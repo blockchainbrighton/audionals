@@ -15,13 +15,12 @@ const processButton = document.getElementById("process");
 const convertButton = document.getElementById("convert");
 const reminder = document.getElementById("reminder");
 const audionalJsonTextarea = document.getElementById("audional-json");
-const startInscriptionProcessButton = document.getElementById(
-  "startInscriptionProcess"
-);
+// const startInscriptionProcessButton = document.getElementById(
+//   "startInscriptionProcess"
+// );
 const inscriptionPreviewContainer = document.getElementById(
   "inscriptionPreviewContainer"
 );
-const doInscribe = document.getElementById("doInscribe");
 const estimatedFeesSpan = document.getElementById("estimatedFees");
 const networkFeeRateSpan = document.getElementById("networkFeeRate");
 const recipientAddress = document.getElementById("ordinalRecipientAddress");
@@ -187,6 +186,29 @@ convertButton.addEventListener("click", function () {
 
 convertButton.addEventListener("click", function () {
   var audioTypeInput = document.getElementById("audio_type");
+  var audioType = audioTypeInput.value ? audioTypeInput.value : "None given";
+  if (!audioTypeInput.value) {
+    alert(
+      "Please select the Audio Type and add details to other fields if known."
+    );
+    return;
+  }
+
+  // hide step1 and show step2
+
+  document.getElementById("step1").style.display = "none";
+  document.getElementById("step2").style.display = "block";
+
+  const checkPriceButton = document.getElementById("checkPrice");
+  checkPriceButton.addEventListener("click", () => {
+    showPaymentDetails();
+  });
+
+  const doInscribe = document.getElementById("doInscribe");
+  doInscribe.addEventListener("click", async () => {
+    await doInscribeFunction();
+  });
+
   var fileInput = document.getElementById("file");
   var instrumentInput = document.getElementById("instrument");
   var instrumentSpecificsInput = document.getElementById(
@@ -199,7 +221,6 @@ convertButton.addEventListener("click", function () {
   var noteInput = document.getElementById("note");
   var creatorInput = document.getElementById("creator"); // Make sure this input exists in your HTML
 
-  var audioType = audioTypeInput.value ? audioTypeInput.value : "None given";
   var file = fileInput.files.length > 0 ? fileInput.files[0] : "None given";
   var instrument = instrumentInput.value ? instrumentInput.value : "None given";
   var instrumentSpecifics = instrumentSpecificsInput.value
@@ -220,12 +241,6 @@ convertButton.addEventListener("click", function () {
   var file = fileInput.files[0];
   if (!file) {
     alert("Please select a file.");
-    return;
-  }
-  if (!audioTypeInput.value) {
-    alert(
-      "Please select the Audio Type and add details to other fields if known."
-    );
     return;
   }
 
@@ -290,9 +305,9 @@ convertButton.addEventListener("click", function () {
     audionalJsonTextarea.style.display = "block";
 
     // show startInscriptionProcessButton
-    startInscriptionProcessButton.style.display = "inline";
-    // enable startInscriptionProcessButton
-    startInscriptionProcessButton.disabled = false;
+    // startInscriptionProcessButton.style.display = "inline";
+    // // enable startInscriptionProcessButton
+    // startInscriptionProcessButton.disabled = false;
   };
 
   reader.onerror = function () {
@@ -303,16 +318,16 @@ convertButton.addEventListener("click", function () {
 });
 
 // Start Inscription Process
-startInscriptionProcessButton.addEventListener("click", async function () {
-  startInscriptionProcess(
-    audionalJsonTextarea,
-    inscriptionPreviewContainer,
-    estimatedFeesSpan,
-    networkFeeRateSpan
-  );
-});
+// startInscriptionProcessButton.addEventListener("click", async function () {
+//   startInscriptionProcess(
+//     audionalJsonTextarea,
+//     inscriptionPreviewContainer,
+//     estimatedFeesSpan,
+//     networkFeeRateSpan
+//   );
+// });
 
-doInscribe.addEventListener("click", async function () {
+async function doInscribeFunction() {
   // get recipientAddress and verify it starts with bc1
   const recipientAddressValue = recipientAddress.value;
   if (!validateTaprootAddress(recipientAddressValue)) {
@@ -347,7 +362,7 @@ doInscribe.addEventListener("click", async function () {
   // update the input invoiceAddress with inscriptionRequestResults.btc_deposit_address
   invoiceAmount.value = inscriptionRequestResults.total_request_fee_sats;
   inscriptionRequestId.value = inscriptionRequestResults.id;
-});
+}
 
 function generateBitcoinPaymentQRCode(
   btc_deposit_address,
@@ -374,3 +389,187 @@ function generateBitcoinPaymentQRCode(
     correctLevel: QRCode.CorrectLevel.H,
   });
 }
+
+// Define these values globally or within your class/component scope
+let inscriptionCost = null;
+let currentFeeRates = null;
+
+// on checkPrice button click run showPaymentDetails
+function showPaymentDetails() {
+  // Retrieve the Audional Ordinal Recipient Address
+  const recipientAddress = document
+    .getElementById("bitcoinAddress")
+    .value.trim();
+
+  // Check if the recipient address is valid
+  if (!isValidRecipientAddress(recipientAddress)) {
+    alert("Please enter a valid recipient's address.");
+    return;
+  }
+
+  // Show loading state
+  const inscriptionButton = document.getElementById("inscribe");
+  inscriptionButton.disabled = true;
+  inscriptionButton.classList.remove("custom-gold-button");
+
+  // Simulate asynchronous data retrieval
+  setTimeout(function () {
+    // Retrieve the current fee rates, inscription cost, and Bitcoin payment address
+    // Now we use actual values from `startInscriptionProcess`
+    const paymentAddress = getPaymentAddress(); // Replace this with your own logic to get the payment address
+
+    // Create and populate the text nodes for displaying the information
+    const feeRatesTextNode = document.createTextNode(
+      "Current Fee Rates: " + currentFeeRates
+    );
+    const inscriptionCostTextNode = document.createTextNode(
+      "Inscription Cost: " + inscriptionCost
+    );
+    const paymentAddressTextNode = document.createTextNode(
+      "Payment Address: " + paymentAddress
+    );
+
+    // Clear the current content and append the text nodes
+    const userDefinedRight = document.getElementById("user-defined-right");
+    userDefinedRight.innerHTML = ""; // Clear the current content
+
+    const feeRatesInput = document.createElement("div");
+    feeRatesInput.className = "payment-input";
+    feeRatesInput.appendChild(feeRatesTextNode);
+    userDefinedRight.appendChild(feeRatesInput);
+
+    const inscriptionCostInput = document.createElement("div");
+    inscriptionCostInput.className = "payment-input";
+    inscriptionCostInput.appendChild(inscriptionCostTextNode);
+    userDefinedRight.appendChild(inscriptionCostInput);
+
+    const paymentAddressInput = document.createElement("div");
+    paymentAddressInput.className = "payment-input";
+    paymentAddressInput.appendChild(paymentAddressTextNode);
+    userDefinedRight.appendChild(paymentAddressInput);
+
+    // Enable and style the inscription button
+    inscriptionButton.disabled = false;
+
+    setTimeout(function () {
+      inscriptionButton.classList.add("custom-gold-button", "enabled");
+    }, 100); // Delay for button color change and shimmer effect
+  }, 2000); // Simulated delay, replace with your data retrieval logic
+}
+
+function isValidRecipientAddress(address) {
+  // Replace this with your own validation logic for the recipient's address
+  // Return true if the address is valid, false otherwise
+  return address.startsWith("bc1");
+}
+
+// Example functions to retrieve the fee rates, inscription cost, and payment address
+function getCurrentFeeRates() {
+  // Replace this with your own logic to retrieve the current fee rates
+  return "15 Sat/vB";
+}
+
+function getInscriptionCost() {
+  // Replace this with your own logic to retrieve the inscription cost
+  return "15 Sat/vB * filesize";
+}
+
+function getPaymentAddress() {
+  // Replace this with your own logic to retrieve the payment address
+  return "1ABCxyz..."; // Example payment address
+}
+
+window.addEventListener("DOMContentLoaded", (event) => {
+  fetch("Step-for-man_audional.json")
+    .then((response) => response.json())
+    .then((data) => {
+      const textarea = document.getElementById("user-defined");
+      textarea.placeholder = JSON.stringify(data, null, 2);
+    })
+    .catch((error) => console.error("Error:", error));
+});
+
+function toggleInfo(buttonId) {
+  var audionalsButton = document.getElementById("audionals-button");
+  var jsonButton = document.getElementById("check-order-button");
+
+  var audionalsContent = document.getElementById("info-content-audionals");
+  var jsonContent = document.getElementById("info-content-json");
+
+  if (buttonId === "audionals") {
+    var isAudionalsActive = audionalsButton.classList.contains("active");
+    if (isAudionalsActive) {
+      audionalsButton.classList.remove("active");
+      audionalsContent.style.display = "none";
+    } else {
+      audionalsButton.classList.add("active");
+      jsonButton.classList.remove("active");
+      audionalsContent.style.display = "block";
+      jsonContent.style.display = "none";
+    }
+  } else {
+    var isJsonActive = jsonButton.classList.contains("active");
+    if (isJsonActive) {
+      jsonButton.classList.remove("active");
+      jsonContent.style.display = "none";
+    } else {
+      jsonButton.classList.add("active");
+      audionalsButton.classList.remove("active");
+      audionalsContent.style.display = "none";
+      jsonContent.style.display = "block";
+    }
+  }
+}
+
+function toggleDescription(buttonId) {
+  var taprootButton = document.getElementById("metadata-button");
+  var jsonButton = document.getElementById("check-order-button");
+
+  var taprootContent = document.getElementById("info-content-taproot");
+  var jsonContent = document.getElementById("info-content-json");
+
+  if (buttonId === "taproot") {
+    var isTaprootActive = taprootButton.classList.contains("active");
+    if (isTaprootActive) {
+      taprootButton.classList.remove("active");
+      taprootContent.style.display = "none";
+    } else {
+      taprootButton.classList.add("active");
+      jsonButton.classList.remove("active");
+      taprootContent.style.display = "block";
+      jsonContent.style.display = "none";
+    }
+  } else {
+    var isJsonActive = jsonButton.classList.contains("active");
+    if (isJsonActive) {
+      jsonButton.classList.remove("active");
+      jsonContent.style.display = "none";
+    } else {
+      jsonButton.classList.add("active");
+      taprootButton.classList.remove("active");
+      taprootContent.style.display = "none";
+      jsonContent.style.display = "block";
+    }
+  }
+}
+
+// Set initial state
+window.onload = function () {
+  var audionalsButton = document.getElementById("audionals-button");
+  var taprootButton = document.getElementById("metadata-button");
+  var jsonButton = document.getElementById("check-order-button");
+
+  var audionalsContent = document.getElementById("info-content-audionals");
+  var taprootContent = document.getElementById("info-content-taproot");
+  var jsonContent = document.getElementById("info-content-json");
+
+  // Enable all buttons
+  audionalsButton.disabled = false;
+  taprootButton.disabled = false;
+  jsonButton.disabled = false;
+
+  // Show all content
+  audionalsContent.style.display = "block";
+  taprootContent.style.display = "block";
+  jsonContent.style.display = "block";
+};
