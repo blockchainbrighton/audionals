@@ -13,7 +13,7 @@
     --control-button-dimension: 25px;
     --box-shadow-style: 0 0 10px var(--main-bg-color) inset;
     --margin-style: 10px;
-    --default-font: Arial, sans-serif;
+    --default-font: Verdana, sans-serif;
 }
 
 body {
@@ -260,11 +260,15 @@ h3:hover .subtext {
 .subtext-container {
     display: flex;
     justify-content: flex-end;
-    margin-right: 400px;
+    margin-right: 330px;
 }
 
 .centered-text {
     text-align: right;
+}
+.larger-font {
+    font-size: 1.5em; /* Adjust this to the size you want */
+    padding-bottom: 10px;
 }
 
 </style>    
@@ -275,18 +279,14 @@ h3:hover .subtext {
             
             <span class="button-label">Play</span>
             <div class="button button-round">
-                
-                
+             
                 <div class="button play-button" id="play"></div> <!-- Update the class and ID for play button -->
-            </div>
-            <span class="title">Audional Sequencer <span class="">&#x20bf;</span>eta<span class="bright-orange">&#x20bf;</span>itcoin<span class="">&#x20bf;</span>eats</span>
-          
-            <span class="button-label stop">Stop</span>           
-             <div class="button button-round">
-                
-
-                
-                <div class="button stop-button" id="stop"></div> <!-- Update the class and ID for stop button -->
+                </div>
+                <span class="title"><span class="larger-font">AUDIONAL SEQUENCER</span> <span class="">&#x20bf;</span>eta<span class="bright-orange">&#x20bf;</span>itcoin<span class="">&#x20bf;</span>eats</span>
+    
+                <span class="button-label stop">Stop</span>           
+                <div class="button button-round">
+                 <div class="button stop-button" id="stop"></div> <!-- Update the class and ID for stop button -->
             </div>
             <div class="bpm-container">
                 BPM: <input type="range" min="60" max="180" value="125" step="1" id="bpm-slider">
@@ -295,8 +295,7 @@ h3:hover .subtext {
         </h1>
        
         <div class="subtext-container">
-            <p class="subtext centered-text">
-                Raw On-chain <span class="bright-orange">&#x20bf;</span>itcoin Audionals: playing live, directly from the <span class="">&#x20bf;</span>lockchain!
+                Raw On-chain <span class="bright-orange">&#x20bf;</span>itcoin Audionals: playing live, directly from the <span class=""> &#x20bf;</span>lockchain!
             </p>
             </div>
             </span>
@@ -519,27 +518,55 @@ h3:hover .subtext {
 
 
 
-  function exportSettings() {
-    let settings = { channels: [], bpm: bpm };
-    channels.forEach((channel, index) => {
-        let triggers = [];
-        let stepButtons = channel.querySelectorAll('.step-button');
-        stepButtons.forEach((button, i) => {
-        if (button.classList.contains('selected')) {
-            triggers.push(i + 1); // we use (i+1) because nth-child selector is 1-based
-        }
+    function exportSettings() {
+        let settings = { channels: [], bpm: bpm };
+        channels.forEach((channel, index) => {
+            let triggers = [];
+            let stepButtons = channel.querySelectorAll('.step-button');
+            stepButtons.forEach((button, i) => {
+                if (button.classList.contains('selected')) {
+                    triggers.push(i + 1);
+                }
+            });
+
+            let mute = channel.dataset.muted === 'true';
+            let url = channel.dataset.originalUrl;
+            settings.channels.push({ triggers: triggers, mute: mute, url: url });
         });
 
-        let mute = channel.dataset.muted === 'true';
-        let url = channel.dataset.originalUrl; // Use the original URL
-        settings.channels.push({ triggers: triggers, mute: mute, url: url });
-    });
+        // Create the audioData string with no whitespace
+        let audioDataString = JSON.stringify(settings);
 
-    return JSON.stringify(settings, null, 2); // to make the output more readable
+        // Manually create the first part of the JSON with whitespace, then append audioData
+        let output = `{
+    "protocol": "audionalComposition",
+    "operation": "deploy",
+    "audionalId": "649ed4f7LYVmVBb",
+    "compositionName": "My First Audional Composition",
+    "audioData": ${audioDataString}
+    }`;
+
+        return output;
+    }
+
+    function loadSettingsFromURL(url) {
+        fetch(url)
+            .then(response => response.text())
+            .then(json => {
+                importSettings(json);
+            })
+            .catch(error => console.error('Error:', error));
     }
 
     function importSettings(json) {
-        let settings = JSON.parse(json);
+        let fileData = JSON.parse(json);
+        let settings;
+        if (fileData.audioData) {  // If 'audioData' exists, use it as settings
+            settings = fileData.audioData;
+        } else {  // Else use the fileData as settings (old format)
+            settings = fileData;
+        }
+
         bpm = settings.bpm;
 
         settings.channels.forEach((chSettings, index) => {
@@ -548,7 +575,7 @@ h3:hover .subtext {
 
             // Fetch and set audio sample URL only if url is defined
             if(chSettings.url) {
-            fetchAudio(chSettings.url, index, loadSampleButton);
+                fetchAudio(chSettings.url, index, loadSampleButton);
             }
 
             // Set mute settings
@@ -561,7 +588,9 @@ h3:hover .subtext {
             stepButtons.forEach(button => button.classList.remove('selected')); // clear existing triggers
             chSettings.triggers.forEach(i => stepButtons[i - 1].classList.add('selected')); // set new triggers
         });
-        }
+    }
+
+
 
 
         document.addEventListener("DOMContentLoaded", function() {
@@ -585,8 +614,13 @@ h3:hover .subtext {
             });
 
             loadButton.addEventListener('click', () => {
-                // Trigger a click on the load file input
-                loadFileInput.click();
+                let url = prompt("Please enter the URL of the Audional Composition JSON file you wish to load. If you want to load a local file, just press OK.");
+                if (url) {
+                    loadSettingsFromURL(url);
+                } else {
+                    // Trigger a click on the load file input
+                    loadFileInput.click();
+                }
             });
 
             loadFileInput.addEventListener('change', () => {
