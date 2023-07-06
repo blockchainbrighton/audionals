@@ -714,7 +714,12 @@ h3:hover .subtext {
         ['5', '13', '21', '29', '37', '45', '53', '61', '64']
         ],
         muted: [ false, false, true, true ],
-        unmuteBeats: [ null, null, 28, 63 ]  // Use beat counts to unmute
+        channelStates: [
+            { muteTriggers: [{beat: 0, mute: false}] },// {beat: 1024, mute: true}, {beat: 1024, mute: false}] },
+            { muteTriggers: [{beat: 0, mute: false}] }, // {beat: 1024, mute: true}, {beat: 1024, mute: false}] },
+            { muteTriggers: [{beat: 0, mute: true}, {beat: 28, mute: false}, {beat: 60, mute: true}] },
+            { muteTriggers: [{beat: 0, mute: true}, {beat: 63, mute: false}] },// {beat: 1024, mute: true}] },
+        ]
     },
 };
 
@@ -805,14 +810,27 @@ h3:hover .subtext {
 
     channels.forEach((channel, index) => {
         const buttons = channel.querySelectorAll('.step-button');
-        let isMuted = channel.dataset.muted === 'true';
+        let isMuted = channel.dataset.muted === 'true'; // start with the current mute state
 
-        // Unmute the channel at the designated beat if it's currently muted
-        const unmuteBeat = presets.preset1.unmuteBeats[index];
-        if (isMuted && unmuteBeat !== null && unmuteBeat === beatCount) {
-            channel.dataset.muted = 'false';
-            isMuted = false;
-            channel.querySelector('.mute-button').classList.remove('selected'); 
+        const muteTriggers = presets.preset1.channelStates[index]?.muteTriggers;
+        if (muteTriggers) {
+            const trigger = muteTriggers.find(t => t.beat === beatCount);
+            if (trigger) { // if a mute trigger is found for the current beat
+                isMuted = trigger.mute; // update the mute state
+            }
+        }
+
+        // Update the mute state in the UI if it has changed
+        if (isMuted !== (channel.dataset.muted === 'true')) {
+            channel.dataset.muted = isMuted ? 'true' : '';
+            const muteButton = channel.querySelector('.mute-button');
+            if (muteButton) {
+                if (isMuted) {
+                    muteButton.classList.add('selected');
+                } else {
+                    muteButton.classList.remove('selected');
+                }
+            }
         }
         buttons.forEach((button, buttonIndex) => {
             button.classList.remove('playing'); // Reset the playhead/step light for all buttons
