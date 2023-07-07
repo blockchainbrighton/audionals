@@ -389,7 +389,7 @@ h3:hover .subtext {
                 </div>
             </div>
         </div>
-        <div class="channel" id="channel-5">
+        <div class="channel" id="channel-6">
             <button class="load-sample-button" title="Load New Audional">Load New Audional</button>
             <div>
             <button class="control-button clear-button">C</button>
@@ -406,7 +406,7 @@ h3:hover .subtext {
                 </div>
             </div>
         </div>
-        <div class="channel" id="channel-5">
+        <div class="channel" id="channel-7">
             <button class="load-sample-button" title="Load New Audional">Load New Audional</button>
             <div>
             <button class="control-button clear-button">C</button>
@@ -423,7 +423,7 @@ h3:hover .subtext {
                 </div>
             </div>
         </div>
-        <div class="channel" id="channel-5">
+        <div class="channel" id="channel-8">
             <button class="load-sample-button" title="Load New Audional">Load New Audional</button>
             <div>
             <button class="control-button clear-button">C</button>
@@ -469,6 +469,16 @@ h3:hover .subtext {
     let nextStepTime;
     let stepDuration;
     let gainNodes = [];
+    let audioBufferCache = new Map();
+
+
+    let state = {
+    channels: [],
+    // Other properties related to the state...
+    };
+
+    const channelElements = document.querySelectorAll('.channel');
+
 
 
   function getIDFromURL(url) {
@@ -487,37 +497,44 @@ h3:hover .subtext {
   }
   
 
-  const fetchAudio = (url, channelIndex, loadSampleButtonElement) => {
-  fetch(url)
-    .then(response => response.json())
-    .then(data => {
-      const audioData = base64ToArrayBuffer(data.audioData.split(',')[1]);
-      const audioBlob = new Blob([audioData], { type: 'audio/mpeg' });
-      const audioBlobUrl = URL.createObjectURL(audioBlob);
+  async function fetchAudioData(url) {
+  const response = await fetch(url);
+  return await response.json();
+}
 
-      const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"]`);
-      channel.dataset.audioData = audioBlobUrl;
-      channel.dataset.originalUrl = url; // Store the original URL
-      channel.dataset.audioDataLoaded = 'true';
+function createAudioBlob(audioData) {
+  const arrayBuffer = base64ToArrayBuffer(audioData.split(',')[1]);
+  return new Blob([arrayBuffer], { type: 'audio/mpeg' });
+}
 
-      // Ensure loadSampleButtonElement is not null and then proceed
-      if (loadSampleButtonElement) {
-        const filename = data.filename || data.fileName; // Check both properties
-        loadSampleButtonElement.classList.add('button-fixed-width');
-        loadSampleButtonElement.style.width = '200px'; // or whatever width you want
-        loadSampleButtonElement.textContent = filename ? filename.substring(0,20) : 'Load New Audional';
-        loadSampleButtonElement.title = filename ? filename : 'Load New Audional';
-        
+function updateButtonWithAudioFilename(loadSampleButtonElement, filename) {
+  loadSampleButtonElement.classList.add('button-fixed-width');
+  loadSampleButtonElement.style.width = '200px';
+  loadSampleButtonElement.textContent = filename ? filename.substring(0, 20) : 'Load New Audional';
+  loadSampleButtonElement.title = filename || 'Load New Audional';
+}
 
-        console.log(data);
-      } else {
-        console.log("Button element not found.");
-      }
-    })
-    .catch(error => {
-      console.error('Error fetching audio:', error);
-    });
-};
+async function fetchAudio(url, channelIndex, loadSampleButtonElement) {
+  try {
+    const data = await fetchAudioData(url);
+    const audioBlob = createAudioBlob(data.audioData);
+    const audioBlobUrl = URL.createObjectURL(audioBlob);
+
+    const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"]`);
+    channel.dataset.audioData = audioBlobUrl;
+    channel.dataset.originalUrl = url;
+    channel.dataset.audioDataLoaded = 'true';
+
+    if (loadSampleButtonElement) {
+      const filename = data.filename || data.fileName;
+      updateButtonWithAudioFilename(loadSampleButtonElement, filename);
+    } else {
+      console.log("Button element not found.");
+    }
+  } catch (error) {
+    console.error('Error fetching audio:', error);
+  }
+}
 
 
 
@@ -805,86 +822,84 @@ h3:hover .subtext {
     }, (nextStepTime - audioContext.currentTime) * 1000);
   }
 
-  function playStep() {
-    const currentBeat = ((currentStep / 4) | 0) % 16; // Calculate the current beat and ensure it wraps
+ // Convert NodeList to an Array
+const channelsArray = Array.from(channels);
 
-    channels.forEach((channel, index) => {
-        const buttons = channel.querySelectorAll('.step-button');
-        let isMuted = channel.dataset.muted === 'true'; // start with the current mute state
+// Store the step-buttons for each channel to avoid querying for them on every step
+const channelStepButtons = channelsArray.map(channel => channel.querySelectorAll('.step-button'));
 
-        const muteTriggers = presets.preset1.channelStates[index]?.muteTriggers;
-        if (muteTriggers) {
-            const trigger = muteTriggers.find(t => t.beat === beatCount);
-            if (trigger) { // if a mute trigger is found for the current beat
-                isMuted = trigger.mute; // update the mute state
-            }
+function playStep() {
+  const currentBeat = ((currentStep / 4) | 0) % 16;
+
+  channelsArray.forEach((channel, index) => {
+    let isMuted = channel.dataset.muted === 'true';
+    const muteTriggers = presets.preset1.channelStates[index]?.muteTriggers;
+    if (muteTriggers) {
+      const trigger = muteTriggers.find(t => t.beat === beatCount);
+      if (trigger) {
+        isMuted = trigger.mute;
+      }
+    }
+
+    // Update the mute state in the UI if it has changed
+    if (isMuted !== (channel.dataset.muted === 'true')) {
+      channel.dataset.muted = isMuted ? 'true' : '';
+      const muteButton = channel.querySelector('.mute-button');
+      if (muteButton) {
+        if (isMuted) {
+          muteButton.classList.add('selected');
+        } else {
+          muteButton.classList.remove('selected');
         }
+      }
+    }
 
-        // Update the mute state in the UI if it has changed
-        if (isMuted !== (channel.dataset.muted === 'true')) {
-            channel.dataset.muted = isMuted ? 'true' : '';
-            const muteButton = channel.querySelector('.mute-button');
-            if (muteButton) {
-                if (isMuted) {
-                    muteButton.classList.add('selected');
-                } else {
-                    muteButton.classList.remove('selected');
-                }
-            }
+    const buttons = channelStepButtons[index];  // Fetch step-buttons from the cached array
+    buttons.forEach((button, buttonIndex) => {
+      button.classList.remove('playing');
+      button.classList.remove('triggered');
+
+      if (buttonIndex === currentStep && !isMuted) {
+        button.classList.add('playing');
+      }
+
+      if (button.classList.contains('selected')) {
+        const triggerIndex = presets.preset1.triggers[index].indexOf(String(buttonIndex + 1));
+        if (triggerIndex !== -1) {
+          button.classList.add('triggered');
         }
-        buttons.forEach((button, buttonIndex) => {
-            button.classList.remove('playing'); // Reset the playhead/step light for all buttons
-            button.classList.remove('triggered'); // Reset the triggered light for all buttons
-
-            if (buttonIndex === currentStep && !isMuted) {
-                button.classList.add('playing'); // Highlight the current step with the playhead/step light
-            }
-
-            if (button.classList.contains('selected')) {
-                const triggerIndex = presets.preset1.triggers[index].indexOf(String(buttonIndex + 1));
-                if (triggerIndex !== -1) {
-                    button.classList.add('triggered'); // Highlight the live trigger with the triggered light
-                }
-            }
-        });
-
-        if (buttons[currentStep].classList.contains('selected') && !isMuted) {
-            const audioData = channel.dataset.audioData;
-            if (audioData) {
-                const audio = new Audio(audioData);
-                const source = audioContext.createMediaElementSource(audio);
-                source.connect(audioContext.destination);
-                audio.play();
-            }
-        }
+      }
     });
 
-    // Log the beat, bar, and sequence counts
+    if (buttons[currentStep].classList.contains('selected') && !isMuted) {
+      const audioData = channel.dataset.audioData;
+      if (audioData) {
+        const audio = new Audio(audioData);
+        const source = audioContext.createMediaElementSource(audio);
+        source.connect(audioContext.destination);
+        audio.play();
+      }
+    }
+  });
+
+  // Log the beat, bar, and sequence counts
     //console.log('Step:', currentStep);
     //console.log('Beat:', beatCount);
     //console.log('Bar:', barCount);  // Use barCount instead of currentBar
     //console.log('Sequence:', sequenceCount);
 
-    currentStep = (currentStep + 1) % 64;
 
-    if (currentStep % 4 === 0) {
-        beatCount++;  // No wrap-around here
-    }
+  // Update step, beat, bar, and sequence
+  currentStep = (currentStep + 1) % 64;
+  if (currentStep % 4 === 0) beatCount++;
+  if (currentStep % 16 === 0) barCount++;
+  if (currentStep % 64 === 0) sequenceCount++;
 
-    if (currentStep % 16 === 0) {
-        barCount = (barCount + 1);
-    }
-
-    if (currentStep % 64 === 0) {
-        sequenceCount++;
-    }
-
-    nextStepTime += stepDuration;
+  nextStepTime += stepDuration;
 }
 
 
-
-
+ 
 
 function stopScheduler() {
     if (audioContext) {
