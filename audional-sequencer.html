@@ -295,6 +295,47 @@ h3:hover .subtext {
     color: var(--primary-color);
     opacity: 0.7;
 }
+.mode-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.mode-switcher label {
+  margin-right: 10px;
+}
+
+.mode-switcher input[type="checkbox"] {
+  appearance: none;
+  width: 40px;
+  height: 20px;
+  background-color: #ccc;
+  border-radius: 10px;
+  position: relative;
+  outline: none;
+  cursor: pointer;
+}
+
+.mode-switcher input[type="checkbox"]:checked {
+  background-color: #2196f3;
+}
+
+.mode-switcher input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 18px;
+  height: 18px;
+  background-color: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+
+.mode-switcher input[type="checkbox"]:checked::before {
+  transform: translateX(20px);
+}
 
 </style>    
 </head>
@@ -329,6 +370,7 @@ h3:hover .subtext {
             </p>
             </div>
             </span>
+            
           
             <main id="app" role="main">
         <div class="channel" id="bass-drum">
@@ -475,6 +517,11 @@ h3:hover .subtext {
         
           <button id="load-button">Load</button>
           <input type="file" id="load-file-input" style="display: none" accept=".json">
+
+          <div class="mode-switcher">
+            <label for="mode-toggle">Continuous Mode</label>
+            <input type="checkbox" id="mode-toggle">
+          </div>
         
           <button class="new-button">Inscribe Audional Composition</button>
           <span class="new-button-subtext">(Coming soon...)</span>
@@ -501,6 +548,13 @@ let startTime;
 let nextStepTime;
 let stepDuration;
 let gainNodes = [];
+let isContinuous = false;
+let modeToggle = document.getElementById('mode-toggle');
+let sequences = Array(64).fill().map(() => Array(64).fill(false));
+let currentSequence = 0;
+
+
+
 
 
   function getIDFromURL(url) {
@@ -551,6 +605,12 @@ let gainNodes = [];
     });
 };
 
+  function updateUI() {
+    let buttons = document.querySelectorAll('.step-button');
+    buttons.forEach((button, index) => {
+      button.classList.toggle('selected', sequences[currentSequence][index]);
+    });
+  }
 
 
 
@@ -598,41 +658,71 @@ let gainNodes = [];
         });
         }
 
+        function resetSequenceCounts() {
+          if (!isContinuous) {
+              sequenceCount = 0;
+              resetStepLights();
+          }
+      }
+        document.addEventListener('DOMContentLoaded', () => {
+          let saveFileInput = document.getElementById('save-file-input');
+          let loadFileInput = document.getElementById('load-file-input');
+          let modeToggle = document.getElementById('mode-toggle');
 
-        document.addEventListener("DOMContentLoaded", function() {
-            let saveFileInput = document.getElementById('save-file-input');
-            let loadFileInput = document.getElementById('load-file-input');
+          modeToggle.addEventListener('change', () => {
+            isContinuous = modeToggle.checked;
+            if (!isContinuous) {
+                currentStep = 0;
+                beatCount = 1;
+                barCount = 1;
+                sequenceCount = 0;
+                currentSequence = 0;
+            }
+            resetStepLights();
+        });
 
-            saveButton.addEventListener('click', () => {
-                let settings = exportSettings();
+          saveButton.addEventListener('click', () => {
+            let settings = exportSettings();
 
-                // Create a Blob with the settings
-                let blob = new Blob([settings], { type: 'application/json' });
+            // Create a Blob with the settings
+            let blob = new Blob([settings], { type: 'application/json' });
 
-                // Create a download link for the Blob
-                let url = URL.createObjectURL(blob);
-                let downloadLink = document.createElement('a');
-                downloadLink.href = url;
-                downloadLink.download = 'settings.json';
+            // Create a download link for the Blob
+            let url = URL.createObjectURL(blob);
+            let downloadLink = document.createElement('a');
+            downloadLink.href = url;
+            downloadLink.download = 'settings.json';
 
-                // Trigger a click on the download link
-                downloadLink.click();
-            });
+            // Trigger a click on the download link
+            downloadLink.click();
+          });
 
-            loadButton.addEventListener('click', () => {
-                // Trigger a click on the load file input
-                loadFileInput.click();
-            });
+          loadButton.addEventListener('click', () => {
+            // Trigger a click on the load file input
+            loadFileInput.click();
+          });
 
-            loadFileInput.addEventListener('change', () => {
-                let file = loadFileInput.files[0];
-                let reader = new FileReader();
-                reader.onload = function(e) {
-                    let settings = e.target.result;
-                    importSettings(settings);
-                };
-                reader.readAsText(file);
-            });
+          loadFileInput.addEventListener('change', () => {
+            let file = loadFileInput.files[0];
+            let reader = new FileReader();
+            reader.onload = function (e) {
+              let settings = e.target.result;
+              importSettings(settings);
+            };
+            reader.readAsText(file);
+          });
+
+          modeToggle.addEventListener('change', () => {
+            if (modeToggle.checked) {
+              // Continuous play mode is enabled
+              resetSequenceCounts();
+              resetStepLights();
+            } else {
+              // 4-bar loop mode is enabled
+              resetBarAndSequenceCounts();
+              resetStepLights();
+            }
+          });
         });
 
 
@@ -672,8 +762,11 @@ let gainNodes = [];
       const button = document.createElement('button');
       button.classList.add('step-button');
       button.addEventListener('click', () => {
+        let stepIndex = Array.from(stepsContainer.children).indexOf(button);
+        sequences[currentSequence][stepIndex] = !sequences[currentSequence][stepIndex];
         button.classList.toggle('selected');
       });
+
       fragment.appendChild(button);
     }
     stepsContainer.appendChild(fragment);
@@ -698,26 +791,29 @@ let gainNodes = [];
 
     playButton.addEventListener('click', () => {
       if (!isPlaying) {
-        startScheduler();
-        playButton.classList.add('selected');
-        stopButton.classList.remove('selected');
-        isPlaying = true;
+          startScheduler();
+          playButton.classList.add('selected');
+          stopButton.classList.remove('selected');
+          isPlaying = true;
       }
-    });
+  });
 
-    stopButton.addEventListener('click', () => {
+  stopButton.addEventListener('click', () => {
       if (isPlaying) {
-        stopScheduler();
-        stopButton.classList.add('selected');
-        playButton.classList.remove('selected');
-        isPlaying = false;
-        beatCount = 0;  // reset the beat count
-        barCount = 0; // reset the bar count
-        sequenceCount = 0; // reset the sequence count
-        currentStep = 0;  // reset the step count
-        resetStepLights();  // reset the step lights
+          stopScheduler();
+          stopButton.classList.add('selected');
+          playButton.classList.remove('selected');
+          isPlaying = false;
+
+          if (!isContinuous) {  // Only reset the counts if we're not in continuous mode
+              beatCount = 0;
+              barCount = 0;
+              sequenceCount = 0;
+              currentStep = 0;
+              resetStepLights();
+          }
       }
-    });
+  });
 
 
   } else {
@@ -727,10 +823,17 @@ let gainNodes = [];
 
   const bpmSlider = document.getElementById('bpm-slider');
   const bpmDisplay = document.getElementById('bpm-display');
-  bpmSlider.addEventListener('input', () => {
-    bpm = bpmSlider.value;
+  bpmSlider.addEventListener('input', updateBPM);
+
+  function updateBPM() {
+    bpm = parseInt(bpmSlider.value);
     bpmDisplay.textContent = bpm;
-  });
+    if (isPlaying) {
+      stopScheduler();
+      startScheduler();
+    }
+  }
+
 
   
   const presets = {
@@ -842,12 +945,11 @@ let gainNodes = [];
   }
 
   function playStep() {
-    const currentBeat = ((currentStep / 4) | 0) % 16; // Calculate the current beat and ensure it wraps
+    const currentBeat = ((currentStep / 4) | 0) % 16; 
 
     channels.forEach((channel, index) => {
         const buttons = channel.querySelectorAll('.step-button');
         let isMuted = channel.dataset.muted === 'true';
-
         // Unmute the channel at the designated beat if it's currently muted
         const unmuteBeat = presets.preset1.unmuteBeats[index];
         if (isMuted && unmuteBeat !== null && unmuteBeat === beatCount) {
@@ -865,22 +967,23 @@ let gainNodes = [];
         }
         
         buttons.forEach((button, buttonIndex) => {
-            button.classList.remove('playing'); // Reset the playhead/step light for all buttons
-            button.classList.remove('triggered'); // Reset the triggered light for all buttons
+            button.classList.remove('playing'); 
+            button.classList.remove('triggered'); 
 
             if (buttonIndex === currentStep && !isMuted) {
-                button.classList.add('playing'); // Highlight the current step with the playhead/step light
+                button.classList.add('playing');
             }
 
-            if (button.classList.contains('selected')) {
+            if (sequences[currentSequence][buttonIndex]) {
                 const triggerIndex = presets.preset1.triggers[index].indexOf(String(buttonIndex + 1));
                 if (triggerIndex !== -1) {
-                    button.classList.add('triggered'); // Highlight the live trigger with the triggered light
+                    button.classList.add('triggered');
                 }
             }
         });
 
-        if (buttons[currentStep].classList.contains('selected') && !isMuted) {
+
+        if (sequences[currentSequence][currentStep] && !isMuted) {
             const audioData = channel.dataset.audioData;
             if (audioData) {
                 const audio = new Audio(audioData);
@@ -900,7 +1003,7 @@ let gainNodes = [];
     currentStep = (currentStep + 1) % 64;
 
     if (currentStep % 4 === 0) {
-        beatCount++;  // No wrap-around here
+        beatCount++;
     }
 
     if (currentStep % 16 === 0) {
@@ -909,6 +1012,10 @@ let gainNodes = [];
 
     if (currentStep % 64 === 0) {
         sequenceCount++;
+        if (isContinuous) {
+            currentSequence = (currentSequence + 1) % 64;
+            updateUI();  // Make sure to update the UI to reflect the new sequence
+        }
     }
 
     nextStepTime += stepDuration;
@@ -920,24 +1027,27 @@ let gainNodes = [];
 
 function stopScheduler() {
     if (audioContext) {
-      audioContext.close();
+        audioContext.close();
     }
     clearTimeout(timeoutId);
 
     // Reset counters
     currentStep = 0;
     beatCount = 1;
-    barCount = 1; // Reset barCount to 1
+    barCount = 1;
     sequenceCount = 0;
+    if (!isContinuous) {
+        currentSequence = 0;
+    }
+    resetStepLights();
 }
 
   function resetStepLights() {
-    const buttons = document.querySelectorAll('.step-button');
-    buttons.forEach(button => {
-        button.classList.remove('playing');
-    });
-    }
-
+      const buttons = document.querySelectorAll('.step-button');
+      buttons.forEach((button, index) => {
+          button.classList.toggle('playing', sequences[currentSequence][index]);
+      });
+  }
   function togglePlayState(isPlaying, startStopFunction, firstButton, secondButton) {
     if (!isPlaying) {
       isPlaying = true;
