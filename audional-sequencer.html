@@ -555,10 +555,14 @@ h3:hover .subtext {
     <script>
 
 let isPlaying = false;
+let stepCount = 0;
 let currentStep = 0;
 let beatCount = 1; // individual steps
+let currentBeat = 1;
 let barCount = 1; // bars
+let currentBar = 1;
 let sequenceCount = 0; // sequences
+let currentSequence = 1;
 let timeoutId;
 let stopClickCount = 0;
 let playButton = document.getElementById('play');
@@ -574,7 +578,6 @@ let gainNodes = [];
 let isContinuous = false;
 let modeToggle = document.getElementById('mode-toggle');
 let sequences = Array(64).fill().map(() => Array(64).fill(false));
-let currentSequence = 0;
 let audioContext;
 let audioBuffers = {};
 let channels = Array(8).fill(null); // Added initialization for channels array
@@ -630,87 +633,144 @@ let channels = Array(8).fill(null); // Added initialization for channels array
 };
 
 function updateUI() {
+    console.log('Updating UI for sequence:', currentSequence); // Logs the sequence number for which UI is being updated.
     let buttons = document.querySelectorAll('.step-button');
     buttons.forEach((button, index) => {
         button.classList.remove('selected');
-        if (sequences[currentSequence][index]) {
+        if (sequences[currentSequence - 1][index]) { // note the adjustment to the index
+            console.log(`Button ${index + 1} is selected in sequence ${currentSequence}`); // Logs the index of the button being selected.
             button.classList.add('selected');
         }
     });
 }
 
 
-  function exportSettings() {
-    let settings = { channels: [], bpm: bpm };
+function exportSettings() {
+    let settings = { channels: [], bpm: bpm, currentSequence: currentSequence };
     channels.forEach((channel, index) => {
         let triggers = [];
+        let unmuteBeats = [];
+        let muteBeats = [];
+
         let stepButtons = channel.querySelectorAll('.step-button');
         stepButtons.forEach((button, i) => {
-        if (button.classList.contains('selected')) {
-            triggers.push(i + 1); // we use (i+1) because nth-child selector is 1-based
-        }
+            if (button.classList.contains('selected')) {
+                triggers.push(i + 1);
+            }
+            if (button.classList.contains('unmuted')) { // update this with your actual unmute class
+                unmuteBeats.push(i + 1);
+            }
+            if (button.classList.contains('muted')) { // update this with your actual mute class
+                muteBeats.push(i + 1);
+            }
         });
 
         let mute = channel.dataset.muted === 'true';
-        let url = channel.dataset.originalUrl; // Use the original URL
-        settings.channels.push({ triggers: triggers, mute: mute, url: url });
+        let url = channel.dataset.originalUrl;
+        settings.channels.push({ triggers: triggers, unmuteBeats: unmuteBeats, muteBeats: muteBeats, mute: mute, url: url });
     });
 
-    return JSON.stringify(settings, null, 2); // to make the output more readable
+    return JSON.stringify(settings, null, 2);
+}
+
+
+function importSettings(json) {
+    let settings = JSON.parse(json);
+    bpm = settings.bpm;
+
+    if (settings.currentSequence !== undefined) {
+        currentSequence = settings.currentSequence; // Set current sequence from imported data
     }
 
-    function importSettings(json) {
-        let settings = JSON.parse(json);
-        bpm = settings.bpm;
+    settings.channels.forEach((chSettings, index) => {
+        let channel = document.querySelector(`.channel[data-id="Channel-${index + 1}"]`);
+        let loadSampleButton = channel.querySelector('.load-sample-button');
 
-        settings.channels.forEach((chSettings, index) => {
-            let channel = document.querySelector(`.channel[data-id="Channel-${index + 1}"]`);
-            let loadSampleButton = channel.querySelector('.load-sample-button');
-
-            // Fetch and set audio sample URL only if url is defined
-            if(chSettings.url) {
+        if(chSettings.url) {
             fetchAudio(chSettings.url, index, loadSampleButton);
-            }
-
-            // Set mute settings
-            channel.dataset.muted = chSettings.mute ? 'true' : '';
-            let muteButton = channel.querySelector('.mute-button');
-            muteButton.classList.toggle('selected', chSettings.mute);
-
-            // Set trigger buttons
-            let stepButtons = channel.querySelectorAll('.step-button');
-            stepButtons.forEach(button => button.classList.remove('selected')); // clear existing triggers
-            chSettings.triggers.forEach(i => stepButtons[i - 1].classList.add('selected')); // set new triggers
-        });
         }
+
+        channel.dataset.muted = chSettings.mute ? 'true' : '';
+        let muteButton = channel.querySelector('.mute-button');
+        muteButton.classList.toggle('selected', chSettings.mute);
+
+        let stepButtons = channel.querySelectorAll('.step-button');
+        stepButtons.forEach(button => button.classList.remove('selected', 'muted', 'unmuted')); // clear existing settings
+
+        chSettings.triggers.forEach(i => stepButtons[i - 1].classList.add('selected'));
+        chSettings.unmuteBeats.forEach(i => stepButtons[i - 1].classList.add('unmuted')); // update this with your actual unmute class
+        chSettings.muteBeats.forEach(i => stepButtons[i - 1].classList.add('muted')); // update this with your actual mute class
+    });
+}
+
 
 
         document.addEventListener('DOMContentLoaded', () => {
           let saveFileInput = document.getElementById('save-file-input');
           let loadFileInput = document.getElementById('load-file-input');
-          let modeToggle = document.getElementById('mode-toggle');
+          const modeToggle = document.getElementById('mode-toggle');
 
           modeToggle.addEventListener('change', () => {
             console.log("Mode toggle changed");
-            isContinuous = modeToggle.checked;
-            if (!isContinuous) {
-                // In the non-continuous mode, start looping from the beginning of the current sequence
-                currentStep = (currentSequence * 64) % 256;
-                // Don't reset beatCount, barCount, or sequenceCount
+            if (modeToggle.checked) {
+              // Continuous play mode is enabled
+              resetSequenceCounts();
+              resetStepLights();
+            } else {
+              // 4-bar loop mode is enabled
+              resetBarAndSequenceCounts();
+              resetStepLights();
             }
-            resetStepLights();
-        });
+          });
+
+
+
+        // Create the sequence lights
+        const sequenceLightsContainer = document.getElementById('sequence-lights');
+          for (let i = 0; i < 64; i++) {
+              const light = document.createElement('div');
+              light.classList.add('sequence-light');
+              sequenceLightsContainer.appendChild(light);
+          }
+          console.log(sequenceLightsContainer.children.length);  // should print 64
+
+          // Manually turn on the first light
+          if(sequenceLightsContainer.firstElementChild) {
+            sequenceLightsContainer.firstElementChild.classList.add('on');
+          } else {
+            console.error('No sequence light element was created.');
+          }
 
         const sequenceLights = document.querySelectorAll('.sequence-light');
 
         sequenceLights.forEach((light, index) => {
-            light.addEventListener('click', () => {
-                console.log(`Sequence light ${index + 1} clicked`);
-                currentSequence = index; // update the current sequence to the clicked index
-                updateUI(); // call the function to update the UI
-            });
-        });
+          light.addEventListener('click', () => {
+              console.log(`Sequence light ${index + 1} clicked`);
 
+              // Save the current state of buttons to the previous sequence
+              const buttons = document.querySelectorAll('.step-button');
+              buttons.forEach((button, buttonIndex) => {
+                  sequences[currentSequence - 1][buttonIndex] = button.classList.contains('selected');
+              });
+              console.log('Button States After Saving:', sequences[currentSequence - 1]); // Logs the button states after saving
+
+
+              // update the current sequence to the clicked index + 1 AFTER saving button states
+              currentSequence = index + 1; 
+
+              console.log('Current Sequence After Updating:', currentSequence); // Logs the current sequence after updating
+
+
+              updateUI(); // call the function to update the UI
+              sequenceLights.forEach((light, lightIndex) => {
+                  if (lightIndex === currentSequence - 1) {
+                      light.classList.add('on');
+                  } else {
+                      light.classList.remove('on');
+                  }
+              });
+          });
+      });
           saveButton.addEventListener('click', () => {
             console.log("Save button clicked");
             let settings = exportSettings();
@@ -749,23 +809,15 @@ function updateUI() {
             reader.readAsText(file);
           });
 
-          modeToggle.addEventListener('change', () => {
-            console.log("Mode toggle changed");
-            if (modeToggle.checked) {
-              // Continuous play mode is enabled
-              resetSequenceCounts();
-              resetStepLights();
-            } else {
-              // 4-bar loop mode is enabled
-              resetBarAndSequenceCounts();
-              resetStepLights();
-            }
-          });
         });
 
-
-
-                
+        function resetSequenceCounts() {
+          if (!isContinuous) {
+              sequenceCount = 0;
+              resetStepLights();
+          }
+      }
+   
 
         channels = document.querySelectorAll('.channel');
 
@@ -819,14 +871,7 @@ function updateUI() {
 
         });
 
-        // Create the sequence lights
-        const sequenceLightsContainer = document.getElementById('sequence-lights');
-          for (let i = 0; i < 64; i++) {
-              const light = document.createElement('div');
-              light.classList.add('sequence-light');
-              sequenceLightsContainer.appendChild(light);
-          }
-
+          
   if (playButton && stopButton) {
     const channel1 = document.querySelector('#channel-0 .step-button:nth-child(4n+1)');
     if (channel1) channel1.classList.add('selected');
@@ -839,26 +884,29 @@ function updateUI() {
 
     playButton.addEventListener('click', () => {
       if (!isPlaying) {
-        startScheduler();
-        playButton.classList.add('selected');
-        stopButton.classList.remove('selected');
-        isPlaying = true;
+          startScheduler();
+          playButton.classList.add('selected');
+          stopButton.classList.remove('selected');
+          isPlaying = true;
       }
-    });
+  });
 
-    stopButton.addEventListener('click', () => {
-        if (isPlaying) {
-            stopScheduler();
-            stopButton.classList.add('selected');
-            playButton.classList.remove('selected');
-            isPlaying = false;
-            beatCount = 0;  // reset the beat count
-            barCount = 0; // reset the bar count
-            sequenceCount = 0; // reset the sequence count
-            currentStep = 0;  // reset the step count
-            resetStepLights();  // reset the step lights
-        }
-    });
+  stopButton.addEventListener('click', () => {
+      if (isPlaying) {
+          stopScheduler();
+          stopButton.classList.add('selected');
+          playButton.classList.remove('selected');
+          isPlaying = false;
+
+          if (!isContinuous) {  // Only reset the counts if we're not in continuous mode
+              beatCount = 1;
+              barCount = 1;
+              sequenceCount = 0;
+              currentStep = 0;
+              resetStepLights();
+          }
+      }
+  });
 
   } else {
     console.error("Play or Stop button is not defined");
