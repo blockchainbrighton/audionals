@@ -105,7 +105,6 @@ function playRecording() {
     let currentIndex = 0;
 
     console.log("[synthRecording.js] [playRecording] Playback started at:", new Date(startTime).toISOString());
-    console.log("[synthRecording.js] [playRecording] Current BPM:", currentBPM);
 
     let loopDuration = 60000 / currentBPM * beatsPerBar * selectedLoopBars;
     if (isSequencerPlaying) {
