@@ -7,6 +7,9 @@ let recordingStartTime;
 let selectedLoopBars = 1; // Default to 1 bar loop
 let currentLoopBeat = 1; // Track the current beat within the loop
 let scheduledLoopTime = null;
+let recordingTimeout = null; // Timeout for auto-stopping the recording
+
+const beatsPerBar = 4; // Assuming a 4/4 time signature
 
 // Buffered Playback
 let bufferedEvents = [];
@@ -44,8 +47,19 @@ function startRecording() {
         recordingData = [];
         console.log("[synthRecording.js] [startRecording] Recording initialized and waiting for the first note.");
         logCurrentSettings("startRecording");
+
+        // Calculate loop duration and set a timeout to auto-stop recording
+        let loopDuration = 60000 / currentBPM * beatsPerBar * selectedLoopBars;
+        recordingTimeout = setTimeout(() => {
+            stopRecording();
+            if (isLooping) { // Using the correct variable 'isLooping' to check if looping is on
+                playBufferedEvents();
+            }
+        }, loopDuration);
     }
 }
+
+
 
 function recordMIDIInput(midiMessage) {
     if (isRecording) {
@@ -67,6 +81,7 @@ function recordMIDIInput(midiMessage) {
 
 function stopRecording() {
     if (isRecording) {
+        clearTimeout(recordingTimeout); // Clear the auto-stop timeout
         isRecording = false;
         hasStartedRecording = false; // Reset the flag when stopping recording
         console.log(`[synthRecording.js] [stopRecording] Recording stopped at ${new Date().toISOString()}`);
@@ -76,10 +91,8 @@ function stopRecording() {
 }
 
 
-
 let currentBar = 1; // Current bar in the sequence
 let currentBeat = 1; // Current beat within the bar
-const beatsPerBar = 4; // Assuming a 4/4 time signature
 
 function recordSilence(duration) {
     if (isRecording && hasStartedRecording) {
