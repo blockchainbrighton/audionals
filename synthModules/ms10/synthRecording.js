@@ -7,11 +7,14 @@ let isLooping = false;  // Variable to keep track if looping is enabled
 let loopStartTimestamp;  // Timestamp to determine when to start the loop
 let isPlayingRecording = false;
 let playbackInterval; 
+let startTime; // Move startTime to global scope
+let loopDuration; // Global variable for the loop duration
 
 
 
 let selectedLoopBars = 1; // Default to 1 bar loop
 let currentLoopBeat = 1; // Track the current beat within the loop
+let scheduledLoopTime = null;
 
 const elements = {
     attack: document.getElementById('attack'),
@@ -21,6 +24,59 @@ const elements = {
     volume: document.getElementById('volume'),
     note: document.getElementById('note')
 };
+
+// Unified event handling mechanism
+function handleEvent(event) {
+    switch (event.type) {
+        case 'startRecording':
+            startRecording();
+            break;
+        case 'stopRecording':
+            stopRecording();
+            break;
+        case 'playRecording':
+            playRecording();
+            break;
+        case 'stopPlayback':
+            stopPlayback();
+            break;
+        case 'toggleLoop':
+            toggleLoop();
+            break;
+        case 'midiMessageReceived':
+            recordMIDIInput(event.detail.midiMessage);
+            logCurrentSettings("midiMessageReceived");
+            break;
+        // ... [Other event handlers]
+    }
+}
+
+// Buffered Playback
+let bufferedEvents = [];
+function bufferEvents() {
+    bufferedEvents = recordingData.slice(); // Clone the recordingData array
+}
+
+function playBufferedEvents() {
+    let startTime = Date.now();
+    let currentIndex = 0;
+
+    function processBufferedEvents() {
+        let currentTime = Date.now() - startTime;
+        while (currentIndex < bufferedEvents.length && bufferedEvents[currentIndex].timestamp <= currentTime) {
+            handleMIDIMessage(bufferedEvents[currentIndex].midiMessage, bufferedEvents[currentIndex].synthSettings);
+            currentIndex++;
+        }
+    }
+
+    playbackInterval = setInterval(processBufferedEvents, 10);
+}
+
+// Optimized Looping
+function scheduleLoopedPlayback() {
+    let loopDuration = 60000 / currentBPM * beatsPerBar * selectedLoopBars;
+    setTimeout(playBufferedEvents, loopDuration);
+}
 
 function getCurrentSynthSettings() {
     return {
@@ -101,12 +157,14 @@ function recordSilence(duration) {
 }
 
 function playRecording() {
-    let startTime = Date.now();
+    loopDuration = 60000 / currentBPM * beatsPerBar * selectedLoopBars; // Modify the global variable
+
+    startTime = Date.now(); // Modify this line, since startTime is now a global variable
     let currentIndex = 0;
+    scheduledLoopTime = startTime + loopDuration;  // Schedule the first loop time
 
     console.log("[synthRecording.js] [playRecording] Playback started at:", new Date(startTime).toISOString());
 
-    let loopDuration = 60000 / currentBPM * beatsPerBar * selectedLoopBars;
 
     if (isSequencerPlaying) {
         if (!isPlayingRecording) {
@@ -123,21 +181,13 @@ function playRecording() {
                 currentIndex++;
             }
 
-            // Check for loop conditions
-            if (currentTime >= loopDuration) {
-                console.log("[synthRecording.js] [playRecording] Looping started at:", new Date().toISOString());
-                clearInterval(playbackInterval);
-                playRecording();
-                return;
-            }
-
             if (currentIndex >= recordingData.length) {
-                clearInterval(playbackInterval);
+                isPlayingRecording = false;  // Mark the playback as stopped when the recording ends
                 console.log("[synthRecording.js] [playRecording] Waiting for loop restart.");
             }
         }
 
-        playbackInterval = setInterval(processMIDIEvents, 10); // Check every 10ms to see if we have any events to play
+        playbackInterval = setInterval(processMIDIEvents, 10);  // Check every 10ms to see if we have any events to play
     }
 }
 
@@ -145,22 +195,34 @@ function playFromStart() {
     let currentIndex = 0;
 
     function processMIDIEvents() {
-        if (currentIndex < recordingData.length) {
+        let currentTime = Date.now() - startTime;
+
+        while (currentIndex < recordingData.length && recordingData[currentIndex].timestamp <= currentTime) {
+            console.log("[synthRecording.js] [playRecording] Processing MIDI message at index:", currentIndex);
             handleMIDIMessage(recordingData[currentIndex].midiMessage, recordingData[currentIndex].synthSettings);
             currentIndex++;
-        } else {
-            // End of recording; reset for the next loop
-            currentIndex = 0;
+        }
+
+        if (currentIndex >= recordingData.length) {
+            if (isLooping) {
+                console.log("[synthRecording.js] [playRecording] Looping started at:", new Date().toISOString());
+                currentIndex = 0;
+                startTime = Date.now();
+                scheduledLoopTime = startTime + loopDuration; // Access the global variable without issues
+            } else {
+                isPlayingRecording = false;
+                console.log("[synthRecording.js] [playRecording] Playback finished.");
+            }
         }
     }
 
-    // Subscribe to beat messages from the sequencer
     sequencerChannel.onmessage = function(event) {
         if (event.data.type === 'beat') {
-            // If playback has stopped (either manually or reached the end), restart it on the next beat
-            if (!isPlayingRecording) {
+            if (Date.now() >= scheduledLoopTime) {
+                // Restart the loop if the current time has passed the scheduled loop time
                 isPlayingRecording = true;
                 currentIndex = 0;
+                scheduledLoopTime += loopDuration;  // Schedule the next loop
             }
             processMIDIEvents();
         }
@@ -237,11 +299,14 @@ function toggleLoop() {
 }
 
 // Event listeners for various buttons and interactions
-document.getElementById("startRecording").addEventListener("click", startRecording);
-document.getElementById("stopRecording").addEventListener("click", stopRecording);
-document.getElementById("playRecording").addEventListener("click", playRecording);
-document.getElementById("stopPlayback").addEventListener("click", stopPlayback);
-document.getElementById("loopToggle").addEventListener("click", toggleLoop);
+// Attach unified event listeners
+document.getElementById("startRecording").addEventListener("click", handleEvent);
+document.getElementById("stopRecording").addEventListener("click", handleEvent);
+document.getElementById("playRecording").addEventListener("click", handleEvent);
+document.getElementById("stopPlayback").addEventListener("click", handleEvent);
+document.getElementById("loopToggle").addEventListener("click", handleEvent);
+document.addEventListener('midiMessageReceived', handleEvent);
+
 
 document.querySelector("button[onclick='playMS10TriangleBass()']").addEventListener("click", function() {
     recordSynthInteraction({ event: "notePlayed", note: elements.note.value });
