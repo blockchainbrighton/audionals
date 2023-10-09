@@ -57,7 +57,11 @@ function onMIDIMessage(message) {
             console.log(`Unhandled MIDI message type: ${command}`);
             break;
     }
-}
+    // Dispatch the custom event with the received MIDI message
+    const event = new CustomEvent('midiMessageReceived', { detail: { midiMessage: message.data } });
+    document.dispatchEvent(event);
+    }   
+
 
 
 function midiNoteToFrequency(midiNote) {
@@ -83,3 +87,5 @@ function getVolume() {
     const volumeSlider = document.getElementById('volume');
     return volumeSlider.value / 100; // convert to a value between 0 and 1
 }
+
+

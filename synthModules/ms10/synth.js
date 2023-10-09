@@ -50,4 +50,5 @@ function playMS10TriangleBass(frequency = null) {
     oscillator.stop(context.currentTime + attack + release);
 
     currentOscillator = oscillator;  // Set the current oscillator
+    
 }
