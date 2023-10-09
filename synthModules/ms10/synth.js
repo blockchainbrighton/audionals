@@ -18,6 +18,9 @@ function playMS10TriangleBass(frequency = null) {
     let waveformType = document.getElementById('waveform').value;
     oscillator.type = waveformType;
 
+    console.log("[synth.js] [playMS10TriangleBass] Waveform Type:", waveformType);
+
+
     if (frequency === null) {
         frequency = parseFloat(document.getElementById('note').value);
         if (!isFinite(frequency)) {
@@ -26,12 +29,20 @@ function playMS10TriangleBass(frequency = null) {
         }
     }
 
+    console.log("[synth.js] [playMS10TriangleBass] Frequency:", frequency);
+
     oscillator.frequency.setValueAtTime(frequency, context.currentTime);
 
     let attack = document.getElementById('attack').value / 1000;
     let release = document.getElementById('release').value / 1000;
     let cutoff = document.getElementById('cutoff').value;
     let resonance = document.getElementById('resonance').value;
+
+    console.log("[synth.js] [playMS10TriangleBass] Attack:", attack);
+    console.log("[synth.js] [playMS10TriangleBass] Release:", release);
+    console.log("[synth.js] [playMS10TriangleBass] Cutoff:", cutoff);
+    console.log("[synth.js] [playMS10TriangleBass] Resonance:", resonance);
+   
 
     filter.type = 'lowpass';
     filter.frequency.value = cutoff;
@@ -42,6 +53,8 @@ function playMS10TriangleBass(frequency = null) {
     gainNode.gain.linearRampToValueAtTime(currentVolume * 2, context.currentTime + attack); 
     gainNode.gain.linearRampToValueAtTime(0, context.currentTime + attack + release);
 
+    console.log("[synth.js] [playMS10TriangleBass] Volume:", currentVolume);
+
     oscillator.connect(filter);
     filter.connect(gainNode);
     gainNode.connect(context.destination);
@@ -50,5 +63,15 @@ function playMS10TriangleBass(frequency = null) {
     oscillator.stop(context.currentTime + attack + release);
 
     currentOscillator = oscillator;  // Set the current oscillator
+
+    console.log("[synth.js] [playMS10TriangleBass] All settings:", {
+        waveformType: waveformType,
+        frequency: frequency,
+        attack: attack,
+        release: release,
+        cutoff: cutoff,
+        resonance: resonance,
+        volume: currentVolume
+    });
     
 }

@@ -27,3 +27,20 @@ document.addEventListener('keyup', function(event) {
 
 
 document.getElementById('arpToggle').addEventListener('click', toggleArpeggiator);
+
+// Toggle button states
+document.querySelectorAll('button[data-state]').forEach(button => {
+    button.addEventListener('click', function() {
+        if (this.getAttribute('data-state') === 'off') {
+            this.setAttribute('data-state', 'on');
+            if (this.id === 'arpToggle') {
+                this.textContent = 'Toggle Arpeggiator: ON';
+            }
+        } else {
+            this.setAttribute('data-state', 'off');
+            if (this.id === 'arpToggle') {
+                this.textContent = 'Toggle Arpeggiator: OFF';
+            }
+        }
+    });
+});

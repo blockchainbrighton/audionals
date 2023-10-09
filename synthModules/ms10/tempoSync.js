@@ -4,6 +4,10 @@ console.log(`[tempoSync] [${new Date().toISOString()}] [MS10] tempoSync.js scrip
 
 let syncBeat = 1; // Initialize syncBeat to 1
 let syncBar = 1; // Initialize syncBar to 1
+let currentBPM = 105; // Initialize with a default value or fetch from a source if available
+
+// Global state variable to track if the sequencer is playing
+let isSequencerPlaying = false;
 
 const sequencerChannel = new BroadcastChannel('sequencerChannel');
 
@@ -23,32 +27,27 @@ sequencerChannel.onmessage = function(event) {
             syncBar++; // Increment the syncBar
         }
     } else if (type === 'BPMUpdate') {
-        const updatedBPM = data;
+        currentBPM = data;  // Update the current BPM with the new value
 
         const arpTempoSlider = document.getElementById('arpTempo');
-        arpTempoSlider.value = updatedBPM;
+        arpTempoSlider.value = currentBPM;
 
-        console.log(`[tempoSync] [${new Date().toISOString()}] Updated BPM: ${updatedBPM}`);
-   } else if (type === 'pause') {
+        console.log(`[tempoSync] [${new Date().toISOString()}] Updated BPM: ${currentBPM}`);
+    
+    } else if (type === 'pause' || type === 'stop') {
+        isSequencerPlaying = false;  // Set the global state to false
+        
         if (isArpeggiatorOn) {
-            console.log(`[tempoSync] [${new Date().toISOString()}] [MS10] Stopping arpeggiator due to pause message`);
+            console.log(`[tempoSync] [${new Date().toISOString()}] [MS10] Stopping arpeggiator due to ${type} message`);
             stopArpeggiator();
         }
-    } else if (type === 'resume') {
-        if (!isArpeggiatorOn) {
-            console.log(`[tempoSync] [${new Date().toISOString()}] [MS10] Starting arpeggiator due to resume message`);
-            startArpeggiator();
-        }
-    } else if (type === 'stop') {
-        if (isArpeggiatorOn) {
-            console.log(`[tempoSync] [${new Date().toISOString()}] [MS10] Stopping arpeggiator due to stop message`);
-            stopArpeggiator();
-        }
-        console.log(`[tempoSync] [${new Date().toISOString()}] [MS10] Resetting syncBeat and syncBar due to stop message`);
+        console.log(`[tempoSync] [${new Date().toISOString()}] [MS10] Resetting syncBeat and syncBar due to ${type} message`);
         syncBeat = 1; // Reset syncBeat
         syncBar = 1; // Reset syncBar
-    } else if (type === 'play') {
-        console.log(`[tempoSync] [${new Date().toISOString()}] [MS10] Playing arpeggiator due to play message`);
+    } else if (type === 'play' || type === 'resume') {
+        isSequencerPlaying = true;  // Set the global state to true
+        
+        console.log(`[tempoSync] [${new Date().toISOString()}] [MS10] Playing arpeggiator due to ${type} message`);
         playArpeggiator();
     }
 

@@ -1,162 +1,278 @@
 // synthRecording.js
-
+let isPlaying = false;
 let isRecording = false;
 let recordingData = [];
 let recordingStartTime;
+let isLooping = false;  // Variable to keep track if looping is enabled
+let loopStartTimestamp;  // Timestamp to determine when to start the loop
+let isPlayingRecording = false;
+let playbackInterval; 
 
-// Start recording
+
+let selectedLoopBars = 1; // Default to 1 bar loop
+let currentLoopBeat = 1; // Track the current beat within the loop
+
+const elements = {
+    attack: document.getElementById('attack'),
+    release: document.getElementById('release'),
+    cutoff: document.getElementById('cutoff'),
+    resonance: document.getElementById('resonance'),
+    volume: document.getElementById('volume'),
+    note: document.getElementById('note')
+};
+
+function getCurrentSynthSettings() {
+    return {
+        attack: parseFloat(elements.attack.value),
+        release: parseFloat(elements.release.value),
+        cutoff: parseFloat(elements.cutoff.value),
+        resonance: parseFloat(elements.resonance.value),
+        volume: getVolume()
+    };
+}
+
+function logCurrentSettings(action) {
+    console.log(`[synthRecording.js] [${action}] Current settings:`, getCurrentSynthSettings());
+}
+
+let hasStartedRecording = false; // This will be true once the first note is pressed during recording
+
 function startRecording() {
     if (!isRecording) {
         isRecording = true;
-        recordingData = []; // Clear previous recording data
-        recordingStartTime = Date.now();
-        console.log("[synthRecording.js] [startRecording] Recording started at " + new Date(recordingStartTime).toISOString());
+        hasStartedRecording = false; // Reset this flag when starting a new recording session
+        recordingData = [];
+        console.log("[synthRecording.js] [startRecording] Recording initialized and waiting for the first note.");
+        logCurrentSettings("startRecording");
     }
 }
 
-// Function to capture the current state of synth settings
-function getCurrentSynthSettings() {
-    const attack = parseFloat(document.getElementById('attack').value);
-    const release = parseFloat(document.getElementById('release').value);
-    const cutoff = parseFloat(document.getElementById('cutoff').value);
-    const resonance = parseFloat(document.getElementById('resonance').value);
-    const volume = getVolume();
-
-    return { attack, release, cutoff, resonance, volume };
-}
-
-// Function to capture MIDI input during recording
 function recordMIDIInput(midiMessage) {
     if (isRecording) {
-        const timestamp = Date.now() - recordingStartTime;
-        const synthSettings = getCurrentSynthSettings();
-        recordingData.push({ timestamp, midiMessage, synthSettings });
-        console.log("[synthRecording.js] [recordMIDIInput] MIDI message and synth settings recorded:", midiMessage, synthSettings);
+        // Start the actual recording when the first note is pressed
+        if (!hasStartedRecording) {
+            recordingStartTime = Date.now();
+            hasStartedRecording = true;
+            console.log(`[synthRecording.js] [recordMIDIInput] Recording actually started at ${new Date(recordingStartTime).toISOString()}`);
+        }
+
+        recordingData.push({
+            timestamp: Date.now() - recordingStartTime,
+            midiMessage,
+            synthSettings: getCurrentSynthSettings()
+        });
+        console.log("[synthRecording.js] [recordMIDIInput] MIDI message recorded:", midiMessage);
     }
 }
 
-// Stop recording
 function stopRecording() {
     if (isRecording) {
         isRecording = false;
-        console.log("[synthRecording.js] [stopRecording] Recording stopped at " + new Date().toISOString());
-        console.log("[synthRecording.js] [stopRecording] Recorded data:", recordingData);  // <-- This logs the recorded array
+        hasStartedRecording = false; // Reset the flag when stopping recording
+        console.log(`[synthRecording.js] [stopRecording] Recording stopped at ${new Date().toISOString()}`);
+        console.log("[synthRecording.js] [stopRecording] Recorded data:", recordingData);
+        logCurrentSettings("stopRecording");
     }
 }
 
-// Play back the recorded MIDI messages
-function playbackRecording() {
-    let playbackStartTime = Date.now();
-    console.log("[synthRecording.js] [playbackRecording] Playback started at."(playbackStartTime));
-    recordingData.forEach(event => {
-        setTimeout(() => {
-            // Handle the MIDI message to generate audio
-            handleMIDIMessage(event.midiMessage);
-            console.log("[synthRecording.js] [playbackRecording] MIDI message played:", event.midiMessage);
-        }, event.timestamp);
-    });
-    console.log("[synthRecording.js] [playbackRecording] Playback scheduled.");
+
+function toggleLoop() {
+    isLooping = !isLooping;  // Toggle looping status
+    const loopButton = document.getElementById("loopToggle");
+    loopButton.dataset.state = isLooping ? "on" : "off";  // Update button state
+    loopButton.style.backgroundColor = isLooping ? "#A0A0A0" : "";  // Update button color
 }
 
-// Save recording to a JSON file
-function saveRecording() {
-    const blob = new Blob([JSON.stringify(recordingData)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "synthRecording.json";
-    a.click();
-    console.log("[RECORDING] Saved to file.");
+let currentBar = 1; // Current bar in the sequence
+let currentBeat = 1; // Current beat within the bar
+const beatsPerBar = 4; // Assuming a 4/4 time signature
+
+function recordSilence(duration) {
+    if (isRecording && hasStartedRecording) {
+        recordingData.push({
+            timestamp: Date.now() - recordingStartTime,
+            midiMessage: null,  // null indicates silence
+            duration: duration,
+            synthSettings: getCurrentSynthSettings()
+        });
+        console.log("[synthRecording.js] [recordSilence] Silence recorded for duration:", duration);
+    }
 }
 
-// Load recording from a JSON file
-function loadRecording(event) {
-    const file = event.target.files[0];
-    const reader = new FileReader();
-    
-    reader.onload = function() {
-        recordingData = JSON.parse(reader.result);
-        console.log("[synthRecording.js] [loadRecording] Loaded from file at " + new Date().toISOString());
-        console.log("[synthRecording.js] [loadRecording] Loaded data:", recordingData);
-    };
-
-    reader.readAsText(file);
-}
-
-// Play the recording
-// Play the recording
 function playRecording() {
+    
     let startTime = Date.now();
     let currentIndex = 0;
 
-    console.log("[synthRecording.js] [playRecording] Playback initiated at " + new Date(startTime).toISOString());
+    console.log("[synthRecording.js] [playRecording] Playback started at:", new Date(startTime).toISOString());
+    console.log("[synthRecording.js] [playRecording] Current BPM:", currentBPM);
 
-    playbackInterval = setInterval(() => {
+    let loopDuration = 60000 / currentBPM * beatsPerBar * selectedLoopBars;
+    if (isSequencerPlaying) {
+        // If the sequencer is playing, rely on its beat and bar messages
+        if (!isPlayingRecording) {
+            isPlayingRecording = true;
+            playFromStart();
+        }
+    } else {
+    function processMIDIEvents() {
         let currentTime = Date.now() - startTime;
+
         while (currentIndex < recordingData.length && recordingData[currentIndex].timestamp <= currentTime) {
-            console.log("[synthRecording.js] [playRecording] Playing event at " + new Date(Date.now()).toISOString() + ": ", recordingData[currentIndex]);
-            
-            // Determine the type of MIDI message
-            let midiMessage = recordingData[currentIndex].midiMessage;
-            let command = midiMessage[0] & 0xF0; // Mask the channel bits to get the message type
-            let midiNote = midiMessage[1];
-            let velocity = (midiMessage.length > 2) ? midiMessage[2] : 0;
-
-            switch (command) {
-                case 0x90: // noteOn for all channels
-                    if (velocity > 0) {
-                        let frequency = midiNoteToFrequency(midiNote);
-                        playMS10TriangleBass(frequency, recordingData[currentIndex].synthSettings);  // Pass the recorded synth settings
-                    } else {
-                        stopMS10TriangleBass();
-                    }
-                    break;
-                case 0x80: // noteOff for all channels
-                    stopMS10TriangleBass();
-                    break;
-            }
-
+            console.log("[synthRecording.js] [playRecording] Processing MIDI message at index:", currentIndex);
+            handleMIDIMessage(recordingData[currentIndex].midiMessage, recordingData[currentIndex].synthSettings);
             currentIndex++;
         }
 
-        // If we have played back all the recorded events, stop the playback
-        if (currentIndex >= recordingData.length) {
-            stopPlayback();
+        // Check for loop conditions
+        if (currentTime >= loopDuration) {
+            console.log("[synthRecording.js] [playRecording] Looping started at:", new Date().toISOString());
+            clearInterval(playbackInterval);
+            playRecording();
+            return;
         }
-    }, 10); // Check every 10ms to see if we have any events to play
+
+        if (currentIndex >= recordingData.length) {
+            clearInterval(playbackInterval);
+            console.log("[synthRecording.js] [playRecording] Waiting for loop restart.");
+            setTimeout(() => {
+                playRecording();
+            }, loopDuration - currentTime);
+        }
+    }
+
+    playbackInterval = setInterval(processMIDIEvents, 10); // Check every 10ms to see if we have any events to play
 }
 
-// Function to stop the current oscillator
-function stopMS10TriangleBass() {
-    if (currentOscillator) {
-        currentOscillator.stop();
-        currentOscillator = null;
+}
+
+function playFromStart() {
+    let currentIndex = 0;
+
+    function processMIDIEvents() {
+        if (currentIndex < recordingData.length) {
+            handleMIDIMessage(recordingData[currentIndex].midiMessage, recordingData[currentIndex].synthSettings);
+            currentIndex++;
+        } else {
+            // End of recording; wait for the next loop
+            isPlayingRecording = false;
+        }
+    }
+
+    // Subscribe to beat messages from the sequencer
+    sequencerChannel.onmessage = function(event) {
+        if (event.data.type === 'beat') {
+            if (syncBeat === 1 && syncBar % selectedLoopBars === 0) {
+                // Start or restart the loop
+                currentIndex = 0;
+            }
+            processMIDIEvents();
+        }
+    };
+}
+function handleBarButtonClick(event) {
+    barButtons.forEach(button => {
+        button.classList.remove('selected');
+        button.style.backgroundColor = "";
+    });
+    
+    event.target.classList.add('selected');
+    event.target.style.backgroundColor = "#A0A0A0";
+
+    selectedLoopBars = parseInt(event.target.getAttribute('data-bar'));
+    console.log("[synthRecording.js] [handleBarButtonClick] Selected Loop Bars:", selectedLoopBars);
+
+    currentLoopBeat = 1;
+    loopStartTimestamp = null;
+    console.log("[synthRecording.js] [handleBarButtonClick] Reset loop counters.");
+}
+
+function handleMIDIMessage(midiMessage, synthSettings) {
+    console.log("[synthRecording.js] [handleMIDIMessage] Applying settings:", synthSettings);
+    let command = midiMessage[0] & 0xF0;
+    let midiNote = midiMessage[1];
+    let velocity = (midiMessage.length > 2) ? midiMessage[2] : 0;
+
+    switch (command) {
+        case 0x90:
+            if (velocity > 0) {
+                let frequency = midiNoteToFrequency(midiNote);
+                console.log("[synthRecording.js] [handleMIDIMessage] Playing note with frequency:", frequency);
+                playMS10TriangleBass(frequency, synthSettings);
+            } 
+            break;
     }
 }
 
-
-// Stop the playback
 function stopPlayback() {
     clearInterval(playbackInterval);
     console.log("[synthRecording.js] [stopPlayback] Playback stopped at " + new Date().toISOString());
+    currentLoopBeat = 1;
+    loopStartTimestamp = null;
+    console.log("[synthRecording.js] [stopPlayback] Reset loop counters and timestamps.");
 }
 
-
-// Event listeners for the buttons
-document.getElementById("startRecording").addEventListener("click", startRecording);
-document.getElementById("stopRecording").addEventListener("click", stopRecording);
-document.getElementById("saveRecording").addEventListener("click", saveRecording);
-document.getElementById("loadRecordingInput").addEventListener("change", loadRecording);
-document.getElementById("playRecording").addEventListener("click", playRecording);
-document.getElementById("stopPlayback").addEventListener("click", stopPlayback);
-
-
-// For demonstration purposes, let's record a note interaction when the "Play Note" button is clicked
-document.querySelector("button[onclick='playMS10TriangleBass()']").addEventListener("click", function() {
-    recordSynthInteraction({ event: "notePlayed", note: document.getElementById("note").value });
+['attack', 'release', 'cutoff', 'resonance', 'volume'].forEach(id => {
+    elements[id].addEventListener('input', () => {
+        if (isRecording) {
+            const interaction = { event: `${id}Changed`, value: elements[id].value };
+            recordingData.push({
+                timestamp: Date.now() - recordingStartTime,
+                interaction
+            });
+            console.log("[synthRecording.js] [recordSynthInteraction] Synth interaction recorded:", interaction);
+        }
+    });
 });
 
-// Integration with midiControl.js
+// Toggle loop functionality
+function toggleLoop() {
+    isLooping = !isLooping;  // Toggle the boolean value
+    const loopButton = document.getElementById("loopToggle");
+    loopButton.dataset.state = isLooping ? "on" : "off";
+    if (isLooping) {
+        loopButton.style.backgroundColor = "#A0A0A0";  // Light up the button
+    } else {
+        loopButton.style.backgroundColor = "";  // Reset the button color
+    }
+}
+
+// Event listeners for various buttons and interactions
+document.getElementById("startRecording").addEventListener("click", startRecording);
+document.getElementById("stopRecording").addEventListener("click", stopRecording);
+document.getElementById("playRecording").addEventListener("click", playRecording);
+document.getElementById("stopPlayback").addEventListener("click", stopPlayback);
+document.getElementById("loopToggle").addEventListener("click", toggleLoop);
+
+document.querySelector("button[onclick='playMS10TriangleBass()']").addEventListener("click", function() {
+    recordSynthInteraction({ event: "notePlayed", note: elements.note.value });
+});
+
 document.addEventListener('midiMessageReceived', function(e) {
     recordMIDIInput(e.detail.midiMessage);
+    logCurrentSettings("midiMessageReceived");
+});
+
+// Get references to the bar selection buttons
+const barButtons = document.querySelectorAll('#selectBar1, #selectBar2, #selectBar4');
+
+// Function to handle button clicks
+function handleBarButtonClick(event) {
+    // Remove the 'selected' class from all bar buttons
+    barButtons.forEach(button => {
+        button.classList.remove('selected');
+        button.style.backgroundColor = "";  // Reset the button color
+    });
+    
+    // Highlight the clicked button and set its state
+    event.target.classList.add('selected');
+    event.target.style.backgroundColor = "#A0A0A0";  // Highlight the button
+
+    // Update the number of bars for looping based on the selected button
+    selectedLoopBars = parseInt(event.target.getAttribute('data-bar'));
+}
+
+// Attach click event listeners to the bar selection buttons
+barButtons.forEach(button => {
+    button.addEventListener('click', handleBarButtonClick);
 });
