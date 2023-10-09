@@ -9,6 +9,7 @@ let isPlayingRecording = false;
 let playbackInterval; 
 
 
+
 let selectedLoopBars = 1; // Default to 1 bar loop
 let currentLoopBeat = 1; // Track the current beat within the loop
 
@@ -100,49 +101,44 @@ function recordSilence(duration) {
 }
 
 function playRecording() {
-    
     let startTime = Date.now();
     let currentIndex = 0;
 
     console.log("[synthRecording.js] [playRecording] Playback started at:", new Date(startTime).toISOString());
 
     let loopDuration = 60000 / currentBPM * beatsPerBar * selectedLoopBars;
+
     if (isSequencerPlaying) {
-        // If the sequencer is playing, rely on its beat and bar messages
         if (!isPlayingRecording) {
             isPlayingRecording = true;
             playFromStart();
         }
     } else {
-    function processMIDIEvents() {
-        let currentTime = Date.now() - startTime;
+        function processMIDIEvents() {
+            let currentTime = Date.now() - startTime;
 
-        while (currentIndex < recordingData.length && recordingData[currentIndex].timestamp <= currentTime) {
-            console.log("[synthRecording.js] [playRecording] Processing MIDI message at index:", currentIndex);
-            handleMIDIMessage(recordingData[currentIndex].midiMessage, recordingData[currentIndex].synthSettings);
-            currentIndex++;
-        }
+            while (currentIndex < recordingData.length && recordingData[currentIndex].timestamp <= currentTime) {
+                console.log("[synthRecording.js] [playRecording] Processing MIDI message at index:", currentIndex);
+                handleMIDIMessage(recordingData[currentIndex].midiMessage, recordingData[currentIndex].synthSettings);
+                currentIndex++;
+            }
 
-        // Check for loop conditions
-        if (currentTime >= loopDuration) {
-            console.log("[synthRecording.js] [playRecording] Looping started at:", new Date().toISOString());
-            clearInterval(playbackInterval);
-            playRecording();
-            return;
-        }
-
-        if (currentIndex >= recordingData.length) {
-            clearInterval(playbackInterval);
-            console.log("[synthRecording.js] [playRecording] Waiting for loop restart.");
-            setTimeout(() => {
+            // Check for loop conditions
+            if (currentTime >= loopDuration) {
+                console.log("[synthRecording.js] [playRecording] Looping started at:", new Date().toISOString());
+                clearInterval(playbackInterval);
                 playRecording();
-            }, loopDuration - currentTime);
+                return;
+            }
+
+            if (currentIndex >= recordingData.length) {
+                clearInterval(playbackInterval);
+                console.log("[synthRecording.js] [playRecording] Waiting for loop restart.");
+            }
         }
+
+        playbackInterval = setInterval(processMIDIEvents, 10); // Check every 10ms to see if we have any events to play
     }
-
-    playbackInterval = setInterval(processMIDIEvents, 10); // Check every 10ms to see if we have any events to play
-}
-
 }
 
 function playFromStart() {
@@ -153,22 +149,24 @@ function playFromStart() {
             handleMIDIMessage(recordingData[currentIndex].midiMessage, recordingData[currentIndex].synthSettings);
             currentIndex++;
         } else {
-            // End of recording; wait for the next loop
-            isPlayingRecording = false;
+            // End of recording; reset for the next loop
+            currentIndex = 0;
         }
     }
 
     // Subscribe to beat messages from the sequencer
     sequencerChannel.onmessage = function(event) {
         if (event.data.type === 'beat') {
-            if (syncBeat === 1 && syncBar % selectedLoopBars === 0) {
-                // Start or restart the loop
+            // If playback has stopped (either manually or reached the end), restart it on the next beat
+            if (!isPlayingRecording) {
+                isPlayingRecording = true;
                 currentIndex = 0;
             }
             processMIDIEvents();
         }
     };
 }
+
 function handleBarButtonClick(event) {
     barButtons.forEach(button => {
         button.classList.remove('selected');
@@ -204,12 +202,14 @@ function handleMIDIMessage(midiMessage, synthSettings) {
 }
 
 function stopPlayback() {
+    isPlayingRecording = false;  // Stop the current playback
     clearInterval(playbackInterval);
     console.log("[synthRecording.js] [stopPlayback] Playback stopped at " + new Date().toISOString());
     currentLoopBeat = 1;
     loopStartTimestamp = null;
     console.log("[synthRecording.js] [stopPlayback] Reset loop counters and timestamps.");
 }
+
 
 ['attack', 'release', 'cutoff', 'resonance', 'volume'].forEach(id => {
     elements[id].addEventListener('input', () => {
