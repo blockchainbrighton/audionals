@@ -71,3 +71,9 @@ function playNextArpNote() {
         console.log(`[ARP] Played note: ${noteToPlay} (Frequency: ${noteToPlay}) at ${new Date().toISOString()}`);
     }
 }
+
+arpSequencerChannel.onmessage = function(event) {
+    const type = event.data.type;
+    const timestamp = performance.now();
+    console.log(`[ARP] Received message: ${type} at ${timestamp.toFixed(2)}ms`);
+};

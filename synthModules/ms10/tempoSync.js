@@ -14,6 +14,10 @@ const sequencerChannel = new BroadcastChannel('sequencerChannel');
 sequencerChannel.onmessage = function(event) {
     const type = event.data.type;
     const data = event.data.data;
+    const timestamp = performance.now();
+    console.log(`[tempoSync] [${timestamp.toFixed(2)}ms] [MS10] Message received on sequencerChannel: ${type}`);
+
+
 
     console.log(`[tempoSync] [${new Date().toISOString()}] [MS10] Message received on sequencerChannel: ${type}`);
 

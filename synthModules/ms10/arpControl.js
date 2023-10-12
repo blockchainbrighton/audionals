@@ -1,13 +1,14 @@
 // arpControl.js
 
 function startArpeggiator() {
+    const timestamp = performance.now();
     if (isArpeggiatorPaused) {
-        console.log("[ARP CONTROL] Resuming arpeggiator from pause.");
+        console.log(`[ARP CONTROL] Resuming arpeggiator from pause at ${timestamp.toFixed(2)}ms.`);
         isArpeggiatorPaused = false;
     } else if (!isArpeggiatorOn) {
-        console.log("[ARP CONTROL] Starting arpeggiator immediately.");
+        console.log(`[ARP CONTROL] Starting arpeggiator immediately at ${timestamp.toFixed(2)}ms.`);
         playArpNotes();
-        isArpeggiatorOn = true; // Ensure this flag is set to true when the arpeggiator is started
+        isArpeggiatorOn = true;
     }
 }
 
