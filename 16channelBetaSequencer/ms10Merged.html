@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Korg MS10 Emulator</title>
+    <style>
+    body{font-family:Arial,sans-serif;background-color:#2d2d2d;color:#efefef;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background-image:linear-gradient(to top,#2d2d2d,#434343)}.synth-container{background-color:#4a4a4a;padding:20px;border-radius:10px;box-shadow:0 0 15px rgba(0,150,255,.5)}button{background-color:#2d2d2d;color:#0fafff;border:none;padding:5px 20px;border-radius:5px;cursor:pointer;outline:none;transition:background-color .3s}button:hover{background-color:#0fafff;color:#2d2d2d}label{display:block;margin:10px 0}input[type=range]{width:100%}
+    </style>
+</head>
+
+<body>
+  
+    <div class=synth-container><h2>Audional Synth</h2><label>Note:<select id=note></select></label><label>Waveform:<select id=waveform><option value=sawtooth selected>Sawtooth<option value=square>Square<option value=triangle>Triangle<option value=pulse>Pulse</select></label><button onclick=playMS10TriangleBass()>Play Note</button><label>Attack (ms): <input id=attack max=2000 min=0 type=range value=10></label><label>Release (ms): <input id=release max=2000 min=0 type=range value=500></label><label>Cutoff (Hz): <input id=cutoff max=2000 min=20 type=range value=2000></label><label>Resonance: <input id=resonance max=10 min=0 type=range value=5 step=0.1></label><label>Volume: <input id=volume max=100 min=0 type=range value=100></label><div class=arpeggiator-controls><h3>Arpeggiator</h3><button id=arpToggle>Toggle Arpeggiator</button> <button id=playArp>Play Arp</button> <button id=pauseArp>Pause Arp</button><button id="addRest">Add Rest</button><label>Tempo (BPM): <input id="arpTempo" max="240" min="40" type="number" value="105" step="0.1"></label><br><label for="bpmAdjustValue">Fine Tuning (+/- BPM):</label><input type="number" id="bpmAdjustValue" value="0.5" step="0.1" min="-10" max="10"><label>Pattern:<select id=arpPattern><option value=up>Up<option value=down>Down<option value=random>Random<option value=up-down>Up-Down<option value=double-step>Double Step<option value=random-rest>Random with Rests</select></label><label>Speed:<select id=arpSpeed><option value=half-time>Half Time<option value=normal selected>Normal<option value=double-time>Double Time<option value=quadruple-time>Quadruple Time<option value=octuple-time>Octuple Time</select></label></div><div><label for=timingAdjust>Timing Adjust (%):</label><input id=timingAdjust max=10 min=-10 type=range value=0 onmouseup=resetTimingAdjust()><canvas height="60" id="arpNotesDisplay" width="300"></canvas></div></div>      <label>
+        <button onclick="toggleSequencerSimulator()">Start Sequencer Simulator</button>
+        <input type="checkbox" id="useSequencerTiming" value="useSequencerTiming"> Use Sequencer Timing
+    </label>
+    <button onclick="saveSettings()">Save Settings</button>
+    <button onclick="loadSettings()">Load Settings</button>
+    </div>    
+    <script>
+
+        let expectedNextStepTime = null;
+        let simulatedSequencerTimeout = null;
+        let nextSimulatedSequencerTime = null;
+        let isSimulatedMode = true; // Initially, it's in simulated mode
+        let simulatedCurrentStep = 0; // Move this outside of the startSequencerSimulator function
+        let isSimulatorRunning = false; // Track whether the simulator is running or not
+        let isExternalModeActive = false; // New flag to track if we're in external mode
+        let externalStepTimeout = null;
+
+           // arpeggiator.js
+        let isArpeggiatorOn = false;
+        let arpNotes = [];
+        
+        let currentArpIndex = 0;
+        let arpTimeout = null;
+        let nudgeApplied = false;
+        let isNudgeActive = false;
+
+        // synth.js
+        let context=new(window.AudioContext||window.webkitAudioContext),currentOscillator=null;function playMS10TriangleBass(e=null){currentOscillator&&(currentOscillator.stop(),currentOscillator=null);let t=context.createOscillator(),n=context.createGain(),l=context.createBiquadFilter(),c=document.getElementById("waveform").value;if(t.type=c,null===e&&(e=parseFloat(document.getElementById("note").value),!isFinite(e)))return void console.error("Invalid frequency value:",e);t.frequency.setValueAtTime(e,context.currentTime);let o=document.getElementById("attack").value/1e3,r=document.getElementById("release").value/1e3,a=document.getElementById("cutoff").value,u=document.getElementById("resonance").value;l.type="lowpass",l.frequency.value=a,l.Q.value=u,n.gain.setValueAtTime(0,context.currentTime);const i=getVolume();n.gain.linearRampToValueAtTime(2*i,context.currentTime+o),n.gain.linearRampToValueAtTime(0,context.currentTime+o+r),t.connect(l),l.connect(n),n.connect(context.destination),t.start(),t.stop(context.currentTime+o+r),currentOscillator=t}
+        let nextNoteTime = context.currentTime;
+
+        // midiControl.js
+        const A4_MIDI_NUMBER = 69;
+        const A4_FREQUENCY = 440;
+        const arpNoteNames = [];
+
+        function onMIDISuccess(e) {
+            let o = e.inputs.values();
+            for (let e = o.next(); e && !e.done; e = o.next()) {
+                e.value.onmidimessage = onMIDIMessage;
+            }
+        }
+
+        function onMIDIFailure() {
+            console.warn("Could not access your MIDI devices.");
+        }
+
+        function onMIDIMessage(e) {
+            console.log("Received MIDI message:", e.data);
+            let o = 240 & e.data[0];
+            let n = e.data[1];
+            let t = e.data.length > 2 ? e.data[2] : 0;
+
+            switch (o) {
+                case 144:
+                    if (t > 0) {
+                        let e = midiNoteToFrequency(n);
+                        console.log(`Note On. MIDI note: ${n}, Frequency: ${e}`);
+                        if (isArpeggiatorOn) {
+                            arpNotes.push(e);
+                            updateArpNotesDisplay();
+                        } else {
+                            playMS10TriangleBass(e, t / 127);
+                        }
+                    }
+                    break;
+                case 128:
+                    console.log(`Note Off. MIDI note: ${n}`);
+                    if (isArpeggiatorOn) {
+                        let e = midiNoteToFrequency(n);
+                        let o = arpNotes.indexOf(e);
+                        if (o !== -1) arpNotes.splice(o, 1);
+                    }
+                    break;
+                default:
+                    console.log(`Unhandled MIDI message type: ${o}`);
+            }
+        }
+
+        function midiNoteToFrequency(e) {
+            return e < 0 || e > 127 ? (console.error("Invalid MIDI note:", e), null) : Math.pow(2, (e - A4_MIDI_NUMBER) / 12) * A4_FREQUENCY;
+        }
+
+        function playNote(e, o = 1) {
+            let n = 440 * Math.pow(2, (e - 69) / 12);
+            playMS10TriangleBass(n, o);
+        }
+
+        function stopNote(e) {}
+
+        function getVolume() {
+            return document.getElementById("volume").value / 100;
+        }
+
+        navigator.requestMIDIAccess ? navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure) : console.warn("WebMIDI is not supported in this browser.");
+        // noteSelector.js
+        function populateNoteSelector(){const e=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];window.noteNameToFrequency=function(t,o){const n=e.indexOf(t)+12*(o+1);return 440*Math.pow(2,(n-69)/12)},window.frequencyToNoteName=function(t){let o=Math.round(12*Math.log2(t/440)+69);return e[o%12]+(Math.floor(o/12)-1)};let t=0,o=0;const n=document.getElementById("note");for(let e=0;e<88;e++){const a=document.createElement("option"),c=noteNames[t],d=440*Math.pow(2,(e-49)/12);a.value=d,a.textContent=c+o,n.appendChild(a),t++,t>=12&&(t=0,o++)}}document.addEventListener("DOMContentLoaded",populateNoteSelector);
+        // arpControl.js
+        function startArpeggiator(){
+            isArpeggiatorOn = true;
+            playArpNotes();
+        }
+        function playArpeggiator(){
+            startArpeggiator();
+        }
+        function stopArpeggiator(){
+            isArpeggiatorOn = false;
+            arpNotes.length = 0;
+        }
+
+     
+
+
+        function playArpNotes() {
+            console.log("[playArpNotes] Function called.");
+
+            if (isArpeggiatorOn && arpNotes.length > 0) {
+                console.log("[playArpNotes] Arpeggiator is on and arpNotes are present.");
+
+                if (isExternalModeActive) {
+                    // If we're in external mode, don't reschedule the next note 
+                    // unless a new step is received
+                    console.log("[playArpNotes] isExternalModeActive value:", isExternalModeActive);
+                    return;
+                }
+                
+                if (arpNotes[currentArpIndex] !== null) {
+                    console.log("[playArpNotes] Playing note at current index:", currentArpIndex, "Note:", arpNotes[currentArpIndex]);
+                    playMS10TriangleBass(arpNotes[currentArpIndex]);
+                }
+
+                let pattern = document.getElementById("arpPattern").value;
+                console.log("[playArpNotes] Arpeggiator pattern:", pattern);
+
+                let baseInterval = 60 / parseFloat(document.getElementById("arpTempo").value) * 1000;
+                console.log("[playArpNotes] Base interval (ms):", baseInterval);
+
+                switch(pattern) {
+                    case 'up':
+                        incrementArpIndex();
+                        break;
+                    case 'down':
+                        decrementArpIndex();
+                        break;
+                    case 'random':
+                        randomizeArpIndex();
+                        break;
+                    case 'up-down':
+                        upDownArpIndex();
+                        break;
+                    case 'double-step':
+                        doubleStepArpIndex();
+                        break;
+                    case 'random-rest':
+                        randomWithRestsArpIndex();
+                        break;
+                    default:
+                        console.error("Unknown arpeggiator pattern:", pattern);
+                }
+
+                console.log("[playArpNotes] New arp index after pattern modification:", currentArpIndex);
+
+                baseInterval = applySpeedModifier(baseInterval);
+                console.log("[playArpNotes] Base interval after speed modifier (ms):", baseInterval);
+
+                let interval = baseInterval;
+
+                // Overwrite BPM with Nudge if Nudge is active
+                if (isNudgeActive) {
+                    let timingAdjustValue = parseFloat(document.getElementById("timingAdjust").value) / 100;
+                    const adjustmentMultiplier = 1 - timingAdjustValue;
+                    baseInterval *= adjustmentMultiplier;
+                    console.log("[playArpNotes] Adjusted interval due to active nudge (ms):", baseInterval);
+                }
+
+                // Use context (AudioContext) to schedule the next call
+                let scheduledTime = context.currentTime + interval / 1000; // Convert to seconds
+                console.log("[playArpNotes] Scheduled time (in context time):", scheduledTime);
+
+                arpTimeout = setTimeout(() => {
+                    nudgeApplied = false;
+                    console.log("[playArpNotes] Timeout triggered. Calling playArpNotes again.");
+                    playArpNotes();
+                }, interval);
+            } else {
+                console.log("[playArpNotes] Arpeggiator is off or arpNotes is empty.");
+            }
+            updateArpNotesDisplay();
+        }
+
+
+        function applySpeedModifier(baseInterval) {
+            let speed = document.getElementById("arpSpeed").value;
+
+            switch(speed) {
+                case 'normal':
+                    return baseInterval;
+                case 'double-time':
+                    return baseInterval / 2;
+                case 'half-time':
+                    return baseInterval * 2;
+                case 'quadruple-time':
+                    return baseInterval / 4;
+                case 'octuple-time':
+                    return baseInterval / 8;
+                default:
+                    console.error("Unknown speed setting:", speed);
+                    return baseInterval;
+            }
+        }
+
+
+        function incrementArpIndex() {
+            currentArpIndex = (currentArpIndex + 1) % arpNotes.length;  // Wrap around
+        }
+
+        function decrementArpIndex() {
+            currentArpIndex = (currentArpIndex - 1 + arpNotes.length) % arpNotes.length;  // Wrap around, but in reverse
+        }
+
+        function randomizeArpIndex() {
+            currentArpIndex = Math.floor(Math.random() * arpNotes.length);  // Random index
+        }
+
+        // Additional Pattern Functions
+        let goingUp = true;
+
+        function upDownArpIndex() {
+            if (goingUp) {
+                incrementArpIndex();
+                if (currentArpIndex === arpNotes.length - 1) {
+                    goingUp = false;
+                }
+            } else {
+                decrementArpIndex();
+                if (currentArpIndex === 0) {
+                    goingUp = true;
+                }
+            }
+        }
+
+        function doubleStepArpIndex() {
+            currentArpIndex = (currentArpIndex + 2) % arpNotes.length;
+        }
+
+        function randomWithRestsArpIndex() {
+            if (Math.random() > 0.8) { // 20% chance of rest
+                return;
+            }
+            randomizeArpIndex();
+        }
+
+
+        function pauseArpeggiator() {
+            clearTimeout(arpTimeout);  // Clear the timeout to stop the arpeggiator
+            isArpeggiatorOn = false;
+        }
+
+        function resetTimingAdjust() {
+            document.getElementById("timingAdjust").value = 0;
+        }
+
+
+        function updateArpNotesDisplay() {
+            const canvas = document.getElementById("arpNotesDisplay");
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Set font size and weight
+            ctx.font = "bold 11px Arial";
+            ctx.fillStyle = "#FFFFFF";
+            
+            const columns = 16;
+            const noteWidth = ctx.measureText("W#").width; 
+            const spacing = noteWidth + 7; 
+            let x = 10;
+            let y = 30;
+            
+            let currentColumn = 0;
+
+            arpNotes.forEach(note => {
+                let noteText = note !== null ? frequencyToNoteName(note) : "Rest";
+
+                // Check if the next note (including its spacing) would overflow the canvas width
+                if (x + spacing > canvas.width) {
+                    currentColumn = 0;
+                    x = 10;
+                    y += 30;
+                }
+
+                ctx.fillText(noteText, x, y);
+                        
+                currentColumn++;
+                if (currentColumn >= columns) {
+                    currentColumn = 0;
+                    x = 10;
+                    y += 30;
+                } else {
+                    x += spacing;
+                }
+            });
+        }
+
+
+
+
+
+
+        // arpToggle.js
+        function toggleArpeggiator(){
+            const btn = document.getElementById("arpToggle");
+            if(isArpeggiatorOn){
+                btn.innerText = "Start Arpeggiator";
+                stopArpeggiator();
+            } else {
+                btn.innerText = "Stop Arpeggiator";
+                startArpeggiator();
+            }
+        }
+        // eventListeners.js
+        const keyToMidiNote={},noteNames=["A","W","S","E","D","F","T","G","Y","H","U","J","K","O","L","P"],startingMidiNote=21;for(let e=0;e<noteNames.length;e++)keyToMidiNote["Key"+noteNames[e]]=21+e;document.addEventListener("keydown",(function(e){const o=keyToMidiNote[e.code];if(o){const n=440*Math.pow(2,(o-69)/12);console.log(`[KEYDOWN] Key: ${e.code}, MIDI note: ${o}, Frequency: ${n}`),playMS10TriangleBass(n),arpNotes.push(n),updateArpNotesDisplay()}})),document.addEventListener("keyup",(function(e){const o=keyToMidiNote[e.code];o&&(console.log(`[KEYUP] Key: ${e.code}, MIDI note: ${o}`),stopMS10TriangleBass())})),document.getElementById("arpToggle").addEventListener("click",toggleArpeggiator);
+        // Assign the playArp function to the button
+        document.getElementById("playArp").addEventListener("click", playArpeggiator);
+        document.getElementById("pauseArp").addEventListener("click", pauseArpeggiator);
+
+        let previousTimestamp = null;
+        let sequencerBPM = null;
+
+       // Adjust the onSequencerStep function to dynamically adjust the note placement
+        function onSequencerStep(currentStep) {
+            const currentTimestamp = Date.now();
+
+            if (previousTimestamp !== null) {
+                const delta = currentTimestamp - previousTimestamp; // time difference in milliseconds
+                const currentBPM = (60000 / delta) / 4; // Convert to BPM considering 16th notes
+
+                // Add the current BPM to the buffer and remove the oldest one if necessary
+                bpmBuffer.push(currentBPM);
+                if (bpmBuffer.length > bpmBufferSize) {
+                    bpmBuffer.shift();
+                }
+
+                // Compute the average BPM from the buffer
+                const averageBPM = bpmBuffer.reduce((sum, bpm) => sum + bpm, 0) / bpmBuffer.length;
+
+                // Only adjust the arpeggiator's timing if the checkbox is checked
+                if (document.getElementById("useSequencerTiming").checked) {
+                    adjustArpeggiatorTiming(averageBPM);
+                }
+            }
+
+            // If the current time is very close to the expected next step time, reset the arp note index
+            if (Math.abs(Date.now() - expectedNextStepTime) < 10) { // Assuming a 10ms tolerance
+                currentArpIndex = 0;
+            }
+
+            previousTimestamp = currentTimestamp;
+        }
+
+
+        function adjustArpeggiatorTiming(bpm) {
+            if (isNudgeActive) {
+                let timingAdjustValue = parseFloat(document.getElementById("timingAdjust").value) / 100;
+                const adjustmentMultiplier = 1 + timingAdjustValue;
+                bpm *= adjustmentMultiplier;
+            }
+
+            const bpmAdjustValue = parseFloat(document.getElementById("bpmAdjustValue").value);
+            bpm += bpmAdjustValue; // Use the user-adjusted value
+
+            // Adjust the arpeggiator's BPM to match the sequencer's BPM
+            document.getElementById("arpTempo").value = bpm.toFixed(1);
+
+            // Calculate when the next step is expected
+            const stepInterval = (60000 / bpm) / 4; // Considering 16th notes
+            expectedNextStepTime = Date.now() + stepInterval;
+        }
+
+
+
+
+        function toggleSequencerSimulator() {
+            console.log("[toggleSequencerSimulator] Function called.");
+
+            if (!isSimulatorRunning) {
+                console.log("[toggleSequencerSimulator] Simulator is not running.");
+
+                // Start the simulator
+                if (isSimulatedMode) {
+                    console.log("[toggleSequencerSimulator] Switching to Simulated Mode.");
+
+                    const bpm = 105;
+                    const beatsPerSecond = bpm / 60; 
+                    const stepInterval = 1 / (beatsPerSecond * 4); 
+
+                    if (simulatedSequencerTimeout) {
+                        console.log("[toggleSequencerSimulator] Clearing existing simulatedSequencerTimeout.");
+                        clearTimeout(simulatedSequencerTimeout);
+                    }
+
+                    if (nextSimulatedSequencerTime === null) {
+                        nextSimulatedSequencerTime = context.currentTime + stepInterval;
+                        console.log("[toggleSequencerSimulator] Initializing nextSimulatedSequencerTime:", nextSimulatedSequencerTime);
+                    }
+
+                    // Start the scheduling
+                    scheduleNextSimulatedStep();
+                    console.log("[toggleSequencerSimulator] Scheduling next simulated step.");
+
+                    // Update button text
+                    document.querySelector("button").textContent = "Switch to External Listening Mode";
+                    console.log("[toggleSequencerSimulator] Button text updated to: Switch to External Listening Mode.");
+
+                    // Toggle the mode for next click
+                    isSimulatedMode = false;
+                    console.log("[toggleSequencerSimulator] isSimulatedMode set to false.");
+
+                    // Set the simulator running flag to true
+                    isSimulatorRunning = true;
+                    console.log("[toggleSequencerSimulator] isSimulatorRunning set to true.");
+
+                    // Set the external mode flag to false
+                    isExternalModeActive = false;
+                    console.log("[toggleSequencerSimulator] isExternalModeActive set to false.");
+
+                } else {
+                    console.log("[toggleSequencerSimulator] Switching to External Mode.");
+
+                    // Stop the arpeggiator if it's running
+                    if (arpTimeout) {
+                        console.log("[toggleSequencerSimulator] Clearing existing arpTimeout.");
+                        clearTimeout(arpTimeout);
+                    }
+
+                    // Update button text
+                    document.querySelector("button").textContent = "Switch to Simulated Mode";
+                    console.log("[toggleSequencerSimulator] Button text updated to: Switch to Simulated Mode.");
+
+                    // Toggle the mode for next click
+                    isSimulatedMode = true;
+                    console.log("[toggleSequencerSimulator] isSimulatedMode set to true.");
+
+                    // Set the simulator running flag to false
+                    isSimulatorRunning = false;
+                    console.log("[toggleSequencerSimulator] isSimulatorRunning set to false.");
+
+                    // Set the external mode flag to true
+                    isExternalModeActive = true;
+                    console.log("[toggleSequencerSimulator] isExternalModeActive set to true.");
+                }
+            } else {
+                console.log("[toggleSequencerSimulator] Simulator is already running. Stopping simulator.");
+
+                // Stop the simulator
+                if (simulatedSequencerTimeout) {
+                    console.log("[toggleSequencerSimulator] Clearing existing simulatedSequencerTimeout.");
+                    clearTimeout(simulatedSequencerTimeout);
+                    simulatedSequencerTimeout = null;
+                }
+
+                // Update button text to reflect the mode
+                document.querySelector("button").textContent = isSimulatedMode ? "Start Sequencer Simulator" : "Switch to External Listening Mode";
+                console.log("[toggleSequencerSimulator] Button text updated based on isSimulatedMode value.");
+
+                // Set the simulator running flag to false
+                isSimulatorRunning = false;
+                console.log("[toggleSequencerSimulator] isSimulatorRunning set to false.");
+            }
+        }
+
+
+
+
+        function scheduleNextSimulatedStep() {
+            const bpm = 105;
+            const beatsPerSecond = bpm / 60; // How many beats in one second
+            const stepInterval = 1 / (beatsPerSecond * 4); // 1/4 of each beat, in seconds
+
+            const timeUntilNextSimulatedStep = (nextSimulatedSequencerTime - context.currentTime) * 1000; // Convert to milliseconds
+
+            simulatedSequencerTimeout = setTimeout(() => {
+            simulatedCurrentStep = (simulatedCurrentStep + 1) % 64; // Increment directly
+
+                const idealStepForArpStart = simulatedCurrentStep % arpNotes.length;
+                if (simulatedCurrentStep === idealStepForArpStart) {
+                    currentArpIndex = 0;
+                }
+
+                // Call the onSequencerStep only if the checkbox is checked
+                if (document.getElementById("useSequencerTiming").checked) {
+                    onSequencerStep(simulatedCurrentStep);
+                }
+
+                // For simulation purposes, we can log the current step
+                console.log(`[ms10] Sequencer Simulated Step: ${simulatedCurrentStep}`);
+
+                nextSimulatedSequencerTime += stepInterval; // Schedule the next step
+                scheduleNextSimulatedStep(); // Recursively call this function
+            }, timeUntilNextSimulatedStep);
+        }
+
+
+        const bpmBuffer = [];
+        const bpmBufferSize = 100; // Change this to whatever size you think is appropriate. The larger the value, the smoother the adjustments.
+
+        // Adjust the onSequencerStep function to only adjust the arpeggiator's timing if the checkbox is checked
+        function onSequencerStep(currentStep) {
+            const currentTimestamp = Date.now();
+
+            if (previousTimestamp !== null) {
+                const delta = currentTimestamp - previousTimestamp; // time difference in milliseconds
+                const currentBPM = (60000 / delta) / 4; // Convert to BPM considering 16th notes
+
+                // Add the current BPM to the buffer and remove the oldest one if necessary
+                bpmBuffer.push(currentBPM);
+                if (bpmBuffer.length > bpmBufferSize) {
+                    bpmBuffer.shift();
+                }
+
+                // Compute the average BPM from the buffer
+                const averageBPM = bpmBuffer.reduce((sum, bpm) => sum + bpm, 0) / bpmBuffer.length;
+
+                // Only adjust the arpeggiator's timing if the checkbox is checked
+                if (document.getElementById("useSequencerTiming").checked) {
+                    adjustArpeggiatorTiming(averageBPM);
+                }
+            }
+
+            previousTimestamp = currentTimestamp;
+        }
+
+
+
+
+        const sequencerChannel = new BroadcastChannel('sequencerChannel');
+
+        sequencerChannel.addEventListener("message", (event) => {
+            if (event.data.type === 'step') {
+                console.log(`[ms10 messageEventListener] Received step: ${event.data.data.step}`);
+                onSequencerStep(event.data.data.step);
+
+                // Clear any existing timeout since we've received an external step
+                if (externalStepTimeout) {
+                    clearTimeout(externalStepTimeout);
+                }
+
+                // Set a new timeout to check if we receive another step in the next 2 seconds (or any other reasonable duration)
+                externalStepTimeout = setTimeout(() => {
+                    console.log(`[ms10] No external steps received for an extended period. Stopping arpeggiator.`);
+                    stopArpeggiator();
+                }, 250);  // Timeout duration can be adjusted based on your needs
+            }
+        });
+
+
+
+
+        function saveSettings() {
+            const settings = {
+                note: document.getElementById("note").value,
+                waveform: document.getElementById("waveform").value,
+                attack: document.getElementById("attack").value,
+                release: document.getElementById("release").value,
+                cutoff: document.getElementById("cutoff").value,
+                resonance: document.getElementById("resonance").value,
+                volume: document.getElementById("volume").value,
+                arpTempo: document.getElementById("arpTempo").value,
+                arpPattern: document.getElementById("arpPattern").value,
+                arpNotes: arpNotes
+            };
+
+            const settingsStr = JSON.stringify(settings);
+            const blob = new Blob([settingsStr], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "synth_settings.json";
+            a.click();
+        }
+
+function loadSettings() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+
+    input.onchange = event => {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const settings = JSON.parse(e.target.result);
+
+            document.getElementById("note").value = settings.note;
+            document.getElementById("waveform").value = settings.waveform;
+            document.getElementById("attack").value = settings.attack;
+            document.getElementById("release").value = settings.release;
+            document.getElementById("cutoff").value = settings.cutoff;
+            document.getElementById("resonance").value = settings.resonance;
+            document.getElementById("volume").value = settings.volume;
+            document.getElementById("arpTempo").value = settings.arpTempo;
+            document.getElementById("arpPattern").value = settings.arpPattern;
+            
+            if (settings.arpNotes) {
+                arpNotes = settings.arpNotes;
+                updateArpNotesDisplay();
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    input.click();
+}
+
+document.getElementById("addRest").addEventListener("click", function() {
+    arpNotes.push(null); // Using null to represent a rest
+    updateArpNotesDisplay();
+});
+
+// Add an event listener to detect nudge slider activity
+document.getElementById("timingAdjust").addEventListener('input', function() {
+    isNudgeActive = true;
+});
+
+document.getElementById("timingAdjust").addEventListener('change', function() {
+    isNudgeActive = false; // Reset when the user stops adjusting the slider
+});
+
+
+        </script>
+</body>
+
+</html>

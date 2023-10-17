@@ -62,6 +62,8 @@ function playStep() {
 
     currentStep = (currentStep + 1) % 64;
     totalStepCount = (totalStepCount + 1);
+    emitStep(currentStep); // Emit the current step message
+
 
     if (currentStep % 4 === 0) {
         beatCount++;  

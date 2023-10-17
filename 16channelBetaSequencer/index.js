@@ -22,7 +22,6 @@ let saveButton = document.getElementById('save-button');
 let loadButton = document.getElementById('load-button');
 let bpm = 105;
 let audioContext;
-let currentStepTime;
 let startTime;
 let nextStepTime;
 let stepDuration;
