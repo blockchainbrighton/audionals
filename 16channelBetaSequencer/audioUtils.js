@@ -201,3 +201,5 @@ function toggleMute(channelElement) {
   updateMuteState(channelElement, !isMuted, channelIndex);
   console.log('Mute has been toggled by the toggleMute function');
 }
+
+

@@ -183,16 +183,16 @@ function importSettings(settings) {
     channelSettings = sequences[currentSequence - 1];
     sequences[currentSequence - 1] = channelSettings;
 
-    const currentSeqSettings = parsedSettings[0]; // since currentSequence is set to 1
-    currentSeqSettings.channels.forEach((channelData, channelIndex) => {
-        const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"]`);
-        if (channelData.mute !== undefined) { // Only if mute is defined in the JSON
-            updateMuteState(channel, channelData.mute);
-        }
-        if (channelData.volume !== undefined) { // Only if volume is defined in the JSON
-            setChannelVolume(channelIndex, channelData.volume);
-        }
-    });
+    //const currentSeqSettings = parsedSettings[0]; // since currentSequence is set to 1
+    //currentSeqSettings.channels.forEach((channelData, channelIndex) => {
+    //    const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"]`);
+    //    if (channelData.mute !== undefined) { // Only if mute is defined in the JSON
+    //        updateMuteState(channel, channelData.mute);
+    //    }
+    //    if (channelData.volume !== undefined) { // Only if volume is defined in the JSON
+    //        setChannelVolume(channelIndex, channelData.volume);
+    //    }
+    //});
 
     updateUIForSequence(currentSequence);
     saveCurrentSequence(currentSequence);
