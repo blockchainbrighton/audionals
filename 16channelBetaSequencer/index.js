@@ -610,13 +610,4 @@ fetch('16channelBetaSequencer/allSequencesEmbedded.json')
     });
 
 
-// Load a preset when the page loads
-const presetToLoadOnPageLoad = 'preset1';
-if (presets[presetToLoadOnPageLoad]) {
-    loadPreset(presetToLoadOnPageLoad);
-    loadSequence(sequenceCount);  // Ensure the current sequence is loaded
-} else {
-    console.error('Preset not found:', presetToLoadOnPageLoad);
-}
-
 

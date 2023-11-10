@@ -2,15 +2,19 @@
 
 function handleStep(channel, channelData, totalStepCount) {
     let isMuted = channel.dataset.muted === 'true';
-    const isToggleMuteStep = channelData.toggleMuteSteps.includes(totalStepCount);
+
+    // Ensure toggleMuteSteps is an array; if not, default to an empty array
+    const toggleMuteSteps = Array.isArray(channelData.toggleMuteSteps) ? channelData.toggleMuteSteps : [];
+
+    const isToggleMuteStep = toggleMuteSteps.includes(totalStepCount);
 
     if (isToggleMuteStep) {
-      isMuted = !isMuted;
-      channel.dataset.muted = isMuted ? 'true' : 'false';
-      // Update the mute state in the DOM
-      updateMuteState(channel, isMuted);
-      saveCurrentSequence(currentSequence);
-      console.log('Mute toggled by the handleStep function');
+        isMuted = !isMuted;
+        channel.dataset.muted = isMuted ? 'true' : 'false';
+        // Update the mute state in the DOM
+        updateMuteState(channel, isMuted);
+        saveCurrentSequence(currentSequence);
+        console.log('Mute toggled by the handleStep function');
     }
 
     return isMuted;
@@ -33,20 +37,23 @@ function renderPlayhead(buttons, currentStep) {
 
 
 function playStep() {
-    const presetData = presets.preset1;
+    // Assuming currentSequence is the index of the currently active sequence
+    const currentSequenceData = sequences[currentSequence - 1];
 
     // Only iterate over active channels
     activeChannels.forEach((channelIndex) => {
         const channel = channels[channelIndex];
         const buttons = channel.querySelectorAll('.step-button');
-        let channelData = presetData.channels[channelIndex];
-        const defaultTriggerArray = Array(4096).fill(false);
-        renderPlayhead(buttons, currentStep, channel.dataset.muted === 'true');
+        
+        // Get channel data from the current sequence
+        let channelData = currentSequenceData[channelIndex];
+        const defaultTriggerArray = Array(64).fill(false);
 
+        renderPlayhead(buttons, currentStep, channel.dataset.muted === 'true');
 
         // If no channelData is found for the current channel, use a default set of values
         if (!channelData) {
-            console.warn(`No preset data for channel index: ${channelIndex + 1}`);
+            console.warn(`No data for channel index: ${channelIndex + 1}`);
             channelData = {
                 triggers: defaultTriggerArray.slice(), // Clone the defaultTriggerArray
                 toggleMuteSteps: [],
