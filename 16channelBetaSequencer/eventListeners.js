@@ -7,7 +7,6 @@ document.addEventListener("DOMContentLoaded", function() {
     let loadButton = document.getElementById('load-button');
     let loadOptions = document.getElementById('loadOptions');
     let loadJson = document.getElementById('loadJson');
-    let loadInternalPreset = document.getElementById('loadInternalPreset');
 
     saveButton.addEventListener('click', () => {
       let { settings, filename } = exportSettings();
@@ -40,20 +39,6 @@ document.addEventListener("DOMContentLoaded", function() {
         loadOptions.style.display = "none"; // Hide the menu after selection
     });
 
-    loadInternalPreset.addEventListener('click', () => {
-        fetch('16channelBetaSequencer/allSequencesEmbedded.json')
-            .then(response => response.json())
-            .then(data => {
-                // Now, data contains the content of the JSON file.
-                // Assuming importSettings is the function that processes this data:
-                importSettings(JSON.stringify(data)); 
-            })
-            .catch(error => {
-                console.error("Error loading the internal preset:", error);
-            });
-    
-        loadOptions.style.display = "none"; // Hide the menu after selection
-    });
     
   
   loadFileInput.addEventListener('change', () => {
