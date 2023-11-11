@@ -1,4 +1,4 @@
-// channelSettings.js
+// channelVolumeSettings.js
 
 
 function setChannelVolume(channelIndex, volume) {
