@@ -41,3 +41,21 @@ function updateSequenceData(params) {
         }
     }
 }
+/**
+ * Resets all sequence data to default values.
+ */
+function resetSequenceData() {
+    // Reset BPMs
+    sequenceBPMs.fill(105); // Assuming 105 is the default BPM
+
+    // Reset URLs and mute states for all channels in all sequences
+    for (let i = 0; i < channelURLs.length; i++) {
+        channelURLs[i].fill('');
+        channelMutes.fill(false);
+    }
+
+    // Reset step settings for all channels
+    for (let i = 0; i < channelSettings.length; i++) {
+        channelSettings[i].fill(false);
+    }
+}

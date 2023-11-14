@@ -34,33 +34,36 @@ function exportSettings() {
 
 function importSettings(settings) {
     console.log("Importing settings...");
-
-    // Reset sequences, URLs, and BPMs to initial state
-    sequences = Array(16).fill().map(() => Array(16).fill(EMPTY_CHANNEL));
-    collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
-    sequenceBPMs.fill(105);  // Reset BPMs to default value
-
-    // Reset channel states
-    channels.forEach((channel, index) => {
-        updateMuteState(channel, false); // unmute
-        setChannelVolume(index, 1); // set volume to 1
-    });
-
-    let parsedSettings;
-    newJsonImport = true;
-
-    try {
-        parsedSettings = JSON.parse(settings);
-        console.log("Parsed settings:", parsedSettings);
-    } catch (error) {
-        console.error("Error parsing settings:", error);
-        return;
-    }
-
-    if (!Array.isArray(parsedSettings) || parsedSettings.length === 0) {
-        console.error("Imported JSON doesn't match expected format or is empty.");
-        return;
-    }
+    
+        // Reset sequences, URLs, and BPMs to initial state
+        sequences = Array(16).fill().map(() => Array(16).fill(EMPTY_CHANNEL));
+        collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
+        sequenceBPMs.fill(105);  // Reset BPMs to default value
+    
+        // Reset channel states
+        channels.forEach((channel, index) => {
+            updateMuteState(channel, false); // unmute
+            setChannelVolume(index, 1); // set volume to 1
+        });
+    
+        let parsedSettings;
+        newJsonImport = true;
+    
+        try {
+            parsedSettings = JSON.parse(settings);
+            console.log("Parsed settings:", parsedSettings);
+        } catch (error) {
+            console.error("Error parsing settings:", error);
+            return;
+        }
+    
+        if (!Array.isArray(parsedSettings) || parsedSettings.length === 0) {
+            console.error("Imported JSON doesn't match expected format or is empty.");
+            return;
+        }
+    
+        // Clear current steps in the UI before applying new settings
+        clearCurrentStepsUI();
 
     // Update BPM for the first sequence only
     sequenceBPMs[0] = parsedSettings[0].bpm;
@@ -81,9 +84,9 @@ function importSettings(settings) {
     currentSequence = 1;
     setActiveSequence(currentSequence);
     updateSequenceUI(parsedSettings[0], currentSequence);
-
+    }
     console.log("Import settings completed.");
-}
+
 
 function convertSequenceSettings(settings) {
     return Array.from({ length: 16 }, (_, i) => settings.channels[i] || EMPTY_CHANNEL)
@@ -95,27 +98,41 @@ function convertChannelToStepSettings(channel) {
 }
 
 function updateSequenceUI(seqSettings, sequenceIndex) {
+    console.log(`Updating UI for sequence ${sequenceIndex}`);
+
     // Clear current steps in the UI
     clearCurrentStepsUI();
 
     seqSettings.channels.forEach((channelData, channelIndex) => {
+        console.log(`Updating channel ${channelIndex + 1}`);
         const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"]`);
-        if (channelData.mute !== undefined) updateMuteState(channel, channelData.mute);
-        if (channelData.volume !== undefined) setChannelVolume(channelIndex, channelData.volume);
+        if (channelData.mute !== undefined) {
+            // console.log(` - Updating mute state for channel ${channelIndex + 1}: ${channelData.mute}`);
+            updateMuteState(channel, channelData.mute);
+        }
+        if (channelData.volume !== undefined) {
+            console.log(` - Updating volume for channel ${channelIndex + 1}: ${channelData.volume}`);
+            setChannelVolume(channelIndex, channelData.volume);
+        }
     });
 
     updateUIForSequence(sequenceIndex);
     saveCurrentSequence(sequenceIndex);
     loadAndDisplaySequence(sequenceIndex);
+
+    console.log(`UI update for sequence ${sequenceIndex} completed.`);
 }
 
+
 function clearCurrentStepsUI() {
-    // Assuming you have a way to select all step elements in the UI
-    const steps = document.querySelectorAll('.step');
-    steps.forEach(step => {
-        // Reset the step to its default state
-        // This might vary depending on how your steps are implemented
-        step.classList.remove('active');
-        // Any other reset logic specific to your steps
+    console.log("Clearing current steps in UI");
+
+    const stepButtons = document.querySelectorAll('.step-button');
+    stepButtons.forEach((button, index) => {
+        button.classList.remove('selected');
+        console.log(` - Step button ${index} cleared`);
     });
+
+    console.log("All step buttons cleared in UI");
 }
+
