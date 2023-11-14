@@ -16,7 +16,7 @@ quickPlayContainer.style.marginBottom = '20px';  // Add some margin for spacing
 
 
 function setActiveSequence(index) {
-    console.log(`Setting active sequence for index: ${index}`);
+    // console.log(`Setting active sequence for index: ${index}`);
 
     // If there's a previously active sequence that's different from the current one, set it to inactive
     if (currentActiveIndex !== null && currentActiveIndex !== index) {
@@ -26,7 +26,7 @@ function setActiveSequence(index) {
 
     // Light up the button for this index
     quickPlayButtons[index-1].classList.remove('inactive');
-    console.log(`Sequence ${index} activated.`);
+    // console.log(`Sequence ${index} activated.`);
 
     // Darken other buttons  
     quickPlayButtons.forEach(button => {
@@ -34,8 +34,8 @@ function setActiveSequence(index) {
             button.classList.add('inactive'); 
         }
     });
-    console.log(`${quickPlayButtons.length} quickplay buttons made inactive.`);
-    console.log("All quickplay button indexes: ", quickPlayButtons.map(btn => btn.dataset.sequenceIndex));
+   //  console.log(`${quickPlayButtons.length} quickplay buttons made inactive.`);
+   //  console.log("All quickplay button indexes: ", quickPlayButtons.map(btn => btn.dataset.sequenceIndex));
 
     currentActiveIndex = index;
 }
@@ -52,7 +52,7 @@ function updateActiveQuickPlayButton() {
 }
 
 function insertQuickPlayButtons() {
-    console.log("insertQuickPlayButtons called!");
+   // console.log("insertQuickPlayButtons called!");
 
     const checkBox = document.getElementById('continuous-play');
     const quickPlayButton = document.getElementById('quick-play-button');
@@ -60,11 +60,11 @@ function insertQuickPlayButtons() {
     if (checkBox && quickPlayButton) {
         for (let j = 0; j < 16; j++) {
             const quickBtn = createQuickPlayButton(j + 1);
-            console.log(`Created Quick Play Button for Sequence_${j+1}`);
+           // console.log(`Created Quick Play Button for Sequence_${j+1}`);
             checkBox.parentNode.insertBefore(quickBtn, quickPlayButton);
-            console.log(`Added Quick Play Button for Sequence_${j+1} to DOM`);
+           // console.log(`Added Quick Play Button for Sequence_${j+1} to DOM`);
         }
-        console.log(`${quickPlayButtons.length} quickplay buttons inserted.`);
+       // console.log(`${quickPlayButtons.length} quickplay buttons inserted.`);
 
     } else {
         console.error("Either checkBox or quickPlayButton is missing!");
@@ -94,11 +94,11 @@ function loadAndDisplaySequence(sequenceIndex) {
 
 // Function to create the quick-play-button
 function createQuickPlayButton(index) {
-    console.log(`Creating quickplay button with index: ${index}`);
+   // console.log(`Creating quickplay button with index: ${index}`);
     const button = document.createElement('div');
     button.classList.add('quick-play-button', 'tooltip'); // Add the tooltip class
     button.dataset.sequenceIndex = index; // Store the sequence index as a data attribute
-    console.log(`Button for sequence ${index} has data attribute:`, button.dataset.sequenceIndex);
+   // console.log(`Button for sequence ${index} has data attribute:`, button.dataset.sequenceIndex);
     button.style.textAlign = "center"; // Center the text
     button.style.fontWeight = "bold"; // Bold the text
     button.innerHTML = index; // Add the number inside the button
@@ -109,8 +109,8 @@ function createQuickPlayButton(index) {
     button.appendChild(tooltipText); // Append the tooltip to the button
 
     quickPlayButtons.push(button); // Add the button to the array
-    console.log(`Quickplay button added. Current count: ${quickPlayButtons.length}`);
-    console.log("Current indexes: ", quickPlayButtons.map(btn => btn.dataset.sequenceIndex));
+   // console.log(`Quickplay button added. Current count: ${quickPlayButtons.length}`);
+    // console.log("Current indexes: ", quickPlayButtons.map(btn => btn.dataset.sequenceIndex));
 
     // Add a click event to set the sequence as active when clicked
     button.addEventListener('click', function() {
@@ -136,7 +136,7 @@ for (let i = 1; i <= 16; i++) {
     let clonedChannel = channelTemplate.cloneNode(true);
     clonedChannel.id = `channel-${i}`;
     mainContainer.appendChild(clonedChannel);
-    console.log(`Created Channel Name: ${clonedChannel.id}, Index: ${i}`);
+    // console.log(`Created Channel Name: ${clonedChannel.id}, Index: ${i}`);
 }
 
 channelTemplateContainer.remove();

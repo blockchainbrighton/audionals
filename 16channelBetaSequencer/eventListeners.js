@@ -148,10 +148,17 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
                 endSliderValue: savedTrimSettings?.end || defaultSettings.end
             }
         });
-        console.log('Audio trimmer instantiated');
+
+        // Log the collected values
+        console.log('Audio trimmer instantiated with the following settings:', {
+            externalAudioContext: audioContext,
+            externalOrdinalId: ordinalId,
+            channelIndex: channelNumber,
+            startSliderValue: savedTrimSettings?.start || defaultSettings.start,
+            endSliderValue: savedTrimSettings?.end || defaultSettings.end
+        });
     });
 });
-
 
 // Close the modal when the user clicks on <span> (x)
 document.querySelector('.close-button').addEventListener('click', function() {
@@ -169,4 +176,3 @@ window.onclick = function(event) {
         console.log('Modal closed');
     }
 };
-

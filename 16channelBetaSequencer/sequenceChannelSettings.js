@@ -50,11 +50,11 @@ function onSequenceOrDataChange() {
 
 // Function to add URLs to our structure
 function addURLsToSequenceArrays(urls) {
-    console.log("Received URLs to add:", urls);
+    // console.log("Received URLs to add:", urls);
     urls.forEach((url, index) => {
         channelURLs[currentSequence - 1][index] = url;
     });
-    console.log("Updated channelURLs:", channelURLs);
+    // console.log("Updated channelURLs:", channelURLs);
 }
 
 

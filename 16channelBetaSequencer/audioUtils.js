@@ -108,8 +108,6 @@ function bufferToBase64(buffer) {
 }
 
 function playSound(channel, currentStep) {
-  console.log("playSound: initial preset settings - gainNodes values:", gainNodes.map(gn => gn.gain.value));
-
   if (channel.querySelectorAll('.step-button')[currentStep].classList.contains('selected')) {
     const url = channel.dataset.originalUrl;
     console.log("[playSound] URL of the audio:", url);
@@ -121,11 +119,9 @@ function playSound(channel, currentStep) {
       const source = audioContext.createBufferSource();
       source.buffer = audioBuffer;
 
-      // Adjusted to use 1-indexed format
       const channelIndex = parseInt(channel.dataset.id.split('-')[1]);
       console.log("[playSound] Channel index:", channelIndex);
 
-      // Retrieve and apply trim settings
       let trimStart = parseFloat(localStorage.getItem(`trimStart-${channelIndex}`)) || 0;
       let trimEnd = parseFloat(localStorage.getItem(`trimEnd-${channelIndex}`)) || audioBuffer.duration;
       console.log("[playSound] Retrieved trimStart and trimEnd:", trimStart, trimEnd);
@@ -137,11 +133,9 @@ function playSound(channel, currentStep) {
       const duration = trimEnd - trimStart;
       console.log("[playSound] Duration to play:", duration);
 
-      // Connect to the gain node using the 1-indexed channel number
       source.connect(gainNodes[channelIndex - 1]);
       gainNodes[channelIndex - 1].connect(audioContext.destination);
 
-      // Start playback at trimStart and play for the duration of trimEnd - trimStart
       console.log("[playSound] Starting playback from:", trimStart, "for duration:", duration);
       source.start(0, trimStart, duration);
     } else {
@@ -208,17 +202,17 @@ function updateMuteState(channel, shouldMute) {
   // Mute or unmute using gain node
   if (shouldMute) {
       gainNodes[channelIndex].gain.value = 0; // Mute the channel
-      console.log("updateMuteState - Channel-" + channel.dataset.id.replace("Channel-", "") + " Muted");
+      // console.log("updateMuteState - Channel-" + channel.dataset.id.replace("Channel-", "") + " Muted");
   } else {
       gainNodes[channelIndex].gain.value = 1; // Unmute the channel (set to original volume)
-      console.log("updateMuteState - Channel-" + channel.dataset.id.replace("Channel-", "") + " Unmuted");
+      // console.log("updateMuteState - Channel-" + channel.dataset.id.replace("Channel-", "") + " Unmuted");
   }
 
   // Update the dim state of the channel
   updateDimState(channel, channelIndex);
 
   saveCurrentSequence(currentSequence);
-  console.log(`Channel-${channel.dataset.id.replace("Channel-", "")} Muted: ${shouldMute}`);
+  // console.log(`Channel-${channel.dataset.id.replace("Channel-", "")} Muted: ${shouldMute}`);
 }
 
 

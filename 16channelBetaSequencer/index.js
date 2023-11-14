@@ -100,7 +100,7 @@ channels.forEach((channel, index) => {
     gainNodes[index] = gainNode;
     
       // Logging to confirm gain node creation and attachment
-      console.log(`Gain node created for Channel-${index + 1}. Current gain value: ${gainNode.gain.value}`);
+      // console.log(`Gain node created for Channel-${index + 1}. Current gain value: ${gainNode.gain.value}`);
     
       
       const muteButton = channel.querySelector('.mute-button');
@@ -434,7 +434,7 @@ channels.forEach((channel, index) => {
                     idModal.appendChild(idModalContent);
                     document.body.appendChild(idModal);
                 });
-                console.log("Collected URLs before adding to sequence arrays:", collectedURLs);
+                // console.log("Collected URLs before adding to sequence arrays:", collectedURLs);
                 addURLsToSequenceArrays(collectedURLs);
                 
 
@@ -546,9 +546,9 @@ channels.forEach((channel, index) => {
 
 // The loadPreset function is updated to use updateMuteState function
 const loadPreset = (preset) => {
-    console.log("loadPreset: before loadPreset, gainNodes values:", gainNodes.map(gn => gn.gain.value));
+    // console.log("loadPreset: before loadPreset, gainNodes values:", gainNodes.map(gn => gn.gain.value));
 
-    console.log("loadPreset: Loading preset:", preset);
+    // console.log("loadPreset: Loading preset:", preset);
 
   const presetData = presets[preset];
 
@@ -585,7 +585,7 @@ const loadPreset = (preset) => {
     const channelElement = document.querySelector(`.channel[data-id="Channel-${index + 1}"]`);
     if (channelElement) {
       updateMuteState(channelElement, mute); 
-      console.log(`Channel-${index + 1} updateMuteState toggled by the loadPreset function - Muted: ${mute}`);
+      // console.log(`Channel-${index + 1} updateMuteState toggled by the loadPreset function - Muted: ${mute}`);
       
       // Add the 'ordinal-loaded' class to the channel element
       channelElement.classList.add('ordinal-loaded');

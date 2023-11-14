@@ -782,16 +782,16 @@ var app = (function () {
     	let { channelIndex } = $$props;
 
     	// In your Svelte component
-function storeTrimSettings() {
-    console.log(`Storing trim settings for channel ${channelIndex}`);
-    window.trimSettings.update({
-        [channelIndex]: {
-            start: $startSliderValue,
-            end: $endSliderValue
-        }
-    });
-    console.log(`Trim settings stored successfully for channel ${channelIndex}`);
-}
+		function storeTrimSettings() {
+			console.log(`Storing trim settings for channel ${channelIndex}`);
+			const newSettings = {
+				start: $startSliderValue,
+				end: $endSliderValue
+			};
+			window.trimSettings.update(channelIndex, newSettings);
+			console.log(`Updated trim settings:`, newSettings);
+		}
+	
 
     	// Use the external AudioContext if provided, otherwise create a new one
     	let audioContext = externalAudioContext || new (window.AudioContext || window.webkitAudioContext)();
@@ -1180,23 +1180,25 @@ function storeTrimSettings() {
     }
 
 	window.AudioTrimmer = class extends SvelteComponentDev {
-    	constructor(options) {
-    		super(options);
-
-    		init(
-    			this,
-    			options,
-    			instance$1,
-    			create_fragment$1,
-    			safe_not_equal,
-    			{
-    				externalOrdinalId: 15,
-    				externalAudioContext: 16,
-    				channelIndex: 17
-    			},
-    			null,
-    			[-1, -1]
-    		);
+		constructor(options) {
+			super(options);
+	
+			init(
+				this,
+				options,
+				instance$1,
+				create_fragment$1,
+				safe_not_equal,
+				{
+					externalOrdinalId: 15,
+					externalAudioContext: 16,
+					channelIndex: 17,
+					startSliderValue: 18, // Add this line
+					endSliderValue: 19     // And this line
+				},
+				null,
+				[-1, -1]
+			);
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
