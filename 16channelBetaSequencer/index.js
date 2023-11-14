@@ -597,26 +597,3 @@ const loadPreset = (preset) => {
   console.log("loadPreset: After loadPreset, gainNodes values:", gainNodes.map(gn => gn.gain.value));
 
 };
-
-// Fetch and load the allSequencesEmbedded.json file during initialization
-fetch('16channelBetaSequencer/allSequencesEmbedded.json')
-    .then(response => response.json())
-    .then(data => {
-        importSettings(JSON.stringify(data));
-        loadSequence(sequenceCount);  // Ensure the current sequence is loaded
-    })
-    .catch(error => {
-        console.error("Error loading the allSequencesEmbedded.json file:", error);
-    });
-
-
-// Load a preset when the page loads
-const presetToLoadOnPageLoad = 'preset1';
-if (presets[presetToLoadOnPageLoad]) {
-    loadPreset(presetToLoadOnPageLoad);
-    loadSequence(sequenceCount);  // Ensure the current sequence is loaded
-} else {
-    console.error('Preset not found:', presetToLoadOnPageLoad);
-}
-
-
