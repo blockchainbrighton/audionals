@@ -1010,11 +1010,13 @@ var app = (function () {
     		}
     	});
 
-    	const writable_props = ['externalOrdinalId', 'externalAudioContext', 'channelIndex'];
+		const writable_props = ['externalOrdinalId', 'externalAudioContext', 'channelIndex', 'startSliderValue', 'endSliderValue'];
 
     	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1.warn(`<AudioTrimmer> was created with unknown prop '${key}'`);
-    	});
+			if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') {
+				console_1.warn(`<AudioTrimmer> was created with unknown prop '${key}'`);
+			}
+		});
 
     	function input0_input_handler() {
     		ordinalId = this.value;
@@ -1052,10 +1054,12 @@ var app = (function () {
 		
 
     	$$self.$$set = $$props => {
-    		if ('externalOrdinalId' in $$props) $$invalidate(15, externalOrdinalId = $$props.externalOrdinalId);
-    		if ('externalAudioContext' in $$props) $$invalidate(16, externalAudioContext = $$props.externalAudioContext);
-    		if ('channelIndex' in $$props) $$invalidate(17, channelIndex = $$props.channelIndex);
-    	};
+			if ('externalOrdinalId' in $$props) $$invalidate(15, externalOrdinalId = $$props.externalOrdinalId);
+			if ('externalAudioContext' in $$props) $$invalidate(16, externalAudioContext = $$props.externalAudioContext);
+			if ('channelIndex' in $$props) $$invalidate(17, channelIndex = $$props.channelIndex);
+			if ('startSliderValue' in $$props) $$invalidate(18, startSliderValue = $$props.startSliderValue); // Add this line
+			if ('endSliderValue' in $$props) $$invalidate(19, endSliderValue = $$props.endSliderValue);       // And this line
+		};
 
     	$$self.$capture_state = () => ({
     		externalOrdinalId,
@@ -1193,8 +1197,6 @@ var app = (function () {
 					externalOrdinalId: 15,
 					externalAudioContext: 16,
 					channelIndex: 17,
-					startSliderValue: 18, // Add this line
-					endSliderValue: 19     // And this line
 				},
 				null,
 				[-1, -1]

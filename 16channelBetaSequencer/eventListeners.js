@@ -154,8 +154,6 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
             externalAudioContext: audioContext,
             externalOrdinalId: ordinalId,
             channelIndex: channelNumber,
-            startSliderValue: savedTrimSettings?.start || defaultSettings.start,
-            endSliderValue: savedTrimSettings?.end || defaultSettings.end
         });
     });
 });

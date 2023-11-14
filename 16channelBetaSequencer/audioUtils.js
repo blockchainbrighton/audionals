@@ -122,8 +122,10 @@ function playSound(channel, currentStep) {
       const channelIndex = parseInt(channel.dataset.id.split('-')[1]);
       console.log("[playSound] Channel index:", channelIndex);
 
-      let trimStart = parseFloat(localStorage.getItem(`trimStart-${channelIndex}`)) || 0;
-      let trimEnd = parseFloat(localStorage.getItem(`trimEnd-${channelIndex}`)) || audioBuffer.duration;
+      // Retrieve trim settings using LocalStorageUtils
+      const trimSettings = getTrimSettings(`channel-${channelIndex}`);
+      let trimStart = trimSettings ? trimSettings.start : 0;
+      let trimEnd = trimSettings ? trimSettings.end : audioBuffer.duration;
       console.log("[playSound] Retrieved trimStart and trimEnd:", trimStart, trimEnd);
 
       trimStart = Math.max(0, Math.min(trimStart, audioBuffer.duration));
