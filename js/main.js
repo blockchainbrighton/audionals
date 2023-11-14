@@ -1,3 +1,5 @@
+// main.js
+
 import { audionalJsonTemplate } from "./audionalJson.js";
 import { digestMessage } from "./digestMessage.js";
 import { startInscriptionProcess } from "./startInscriptionProcess.js";

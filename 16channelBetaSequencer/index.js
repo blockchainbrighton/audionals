@@ -20,7 +20,7 @@ let playButton = document.getElementById('play');
 let stopButton = document.getElementById('stop');
 let saveButton = document.getElementById('save-button');
 let loadButton = document.getElementById('load-button');
-let bpm = 105;
+let bpm ;
 let audioContext;
 let currentStepTime;
 let startTime;

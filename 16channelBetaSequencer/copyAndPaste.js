@@ -110,9 +110,6 @@ function pasteSettings() {
         // Update collectedURLsForSequences with the copied URLs for the current sequence
         collectedURLsForSequences[currentSequence - 1] = copiedData.channelURLs;
 
-        // Update the BPM for the current sequence
-        sequenceBPMs[currentSequence - 1] = copiedData.bpm;
-
     } else if (copiedData.type === 'channel') {
         // Update the specific channel's URL in collectedURLsForSequences
         collectedURLsForSequences[currentSequence - 1][copiedData.channelIndex] = copiedData.channelURL;
@@ -163,9 +160,6 @@ function pasteSequenceSettings(settings) {
 
     // Update collectedURLsForSequences with the parsed URLs for the current sequence
     collectedURLsForSequences[currentSequence - 1] = parsedSettings[0].channels.map(ch => ch.url);
-
-    // Update the BPM for the current sequence
-    sequenceBPMs[currentSequence - 1] = parsedSettings[0].bpm;
 
     // Build the sequences array for paste
     let pastedSequences = parsedSettings.map((seqSettings, index) => {

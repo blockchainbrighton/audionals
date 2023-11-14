@@ -1,3 +1,5 @@
+// masterSettings.js
+
 const bpmSlider = document.getElementById('bpm-slider');
 const bpmDisplay = document.getElementById('bpm-display');
 
