@@ -112,27 +112,46 @@ function playSound(channel, currentStep) {
 
   if (channel.querySelectorAll('.step-button')[currentStep].classList.contains('selected')) {
     const url = channel.dataset.originalUrl;
+    console.log("[playSound] URL of the audio:", url);
+
     const audioBuffer = audioBuffers.get(url);
     if (audioBuffer) {
+      console.log("[playSound] Audio buffer found for URL:", url);
+
       const source = audioContext.createBufferSource();
       source.buffer = audioBuffer;
-      const channelIndex = parseInt(channel.dataset.id.split('-')[1]) - 1;
 
-      // Use trim settings if available, with validation
-      let trimStart = parseFloat(channel.dataset.trimStart) || 0;
-      let trimEnd = parseFloat(channel.dataset.trimEnd) || audioBuffer.duration;
+      // Adjusted to use 1-indexed format
+      const channelIndex = parseInt(channel.dataset.id.split('-')[1]);
+      console.log("[playSound] Channel index:", channelIndex);
+
+      // Retrieve and apply trim settings
+      let trimStart = parseFloat(localStorage.getItem(`trimStart-${channelIndex}`)) || 0;
+      let trimEnd = parseFloat(localStorage.getItem(`trimEnd-${channelIndex}`)) || audioBuffer.duration;
+      console.log("[playSound] Retrieved trimStart and trimEnd:", trimStart, trimEnd);
+
       trimStart = Math.max(0, Math.min(trimStart, audioBuffer.duration));
       trimEnd = Math.max(trimStart, Math.min(trimEnd, audioBuffer.duration));
-      const duration = trimEnd - trimStart;
+      console.log("[playSound] Validated and applied trimStart and trimEnd:", trimStart, trimEnd);
 
-      source.connect(gainNodes[channelIndex]);
-      gainNodes[channelIndex].connect(audioContext.destination);
+      const duration = trimEnd - trimStart;
+      console.log("[playSound] Duration to play:", duration);
+
+      // Connect to the gain node using the 1-indexed channel number
+      source.connect(gainNodes[channelIndex - 1]);
+      gainNodes[channelIndex - 1].connect(audioContext.destination);
 
       // Start playback at trimStart and play for the duration of trimEnd - trimStart
+      console.log("[playSound] Starting playback from:", trimStart, "for duration:", duration);
       source.start(0, trimStart, duration);
+    } else {
+      console.log("[playSound] No audio buffer found for URL:", url);
     }
+  } else {
+    console.log("[playSound] Current step is not selected. Skipping playback.");
   }
 }
+
 
 
 async function playAuditionedSample(url) {
