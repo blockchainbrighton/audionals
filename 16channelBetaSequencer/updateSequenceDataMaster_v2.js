@@ -2,8 +2,6 @@
 
 let totalSequenceCount = 64;
 let currentSequence = 1; 
-
-
 let sequences = createArray(totalSequenceCount).map((_, index) => {
     return {
         sequenceName: `Sequence ${index + 1}`,
@@ -42,9 +40,6 @@ const EMPTY_CHANNEL = {
 };
 
 let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
-
-
-
 
 // Utility function to create an array with a default value
 function createArray(length, defaultValue) {

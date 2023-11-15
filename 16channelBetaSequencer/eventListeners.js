@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", function() {
 // Add event listener to BPM slider to update sequence data when BPM changes
 bpmSlider.addEventListener('input', function() {
     let newBpm = parseInt(bpmSlider.value);
+    console.log(`Updating BPM: sequenceIndex=${currentSequence - 1}, bpm=${newBpm}`);
     updateSequenceData({
         sequenceIndex: currentSequence - 1, // Assuming 0-based indexing
         bpm: newBpm

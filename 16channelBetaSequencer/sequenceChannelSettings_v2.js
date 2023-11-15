@@ -7,10 +7,14 @@
 
 
 
-function updateChannelSettingsForSequence(sequenceIndex) {
-    let sequence = sequences[sequenceIndex];
-    sequence.channels.forEach((channel, index) => {
-        channel.triggers = getChannelSettings(index);
+function updateChannelSettingsForSequence() {
+    console.log(`Updating Channel Settings for Sequence`);
+    updateSequenceData((sequenceData) => {
+        sequenceData.channels.forEach((channel, index) => {
+            channel.triggers.forEach(trigger => {
+                channelSettings[index][trigger] = true; // set the trigger step to 'on'
+            });
+        });
     });
 }
 

@@ -82,6 +82,7 @@ function loadChannelSettingsFromPreset(preset) {
 
 function updateStep(channelIndex, stepIndex, state) {
     channelSettings[channelIndex][stepIndex + 1] = state;
+    console.log(`Updating Step: channelIndex=${channelIndex}, stepIndex=${stepIndex}, state=${state}`);
     updateSequenceData({
         channelIndex: channelIndex,
         stepSettings: channelSettings[channelIndex]

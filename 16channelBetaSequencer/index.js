@@ -192,9 +192,10 @@ channels.forEach((channel, index) => {
         
                 // Update the step settings in the sequence data
                 let stepSettings = [null].concat(Array(64).fill(false)); // Reset all steps to false
+                console.log(`Clearing Steps: channelIndex=${index}, stepSettings=${[null].concat(Array(64).fill(false))}`);
                 updateSequenceData({
                     channelIndex: index,
-                    stepSettings: stepSettings
+                    stepSettings: [null].concat(Array(64).fill(false))
                 });
         
                 // Hide the visual indication
