@@ -1,31 +1,10 @@
 // sequenceChannelSettings_v2.js
 
-let totalSequenceCount = 64;
 
 
-// Create an initial state for all 16 channels, with 64 steps each set to 'off' (false)
 
-// Utility function to create an array with a default value
-function createArray(length, defaultValue) {
-    return Array(length).fill(defaultValue);
-}
 
-let channelSettings = createArray(16, [null].concat(createArray(64, false)));
 
-let sequences = createArray(totalSequenceCount).map((_, index) => {
-    return {
-        sequenceName: `Sequence ${index + 1}`,
-        channels: createArray(16).map(() => ({
-            url: '',
-            mute: false,
-            triggers: createArray(64, false)
-        }))
-    };
-});
-
-// For the first sequence, add additional properties
-sequences[0].bpm = 105; // Default BPM
-sequences[0].projectName = 'Default Project'; // Default project name
 
 
 function updateChannelSettingsForSequence(sequenceIndex) {
@@ -41,9 +20,6 @@ function updateChannelURLsForSequence(sequenceIndex) {
         channel.url = channelURLs[sequenceIndex][index];
     });
 }
-
-// Create a two-dimensional array to store the URLs for each channel for every sequence
-var channelURLs = Array(totalSequenceCount).fill().map(() => Array(16).fill(''));
 
 
 // A function to be called whenever the sequence changes or JSON data is loaded

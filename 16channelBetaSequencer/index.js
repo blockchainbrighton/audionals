@@ -4,13 +4,9 @@ let totalStepCount = 0
 let beatCount = 1; // individual steps
 let barCount = 1; // bars
 
-let sequenceCount = 1;
-let currentSequence = 1;
 
-const sequenceLength = 64;
-const maxSequenceCount = 64; // sequences
-const allSequencesLength = 4096;
-const collectedURLs = Array(16).fill(''); 
+
+
 
 let timeoutId;
 let isPaused = false; // a flag to indicate if the sequencer is paused
@@ -28,7 +24,6 @@ let nextStepTime;
 let stepDuration;
 let gainNodes = Array(16).fill(null);
 let isMuted = false;
-let channelMutes = []; // Declare the channelMutes array as a global variable
 let muteState = false
 let volumeStates = Array(16).fill(1); // Start with full volume for all channels
 let soloedChannels = Array(16).fill(false); // Assuming you have 16 channels
@@ -246,7 +241,7 @@ channels.forEach((channel, index) => {
         // Retrieve the channel index from the channel's id attribute
         let channelIndex = parseInt(channel.id.split('-')[1]) - 1; // Convert 'channel-x' format to an index (0-15)
         
-        
+
         button.addEventListener('click', () => {
             button.classList.toggle('selected');
             

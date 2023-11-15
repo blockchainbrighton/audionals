@@ -1,20 +1,5 @@
 // importExport_v2.js
 
-let newJsonImport = false;
-let liveSequences = [];  // New array to keep track of "live" sequences
-
-
-
-const EMPTY_CHANNEL = {
-    "url": "",
-    "mute": false,
-    "triggers": []
-};
-
-let sequenceBPMs = Array(totalSequenceCount).fill(105);  // Initialize with 0 BPM for all sequences
-let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
-
-
 
 // Function to mark a sequence as "live" when edited
 function markSequenceAsLive(seqIndex) {

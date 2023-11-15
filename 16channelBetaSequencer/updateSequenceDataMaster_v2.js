@@ -1,11 +1,54 @@
 // updateSequenceDataMaster_v2.js
 
-// Assuming these are the global data structures for sequences, channels, BPMs, etc.
-let sequences = [];
+let totalSequenceCount = 64;
+
+let sequences = createArray(totalSequenceCount).map((_, index) => {
+    return {
+        sequenceName: `Sequence ${index + 1}`,
+        channels: createArray(16).map(() => ({
+            url: '',
+            mute: false,
+            triggers: createArray(64, false)
+        }))
+    };
+});
+
+// For the first sequence, add additional properties
+sequences[0].bpm = 105; // Default BPM
+sequences[0].projectName = 'Default Project'; // Default project name
+
 let channelURLs = [];
 let channelMutes = [];
 let channelSettings = [];
 let sequenceBPMs = [];
+let sequenceCount = 1;
+let currentSequence = 1;
+const collectedURLs = Array(16).fill(''); 
+
+const sequenceLength = 64;
+const maxSequenceCount = 64; // sequences
+const allSequencesLength = 4096;
+
+let newJsonImport = false;
+let liveSequences = [];  // New array to keep track of "live" sequences
+
+
+
+const EMPTY_CHANNEL = {
+    "url": "",
+    "mute": false,
+    "triggers": []
+};
+
+let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
+
+
+
+
+// Utility function to create an array with a default value
+function createArray(length, defaultValue) {
+    return Array(length).fill(defaultValue);
+}
 
 /**
  * Initializes the data structures for sequences and channels.
