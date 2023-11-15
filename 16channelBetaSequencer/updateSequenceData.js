@@ -11,8 +11,6 @@
  * @param {boolean} [params.muteState] - Mute state for the channel.
  * @param {Array} [params.stepSettings] - An array of step button states for the channel.
  */
-
-
 function updateSequenceData(params) {
     
     if (params.sequenceIndex !== undefined) {
@@ -22,8 +20,9 @@ function updateSequenceData(params) {
             return;
         }
         if (params.bpm) {
-            // Apply BPM to all sequences
-            sequenceBPMs.fill(params.bpm);
+            // Update BPM for the sequence
+            // Assuming you have a sequenceBPMs array
+            sequenceBPMs[params.sequenceIndex] = params.bpm;
         }
     }
 

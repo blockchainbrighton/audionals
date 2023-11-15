@@ -176,6 +176,8 @@ function changeSequence(seq) {
  * @param {boolean} state - The new state of the step (true for on, false for off).
  */
 function updateStep(channelIndex, stepIndex, state) {
+    console.log(`updateStep called with channelIndex: ${channelIndex}, stepIndex: ${stepIndex}, state: ${state}`);
+
     // Account for 1-indexing
     channelSettings[channelIndex][stepIndex + 1] = state;
     

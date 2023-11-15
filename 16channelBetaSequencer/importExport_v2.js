@@ -1,4 +1,4 @@
-// importExport.js
+// importExport_v2.js
 
 let newJsonImport = false;
 let liveSequences = [];  // New array to keep track of "live" sequences

@@ -13,39 +13,54 @@
  */
 
 function updateSequenceData(params) {
-    // Check if the sequence is the first one
-    const isFirstSequence = params.sequenceIndex === 0;
+    console.log("updateSequenceData called with params:", params);
 
-    if (params.sequenceIndex !== undefined) {
-        // Assertion to ensure valid indexing
-        if (params.sequenceIndex < 0 || params.sequenceIndex >= sequences.length) {
-            console.error(`Invalid sequenceIndex: ${params.sequenceIndex}`);
+    // Ensure sequences array is initialized
+    if (!Array.isArray(sequences)) {
+        sequences = [];
+    }
+
+    // Check if sequenceIndex is provided and valid
+    if (params.sequenceIndex === undefined || params.sequenceIndex < 0 || params.sequenceIndex >= sequences.length) {
+        console.error(`Invalid or missing sequenceIndex: ${params.sequenceIndex}`);
+        return;
+    }
+
+    // Initialize the sequence object if it doesn't exist
+    if (!sequences[params.sequenceIndex]) {
+        sequences[params.sequenceIndex] = { sequenceName: '', bpm: 120, channels: [] };
+    }
+
+    // Update sequence name and BPM
+    if (params.sequenceName) {
+        sequences[params.sequenceIndex].sequenceName = params.sequenceName;
+    }
+    if (params.bpm) {
+        sequences[params.sequenceIndex].bpm = params.bpm;
+    }
+
+    // Check if channelIndex is provided and valid
+    if (params.channelIndex !== undefined) {
+        if (params.channelIndex < 0 || params.channelIndex >= sequences[params.sequenceIndex].channels.length) {
+            console.error(`Invalid channelIndex: ${params.channelIndex}`);
             return;
         }
 
-        // Update sequence name
-        sequences[params.sequenceIndex].sequenceName = params.sequenceName;
-
-        // Update BPM only for the first sequence
-        if (isFirstSequence && params.bpm) {
-            sequences[0].bpm = params.bpm;
+        // Initialize the channel object if it doesn't exist
+        let sequence = sequences[params.sequenceIndex];
+        if (!sequence.channels[params.channelIndex]) {
+            sequence.channels[params.channelIndex] = { url: '', mute: false, triggers: [] };
         }
-    }
 
-    if (params.channelIndex !== undefined && isFirstSequence) {
-        // Update URL and mute state only for the first sequence
+        // Update URL, mute state, and step settings for the channel
         if (params.url) {
-            sequences[0].channels[params.channelIndex].url = params.url;
+            sequence.channels[params.channelIndex].url = params.url;
         }
         if (params.muteState !== undefined) {
-            sequences[0].channels[params.channelIndex].mute = params.muteState;
+            sequence.channels[params.channelIndex].mute = params.muteState;
+        }
+        if (params.stepSettings) {
+            sequence.channels[params.channelIndex].triggers = params.stepSettings;
         }
     }
-
-    // Update step button states for the channel in all sequences
-    if (params.stepSettings) {
-        sequences[params.sequenceIndex].channels[params.channelIndex].triggers = params.stepSettings;
-    }
 }
-
-// Assuming 'sequences' is an array of sequence objects as per the new format

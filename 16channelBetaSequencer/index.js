@@ -246,13 +246,18 @@ channels.forEach((channel, index) => {
         // Retrieve the channel index from the channel's id attribute
         let channelIndex = parseInt(channel.id.split('-')[1]) - 1; // Convert 'channel-x' format to an index (0-15)
         
+        
         button.addEventListener('click', () => {
             button.classList.toggle('selected');
             
             // Update the step's state in the channelSettings
             let stepState = button.classList.contains('selected');
-            updateStep(channelIndex, i, stepState);
+            console.log(`Button click event in index.js with channelIndex: ${channelIndex}, stepIndex: ${i}, stepState: ${stepState}`);
+        
+            // Assuming currentSequence holds the current sequence number
+            updateStep(currentSequence - 1, channelIndex, i, stepState); // Adjusted to pass the sequenceIndex
         });
+        
     
         fragment.appendChild(button);
     }
