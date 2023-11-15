@@ -55,7 +55,7 @@ function setCurrentSequence(sequenceIndex) {
  * @param {number} sequenceIndex - Index of the sequence.
  * @param {string} sequenceName - New name for the sequence.
  */
-function updateSequenceName(sequenceIndex, sequenceName) {
+function setSequenceName(sequenceIndex, sequenceName) {
     if (sequenceIndex < 0 || sequenceIndex >= sequencerMaster.sequences.length) {
         console.error(`Invalid sequenceIndex: ${sequenceIndex}`);
         return;
@@ -67,7 +67,7 @@ function updateSequenceName(sequenceIndex, sequenceName) {
  * Updates the global BPM.
  * @param {number} bpm - New BPM value.
  */
-function updateGlobalBPM(bpm) {
+function setGlobalBPM(bpm) {
     sequencerMaster.bpm = bpm;
 }
 /**
@@ -89,7 +89,7 @@ function getChannelURL(channelIndex) {
  * @param {number} channelIndex - Index of the channel.
  * @param {string} url - New URL for the channel's audio sample.
  */
-function updateChannelURL(channelIndex, url) {
+function setChannelURL(channelIndex, url) {
     if (channelIndex < 0 || channelIndex >= sequencerMaster.audioURLs.length) {
         console.error(`Invalid channelIndex: ${channelIndex}`);
         return;
@@ -117,7 +117,7 @@ function getChannelMute(sequenceIndex, channelIndex) {
  * @param {number} channelIndex - Index of the channel.
  * @param {boolean} muteState - New mute state for the channel.
  */
-function updateChannelMute(sequenceIndex, channelIndex, muteState) {
+function setChannelMute(sequenceIndex, channelIndex, muteState) {
     if (sequenceIndex < 0 || sequenceIndex >= sequencerMaster.sequences.length ||
         channelIndex < 0 || channelIndex >= sequencerMaster.sequences[sequenceIndex].channels.length) {
         console.error(`Invalid sequenceIndex or channelIndex: ${sequenceIndex}, ${channelIndex}`);
@@ -158,7 +158,7 @@ function getChannelTriggers(sequenceIndex, channelIndex) {
  * @param {number} channelIndex - Index of the channel.
  * @param {Array} stepSettings - New trigger settings for the channel.
  */
-function updateChannelTriggers(sequenceIndex, channelIndex, stepSettings) {
+function setChannelTriggers(sequenceIndex, channelIndex, stepSettings) {
     if (sequenceIndex < 0 || sequenceIndex >= sequencerMaster.sequences.length ||
         channelIndex < 0 || channelIndex >= sequencerMaster.sequences[sequenceIndex].channels.length) {
         console.error(`Invalid sequenceIndex or channelIndex: ${sequenceIndex}, ${channelIndex}`);
@@ -171,19 +171,19 @@ function updateChannelTriggers(sequenceIndex, channelIndex, stepSettings) {
 setCurrentSequence(1); 
 console.log(`Current sequence set to: ${getCurrentSequence()}`);
 
-updateSequenceName(1, 'My New Sequence');
+setSequenceName(1, 'My New Sequence');
 console.log(`Sequence name for sequence 2 updated to: ${sequencerMaster.sequences[1].sequenceName}`);
 
-updateGlobalBPM(120);
+setGlobalBPM(120);
 console.log(`Global BPM updated to: ${sequencerMaster.bpm}`);
 
-updateChannelURL(3, 'http://newurl.com/sample.mp3');
+setChannelURL(3, 'http://newurl.com/sample.mp3');
 console.log(`URL for channel 4 updated to: ${sequencerMaster.audioURLs[3]}`);
 
-updateChannelMute(1, 3, true);
+setChannelMute(1, 3, true);
 console.log(`Mute state for channel 4 in sequence 2 updated to: ${sequencerMaster.sequences[1].channels[3].mute}`);
 
-updateChannelTriggers(1, 3, createArray(64, true));
+setChannelTriggers(1, 3, createArray(64, true));
 console.log(`Trigger settings for channel 4 in sequence 2 updated`);
 
 

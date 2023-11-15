@@ -1,5 +1,6 @@
 // importExport_v2.js
 
+// Assuming liveSequences, sequencerMaster, channels, updateMuteState, setChannelVolume, setActiveSequence, updateUIForSequence, saveCurrentSequence are defined elsewhere
 
 // Function to mark a sequence as "live" when edited
 function markSequenceAsLive(seqIndex) {
@@ -8,56 +9,32 @@ function markSequenceAsLive(seqIndex) {
     }
 }
 
-// Call this function whenever a sequence is edited
-// For example, when a URL is added or a step is toggled
-// You need to identify these places in your code and call this function
-
 function exportSettings() {
     console.log("Live Sequences:", liveSequences);
-    console.log("All Sequences:", sequences);
 
-    let allSequencesSettings = [];
-
-    for (let seqIndex of liveSequences) {
-        const sequence = sequences[seqIndex];
+    let allSequencesSettings = liveSequences.map(seqIndex => {
+        const sequence = sequencerMaster.sequences[seqIndex];
         if (!sequence) {
             console.error(`Sequence at index ${seqIndex} is undefined`);
-            continue;
+            return null;
         }
 
-        let settings = {
+        return {
             sequenceName: sequence.sequenceName,
             channels: sequence.channels.map(channel => ({
-                triggers: channel.triggers
+                triggers: channel.triggers,
+                url: channel.url,
+                mute: channel.mute
             }))
         };
-
-        // Include additional details only for the first sequence
-        if (seqIndex === 0) {
-            settings.bpm = sequence.bpm;
-            settings.channels = settings.channels.map((channel, i) => ({
-                ...channel,
-                url: sequence.channels[i].url,
-                mute: sequence.channels[i].mute
-            }));
-        }
-
-        allSequencesSettings.push(settings);
-    }
+    }).filter(settings => settings !== null);
 
     let filename = `Audional_Sequencer_Settings.json`;
     return { settings: JSON.stringify(allSequencesSettings, null, 2), filename: filename };
 }
 
-
-
-
 function importSettings(settings) {
     console.log("Importing settings...");
-
-    // Reset sequences and BPMs
-    sequences = [];
-    sequenceBPMs = Array(totalSequenceCount).fill(105);
 
     let parsedSettings;
     try {
@@ -79,59 +56,35 @@ function importSettings(settings) {
             return;
         }
 
-        let newSequence = {
-            sequenceName: seqSettings.sequenceName,
-            channels: seqSettings.channels.map(ch => convertChannelToStepSettings(ch))
-        };
-
-        if (index === 0) {
-            newSequence.bpm = seqSettings.bpm;
-            newSequence.channels = newSequence.channels.map((channel, i) => ({
-                ...channel,
-                url: seqSettings.channels[i].url || "",
-                mute: seqSettings.channels[i].mute || false
-            }));
-        }
-
-        sequences.push(newSequence);
-        sequenceBPMs[index] = seqSettings.bpm || 105;
+        setSequenceName(index, seqSettings.sequenceName);
+        seqSettings.channels.forEach((ch, chIndex) => {
+            setChannelURL(chIndex, ch.url || "");
+            setChannelMute(index, chIndex, ch.mute || false);
+            setChannelTriggers(index, chIndex, ch.triggers);
+        });
     });
 
     // Update UI and settings for each channel
     channels.forEach((channel, index) => {
-        updateMuteState(channel, false); // unmute
-        setChannelVolume(index, 1); // set volume to 1
-        if (sequences.length > 0) {
-            const channelData = sequences[0].channels[index];
-            if (channelData) {
-                updateMuteState(channel, channelData.mute);
-                setChannelVolume(index, channelData.volume || 1);
-            }
-        }
+        const channelData = sequencerMaster.sequences[0].channels[index];
+        updateMuteState(channel, channelData.mute);
+        setChannelVolume(index, 1); // Assuming volume is set to 1 by default
     });
 
     // Set current sequence to the first one and update UI
-    currentSequence = 1;
-    setActiveSequence(currentSequence);
-    updateUIForSequence(currentSequence);
-    saveCurrentSequence(currentSequence);
+    setCurrentSequence(1);
+    setActiveSequence(getCurrentSequence());
+    updateUIForSequence(getCurrentSequence());
+    saveCurrentSequence(getCurrentSequence());
 
     // Mark all loaded sequences as "live"
-    liveSequences = sequences.map((_, index) => index);
+    liveSequences = parsedSettings.map((_, index) => index);
 
     console.log("Import settings completed.");
 }
 
 function isValidSequence(seq) {
     return seq && Array.isArray(seq.channels) && typeof seq.sequenceName === 'string';
-}
-
-
-// Function to mark a sequence as "live" when edited
-function markSequenceAsLive(seqIndex) {
-    if (!liveSequences.includes(seqIndex)) {
-        liveSequences.push(seqIndex);
-    }
 }
 
 function convertSequenceSettings(settings) {
