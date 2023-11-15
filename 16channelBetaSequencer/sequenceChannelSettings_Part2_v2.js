@@ -21,7 +21,7 @@ function loadSequence(sequenceNumber) {
 }
 
 function saveCurrentSequence(sequenceNumber) {
-    sequences[sequenceNumber - 1] = [...channelSettings];
+    sequencerMaster.sequences[sequenceNumber - 1] = [...channelSettings];
 }
 
 function loadNextSequence() {

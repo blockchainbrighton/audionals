@@ -1,21 +1,21 @@
 // updateSequenceDataMaster_v2.js
 
-let totalSequenceCount = 64;
+let totalSequenceCount = 16;
 let currentSequence = 1; 
-let sequences = createArray(totalSequenceCount).map((_, index) => {
-    return {
-        sequenceName: `Sequence ${index + 1}`,
+// New top-level structure
+let sequencerMaster = {
+    projectName: 'Default Project', // Default project name
+    bpm: 105, // Default BPM
+    audioURLs: new Array(16).fill(''), // Initialize with empty URLs
+    sequences: createArray(totalSequenceCount).map(() => ({
         channels: createArray(16).map(() => ({
-            url: '',
             mute: false,
             triggers: createArray(64, false)
         }))
-    };
-});
+    }))
+};
 
-// For the first sequence, add additional properties
-sequences[0].bpm = 105; // Default BPM
-sequences[0].projectName = 'Default Project'; // Default project name
+
 
 let channelURLs = [];
 let channelMutes = [];
@@ -39,7 +39,7 @@ const EMPTY_CHANNEL = {
     "triggers": []
 };
 
-let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
+let collectedURLsForSequences = Array(sequencerMaster.sequences.length).fill().map(() => []);
 
 // Utility function to create an array with a default value
 function createArray(length, defaultValue) {
@@ -65,7 +65,7 @@ function setCurrentSequence(sequenceIndex) {
  */
 function initializeData(totalSequences, totalChannels) {
     for (let i = 0; i < totalSequences; i++) {
-        sequences.push({ sequenceName: `Sequence ${i + 1}`, channels: [] });
+        sequencerMaster.sequences.push({ sequenceName: `Sequence ${i + 1}`, channels: [] });
         channelURLs.push(new Array(totalChannels).fill(''));
         channelMutes.push(new Array(totalChannels).fill(false));
         channelSettings.push(new Array(totalChannels).fill([])); // Assuming each channel has an array of settings
@@ -84,44 +84,72 @@ function initializeData(totalSequences, totalChannels) {
  * @param {boolean} [params.muteState] - Mute state for the channel.
  * @param {Array} [params.stepSettings] - An array of step button states for the channel.
  */
+
 function updateSequenceData(params) {
     console.log("[updateSequenceDataMaster_v2 - updateSequenceData] sequenceIndex:", params.sequenceIndex, "currentSequence:", currentSequence);
 
-    // Validate sequenceIndex
-    if (params.sequenceIndex === undefined || params.sequenceIndex < 0 || params.sequenceIndex >= sequences.length) {
-        console.error(`Invalid or missing sequenceIndex: ${params.sequenceIndex}`);
-        return;
-    }
-
-    // Update sequence-level settings
-    if (params.sequenceName) {
-        sequences[params.sequenceIndex].sequenceName = params.sequenceName;
-    }
-    if (params.bpm) {
-        sequenceBPMs[params.sequenceIndex] = params.bpm;
-    }
-
     // Validate and update channel-level settings
     if (params.channelIndex !== undefined) {
-        if (params.channelIndex < 0 || params.channelIndex >= channelURLs[params.sequenceIndex].length) {
-            console.error(`Invalid channelIndex: ${params.channelIndex}`);
+        if (params.sequenceIndex === undefined || params.sequenceIndex < 0 || params.sequenceIndex >= sequencerMaster.sequences.length) {
+            console.error(`Invalid sequenceIndex: ${params.sequenceIndex}`);
             return;
         }
 
-        if (params.url) {
-            channelURLs[params.sequenceIndex][params.channelIndex] = params.url;
+        let sequence = sequencerMaster.sequences[params.sequenceIndex];
+        if (!sequence || params.channelIndex < 0 || params.channelIndex >= sequence.channels.length) {
+            console.error(`Invalid channelIndex: ${params.channelIndex} or sequence is undefined`);
+            return;
         }
-        if (params.muteState !== undefined) {
-            channelMutes[params.channelIndex] = params.muteState;
+
+        // Update sequence-level settings
+        if (params.sequenceName) {
+            sequencerMaster.sequences[params.sequenceIndex].sequenceName = params.sequenceName;
         }
-        if (params.stepSettings) {
-            channelSettings[params.channelIndex] = params.stepSettings;
+        if (params.bpm) {
+            sequencerMaster.bpm = params.bpm; // Update global BPM
+        }
+
+        // Validate and update channel-level settings
+        if (params.channelIndex !== undefined) {
+            let sequence = sequencerMaster.sequences[currentSequence - 1];
+            if (params.channelIndex < 0 || params.channelIndex >= sequence.channels.length) {
+                console.error(`Invalid channelIndex: ${params.channelIndex}`);
+                return;
+            }
+
+            if (params.url) {
+                sequencerMaster.audioURLs[params.channelIndex] = params.url; // Update global audio URL
+            }
+            if (params.muteState !== undefined) {
+                sequence.channels[params.channelIndex].mute = params.muteState;
+            }
+            if (params.stepSettings) {
+                sequence.channels[params.channelIndex].triggers = params.stepSettings;
+            }
         }
     }
 }
 
-// Export functions if using modules
-// module.exports = { initializeData, updateSequenceData };
 
 // Example usage
-initializeData(16, 64); // Initialize data for 16 sequences and 64 channels
+initializeData(16, 16); // Initialize data for 16 sequences and 64 channels
+
+
+
+//    TEMPLATE
+//    SequencerMaster
+//    │
+//    ├── projectName: "Default Project"
+//    ├── bpm: 120
+//    ├── audioURLs: [url1, url2, ..., url16]
+//    │
+//    └── sequences: Array[16] 
+//        ├── Sequence 1: Array[16]
+//        │   ├── Channel 1: { triggers: [true, false, ...], channelName: "Channel 1" }
+//        │   ├── Channel 2: { triggers: [false, true, ...], channelName: "Channel 2" }
+//        │   ...
+//        │   └── Channel 16: { triggers: [false, false, ...], channelName: "Channel 16" }
+//        ├── Sequence 2: Array[16]
+//        │   ...
+//        └── Sequence 16: Array[16]
+//    
