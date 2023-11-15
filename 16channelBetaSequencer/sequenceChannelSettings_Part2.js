@@ -106,10 +106,14 @@ function updateUIForSequence(sequenceNumber) {
         channelSettings = sequences[sequenceNumber - 1];
         saveCurrentSequence(currentSequence);
 
+        // Mark the sequence as active
+        markSequenceAsLive(sequenceNumber - 1);
+
         // Rest of the function remains unchanged...
     } else {
         console.error("Invalid sequence number:", sequenceNumber);
     }
+
     const sequenceSettings = sequences[sequenceNumber - 1];
     channels.forEach((channel, index) => {
         const stepButtons = channel.querySelectorAll('.step-button');

@@ -16,6 +16,17 @@ let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
 
 
 
+// Function to mark a sequence as "live" when edited
+function markSequenceAsLive(seqIndex) {
+    if (!liveSequences.includes(seqIndex)) {
+        liveSequences.push(seqIndex);
+    }
+}
+
+// Call this function whenever a sequence is edited
+// For example, when a URL is added or a step is toggled
+// You need to identify these places in your code and call this function
+
 function exportSettings() {
    // console.log("exportSettings: collectedURLsForSequences before export:", collectedURLsForSequences);
 
