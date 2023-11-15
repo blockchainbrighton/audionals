@@ -1,4 +1,4 @@
-// updateSequenceData.js
+// updateSequenceDataMaster.js
 
 /**
  * Centralized function to update sequence data.
