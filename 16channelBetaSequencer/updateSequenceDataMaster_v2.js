@@ -88,47 +88,51 @@ function initializeData(totalSequences, totalChannels) {
 function updateSequenceData(params) {
     console.log("[updateSequenceDataMaster_v2 - updateSequenceData] sequenceIndex:", params.sequenceIndex, "currentSequence:", currentSequence);
 
+    // Validate sequenceIndex
+    if (params.sequenceIndex === undefined || params.sequenceIndex < 0 || params.sequenceIndex >= sequencerMaster.sequences.length) {
+        console.error(`Invalid sequenceIndex: ${params.sequenceIndex}`);
+        return;
+    }
+
+    let sequence = sequencerMaster.sequences[params.sequenceIndex];
+    console.log("Accessed sequence:", sequence);
+
+    // Update sequence-level settings
+    if (params.sequenceName) {
+        sequence.sequenceName = params.sequenceName;
+        console.log(`Sequence name updated to: ${sequence.sequenceName}`);
+    }
+    if (params.bpm) {
+        sequencerMaster.bpm = params.bpm; // Update global BPM
+        console.log(`Global BPM updated to: ${sequencerMaster.bpm}`);
+    }
+
     // Validate and update channel-level settings
     if (params.channelIndex !== undefined) {
-        if (params.sequenceIndex === undefined || params.sequenceIndex < 0 || params.sequenceIndex >= sequencerMaster.sequences.length) {
-            console.error(`Invalid sequenceIndex: ${params.sequenceIndex}`);
+        if (params.channelIndex < 0 || params.channelIndex >= sequence.channels.length) {
+            console.error(`Invalid channelIndex: ${params.channelIndex}`);
             return;
         }
 
-        let sequence = sequencerMaster.sequences[params.sequenceIndex];
-        if (!sequence || params.channelIndex < 0 || params.channelIndex >= sequence.channels.length) {
-            console.error(`Invalid channelIndex: ${params.channelIndex} or sequence is undefined`);
-            return;
-        }
+        let channel = sequence.channels[params.channelIndex];
+        console.log("Accessed channel:", channel);
 
-        // Update sequence-level settings
-        if (params.sequenceName) {
-            sequencerMaster.sequences[params.sequenceIndex].sequenceName = params.sequenceName;
+        if (params.url) {
+            sequencerMaster.audioURLs[params.channelIndex] = params.url; // Update global audio URL
+            console.log(`Global audio URL for channel ${params.channelIndex} updated to: ${sequencerMaster.audioURLs[params.channelIndex]}`);
         }
-        if (params.bpm) {
-            sequencerMaster.bpm = params.bpm; // Update global BPM
+        if (params.muteState !== undefined) {
+            channel.mute = params.muteState;
+            console.log(`Channel ${params.channelIndex} mute state updated to: ${channel.mute}`);
         }
-
-        // Validate and update channel-level settings
-        if (params.channelIndex !== undefined) {
-            let sequence = sequencerMaster.sequences[currentSequence - 1];
-            if (params.channelIndex < 0 || params.channelIndex >= sequence.channels.length) {
-                console.error(`Invalid channelIndex: ${params.channelIndex}`);
-                return;
-            }
-
-            if (params.url) {
-                sequencerMaster.audioURLs[params.channelIndex] = params.url; // Update global audio URL
-            }
-            if (params.muteState !== undefined) {
-                sequence.channels[params.channelIndex].mute = params.muteState;
-            }
-            if (params.stepSettings) {
-                sequence.channels[params.channelIndex].triggers = params.stepSettings;
-            }
+        if (params.stepSettings) {
+            channel.triggers = params.stepSettings;
+            console.log(`Channel ${params.channelIndex} step settings updated`);
         }
     }
 }
+
+
 
 
 // Example usage
