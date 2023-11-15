@@ -1,6 +1,8 @@
 // updateSequenceDataMaster_v2.js
 
 let totalSequenceCount = 64;
+let currentSequence = 1; 
+
 
 let sequences = createArray(totalSequenceCount).map((_, index) => {
     return {
@@ -22,7 +24,6 @@ let channelMutes = [];
 let channelSettings = [];
 let sequenceBPMs = [];
 let sequenceCount = 1;
-let currentSequence = 1;
 const collectedURLs = Array(16).fill(''); 
 
 const sequenceLength = 64;
@@ -48,6 +49,20 @@ let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
 // Utility function to create an array with a default value
 function createArray(length, defaultValue) {
     return Array(length).fill(defaultValue);
+}
+
+// Function to get the current sequence
+function getCurrentSequence() {
+    return currentSequence;
+}
+
+// Function to set the current sequence
+function setCurrentSequence(sequenceIndex) {
+    if (sequenceIndex < 1 || sequenceIndex > totalSequenceCount) {
+        console.error(`Invalid sequenceIndex: ${sequenceIndex}`);
+        return;
+    }
+    currentSequence = sequenceIndex;
 }
 
 /**
