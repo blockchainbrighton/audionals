@@ -85,6 +85,8 @@ function initializeData(totalSequences, totalChannels) {
  * @param {Array} [params.stepSettings] - An array of step button states for the channel.
  */
 function updateSequenceData(params) {
+    console.log("[updateSequenceDataMaster_v2 - updateSequenceData] sequenceIndex:", params.sequenceIndex, "currentSequence:", currentSequence);
+
     // Validate sequenceIndex
     if (params.sequenceIndex === undefined || params.sequenceIndex < 0 || params.sequenceIndex >= sequences.length) {
         console.error(`Invalid or missing sequenceIndex: ${params.sequenceIndex}`);

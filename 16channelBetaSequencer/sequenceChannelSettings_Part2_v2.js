@@ -80,14 +80,15 @@ function loadChannelSettingsFromPreset(preset) {
     saveCurrentSequence(currentSequence);
 }
 
-function updateStep(channelIndex, stepIndex, state) {
+function updateStep(channelIndex, stepIndex, state, sequenceIndex) {
     channelSettings[channelIndex][stepIndex + 1] = state;
-    console.log(`Updating Step: channelIndex=${channelIndex}, stepIndex=${stepIndex}, state=${state}`);
     updateSequenceData({
+        sequenceIndex: sequenceIndex,
         channelIndex: channelIndex,
         stepSettings: channelSettings[channelIndex]
     });
 }
+
 
 window.addEventListener('setupComplete', function() {
     loadAndDisplaySequence(1);

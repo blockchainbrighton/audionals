@@ -248,11 +248,13 @@ channels.forEach((channel, index) => {
             
             // Update the step's state in the channelSettings
             let stepState = button.classList.contains('selected');
-            console.log(`Button click event in index.js with channelIndex: ${channelIndex}, stepIndex: ${i}, stepState: ${stepState}`);
+            let sequenceIndex = currentSequence - 1; // Calculate sequenceIndex
+            console.log(`[index.js - Button Click] channelIndex: ${channelIndex}, stepIndex: ${i}, stepState: ${stepState}, sequenceIndex: ${sequenceIndex}`);
         
-            // Assuming currentSequence holds the current sequence number
-            updateStep(currentSequence - 1, channelIndex, i, stepState); // Adjusted to pass the sequenceIndex
+            // Call updateStep with the correct arguments
+            updateStep(channelIndex, i, stepState, sequenceIndex);
         });
+        
         
     
         fragment.appendChild(button);
