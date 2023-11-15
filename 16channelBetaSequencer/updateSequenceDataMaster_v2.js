@@ -1,4 +1,4 @@
-// updateSequenceDataMaster.js
+// updateSequenceDataMaster_v2.js
 
 // Assuming these are the global data structures for sequences, channels, BPMs, etc.
 let sequences = [];
