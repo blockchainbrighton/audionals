@@ -11,7 +11,16 @@ document.addEventListener("DOMContentLoaded", function() {
     let loadInternalPreset2 = document.getElementById('loadInternalPreset2');
     let loadInternalPreset3 = document.getElementById('loadInternalPreset3');
 
+// Add event listener to BPM slider to update sequence data when BPM changes
+bpmSlider.addEventListener('input', function() {
+    let newBpm = parseInt(bpmSlider.value);
+    updateSequenceData({
+        sequenceIndex: currentSequence - 1, // Assuming 0-based indexing
+        bpm: newBpm
+    });
+});
 
+bpmSlider.dispatchEvent(new Event('input')); // Update the sequencer's BPM
 
     saveButton.addEventListener('click', () => {
       let { settings, filename } = exportSettings();
