@@ -28,6 +28,7 @@ function setActiveSequence(index) {
     });
 
     currentActiveIndex = index;
+    console.log(`[quickplayButtons_v2.js {setActiveSequence}] Active sequence set to: ${index}`);
 }
 
 function updateActiveQuickPlayButton() {
@@ -37,6 +38,7 @@ function updateActiveQuickPlayButton() {
 
     const activeBtn = quickPlayButtons[getCurrentSequence() - 1];
     activeBtn.classList.add('active');
+    console.log(`[quickplayButtons_v2.js {updateActiveQuickPlayButton}] Active Quick Play Button updated for sequence: ${getCurrentSequence()}`);
 }
 
 function insertQuickPlayButtons() {
@@ -64,6 +66,7 @@ quickPlayButtons.forEach((button) => {
 
 function loadAndDisplaySequence(sequenceIndex) {
     setCurrentSequence(sequenceIndex);
+    console.log(`[quickplayButtons_v2.js {loadAndDisplaySequence}] Current sequence set to: ${getCurrentSequence()}`);
     loadSequence(sequenceIndex);
 
     document.getElementById('current-sequence-display').textContent = `Sequence ${getCurrentSequence()}`;
@@ -97,6 +100,8 @@ function createQuickPlayButton(index) {
     return button;
 }
 
+// Initial setup actions
+insertQuickPlayButtons();
 quickPlayButtons.forEach(button => button.classList.add('inactive'));
 
 for (let i = 1; i <= 16; i++) {
@@ -109,16 +114,3 @@ channelTemplateContainer.remove();
 
 const setupCompleteEvent = new Event('setupComplete');
 window.dispatchEvent(setupCompleteEvent);
-
-// Helper functions to interact with the master file
-function getCurrentSequence() {
-    // This function should retrieve the current sequence from the master file
-    // Replace with the appropriate method to access the currentSequence from updateSequenceDataMaster_v2.js
-    return currentSequence; // Placeholder
-}
-
-function setCurrentSequence(index) {
-    // This function should set the current sequence in the master file
-    // Replace with the appropriate method to update the currentSequence in updateSequenceDataMaster_v2.js
-    currentSequence = index; // Placeholder
-}
