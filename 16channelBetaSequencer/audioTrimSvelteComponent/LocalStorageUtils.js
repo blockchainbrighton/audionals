@@ -3,10 +3,10 @@
 function saveTrimSettings(channelId, trimSettings) {
     const settings = JSON.parse(localStorage.getItem('audioTrimSettings') || '{}');
     settings[channelId] = trimSettings;
-    localStorage.setItem('audioTrimSettings', JSON.stringify(settings));
+    localStorage.setItem('[LocalStorageUtils.js] audioTrimSettings', JSON.stringify(settings));
 
     // Log what's being saved
-    console.log(`Saved settings for channel ${channelId}:`, trimSettings);
+    console.log(`[LocalStorageUtils.js] Saved settings for channel ${channelId}:`, trimSettings);
 }
 
 function getTrimSettings(channelId) {
@@ -15,10 +15,12 @@ function getTrimSettings(channelId) {
 
     // Log what's being retrieved
     if (channelSettings) {
-        console.log(`Retrieved settings for channel ${channelId}:`, channelSettings);
+        console.log(`[LocalStorageUtils.js] Retrieved settings for channel ${channelId}:`, channelSettings);
     } else {
-        console.log(`No settings found for channel ${channelId}`);
+        console.log(`[LocalStorageUtils.js] No settings found for channel ${channelId}`);
     }
 
     return channelSettings;
 }
+
+

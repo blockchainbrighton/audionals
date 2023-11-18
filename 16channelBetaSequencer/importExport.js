@@ -16,8 +16,19 @@ let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
 
 
 
+// Function to mark a sequence as "live" when edited
+function markSequenceAsLive(seqIndex) {
+    if (!liveSequences.includes(seqIndex)) {
+        liveSequences.push(seqIndex);
+    }
+}
+
+// Call this function whenever a sequence is edited
+// For example, when a URL is added or a step is toggled
+// You need to identify these places in your code and call this function
+
 function exportSettings() {
-    console.log("exportSettings: collectedURLsForSequences before export:", collectedURLsForSequences);
+   // console.log("exportSettings: collectedURLsForSequences before export:", collectedURLsForSequences);
 
     let allSequencesSettings = [];
 
@@ -80,18 +91,18 @@ function importSettings(settings) {
     if (parsedSettings && Array.isArray(parsedSettings)) {
         collectedURLsForSequences = parsedSettings.map(seq => {
             let urlsForSequence = seq.channels.map(ch => ch.url || "");
-            console.log("URLs for this sequence:", urlsForSequence);
+           // console.log("URLs for this sequence:", urlsForSequence);
             while (urlsForSequence.length < 16) {
                 urlsForSequence.push("");
             }
             return urlsForSequence;
         });
-        console.log("Final collectedURLsForSequences:", collectedURLsForSequences);
+       // console.log("Final collectedURLsForSequences:", collectedURLsForSequences);
     }
 
     function isValidSequence(seq) {
         const isValid = seq && Array.isArray(seq.channels) && typeof seq.name === 'string';
-        console.log(`Sequence ${seq.name} is valid: ${isValid}`);
+       // console.log(`Sequence ${seq.name} is valid: ${isValid}`);
         return isValid;
     }
 
@@ -218,12 +229,12 @@ function convertSequenceSettings(settings) {
         for (let i = 0; i < emptyChannelsToAdd; i++) {
             channels.push(EMPTY_CHANNEL);
         }
-        console.log("Converted channel:", convertedChannel);
+        // console.log("Converted channel:", convertedChannel);
     }
 
     return channels.map(ch => {
         let convertedChannel = convertChannelToStepSettings(ch);
-        console.log("Converted channel:", convertedChannel);
+       //  console.log("Converted channel:", convertedChannel);
         return convertedChannel;
     });
 }

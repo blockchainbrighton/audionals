@@ -108,31 +108,46 @@ function bufferToBase64(buffer) {
 }
 
 function playSound(channel, currentStep) {
-  console.log("playSound: initial preset settings - gainNodes values:", gainNodes.map(gn => gn.gain.value));
-
   if (channel.querySelectorAll('.step-button')[currentStep].classList.contains('selected')) {
     const url = channel.dataset.originalUrl;
+    console.log("[playSound] URL of the audio:", url);
+
     const audioBuffer = audioBuffers.get(url);
     if (audioBuffer) {
+      console.log("[playSound] Audio buffer found for URL:", url);
+
       const source = audioContext.createBufferSource();
       source.buffer = audioBuffer;
-      const channelIndex = parseInt(channel.dataset.id.split('-')[1]) - 1;
 
-      // Use trim settings if available, with validation
-      let trimStart = parseFloat(channel.dataset.trimStart) || 0;
-      let trimEnd = parseFloat(channel.dataset.trimEnd) || audioBuffer.duration;
+      const channelIndex = parseInt(channel.dataset.id.split('-')[1]);
+      console.log("[playSound] Channel index:", channelIndex);
+
+      // Retrieve trim settings using LocalStorageUtils
+      const trimSettings = getTrimSettings(`channel-${channelIndex}`);
+      let trimStart = trimSettings ? trimSettings.start : 0;
+      let trimEnd = trimSettings ? trimSettings.end : audioBuffer.duration;
+      console.log("[playSound] Retrieved trimStart and trimEnd:", trimStart, trimEnd);
+
       trimStart = Math.max(0, Math.min(trimStart, audioBuffer.duration));
       trimEnd = Math.max(trimStart, Math.min(trimEnd, audioBuffer.duration));
+      console.log("[playSound] Validated and applied trimStart and trimEnd:", trimStart, trimEnd);
+
       const duration = trimEnd - trimStart;
+      console.log("[playSound] Duration to play:", duration);
 
-      source.connect(gainNodes[channelIndex]);
-      gainNodes[channelIndex].connect(audioContext.destination);
+      source.connect(gainNodes[channelIndex - 1]);
+      gainNodes[channelIndex - 1].connect(audioContext.destination);
 
-      // Start playback at trimStart and play for the duration of trimEnd - trimStart
+      console.log("[playSound] Starting playback from:", trimStart, "for duration:", duration);
       source.start(0, trimStart, duration);
+    } else {
+      console.log("[playSound] No audio buffer found for URL:", url);
     }
+  } else {
+    console.log("[playSound] Current step is not selected. Skipping playback.");
   }
 }
+
 
 
 async function playAuditionedSample(url) {
@@ -189,17 +204,17 @@ function updateMuteState(channel, shouldMute) {
   // Mute or unmute using gain node
   if (shouldMute) {
       gainNodes[channelIndex].gain.value = 0; // Mute the channel
-      console.log("updateMuteState - Channel-" + channel.dataset.id.replace("Channel-", "") + " Muted");
+      // console.log("updateMuteState - Channel-" + channel.dataset.id.replace("Channel-", "") + " Muted");
   } else {
       gainNodes[channelIndex].gain.value = 1; // Unmute the channel (set to original volume)
-      console.log("updateMuteState - Channel-" + channel.dataset.id.replace("Channel-", "") + " Unmuted");
+      // console.log("updateMuteState - Channel-" + channel.dataset.id.replace("Channel-", "") + " Unmuted");
   }
 
   // Update the dim state of the channel
   updateDimState(channel, channelIndex);
 
   saveCurrentSequence(currentSequence);
-  console.log(`Channel-${channel.dataset.id.replace("Channel-", "")} Muted: ${shouldMute}`);
+  // console.log(`Channel-${channel.dataset.id.replace("Channel-", "")} Muted: ${shouldMute}`);
 }
 
 

@@ -782,16 +782,16 @@ var app = (function () {
     	let { channelIndex } = $$props;
 
     	// In your Svelte component
-function storeTrimSettings() {
-    console.log(`Storing trim settings for channel ${channelIndex}`);
-    window.trimSettings.update({
-        [channelIndex]: {
-            start: $startSliderValue,
-            end: $endSliderValue
-        }
-    });
-    console.log(`Trim settings stored successfully for channel ${channelIndex}`);
-}
+		function storeTrimSettings() {
+			console.log(`Storing trim settings for channel ${channelIndex}`);
+			const newSettings = {
+				start: $startSliderValue,
+				end: $endSliderValue
+			};
+			window.trimSettings.update(channelIndex, newSettings);
+			console.log(`Updated trim settings:`, newSettings);
+		}
+	
 
     	// Use the external AudioContext if provided, otherwise create a new one
     	let audioContext = externalAudioContext || new (window.AudioContext || window.webkitAudioContext)();
@@ -1010,11 +1010,13 @@ function storeTrimSettings() {
     		}
     	});
 
-    	const writable_props = ['externalOrdinalId', 'externalAudioContext', 'channelIndex'];
+		const writable_props = ['externalOrdinalId', 'externalAudioContext', 'channelIndex', 'startSliderValue', 'endSliderValue'];
 
     	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1.warn(`<AudioTrimmer> was created with unknown prop '${key}'`);
-    	});
+			if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') {
+				console_1.warn(`<AudioTrimmer> was created with unknown prop '${key}'`);
+			}
+		});
 
     	function input0_input_handler() {
     		ordinalId = this.value;
@@ -1052,10 +1054,12 @@ function storeTrimSettings() {
 		
 
     	$$self.$$set = $$props => {
-    		if ('externalOrdinalId' in $$props) $$invalidate(15, externalOrdinalId = $$props.externalOrdinalId);
-    		if ('externalAudioContext' in $$props) $$invalidate(16, externalAudioContext = $$props.externalAudioContext);
-    		if ('channelIndex' in $$props) $$invalidate(17, channelIndex = $$props.channelIndex);
-    	};
+			if ('externalOrdinalId' in $$props) $$invalidate(15, externalOrdinalId = $$props.externalOrdinalId);
+			if ('externalAudioContext' in $$props) $$invalidate(16, externalAudioContext = $$props.externalAudioContext);
+			if ('channelIndex' in $$props) $$invalidate(17, channelIndex = $$props.channelIndex);
+			if ('startSliderValue' in $$props) $$invalidate(18, startSliderValue = $$props.startSliderValue); // Add this line
+			if ('endSliderValue' in $$props) $$invalidate(19, endSliderValue = $$props.endSliderValue);       // And this line
+		};
 
     	$$self.$capture_state = () => ({
     		externalOrdinalId,
@@ -1180,23 +1184,23 @@ function storeTrimSettings() {
     }
 
 	window.AudioTrimmer = class extends SvelteComponentDev {
-    	constructor(options) {
-    		super(options);
-
-    		init(
-    			this,
-    			options,
-    			instance$1,
-    			create_fragment$1,
-    			safe_not_equal,
-    			{
-    				externalOrdinalId: 15,
-    				externalAudioContext: 16,
-    				channelIndex: 17
-    			},
-    			null,
-    			[-1, -1]
-    		);
+		constructor(options) {
+			super(options);
+	
+			init(
+				this,
+				options,
+				instance$1,
+				create_fragment$1,
+				safe_not_equal,
+				{
+					externalOrdinalId: 15,
+					externalAudioContext: 16,
+					channelIndex: 17,
+				},
+				null,
+				[-1, -1]
+			);
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,

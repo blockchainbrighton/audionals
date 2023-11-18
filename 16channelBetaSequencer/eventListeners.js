@@ -8,6 +8,10 @@ document.addEventListener("DOMContentLoaded", function() {
     let loadOptions = document.getElementById('loadOptions');
     let loadJson = document.getElementById('loadJson');
     let loadInternalPreset = document.getElementById('loadInternalPreset');
+    let loadInternalPreset2 = document.getElementById('loadInternalPreset2');
+    let loadInternalPreset3 = document.getElementById('loadInternalPreset3');
+
+
 
     saveButton.addEventListener('click', () => {
       let { settings, filename } = exportSettings();
@@ -54,6 +58,39 @@ document.addEventListener("DOMContentLoaded", function() {
     
         loadOptions.style.display = "none"; // Hide the menu after selection
     });
+
+    loadInternalPreset2.addEventListener('click', () => {
+        fetch('16channelBetaSequencer/internalPreset2.json') // Replace with the correct path to your second preset JSON file
+            .then(response => response.json())
+            .then(data => {
+                // Now, data contains the content of the JSON file for the second preset.
+                // Assuming importSettings is the function that processes this data:
+                importSettings(JSON.stringify(data)); 
+            })
+            .catch(error => {
+                console.error("Error loading the internal preset 2:", error);
+            });
+
+        loadOptions.style.display = "none"; // Hide the menu after selection
+    });
+
+
+    loadInternalPreset3.addEventListener('click', () => {
+        fetch('16channelBetaSequencer/Preset_Json_Files/Japanese_Koto_Samples.json')
+            .then(response => response.json())
+            .then(data => {
+                // Now, data contains the content of the Japanese Koto Samples JSON file.
+                // Assuming importSettings is the function that processes this data:
+                importSettings(JSON.stringify(data)); 
+            })
+            .catch(error => {
+                console.error("Error loading the Japanese Koto Samples preset:", error);
+            });
+
+        loadOptions.style.display = "none"; // Hide the menu after selection
+    });
+
+
     
   
   loadFileInput.addEventListener('change', () => {
@@ -148,10 +185,15 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
                 endSliderValue: savedTrimSettings?.end || defaultSettings.end
             }
         });
-        console.log('Audio trimmer instantiated');
+
+        // Log the collected values
+        console.log('Audio trimmer instantiated with the following settings:', {
+            externalAudioContext: audioContext,
+            externalOrdinalId: ordinalId,
+            channelIndex: channelNumber,
+        });
     });
 });
-
 
 // Close the modal when the user clicks on <span> (x)
 document.querySelector('.close-button').addEventListener('click', function() {
@@ -169,4 +211,3 @@ window.onclick = function(event) {
         console.log('Modal closed');
     }
 };
-

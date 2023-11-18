@@ -45,10 +45,10 @@ function loadSequence(sequenceNumber) {
         return;
     }
     const urlsForSequence = sequenceChannels.map(channelData => channelData[0]);
-    console.log(`URLs for Sequence ${sequenceNumber}:`, urlsForSequence);
+    // console.log(`URLs for Sequence ${sequenceNumber}:`, urlsForSequence);
 
     // Loaded settings for Sequence
-    console.log(`Loaded settings for Sequence ${sequenceNumber}:`, sequenceChannels);
+    // console.log(`Loaded settings for Sequence ${sequenceNumber}:`, sequenceChannels);
 
     // Update the UI to reflect the loaded sequence
     updateUIForSequence(sequenceNumber);
@@ -71,9 +71,9 @@ function loadSequence(sequenceNumber) {
 
 function saveCurrentSequence(sequenceNumber) {
     sequences[sequenceNumber - 1] = [...channelSettings];
-    console.log(`from saveCurrentSequence: Saved settings for Sequence ${sequenceNumber}:`, sequences[sequenceNumber - 1]);
+    // console.log(`from saveCurrentSequence: Saved settings for Sequence ${sequenceNumber}:`, sequences[sequenceNumber - 1]);
     const urlsForSavedSequence = channelSettings.map(channelData => channelData[0]);
-    console.log(`from saveCurrentSequence: Saved URLs for Sequence ${sequenceNumber}:`, urlsForSavedSequence);
+    // console.log(`from saveCurrentSequence: Saved URLs for Sequence ${sequenceNumber}:`, urlsForSavedSequence);
 
 }
 
@@ -106,10 +106,14 @@ function updateUIForSequence(sequenceNumber) {
         channelSettings = sequences[sequenceNumber - 1];
         saveCurrentSequence(currentSequence);
 
+        // Mark the sequence as active
+        markSequenceAsLive(sequenceNumber - 1);
+
         // Rest of the function remains unchanged...
     } else {
         console.error("Invalid sequence number:", sequenceNumber);
     }
+
     const sequenceSettings = sequences[sequenceNumber - 1];
     channels.forEach((channel, index) => {
         const stepButtons = channel.querySelectorAll('.step-button');
@@ -148,19 +152,19 @@ function changeSequence(seq) {
             stepSettings[trigger] = true;
         });
         channelSettings[channelIndex] = stepSettings;
-        console.log(`Loaded settings for Channel-${channelIndex + 1}:`, channelSettings[channelIndex]);
+       // console.log(`Loaded settings for Channel-${channelIndex + 1}:`, channelSettings[channelIndex]);
         
         // Fetch audio data
         if (channelData.url) {
             const loadSampleButton = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"] .load-sample-button`);
             fetchAudio(channelData.url, channelIndex, loadSampleButton);
-            console.log(`Channel-${channelIndex + 1} fetchAudio called`);
+            // console.log(`Channel-${channelIndex + 1} fetchAudio called`);
         }
     });
 
     // Save the loaded preset to the current sequence
     saveCurrentSequence(currentSequence);
-    console.log("loadChannelSettingsFromPreset: After loadChannelSettingsFromPreset, gainNodes values:", gainNodes.map(gn => gn.gain.value));
+    // console.log("loadChannelSettingsFromPreset: After loadChannelSettingsFromPreset, gainNodes values:", gainNodes.map(gn => gn.gain.value));
 
 }
 
@@ -180,7 +184,7 @@ function updateStep(channelIndex, stepIndex, state) {
         channelIndex: channelIndex,
         stepSettings: channelSettings[channelIndex]
     });
-    console.log(`Updated settings for Channel-${channelIndex + 1}:`, channelSettings[channelIndex]);
+    // console.log(`Updated settings for Channel-${channelIndex + 1}:`, channelSettings[channelIndex]);
 }
 
 
