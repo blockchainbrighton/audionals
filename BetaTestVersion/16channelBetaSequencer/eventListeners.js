@@ -30,80 +30,99 @@ document.addEventListener("DOMContentLoaded", function() {
     });
     
   
-  
     loadButton.addEventListener('click', () => {
+        console.log("Load button clicked");
         if (loadOptions.style.display === "none" || loadOptions.style.display === "") {
+            console.log("Displaying load options");
             loadOptions.style.display = "block";
         } else {
+            console.log("Hiding load options");
             loadOptions.style.display = "none";
         }
     });
-  
+    
     loadJson.addEventListener('click', () => {
+        console.log("Load JSON option selected");
         loadFileInput.click();
         loadOptions.style.display = "none"; // Hide the menu after selection
     });
-
+    
     loadInternalPreset.addEventListener('click', () => {
-        fetch('16channelBetaSequencer/allSequencesEmbedded.json')
-            .then(response => response.json())
+        console.log("Loading internal preset 1");
+        fetch('Preset_Json_Files/internalPreset1.json')
+            .then(response => {
+                console.log("Received response for internal preset 1", response);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                // Now, data contains the content of the JSON file.
-                // Assuming importSettings is the function that processes this data:
-                importSettings(JSON.stringify(data)); 
+                console.log("Loaded data for internal preset 1", data);
+                importSettings(JSON.stringify(data));
             })
             .catch(error => {
-                console.error("Error loading the internal preset:", error);
+                console.error("Error loading the internal preset 1:", error);
             });
     
         loadOptions.style.display = "none"; // Hide the menu after selection
     });
-
+    
     loadInternalPreset2.addEventListener('click', () => {
-        fetch('16channelBetaSequencer/internalPreset2.json') // Replace with the correct path to your second preset JSON file
-            .then(response => response.json())
+        console.log("Loading internal preset 2");
+        fetch('Preset_Json_Files/internalPreset2.json')
+            .then(response => {
+                console.log("Received response for internal preset 2", response);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                // Now, data contains the content of the JSON file for the second preset.
-                // Assuming importSettings is the function that processes this data:
-                importSettings(JSON.stringify(data)); 
+                console.log("Loaded data for internal preset 2", data);
+                importSettings(JSON.stringify(data));
             })
             .catch(error => {
                 console.error("Error loading the internal preset 2:", error);
             });
-
+    
         loadOptions.style.display = "none"; // Hide the menu after selection
     });
-
-
+    
     loadInternalPreset3.addEventListener('click', () => {
-        fetch('16channelBetaSequencer/Preset_Json_Files/Japanese_Koto_Samples.json')
-            .then(response => response.json())
+        console.log("Loading internal preset 3 (Japanese Koto Samples)");
+        fetch('Preset_Json_Files/Japanese_Koto_Samples.json')
+            .then(response => {
+                console.log("Received response for Japanese Koto Samples", response);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                // Now, data contains the content of the Japanese Koto Samples JSON file.
-                // Assuming importSettings is the function that processes this data:
-                importSettings(JSON.stringify(data)); 
+                console.log("Loaded data for Japanese Koto Samples", data);
+                importSettings(JSON.stringify(data));
             })
             .catch(error => {
                 console.error("Error loading the Japanese Koto Samples preset:", error);
             });
-
+    
         loadOptions.style.display = "none"; // Hide the menu after selection
     });
-
-
     
-  
-  loadFileInput.addEventListener('change', () => {
-      let file = loadFileInput.files[0];
-      let reader = new FileReader();
-      reader.onload = function(e) {
-          let settings = e.target.result;
-          importSettings(settings);
-          console.log("Loaded file content:", settings);
-
-      };
-      reader.readAsText(file);
-  });
+    loadFileInput.addEventListener('change', () => {
+        console.log("File input changed");
+        let file = loadFileInput.files[0];
+        console.log("Selected file:", file.name);
+        let reader = new FileReader();
+        reader.onload = function(e) {
+            let settings = e.target.result;
+            console.log("Loaded file content:", settings);
+            importSettings(settings);
+        };
+        reader.readAsText(file);
+    });
+    
 });
 
   // Listen for messages
