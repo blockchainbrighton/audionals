@@ -8,6 +8,12 @@ document.addEventListener("DOMContentLoaded", function() {
     let loadOptions = document.getElementById('loadOptions');
     let loadJson = document.getElementById('loadJson');
     let loadInternalPreset = document.getElementById('loadInternalPreset');
+    let loadInternalPreset2 = document.getElementById('loadInternalPreset2');
+    let loadInternalPreset3 = document.getElementById('loadInternalPreset3');
+    let loadInternalPreset4 = document.getElementById('loadInternalPreset4');
+    let loadInternalPreset5 = document.getElementById('loadInternalPreset5');
+
+
 
     saveButton.addEventListener('click', () => {
       let { settings, filename } = exportSettings();
@@ -40,20 +46,30 @@ document.addEventListener("DOMContentLoaded", function() {
         loadOptions.style.display = "none"; // Hide the menu after selection
     });
 
-    loadInternalPreset.addEventListener('click', () => {
-        fetch('16channelBetaSequencer/allSequencesEmbedded.json')
+    function loadPresetFromFile(filePath) {
+        console.log(`Loading preset from: ${filePath}`);
+        fetch(filePath)
             .then(response => response.json())
             .then(data => {
-                // Now, data contains the content of the JSON file.
-                // Assuming importSettings is the function that processes this data:
-                importSettings(JSON.stringify(data)); 
+                console.log(`Loaded data from ${filePath}`, data);
+                importSettings(JSON.stringify(data));
             })
             .catch(error => {
-                console.error("Error loading the internal preset:", error);
+                console.error(`Error loading preset from ${filePath}:`, error);
             });
     
         loadOptions.style.display = "none"; // Hide the menu after selection
-    });
+    }
+    
+    // Attaching the function to buttons
+    loadInternalPreset.addEventListener('click', () => loadPresetFromFile('Preset_Json_Files/internalPreset1.json'));
+    loadInternalPreset2.addEventListener('click', () => loadPresetFromFile('Preset_Json_Files/randomOrdinalSounds2.json'));
+    loadInternalPreset3.addEventListener('click', () => loadPresetFromFile('Preset_Json_Files/Japanese_Koto_Samples.json'));
+    loadInternalPreset4.addEventListener('click', () => loadPresetFromFile('Preset_Json_Files/internalPreset4.json'));
+    loadInternalPreset5.addEventListener('click', () => loadPresetFromFile('Preset_Json_Files/Koto2.json'));
+
+
+
     
   
   loadFileInput.addEventListener('change', () => {
@@ -148,10 +164,15 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
                 endSliderValue: savedTrimSettings?.end || defaultSettings.end
             }
         });
-        console.log('Audio trimmer instantiated');
+
+        // Log the collected values
+        console.log('Audio trimmer instantiated with the following settings:', {
+            externalAudioContext: audioContext,
+            externalOrdinalId: ordinalId,
+            channelIndex: channelNumber,
+        });
     });
 });
-
 
 // Close the modal when the user clicks on <span> (x)
 document.querySelector('.close-button').addEventListener('click', function() {
@@ -169,4 +190,3 @@ window.onclick = function(event) {
         console.log('Modal closed');
     }
 };
-
