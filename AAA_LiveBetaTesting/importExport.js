@@ -28,11 +28,10 @@ function markSequenceAsLive(seqIndex) {
 // You need to identify these places in your code and call this function
 
 function exportSettings() {
-   // console.log("exportSettings: collectedURLsForSequences before export:", collectedURLsForSequences);
-   let projectName = document.getElementById('project-name').value.trim();
-   if (!projectName) {
-       projectName = 'Default_Project';  // Default name if none is entered
-   }
+    let projectName = document.getElementById('project-name').value.trim();
+    if (!projectName) {
+        projectName = 'Default_Project';  // Default name if none is entered
+    }
 
     let allSequencesSettings = [];
 
@@ -56,11 +55,19 @@ function exportSettings() {
             });
 
             let mute = channels[i] && channels[i].dataset ? channels[i].dataset.muted === 'true' : false;
-            settings.channels.push({
+            
+            // Retrieve trim settings for the channel
+            let trimSettings = window.trimSettings.get(i);  // Assuming channel index matches with i
+
+            // Channel object with added trim settings
+            let channelObj = {
                 url: url,
                 mute: mute,
-                triggers: triggers
-            });
+                triggers: triggers,
+                trimSettings: trimSettings  // Added trim settings
+            };
+
+            settings.channels.push(channelObj);
         }
 
         allSequencesSettings.push(settings);
@@ -69,7 +76,6 @@ function exportSettings() {
     let filename = `Audional_Sequencer_Settings_${projectName}.json`;
     return { settings: JSON.stringify(allSequencesSettings, null, 2), filename: filename };
 }
-
 
 
 function importSettings(settings) {
@@ -212,13 +218,26 @@ function importSettings(settings) {
     const currentSeqSettings = parsedSettings[0]; // since currentSequence is set to 1
     currentSeqSettings.channels.forEach((channelData, channelIndex) => {
         const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"]`);
-        if (channelData.mute !== undefined) { // Only if mute is defined in the JSON
+
+        // Apply mute and volume settings
+        if (channelData.mute !== undefined) {
             updateMuteState(channel, channelData.mute);
         }
-        if (channelData.volume !== undefined) { // Only if volume is defined in the JSON
+        if (channelData.volume !== undefined) {
             setChannelVolume(channelIndex, channelData.volume);
         }
+
+        // Apply trim settings for each channel
+        if (channelData.trimSettings) {
+            // Assuming you have a function to apply trim settings to a channel
+            applyTrimSettingsToChannel(channelIndex, channelData.trimSettings);
+        }
     });
+
+    function applyTrimSettingsToChannel(channelIndex, trimSettings) {
+        console.log(`[importExport] Applying trim settings to channel ${channelIndex}:`, trimSettings);
+        window.trimSettings.update(channelIndex, trimSettings);
+    }
 
     updateUIForSequence(currentSequence);
     saveCurrentSequence(currentSequence);
