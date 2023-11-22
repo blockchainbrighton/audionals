@@ -1,77 +1,51 @@
-// importExport.js
+// importManager.js
 
 let newJsonImport = false;
-let liveSequences = [];  // New array to keep track of "live" sequences
 
+// Function to export the settings of the sequences
+// function exportSettings() {
+//     let projectName = document.getElementById('project-name').value.trim();
+//     if (!projectName) {
+//         projectName = 'Default_Project';
+//     }
+// 
+//     let allSequencesSettings = [];
+// 
+//     for (let seqIndex of liveSequences) {
+//         const sequence = sequences[seqIndex];
+//         let settings = {
+//             projectName: projectName,
+//             name: `Sequence_${seqIndex + 1}`,
+//             bpm: sequenceBPMs[seqIndex],
+//             channels: [],
+//         };
+// 
+//         for (let i = 0; i < 16; i++) {
+//             let channelSteps = sequence[i] || [];
+//             let url = sequence[i] && sequence[i][0] ? sequence[i][0] : "";
+//             let triggers = [];
+//             channelSteps.forEach((stepState, stepIndex) => {
+//                 if (stepState && stepIndex !== 0) {
+//                     triggers.push(stepIndex);
+//                 }
+//             });
+// 
+//             let mute = channels[i] && channels[i].dataset ? channels[i].dataset.muted === 'true' : false;
+//             settings.channels.push({
+//                 url: url,
+//                 mute: mute,
+//                 triggers: triggers
+//             });
+//         }
+// 
+//         allSequencesSettings.push(settings);
+//     }
+// 
+//     let filename = `Audional_Sequencer_Settings_${projectName}.json`;
+//     return { settings: JSON.stringify(allSequencesSettings, null, 2), filename: filename };
+// }
 
-
-const EMPTY_CHANNEL = {
-    "url": "",
-    "mute": false,
-    "triggers": []
-};
-
-let sequenceBPMs = Array(totalSequenceCount).fill(105);  // Initialize with 0 BPM for all sequences
-let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
-
-
-
-// Function to mark a sequence as "live" when edited
-function markSequenceAsLive(seqIndex) {
-    if (!liveSequences.includes(seqIndex)) {
-        liveSequences.push(seqIndex);
-    }
-}
-
-// Call this function whenever a sequence is edited
-// For example, when a URL is added or a step is toggled
-// You need to identify these places in your code and call this function
-
-function exportSettings() {
-   // console.log("exportSettings: collectedURLsForSequences before export:", collectedURLsForSequences);
-   let projectName = document.getElementById('project-name').value.trim();
-   if (!projectName) {
-       projectName = 'Default_Project';  // Default name if none is entered
-   }
-
-    let allSequencesSettings = [];
-
-    for (let seqIndex of liveSequences) {  // Only export "live" sequences
-        const sequence = sequences[seqIndex];
-        let settings = {
-            projectName: projectName, // Add the project name here
-            name: `Sequence_${seqIndex + 1}`,
-            bpm: sequenceBPMs[seqIndex],
-            channels: [],
-        };
-
-        for (let i = 0; i < 16; i++) {
-            let channelSteps = sequence[i] || [];
-            let url = sequence[i] && sequence[i][0] ? sequence[i][0] : "";
-            let triggers = [];
-            channelSteps.forEach((stepState, stepIndex) => {
-                if (stepState && stepIndex !== 0) {
-                    triggers.push(stepIndex);
-                }
-            });
-
-            let mute = channels[i] && channels[i].dataset ? channels[i].dataset.muted === 'true' : false;
-            settings.channels.push({
-                url: url,
-                mute: mute,
-                triggers: triggers
-            });
-        }
-
-        allSequencesSettings.push(settings);
-    }
-
-    let filename = `Audional_Sequencer_Settings_${projectName}.json`;
-    return { settings: JSON.stringify(allSequencesSettings, null, 2), filename: filename };
-}
-
-
-
+// Function to import settings
 function importSettings(settings) {
     console.log("Importing settings...");
     channels.forEach(channel => {
