@@ -2,16 +2,18 @@
 
 // Function to export the settings of the sequences
 function exportSettings() {
+    console.log('[exportManager_v2.js] exportSettings: Starting export process');
+
     let projectName = document.getElementById('project-name').value.trim();
     if (!projectName) {
         projectName = 'Default_Project';
     }
 
-    // Step 1: Gather Master Settings (assuming these are general and not sequence-specific)
+    // Step 1: Gather Master Settings from the first sequence or master settings
     const masterSettings = {
         projectName: projectName,
-        bpm: sequenceBPMs[0], // Default BPM, adjust if needed
-        channels: [] // Initialize channels array
+        bpm: sequenceBPMs[0], // Adjust if necessary
+        channels: []
     };
 
     // Fetch URL, mute, and trim settings from the first sequence
@@ -20,7 +22,7 @@ function exportSettings() {
         let channelSteps = firstSequence[i] || [];
         let url = channelSteps[0] || "";
         let mute = channels[i] && channels[i].dataset ? channels[i].dataset.muted === 'true' : false;
-        let trimSettings = { start: 0.01, end: 100 }; // Default trim settings
+        let trimSettings = { start: 0.01, end: 100 };
 
         masterSettings.channels.push({
             url: url,
@@ -29,16 +31,19 @@ function exportSettings() {
         });
     }
 
-    // Step 2: Compile Data for Live Sequences
+    // Step 2: Compile Data for Each Live Sequence (Only Active Trigger Step Numbers)
     let sequencesData = liveSequences.map(seqIndex => {
         let sequence = sequences[seqIndex];
         return {
             sequenceNumber: seqIndex + 1,
             channels: sequence.map(channel => {
-                let triggers = channel.slice(1).filter(step => {
-                    console.log(`Step state: ${step}`); // Debugging log
-                    return step !== 0;
-                }).map((_, index) => index + 1); 
+                let triggers = [];
+                channel.forEach((stepState, index) => {
+                    if (stepState === true && index !== 0) { // Extract only active triggers
+                        triggers.push(index);
+                    }
+                });
+                return { triggers: triggers };
             })
         };
     });
@@ -50,9 +55,10 @@ function exportSettings() {
         filename: `Audional_Sequencer_Settings_${projectName}.json`
     };
 
-    // Step 4: Serialize and Export
-    const exportString = JSON.stringify(exportObject, null, 2); // Pretty print JSON
-    
+    // Serialize and Export
+    const exportString = JSON.stringify(exportObject, null, 2);
+    console.log('[exportManager_v2.js] exportSettings: Export data prepared', exportObject);
+
     // Return the expected object
     return { settings: exportString, filename: exportObject.filename };
 }

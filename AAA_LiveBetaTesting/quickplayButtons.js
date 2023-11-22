@@ -83,13 +83,25 @@ quickPlayButtons.forEach((button) => {
 
 
 function loadAndDisplaySequence(sequenceIndex) {
+    console.log('[sequenceManager.js] loadAndDisplaySequence: Loading sequence', sequenceIndex);
+
+    // Load the sequence based on the provided index
     currentSequence = sequenceIndex;
     loadSequence(sequenceIndex);
 
-    // Update the display and highlight the active button
-    document.getElementById('current-sequence-display').textContent = `Sequence ${currentSequence}`;
+    // Mark the loaded sequence as 'live'
+    markSequenceAsLive(sequenceIndex);
+
+    // Update the display to show the current sequence
+    document.getElementById('current-sequence-display').textContent = `Sequence ${currentSequence + 1}`;
+
+    // Update the UI to highlight the active quick play button
     updateActiveQuickPlayButton();
+
+    console.log('[sequenceManager.js] loadAndDisplaySequence: Sequence loaded and marked as live', sequenceIndex);
 }
+
+
 
 
 // Function to create the quick-play-button

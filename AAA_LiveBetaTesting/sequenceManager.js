@@ -8,7 +8,9 @@ let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
 function markSequenceAsLive(seqIndex) {
     if (!liveSequences.includes(seqIndex)) {
         liveSequences.push(seqIndex);
-        console.log(`Sequence ${seqIndex} marked as live`); // Debugging log
+        console.log('[sequenceManager.js] markSequenceAsLive: Marking sequence as live', seqIndex);
+    } else {
+        console.log('[sequenceManager.js] markSequenceAsLive: Sequence already marked as live', seqIndex);
     }
 }
 
