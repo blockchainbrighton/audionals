@@ -16,20 +16,21 @@ document.addEventListener("DOMContentLoaded", function() {
 
 
     saveButton.addEventListener('click', () => {
-      let { settings, filename } = exportSettings();
-  
-      // Create a Blob with the settings
-      let blob = new Blob([settings], { type: 'application/json' });
-  
-      // Create a download link for the Blob
-      let url = URL.createObjectURL(blob);
-      let downloadLink = document.createElement('a');
-      downloadLink.href = url;
-      downloadLink.download = filename;
-  
-      // Trigger a click on the download link
-      downloadLink.click();
+        let { settings, filename } = exportSettings();
+    
+        // Create a Blob with the settings
+        let blob = new Blob([settings], { type: 'application/json' });
+    
+        // Create a download link for the Blob
+        let url = URL.createObjectURL(blob);
+        let downloadLink = document.createElement('a');
+        downloadLink.href = url;
+        downloadLink.download = filename;
+    
+        // Trigger a click on the download link
+        downloadLink.click();
     });
+    
     
   
   
