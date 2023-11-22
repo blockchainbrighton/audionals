@@ -11,7 +11,7 @@ function createArray(length, defaultValue) {
 }
 
 let channelSettings = createArray(16, [null].concat(createArray(64, false)));
-let sequences = createArray(totalSequenceCount, createArray(16, [null].concat(createArray(64, false))));
+// let sequences = createArray(totalSequenceCount, createArray(16, [null].concat(createArray(64, false))));
 
 function updateChannelSettingsForSequence() {
     updateSequenceData((sequenceData) => {
