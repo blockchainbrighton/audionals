@@ -1,5 +1,8 @@
 // sequenceManager.js
 
+let sequences = createArray(totalSequenceCount, createArray(16, [null].concat(createArray(64, false))));
+
+
 let liveSequences = [];  // New array to keep track of "live" sequences
 let sequenceBPMs = Array(totalSequenceCount).fill(105);  // Initialize with 105 BPM for all sequences
 let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
@@ -39,3 +42,8 @@ function convertChannelToStepSettings(channel) {
 }
 
 // Additional helper functions or data related to sequences can go here
+function isValidSequence(seq) {
+    const isValid = seq && Array.isArray(seq.channels) && typeof seq.name === 'string';
+   // console.log(`Sequence ${seq.name} is valid: ${isValid}`);
+    return isValid;
+}
