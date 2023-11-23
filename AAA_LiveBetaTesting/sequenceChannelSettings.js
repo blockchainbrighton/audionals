@@ -32,7 +32,7 @@ var channelURLs = Array(totalSequenceCount).fill().map(() => Array(16).fill(''))
 // A function to be called whenever the sequence changes or JSON data is loaded
 function onSequenceOrDataChange() {
   // reset channelSettings to initial state
-  channelSettings = Array(16).fill().map(() => [null].concat(Array(64).fill(false)));
+  // channelSettings = Array(16).fill().map(() => [null].concat(Array(64).fill(false)));
   saveCurrentSequence(currentSequence);
   // update the settings and URLs for the current sequence
   updateChannelSettingsForSequence();
