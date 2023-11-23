@@ -1,10 +1,12 @@
 // sequenceManager.js
 
-let sequences = createArray(totalSequenceCount, createArray(16, [null].concat(createArray(64, false))));
+let newJsonImport = false;
+let sequences = createArray(totalSequenceCount, createArray(16, createArray(64, false)));
+let liveSequences = [];  // Array to keep track of "live" sequences
 
+// Global variable for master BPM
+let masterBPM = 105; // Default value
 
-let liveSequences = [];  // New array to keep track of "live" sequences
-let sequenceBPMs = Array(totalSequenceCount).fill(105);  // Initialize with 105 BPM for all sequences
 let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
 
 // Function to mark a sequence as "live" when edited
@@ -17,33 +19,57 @@ function markSequenceAsLive(seqIndex) {
     }
 }
 
-// Function to convert sequence settings to channel settings
+// Function to convert channel settings to step settings
 function convertSequenceSettings(settings) {
+    if (!settings || !Array.isArray(settings.channels)) {
+        console.error("convertSequenceSettings: Invalid settings provided", settings);
+        return [];
+    }
+
     let channels = settings.channels;
     if (channels.length < 16) {
         let emptyChannelsToAdd = 16 - channels.length;
         for (let i = 0; i < emptyChannelsToAdd; i++) {
             channels.push(EMPTY_CHANNEL);
         }
+        console.log("convertSequenceSettings: Added empty channels to sequence", channels);
     }
-    return channels.map(ch => {
+
+    return channels.map((ch, index) => {
+        if (!ch) {
+            console.error(`convertSequenceSettings: Channel ${index} is undefined or null`);
+            return Array(64).fill(false);
+        }
+
         let convertedChannel = convertChannelToStepSettings(ch);
+        console.log(`convertSequenceSettings: Converted channel ${index}`, convertedChannel);
         return convertedChannel;
     });
 }
 
-// Function to convert channel settings to step settings
+
 function convertChannelToStepSettings(channel) {
-    let stepSettings = [channel.url].concat(Array(64).fill(false)); 
+    if (!channel || !Array.isArray(channel.triggers)) {
+        console.error("convertChannelToStepSettings: Invalid channel data", channel);
+        return Array(64).fill(false);
+    }
+
+    let stepSettings = Array(64).fill(false);
+
     channel.triggers.forEach(i => {
-        stepSettings[i] = true;
+        if (typeof i === 'number' && i >= 0 && i < 64) {
+            stepSettings[i] = true;
+        } else {
+            console.error(`convertChannelToStepSettings: Invalid trigger index ${i} for channel`, channel);
+        }
     });
+
+    console.log("convertChannelToStepSettings: Processed step settings for channel", stepSettings);
     return stepSettings;
 }
 
 // Additional helper functions or data related to sequences can go here
 function isValidSequence(seq) {
     const isValid = seq && Array.isArray(seq.channels) && typeof seq.name === 'string';
-   // console.log(`Sequence ${seq.name} is valid: ${isValid}`);
     return isValid;
 }

@@ -1,7 +1,5 @@
 // importManager_v2.js
 
-let newJsonImport = false;
-
 // Function to import settings
 
     function importSettings(settings) {
@@ -48,7 +46,7 @@ let newJsonImport = false;
         // Process the sequence data
         sequences = sequenceData.map((seqSettings, seqIndex) => {         
             if (isValidSequence(seqSettings)) {
-                sequenceBPMs[seqIndex] = seqSettings.bpm || 105; // Update the BPM value
+                masterBPM[seqIndex] = seqSettings.bpm || 105; // Update the BPM value
                 console.log(`[importManager_v2.js] {importSettings}: Processed sequence ${seqIndex + 1}`, convertSequenceSettings(seqSettings));
 
                 return convertSequenceSettings(seqSettings);
@@ -147,7 +145,7 @@ function convertSequenceSettings(settings) {
     return channels.map((ch, index) => {
         if (!ch) {
             console.error(`convertSequenceSettings: Channel ${index} is undefined or null`);
-            return [null].concat(Array(64).fill(false));
+            return Array(64).fill(false);
         }
 
         let convertedChannel = convertChannelToStepSettings(ch);
@@ -160,10 +158,10 @@ function convertSequenceSettings(settings) {
 function convertChannelToStepSettings(channel) {
     if (!channel || !Array.isArray(channel.triggers)) {
         console.error("convertChannelToStepSettings: Invalid channel data", channel);
-        return [null].concat(Array(64).fill(false));
+        return Array(64).fill(false);
     }
 
-    let stepSettings = [channel.url || null].concat(Array(64).fill(false)); // Null-safe handling for URL
+    let stepSettings = Array(64).fill(false);
 
     channel.triggers.forEach(i => {
         if (typeof i === 'number' && i >= 0 && i < 64) {
@@ -177,38 +175,39 @@ function convertChannelToStepSettings(channel) {
     return stepSettings;
 }
 
-function testSequenceProcessing() {
-    // Sample data for new JSON format
-    let newJsonSample = {
-        masterSettings: {/*...*/},
-        sequences: [/* array of sequences in new format ... */]
-    };
 
-    // Sample data for existing JSON format
-    let existingJsonSample = [/* array of sequences in existing format ... */];
-
-    // Process new JSON format
-    console.log("Processing new JSON format:");
-    let parsedNewFormat = parseNewJsonFormat(newJsonSample);
-    console.log("Parsed new format:", parsedNewFormat);
-
-    // Process existing JSON format
-    console.log("Processing existing JSON format:");
-    let parsedExistingFormat = parseExistingJsonFormat(existingJsonSample);
-    console.log("Parsed existing format:", parsedExistingFormat);
-
-    // Convert sequence settings for both formats
-    let convertedNewFormat = convertSequenceSettings(parsedNewFormat);
-    console.log("Converted new format sequences:", convertedNewFormat);
-
-    let convertedExistingFormat = convertSequenceSettings(parsedExistingFormat);
-    console.log("Converted existing format sequences:", convertedExistingFormat);
-
-    // Add additional calls and logging as needed
-    // ...
-
-    // This is a simple outline, and you can expand it based on your specific application logic
-}
-
-// Call the test function
-testSequenceProcessing();
+// function testSequenceProcessing() {
+//     // Sample data for new JSON format
+//     let newJsonSample = {
+//         masterSettings: {/*...*/},
+//         sequences: [/* array of sequences in new format ... */]
+//     };
+// 
+//     // Sample data for existing JSON format
+//     let existingJsonSample = [/* array of sequences in existing format ... */];
+// 
+//     // Process new JSON format
+//     console.log("Processing new JSON format:");
+//     let parsedNewFormat = parseNewJsonFormat(newJsonSample);
+//     console.log("Parsed new format:", parsedNewFormat);
+// 
+//     // Process existing JSON format
+//     console.log("Processing existing JSON format:");
+//     let parsedExistingFormat = parseExistingJsonFormat(existingJsonSample);
+//     console.log("Parsed existing format:", parsedExistingFormat);
+// 
+//     // Convert sequence settings for both formats
+//     let convertedNewFormat = convertSequenceSettings(parsedNewFormat);
+//     console.log("Converted new format sequences:", convertedNewFormat);
+// 
+//     let convertedExistingFormat = convertSequenceSettings(parsedExistingFormat);
+//     console.log("Converted existing format sequences:", convertedExistingFormat);
+// 
+//     // Add additional calls and logging as needed
+//     // ...
+// 
+//     // This is a simple outline, and you can expand it based on your specific application logic
+// }
+// 
+// // Call the test function
+// testSequenceProcessing();

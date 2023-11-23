@@ -11,29 +11,25 @@ function loadSequence(sequenceNumber) {
     }
 
     // Assertion to ensure valid indexing
-    if (sequenceNumber - 1 < 0 || sequenceNumber - 1 >= sequenceBPMs.length) {
+    if (sequenceNumber - 1 < 0 || sequenceNumber - 1 >= sequences.length) {
         console.error(`Invalid sequenceNumber: ${sequenceNumber}`);
         return;
     }   
 
-    // Set the BPM slider and display to match the current sequence's BPM
-    let bpm = sequenceBPMs[sequenceNumber - 1];  // Get the BPM for the current sequence
+    // Set the BPM slider and display to match the master BPM
     let bpmSlider = document.getElementById('bpm-slider');
     let bpmDisplay = document.getElementById('bpm-display');
-    bpmSlider.value = bpm;
-    bpmDisplay.innerText = bpm;
-// Add event listener to BPM slider to update sequence data when BPM changes
+    bpmSlider.value = masterBPM; // Use global masterBPM
+    bpmDisplay.innerText = masterBPM;
+
+    // Add event listener to BPM slider to update master BPM when changed
     bpmSlider.addEventListener('input', function() {
-        let newBpm = parseInt(bpmSlider.value);
-        updateSequenceData({
-            sequenceIndex: currentSequence - 1, // Assuming 0-based indexing
-            bpm: newBpm
-        });
+        masterBPM = parseInt(bpmSlider.value); // Update global masterBPM
+        bpmDisplay.innerText = masterBPM;
+        // Emit an event or call a function to update all relevant components
+        // For example, emitMessage('BPMUpdate', masterBPM);
     });
 
-    bpmSlider.dispatchEvent(new Event('input')); // Update the sequencer's BPM
-
-    
     const sequenceChannels = sequences[sequenceNumber - 1];
     if (!sequenceChannels) {
         console.error(`Sequence ${sequenceNumber} is not found in sequences.`, sequences);
@@ -45,10 +41,10 @@ function loadSequence(sequenceNumber) {
         return;
     }
     const urlsForSequence = sequenceChannels.map(channelData => channelData[0]);
-    // console.log(`URLs for Sequence ${sequenceNumber}:`, urlsForSequence);
+    console.log(`URLs for Sequence ${sequenceNumber}:`, urlsForSequence);
 
     // Loaded settings for Sequence
-    // console.log(`Loaded settings for Sequence ${sequenceNumber}:`, sequenceChannels);
+    console.log(`Loaded settings for Sequence ${sequenceNumber}:`, sequenceChannels);
 
     // Update the UI to reflect the loaded sequence
     updateUIForSequence(sequenceNumber);

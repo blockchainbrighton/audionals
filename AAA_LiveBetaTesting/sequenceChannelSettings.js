@@ -23,13 +23,7 @@ function updateChannelSettingsForSequence() {
     });
 }
 
-function updateChannelURLsForSequence() {
-    updateSequenceData((sequenceData) => {
-        sequenceData.channels.forEach((channel, index) => {
-            channelURLs[currentSequence - 1][index] = channel.url;
-        });
-    });
-}
+
 
 // Create a two-dimensional array to store the URLs for each channel for every sequence
 var channelURLs = Array(totalSequenceCount).fill().map(() => Array(16).fill(''));
@@ -42,7 +36,6 @@ function onSequenceOrDataChange() {
   saveCurrentSequence(currentSequence);
   // update the settings and URLs for the current sequence
   updateChannelSettingsForSequence();
-  updateChannelURLsForSequence();
   const currentUrls = channelURLs;
   console.log(`URLs for Current Sequence (${currentSequence}) after data change:`, currentUrls);
 
@@ -85,7 +78,32 @@ function setChannelSettings(channelIndex, settings) {
     console.log(`Settings set for Channel-${channelIndex + 1}:`, channelSettings[channelIndex]);
 }
 
+// from channelSettings.js
 
+// channelSettings.js
+
+
+function setChannelVolume(channelIndex, volume) {
+    const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"]`);
+    channel.dataset.volume = volume;
+    updateChannelVolume(channel);
+  
+    // Update sequence data
+    updateSequenceData({
+        channelIndex: channelIndex,
+        volume: volume
+    });
+  
+    saveCurrentSequence(currentSequence);
+  }
+  
+    function updateChannelVolume(channel) {
+      const volume = parseFloat(channel.dataset.volume);
+      const gainNode = gainNodes[parseInt(channel.dataset.id.split('-')[1]) - 1];
+      gainNode.gain.value = volume;
+      }
+  
+  
 
 
 

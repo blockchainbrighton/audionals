@@ -2,7 +2,6 @@
 
 // Introduce the flag at the top level
 let isCopyPasteEvent = false;
-
 let copiedData = null; // This will hold the copied data
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -12,11 +11,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (copyButton) {
         copyButton.addEventListener('click', function() {
-            // Logic to copy the sequence settings
+            // Copy the sequence settings
             copiedData = {
                 type: 'sequence',
                 sequenceNumber: currentSequence,
-                bpm: document.getElementById('bpm-slider').value,
                 channelSettings: [...channelSettings],
                 channelURLs: channelURLs[currentSequence - 1]
             };
@@ -84,7 +82,6 @@ function pasteSettings() {
     if (copiedData.type === 'sequence') {
         settingsToImport = [{
             name: `Sequence_${currentSequence}`,
-            bpm: copiedData.bpm,
             channels: copiedData.channelSettings.map((channel, index) => {
                 return {
                     url: copiedData.channelURLs[index],
@@ -94,9 +91,6 @@ function pasteSettings() {
         }];
         // Update collectedURLsForSequences with the copied URLs for the current sequence
         collectedURLsForSequences[currentSequence - 1] = copiedData.channelURLs;
-
-        // Update the BPM for the current sequence
-        sequenceBPMs[currentSequence - 1] = copiedData.bpm;
 
     } else if (copiedData.type === 'channel') {
         // Update the specific channel's URL in collectedURLsForSequences
@@ -148,9 +142,6 @@ function pasteSequenceSettings(settings) {
 
     // Update collectedURLsForSequences with the parsed URLs for the current sequence
     collectedURLsForSequences[currentSequence - 1] = parsedSettings[0].channels.map(ch => ch.url);
-
-    // Update the BPM for the current sequence
-    sequenceBPMs[currentSequence - 1] = parsedSettings[0].bpm;
 
     // Build the sequences array for paste
     let pastedSequences = parsedSettings.map((seqSettings, index) => {

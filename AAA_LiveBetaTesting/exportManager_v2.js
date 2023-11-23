@@ -4,34 +4,22 @@
 function exportSettings() {
     console.log('[exportManager_v2.js] exportSettings: Starting export process');
 
-    let projectName = document.getElementById('project-name').value.trim();
-    if (!projectName) {
-        projectName = 'Default_Project';
-    }
+    let projectName = document.getElementById('project-name').value.trim() || 'Default_Project';
 
-    // Step 1: Gather Master Settings from the first sequence or master settings
+    // Master settings
     const masterSettings = {
         projectName: projectName,
-        bpm: sequenceBPMs[0], // Adjust if necessary
-        channels: []
+        bpm: masterBPM, // Use the single master BPM
+        sequences: []
     };
 
-    // Fetch URL, mute, and trim settings from the first sequence
-    const firstSequence = sequences[0];
+    // Add URLs to the master settings
     for (let i = 0; i < 16; i++) {
-        let channelSteps = firstSequence[i] || [];
-        let url = channelSteps[0] || "";
-        let mute = channels[i] && channels[i].dataset ? channels[i].dataset.muted === 'true' : false;
-        let trimSettings = { start: 0.01, end: 100 };
-
-        masterSettings.channels.push({
-            url: url,
-            mute: mute,
-            trimSettings: trimSettings
-        });
+        let url = channels[i] && channels[i].dataset ? channels[i].dataset.url : "";
+        masterSettings.channels.push(url);
     }
 
-    // Step 2: Compile Data for Each Live Sequence (Only Active Trigger Step Numbers)
+    // Compile Data for Each Live Sequence (Only Active Trigger Step Numbers)
     let sequencesData = liveSequences.map(seqIndex => {
         let sequence = sequences[seqIndex];
         return {
@@ -48,7 +36,7 @@ function exportSettings() {
         };
     });
 
-    // Step 3: Format the Export Object
+    // Format the Export Object
     const exportObject = {
         masterSettings: masterSettings,
         sequences: sequencesData,
