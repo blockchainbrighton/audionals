@@ -1,17 +1,15 @@
 // sequenceManager.js
 
-let newJsonImport = false;
-
-let masterBPM = 105; // Default value for master BPM
-let liveSequences = [];  // Array to keep track of "live" sequences
-
-
 // Assuming the existence of necessary utility functions like createArray
 let totalSequenceCount = 1;
 let channelURLs = Array(16).fill('');
 let sequences = createArray(totalSequenceCount, createArray(16, createArray(64, false)));
 let channelSettings = createArray(16, [null].concat(createArray(64, false)));
 
+let newJsonImport = false;
+
+let masterBPM = 105; // Default value for master BPM
+let liveSequences = [];  // Array to keep track of "live" sequences
 
 // Function to mark a sequence as "live" when edited
 function markSequenceAsLive(seqIndex) {

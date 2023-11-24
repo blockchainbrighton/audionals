@@ -13,29 +13,30 @@ function exportSettings() {
         channelURLs: [] // Rename channels to channelURLs
     };
 
-   // Add URLs to the master settings
-        for (let i = 0; i < 16; i++) {
-            // Assuming channelURLs is accessible and contains the correct URLs
-            let url = channelURLs[currentSequence - 1][i] || "";
-            masterSettings.channelURLs.push(url);
-        }
+    // Add URLs to the master settings
+    for (let i = 0; i < 16; i++) {
+        let url = channelURLs[currentSequence - 1][i] || "";
+        masterSettings.channelURLs.push(url);
+    }
+    console.log('[exportManager_v2.js] Master settings prepared:', currentSequence, masterSettings);
 
-    // Compile Data for Each Live Sequence (Only Active Trigger Step Numbers)
-    let sequencesData = liveSequences.map(seqIndex => {
-        let sequence = sequences[seqIndex];
+    // Compile Data for Each Sequence
+    let sequencesData = sequences.map((sequence, seqIndex) => {
         return {
             sequenceNumber: seqIndex + 1,
-            channels: sequence.map(channel => {
+            channels: sequence.map((channel, chIndex) => {
                 let triggers = [];
                 channel.forEach((stepState, index) => {
-                    if (stepState === true && index !== 0) { // Extract only active triggers
+                    if (stepState === true) { // Extract all triggers
                         triggers.push(index);
                     }
                 });
+                console.log(`[exportManager_v2.js] Triggers for Sequence ${seqIndex + 1}, Channel ${chIndex + 1}:`, triggers);
                 return { triggers: triggers };
             })
         };
     });
+    console.log('[exportManager_v2.js] Sequences data prepared:', sequencesData);
 
     // Format the Export Object
     const exportObject = {
@@ -46,7 +47,7 @@ function exportSettings() {
 
     // Serialize and Export
     const exportString = JSON.stringify(exportObject, null, 2);
-    console.log('[exportManager_v2.js] exportSettings: Export data prepared', exportObject);
+    console.log('[exportManager_v2.js] Export data prepared', exportObject);
 
     // Return the expected object
     return { settings: exportString, filename: exportObject.filename };

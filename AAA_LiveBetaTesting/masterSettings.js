@@ -1,8 +1,6 @@
 const bpmSlider = document.getElementById('bpm-slider');
 const bpmDisplay = document.getElementById('bpm-display');
 
-let externalSyncBPM; // Initialize the cloned BPM variable
-
 bpmSlider.addEventListener('input', () => {
   bpm = bpmSlider.value;
   bpmDisplay.textContent = bpm;
