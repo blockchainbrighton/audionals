@@ -1,23 +1,26 @@
 // LocalStorageUtils.js
 
-function saveTrimSettings(channelId, trimSettings) {
-    const settings = JSON.parse(localStorage.getItem('audioTrimSettings') || '{}');
+function saveTrimSettings(projectName, channelId, trimSettings) {
+    // Use both projectName and channelId as part of the key
+    const key = `audioTrimSettings_${projectName}_${channelId}`;
+    const settings = JSON.parse(localStorage.getItem(key) || '{}');
     settings[channelId] = trimSettings;
-    localStorage.setItem('[LocalStorageUtils.js] audioTrimSettings', JSON.stringify(settings));
+    localStorage.setItem(key, JSON.stringify(settings));
 
     // Log what's being saved
-    console.log(`[LocalStorageUtils.js] Saved settings for channel ${channelId}:`, trimSettings);
+    console.log(`[LocalStorageUtils.js] Saved settings for project ${projectName}, channel ${channelId}:`, trimSettings);
 }
 
-function getTrimSettings(channelId) {
-    const settings = JSON.parse(localStorage.getItem('audioTrimSettings') || '{}');
+function getTrimSettings(projectName, channelId) {
+    const key = `audioTrimSettings_${projectName}_${channelId}`;
+    const settings = JSON.parse(localStorage.getItem(key) || '{}');
     const channelSettings = settings[channelId] || null;
 
     // Log what's being retrieved
     if (channelSettings) {
-        console.log(`[LocalStorageUtils.js] Retrieved settings for channel ${channelId}:`, channelSettings);
+        console.log(`[LocalStorageUtils.js] Retrieved settings for project ${projectName}, channel ${channelId}:`, channelSettings);
     } else {
-        console.log(`[LocalStorageUtils.js] No settings found for channel ${channelId}`);
+        console.log(`[LocalStorageUtils.js] No settings found for project ${projectName}, channel ${channelId}`);
     }
 
     return channelSettings;

@@ -780,17 +780,20 @@ var app = (function () {
     	let { externalOrdinalId = '' } = $$props;
     	let { externalAudioContext } = $$props;
     	let { channelIndex } = $$props;
+		let { projectName = 'defaultProjectName' } = $$props; // Add projectName property with a default value
+
 
     	// In your Svelte component
 		function storeTrimSettings() {
-			console.log(`Storing trim settings for channel ${channelIndex}`);
+			console.log(`[AudioTrimmer] Storing trim settings for project ${projectName}, channel ${channelIndex}`);
 			const newSettings = {
 				start: $startSliderValue,
 				end: $endSliderValue
 			};
-			window.trimSettings.update(channelIndex, newSettings);
-			console.log(`Updated trim settings:`, newSettings);
+			window.trimSettings.update(projectName, channelIndex, newSettings);
+			console.log(`[AudioTrimmer] Updated trim settings for project ${projectName}, channel ${channelIndex}:`, newSettings);
 		}
+		
 	
 
     	// Use the external AudioContext if provided, otherwise create a new one
@@ -840,9 +843,9 @@ var app = (function () {
 			playbackCtx = playbackCanvas.getContext('2d');
 		
 			// Check for saved trim settings in local storage
-			const savedTrimSettings = getTrimSettings(channelIndex);
+			const savedTrimSettings = getTrimSettings(projectName, channelIndex);
 			if (savedTrimSettings) {
-				console.log(`Retrieved trim settings for channel ${channelIndex}:`, savedTrimSettings);
+				console.log(`Retrieved trim settings for ${projectName} channel ${channelIndex}:`, savedTrimSettings);
 				startSliderValue.set(savedTrimSettings.start);
 				endSliderValue.set(savedTrimSettings.end);
 		
@@ -896,7 +899,7 @@ var app = (function () {
 
     			$$invalidate(18, audioBuffer = await decodeAudioData(arrayBuffer));
     			// Only set default values if no saved settings are found
-				const savedTrimSettings = getTrimSettings(channelIndex);
+				const savedTrimSettings = getTrimSettings(projectName, channelIndex);
 				if (!savedTrimSettings) {
 					startSliderValue.set(0);
 					endSliderValue.set(audioBuffer.duration);
@@ -1010,7 +1013,7 @@ var app = (function () {
     		}
     	});
 
-		const writable_props = ['externalOrdinalId', 'externalAudioContext', 'channelIndex', 'startSliderValue', 'endSliderValue'];
+		const writable_props = ['externalOrdinalId', 'externalAudioContext', 'channelIndex', 'startSliderValue', 'endSliderValue', 'projectName'];
 
     	Object.keys($$props).forEach(key => {
 			if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') {
@@ -1041,15 +1044,18 @@ var app = (function () {
 			$startSliderValue = to_number(this.value);
 			startSliderValue.set($startSliderValue);
 			console.log(`Saving start trim setting for channel ${channelIndex}:`, $startSliderValue);
-			saveTrimSettings(channelIndex, { start: $startSliderValue, end: $endSliderValue });
+			// Pass projectName when calling saveTrimSettings
+			saveTrimSettings(projectName, channelIndex, { start: $startSliderValue, end: $endSliderValue });
 		}
 		
 		function input2_change_input_handler() {
 			$endSliderValue = to_number(this.value);
 			endSliderValue.set($endSliderValue);
 			console.log(`Saving end trim setting for channel ${channelIndex}:`, $endSliderValue);
-			saveTrimSettings(channelIndex, { start: $startSliderValue, end: $endSliderValue });
+			// Pass projectName when calling saveTrimSettings
+			saveTrimSettings(projectName, channelIndex, { start: $startSliderValue, end: $endSliderValue });
 		}
+		
 		
 		
 
@@ -1057,8 +1063,9 @@ var app = (function () {
 			if ('externalOrdinalId' in $$props) $$invalidate(15, externalOrdinalId = $$props.externalOrdinalId);
 			if ('externalAudioContext' in $$props) $$invalidate(16, externalAudioContext = $$props.externalAudioContext);
 			if ('channelIndex' in $$props) $$invalidate(17, channelIndex = $$props.channelIndex);
-			if ('startSliderValue' in $$props) $$invalidate(18, startSliderValue = $$props.startSliderValue); // Add this line
-			if ('endSliderValue' in $$props) $$invalidate(19, endSliderValue = $$props.endSliderValue);       // And this line
+			if ('projectName' in $$props) $$invalidate(20, projectName = $$props.projectName); 
+			if ('startSliderValue' in $$props) $$invalidate(18, startSliderValue = $$props.startSliderValue); 
+			if ('endSliderValue' in $$props) $$invalidate(19, endSliderValue = $$props.endSliderValue);      
 		};
 
     	$$self.$capture_state = () => ({
@@ -1197,6 +1204,7 @@ var app = (function () {
 					externalOrdinalId: 15,
 					externalAudioContext: 16,
 					channelIndex: 17,
+					projectName: 20 
 				},
 				null,
 				[-1, -1]
@@ -1242,9 +1250,19 @@ var app = (function () {
     	let main;
     	let audiotrimmer;
     	let current;
-    	audiotrimmer = new AudioTrimmer({ $$inline: true });
+    	// Pass necessary props to AudioTrimmer, including projectName
+		audiotrimmer = new AudioTrimmer({
+			props: {
+				externalOrdinalId: ctx.externalOrdinalId,
+				externalAudioContext: ctx.externalAudioContext,
+				channelIndex: ctx.channelIndex,
+				projectName: ctx.projectName,
+				// ... other props if needed
+			},
+			$$inline: true
+		});
 
-    	const block = {
+		const block = {
     		c: function create() {
     			main = element("main");
     			create_component(audiotrimmer.$$.fragment);
@@ -1286,37 +1304,60 @@ var app = (function () {
     }
 
     function instance($$self, $$props, $$invalidate) {
-    	let { $$slots: slots = {}, $$scope } = $$props;
-    	validate_slots('App', slots, []);
-    	const writable_props = [];
-
-    	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<App> was created with unknown prop '${key}'`);
-    	});
-
-    	$$self.$capture_state = () => ({ AudioTrimmer });
-    	return [];
-    }
-
-    class App extends SvelteComponentDev {
-    	constructor(options) {
-    		super(options);
-    		init(this, options, instance, create_fragment, safe_not_equal, {});
-
-    		dispatch_dev("SvelteRegisterComponent", {
-    			component: this,
-    			tagName: "App",
-    			options,
-    			id: create_fragment.name
-    		});
-    	}
-    }
-
-    const app = new App({
-      target: document.body,
-    });
-
-    return app;
-
-})();
-//# sourceMappingURL=bundle.js.map
+		let { externalOrdinalId, externalAudioContext, channelIndex, projectName } = $$props;
+	
+		// Update writable_props to include new props
+		const writable_props = ['externalOrdinalId', 'externalAudioContext', 'channelIndex', 'projectName'];
+	
+		Object.keys($$props).forEach(key => {
+			if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') {
+				console.warn(`<App> was created with unknown prop '${key}'`);
+			}
+		});
+	
+		// Propagate changes to child components
+		$$self.$$set = $$new_props => {
+			$$invalidate(0, $$props = assign(assign({}, $$props), exclude_internal_props($$new_props)));
+			if ('externalOrdinalId' in $$new_props) $$invalidate(1, externalOrdinalId = $$new_props.externalOrdinalId);
+			if ('externalAudioContext' in $$new_props) $$invalidate(2, externalAudioContext = $$new_props.externalAudioContext);
+			if ('channelIndex' in $$new_props) $$invalidate(3, channelIndex = $$new_props.channelIndex);
+			if ('projectName' in $$new_props) $$invalidate(4, projectName = $$new_props.projectName);
+		};
+	
+		$$self.$capture_state = () => ({ AudioTrimmer, externalOrdinalId, externalAudioContext, channelIndex, projectName });
+		return [externalOrdinalId, externalAudioContext, channelIndex, projectName];
+	}
+	
+	class App extends SvelteComponentDev {
+		constructor(options) {
+			super(options);
+			init(this, options, instance, create_fragment, safe_not_equal, {
+				externalOrdinalId: 1,
+				externalAudioContext: 2,
+				channelIndex: 3,
+				projectName: 4
+			});
+	
+			dispatch_dev("SvelteRegisterComponent", {
+				component: this,
+				tagName: "App",
+				options,
+				id: create_fragment.name
+			});
+		}
+	}
+	
+	const app = new App({
+		target: document.body,
+		props: {
+			// Example props, replace with actual values
+			externalOrdinalId: 'some-id',
+			externalAudioContext: 'some-context',
+			channelIndex: 1,
+			projectName: 'MyProject'
+		}
+	});
+	
+	return app;
+	})();
+	//# sourceMappingURL=bundle.js.map

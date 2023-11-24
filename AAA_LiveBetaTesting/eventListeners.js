@@ -113,6 +113,7 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
     button.addEventListener('click', function(event) {
         console.log('Open audio trimmer button clicked');
 
+        
         // Get the channel element
         const channelElement = event.target.closest('.channel');
         if (!channelElement) {
@@ -134,9 +135,15 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         }
         console.log('Channel Number:', channelNumber);
 
+        // Get the projectName from a data attribute or use a default value
+        const projectName = button.dataset.projectName || 'defaultProjectName';
+        console.log('Project Name:', projectName);
+
         // Retrieve trim settings for the channel
-        const savedTrimSettings = getTrimSettings(channelNumber);
-        console.log('Retrieved trim settings for channel:', channelNumber, savedTrimSettings);
+        // Assuming getTrimSettings now also requires projectName
+        const savedTrimSettings = getTrimSettings(projectName, channelNumber);
+        console.log('Retrieved trim settings for channel:', projectName, channelNumber, savedTrimSettings);
+
 
         // Display the modal
         const modal = document.getElementById('audio-trimmer-modal');
@@ -153,10 +160,11 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         // Define default settings
         const defaultSettings = { start: 0.01, end: 100 };
 
-        // Instantiate the Audio Trimmer with settings
+       // Instantiate the Audio Trimmer with settings, including projectName
         const audioTrimmer = new AudioTrimmer({
             target: trimmerContainer,
             props: {
+                projectName: projectName, // Add projectName to the props
                 externalAudioContext: audioContext,
                 externalOrdinalId: ordinalId,
                 channelIndex: channelNumber,
