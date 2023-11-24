@@ -135,7 +135,7 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         console.log('Channel Number:', channelNumber);
 
         // Retrieve trim settings for the channel
-        const savedTrimSettings = getTrimSettings(channelNumber);
+        const savedTrimSettings = getTrimSettings(projectName, channelId);
         console.log('Retrieved trim settings for channel:', channelNumber, savedTrimSettings);
 
         // Display the modal
