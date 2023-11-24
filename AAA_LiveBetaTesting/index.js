@@ -7,10 +7,8 @@ let barCount = 1; // bars
 let sequenceCount = 1;
 let currentSequence = 1;
 
-const sequenceLength = 64;
-const maxSequenceCount = 64; // sequences
+const maxSequenceCount = 1; // sequences
 const allSequencesLength = 4096;
-const collectedURLs = Array(16).fill(''); 
 
 let timeoutId;
 let isPaused = false; // a flag to indicate if the sequencer is paused
@@ -329,30 +327,34 @@ channels.forEach((channel, index) => {
                     });
 
                     const loadButton = document.createElement('button');
-                    loadButton.textContent = 'Load';
-                    loadButton.addEventListener('click', () => {
-                        if (audionalInput.value) {
-                            const audionalUrl = 'https://ordinals.com/content/' + getIDFromURL(audionalInput.value);
-                            console.log(`index.js loadButton: Setting URL for channel ${index + 1}:`, audionalUrl);
-                            collectedURLs[index] = audionalUrl; 
-                            fetchAudio(audionalUrl, index, loadSampleButton);
-                            // Add the orange margin to the channel container
-                            const channelContainer = channel.querySelector('.channel-container');
-                            channelContainer.classList.add('ordinal-loaded');
-                        } else if (ipfsInput.value) {
-                            const ipfsUrl = 'https://ipfs.io/ipfs/' + ipfsInput.value;
-                            console.log(ipfsUrl);
-                            collectedURLs[index] = ipfsUrl;
-                            fetchAudio(ipfsUrl, index, loadSampleButton);
-                            console.log(`index.js loadButton: Setting IPFS URL for channel ${index + 1}:`, ipfsUrl);
-                            const channelContainer = channel.querySelector('.channel-container');
-                            channelContainer.classList.remove('ordinal-loaded');
-                        }
-                        updateCollectedURLsForSequences();  // Call the update function here
-                        document.body.removeChild(idModal);
-                        console.log(`loadButton: Updated collectedURLs after adding URL for channel ${index + 1}:`, collectedURLs);
-                    });
-                    idModalContent.appendChild(loadButton);
+                        loadButton.textContent = 'Load';
+                            loadButton.addEventListener('click', () => {
+                                let url;
+                                if (audionalInput.value) {
+                                    url = 'https://ordinals.com/content/' + getIDFromURL(audionalInput.value);
+                                    console.log(`index.js loadButton: Setting URL for channel ${index + 1}:`, url);
+                                    
+                                    // Add the orange margin to the channel container
+                                    const channelContainer = channel.querySelector('.channel-container');
+                                    channelContainer.classList.add('ordinal-loaded');
+                                } else if (ipfsInput.value) {
+                                    url = 'https://ipfs.io/ipfs/' + ipfsInput.value;
+                                    console.log(`index.js loadButton: Setting IPFS URL for channel ${index + 1}:`, url);
+                                    
+                                    const channelContainer = channel.querySelector('.channel-container');
+                                    channelContainer.classList.remove('ordinal-loaded');
+                                }
+
+                                if (url) {
+                                    // Call the helper function to update the masterSettings channelURLs array
+                                    updateChannelURL(currentSequence - 1, index, url);
+                                    fetchAudio(url, index, loadSampleButton);
+                                }
+
+                                document.body.removeChild(idModal);
+                                console.log(`loadButton: Updated channelURLs after adding URL for channel ${index + 1} in sequence ${currentSequence}:`, channelURLs);
+                            });
+                            idModalContent.appendChild(loadButton);
 
                     // Cancel button implementation
                     const cancelButton = document.createElement('button');
@@ -400,7 +402,7 @@ channels.forEach((channel, index) => {
                           e.preventDefault();
                           const audionalUrl = 'https://ordinals.com/content/' + getIDFromURL(audionalObj.id);
                           console.log(audionalUrl); // or ipfsUrl
-                          collectedURLs[index] = audionalUrl; // Instead of using .push
+                          channelURLs[index] = audionalUrl; // Instead of using .push
                           fetchAudio(audionalUrl, index, loadSampleButton);
                           document.body.removeChild(idModal);
                       });
@@ -423,7 +425,7 @@ channels.forEach((channel, index) => {
                             e.preventDefault();
                             const audionalUrl = 'https://ordinals.com/content/' + getIDFromURL(audionalObj.id);
                             console.log(audionalUrl); // or ipfsUrl
-                            collectedURLs[index] = audionalUrl; // Instead of using .push
+                            channelURLs[index] = audionalUrl; // Instead of using .push
                             fetchAudio(audionalUrl, index, loadSampleButton);
                         });
                         idModalContent.appendChild(idLink);
@@ -432,8 +434,8 @@ channels.forEach((channel, index) => {
                     idModal.appendChild(idModalContent);
                     document.body.appendChild(idModal);
                 });
-                // console.log("Collected URLs before adding to sequence arrays:", collectedURLs);
-                addURLsToSequenceArrays(collectedURLs);
+                // console.log("Collected URLs before adding to sequence arrays:", channelURLs);
+                addURLsToSequenceArrays(channelURLs);
                 
 
         });
@@ -468,14 +470,14 @@ channels.forEach((channel, index) => {
         
         
         
-        function updateCollectedURLsForSequences() {
-            // Assuming collectedURLsForSequences is a 2D array where each inner array represents URLs for a sequence.
-            if (!collectedURLsForSequences[currentSequence - 1]) {
-                collectedURLsForSequences[currentSequence - 1] = [];
-            }
-            collectedURLsForSequences[currentSequence - 1] = [...collectedURLs];
-            console.log(`index.js loadButton: Updated collectedURLsForSequences for sequence ${currentSequence}:`, collectedURLsForSequences[currentSequence - 1]);
-        }
+        // function updateCollectedURLsForSequences() {
+        //     // Assuming collectedURLsForSequences is a 2D array where each inner array represents URLs for a sequence.
+        //     if (!collectedURLsForSequences[currentSequence - 1]) {
+        //         collectedURLsForSequences[currentSequence - 1] = [];
+        //     }
+        //     collectedURLsForSequences[currentSequence - 1] = [...collectedURLs];
+        //     console.log(`index.js loadButton: Updated collectedURLsForSequences for sequence ${currentSequence}:`, collectedURLsForSequences[currentSequence - 1]);
+        // }
         
         // Inside your playButton event listener, after the play logic
         playButton.addEventListener('click', () => {            const continuousPlayCheckbox = document.getElementById('continuous-play');

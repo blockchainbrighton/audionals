@@ -13,11 +13,12 @@ function exportSettings() {
         channelURLs: [] // Rename channels to channelURLs
     };
 
-    // Add URLs to the master settings
-    for (let i = 0; i < 16; i++) {
-        let url = channels[i] && channels[i].dataset ? channels[i].dataset.url : "";
-        masterSettings.channelURLs.push(url);
-    }
+   // Add URLs to the master settings
+        for (let i = 0; i < 16; i++) {
+            // Assuming channelURLs is accessible and contains the correct URLs
+            let url = channelURLs[currentSequence - 1][i] || "";
+            masterSettings.channelURLs.push(url);
+        }
 
     // Compile Data for Each Live Sequence (Only Active Trigger Step Numbers)
     let sequencesData = liveSequences.map(seqIndex => {

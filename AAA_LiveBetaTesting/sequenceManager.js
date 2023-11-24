@@ -1,13 +1,17 @@
 // sequenceManager.js
 
 let newJsonImport = false;
-let sequences = createArray(totalSequenceCount, createArray(16, createArray(64, false)));
+
+let masterBPM = 105; // Default value for master BPM
 let liveSequences = [];  // Array to keep track of "live" sequences
 
-// Global variable for master BPM
-let masterBPM = 105; // Default value
 
-let collectedURLsForSequences = Array(sequences.length).fill().map(() => []);
+// Assuming the existence of necessary utility functions like createArray
+let totalSequenceCount = 1;
+let channelURLs = Array(16).fill('');
+let sequences = createArray(totalSequenceCount, createArray(16, createArray(64, false)));
+let channelSettings = createArray(16, [null].concat(createArray(64, false)));
+
 
 // Function to mark a sequence as "live" when edited
 function markSequenceAsLive(seqIndex) {
@@ -18,6 +22,45 @@ function markSequenceAsLive(seqIndex) {
         console.log('[sequenceManager.js] markSequenceAsLive: Sequence already marked as live', seqIndex);
     }
 }
+
+// Function to update the URL for a specific channel in a specific sequence
+function updateChannelURL(sequenceIndex, channelIndex, url) {
+    channelURLs[sequenceIndex][channelIndex] = url;
+    console.log(`Updated URL for sequence ${sequenceIndex + 1}, channel ${channelIndex + 1}:`, url);
+}
+
+// Function to add URLs to our structure
+function addURLsToSequenceArrays(urls) {
+    urls.forEach((url, index) => {
+        channelURLs[currentSequence - 1][index] = url;
+    });
+    console.log("Updated channelURLs:", channelURLs);
+}
+
+// Function to get the current settings for a specific channel
+function getChannelSettings(channelIndex) {
+    return channelSettings[channelIndex];
+}
+
+// Function to set the settings for a specific channel
+function setChannelSettings(channelIndex, settings) {
+    channelSettings[channelIndex] = settings;
+    console.log(`Settings set for Channel-${channelIndex + 1}:`, channelSettings[channelIndex]);
+}
+
+// Function to update channel settings for a sequence
+function updateChannelSettingsForSequence() {
+    // Implementation depends on how sequenceData is structured and updated
+    // Example:
+    // updateSequenceData((sequenceData) => {
+    //     sequenceData.channels.forEach((channel, index) => {
+    //         channel.triggers.forEach(trigger => {
+    //             channelSettings[index][trigger] = true;
+    //         });
+    //     });
+    // });
+}
+
 
 // Function to convert channel settings to step settings
 function convertSequenceSettings(settings) {

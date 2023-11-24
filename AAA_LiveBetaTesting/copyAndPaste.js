@@ -89,12 +89,12 @@ function pasteSettings() {
                 };
             })
         }];
-        // Update collectedURLsForSequences with the copied URLs for the current sequence
-        collectedURLsForSequences[currentSequence - 1] = copiedData.channelURLs;
+        // Update channelURLs with the copied URLs for the current sequence
+        channelURLs[currentSequence - 1] = copiedData.channelURLs;
 
     } else if (copiedData.type === 'channel') {
         // Update the specific channel's URL in collectedURLsForSequences
-        collectedURLsForSequences[currentSequence - 1][copiedData.channelIndex] = copiedData.channelURL;
+        channelURLs[currentSequence - 1][copiedData.channelIndex] = copiedData.channelURL;
 
         // Get the current sequence settings
         settingsToImport = [{
@@ -140,8 +140,8 @@ function pasteSequenceSettings(settings) {
     }
     console.log("P1 Parsed settings before conversion:", parsedSettings);
 
-    // Update collectedURLsForSequences with the parsed URLs for the current sequence
-    collectedURLsForSequences[currentSequence - 1] = parsedSettings[0].channels.map(ch => ch.url);
+    // Update channelURLs with the parsed URLs for the current sequence
+    channelURLs[currentSequence - 1] = parsedSettings[0].channels.map(ch => ch.url);
 
     // Build the sequences array for paste
     let pastedSequences = parsedSettings.map((seqSettings, index) => {
