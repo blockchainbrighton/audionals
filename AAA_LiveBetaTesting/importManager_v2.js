@@ -90,7 +90,10 @@
     
         loadAndDisplaySequence(currentSequence);
     
-console.log("[importManager_v2.js] {importSettings}: Import process completed. Final sequences:", sequences);
+// console.log("[importManager_v2.js] {importSettings}: Import process completed. Final sequences:", sequences);
+console.log("[importManager_v2.js] {settingsDataChecks} Import complete. Master settings:", importedData.masterSettings);
+console.log("[importManager_v2.js] {settingsDataChecks} Sequence 1 settings:", importedData.sequences[0]);
+
     }
     
     // Additional functions (applyMasterSettings, markSequenceAsLive, convertSequenceSettings, convertChannelToStepSettings) remain unchanged

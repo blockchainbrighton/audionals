@@ -19,6 +19,8 @@ function updateChannelSettingsForSequence() {
             channel.triggers.forEach(trigger => {
                 channelSettings[index][trigger] = true; // set the trigger step to 'on'
             });
+            console.log("[sequenceChannelSettings.js] {settingsDataChecks} Channel settings for Sequence 1 after update:", channelSettings);
+
         });
     });
 }

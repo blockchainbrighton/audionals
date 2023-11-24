@@ -129,7 +129,7 @@ function updateUIForSequence(sequenceNumber) {
             }
         });
 
-        // You can add similar logic for updating other UI elements like toggle mute states, volume, etc.
+        console.log("[sequenceChannelSettings_Part2.js] {settingsDataChecks}  UI update for Sequence 1. Channel settings:", channelSettings);
     });
 }
 

@@ -10,13 +10,13 @@ function exportSettings() {
     const masterSettings = {
         projectName: projectName,
         bpm: masterBPM, // Use the single master BPM
-        sequences: []
+        channelURLs: [] // Rename channels to channelURLs
     };
 
     // Add URLs to the master settings
     for (let i = 0; i < 16; i++) {
         let url = channels[i] && channels[i].dataset ? channels[i].dataset.url : "";
-        masterSettings.channels.push(url);
+        masterSettings.channelURLs.push(url);
     }
 
     // Compile Data for Each Live Sequence (Only Active Trigger Step Numbers)
@@ -50,4 +50,3 @@ function exportSettings() {
     // Return the expected object
     return { settings: exportString, filename: exportObject.filename };
 }
-

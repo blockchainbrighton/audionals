@@ -43,6 +43,7 @@ function convertSequenceSettings(settings) {
 
         let convertedChannel = convertChannelToStepSettings(ch);
         console.log(`convertSequenceSettings: Converted channel ${index}`, convertedChannel);
+        console.log("[sequenceManager.js]{settingsDataChecks} Sequence 1 settings after conversion:", sequences[0]);
         return convertedChannel;
     });
 }
