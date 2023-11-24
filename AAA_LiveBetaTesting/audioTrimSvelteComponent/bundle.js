@@ -781,6 +781,19 @@ var app = (function () {
     	let { externalAudioContext } = $$props;
     	let { channelIndex } = $$props;
 
+
+		// Initialization of global trimSettings object
+		if (!window.trimSettings) {
+			window.trimSettings = {
+				settings: {},
+				update: function(channelIndex, newSettings) {
+					this.settings[channelIndex] = newSettings;
+				},
+				get: function(channelIndex) {
+					return this.settings[channelIndex];
+				}
+			};
+		}
     	// In your Svelte component
 		function storeTrimSettings() {
 			console.log(`Storing trim settings for channel ${channelIndex}`);

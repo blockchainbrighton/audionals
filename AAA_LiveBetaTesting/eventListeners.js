@@ -134,9 +134,17 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         }
         console.log('Channel Number:', channelNumber);
 
-        // Retrieve trim settings for the channel
-        const savedTrimSettings = getTrimSettings(projectName, channelId);
-        console.log('Retrieved trim settings for channel:', channelNumber, savedTrimSettings);
+        // Get the projectName from a data attribute
+        const projectName = button.dataset.projectName || 'defaultProjectName';
+        if (!projectName) {
+            return console.error('Project name not found');
+        }
+        console.log('Project Name:', projectName);
+
+
+        // Retrieve trim settings for the channel from the global object
+        const savedTrimSettings = window.trimSettings.get(channelNumber);
+        console.log('Retrieved trim settings for channel:', projectName, channelNumber, savedTrimSettings);
 
         // Display the modal
         const modal = document.getElementById('audio-trimmer-modal');

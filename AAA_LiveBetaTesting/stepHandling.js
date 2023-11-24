@@ -32,7 +32,7 @@ function renderPlayhead(buttons, currentStep) {
 }
 
 
-function playStep() {
+function playStep(projectName) {
     const presetData = presets.preset1;
 
     // Only iterate over active channels
@@ -57,7 +57,7 @@ function playStep() {
 
         renderPlayhead(buttons, currentStep);
         const isMuted = handleStep(channel, channelData, totalStepCount);
-        playSound(channel, currentStep, isMuted);
+        playSound(projectName, channel, currentStep, isMuted);
     });
 
     currentStep = (currentStep + 1) % 64;

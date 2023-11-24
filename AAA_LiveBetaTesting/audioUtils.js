@@ -107,7 +107,7 @@ function bufferToBase64(buffer) {
   return window.btoa(binary);
 }
 
-function playSound(channel, currentStep) {
+function playSound(projectName, channel, currentStep) {
   if (channel.querySelectorAll('.step-button')[currentStep].classList.contains('selected')) {
     const url = channel.dataset.originalUrl;
     console.log("[playSound] URL of the audio:", url);
