@@ -335,6 +335,7 @@ channels.forEach((channel, index) => {
                             const audionalUrl = 'https://ordinals.com/content/' + getIDFromURL(audionalInput.value);
                             console.log(`index.js loadButton: Setting URL for channel ${index + 1}:`, audionalUrl);
                             collectedURLs[index] = audionalUrl; 
+                            window.unifiedSequencerSettings.updateSetting('projectURLs', collectedURLs);
                             fetchAudio(audionalUrl, index, loadSampleButton);
                             // Add the orange margin to the channel container
                             const channelContainer = channel.querySelector('.channel-container');
@@ -343,6 +344,7 @@ channels.forEach((channel, index) => {
                             const ipfsUrl = 'https://ipfs.io/ipfs/' + ipfsInput.value;
                             console.log(ipfsUrl);
                             collectedURLs[index] = ipfsUrl;
+                            window.unifiedSequencerSettings.updateSetting('projectURLs', collectedURLs);
                             fetchAudio(ipfsUrl, index, loadSampleButton);
                             console.log(`index.js loadButton: Setting IPFS URL for channel ${index + 1}:`, ipfsUrl);
                             const channelContainer = channel.querySelector('.channel-container');
@@ -401,6 +403,7 @@ channels.forEach((channel, index) => {
                           const audionalUrl = 'https://ordinals.com/content/' + getIDFromURL(audionalObj.id);
                           console.log(audionalUrl); // or ipfsUrl
                           collectedURLs[index] = audionalUrl; // Instead of using .push
+                          window.unifiedSequencerSettings.updateSetting('projectURLs', collectedURLs);
                           fetchAudio(audionalUrl, index, loadSampleButton);
                           document.body.removeChild(idModal);
                       });

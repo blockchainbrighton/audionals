@@ -112,6 +112,8 @@ function importSettings(settings) {
             }
             return urlsForSequence;
         });
+        window.unifiedSequencerSettings.updateSetting('projectURLs', collectedURLsForSequences.flat());
+
        // console.log("Final collectedURLsForSequences:", collectedURLsForSequences);
     }
 
