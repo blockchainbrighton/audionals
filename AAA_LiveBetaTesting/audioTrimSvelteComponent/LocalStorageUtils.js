@@ -27,3 +27,30 @@ function getTrimSettings(projectName, channelId) {
 }
 
 
+function viewAllSavedSettings() {
+    console.log("Viewing all saved settings in local storage:");
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('audioTrimSettings_')) {
+            const value = localStorage.getItem(key);
+            console.log(`${key}: ${value}`);
+        }
+    }
+}
+
+function clearAllLocalStorage() {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('audioTrimSettings_')) {
+            keysToRemove.push(key);
+        }
+    }
+
+    keysToRemove.forEach(key => {
+        localStorage.removeItem(key);
+        console.log(`Removed ${key} from local storage`);
+    });
+
+    console.log("All local storage related to audio trim settings cleared.");
+}

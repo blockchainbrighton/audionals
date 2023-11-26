@@ -123,7 +123,7 @@ function playSound(channel, currentStep) {
       console.log("[playSound] Channel index:", channelIndex);
 
       // Retrieve trim settings using LocalStorageUtils
-      const trimSettings = getTrimSettings(`channel-${channelIndex}`);
+      const trimSettings = getTrimSettings("defaultProjectName", `channel-${channelIndex}`);
       let trimStart = trimSettings ? trimSettings.start : 0;
       let trimEnd = trimSettings ? trimSettings.end : audioBuffer.duration;
       console.log("[playSound] Retrieved trimStart and trimEnd:", trimStart, trimEnd);
