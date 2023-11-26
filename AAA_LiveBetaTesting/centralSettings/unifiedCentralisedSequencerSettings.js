@@ -41,6 +41,17 @@ class UnifiedSequencerSettings {
         }
     }
 
+    // Method to update the state of a specific step
+    updateStepState(sequenceNumber, channelIndex, stepIndex, state) {
+        if (this.settings.masterSettings.projectSequences[`Sequence${sequenceNumber}`] &&
+            this.settings.masterSettings.projectSequences[`Sequence${sequenceNumber}`][`ch${channelIndex + 1}`]) {
+            this.settings.masterSettings.projectSequences[`Sequence${sequenceNumber}`][`ch${channelIndex + 1}`][stepIndex] = state;
+        } else {
+            console.error('Error updating step state: Invalid sequence, channel, or step index');
+        }
+    }
+
+
     // Method to get a specific setting
     getSetting(key) {
         return this.settings.masterSettings[key] || null;

@@ -246,11 +246,15 @@ channels.forEach((channel, index) => {
 
                 button.addEventListener('click', () => {
                     button.classList.toggle('selected');
-
+                    
                     // Update the step's state in the channelSettings
                     let stepState = button.classList.contains('selected');
                     updateStep(channelIndex, i, stepState);
+                
+                    // Update the global object
+                    window.unifiedSequencerSettings.updateStepState(currentSequence, channelIndex, i, stepState);
                 });
+                
 
                 stepsContainer.appendChild(button);
             }
