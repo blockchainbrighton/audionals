@@ -260,6 +260,9 @@ channels.forEach((channel, index) => {
 
             const loadSampleButton = channel.querySelector('.load-sample-button');
                 loadSampleButton.addEventListener('click', () => {
+                    // Assuming projectName is either passed to this function or retrieved from a global context
+                    let projectName = getProjectName(); // This function should return the current project name or a default name
+
                     // Create a basic modal for audional ID input
                     const idModal = document.createElement('div');
                     idModal.style.position = 'fixed';

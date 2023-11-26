@@ -13,22 +13,51 @@ document.addEventListener("DOMContentLoaded", function() {
     let loadInternalPreset4 = document.getElementById('loadInternalPreset4');
     let loadInternalPreset5 = document.getElementById('loadInternalPreset5');
 
+    // Get the project name input element
+    let projectNameInput = document.getElementById('project-name');
 
+    // Event listener for project name changes
+    projectNameInput.addEventListener('input', () => {
+        // Update the projectName variable with the new value
+        let projectName = projectNameInput.value.trim();
+        if (projectName === '' || projectName === 'defaultProjectName') {
+            // Prompt the user to enter a project name if it's empty or default
+            projectName = prompt("Please enter a project name:");
+            if (!projectName || projectName.trim() === '') {
+                projectName = 'defaultProjectName'; // Use default name if input is still empty
+            }
+            projectNameInput.value = projectName; // Update the input field with the new project name
+        }
+        console.log('Project Name updated to:', projectName);
+
+        // Update the data attribute of the open audio trimmer buttons
+        document.querySelectorAll('.open-audio-trimmer').forEach(button => {
+            button.dataset.projectName = projectName;
+        });
+    });
 
     saveButton.addEventListener('click', () => {
-      let { settings, filename } = exportSettings();
-  
-      // Create a Blob with the settings
-      let blob = new Blob([settings], { type: 'application/json' });
-  
-      // Create a download link for the Blob
-      let url = URL.createObjectURL(blob);
-      let downloadLink = document.createElement('a');
-      downloadLink.href = url;
-      downloadLink.download = filename;
-  
-      // Trigger a click on the download link
-      downloadLink.click();
+        let projectName = getValidProjectName();
+        if (projectName === 'defaultProjectName') {
+            alert("Please provide a valid project name before saving.");
+            return; // Exit the function if no valid project name is provided
+        }
+
+        projectNameInput.value = projectName; // Update the input field with the valid project name
+
+        let { settings, filename } = exportSettings();
+
+        // Create a Blob with the settings
+        let blob = new Blob([settings], { type: 'application/json' });
+
+        // Create a download link for the Blob
+        let url = URL.createObjectURL(blob);
+        let downloadLink = document.createElement('a');
+        downloadLink.href = url;
+        downloadLink.download = `${projectName}_${filename}`;
+
+        // Trigger a click on the download link
+        downloadLink.click();
     });
     
   
