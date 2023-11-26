@@ -190,3 +190,12 @@ window.onclick = function(event) {
         console.log('Modal closed');
     }
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+    const projectNameInput = document.getElementById('project-name');
+
+    projectNameInput.addEventListener('input', () => {
+        const projectName = projectNameInput.value;
+        window.unifiedSequencerSettings.updateSetting('projectName', projectName);
+    });
+});
