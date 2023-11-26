@@ -15,4 +15,7 @@ bpmSlider.addEventListener('input', () => {
 
   // Send BPM to external modules
   emitMessage('BPMUpdate', externalSyncBPM);
+
+  // Update the global settings object without affecting the rest of the code
+  window.unifiedSequencerSettings.updateSetting('projectBPM', parseInt(bpm));
 });
