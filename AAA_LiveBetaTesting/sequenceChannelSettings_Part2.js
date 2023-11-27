@@ -177,7 +177,7 @@ function changeSequence(seq) {
  */
 function updateStep(channelIndex, stepIndex, state) {
     // Existing code to update channelSettings
-    channelSettings[channelIndex][stepIndex + 1] = state;
+    channelSettings[channelIndex][stepIndex] = state;
     
     // Log updated settings for the specific channel after the update
     updateSequenceData({
@@ -187,7 +187,7 @@ function updateStep(channelIndex, stepIndex, state) {
     // console.log(`Updated settings for Channel-${channelIndex + 1}:`, channelSettings[channelIndex]);
 
     // Update the global object
-    window.unifiedSequencerSettings.updateStepState(currentSequence, channelIndex, stepIndex, state);
+    window.unifiedSequencerSettings.updateStepState(currentSequence - 1, channelIndex, stepIndex, state);
 
     // Add console log for debugging
     console.log(`updateStepState called with sequence: ${currentSequence}, channelIndex: ${channelIndex}, stepIndex: ${stepIndex}, state: ${state}`);
