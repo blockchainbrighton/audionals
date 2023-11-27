@@ -257,7 +257,6 @@ function importSettings(settings) {
 
     updateUIForSequence(currentSequence);
     saveCurrentSequence(currentSequence);
-    packageSettingsForGlobalObject(settings);
 
     console.log("Final sequences array:", sequences);
 

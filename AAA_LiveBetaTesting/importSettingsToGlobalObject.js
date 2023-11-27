@@ -5,7 +5,6 @@ function parseAndValidateSettings(jsonString) {
     try {
         parsedSettings = JSON.parse(jsonString);
         // Add additional validation if necessary
-        // For example, check if parsedSettings has required properties
     } catch (error) {
         console.error("Error parsing settings:", error);
         return null;
@@ -14,47 +13,48 @@ function parseAndValidateSettings(jsonString) {
 }
 
 function convertTriggersToSteps(triggers) {
-    // Assuming triggers are an array of boolean values
-    // Convert them to the format expected by the global object
-    return triggers.map(trigger => trigger ? 1 : 0);
+    // Create a new array starting from the second element and including only the next 64 elements
+    return triggers.slice(1, 65).map(trigger => trigger === true); // Convert to boolean values
 }
 
 function packageSettingsForGlobalObject(jsonString) {
     const importedSettings = parseAndValidateSettings(jsonString);
-    if (!importedSettings) return;
+    if (!importedSettings || !Array.isArray(importedSettings)) return;
 
-    // Update project name and BPM
-    if (importedSettings.projectName) {
-        window.unifiedSequencerSettings.updateSetting('projectName', importedSettings.projectName);
-    }
-    if (importedSettings.projectBPM) {
-        window.unifiedSequencerSettings.updateSetting('projectBPM', importedSettings.projectBPM);
-    }
+    const firstSequence = importedSettings[0];
+    if (firstSequence) {
+        // Update project name and BPM
+        if (firstSequence.name) {
+            window.unifiedSequencerSettings.updateSetting('projectName', firstSequence.name);
+        }
+        if (firstSequence.bpm) {
+            window.unifiedSequencerSettings.updateSetting('projectBPM', firstSequence.bpm);
+        }
 
-    // Update URLs and URL names
-    if (Array.isArray(importedSettings.projectURLs)) {
-        window.unifiedSequencerSettings.updateSetting('projectURLs', importedSettings.projectURLs);
-    }
-    if (Array.isArray(importedSettings.projectURLNames)) {
-        window.unifiedSequencerSettings.updateSetting('projectURLNames', importedSettings.projectURLNames);
+        // Update URLs from the first sequence
+        if (Array.isArray(firstSequence.channels)) {
+            const projectURLs = firstSequence.channels.map(ch => ch[0] || ''); // Get URL from the first element
+            window.unifiedSequencerSettings.updateSetting('projectURLs', projectURLs);
+        }
     }
 
     // Update step states for each sequence and channel
-    Object.keys(importedSettings.projectSequences).forEach(sequenceKey => {
-        const sequenceNumber = parseInt(sequenceKey.replace('Sequence', ''), 10) - 1;
-        const channels = importedSettings.projectSequences[sequenceKey];
-
-        Object.keys(channels).forEach(channelKey => {
-            const channelIndex = parseInt(channelKey.replace('ch', ''), 10) - 1;
-            const triggers = channels[channelKey];
-            const steps = convertTriggersToSteps(triggers);
-
-            steps.forEach((stepState, stepIndex) => {
-                window.unifiedSequencerSettings.updateStepState(sequenceNumber, channelIndex, stepIndex, stepState);
+    importedSettings.forEach((sequence, sequenceIndex) => {
+        if (sequence && Array.isArray(sequence.channels)) {
+            sequence.channels.forEach((channel, channelIndex) => {
+                if (Array.isArray(channel)) {
+                    const steps = convertTriggersToSteps(channel);
+                    steps.forEach((stepState, stepIndex) => {
+                        window.unifiedSequencerSettings.updateStepState(sequenceIndex, channelIndex, stepIndex, stepState);
+                    });
+                }
             });
-        });
+        }
     });
+
+    console.log("Final data sent to global object:", window.unifiedSequencerSettings.viewCurrentSettings());
 }
+
 
 // Example usage:
 // let jsonString = /* your JSON string here */;

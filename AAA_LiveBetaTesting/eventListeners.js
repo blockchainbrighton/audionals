@@ -52,7 +52,9 @@ document.addEventListener("DOMContentLoaded", function() {
             .then(response => response.json())
             .then(data => {
                 console.log(`Loaded data from ${filePath}`, data);
-                importSettings(JSON.stringify(data));
+                const jsonString = JSON.stringify(data);
+                importSettings(jsonString); // Existing call to importSettings
+                packageSettingsForGlobalObject(jsonString); // New call to packageSettingsForGlobalObject
             })
             .catch(error => {
                 console.error(`Error loading preset from ${filePath}:`, error);
