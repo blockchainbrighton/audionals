@@ -12,18 +12,29 @@ function parseAndValidateSettings(jsonString) {
     return parsedSettings;
 }
 
-function convertTriggersToSteps(triggers) {
-    // Create a new array starting from the second element and including only the next 64 elements
-    return triggers.slice(1, 65).map(trigger => trigger === true); // Convert to boolean values
+function convertTriggersToSteps(triggers, numSteps = 64) {
+    let steps = new Array(numSteps).fill(false);
+    triggers.forEach(trigger => {
+        if (trigger > 0 && trigger <= numSteps) {
+            steps[trigger - 1] = true; // Adjust index to 0-based
+        }
+    });
+    return steps;
+}
+
+function convertChannelArray(channelArray) {
+    // Remove the URL from the first position and return the modified array
+    return channelArray.slice(1);
 }
 
 function packageSettingsForGlobalObject(jsonString) {
     const importedSettings = parseAndValidateSettings(jsonString);
     if (!importedSettings || !Array.isArray(importedSettings)) return;
 
+    console.log("Received data:", JSON.stringify(importedSettings, null, 2)); // Log received data
+
     const firstSequence = importedSettings[0];
     if (firstSequence) {
-        // Update project name and BPM
         if (firstSequence.name) {
             window.unifiedSequencerSettings.updateSetting('projectName', firstSequence.name);
         }
@@ -31,19 +42,17 @@ function packageSettingsForGlobalObject(jsonString) {
             window.unifiedSequencerSettings.updateSetting('projectBPM', firstSequence.bpm);
         }
 
-        // Update URLs from the first sequence
         if (Array.isArray(firstSequence.channels)) {
-            const projectURLs = firstSequence.channels.map(ch => ch[0] || ''); // Get URL from the first element
+            const projectURLs = firstSequence.channels.map(ch => ch.url || '');
             window.unifiedSequencerSettings.updateSetting('projectURLs', projectURLs);
         }
     }
 
-    // Update step states for each sequence and channel
-    importedSettings.forEach((sequence, sequenceIndex) => {
+    importedSettings.slice(1).forEach((sequence, sequenceIndex) => {
         if (sequence && Array.isArray(sequence.channels)) {
             sequence.channels.forEach((channel, channelIndex) => {
-                if (Array.isArray(channel)) {
-                    const steps = convertTriggersToSteps(channel);
+                if (Array.isArray(channel.triggers)) {
+                    const steps = convertTriggersToSteps(channel.triggers);
                     steps.forEach((stepState, stepIndex) => {
                         window.unifiedSequencerSettings.updateStepState(sequenceIndex, channelIndex, stepIndex, stepState);
                     });
@@ -52,11 +61,9 @@ function packageSettingsForGlobalObject(jsonString) {
         }
     });
 
-    console.log("Final data sent to global object:", window.unifiedSequencerSettings.viewCurrentSettings());
+    console.log("Final data sent to global object:", window.unifiedSequencerSettings.viewCurrentSettings()); // Log final data
 }
-
 
 // Example usage:
 // let jsonString = /* your JSON string here */;
 // packageSettingsForGlobalObject(jsonString);
-console.log("Updated global object:", window.unifiedSequencerSettings.settings.masterSettings);

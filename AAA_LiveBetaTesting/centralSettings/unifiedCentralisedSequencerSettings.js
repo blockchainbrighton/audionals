@@ -45,18 +45,13 @@ class UnifiedSequencerSettings {
 
 // Method to update the state of a specific step
 updateStepState(sequenceNumber, channelIndex, stepIndex, state) {
-    // Adjusting for 1-based indexing
     let adjustedSequenceNumber = sequenceNumber + 1;
     let adjustedChannelIndex = channelIndex + 1;
-    let adjustedStepIndex = stepIndex + 1; // Adjusting step index to start from 1
-
-    console.log(`Attempting to update step state: Sequence ${adjustedSequenceNumber}, Channel ${adjustedChannelIndex}, Step ${adjustedStepIndex}, State ${state}`);
 
     if (this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`] &&
         this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`][`ch${adjustedChannelIndex}`] &&
-        adjustedStepIndex <= this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`][`ch${adjustedChannelIndex}`].length) {
-        this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`][`ch${adjustedChannelIndex}`][adjustedStepIndex] = state;
-        console.log(`Step state updated successfully: Sequence ${adjustedSequenceNumber}, Channel ${adjustedChannelIndex}, Step ${adjustedStepIndex}, State ${state}`);
+        stepIndex < this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`][`ch${adjustedChannelIndex}`].length) {
+        this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`][`ch${adjustedChannelIndex}`][stepIndex] = state;
     } else {
         console.error('Error updating step state: Invalid sequence, channel, or step index');
     }
