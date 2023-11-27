@@ -84,14 +84,3 @@ function setChannelSettings(channelIndex, settings) {
     // Log the settings for the specific channel after they are set
     console.log(`Settings set for Channel-${channelIndex + 1}:`, channelSettings[channelIndex]);
 }
-
-
-
-
-
-
-
-
-
-
-
