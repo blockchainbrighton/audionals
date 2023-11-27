@@ -100,6 +100,39 @@ function importSettings(settings) {
         console.log("Project name:", projectName);
     }
 
+    // Update global object with step states from imported settings
+    parsedSettings.forEach((sequence, sequenceIndex) => {
+        sequence.channels.forEach((channel, channelIndex) => {
+            if (Array.isArray(channel.triggers)) {
+                // Convert triggers to steps
+                const steps = convertTriggersToSteps(channel.triggers);
+    
+                steps.forEach((stepState, stepIndex) => {
+                    // Update the global object with the converted step state
+                    window.unifiedSequencerSettings.updateStepState(sequenceIndex, channelIndex, stepIndex, stepState);
+                });
+            } else {
+                // Handle the case where channel.triggers is not an array
+                console.warn(`channel.triggers is not an array for channel at index ${channelIndex} in sequence ${sequenceIndex}`);
+                // Provide default steps if necessary
+                // ...
+            }
+        });
+    });
+    
+    // Function to convert triggers to steps
+    function convertTriggersToSteps(triggers) {
+        // Implement the logic to convert triggers to steps
+        // This is a placeholder function and needs to be implemented based on your application's logic
+        // For example, if triggers are simply boolean values, the conversion might be direct
+        return triggers.map(trigger => {
+            // Convert each trigger to a step
+            // This is a simple example and may need to be adjusted based on your actual data structure
+            return trigger ? 1 : 0; // Assuming 1 represents a triggered step and 0 represents an untriggered step
+        });
+    }
+    
+
     // Update the project name in the text box
     document.getElementById('project-name').value = projectName;
 

@@ -103,11 +103,22 @@ function updateStepButtonsUI() {
     const stepButtons = document.querySelectorAll('.step-button');
     
     stepButtons.forEach((button, index) => {
+        // Determine the channel index from the button's parent container
+        let channelElement = button.closest('.channel');
+        let channelIndex = parseInt(channelElement.id.split('-')[1]) - 1; // Assuming the id is in the format 'channel-x'
+
         // Update each button's state based on the currentSequence
-        if (currentSequence[index]) {
+        let stepState = currentSequence[index];
+        if (stepState) {
             button.classList.add('selected');
         } else {
             button.classList.remove('selected');
         }
+
+        // Update the global object
+        window.unifiedSequencerSettings.updateStepState(sequenceCount, channelIndex, index, stepState);
+
+        // Optional: Log for debugging
+        console.log(`Updated global object for sequence: ${sequenceCount}, channelIndex: ${channelIndex}, stepIndex: ${index}, state: ${stepState}`);
     });
 }

@@ -176,7 +176,7 @@ function changeSequence(seq) {
  * @param {boolean} state - The new state of the step (true for on, false for off).
  */
 function updateStep(channelIndex, stepIndex, state) {
-    // Account for 1-indexing
+    // Existing code to update channelSettings
     channelSettings[channelIndex][stepIndex + 1] = state;
     
     // Log updated settings for the specific channel after the update
@@ -185,7 +185,14 @@ function updateStep(channelIndex, stepIndex, state) {
         stepSettings: channelSettings[channelIndex]
     });
     // console.log(`Updated settings for Channel-${channelIndex + 1}:`, channelSettings[channelIndex]);
+
+    // Update the global object
+    window.unifiedSequencerSettings.updateStepState(currentSequence, channelIndex, stepIndex, state);
+
+    // Add console log for debugging
+    console.log(`updateStepState called with sequence: ${currentSequence}, channelIndex: ${channelIndex}, stepIndex: ${stepIndex}, state: ${state}`);
 }
+
 
 
 
