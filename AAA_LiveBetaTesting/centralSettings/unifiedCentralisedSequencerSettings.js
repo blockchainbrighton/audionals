@@ -51,7 +51,6 @@ class UnifiedSequencerSettings {
         }
     }
 
-
     // Method to get a specific setting
     getSetting(key) {
         return this.settings.masterSettings[key] || null;
