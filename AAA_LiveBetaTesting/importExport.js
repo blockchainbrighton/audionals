@@ -298,3 +298,4 @@ function convertChannelToStepSettings(channel) {
 
     return stepSettings;
 }
+
