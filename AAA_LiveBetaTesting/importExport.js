@@ -147,43 +147,6 @@ function importSettings(settings) {
         });
         window.unifiedSequencerSettings.updateSetting('projectURLs', collectedURLsForSequences.flat());
 
-        function packageSettingsForGlobalObject(importedSettings) {
-            // Update project name and BPM
-            if (importedSettings.projectName) {
-                window.unifiedSequencerSettings.updateSetting('projectName', importedSettings.projectName);
-            }
-            if (importedSettings.projectBPM) {
-                window.unifiedSequencerSettings.updateSetting('projectBPM', importedSettings.projectBPM);
-            }
-        
-            // Update URLs and URL names
-            if (Array.isArray(importedSettings.projectURLs)) {
-                window.unifiedSequencerSettings.updateSetting('projectURLs', importedSettings.projectURLs);
-            }
-            if (Array.isArray(importedSettings.projectURLNames)) {
-                window.unifiedSequencerSettings.updateSetting('projectURLNames', importedSettings.projectURLNames);
-            }
-        
-            // Update step states for each sequence and channel
-            Object.keys(importedSettings.projectSequences).forEach(sequenceKey => {
-                const sequenceNumber = parseInt(sequenceKey.replace('Sequence', ''), 10) - 1; // Adjust for 1-based indexing in global object
-                const channels = importedSettings.projectSequences[sequenceKey];
-        
-                Object.keys(channels).forEach(channelKey => {
-                    const channelIndex = parseInt(channelKey.replace('ch', ''), 10) - 1; // Adjust for 1-based indexing in global object
-                    const steps = channels[channelKey];
-        
-                    steps.forEach((stepState, stepIndex) => {
-                        window.unifiedSequencerSettings.updateStepState(sequenceNumber, channelIndex, stepIndex, stepState);
-                    });
-                });
-            });
-        }
-        
-        // Example usage:
-         let parsedSettings = JSON.parse(settings);
-         packageSettingsForGlobalObject(parsedSettings);
-         console.log("Updated global object:", window.unifiedSequencerSettings.settings.masterSettings);
        // console.log("Final collectedURLsForSequences:", collectedURLsForSequences);
     }
 
@@ -294,6 +257,7 @@ function importSettings(settings) {
 
     updateUIForSequence(currentSequence);
     saveCurrentSequence(currentSequence);
+    packageSettingsForGlobalObject(settings);
 
     console.log("Final sequences array:", sequences);
 
