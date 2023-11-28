@@ -7,8 +7,10 @@ class UnifiedSequencerSettings {
                 projectName: '',
                 projectBPM: 120, // Default BPM, can be adjusted
                 projectURLs: new Array(16).fill(''), // Array of 16 URLs
+                audioSampleTotalLength: new Array(16).fill(0), // Array for audio sample lengths
+                trimValues: new Array(16).fill(null).map(() => ({ startTrimTime: '0.01', endTrimTime: '100' })),
                 projectURLNames: new Array(16).fill(''), // Array of 16 URL names
-                projectSequences: this.initializeSequences(16, 16, 64) // 16 Sequences, each with 16 channels, each channel with 64 steps
+                projectSequences: this.initializeSequences(16, 16, 64), // 16 Sequences, each with 16 channels, each channel with 64 steps
             },
             // Add other settings as needed
         };
