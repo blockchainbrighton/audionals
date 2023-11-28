@@ -782,32 +782,28 @@ var app = (function () {
     	let { channelIndex } = $$props;
 
     	// In your Svelte component
-		function storeTrimSettings() {
-			console.log(`Storing trim settings for channel ${channelIndex}`);
-			const newSettings = {
-				start: $startSliderValue,
-				end: $endSliderValue
-			};
-			console.log('New settings to store:', newSettings);
-		
-			window.trimSettings.update(channelIndex, newSettings);
-			console.log(`Updated trim settings in window.trimSettings for channel ${channelIndex}:`, newSettings);
-		
-			// Convert channelIndex to a number
-			const numericChannelIndex = parseInt(channelIndex.replace('channel-', ''), 10) - 1;
-			console.log(`Converted channelIndex to numeric index: ${numericChannelIndex}`);
-		
-			// Update the global trim settings
-			if (window.unifiedSequencerSettings && typeof window.unifiedSequencerSettings.updateTrimSettings === 'function') {
-				window.unifiedSequencerSettings.updateTrimSettings(numericChannelIndex, newSettings);
-				console.log(`Updated global trim settings for channel ${numericChannelIndex}:`, newSettings);
-			} else {
-				console.error('Unable to update global trim settings: unifiedSequencerSettings is not defined or updateTrimSettings is not a function');
-			}
-			console.log(`[storeTrimSettings] {trimStore} Saving trim settings - Start: ${$startSliderValue}, End: ${$endSliderValue}`);
+	function storeTrimSettings() {
+		console.log(`Storing trim settings for channel ${channelIndex}`);
+		const newSettings = {
+			start: $startSliderValue,
+			end: $endSliderValue
+		};
+		console.log('New settings to store:', newSettings);
+
+		// Update trim settings directly with the numeric channelIndex
+		window.trimSettings.update(channelIndex, newSettings);
+		console.log(`Updated trim settings in window.trimSettings for channel ${channelIndex}:`, newSettings);
+
+		// Update the global trim settings using the same numeric channelIndex
+		if (window.unifiedSequencerSettings && typeof window.unifiedSequencerSettings.updateTrimSettings === 'function') {
+			window.unifiedSequencerSettings.updateTrimSettings(channelIndex, newSettings);
+			console.log(`Updated global trim settings for channel ${channelIndex}:`, newSettings);
+		} else {
+			console.error('Unable to update global trim settings: unifiedSequencerSettings is not defined or updateTrimSettings is not a function');
 		}
-		
-	
+		console.log(`[storeTrimSettings] {trimStore} Saving trim settings - Start: ${$startSliderValue}, End: ${$endSliderValue}`);
+	}
+
 
     	// Use the external AudioContext if provided, otherwise create a new one
     	let audioContext = externalAudioContext || new (window.AudioContext || window.webkitAudioContext)();

@@ -174,7 +174,7 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         console.log('Audio trimmer instantiated with the following settings:', {
             externalAudioContext: audioContext,
             externalOrdinalId: ordinalId,
-            channelIndex: channelNumber,
+            channelIndex: channelIndex,
         });
     });
 });

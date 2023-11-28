@@ -8,7 +8,7 @@ class UnifiedSequencerSettings {
                 projectBPM: 120, // Default BPM, can be adjusted
                 projectURLs: new Array(16).fill(''), // Array of 16 URLs
                 audioSampleTotalLength: new Array(16).fill(0), // Array for audio sample lengths
-                trimValues: new Array(16).fill(null).map(() => ({ startTrimTime: '0:00:00', endTrimTime: '0:00:00' })), // Array of trim values for each URL
+                trimValues: new Array(16).fill(null).map(() => ({ startTrimTime: '0.01', endTrimTime: '0' })),
                 projectURLNames: new Array(16).fill(''), // Array of 16 URL names
                 projectSequences: this.initializeSequences(16, 16, 64), // 16 Sequences, each with 16 channels, each channel with 64 steps
             },
@@ -39,6 +39,10 @@ class UnifiedSequencerSettings {
           this.settings.masterSettings.audioSampleTotalLength[numericChannelIndex] = length;
         } else {
           console.error('{updateAudioSampleLength} {decodeAudioData} Invalid channel index for updating audio sample length');
+        }
+        // Update the endTrimTime for the channel
+        if (numericChannelIndex >= 0 && numericChannelIndex < this.settings.masterSettings.trimValues.length) {
+            this.settings.masterSettings.trimValues[numericChannelIndex].endTrimTime = length.toString();
         }
       }
       
@@ -144,6 +148,7 @@ getTrimSettings(channelIndex) {
             projectName: this.settings.masterSettings.projectName,
             projectBPM: this.settings.masterSettings.projectBPM,
             projectURLs: this.settings.masterSettings.projectURLs.map(url => ({ url })),
+            audioSampleTotalLength: this.settings.masterSettings.audioSampleTotalLength, // Include audio sample lengths
             trimValues: this.settings.masterSettings.trimValues.map(trim => ({ 
                 startTrimTime: trim.startTrimTime, 
                 endTrimTime: trim.endTrimTime 
