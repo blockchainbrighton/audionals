@@ -159,17 +159,24 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         const channelIndex = parseInt(channelNumber.split('-')[1]) - 1;
 
         // Instantiate the Audio Trimmer with settings
+        // Instantiate the Audio Trimmer with settings
         const audioTrimmer = new AudioTrimmer({
             target: trimmerContainer,
             props: {
                 externalAudioContext: audioContext,
                 externalOrdinalId: ordinalId,
-                channelIndex: channelIndex, // Use the 0-indexed value
-                startSliderValue: savedTrimSettings?.start || defaultSettings.start,
-                endSliderValue: savedTrimSettings?.end || defaultSettings.end
+                channelIndex: channelIndex // Use the 0-indexed value
             }
         });
 
+        // Retrieve global trim settings for the specified channel
+        const globalTrimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
+
+        // Set the start and end slider values from the global settings
+        audioTrimmer.$set({
+            startSliderValue: globalTrimSettings ? parseFloat(globalTrimSettings.start) : 0.01,
+            endSliderValue: globalTrimSettings ? parseFloat(globalTrimSettings.end) : 100
+        });
         // Log the collected values
         console.log('Audio trimmer instantiated with the following settings:', {
             externalAudioContext: audioContext,

@@ -796,8 +796,12 @@ var app = (function () {
 
 		// Update the global trim settings using the same numeric channelIndex
 		if (window.unifiedSequencerSettings && typeof window.unifiedSequencerSettings.updateTrimSettings === 'function') {
-			window.unifiedSequencerSettings.updateTrimSettings(channelIndex, newSettings);
-			console.log(`Updated global trim settings for channel ${channelIndex}:`, newSettings);
+			const newGlobalSettings = {
+				startTrimTime: $startSliderValue.toString(),
+				endTrimTime: $endSliderValue.toString()
+			};
+			window.unifiedSequencerSettings.updateTrimSettings(channelIndex, newGlobalSettings);
+			console.log(`Updated global trim settings for channel ${channelIndex}:`, newGlobalSettings);
 		} else {
 			console.error('Unable to update global trim settings: unifiedSequencerSettings is not defined or updateTrimSettings is not a function');
 		}
@@ -854,25 +858,30 @@ var app = (function () {
 			ctx = canvas.getContext('2d');
 			playbackCtx = playbackCanvas.getContext('2d');
 		
-			// Check for saved trim settings in local storage
-			const savedTrimSettings = getTrimSettings(channelIndex);
-			if (savedTrimSettings) {
-				console.log(`Retrieved trim settings for channel ${channelIndex}:`, savedTrimSettings);
-				startSliderValue.set(savedTrimSettings.start);
-				endSliderValue.set(savedTrimSettings.end);
+			// Retrieve initial trim settings from global object
+			if (window.unifiedSequencerSettings) {
+				const globalTrimSettings = window.unifiedSequencerSettings.settings.masterSettings.trimValues[channelIndex];
+				if (globalTrimSettings) {
+					console.log(`Retrieved global trim settings for channel ${channelIndex}:`, globalTrimSettings);
+					startSliderValue.set(parseFloat(globalTrimSettings.startTrimTime));
+					endSliderValue.set(parseFloat(globalTrimSettings.endTrimTime));
 		
-				// Update dimmed widths based on saved settings
-				if (audioBuffer) {
-					maxDuration = audioBuffer.duration;
-					startDimmedWidth = `${Math.max(0, savedTrimSettings.start / maxDuration) * 100}%`;
-					endDimmedWidth = `${Math.max(0, (1 - savedTrimSettings.end / maxDuration)) * 100}%`;
+					// Update dimmed widths based on global settings
+					if (audioBuffer) {
+						maxDuration = audioBuffer.duration;
+						startDimmedWidth = `${Math.max(0, parseFloat(globalTrimSettings.startTrimTime) / maxDuration) * 100}%`;
+						endDimmedWidth = `${Math.max(0, (1 - parseFloat(globalTrimSettings.endTrimTime) / maxDuration)) * 100}%`;
+					}
+					shouldSaveSettings = true;
+				} else {
+					console.log(`No global trim settings found for channel ${channelIndex}`);
 				}
-				shouldSaveSettings = true;
 			} else {
-				console.log(`No saved trim settings found for channel ${channelIndex}`);
+				console.error('Global settings object (unifiedSequencerSettings) is not defined');
 			}
 			console.log(`[onMount] {trimStore} Initial slider values - Start: ${$startSliderValue}, End: ${$endSliderValue}`);
 		});
+		
 		
 
     	onDestroy(() => {
@@ -1056,17 +1065,18 @@ var app = (function () {
 
     	function input1_change_input_handler() {
 			$startSliderValue = to_number(this.value);
-			startSliderValue.set($startSliderValue);
+			startSliderValue =$startSliderValue;
 			console.log(`Saving start trim setting for channel ${channelIndex}:`, $startSliderValue);
 			saveTrimSettings(channelIndex, { start: $startSliderValue, end: $endSliderValue });
 		}
 		
 		function input2_change_input_handler() {
 			$endSliderValue = to_number(this.value);
-			endSliderValue.set($endSliderValue);
+			endSliderValue = $endSliderValue; // Direct assignment
 			console.log(`Saving end trim setting for channel ${channelIndex}:`, $endSliderValue);
 			saveTrimSettings(channelIndex, { start: $startSliderValue, end: $endSliderValue });
 		}
+		
 		
 		
 
