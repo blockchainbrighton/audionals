@@ -788,9 +788,25 @@ var app = (function () {
 				start: $startSliderValue,
 				end: $endSliderValue
 			};
+			console.log('New settings to store:', newSettings);
+		
 			window.trimSettings.update(channelIndex, newSettings);
-			console.log(`Updated trim settings:`, newSettings);
+			console.log(`Updated trim settings in window.trimSettings for channel ${channelIndex}:`, newSettings);
+		
+			// Convert channelIndex to a number
+			const numericChannelIndex = parseInt(channelIndex.replace('channel-', ''), 10) - 1;
+			console.log(`Converted channelIndex to numeric index: ${numericChannelIndex}`);
+		
+			// Update the global trim settings
+			if (window.unifiedSequencerSettings && typeof window.unifiedSequencerSettings.updateTrimSettings === 'function') {
+				window.unifiedSequencerSettings.updateTrimSettings(numericChannelIndex, newSettings);
+				console.log(`Updated global trim settings for channel ${numericChannelIndex}:`, newSettings);
+			} else {
+				console.error('Unable to update global trim settings: unifiedSequencerSettings is not defined or updateTrimSettings is not a function');
+			}
+			console.log(`[storeTrimSettings] {trimStore} Saving trim settings - Start: ${$startSliderValue}, End: ${$endSliderValue}`);
 		}
+		
 	
 
     	// Use the external AudioContext if provided, otherwise create a new one
@@ -825,6 +841,7 @@ var app = (function () {
 			if (shouldSaveSettings) {
 				storeTrimSettings();
 			}
+			console.log(`[Reactive] {trimStore} Slider values updated - Start: ${$startSliderValue}, End: ${$endSliderValue}`);
 		}
 
 		// Reactive block for handling slider value changes
@@ -832,6 +849,8 @@ var app = (function () {
 			startDimmedWidth = `${Math.max(0, $startSliderValue / maxDuration) * 100}%`;
 			endDimmedWidth = `${Math.max(0, (1 - $endSliderValue / maxDuration)) * 100}%`;
 			storeTrimSettings();
+			console.log(`[Reactive] {trimStore} Slider values change detected - Start: ${$startSliderValue}, End: ${$endSliderValue}`);
+
 		}
 
 
@@ -856,6 +875,7 @@ var app = (function () {
 			} else {
 				console.log(`No saved trim settings found for channel ${channelIndex}`);
 			}
+			console.log(`[onMount] {trimStore} Initial slider values - Start: ${$startSliderValue}, End: ${$endSliderValue}`);
 		});
 		
 
@@ -905,6 +925,7 @@ var app = (function () {
     		} catch(error) {
     			console.error('Error fetching or decoding audio:', error);
     		}
+			console.log(`[fetchAudio] {trimStore} Slider values after fetching audio - Start: ${$startSliderValue}, End: ${$endSliderValue}`);
     	}
 
     	function loadSample() {

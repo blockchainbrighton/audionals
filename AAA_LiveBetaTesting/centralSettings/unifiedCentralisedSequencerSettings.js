@@ -7,8 +7,9 @@ class UnifiedSequencerSettings {
                 projectName: '',
                 projectBPM: 120, // Default BPM, can be adjusted
                 projectURLs: new Array(16).fill(''), // Array of 16 URLs
+                trimValues: new Array(16).fill(null).map(() => ({ startTrimTime: '0:00:00', endTrimTime: '0:00:00' })), // Array of trim values for each URL
                 projectURLNames: new Array(16).fill(''), // Array of 16 URL names
-                projectSequences: this.initializeSequences(16, 16, 64) // 16 Sequences, each with 16 channels, each channel with 64 steps
+                projectSequences: this.initializeSequences(16, 16, 64), // 16 Sequences, each with 16 channels, each channel with 64 steps
             },
             // Add other settings as needed
         };
@@ -57,6 +58,34 @@ updateStepState(sequenceNumber, channelIndex, stepIndex, state) {
     }
 }
 
+// Method to update trim settings for a specific channel
+updateTrimSettings(channelIndex, trimSettings) {
+    if (channelIndex >= 0 && channelIndex < this.settings.masterSettings.trimValues.length) {
+        this.settings.masterSettings.trimValues[channelIndex] = {
+            startTrimTime: trimSettings.start, // Use start property
+            endTrimTime: trimSettings.end     // Use end property
+        };
+        console.log(`Trim settings updated for channel ${channelIndex}: Start - ${trimSettings.start}, End - ${trimSettings.end}`);
+    } else {
+        console.error(`Invalid channel index: ${channelIndex}`);
+    }
+}
+
+// Method to get trim settings for a specific channel
+getTrimSettings(channelIndex) {
+    if (channelIndex >= 0 && channelIndex < this.settings.masterSettings.trimValues.length) {
+        const trimSettings = this.settings.masterSettings.trimValues[channelIndex];
+        console.log(`Retrieved trim settings for channel ${channelIndex}: Start - ${trimSettings.startTrimTime}, End - ${trimSettings.endTrimTime}`);
+        return {
+            start: trimSettings.startTrimTime,
+            end: trimSettings.endTrimTime
+        };
+    } else {
+        console.error(`Invalid channel index: ${channelIndex}`);
+        return null; // Return null if the channel index is invalid
+    }
+}
+
 
 
 
@@ -77,13 +106,46 @@ updateStepState(sequenceNumber, channelIndex, stepIndex, state) {
 
     // Method to export current settings as a JSON string
     exportSettings() {
-        return JSON.stringify(this.settings.masterSettings);
+        const formattedSettings = this.viewCurrentSettings();
+        const blob = new Blob([formattedSettings], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'settings.json'; // Set the filename as needed
+        document.body.appendChild(a);
+        a.click();
+        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
     }
+    
 
-    // Method to view current settings in JSON format
     viewCurrentSettings() {
-        return JSON.stringify(this.settings, null, 2); // Pretty print the JSON
+        const formattedSettings = {
+            projectName: this.settings.masterSettings.projectName,
+            projectBPM: this.settings.masterSettings.projectBPM,
+            projectURLs: this.settings.masterSettings.projectURLs.map(url => ({ url })),
+            trimValues: this.settings.masterSettings.trimValues.map(trim => ({ 
+                startTrimTime: trim.startTrimTime, 
+                endTrimTime: trim.endTrimTime 
+            })),
+            projectURLNames: this.settings.masterSettings.projectURLNames.map(name => ({ name })),
+            sequences: this.formatSequences(this.settings.masterSettings.projectSequences)
+        };
+    
+        return JSON.stringify(formattedSettings, null, 2); // Pretty print the JSON
     }
+    
+    // Helper function to format sequences
+    formatSequences(sequences) {
+        let formattedSequences = {};
+        Object.keys(sequences).forEach(sequenceKey => {
+            formattedSequences[sequenceKey] = {};
+            Object.keys(sequences[sequenceKey]).forEach(channelKey => {
+                formattedSequences[sequenceKey][channelKey] = sequences[sequenceKey][channelKey].map(step => ({ step }));
+            });
+        });
+        return formattedSequences;
+    }    
 }
 
 // Attach the settings object to the global window object
