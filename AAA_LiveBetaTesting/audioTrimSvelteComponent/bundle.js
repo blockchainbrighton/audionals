@@ -862,7 +862,7 @@ var app = (function () {
 			if (window.unifiedSequencerSettings) {
 				const globalTrimSettings = window.unifiedSequencerSettings.settings.masterSettings.trimValues[channelIndex];
 				if (globalTrimSettings) {
-					console.log(`Retrieved global trim settings for channel ${channelIndex}:`, globalTrimSettings);
+					console.log(`[onMount] Retrieved global trim settings for channel ${channelIndex}:`, globalTrimSettings);
 					startSliderValue.set(parseFloat(globalTrimSettings.startTrimTime));
 					endSliderValue.set(parseFloat(globalTrimSettings.endTrimTime));
 		
