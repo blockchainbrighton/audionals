@@ -19,11 +19,22 @@ function base64ToArrayBuffer(base64) {
 }
 
 // Function to decode audio data
-const decodeAudioData = (audioData) => {
+const decodeAudioData = (audioData, channelIndex) => {
   return new Promise((resolve, reject) => {
-    audioContext.decodeAudioData(audioData, resolve, reject);
+    audioContext.decodeAudioData(audioData, (decodedData) => {
+      console.log(`[decodeAudioData] Updating audio sample length for channel ${channelIndex}:`, decodedData.duration);
+
+      // Update the length of the audio sample using the global object via window
+      if (window.unifiedSequencerSettings) {
+        window.unifiedSequencerSettings.updateAudioSampleLength(channelIndex, decodedData.duration);
+      } else {
+        console.error('unifiedSequencerSettings is not defined on the window object');
+      }
+      resolve(decodedData);
+    }, reject);
   });
 };
+
 
 // Function to fetch and parse the HTML to find the content type
 async function fetchAndParseContentType(url) {
@@ -76,7 +87,7 @@ const fetchAudio = async (url, channelIndex, loadSampleButtonElement = null) => 
     }
 
     // Proceed with audio data processing
-    const audioBuffer = await decodeAudioData(audioData);
+    const audioBuffer = await decodeAudioData(audioData, channelIndex);
     audioBuffers.set(url, audioBuffer);
 
     const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"]`);
@@ -164,7 +175,7 @@ async function playAuditionedSample(url) {
         audioContext = new AudioContext();
       }
 
-      const audioBuffer = await decodeAudioData(audioData);
+      const audioBuffer = await decodeAudioData(audioData, channelIndex);
       const source = audioContext.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(audioContext.destination);

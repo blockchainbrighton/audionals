@@ -155,13 +155,16 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         // Define default settings
         const defaultSettings = { start: 0.01, end: 100 };
 
+        // Convert channelNumber to 0-indexed format
+        const channelIndex = parseInt(channelNumber.split('-')[1]) - 1;
+
         // Instantiate the Audio Trimmer with settings
         const audioTrimmer = new AudioTrimmer({
             target: trimmerContainer,
             props: {
                 externalAudioContext: audioContext,
                 externalOrdinalId: ordinalId,
-                channelIndex: channelNumber,
+                channelIndex: channelIndex, // Use the 0-indexed value
                 startSliderValue: savedTrimSettings?.start || defaultSettings.start,
                 endSliderValue: savedTrimSettings?.end || defaultSettings.end
             }

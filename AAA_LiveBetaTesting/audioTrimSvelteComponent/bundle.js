@@ -887,11 +887,11 @@ var app = (function () {
     		audioContext.close();
     	});
 
-    	function decodeAudioData(audioData) {
-    		return new Promise((resolve, reject) => {
-    				audioContext.decodeAudioData(audioData, resolve, e => reject(new Error(`Decoding audio data failed with error: ${e}`)));
-    			});
-    	}
+    	// function decodeAudioData(audioData) {
+    	// 	return new Promise((resolve, reject) => {
+    	// 			audioContext.decodeAudioData(audioData, resolve, e => reject(new Error(`Decoding audio data failed with error: ${e}`)));
+    	// 		});
+    	// }
 
     	async function fetchAudio(ordinalId) {
     		const url = `https://ordinals.com/content/${ordinalId}`;
@@ -914,7 +914,7 @@ var app = (function () {
     				arrayBuffer = await response.arrayBuffer();
     			}
 
-    			$$invalidate(18, audioBuffer = await decodeAudioData(arrayBuffer));
+    			$$invalidate(18, audioBuffer = await decodeAudioData(arrayBuffer, channelIndex));
     			// Only set default values if no saved settings are found
 				const savedTrimSettings = getTrimSettings(channelIndex);
 				if (!savedTrimSettings) {
