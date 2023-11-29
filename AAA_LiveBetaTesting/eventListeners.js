@@ -121,13 +121,20 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
 
         // Fetch and load the vanillaTrim HTML into the modal
         fetch('vanillaTrimComponent/vanillaTrim.html')
-            .then(response => response.text())
-            .then(html => {
-                modal.innerHTML = html;
-                modal.style.display = 'block';
-                console.log('vanillaTrim component loaded and displayed');
-            })
-            .catch(error => console.error('Error loading vanillaTrim component:', error));
+        .then(response => response.text())
+        .then(html => {
+            modal.innerHTML = html;
+            modal.style.display = 'block';
+            console.log('vanillaTrim component loaded and displayed');
+
+            // Check if the script is already loaded
+            if (!document.querySelector('script[src="vanillaTrimComponent/index.js"]')) {
+                const script = document.createElement('script');
+                script.src = 'vanillaTrimComponent/index.js';
+                document.body.appendChild(script);
+            }
+        })
+        .catch(error => console.error('Error loading vanillaTrim component:', error));
     });
 });
 
