@@ -131,7 +131,16 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
     });
 });
 
+document.querySelector('.close-button').addEventListener('click', function() {
+    document.getElementById('vanilla-trim-modal').style.display = 'none';
+});
 
+window.onclick = function(event) {
+    const modal = document.getElementById('vanilla-trim-modal');
+    if (event.target === modal) {
+        modal.style.display = 'none';
+    }
+};
 
 // document.querySelectorAll('.open-audio-trimmer').forEach(button => {
 //     button.addEventListener('click', function(event) {
