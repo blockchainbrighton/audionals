@@ -121,6 +121,13 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
             return console.error('Channel element not found');
         }
 
+        // Extract the URL or audio buffer for the audio sample
+        const audioData = channelElement.dataset.audioData; // Assuming audioData is the URL or buffer
+        if (!audioData) {
+            return console.error('Audio data not found on the channel element');
+        }
+        console.log('Audio Data:', audioData);
+
         // Extract the ID from the originalUrl for the audio sample
         const originalUrl = channelElement.dataset.originalUrl;
         const ordinalId = originalUrl ? originalUrl.split('/').pop() : '';
@@ -140,11 +147,16 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         const savedTrimSettings = getTrimSettings(channelNumber);
         console.log('Retrieved trim settings for channel:', channelNumber, savedTrimSettings);
 
+       // Store the necessary data for the Audio Trimmer
+        window.audioTrimmerData = {
+            audioData: audioData,
+            ordinalId: ordinalId,
+            channelNumber: channelNumber,
+            trimSettings: savedTrimSettings || defaultSettings
+        };
+
         // Display the modal
         const modal = document.getElementById('audio-trimmer-modal');
-        if (!modal) {
-            return console.error('Modal element not found');
-        }
         modal.style.display = 'block';
         console.log('Modal displayed');
 
@@ -160,14 +172,14 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
 
         // Instantiate the Audio Trimmer with settings
         // Instantiate the Audio Trimmer with settings
-        const audioTrimmer = new AudioTrimmer({
-            target: trimmerContainer,
-            props: {
-                externalAudioContext: audioContext,
-                externalOrdinalId: ordinalId,
-                channelIndex: channelIndex // Use the 0-indexed value
-            }
-        });
+        // const audioTrimmer = new AudioTrimmer({
+        //     target: trimmerContainer,
+        //     props: {
+        //         externalAudioContext: audioContext,
+        //         externalOrdinalId: ordinalId,
+        //         channelIndex: channelIndex // Use the 0-indexed value
+        //     }
+        // });
 
         // Retrieve global trim settings for the specified channel
         const globalTrimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);

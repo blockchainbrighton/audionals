@@ -680,22 +680,22 @@ var app = (function () {
     	let startDimmedWidth = '0%', endDimmedWidth = '0%';
     	let canvas, playbackCanvas, ctx, playbackCtx;
 
-    	//  // Function to update global settings with local values
-    	//  function updateGlobalSettings() {
-    	//      if (!window.UnifiedSequencerSettings || !window.UnifiedSequencerSettings.settings) {
-    	//          console.error('UnifiedSequencerSettings is not initialized');
-    	//          return;
-    	//      }
-    	//      globalSettings.settings.masterSettings.trimValues[channelIndex] = {
-    	//          startTrimTime: get(startSliderValue).toString(),
-    	//          endTrimTime: get(endSliderValue).toString()
-    	//      };
-    	//  }
-    	// Subscribe to store changes to keep the global object updated
-    	// startSliderValue.subscribe(updateGlobalSettings);
-    	// endSliderValue.subscribe(updateGlobalSettings);
     	// Sync with global settings on component mount
     	onMount(() => {
+    		// Check if the data is available
+    		if (window.audioTrimmerData) {
+    			const { audioData, ordinalId, channelNumber, trimSettings } = window.audioTrimmerData;
+
+    			// Use this data to set up your component
+    			// For example, load the audio, set initial trim settings, etc.
+    			loadAudio(audioData);
+
+    			setInitialTrimSettings(trimSettings);
+
+    			// Clear the global data to avoid reuse
+    			window.audioTrimmerData = null;
+    		}
+
     		// syncWithGlobalSettings();
     		ctx = canvas.getContext('2d');
 
