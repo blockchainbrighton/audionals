@@ -5,7 +5,7 @@
     // Props and external dependencies
     export let externalOrdinalId = '';
     export let externalAudioContext;
-
+    export let channelIndex;
 
     // Accessing the global object
     // const globalSettings = window.UnifiedSequencerSettings;
@@ -23,13 +23,21 @@
     let startDimmedWidth = '0%', endDimmedWidth = '0%';
     let canvas, playbackCanvas, ctx, playbackCtx;
 
+    // Formatted time for display
+    let formattedStartTime = '0:00.00';
+    let formattedEndTime = '0:00.00';
+
+    // Reactive statements to update formatted time
+    $: formattedStartTime = formatTime($startSliderValue);
+    $: formattedEndTime = formatTime($endSliderValue);
+
 
     // Sync with global settings on component mount
     onMount(() => {
-        // Check if the data is available
         if (window.audioTrimmerData) {
-            const { audioData, ordinalId, channelNumber, trimSettings } = window.audioTrimmerData;
-
+            // Use the data from the global object
+            const { audioData, trimSettings } = window.audioTrimmerData;
+            // Load audio and set initial trim settings
             // Use this data to set up your component
             // For example, load the audio, set initial trim settings, etc.
             loadAudio(audioData);
@@ -42,6 +50,13 @@
         ctx = canvas.getContext('2d');
         playbackCtx = playbackCanvas.getContext('2d');
     });
+
+    function formatTime(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        seconds = Math.floor(seconds % 60);
+        const hundredths = Math.floor((seconds - Math.floor(seconds)) * 100);
+        return `${minutes}:${seconds.toString().padStart(2, '0')}.${hundredths}`;
+    }
 
     // Ensure disconnection and cleanup on component destruction
     onDestroy(() => {
@@ -210,17 +225,25 @@
     }
 
 
-   //  // Function to update global settings with local values
-   //  function updateGlobalSettings() {
-   //      if (!window.UnifiedSequencerSettings || !window.UnifiedSequencerSettings.settings) {
-   //          console.error('UnifiedSequencerSettings is not initialized');
-   //          return;
-   //      }
-   //      globalSettings.settings.masterSettings.trimValues[channelIndex] = {
-   //          startTrimTime: get(startSliderValue).toString(),
-   //          endTrimTime: get(endSliderValue).toString()
-   //      };
-   //  }
+  // Function to update global settings with local values
+function updateGlobalSettings() {
+    if (!window.UnifiedSequencerSettings || !window.UnifiedSequencerSettings.settings) {
+        console.error('UnifiedSequencerSettings is not initialized');
+        return;
+    }
+
+    // Ensure that channelIndex is defined and is a valid index
+    if (channelIndex === undefined || channelIndex < 0) {
+        console.error('Invalid or undefined channelIndex');
+        return;
+    }
+
+    // Update the specific channel's trim settings in the global object
+    window.UnifiedSequencerSettings.settings.masterSettings.trimValues[channelIndex] = {
+        startTrimTime: get(startSliderValue).toString(),
+        endTrimTime: get(endSliderValue).toString()
+    };
+}
 
     // Subscribe to store changes to keep the global object updated
     // startSliderValue.subscribe(updateGlobalSettings);
@@ -275,6 +298,12 @@
     <canvas bind:this={playbackCanvas} width="4000" height="800" class="playback-canvas"></canvas>
     <div class="dimmed" style="width: {startDimmedWidth}; left: 0;"></div>
     <div class="dimmed" style="width: {endDimmedWidth}; right: 0; left: auto;"></div>
+</div>
+
+<div>
+    <p>Start Time: {formattedStartTime}</p>
+    <p>End Time: {formattedEndTime}</p>
+    <!-- ... rest of the HTML -->
 </div>
 
 <input type="range" class="slider" bind:value={$startSliderValue} min="0" max={maxDuration} step="0.01" >

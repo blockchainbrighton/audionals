@@ -113,90 +113,61 @@ document.addEventListener("DOMContentLoaded", function() {
 
 document.querySelectorAll('.open-audio-trimmer').forEach(button => {
     button.addEventListener('click', function(event) {
-        console.log('Open audio trimmer button clicked');
+        console.log('[eventListeners.js] {button click handler} - Open audio trimmer button clicked');
 
-        // Get the channel element
         const channelElement = event.target.closest('.channel');
         if (!channelElement) {
-            return console.error('Channel element not found');
+            return console.error('[eventListeners.js] {button click handler} - Channel element not found');
         }
+        // Log the entire dataset of the channel element
+        console.log('[eventListeners.js] {button click handler} - Channel element dataset:', channelElement.dataset);
 
-        // Extract the URL or audio buffer for the audio sample
-        const audioData = channelElement.dataset.audioData; // Assuming audioData is the URL or buffer
+        // Ensure channelIndex is defined before using it
+        const channelIndex = parseInt(channelElement.id.split('-')[1]) - 1;
+        if (isNaN(channelIndex)) {
+            return console.error('[eventListeners.js] {button click handler} - Invalid channel index');
+        }
+        console.log('[eventListeners.js] {button click handler} - Channel Index:', channelIndex);
+
+        const audioData = channelElement.dataset.audioData;
         if (!audioData) {
-            return console.error('Audio data not found on the channel element');
+            return console.error('[eventListeners.js] {button click handler} - Audio data not found on the channel element');
         }
-        console.log('Audio Data:', audioData);
+        console.log('[eventListeners.js] {button click handler} - Audio Data:', audioData);
 
-        // Extract the ID from the originalUrl for the audio sample
         const originalUrl = channelElement.dataset.originalUrl;
         const ordinalId = originalUrl ? originalUrl.split('/').pop() : '';
         if (!ordinalId) {
-            return console.error('Original URL not found on the channel element');
+            return console.error('[eventListeners.js] {button click handler} - Original URL not found on the channel element');
         }
-        console.log('Ordinal ID:', ordinalId);
+        console.log('[eventListeners.js] {button click handler} - Ordinal ID:', ordinalId);
 
-        // Use the ID of the channel element as the channel number
-        const channelNumber = channelElement.id;
-        if (!channelNumber) {
-            return console.error('Channel number not found on the channel element');
-        }
-        console.log('Channel Number:', channelNumber);
+        const savedTrimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
+        console.log('[eventListeners.js] {button click handler} - Retrieved trim settings for channel:', channelIndex, savedTrimSettings);
 
-        // Retrieve trim settings for the channel
-        const savedTrimSettings = getTrimSettings(channelNumber);
-        console.log('Retrieved trim settings for channel:', channelNumber, savedTrimSettings);
-
-       // Store the necessary data for the Audio Trimmer
         window.audioTrimmerData = {
             audioData: audioData,
             ordinalId: ordinalId,
-            channelNumber: channelNumber,
-            trimSettings: savedTrimSettings || defaultSettings
+            channelIndex: channelIndex,
+            trimSettings: savedTrimSettings
         };
 
-        // Display the modal
-        const modal = document.getElementById('audio-trimmer-modal');
-        modal.style.display = 'block';
-        console.log('Modal displayed');
+        console.log('[eventListeners.js] {button click handler} - Data passed to Audio Trimmer component:', window.audioTrimmerData);
 
-        // Clear previous Audio Trimmer instance and instantiate a new one
+        const modal = document.getElementById('audio-trimmer-modal');
+        if (!modal) {
+            return console.error('[eventListeners.js] {button click handler} - Modal element not found');
+        }
+        modal.style.display = 'block';
+        console.log('[eventListeners.js] {button click handler} - Modal displayed');
+
         const trimmerContainer = document.getElementById('audio-trimmer-container');
         trimmerContainer.innerHTML = ''; // Clear the container
-
-        // Define default settings
-        const defaultSettings = { start: 0.01, end: 100 };
-
-        // Convert channelNumber to 0-indexed format
-        const channelIndex = parseInt(channelNumber.split('-')[1]) - 1;
-
-        // Instantiate the Audio Trimmer with settings
-        // Instantiate the Audio Trimmer with settings
-        // const audioTrimmer = new AudioTrimmer({
-        //     target: trimmerContainer,
-        //     props: {
-        //         externalAudioContext: audioContext,
-        //         externalOrdinalId: ordinalId,
-        //         channelIndex: channelIndex // Use the 0-indexed value
-        //     }
-        // });
-
-        // Retrieve global trim settings for the specified channel
-        const globalTrimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
-
-        // Set the start and end slider values from the global settings
-        audioTrimmer.$set({
-            startSliderValue: globalTrimSettings ? parseFloat(globalTrimSettings.start) : 0.01,
-            endSliderValue: globalTrimSettings ? parseFloat(globalTrimSettings.end) : 100
-        });
-        // Log the collected values
-        console.log('Audio trimmer instantiated with the following settings:', {
-            externalAudioContext: audioContext,
-            externalOrdinalId: ordinalId,
-            channelIndex: channelIndex,
-        });
+        console.log('[eventListeners.js] {button click handler} - Trimmer container cleared');
     });
 });
+
+
 
 // Close the modal when the user clicks on <span> (x)
 document.querySelector('.close-button').addEventListener('click', function() {

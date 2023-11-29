@@ -19,8 +19,11 @@ const fetchAudioMp3AndWav = async (url, channelIndex, loadSampleButtonElement = 
 
     const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"]`);
     channel.dataset.originalUrl = url;
+    channel.dataset.audioData = url; // Set the URL as audioData
     channel.dataset.audioDataLoaded = 'true';
-    channelSettings[channelIndex][0] = url;
+
+    console.log('[fetchAudioMp3AndWav] - Channel element dataset after fetching:', channelElement.dataset);
+
     saveCurrentSequence(currentSequence);
 
     if (loadSampleButtonElement) {

@@ -66,6 +66,12 @@ var app = (function () {
     function children(element) {
         return Array.from(element.childNodes);
     }
+    function set_data(text, data) {
+        data = '' + data;
+        if (text.data === data)
+            return;
+        text.data = data;
+    }
     function set_input_value(input, value) {
         input.value = value == null ? '' : value;
     }
@@ -448,14 +454,23 @@ var app = (function () {
     	let t7;
     	let div1;
     	let t8;
-    	let input1;
+    	let div3;
+    	let p0;
     	let t9;
-    	let input2;
     	let t10;
-    	let button1;
+    	let t11;
+    	let p1;
     	let t12;
-    	let button2;
+    	let t13;
     	let t14;
+    	let input1;
+    	let t15;
+    	let input2;
+    	let t16;
+    	let button1;
+    	let t18;
+    	let button2;
+    	let t20;
     	let button3;
     	let mounted;
     	let dispose;
@@ -479,16 +494,25 @@ var app = (function () {
     			t7 = space();
     			div1 = element("div");
     			t8 = space();
+    			div3 = element("div");
+    			p0 = element("p");
+    			t9 = text("Start Time: ");
+    			t10 = text(/*formattedStartTime*/ ctx[9]);
+    			t11 = space();
+    			p1 = element("p");
+    			t12 = text("End Time: ");
+    			t13 = text(/*formattedEndTime*/ ctx[10]);
+    			t14 = space();
     			input1 = element("input");
-    			t9 = space();
+    			t15 = space();
     			input2 = element("input");
-    			t10 = space();
+    			t16 = space();
     			button1 = element("button");
     			button1.textContent = "Play";
-    			t12 = space();
+    			t18 = space();
     			button2 = element("button");
     			button2.textContent = "Stop";
-    			t14 = space();
+    			t20 = space();
     			button3 = element("button");
     			button3.textContent = "Loop Selection";
     			attr(input0, "type", "text");
@@ -531,38 +555,47 @@ var app = (function () {
     			insert(target, t4, anchor);
     			insert(target, div2, anchor);
     			append(div2, canvas0);
-    			/*canvas0_binding*/ ctx[19](canvas0);
+    			/*canvas0_binding*/ ctx[22](canvas0);
     			append(div2, t5);
     			append(div2, canvas1);
-    			/*canvas1_binding*/ ctx[20](canvas1);
+    			/*canvas1_binding*/ ctx[23](canvas1);
     			append(div2, t6);
     			append(div2, div0);
     			append(div2, t7);
     			append(div2, div1);
     			insert(target, t8, anchor);
+    			insert(target, div3, anchor);
+    			append(div3, p0);
+    			append(p0, t9);
+    			append(p0, t10);
+    			append(div3, t11);
+    			append(div3, p1);
+    			append(p1, t12);
+    			append(p1, t13);
+    			insert(target, t14, anchor);
     			insert(target, input1, anchor);
     			set_input_value(input1, /*$startSliderValue*/ ctx[2]);
-    			insert(target, t9, anchor);
+    			insert(target, t15, anchor);
     			insert(target, input2, anchor);
     			set_input_value(input2, /*$endSliderValue*/ ctx[1]);
-    			insert(target, t10, anchor);
+    			insert(target, t16, anchor);
     			insert(target, button1, anchor);
-    			insert(target, t12, anchor);
+    			insert(target, t18, anchor);
     			insert(target, button2, anchor);
-    			insert(target, t14, anchor);
+    			insert(target, t20, anchor);
     			insert(target, button3, anchor);
 
     			if (!mounted) {
     				dispose = [
-    					listen(input0, "input", /*input0_input_handler*/ ctx[18]),
-    					listen(button0, "click", /*loadSample*/ ctx[11]),
-    					listen(input1, "change", /*input1_change_input_handler*/ ctx[21]),
-    					listen(input1, "input", /*input1_change_input_handler*/ ctx[21]),
-    					listen(input2, "change", /*input2_change_input_handler*/ ctx[22]),
-    					listen(input2, "input", /*input2_change_input_handler*/ ctx[22]),
-    					listen(button1, "click", /*playAudio*/ ctx[13]),
-    					listen(button2, "click", /*stopAudio*/ ctx[14]),
-    					listen(button3, "click", /*toggleLoop*/ ctx[12])
+    					listen(input0, "input", /*input0_input_handler*/ ctx[21]),
+    					listen(button0, "click", /*loadSample*/ ctx[13]),
+    					listen(input1, "change", /*input1_change_input_handler*/ ctx[24]),
+    					listen(input1, "input", /*input1_change_input_handler*/ ctx[24]),
+    					listen(input2, "change", /*input2_change_input_handler*/ ctx[25]),
+    					listen(input2, "input", /*input2_change_input_handler*/ ctx[25]),
+    					listen(button1, "click", /*playAudio*/ ctx[15]),
+    					listen(button2, "click", /*stopAudio*/ ctx[16]),
+    					listen(button3, "click", /*toggleLoop*/ ctx[14])
     				];
 
     				mounted = true;
@@ -580,6 +613,9 @@ var app = (function () {
     			if (dirty[0] & /*endDimmedWidth*/ 64) {
     				set_style(div1, "width", /*endDimmedWidth*/ ctx[6]);
     			}
+
+    			if (dirty[0] & /*formattedStartTime*/ 512) set_data(t10, /*formattedStartTime*/ ctx[9]);
+    			if (dirty[0] & /*formattedEndTime*/ 1024) set_data(t13, /*formattedEndTime*/ ctx[10]);
 
     			if (dirty[0] & /*maxDuration*/ 1) {
     				attr(input1, "max", /*maxDuration*/ ctx[0]);
@@ -615,17 +651,19 @@ var app = (function () {
     			if (detaching) detach(button0);
     			if (detaching) detach(t4);
     			if (detaching) detach(div2);
-    			/*canvas0_binding*/ ctx[19](null);
-    			/*canvas1_binding*/ ctx[20](null);
+    			/*canvas0_binding*/ ctx[22](null);
+    			/*canvas1_binding*/ ctx[23](null);
     			if (detaching) detach(t8);
-    			if (detaching) detach(input1);
-    			if (detaching) detach(t9);
-    			if (detaching) detach(input2);
-    			if (detaching) detach(t10);
-    			if (detaching) detach(button1);
-    			if (detaching) detach(t12);
-    			if (detaching) detach(button2);
+    			if (detaching) detach(div3);
     			if (detaching) detach(t14);
+    			if (detaching) detach(input1);
+    			if (detaching) detach(t15);
+    			if (detaching) detach(input2);
+    			if (detaching) detach(t16);
+    			if (detaching) detach(button1);
+    			if (detaching) detach(t18);
+    			if (detaching) detach(button2);
+    			if (detaching) detach(t20);
     			if (detaching) detach(button3);
     			mounted = false;
     			run_all(dispose);
@@ -633,6 +671,19 @@ var app = (function () {
     	};
     }
 
+    function formatTime(seconds) {
+    	const minutes = Math.floor(seconds / 60);
+    	seconds = Math.floor(seconds % 60);
+    	const hundredths = Math.floor((seconds - Math.floor(seconds)) * 100);
+    	return `${minutes}:${seconds.toString().padStart(2, '0')}.${hundredths}`;
+    }
+
+    //  // Function to synchronize with global settings
+    //  function syncWithGlobalSettings() {
+    //      const currentTrimValues = globalSettings.settings.masterSettings.trimValues[channelIndex];
+    //      startSliderValue.set(parseFloat(currentTrimValues.startTrimTime));
+    //      endSliderValue.set(parseFloat(currentTrimValues.endTrimTime));
+    //  }
     function base64ToArrayBuffer(base64) {
     	const binaryString = atob(base64);
     	const bytes = new Uint8Array(binaryString.length);
@@ -661,6 +712,7 @@ var app = (function () {
     	let $startSliderValue;
     	let { externalOrdinalId = '' } = $$props;
     	let { externalAudioContext } = $$props;
+    	let { channelIndex } = $$props;
 
     	// Accessing the global object
     	// const globalSettings = window.UnifiedSequencerSettings;
@@ -680,12 +732,18 @@ var app = (function () {
     	let startDimmedWidth = '0%', endDimmedWidth = '0%';
     	let canvas, playbackCanvas, ctx, playbackCtx;
 
+    	// Formatted time for display
+    	let formattedStartTime = '0:00.00';
+
+    	let formattedEndTime = '0:00.00';
+
     	// Sync with global settings on component mount
     	onMount(() => {
-    		// Check if the data is available
     		if (window.audioTrimmerData) {
-    			const { audioData, ordinalId, channelNumber, trimSettings } = window.audioTrimmerData;
+    			// Use the data from the global object
+    			const { audioData, trimSettings } = window.audioTrimmerData;
 
+    			// Load audio and set initial trim settings
     			// Use this data to set up your component
     			// For example, load the audio, set initial trim settings, etc.
     			loadAudio(audioData);
@@ -738,7 +796,7 @@ var app = (function () {
     				arrayBuffer = await response.arrayBuffer();
     			}
 
-    			$$invalidate(17, audioBuffer = await decodeAudioData(arrayBuffer));
+    			$$invalidate(20, audioBuffer = await decodeAudioData(arrayBuffer));
     			startSliderValue.set(0);
     			endSliderValue.set(audioBuffer.duration);
     			drawWaveform();
@@ -870,18 +928,28 @@ var app = (function () {
     	}
 
     	$$self.$$set = $$props => {
-    		if ('externalOrdinalId' in $$props) $$invalidate(15, externalOrdinalId = $$props.externalOrdinalId);
-    		if ('externalAudioContext' in $$props) $$invalidate(16, externalAudioContext = $$props.externalAudioContext);
+    		if ('externalOrdinalId' in $$props) $$invalidate(17, externalOrdinalId = $$props.externalOrdinalId);
+    		if ('externalAudioContext' in $$props) $$invalidate(18, externalAudioContext = $$props.externalAudioContext);
+    		if ('channelIndex' in $$props) $$invalidate(19, channelIndex = $$props.channelIndex);
     	};
 
     	$$self.$$.update = () => {
-    		if ($$self.$$.dirty[0] & /*externalOrdinalId*/ 32768) {
+    		if ($$self.$$.dirty[0] & /*$startSliderValue*/ 4) {
+    			// Reactive statements to update formatted time
+    			$$invalidate(9, formattedStartTime = formatTime($startSliderValue));
+    		}
+
+    		if ($$self.$$.dirty[0] & /*$endSliderValue*/ 2) {
+    			$$invalidate(10, formattedEndTime = formatTime($endSliderValue));
+    		}
+
+    		if ($$self.$$.dirty[0] & /*externalOrdinalId*/ 131072) {
     			if (externalOrdinalId) {
     				fetchAudio(externalOrdinalId);
     			}
     		}
 
-    		if ($$self.$$.dirty[0] & /*audioBuffer, $startSliderValue, maxDuration, $endSliderValue*/ 131079) {
+    		if ($$self.$$.dirty[0] & /*audioBuffer, $startSliderValue, maxDuration, $endSliderValue*/ 1048583) {
     			// Update the dimmed widths reactively
     			if (audioBuffer) {
     				$$invalidate(0, maxDuration = audioBuffer.duration);
@@ -901,6 +969,8 @@ var app = (function () {
     		endDimmedWidth,
     		canvas,
     		playbackCanvas,
+    		formattedStartTime,
+    		formattedEndTime,
     		startSliderValue,
     		endSliderValue,
     		loadSample,
@@ -909,6 +979,7 @@ var app = (function () {
     		stopAudio,
     		externalOrdinalId,
     		externalAudioContext,
+    		channelIndex,
     		audioBuffer,
     		input0_input_handler,
     		canvas0_binding,
@@ -929,8 +1000,9 @@ var app = (function () {
     			create_fragment$1,
     			safe_not_equal,
     			{
-    				externalOrdinalId: 15,
-    				externalAudioContext: 16
+    				externalOrdinalId: 17,
+    				externalAudioContext: 18,
+    				channelIndex: 19
     			},
     			null,
     			[-1, -1]

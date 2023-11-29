@@ -58,6 +58,7 @@ async function fetchAndParseContentType(url) {
 // Function to fetch audio data
 const fetchAudio = async (url, channelIndex, loadSampleButtonElement = null) => {
   try {
+    console.log(`[fetchAudio]{Start} Fetching audio from URL: ${url}, Channel Index: ${channelIndex}`);
     const response = await fetch(url);
     let data;
     let audioData;
@@ -70,9 +71,10 @@ const fetchAudio = async (url, channelIndex, loadSampleButtonElement = null) => 
     try {
       // Try to read the response as JSON
       data = await response.json();
-      // If this succeeds, extract the audio data from the JSON
+      console.log(`[fetchAudio]{JSON Response} Data received:`, data);
       audioData = base64ToArrayBuffer(data.audioData.split(',')[1]);
       filename = data.filename || data.fileName; // Get filename from JSON if available
+      console.log(`[fetchAudio]{Processed JSON} Audio Data and Filename:`, audioData, filename);
     } catch (e) {
       // If JSON parsing fails, try reading as binary data
       console.log("Response is not JSON, trying to read as arrayBuffer");
@@ -80,6 +82,7 @@ const fetchAudio = async (url, channelIndex, loadSampleButtonElement = null) => 
         audioData = await clonedResponse.arrayBuffer();
         isBinaryData = true;
         filename = url.split('/').pop(); // Use the URL to get the filename for binary data
+        console.log(`[fetchAudio]{Binary Data} Audio Data and Filename:`, audioData, filename);
       } catch (e) {
         console.error("Response could not be processed as JSON or as an ArrayBuffer.", e);
         return; // Exit the function if we cannot process the response
@@ -89,12 +92,15 @@ const fetchAudio = async (url, channelIndex, loadSampleButtonElement = null) => 
     // Proceed with audio data processing
     const audioBuffer = await decodeAudioData(audioData, channelIndex);
     audioBuffers.set(url, audioBuffer);
+    console.log(`[fetchAudio]{Audio Buffer Set} URL: ${url}, Channel Index: ${channelIndex}`);
 
     const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"]`);
     channel.dataset.originalUrl = url;
     channel.dataset.audioDataLoaded = 'true';
     channelSettings[channelIndex][0] = url;
     saveCurrentSequence(currentSequence);
+    console.log(`[fetchAudio]{Channel Updated} Channel Index: ${channelIndex}, URL: ${url}`);
+    console.log('[fetchAudio] - Channel element dataset after fetching:', channelElement.dataset);
 
     if (loadSampleButtonElement) {
       loadSampleButtonElement.classList.add('button-fixed-width');
@@ -102,11 +108,13 @@ const fetchAudio = async (url, channelIndex, loadSampleButtonElement = null) => 
       loadSampleButtonElement.textContent = filename ? filename.substring(0, 20) : 'Loaded Sample';
       loadSampleButtonElement.title = filename ? filename : 'Loaded Sample';
       activeChannels.add(channelIndex);
+      console.log(`[fetchAudio]{UI Updated} Channel Index: ${channelIndex}`);
     }
   } catch (error) {
-    console.error('Error fetching audio:', error);
+    console.error('[fetchAudio]{Error} Error fetching audio:', error);
   }
 };
+
 // Helper function to convert an ArrayBuffer to a Base64 string
 function bufferToBase64(buffer) {
   let binary = '';
