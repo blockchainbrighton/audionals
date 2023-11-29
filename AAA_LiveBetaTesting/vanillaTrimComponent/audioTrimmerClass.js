@@ -1,68 +1,65 @@
-  // index.js
+  // audioTrimmerClass.js
   
 
-        class AudioTrimmer {
-            constructor() {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                this.audioBuffer = null;
-                this.sourceNode = null;
-                this.isPlaying = false;
-                this.isLooping = false;
-                this.startTime = 0;
-                this.totalSampleDuration = 0;
-                this.startSliderValue = 0;
-                this.endSliderValue = 100;
-                this.trimmedSampleDuration = 0;
-                this.displayTimeout = null;
-            }
+  class AudioTrimmer {
+    constructor() {
+        console.log('AudioTrimmer constructor called');
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.audioBuffer = null;
+        this.sourceNode = null;
+        this.isPlaying = false;
+        this.isLooping = false;
+        this.startTime = 0;
+        this.totalSampleDuration = 0;
+        this.startSliderValue = 0;
+        this.endSliderValue = 100;
+        this.trimmedSampleDuration = 0;
+        this.displayTimeout = null;
+    }
 
-            initialize() {
-                ['ordinalIdInput', 'loadSampleButton', 'waveformCanvas', 'playbackCanvas', 'startSlider', 'endSlider', 'playButton', 'stopButton', 'loopButton', 'startDimmed', 'endDimmed']
-                    .forEach(id => this[id] = document.getElementById(id));
-                this.ctx = this.waveformCanvas.getContext('2d');
-                this.playbackCtx = this.playbackCanvas.getContext('2d');
-                this.addEventListeners();
+    initialize() {
+        console.log('Initializing AudioTrimmer');
+        ['ordinalIdInput', 'loadOrdinalButton', 'waveformCanvas', 'playbackCanvas', 'startSlider', 'endSlider', 'playButton', 'stopButton', 'loopButton', 'startDimmed', 'endDimmed']
+            .forEach(id => {
+                this[id] = document.getElementById(id);
+                console.log(`Element with ID ${id} initialized: `, this[id]);
+            });
+        this.ctx = this.waveformCanvas.getContext('2d');
+        this.playbackCtx = this.playbackCanvas.getContext('2d');
+        this.addEventListeners();
 
-                // Initialize slider values and event listeners
-                this.initializeSliders();
+        // Initialize slider values and event listeners
+        this.initializeSliders();
 
-                // Update the dimmed areas based on the initial slider values
-                this.updateDimmedAreas(); // Ensure dimmed areas are correctly set on page load
-            }
+        // Update the dimmed areas based on the initial slider values
+        this.updateDimmedAreas(); // Ensure dimmed areas are correctly set on page load
+        console.log('AudioTrimmer initialized');
+    }
 
-            initializeSliders() {
-                const startSlider = this.startSlider;
-                const endSlider = this.endSlider;
+    initializeSliders() {
+        console.log('Initializing sliders');
+        this.startSlider.addEventListener('input', () => {
+            this.startSliderValue = Math.min(this.startSlider.value, this.endSliderValue);
+            this.updateSliderValues();
+            console.log('Start slider updated:', this.startSliderValue);
+        });
 
-                // Initialize state
-                let startSliderState = 0;   // Start slider state (0-100)
-                let endSliderState = 100;    // End slider state (0-100)
+        this.endSlider.addEventListener('input', () => {
+            this.endSliderValue = Math.max(this.endSlider.value, this.startSliderValue);
+            this.updateSliderValues();
+            console.log('End slider updated:', this.endSliderValue);
+        });
+    }
 
-                startSlider.value = startSliderState;
-                endSlider.value = endSliderState;
-
-                startSlider.addEventListener('input', () => {
-                    startSliderState = parseInt(startSlider.value);
-                    if (startSliderState > endSliderState) {
-                        startSlider.value = endSliderState; // Limit to end slider position
-                    }
-                });
-
-                endSlider.addEventListener('input', () => {
-                    endSliderState = parseInt(endSlider.value);
-                    if (endSliderState < startSliderState) {
-                        endSlider.value = startSliderState; // Limit to start slider position
-                    }
-                });
-            }
-
-            updateSliderValues() {
-                this.startSliderValue = parseFloat(this.startSlider.value);
-                this.endSliderValue = parseFloat(this.endSlider.value);
-                this.updateDimmedAreas(); // This will update the dimmed areas based on the sliders
-                this.updateTrimmedSampleDuration();
-                this.debounceDisplayValues();
-            }
+    updateSliderValues() {
+        console.log('Updating slider values');
+        this.startSliderValue = parseFloat(this.startSlider.value);
+        this.endSliderValue = parseFloat(this.endSlider.value);
+        this.updateDimmedAreas(); // This will update the dimmed areas based on the sliders
+        this.updateTrimmedSampleDuration();
+        this.debounceDisplayValues();
+        console.log('Slider values updated:', this.startSliderValue, this.endSliderValue);
+    }
 
         
             updateDimmedAreas() {
@@ -73,6 +70,7 @@
                 const startDimmedWidth = `${this.startSliderValue / maxDuration * 100}%`;
                 const endDimmedWidth = `${(1 - this.endSliderValue / maxDuration) * 100}%`;
                 const endDimmedLeft = `${this.endSliderValue / maxDuration * 100}%`;
+                console.log(`[updateDimmedAreas pt1] Start Dimmed Width: ${startDimmedWidth}, End Dimmed Width: ${endDimmedWidth}, End Dimmed Left: ${endDimmedLeft}`);
 
                 // Adjust the start and end dimmed areas
                 this.startDimmed.style.width = startDimmedWidth;
@@ -81,6 +79,8 @@
                 // Calculate the position of the end dimmed area from the left
                 this.endDimmed.style.width = endDimmedWidth;
                 this.endDimmed.style.left = endDimmedLeft;
+                console.log(`[updateDimmedAreas pt2] Start Dimmed Width: ${startDimmedWidth}, End Dimmed Width: ${endDimmedWidth}, End Dimmed Left: ${endDimmedLeft}`);
+
             }
 
             updateTrimmedSampleDuration() {
@@ -92,9 +92,7 @@
 
 
             debounceDisplayValues() {
-                if (this.displayTimeout) {
-                    clearTimeout(this.displayTimeout);
-                }
+                clearTimeout(this.displayTimeout);
                 this.displayTimeout = setTimeout(() => this.displayValues(), 3000);
             }
 
@@ -109,7 +107,7 @@
             }
 
             addEventListeners() {
-                this.loadSampleButton.addEventListener('click', () => this.loadSample());
+                this.loadOrdinaleButton.addEventListener('click', () => this.loadOrdinal());
                 this.playButton.addEventListener('click', () => this.playAudio());
                 this.stopButton.addEventListener('click', () => this.stopAudio());
                 this.loopButton.addEventListener('click', () => this.toggleLoop());
@@ -117,12 +115,19 @@
                     this[slider].addEventListener('input', () => this.updateSliderValues()));
             }
 
-            async loadSample() {
-                if (!this.ordinalIdInput.value) return;
+            async loadOrdinal() {
+                console.log("[loadOrdinal] Method called");
+
+                if (!this.ordinalIdInput.value) {
+                    console.log("[loadOrdinal] No input value for ordinalIdInput");
+                    return;
+                }
                 this.startSliderValue = 0;
                 this.endSliderValue = 100;
                 this.updateSliderValues();
                 try {
+                    console.log(`[loadOrdinal] Fetching audio from URL: ${url}`);
+
                     const url = `https://ordinals.com/content/${this.ordinalIdInput.value}`;
                     const response = await fetch(url);
                     const contentType = response.headers.get('content-type');
@@ -133,17 +138,13 @@
                     this.updateSliderValues();
                     this.drawWaveform();
                 } catch (error) {
-                    console.error('Error fetching or decoding audio:', error);
+                    console.error('[loadOrdinal] Error fetching or decoding audio:', error);
                 }
                 if (this.audioBuffer) {
                     this.totalSampleDuration = this.audioBuffer.duration;
                     this.updateTrimmedSampleDuration();
+                    this.debounceDisplayValues();
                 }
-                if (this.audioBuffer) {
-                    this.totalSampleDuration = this.audioBuffer.duration;
-                    this.updateTrimmedSampleDuration();
-                }
-                this.debounceDisplayValues();
             }
 
             base64ToArrayBuffer(base64) {
@@ -151,41 +152,59 @@
             }
 
             decodeAudioData(audioData) {
+                console.log("[decodeAudioData] Decoding audio data");
                 return new Promise((resolve, reject) => 
-                    this.audioContext.decodeAudioData(audioData, resolve, e => reject(new Error(`Decoding audio data failed with error: ${e}`))));
+                    this.audioContext.decodeAudioData(audioData, 
+                        (decodedData) => {
+                            console.log("[decodeAudioData] Audio data decoded successfully");
+                            resolve(decodedData);
+                        }, 
+                        e => {
+                            console.error(`[decodeAudioData] Decoding audio data failed with error: ${e}`);
+                            reject(new Error(`Decoding audio data failed with error: ${e}`));
+                        }
+                    )
+                );
             }
 
-    drawWaveform() {
-        if (!this.audioBuffer) return;
-        const width = this.waveformCanvas.width;
-        const height = this.waveformCanvas.height;
-        const channelData = this.audioBuffer.getChannelData(0);
-        const step = Math.ceil(channelData.length / width);
-        const amp = height / 2;
-        this.ctx.clearRect(0, 0, width, height);
-        this.ctx.beginPath();
-
-        for (let i = 0; i < width; i++) {
-            const { min, max } = this.getMinMax(channelData, i * step, step);
-            this.ctx.moveTo(i, amp * (1 + min));
-            this.ctx.lineTo(i, amp * (1 + max));
-        }
-
-        this.ctx.stroke();
-    }
-
-    getMinMax(channelData, startIndex, step) {
-        let min = 1.0, max = -1.0;
-        for (let i = 0; i < step; i++) {
-            const datum = channelData[startIndex + i];
-            if (datum < min) min = datum;
-            if (datum > max) max = datum;
-        }
-        return { min, max };
-    }
+            drawWaveform() {
+                if (!this.audioBuffer) {
+                    console.log("[drawWaveform] No audio buffer available");
+                    return;
+                }
+            
+                console.log("[drawWaveform] Drawing waveform");               
+                const width = this.waveformCanvas.width;
+                const height = this.waveformCanvas.height;
+                const channelData = this.audioBuffer.getChannelData(0);
+                const step = Math.ceil(channelData.length / width);
+                const amp = height / 2;
+                this.ctx.clearRect(0, 0, width, height);
+                this.ctx.beginPath();
+        
+                for (let i = 0; i < width; i++) {
+                    const { min, max } = this.getMinMax(channelData, i * step, step);
+                    this.ctx.moveTo(i, amp - amp * min);
+                    this.ctx.lineTo(i, amp - amp * max);
+                }
+        
+                this.ctx.stroke();
+            }
+        
+            getMinMax(channelData, startIndex, step) {
+                let min = 1.0, max = -1.0;
+                for (let i = 0; i < step; i++) {
+                    const datum = channelData[startIndex + i];
+                    min = Math.min(min, datum);
+                    max = Math.max(max, datum);
+                }
+                return { min, max };
+            }
 
     playAudio() {
+        console.log("[playAudio] Attempting to play audio");
         if (this.isPlaying) {
+            console.log("[playAudio] Audio is already playing, stopping current playback");
             this.stopAudio();
         }
 

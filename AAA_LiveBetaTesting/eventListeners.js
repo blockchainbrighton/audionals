@@ -126,13 +126,6 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
             modal.innerHTML = html;
             modal.style.display = 'block';
             console.log('vanillaTrim component loaded and displayed');
-
-            // Check if the script is already loaded
-            if (!document.querySelector('script[src="vanillaTrimComponent/index.js"]')) {
-                const script = document.createElement('script');
-                script.src = 'vanillaTrimComponent/index.js';
-                document.body.appendChild(script);
-            }
         })
         .catch(error => console.error('Error loading vanillaTrim component:', error));
     });
@@ -154,7 +147,6 @@ window.onclick = function(event) {
     }
 };
 
-
 document.addEventListener('DOMContentLoaded', () => {
     const projectNameInput = document.getElementById('project-name');
 
@@ -163,6 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.unifiedSequencerSettings.updateSetting('projectName', projectName);
     });
 });
+
 
 // document.querySelectorAll('.open-audio-trimmer').forEach(button => {
 //     button.addEventListener('click', function(event) {
