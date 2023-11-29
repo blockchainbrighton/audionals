@@ -1,7 +1,23 @@
 
 // (function(l, r) { if (!l || l.getElementById('livereloadscript')) return; r = l.createElement('script'); r.async = 1; r.src = '//' + (self.location.host || 'localhost').split(':')[0] + ':35729/livereload.js?snipver=1'; r.id = 'livereloadscript'; l.getElementsByTagName('head')[0].appendChild(r) })(self.document);
+
 var app = (function () {
     'use strict';
+
+	window.trimSettings = (function() {
+		let settings = JSON.parse(localStorage.getItem('audioTrimSettings') || '{}');
+	
+		function update(channelIndex, newSettings) {
+			settings[channelIndex] = newSettings;
+			localStorage.setItem('audioTrimSettings', JSON.stringify(settings));
+		}
+	
+		function get(channelIndex) {
+			return settings[channelIndex] || { start: 0.01, end: 100 };
+		}
+	
+		return { update, get };
+	})();
 
     function noop() { }
     function add_location(element, file, line, column, char) {
@@ -648,9 +664,12 @@ var app = (function () {
     			insert_dev(target, t8, anchor);
     			insert_dev(target, input1, anchor);
     			set_input_value(input1, /*$startSliderValue*/ ctx[2]);
+				console.log("[bundle.js] {mount} Mounted start slider value:", /*maxDuration*/ ctx[2]);
+
     			insert_dev(target, t9, anchor);
     			insert_dev(target, input2, anchor);
-    			set_input_value(input2, /*$endSliderValue*/ ctx[1]);
+				set_input_value(input2, /*$endSliderValue*/ ctx[1]);				console.log("[bundle.js] {mount} Mounted end slider value:", /*maxDuration*/ ctx[0]);
+
     			insert_dev(target, t10, anchor);
     			insert_dev(target, button1, anchor);
     			insert_dev(target, t12, anchor);
@@ -692,16 +711,23 @@ var app = (function () {
     			}
 
     			if (dirty[0] & /*$startSliderValue*/ 4) {
-    				set_input_value(input1, /*$startSliderValue*/ ctx[2]);
-    			}
+					set_input_value(input1, /*$startSliderValue*/ ctx[2]);
+					console.log("[bundle.js] [update] Updated start slider value:", /*$startSliderValue*/ ctx[2]);
+				}
+				
+				if (dirty[0] & /*$endSliderValue*/ 2) {
+					set_input_value(input2, /*$endSliderValue*/ ctx[1]);
+					console.log("[bundle.js] [update] Updated end slider value:", /*$endSliderValue*/ ctx[1]);
+				}
 
     			if (dirty[0] & /*maxDuration*/ 1) {
     				attr_dev(input2, "max", /*maxDuration*/ ctx[0]);
     			}
 
-    			if (dirty[0] & /*$endSliderValue*/ 2) {
-    				set_input_value(input2, /*$endSliderValue*/ ctx[1]);
-    			}
+    			if (dirty[0] & /*maxDuration*/ 1) {
+					set_input_value(input2, /*maxDuration*/ ctx[0]);
+				}
+				
 
     			if (dirty[0] & /*isLooping*/ 64) {
     				toggle_class(button3, "off", !/*isLooping*/ ctx[6]);
@@ -773,14 +799,18 @@ var app = (function () {
     }
 
     function instance$1($$self, $$props, $$invalidate) {
+		
+
     	let $endSliderValue;
     	let $startSliderValue;
+	
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('AudioTrimmer', slots, []);
-    	let { externalOrdinalId = '' } = $$props;
-    	let { externalAudioContext } = $$props;
-    	let { channelIndex } = $$props;
-
+		let { externalOrdinalId = '', externalAudioContext, channelIndex, startSliderValue: initialStartValue, endSliderValue: initialEndValue } = $$props;
+		const startSliderValue = writable(initialStartValue || 0.01);
+		const endSliderValue = writable(initialEndValue || 100);
+		console.log("[bundle.js] {instance$1} Initial start slider value:", $startSliderValue);
+		console.log("bundle.jsInitial end slider value:", $endSliderValue);
     	// In your Svelte component
 		function storeTrimSettings() {
 			console.log(`Storing trim settings for channel ${channelIndex}`);
@@ -804,12 +834,7 @@ var app = (function () {
     	let startDimmedWidth = '0%';
     	let endDimmedWidth = '0%';
     	let maxDuration = 0;
-		const startSliderValue = writable(0.01);
-		validate_store(startSliderValue, 'startSliderValue');
-		component_subscribe($$self, startSliderValue, value => $$invalidate(2, $startSliderValue = value));
-		const endSliderValue = writable(100);
-		validate_store(endSliderValue, 'endSliderValue');
-		component_subscribe($$self, endSliderValue, value => $$invalidate(1, $endSliderValue = value));
+		
 		const loopEnabled = writable(false);
 		let isLooping = false;
 		let canvas, playbackCanvas, ctx, playbackCtx;
@@ -829,8 +854,12 @@ var app = (function () {
 
 		// Reactive block for handling slider value changes
 		$: if (shouldSaveSettings && maxDuration > 0) {
+			console.log("[bundle.js] {reactive block - pre} Reactive - start slider value:", $startSliderValue);
+			console.log("[bundle.js] {reactive block - pre} Reactive - end slider value:", $endSliderValue);
 			startDimmedWidth = `${Math.max(0, $startSliderValue / maxDuration) * 100}%`;
 			endDimmedWidth = `${Math.max(0, (1 - $endSliderValue / maxDuration)) * 100}%`;
+			console.log("[bundle.js] {reactive block - post} Reactive - start slider value:", $startSliderValue);
+			console.log("[bundle.js] {reactive block - post} Reactive - end slider value:", $endSliderValue);
 			storeTrimSettings();
 		}
 
@@ -874,38 +903,50 @@ var app = (function () {
     	}
 
     	async function fetchAudio(ordinalId) {
-    		const url = `https://ordinals.com/content/${ordinalId}`;
-
-    		try {
-    			const response = await fetch(url);
-    			const contentType = response.headers.get('content-type');
-    			let arrayBuffer;
-
-    			if (contentType && contentType.includes('application/json')) {
-    				const jsonData = await response.json();
-
-    				if (!jsonData.audioData) {
-    					throw new Error("No audioData field in JSON response");
-    				}
-
-    				const base64Audio = jsonData.audioData.split(',')[1];
-    				arrayBuffer = base64ToArrayBuffer(base64Audio);
-    			} else {
-    				arrayBuffer = await response.arrayBuffer();
-    			}
-
-    			$$invalidate(18, audioBuffer = await decodeAudioData(arrayBuffer));
-    			// Only set default values if no saved settings are found
+			const url = `https://ordinals.com/content/${ordinalId}`;
+			console.log('[fetchData] Starting to fetch audio for ordinalId:', ordinalId);
+		
+			try {
+				const response = await fetch(url);
+				console.log('[fetchData] Response received from fetch call');
+				const contentType = response.headers.get('content-type');
+				let arrayBuffer;
+		
+				if (contentType && contentType.includes('application/json')) {
+					console.log('[fetchData] Content type is JSON');
+					const jsonData = await response.json();
+		
+					if (!jsonData.audioData) {
+						throw new Error("No audioData field in JSON response");
+					}
+		
+					console.log('[fetchData] JSON data received, processing audio data');
+					const base64Audio = jsonData.audioData.split(',')[1];
+					arrayBuffer = base64ToArrayBuffer(base64Audio);
+				} else {
+					console.log('[fetchData] Content type is not JSON, assuming ArrayBuffer');
+					arrayBuffer = await response.arrayBuffer();
+				}
+		
+				console.log('[fetchData] Decoding audio data');
+				$$invalidate(18, audioBuffer = await decodeAudioData(arrayBuffer));
+				console.log('[fetchData] Audio data decoded, duration:', audioBuffer.duration);
+		
+				// Only set default values if no saved settings are found
 				const savedTrimSettings = getTrimSettings(channelIndex);
 				if (!savedTrimSettings) {
+					console.log('[fetchData] No saved trim settings found, setting default slider values');
 					startSliderValue.set(0);
 					endSliderValue.set(audioBuffer.duration);
+				} else {
+					console.log('[fetchData] Saved trim settings found:', savedTrimSettings);
 				}
 				drawWaveform();
-    		} catch(error) {
-    			console.error('Error fetching or decoding audio:', error);
-    		}
-    	}
+			} catch(error) {
+				console.error('[fetchData] Error fetching or decoding audio:', error);
+			}
+		}
+		
 
     	function loadSample() {
     		const idToUse = externalOrdinalId || ordinalId;
@@ -1128,32 +1169,32 @@ var app = (function () {
     	}
 
     	$$self.$$.update = () => {
-    		if ($$self.$$.dirty[0] & /*audioBuffer, $startSliderValue, maxDuration, $endSliderValue*/ 262151) {
-    			if (audioBuffer) {
-    				$$invalidate(0, maxDuration = audioBuffer.duration);
-    				$$invalidate(4, startDimmedWidth = `${Math.max(0, $startSliderValue / maxDuration) * 100}%`);
-    				$$invalidate(5, endDimmedWidth = `${Math.max(0, 1 - $endSliderValue / maxDuration) * 100}%`);
-
-    				if ($startSliderValue >= $endSliderValue) {
-    					startSliderValue.set($endSliderValue - 0.01);
-    				}
-
-    				if ($endSliderValue <= $startSliderValue) {
-    					endSliderValue.set($startSliderValue + 0.01);
-    				}
-
-    				if ($startSliderValue !== undefined && $endSliderValue !== undefined) {
-    					storeTrimSettings();
-    				}
-    			}
-    		}
-
-    		if ($$self.$$.dirty[0] & /*externalOrdinalId*/ 32768) {
-    			if (externalOrdinalId) {
-    				fetchAudio(externalOrdinalId);
-    			}
-    		}
-    	};
+			if ($$self.$$.dirty[0] & /*audioBuffer, $startSliderValue, maxDuration, $endSliderValue*/ 262151) {
+				if (audioBuffer) {
+					$$invalidate(0, maxDuration = audioBuffer.duration);
+					$$invalidate(4, startDimmedWidth = `${Math.max(0, $startSliderValue / maxDuration) * 100}%`);
+					$$invalidate(5, endDimmedWidth = `${Math.max(0, 1 - $endSliderValue / maxDuration) * 100}%`);
+		
+					if ($startSliderValue >= $endSliderValue) {
+						startSliderValue.set($endSliderValue - 0.01);
+					}
+		
+					if ($endSliderValue <= $startSliderValue || $endSliderValue > maxDuration) {
+						endSliderValue.set(Math.min($startSliderValue + 0.01, maxDuration));
+					}
+		
+					if ($startSliderValue !== undefined && $endSliderValue !== undefined) {
+						storeTrimSettings();
+					}
+				}
+			}
+		
+			if ($$self.$$.dirty[0] & /*externalOrdinalId*/ 32768) {
+				if (externalOrdinalId) {
+					fetchAudio(externalOrdinalId);
+				}
+			}
+		};
 
     	return [
     		maxDuration,
@@ -1269,6 +1310,9 @@ var app = (function () {
     			current = false;
     		},
     		d: function destroy(detaching) {
+				console.log("[bundle.js] {destroy} Before destroy - start slider value:", $startSliderValue);
+				console.log("[bundle.js] {destroy} Before destroy - end slider value:", $endSliderValue);
+
     			if (detaching) detach_dev(main);
     			destroy_component(audiotrimmer);
     		}
