@@ -138,7 +138,7 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
 
         // Retrieve trim settings for the channel
         const savedTrimSettings = getTrimSettings(channelNumber);
-        console.log('Retrieved trim settings for channel:', channelNumber, savedTrimSettings);
+        console.log('[trimmer eventListener] Retrieved trim settings for channel:', channelNumber, savedTrimSettings);
 
         // Display the modal
         const modal = document.getElementById('audio-trimmer-modal');
@@ -168,7 +168,7 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         });
 
         // Log the collected values
-        console.log('Audio trimmer instantiated with the following settings:', {
+        console.log('[trimmer eventListener] Audio trimmer instantiated with the following settings:', {
             externalAudioContext: audioContext,
             externalOrdinalId: ordinalId,
             channelIndex: channelNumber,

@@ -799,18 +799,26 @@ var app = (function () {
     }
 
     function instance$1($$self, $$props, $$invalidate) {
-		
-
-    	let $endSliderValue;
-    	let $startSliderValue;
-	
-    	let { $$slots: slots = {}, $$scope } = $$props;
-    	validate_slots('AudioTrimmer', slots, []);
+		let { $$slots: slots = {}, $$scope } = $$props;
+		validate_slots('AudioTrimmer', slots, []);
 		let { externalOrdinalId = '', externalAudioContext, channelIndex, startSliderValue: initialStartValue, endSliderValue: initialEndValue } = $$props;
-		const startSliderValue = writable(initialStartValue || 0.01);
-		const endSliderValue = writable(initialEndValue || 100);
+	
+		// Initialize writable stores with the initial values from props
+		// Only set initial values if they are explicitly provided
+		const startSliderValue = writable(typeof initialStartValue === 'number' ? initialStartValue : 0.01);
+		const endSliderValue = writable(typeof initialEndValue === 'number' ? initialEndValue : 100);
+	
+		// Subscribe to the stores to get their reactive values
+		let $startSliderValue;
+		let $endSliderValue;
+		component_subscribe($$self, startSliderValue, value => $startSliderValue = value);
+		component_subscribe($$self, endSliderValue, value => $endSliderValue = value);
+	
+		// Log the initial values with clear tagging
 		console.log("[bundle.js] {instance$1} Initial start slider value:", $startSliderValue);
-		console.log("bundle.jsInitial end slider value:", $endSliderValue);
+		console.log("[bundle.js] {instance$1} Initial end slider value:", $endSliderValue);
+	
+
     	// In your Svelte component
 		function storeTrimSettings() {
 			console.log(`Storing trim settings for channel ${channelIndex}`);
@@ -841,28 +849,41 @@ var app = (function () {
 		let shouldSaveSettings = false;
 
 		// Reactive block for updating dimmed areas and saving settings
-		$: if (audioBuffer) {
-			maxDuration = audioBuffer.duration;
-			startDimmedWidth = `${Math.max(0, $startSliderValue / maxDuration) * 100}%`;
-			endDimmedWidth = `${Math.max(0, (1 - $endSliderValue / maxDuration)) * 100}%`;
-			console.log(`Start dimmed width: ${startDimmedWidth}, End dimmed width: ${endDimmedWidth}`);
+$: if (audioBuffer) {
+    maxDuration = audioBuffer.duration;
+    startDimmedWidth = `${Math.max(0, $startSliderValue / maxDuration) * 100}%`;
+    endDimmedWidth = `${Math.max(0, (1 - $endSliderValue / maxDuration)) * 100}%`;
+    console.log(`Start dimmed width: ${startDimmedWidth}, End dimmed width: ${endDimmedWidth}`);
 
-			if (shouldSaveSettings) {
-				storeTrimSettings();
-			}
+    if (shouldSaveSettings) {
+        storeTrimSettings();
+    }
+}
+
+// Reactive block for handling slider value changes
+$: {
+    if (audioBuffer && maxDuration > 0) {
+        console.log("[bundle.js] {reactive block} Reactive - start slider value:", $startSliderValue);
+        console.log("[bundle.js] {reactive block} Reactive - end slider value:", $endSliderValue);
+        startDimmedWidth = `${Math.max(0, $startSliderValue / maxDuration) * 100}%`;
+        endDimmedWidth = `${Math.max(0, (1 - $endSliderValue / maxDuration)) * 100}%`;
+
+        if (shouldSaveSettings) {
+            storeTrimSettings();
+        }
+    }
+}
+
+
+		// Reactive block to update start slider value if initialStartValue is provided
+		$: if (initialStartValue !== undefined) {
+			startSliderValue.set(initialStartValue);
 		}
 
-		// Reactive block for handling slider value changes
-		$: if (shouldSaveSettings && maxDuration > 0) {
-			console.log("[bundle.js] {reactive block - pre} Reactive - start slider value:", $startSliderValue);
-			console.log("[bundle.js] {reactive block - pre} Reactive - end slider value:", $endSliderValue);
-			startDimmedWidth = `${Math.max(0, $startSliderValue / maxDuration) * 100}%`;
-			endDimmedWidth = `${Math.max(0, (1 - $endSliderValue / maxDuration)) * 100}%`;
-			console.log("[bundle.js] {reactive block - post} Reactive - start slider value:", $startSliderValue);
-			console.log("[bundle.js] {reactive block - post} Reactive - end slider value:", $endSliderValue);
-			storeTrimSettings();
+		// Reactive block to update end slider value if initialEndValue is provided
+		$: if (initialEndValue !== undefined) {
+			endSliderValue.set(initialEndValue);
 		}
-
 
 		onMount(() => {
 			ctx = canvas.getContext('2d');
@@ -872,8 +893,6 @@ var app = (function () {
 			const savedTrimSettings = getTrimSettings(channelIndex);
 			if (savedTrimSettings) {
 				console.log(`Retrieved trim settings for channel ${channelIndex}:`, savedTrimSettings);
-				startSliderValue.set(savedTrimSettings.start);
-				endSliderValue.set(savedTrimSettings.end);
 		
 				// Update dimmed widths based on saved settings
 				if (audioBuffer) {
@@ -936,8 +955,7 @@ var app = (function () {
 				const savedTrimSettings = getTrimSettings(channelIndex);
 				if (!savedTrimSettings) {
 					console.log('[fetchData] No saved trim settings found, setting default slider values');
-					startSliderValue.set(0);
-					endSliderValue.set(audioBuffer.duration);
+				
 				} else {
 					console.log('[fetchData] Saved trim settings found:', savedTrimSettings);
 				}
