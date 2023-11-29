@@ -131,16 +131,31 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
     });
 });
 
-document.querySelector('.close-button').addEventListener('click', function() {
-    document.getElementById('vanilla-trim-modal').style.display = 'none';
+// Event delegation for close button
+document.body.addEventListener('click', function(event) {
+    if (event.target.classList.contains('close-button')) {
+        document.getElementById('vanilla-trim-modal').style.display = 'none';
+    }
 });
 
+// Close the modal when the user clicks anywhere outside of the modal content
 window.onclick = function(event) {
     const modal = document.getElementById('vanilla-trim-modal');
-    if (event.target === modal) {
+    const modalContent = document.querySelector('.modal-content');
+    if (event.target === modal && !modalContent.contains(event.target)) {
         modal.style.display = 'none';
     }
 };
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    const projectNameInput = document.getElementById('project-name');
+
+    projectNameInput.addEventListener('input', () => {
+        const projectName = projectNameInput.value;
+        window.unifiedSequencerSettings.updateSetting('projectName', projectName);
+    });
+});
 
 // document.querySelectorAll('.open-audio-trimmer').forEach(button => {
 //     button.addEventListener('click', function(event) {
@@ -207,28 +222,3 @@ window.onclick = function(event) {
 //     });
 // });
 
-// Close the modal when the user clicks on <span> (x)
-document.querySelector('.close-button').addEventListener('click', function() {
-    console.log('Close button clicked');
-    document.getElementById('audio-trimmer-modal').style.display = 'none';
-    console.log('Modal closed');
-});
-
-// Close the modal when the user clicks anywhere outside of the modal
-window.onclick = function(event) {
-    const modal = document.getElementById('audio-trimmer-modal');
-    if (event.target === modal) {
-        console.log('Clicked outside the modal');
-        modal.style.display = 'none';
-        console.log('Modal closed');
-    }
-};
-
-document.addEventListener('DOMContentLoaded', () => {
-    const projectNameInput = document.getElementById('project-name');
-
-    projectNameInput.addEventListener('input', () => {
-        const projectName = projectNameInput.value;
-        window.unifiedSequencerSettings.updateSetting('projectName', projectName);
-    });
-});
