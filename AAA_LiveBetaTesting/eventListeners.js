@@ -119,39 +119,28 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         if (!channelElement) {
             return console.error('[eventListeners.js] {button click handler} - Channel element not found');
         }
-        // Log the entire dataset of the channel element
         console.log('[eventListeners.js] {button click handler} - Channel element dataset:', channelElement.dataset);
 
-        // Ensure channelIndex is defined before using it
         const channelIndex = parseInt(channelElement.id.split('-')[1]) - 1;
         if (isNaN(channelIndex)) {
             return console.error('[eventListeners.js] {button click handler} - Invalid channel index');
         }
         console.log('[eventListeners.js] {button click handler} - Channel Index:', channelIndex);
 
-        const audioData = channelElement.dataset.audioData;
-        if (!audioData) {
-            return console.error('[eventListeners.js] {button click handler} - Audio data not found on the channel element');
-        }
-        console.log('[eventListeners.js] {button click handler} - Audio Data:', audioData);
-
         const originalUrl = channelElement.dataset.originalUrl;
-        const ordinalId = originalUrl ? originalUrl.split('/').pop() : '';
-        if (!ordinalId) {
+        if (!originalUrl) {
             return console.error('[eventListeners.js] {button click handler} - Original URL not found on the channel element');
         }
-        console.log('[eventListeners.js] {button click handler} - Ordinal ID:', ordinalId);
+        console.log('[eventListeners.js] {button click handler} - Original URL:', originalUrl);
 
         const savedTrimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
         console.log('[eventListeners.js] {button click handler} - Retrieved trim settings for channel:', channelIndex, savedTrimSettings);
 
         window.audioTrimmerData = {
-            audioData: audioData,
-            ordinalId: ordinalId,
+            originalUrl: originalUrl,
             channelIndex: channelIndex,
             trimSettings: savedTrimSettings
         };
-
         console.log('[eventListeners.js] {button click handler} - Data passed to Audio Trimmer component:', window.audioTrimmerData);
 
         const modal = document.getElementById('audio-trimmer-modal');
@@ -161,9 +150,9 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         modal.style.display = 'block';
         console.log('[eventListeners.js] {button click handler} - Modal displayed');
 
-        const trimmerContainer = document.getElementById('audio-trimmer-container');
-        trimmerContainer.innerHTML = ''; // Clear the container
-        console.log('[eventListeners.js] {button click handler} - Trimmer container cleared');
+        // const trimmerContainer = document.getElementById('audio-trimmer-container');
+        // trimmerContainer.innerHTML = '';
+        // console.log('[eventListeners.js] {button click handler} - Trimmer container cleared');
     });
 });
 

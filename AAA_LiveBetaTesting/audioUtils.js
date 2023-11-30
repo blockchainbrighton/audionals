@@ -94,13 +94,18 @@ const fetchAudio = async (url, channelIndex, loadSampleButtonElement = null) => 
     audioBuffers.set(url, audioBuffer);
     console.log(`[fetchAudio]{Audio Buffer Set} URL: ${url}, Channel Index: ${channelIndex}`);
 
+    // Select the channel element using channelIndex
     const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex + 1}"]`);
+    if (!channel) {
+      console.error(`[fetchAudio]{Error} Channel element not found for Channel Index: ${channelIndex}`);
+      return;
+    }
+
     channel.dataset.originalUrl = url;
     channel.dataset.audioDataLoaded = 'true';
     channelSettings[channelIndex][0] = url;
     saveCurrentSequence(currentSequence);
     console.log(`[fetchAudio]{Channel Updated} Channel Index: ${channelIndex}, URL: ${url}`);
-    console.log('[fetchAudio] - Channel element dataset after fetching:', channelElement.dataset);
 
     if (loadSampleButtonElement) {
       loadSampleButtonElement.classList.add('button-fixed-width');

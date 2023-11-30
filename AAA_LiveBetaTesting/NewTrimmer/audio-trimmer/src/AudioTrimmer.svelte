@@ -126,10 +126,15 @@
         }
     }
 
+    let scaleFactor = 10; // Adjust this based on how zoomed in you want the waveform to be
+
     function drawWaveform() {
         if (!audioBuffer) return;
-        const width = canvas.width;
-        const height = canvas.height;
+        const duration = audioBuffer.duration;
+        const scaledWidth = duration * scaleFactor; // Calculate width based on duration and scale factor
+        canvas.width = scaledWidth; // Set the canvas width
+        playbackCanvas.width = scaledWidth; // Set the playback canvas width
+
         const channelData = audioBuffer.getChannelData(0);
         const step = Math.ceil(channelData.length / width);
         const amp = height / 2;
@@ -251,25 +256,25 @@ function updateGlobalSettings() {
 </script>
 
 <style>
-    .waveform-container {
-      position: relative;
-      width: 100%;
-      height: 200px;
-      background: #f3f3f3;
-      border: 1px solid #000;
-    }
+.waveform-container {
+    max-width: 100%; /* Limit the width to the parent container's width */
+    overflow-x: auto; /* Enable horizontal scrolling */
+    height: 200px; /* Adjust height as needed */
+    background: #f3f3f3;
+    border: 1px solid #000;
+}
 
-    canvas, .dimmed {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-    }
+canvas, .dimmed {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+}
 
-    canvas {
-      display: block;
-    }
+canvas {
+    display: block;
+    width: auto !important; /* Allow canvas to expand as needed */
+}
 
     .slider {
       width: 100%;
