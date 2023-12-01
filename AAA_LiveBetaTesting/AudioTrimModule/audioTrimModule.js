@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => new AudioTrimmer().initialize());
+// audioTrimModule.js 
 
 class AudioTrimmer {
     constructor() {
@@ -9,8 +9,8 @@ class AudioTrimmer {
         this.isLooping = false;
         this.startTime = 0;
         this.totalSampleDuration = 0;
-        this.startSliderValue = 0;
-        this.endSliderValue = 100;
+        this.startSliderValue = 0.01;
+        this.endSliderValue = 10.00;
         this.trimmedSampleDuration = 0;
         this.displayTimeout = null;
     }
@@ -33,12 +33,9 @@ class AudioTrimmer {
         const startSlider = this.startSlider;
         const endSlider = this.endSlider;
 
-        // Initialize state
-        let startSliderState = 0;   // Start slider state (0-100)
-        let endSliderState = 100;    // End slider state (0-100)
-
-        startSlider.value = startSliderState;
-        endSlider.value = endSliderState;
+        // Set initial slider values
+        startSlider.value = this.startSliderValue;
+        endSlider.value = this.endSliderValue;
 
         startSlider.addEventListener('input', () => {
             startSliderState = parseInt(startSlider.value);
@@ -112,8 +109,13 @@ class AudioTrimmer {
         this.playButton.addEventListener('click', () => this.playAudio());
         this.stopButton.addEventListener('click', () => this.stopAudio());
         this.loopButton.addEventListener('click', () => this.toggleLoop());
-        ['startSlider', 'endSlider'].forEach(slider => 
-            this[slider].addEventListener('input', () => this.updateSliderValues()));
+        ['startSlider', 'endSlider'].forEach(slider => {
+            this[slider].addEventListener('input', () => {
+                this.updateSliderValues();
+                // Call to update the global settings with the new slider values
+                setTrimSettings(this.startSliderValue, this.endSliderValue);
+            });
+        });
     }
 
     async loadSample() {

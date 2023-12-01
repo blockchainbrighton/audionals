@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function openAudioTrimmerModal() {
-    fetch('audioTrimModule.html')
+    fetch('AudioTrimModule/audioTrimModule.html')
         .then(response => response.text())
         .then(html => {
             const container = document.getElementById('audio-trimmer-container');
@@ -18,38 +18,38 @@ function openAudioTrimmerModal() {
 
             // Initialize AudioTrimmer here, after the content is loaded
             if (typeof AudioTrimmer === 'function') {
-                const trimmer = new AudioTrimmer();
-                trimmer.initialize();
+                setTimeout(() => {
+                    const trimmer = new AudioTrimmer();
+                    trimmer.initialize();
+                }, 0);
             }
 
             document.getElementById('audio-trimmer-modal').style.display = 'block';
-        })
-        .catch(error => {
-            console.error('Error loading audio trimmer module:', error);
-        });
-        // After loading the trimmer, retrieve and apply saved settings
-        getTrimSettings().then(settings => {
+
+            // Retrieve and apply saved settings
+            const settings = getTrimSettings();
             if (settings) {
-                // Assuming AudioTrimmer class has methods to set these values
                 const trimmer = new AudioTrimmer();
                 trimmer.setStartSliderValue(settings.startSliderValue);
                 trimmer.setEndSliderValue(settings.endSliderValue);
                 trimmer.setIsLooping(settings.isLooping);
-        }
-    });    
+            }
+        })
+        .catch(error => {
+            console.error('Error loading audio trimmer module:', error);
+        });
 }
 
 // Function to save trim settings
-function setTrimSettings(settings) {
-    localStorage.setItem('audioTrimSettings', JSON.stringify(settings));
+function setTrimSettings(startSliderValue, endSliderValue) {
+    // Assuming unifiedSequencerSettings is the global object
+    window.unifiedSequencerSettings.updateTrimSettings(startSliderValue, endSliderValue);
 }
 
 // Function to get trim settings
 function getTrimSettings() {
-    return new Promise(resolve => {
-        const settings = localStorage.getItem('audioTrimSettings');
-        resolve(settings ? JSON.parse(settings) : null);
-    });
+    // Assuming unifiedSequencerSettings is the global object
+    return window.unifiedSequencerSettings.getTrimSettings();
 }
 
 // Close modal functionality

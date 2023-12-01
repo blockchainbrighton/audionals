@@ -7,6 +7,10 @@ class UnifiedSequencerSettings {
                 projectName: '',
                 projectBPM: 120, // Default BPM, can be adjusted
                 projectURLs: new Array(16).fill(''), // Array of 16 URLs
+                trimSettings: {
+                    startSliderValue: 0.01,
+                    endSliderValue: 10.00,
+                },
                 projectURLNames: new Array(16).fill(''), // Array of 16 URL names
                 projectSequences: this.initializeSequences(16, 16, 64) // 16 Sequences, each with 16 channels, each channel with 64 steps
             },
@@ -41,6 +45,35 @@ class UnifiedSequencerSettings {
         } else {
             console.error(`Setting ${key} does not exist in masterSettings`);
         }
+    }
+    setStartSliderValue(value) {
+        this.startSliderValue = value;
+        if (this.startSlider) {
+            this.startSlider.value = value;
+        }
+    }
+
+    setEndSliderValue(value) {
+        this.endSliderValue = value;
+        if (this.endSlider) {
+            this.endSlider.value = value;
+        }
+    }
+
+    setIsLooping(isLooping) {
+        this.isLooping = isLooping;
+        // Additional logic to handle the looping state if needed
+    }
+
+   // Method to update trim settings
+    updateTrimSettings(startSliderValue, endSliderValue) {
+        this.settings.masterSettings.trimSettings.startSliderValue = startSliderValue;
+        this.settings.masterSettings.trimSettings.endSliderValue = endSliderValue;
+    }
+
+    // Method to get trim settings
+    getTrimSettings() {
+        return this.settings.masterSettings.trimSettings;
     }
 
 // Method to update the state of a specific step

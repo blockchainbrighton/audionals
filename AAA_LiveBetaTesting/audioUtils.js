@@ -122,10 +122,10 @@ function playSound(channel, currentStep) {
       const channelIndex = parseInt(channel.dataset.id.split('-')[1]);
       console.log("[playSound] Channel index:", channelIndex);
 
-      // Retrieve trim settings using LocalStorageUtils
-      const trimSettings = getTrimSettings(`channel-${channelIndex}`);
-      let trimStart = trimSettings ? trimSettings.start : 0;
-      let trimEnd = trimSettings ? trimSettings.end : audioBuffer.duration;
+      // Retrieve trim settings using the global object
+      const trimSettings = window.unifiedSequencerSettings.getTrimSettings();
+      let trimStart = trimSettings.startSliderValue;
+      let trimEnd = trimSettings.endSliderValue;
       console.log("[playSound] Retrieved trimStart and trimEnd:", trimStart, trimEnd);
 
       trimStart = Math.max(0, Math.min(trimStart, audioBuffer.duration));
