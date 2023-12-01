@@ -136,10 +136,6 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         }
         console.log('Channel Number:', channelNumber);
 
-        // Retrieve trim settings for the channel
-        const savedTrimSettings = getTrimSettings(channelNumber);
-        console.log('Retrieved trim settings for channel:', channelNumber, savedTrimSettings);
-
         // Display the modal
         const modal = document.getElementById('audio-trimmer-modal');
         if (!modal) {
@@ -148,33 +144,63 @@ document.querySelectorAll('.open-audio-trimmer').forEach(button => {
         modal.style.display = 'block';
         console.log('Modal displayed');
 
-        // Clear previous Audio Trimmer instance and instantiate a new one
-        const trimmerContainer = document.getElementById('audio-trimmer-container');
-        trimmerContainer.innerHTML = ''; // Clear the container
-
-        // Define default settings
-        const defaultSettings = { start: 0.01, end: 100 };
-
-        // Instantiate the Audio Trimmer with settings
-        const audioTrimmer = new AudioTrimmer({
-            target: trimmerContainer,
-            props: {
-                externalAudioContext: audioContext,
-                externalOrdinalId: ordinalId,
-                channelIndex: channelNumber,
-                startSliderValue: savedTrimSettings?.start || defaultSettings.start,
-                endSliderValue: savedTrimSettings?.end || defaultSettings.end
-            }
-        });
-
-        // Log the collected values
-        console.log('Audio trimmer instantiated with the following settings:', {
-            externalAudioContext: audioContext,
-            externalOrdinalId: ordinalId,
-            channelIndex: channelNumber,
-        });
+        // Load the standalone HTML file into the modal
+        loadAudioTrimmerHTML(modal, ordinalId, channelNumber);
     });
 });
+
+function loadAudioTrimmerHTML(modal, ordinalId, channelNumber) {
+    fetch('audioTrimSvelteComponent/vanillaTrim.html')
+        .then(response => response.text())
+        .then(html => {
+            // Create a Blob from the HTML string
+            const blob = new Blob([html], { type: 'text/html' });
+
+            // Create an Object URL for the Blob
+            const url = URL.createObjectURL(blob);
+
+            // Create an iframe and set its source to the Object URL
+            const iframe = document.createElement('iframe');
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.src = url;
+
+            // Clear the modal content and append the iframe
+            modal.innerHTML = '';
+            modal.appendChild(iframe);
+
+            // Access the content of the iframe and initialize AudioTrimmer
+            iframe.onload = () => {
+                const iframeWindow = iframe.contentWindow;
+                if (iframeWindow.AudioTrimmer) {
+                    const audioTrimmer = new iframeWindow.AudioTrimmer(channelNumber, ordinalId);
+                    audioTrimmer.initialize();
+                } else {
+                    console.error("AudioTrimmer class not found");
+                }
+            };
+        })
+        .catch(error => console.error('Failed to load audio trimmer HTML:', error));
+}
+
+// Assuming AudioTrimmer class is defined in the loaded HTML or in a linked script
+// Make sure the script tag in the loaded HTML is executed after the HTML is loaded
+function executeScriptFromHTML(container) {
+    // Find the script element in the container
+    const scriptElement = container.querySelector('script');
+    
+    if (scriptElement) {
+        // Create a new script element
+        const scriptTag = document.createElement('script');
+        scriptTag.textContent = scriptElement.textContent;
+        
+        // Append the new script element to the container (or document.body)
+        container.appendChild(scriptTag);
+    }
+}
+
+
+
 
 // Close the modal when the user clicks on <span> (x)
 document.querySelector('.close-button').addEventListener('click', function() {
