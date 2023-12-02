@@ -32,22 +32,22 @@ class AudioTrimmer {
     initializeSliders() {
         const startSlider = this.startSlider;
         const endSlider = this.endSlider;
-
+    
         // Set initial slider values
         startSlider.value = this.startSliderValue;
         endSlider.value = this.endSliderValue;
-
+    
         startSlider.addEventListener('input', () => {
-            startSliderState = parseInt(startSlider.value);
-            if (startSliderState > endSliderState) {
-                startSlider.value = endSliderState; // Limit to end slider position
+            let startSliderState = parseFloat(startSlider.value); // Declare locally
+            if (startSliderState > parseFloat(endSlider.value)) {
+                startSlider.value = endSlider.value; // Limit to end slider position
             }
         });
-
+    
         endSlider.addEventListener('input', () => {
-            endSliderState = parseInt(endSlider.value);
-            if (endSliderState < startSliderState) {
-                endSlider.value = startSliderState; // Limit to start slider position
+            let endSliderState = parseFloat(endSlider.value); // Declare locally
+            if (endSliderState < parseFloat(startSlider.value)) {
+                endSlider.value = startSlider.value; // Limit to start slider position
             }
         });
     }

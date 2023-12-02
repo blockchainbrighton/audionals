@@ -9,36 +9,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-function openAudioTrimmerModal() {
-    fetch('AudioTrimModule/audioTrimModule.html')
-        .then(response => response.text())
-        .then(html => {
-            const container = document.getElementById('audio-trimmer-container');
-            container.innerHTML = html;
-
-            // Initialize AudioTrimmer here, after the content is loaded
-            if (typeof AudioTrimmer === 'function') {
-                setTimeout(() => {
-                    const trimmer = new AudioTrimmer();
-                    trimmer.initialize();
-                }, 0);
-            }
-
-            document.getElementById('audio-trimmer-modal').style.display = 'block';
-
-            // Retrieve and apply saved settings
-            const settings = getTrimSettings();
-            if (settings) {
-                const trimmer = new AudioTrimmer();
-                trimmer.setStartSliderValue(settings.startSliderValue);
-                trimmer.setEndSliderValue(settings.endSliderValue);
-                trimmer.setIsLooping(settings.isLooping);
-            }
-        })
-        .catch(error => {
-            console.error('Error loading audio trimmer module:', error);
-        });
-}
 
 // Function to save trim settings
 function setTrimSettings(startSliderValue, endSliderValue) {
@@ -50,6 +20,25 @@ function setTrimSettings(startSliderValue, endSliderValue) {
 function getTrimSettings() {
     // Assuming unifiedSequencerSettings is the global object
     return window.unifiedSequencerSettings.getTrimSettings();
+}
+
+function setStartSliderValue(value) {
+    this.startSliderValue = value;
+    if (this.startSlider) {
+        this.startSlider.value = value;
+    }
+}
+
+function setEndSliderValue(value) {
+    this.endSliderValue = value;
+    if (this.endSlider) {
+        this.endSlider.value = value;
+    }
+}
+
+function setIsLooping(isLooping) {
+    this.isLooping = isLooping;
+    // Additional logic to handle the looping state if needed
 }
 
 // Close modal functionality
@@ -65,3 +54,33 @@ document.querySelector('.close-button').addEventListener('click', function() {
 
     document.getElementById('audio-trimmer-modal').style.display = 'none';
 });
+
+
+function openAudioTrimmerModal() {
+    fetch('AudioTrimModule/audioTrimModule.html')
+        .then(response => response.text())
+        .then(html => {
+            const container = document.getElementById('audio-trimmer-container');
+            container.innerHTML = html;
+
+            const trimmer = new AudioTrimmer();
+            if (typeof AudioTrimmer === 'function') {
+                setTimeout(() => {
+                    trimmer.initialize();
+
+                    // Retrieve and apply saved settings
+                    const settings = getTrimSettings();
+                    if (settings) {
+                    setStartSliderValue(settings.startSliderValue);
+                    setEndSliderValue(settings.endSliderValue);
+                    setIsLooping(settings.isLooping);
+                    }
+                }, 0);
+            }
+
+            document.getElementById('audio-trimmer-modal').style.display = 'block';
+        })
+        .catch(error => {
+            console.error('Error loading audio trimmer module:', error);
+        });
+}

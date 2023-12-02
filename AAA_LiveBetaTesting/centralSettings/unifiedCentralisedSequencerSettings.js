@@ -46,24 +46,6 @@ class UnifiedSequencerSettings {
             console.error(`Setting ${key} does not exist in masterSettings`);
         }
     }
-    setStartSliderValue(value) {
-        this.startSliderValue = value;
-        if (this.startSlider) {
-            this.startSlider.value = value;
-        }
-    }
-
-    setEndSliderValue(value) {
-        this.endSliderValue = value;
-        if (this.endSlider) {
-            this.endSlider.value = value;
-        }
-    }
-
-    setIsLooping(isLooping) {
-        this.isLooping = isLooping;
-        // Additional logic to handle the looping state if needed
-    }
 
    // Method to update trim settings
     updateTrimSettings(startSliderValue, endSliderValue) {
