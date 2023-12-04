@@ -5,14 +5,15 @@ class UnifiedSequencerSettings {
         this.settings = {
             masterSettings: {
                 projectName: '',
-                projectBPM: 120, // Default BPM, can be adjusted
-                projectURLs: new Array(16).fill(''), // Array of 16 URLs
-                trimSettings: {
+                projectBPM: 120,
+                projectURLs: new Array(16).fill(''),
+                trimSettings: new Array(16).fill().map(() => ({
                     startSliderValue: 0.01,
                     endSliderValue: 10.00,
-                },
-                projectURLNames: new Array(16).fill(''), // Array of 16 URL names
-                projectSequences: this.initializeSequences(16, 16, 64) // 16 Sequences, each with 16 channels, each channel with 64 steps
+                    totalSampleDuration: 0
+                })),
+                projectURLNames: new Array(16).fill(''),
+                projectSequences: this.initializeSequences(16, 16, 64)
             },
             // Add other settings as needed
         };
@@ -39,11 +40,26 @@ class UnifiedSequencerSettings {
     }
 
     // Method to update a specific setting
-    updateSetting(key, value) {
+    updateSetting(key, value, channelIndex = null) {
         if (key in this.settings.masterSettings) {
-            this.settings.masterSettings[key] = value;
+            if (Array.isArray(this.settings.masterSettings[key]) && channelIndex !== null) {
+                // If the setting is an array and a channel index is provided, update the specific element
+                this.settings.masterSettings[key][channelIndex] = value;
+            } else {
+                // If the setting is not an array or no channel index is provided, update the whole setting
+                this.settings.masterSettings[key] = value;
+            }
         } else {
             console.error(`Setting ${key} does not exist in masterSettings`);
+        }
+    }
+
+    // Method to update audio data for a specific channel
+    updateSampleDuration(duration, channelIndex) {
+        if (this.settings.masterSettings.trimSettings[channelIndex]) {
+            this.settings.masterSettings.trimSettings[channelIndex].totalSampleDuration = duration;
+        } else {
+            console.error(`Trim settings not found for channel index: ${channelIndex}`);
         }
     }
 
@@ -58,22 +74,39 @@ class UnifiedSequencerSettings {
         return this.settings.masterSettings.trimSettings;
     }
 
-// Method to update the state of a specific step
-updateStepState(sequenceNumber, channelIndex, stepIndex, state) {
-    let adjustedSequenceNumber = sequenceNumber + 1;
-    let adjustedChannelIndex = channelIndex + 1;
+    // Method to update the state of a specific step
+    updateStepState(sequenceNumber, channelIndex, stepIndex, state) {
+        let adjustedSequenceNumber = sequenceNumber + 1;
+        let adjustedChannelIndex = channelIndex + 1;
 
-    if (this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`] &&
-        this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`][`ch${adjustedChannelIndex}`] &&
-        stepIndex < this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`][`ch${adjustedChannelIndex}`].length) {
-        this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`][`ch${adjustedChannelIndex}`][stepIndex] = state;
-    } else {
-        console.error('Error updating step state: Invalid sequence, channel, or step index');
+        if (this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`] &&
+            this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`][`ch${adjustedChannelIndex}`] &&
+            stepIndex < this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`][`ch${adjustedChannelIndex}`].length) {
+            this.settings.masterSettings.projectSequences[`Sequence${adjustedSequenceNumber}`][`ch${adjustedChannelIndex}`][stepIndex] = state;
+        } else {
+            console.error('Error updating step state: Invalid sequence, channel, or step index');
+        }
     }
-}
 
 
+    // Method to get the audio URL for a specific channel
+    getAudioUrlForChannel(channelIndex) {
+        // Assuming channelIndex is 0-based and corresponds directly to the array index
+        return this.settings.masterSettings.projectURLs[channelIndex];
+    }
 
+    // Method to get the trim settings for a specific channel
+    getTrimSettingsForChannel(channelIndex) {
+        // Assuming channelIndex is 0-based and corresponds directly to the array index
+        const trimSettings = this.settings.masterSettings.trimSettings[channelIndex];
+        return trimSettings ? {
+            startSliderValue: trimSettings.startSliderValue,
+            endSliderValue: trimSettings.endSliderValue
+        } : {
+            startSliderValue: 0.01, // Default value if not set
+            endSliderValue: this.totalSampleDuration // Default to total sample duration
+        };
+    }
 
     // Method to get a specific setting
     getSetting(key) {

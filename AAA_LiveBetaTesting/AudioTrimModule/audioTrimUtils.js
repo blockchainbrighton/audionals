@@ -2,12 +2,13 @@
 
 document.addEventListener('DOMContentLoaded', function() {
     // Add event listener to all "T" buttons
-    document.querySelectorAll('.open-audio-trimmer').forEach(button => {
+    document.querySelectorAll('.open-audio-trimmer').forEach((button, index) => {
         button.addEventListener('click', function() {
-            openAudioTrimmerModal();
+            openAudioTrimmerModal(index); // Pass the channel index
         });
     });
 });
+
 
 
 // Function to save trim settings
@@ -56,7 +57,7 @@ document.querySelector('.close-button').addEventListener('click', function() {
 });
 
 
-function openAudioTrimmerModal() {
+function openAudioTrimmerModal(channelIndex) {
     fetch('AudioTrimModule/audioTrimModule.html')
         .then(response => response.text())
         .then(html => {
@@ -68,12 +69,17 @@ function openAudioTrimmerModal() {
                 setTimeout(() => {
                     trimmer.initialize();
 
-                    // Retrieve and apply saved settings
-                    const settings = getTrimSettings();
-                    if (settings) {
-                    setStartSliderValue(settings.startSliderValue);
-                    setEndSliderValue(settings.endSliderValue);
-                    setIsLooping(settings.isLooping);
+                    // Retrieve audio sample URL and trim settings for the channel
+                    const audioUrl = window.unifiedSequencerSettings.getAudioUrlForChannel(channelIndex);
+                    const trimSettings = window.unifiedSequencerSettings.getTrimSettingsForChannel(channelIndex);
+
+                    if (audioUrl) {
+                        trimmer.loadSample(audioUrl); // Load the audio sample
+                    }
+                    if (trimSettings) {
+                        setStartSliderValue(trimSettings.startSliderValue);
+                        setEndSliderValue(trimSettings.endSliderValue);
+                        setIsLooping(trimSettings.isLooping);
                     }
                 }, 0);
             }
@@ -84,3 +90,5 @@ function openAudioTrimmerModal() {
             console.error('Error loading audio trimmer module:', error);
         });
 }
+
+// Add implementations for getAudioUrlForChannel and getTrimSettingsForChannel in UnifiedSequencerSettings

@@ -574,26 +574,39 @@ const loadPreset = (preset) => {
 
     // console.log("loadPreset: Loading preset:", preset);
 
-  const presetData = presets[preset];
-
-  if (!presetData) {
-    console.error('Preset not found:', preset);
-    return;
-  }
-
-  channels.forEach((channel, index) => {
-    const channelData = presetData.channels[index];
-    if (!channelData) {
-      console.warn(`No preset data for channel index: ${index + 1}`);
-      return; // Skip this channel since there's no data for it in the preset
+    const presetData = presets[preset];
+    if (!presetData) {
+        console.error('Preset not found:', preset);
+        return;
     }
 
-    const { url, triggers, toggleMuteSteps, mute } = channelData;
+    channels.forEach((channel, index) => {
+        const channelData = presetData.channels[index];
+        if (!channelData) {
+            console.warn(`No preset data for channel index: ${index + 1}`);
+            return;
+        }
 
-    if (url) { // Only fetch audio if a URL is provided
-      const loadSampleButton = document.querySelector(`.channel[data-id="Channel-${index + 1}"] .load-sample-button`);
-      fetchAudio(url, index, loadSampleButton);
-    }
+        const { url, triggers, toggleMuteSteps, mute } = channelData;
+
+        if (url) {
+            const loadSampleButton = document.querySelector(`.channel[data-id="Channel-${index + 1}"] .load-sample-button`);
+            fetchAudio(url, index, loadSampleButton).then(() => {
+                const audioTrimmer = getAudioTrimmerInstanceForChannel(index);
+                if (audioTrimmer) {
+                    audioTrimmer.loadSampleFromURL(url).then(() => {
+                        // Set initial trim settings
+                        const startSliderValue = channelData.trimSettings?.startSliderValue || 0.01;
+                        const endSliderValue = channelData.trimSettings?.endSliderValue || audioTrimmer.totalSampleDuration;
+                        audioTrimmer.setStartSliderValue(startSliderValue);
+                        audioTrimmer.setEndSliderValue(endSliderValue);
+
+                        // Update global settings
+                        window.unifiedSequencerSettings.updateTrimSettings(startSliderValue, endSliderValue, index);
+                    });
+                }
+            });
+        }
 
     triggers.forEach(pos => {
       const btn = document.querySelector(`.channel[data-id="Channel-${index + 1}"] .step-button:nth-child(${pos})`);

@@ -85,6 +85,14 @@ const fetchAudio = async (url, channelIndex, loadSampleButtonElement = null) => 
     channelSettings[channelIndex][0] = url;
     saveCurrentSequence(currentSequence);
 
+    // Update the global object with the new URL and audio data
+    window.unifiedSequencerSettings.updateSetting('projectURLs', url, channelIndex);
+
+    // Update the global object with the audio sample's duration for the specific channel
+    window.unifiedSequencerSettings.updateSampleDuration(audioBuffer.duration, channelIndex);
+
+
+
     if (loadSampleButtonElement) {
       loadSampleButtonElement.classList.add('button-fixed-width');
       loadSampleButtonElement.style.width = '200px';

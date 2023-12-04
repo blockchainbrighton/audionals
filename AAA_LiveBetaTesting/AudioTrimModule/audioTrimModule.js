@@ -60,6 +60,21 @@ class AudioTrimmer {
         this.debounceDisplayValues();
     }
 
+    // Method to get the current value of the start slider
+    getStartSliderValue() {
+        return this.startSliderValue;
+    }
+
+    // Method to get the current value of the end slider
+    getEndSliderValue() {
+        return this.endSliderValue;
+    }
+
+     // Method to get the current value of the isLooping flag
+     getIsLooping() {
+        return this.isLooping;
+    }
+
 
     updateDimmedAreas() {
         // Assuming maxDuration represents the total duration or range for the sliders
