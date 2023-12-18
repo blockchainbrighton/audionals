@@ -48,16 +48,21 @@ function createStepButtonsForSequence() {
 document.addEventListener('DOMContentLoaded', createStepButtonsForSequence);
 
 function updateStepButtonColor(stepButton, loadSampleButton) {
-    console.log("[updateStepButtonColor] entered with stepButton:", stepButton, "loadSampleButton:", loadSampleButton);
+    console.log("[updateStepButtonColor] entered with ", stepButton, loadSampleButton);
     try {
-        const colorClass = loadSampleButton.className.match(/\bcolor-[^ ]+/) || '';
-        if (colorClass) {
-            console.log("[updateStepButtonColor] Applying color class:", colorClass[0], "to stepButton");
-            stepButton.classList.add(colorClass[0]);
-            console.log("[updateStepButtonColor] New stepButton class list:", stepButton.classList);
+        // Check if the step button is active (selected)
+        if (stepButton.classList.contains('selected')) {
+            const colorClass = loadSampleButton.className.match(/\bcolor-[^ ]+/) || '';
+            if (colorClass) {
+                stepButton.classList.add(colorClass[0]);
+                console.log(`[updateStepButtonColor] Applied color class ${colorClass[0]} to active step button`);
+            } else {
+                // Apply default color (red) if no color class is found
+                stepButton.style.backgroundColor = 'red';
+                console.log('[updateStepButtonColor] Applied default color (red) to active step button');
+            }
         } else {
-            console.log("[updateStepButtonColor] No color class found on loadSampleButton");
-            // Fallback color logic if needed
+            console.log('[updateStepButtonColor] Step button is not active (selected), no color update applied');
         }
     } catch (error) {
         console.error(`Error in updateStepButtonColor: ${error}`);
@@ -93,22 +98,21 @@ function updateSelectedStepButtonColor() {
     }
 }
 function updateChannelStepButtonColors(channelIndex, loadSampleButton) {
-    console.log(`[updateChannelStepButtonColors] Updating colors for Channel ${channelIndex}`);
-    const channel = document.querySelector(`.channel:nth-child(${channelIndex + 1})`); // Adjust the selector as per your DOM structure
-    const stepButtons = channel.querySelectorAll('.step-button');
-    const colorClass = loadSampleButton.className.match(/\bcolor-[^ ]+/) || '';
+    const channel = document.querySelector(`.channel[data-id="Channel-${channelIndex}"]`);
+    const stepButtons = channel.querySelectorAll('.step-button.selected'); // Select only active (selected) step buttons
 
     stepButtons.forEach(button => {
-        // Remove existing color classes if necessary
+        const colorClass = loadSampleButton.className.match(/\bcolor-[^ ]+/) || '';
         button.classList.forEach(cls => {
             if (cls.startsWith('color-')) {
                 button.classList.remove(cls);
             }
         });
 
-        // Apply new color class
         if (colorClass) {
             button.classList.add(colorClass[0]);
+        } else {
+            button.style.backgroundColor = 'red'; // Default color if no color class is found
         }
     });
 }

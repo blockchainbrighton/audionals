@@ -84,26 +84,27 @@
 
 
             
-        const loadSampleButton = channel.querySelector('.load-sample-button');
-
-        
+       
+            const loadSampleButton = channel.querySelector('.load-sample-button');
+            setupLoadSampleButtonListeners(loadSampleButton, channelIndex);
 
        // Assuming 'loadSampleButton' is defined in a broader context
         // and this code is part of a loop or function where 'channel' and 'index' are defined
 
          // Left-click event listener
-         loadSampleButton.addEventListener('click', () => {
-            setupLoadSampleModalButton(channel, index);
-            // Additional logic for closing the modal can be added within setupLoadSampleModalButton if needed
-        });
-
-       // Right-click event listener for the loadSampleButton
-        loadSampleButton.addEventListener('contextmenu', (event) => {
-            console.log('Right-click on loadSampleButton');
-
-            event.preventDefault();
-            showCustomContextMenu(event, event.pageX, event.pageY, index, loadSampleButton);
-        });
+         function setupLoadSampleButtonListeners(loadSampleButton, channelIndex) {
+            // Left-click event listener
+            loadSampleButton.addEventListener('click', () => {
+                setupLoadSampleModalButton(channel, channelIndex);
+            });
+        
+            // Right-click event listener for the loadSampleButton
+            loadSampleButton.addEventListener('contextmenu', (event) => {
+                console.log('Right-click on loadSampleButton');
+                event.preventDefault();
+                showCustomContextMenu(event, event.pageX, event.pageY, channelIndex, loadSampleButton);
+            });
+        }
 
         // Function to create and show the custom context menu
         function showCustomContextMenu(contextEvent, x, y, channelIndex, button) {
@@ -131,11 +132,10 @@
             // Modify the event listener for the 'Set Channel Colour' option
             const setChannelColour = createMenuOption('Set Channel Colour', () => {
                 console.log('Set Channel Colour option selected');
-
-                showColorPicker(contextEvent, button); // Call showColorPicker with the captured right-click event and the button
+                showColorPicker(contextEvent, button, channelIndex); // Correctly pass channelIndex
                 closeCustomContextMenu();
-                // Update the colors of the step buttons in the same channel
                 updateChannelStepButtonColors(channelIndex, loadSampleButton);
+
             });
         
             // Add new menu options for pasting
@@ -167,7 +167,7 @@
             }, 0);
         }
 
-        function showColorPicker(event, button) {
+        function showColorPicker(event, button, channelIndex) {
             console.log('showColorPicker function called inside channelsForEach.js');
         
             // Define colors for the grid
@@ -201,11 +201,10 @@
                 colorDiv.addEventListener('click', function() {
                     console.log(`Color selected: ${color}`);
                     button.style.backgroundColor = color;
-        
-                    // Remove previous color class and add the new one
                     button.className = button.className.replace(/\bcolor-[^ ]+/g, '');
                     button.classList.add(`color-${color.replace('#', '')}`);
         
+                    updateChannelStepButtonColors(channelIndex, button); // Update step buttons after color selection
                     colorPicker.remove();
                 });
                 colorPicker.appendChild(colorDiv);
