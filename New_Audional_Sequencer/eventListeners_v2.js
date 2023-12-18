@@ -65,33 +65,34 @@ document.addEventListener("DOMContentLoaded", function() {
         let file = loadFileInput.files[0];
         let reader = new FileReader();
         reader.onload = async function(e) {
-            console.log("File read start");
-            let loadedSettings = JSON.parse(e.target.result);
-            console.log("[loadFileInput] File content:", loadedSettings);
-        
-            // Load new settings and update UI
-            window.unifiedSequencerSettings.loadSettings(loadedSettings);
-
+            try {
+                console.log("File read start");
+                let loadedSettings = JSON.parse(e.target.result);
+                console.log("[loadFileInput] File content:", loadedSettings);
     
-            // Fetch audio for each URL in the loaded settings
-            if (loadedSettings.projectURLs && Array.isArray(loadedSettings.projectURLs)) {
-                for (let i = 0; i < loadedSettings.projectURLs.length; i++) {
-                    const url = loadedSettings.projectURLs[i];
-                    if (url) {
-                        // Call fetchAudio for each URL
-                        // Assuming you have a way to get the corresponding loadSampleButtonElement
-                        const loadSampleButtonElement = document.getElementById(`load-sample-button-${i}`);
-                        await fetchAudio(url, i, loadSampleButtonElement);
+                // Load new settings and update UI
+                window.unifiedSequencerSettings.loadSettings(loadedSettings);
+    
+                // Fetch audio for each URL in the loaded settings
+                if (loadedSettings.projectURLs && Array.isArray(loadedSettings.projectURLs)) {
+                    for (let i = 0; i < loadedSettings.projectURLs.length; i++) {
+                        const url = loadedSettings.projectURLs[i];
+                        if (url) {
+                            const loadSampleButtonElement = document.getElementById(`load-sample-button-${i}`);
+                            await fetchAudio(url, i, loadSampleButtonElement);
+                            // Optional: Update step buttons' colors if needed
+                            // updateChannelStepButtonColors(i, loadSampleButtonElement);
+                        }
                     }
                 }
+            } catch (error) {
+                console.error("Error reading or parsing file:", error);
             }
         };
     
         reader.readAsText(file);
     });
     
-    
-
     function loadPresetFromFile(filePath) {
         console.log(`[internalPresetDebug] Loading preset from: ${filePath}`);
         fetch(filePath)

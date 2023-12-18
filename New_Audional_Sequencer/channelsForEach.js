@@ -134,6 +134,8 @@
 
                 showColorPicker(contextEvent, button); // Call showColorPicker with the captured right-click event and the button
                 closeCustomContextMenu();
+                // Update the colors of the step buttons in the same channel
+                updateChannelStepButtonColors(channelIndex, loadSampleButton);
             });
         
             // Add new menu options for pasting

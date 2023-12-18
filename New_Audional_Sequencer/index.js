@@ -252,6 +252,7 @@ if (playButton && stopButton) {
                 
                                 window.unifiedSequencerSettings.setTrimSettings(index, startSliderValue, endSliderValue);
                                 updateLoadSampleButtonText(index, loadSampleButton);
+                                updateChannelStepButtonColors(index, loadSampleButton);
                             });
                         }
                     });
