@@ -17,15 +17,17 @@ function createStepButtonsForSequence() {
             button.addEventListener('click', () => {
                 let currentStepState = window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, i);
                 window.unifiedSequencerSettings.updateStepState(currentSequence, channelIndex, i, !currentStepState);
-
+            
                 // Toggle the 'selected' class and update color based on the loadSampleButton's color
                 if (button.classList.toggle('selected')) {
                     const loadSampleButton = channel.querySelector('.load-sample-button');
                     const colorClass = loadSampleButton.className.match(/\bcolor-[^ ]+/);
+            
                     if (colorClass) {
+                        console.log("Applied color class:", colorClass[0]); // Log the applied color class
                         button.classList.add(colorClass[0]);
                     } else {
-                        // If no color class, ensure default color is used
+                        console.log("No color class found, applying default color."); // Log when default color is used
                         button.style.backgroundColor = 'var(--accent-color)';
                     }
                 } else {
@@ -33,11 +35,12 @@ function createStepButtonsForSequence() {
                     button.classList.add('step-button'); // Re-add the default class
                     button.style.backgroundColor = ''; // Remove inline style if any
                 }
-
+            
                 updateSpecificStepUI(currentSequence, channelIndex, i);
             });
-
+            
             stepsContainer.appendChild(button);
+            
         }
 
         console.log(`[createStepButtonsForSequence] Completed creating step buttons for Channel ${channelIndex} in Sequence ${currentSequence}.`);
