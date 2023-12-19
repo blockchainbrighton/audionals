@@ -172,25 +172,21 @@
             const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#00FFFF', '#FF00FF', '#808080', '#FFFFFF',
                             '#FFA500', '#800080', '#008080', '#000080', '#800000', '#008000', '#FFC0CB', '#D2691E'];
         
-            // Create color picker container
             const colorPicker = document.createElement('div');
             colorPicker.style.position = 'absolute';
             colorPicker.style.display = 'grid';
             colorPicker.style.gridTemplateColumns = 'repeat(4, 1fr)';
             colorPicker.style.gap = '1px';
         
-            // Calculate the position
-            const gridHeight = (colors.length / 4) * 20; // 20px height for each color div
+            const gridHeight = (colors.length / 4) * 20;
             const topPosition = event.clientY - gridHeight;
             const leftPosition = event.clientX;
         
-            // Log calculated position
             console.log(`Color picker position - Top: ${topPosition}px, Left: ${leftPosition}px`);
         
             colorPicker.style.top = topPosition + 'px';
             colorPicker.style.left = leftPosition + 'px';
         
-            // Add color options to the picker
             colors.forEach(color => {
                 const colorDiv = document.createElement('div');
                 colorDiv.style.width = '20px';
@@ -198,38 +194,37 @@
                 colorDiv.style.backgroundColor = color;
                 colorDiv.addEventListener('click', function() {
                     console.log(`Color selected: ${color}`);
-                    button.style.backgroundColor = color;
         
                     // Remove previous color class and add the new one
+                    const colorClass = `color-${color.replace('#', '')}`;
                     button.className = button.className.replace(/\bcolor-[^ ]+/g, '');
-                    button.classList.add(`color-${color.replace('#', '')}`);
+                    button.classList.add(colorClass);
+        
+                    // Update the background color of the loadSampleButton
+                    button.style.backgroundColor = color;
+        
+                    // Update the CSS variable --sample-button-color
+                    document.documentElement.style.setProperty('--sample-button-color', color);
         
                     colorPicker.remove();
                 });
                 colorPicker.appendChild(colorDiv);
             });
         
-            // Append the color picker to the body
             document.body.appendChild(colorPicker);
-            console.log('Color picker appended to the body. Check if it is visible in the DOM.');
         
-            // Add event listener to stop propagation of click events inside the color picker
             colorPicker.addEventListener('click', function(e) {
                 e.stopPropagation();
             });
         
-            // Delay the addition of the global click listener
             setTimeout(() => {
                 document.addEventListener('click', function removePicker() {
-                    console.log('Global click detected. Removing color picker.');
                     colorPicker.remove();
                     document.removeEventListener('click', removePicker);
                 });
-            }, 0); // Small delay like 0 or 10 milliseconds
+            }, 0);
         
-            // Set a timeout to remove the color picker after 2 seconds
             setTimeout(() => {
-                console.log('Removing color picker after 2 seconds.');
                 colorPicker.remove();
             }, 5000);
         }
