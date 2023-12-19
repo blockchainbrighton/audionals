@@ -193,18 +193,22 @@
                 colorDiv.style.height = '20px';
                 colorDiv.style.backgroundColor = color;
                 colorDiv.addEventListener('click', function() {
-                    // Apply the color only to step buttons within the same channel
-                    let channelStepButtons = findStepButtonsInSameChannel(loadSampleButton);
-                    channelStepButtons.forEach(stepButton => {
-                        stepButton.style.backgroundColor = color;
-                        stepButton.classList.add(`color-${color.replace('#', '')}`);
-                    });
+                    console.log(`Color selected: ${color}`);
         
-                    // Update the loadSampleButton's own background color
-                    loadSampleButton.style.backgroundColor = color;
+                    // Remove previous color class and add the new one
+                    const colorClass = `color-${color.replace('#', '')}`;
+                    button.className = button.className.replace(/\bcolor-[^ ]+/g, '');
+                    button.classList.add(colorClass);
+        
+                    // Update the background color of the loadSampleButton
+                    button.style.backgroundColor = color;
+        
+                    // Update the CSS variable --sample-button-color
+                    document.documentElement.style.setProperty('--sample-button-color', color);
         
                     colorPicker.remove();
                 });
+                colorPicker.appendChild(colorDiv);
             });
         
             document.body.appendChild(colorPicker);
@@ -226,11 +230,6 @@
         }
         
 
-        function findStepButtonsInSameChannel(loadSampleButton) {
-            // Implement logic to find all step buttons within the same channel as the loadSampleButton
-            // This depends on your HTML structure and how you identify channels
-        }
-        
         // Helper function to handle click outside the custom context menu
         function handleClickOutsideMenu(event) {
             const existingMenu = document.querySelector('.custom-context-menu');
