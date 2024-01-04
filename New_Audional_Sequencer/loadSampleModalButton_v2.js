@@ -32,7 +32,11 @@
         // Add the 'Search Ordinal Audio Files' button with a unique class name and tooltip
         const searchOrdinalButton = createExternalLinkButton('Search Ordinal Audio Files', 'https://ordinals.hiro.so/inscriptions?f=audio&s=genesis_block_height&o=asc', 'searchButton', 'Search for audio files (Copy and paste the Ordinal ID to load a sample');
         idModalContent.appendChild(searchOrdinalButton);
-    
+
+        // Add the 'Search Audional Samples' button with a unique class name and tooltip
+        const searchAudionalSamplesButton = createButton('Search Audional Samples', () => displayAudionalSamples(), 'searchAudionalSamplesButton', 'Display a list of Audional Samples');
+        idModalContent.appendChild(searchAudionalSamplesButton);
+
         document.body.appendChild(idModal);
     }
     
@@ -152,6 +156,13 @@
         container.appendChild(tooltip);
     
         return container;
+    }
+
+    function displayAudionalSamples() {
+        console.log("Audional Samples:");
+        audionalIDs.forEach(audional => {
+            console.log(`${audional.label}: ${audional.id}`);
+        });
     }
     
     
