@@ -3,7 +3,7 @@
 const sequencerChannel = new BroadcastChannel('sequencerChannel');
 
 function emitMessage(type, data) {
-   // console.log(`[Sequencer ${new Date().toISOString()}] Emitting message of type "${type}" with data:`, data);
+    console.log(`[Sequencer ${new Date().toISOString()}] Emitting message of type "${type}" with data:`, data);
     sequencerChannel.postMessage({ type, data });
 }
 
