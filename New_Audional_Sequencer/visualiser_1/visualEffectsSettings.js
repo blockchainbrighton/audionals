@@ -1,7 +1,6 @@
 //visualEffectsSettings.js
 // Ensure these are defined or accessible in this scope
 let visualTime = 0;  // Ensure this is accessible here
-let startTime;  // Ensure this is accessible here
 let maxDistance;  // Declare this at the top
 let currentTime = performance.now();
 let elapsedTime = (currentTime - startTime) / 1000.0; // Convert ms to seconds
