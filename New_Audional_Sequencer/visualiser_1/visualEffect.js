@@ -1,6 +1,5 @@
 //visualEffect.js
 
-
 let canvas;
 let canvasCenterX;
 let canvasCenterY;
@@ -9,6 +8,11 @@ let program;
 let cursorPosition = 1.3;
 let startTime = performance.now(); // Ensure startTime is initialized
 let phaseTimer = 0; // Initialize a phase timer
+let reverseDirection = false; // Initialize reverseDirection
+let timeSpeedMultiplier = 1.0; // Initialize timeSpeedMultiplier
+let cursorSpeedMultiplier = 1.0; // Initialize cursorSpeedMultiplier
+let visualTime = 0; // Initialize visualTime
+
 
 const vertexShaderSource = `
     attribute vec2 a_position;
@@ -125,14 +129,10 @@ function resizeCanvas() {
 }
 
 function render() {
-    // Calculate elapsed time since the last frame
-    currentTime = performance.now();
+    let currentTime = performance.now();
     let frameTime = (currentTime - startTime) / 1000.0; // Convert ms to seconds
-
-    // Update visual time based on reverseDirection and timeSpeedMultiplier
     visualTime += (reverseDirection ? -1 : 1) * frameTime * timeSpeedMultiplier;
-
-    console.log(`Current Time: ${currentTime.toFixed(2)}, Frame Time: ${frameTime.toFixed(2)}, Visual Time: ${visualTime.toFixed(2)}`); // Log time calculations
+    console.log(`Current Time: ${currentTime.toFixed(2)}, Frame Time: ${frameTime.toFixed(2)}, Visual Time: ${visualTime.toFixed(2)}`);
 
     resizeCanvas();
     if (!gl) {
@@ -159,14 +159,7 @@ function render() {
     startTime = currentTime;
 
     requestAnimationFrame(render);
-}
-
-// Start the rendering process
-document.addEventListener('DOMContentLoaded', function() {
-    // Existing initialization code here
-
-    render();
-});
+    }
 
 
 document.addEventListener('DOMContentLoaded', function() {

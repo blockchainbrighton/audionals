@@ -1,13 +1,9 @@
 //visualEffectsSettings.js
 // Ensure these are defined or accessible in this scope
-let visualTime = 0;  // Ensure this is accessible here
 let maxDistance;  // Declare this at the top
 let currentTime = performance.now();
 let elapsedTime = (currentTime - startTime) / 1000.0; // Convert ms to seconds
 let lastPaletteShift = 0; // Keep track of the last time the palette shifted
-let reverseDirection = false; // Variable to control direction of time
-let timeSpeedMultiplier = 1; // Increase to speed up, decrease to slow down
-let cursorSpeedMultiplier = 1; // Increase for more sensitivity, decrease for less
 let palettePhase = 0; // Start from the first phase
 
 function updateCursorPosition(clientX, clientY) {
