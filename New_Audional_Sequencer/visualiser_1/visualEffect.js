@@ -1,3 +1,6 @@
+//visualEffect.js
+
+
 let canvas;
 let canvasCenterX;
 let canvasCenterY;
@@ -5,16 +8,7 @@ let gl;
 let program;
 let cursorPosition = 1.3;
 let startTime = performance.now(); // Ensure startTime is initialized
-
-
-let currentTime = performance.now();
-let elapsedTime = (currentTime - startTime) / 1000.0; // Convert ms to seconds
-let lastPaletteShift = 0; // Keep track of the last time the palette shifted
-let reverseDirection = false; // Variable to control direction of time
-let visualTime = 0;  // A new variable to keep track of the 'visual' time
-let timeSpeedMultiplier = 1; // Increase to speed up, decrease to slow down
-let cursorSpeedMultiplier = 1; // Increase for more sensitivity, decrease for less
-let palettePhase = 0; // Start from the first phase
+let phaseTimer = 0; // Initialize a phase timer
 
 const vertexShaderSource = `
     attribute vec2 a_position;
@@ -98,7 +92,6 @@ const fragmentShaderSource = `
     }
 `;
 
-
 function createShader(gl, type, source) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, source);
@@ -123,74 +116,12 @@ function createProgram(gl, vertexShader, fragmentShader) {
     return program;
 }
 
-let maxDistance; // Declare this outside and update only on resize
-
 function resizeCanvas() {
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
     let rect = canvas.getBoundingClientRect();
     canvasCenterX = rect.left + rect.width / 2;
     canvasCenterY = rect.top + rect.height / 2;
-    maxDistance = Math.sqrt(canvasCenterX * canvasCenterX + canvasCenterY * canvasCenterY);
-}
-
-function updateCursorPosition(clientX, clientY) {
-    const dx = clientX - canvasCenterX;
-    const dy = clientY - canvasCenterY;
-    const distanceToCenter = Math.sqrt(dx * dx + dy * dy);
-    const maxDistance = Math.sqrt(canvasCenterX * canvasCenterX + canvasCenterY * canvasCenterY);
-    cursorPosition = 0.5 + 2.0 * ((maxDistance - distanceToCenter) / maxDistance);
-}
-
-function handleMouseMove(e) {
-    updateCursorPosition(e.clientX, e.clientY);
-}
-
-function handleTouchMove(e) {
-    let touch = e.touches[0];
-    updateCursorPosition(touch.clientX, touch.clientY);
-}
-
-// Declare a variable to keep track of the last beat count when the phase was changed
-let lastPhaseChangeBeatCount = 0;
-
-// Add an event listener to listen for beat messages from the sequencer
-const sequencerChannel = new BroadcastChannel('sequencerChannel');
-sequencerChannel.onmessage = (event) => {
-    try {
-        const { type, data } = event.data;
-        if (type === 'beat') {
-            handleBeatMessage(data);
-        }
-    } catch (error) {
-        console.error(`Error handling message: ${error}`);
-    }
-};
-
-// Define the message handling function
-function handleBeatMessage(data) {
-    let beatCount = data.beat; // Update beat count based on the received message
-    console.log(`Handling 'beat' message. Beat count: ${beatCount}`);
-
-    // Check if it's time to update the palette phase
-    if (beatCount - lastPhaseChangeBeatCount >= 4) {
-        console.log(`Palette phase changing from ${palettePhase} to ${(palettePhase + 1) % 7}`);
-        lastPhaseChangeBeatCount = beatCount; // Update the last phase change beat count
-        palettePhase = (palettePhase + 1) % 7; // Cycle through 7 phases
-
-        // Update the palettePhase uniform
-        updatePalettePhase();
-    }
-}
-
-// Function to update the palette phase in the shader
-function updatePalettePhase() {
-    const palettePhaseLocation = gl.getUniformLocation(program, 'palettePhase');
-    if (palettePhaseLocation === -1) {
-        console.error("Failed to get the location of 'palettePhase'");
-    } else {
-        gl.uniform1f(palettePhaseLocation, palettePhase);
-    }
 }
 
 function render() {
@@ -282,3 +213,4 @@ document.addEventListener('DOMContentLoaded', function() {
     startTime = performance.now();
     render();
 });
+
