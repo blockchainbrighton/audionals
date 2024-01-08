@@ -1,4 +1,5 @@
-//visualEffectsSettings.js
+// visualEffectsSettings.js
+
 // Ensure these are defined or accessible in this scope
 let maxDistance;  // Declare this at the top
 let currentTime = performance.now();
@@ -22,21 +23,6 @@ function handleTouchMove(e) {
     updateCursorPosition(touch.clientX, touch.clientY);
 }
 
-// Additional logic to update visual effects based on user interaction or time
-document.addEventListener('DOMContentLoaded', function() {
-    window.addEventListener('resize', function() {
-        maxDistance = Math.sqrt(canvasCenterX * canvasCenterX + canvasCenterY * canvasCenterY);
-        resizeCanvas(); // This function is defined in visualEffect.js
-    });
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('touchmove', handleTouchMove);
-
-    canvas.addEventListener('click', function() {
-        console.log("Canvas clicked. Reverse direction: ", !reverseDirection);
-        reverseDirection = !reverseDirection;
-    });
-});
 
 function updateVisuals() {
     // Calculate elapsed time since the last frame
