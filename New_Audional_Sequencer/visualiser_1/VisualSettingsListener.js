@@ -1,5 +1,7 @@
 // visualSettingsListener.js
 
+let startTime = 0;
+
 const vertexShaderSource = `
     attribute vec2 a_position;
     
