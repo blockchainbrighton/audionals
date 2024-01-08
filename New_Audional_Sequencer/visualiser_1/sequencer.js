@@ -23,7 +23,7 @@ function handleMessage(type, data) {
             barCount = data.bar;
             break;
         case 'beat':
-            beatCount = data.beat;
+            beatCount++; // Increment the beat count for each 'beat' message
             barCount = data.bar || barCount; // Update bar count if included
             break;
         case 'pause':
@@ -32,14 +32,13 @@ function handleMessage(type, data) {
             break;
         case 'stop':
             isPlaying = false;
-            beatCount = barCount = 0;
+            beatCount = barCount = 0; // Reset both beat and bar counts
             break;
         case 'play':
             isPlaying = true;
-            beatCount = data.beat || beatCount;
-            barCount = data.bar || barCount;
+            beatCount = data.beat || beatCount; // Update beat count, or keep the existing count if not specified
+            barCount = data.bar || barCount; // Update bar count, or keep the existing count if not specified
             break;
     }
     console.log(`Handling '${type}' message. isPlaying: ${isPlaying}, Beat count: ${beatCount}, Bar count: ${barCount}`);
 }
-
