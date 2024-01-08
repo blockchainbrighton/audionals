@@ -1,5 +1,5 @@
 // Initialize variables for audio-reactive elements
-let barCount = 0, beatCount = 0, isPlaying = false;
+let barCount = 0, beatCount = 0, beatsPerPhase = 0, isPlaying = false;
 
 // Add an event listener to the BroadcastChannel
 const sequencerChannel = new BroadcastChannel('sequencerChannel');
@@ -22,8 +22,13 @@ function handleMessage(type, data) {
         case 'bar':
             barCount = data.bar;
             break;
-        case 'beat':
-            beatCount++; // Increment the beat count for each 'beat' message
+            case 'beat':
+                beatCount++; // Increment the beat count for each 'beat' message
+                beatsPerPhase++;
+                if (beatsPerPhase >= 4) {
+                    beatsPerPhase = 0; // Reset every 4 beats
+                    // Trigger color phase change here. This could be a message to visualEffectsSettings.js or a direct function call if accessible
+                }
             barCount = data.bar || barCount; // Update bar count if included
             break;
         case 'pause':

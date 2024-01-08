@@ -124,6 +124,14 @@ document.addEventListener('DOMContentLoaded', function() {
         maxDistance = Math.sqrt(canvasCenterX * canvasCenterX + canvasCenterY * canvasCenterY);
     });
 
+    document.addEventListener('keydown', function(event) {
+        const key = event.key;
+        if (key >= '1' && key <= '7') {
+            palettePhase = parseInt(key) - 1; // Convert key to phase index (0-6)
+            // Make sure this change is reflected in the rendering logic
+        }
+    });
+
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('touchmove', handleTouchMove);
 

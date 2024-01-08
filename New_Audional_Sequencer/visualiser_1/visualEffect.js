@@ -43,6 +43,9 @@ const updateUniforms = () => {
     gl.uniform1f(iTimeLocation, visualTime);
     const cursorPosLocation = gl.getUniformLocation(program, 'cursorPos');
     gl.uniform1f(cursorPosLocation, clamp(cursorPosition * cursorSpeedMultiplier, 0.1, 5.0));
+    const palettePhaseLocation = gl.getUniformLocation(program, 'palettePhase');
+    gl.uniform1f(palettePhaseLocation, palettePhase);
+
 };
 
 function render() {
