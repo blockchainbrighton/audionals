@@ -1,24 +1,27 @@
 // midiRecorder.js
 
-console.log('midiRecorder.js loaded'); 
+console.log('midiRecorder.js loaded');
 
-
+let isRecordingMIDI = false;
+let midiRecording = [];
 let playbackInterval;
 let playbackStartTime = 0;
 let nextEventIndex = 0;
+let isReadyToRecord = false; // Flag to indicate readiness to record
 
 function startMIDIRecording() {
-    if (!isRecordingMIDI) {
-        isRecordingMIDI = true;
-        midiRecording = [];
+    // Only set the flag and UI, actual recording starts on first MIDI event
+    if (!isRecordingMIDI && !isReadyToRecord) {
+        isReadyToRecord = true;
         document.getElementById('recordMIDIButton').classList.add('active');
-        console.log('MIDI Recording started');
+        console.log('Ready to start MIDI Recording on first note');
     }
 }
 
 function stopMIDIRecording() {
-    if (isRecordingMIDI) {
+    if (isRecordingMIDI || isReadyToRecord) {
         isRecordingMIDI = false;
+        isReadyToRecord = false;
         document.getElementById('recordMIDIButton').classList.remove('active');
         console.log('MIDI Recording stopped');
     }
@@ -39,7 +42,7 @@ function playbackNextMIDIEvent() {
         const now = performance.now() - playbackStartTime;
         const nextEvent = midiRecording[nextEventIndex];
         if (now >= nextEvent.timestamp) {
-            handleMIDIEvent(nextEvent.message); // handleMIDIEvent should process the MIDI message (similar to onMIDIMessage)
+            handleMIDIEvent(nextEvent.message); // Assume existing function to process MIDI message
             console.log('Playing MIDI Event:', nextEvent.message);
             nextEventIndex++;
         }
@@ -50,8 +53,16 @@ function playbackNextMIDIEvent() {
     }
 }
 
-// Modify recordMIDIEvent to push events into midiRecording
+// Modified to start recording on first MIDI event
 function recordMIDIEvent(message) {
+    if (isReadyToRecord && !isRecordingMIDI) {
+        // Start recording with the first MIDI event
+        isRecordingMIDI = true;
+        isReadyToRecord = false;
+        playbackStartTime = performance.now(); // Reset start time to now
+        console.log('MIDI Recording started with first note');
+    }
+
     if (isRecordingMIDI) {
         const currentTime = performance.now();
         const timestamp = currentTime - playbackStartTime;
@@ -61,6 +72,7 @@ function recordMIDIEvent(message) {
 }
 
 window.recordMIDIEvent = recordMIDIEvent; // Make it accessible globally
+
 
 function prepareToRecordMIDI() {
     metronomeCount = 0;
