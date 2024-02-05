@@ -3,7 +3,7 @@
 const appContainer = document.getElementById('drum-machine'); // Adjust the ID as per your HTML
 appContainer.addEventListener('click', () => {
     audioContext.resume().then(() => {
-        console.log('Playback resumed successfully');
+        console.log('Audio Context resumed successfully');
     });
 });
 
@@ -77,9 +77,12 @@ document.addEventListener("DOMContentLoaded", function() {
             if (loadedSettings.projectURLs && Array.isArray(loadedSettings.projectURLs)) {
                 for (let i = 0; i < loadedSettings.projectURLs.length; i++) {
                     const url = loadedSettings.projectURLs[i];
-                    if (url) {
-                        // Call fetchAudio for each URL
-                        // Assuming you have a way to get the corresponding loadSampleButtonElement
+                    if (url === 'AUDIONALSYNTH') {
+                        // If the URL is the special reference, trigger synth loading
+                        console.log(`Triggering synthesizer load for channel ${i}...`);
+                        handleLoadSynth(i, null); // Passing null as idModal since it's not needed here
+                    } else if (url) {
+                        // Handle normal audio URLs
                         const loadSampleButtonElement = document.getElementById(`load-sample-button-${i}`);
                         await fetchAudio(url, i, loadSampleButtonElement);
                     }

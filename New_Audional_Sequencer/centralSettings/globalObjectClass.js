@@ -29,13 +29,14 @@ class UnifiedSequencerSettings {
 
         setChannelContent(index, content) {
             if (content === 'SYNTH') {
-                this.settings.projectURLs[index] = 'SYNTH';
+                this.settings.masterSettings.projectURLs[index] = 'AUDIONALSYNTH';
             } else {
                 // Handle as URL
-                this.settings.projectURLs[index] = content;
+                this.settings.masterSettings.projectURLs[index] = content;
             }
             this.notifyObservers();
         }
+        
         
 
         clearMasterSettings() {

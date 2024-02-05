@@ -40,19 +40,20 @@
         document.body.appendChild(idModal);
         }    
 
-        function handleLoadSynth(index, idModal) {
+        function handleLoadSynth(index, idModal = null) {
             console.log(`Loading synthesizer for channel ${index}...`);
+            
+            window.unifiedSequencerSettings.setChannelContent(index, 'AUDIONALSYNTH');
         
-            // Update the projectURLs to indicate a synth is loaded for this channel
-            window.unifiedSequencerSettings.setChannelContent(index, 'SYNTH');
-
             // Load the synth in a pop-up window
             openSynthPopup(index);
         
             console.log('Synthesizer loading initiated.');
         
-            // Close the modal after initiating the synthesizer loading
-            document.body.removeChild(idModal);
+            // Only try to remove the modal if it's passed as an argument
+            if (idModal) {
+                document.body.removeChild(idModal);
+            }
         }
         
 
