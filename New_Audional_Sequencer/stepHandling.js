@@ -85,14 +85,25 @@ function playStep() {
     // displayUpdatedValues();
 }
 
-
 function broadcastSynthPlayMessage(channelIndex, currentStep) {
-    if(window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, currentStep)) {
+    if (window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, currentStep)) {
+        
+        // Create a new BroadcastChannel for 'synthChannel'
+        const synthChannel = new BroadcastChannel('synthChannel');
+        
+        // Create the message data
+        const messageData = { type: 'play', data: { channel: channelIndex, step: currentStep } };
+        
+        // Log the message data being sent
+        console.log('Sending message to synthChannel:', messageData);
+        
+        // Place the code to broadcast the message to 'synthChannel' here
+        synthChannel.postMessage(messageData);
+        
         console.log(`Playing Synth for Channel ${channelIndex} at Step ${currentStep}`);
-        // Place the code to broadcast the message here
-        // Example: sendMessageToSynth('play', { channel: channelIndex, step: currentStep });
     }
 }
+
 
 
 
