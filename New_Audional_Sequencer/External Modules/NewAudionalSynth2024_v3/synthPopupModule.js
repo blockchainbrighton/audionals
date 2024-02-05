@@ -2,7 +2,7 @@
 
 function openSynthPopup(index) {
     // Define the URL to the synthesizer HTML page
-    const synthPageUrl = 'ms10Merged.html'; // Update this path as needed
+    const synthPageUrl = 'External Modules/NewAudionalSynth2024_v3/ms10Merged.html';
 
     // Create a pop-up window for the synthesizer
     const synthWindow = window.open(synthPageUrl, `SynthChannel${index}`, 'width=600,height=400');
