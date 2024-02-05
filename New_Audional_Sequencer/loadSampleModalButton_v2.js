@@ -41,20 +41,17 @@
         }    
 
         function handleLoadSynth(index, idModal) {
-            // Example logic to instantiate the synthesizer for the selected channel
             console.log(`Loading synthesizer for channel ${index}...`);
         
-            // Here, you should integrate the logic to instantiate the synthesizer
-            // This might involve loading the 'ms10Merged.html' content and initializing
-            // the synthesizer with the correct settings for the selected channel.
+            // Load the synth in a pop-up window
+            openSynthPopup(index);
         
-            // For demonstration, this just logs to the console
-            console.log('Synthesizer loaded successfully.');
+            console.log('Synthesizer loading initiated.');
         
-            // Close the modal after loading the synthesizer
+            // Close the modal after initiating the synthesizer loading
             document.body.removeChild(idModal);
         }
-    
+        
 
     function createModal() {
         const modal = document.createElement('div');
