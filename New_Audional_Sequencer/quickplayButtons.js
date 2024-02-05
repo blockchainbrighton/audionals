@@ -48,7 +48,7 @@ function updateActiveQuickPlayButton() {
 
     // Add 'active' class to current sequence button
     const activeBtn = quickPlayButtons[currentSequence];
-    activeBtn.classList.add('active');
+    //activeBtn.classList.add('active');
 }
 
 function insertQuickPlayButtons() {
