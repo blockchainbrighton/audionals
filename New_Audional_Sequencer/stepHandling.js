@@ -48,7 +48,7 @@ function playStep() {
         const channel = channels[channelIndex];
         const buttons = channel.querySelectorAll('.step-button');
         let channelData = presetData.channels[channelIndex];
-
+        
         // If no channelData is found for the current channel, use a default set of values
         if (!channelData) {
             console.warn(`No preset data for channel index: ${channelIndex}`);
@@ -64,6 +64,7 @@ function playStep() {
         console.log(`[playStep] Mute state for channel index ${channelIndex}: ${isMuted}`);
 
         playSound(currentSequence, channel, currentStep);
+        broadcastSynthPlayMessage(channelIndex, currentStep);
         console.log(`[playStep] Playing sound for current sequence: ${currentSequence}, channel index: ${channelIndex}, current step: ${currentStep}`);
     }
 
@@ -83,6 +84,16 @@ function playStep() {
     // Optionally: Update display values
     // displayUpdatedValues();
 }
+
+
+function broadcastSynthPlayMessage(channelIndex, currentStep) {
+    if(window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, currentStep)) {
+        console.log(`Playing Synth for Channel ${channelIndex} at Step ${currentStep}`);
+        // Place the code to broadcast the message here
+        // Example: sendMessageToSynth('play', { channel: channelIndex, step: currentStep });
+    }
+}
+
 
 
 function incrementStepCounters() {
@@ -135,7 +146,6 @@ function handleSequenceTransition(targetSequence) {
         console.log(`[SeqDebug][handleSequenceTransition][stepHandling] UI updated for sequence ${targetSequence} at ${new Date().toLocaleTimeString()}`);
     }, 100); // Adjust delay as needed
 }
-
 
 
 
