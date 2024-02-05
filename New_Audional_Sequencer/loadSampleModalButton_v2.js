@@ -33,8 +33,27 @@
         const searchOrdinalButton = createExternalLinkButton('Search Ordinal Audio Files', 'https://ordinals.hiro.so/inscriptions?f=audio&s=genesis_block_height&o=asc', 'searchButton', 'Search for audio files (Copy and paste the Ordinal ID to load a sample');
         idModalContent.appendChild(searchOrdinalButton);
     
+        // New: Add the 'Load Synth' button with a unique class name
+        const loadSynthButton = createButton('Load Synth', () => handleLoadSynth(index, idModal), 'loadSynthButton', 'Load the synthesizer for this channel');
+        idModalContent.appendChild(loadSynthButton);
+
         document.body.appendChild(idModal);
-    }
+        }    
+
+        function handleLoadSynth(index, idModal) {
+            // Example logic to instantiate the synthesizer for the selected channel
+            console.log(`Loading synthesizer for channel ${index}...`);
+        
+            // Here, you should integrate the logic to instantiate the synthesizer
+            // This might involve loading the 'ms10Merged.html' content and initializing
+            // the synthesizer with the correct settings for the selected channel.
+        
+            // For demonstration, this just logs to the console
+            console.log('Synthesizer loaded successfully.');
+        
+            // Close the modal after loading the synthesizer
+            document.body.removeChild(idModal);
+        }
     
 
     function createModal() {
