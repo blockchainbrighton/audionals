@@ -1,0 +1,17 @@
+// SynthPopupModule.js
+
+function openSynthPopup(index) {
+    // Append the channel index as a query parameter to the URL
+    const synthPageUrl = `External Modules/NewAudionalSynth2024_v3/ms10Merged.html?channelIndex=${index}`;
+
+    // Create a pop-up window for the synthesizer
+    // Note: Using `index` in window name might not be sufficient for unique identification if pop-ups can be reopened
+    const synthWindow = window.open(synthPageUrl, `SynthChannel${index}`, 'width=600,height=400');
+
+    // Optional: Pass channel or other relevant information to the synthesizer window
+    synthWindow.onload = () => {
+        // Example: Setting the title dynamically based on the channel index
+        synthWindow.document.title = `Synth for Channel ${index}`;
+        // Further customization or initialization can go here
+    };
+}

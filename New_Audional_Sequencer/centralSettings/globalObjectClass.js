@@ -27,6 +27,18 @@ class UnifiedSequencerSettings {
             this.clearMasterSettings = this.clearMasterSettings.bind(this);
         }
 
+        setChannelContent(index, content) {
+            if (content === 'SYNTH') {
+                this.settings.masterSettings.projectURLs[index] = 'AUDIONALSYNTH';
+            } else {
+                // Handle as URL
+                this.settings.masterSettings.projectURLs[index] = content;
+            }
+            this.notifyObservers();
+        }
+        
+        
+
         clearMasterSettings() {
             console.log("[clearMasterSettings] Current masterSettings before clearing:", this.settings.masterSettings);
 

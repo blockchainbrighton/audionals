@@ -79,10 +79,10 @@ let previousTimestamp = null;
                 // Compute the average BPM from the buffer
                 const averageBPM = bpmBuffer.reduce((sum, bpm) => sum + bpm, 0) / bpmBuffer.length;
 
-                // Only adjust the arpeggiator's timing if the checkbox is checked
-                if (document.getElementById("useSequencerTiming").checked) {
-                    adjustArpeggiatorTiming(averageBPM);
-                }
+                // // Only adjust the arpeggiator's timing if the checkbox is checked
+                // if (document.getElementById("useSequencerTiming").checked) {
+                //     adjustArpeggiatorTiming(averageBPM);
+                // }
             }
 
             previousTimestamp = currentTimestamp;

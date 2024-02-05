@@ -33,9 +33,29 @@
         const searchOrdinalButton = createExternalLinkButton('Search Ordinal Audio Files', 'https://ordinals.hiro.so/inscriptions?f=audio&s=genesis_block_height&o=asc', 'searchButton', 'Search for audio files (Copy and paste the Ordinal ID to load a sample');
         idModalContent.appendChild(searchOrdinalButton);
     
+        // New: Add the 'Load Synth' button with a unique class name
+        const loadSynthButton = createButton('Load Synth', () => handleLoadSynth(index, idModal), 'loadSynthButton', 'Load the synthesizer for this channel');
+        idModalContent.appendChild(loadSynthButton);
+
         document.body.appendChild(idModal);
-    }
-    
+        }    
+
+        function handleLoadSynth(index, idModal = null) {
+            console.log(`Loading synthesizer for channel ${index}...`);
+            
+            window.unifiedSequencerSettings.setChannelContent(index, 'AUDIONALSYNTH');
+        
+            // Load the synth in a pop-up window
+            openSynthPopup(index);
+        
+            console.log('Synthesizer loading initiated.');
+        
+            // Only try to remove the modal if it's passed as an argument
+            if (idModal) {
+                document.body.removeChild(idModal);
+            }
+        }
+        
 
     function createModal() {
         const modal = document.createElement('div');

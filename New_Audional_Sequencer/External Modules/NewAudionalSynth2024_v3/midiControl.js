@@ -25,7 +25,7 @@ function onMIDIFailure() {
 
 function onMIDIMessage(e) {
     let data = e.data;
-    console.log("Received MIDI message:", e.data);
+    // console.log("Received MIDI message:", e.data);
 
     // Ensure data is in the expected format for processing
     if (typeof data === 'object' && !Array.isArray(data)) {
