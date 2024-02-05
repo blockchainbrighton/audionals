@@ -43,6 +43,9 @@
         function handleLoadSynth(index, idModal) {
             console.log(`Loading synthesizer for channel ${index}...`);
         
+            // Update the projectURLs to indicate a synth is loaded for this channel
+            window.unifiedSequencerSettings.setChannelContent(index, 'SYNTH');
+
             // Load the synth in a pop-up window
             openSynthPopup(index);
         
