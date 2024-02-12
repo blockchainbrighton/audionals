@@ -7,31 +7,31 @@ class AudioSamplePlayer {
     }
 
     loadSample(key, url) {
-        fetch(url)
+        return fetch(url)
             .then(response => response.arrayBuffer())
             .then(arrayBuffer => this.audioContext.decodeAudioData(arrayBuffer))
             .then(decodedAudio => {
                 this.sampleBuffers[key] = decodedAudio;
+                console.log(`Sample loaded: ${key}`);
             })
             .catch(error => console.error("Error loading audio sample:", error));
     }
-
+    
     loadSampleFromBase64(key, base64Data) {
-        // Extract the base64 part of the data URL
         const base64Content = base64Data.split(',')[1];
         if (!base64Content) {
             console.error('Invalid base64 audio data');
             return;
         }
-
         const arrayBuffer = this.base64ToArrayBuffer(base64Content);
-        this.audioContext.decodeAudioData(arrayBuffer)
+        return this.audioContext.decodeAudioData(arrayBuffer)
             .then(decodedAudio => {
                 this.sampleBuffers[key] = decodedAudio;
+                console.log(`Sample loaded from base64: ${key}`);
             })
             .catch(error => console.error("Error loading base64 audio sample:", error));
     }
-
+    
     playSample(key) {
         if (this.audioContext.state === 'suspended') {
             this.audioContext.resume().then(() => {
