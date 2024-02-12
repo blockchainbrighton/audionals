@@ -66,7 +66,13 @@ function processJSONContent(json, pad) {
     }
 
     const base64AudioData = json.audioData;
-    if (base64AudioData) {
+    
+        if (base64AudioData) {
+            console.log("Found base64AudioData, attaching to pad");
+            attachBase64Audio(base64AudioData, pad); // Use the attachBase64Audio function
+        } else {
+            console.log("No base64AudioData found in JSON");        
+            
         if (window.audioSamplePlayer) {
             window.audioSamplePlayer.loadSampleFromBase64(`padAudio_${pad.dataset.pad}`, base64AudioData)
                 .then(() => {
