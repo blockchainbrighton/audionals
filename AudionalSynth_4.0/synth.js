@@ -6,13 +6,13 @@ import { pianoFrequencies } from './frequencyTable.js';
 let context = new (window.AudioContext || window.webkitAudioContext)();
 let currentOscillator = null;
 
-function getValidFrequency(frequencyInput) {
-    let frequency = parseFloat(frequencyInput);
-    if (isNaN(frequency) || frequency < 20 || frequency > 20000) {
-        console.error("Invalid frequency value. Using default Middle C (261.63 Hz)");
-        return 261.63; // Corrected default to Middle C
-    }
-    return frequency;
+// Function to update the master gain node's volume
+let masterGainNode = context.createGain(); // Global gain node for controlling volume
+masterGainNode.connect(context.destination);
+
+function updateVolume() {
+    let volume = getVolume();
+    masterGainNode.gain.value = volume;
 }
 
 function getVolume() {
@@ -21,15 +21,26 @@ function getVolume() {
 }
 
 
+// Call this function when the volume slider value changes
+document.getElementById("volume").addEventListener("input", updateVolume);
+
+
 function play() {
     let noteIndex = document.getElementById("noteSlider").value;
     let frequency = pianoFrequencies[noteIndex];
+    if (currentOscillator) {
+        currentOscillator.forEach(osc => osc.stop(context.currentTime));
+        currentOscillator = []; // Clear the array after stopping oscillators
+    }
     playMS10TriangleBass(frequency);
 }
 
+// Ensure this is called not just on button click but also potentially on slider change if you want immediate feedback
+document.getElementById("noteSlider").addEventListener("input", play);
+
 function playMS10TriangleBass(frequency) {
     if (currentOscillator) {
-        currentOscillator.forEach(osc => osc.stop());
+        currentOscillator.forEach(osc => osc.stop(context.currentTime));
     }
     currentOscillator = [];
 
@@ -47,6 +58,26 @@ function playMS10TriangleBass(frequency) {
         osc.connect(filter);
         currentOscillator.push(osc); // Store oscillators to manage later
     });
+    // LFO Setup
+    let lfoSwitch = document.getElementById('lfoSwitch').checked;
+    let lfoRate = parseFloat(document.getElementById('lfoRate').value);
+    
+    if (lfoSwitch) {
+        let lfo = context.createOscillator();
+        let lfoGain = context.createGain();
+        
+        // Configure LFO rate and gain
+        lfo.frequency.setValueAtTime(lfoRate, context.currentTime); // LFO frequency determines the "wobble" speed
+        lfoGain.gain.setValueAtTime(frequency / 30, context.currentTime); // Adjust depth of the wobble effect
+        
+        // Connect LFO
+        lfo.connect(lfoGain);
+        lfoGain.connect(primaryOscillator.frequency); // Apply to primary oscillator frequency
+        lfoGain.connect(subOscillator.frequency); // Optionally, apply to sub oscillator
+        lfoGain.connect(detuneOscillator.frequency); // Optionally, apply to detuned oscillator
+        
+        lfo.start();
+    }
 
     filter.connect(gainNode);
     gainNode.connect(panner);

@@ -75,5 +75,6 @@ function noteOff(note) {
     console.log(`Note Off: ${note}`);
     // Implement logic for stopping the note, if necessary
     // This might involve modifying the synth to handle note off events
+
 }
 
