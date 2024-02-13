@@ -1,4 +1,6 @@
 // gainManagement.js
+export const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
 
 class GainManager {
     constructor(audioContext) {
@@ -63,7 +65,6 @@ setCompressorRelease(value) {
 
 // Example of using the GainManager
 document.addEventListener('DOMContentLoaded', () => {
-const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 const gainManager = new GainManager(audioContext);
 
 // Assuming you have an audio source
@@ -91,3 +92,5 @@ gainManager.setCompressorRelease(0.25);
 // oscillator.stop(audioContext.currentTime + 2); // Stop after 2 seconds
 // gainManager.disconnect();
 });
+
+export { GainManager };

@@ -1,27 +1,27 @@
-// synth_2.js
+// synth.js
 
 
-function createOscillator(context, frequency, type, detune = 0) {
-    let oscillator = context.createOscillator();
+function createOscillator(audioContext, frequency, type, detune = 0) {
+    let oscillator = audioContext.createOscillator();
     oscillator.type = type;
-    oscillator.frequency.setValueAtTime(frequency, context.currentTime);
-    oscillator.detune.setValueAtTime(detune, context.currentTime);
+    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+    oscillator.detune.setValueAtTime(detune, audioContext.currentTime);
     return oscillator;
 }
 
-function createFilter(context) {
-    let filter = context.createBiquadFilter();
+function createFilter(audioContext) {
+    let filter = audioContext.createBiquadFilter();
     filter.type = "lowpass";
     filter.frequency.value = document.getElementById("cutoff").value;
     filter.Q.value = document.getElementById("resonance").value;
     return filter;
 }
 
-function configureEnvelope(context, gainNode) {
+function configureEnvelope(audioContext, gainNode) {
     let attackTime = document.getElementById("attack").value / 1000;
     let releaseTime = document.getElementById("release").value / 1000;
     let sustainLevel = 0.5; // Adjust as needed
-    let currentTime = context.currentTime;
+    let currentTime = audioContext.currentTime;
 
     // Smoothly ramp up
     gainNode.gain.setValueAtTime(0, currentTime);
@@ -34,32 +34,64 @@ function configureEnvelope(context, gainNode) {
     gainNode.gain.linearRampToValueAtTime(0, currentTime + attackTime + releaseTime);
 }
 
-function playMS10TriangleBass(context, frequency) {
-    if (context.currentOscillator) {
-        context.currentOscillator.forEach(osc => osc.stop(context.currentTime));
+function playMS10TriangleBass(audioContext, frequency, gainManager) {
+    // Clear previous oscillators if any
+    if (audioContext.currentOscillator) {
+        audioContext.currentOscillator.forEach(osc => osc.stop(audioContext.currentTime));
     }
-    context.currentOscillator = [];
+    audioContext.currentOscillator = [];
 
-    let primaryOscillator = createOscillator(context, frequency, document.getElementById("waveform").value);
-    let subOscillator = createOscillator(context, frequency / 2, 'sine');
-    let detuneOscillator = createOscillator(context, frequency, document.getElementById("waveform").value, 10);
+    // Create oscillators
+    let primaryOscillator = createOscillator(audioContext, frequency, document.getElementById("waveform").value);
+    let subOscillator = createOscillator(audioContext, frequency / 2, 'sine');
+    let detuneOscillator = createOscillator(audioContext, frequency, document.getElementById("waveform").value, 10);
 
-    let gainNode = context.createGain();
-    let filter = createFilter(context);
-    let panner = new StereoPannerNode(context, {pan: 0}); // Implement stereo spread control if needed
+    // Create and configure filter
+    let filter = createFilter(audioContext);
 
-    configureEnvelope(context, gainNode);
+    // Create a gain node for envelope control
+    let envelopeGainNode = audioContext.createGain();
 
+    // Configure the envelope on the gain node
+    configureEnvelope(audioContext, envelopeGainNode);
+
+    // Connect oscillators to filter, then filter to envelope gain node
     [primaryOscillator, subOscillator, detuneOscillator].forEach(osc => {
         osc.connect(filter);
-        context.currentOscillator.push(osc); // Store oscillators to manage later
+        audioContext.currentOscillator.push(osc); // Store oscillators to manage later
     });
 
-    filter.connect(gainNode);
-    gainNode.connect(panner);
-    panner.connect(context.masterGainNode);
+      // LFO Setup
+      let lfoSwitch = document.getElementById('lfoSwitch').checked;
+      let lfoRate = parseFloat(document.getElementById('lfoRate').value);
+      
+      if (lfoSwitch) {
+          let lfo = audioContext.createOscillator();
+          let lfoGain = audioContext.createGain();
+          
+          // Configure LFO rate and gain
+          lfo.frequency.setValueAtTime(lfoRate, audioContext.currentTime); // LFO frequency determines the "wobble" speed
+          lfoGain.gain.setValueAtTime(frequency / 30, audioContext.currentTime); // Adjust depth of the wobble effect
+          
+          // Connect LFO
+          lfo.connect(lfoGain);
+          lfoGain.connect(primaryOscillator.frequency); // Apply to primary oscillator frequency
+          lfoGain.connect(subOscillator.frequency); // Optionally, apply to sub oscillator
+          lfoGain.connect(detuneOscillator.frequency); // Optionally, apply to detuned oscillator
+          
+          lfo.start();
+      }
 
-    context.currentOscillator.forEach(osc => osc.start());
+    // Continue the audio node chain
+    filter.connect(envelopeGainNode);
+    envelopeGainNode.connect(gainManager.inputGain); // Connect envelope gain node to GainManager's inputGain
+
+    // Connect GainManager to audio context destination or next node in the chain
+    gainManager.connect(audioContext.destination);
+
+    // Start oscillators
+    audioContext.currentOscillator.forEach(osc => osc.start());
 }
+
 
 export { playMS10TriangleBass, createOscillator, createFilter, configureEnvelope };
