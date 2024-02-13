@@ -1,6 +1,5 @@
 // lfo.js
 
-import { audioContext, GainManager } from './gainManagement.js';
 
 let lfo; // Define LFO oscillator at a higher scope for broader control
 

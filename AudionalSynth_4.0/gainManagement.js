@@ -1,5 +1,5 @@
 // gainManagement.js
-export const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+import { audioContext } from './main.js'; // Adjust the path as necessary
 
 
 class GainManager {
