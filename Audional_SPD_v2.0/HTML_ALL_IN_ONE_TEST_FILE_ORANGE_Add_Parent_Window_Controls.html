@@ -47,6 +47,7 @@ Your browser does not support the audio element.
 <script>
 
 window.addEventListener('message', (event) => {
+    console.log('Received message:', event.data);
     // if (event.origin !== "EXPECTED_ORIGIN") return; // Replace EXPECTED_ORIGIN with your domain
 
     const { type, data } = event.data;
@@ -65,10 +66,27 @@ window.addEventListener('message', (event) => {
                 applyVolumeFade(previousVolume, audioContext.currentTime, 0.03); // Unmute
             }
             break;
+            case 'requestSettings':
+                event.source.postMessage({
+                    type: 'currentSettings',
+                    data: {
+                        bpm: state.bpm,
+                        scheduleMultiplier: state.scheduleMultiplier,
+                    }
+                }, event.origin);
+                break;
+
+
+            // case 'applySettings':
+            // // Apply the settings received
+            // break;
         default:
             console.log('Unknown message type:', type);
     }
 });
+
+
+
 
     // Create audio context and gain node
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -121,6 +139,73 @@ window.addEventListener('message', (event) => {
         console.log(`Multiplier adjusted: ${state.scheduleMultiplier}`);
         displayUpdate('BPM', `Multiplier: ${state.scheduleMultiplier.toFixed(2)}`);
     });
+
+    // Function to send current settings to the parent
+    function sendCurrentSettings() {
+        const currentSettings = {
+            bpm: state.bpm,
+            scheduleMultiplier: state.scheduleMultiplier,
+        };
+        window.parent.postMessage({ type: 'currentSettings', settings: currentSettings }, '*');
+    }
+
+       // Display update with CSS transition
+       function displayUpdate(elementId, text, duration = 3000) {
+         const element = document.getElementById(elementId);
+         element.textContent = text.startsWith("Multiplier:") 
+             ? calculateDisplayTextForMultiplier(text.split(": ")[1]) 
+             : text;
+         element.classList.add('show');
+         setTimeout(() => element.classList.remove('show'), duration);
+     }
+
+     // Global scope variables remain the same
+    let isMuted = false;
+    let previousVolume = 1;
+    let multiplierCount = 0;
+
+    document.addEventListener('keydown', handleKeyDownEvent);
+
+    function handleKeyDownEvent(event) {
+        const currentTime = audioContext.currentTime;
+        const fadeDuration = 0.03; // Fast fade duration in seconds
+
+        // Adjust scheduling multiplier, BPM Adjustment, and reset scheduling multiplier with '0'
+        adjustControls(event);
+
+        // Gain adjustment with smooth fade and Toggle mute/unmute
+        adjustVolumeAndToggleMute(event, currentTime, fadeDuration);
+    }
+
+    function adjustControls(event) {
+        // Check for BPM adjustments
+        if (event.key === '+' && event.shiftKey && !event.ctrlKey) {
+            dispatchEvent('bpmChange', { adjustment: 1 });
+        } else if (event.key === '_' && event.shiftKey && !event.ctrlKey) {
+            dispatchEvent('bpmChange', { adjustment: -1 });
+        } else if (event.key === '=' && event.shiftKey && event.ctrlKey) {
+            dispatchEvent('bpmChange', { adjustment: 10 });
+        } else if (event.key === '_' && event.shiftKey && event.ctrlKey) {
+            dispatchEvent('bpmChange', { adjustment: -10 });
+        }
+
+        // Check for multiplier adjustments or reset
+        if ((event.key === '=' || event.key === '-') && !event.shiftKey && !event.ctrlKey) {
+            const multiplier = event.key === '=' ? 2 : 0.5;
+            dispatchEvent('multiplierChange', { multiplier });
+            console.log(`Dispatching multiplierChange event, multiplier: ${multiplier}`);
+        } else if (event.key === '0' && !event.shiftKey && !event.ctrlKey) {
+            dispatchEvent('multiplierChange', { multiplier: 1 });
+            console.log(`Resetting multiplier to initial value: 1`);
+        }
+    }
+
+    function dispatchEvent(eventName, detail) {
+        const event = new CustomEvent(eventName, { detail });
+        document.dispatchEvent(event);
+    }
+
+
 
      // Example modification to playSampleOnce function
     function playSampleOnce() {
@@ -273,15 +358,7 @@ window.addEventListener('message', (event) => {
         }
     }
  
-     // Display update with CSS transition
-     function displayUpdate(elementId, text, duration = 3000) {
-         const element = document.getElementById(elementId);
-         element.textContent = text.startsWith("Multiplier:") 
-             ? calculateDisplayTextForMultiplier(text.split(": ")[1]) 
-             : text;
-         element.classList.add('show');
-         setTimeout(() => element.classList.remove('show'), duration);
-     }
+  
  
      // Simplify multiplier display calculation
      function calculateDisplayTextForMultiplier(rawMultiplierText) {
@@ -327,51 +404,6 @@ function stopAnimation(elementId) {
    
 }
 
-// Global scope variables remain the same
-let isMuted = false;
-let previousVolume = 1;
-let multiplierCount = 0;
-
-document.addEventListener('keydown', handleKeyDownEvent);
-
-function handleKeyDownEvent(event) {
-    const currentTime = audioContext.currentTime;
-    const fadeDuration = 0.03; // Fast fade duration in seconds
-
-    // Adjust scheduling multiplier, BPM Adjustment, and reset scheduling multiplier with '0'
-    adjustControls(event);
-
-    // Gain adjustment with smooth fade and Toggle mute/unmute
-    adjustVolumeAndToggleMute(event, currentTime, fadeDuration);
-}
-
-function adjustControls(event) {
-    // Check for BPM adjustments
-    if (event.key === '+' && event.shiftKey && !event.ctrlKey) {
-        dispatchEvent('bpmChange', { adjustment: 1 });
-    } else if (event.key === '_' && event.shiftKey && !event.ctrlKey) {
-        dispatchEvent('bpmChange', { adjustment: -1 });
-    } else if (event.key === '=' && event.shiftKey && event.ctrlKey) {
-        dispatchEvent('bpmChange', { adjustment: 10 });
-    } else if (event.key === '_' && event.shiftKey && event.ctrlKey) {
-        dispatchEvent('bpmChange', { adjustment: -10 });
-    }
-
-    // Check for multiplier adjustments or reset
-    if ((event.key === '=' || event.key === '-') && !event.shiftKey && !event.ctrlKey) {
-        const multiplier = event.key === '=' ? 2 : 0.5;
-        dispatchEvent('multiplierChange', { multiplier });
-        console.log(`Dispatching multiplierChange event, multiplier: ${multiplier}`);
-    } else if (event.key === '0' && !event.shiftKey && !event.ctrlKey) {
-        dispatchEvent('multiplierChange', { multiplier: 1 });
-        console.log(`Resetting multiplier to initial value: 1`);
-    }
-}
-
-function dispatchEvent(eventName, detail) {
-    const event = new CustomEvent(eventName, { detail });
-    document.dispatchEvent(event);
-}
 
 function adjustVolumeAndToggleMute(event, currentTime, fadeDuration) {
     // Volume adjustment
