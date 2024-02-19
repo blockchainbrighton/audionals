@@ -52,9 +52,15 @@ const gainNode = audioContext.createGain();
 gainNode.connect(audioContext.destination);
 gainNode.gain.value = 1; // Initial gain value
 
-// State Object
+let multiplierCount = 0;
 let isMuted = false;
 let previousVolume = 1;
+
+let beatCounter = 0; // Initialize a counter to keep track of the beats
+
+let isFadingOut = false;
+
+// state object
 const state = {
     bpm: 78,
     isLooping: false,
@@ -82,116 +88,51 @@ window.addEventListener('message', (event) => {
     }
 });
 
-// Event Listeners for User Interactions
-document.getElementById("OB1_Image").addEventListener("click", async () => {
-    if (audioContext.state === 'suspended') await audioContext.resume();
-    state.isLooping ? stopAudioPlayback() : playAudioBuffer();
-});
 
-document.addEventListener('keydown', handleKeyDownEvent);
+    // Event listener for DOMContentLoaded to fetch and decode audio
+    document.addEventListener('DOMContentLoaded', () => fetchAndDecodeAudio("audionalData"));
 
-// Function to handle BPM updates and related UI or state changes
-function updateBPM(newBPM) {
-    state.bpm = newBPM;
-    // Additional logic for adjusting playback or UI based on new BPM
-    console.log(`BPM updated to ${newBPM}`);
-}
-
-// Function to send current settings back to parent
-function sendCurrentSettings() {
-    console.log('Sending current settings back to parent:', {
-        volume: gainNode.gain.value,
-        scheduleMultiplier: state.scheduleMultiplier
+    // Event listener for image click to toggle audio playback
+    document.getElementById("OB1_Image").addEventListener("click", async () => {
+        if (audioContext.state === 'suspended') await audioContext.resume();
+        const loopingState = state.isLooping ? "STOP" : "START";
+        console.log(`[Click Event] Looping state: ${loopingState}`);
+        state.isLooping ? stopAudioPlayback() : playAudioBuffer();
     });
-    event.source.postMessage({
-        type: 'currentSettings',
-        settings: {
+
+    // Event listener for spacebar press to trigger sample playback
+    document.addEventListener('keydown', event => {
+        if (event.key === ' ' || event.keyCode === 32) playSampleOnce();
+    });
+
+    // Event listeners for custom BPM and scheduling multiplier adjustments
+    document.addEventListener('bpmChange', (event) => {
+        updateBPM(state.bpm + event.detail.adjustment);
+    });
+
+    // Event listener to update scheduling multiplier on custom event
+    document.addEventListener('multiplierChange', (event) => {
+        state.scheduleMultiplier = event.detail.multiplier !== 1 ?
+            Math.max(1 / 32, Math.min(32, state.scheduleMultiplier * event.detail.multiplier)) :
+            1;
+        console.log(`Multiplier adjusted: ${state.scheduleMultiplier}`);
+        displayUpdate('BPM', `Multiplier: ${state.scheduleMultiplier.toFixed(2)}`);
+    });
+
+    // Function to send current settings back to parent
+    function sendCurrentSettings() {
+        console.log('Sending current settings back to parent:', {
             volume: gainNode.gain.value,
             scheduleMultiplier: state.scheduleMultiplier
-        }
-    }, '*'); // Consider replacing '*' with event.origin for security
-}
-
-// Event listeners for custom BPM and scheduling multiplier adjustments
-document.addEventListener('bpmChange', (event) => {
-    updateBPM(state.bpm + event.detail.adjustment);
-});
-
-document.addEventListener('multiplierChange', (event) => {
-    state.scheduleMultiplier = event.detail.multiplier !== 1 ?
-        Math.max(1 / 32, Math.min(32, state.scheduleMultiplier * event.detail.multiplier)) :
-        1;
-    console.log(`Multiplier adjusted: ${state.scheduleMultiplier}`);
-});
-
-// Helper functions for volume fade and mute control
-function applyVolumeFade(targetVolume, currentTime, fadeDuration) {
-    gainNode.gain.setValueAtTime(gainNode.gain.value, currentTime);
-    gainNode.gain.linearRampToValueAtTime(targetVolume, currentTime + fadeDuration);
-    isMuted = targetVolume === 0;
-    previousVolume = isMuted ? previousVolume : targetVolume;
-    console.log(isMuted ? "Muted" : `Volume adjusted to ${targetVolume}`);
-}
-
-function handleKeyDownEvent(event) {
-    adjustControls(event);
-    adjustVolumeAndToggleMute(event, audioContext.currentTime, 0.03);
-}
-
-// Function to dispatch custom events for BPM and multiplier changes
-function dispatchEvent(eventName, detail) {
-    const event = new CustomEvent(eventName, { detail });
-    document.dispatchEvent(event);
-}
-
-// Adjust controls based on key events (Integrating with provided volume and mute functionality)
-function adjustControls(event) {
-    // Check for BPM adjustments
-    if (event.key === '+' && event.shiftKey && !event.ctrlKey) {
-        dispatchEvent('bpmChange', { adjustment: 1 });
-    } else if (event.key === '_' && event.shiftKey && !event.ctrlKey) {
-        dispatchEvent('bpmChange', { adjustment: -1 });
-    } else if (event.key === '=' && event.shiftKey && event.ctrlKey) {
-        dispatchEvent('bpmChange', { adjustment: 10 });
-    } else if (event.key === '_' && event.shiftKey && event.ctrlKey) {
-        dispatchEvent('bpmChange', { adjustment: -10 });
+        });
+        event.source.postMessage({
+            type: 'currentSettings',
+            settings: {
+                volume: gainNode.gain.value,
+                scheduleMultiplier: state.scheduleMultiplier
+            }
+        }, '*'); // Consider replacing '*' with event.origin for security
     }
-
-    // Check for multiplier adjustments or reset
-    if ((event.key === '=' || event.key === '-') && !event.shiftKey && !event.ctrlKey) {
-        const multiplier = event.key === '=' ? 2 : 0.5;
-        dispatchEvent('multiplierChange', { multiplier });
-        console.log(`Dispatching multiplierChange event, multiplier: ${multiplier}`);
-    } else if (event.key === '0' && !event.shiftKey && !event.ctrlKey) {
-        dispatchEvent('multiplierChange', { multiplier: 1 });
-        console.log(`Resetting multiplier to initial value: 1`);
-    }
-
-    // The volume adjustment and mute toggle functionality is handled within adjustVolumeAndToggleMute
-}
-
-function adjustVolumeAndToggleMute(event, currentTime, fadeDuration) {
-    // Volume adjustment
-    if ((event.key === ',' || event.key === '.') && !event.shiftKey && !event.ctrlKey) {
-        const direction = event.key === ',' ? -0.1 : 0.1;
-        const newGainValue = Math.min(2, Math.max(0, gainNode.gain.value + direction));
-        previousVolume = newGainValue;
-        applyVolumeFade(newGainValue, currentTime, fadeDuration);
-    }
-    // Toggle mute/unmute
-    else if (event.key === 'm' && !event.shiftKey && !event.ctrlKey) {
-        isMuted = !isMuted;
-        const targetVolume = isMuted ? 0 : previousVolume;
-        applyVolumeFade(targetVolume, currentTime, fadeDuration);
-        console.log(isMuted ? "Muted" : "Unmuted");
-    }
-}
-
-function applyVolumeFade(targetGainValue, currentTime, fadeDuration) {
-    gainNode.gain.setValueAtTime(gainNode.gain.value, currentTime);
-    gainNode.gain.linearRampToValueAtTime(targetGainValue, currentTime + fadeDuration);
-    console.log(`Volume adjusted, target gain: ${targetGainValue}`);
-}
 
      // Example modification to playSampleOnce function
     function playSampleOnce() {
@@ -224,7 +165,6 @@ function applyVolumeFade(targetGainValue, currentTime, fadeDuration) {
          }
      }
  
-     let beatCounter = 0; // Initialize a counter to keep track of the beats
 
     // Schedule next note for looping playback
     function scheduleNextNote() {
@@ -279,7 +219,6 @@ function applyVolumeFade(targetGainValue, currentTime, fadeDuration) {
      }
 
 
-    let isFadingOut = false;
 
     // Fade out and stop all scheduled sources
     function fadeOutAndStopSources() {
@@ -321,12 +260,12 @@ function applyVolumeFade(targetGainValue, currentTime, fadeDuration) {
         console.log(`Updating BPM to ${newBPM}`);
         state.bpm = newBPM;
 
-       // This calls a function to adjust playback scheduling based on BPM
+        // Assume we have a function to adjust playback scheduling based on BPM
         adjustPlaybackTimingBasedOnBPM();
 
-        // Update UI or other elements to reflect the new BPM
+        // If necessary, update UI or other elements to reflect the new BPM
         displayUpdate('BPM', `${newBPM} BPM`);
-     }
+    }
 
     function adjustPlaybackTimingBasedOnBPM() {
         // Example: Adjusting the next note time based on the new BPM
@@ -343,7 +282,7 @@ function applyVolumeFade(targetGainValue, currentTime, fadeDuration) {
             playAudioBuffer();
         }
     }
-
+ 
      // Display update with CSS transition
      function displayUpdate(elementId, text, duration = 3000) {
          const element = document.getElementById(elementId);
@@ -359,7 +298,7 @@ function applyVolumeFade(targetGainValue, currentTime, fadeDuration) {
          const multiplier = parseFloat(rawMultiplierText);
          return multiplier !== 1 ? (multiplier > 1 ? `x${multiplier}` : `1/${1 / multiplier}`) : '1:1';
      }
- 
+
      // animate.js
 let animationTimeoutId = null;
 
@@ -398,8 +337,74 @@ function stopAnimation(elementId) {
    
 }
 
-// Initialize Audio Data Loading
-document.addEventListener('DOMContentLoaded', () => fetchAndDecodeAudio("audionalData"));
+
+document.addEventListener('keydown', handleKeyDownEvent);
+
+function handleKeyDownEvent(event) {
+    const currentTime = audioContext.currentTime;
+    const fadeDuration = 0.03; // Fast fade duration in seconds
+
+    // Adjust scheduling multiplier, BPM Adjustment, and reset scheduling multiplier with '0'
+    adjustControls(event);
+
+    // Gain adjustment with smooth fade and Toggle mute/unmute
+    adjustVolumeAndToggleMute(event, currentTime, fadeDuration);
+}
+
+// Function to dispatch custom events for BPM and multiplier changes
+function dispatchEvent(eventName, detail) {
+    const event = new CustomEvent(eventName, { detail });
+    document.dispatchEvent(event);
+}
+
+
+function adjustControls(event) {
+    // Check for BPM adjustments
+    if (event.key === '+' && event.shiftKey && !event.ctrlKey) {
+        dispatchEvent('bpmChange', { adjustment: 1 });
+    } else if (event.key === '_' && event.shiftKey && !event.ctrlKey) {
+        dispatchEvent('bpmChange', { adjustment: -1 });
+    } else if (event.key === '=' && event.shiftKey && event.ctrlKey) {
+        dispatchEvent('bpmChange', { adjustment: 10 });
+    } else if (event.key === '_' && event.shiftKey && event.ctrlKey) {
+        dispatchEvent('bpmChange', { adjustment: -10 });
+    }
+
+    // Check for multiplier adjustments or reset
+    if ((event.key === '=' || event.key === '-') && !event.shiftKey && !event.ctrlKey) {
+        const multiplier = event.key === '=' ? 2 : 0.5;
+        dispatchEvent('multiplierChange', { multiplier });
+        console.log(`Dispatching multiplierChange event, multiplier: ${multiplier}`);
+    } else if (event.key === '0' && !event.shiftKey && !event.ctrlKey) {
+        dispatchEvent('multiplierChange', { multiplier: 1 });
+        console.log(`Resetting multiplier to initial value: 1`);
+    }
+}
+
+
+
+function adjustVolumeAndToggleMute(event, currentTime, fadeDuration) {
+    // Volume adjustment
+    if ((event.key === ',' || event.key === '.') && !event.shiftKey && !event.ctrlKey) {
+        const direction = event.key === ',' ? -0.1 : 0.1;
+        const newGainValue = Math.min(2, Math.max(0, gainNode.gain.value + direction));
+        previousVolume = newGainValue;
+        applyVolumeFade(newGainValue, currentTime, fadeDuration);
+    }
+    // Toggle mute/unmute
+    else if (event.key === 'm' && !event.shiftKey && !event.ctrlKey) {
+        isMuted = !isMuted;
+        const targetVolume = isMuted ? 0 : previousVolume;
+        applyVolumeFade(targetVolume, currentTime, fadeDuration);
+        console.log(isMuted ? "Muted" : "Unmuted");
+    }
+}
+
+function applyVolumeFade(targetGainValue, currentTime, fadeDuration) {
+    gainNode.gain.setValueAtTime(gainNode.gain.value, currentTime);
+    gainNode.gain.linearRampToValueAtTime(targetGainValue, currentTime + fadeDuration);
+    console.log(`Volume adjusted, target gain: ${targetGainValue}`);
+}
 
 </script>
 </body>
