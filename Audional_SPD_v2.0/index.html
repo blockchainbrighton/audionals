@@ -57,150 +57,165 @@
 <div class="grid-container"></div>
 
 <script>
-const numberOfIframes = 36; // Define the total number of iframes
-
-function createIframes() {
-  const container = document.querySelector('.grid-container');
-  for (let i = 0; i < numberOfIframes; i++) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'iframe-wrapper';
-
-    const iframe = document.createElement('iframe');
-    iframe.id = `iframe-${i}`;
-
-    // Attach event listener for loading HTML files into iframes
-    attachIframeClickListener(iframe);
-
-    wrapper.appendChild(iframe);
-    container.appendChild(wrapper);
-  }
-}
-
-function attachIframeClickListener(iframe) {
-  iframe.addEventListener('click', () => {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'text/html';
-    fileInput.style.display = 'none';
-
-    fileInput.onchange = (e) => loadFileIntoIframe(e, iframe);
-    document.body.appendChild(fileInput);
-    fileInput.click();
-    document.body.removeChild(fileInput);
-  });
-}
-
-function loadFileIntoIframe(e, iframe) {
-    const file = e.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const blob = new Blob([e.target.result], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
-            iframe.src = url;
-
-            // Wait for the iframe to load the new content
-            iframe.onload = () => {
-                // Send the current global BPM to the newly loaded content
-                const currentGlobalBPM = parseInt(document.getElementById('globalBPM').value, 10);
-                iframe.contentWindow.postMessage({
-                    type: 'updateBPM',
-                    data: { bpm: currentGlobalBPM }
-                }, '*'); // Remember to replace '*' with the actual origin for better security
-            };
-        };
-        reader.readAsText(file);
+  const numberOfIframes = 36; // Define the total number of iframes
+  
+  console.log('Starting to create iframes...');
+  
+  function createIframes() {
+    const container = document.querySelector('.grid-container');
+    console.log('Creating iframes...');
+    for (let i = 0; i < numberOfIframes; i++) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'iframe-wrapper';
+  
+      const iframe = document.createElement('iframe');
+      iframe.id = `iframe-${i}`;
+      console.log(`Iframe ${iframe.id} created`);
+  
+      // Attach event listener for loading HTML files into iframes
+      attachIframeClickListener(iframe);
+  
+      wrapper.appendChild(iframe);
+      container.appendChild(wrapper);
     }
-}
-
-
-function setGlobalBPM() {
-  const bpm = parseInt(document.getElementById('globalBPM').value, 10);
-  const iframes = document.querySelectorAll('iframe');
-
-  iframes.forEach(iframe => {
-    iframe.contentWindow.postMessage({
-      type: 'updateBPM',
-      data: { bpm: bpm }
-    }, '*'); // Adjust to use the actual origin for better security
-  });
-}
-
-createIframes();
-
-document.getElementById('setBPM').addEventListener('click', setGlobalBPM);
-
-// Toggle selection and mute control
-document.querySelectorAll('iframe').forEach(iframe => {
-  iframe.addEventListener('click', () => iframe.classList.toggle('selected'));
-});
-
-document.addEventListener('keydown', event => {
-  if (event.key.toLowerCase() === 'm') {
-    document.querySelectorAll('iframe.selected').forEach(iframe => {
-      const isMuted = iframe.classList.contains('muted');
-      iframe.contentWindow.postMessage({
-        type: 'muteControl',
-        data: { mute: !isMuted }
-      }, '*'); // Adjust to use the actual origin for better security
-      iframe.classList.toggle('muted', !isMuted);
+  }
+  
+  function attachIframeClickListener(iframe) {
+    console.log(`Attaching click listener to ${iframe.id}`);
+    iframe.addEventListener('click', () => {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'text/html';
+      fileInput.style.display = 'none';
+  
+      fileInput.onchange = (e) => loadFileIntoIframe(e, iframe);
+      document.body.appendChild(fileInput);
+      fileInput.click();
+      document.body.removeChild(fileInput);
     });
   }
-});
-
-let isEventListenerAdded = false; // Flag to check if the event listener has been added
-
-function saveSettings() {
-  console.log('saveSettings entered: Saving settings...');
-  const settings = [];
-
-  // Add the event listener only once
-  if (!isEventListenerAdded) {
-    window.addEventListener('message', (event) => {
-      if (event.data && event.data.type === 'currentSettings') {
-        // Process the settings received from the iframe
-        settings.push({
-          iframeId: event.source.frameElement.id, // Assuming each iframe has a unique ID
-          ...event.data.settings // Spreads the settings including URL and volume
-        });
-        console.log('Settings received:', event.data.settings);
+  
+  function loadFileIntoIframe(e, iframe) {
+      const file = e.target.files[0];
+      console.log(`Loading file into ${iframe.id}`);
+      if (file) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+              const blob = new Blob([e.target.result], { type: 'text/html' });
+              const url = URL.createObjectURL(blob);
+              iframe.src = url;
+  
+              console.log(`File loaded into ${iframe.id}, URL: ${url}`);
+  
+              // Wait for the iframe to load the new content
+              iframe.onload = () => {
+                  console.log(`Iframe ${iframe.id} loaded with content`);
+                  const currentGlobalBPM = parseInt(document.getElementById('globalBPM').value, 10);
+                  console.log(`Sending BPM update to ${iframe.id}: BPM = ${currentGlobalBPM}`);
+                  iframe.contentWindow.postMessage({
+                      type: 'updateBPM',
+                      data: { bpm: currentGlobalBPM }
+                  }, '*'); // Remember to replace '*' with the actual origin for better security
+              };
+          };
+          reader.readAsText(file);
       }
-    });
-    isEventListenerAdded = true; // Set the flag to true after adding the listener
   }
-
-  document.querySelectorAll('iframe').forEach(iframe => {
-    // Wait for the iframe to load before requesting settings
-    iframe.contentWindow.postMessage({ type: 'requestSettings' }, '*');
+  
+  function setGlobalBPM() {
+    console.log('Setting global BPM...');
+    const bpm = parseInt(document.getElementById('globalBPM').value, 10);
+    const iframes = document.querySelectorAll('iframe');
+  
+    iframes.forEach(iframe => {
+      console.log(`Updating BPM for ${iframe.id} to ${bpm}`);
+      iframe.contentWindow.postMessage({
+        type: 'updateBPM',
+        data: { bpm: bpm }
+      }, '*'); // Adjust to use the actual origin for better security
+    });
+  }
+  
+  createIframes();
+  
+  document.getElementById('setBPM').addEventListener('click', () => {
+    console.log('Set BPM button clicked');
+    setGlobalBPM();
   });
-
-  // Compile settings into a single JSON text file
-  const settingsBlob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
-  const settingsUrl = URL.createObjectURL(settingsBlob);
-
-  // Trigger download
-  const downloadLink = document.createElement('a');
-  downloadLink.href = settingsUrl;
-  downloadLink.download = 'audioSettings.json';
-  downloadLink.click();
-}
-
-// // Example function to load settings
-// function loadSettings() {
-//   const settings = ...; // Retrieve settings from localStorage or a server
-//   settings.forEach((setting, index) => {
-//     const iframe = document.getElementById(`iframe-${index}`);
-//     // Example: Apply settings to iframe
-//     // You'll need to implement the message handling in the iframes
-//     iframe.contentWindow.postMessage({ type: 'applySettings', data: setting }, '*');
-//   });
-// }
-
-// Example usage
-document.getElementById('saveSettingsButton').addEventListener('click', saveSettings);
-// window.addEventListener('load', loadSettings);
-
-</script>
+  
+  // Toggle selection and mute control
+  document.querySelectorAll('iframe').forEach(iframe => {
+    iframe.addEventListener('click', () => {
+      console.log(`${iframe.id} clicked for toggle selection/mute`);
+      iframe.classList.toggle('selected');
+    });
+  });
+  
+  document.addEventListener('keydown', event => {
+    if (event.key.toLowerCase() === 'm') {
+      console.log('Mute key pressed, toggling mute for selected iframes');
+      document.querySelectorAll('iframe.selected').forEach(iframe => {
+        const isMuted = iframe.classList.contains('muted');
+        console.log(`Toggling mute for ${iframe.id}: ${!isMuted}`);
+        iframe.contentWindow.postMessage({
+          type: 'muteControl',
+          data: { mute: !isMuted }
+        }, '*'); // Adjust to use the actual origin for better security
+        iframe.classList.toggle('muted', !isMuted);
+      });
+    }
+  });
+  
+  let isEventListenerAdded = false; // Flag to check if the event listener has been added
+  
+  function saveSettings() {
+    console.log('saveSettings function triggered');
+    const settings = [];
+  
+    // Add the event listener only once
+    if (!isEventListenerAdded) {
+      console.log('Adding message event listener for receiving settings from iframes...');
+      window.addEventListener('message', (event) => {
+        console.log('Message received from iframe:', event.data);
+        if (event.data && event.data.type === 'currentSettings') {
+          // Process the settings received from the iframe
+          settings.push({
+            iframeId: event.source.frameElement.id, // Assuming each iframe has a unique ID
+            ...event.data.settings // Spreads the settings including URL and volume
+          });
+          console.log('Settings received and processed:', event.data.settings);
+        }
+      });
+      isEventListenerAdded = true; // Set the flag to true after adding the listener
+    }
+  
+    document.querySelectorAll('iframe').forEach(iframe => {
+      console.log(`Requesting settings from ${iframe.id}`);
+      // Wait for the iframe to load before requesting settings
+      iframe.contentWindow.postMessage({ type: 'requestSettings' }, '*');
+    });
+  
+    // Compile settings into a single JSON text file
+    setTimeout(() => { // Delay to ensure all settings are received before creating the blob
+      console.log('Compiled settings:', JSON.stringify(settings, null, 2));
+      const settingsBlob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+      const settingsUrl = URL.createObjectURL(settingsBlob);
+  
+      // Trigger download
+      const downloadLink = document.createElement('a');
+      downloadLink.href = settingsUrl;
+      downloadLink.download = 'audioSettings.json';
+      downloadLink.click();
+      console.log('Settings file created and download triggered');
+    }, 1000); // Adjust delay as needed
+  }
+  
+  document.getElementById('saveSettingsButton').addEventListener('click', () => {
+    console.log('Save Settings button clicked');
+    saveSettings();
+  });
+  </script>
+  
 
 </body>
 </html>
