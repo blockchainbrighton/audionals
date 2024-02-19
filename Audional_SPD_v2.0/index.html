@@ -159,23 +159,31 @@ function saveSettings() {
     window.addEventListener('message', (event) => {
       if (event.data && event.data.type === 'currentSettings') {
         // Process the settings received from the iframe
-        settings.push(event.data.settings);
+        settings.push({
+          iframeId: event.source.frameElement.id, // Assuming each iframe has a unique ID
+          ...event.data.settings // Spreads the settings including URL and volume
+        });
         console.log('Settings received:', event.data.settings);
-        // Here, save the settings to localStorage or send them to a server
-        // localStorage.setItem('audioSettings', JSON.stringify(settings));
       }
     });
     isEventListenerAdded = true; // Set the flag to true after adding the listener
   }
 
   document.querySelectorAll('iframe').forEach(iframe => {
-    iframe.addEventListener('load', () => {
-        // Wait for the iframe to load before requesting settings
-        iframe.contentWindow.postMessage({ type: 'requestSettings' }, '*');
-    });
-});
-}
+    // Wait for the iframe to load before requesting settings
+    iframe.contentWindow.postMessage({ type: 'requestSettings' }, '*');
+  });
 
+  // Compile settings into a single JSON text file
+  const settingsBlob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+  const settingsUrl = URL.createObjectURL(settingsBlob);
+
+  // Trigger download
+  const downloadLink = document.createElement('a');
+  downloadLink.href = settingsUrl;
+  downloadLink.download = 'audioSettings.json';
+  downloadLink.click();
+}
 
 // // Example function to load settings
 // function loadSettings() {
