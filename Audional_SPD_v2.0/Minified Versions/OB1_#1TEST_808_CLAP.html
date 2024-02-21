@@ -277,27 +277,22 @@ Your browser does not support the audio element.
  
    // Schedule next note for looping playback
    function scheduleNextNote() {
-        if (!state.isLooping || !state.audioBuffer) return;
-
-        const context = getAudioContext();
-        const currentTime = context.currentTime;
-        const lookaheadTime = 0.1; // 100 milliseconds lookahead
-
-        // Ensure we're scheduling ahead of the current time
-        while (state.nextNoteTime < currentTime + lookaheadTime) {
-            const scheduledTime = Math.max(state.nextNoteTime, currentTime + lookaheadTime);
-            playAudional(scheduledTime); // Now passing the precise scheduled time
-
-            // Calculate the next note's time, ensuring it's scheduled in the future
-            state.nextNoteTime += calculateBeatDuration(state.bpm) / state.scheduleMultiplier;
-        }
-
-        // Continue scheduling the next note
-        const delayUntilNextCheck = Math.max(state.nextNoteTime - currentTime - lookaheadTime, 0.01) * 1000;
-        setTimeout(scheduleNextNote, delayUntilNextCheck);
-    }
-
+     if (!state.isLooping || !state.audioBuffer) return;
  
+     const context = getAudioContext(); // Centralize AudioContext access
+     const crossfadeDuration = 0.02; // 20 milliseconds crossfade
+     const currentTime = context.currentTime;
+ 
+     // Adjust for crossfade by scheduling slightly before the current note ends
+     if (currentTime >= state.nextNoteTime - crossfadeDuration) {
+         playAudional(); // Adjust playAudional to handle crossfade logic
+         // Schedule the next note, accounting for crossfade duration
+         state.nextNoteTime += calculateBeatDuration(state.bpm) / state.scheduleMultiplier - crossfadeDuration;
+     }
+ 
+     const delayUntilNextCheck = Math.max((state.nextNoteTime - currentTime) * 1000, 10);
+     setTimeout(scheduleNextNote, delayUntilNextCheck);
+ }
  
           // Step 1: Define Multiplier Steps
          // Adjusted Multiplier Steps to reflect logical progression
@@ -649,7 +644,6 @@ Your browser does not support the audio element.
      
         
  
-     
  </script>
      
 

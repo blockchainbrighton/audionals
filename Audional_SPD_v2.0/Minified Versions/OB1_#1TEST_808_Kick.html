@@ -32,664 +32,620 @@ Your browser does not support the audio element.
 
 <script>
 
-    // Audio Context and Gain Node Initialization
- 
- // Dynamically manage Audio Context initialization
- let audioContext = null;
- let gainNode = null;
- 
- let animationTimeoutId = null;
- 
- let multiplierCount = 0;
- let isMuted = false;
- let previousVolume = 1;
- 
- let beatCounter = 0; // Initialize a counter to keep track of the beats
- 
- let isFadingOut = false;
- 
- function getAudioContext() {
-     // Check if the existing AudioContext is closed. If so, create a new one.
-     if (!window.myAudioContext || window.myAudioContext.state === 'closed') {
-         window.myAudioContext = new AudioContext();
-         // Reinitialize AudioNodes with the new AudioContext
-         initializeAudioNodes();
-     }
-     return window.myAudioContext;
- }
- 
- function initializeAudioNodes() {
-     const context = getAudioContext();
-     // Re-create gainNode and other necessary AudioNodes with the new context
-     gainNode = context.createGain();
-     // Connect gainNode and other nodes as needed
-     gainNode.connect(context.destination);
-     // Add similar reinitializations for other AudioNodes you might have
- }
- 
- document.body.addEventListener('click', initializeAudioContext, { once: true });
+   // Audio Context and Gain Node Initialization
 
-function initializeAudioContext() {
-    if (!window.myAudioContext) {
+// Dynamically manage Audio Context initialization
+let audioContext = null;
+let gainNode = null;
+
+let animationTimeoutId = null;
+
+let multiplierCount = 0;
+let isMuted = false;
+let previousVolume = 1;
+
+let beatCounter = 0; // Initialize a counter to keep track of the beats
+
+let isFadingOut = false;
+
+function getAudioContext() {
+    // Check if the existing AudioContext is closed. If so, create a new one.
+    if (!window.myAudioContext || window.myAudioContext.state === 'closed') {
         window.myAudioContext = new AudioContext();
+        // Reinitialize AudioNodes with the new AudioContext
+        initializeAudioNodes();
     }
-    // Check if the state of the AudioContext is not 'running', then resume it
-    if (window.myAudioContext.state !== 'running') {
-        window.myAudioContext.resume();
-    }
-    console.log('AudioContext initialized and running');
-    // Here you can also preload and decode your samples as needed
+    return window.myAudioContext;
 }
 
-function ensureAudioContextRunning() {
-    if (window.myAudioContext && window.myAudioContext.state !== 'running') {
-        window.myAudioContext.resume().then(() => {
-            console.log('AudioContext resumed successfully.');
-        }).catch(error => {
-            console.error('Error resuming AudioContext:', error);
+function initializeAudioNodes() {
+    const context = getAudioContext();
+    // Re-create gainNode and other necessary AudioNodes with the new context
+    gainNode = context.createGain();
+    // Connect gainNode and other nodes as needed
+    gainNode.connect(context.destination);
+    // Add similar reinitializations for other AudioNodes you might have
+}
+
+
+
+const state = {
+    bpm: 78,
+    isLooping: false,
+    audioBuffer: null,
+    nextNoteTime: 0, // Temporarily set to 0 or some safe initial value
+    scheduledNotes: [],
+    scheduleMultiplier: 1,
+};
+
+// Event listener for image click to toggle audio playback
+document.getElementById("OB1_Image").addEventListener("click", async () => {
+    const context = getAudioContext(); // Move this inside the function
+    console.log(`[audioConnection] AudioContext state: ${context.state}`);
+    if (context.state === 'suspended') {
+        console.log("[audioConnection] Resuming suspended AudioContext");
+        await context.resume();
+    }
+
+    console.log("[audioConnection] Ensuring GainNode is connected to AudioContext.destination");
+    if (!gainNode) {
+        gainNode = context.createGain();
+        gainNode.connect(context.destination);
+    }
+    console.log("[audioConnection] GainNode connected to AudioContext.destination");
+    // Fetch and decode the audio again if necessary
+    await fetchAndDecodeAudio("audionalData");
+
+    const loopingState = state.isLooping ? "STOP" : "START";
+    console.log(`[Click Event] Looping state: ${loopingState}`);
+    state.isLooping ? stopAudioPlayback() : playAudioBuffer();
+});
+
+// Event listener for DOMContentLoaded to fetch and decode audio
+document.addEventListener('DOMContentLoaded', () => fetchAndDecodeAudio("audionalData"));
+
+
+// Event listener for Messages
+window.addEventListener('message', (event) => {
+    // Check if the message is from the current window and ignore it if so
+    if (event.source === window) {
+        return; // Ignore messages that the window sent to itself
+    }
+
+    const { type, data } = event.data;
+    switch (type) {
+        case 'updateBPM':
+            updateBPM(Math.max(60, Math.min(240, data.bpm)));
+            break;
+        case 'muteControl':
+            applyVolumeFade(data.mute ? 0 : previousVolume, audioContext.currentTime, 0.03);
+            break;
+        case 'requestSettings':
+            sendCurrentSettings();
+            break;
+        default:
+            console.log('Unknown message type:', type);
+    }
+});
+
+// Event listener for keydown to handle all key controls including BPM and multiplier adjustments
+document.addEventListener('keydown', event => {
+    const context = getAudioContext();
+    
+    if (context.state !== 'running') {
+        console.log('Resuming AudioContext.');
+        context.resume().then(() => {
+            console.log('AudioContext resumed.');
+            processKeyInput(event);
         });
+    } else {
+        processKeyInput(event);
+    }
+});
+
+function processKeyInput(event) {
+    switch (event.key) {
+        case ' ':
+        case 'Spacebar': // For cross-browser compatibility
+            playSampleOnce();
+            console.log('Spacebar pressed');
+            break;
+        case '+':
+        case '=': // '+' might not require shift on some keyboards, '=' does
+            if (event.ctrlKey && event.shiftKey) {
+                updateBPM(state.bpm + 10); // Increase BPM by 10
+            } else if (event.shiftKey) {
+                updateBPM(state.bpm + 1); // Increase BPM by 1
+            } else {
+                adjustMultiplier(2); // Double the multiplier
+            }
+            break;
+        case '-':
+            if (event.ctrlKey && event.shiftKey) {
+                updateBPM(state.bpm - 10); // Decrease BPM by 10
+            } else if (event.shiftKey) {
+                updateBPM(state.bpm - 1); // Decrease BPM by 1
+            } else {
+                adjustMultiplier(0.5); // Halve the multiplier
+            }
+            break;
+            case ',':
+            adjustVolume(false); // Decrease volume
+            break;
+        case '.':
+            adjustVolume(true); // Increase volume
+            break;
+        case 'm':
+            toggleMute(); // Mute or unmute the audio
+            break;
+        case '0':
+            state.scheduleMultiplier = 1; // Reset multiplier
+            console.log(`Multiplier reset to initial value: 1`);
+            displayUpdate('BPM', `Multiplier reset to 1`);
+            break;
+        default:
+            // Handle other keys if necessary
+            break;
     }
 }
 
-// Call this function before any playback action
-ensureAudioContextRunning();
 
-// Assuming initializeAudioContext also handles sample preloading
-function initializeAudioContext() {
-    if (!window.myAudioContext) {
-        window.myAudioContext = new AudioContext();
-    }
-    if (window.myAudioContext.state !== 'running') {
-        window.myAudioContext.resume();
-    }
-    console.log('AudioContext initialized and running');
 
-    // Preload and decode samples here
-    preloadAndDecodeSamples(['sample1', 'sample2']); // Add your sample names
+// function toggleMute() {
+//     isMuted = !isMuted;
+//     applyVolumeFade(isMuted ? 0 : previousVolume);
+//     console.log(isMuted ? "Muted" : "Unmuted");
+// }
+
+function applyVolumeFade(targetGainValue) {
+    const currentTime = getAudioContext().currentTime;
+    const fadeDuration = 0.03;
+    gainNode.gain.setValueAtTime(gainNode.gain.value, currentTime);
+    gainNode.gain.linearRampToValueAtTime(targetGainValue, currentTime + fadeDuration);
+    console.log(`Volume adjusted, target gain: ${targetGainValue}`);
 }
- 
- const state = {
-     bpm: 78,
-     isLooping: false,
-     audioBuffer: null,
-     nextNoteTime: 0, // Temporarily set to 0 or some safe initial value
-     scheduledNotes: [],
-     scheduleMultiplier: 1,
- };
- 
- // Event listener for image click to toggle audio playback
- document.getElementById("OB1_Image").addEventListener("click", async () => {
-     const context = getAudioContext(); // Move this inside the function
-     console.log(`[audioConnection] AudioContext state: ${context.state}`);
-     if (context.state === 'suspended') {
-         console.log("[audioConnection] Resuming suspended AudioContext");
-         await context.resume();
-     }
- 
-     console.log("[audioConnection] Ensuring GainNode is connected to AudioContext.destination");
-     if (!gainNode) {
-         gainNode = context.createGain();
-         gainNode.connect(context.destination);
-     }
-     console.log("[audioConnection] GainNode connected to AudioContext.destination");
-     // Fetch and decode the audio again if necessary
-     await fetchAndDecodeAudio("audionalData");
- 
-     const loopingState = state.isLooping ? "STOP" : "START";
-     console.log(`[Click Event] Looping state: ${loopingState}`);
-     state.isLooping ? stopAudioPlayback() : playAudioBuffer();
- });
- 
- // Event listener for DOMContentLoaded to fetch and decode audio
- document.addEventListener('DOMContentLoaded', () => fetchAndDecodeAudio("audionalData"));
- 
- 
- // Event listener for Messages
- window.addEventListener('message', (event) => {
-     // Check if the message is from the current window and ignore it if so
-     if (event.source === window) {
-         return; // Ignore messages that the window sent to itself
-     }
- 
-     const { type, data } = event.data;
-     switch (type) {
-         case 'updateBPM':
-             updateBPM(Math.max(60, Math.min(240, data.bpm)));
-             break;
-         case 'muteControl':
-             applyVolumeFade(data.mute ? 0 : previousVolume, audioContext.currentTime, 0.03);
-             break;
-         case 'requestSettings':
-             sendCurrentSettings();
-             break;
-         default:
-             console.log('Unknown message type:', type);
-     }
- });
- 
- // Event listener for keydown to handle all key controls including BPM and multiplier adjustments
- document.addEventListener('keydown', event => {
-     const context = getAudioContext();
-     
-     if (context.state !== 'running') {
-         console.log('Resuming AudioContext.');
-         context.resume().then(() => {
-             console.log('AudioContext resumed.');
-             processKeyInput(event);
-         });
-     } else {
-         processKeyInput(event);
-     }
- });
- 
- function processKeyInput(event) {
-     switch (event.key) {
-         case ' ':
-         case 'Spacebar': // For cross-browser compatibility
-             playSampleOnce();
-             console.log('Spacebar pressed');
-             break;
-         case '+':
-         case '=': // '+' might not require shift on some keyboards, '=' does
-             if (event.ctrlKey && event.shiftKey) {
-                 updateBPM(state.bpm + 10); // Increase BPM by 10
-             } else if (event.shiftKey) {
-                 updateBPM(state.bpm + 1); // Increase BPM by 1
-             } else {
-                 adjustMultiplier(2); // Double the multiplier
-             }
-             break;
-         case '-':
-             if (event.ctrlKey && event.shiftKey) {
-                 updateBPM(state.bpm - 10); // Decrease BPM by 10
-             } else if (event.shiftKey) {
-                 updateBPM(state.bpm - 1); // Decrease BPM by 1
-             } else {
-                 adjustMultiplier(0.5); // Halve the multiplier
-             }
-             break;
-             case ',':
-             adjustVolume(false); // Decrease volume
-             break;
-         case '.':
-             adjustVolume(true); // Increase volume
-             break;
-         case 'm':
-             toggleMute(); // Mute or unmute the audio
-             break;
-         case '0':
-             state.scheduleMultiplier = 1; // Reset multiplier
-             console.log(`Multiplier reset to initial value: 1`);
-             displayUpdate('BPM', `Multiplier reset to 1`);
-             break;
-         default:
-             // Handle other keys if necessary
-             break;
-     }
- }
- 
- 
- 
- // function toggleMute() {
- //     isMuted = !isMuted;
- //     applyVolumeFade(isMuted ? 0 : previousVolume);
- //     console.log(isMuted ? "Muted" : "Unmuted");
- // }
- 
- function applyVolumeFade(targetGainValue) {
-     const currentTime = getAudioContext().currentTime;
-     const fadeDuration = 0.03;
-     gainNode.gain.setValueAtTime(gainNode.gain.value, currentTime);
-     gainNode.gain.linearRampToValueAtTime(targetGainValue, currentTime + fadeDuration);
-     console.log(`Volume adjusted, target gain: ${targetGainValue}`);
- }
- 
- function adjustVolume(increase) {
-     const step = 0.1;
-     let targetVolume = increase ? 
-         Math.min(2, gainNode.gain.value + step) : 
-         Math.max(0, gainNode.gain.value - step);
- 
-     // Update previousVolume if not muted
-     if (!isMuted) {
-         previousVolume = targetVolume;
-     }
- 
-     // Use applyVolumeFade to adjust volume with a fade effect
-     applyVolumeFade(targetVolume, getAudioContext().currentTime, 0.03);
-     console.log(`Volume adjusted to ${targetVolume}`);
- }
- 
- 
- function toggleMute() {
-     isMuted = !isMuted;
-     // Apply a fade to 0 for mute, or back to previousVolume for unmute
-     applyVolumeFade(isMuted ? 0 : previousVolume, getAudioContext().currentTime, 0.03);
-     console.log(isMuted ? "Muted" : "Unmuted");
- }
- 
- 
- 
- // No change needed here, as long as it correctly uses the passed parameters
- function applyVolumeFade(targetGainValue, currentTime, fadeDuration) {
-     gainNode.gain.cancelScheduledValues(currentTime); // Cancel any ongoing transitions
-     gainNode.gain.setValueAtTime(gainNode.gain.value, currentTime); // Set the current value
-     gainNode.gain.linearRampToValueAtTime(targetGainValue, currentTime + fadeDuration); // Schedule the fade
-     console.log(`Volume adjusted with fade, target gain: ${targetGainValue}`);
- }
- 
- 
- document.addEventListener('multiplierChange', (event) => {
-     if (event.detail.multiplier === 1) {
-         state.scheduleMultiplier = 1; // Reset multiplier
-     } else {
-         // Find the current index of the scheduleMultiplier
-         let currentIndex = multiplierSteps.indexOf(state.scheduleMultiplier);
-         // Calculate the new index based on the direction of the change
-         let newIndex = event.detail.multiplier === 2 ?
-             Math.max(0, currentIndex - 1) : // Doubling the multiplier, move up in the array
-             Math.min(multiplierSteps.length - 1, currentIndex + 1); // Halving the multiplier, move down in the array
-         // Update the scheduleMultiplier based on the new index
-         state.scheduleMultiplier = multiplierSteps[newIndex];
-     }
-     console.log(`Multiplier adjusted: ${state.scheduleMultiplier}`);
-     displayUpdate('BPM', `Multiplier: ${state.scheduleMultiplier}`);
- });
- 
- function adjustMultiplier(changeFactor) {
-     let currentIndex = multiplierSteps.indexOf(state.scheduleMultiplier);
-     let newIndex = currentIndex;
- 
-     if (changeFactor === 2 && currentIndex > 0) { // Increase multiplier
-         newIndex = currentIndex - 1;
-     } else if (changeFactor === 0.5 && currentIndex < multiplierSteps.length - 1) { // Decrease multiplier
-         newIndex = currentIndex + 1;
-     }
- 
-     state.scheduleMultiplier = multiplierSteps[newIndex];
-     console.log(`Multiplier adjusted: ${state.scheduleMultiplier}`);
- 
-     // Update the display to reflect the new multiplier
-     const displayText = `${loopLengthDescriptions[state.scheduleMultiplier]} (${state.scheduleMultiplier})`;
-     displayUpdate('BPM', displayText);
- }
- 
-   // Schedule next note for looping playback
-   function scheduleNextNote() {
-        if (!state.isLooping || !state.audioBuffer) return;
 
-        const context = getAudioContext();
-        const currentTime = context.currentTime;
-        const lookaheadTime = 0.1; // 100 milliseconds lookahead
+function adjustVolume(increase) {
+    const step = 0.1;
+    let targetVolume = increase ? 
+        Math.min(2, gainNode.gain.value + step) : 
+        Math.max(0, gainNode.gain.value - step);
 
-        // Ensure we're scheduling ahead of the current time
-        while (state.nextNoteTime < currentTime + lookaheadTime) {
-            const scheduledTime = Math.max(state.nextNoteTime, currentTime + lookaheadTime);
-            playAudional(scheduledTime); // Now passing the precise scheduled time
+    // Update previousVolume if not muted
+    if (!isMuted) {
+        previousVolume = targetVolume;
+    }
 
-            // Calculate the next note's time, ensuring it's scheduled in the future
-            state.nextNoteTime += calculateBeatDuration(state.bpm) / state.scheduleMultiplier;
+    // Use applyVolumeFade to adjust volume with a fade effect
+    applyVolumeFade(targetVolume, getAudioContext().currentTime, 0.03);
+    console.log(`Volume adjusted to ${targetVolume}`);
+}
+
+
+function toggleMute() {
+    isMuted = !isMuted;
+    // Apply a fade to 0 for mute, or back to previousVolume for unmute
+    applyVolumeFade(isMuted ? 0 : previousVolume, getAudioContext().currentTime, 0.03);
+    console.log(isMuted ? "Muted" : "Unmuted");
+}
+
+
+
+// No change needed here, as long as it correctly uses the passed parameters
+function applyVolumeFade(targetGainValue, currentTime, fadeDuration) {
+    gainNode.gain.cancelScheduledValues(currentTime); // Cancel any ongoing transitions
+    gainNode.gain.setValueAtTime(gainNode.gain.value, currentTime); // Set the current value
+    gainNode.gain.linearRampToValueAtTime(targetGainValue, currentTime + fadeDuration); // Schedule the fade
+    console.log(`Volume adjusted with fade, target gain: ${targetGainValue}`);
+}
+
+
+document.addEventListener('multiplierChange', (event) => {
+    if (event.detail.multiplier === 1) {
+        state.scheduleMultiplier = 1; // Reset multiplier
+    } else {
+        // Find the current index of the scheduleMultiplier
+        let currentIndex = multiplierSteps.indexOf(state.scheduleMultiplier);
+        // Calculate the new index based on the direction of the change
+        let newIndex = event.detail.multiplier === 2 ?
+            Math.max(0, currentIndex - 1) : // Doubling the multiplier, move up in the array
+            Math.min(multiplierSteps.length - 1, currentIndex + 1); // Halving the multiplier, move down in the array
+        // Update the scheduleMultiplier based on the new index
+        state.scheduleMultiplier = multiplierSteps[newIndex];
+    }
+    console.log(`Multiplier adjusted: ${state.scheduleMultiplier}`);
+    displayUpdate('BPM', `Multiplier: ${state.scheduleMultiplier}`);
+});
+
+function adjustMultiplier(changeFactor) {
+    let currentIndex = multiplierSteps.indexOf(state.scheduleMultiplier);
+    let newIndex = currentIndex;
+
+    if (changeFactor === 2 && currentIndex > 0) { // Increase multiplier
+        newIndex = currentIndex - 1;
+    } else if (changeFactor === 0.5 && currentIndex < multiplierSteps.length - 1) { // Decrease multiplier
+        newIndex = currentIndex + 1;
+    }
+
+    state.scheduleMultiplier = multiplierSteps[newIndex];
+    console.log(`Multiplier adjusted: ${state.scheduleMultiplier}`);
+
+    // Update the display to reflect the new multiplier
+    const displayText = `${loopLengthDescriptions[state.scheduleMultiplier]} (${state.scheduleMultiplier})`;
+    displayUpdate('BPM', displayText);
+}
+
+  // Schedule next note for looping playback
+  function scheduleNextNote() {
+    if (!state.isLooping || !state.audioBuffer) return;
+
+    const context = getAudioContext(); // Centralize AudioContext access
+    const crossfadeDuration = 0.02; // 20 milliseconds crossfade
+    const currentTime = context.currentTime;
+
+    // Adjust for crossfade by scheduling slightly before the current note ends
+    if (currentTime >= state.nextNoteTime - crossfadeDuration) {
+        playAudional(); // Adjust playAudional to handle crossfade logic
+        // Schedule the next note, accounting for crossfade duration
+        state.nextNoteTime += calculateBeatDuration(state.bpm) / state.scheduleMultiplier - crossfadeDuration;
+    }
+
+    const delayUntilNextCheck = Math.max((state.nextNoteTime - currentTime) * 1000, 10);
+    setTimeout(scheduleNextNote, delayUntilNextCheck);
+}
+
+         // Step 1: Define Multiplier Steps
+        // Adjusted Multiplier Steps to reflect logical progression
+        const multiplierSteps = [
+            16, 8, 4, 2, 1, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0.0078125, 0.00390625, 0.001953125, 0.0009765625, 0.00048828125
+        ];
+    
+        // Corrected loop length descriptions
+        const loopLengthDescriptions = {
+            16: "1/16",
+            8: "1/8",
+            4: "1/4",
+            2: "1/2 beat",
+            1: "1 beat",
+            0.5: "2 beats",
+            0.25: "Loop Length = 1 bar", // Corrected here
+            0.125: "2 bars",
+            0.0625: "4 bars",
+            0.03125: "8 bars",
+            0.015625: "16 bars",
+            0.0078125: "32 bars",
+            0.00390625: "64 bars",
+            0.001953125: "128 bars",
+            0.0009765625: "256 bars",
+            0.00048828125: "512 bars",
+        };
+    
+
+ // Display update with CSS transition and stabilized display timing
+ let displayTimeout; // Declare outside to clear previous timeouts
+    
+    function displayUpdate(elementId, text) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.textContent = text;
+            element.classList.add('show');
+            clearTimeout(displayTimeout);
+            displayTimeout = setTimeout(() => element.classList.remove('show'), 3000);
+        } else {
+            console.log(`Element with ID ${elementId} not found.`);
+        }
+    }
+
+   // Calculate display text for multiplier without changes
+function calculateDisplayTextForMultiplier(rawMultiplierText) {
+    const multiplier = parseFloat(rawMultiplierText);
+    let displayText = "";
+
+    if (multiplier in loopLengthDescriptions) {
+        displayText += loopLengthDescriptions[multiplier];
+    } else {
+        displayText = "Multiplier out of range";
+    }
+
+    return displayText;
+}
+
+  // Update BPM and restart playback if looping
+  function updateBPM(newBPM) {
+            console.log(`Updating BPM to ${newBPM}`);
+            state.bpm = newBPM;
+    
+            // Assume we have a function to adjust playback scheduling based on BPM
+            adjustPlaybackTimingBasedOnBPM();
+    
+            // If necessary, update UI or other elements to reflect the new BPM
+            displayUpdate('BPM', `${newBPM} BPM`);
+        }
+    
+
+
+     // Function to send current settings back to parent
+     function sendCurrentSettings() {
+            console.log('Sending current settings back to parent:', {
+                volume: gainNode.gain.value,
+                scheduleMultiplier: state.scheduleMultiplier
+            });
+            event.source.postMessage({
+                type: 'currentSettings',
+                settings: {
+                    volume: gainNode.gain.value,
+                    scheduleMultiplier: state.scheduleMultiplier
+                }
+            }, '*'); // Consider replacing '*' with event.origin for security
         }
 
-        // Continue scheduling the next note
-        const delayUntilNextCheck = Math.max(state.nextNoteTime - currentTime - lookaheadTime, 0.01) * 1000;
-        setTimeout(scheduleNextNote, delayUntilNextCheck);
+    
+    
+         // Function to get the sample name from the HTML element
+    function getSampleName() {
+        const sampleName = document.getElementById('sampleName').innerText;
+        console.log(`[Child] Sample Name fetched: ${sampleName}`);
+        return sampleName;
+    }
+    
+    // Function to get the OB1 number from the HTML element
+    function getOb1Number() {
+        const ob1Number = document.getElementById('ob1Number').innerText;
+        console.log(`[Child] OB1 Number fetched: ${ob1Number}`);
+        return ob1Number;
+    }
+    
+    // Function to broadcast the sample play to the parent window
+    function broadcastSamplePlay(sampleName, ob1Number) {
+        const currentTimeMillis = Date.now(); // Get current time in milliseconds
+        console.log(`[Child] Broadcasting play with real-time timestamp: Sample Name - ${sampleName}, OB1 Number - ${ob1Number}, Timestamp - ${currentTimeMillis}`);
+    
+        window.parent.postMessage({
+            type: 'playingNote',
+            details: {
+                sampleName: sampleName,
+                ob1Number: ob1Number,
+            },
+            timestamp: currentTimeMillis // Include the current real-time timestamp
+        }, '*'); // Reminder to replace '*' with a specific domain for production for security
+    }
+    
+    
+    
+    // Function to start audio playback and handle its lifecycle
+    async function startAudioPlayback(callback) {
+        const context = getAudioContext();
+        if (!context) {
+            console.error('[Child] AudioContext is not available.');
+            return;
+        }
+
+        if (!state.audioBuffer) {
+            console.log('[Child] Audio buffer is not loaded. Loading audio data...');
+            await fetchAndDecodeAudio('yourAudioElementId'); // Ensure this is called correctly
+            if (!state.audioBuffer) {
+                console.error('Failed to load audio buffer.');
+                return;
+            }
+        }
+
+        const source = createAndConnectBufferSource(state.audioBuffer);
+            if (!source) {
+                console.error('Failed to create or connect the buffer source.');
+                return;
+            }
+            console.log('[Child] Starting audio playback');
+            startAnimation('OB1_Image');
+            source.start(0);
+
+            source.onended = () => {
+                console.log('[Child] Audio playback ended');
+                stopAnimation('OB1_Image');
+                source.disconnect();
+
+                if (typeof callback === 'function') {
+                    callback();
+                } else {
+                    console.log('No valid callback provided.');
+                }
+            };
+            state.scheduledNotes.push(source);
+        }
+    
+   // Function to play audio sample and broadcast its details to the parent
+   async function playAudional() {
+        console.log('[Child] [play process] Playing Audional Sample');
+        await fetchAndDecodeAudio('audionalData');
+
+        const sampleName = getSampleName();
+        const ob1Number = getOb1Number();
+        console.log(`[Child] Playing Audional Sample: ${sampleName} from OB1 #${ob1Number}`);
+
+        broadcastSamplePlay(sampleName, ob1Number);
+        startAudioPlayback(() => {
+            console.log('[Child] Additional logic after playAudional playback ends');
+        });
     }
 
- 
- 
-          // Step 1: Define Multiplier Steps
-         // Adjusted Multiplier Steps to reflect logical progression
-         const multiplierSteps = [
-             16, 8, 4, 2, 1, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0.0078125, 0.00390625, 0.001953125, 0.0009765625, 0.00048828125
-         ];
-     
-         // Corrected loop length descriptions
-         const loopLengthDescriptions = {
-             16: "1/16",
-             8: "1/8",
-             4: "1/4",
-             2: "1/2 beat",
-             1: "1 beat",
-             0.5: "2 beats",
-             0.25: "Loop Length = 1 bar", // Corrected here
-             0.125: "2 bars",
-             0.0625: "4 bars",
-             0.03125: "8 bars",
-             0.015625: "16 bars",
-             0.0078125: "32 bars",
-             0.00390625: "64 bars",
-             0.001953125: "128 bars",
-             0.0009765625: "256 bars",
-             0.00048828125: "512 bars",
-         };
-     
- 
-  // Display update with CSS transition and stabilized display timing
-  let displayTimeout; // Declare outside to clear previous timeouts
-     
-     function displayUpdate(elementId, text) {
-         const element = document.getElementById(elementId);
-         if (element) {
-             element.textContent = text;
-             element.classList.add('show');
-             clearTimeout(displayTimeout);
-             displayTimeout = setTimeout(() => element.classList.remove('show'), 3000);
-         } else {
-             console.log(`Element with ID ${elementId} not found.`);
-         }
-     }
- 
-    // Calculate display text for multiplier without changes
- function calculateDisplayTextForMultiplier(rawMultiplierText) {
-     const multiplier = parseFloat(rawMultiplierText);
-     let displayText = "";
- 
-     if (multiplier in loopLengthDescriptions) {
-         displayText += loopLengthDescriptions[multiplier];
-     } else {
-         displayText = "Multiplier out of range";
-     }
- 
-     return displayText;
- }
- 
-   // Update BPM and restart playback if looping
-   function updateBPM(newBPM) {
-             console.log(`Updating BPM to ${newBPM}`);
-             state.bpm = newBPM;
-     
-             // Assume we have a function to adjust playback scheduling based on BPM
-             adjustPlaybackTimingBasedOnBPM();
-     
-             // If necessary, update UI or other elements to reflect the new BPM
-             displayUpdate('BPM', `${newBPM} BPM`);
-         }
-     
- 
- 
-      // Function to send current settings back to parent
-      function sendCurrentSettings() {
-             console.log('Sending current settings back to parent:', {
-                 volume: gainNode.gain.value,
-                 scheduleMultiplier: state.scheduleMultiplier
-             });
-             event.source.postMessage({
-                 type: 'currentSettings',
-                 settings: {
-                     volume: gainNode.gain.value,
-                     scheduleMultiplier: state.scheduleMultiplier
-                 }
-             }, '*'); // Consider replacing '*' with event.origin for security
-         }
- 
-     
-     
-          // Function to get the sample name from the HTML element
-     function getSampleName() {
-         const sampleName = document.getElementById('sampleName').innerText;
-         console.log(`[Child] Sample Name fetched: ${sampleName}`);
-         return sampleName;
-     }
-     
-     // Function to get the OB1 number from the HTML element
-     function getOb1Number() {
-         const ob1Number = document.getElementById('ob1Number').innerText;
-         console.log(`[Child] OB1 Number fetched: ${ob1Number}`);
-         return ob1Number;
-     }
-     
-     // Function to broadcast the sample play to the parent window
-     function broadcastSamplePlay(sampleName, ob1Number) {
-         const currentTimeMillis = Date.now(); // Get current time in milliseconds
-         console.log(`[Child] Broadcasting play with real-time timestamp: Sample Name - ${sampleName}, OB1 Number - ${ob1Number}, Timestamp - ${currentTimeMillis}`);
-     
-         window.parent.postMessage({
-             type: 'playingNote',
-             details: {
-                 sampleName: sampleName,
-                 ob1Number: ob1Number,
-             },
-             timestamp: currentTimeMillis // Include the current real-time timestamp
-         }, '*'); // Reminder to replace '*' with a specific domain for production for security
-     }
-     
-     
-     
-     // Function to start audio playback and handle its lifecycle
-     async function startAudioPlayback(callback) {
-         const context = getAudioContext();
-         if (!context) {
-             console.error('[Child] AudioContext is not available.');
-             return;
-         }
- 
-         if (!state.audioBuffer) {
-             console.log('[Child] Audio buffer is not loaded. Loading audio data...');
-             await fetchAndDecodeAudio('yourAudioElementId'); // Ensure this is called correctly
-             if (!state.audioBuffer) {
-                 console.error('Failed to load audio buffer.');
-                 return;
-             }
-         }
- 
-         const source = createAndConnectBufferSource(state.audioBuffer);
-             if (!source) {
-                 console.error('Failed to create or connect the buffer source.');
-                 return;
-             }
-             console.log('[Child] Starting audio playback');
-             startAnimation('OB1_Image');
-             source.start(0);
- 
-             source.onended = () => {
-                 console.log('[Child] Audio playback ended');
-                 stopAnimation('OB1_Image');
-                 source.disconnect();
- 
-                 if (typeof callback === 'function') {
-                     callback();
-                 } else {
-                     console.log('No valid callback provided.');
-                 }
-             };
-             state.scheduledNotes.push(source);
-         }
-     
-    // Function to play audio sample and broadcast its details to the parent
-    async function playAudional() {
-         console.log('[Child] [play process] Playing Audional Sample');
-         await fetchAndDecodeAudio('audionalData');
- 
-         const sampleName = getSampleName();
-         const ob1Number = getOb1Number();
-         console.log(`[Child] Playing Audional Sample: ${sampleName} from OB1 #${ob1Number}`);
- 
-         broadcastSamplePlay(sampleName, ob1Number);
-         startAudioPlayback(() => {
-             console.log('[Child] Additional logic after playAudional playback ends');
-         });
-     }
- 
-     function playSampleOnce() {
-         console.log('Spacebar pressed, attempting to play sample once.');
-         const context = getAudioContext();
-         if (context.state === 'suspended') context.resume();
- 
-         const sampleName = getSampleName();
-         const ob1Number = getOb1Number();
- 
-         console.log(`[Child] Playing Sample Once: ${sampleName} from OB1 #${ob1Number}`);
-         broadcastSamplePlay(sampleName, ob1Number);
- 
-         startAudioPlayback(() => {
-             console.log('[Child] Additional logic after playSampleOnce playback ends');
-         });
-     }
- 
- 
-     
-        // Fetch and decode audio data
-        async function fetchAndDecodeAudio(elementId) {
-             console.log(`[fetchAndDecodeAudio] Fetching audio for element: ${elementId}`);
-             const audioElement = document.getElementById(elementId);
-             if (!audioElement) {
-                 console.error("Audio element not found:", elementId);
-                 return;
-             }
- 
-             const audioSrc = audioElement.querySelector('source')?.src || audioElement.src;
-             if (!audioSrc) {
-                 console.error("Audio source not found for element:", elementId);
-                 return;
-             }
- 
-             try {
-                 const arrayBuffer = await fetch(audioSrc).then(res => res.arrayBuffer());
-                 const context = getAudioContext(); // Centralize AudioContext access
-                 const buffer = await context.decodeAudioData(arrayBuffer);
-                 state.audioBuffer = buffer;
-                 console.log("[fetchAndDecodeAudio] Audio data fetched and decoded successfully.");
-             } catch (error) {
-                 console.error("Error fetching or decoding audio data:", error);
-             }
-         }
- 
-      
- // Create buffer source and connect it to the gain node
- function createAndConnectBufferSource(buffer) {
-     const context = getAudioContext();
-     if (!context) {
-         console.error('AudioContext is not initialized or has been closed.');
-         return null;
-     }
-     if (!buffer) {
-         console.error('Audio buffer is not valid or not yet loaded.');
-         return null;
-     }
- 
-     try {
-         const source = context.createBufferSource();
-         source.buffer = buffer;
-         
-         if (!gainNode) {
-             gainNode = context.createGain();
-             gainNode.connect(context.destination);
-         }
- 
-         source.connect(gainNode);
-         return source;
-     } catch (error) {
-         console.error("Error creating or connecting buffer source:", error);
-         return null;
-     }
- }
- 
- 
-      // Play audio buffer for looping playback
-      function playAudioBuffer() {
-         const context = getAudioContext();
-         if (!state.isLooping && state.audioBuffer) {
-             state.isLooping = true;
-             state.startTime = state.nextNoteTime = context.currentTime;
-             scheduleNextNote();
-         } else {
-             console.error("playAudioBuffer called before audioBuffer was ready");
-         }
-     }
- 
-      
-         // Stop audio playback and reset counters
-         function stopAudioPlayback() {
-             if (state.isLooping) {
-                 state.isLooping = false;
-                 fadeOutAndStopSources(); // This initiates a smooth fade-out
-                 beatCounter = 0; // Reset beat counter
-                 // No need to clear scheduled notes here; it's handled in fadeOutAndStopSources
-                 // Additional state reset logic as needed
-             }
-         }
- 
- 
- // Fade out and stop all scheduled sources
- function fadeOutAndStopSources() {
-     if (isFadingOut) return; // Prevent multiple fade-outs happening simultaneously
-     isFadingOut = true;
- 
-     const context = getAudioContext(); // Ensure we're working with a valid context
-     const currentTime = context.currentTime;
-     const preMuteDuration = 0.05; // Short duration for preliminary mute
-     const fadeDuration = 0.1; // Adjust fade-out duration as needed
- 
-     // Preliminary mute to prevent clicks
-     gainNode.gain.setValueAtTime(gainNode.gain.value, currentTime);
-     gainNode.gain.linearRampToValueAtTime(0, currentTime + preMuteDuration);
- 
-     setTimeout(() => {
-         // Proceed with stopping and disconnecting sources after mute
-         state.scheduledNotes.forEach(source => {
-             source.stop(currentTime + preMuteDuration);
-             source.disconnect();
-         });
-         state.scheduledNotes = []; // Clear any remaining scheduled notes
- 
-         // Reset gain to initial value smoothly after stopping sources
-         gainNode.gain.setValueAtTime(0, currentTime + preMuteDuration);
-         gainNode.gain.linearRampToValueAtTime(1, currentTime + preMuteDuration + fadeDuration);
- 
-         if (context.state !== 'closed') {
-             context.close().then(() => console.log('[Child] AudioContext closed.'));
-             // getAudioContext() will handle re-initialization
-         }
- 
-         isFadingOut = false;
-         console.log('[Child] Fade-out and reset complete.');
-     }, (preMuteDuration + fadeDuration) * 1000);
- }
- 
- 
- 
-  // Function to cancel all scheduled notes
-  function cancelScheduledNotes() {
-     state.scheduledNotes.forEach(source => {
-         source.stop();
-         source.disconnect();
-     });
-     state.scheduledNotes = []; // Clear the array of scheduled notes
- }
- 
- // Calculate beat duration
- function calculateBeatDuration(bpm) {
-     return 60 / bpm;
- }
- function adjustPlaybackTimingBasedOnBPM() {
-    const context = getAudioContext(); // Ensure we're working with a valid context
-    const beatDuration = 60 / state.bpm;
-    state.nextNoteTime = context.currentTime + beatDuration;
-    
-    if (state.isLooping) {
-        stopAudioPlayback();
-        playAudioBuffer();
+    function playSampleOnce() {
+        console.log('Spacebar pressed, attempting to play sample once.');
+        const context = getAudioContext();
+        if (context.state === 'suspended') context.resume();
+
+        const sampleName = getSampleName();
+        const ob1Number = getOb1Number();
+
+        console.log(`[Child] Playing Sample Once: ${sampleName} from OB1 #${ob1Number}`);
+        broadcastSamplePlay(sampleName, ob1Number);
+
+        startAudioPlayback(() => {
+            console.log('[Child] Additional logic after playSampleOnce playback ends');
+        });
     }
- }
+
+
+    
+       // Fetch and decode audio data
+       async function fetchAndDecodeAudio(elementId) {
+            console.log(`[fetchAndDecodeAudio] Fetching audio for element: ${elementId}`);
+            const audioElement = document.getElementById(elementId);
+            if (!audioElement) {
+                console.error("Audio element not found:", elementId);
+                return;
+            }
+
+            const audioSrc = audioElement.querySelector('source')?.src || audioElement.src;
+            if (!audioSrc) {
+                console.error("Audio source not found for element:", elementId);
+                return;
+            }
+
+            try {
+                const arrayBuffer = await fetch(audioSrc).then(res => res.arrayBuffer());
+                const context = getAudioContext(); // Centralize AudioContext access
+                const buffer = await context.decodeAudioData(arrayBuffer);
+                state.audioBuffer = buffer;
+                console.log("[fetchAndDecodeAudio] Audio data fetched and decoded successfully.");
+            } catch (error) {
+                console.error("Error fetching or decoding audio data:", error);
+            }
+        }
+
      
+// Create buffer source and connect it to the gain node
+function createAndConnectBufferSource(buffer) {
+    const context = getAudioContext();
+    if (!context) {
+        console.error('AudioContext is not initialized or has been closed.');
+        return null;
+    }
+    if (!buffer) {
+        console.error('Audio buffer is not valid or not yet loaded.');
+        return null;
+    }
+
+    try {
+        const source = context.createBufferSource();
+        source.buffer = buffer;
         
-      
-      
+        if (!gainNode) {
+            gainNode = context.createGain();
+            gainNode.connect(context.destination);
+        }
+
+        source.connect(gainNode);
+        return source;
+    } catch (error) {
+        console.error("Error creating or connecting buffer source:", error);
+        return null;
+    }
+}
+
+
+     // Play audio buffer for looping playback
+     function playAudioBuffer() {
+        const context = getAudioContext();
+        if (!state.isLooping && state.audioBuffer) {
+            state.isLooping = true;
+            state.startTime = state.nextNoteTime = context.currentTime;
+            scheduleNextNote();
+        } else {
+            console.error("playAudioBuffer called before audioBuffer was ready");
+        }
+    }
+
+     
+        // Stop audio playback and reset counters
+        function stopAudioPlayback() {
+            if (state.isLooping) {
+                state.isLooping = false;
+                fadeOutAndStopSources(); // This initiates a smooth fade-out
+                beatCounter = 0; // Reset beat counter
+                // No need to clear scheduled notes here; it's handled in fadeOutAndStopSources
+                // Additional state reset logic as needed
+            }
+        }
+
+
+// Fade out and stop all scheduled sources
+function fadeOutAndStopSources() {
+    if (isFadingOut) return; // Prevent multiple fade-outs happening simultaneously
+    isFadingOut = true;
+
+    const context = getAudioContext(); // Ensure we're working with a valid context
+    const currentTime = context.currentTime;
+    const preMuteDuration = 0.05; // Short duration for preliminary mute
+    const fadeDuration = 0.1; // Adjust fade-out duration as needed
+
+    // Preliminary mute to prevent clicks
+    gainNode.gain.setValueAtTime(gainNode.gain.value, currentTime);
+    gainNode.gain.linearRampToValueAtTime(0, currentTime + preMuteDuration);
+
+    setTimeout(() => {
+        // Proceed with stopping and disconnecting sources after mute
+        state.scheduledNotes.forEach(source => {
+            source.stop(currentTime + preMuteDuration);
+            source.disconnect();
+        });
+        state.scheduledNotes = []; // Clear any remaining scheduled notes
+
+        // Reset gain to initial value smoothly after stopping sources
+        gainNode.gain.setValueAtTime(0, currentTime + preMuteDuration);
+        gainNode.gain.linearRampToValueAtTime(1, currentTime + preMuteDuration + fadeDuration);
+
+        if (context.state !== 'closed') {
+            context.close().then(() => console.log('[Child] AudioContext closed.'));
+            // getAudioContext() will handle re-initialization
+        }
+
+        isFadingOut = false;
+        console.log('[Child] Fade-out and reset complete.');
+    }, (preMuteDuration + fadeDuration) * 1000);
+}
+
+
+
+ // Function to cancel all scheduled notes
+ function cancelScheduledNotes() {
+    state.scheduledNotes.forEach(source => {
+        source.stop();
+        source.disconnect();
+    });
+    state.scheduledNotes = []; // Clear the array of scheduled notes
+}
+
+// Calculate beat duration
+function calculateBeatDuration(bpm) {
+    return 60 / bpm;
+}
+function adjustPlaybackTimingBasedOnBPM() {
+   const context = getAudioContext(); // Ensure we're working with a valid context
+   const beatDuration = 60 / state.bpm;
+   state.nextNoteTime = context.currentTime + beatDuration;
+   
+   if (state.isLooping) {
+       stopAudioPlayback();
+       playAudioBuffer();
+   }
+}
+    
+       
+     
      
     
-     
-     
-         
-     
-     
-     
-     
-     
+   
+    
+    
         
- 
-     
- </script>
+    
+    
+    
+    
+    
+       
+
+    
+</script>
 
 <style>
 /* Common base for animation */
