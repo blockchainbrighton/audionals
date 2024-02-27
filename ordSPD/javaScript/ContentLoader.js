@@ -88,7 +88,7 @@ function manageContentLoading(iframe, url, onSuccess, onError) {
   }
 
 
-  function loadContentFromURL(iframe, loadButton) {
+  export function loadContentFromURL(iframe, loadButton) {
     const url = prompt("Please enter the URL:");
     if (!url) return;
     const urlPattern = /^https:\/\/ordinals\.com\/content\/[a-zA-Z0-9]{64}i0$/;

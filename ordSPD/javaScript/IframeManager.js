@@ -1,11 +1,12 @@
 // IframeManager.js
-import { preloadContent } from './ContentLoader.js';
+  import { preloadContent, loadContentFromURL } from './ContentLoader.js';
 
-const numberOfIframes = 36; // Define the total number of iframes
-
+  const numberOfIframes = 36; // Define the total number of iframes
+  let activeIframeId = null; // Keeps track of the currently active iframe ID
 
   export function createIframes() {
     const container = document.querySelector('.grid-container');
+
     for (let i = 0; i < numberOfIframes; i++) {
         const wrapper = document.createElement('div');
         wrapper.className = 'iframe-wrapper';
@@ -16,6 +17,38 @@ const numberOfIframes = 36; // Define the total number of iframes
         iframe.id = `iframe-${i}`;
         iframe.style.zIndex = '1'; // Ensure the iframe content is above the overlay
 
+
+        // Create a transparent div to capture clicks on the iframe
+        const clickCatcher = document.createElement('div');
+        clickCatcher.className = 'click-catcher';
+        clickCatcher.style.position = 'absolute';
+        clickCatcher.style.top = '0';
+        clickCatcher.style.right = '0';
+        clickCatcher.style.bottom = '0';
+        clickCatcher.style.left = '0';
+        clickCatcher.style.zIndex = '2'; // Above the iframe but below the load button
+        clickCatcher.style.pointerEvents = 'auto'; // Set to auto to capture click events
+
+        // Add a click event listener to the clickCatcher
+        clickCatcher.addEventListener('click', function() {
+          // Log the ID of the clicked iframe
+          console.log('Clicked iframe ID:', iframe.id);
+
+          // Update the active iframe ID
+          setActiveIframe(iframe.id);
+          
+          // Temporarily disable click capturing to let the click through to the iframe
+          this.style.pointerEvents = 'none';
+          
+          // Use a timeout to re-enable the click capturing
+          setTimeout(() => {
+            this.style.pointerEvents = 'auto';
+          }, 0);
+        });
+
+
+        // Append the clickCatcher to the wrapper
+        wrapper.appendChild(clickCatcher);
         // Function to create a border div
         function createBorder(className) {
             const border = document.createElement('div');
@@ -53,6 +86,21 @@ const numberOfIframes = 36; // Define the total number of iframes
         firstIframe.classList.add('selected-iframe');
     }
 }
+
+// Function to set the active iframe
+  function setActiveIframe(iframeId) {
+    // Remove 'selected-iframe' class from all iframes
+    document.querySelectorAll('.iframe-wrapper iframe').forEach(iframe => {
+      iframe.classList.remove('selected-iframe');
+    });
+
+    // Add 'selected-iframe' class to the active iframe
+    const activeIframe = document.getElementById(iframeId);
+    if (activeIframe) {
+      activeIframe.classList.add('selected-iframe');
+      activeIframeId = iframeId; // Update the active iframe ID
+    }
+  } 
 
 
 // Clears the content of a single iframe
