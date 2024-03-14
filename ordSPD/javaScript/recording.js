@@ -4,10 +4,11 @@
 const recordButton = document.getElementById('recordButton');
 const tooltipText = document.querySelector('.tooltiptext');
 
-// Unified recording state object
-const recordingState = {
+// Add this to your recordingState object
+let recordingState = {
   isRecording: false,
   isLiveRecording: false,
+  isPlaybackActive: false, // New state variable to indicate playback mode
   startTime: null,
   actions: [],
   initialSettings: {}
@@ -125,16 +126,31 @@ const ob1NumberToUrlMap = {
 
 // Modify toggleFlashing to handle transitions correctly
 function toggleFlashing() {
-  if (recordingState.isRecording || recordingState.isLiveRecording) {
-    // This stops recording and goes back to the initial "off" state directly
-        stopRecording();
+  // Check if currently in "record ready" mode via a class or separate state
+  const isRecordReady = recordButton.classList.contains('record-ready');
 
+  if (isRecordReady) {
+    // Exiting "record ready" mode
+    recordButton.classList.remove('record-ready');
+    recordButton.classList.remove('toggled'); // Assuming 'toggled' is used for visual feedback
+    recordButton.innerText = "Record Live Set"; // Default text
+    tooltipText.innerText = "Place SPD in record ready mode to prepare for recording.";
   } else {
-    // Enter "record ready" mode
-    recordingState.isRecording = true;
-    updateButtonAndTooltipText();
+    // Entering "record ready" mode
+    recordButton.classList.add('record-ready');
+    recordButton.classList.add('toggled'); // Assuming 'toggled' is used for visual feedback
+    recordButton.innerText = "Ready to Record";
+    tooltipText.innerText = "Recording will begin when the first sample is triggered by the user.";
   }
 }
+
+// Attach event listener to the record button for toggling between ready and off modes
+recordButton.addEventListener('click', () => {
+    toggleFlashing();
+    // Remove direct manipulation of recording state here, handle state transition elsewhere
+    console.log("Record button clicked - Visual mode toggled.");
+});
+
 
 function muteAllIframes() {
     const iframes = document.querySelectorAll('iframe');

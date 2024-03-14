@@ -29,13 +29,13 @@ function handleMessage(event) {
 
             // Check recording state before proceeding
             if (!recordingState.isLiveRecording) {
-                if (!recordingState.isRecording) {
-                    toggleFlashing(); // Adjusts UI to "ready to record" mode if not already set
-                    console.log('Toggled to ready to record due to playAudioBuffer action.');
-                }
+                // if (!recordingState.isRecording) {
+                //     toggleFlashing(); // Adjusts UI to "ready to record" mode if not already set
+                //     console.log('Toggled to ready to record due to playAudioBuffer action.');
+                // }
 
                 // Update state to indicate live recording has started
-                recordingState.isLiveRecording = true;
+                // recordingState.isLiveRecording = true;
                 console.log('Live recording mode activated.');
 
                 // Record the action

@@ -22,65 +22,146 @@ export function togglePlayback() {
   isPlaying = !isPlaying;
 }
 
-// Function to play back the recorded actions
 export function playbackRecording() {
-    if (recordingState.actions.length > 0) {
-      console.log("Playback started. Implement logic to reset to initial state and play actions.");
-  
-      // Unmute all iframes at the beginning of playback
-      unmuteAllIframes();
-  
-      // Sort actions by timestamp to ensure correct sequence
-      const sortedActions = [...recordingState.actions].sort((a, b) => a.timestamp - b.timestamp);
-      const firstActionTime = sortedActions[0].timestamp; // Reference time (time zero)
-  
-      sortedActions.forEach((action, index) => {
-        const relativeDelay = action.timestamp - firstActionTime; // Calculate delay relative to the first action
-        setTimeout(() => {
-          if (action.type === 'endOfRecording') {
-            // Mute all iframes at the end of playback
-            muteAllIframes();
-            return;
-          }
-  
-          const iframeId = Object.keys(window.iframeSettings).find(id => window.iframeSettings[id].url === action.url);
-          if (iframeId) {
-            const iframe = document.getElementById(iframeId);
-            if (iframe) {
-              const message = { type: action.type === 'playLoop' ? 'playLoop' : 'playOnce', data: { sampleName: action.sampleName } };
-              const origin = iframe.src; // Adjust for security
-              iframe.contentWindow.postMessage(message, "*");
-              console.log(`Playing back action in iframe ${iframeId} after delay ${relativeDelay}ms:`, message);
-            } else {
-              console.warn("Iframe not found for ID:", iframeId);
-            }
+  // Set playback mode to active at the start of playback
+  recordingState.isPlaybackActive = true;
+
+  if (recordingState.actions.length > 0) {
+    console.log("Playback started. Implement logic to reset to initial state and play actions.");
+
+    // Unmute all iframes at the beginning of playback
+    unmuteAllIframes();
+
+    // Sort actions by timestamp to ensure correct sequence
+    const sortedActions = [...recordingState.actions].sort((a, b) => a.timestamp - b.timestamp);
+    const firstActionTime = sortedActions[0].timestamp; // Reference time (time zero)
+    let maxDelay = 0; // To calculate the total playback duration
+
+    sortedActions.forEach(action => {
+      const relativeDelay = action.timestamp - firstActionTime; // Calculate delay relative to the first action
+      maxDelay = Math.max(maxDelay, relativeDelay); // Update maxDelay to the highest delay encountered
+
+      const iframeId = Object.keys(window.iframeSettings).find(id => window.iframeSettings[id].url === action.url);
+
+      if (iframeId) {
+        setTimeout(() => { // Schedule playback with calculated delay
+          const iframe = document.getElementById(iframeId);
+          if (iframe) {
+            const message = { type: 'playLoop', data: { sampleName: action.sampleName } };
+            const origin = new URL(iframe.src).origin; // Correctly compute origin
+            iframe.contentWindow.postMessage(message, origin); // Use the computed origin for security
+            console.log(`Playing back action in iframe ${iframeId} after delay ${relativeDelay}ms:`, message);
           } else {
-            console.warn("No matching iframe settings for URL:", action.url);
+            console.warn("Iframe not found for ID:", iframeId);
           }
         }, relativeDelay);
-      });
-    } else {
-      console.log("No recorded actions to play back.");
-    }
-  }
-  
-  
-  function unmuteAllIframes() {
-    const iframes = document.querySelectorAll('iframe');
-    const unmuteMessage = { type: "muteControl", data: { mute: false } };
-  
-    iframes.forEach(iframe => {
-      // Only proceed if the iframe's src attribute is set and is a valid URL
-      if (iframe.src) {
-        try {
-          const origin = new URL(iframe.src).origin;
-          iframe.contentWindow.postMessage(unmuteMessage, "*"); // Adjust the origin accordingly
-        } catch (error) {
-          console.error("Failed to construct URL from iframe src:", iframe.src, error);
-        }
+      } else {
+        console.warn("No matching iframe settings for URL:", action.url);
       }
     });
+
+    // Reset playback mode to inactive after the total playback duration
+    setTimeout(() => {
+      recordingState.isPlaybackActive = false;
+      console.log("Playback finished. Resetting playback state.");
+      // Optionally, mute all iframes here again to ensure silence after playback
+      muteAllIframes();
+    }, maxDelay);
+  } else {
+    console.log("No recorded actions to play back.");
+    recordingState.isPlaybackActive = false; // Reset immediately if there are no actions
   }
+}
+
+function unmuteAllIframes() {
+  const iframes = document.querySelectorAll('iframe');
+  iframes.forEach(iframe => {
+    // Make sure the iframe has loaded content before trying to postMessage
+    if (iframe.src && iframe.src !== 'about:blank') {
+      try {
+        const origin = new URL(iframe.src).origin;
+        iframe.contentWindow.postMessage({type: "muteControl", data: { mute: false }}, "*");
+      } catch (error) {
+        console.error("Error unmute iframe:", error);
+      }
+    }
+  });
+}
+
+function muteAllIframes() {
+  const iframes = document.querySelectorAll('iframe');
+  iframes.forEach(iframe => {
+    // Similar to unmuteAllIframes but setting mute: true
+    if (iframe.src && iframe.src !== 'about:blank') {
+      try {
+        const origin = new URL(iframe.src).origin;
+        iframe.contentWindow.postMessage({type: "muteControl", data: { mute: true }}, "*");
+      } catch (error) {
+        console.error("Error muting iframe:", error);
+      }
+    }
+  });
+}
+
+// // Function to play back the recorded actions
+// export function playbackRecording() {
+//     if (recordingState.actions.length > 0) {
+//       console.log("Playback started. Implement logic to reset to initial state and play actions.");
+  
+//       // Unmute all iframes at the beginning of playback
+//       unmuteAllIframes();
+  
+//       // Sort actions by timestamp to ensure correct sequence
+//       const sortedActions = [...recordingState.actions].sort((a, b) => a.timestamp - b.timestamp);
+//       const firstActionTime = sortedActions[0].timestamp; // Reference time (time zero)
+  
+//       sortedActions.forEach((action, index) => {
+//         const relativeDelay = action.timestamp - firstActionTime; // Calculate delay relative to the first action
+//         setTimeout(() => {
+//           if (action.type === 'endOfRecording') {
+//             // Mute all iframes at the end of playback
+//             muteAllIframes();
+//             return;
+//           }
+  
+//           const iframeId = Object.keys(window.iframeSettings).find(id => window.iframeSettings[id].url === action.url);
+//           if (iframeId) {
+//             const iframe = document.getElementById(iframeId);
+//             if (iframe) {
+//               const message = { type: action.type === 'playLoop' ? 'playLoop' : 'playOnce', data: { sampleName: action.sampleName } };
+//               const origin = iframe.src; // Adjust for security
+//               iframe.contentWindow.postMessage(message, "*");
+//               console.log(`Playing back action in iframe ${iframeId} after delay ${relativeDelay}ms:`, message);
+//             } else {
+//               console.warn("Iframe not found for ID:", iframeId);
+//             }
+//           } else {
+//             console.warn("No matching iframe settings for URL:", action.url);
+//           }
+//         }, relativeDelay);
+//       });
+//     } else {
+//       console.log("No recorded actions to play back.");
+//     }
+//   }
+  
+  
+  // function unmuteAllIframes() {
+  //   const iframes = document.querySelectorAll('iframe');
+  //   const unmuteMessage = { type: "muteControl", data: { mute: false } };
+  
+  //   iframes.forEach(iframe => {
+  //     // Only proceed if the iframe's src attribute is set and is a valid URL
+  //     if (iframe.src) {
+  //       try {
+  //         const origin = new URL(iframe.src).origin;
+  //         iframe.contentWindow.postMessage(unmuteMessage, "*"); // Adjust the origin accordingly
+  //       } catch (error) {
+  //         console.error("Failed to construct URL from iframe src:", iframe.src, error);
+  //       }
+  //     }
+  //   });
+  // }
   
   
     
