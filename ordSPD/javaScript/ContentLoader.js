@@ -17,6 +17,9 @@
   // Ensure window.iframeSettings exists
 window.iframeSettings = window.iframeSettings || {};
 
+// Initialize a global recording array
+window.recordingData = [];
+
 export function preloadContent() {
   const iframes = document.querySelectorAll('iframe');
   const loadButtons = document.querySelectorAll('.load-button'); // Assuming load buttons exist for each iframe
