@@ -110,21 +110,41 @@ const ob1NumberToUrlMap = {
     recordingState.isRecording = false;
     recordingState.isLiveRecording = false;
     updateButtonAndTooltipText();
-    // Consider removing event listeners here if they are no longer needed after stopping recording
+    muteAllIframes();
+  
+    // Record an end-of-recording marker
+    const endMarker = {
+      type: 'endOfRecording',
+      timestamp: Date.now() - recordingState.startTime
+    };
+    recordingState.actions.push(endMarker);
+  
     console.log("Recording stopped. Recorded actions:", recordingState.actions);
   }
+  
 
 // Modify toggleFlashing to handle transitions correctly
 function toggleFlashing() {
   if (recordingState.isRecording || recordingState.isLiveRecording) {
     // This stops recording and goes back to the initial "off" state directly
-    stopRecording();
+        stopRecording();
+
   } else {
     // Enter "record ready" mode
     recordingState.isRecording = true;
     updateButtonAndTooltipText();
   }
 }
+
+function muteAllIframes() {
+    const iframes = document.querySelectorAll('iframe');
+    const muteMessage = { type: "muteControl", data: { mute: true } };
+  
+    iframes.forEach(iframe => {
+      const origin = new URL(iframe.src).origin; // Get the origin of the iframe for security
+      iframe.contentWindow.postMessage(muteMessage, "*");
+    });
+  }
 
 // Export functions and unified state for use in other modules
 export { recordingState, toggleFlashing, startRecording, stopRecording, recordAction, updateButtonAndTooltipText };

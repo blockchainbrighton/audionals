@@ -100,6 +100,23 @@ export function createIframes() {
     });
   } 
 
+  // Refresh the content of a single iframe to its initial URL
+export function refreshIframe(iframeId) {
+  const iframe = document.getElementById(iframeId);
+  if (iframe && window.iframeSettings && window.iframeSettings[iframeId].url) {
+    // Reset the iframe's src to its initial URL to reload the content
+    iframe.src = window.iframeSettings[iframeId].url;
+  }
+}
+
+// Refresh all iframes to their initial URLs
+export function refreshAllIframes() {
+  Object.keys(window.iframeSettings).forEach(iframeId => {
+    refreshIframe(iframeId);
+  });
+}
+
+
 
 
 // Function to get the IDs of the selected iframe wrappers
