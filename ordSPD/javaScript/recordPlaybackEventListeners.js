@@ -9,72 +9,44 @@ const recordButton = document.getElementById('recordButton');
 
 // Function to handle incoming post messages
 function handleMessage(event) {
-    // Detailed log for debugging
-    console.log('Received message:', event.data);
-
-    // Check message origin for security
-    if (event.origin !== "http://127.0.0.1:5500") {
-        console.error('Message origin mismatch:', event.origin);
-        return;
-    }
+    // // Implement origin check for security
+    // if (event.origin !== "http://127.0.0.1:5500") {
+    //     console.error('Message origin mismatch:', event.origin);
+    //     return;
+    // }
 
     try {
         const { action, ob1Number, sampleName, timestamp } = event.data;
-
-        console.log(`Processing action: ${action}`);
-
-        // Handling 'playAudioBuffer' action
-        if (action === 'playAudioBuffer') {
-            console.log(`'playAudioBuffer' action detected for sample "${sampleName}" (OB1 Number: ${ob1Number}), timestamp: ${timestamp}`);
-
-            // Check recording state before proceeding
-            if (!recordingState.isLiveRecording) {
-                // if (!recordingState.isRecording) {
-                //     toggleFlashing(); // Adjusts UI to "ready to record" mode if not already set
-                //     console.log('Toggled to ready to record due to playAudioBuffer action.');
-                // }
-
-                // Update state to indicate live recording has started
-                // recordingState.isLiveRecording = true;
-                console.log('Live recording mode activated.');
-
-                // Record the action
-                recordAction({
-                    action: 'playAudioBuffer',
-                    ob1Number: ob1Number,
-                    sampleName: sampleName,
-                    timestamp: timestamp
-                });
-
-                // Reflect UI changes for "live recording" mode
-                recordButton.classList.remove('toggled'); // Remove "ready to record" indication
-                recordButton.classList.add('live-recording'); // Indicate live recording
-                updateButtonAndTooltipText(); // Update button text and tooltip accordingly
-            } else {
-                // If already in live recording mode, just log the action
-                recordAction({
-                    action: 'playAudioBuffer',
-                    ob1Number: ob1Number,
-                    sampleName: sampleName,
-                    timestamp: timestamp
-                });
-            }
+        if (action === 'playAudioBuffer' && !recordingState.isRecording) {
+            // Log only when action is playAudioBuffer and not recording
+            console.log(`Received: ${action}, Sample: "${sampleName}", OB1: ${ob1Number}, Timestamp: ${timestamp}`);
+            
+            // Record the action
+            recordAction({ action, ob1Number, sampleName, timestamp });
+        } else if (action !== 'playAudioBuffer') {
+            console.log(`Unrecognized action '${action}'.`);
         }
     } catch (error) {
         console.error('Error processing message:', error);
     }
 }
 
-// Listen for messages from iframes
-window.addEventListener('message', handleMessage);
+// Setup message event listener once
+if (!window.messageListenerAdded) {
+    window.addEventListener('message', handleMessage);
+    window.messageListenerAdded = true;
+}
 
-// Attach event listener to the record button for toggling between ready and off modes
+// Toggle recording state and UI updates
 recordButton.addEventListener('click', () => {
     toggleFlashing();
-    console.log(`Record button clicked. Current state - isRecording: ${recordingState.isRecording}, isLiveRecording: ${recordingState.isLiveRecording}`);
+    // Assuming refreshAllIframes is defined elsewhere and relevant here
+    if (recordingState.isRecording) console.log('Refreshing all iframes.');
+    updateButtonAndTooltipText(); // Ensure UI reflects current state accurately
+    console.log(`Record button clicked. Recording state: ${recordingState.isRecording}`);
 });
 
-// Attach event listener to the play recording button for playback functionality
+// Setup playback functionality
 document.getElementById('playRecordingButton').addEventListener('click', () => {
     playbackRecording();
     console.log('Playback initiated.');

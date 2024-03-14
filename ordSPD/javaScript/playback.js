@@ -2,6 +2,7 @@
 
 // Import necessary items from recording.js
 import { recordingState } from './recording.js';
+import { refreshAllIframes } from './IframeManager.js';
 
 // DOM elements
 const playRecordingButton = document.getElementById('playRecordingButton');
@@ -65,7 +66,7 @@ export function playbackRecording() {
       recordingState.isPlaybackActive = false;
       console.log("Playback finished. Resetting playback state.");
       // Optionally, mute all iframes here again to ensure silence after playback
-      muteAllIframes();
+      refreshAllIframes();
     }, maxDelay);
   } else {
     console.log("No recorded actions to play back.");
@@ -103,68 +104,6 @@ function muteAllIframes() {
   });
 }
 
-// // Function to play back the recorded actions
-// export function playbackRecording() {
-//     if (recordingState.actions.length > 0) {
-//       console.log("Playback started. Implement logic to reset to initial state and play actions.");
-  
-//       // Unmute all iframes at the beginning of playback
-//       unmuteAllIframes();
-  
-//       // Sort actions by timestamp to ensure correct sequence
-//       const sortedActions = [...recordingState.actions].sort((a, b) => a.timestamp - b.timestamp);
-//       const firstActionTime = sortedActions[0].timestamp; // Reference time (time zero)
-  
-//       sortedActions.forEach((action, index) => {
-//         const relativeDelay = action.timestamp - firstActionTime; // Calculate delay relative to the first action
-//         setTimeout(() => {
-//           if (action.type === 'endOfRecording') {
-//             // Mute all iframes at the end of playback
-//             muteAllIframes();
-//             return;
-//           }
-  
-//           const iframeId = Object.keys(window.iframeSettings).find(id => window.iframeSettings[id].url === action.url);
-//           if (iframeId) {
-//             const iframe = document.getElementById(iframeId);
-//             if (iframe) {
-//               const message = { type: action.type === 'playLoop' ? 'playLoop' : 'playOnce', data: { sampleName: action.sampleName } };
-//               const origin = iframe.src; // Adjust for security
-//               iframe.contentWindow.postMessage(message, "*");
-//               console.log(`Playing back action in iframe ${iframeId} after delay ${relativeDelay}ms:`, message);
-//             } else {
-//               console.warn("Iframe not found for ID:", iframeId);
-//             }
-//           } else {
-//             console.warn("No matching iframe settings for URL:", action.url);
-//           }
-//         }, relativeDelay);
-//       });
-//     } else {
-//       console.log("No recorded actions to play back.");
-//     }
-//   }
-  
-  
-  // function unmuteAllIframes() {
-  //   const iframes = document.querySelectorAll('iframe');
-  //   const unmuteMessage = { type: "muteControl", data: { mute: false } };
-  
-  //   iframes.forEach(iframe => {
-  //     // Only proceed if the iframe's src attribute is set and is a valid URL
-  //     if (iframe.src) {
-  //       try {
-  //         const origin = new URL(iframe.src).origin;
-  //         iframe.contentWindow.postMessage(unmuteMessage, "*"); // Adjust the origin accordingly
-  //       } catch (error) {
-  //         console.error("Failed to construct URL from iframe src:", iframe.src, error);
-  //       }
-  //     }
-  //   });
-  // }
-  
-  
-    
 // Event listener for the play recording button click
 playRecordingButton.addEventListener('click', () => {
   togglePlayback();
@@ -186,5 +125,3 @@ const ob1NumberToUrlMap = {
     "#10": "https://ordinals.com/content/3be1f8e37b718f5b9874aecad792504c5822dc8dfc727ad4928594f7725db987i0",
     "#11": "https://ordinals.com/content/1bda678460ef08fb64435b57c9b69fd78fd4556822ccd8e9839b4eb71b3621edi0"
   };
-  
-  

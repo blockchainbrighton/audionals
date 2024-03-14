@@ -1,4 +1,5 @@
 // recording.js
+import { refreshAllIframes } from "./IframeManager.js";
 
 // DOM elements
 const recordButton = document.getElementById('recordButton');
@@ -7,25 +8,30 @@ const tooltipText = document.querySelector('.tooltiptext');
 // Add this to your recordingState object
 let recordingState = {
   isRecording: false,
-  isLiveRecording: false,
-  isPlaybackActive: false, // New state variable to indicate playback mode
+  isRecordReady: false, // New flag for "record ready" mode
+  isPlaybackActive: false,
   startTime: null,
   actions: [],
   initialSettings: {}
 };
 
+
 // Function to update the recording button text based on its state
 function updateButtonAndTooltipText() {
-  if (recordingState.isLiveRecording) {
+  if (recordingState.isRecording) {
     tooltipText.innerText = "Recording.";
     recordButton.innerText = "Recording";
-    recordButton.classList.add('live-recording');
-    recordButton.classList.remove('toggled');
-  } else if (recordingState.isRecording) {
+    recordButton.classList.add('recording');
+  } else if (recordingState.isRecordReady) {
     tooltipText.innerText = "Recording will begin when the first sample is triggered by the user.";
     recordButton.innerText = "Ready to Record";
-    recordButton.classList.add('toggled');
-    recordButton.classList.remove('live-recording');
+    recordButton.classList.add('recordReady');
+    recordButton.classList.remove('recording');
+  } else if (recordingState.isPlaybackActive) {
+    tooltipText.innerText = "Playback mode active. Recording disabled.";
+    recordButton.innerText = "Playback Active";
+    recordButton.classList.remove('recording');
+    recordButton.classList.remove('recordReady');
   } else {
     tooltipText.innerText = "Place SPD in record ready mode to prepare for recording.";
     recordButton.innerText = "Record Live Set";
@@ -56,12 +62,10 @@ function updateButtonAndTooltipText() {
   // Add to recording.js or within recordPlaybackEventListeners.js as appropriate
 
   function recordAction(actionDetails) {
+      // Update state to indicate recording has started
+    // recordingState.isRecording = true;
+    updateButtonAndTooltipText();
     console.log('Attempting to record action:', actionDetails);
-  
-    if (!recordingState.isLiveRecording) {
-      console.log('Aborting action recording; not in live recording mode.');
-      return; // Only record if we're actively recording
-    }
   
     // Append the URL to the action details based on the OB1 number
     const url = ob1NumberToUrlMap[`#${actionDetails.ob1Number}`];
@@ -95,9 +99,8 @@ const ob1NumberToUrlMap = {
   
   // Adjust startRecording to set up event listeners
   function startRecording() {
-    if (!recordingState.isLiveRecording) {
+    if (!recordingState.isRecording) {
       recordingState.isRecording = true;
-      recordingState.isLiveRecording = true;
       recordingState.startTime = Date.now();
       recordingState.actions = [];
       updateButtonAndTooltipText();
@@ -109,9 +112,9 @@ const ob1NumberToUrlMap = {
   // Add any necessary cleanup in stopRecording, such as removing event listeners if required
   function stopRecording() {
     recordingState.isRecording = false;
-    recordingState.isLiveRecording = false;
     updateButtonAndTooltipText();
-    muteAllIframes();
+    refreshAllFrames();
+    console.log("Recording stopped. Refreshing All Frames. Recorded actions:", recordingState.actions);
   
     // Record an end-of-recording marker
     const endMarker = {
@@ -126,41 +129,34 @@ const ob1NumberToUrlMap = {
 
 // Modify toggleFlashing to handle transitions correctly
 function toggleFlashing() {
-  // Check if currently in "record ready" mode via a class or separate state
-  const isRecordReady = recordButton.classList.contains('record-ready');
 
-  if (isRecordReady) {
-    // Exiting "record ready" mode
-    recordButton.classList.remove('record-ready');
-    recordButton.classList.remove('toggled'); // Assuming 'toggled' is used for visual feedback
-    recordButton.innerText = "Record Live Set"; // Default text
-    tooltipText.innerText = "Place SPD in record ready mode to prepare for recording.";
-  } else {
+  
+  // Toggle "record ready" mode without changing the recording state
+  const isRecordReady = recordButton.classList.contains('recordReady');
+  if (!isRecordReady) {
     // Entering "record ready" mode
-    recordButton.classList.add('record-ready');
-    recordButton.classList.add('toggled'); // Assuming 'toggled' is used for visual feedback
+    recordButton.classList.add('recordReady');
+    tooltipText.innerText = "Ready to Record";
     recordButton.innerText = "Ready to Record";
-    tooltipText.innerText = "Recording will begin when the first sample is triggered by the user.";
+  } else {
+    // Exiting "record ready" mode
+    recordButton.classList.remove('recordReady');
+    tooltipText.innerText = "Place SPD in record ready mode to prepare for recording.";
+    recordButton.innerText = "Record Live Set";
   }
 }
 
-// Attach event listener to the record button for toggling between ready and off modes
-recordButton.addEventListener('click', () => {
-    toggleFlashing();
-    // Remove direct manipulation of recording state here, handle state transition elsewhere
-    console.log("Record button clicked - Visual mode toggled.");
-});
 
 
-function muteAllIframes() {
-    const iframes = document.querySelectorAll('iframe');
-    const muteMessage = { type: "muteControl", data: { mute: true } };
+// function muteAllIframes() {
+//     const iframes = document.querySelectorAll('iframe');
+//     const muteMessage = { type: "muteControl", data: { mute: true } };
   
-    iframes.forEach(iframe => {
-      const origin = new URL(iframe.src).origin; // Get the origin of the iframe for security
-      iframe.contentWindow.postMessage(muteMessage, "*");
-    });
-  }
+//     iframes.forEach(iframe => {
+//       const origin = new URL(iframe.src).origin; // Get the origin of the iframe for security
+//       iframe.contentWindow.postMessage(muteMessage, "*");
+//     });
+//   }
 
 // Export functions and unified state for use in other modules
-export { recordingState, toggleFlashing, startRecording, stopRecording, recordAction, updateButtonAndTooltipText };
+export { recordingState, toggleFlashing, startRecording, stopRecording, recordAction, updateButtonAndTooltipText, };

@@ -1,5 +1,6 @@
 // IframeManager.js
 import { preloadContent, loadContentFromURL } from './ContentLoader.js';
+import { recordingState, recordAction } from './recording.js';
 
 const numberOfIframes = 36; // Define the total number of iframes
 
@@ -111,6 +112,12 @@ export function refreshIframe(iframeId) {
 
 // Refresh all iframes to their initial URLs
 export function refreshAllIframes() {
+  console.log('Refreshing All Iframes. Recording State:', {
+    isRecording: recordingState.isRecording,
+    isPlaybackActive: recordingState.isPlaybackActive,
+    isRecordReady: recordingState.isRecordReady,
+    recordAction: recordAction
+});
   Object.keys(window.iframeSettings).forEach(iframeId => {
     refreshIframe(iframeId);
   });
