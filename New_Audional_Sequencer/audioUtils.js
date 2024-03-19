@@ -134,32 +134,34 @@ function playSound(currentSequence, channel, currentStep) {
   console.log(`[playSound Debugging] Processing channel index: ${channelIndex}`);
 
   const stepState = getStepState(currentSequence, channelIndex, currentStep);
-  console.log(`[playSound Debugging] Step state for currentSequence: ${currentSequence}, channelIndex: ${channelIndex}, currentStep: ${currentStep} is: ${stepState}`);
   if (!stepState) {
       console.log("[playSound Debugging] Current step is not selected. Skipping playback.");
       return;
   }
 
   const url = getAudioUrl(channelIndex);
-  console.log(`[playSound Debugging] URL for channelIndex: ${channelIndex} is: ${url}`);
-  const audioBuffer = getAudioBuffer(url);
+  let audioBuffer = window.unifiedSequencerSettings.getProcessedAudioBuffer(channelIndex);
+
   if (!audioBuffer) {
-      console.log("[playSound Debugging] No audio buffer found for URL:", url);
-      return;
+    console.log(`[playSound Debugging] No modified audio buffer found for channelIndex: ${channelIndex}, fetching from URL: ${url}`);
+    audioBuffer = getAudioBuffer(url);
+    if (!audioBuffer) {
+        console.log("[playSound Debugging] No audio buffer found for URL:", url);
+        return;
+    }
   }
 
-  // Check if there's an active pitch shift setting for the current step
   const pitchShiftSetting = window.unifiedSequencerSettings.getPitchShifter(currentSequence, channelIndex, currentStep);
-  console.log(`[playSound Debugging] Retrieved pitch shift setting for currentSequence: ${currentSequence}, channelIndex: ${channelIndex}, currentStep: ${currentStep}`, pitchShiftSetting);
   
   if (pitchShiftSetting && pitchShiftSetting.enabled && parseFloat(pitchShiftSetting.amount) !== 1) {
     console.log('[playSound Debugging] Applying pitch shift with amount:', pitchShiftSetting.amount);
     applyPitchShiftAndPlay(audioBuffer, parseFloat(pitchShiftSetting.amount));
   } else {
     console.log('[playSound Debugging] No pitch shift to apply or amount is default.');
-    playTrimmedAudio(channelIndex, audioBuffer, url);
+    playTrimmedAudio(channelIndex, audioBuffer);
   }
 }
+
 
 // Function to apply pitch shift and play the audio
 function applyPitchShiftAndPlay(audioBuffer, pitchAmount) {
