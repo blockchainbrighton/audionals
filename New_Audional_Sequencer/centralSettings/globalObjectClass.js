@@ -10,11 +10,20 @@ class UnifiedSequencerSettings {
                 projectBPM: 120,
                 currentSequence: 0, // Initialize with a default value
                 projectURLs: new Array(16).fill(''), 
+
                 trimSettings: Array.from({ length: 16 }, () => ({
                     startSliderValue: 0.01,
                     endSliderValue: 100.00,
                     totalSampleDuration: 0
                 })),
+
+                activePitchShifters: [{
+                    sequence: 0, // Sequence number
+                    channel: 0, // Channel number
+                    step: 0, // Step number. For channel-wide settings, this could be null or a specific identifier
+                    amount: 1.5 // Pitch shift amount
+                }],
+
                 projectChannelNames: new Array(16).fill(''), // Placeholder for channel names
                 projectSequences: this.initializeSequences(16, 16, 64) // Adjust dimensions as needed
             }
@@ -26,6 +35,39 @@ class UnifiedSequencerSettings {
             this.checkSettings = this.checkSettings.bind(this);
             this.clearMasterSettings = this.clearMasterSettings.bind(this);
         }
+
+        addOrUpdatePitchShifter(sequence, channel, step, amount) {
+            const index = this.settings.masterSettings.activePitchShifters.findIndex(ps => 
+                ps.sequence === sequence && ps.channel === channel && ps.step === step);
+        
+            if (index > -1) {
+                this.settings.masterSettings.activePitchShifters[index].amount = amount;
+                console.log(`[UnifiedSequencerSettings] Updated pitch shifter at index ${index} with amount ${amount}`);
+            } else {
+                this.settings.masterSettings.activePitchShifters.push({ sequence, channel, step, amount });
+                console.log(`[UnifiedSequencerSettings] Added new pitch shifter for sequence ${sequence}, channel ${channel}, step ${step} with amount ${amount}`);
+            }
+        }
+
+        removePitchShifter(sequence, channel, step) {
+            const index = this.settings.masterSettings.activePitchShifters.findIndex(ps => 
+                ps.sequence === sequence && ps.channel === channel && ps.step === step);
+        
+            if (index > -1) {
+                this.settings.masterSettings.activePitchShifters.splice(index, 1);
+                console.log(`[UnifiedSequencerSettings] Removed pitch shifter for sequence ${sequence}, channel ${channel}, step ${step}`);
+            }
+        }
+
+        getPitchShifter(sequence, channel, step) {
+            const setting = this.settings.masterSettings.activePitchShifters.find(ps => 
+                ps.sequence === sequence && ps.channel === channel && ps.step === step);
+    
+                console.log(`[Global Settings] Retrieved pitch shifter setting for Seq: ${sequence}, Ch: ${channel}, Step: ${step}:`, setting ? setting.amount : 'Not Found');
+                return setting;
+        }
+        
+        
 
         clearMasterSettings() {
             console.log("[clearMasterSettings] Current masterSettings before clearing:", this.settings.masterSettings);

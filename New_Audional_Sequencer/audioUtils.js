@@ -125,28 +125,64 @@ function bufferToBase64(buffer) {
   console.log(`[HTML Debugging] [bufferToBase64] Converted to base64, length: ${base64.length}`);
   return base64;
 }
-// Function to play sound
+
+
+// Modified function to play sound with pitch shift effect applied if necessary
 function playSound(currentSequence, channel, currentStep) {
-  console.log('playSound entered');
+  console.log('[playSound] entered');
   const channelIndex = getChannelIndex(channel);
-  console.log(`[HTML Debugging] [playSound] Processing channel index: ${channelIndex}`);
+  console.log(`[playSound Debugging] Processing channel index: ${channelIndex}`);
 
   const stepState = getStepState(currentSequence, channelIndex, currentStep);
-  console.log(`[HTML Debugging] [playSound] setting stepState using getStepState to: ${stepState}`);
+  console.log(`[playSound Debugging] Step state for currentSequence: ${currentSequence}, channelIndex: ${channelIndex}, currentStep: ${currentStep} is: ${stepState}`);
   if (!stepState) {
-      console.log("[HTML Debugging] [playSound] Current step is not selected. Skipping playback.");
+      console.log("[playSound Debugging] Current step is not selected. Skipping playback.");
       return;
   }
 
   const url = getAudioUrl(channelIndex);
+  console.log(`[playSound Debugging] URL for channelIndex: ${channelIndex} is: ${url}`);
   const audioBuffer = getAudioBuffer(url);
   if (!audioBuffer) {
-      console.log("[HTML Debugging] [playSound] No audio buffer found for URL:", url);
+      console.log("[playSound Debugging] No audio buffer found for URL:", url);
       return;
   }
 
-  playTrimmedAudio(channelIndex, audioBuffer, url);
+  // Check if there's an active pitch shift setting for the current step
+  const pitchShiftSetting = window.unifiedSequencerSettings.getPitchShifter(currentSequence, channelIndex, currentStep);
+  console.log(`[playSound Debugging] Retrieved pitch shift setting for currentSequence: ${currentSequence}, channelIndex: ${channelIndex}, currentStep: ${currentStep}`, pitchShiftSetting);
+  
+  if (pitchShiftSetting && pitchShiftSetting.enabled && parseFloat(pitchShiftSetting.amount) !== 1) {
+    console.log('[playSound Debugging] Applying pitch shift with amount:', pitchShiftSetting.amount);
+    applyPitchShiftAndPlay(audioBuffer, parseFloat(pitchShiftSetting.amount));
+  } else {
+    console.log('[playSound Debugging] No pitch shift to apply or amount is default.');
+    playTrimmedAudio(channelIndex, audioBuffer, url);
+  }
 }
+
+// Function to apply pitch shift and play the audio
+function applyPitchShiftAndPlay(audioBuffer, pitchAmount) {
+  console.log(`[applyPitchShiftAndPlay] Called with pitch amount: ${pitchAmount}`);
+
+  const source = audioContext.createBufferSource();
+  source.buffer = audioBuffer;
+  
+  // Create pitch shift effect
+  const pitchShift = new Tone.PitchShift({
+    pitch: pitchAmount
+  }).toDestination();
+  
+  // Connect the source to the pitch shift effect and then to the destination
+  source.connect(pitchShift);
+  pitchShift.toDestination();
+  
+  source.start();
+  console.log('[applyPitchShiftAndPlay] Pitch shift effect applied and audio started.');
+  console.log(`[applyPitchShiftAndPlay] Audio playback started with pitch shift: ${pitchAmount}`);
+}
+
+// Ensure playTrimmedAudio, getChannelIndex, getStepState, getAudioUrl, getAudioBuffer, and audioBuffers are correctly implemented and available.
 
 function getChannelIndex(channel) {
   return parseInt(channel.dataset.id.split('-')[1]);
