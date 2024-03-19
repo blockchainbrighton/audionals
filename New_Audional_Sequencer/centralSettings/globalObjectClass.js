@@ -69,81 +69,71 @@ class UnifiedSequencerSettings {
             }
         
 
-        initializePitchShiftControls() {
-            const pitchShiftRange = document.getElementById('pitchShiftRange');
-            const pitchShiftValueDisplay = document.getElementById('pitchShiftValue');
-            const pitchShiftToggleButton = document.getElementById('pitchShiftToggleButton');
-        
-            pitchShiftRange.addEventListener('input', (e) => {
-                const value = parseFloat(e.target.value);
-                pitchShiftValueDisplay.textContent = value;
-                this.pitchShift.pitch = value;
-        
-                // Update global settings with the new pitch shift amount
-                window.unifiedSequencerSettings.addOrUpdatePitchShifter(
-                    window.unifiedSequencerSettings.settings.masterSettings.currentSequence,
-                    this.channelIndex,
-                    null, // Assuming channel-wide setting for pitch shift, not specific to a step
-                    value
-                );
-            });
-        
-            pitchShiftToggleButton.addEventListener('click', () => {
-                this.pitchShiftActive = !this.pitchShiftActive;
-                pitchShiftToggleButton.textContent = this.pitchShiftActive ? 'Turn Pitch Shift Off' : 'Turn Pitch Shift On';
-        
-                if (this.pitchShiftActive) {
-                    console.log('[AudioTrimmer] Pitch Shift Activated');
-                    // Update global settings to activate pitch shift
+            initializePitchShiftControls() {
+                const pitchShiftRange = document.getElementById('pitchShiftRange');
+                const pitchShiftValueDisplay = document.getElementById('pitchShiftValue');
+                const pitchShiftToggleButton = document.getElementById('pitchShiftToggleButton');
+            
+                pitchShiftRange.addEventListener('input', (e) => {
+                    const value = parseFloat(e.target.value);
+                    pitchShiftValueDisplay.textContent = value;
+                    this.pitchShift.pitch = value;
+            
+                    // Update global settings with the new pitch shift amount
                     window.unifiedSequencerSettings.addOrUpdatePitchShifter(
-                        window.unifiedSequencerSettings.settings.masterSettings.currentSequence,
+                        window.unifiedSequencerSettings.getCurrentSequence(),
                         this.channelIndex,
-                        null, // Assuming channel-wide setting for pitch shift
-                        parseFloat(pitchShiftRange.value)
+                        null, // Assuming channel-wide setting for pitch shift, not specific to a step
+                        value,
+                        this.pitchShiftActive
                     );
+                });
+            
+                pitchShiftToggleButton.addEventListener('click', () => {
+                    this.pitchShiftActive = !this.pitchShiftActive;
+                    pitchShiftToggleButton.textContent = this.pitchShiftActive ? 'Turn Pitch Shift Off' : 'Turn Pitch Shift On';
+            
+                    // Inform global settings about the activation state change
+                    window.unifiedSequencerSettings.addOrUpdatePitchShifter(
+                        window.unifiedSequencerSettings.getCurrentSequence(),
+                        this.channelIndex,
+                        null, // Again, assuming channel-wide setting
+                        parseFloat(pitchShiftRange.value),
+                        this.pitchShiftActive
+                    );
+                });
+            }
+        
+
+            addOrUpdatePitchShifter(sequence, channel, step, amount, active = true) {
+                const index = this.settings.masterSettings.activePitchShifters.findIndex(ps => 
+                    ps.sequence === sequence && ps.channel === channel && (ps.step === step || step === null));
+                
+                if (index > -1) {
+                    this.settings.masterSettings.activePitchShifters[index].amount = amount;
+                    this.settings.masterSettings.activePitchShifters[index].active = active;
                 } else {
-                    console.log('[AudioTrimmer] Pitch Shift Deactivated');
-                    // Remove pitch shift settings from global settings
-                    window.unifiedSequencerSettings.removePitchShifter(
-                        window.unifiedSequencerSettings.settings.masterSettings.currentSequence,
-                        this.channelIndex,
-                        null // Assuming channel-wide setting for pitch shift
-                    );
+                    this.settings.masterSettings.activePitchShifters.push({ sequence, channel, step, amount, active });
                 }
-            });
-        }
-        
-
-        addOrUpdatePitchShifter(sequence, channel, step, amount) {
-            const index = this.settings.masterSettings.activePitchShifters.findIndex(ps => 
-                ps.sequence === sequence && ps.channel === channel && ps.step === step);
-        
-            if (index > -1) {
-                this.settings.masterSettings.activePitchShifters[index].amount = amount;
-                console.log(`[UnifiedSequencerSettings] Updated pitch shifter at index ${index} with amount ${amount}`);
-            } else {
-                this.settings.masterSettings.activePitchShifters.push({ sequence, channel, step, amount });
-                console.log(`[UnifiedSequencerSettings] Added new pitch shifter for sequence ${sequence}, channel ${channel}, step ${step} with amount ${amount}`);
+                console.log(`[UnifiedSequencerSettings] Pitch shifter for sequence ${sequence}, channel ${channel}, step ${step} updated/added.`);
             }
-        }
-
-        removePitchShifter(sequence, channel, step) {
-            const index = this.settings.masterSettings.activePitchShifters.findIndex(ps => 
-                ps.sequence === sequence && ps.channel === channel && ps.step === step);
-        
-            if (index > -1) {
-                this.settings.masterSettings.activePitchShifters.splice(index, 1);
-                console.log(`[UnifiedSequencerSettings] Removed pitch shifter for sequence ${sequence}, channel ${channel}, step ${step}`);
+            
+            removePitchShifter(sequence, channel, step) {
+                const index = this.settings.masterSettings.activePitchShifters.findIndex(ps => 
+                    ps.sequence === sequence && ps.channel === channel && (ps.step === step || step === null));
+                
+                if (index > -1) {
+                    this.settings.masterSettings.activePitchShifters.splice(index, 1);
+                    console.log(`[UnifiedSequencerSettings] Pitch shifter for sequence ${sequence}, channel ${channel}, step ${step} removed.`);
+                }
             }
-        }
-
-        getPitchShifter(sequence, channel, step) {
-            const setting = this.settings.masterSettings.activePitchShifters.find(ps => 
-                ps.sequence === sequence && ps.channel === channel && ps.step === step);
-    
-                console.log(`[Global Settings] Retrieved pitch shifter setting for Seq: ${sequence}, Ch: ${channel}, Step: ${step}:`, setting ? setting.amount : 'Not Found');
+            
+            getPitchShifter(sequence, channel, step) {
+                const setting = this.settings.masterSettings.activePitchShifters.find(ps => 
+                    ps.sequence === sequence && ps.channel === channel && (ps.step === step || step === null));
+                
                 return setting;
-        }
+            }
         
         
 
