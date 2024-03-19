@@ -26,12 +26,15 @@ class UnifiedSequencerSettings {
 
                 projectChannelNames: new Array(16).fill(''), // Placeholder for channel names
                 projectSequences: this.initializeSequences(16, 16, 64) // Adjust dimensions as needed
+
+                
             }
             
         };
 
         // Initialize the processedBuffers object to store the processed audio buffers.
                 this.processedBuffers = {};
+                this.notifyObservers = this.notifyObservers.bind(this);
 
                 // Bind methods to ensure they have access to the class instance when called
                 this.checkSettings = this.checkSettings.bind(this);
@@ -39,12 +42,31 @@ class UnifiedSequencerSettings {
                 this.setProcessedAudioBuffer = this.setProcessedAudioBuffer.bind(this); // Ensure setProcessedAudioBuffer is properly bound
             }
 
+            addObserver(observerCallback) {
+                this.observers.push(observerCallback);
+            }
+        
+            removeObserver(observerCallback) {
+                const index = this.observers.indexOf(observerCallback);
+                if (index > -1) {
+                    this.observers.splice(index, 1);
+                }
+            }
+        
+            notifyObservers() {
+                this.observers.forEach((callback) => callback());
+            }
 
-        setProcessedAudioBuffer(channelIndex, buffer) {
-        // Store the processed buffer using the channel index as the key
-            this.processedBuffers[channelIndex] = buffer;
-            console.log(`Processed buffer set for channel ${channelIndex}`);
-        }
+
+            setProcessedAudioBuffer(channelIndex, buffer) {
+                this.processedBuffers[channelIndex] = buffer;
+                console.log(`Processed buffer set for channel ${channelIndex}`);
+                this.notifyObservers(); // Notify all observers about the change
+            }
+        
+            getProcessedAudioBuffer(channelIndex) {
+                return this.processedBuffers[channelIndex];
+            }
         
 
         initializePitchShiftControls() {

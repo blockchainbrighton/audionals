@@ -6,15 +6,15 @@ class AudioTrimmer {
         console.log("[Class Functions] constructor", { channelIndex });
 
         this.channelIndex = channelIndex;
-        this.unifiedSequencerSettings = this.unifiedSequencerSettings; // Store the unifiedSequencerSettings reference
+        this.unifiedSequencerSettings = window.unifiedSequencerSettings;
         this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        this.audioBuffer = null;
+        this.audioBuffer = null; // This will be set by loadProcessedAudioBuffer if buffer exists
         this.isPlaying = false;
         this.isLooping = false;
 
         this.initializeSliderTrack(channelIndex);
 
-        const trimSettings = getTrimSettings(this.channelIndex);
+        const trimSettings = this.unifiedSequencerSettings.getTrimSettings(this.channelIndex); // Updated to use the global settings
         console.log("getSettings read into trimSettings in AudioTrimmer class constructor", trimSettings);
         this.startSliderValue = trimSettings.startSliderValue;
         this.endSliderValue = trimSettings.endSliderValue;
@@ -26,56 +26,35 @@ class AudioTrimmer {
 
         this.fetchInitialPitchShiftSettings();
         this.initializePitchShiftControls();
+        this.loadProcessedAudioBuffer(); // Load the processed audio buffer
     }
 
-    fetchInitialPitchShiftSettings() {
-        // Assuming unifiedSequencerSettings is an instance of UnifiedSequencerSettings available globally
-        const currentSequence = unifiedSequencerSettings.settings.masterSettings.currentSequence;
-        const pitchSetting = unifiedSequencerSettings.getPitchShifter(currentSequence, this.channelIndex, null);
-
-        if (pitchSetting) {
-            this.pitchShift.pitch = pitchSetting.amount;
-            this.pitchShiftActive = true; // Assuming presence of settings implies activation
-            this.pitchShift.wet.value = 1; // Apply the effect since it's active
-            console.log(`[AudioTrimmer] Fetched pitch setting: ${pitchSetting.amount} for channel ${this.channelIndex}`);
-
-            // Update UI to reflect fetched settings
-            document.getElementById('pitchShiftRange').value = pitchSetting.amount;
-            document.getElementById('pitchShiftValue').textContent = pitchSetting.amount;
-            document.getElementById('pitchShiftToggleButton').textContent = 'Turn Pitch Shift Off';
-        }else {
-            console.log(`[AudioTrimmer] No pitch setting found for channel ${this.channelIndex}`);
+    loadProcessedAudioBuffer() {
+        const buffer = this.unifiedSequencerSettings.getProcessedAudioBuffer(this.channelIndex);
+        if (buffer) {
+            this.audioBuffer = buffer;
+            console.log("[AudioTrimmer] Loaded processed audio buffer from global settings.");
+            // Additional steps to utilize the loaded buffer
+        } else {
+            console.log("[AudioTrimmer] No processed audio buffer found in global settings for this channel.");
         }
     }
-    
 
-    initializePitchShiftControls() {
-        // Initialize controls as before, with added integration to update global settings
-        const pitchShiftRange = document.getElementById('pitchShiftRange');
-        const pitchShiftValueDisplay = document.getElementById('pitchShiftValue');
-        const pitchShiftToggleButton = document.getElementById('pitchShiftToggleButton');
+    async loadSample() {
+        console.log("[Class Functions] loadSample");
 
-        pitchShiftRange.addEventListener('input', () => {
-            const value = parseFloat(pitchShiftRange.value);
-            pitchShiftValueDisplay.textContent = value;
-            this.pitchShift.pitch = value;
-            // Update global settings whenever the pitch shift amount changes
-            unifiedSequencerSettings.addOrUpdatePitchShifter(unifiedSequencerSettings.settings.masterSettings.currentSequence, this.channelIndex, null, value);
-        });
+        if (!this.ordinalIdInput.value) return;
+        try {
+            this.audioBuffer = await fetchAudio(`https://ordinals.com/content/${this.ordinalIdInput.value}`);
+            this.trimSettings = getTrimSettings(this.channelIndex);
+            this.drawWaveform();
+            console.log(" updateDimmedAreas method called from loadSample");
+            this.updateSliderValues();
 
-        pitchShiftToggleButton.addEventListener('click', () => {
-            this.pitchShiftActive = !this.pitchShiftActive;
-            pitchShiftToggleButton.textContent = this.pitchShiftActive ? 'Turn Pitch Shift Off' : 'Turn Pitch Shift On';
-            this.pitchShift.wet.value = this.pitchShiftActive ? 1 : 0;
-            // Update global settings based on pitch shift activation status
-            if (this.pitchShiftActive) {
-                console.log('[AudioTrimmer] Pitch Shift Activated');
-                unifiedSequencerSettings.addOrUpdatePitchShifter(unifiedSequencerSettings.settings.masterSettings.currentSequence, this.channelIndex, null, parseFloat(this.pitchShift.pitch));
-            } else {
-                console.log('[AudioTrimmer] Pitch Shift Deactivated');
-                unifiedSequencerSettings.removePitchShifter(unifiedSequencerSettings.settings.masterSettings.currentSequence, this.channelIndex, null);
-            }
-        });
+            this.updateDimmedAreas();
+        } catch (error) {
+            console.error('Error loading audio:', error);
+        }
     }
 
     applyPitchShiftAndExport() {
@@ -169,6 +148,59 @@ class AudioTrimmer {
         // Implement logic to calculate playback rate based on pitch, if needed
         return Math.pow(2, pitch / 12); // Example: convert pitch shift in semitones to playback rate
     }
+
+
+    fetchInitialPitchShiftSettings() {
+        // Assuming unifiedSequencerSettings is an instance of UnifiedSequencerSettings available globally
+        const currentSequence = unifiedSequencerSettings.settings.masterSettings.currentSequence;
+        const pitchSetting = unifiedSequencerSettings.getPitchShifter(currentSequence, this.channelIndex, null);
+
+        if (pitchSetting) {
+            this.pitchShift.pitch = pitchSetting.amount;
+            this.pitchShiftActive = true; // Assuming presence of settings implies activation
+            this.pitchShift.wet.value = 1; // Apply the effect since it's active
+            console.log(`[AudioTrimmer] Fetched pitch setting: ${pitchSetting.amount} for channel ${this.channelIndex}`);
+
+            // Update UI to reflect fetched settings
+            document.getElementById('pitchShiftRange').value = pitchSetting.amount;
+            document.getElementById('pitchShiftValue').textContent = pitchSetting.amount;
+            document.getElementById('pitchShiftToggleButton').textContent = 'Turn Pitch Shift Off';
+        }else {
+            console.log(`[AudioTrimmer] No pitch setting found for channel ${this.channelIndex}`);
+        }
+    }
+    
+
+    initializePitchShiftControls() {
+        // Initialize controls as before, with added integration to update global settings
+        const pitchShiftRange = document.getElementById('pitchShiftRange');
+        const pitchShiftValueDisplay = document.getElementById('pitchShiftValue');
+        const pitchShiftToggleButton = document.getElementById('pitchShiftToggleButton');
+
+        pitchShiftRange.addEventListener('input', () => {
+            const value = parseFloat(pitchShiftRange.value);
+            pitchShiftValueDisplay.textContent = value;
+            this.pitchShift.pitch = value;
+            // Update global settings whenever the pitch shift amount changes
+            unifiedSequencerSettings.addOrUpdatePitchShifter(unifiedSequencerSettings.settings.masterSettings.currentSequence, this.channelIndex, null, value);
+        });
+
+        pitchShiftToggleButton.addEventListener('click', () => {
+            this.pitchShiftActive = !this.pitchShiftActive;
+            pitchShiftToggleButton.textContent = this.pitchShiftActive ? 'Turn Pitch Shift Off' : 'Turn Pitch Shift On';
+            this.pitchShift.wet.value = this.pitchShiftActive ? 1 : 0;
+            // Update global settings based on pitch shift activation status
+            if (this.pitchShiftActive) {
+                console.log('[AudioTrimmer] Pitch Shift Activated');
+                unifiedSequencerSettings.addOrUpdatePitchShifter(unifiedSequencerSettings.settings.masterSettings.currentSequence, this.channelIndex, null, parseFloat(this.pitchShift.pitch));
+            } else {
+                console.log('[AudioTrimmer] Pitch Shift Deactivated');
+                unifiedSequencerSettings.removePitchShifter(unifiedSequencerSettings.settings.masterSettings.currentSequence, this.channelIndex, null);
+            }
+        });
+    }
+
+   
     
 
     initializeSliderTrack() {
@@ -417,23 +449,7 @@ displayValues() {
         
       
 
-    async loadSample() {
-        console.log("[Class Functions] loadSample");
-
-        if (!this.ordinalIdInput.value) return;
-        try {
-            this.audioBuffer = await fetchAudio(`https://ordinals.com/content/${this.ordinalIdInput.value}`);
-            this.trimSettings = getTrimSettings(this.channelIndex);
-            this.drawWaveform();
-            console.log(" updateDimmedAreas method called from loadSample");
-            this.updateSliderValues();
-
-            this.updateDimmedAreas();
-        } catch (error) {
-            console.error('Error loading audio:', error);
-        }
-    }
-
+   
         
         getMinMax(channelData, startIndex, step) {
         let min = 1.0, max = -1.0;
