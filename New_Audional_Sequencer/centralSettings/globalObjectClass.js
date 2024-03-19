@@ -30,11 +30,22 @@ class UnifiedSequencerSettings {
             
         };
 
+        // Initialize the processedBuffers object to store the processed audio buffers.
+                this.processedBuffers = {};
 
-        // Bind methods
-            this.checkSettings = this.checkSettings.bind(this);
-            this.clearMasterSettings = this.clearMasterSettings.bind(this);
+                // Bind methods to ensure they have access to the class instance when called
+                this.checkSettings = this.checkSettings.bind(this);
+                this.clearMasterSettings = this.clearMasterSettings.bind(this);
+                this.setProcessedAudioBuffer = this.setProcessedAudioBuffer.bind(this); // Ensure setProcessedAudioBuffer is properly bound
+            }
+
+
+        setProcessedAudioBuffer(channelIndex, buffer) {
+        // Store the processed buffer using the channel index as the key
+            this.processedBuffers[channelIndex] = buffer;
+            console.log(`Processed buffer set for channel ${channelIndex}`);
         }
+        
 
         initializePitchShiftControls() {
             const pitchShiftRange = document.getElementById('pitchShiftRange');

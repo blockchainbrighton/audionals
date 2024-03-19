@@ -84,25 +84,26 @@ class AudioTrimmer {
                 reject("No audio buffer loaded");
                 return;
             }
-
+    
             if (!this.pitchShiftActive) {
                 resolve(this.audioBuffer);
                 return;
             }
-
-            // Assume this.audioBuffer is compatible with Tone.js (e.g., loaded via Tone.Buffer)
+    
             Tone.Offline(() => {
-                // Setup the pitch shift effect
                 const pitchShift = new Tone.PitchShift(this.pitchShift.pitch).toDestination();
                 const source = new Tone.Player(this.audioBuffer).connect(pitchShift);
                 source.start(0);
             }, this.audioBuffer.duration).then((buffer) => {
-                // Convert Tone.Buffer back to AudioBuffer for Web Audio API
                 const offlineContext = new OfflineAudioContext(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
                 const myArrayBuffer = offlineContext.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
                 for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
                     myArrayBuffer.copyToChannel(buffer.getChannelData(channel), channel);
                 }
+    
+                // Use the correct global settings object reference to store the processed audio buffer
+                window.unifiedSequencerSettings.setProcessedAudioBuffer(this.channelIndex, myArrayBuffer);
+    
                 resolve(myArrayBuffer);
             }).catch(reject);
         });
