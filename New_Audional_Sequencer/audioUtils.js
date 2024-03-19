@@ -179,6 +179,7 @@ function applyPitchShiftAndPlay(audioBuffer, pitchAmount) {
   
   source.start();
   console.log('[applyPitchShiftAndPlay] Pitch shift effect applied and audio started.');
+
   console.log(`[applyPitchShiftAndPlay] Audio playback started with pitch shift: ${pitchAmount}`);
 }
 
