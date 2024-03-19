@@ -36,6 +36,51 @@ class UnifiedSequencerSettings {
             this.clearMasterSettings = this.clearMasterSettings.bind(this);
         }
 
+        initializePitchShiftControls() {
+            const pitchShiftRange = document.getElementById('pitchShiftRange');
+            const pitchShiftValueDisplay = document.getElementById('pitchShiftValue');
+            const pitchShiftToggleButton = document.getElementById('pitchShiftToggleButton');
+        
+            pitchShiftRange.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                pitchShiftValueDisplay.textContent = value;
+                this.pitchShift.pitch = value;
+        
+                // Update global settings with the new pitch shift amount
+                window.unifiedSequencerSettings.addOrUpdatePitchShifter(
+                    window.unifiedSequencerSettings.settings.masterSettings.currentSequence,
+                    this.channelIndex,
+                    null, // Assuming channel-wide setting for pitch shift, not specific to a step
+                    value
+                );
+            });
+        
+            pitchShiftToggleButton.addEventListener('click', () => {
+                this.pitchShiftActive = !this.pitchShiftActive;
+                pitchShiftToggleButton.textContent = this.pitchShiftActive ? 'Turn Pitch Shift Off' : 'Turn Pitch Shift On';
+        
+                if (this.pitchShiftActive) {
+                    console.log('[AudioTrimmer] Pitch Shift Activated');
+                    // Update global settings to activate pitch shift
+                    window.unifiedSequencerSettings.addOrUpdatePitchShifter(
+                        window.unifiedSequencerSettings.settings.masterSettings.currentSequence,
+                        this.channelIndex,
+                        null, // Assuming channel-wide setting for pitch shift
+                        parseFloat(pitchShiftRange.value)
+                    );
+                } else {
+                    console.log('[AudioTrimmer] Pitch Shift Deactivated');
+                    // Remove pitch shift settings from global settings
+                    window.unifiedSequencerSettings.removePitchShifter(
+                        window.unifiedSequencerSettings.settings.masterSettings.currentSequence,
+                        this.channelIndex,
+                        null // Assuming channel-wide setting for pitch shift
+                    );
+                }
+            });
+        }
+        
+
         addOrUpdatePitchShifter(sequence, channel, step, amount) {
             const index = this.settings.masterSettings.activePitchShifters.findIndex(ps => 
                 ps.sequence === sequence && ps.channel === channel && ps.step === step);

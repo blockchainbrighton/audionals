@@ -1,7 +1,9 @@
+
 class PitchShifter {
     constructor() {
-        this.pitchShift = new Tone.PitchShift().toDestination();
+        this.pitchShift = new Tone.PitchShift();
         this.pitchShift.pitch = 1; // Default pitch setting is numeric
+        this.pitchShift.pitch = 0; // Default pitch shift
         this.active = false; 
 
         this.currentStepChannel = null;

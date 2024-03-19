@@ -6,6 +6,7 @@ class AudioTrimmer {
         console.log("[Class Functions] constructor", { channelIndex });
 
         this.channelIndex = channelIndex;
+        this.unifiedSequencerSettings = this.unifiedSequencerSettings; // Store the unifiedSequencerSettings reference
         this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         this.audioBuffer = null;
         this.isPlaying = false;
@@ -17,11 +18,157 @@ class AudioTrimmer {
         console.log("getSettings read into trimSettings in AudioTrimmer class constructor", trimSettings);
         this.startSliderValue = trimSettings.startSliderValue;
         this.endSliderValue = trimSettings.endSliderValue;
-        console.log("startSliderValue and endSliderValue in AudioTrimmer class constructor", this.startSliderValue, this.endSliderValue);
 
-        this.displayTimeout = null;
+        this.pitchShift = new Tone.PitchShift().toDestination();
+        this.pitchShift.wet.value = 0;
+        this.pitchShift.pitch = 0;
+        this.pitchShiftActive = false;
 
+        this.fetchInitialPitchShiftSettings();
+        this.initializePitchShiftControls();
     }
+
+    fetchInitialPitchShiftSettings() {
+        // Assuming unifiedSequencerSettings is an instance of UnifiedSequencerSettings available globally
+        const currentSequence = unifiedSequencerSettings.settings.masterSettings.currentSequence;
+        const pitchSetting = unifiedSequencerSettings.getPitchShifter(currentSequence, this.channelIndex, null);
+
+        if (pitchSetting) {
+            this.pitchShift.pitch = pitchSetting.amount;
+            this.pitchShiftActive = true; // Assuming presence of settings implies activation
+            this.pitchShift.wet.value = 1; // Apply the effect since it's active
+            console.log(`[AudioTrimmer] Fetched pitch setting: ${pitchSetting.amount} for channel ${this.channelIndex}`);
+
+            // Update UI to reflect fetched settings
+            document.getElementById('pitchShiftRange').value = pitchSetting.amount;
+            document.getElementById('pitchShiftValue').textContent = pitchSetting.amount;
+            document.getElementById('pitchShiftToggleButton').textContent = 'Turn Pitch Shift Off';
+        }else {
+            console.log(`[AudioTrimmer] No pitch setting found for channel ${this.channelIndex}`);
+        }
+    }
+    
+
+    initializePitchShiftControls() {
+        // Initialize controls as before, with added integration to update global settings
+        const pitchShiftRange = document.getElementById('pitchShiftRange');
+        const pitchShiftValueDisplay = document.getElementById('pitchShiftValue');
+        const pitchShiftToggleButton = document.getElementById('pitchShiftToggleButton');
+
+        pitchShiftRange.addEventListener('input', () => {
+            const value = parseFloat(pitchShiftRange.value);
+            pitchShiftValueDisplay.textContent = value;
+            this.pitchShift.pitch = value;
+            // Update global settings whenever the pitch shift amount changes
+            unifiedSequencerSettings.addOrUpdatePitchShifter(unifiedSequencerSettings.settings.masterSettings.currentSequence, this.channelIndex, null, value);
+        });
+
+        pitchShiftToggleButton.addEventListener('click', () => {
+            this.pitchShiftActive = !this.pitchShiftActive;
+            pitchShiftToggleButton.textContent = this.pitchShiftActive ? 'Turn Pitch Shift Off' : 'Turn Pitch Shift On';
+            this.pitchShift.wet.value = this.pitchShiftActive ? 1 : 0;
+            // Update global settings based on pitch shift activation status
+            if (this.pitchShiftActive) {
+                console.log('[AudioTrimmer] Pitch Shift Activated');
+                unifiedSequencerSettings.addOrUpdatePitchShifter(unifiedSequencerSettings.settings.masterSettings.currentSequence, this.channelIndex, null, parseFloat(this.pitchShift.pitch));
+            } else {
+                console.log('[AudioTrimmer] Pitch Shift Deactivated');
+                unifiedSequencerSettings.removePitchShifter(unifiedSequencerSettings.settings.masterSettings.currentSequence, this.channelIndex, null);
+            }
+        });
+    }
+
+    applyPitchShiftAndExport() {
+        return new Promise((resolve, reject) => {
+            if (!this.audioBuffer) {
+                reject("No audio buffer loaded");
+                return;
+            }
+
+            if (!this.pitchShiftActive) {
+                resolve(this.audioBuffer);
+                return;
+            }
+
+            // Assume this.audioBuffer is compatible with Tone.js (e.g., loaded via Tone.Buffer)
+            Tone.Offline(() => {
+                // Setup the pitch shift effect
+                const pitchShift = new Tone.PitchShift(this.pitchShift.pitch).toDestination();
+                const source = new Tone.Player(this.audioBuffer).connect(pitchShift);
+                source.start(0);
+            }, this.audioBuffer.duration).then((buffer) => {
+                // Convert Tone.Buffer back to AudioBuffer for Web Audio API
+                const offlineContext = new OfflineAudioContext(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+                const myArrayBuffer = offlineContext.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+                for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+                    myArrayBuffer.copyToChannel(buffer.getChannelData(channel), channel);
+                }
+                resolve(myArrayBuffer);
+            }).catch(reject);
+        });
+    }
+
+    playTrimmedAudio() {
+        console.log("[playTrimmedAudio] [Class Functions] playTrimmedAudio");
+        console.log(`[playTrimmedAudio] Pitch shift active: ${this.pitchShiftActive}, Pitch: ${this.pitchShift.pitch}`);
+    
+        if (this.isPlaying) {
+            console.log("[playTrimmedAudio] Audio is already playing, not starting new playback");
+            return;
+        }
+
+        if (!this.audioBuffer) {
+            console.error("[playTrimmedAudio] No audio buffer loaded");
+            return;
+        }
+
+        this.isPlaying = true;
+        this.applyPitchShiftAndExport().then(processedBuffer => {
+            this.setupAndPlayAudioBuffer(processedBuffer);
+        }).catch(error => {
+            console.error("[playTrimmedAudio] Error processing audio:", error);
+            this.isPlaying = false;
+        });
+    }
+
+    setupAndPlayAudioBuffer(processedBuffer) {
+        this.sourceNode = this.audioContext.createBufferSource();
+        this.sourceNode.buffer = processedBuffer;
+        this.sourceNode.connect(this.audioContext.destination);
+
+        const startTime = this.sliderValueToTimecode(this.startSliderValue, processedBuffer.duration);
+        const endTime = this.sliderValueToTimecode(this.endSliderValue, processedBuffer.duration);
+
+        this.sourceNode.loop = this.isLooping;
+        if (this.isLooping) {
+            this.sourceNode.loopStart = startTime;
+            this.sourceNode.loopEnd = endTime;
+        }
+
+        this.sourceNode.start(0, startTime, endTime - startTime);
+        console.log("[playTrimmedAudio] Playback started");
+        this.animatePlayback(); 
+
+        this.sourceNode.onended = () => {
+            this.isPlaying = false;
+            console.log("[playTrimmedAudio] Playback ended, isPlaying set to false");
+            this.cleanupAfterPlayback(); 
+        };
+    }
+    
+    cleanupAfterPlayback() {
+        // Implement any cleanup logic needed after playback ends
+        if (this.animationFrameRequest) {
+            cancelAnimationFrame(this.animationFrameRequest); // Stop the animation when playback stops
+        }
+        // Additional cleanup as necessary
+    }
+    
+    calculatePlaybackRateFromPitch(pitch) {
+        // Implement logic to calculate playback rate based on pitch, if needed
+        return Math.pow(2, pitch / 12); // Example: convert pitch shift in semitones to playback rate
+    }
+    
 
     initializeSliderTrack() {
     this.sliderTrack = document.querySelector('.slider-track');
@@ -326,70 +473,7 @@ displayValues() {
         }
         
         
-        playTrimmedAudio() {
-            console.log("[playTrimmedAudio] [Class Functions] playTrimmedAudio");
-        
-            // If audio is already playing, return without starting new playback
-            if (this.isPlaying) {
-                console.log("[playTrimmedAudio] Audio is already playing, not starting new playback");
-                return;
-            }
-        
-            if (!this.audioBuffer) {
-                console.error("[playTrimmedAudio] No audio buffer loaded");
-                return;
-            }
-        
-            // Set isPlaying to true immediately to block concurrent playbacks
-            this.isPlaying = true;
-            console.log("[playTrimmedAudio] isPlaying set to true, starting new playback");
-        
-            // Convert the start slider value to a timecode and add it to the current context time
-            const startOffset = this.sliderValueToTimecode(this.startSliderValue, this.audioBuffer.duration);
-            this.startTime = this.audioContext.currentTime - startOffset;
-
-        
-            // Convert internal state slider values to timecodes
-            const startTime = this.sliderValueToTimecode(this.startSliderValue, this.audioBuffer.duration);
-            const endTime = this.sliderValueToTimecode(this.endSliderValue, this.audioBuffer.duration);
-        
-            // Disconnect any existing source node
-            if (this.sourceNode) {
-                this.sourceNode.disconnect();
-            }
-        
-            // Create and configure the audio source node
-            this.sourceNode = this.audioContext.createBufferSource();
-            this.sourceNode.buffer = this.audioBuffer;
-            this.sourceNode.connect(this.audioContext.destination);
-        
-            // Set looping if enabled
-            this.sourceNode.loop = this.isLooping;
-            if (this.isLooping) {
-                this.sourceNode.loopStart = startTime;
-                this.sourceNode.loopEnd = endTime;
-            }
-        
-            // Start playback and animation
-            this.sourceNode.start(0, startTime, endTime - startTime);
-            console.log("[playTrimmedAudio] Playback started");
-            this.animatePlayback();  // Start animating the playback bar
-        
-            // Handle the end of playback
-            this.sourceNode.onended = () => {
-                this.isPlaying = false;
-                if (this.isLooping) {
-                    this.playTrimmedAudio(); // Restart playback if looping
-                } else {
-                    // Handle the end of playback when not looping
-                    console.log("[playTrimmedAudio] Playback ended, isPlaying set to false");
-                    if (this.animationFrameRequest) {
-                        cancelAnimationFrame(this.animationFrameRequest); // Stop the animation when playback stops
-                    }
-                }
-            };
-        }
-        
+       
 
         stopAudio() {
             console.log("[Class Functions] stopAudio");
