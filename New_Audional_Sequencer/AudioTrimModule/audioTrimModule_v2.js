@@ -118,24 +118,32 @@ class AudioTrimmer {
         const pitchShiftValueDisplay = document.getElementById('pitchShiftValue');
         const pitchShiftToggleButton = document.getElementById('pitchShiftToggleButton');
         
-        pitchShiftRange.addEventListener('input', () => {
+        const updateAndProcessAudio = () => {
             const value = parseFloat(pitchShiftRange.value);
-            pitchShiftValueDisplay.textContent = value;
             this.pitchShift.pitch = value;
-            console.log(`[Trimmer Class Pitch Functions] Pitch Shift Slider Moved - Value: ${value}`);
-            // Delegate to global settings to update
-            this.unifiedSequencerSettings.updatePitchShifter(this.currentSequence, this.channelIndex, null, value, this.pitchShiftActive);
+            this.pitchShift.wet.value = this.pitchShiftActive ? 1 : 0; // Ensure the effect is applied based on the active state.
+            
+            // Automatically reprocess the audio with the new settings
+            this.applyPitchShiftAndExport().then(processedBuffer => {
+                window.unifiedSequencerSettings.setProcessedAudioBuffer(this.channelIndex, processedBuffer);
+                console.log("[Trimmer Class Pitch Functions] Audio rebuffered with new pitch settings.");
+            }).catch(error => console.error("[Trimmer Class Pitch Functions] Error rebuffering audio:", error));
+        };
+    
+        pitchShiftRange.addEventListener('input', () => {
+            pitchShiftValueDisplay.textContent = pitchShiftRange.value;
+            console.log(`[Trimmer Class Pitch Functions] Pitch Shift Slider Moved - Value: ${pitchShiftRange.value}`);
+            this.pitchShiftActive = true; // Assume any adjustment to the pitch means the user wants it active
+            updateAndProcessAudio(); // Process audio with the new pitch setting
         });
     
         pitchShiftToggleButton.addEventListener('click', () => {
             this.pitchShiftActive = !this.pitchShiftActive;
             pitchShiftToggleButton.textContent = this.pitchShiftActive ? 'Turn Pitch Shift Off' : 'Turn Pitch Shift On';
-            this.pitchShift.wet.value = this.pitchShiftActive ? 1 : 0;
-            console.log(`[Trimmer Class Pitch Functions] Pitch Shift Toggle Button Clicked - Current State: ${this.pitchShiftActive ? 'On' : 'Off'}`);
-            // Delegate to global settings to update
-            this.unifiedSequencerSettings.updatePitchShifter(this.currentSequence, this.channelIndex, null, parseFloat(pitchShiftRange.value), this.pitchShiftActive);
+            updateAndProcessAudio(); // Re-process audio to apply or remove the pitch shift effect based on the active state
         });
     }
+    
     
 
     playTrimmedAudio() {

@@ -35,21 +35,28 @@ class PitchShifter {
     }
 
     registerObserver() {
+        console.log("[PitchShifter] Registering as observer to global settings.");
         window.unifiedSequencerSettings.addObserver(this.applySettings.bind(this));
     }
+    
 
     applySettings(settings) {
+        console.log("[PitchShifter] applySettings triggered with settings:", settings);
         if (!settings || settings.type !== 'pitchShifter') return;
-
+    
         const pitchSetting = window.unifiedSequencerSettings.getPitchShifter(
             settings.sequence, settings.channel, settings.step
         );
+        console.log("[PitchShifter] Applying pitch setting:", pitchSetting);
         if (pitchSetting && pitchSetting.channel === this.currentStepChannel && pitchSetting.step === this.currentStepNumber) {
             this.updateUI(pitchSetting);
+        } else {
+            console.log("[PitchShifter] No applicable pitch settings found for current step/channel.");
         }
     }
 
     updateUI(settings) {
+        console.log("[PitchShifter] Updating UI with settings:", settings);
         this.pitchShift.pitch = settings.amount;
         this.active = settings.active;
         this.container.querySelector('#pitchRange').value = settings.amount;
@@ -67,6 +74,7 @@ class PitchShifter {
             pitchValue, 
             this.active
         );
+        console.log("[PitchShifter] Pitch changed to:", this.pitchShift.pitch);
     }
 
     toggleActiveState() {
@@ -78,6 +86,7 @@ class PitchShifter {
             this.pitchShift.pitch, 
             this.active
         );
+        console.log("[PitchShifter] Active state changed to:", this.active);
     }
    
 
@@ -86,14 +95,14 @@ class PitchShifter {
         const adjustedChannel = this.currentStepChannel - 1;
         const adjustedStep = this.currentStepNumber - 1;
         if (this.active) {
-            window.unifiedSequencerSettings.addOrUpdatePitchShifter(
+            window.unifiedSequencerSettings.updatePitchShifter(
                 window.unifiedSequencerSettings.getCurrentSequence(),
                 adjustedChannel,
                 adjustedStep,
                 pitchValue
             );
         } else {
-            window.unifiedSequencerSettings.removePitchShifter(
+            window.unifiedSequencerSettings.updatePitchShifter(
                 window.unifiedSequencerSettings.getCurrentSequence(),
                 adjustedChannel,
                 adjustedStep
@@ -102,7 +111,7 @@ class PitchShifter {
     }
 
     showUI(x, y, stepChannel, stepNumber) {
-        console.log("[PitchShifter Class Functions] showUI entered");
+        console.log("[PitchShifter] Showing UI for stepChannel:", stepChannel, "stepNumber:", stepNumber);
         this.currentStepChannel = stepChannel;
         this.currentStepNumber = stepNumber;
 
@@ -124,6 +133,13 @@ class PitchShifter {
         });
         this.container.querySelector('#stepInfo').innerText = `Step: Channel ${stepChannel}, Number ${stepNumber}`;
         document.addEventListener('click', this.documentClickListener);
+        
+        this.applySettings({
+            type: 'pitchShifter', 
+            sequence: window.unifiedSequencerSettings.getCurrentSequence(), 
+            channel: stepChannel, 
+            step: stepNumber
+        });
     }
 
     hideUI() {

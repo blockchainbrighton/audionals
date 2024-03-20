@@ -3,189 +3,93 @@
 class UnifiedSequencerSettings {
     constructor() {
         this.observers = [];
+        this.settings = this.initializeSettings();
+        this.processedBuffers = {};
+        this.bindMethods();
+    }
 
-        this.settings = {
+    initializeSettings() {
+        return {
             masterSettings: {
-                projectName: 'New Audx Project', // Set the project name placeholder
+                projectName: 'New Audx Project',
                 projectBPM: 120,
-                currentSequence: 0, // Initialize with a default value
-                projectURLs: new Array(16).fill(''), 
-
+                currentSequence: 0,
+                projectURLs: new Array(16).fill(''),
                 trimSettings: Array.from({ length: 16 }, () => ({
                     startSliderValue: 0.01,
                     endSliderValue: 100.00,
                     totalSampleDuration: 0
                 })),
-
                 activePitchShifters: [{
-                    sequence: 0, // Sequence number
-                    channel: 0, // Channel number
-                    step: 0, // Step number. For channel-wide settings, this could be null or a specific identifier
-                    amount: 1.5 // Pitch shift amount
+                    sequence: 0,
+                    channel: 0,
+                    step: 0,
+                    amount: 1.5
                 }],
-
-                projectChannelNames: new Array(16).fill(''), // Placeholder for channel names
-                projectSequences: this.initializeSequences(16, 16, 64) // Adjust dimensions as needed
-
-                
+                projectChannelNames: new Array(16).fill(''),
+                projectSequences: this.initializeSequences(16, 16, 64)
             }
-            
         };
+    }
 
-        // Initialize the processedBuffers object to store the processed audio buffers.
-                this.processedBuffers = {};
-                this.notifyObservers = this.notifyObservers.bind(this);
+    bindMethods() {
+        ['notifyObservers', 'checkSettings', 'clearMasterSettings', 'setProcessedAudioBuffer'].forEach(method => {
+            this[method] = this[method].bind(this);
+        });
+    }
 
-                // Bind methods to ensure they have access to the class instance when called
-                this.checkSettings = this.checkSettings.bind(this);
-                this.clearMasterSettings = this.clearMasterSettings.bind(this);
-                this.setProcessedAudioBuffer = this.setProcessedAudioBuffer.bind(this); // Ensure setProcessedAudioBuffer is properly bound
-            }
-
-            addObserver(observerCallback) {
-                this.observers.push(observerCallback);
-            }
-        
-            removeObserver(observerCallback) {
-                const index = this.observers.indexOf(observerCallback);
-                if (index > -1) {
-                    this.observers.splice(index, 1);
-                }
-            }
-        
-            notifyObservers(changedSetting = null) {
-                this.observers.forEach((callback) => callback(changedSetting));
-            }
-
-
-            setProcessedAudioBuffer(channelIndex, buffer) {
-                this.processedBuffers[channelIndex] = buffer;
-                console.log(`Processed buffer set for channel ${channelIndex}`);
-                this.notifyObservers(); // Notify all observers about the change
-            }
-        
-            getProcessedAudioBuffer(channelIndex) {
-                return this.processedBuffers[channelIndex];
-            }
-        
-
-            // initializePitchShiftControls() {
-            //     console.log("[initializePitchShiftControls] entered");
-            //     const pitchShiftRange = document.getElementById('pitchShiftRange');
-            //     const pitchShiftValueDisplay = document.getElementById('pitchShiftValue');
-            //     const pitchShiftToggleButton = document.getElementById('pitchShiftToggleButton');
-            
-            //     pitchShiftRange.addEventListener('input', (e) => {
-            //         const value = parseFloat(e.target.value);
-            //         pitchShiftValueDisplay.textContent = value;
-            //         this.pitchShift.pitch = value;
-            
-            //         // Update global settings with the new pitch shift amount
-            //         window.unifiedSequencerSettings.addOrUpdatePitchShifter(
-            //             window.unifiedSequencerSettings.getCurrentSequence(),
-            //             this.channelIndex,
-            //             null, // Assuming channel-wide setting for pitch shift, not specific to a step
-            //             value,
-            //             this.pitchShiftActive
-            //         );
-            //     });
-            
-            //     pitchShiftToggleButton.addEventListener('click', () => {
-            //         this.pitchShiftActive = !this.pitchShiftActive;
-            //         pitchShiftToggleButton.textContent = this.pitchShiftActive ? 'Turn Pitch Shift Off' : 'Turn Pitch Shift On';
-            
-            //         // Inform global settings about the activation state change
-            //         window.unifiedSequencerSettings.addOrUpdatePitchShifter(
-            //             window.unifiedSequencerSettings.getCurrentSequence(),
-            //             this.channelIndex,
-            //             null, // Again, assuming channel-wide setting
-            //             parseFloat(pitchShiftRange.value),
-            //             this.pitchShiftActive
-            //         );
-            //     });
-            // }
-
-            // Simplified update method for pitch shifters
-            updatePitchShifter(sequence, channel, step, amount, isActive = true) {
-                let shifter = this.settings.masterSettings.activePitchShifters.find(ps =>
-                    ps.sequence === sequence && ps.channel === channel && (ps.step === step || step === null));
-
-                if (shifter) {
-                    shifter.amount = amount;
-                    shifter.active = isActive;
-                } else {
-                    this.settings.masterSettings.activePitchShifters.push({ sequence, channel, step, amount, active: isActive });
-                }
-                
-                console.log(`[UnifiedSequencerSettings] Pitch shifter updated/added.`);
-                this.notifyObservers({ type: 'pitchShifter', sequence, channel, step });
-            }
-
-        
-        // GET RID OF THESE ONCE THE FUNCTION ABOVE IS INTEGRATED
-            addOrUpdatePitchShifter(sequence, channel, step, amount, active = true) {
-                const index = this.settings.masterSettings.activePitchShifters.findIndex(ps => 
-                    ps.sequence === sequence && ps.channel === channel && (ps.step === step || step === null));
-                
-                if (index > -1) {
-                    this.settings.masterSettings.activePitchShifters[index].amount = amount;
-                    this.settings.masterSettings.activePitchShifters[index].active = active;
-                } else {
-                    this.settings.masterSettings.activePitchShifters.push({ sequence, channel, step, amount, active });
-                }
-                console.log(`[UnifiedSequencerSettings] Pitch shifter for sequence ${sequence}, channel ${channel}, step ${step} updated/added.`);
-            }
-            
-            removePitchShifter(sequence, channel, step) {
-                const index = this.settings.masterSettings.activePitchShifters.findIndex(ps => 
-                    ps.sequence === sequence && ps.channel === channel && (ps.step === step || step === null));
-                
-                if (index > -1) {
-                    this.settings.masterSettings.activePitchShifters.splice(index, 1);
-                    console.log(`[UnifiedSequencerSettings] Pitch shifter for sequence ${sequence}, channel ${channel}, step ${step} removed.`);
-                }
-            }
-            
-            getPitchShifter(sequence, channel, step) {
-                const setting = this.settings.masterSettings.activePitchShifters.find(ps => 
-                    ps.sequence === sequence && ps.channel === channel && (ps.step === step || step === null));
-                
-                return setting;
-            }
-        
-        
-    loadSettings(jsonSettings) {
-        console.log("[internalPresetDebug] loadSettings entered");
-        try {
-            console.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
-            const parsedSettings = typeof jsonSettings === 'string' ? JSON.parse(jsonSettings) : jsonSettings;
-            console.log("[internalPresetDebug] Parsed Settings:", parsedSettings);
+    addObserver(observerCallback) {
+        this.observers.push(observerCallback);
+    }
     
-            // Update the masterSettings with the parsed settings
-            this.settings.masterSettings.projectName = parsedSettings.projectName;
-            this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
-            this.settings.masterSettings.projectURLs = parsedSettings.projectURLs;
-            this.settings.masterSettings.trimSettings = parsedSettings.trimSettings;
-            this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames;
-            console.log("[internalPresetDebug] Updated masterSettings:", this.settings.masterSettings);
+    removeObserver(observerCallback) {
+        const index = this.observers.indexOf(observerCallback);
+        if (index > -1) this.observers.splice(index, 1);
+    }
     
-            // Update projectSequences
-            if (parsedSettings.projectSequences) {
-                console.log("[internalPresetDebug] Updating project sequences");
-                this.setProjectSequences(parsedSettings.projectSequences);
-            }
-    
-            console.log("[internalPresetDebug] Master settings after update:", this.settings.masterSettings);
-    
-            // Update the text of each loadSampleButton with the loaded URL
-            this.updateAllLoadSampleButtonTexts();
-        } catch (error) {
-            console.error('[internalPresetDebug] Error loading settings:', error);
+    notifyObservers(changedSetting = null) {
+        this.observers.forEach(callback => callback(changedSetting));
+    }
+
+    setProcessedAudioBuffer(channelIndex, buffer) {
+        this.processedBuffers[channelIndex] = buffer;
+        console.log(`Processed buffer set for channel ${channelIndex}`);
+        this.notifyObservers({ type: 'bufferChange', channelIndex });
+    }
+
+    getProcessedAudioBuffer(channelIndex) {
+        return this.processedBuffers[channelIndex];
+    }
+
+    updatePitchShifter(sequence, channel, step, amount, isActive = true) {
+        let shifterIndex = this.settings.masterSettings.activePitchShifters.findIndex(ps =>
+            ps.sequence === sequence && ps.channel === channel && (ps.step === step || step === null));
+
+        if (shifterIndex !== -1) {
+            Object.assign(this.settings.masterSettings.activePitchShifters[shifterIndex], { amount, active: isActive });
+        } else {
+            this.settings.masterSettings.activePitchShifters.push({ sequence, channel, step, amount, active: isActive });
         }
-        // Notify all observers about the change
-        this.notifyObservers();
-        this.notifyObservers({ type: 'loadSettings' });
+        
+        console.log(`[UnifiedSequencerSettings] Pitch shifter for sequence ${sequence}, channel ${channel} updated/added.`);
+        this.notifyObservers({ type: 'pitchShifter', sequence, channel, step });
+    }
 
+    getPitchShifter(sequence, channel, step) {
+        return this.settings.masterSettings.activePitchShifters.find(ps => 
+            ps.sequence === sequence && ps.channel === channel && (ps.step === step || step === null));
+    }
+
+    loadSettings(jsonSettings) {
+        console.log("[UnifiedSequencerSettings] Loading settings...");
+        try {
+            const parsedSettings = typeof jsonSettings === 'string' ? JSON.parse(jsonSettings) : jsonSettings;
+            Object.assign(this.settings.masterSettings, parsedSettings);
+            console.log("[UnifiedSequencerSettings] Settings loaded and applied.");
+        } catch (error) {
+            console.error('[UnifiedSequencerSettings] Error loading settings:', error);
+        }
+        this.notifyObservers({ type: 'loadSettings' });
     }
     
 
