@@ -104,59 +104,59 @@ class AudioTrimmer {
 
     applyPitchShiftAndExport() {
         console.log("[Trimmer Class Pitch Functions] applyPitchShiftAndExport");
+    
         return new Promise((resolve, reject) => {
             if (!this.audioBuffer) {
+                console.error("[Trimmer Class Pitch Functions] No audio buffer loaded");
                 reject("No audio buffer loaded");
                 return;
             }
     
             if (!this.pitchShiftActive) {
+                console.log("[Trimmer Class Pitch Functions] Pitch shift not active. Resolving with original audio buffer.");
                 resolve(this.audioBuffer);
                 return;
             }
     
-            // Calculate start and end times based on trim settings
-            const startTime = this.sliderValueToTimecode(this.getStartSliderValue(), this.audioBuffer.duration);
-            const endTime = this.sliderValueToTimecode(this.getEndSliderValue(), this.audioBuffer.duration);
-            const durationToProcess = endTime - startTime; // This line was missing in your code.
+            // Convert slider values to time
+            const totalDuration = this.audioBuffer.duration;
+            const startTime = this.sliderValueToTimecode(this.startSliderValue, totalDuration);
+            const endTime = this.sliderValueToTimecode(this.endSliderValue, totalDuration);
     
-            // Calculate the sample frames for the start and end times
-            const startSampleFrame = Math.floor(startTime * this.audioBuffer.sampleRate);
-            const endSampleFrame = Math.floor(endTime * this.audioBuffer.sampleRate);
-    
-            // Extract the trimmed section of the audio buffer
-            const numberOfChannels = this.audioBuffer.numberOfChannels;
-            const trimmedLength = endSampleFrame - startSampleFrame;
-            const trimmedAudioBuffer = this.audioContext.createBuffer(numberOfChannels, trimmedLength, this.audioBuffer.sampleRate);
-    
-            // Copy the trimmed segment into the new audio buffer
-            for (let channel = 0; channel < numberOfChannels; channel++) {
-                const channelData = this.audioBuffer.getChannelData(channel);
-                const trimmedChannelData = trimmedAudioBuffer.getChannelData(channel);
-                for (let i = 0; i < trimmedLength; i++) {
-                    trimmedChannelData[i] = channelData[i + startSampleFrame];
-                }
+            if (endTime <= startTime) {
+                console.error("[Trimmer Class Pitch Functions] Invalid trim section for processing: Duration is zero or negative.");
+                reject("Invalid trim section.");
+                return;
             }
     
-            // Now process the trimmed audio buffer with pitch shift
-            Tone.Offline(({transport}) => {
-                const pitchShift = new Tone.PitchShift(this.pitchShift.pitch).toDestination();
-                const player = new Tone.Player(trimmedAudioBuffer).connect(pitchShift);
-                player.start(0); // Start immediately at the beginning of the OfflineAudioContext timeline
-            }, durationToProcess).then((processedBuffer) => {
-                // Convert the processed Tone.Buffer into a standard AudioBuffer for compatibility
-                const offlineContext = new OfflineAudioContext(processedBuffer.numberOfChannels, processedBuffer.length, processedBuffer.sampleRate);
-                const myArrayBuffer = offlineContext.createBuffer(processedBuffer.numberOfChannels, processedBuffer.length, processedBuffer.sampleRate);
+            const durationToProcess = endTime - startTime;
     
-                // Copy the processed data into the new buffer
-                for (let channel = 0; channel < processedBuffer.numberOfChannels; channel++) {
-                    myArrayBuffer.copyToChannel(processedBuffer.getChannelData(channel), channel);
+            // Use Tone.Offline to process the pitch shift
+            Tone.Offline(({ transport }) => {
+                const startSampleFrame = Math.floor(startTime * this.audioBuffer.sampleRate);
+                const endSampleFrame = Math.floor(endTime * this.audioBuffer.sampleRate);
+                const sectionLength = endSampleFrame - startSampleFrame;
+                const sectionAudioBuffer = this.audioContext.createBuffer(this.audioBuffer.numberOfChannels, sectionLength, this.audioBuffer.sampleRate);
+    
+                for (let channel = 0; channel < this.audioBuffer.numberOfChannels; channel++) {
+                    sectionAudioBuffer.copyToChannel(this.audioBuffer.getChannelData(channel).subarray(startSampleFrame, endSampleFrame), channel);
                 }
     
-                // Update the global settings object with the processed buffer
-                window.unifiedSequencerSettings.setProcessedAudioBuffer(this.channelIndex, myArrayBuffer);
+                const pitchShift = new Tone.PitchShift(this.pitchShift.pitch).toDestination();
+                const player = new Tone.Player(sectionAudioBuffer).connect(pitchShift);
+                player.start(0);
+                transport.start();
+            }, durationToProcess).then(processedBuffer => {
+                // Convert Tone.Buffer to AudioBuffer
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const audioBuffer = audioCtx.createBuffer(processedBuffer.numberOfChannels, processedBuffer.length, processedBuffer.sampleRate);
     
-                resolve(myArrayBuffer);
+                for (let channel = 0; channel < processedBuffer.numberOfChannels; channel++) {
+                    audioBuffer.copyToChannel(processedBuffer.getChannelData(channel), channel);
+                }
+    
+                console.log("[Trimmer Class Pitch Functions] Successfully processed the audio buffer segment with pitch shift.");
+                resolve(audioBuffer);
             }).catch(error => {
                 console.error("[Trimmer Class Pitch Functions] Error during pitch shift processing:", error);
                 reject(error);

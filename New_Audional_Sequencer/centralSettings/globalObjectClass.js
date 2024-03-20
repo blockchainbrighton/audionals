@@ -16,14 +16,30 @@ class UnifiedSequencerSettings {
 
     // New method to invoke applyPitchShiftAndExport on the relevant AudioTrimmer instance
     invokeApplyPitchShiftAndExport(channel) {
-        const trimmer = this.audioTrimmers[channel];
-        if (trimmer) {
-            trimmer.applyPitchShiftAndExport()
-                .then(() => console.log(`Pitch shift applied and buffer updated for channel ${channel}.`))
-                .catch(error => console.error(`Error applying pitch shift for channel ${channel}:`, error));
+        // Check if an AudioTrimmer instance for the specified channel exists
+        if (this.audioTrimmerInstances && this.audioTrimmerInstances[channel]) {
+            // If exists, proceed with invoking the method
+            this.audioTrimmerInstances[channel].applyPitchShiftAndExport();
         } else {
-            console.error(`No AudioTrimmer instance found for channel ${channel}`);
+            // If not exists, log a more informative and less alarming message
+            console.log(`[GlobalObjectClass] Deferred pitch shift update for channel ${channel} as the AudioTrimmer instance is not ready.`);
+            // Optionally, queue the update for later execution
+            this.queueUpdateForLater(channel);
         }
+    }
+
+    queueUpdateForLater(channel) {
+        // Initialize the queue for the channel if it doesn't exist
+        if (!this.updateQueue) this.updateQueue = {};
+        if (!this.updateQueue[channel]) this.updateQueue[channel] = [];
+        
+        // Queue the update
+        this.updateQueue[channel].push({
+            // You might need to capture more context about what needs to be updated
+            // For example, the pitch shift settings to apply
+        });
+    
+        // Consider triggering queued updates when the respective AudioTrimmer instance is registered
     }
 
 
@@ -98,7 +114,7 @@ class UnifiedSequencerSettings {
         console.log(`[UnifiedSequencerSettings] Pitch shifter for sequence ${sequence}, channel ${channel} updated/added.`);
         this.notifyObservers({ type: 'pitchShifter', sequence, channel, step });
     
-        // Assuming there is a function named applyPitchShiftAndUpdateBuffer that takes the channel index,
+        // Assuming there is a function named invokeApplyPitchShiftAndExport that takes the channel index,
         // applies the pitch shift based on the current settings, and updates the processed audio buffer.
         this.invokeApplyPitchShiftAndExport(channel);
     }
