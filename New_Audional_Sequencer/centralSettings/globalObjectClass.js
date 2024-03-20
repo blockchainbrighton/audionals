@@ -5,8 +5,27 @@ class UnifiedSequencerSettings {
         this.observers = [];
         this.settings = this.initializeSettings();
         this.processedBuffers = {};
+        this.audioTrimmers = {}; // Track AudioTrimmer instances by channel
         this.bindMethods();
     }
+
+    // Register an AudioTrimmer instance
+    registerAudioTrimmer(audioTrimmerInstance, channelIndex) {
+        this.audioTrimmers[channelIndex] = audioTrimmerInstance;
+    }
+
+    // New method to invoke applyPitchShiftAndExport on the relevant AudioTrimmer instance
+    invokeApplyPitchShiftAndExport(channel) {
+        const trimmer = this.audioTrimmers[channel];
+        if (trimmer) {
+            trimmer.applyPitchShiftAndExport()
+                .then(() => console.log(`Pitch shift applied and buffer updated for channel ${channel}.`))
+                .catch(error => console.error(`Error applying pitch shift for channel ${channel}:`, error));
+        } else {
+            console.error(`No AudioTrimmer instance found for channel ${channel}`);
+        }
+    }
+
 
     initializeSettings() {
         return {
@@ -61,10 +80,15 @@ class UnifiedSequencerSettings {
         return this.processedBuffers[channelIndex];
     }
 
+    // New function to check if any processed audio buffer is available
+    isProcessedAudioBufferAvailable() {
+        return Object.keys(this.processedBuffers).some(channelIndex => !!this.processedBuffers[channelIndex]);
+    }
+
     updatePitchShifter(sequence, channel, step, amount, isActive = true) {
         let shifterIndex = this.settings.masterSettings.activePitchShifters.findIndex(ps =>
             ps.sequence === sequence && ps.channel === channel && (ps.step === step || step === null));
-
+    
         if (shifterIndex !== -1) {
             Object.assign(this.settings.masterSettings.activePitchShifters[shifterIndex], { amount, active: isActive });
         } else {
@@ -73,7 +97,12 @@ class UnifiedSequencerSettings {
         
         console.log(`[UnifiedSequencerSettings] Pitch shifter for sequence ${sequence}, channel ${channel} updated/added.`);
         this.notifyObservers({ type: 'pitchShifter', sequence, channel, step });
+    
+        // Assuming there is a function named applyPitchShiftAndUpdateBuffer that takes the channel index,
+        // applies the pitch shift based on the current settings, and updates the processed audio buffer.
+        this.invokeApplyPitchShiftAndExport(channel);
     }
+    
 
     getPitchShifter(sequence, channel, step) {
         return this.settings.masterSettings.activePitchShifters.find(ps => 
@@ -84,13 +113,25 @@ class UnifiedSequencerSettings {
         console.log("[UnifiedSequencerSettings] Loading settings...");
         try {
             const parsedSettings = typeof jsonSettings === 'string' ? JSON.parse(jsonSettings) : jsonSettings;
+            
+            // First, update the master settings with the parsed settings
             Object.assign(this.settings.masterSettings, parsedSettings);
+            
+            // Then, if there are any active pitch shifters in the loaded settings, update them accordingly
+            if (parsedSettings.activePitchShifters && parsedSettings.activePitchShifters.length > 0) {
+                parsedSettings.activePitchShifters.forEach(ps => {
+                    this.updatePitchShifter(ps.sequence, ps.channel, ps.step, ps.amount, ps.active);
+                });
+            }
+            
             console.log("[UnifiedSequencerSettings] Settings loaded and applied.");
         } catch (error) {
             console.error('[UnifiedSequencerSettings] Error loading settings:', error);
         }
+        // Notify observers that settings have been loaded, which now includes pitch shifter updates
         this.notifyObservers({ type: 'loadSettings' });
     }
+    
     
 
         clearMasterSettings() {

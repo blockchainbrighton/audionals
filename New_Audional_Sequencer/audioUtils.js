@@ -132,6 +132,11 @@ function bufferToBase64(buffer) {
 
 // Modified function to play sound with pitch shift effect applied if necessary
 function playSound(currentSequence, channel, currentStep) {
+    // Check if any processed audio buffer is available globally
+    if (!window.unifiedSequencerSettings.isProcessedAudioBufferAvailable()) {
+      console.error("No processed audio buffer available for playback");
+      return;
+  }
   console.log('[playSound] entered');
   const channelIndex = getChannelIndex(channel);
   console.log(`[playSound Debugging] Processing channel index: ${channelIndex}`);

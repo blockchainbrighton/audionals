@@ -27,6 +27,9 @@ class AudioTrimmer {
         this.fetchInitialPitchShiftSettings();
         this.initializePitchShiftControls();
         this.loadProcessedAudioBuffer(); // Load the processed audio buffer
+
+        window.unifiedSequencerSettings.registerAudioTrimmer(this, channelIndex);
+
     }
 
     loadProcessedAudioBuffer() {
@@ -57,6 +60,48 @@ class AudioTrimmer {
         }
     }
 
+    initializePitchShiftControls() {
+        console.log("[Trimmer Class Pitch Functions] initializePitchShiftControls");
+        const pitchShiftRange = document.getElementById('pitchShiftRange');
+        const pitchShiftValueDisplay = document.getElementById('pitchShiftValue');
+        const pitchShiftToggleButton = document.getElementById('pitchShiftToggleButton');
+        
+        const updateAndProcessAudio = () => {
+            const value = parseFloat(pitchShiftRange.value);
+            this.pitchShift.pitch = value;
+            this.pitchShift.wet.value = this.pitchShiftActive ? 1 : 0; // Ensure the effect is applied based on the active state.
+    
+            // Update the pitch shifter settings in the global object immediately
+            this.unifiedSequencerSettings.updatePitchShifter(
+                this.unifiedSequencerSettings.getCurrentSequence(),
+                this.channelIndex,
+                null, // Assuming null can be used if step-specific settings aren't needed
+                value,
+                this.pitchShiftActive
+            );
+    
+            // Automatically reprocess the audio with the new settings
+            this.applyPitchShiftAndExport().then(processedBuffer => {
+                window.unifiedSequencerSettings.setProcessedAudioBuffer(this.channelIndex, processedBuffer);
+                console.log("[Trimmer Class Pitch Functions] Audio rebuffered with new pitch settings.");
+            }).catch(error => console.error("[Trimmer Class Pitch Functions] Error rebuffering audio:", error));
+        };
+    
+        pitchShiftRange.addEventListener('input', () => {
+            pitchShiftValueDisplay.textContent = pitchShiftRange.value;
+            console.log(`[Trimmer Class Pitch Functions] Pitch Shift Slider Moved - Value: ${pitchShiftRange.value}`);
+            this.pitchShiftActive = true; // Assume any adjustment to the pitch means the user wants it active
+            updateAndProcessAudio(); // Process audio with the new pitch setting immediately
+        });
+    
+        pitchShiftToggleButton.addEventListener('click', () => {
+            this.pitchShiftActive = !this.pitchShiftActive;
+            pitchShiftToggleButton.textContent = this.pitchShiftActive ? 'Turn Pitch Shift Off' : 'Turn Pitch Shift On';
+            updateAndProcessAudio(); // Re-process audio to apply or remove the pitch shift effect based on the active state immediately
+        });
+    }
+    
+
     applyPitchShiftAndExport() {
         console.log("[Trimmer Class Pitch Functions] applyPitchShiftAndExport");
         return new Promise((resolve, reject) => {
@@ -70,24 +115,56 @@ class AudioTrimmer {
                 return;
             }
     
-            Tone.Offline(() => {
+            // Calculate start and end times based on trim settings
+            const startTime = this.sliderValueToTimecode(this.getStartSliderValue(), this.audioBuffer.duration);
+            const endTime = this.sliderValueToTimecode(this.getEndSliderValue(), this.audioBuffer.duration);
+            const durationToProcess = endTime - startTime; // This line was missing in your code.
+    
+            // Calculate the sample frames for the start and end times
+            const startSampleFrame = Math.floor(startTime * this.audioBuffer.sampleRate);
+            const endSampleFrame = Math.floor(endTime * this.audioBuffer.sampleRate);
+    
+            // Extract the trimmed section of the audio buffer
+            const numberOfChannels = this.audioBuffer.numberOfChannels;
+            const trimmedLength = endSampleFrame - startSampleFrame;
+            const trimmedAudioBuffer = this.audioContext.createBuffer(numberOfChannels, trimmedLength, this.audioBuffer.sampleRate);
+    
+            // Copy the trimmed segment into the new audio buffer
+            for (let channel = 0; channel < numberOfChannels; channel++) {
+                const channelData = this.audioBuffer.getChannelData(channel);
+                const trimmedChannelData = trimmedAudioBuffer.getChannelData(channel);
+                for (let i = 0; i < trimmedLength; i++) {
+                    trimmedChannelData[i] = channelData[i + startSampleFrame];
+                }
+            }
+    
+            // Now process the trimmed audio buffer with pitch shift
+            Tone.Offline(({transport}) => {
                 const pitchShift = new Tone.PitchShift(this.pitchShift.pitch).toDestination();
-                const source = new Tone.Player(this.audioBuffer).connect(pitchShift);
-                source.start(0);
-            }, this.audioBuffer.duration).then((buffer) => {
-                const offlineContext = new OfflineAudioContext(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
-                const myArrayBuffer = offlineContext.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
-                for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-                    myArrayBuffer.copyToChannel(buffer.getChannelData(channel), channel);
+                const player = new Tone.Player(trimmedAudioBuffer).connect(pitchShift);
+                player.start(0); // Start immediately at the beginning of the OfflineAudioContext timeline
+            }, durationToProcess).then((processedBuffer) => {
+                // Convert the processed Tone.Buffer into a standard AudioBuffer for compatibility
+                const offlineContext = new OfflineAudioContext(processedBuffer.numberOfChannels, processedBuffer.length, processedBuffer.sampleRate);
+                const myArrayBuffer = offlineContext.createBuffer(processedBuffer.numberOfChannels, processedBuffer.length, processedBuffer.sampleRate);
+    
+                // Copy the processed data into the new buffer
+                for (let channel = 0; channel < processedBuffer.numberOfChannels; channel++) {
+                    myArrayBuffer.copyToChannel(processedBuffer.getChannelData(channel), channel);
                 }
     
-                // Use the correct global settings object reference to store the processed audio buffer
+                // Update the global settings object with the processed buffer
                 window.unifiedSequencerSettings.setProcessedAudioBuffer(this.channelIndex, myArrayBuffer);
     
                 resolve(myArrayBuffer);
-            }).catch(reject);
+            }).catch(error => {
+                console.error("[Trimmer Class Pitch Functions] Error during pitch shift processing:", error);
+                reject(error);
+            });
         });
     }
+    
+    
 
     fetchInitialPitchShiftSettings() {
         // Fetch initial settings from global object
@@ -112,41 +189,15 @@ class AudioTrimmer {
         }
     }
 
-    initializePitchShiftControls() {
-        console.log("[Trimmer Class Pitch Functions] initializePitchShiftControls");
-        const pitchShiftRange = document.getElementById('pitchShiftRange');
-        const pitchShiftValueDisplay = document.getElementById('pitchShiftValue');
-        const pitchShiftToggleButton = document.getElementById('pitchShiftToggleButton');
-        
-        const updateAndProcessAudio = () => {
-            const value = parseFloat(pitchShiftRange.value);
-            this.pitchShift.pitch = value;
-            this.pitchShift.wet.value = this.pitchShiftActive ? 1 : 0; // Ensure the effect is applied based on the active state.
-            
-            // Automatically reprocess the audio with the new settings
-            this.applyPitchShiftAndExport().then(processedBuffer => {
-                window.unifiedSequencerSettings.setProcessedAudioBuffer(this.channelIndex, processedBuffer);
-                console.log("[Trimmer Class Pitch Functions] Audio rebuffered with new pitch settings.");
-            }).catch(error => console.error("[Trimmer Class Pitch Functions] Error rebuffering audio:", error));
-        };
-    
-        pitchShiftRange.addEventListener('input', () => {
-            pitchShiftValueDisplay.textContent = pitchShiftRange.value;
-            console.log(`[Trimmer Class Pitch Functions] Pitch Shift Slider Moved - Value: ${pitchShiftRange.value}`);
-            this.pitchShiftActive = true; // Assume any adjustment to the pitch means the user wants it active
-            updateAndProcessAudio(); // Process audio with the new pitch setting
-        });
-    
-        pitchShiftToggleButton.addEventListener('click', () => {
-            this.pitchShiftActive = !this.pitchShiftActive;
-            pitchShiftToggleButton.textContent = this.pitchShiftActive ? 'Turn Pitch Shift Off' : 'Turn Pitch Shift On';
-            updateAndProcessAudio(); // Re-process audio to apply or remove the pitch shift effect based on the active state
-        });
-    }
     
     
 
     playTrimmedAudio() {
+        // Check if any processed audio buffer is available globally
+        if (!this.unifiedSequencerSettings.isProcessedAudioBufferAvailable()) {
+            console.error("No processed audio buffer available for playback");
+            return;
+        }
         console.log("[playTrimmedAudio] [Class Functions] playTrimmedAudio");
         console.log(`[playTrimmedAudio] Pitch shift active: ${this.pitchShiftActive}, Pitch: ${this.pitchShift.pitch}`);
     
