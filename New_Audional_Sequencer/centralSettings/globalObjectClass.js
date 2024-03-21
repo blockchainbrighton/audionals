@@ -64,9 +64,8 @@ class UnifiedSequencerSettings {
                 channels[`ch${ch}`] = {
                     steps: new Array(numSteps).fill(false),
                     mute: false, // Ensure mute is off by default
-                    url: '' // Default URL can be empty or set to a default value
+                    url: '' // Reference to the URL of the audio file. Ensure this is populated instead of storing base64 audio data.
                 };
-
             }
             return channels; 
         }
@@ -353,12 +352,21 @@ class UnifiedSequencerSettings {
             // Update the masterSettings with the parsed settings
             this.settings.masterSettings.projectName = parsedSettings.projectName;
             this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
-            this.settings.masterSettings.projectURLs = parsedSettings.projectURLs;
+            
+            // Assuming parsedSettings.projectURLs is an array of URLs corresponding to each channel
+            if (Array.isArray(parsedSettings.projectURLs) && parsedSettings.projectURLs.length > 0) {
+                // Update project URLs directly
+                this.setProjectURLs(parsedSettings.projectURLs);
+            } else {
+                console.warn("[internalPresetDebug] No project URLs found in loaded settings.");
+            }
+            
             this.settings.masterSettings.trimSettings = parsedSettings.trimSettings;
             this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames;
+            
             console.log("[internalPresetDebug] Updated masterSettings:", this.settings.masterSettings);
     
-            // Update projectSequences
+            // Update projectSequences - no changes here, assuming sequences don't contain embedded audio data
             if (parsedSettings.projectSequences) {
                 console.log("[internalPresetDebug] Updating project sequences");
                 this.setProjectSequences(parsedSettings.projectSequences);
@@ -366,12 +374,12 @@ class UnifiedSequencerSettings {
     
             console.log("[internalPresetDebug] Master settings after update:", this.settings.masterSettings);
     
-            // Update the text of each loadSampleButton with the loaded URL
+            // This method should now update button texts to reflect the project URL names or identifiers instead of loading base64 audio data
             this.updateAllLoadSampleButtonTexts();
         } catch (error) {
             console.error('[internalPresetDebug] Error loading settings:', error);
         }
-        // Notify all observers about the change
+        // Notify all observers about the change, ensuring UI updates reflect the new method of handling audio samples via URLs
         this.notifyObservers();
     }
     

@@ -1,10 +1,17 @@
 // importExportGlobalSettings.js
 
+// function exportSettings() {
+//     const settings = window.unifiedSequencerSettings.exportSettings();
+//     // Directly return the JSON string of the settings
+//     return settings;
+// }
+
 function exportSettings() {
     const settings = window.unifiedSequencerSettings.exportSettings();
-    // Directly return the JSON string of the settings
-    return settings;
+    const compressedSettings = SettingsCompressor.compressSettings(JSON.parse(settings));
+    return JSON.stringify(compressedSettings);
 }
+
 
 
 function importSettings(jsonSettings) {
