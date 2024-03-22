@@ -27,6 +27,121 @@ class UnifiedSequencerSettings {
             this.clearMasterSettings = this.clearMasterSettings.bind(this);
         }
 
+
+    updateProjectURLsUI(urls) {
+        // Implement logic to update UI for project URLs
+        console.log("Project URLs UI entered and updated:", urls);
+        // Example: Update each URL input field
+        urls.forEach((url, index) => {
+            const urlInput = document.getElementById(`url-input-${index}`);
+            if (urlInput) {
+                urlInput.value = url;
+            }
+        });
+    }
+
+    updateLoadSampleButtonText(channelIndex, button) {
+        console.log("updateLoadSampleButtonText entered");
+        let buttonText = 'Load New Audional'; // Default text
+    
+        // Accessing projectChannelNames and projectURLs from settings
+        const channelName = this.settings.masterSettings.projectChannelNames[channelIndex];
+        const loadedUrl = this.settings.masterSettings.projectURLs[channelIndex];
+    
+        if (channelName) {
+            buttonText = channelName;
+        } else if (loadedUrl) {
+            // Extract the desired portion of the URL
+            const urlParts = loadedUrl.split('/');
+            const lastPart = urlParts[urlParts.length - 1];
+            buttonText = lastPart;
+        }
+    
+        // Update button text
+        button.textContent = buttonText;
+    }
+
+    loadSettings(jsonSettings) {
+        console.log("[internalPresetDebug] loadSettings entered");
+        try {
+            console.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
+            const parsedSettings = typeof jsonSettings === 'string' ? JSON.parse(jsonSettings) : jsonSettings;
+            console.log("[internalPresetDebug] Parsed Settings:", parsedSettings);
+    
+            // Update the masterSettings with the parsed settings
+            this.settings.masterSettings.projectName = parsedSettings.projectName;
+            this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
+            
+            // Assuming parsedSettings.projectURLs is an array of URLs corresponding to each channel
+            if (Array.isArray(parsedSettings.projectURLs) && parsedSettings.projectURLs.length > 0) {
+                // Update project URLs directly
+                this.setProjectURLs(parsedSettings.projectURLs);
+            } else {
+                console.warn("[internalPresetDebug] No project URLs found in loaded settings.");
+            }
+            
+            this.settings.masterSettings.trimSettings = parsedSettings.trimSettings;
+            this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames;
+            
+            console.log("[internalPresetDebug] Updated masterSettings:", this.settings.masterSettings);
+    
+            // Update projectSequences - no changes here, assuming sequences don't contain embedded audio data
+            if (parsedSettings.projectSequences) {
+                console.log("[internalPresetDebug] Updating project sequences");
+                this.setProjectSequences(parsedSettings.projectSequences);
+            }
+    
+            console.log("[internalPresetDebug] Master settings after update:", this.settings.masterSettings);
+    
+            // This method should now update button texts to reflect the project URL names or identifiers instead of loading base64 audio data
+            this.updateAllLoadSampleButtonTexts();
+        } catch (error) {
+            console.error('[internalPresetDebug] Error loading settings:', error);
+        }
+        // Notify all observers about the change, ensuring UI updates reflect the new method of handling audio samples via URLs
+        this.notifyObservers();
+    }
+    
+
+    getprojectUrlforChannel(channelIndex) {
+        console.log("getprojectUrlforChannel entered");
+        return this.settings.masterSettings.projectURLs[channelIndex];
+    }
+
+    setProjectURLs(urls) {
+        // Validate and set URLs only if they are valid
+        this.settings.masterSettings.projectURLs = urls.map(url => this.isValidURL(url) ? url : '');
+        console.log(`[setProjectURLs] Project URLs updated: `, this.settings.masterSettings.projectURLs);
+    }
+
+    updateProjectURLAtIndex(index, newURL) {
+        // Copy current URLs
+        let updatedURLs = [...this.settings.masterSettings.projectURLs];
+        
+        // Update specific URL if valid
+        if (this.isValidURL(newURL)) {
+            updatedURLs[index] = newURL;
+        } else {
+            console.error(`Invalid URL: ${newURL}`);
+            return; // Optionally handle invalid URL case
+        }
+        
+        // Apply the updated URLs using the validated setter method
+        this.setProjectURLs(updatedURLs);
+    }
+    
+    
+
+    isValidURL(urlString) {
+        try {
+            let url = new URL(urlString);
+            return url.protocol === "http:" || url.protocol === "https:";
+        } catch (_) {
+            return false; // Not a valid URL
+        }
+    }
+
+
         clearMasterSettings() {
             console.log("[clearMasterSettings] Current masterSettings before clearing:", this.settings.masterSettings);
 
@@ -290,19 +405,7 @@ class UnifiedSequencerSettings {
     
    
 
-    getprojectUrlforChannel(channelIndex) {
-        console.log("getprojectUrlforChannel entered");
-        return this.settings.masterSettings.projectURLs[channelIndex];
-    }
-
-    setProjectURLs(urls) {
-        console.log("setProjectURLs entered");
-        this.settings.masterSettings.projectURLs = urls;
-        console.log(`[setProjectURLs] Project URLs set:`, urls);
     
-        // Correctly calling the method within the same class
-        this.updateAllLoadSampleButtonTexts();
-    }
 
     setProjectName(name) {
         console.log("setProjectName entered");
@@ -342,46 +445,6 @@ class UnifiedSequencerSettings {
     }
 
 
-    loadSettings(jsonSettings) {
-        console.log("[internalPresetDebug] loadSettings entered");
-        try {
-            console.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
-            const parsedSettings = typeof jsonSettings === 'string' ? JSON.parse(jsonSettings) : jsonSettings;
-            console.log("[internalPresetDebug] Parsed Settings:", parsedSettings);
-    
-            // Update the masterSettings with the parsed settings
-            this.settings.masterSettings.projectName = parsedSettings.projectName;
-            this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
-            
-            // Assuming parsedSettings.projectURLs is an array of URLs corresponding to each channel
-            if (Array.isArray(parsedSettings.projectURLs) && parsedSettings.projectURLs.length > 0) {
-                // Update project URLs directly
-                this.setProjectURLs(parsedSettings.projectURLs);
-            } else {
-                console.warn("[internalPresetDebug] No project URLs found in loaded settings.");
-            }
-            
-            this.settings.masterSettings.trimSettings = parsedSettings.trimSettings;
-            this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames;
-            
-            console.log("[internalPresetDebug] Updated masterSettings:", this.settings.masterSettings);
-    
-            // Update projectSequences - no changes here, assuming sequences don't contain embedded audio data
-            if (parsedSettings.projectSequences) {
-                console.log("[internalPresetDebug] Updating project sequences");
-                this.setProjectSequences(parsedSettings.projectSequences);
-            }
-    
-            console.log("[internalPresetDebug] Master settings after update:", this.settings.masterSettings);
-    
-            // This method should now update button texts to reflect the project URL names or identifiers instead of loading base64 audio data
-            this.updateAllLoadSampleButtonTexts();
-        } catch (error) {
-            console.error('[internalPresetDebug] Error loading settings:', error);
-        }
-        // Notify all observers about the change, ensuring UI updates reflect the new method of handling audio samples via URLs
-        this.notifyObservers();
-    }
     
     
     
@@ -410,26 +473,7 @@ class UnifiedSequencerSettings {
         }
     
     
-    updateLoadSampleButtonText(channelIndex, button) {
-        console.log("updateLoadSampleButtonText entered");
-        let buttonText = 'Load New Audional'; // Default text
-    
-        // Accessing projectChannelNames and projectURLs from settings
-        const channelName = this.settings.masterSettings.projectChannelNames[channelIndex];
-        const loadedUrl = this.settings.masterSettings.projectURLs[channelIndex];
-    
-        if (channelName) {
-            buttonText = channelName;
-        } else if (loadedUrl) {
-            // Extract the desired portion of the URL
-            const urlParts = loadedUrl.split('/');
-            const lastPart = urlParts[urlParts.length - 1];
-            buttonText = lastPart;
-        }
-    
-        // Update button text
-        button.textContent = buttonText;
-    }
+   
     
     exportSettings() {
         console.log("exportSettings entered");
@@ -461,18 +505,6 @@ class UnifiedSequencerSettings {
             bpmDisplay.textContent = bpm;
             console.log("BPM UI updated:", bpm);
         }
-    }
-
-    updateProjectURLsUI(urls) {
-        // Implement logic to update UI for project URLs
-        console.log("Project URLs UI entered and updated:", urls);
-        // Example: Update each URL input field
-        urls.forEach((url, index) => {
-            const urlInput = document.getElementById(`url-input-${index}`);
-            if (urlInput) {
-                urlInput.value = url;
-            }
-        });
     }
 
     updateTrimSettingsUI(trimSettings) {

@@ -110,7 +110,12 @@
         }
     
         if (url) {
-            processURL(url, index, loadSampleButton);
+            // Here, instead of directly calling processURL, which internally fetches and updates,
+            // ensure processURL or the subsequent methods it calls properly use updateProjectURLAtIndex.
+            processURL(url, index, loadSampleButton).then(() => {
+                // Ensure the global settings object is updated with the new URL correctly
+                window.unifiedSequencerSettings.updateProjectURLAtIndex(index, url);
+            });
         }
     
         document.body.removeChild(idModal);
@@ -129,20 +134,18 @@ async function processURL(url, index, loadSampleButton) {
         if (contentType && contentType.includes("text/html")) {
             console.log("[HTML Debugging] [processURL] HTML content detected. Extracting audio data...");
             const htmlText = await response.text();
-            // Wait for the importHTMLSampleData to process and return the direct audio URL (base64 data)
-            const audioURL = await importHTMLSampleData(htmlText, index);
-            // Process the extracted audio URL as if it was direct audio content
-            if (audioURL) {
-                fetchAudio(audioURL, index);
-            }
+            const audioData = await importHTMLSampleData(htmlText, index);
+            // Process the extracted audio URL as if it was direct audio content, pass both original URL and audio data
+            fetchAudio(url, index, audioData); // Now also passing audioData
         } else {
             console.log("[HTML Debugging] [processURL] Non-HTML content. Processing as direct audio URL...");
-            fetchAudio(url, index);
+            fetchAudio(url, index); // For direct URLs, audioData is not needed
         }
     } catch (error) {
         console.error(`[HTML Debugging] [processURL] Error fetching URL content: `, error);
     }
 }
+
 
 async function importHTMLSampleData(htmlContent, index) {
     console.log("[importHTMLSampleData] Entered function with index: ", index);
@@ -171,21 +174,6 @@ async function importHTMLSampleData(htmlContent, index) {
     return null;
 }
 
-
-    
-
-    // // Extracted UI update functionalities to keep the code organized
-    // function updateUIAfterLoading(index, loadSampleButton) {
-    //     const channelContainer = document.querySelector(`.channel:nth-child(${index + 1}) .channel-container`);
-    //     if (channelContainer) {
-    //         channelContainer.classList.toggle('ordinal-loaded', true);
-    //         console.log(`[HTML Debugging] [handleLoad] Channel container class toggled for channel ${index}`);
-    //     }
-
-    //     updateButtonAfterLoading(index, loadSampleButton);
-    //     console.log(`[HTML Debugging] [handleLoad] Button text updated for channel ${index}`);
-    // }
-
     // Helper function to update button text after loading a sample
     function updateButtonAfterLoading(channelIndex, button) {
         if (window.unifiedSequencerSettings && typeof window.unifiedSequencerSettings.updateLoadSampleButtonText === 'function') {
@@ -213,7 +201,19 @@ async function importHTMLSampleData(htmlContent, index) {
         return container;
     }
     
-    
-    
     export { setupLoadSampleModalButton };
     
+
+
+
+    // // Extracted UI update functionalities to keep the code organized
+    // function updateUIAfterLoading(index, loadSampleButton) {
+    //     const channelContainer = document.querySelector(`.channel:nth-child(${index + 1}) .channel-container`);
+    //     if (channelContainer) {
+    //         channelContainer.classList.toggle('ordinal-loaded', true);
+    //         console.log(`[HTML Debugging] [handleLoad] Channel container class toggled for channel ${index}`);
+    //     }
+
+    //     updateButtonAfterLoading(index, loadSampleButton);
+    //     console.log(`[HTML Debugging] [handleLoad] Button text updated for channel ${index}`);
+    // }

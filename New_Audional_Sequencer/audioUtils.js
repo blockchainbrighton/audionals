@@ -58,52 +58,63 @@ async function fetchAndParseContentType(url) {
   }
 }
 
-// Function to fetch and process audio data, mapping it to its origin URL
-const fetchAudio = async (url, channelIndex) => {
+const fetchAudio = async (url, channelIndex, isBase64 = false) => {
   console.log('[HTML Debugging] [fetchAudio] Entered function. URL:', url, 'Channel Index:', channelIndex);
   try {
-    const response = await fetch(url);
-    console.log('[HTML Debugging] [fetchAudio] Response Content-Type:', response.headers.get('Content-Type'));
-
     let audioData;
     let filename;
 
-    console.log('[HTML Debugging] [fetchAudio] Response received from URL.');
+    if (isBase64) {
+      console.log('[HTML Debugging] [fetchAudio] Processing Base64 audio data.');
+      audioData = base64ToArrayBuffer(url.split(',')[1]);
+      filename = `channel_${channelIndex}_audio_sample`;
+    } else {
+      const response = await fetch(url);
+      console.log('[HTML Debugging] [fetchAudio] Response Content-Type:', response.headers.get('Content-Type'));
 
-    const clonedResponse = response.clone();
+      console.log('[HTML Debugging] [fetchAudio] Response received from URL.');
+      const clonedResponse = response.clone();
 
-    try {
+      try {
         const data = await response.json();
         console.log('[HTML Debugging] [fetchAudio] Response successfully read as JSON.');
         audioData = base64ToArrayBuffer(data.audioData.split(',')[1]);
         filename = data.filename || data.fileName;
-    } catch (e) {
+      } catch (e) {
         console.log("[fetchAudio] Response is not JSON, trying to read as arrayBuffer");
         try {
-            audioData = await clonedResponse.arrayBuffer();
-            filename = url.split('/').pop();
-            console.log('[HTML Debugging] [fetchAudio] Fallback to arrayBuffer successful. Filename:', filename);
+          audioData = await clonedResponse.arrayBuffer();
+          filename = url.split('/').pop();
+          console.log('[HTML Debugging] [fetchAudio] Fallback to arrayBuffer successful. Filename:', filename);
         } catch (e) {
-            console.error("Response could not be processed as JSON or as an ArrayBuffer.", e);
-            return;
+          console.error("Response could not be processed as JSON or as an ArrayBuffer.", e);
+          return;
         }
+      }
     }
 
     console.log('[HTML Debugging] [fetchAudio] Proceeding with audio data processing.');
-    const audioBuffer = await decodeAudioData(audioData);
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const audioBuffer = await audioContext.decodeAudioData(audioData);
     console.log('[HTML Debugging] [fetchAudio] Audio data decoded.');
+
+    // Assuming `audioBuffers` is a Map or similar structure where audio buffers are stored
     audioBuffers.set(url, audioBuffer);
 
-    window.unifiedSequencerSettings.updateSetting('projectURLs', url, channelIndex);
+    // Only update the projectURLs if the URL is not a Base64 encoded data
+    if (!isBase64) {
+      window.unifiedSequencerSettings.updateSetting('projectURLs', url, channelIndex);
+    }
     window.unifiedSequencerSettings.updateSampleDuration(audioBuffer.duration, channelIndex);
     window.unifiedSequencerSettings.updateAllLoadSampleButtonTexts();
-    console.log(`[HTML Debugging] [fetchAudio] Updated global object with URL: ${url} and duration: ${audioBuffer.duration} for channel index: ${channelIndex}`);
 
+    console.log(`[HTML Debugging] [fetchAudio] Updated global object with URL: ${url} and duration: ${audioBuffer.duration} for channel index: ${channelIndex}`);
     console.log(`[HTML Debugging] [fetchAudio] Audio buffer duration: ${audioBuffer.duration} seconds.`);
   } catch (error) {
-      console.error('[HTML Debugging] [fetchAudio] Error fetching audio:', error);
+    console.error('[HTML Debugging] [fetchAudio] Error fetching audio:', error);
   }
 };
+
 
 
 // Helper function to convert an ArrayBuffer to a Base64 string
