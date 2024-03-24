@@ -1,8 +1,8 @@
 // globalObjectHelperFunctions_v2.js
 
-function updateProjectURLsUI(urls) {
+function updateChannelURLsUI(urls) {
     console.log("debugGlobalObjectToUI - entered");
-    console.log("{debugGlobalObjectToUI} updateProjectURLsUI: updating with URLs", urls);
+    console.log("{debugGlobalObjectToUI} updateChannelURLsUI: updating with URLs", urls);
 
     urls.forEach((url, index) => {
         const urlButton = document.getElementById(`load-sample-button-${index}`);

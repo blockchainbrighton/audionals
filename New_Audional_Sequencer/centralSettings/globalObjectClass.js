@@ -309,11 +309,11 @@ class UnifiedSequencerSettings {
 
     getprojectUrlforChannel(channelIndex) {
         console.log("getprojectUrlforChannel entered");
-        return this.settings.masterSettings.projectURLs[channelIndex];
+        return this.settings.masterSettings.channelURLs[channelIndex];
     }
 
     setChannelURLs(urls) {
-        console.log("setProjectURLs entered");
+        console.log("setChannelURLs entered");
         this.settings.masterSettings.channelURLs = urls;
         console.log(`[setChannelURLs] Channel URLs set:`, urls);
     
@@ -369,7 +369,7 @@ class UnifiedSequencerSettings {
             // Update the masterSettings with the parsed settings
             this.settings.masterSettings.projectName = parsedSettings.projectName;
             this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
-            this.settings.masterSettings.projectURLs = parsedSettings.projectURLs;
+            this.settings.masterSettings.channelURLs = parsedSettings.channelURLs;
             this.settings.masterSettings.trimSettings = parsedSettings.trimSettings;
             this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames;
             console.log("[internalPresetDebug] Updated masterSettings:", this.settings.masterSettings);
@@ -471,7 +471,7 @@ class UnifiedSequencerSettings {
         }
     }
 
-    updateProjectURLsUI(urls) {
+    updateChannelURLsUI(urls) {
         // Implement logic to update UI for project URLs
         console.log("Project URLs UI entered and updated:", urls);
         // Example: Update each URL input field
