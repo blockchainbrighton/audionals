@@ -39,6 +39,30 @@ class UnifiedSequencerSettings {
                 console.error(`[addChannelURL] Invalid channel index: ${index}`);
             }
         }
+
+        // Function to get a single channel URL
+        getChannelURL(channelIndex) {
+            if (channelIndex >= 0 && channelIndex < this.settings.masterSettings.channelURLs.length) {
+                return this.settings.masterSettings.channelURLs[channelIndex];
+            } else {
+                console.error(`[getChannelURL] Invalid channel index: ${channelIndex}`);
+                return null;
+            }
+        }
+
+        // Helper function to get channel settings
+        getChannelSettings(channelIndex) {
+            if (channelIndex >= 0 && channelIndex < this.settings.masterSettings.channelURLs.length) {
+                return {
+                    url: this.settings.masterSettings.channelURLs[channelIndex],
+                    trimSettings: this.settings.masterSettings.trimSettings[channelIndex],
+                    channelName: this.settings.masterSettings.projectChannelNames[channelIndex]
+                };
+            } else {
+                console.error(`[getChannelSettings] Invalid channel index: ${channelIndex}`);
+                return null;
+            }
+        }
         
 
         clearMasterSettings() {
@@ -307,10 +331,10 @@ class UnifiedSequencerSettings {
     
    
 
-    getprojectUrlforChannel(channelIndex) {
-        console.log("getprojectUrlforChannel entered");
-        return this.settings.masterSettings.channelURLs[channelIndex];
-    }
+    // getprojectUrlforChannel(channelIndex) {
+    //     console.log("getprojectUrlforChannel entered");
+    //     return this.settings.masterSettings.channelURLs[channelIndex];
+    // }
 
     setChannelURLs(urls) {
         console.log("setChannelURLs entered");
@@ -472,7 +496,7 @@ class UnifiedSequencerSettings {
     }
 
     updateChannelURLsUI(urls) {
-        // Implement logic to update UI for project URLs
+        // Implement logic to update UI for channel URLs
         console.log("Project URLs UI entered and updated:", urls);
         // Example: Update each URL input field
         urls.forEach((url, index) => {
@@ -499,7 +523,7 @@ class UnifiedSequencerSettings {
 
     updateProjectChannelNamesUI(urlNames) {
         // Implement logic to update UI for project URL names
-        console.log("Project URL names UI entered and updated:", urlNames);
+        console.log("Channel URL names UI entered and updated:", urlNames);
         // Example: Update each URL name display
         urlNames.forEach((name, index) => {
             const nameDisplay = document.getElementById(`url-name-${index}`);

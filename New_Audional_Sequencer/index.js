@@ -215,9 +215,8 @@ if (playButton && stopButton) {
           console.error("Play or Stop button is not defined");
         }
 
-
         const loadPreset = (preset) => {
-            console.log('index.js loadPresetentered');
+            console.log('index.js loadPreset entered');
             console.log(`index.js loadPreset: Loading preset: ${preset}`);
             const presetData = presets[preset];
             if (!presetData) {
@@ -225,18 +224,22 @@ if (playButton && stopButton) {
                 return;
             }
         
-            // Retrieve the URLs from global settings
-            const projectURLs = window.unifiedSequencerSettings.getSettings('projectURLs');
-        
+            // Use the new helper function to retrieve URLs and settings for each channel
             channels.forEach((channel, index) => {
+                const channelSettings = window.unifiedSequencerSettings.getChannelSettings(index);
+                if (!channelSettings) {
+                    console.warn(`No data for channel index: ${index}`);
+                    return;
+                }
+        
+                const { url, trimSettings, channelName } = channelSettings;
                 const channelData = presetData.channels[index];
                 if (!channelData) {
                     console.warn(`No preset data for channel index: ${index}`);
                     return;
                 }
         
-                // Use the URL from the global settings instead of the preset
-                const url = projectURLs[index];
+                // Process the URL and trim settings for the channel
                 const { steps, mute } = channelData;
         
                 if (url) {
@@ -249,14 +252,15 @@ if (playButton && stopButton) {
                                 const endSliderValue = channelData.trimSettings?.endSliderValue || audioTrimmer.totalSampleDuration;
                                 audioTrimmer.setStartSliderValue(startSliderValue);
                                 audioTrimmer.setEndSliderValue(endSliderValue);
-                
+        
                                 window.unifiedSequencerSettings.setTrimSettings(index, startSliderValue, endSliderValue);
-                                updateLoadSampleButtonText(index, loadSampleButton);
+                                updateLoadSampleButtonText(index, loadSampleButton, channelName); // Now also passing channelName for button text update
                             });
                         }
                     });
                 }
         
+                // Update the UI based on the steps and mute state provided by the preset
                 steps.forEach(pos => {
                     const btn = document.querySelector(`.channel[data-id="Channel-${index}"] .step-button:nth-child(${pos})`);
                     if (btn) btn.classList.add('selected');
@@ -273,24 +277,99 @@ if (playButton && stopButton) {
             loadChannelSettingsFromPreset(presets[preset]);
             console.log("loadPreset: After loadPreset, gainNodes values:", gainNodes.map(gn => gn.gain.value));
         };
+
+        
+        // function updateLoadSampleButtonText(channelIndex, button, channelName) {
+        //     console.log('updateLoadSampleButtonText entered');
+        //     console.log(`[updateLoadSampleButtonText] Called for channel index: ${channelIndex}, Channel name: ${channelName}`);
+        
+        //     const loadedUrl = window.unifiedSequencerSettings.getChannelSettings(channelIndex).url;
+        //     console.log(`[updateLoadSampleButtonText] Loaded URL for channel ${channelIndex}: ${loadedUrl}`);
+        
+        //     // Update the button text to either the channel name or the loaded URL
+        //     button.textContent = channelName || loadedUrl || 'Load New Audional';
+        //     console.log(`[updateLoadSampleButtonText] Button text updated to: ${channelName || loadedUrl}`);
+        // }
+
+        // Function to update the mute state of a channel            
+        function updateLoadSampleButtonText(channelIndex, button) {
+            console.log('updateLoadSampleButtonText entered');
+            console.log(`[updateLoadSampleButtonText] Called for channel index: ${channelIndex}`);
+
+            const loadedUrl = window.unifiedSequencerSettings.getChannelSettings(channelIndex);
+            console.log(`[updateLoadSampleButtonText] Loaded URL for channel ${channelIndex}: ${loadedUrl}`);
+
+            if (loadedUrl) {
+                button.textContent = loadedUrl; // Update button text to show the loaded URL
+                console.log(`[updateLoadSampleButtonText] Button text updated to: ${loadedUrl}`);
+            } else {
+                button.textContent = 'Load New Audional'; // Default text if no URL is loaded
+                console.log(`[updateLoadSampleButtonText] Default text set for button`);
+            }
+        }
+
         
 
- 
-function updateLoadSampleButtonText(channelIndex, button) {
-    console.log('updateLoadSampleButtonText entered');
-    console.log(`[updateLoadSampleButtonText] Called for channel index: ${channelIndex}`);
 
-    const loadedUrl = window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex);
-    console.log(`[updateLoadSampleButtonText] Loaded URL for channel ${channelIndex}: ${loadedUrl}`);
+//         const loadPreset = (preset) => {
+//             console.log('index.js loadPresetentered');
+//             console.log(`index.js loadPreset: Loading preset: ${preset}`);
+//             const presetData = presets[preset];
+//             if (!presetData) {
+//                 console.error('Preset not found:', preset);
+//                 return;
+//             }
+        
+//             // Retrieve the URLs from global settings
+//             const projectURLs = window.unifiedSequencerSettings.getSettings('projectURLs');
+        
+//             channels.forEach((channel, index) => {
+//                 const channelData = presetData.channels[index];
+//                 if (!channelData) {
+//                     console.warn(`No preset data for channel index: ${index}`);
+//                     return;
+//                 }
+        
+//                 // Use the URL from the global settings instead of the preset
+//                 const url = projectURLs[index];
+//                 const { steps, mute } = channelData;
+        
+//                 if (url) {
+//                     const loadSampleButton = document.querySelector(`.channel[data-id="Channel-${index}"] .load-sample-button`);
+//                     fetchAudio(url, index, loadSampleButton).then(() => {
+//                         const audioTrimmer = getAudioTrimmerInstanceForChannel(index);
+//                         if (audioTrimmer) {
+//                             audioTrimmer.loadSampleFromURL(url).then(() => {
+//                                 const startSliderValue = channelData.trimSettings?.startSliderValue || 0.01;
+//                                 const endSliderValue = channelData.trimSettings?.endSliderValue || audioTrimmer.totalSampleDuration;
+//                                 audioTrimmer.setStartSliderValue(startSliderValue);
+//                                 audioTrimmer.setEndSliderValue(endSliderValue);
+                
+//                                 window.unifiedSequencerSettings.setTrimSettings(index, startSliderValue, endSliderValue);
+//                                 updateLoadSampleButtonText(index, loadSampleButton);
+//                             });
+//                         }
+//                     });
+//                 }
+        
+//                 steps.forEach(pos => {
+//                     const btn = document.querySelector(`.channel[data-id="Channel-${index}"] .step-button:nth-child(${pos})`);
+//                     if (btn) btn.classList.add('selected');
+//                 });
+        
+//                 const channelElement = document.querySelector(`.channel[data-id="Channel-${index}"]`);
+//                 if (channelElement) {
+//                     updateMuteState(channelElement, mute);
+//                     channelElement.classList.add('ordinal-loaded');
+//                 }
+//             });
+        
+//             console.log(preset);
+//             loadChannelSettingsFromPreset(presets[preset]);
+//             console.log("loadPreset: After loadPreset, gainNodes values:", gainNodes.map(gn => gn.gain.value));
+//         };
+        
 
-    if (loadedUrl) {
-        button.textContent = loadedUrl; // Update button text to show the loaded URL
-        console.log(`[updateLoadSampleButtonText] Button text updated to: ${loadedUrl}`);
-    } else {
-        button.textContent = 'Load New Audional'; // Default text if no URL is loaded
-        console.log(`[updateLoadSampleButtonText] Default text set for button`);
-    }
-}
 
 
 

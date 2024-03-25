@@ -11,14 +11,14 @@ function updateChannelURLsUI(urls) {
         }
     });
 
-    console.log("Project URLs UI updated:", urls);
+    console.log("channel URLs UI updated:", urls);
 }
 
-// Helper function to get the project URL for a channel
-function getProjectUrlForChannel(channelIndex) {
-    cons
-    return window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex);
-}
+// // Helper function to get the project URL for a channel
+// function getProjectUrlForChannel(channelIndex) {
+//     cons
+//     return window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex);
+// }
 
 // 
 function updateTrimSettingsUI(trimSettings) {
@@ -165,10 +165,10 @@ function getProjectSequences() {
 //     console.log(`[setGlobalProjectName] Project name updated to: ${projectName}`);
 // }
 // 
-function setGlobalProjectURLs(urls) {
+function setGlobalChannelURLs(urls) {
     console.log("debugGlobalObjectToUI - entered");
-    window.unifiedSequencerSettings.setProjectURLs(urls);
-    console.log(`[setGlobalProjectURLs] Project URLs updated:`, urls);
+    window.unifiedSequencerSettings.setChannelURLs(urls);
+    console.log(`[setGlobalChannelURLs] Channel URLs updated:`, urls);
 }
 // 
 function setTrimSettings(channelIndex, startSliderValue, endSliderValue) {

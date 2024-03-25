@@ -74,9 +74,9 @@ document.addEventListener("DOMContentLoaded", function() {
 
     
             // Fetch audio for each URL in the loaded settings
-            if (loadedSettings.projectURLs && Array.isArray(loadedSettings.projectURLs)) {
-                for (let i = 0; i < loadedSettings.projectURLs.length; i++) {
-                    const url = loadedSettings.projectURLs[i];
+            if (loadedSettings.channelURLs && Array.isArray(loadedSettings.channelURLs)) {
+                for (let i = 0; i < loadedSettings.channelURLs.length; i++) {
+                    const url = loadedSettings.channelURLs[i];
                     if (url) {
                         // Call fetchAudio for each URL
                         // Assuming you have a way to get the corresponding loadSampleButtonElement
@@ -100,10 +100,10 @@ document.addEventListener("DOMContentLoaded", function() {
                 console.log("[internalPresetDebug] JSON settings fetched:", jsonSettings);
                 window.unifiedSequencerSettings.loadSettings(jsonSettings);
     
-                if (jsonSettings.projectURLs && Array.isArray(jsonSettings.projectURLs)) {
-                    console.log("[internalPresetDebug] Found project URLs:", jsonSettings.projectURLs);
-                    for (let i = 0; i < jsonSettings.projectURLs.length; i++) {
-                        const url = jsonSettings.projectURLs[i];
+                if (jsonSettings.channelURLs && Array.isArray(jsonSettings.channelURLs)) {
+                    console.log("[internalPresetDebug] Found project URLs:", jsonSettings.channelURLs);
+                    for (let i = 0; i < jsonSettings.channelURLs.length; i++) {
+                        const url = jsonSettings.channelURLs[i];
                         if (url) {
                             console.log(`[internalPresetDebug] Processing URL ${i}: ${url}`);
                             const loadSampleButtonElement = document.getElementById(`load-sample-button-${i}`);

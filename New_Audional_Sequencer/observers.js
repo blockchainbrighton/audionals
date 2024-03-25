@@ -23,13 +23,13 @@ function updateBPMObserver(settings) {
     }
 }
 
-// Observer for Project URLs
-function updateProjectURLsObserver(settings) {
-    console.log("[observers] updateProjectURLsObserver called with:", settings)
-    if (settings && settings.masterSettings && settings.masterSettings.projectURLs) {
-        console.log("Updating Project URLs UI:", settings.masterSettings.projectURLs);
+// Observer for Channel URLs
+function updateChannelURLsObserver(settings) {
+    console.log("[observers] updateChannelURLsObserver called with:", settings)
+    if (settings && settings.masterSettings && settings.masterSettings.channelURLs) {
+        console.log("Updating channel URLs UI:", settings.masterSettings.channelURLs);
         unifiedSequencerSettings.updateAllLoadSampleButtonTexts();
-        updateChannelURLsUI(settings.masterSettings.projectURLs);
+        updateChannelURLsUI(settings.masterSettings.channelURLs);
     }
 }
 
@@ -74,7 +74,7 @@ function registerObservers() {
     if (window.unifiedSequencerSettings) {
         window.unifiedSequencerSettings.addObserver(updateProjectNameObserver);
         window.unifiedSequencerSettings.addObserver(updateBPMObserver);
-        window.unifiedSequencerSettings.addObserver(updateProjectURLsObserver);
+        window.unifiedSequencerSettings.addObserver(updateChannelURLsObserver);
         window.unifiedSequencerSettings.addObserver(updateTrimSettingsObserver);
         window.unifiedSequencerSettings.addObserver(updateProjectChannelNamesObserver);
         window.unifiedSequencerSettings.addObserver(updateProjectSequencesObserver);

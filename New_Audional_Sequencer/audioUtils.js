@@ -258,7 +258,7 @@ function getStepState(currentSequence, channelIndex, currentStep) {
 }
 
 function getAudioUrl(channelIndex) {
-  return window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex);
+  return window.unifiedSequencerSettings.getChannelURL(channelIndex);
 }
 
 function getAudioBuffer(url) {
