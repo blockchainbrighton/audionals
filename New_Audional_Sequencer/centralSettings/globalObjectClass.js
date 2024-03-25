@@ -32,13 +32,16 @@ class UnifiedSequencerSettings {
         // Method to add a URL to the channelURLs array
         addChannelURL(index, url) {
             if (index >= 0 && index < this.settings.masterSettings.channelURLs.length) {
-                console.log(`[addChannelURL] Adding URL to channel ${index}: ${url}`);
-                this.settings.masterSettings.channelURLs[index] = url;
+                // Extract the ordinal ID from the URL
+                const ordinalID = url.split('/').pop();
+                console.log(`[addChannelURL] Adding URL to channel ${index}: ${ordinalID}`);
+                this.settings.masterSettings.channelURLs[index] = ordinalID;
                 this.notifyObservers(); // Notify observers about the change, if necessary
             } else {
                 console.error(`[addChannelURL] Invalid channel index: ${index}`);
             }
         }
+        
 
         // Helper function to retrieve a URL from the channelURLs array
         getChannelURL(index) {
@@ -85,7 +88,7 @@ class UnifiedSequencerSettings {
     
             // Process channelURLs and projectURLs with proper URL formatting
             this.settings.masterSettings.channelURLs = parsedSettings.channelURLs ?
-                parsedSettings.channelURLs.map(url => formatURL(url)) : [];
+            parsedSettings.channelURLs.map(url => url.split('/').pop()) : [];
     
             this.settings.masterSettings.projectName = parsedSettings.projectName;
             this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;

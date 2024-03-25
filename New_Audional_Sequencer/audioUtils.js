@@ -46,11 +46,14 @@ const decodeAudioData = (audioData) => {
 // Function to fetch and process audio data
 
 const fetchAudio = async (url, channelIndex) => {
-  const fullUrl = formatURL(url);
-  console.log('[HTML Debugging] [fetchAudio] Entered function. URL:', fullUrl, 'Channel Index:', channelIndex);
+    // Ensure id is formatted correctly and convert to full URL
+    const fullUrl = formatURL(id);
+    console.log('[HTML Debugging] [fetchAudio] Entered function. URL:', fullUrl, 'Channel Index:', channelIndex);
+    
+  console.log('[HTML Debugging] [fetchAudio] Entered function. URL:', ordinalID, 'Channel Index:', channelIndex);
 
   try {
-    const response = await fetch(fullUrl);
+    const response = await fetch(ordinalID);
     const contentType = response.headers.get('Content-Type');
     let audioData;
 
@@ -70,7 +73,7 @@ const fetchAudio = async (url, channelIndex) => {
 
     // Decode and process the audio data uniformly
     const audioBuffer = await decodeAudioData(audioData);
-    audioBuffers.set(fullUrl, audioBuffer);
+    audioBuffers.set(ordinalID, audioBuffer);
     console.log(`[HTML Debugging] [fetchAudio] Audio buffer stored.`);
   } catch (error) {
     console.error('[HTML Debugging] [fetchAudio] Error:', error);
@@ -154,17 +157,21 @@ function getStepState(currentSequence, channelIndex, currentStep) {
 }
 
 function getAudioUrl(channelIndex) {
+  const url = window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex);
+
   // Example check to ensure URL exists for the given channel index
   if (typeof window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex) === 'undefined') {
     console.error(`[getAudioUrl] URL not found for channel index: ${channelIndex}`);
     return 'defaultURL'; // Provide a default URL or handle the error appropriately
   }
-  return window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex);
+  return getIDFromURL(url); // Ensure this returns the ordinal ID
 }
 
 function getAudioBuffer(url) {
-  return audioBuffers.get(url);
+  const ordinalID = getIDFromURL(url);
+  return audioBuffers.get(ordinalID);
 }
+
 
 function playTrimmedAudio(channelIndex, audioBuffer, url) {
   console.log('playTrimmedAudio entered');
