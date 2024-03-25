@@ -101,7 +101,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 window.unifiedSequencerSettings.loadSettings(jsonSettings);
     
                 if (jsonSettings.channelURLs && Array.isArray(jsonSettings.channelURLs)) {
-                    console.log("[internalPresetDebug] Found project URLs:", jsonSettings.channelURLs);
+                    console.log("[internalPresetDebug] Found Channel URLs:", jsonSettings.channelURLs);
                     for (let i = 0; i < jsonSettings.channelURLs.length; i++) {
                         const url = jsonSettings.channelURLs[i];
                         if (url) {
