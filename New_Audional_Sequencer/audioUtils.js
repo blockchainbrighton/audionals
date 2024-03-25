@@ -45,40 +45,39 @@ const decodeAudioData = (audioData) => {
 
 // Function to fetch and process audio data
 
-const fetchAudio = async (url, channelIndex) => {
-    // Ensure id is formatted correctly and convert to full URL
-    const fullUrl = formatURL(id);
-    console.log('[HTML Debugging] [fetchAudio] Entered function. URL:', fullUrl, 'Channel Index:', channelIndex);
-    
-  console.log('[HTML Debugging] [fetchAudio] Entered function. URL:', ordinalID, 'Channel Index:', channelIndex);
+const fetchAudio = async (id, channelIndex) => {
+  // Convert ID to a full URL for fetching
+  const fullUrl = formatURL(id);
+  console.log('[HTML Debugging] [fetchAudio] Entered function. URL:', fullUrl, 'Channel Index:', channelIndex);
 
   try {
-    const response = await fetch(ordinalID);
-    const contentType = response.headers.get('Content-Type');
-    let audioData;
+      const response = await fetch(fullUrl); // Ensure we use 'fullUrl' which is defined above
+      const contentType = response.headers.get('Content-Type');
+      let audioData;
 
-    if (contentType && contentType.includes('text/html')) {
-      // Handle HTML content
-      const htmlText = await response.text();
-      const extractedAudioData = await importHTMLAudioData(htmlText, channelIndex);
-      if (!extractedAudioData) return;
+      if (contentType && contentType.includes('text/html')) {
+          // Handle HTML content
+          const htmlText = await response.text();
+          const extractedAudioData = await importHTMLAudioData(htmlText, channelIndex);
+          if (!extractedAudioData) return;
 
-      audioData = extractedAudioData.startsWith('data:') ?
-        base64ToArrayBuffer(extractedAudioData.split(',')[1]) : // Convert base64 to ArrayBuffer directly here
-        await fetch(extractedAudioData).then(res => res.arrayBuffer());
-    } else {
-      // Handle direct audio file
-      audioData = await response.arrayBuffer();
-    }
+          audioData = extractedAudioData.startsWith('data:') ?
+              base64ToArrayBuffer(extractedAudioData.split(',')[1]) : // Convert base64 to ArrayBuffer directly here
+              await fetch(extractedAudioData).then(res => res.arrayBuffer());
+      } else {
+          // Handle direct audio file
+          audioData = await response.arrayBuffer();
+      }
 
-    // Decode and process the audio data uniformly
-    const audioBuffer = await decodeAudioData(audioData);
-    audioBuffers.set(ordinalID, audioBuffer);
-    console.log(`[HTML Debugging] [fetchAudio] Audio buffer stored.`);
+      // Decode and process the audio data uniformly
+      const audioBuffer = await decodeAudioData(audioData);
+      audioBuffers.set(id, audioBuffer); // Store the audioBuffer using 'id' as the key
+      console.log(`[HTML Debugging] [fetchAudio] Audio buffer stored for ID: ${id}`);
   } catch (error) {
-    console.error('[HTML Debugging] [fetchAudio] Error:', error);
+      console.error('[HTML Debugging] [fetchAudio] Error:', error);
   }
 };
+
 
 // Note: The importHTMLAudioData function remains the same.
 
@@ -138,7 +137,7 @@ function playSound(currentSequence, channel, currentStep) {
   }
 
   const url = getAudioUrl(channelIndex);
-  const audioBuffer = getAudioBuffer(url);
+  const audioBuffer = audioBuffers.get(url);
   if (!audioBuffer) {
       console.log("[HTML Debugging] [playSound] No audio buffer found for URL:", url);
       return;
