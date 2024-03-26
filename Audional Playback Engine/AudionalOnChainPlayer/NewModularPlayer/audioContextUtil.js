@@ -1,5 +1,7 @@
 // AudioContextUtil.js
 
+export let isStoppedManually = false; // Change from const to let
+export let isLooping = true; // Change from const to let
 
 // Initialization of AudioContext
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -59,4 +61,6 @@ const fetchAndDecodeAudio = async (url) => {
 // Simplified load audio file function
 const loadAudioFile = url => url ? fetchAndDecodeAudio(url) : customLog('URL is invalid or missing', true);
 
-export { audioContext, customLog, base64ToArrayBuffer, fetchAndDecodeAudio, loadAudioFile, audioBuffersCache };
+// export { audioContext, customLog, base64ToArrayBuffer, fetchAndDecodeAudio, loadAudioFile, audioBuffersCache, isLooping, isStoppedManually, cumulativeOffset };
+
+export { audioContext, customLog, loadAudioFile, audioBuffersCache }; // Export as let instead of const

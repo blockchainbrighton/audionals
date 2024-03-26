@@ -1,5 +1,12 @@
 // c.js
 
+import { Cy, Sp, Cp } from './g.js';
+
+
+console.log('c.js entered');
+console.log(this.v); // Check the structure is as expected
+
+
 const loggedSelections = new Set();
 // Example definitions - adjust according to your actual application logic
 let initialAngle = 0; // Default or calculated value
@@ -73,11 +80,12 @@ logInitialCCI2ColorSelection(initialAngle, initialTm, initialV);
 
 
 function getColors(angle, tm, v, logSelections = false) {
-  // Validate input
-  if (!v || !v.length || typeof v[0].x === 'undefined' || typeof v[0].y === 'undefined') {
-    console.error('Invalid vertex data:', v);
-    return []; // Return an empty array or other default value to handle this case
-}
+  // Correctly validate input
+  if (!Array.isArray(v) || v.length === 0 || typeof v[0].x === 'undefined' || typeof v[0].y === 'undefined') {
+      console.error('Invalid vertex data:', v);
+      return []; // Return an empty array or other default value to handle this case
+  }
+
   // Original color generation logic remains unchanged.
   const colors = [
       `hsl(${(angle + 60 * Math.sin(tm / 1000)) % 360}, 100%, 50%)`,
@@ -175,9 +183,6 @@ function getColors(angle, tm, v, logSelections = false) {
       `rgb(0, ${Math.floor((Math.sqrt(Math.pow(v[0].x - S/2, 2) + Math.pow(v[0].y - S/2, 2)) / (S / 2)) * 255)}, ${255 - Math.floor((Math.sqrt(Math.pow(v[0].x - S/2, 2) + Math.pow(v[0].y - S/2, 2)) / (S / 2)) * 255)})`,
       `rgb(${Math.floor((v[0].z + R) / (2 * R) * 255)}, ${Math.floor((v[0].z + R) / (2 * R) * 255)}, ${Math.floor((v[0].z + R) / (2 * R) * 255)})`,
       `hsl(${(v[0].x + v[0].y) % 360}, 100%, 50%)`,
-      `rgba(255, 0, 0, ${Math.sqrt(Math.pow(v[0].x - v[1].x, 2) + Math.pow(v[0].y - v[1].y, 2)) / 50})`,
-      `rgba(255, 0, 0, ${Math.abs((v[0].x * (v[1].y - v[2].y) + v[1].x * (v[2].y - v[0].y) + v[2].x * (v[0].y - v[1].y)) / 5000)})`,
-      `rgba(255, 165, 0, 0.5)`, // Placeholder for moveGradient
       tm % 200 < 100 ? `hsl(240, ${(tm % 100)}%, 50%)` : 'alternative-color',
       tm % 720 < 360 ? `hsl(${tm % 360}, 100%, 30%)` : 'alternative-color',
       255 - Math.floor((v[0].z + R) / (2 * R) * 255) > 128 ? `rgb(${255 - Math.floor((v[0].z + R) / (2 * R) * 255)}, ${255 - Math.floor((v[0].z + R) / (2 * R) * 255)}, ${255 - Math.floor((v[0].z + R) / (2 * R) * 255)})` : 'alternative-color',
@@ -216,9 +221,7 @@ function getColors(angle, tm, v, logSelections = false) {
       `rgb(0, ${Math.floor((Math.sqrt(Math.pow(v[0].x - S/2, 2) + Math.pow(v[0].y - S/2, 2)) / (S / 2)) * 255)}, ${255 - Math.floor((Math.sqrt(Math.pow(v[0].x - S/2, 2) + Math.pow(v[0].y - S/2, 2)) / (S / 2)) * 255)})`,
       `rgb(${Math.floor((v[0].z + R) / (2 * R) * 255)}, ${Math.floor((v[0].z + R) / (2 * R) * 255)}, ${Math.floor((v[0].z + R) / (2 * R) * 255)})`,
       `hsl(${(v[0].x + v[0].y) % 360}, 100%, 50%)`,
-      `rgba(255, 0, 0, ${Math.sqrt(Math.pow(v[0].x - v[1].x, 2) + Math.pow(v[0].y - v[1].y, 2)) / 50})`,
-      `rgba(255, 0, 0, ${Math.abs((v[0].x * (v[1].y - v[2].y) + v[1].x * (v[2].y - v[0].y) + v[2].x * (v[0].y - v[1].y)) / 5000)})`,
-      `rgba(255, 165, 0, 0.5)`, // Placeholder for moveGradient
+    
 
       // from c2.js
       ((Math.floor(v[0].x / 111) + Math.floor(v[0].y / 111)) % 8 === 0) ? '#00001E' : 'black', // #1 Red Scorpion
@@ -305,7 +308,6 @@ Math.random() > 0.5 ? `hsl(${Math.floor(Math.random() * 60)}, 100%, 50%)` : `hsl
 // #70 Utilizing Math.sin for a cyclic color variation -  LOVE THIS ONE - CRAZY FROG EYES II 
 `rgb(${Math.floor(Math.sin(Date.now()) * 127 + 128)}, ${Math.floor(Math.sin(Date.now() / 1000) * 127 + 128)}, ${Math.floor(Math.sin(Date.now() / 2000) * 127 + 128)})`,
 // #71 Experimenting with a ternary operator inside the template literal for an alternative approach SPINNING RED BLACK EYES
-`rgb(${Math.random() * 255 > 128 ? Math.floor((v[0].z + R) / (2 * R) * 255) : 100}, ${Math.floor((v[0].z + R) / (2 * R) * 255)}, ${Math.floor((v[0].z + R) / (2 * R) * 255)})`,
 
 // #72
 (() => {
@@ -384,7 +386,6 @@ Math.random() > 0.5 ? `hsl(${Math.floor(Math.random() * 60)}, 100%, 50%)` : `hsl
 // #92
 `rgb(${Math.floor(Math.sin(Date.now()) * 127 + 4)}, ${Math.floor(Math.sin(Date.now() / 10) * 127 + 128)}, ${Math.floor(Math.sin(Date.now() / 5000) * 127 + 32)})`,
 // #93  - RED PINK CRAZY GOGGLE EYES
-`rgb(${Math.floor(Math.sin(Date.now()) * 127 + 512)}, ${Math.floor(Math.sin(Date.now() / 1) * 127 + 128)}, ${Math.floor(Math.sin(Date.now() / 1000) * 127 + 8)})`,
 
 //#94
 // Assuming an animation loop is calling this function repeatedly
@@ -404,6 +405,8 @@ Math.random() > 0.5 ? `hsl(${Math.floor(Math.random() * 60)}, 100%, 50%)` : `hsl
 
 // #95 - FLASHING RED EYE
 `rgb(${Math.floor(Math.sin(Date.now()) * 111 + 200000)}, ${Math.floor(Math.sin(Date.now() / 1) * 127 + 12)}, ${Math.floor(Math.sin(Date.now() / 100) * 127 + 4)})`,
+`rgb(${Math.floor(Math.sin(Date.now()) * 127 + 512)}, ${Math.floor(Math.sin(Date.now() / 1) * 127 + 128)}, ${Math.floor(Math.sin(Date.now() / 1000) * 127 + 8)})`,
+`rgb(${Math.random() * 255 > 128 ? Math.floor((v[0].z + R) / (2 * R) * 255) : 100}, ${Math.floor((v[0].z + R) / (2 * R) * 255)}, ${Math.floor((v[0].z + R) / (2 * R) * 255)})`,
 
 // #95 - Oscillating gradient from purple to orange
 () => {
@@ -476,6 +479,11 @@ Math.random() > 0.5 ? `hsl(${Math.floor(Math.random() * 60)}, 100%, 50%)` : `hsl
   cx.fillStyle = `rgb(${255}, ${215 + percent * (192 - 215)}, ${0 + percent * (192 - 0)})`; // Gold to silver
   cx.fillRect(0, 0, S, S);
 },
+
+// `rgba(255, 0, 0, ${Math.abs((v[0].x * (v[1].y - v[2].y) + v[1].x * (v[2].y - v[0].y) + v[2].x * (v[0].y - v[1].y)) / 5000)})`,
+// `rgba(255, 0, 0, ${Math.sqrt(Math.pow(v[0].x - v[1].x, 2) + Math.pow(v[0].y - v[1].y, 2)) / 50})`,
+// `rgba(255, 0, 0, ${Math.abs((v[0].x * (v[1].y - v[2].y) + v[1].x * (v[2].y - v[0].y) + v[2].x * (v[0].y - v[1].y)) / 5000)})`,
+// `rgba(255, 0, 0, ${Math.sqrt(Math.pow(v[0].x - v[1].x, 2) + Math.pow(v[0].y - v[1].y, 2)) / 50})`,
 
 // Luminous neon colors from lime to magenta for a bold effect
 () => {

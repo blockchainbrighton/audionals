@@ -1,23 +1,21 @@
-// Scale factor for object sizes
-let scaleFactor = 3, // scaleFactor: Adjusts the size of geometric objects.
-    // Canvas size, matching window width for full-width rendering
-    S = window.innerWidth,
-    // Radius for certain objects, adjusted by scale factor
-    R = 100 * scaleFactor,
-    // Height for certain objects, twice the radius
-    H = 2 * R,
-    // Rotation speed coefficient
-    RS = (2 * Math.PI) / 2000 / 1000,
-    // Additional radius sizes, identical in this context, potentially for different usage
-    SR = 100 * scaleFactor,
-    OR = 100 * scaleFactor,
-    // Canvas and context setup
-    cv = document.getElementById('cv'),
-    cx = cv.getContext('2d');
+// g.js
 
-// Adjust canvas dimensions to full width
-cv.width = S;
-cv.height = S;
+
+// Scale factor for object sizes
+let scaleFactor = 3; // scaleFactor: Adjusts the size of geometric objects.
+    // Canvas size, matching window width for full-width rendering
+    export const cv = document.getElementById('cv');
+    export const cx = cv.getContext('2d');
+    export let S = window.innerWidth;
+    export let R = 100 * scaleFactor;
+    export let H = 2 * R;
+    export let RS = (2 * Math.PI) / 2000 / 1000;
+    export let SR = 100 * scaleFactor;
+    export let OR = 100 * scaleFactor;
+    
+    // Adjust canvas dimensions to full width
+    cv.width = S;
+    cv.height = S;
 
 // Cylinder class with methods for vertex and face generation, and rotation
 // Class Cy (Cylinder)
@@ -26,7 +24,7 @@ cv.height = S;
 // gF(): Generates faces (f) for rendering the cylinder, using the vertices.
 // rP(p, a): Rotates the cylinder's vertices around a point (p) by an angle (a).
 
-class Cy {
+export class Cy {
     constructor(c, r, h, s) {
         this.c = c; // Center point
         this.r = r; // Radius
@@ -79,7 +77,7 @@ class Cy {
 // gV(): Generates vertices of the sphere. Unlike the cylinder, it calculates vertices based on spherical coordinates.
 // gF(): Generates faces for the sphere in a manner similar to the cylinder, tailored to a sphere's geometry.
 // rP(p, a): Rotates the sphere's vertices around a point by an angle, similar to Cy.rP.
-class Sp {
+export class Sp {
     constructor(c, r, s) {
         this.c = c;
         this.r = r;
@@ -131,7 +129,7 @@ class Sp {
 // Constructor: Creates a composite object consisting of a central cylinder (cy) and two satellite spheres (sp1, sp2). Each component's position is relative to the composite object's center (c), with radii (r) and heights (h) scaled accordingly.
 // rP(p, a): Rotates all components of the composite object (the cylinder and both spheres) around a point by an angle.
 
-class Cp {
+export class Cp {
     constructor(c, r, h, s) {
         this.c = c;
         this.r = r;
@@ -149,7 +147,7 @@ class Cp {
     }
 }
 
-let cp = new Cp({ x: S / 2, y: S / 2, z: 0 }, R, H, 30);
-let os1 = new Sp({ x: S / 2 - OR, y: S / 2, z: 0 }, SR, 30);
-let os2 = new Sp({ x: S / 2 + OR, y: S / 2, z: 0 }, SR, 30);
-let t;
+export let cp = new Cp({ x: S / 2, y: S / 2, z: 0 }, R, H, 30);
+export let os1 = new Sp({ x: S / 2 - OR, y: S / 2, z: 0 }, SR, 30);
+export let os2 = new Sp({ x: S / 2 + OR, y: S / 2, z: 0 }, SR, 30);
+export let t;

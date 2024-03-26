@@ -1,5 +1,8 @@
 // drawObject16.2.js
 
+import { cp, cx, S, RS } from './g.js';
+
+
 cp.drawObject = function(obj, tm) {
     for (let f of obj.f) {
         let v = f.map((i) => obj.v[i]);
@@ -28,6 +31,8 @@ cp.drawObject = function(obj, tm) {
 // drawObject16.1.js
 
 function d(tm) {
+    S = window.innerWidth,
+
     cx.clearRect(0, 0, S, S);
     let a;
     if (t === undefined) {

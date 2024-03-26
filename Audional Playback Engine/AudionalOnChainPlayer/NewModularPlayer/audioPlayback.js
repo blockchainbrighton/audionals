@@ -1,7 +1,8 @@
-// AudioPlayback.js
-import { audioContext, customLog, loadAudioFile, audioBuffersCache } from './audioContextUtil.js';
+// audioPlayback.js
 
-let BPM, isLooping = true, isStoppedManually = false, cumulativeOffset = 0, sequenceData;
+import { audioContext, customLog, loadAudioFile, audioBuffersCache } from './audioContextUtil.js';
+import { getSequenceData } from './UIHandlers.js';
+
 const activeSources = new Set();
 const activeTimeouts = new Set();
 let isInitialPlay = true; // Flag to check if it's the initial play
@@ -32,20 +33,22 @@ const createAndStartAudioSource = (audioBuffer, trimSettings, playbackTime, chan
 };
 
 const playAudio = async () => {
+    const sequenceData = getSequenceData();
     if (!sequenceData || !sequenceData.projectURLs || !sequenceData.projectSequences) {
         customLog("No valid sequence data available. Cannot play audio.", true);
         return;
     }
-    isStoppedManually = false; // Ensure this flag is correctly managed in your logic
-    isLooping = true;
-    BPM = sequenceData.projectBPM;
+    // let isStoppedManually = false;
+    // let isLooping = true;
+    // let BPM = sequenceData.projectBPM;
 
     // This time, we won't stop audio but rather allow sequences to overlap slightly during the loop transition
     // stopAudio(); // Consider removing or reworking this call to fit the new seamless logic
 
     // Initial buffer loading logic remains unchanged
     if (isInitialPlay) {
-        audioBuffersCache = await Promise.all(sequenceData.projectURLs.map(loadAudioFile));
+        // Load audio files once
+        await Promise.all(sequenceData.projectURLs.map(url => loadAudioFile(url)));
         isInitialPlay = false;
     }
 

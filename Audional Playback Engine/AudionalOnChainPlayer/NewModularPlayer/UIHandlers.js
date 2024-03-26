@@ -1,17 +1,23 @@
 // UIHandlers.js
 import { customLog } from './audioContextUtil.js';
-import { playAudio, stopAudio } from './audioPlayback.js';
+import { playAudio } from './audioPlayback.js';
+
+// Define sequenceData at the top level of the module
+let sequenceData;
 
 // Setup UI Handlers simplified by using optional chaining and removing redundant checks
 const setupUIHandlers = () => {
-    document.getElementById('playButton')?.addEventListener('click', () => { isLooping = true; playAudio(); });
-    document.getElementById('stopButton')?.addEventListener('click', stopAudio);
+    document.getElementById('playButton')?.addEventListener('click', () => {
+        // Ensure `isLooping` is appropriately managed within the `playAudio` function or via global state
+        playAudio();
+    });
+    // document.getElementById('stopButton')?.addEventListener('click', stopAudio);
 
     document.getElementById('fileInput')?.addEventListener('change', async (event) => {
         try {
             const file = event.target.files[0];
             if (!file) throw new Error('No file selected');
-            sequenceData = JSON.parse(await file.text());
+            sequenceData = JSON.parse(await file.text()); // Set the global sequenceData
             validateAudioData(sequenceData);
             document.getElementById('playButton').disabled = false;
         } catch (err) {
@@ -21,6 +27,7 @@ const setupUIHandlers = () => {
     });
 };
 
+// Call setupUIHandlers to ensure it's executed
 setupUIHandlers();
 
 const validateAudioData = (data) => {
@@ -28,3 +35,6 @@ const validateAudioData = (data) => {
         throw new Error('Invalid or missing data in JSON');
     }
 };
+
+// Export a function to get the current value of `sequenceData`
+export const getSequenceData = () => sequenceData;

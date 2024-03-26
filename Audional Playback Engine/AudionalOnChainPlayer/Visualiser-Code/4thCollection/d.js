@@ -1,5 +1,9 @@
 console.log('d.js loaded');
 
+import { cp, cx, S, RS, t } from './g.js';
+
+
+
 
 // Function to draw an object with dynamic coloring based on time (`tm`)
 cp.drawObjectD1 = function(obj, tm) {
