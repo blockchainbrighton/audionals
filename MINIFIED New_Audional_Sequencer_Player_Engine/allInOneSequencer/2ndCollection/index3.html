@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html style="height: 100%; margin: 0; padding: 0;">
+<head>
+    <title>BOT 1t5</title>
+    <link rel="stylesheet" href="s.css">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        #cv {
+            width: 100%;
+            height: 100%;
+        }
+        #sequencer-iframe {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            opacity: 0;
+            z-index: 2;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<iframe id="sequencer-iframe" src="EmbeddedSequencer/smallIndex.html"></iframe>
+
+<script src="g2.js"></script>
+<script src="c2.js"></script>
+<script src="d2.js"></script>
+<script>
+    let cci2 = 18; // Initial CCI2 value
+    const initialCCI2 = 21; // Store the initial value of cci2 to reset later
+    let seed = 9; // Seed value, can be adjusted for production purposes
+    let visualSchedule = []; // Array to store the visual schedule
+
+    function randomWithSeed(seedValue) {
+        const x = Math.sin(seedValue) * 10000;
+        return x - Math.floor(x);
+    }
+
+    function calculateCCI2(channelIndex) {
+        const randomSeed = seed + channelIndex;
+        const randomMultiplier = randomWithSeed(randomSeed) * 100;
+        return Math.floor(randomMultiplier) + 1;
+    }
+
+    function loadAndParseSettings() {
+        fetch('/EmbeddedSequencer/BasedSong1.json')
+            .then(response => response.json())
+            .then(data => {
+                buildVisualSchedule(data.projectSequences);
+            })
+            .catch(error => console.error('Error loading settings:', error));
+    }
+
+    function buildVisualSchedule(projectSequences) {
+    // Define a mapping for channels to specific effects, if necessary
+    let channelEffectMapping = {};
+
+    // Iterate through sequences and channels to build the visual schedule
+    Object.keys(projectSequences).forEach(sequenceKey => {
+        const sequence = projectSequences[sequenceKey];
+        Object.keys(sequence).forEach(channelKey => {
+            const channel = sequence[channelKey];
+            // Check if the channel has active steps
+            if (channel.steps.length > 0) {
+                // Calculate an effect identifier or parameter based on the channel index
+                const effectId = calculateCCI2(parseInt(channelKey.substring(2))); // Assuming channelKey is 'chX'
+                channelEffectMapping[channelKey] = effectId;
+                
+                // Add only active steps to the visual schedule
+                channel.steps.forEach(step => {
+                    // Here, instead of just pushing {sequenceKey, channelKey, step},
+                    // you can push an object that also includes the calculated effectId for the channel
+                    visualSchedule.push({sequenceKey, channelKey, step, effectId});
+                });
+            }
+        });
+    });
+
+    console.log('Visual schedule built:', visualSchedule);
+    // Now visualSchedule includes active steps with their associated effectId
+    // Optionally, pre-buffer visuals here based on visualSchedule
+}
+
+// Call `loadAndParseSettings` when the document is ready or when appropriate
+document.addEventListener('DOMContentLoaded', () => {
+    loadAndParseSettings(); // Load settings and build the visual schedule
+});
+
+    const channelPlaybackListener = new BroadcastChannel('channel_playback');
+    channelPlaybackListener.onmessage = (event) => {
+        if (event.data.action === 'stop') {
+            cci2 = initialCCI2;
+            console.log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
+        } else {
+            const { channelIndex } = event.data;
+            cci2 = calculateCCI2(channelIndex);
+            console.log(`Received channel playback: Channel ${channelIndex}. CCI2 updated to ${cci2} based on seed ${seed}.`);
+        }
+    };
+
+    document.addEventListener('click', () => {
+        const message = JSON.stringify({ command: 'play' });
+        window.parent.postMessage(message, '*');
+    });
+</script>
+ 
+</body>
+</html>
