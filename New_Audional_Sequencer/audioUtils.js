@@ -150,23 +150,24 @@ function bufferToBase64(buffer) {
 // Function to play sound
 function playSound(currentSequence, channel, currentStep) {
   console.log('playSound entered');
-  const channelIndex = getChannelIndex(channel);
+  const channelIndex = getChannelIndex(channel); // Assuming this function correctly parses the channel's dataset ID to obtain its index.
   console.log(`[playSound Debugging] [playSound] Processing channel index: ${channelIndex}`);
 
-  const stepState = getStepState(currentSequence, channelIndex, currentStep);
-  // log all 3 variables to
-  console.log(`[playSound Debugging] [playSound] currentSequence: ${currentSequence}, channelIndex: ${channelIndex}, currentStep: ${currentStep}`);
+  // Directly use window.unifiedSequencerSettings.getStepState to retrieve the step state
+  const stepState = window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, currentStep);
+  console.log(`[playSound Debugging] [playSound] currentSequence: ${currentSequence}, channelIndex: ${channelIndex}, currentStep: ${currentStep}, Step State: ${stepState}`);
+
   if (!stepState) {
-      console.log("[playSound Debugging] [playSound] Current step is not selected. Skipping playback.");
-      return;
+    console.log("[playSound Debugging] [playSound] Current step is not selected. Skipping playback.");
+    return;
   }
 
   const url = getAudioUrl(channelIndex);
   console.log("[playSound Debugging] [playSound] Audio URL:", url);
   const audioBuffer = getAudioBuffer(url);
   if (!audioBuffer) {
-      console.log("[playSound Debugging] [playSound] No audio buffer found for URL:", url);
-      return;
+    console.log("[playSound Debugging] [playSound] No audio buffer found for URL:", url);
+    return;
   }
   
   console.log("[playSound Debugging] [playSound] Audio buffer:", audioBuffer);
@@ -175,14 +176,15 @@ function playSound(currentSequence, channel, currentStep) {
 }
 
 
+
 function getChannelIndex(channel) {
   return parseInt(channel.dataset.id.split('-')[1]);
 }
 
-function getStepState(currentSequence, channelIndex, currentStep) {
-  console.log(`[playSound Debugging] [getStepState called] currentSequence: ${currentSequence}, channelIndex: ${channelIndex}, currentStep: ${currentStep}`);
-  return window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, currentStep);
-}
+// function getStepState(currentSequence, channelIndex, currentStep) {
+//   console.log(`[playSound Debugging] [getStepState called] currentSequence: ${currentSequence}, channelIndex: ${channelIndex}, currentStep: ${currentStep}`);
+//   return window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, currentStep);
+// }
 
 function getAudioUrl(channelIndex) {
   // Example check to ensure URL exists for the given channel index

@@ -51,50 +51,50 @@ function updateProjectChannelNamesUI(urlNames) {
         }
     });
 }
-// 
-document.addEventListener('DOMContentLoaded', () => {
-    // Assuming there are 16 sequences and 16 channels per sequence
-    for (let seq = 0; seq < 16; seq++) {
-        for (let ch = 0; ch < 16; ch++) {
-            // Find or create a container for each channel's steps
-            let channelStepsContainer = document.querySelector(`#channel-${ch}-steps-container`);
-            if (!channelStepsContainer) {
-                channelStepsContainer = document.createElement('div');
-                channelStepsContainer.id = `channel-${ch}-steps-container`;
-                channelStepsContainer.classList.add('steps-container');
-                // Append the container to the appropriate place in the DOM
-                // (This needs to be adjusted based on your actual DOM structure)
-                document.body.appendChild(channelStepsContainer);
-            }
+// // 
+// document.addEventListener('DOMContentLoaded', () => {
+//     // Assuming there are 16 sequences and 16 channels per sequence
+//     for (let seq = 0; seq < 16; seq++) {
+//         for (let ch = 0; ch < 16; ch++) {
+//             // Find or create a container for each channel's steps
+//             let channelStepsContainer = document.querySelector(`#channel-${ch}-steps-container`);
+//             if (!channelStepsContainer) {
+//                 channelStepsContainer = document.createElement('div');
+//                 channelStepsContainer.id = `channel-${ch}-steps-container`;
+//                 channelStepsContainer.classList.add('steps-container');
+//                 // Append the container to the appropriate place in the DOM
+//                 // (This needs to be adjusted based on your actual DOM structure)
+//                 document.body.appendChild(channelStepsContainer);
+//             }
 
-            // Clear any existing buttons
-            channelStepsContainer.innerHTML = '';
+//             // Clear any existing buttons
+//             channelStepsContainer.innerHTML = '';
 
-            // Create step buttons for each step in the channel
-            for (let step = 0; step < 64; step++) {
-                const button = document.createElement('button');
-                button.classList.add('step-button');
+//             // Create step buttons for each step in the channel
+//             for (let step = 0; step < 64; step++) {
+//                 const button = document.createElement('button');
+//                 button.classList.add('step-button');
 
-                // Assign an ID to the button based on sequence, channel, and step index
-                button.id = `Sequence${seq}-ch${ch}-step-${step}`;
+//                 // Assign an ID to the button based on sequence, channel, and step index
+//                 button.id = `Sequence${seq}-ch${ch}-step-${step}`;
 
-                button.addEventListener('click', () => {
-                    // Toggle the step state in the global object
-                    let currentStepState = window.unifiedSequencerSettings.getStepState(seq, ch, step);
-                    console.log(`[updateSpecificStepUI] [getStepState applied] Step button clicked: Sequence ${seq}, Channel ${ch}, Step ${step}, Current State: ${currentStepState}`);
-                    window.unifiedSequencerSettings.updateStepState(seq, ch, step, !currentStepState);
+//                 button.addEventListener('click', () => {
+//                     // Toggle the step state in the global object
+//                     let currentStepState = window.unifiedSequencerSettings.getStepState(seq, ch, step);
+//                     console.log(`[updateSpecificStepUI] [getStepState applied] Step button clicked: Sequence ${seq}, Channel ${ch}, Step ${step}, Current State: ${currentStepState}`);
+//                     window.unifiedSequencerSettings.updateStepState(seq, ch, step, !currentStepState);
 
-                    console.log(`[updateSpecificStepUI] Step button clicked: Sequence ${seq}, Channel ${ch}, Step ${step}, New State: ${!currentStepState}`);
+//                     console.log(`[updateSpecificStepUI] Step button clicked: Sequence ${seq}, Channel ${ch}, Step ${step}, New State: ${!currentStepState}`);
 
-                    // Update the UI for the specific step
-                    updateSpecificStepUI(seq, ch, step);
-                });
+//                     // Update the UI for the specific step
+//                     updateSpecificStepUI(seq, ch, step);
+//                 });
 
-                channelStepsContainer.appendChild(button);
-            }
-        }
-    }
-});
+//                 channelStepsContainer.appendChild(button);
+//             }
+//         }
+//     }
+// });
 
 
 
@@ -122,29 +122,29 @@ function updateProjectNameUI(projectName) {
 // 
 // // Utility Functions
 // 
-function updateSpecificStepUI(currentSequence, channelIndex, stepIndex) {
-    console.log("debugGlobalObjectToUI - entered");
-    // Use the correct ID format to match the updated step button IDs
-    const stepButtonId = `Sequence${currentSequence}-ch${channelIndex}-step-${stepIndex}`;
-    console.log(`Looking for step button with ID: ${stepButtonId}`);
+// function updateSpecificStepUI(currentSequence, channelIndex, stepIndex) {
+//     console.log("debugGlobalObjectToUI - entered");
+//     // Use the correct ID format to match the updated step button IDs
+//     const stepButtonId = `Sequence${currentSequence}-ch${channelIndex}-step-${stepIndex}`;
+//     console.log(`Looking for step button with ID: ${stepButtonId}`);
 
-    const stepButton = document.getElementById(stepButtonId);
+//     const stepButton = document.getElementById(stepButtonId);
 
-    if (stepButton) {
-        let currentStepState = window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, stepIndex);
-        console.log(`[updateSpecificStepUI] Step button found: Sequence ${currentSequence}, Channel ${channelIndex}, Step ${stepIndex}, Current State: ${currentStepState}`);
+//     if (stepButton) {
+//         let currentStepState = window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, stepIndex);
+//         console.log(`[updateSpecificStepUI] Step button found: Sequence ${currentSequence}, Channel ${channelIndex}, Step ${stepIndex}, Current State: ${currentStepState}`);
 
-        if (currentStepState) {
-            stepButton.classList.add('selected');
-            console.log(`[updateSpecificStepUI] Added 'selected' class to step button with ID: ${stepButtonId}`);
-        } else {
-            stepButton.classList.remove('selected');
-            console.log(`[updateSpecificStepUI] Removed 'selected' class from step button with ID: ${stepButtonId}`);
-        }
-    } else {
-        console.error(`Step button not found for the given IDs: ${stepButtonId}`);
-    }
-}
+//         if (currentStepState) {
+//             stepButton.classList.add('selected');
+//             console.log(`[updateSpecificStepUI] Added 'selected' class to step button with ID: ${stepButtonId}`);
+//         } else {
+//             stepButton.classList.remove('selected');
+//             console.log(`[updateSpecificStepUI] Removed 'selected' class from step button with ID: ${stepButtonId}`);
+//         }
+//     } else {
+//         console.error(`Step button not found for the given IDs: ${stepButtonId}`);
+//     }
+// }
 
 
 function getProjectSequences() {
@@ -215,53 +215,53 @@ function setTrimSettings(channelIndex, startSliderValue, endSliderValue) {
 // }
 
 
-function updateProjectSequencesUI(sequenceData) {
-    console.log("debugGlobalObjectToUI - entered");
-    console.log("{debugGlobalObjectToUI} [updateProjectSequencesUI] updateProjectSequencesUI: updating with sequences", sequenceData);
+// function updateProjectSequencesUI(sequenceData) {
+//     console.log("debugGlobalObjectToUI - entered");
+//     console.log("{debugGlobalObjectToUI} [updateProjectSequencesUI] updateProjectSequencesUI: updating with sequences", sequenceData);
 
-    // Log the total number of sequences being processed
-    console.log(`[updateProjectSequencesUI] Total sequences to process: ${Object.keys(sequenceData).length}`);
+//     // Log the total number of sequences being processed
+//     console.log(`[updateProjectSequencesUI] Total sequences to process: ${Object.keys(sequenceData).length}`);
 
-    Object.keys(sequenceData).forEach(sequenceKey => {
-        const sequence = sequenceData[sequenceKey];
-        console.log(`[updateProjectSequencesUI] Processing sequence: ${sequenceKey}`);
+//     Object.keys(sequenceData).forEach(sequenceKey => {
+//         const sequence = sequenceData[sequenceKey];
+//         console.log(`[updateProjectSequencesUI] Processing sequence: ${sequenceKey}`);
 
-        Object.keys(sequence).forEach(channelKey => {
-            const steps = sequence[channelKey].steps; // Corrected to directly access the steps array
-            // console.log(`[updateProjectSequencesUI] Processing channel: ${channelKey} in sequence: ${sequenceKey}`);
+//         Object.keys(sequence).forEach(channelKey => {
+//             const steps = sequence[channelKey].steps; // Corrected to directly access the steps array
+//             // console.log(`[updateProjectSequencesUI] Processing channel: ${channelKey} in sequence: ${sequenceKey}`);
 
-            if (Array.isArray(steps)) {
-                // console.log(`[updateProjectSequencesUI] Total steps in channel ${channelKey}: ${steps.length}`);
+//             if (Array.isArray(steps)) {
+//                 // console.log(`[updateProjectSequencesUI] Total steps in channel ${channelKey}: ${steps.length}`);
 
-                steps.forEach((step, index) => {
-                    // Generate ID in the format used for step buttons
-                const stepControlId = `${sequenceKey}-${channelKey}-step-${index}`;
-                const stepControl = document.getElementById(stepControlId);
+//                 steps.forEach((step, index) => {
+//                     // Generate ID in the format used for step buttons
+//                 const stepControlId = `${sequenceKey}-${channelKey}-step-${index}`;
+//                 const stepControl = document.getElementById(stepControlId);
 
-                    // console.log(`[updateProjectSequencesUI] Processing stepControl ID: ${stepControlId}, State: ${step}`);
+//                     // console.log(`[updateProjectSequencesUI] Processing stepControl ID: ${stepControlId}, State: ${step}`);
 
-                    if (stepControl) {
-                        if (step === true) {
-                            if (!stepControl.classList.contains('selected')) {
-                                // console.log(`[updateProjectSequencesUI] Adding 'selected' class to stepControl: ${stepControlId}`);
-                                stepControl.classList.add('selected');
-                            }
-                        } else {
-                            if (stepControl.classList.contains('selected')) {
-                                console.log(`[updateProjectSequencesUI] Removing 'selected' class from stepControl: ${stepControlId}`);
-                                stepControl.classList.remove('selected');
-                            }
-                        }
-                    } else {
-                        // console.log(`[updateProjectSequencesUI] Step control not found for ID: ${stepControlId}`);
-                    }
-                });
-            } else {
-                console.log(`[updateProjectSequencesUI] Steps data for channel ${channelKey} in sequence ${sequenceKey} is not an array`);
-            }
-        });
-    });
-}
+//                     if (stepControl) {
+//                         if (step === true) {
+//                             if (!stepControl.classList.contains('selected')) {
+//                                 // console.log(`[updateProjectSequencesUI] Adding 'selected' class to stepControl: ${stepControlId}`);
+//                                 stepControl.classList.add('selected');
+//                             }
+//                         } else {
+//                             if (stepControl.classList.contains('selected')) {
+//                                 console.log(`[updateProjectSequencesUI] Removing 'selected' class from stepControl: ${stepControlId}`);
+//                                 stepControl.classList.remove('selected');
+//                             }
+//                         }
+//                     } else {
+//                         // console.log(`[updateProjectSequencesUI] Step control not found for ID: ${stepControlId}`);
+//                     }
+//                 });
+//             } else {
+//                 console.log(`[updateProjectSequencesUI] Steps data for channel ${channelKey} in sequence ${sequenceKey} is not an array`);
+//             }
+//         });
+//     });
+// }
 
 
 

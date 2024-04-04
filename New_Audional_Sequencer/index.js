@@ -68,6 +68,13 @@ let clearConfirmTimeout = Array(channels.length).fill(null);
             gainNodes[index].gain.value = isMuted ? 0 : 1;
         }
     }
+
+    function resetChannelVolumes() {
+        console.log("[resetChannelVolumes] Resetting all channel volumes to default");
+        gainNodes.forEach(gainNode => {
+            gainNode.gain.value = 1; // Set to default volume level
+        });
+    }
     
     // Function to update the dim state based on gain value
     function updateDimState(channel, index) {

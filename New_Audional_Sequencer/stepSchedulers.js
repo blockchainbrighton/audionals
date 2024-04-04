@@ -1,23 +1,50 @@
 // stepSchedulers.js
 
 function startScheduler() {
+    console.log("[startSchedulerMain] Function entered. Starting playback scheduler.");
+
+    // Log the initial state of the audio context
+    console.log(`[startSchedulerMain] AudioContext state before resume: ${audioContext.state}`);
+
     channels.forEach(channel => {
         const channelIndex = parseInt(channel.dataset.id.split('-')[1]);
+        console.log(`[startScheduler] Processing channel: ${channelIndex}`);
+
+        // Check and log the mute state for the channel
         if (!channelMutes[channelIndex]) {  // If channel is not muted
+            console.log(`[startScheduler] Channel ${channelIndex} is not muted. Setting volume to 1.`);
             setChannelVolume(channelIndex, 1);
+        } else {
+            console.log(`[startScheduler] Channel ${channelIndex} is muted.`);
         }
     });
 
     clearTimeout(timeoutId); // Clear the current timeout without closing the audio context
-    audioContext.resume();
+    console.log("[startScheduler] Cleared existing timeout ID.");
+
+    // Resuming the audio context and logging the action
+    audioContext.resume().then(() => {
+        console.log("[startScheduler] AudioContext resumed successfully.");
+    }).catch(error => {
+        console.error("[startScheduler] Error resuming AudioContext:", error);
+    });
+
     startTime = audioContext.currentTime;
     nextStepTime = startTime;
+
+    // Logging the current time set for scheduling
+    console.log(`[startScheduler] Playback start time set to ${startTime} (AudioContext time).`);
 
     const currentBPM = window.unifiedSequencerSettings.getBPM();
     console.log(`[startScheduler] Current BPM from global settings: ${currentBPM}`);
 
+    // Schedule the next step and log the action
+    console.log("[startScheduler] Scheduling next step.");
     scheduleNextStep();
+
+    console.log("[startScheduler] Scheduler setup complete.");
 }
+
 
 function pauseScheduler() {
     clearTimeout(timeoutId); // Clear the current timeout without closing the audio context

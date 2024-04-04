@@ -60,13 +60,15 @@ function updateProjectChannelNamesObserver(settings) {
 
 // Observer for Project Sequences
 function updateProjectSequencesObserver(settings) {
-    console.log("[observers] updateProjectSequencesObserver called with:", settings)
+    console.log("[observers] updateProjectSequencesObserver called with:", settings);
     if (settings && settings.masterSettings && settings.masterSettings.projectSequences) {
         console.log("Updating Project Sequences UI:", settings.masterSettings.projectSequences);
-
-         updateProjectSequencesUI(settings.masterSettings.projectSequences);
+        
+        // Ensure this method is called on the UnifiedSequencerSettings instance
+        window.unifiedSequencerSettings.updateProjectSequencesUI(settings.masterSettings.projectSequences);
     }
 }
+
 
 // Register all observers
 function registerObservers() {

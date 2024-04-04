@@ -18,7 +18,7 @@ class UnifiedSequencerSettings {
                     length: 0
                 })),
                 projectChannelNames: new Array(16).fill(''), // Placeholder for channel names
-                projectSequences: this.initializeSequences(16, 16, 64) // Adjust dimensions as needed
+                projectSequences: this.initializeSequences(64, 16, 64) // Adjust dimensions as needed
             }
             
         };
@@ -56,17 +56,64 @@ class UnifiedSequencerSettings {
             });
             return lastActiveIndex;
         }
-        updateProjectSequencesUI() {
-            console.log("updateProjectSequencesUI entered");
-            if (channelIndex < 1) {
-            console.log("updateProjectSequencesUI");
+
+        updateProjectSequencesUI(sequenceData) {
+            console.log("[updateProjectSequencesUI] Method called with sequence data:", sequenceData);
+
+        
+            // Fetch the settings for the current sequence.
+            const currentSequenceIndex = this.getCurrentSequence();
+            const sequenceSettings = this.getSequenceSettings(currentSequenceIndex);
+        
+            if (!sequenceSettings) {
+                console.error(`[updateProjectSequencesUI] No settings found for Sequence ${currentSequenceIndex}.`);
+                return;
             }
-            const projectSequences = this.getSettings('projectSequences');
-            // Assuming you have a method to update the UI for each sequence
-            projectSequences.forEach((sequence, index) => {
-                updateSequenceUI(index, sequence);
+        
+            // Iterate over each channel's steps in the current sequence and update the UI.
+            Object.entries(sequenceSettings).forEach(([channelKey, channelSettings]) => {
+                const { steps } = channelSettings;
+        
+                steps.forEach((stepState, stepIndex) => {
+                    const stepButtonId = `Sequence${currentSequenceIndex}-ch${channelKey.substring(2)}-step-${stepIndex}`;
+                    const stepButton = document.getElementById(stepButtonId);
+        
+                    if (stepButton) {
+                        // Toggle the 'selected' class based on the step's state.
+                        stepButton.classList.toggle('selected', stepState);
+                    }
+                });
             });
+        
+            console.log(`[updateProjectSequencesUI] UI updated for Sequence ${currentSequenceIndex}.`);
         }
+
+        updateSequenceUI(currentSequenceIndex, sequenceSettings) {
+            console.log(`[updateSequenceUI] Updating UI elements for sequence ${currentSequenceIndex}`);
+        
+            // This method is intentionally left simple and could be expanded to handle
+            // additional UI elements related to the sequence (e.g., channel labels, effects settings)
+            // For now, it simply calls updateProjectSequencesUI to handle step state toggling
+            this.updateProjectSequencesUI();
+        }
+        
+        
+        setSequenceSettings(sequenceIndex, sequenceSettings) {
+            console.log("setSequenceSettings entered");
+            const sequenceKey = `Sequence${sequenceIndex}`;
+            this.settings.masterSettings.projectSequences[sequenceKey] = sequenceSettings;
+        }
+        
+        
+    setProjectSequences(sequenceData) {
+        console.log("setProjectSequences entered");
+        this.settings.masterSettings.projectSequences = sequenceData;
+        console.log(`[setProjectSequences] Project sequences set:`, sequenceData);
+        console.log ('[setProjectSequences] currentSequence set to:', this.settings.masterSettings.currentSequence)
+    }
+
+
+        
 
          // Method to update the current sequence
          setCurrentSequence(currentSequence) {
@@ -82,12 +129,7 @@ class UnifiedSequencerSettings {
             console.log(`[SeqDebug] currentSequence set to: ${currentSequence}`);
         }
 
-    setSequenceSettings(sequenceIndex, sequenceSettings) {
-        console.log("setSequenceSettings entered");
-        const sequenceKey = `Sequence${sequenceIndex}`;
-        this.settings.masterSettings.projectSequences[sequenceKey] = sequenceSettings;
-    }
-    
+
 
     
 
@@ -139,7 +181,7 @@ class UnifiedSequencerSettings {
         return this.settings.masterSettings.projectSequences[sequenceKey];
     }
     
- 
+    
         
 
     initializeTrimSettings(numSettings) {
@@ -384,7 +426,7 @@ class UnifiedSequencerSettings {
                     length: 0
                 })),
                 projectChannelNames: new Array(16).fill(''),
-                projectSequences: this.initializeSequences(16, 16, 64)
+                projectSequences: this.initializeSequences(64, 16, 64)
             };
             console.log("[clearMasterSettings] Master settings cleared.");
         }
@@ -519,14 +561,6 @@ class UnifiedSequencerSettings {
         } else {
             console.error(`[setChannelName] Invalid channel index: ${channelIndex}`);
         }
-    }
-
-
-    setProjectSequences(sequenceData) {
-        console.log("setProjectSequences entered");
-        this.settings.masterSettings.projectSequences = sequenceData;
-        console.log(`[setProjectSequences] Project sequences set:`, sequenceData);
-        console.log ('[setProjectSequences] currentSequence set to:', this.settings.masterSettings.currentSequence)
     }
 
 
