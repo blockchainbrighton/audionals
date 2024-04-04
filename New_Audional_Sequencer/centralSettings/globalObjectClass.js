@@ -29,6 +29,118 @@ class UnifiedSequencerSettings {
             this.clearMasterSettings = this.clearMasterSettings.bind(this);
         }
 
+        initializeSequences(numSequences, numChannels, numSteps) {
+            console.log("initializeSequences entered", numSequences, numChannels, numSteps);
+            
+            let sequenceData = {};
+            for (let seq = 0; seq < numSequences; seq++) {
+                sequenceData[`Sequence${seq}`] = this.initializeChannels(numChannels, numSteps);
+            }
+            return sequenceData;
+        }
+
+        isActiveSequence(sequenceIndex) {
+            const sequence = this.getSequenceSettings(sequenceIndex);
+            return Object.values(sequence).some(channel =>
+                channel.steps.some(step => step === 'active') // Assuming 'active' is a placeholder for an actual active step condition
+            );
+        }
+
+        findLastActiveSequence() {
+            const { projectSequences } = this.settings.masterSettings;
+            let lastActiveIndex = 0;
+            Object.keys(projectSequences).forEach((sequenceKey, index) => {
+                if (this.isActiveSequence(index)) {
+                    lastActiveIndex = index;
+                }
+            });
+            return lastActiveIndex;
+        }
+        updateProjectSequencesUI() {
+            console.log("updateProjectSequencesUI entered");
+            if (channelIndex < 1) {
+            console.log("updateProjectSequencesUI");
+            }
+            const projectSequences = this.getSettings('projectSequences');
+            // Assuming you have a method to update the UI for each sequence
+            projectSequences.forEach((sequence, index) => {
+                updateSequenceUI(index, sequence);
+            });
+        }
+
+         // Method to update the current sequence
+         setCurrentSequence(currentSequence) {
+            console.log("[SeqDebug] setCurrentSequence entered with: ", currentSequence);
+            
+            // Ensure sequence exists before setting it.
+            if (!this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`]) {
+                // Initialize the sequence if it does not exist.
+                this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`] = this.initializeChannels(16, 64); // Adjust as necessary
+            }
+        
+            this.settings.masterSettings.currentSequence = currentSequence;
+            console.log(`[SeqDebug] currentSequence set to: ${currentSequence}`);
+        }
+
+    setSequenceSettings(sequenceIndex, sequenceSettings) {
+        console.log("setSequenceSettings entered");
+        const sequenceKey = `Sequence${sequenceIndex}`;
+        this.settings.masterSettings.projectSequences[sequenceKey] = sequenceSettings;
+    }
+    
+
+    
+
+    
+    updateStepState(currentSequence, channelIndex, stepIndex, state) {
+        console.log("updateStepState entered");
+        
+        // Ensure the sequence exists, initialize if not.
+        if (!this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`]) {
+            this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`] = this.initializeChannels(16, 64); // Adjust numbers as needed
+        }
+    
+        const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
+    
+        // Ensure the channel exists within the sequence, initialize steps if not.
+        if (!sequence[`ch${channelIndex}`]) {
+            sequence[`ch${channelIndex}`] = { steps: new Array(64).fill(null) }; // Adjust step count as needed, fill with default state
+        }
+    
+        const channel = sequence[`ch${channelIndex}`];
+        if (stepIndex < channel.steps.length) {
+            channel.steps[stepIndex] = state;
+        } else {
+            console.error('Invalid step index in updateStepState');
+        }
+    }
+    
+
+
+   
+    
+
+    // Method to get the current sequence
+    getCurrentSequence() {
+        console.log("getCurrentSequence entered");
+        return this.settings.masterSettings.currentSequence;
+    }
+
+    getSequenceSettings(sequenceIndex) {
+        console.log("getSequenceSettings entered");
+        const sequenceKey = `Sequence${sequenceIndex}`;
+    
+        // Check if the sequence exists before attempting to return its settings
+        if (!this.settings.masterSettings.projectSequences[sequenceKey]) {
+            console.log(`Sequence ${sequenceIndex} does not exist.`);
+            return null; // Or consider initializing the sequence here, depending on the use case.
+        }
+    
+        return this.settings.masterSettings.projectSequences[sequenceKey];
+    }
+    
+ 
+        
 
     initializeTrimSettings(numSettings) {
         console.log("initializeTrimSettings entered");
@@ -277,15 +389,7 @@ class UnifiedSequencerSettings {
             console.log("[clearMasterSettings] Master settings cleared.");
         }
 
-        initializeSequences(numSequences, numChannels, numSteps) {
-            console.log("initializeSequences entered", numSequences, numChannels, numSteps);
-            
-            let sequenceData = {};
-            for (let seq = 0; seq < numSequences; seq++) {
-                sequenceData[`Sequence${seq}`] = this.initializeChannels(numChannels, numSteps);
-            }
-            return sequenceData;
-        }
+     
         
         initializeChannels(numChannels, numSteps) {
             console.log("initializeChannels entered", numChannels, numSteps);
@@ -315,34 +419,6 @@ class UnifiedSequencerSettings {
         this.notifyObservers(); // Notify observers about the change
     }
 
-    // Method to update the current sequence
-    setCurrentSequence(currentSequence) {
-        console.log("[SeqDebug] setCurrentSequence entered with: ", currentSequence);
-        
-        this.settings.masterSettings.currentSequence = currentSequence;
-        console.log(`[SeqDebug] [setCurrentSequence] currentSequence set to: ${currentSequence}`);
-        console.log(`[SeqDebug] [setCurrentSequence] Object currentSequence set to: ${this.settings.masterSettings.currentSequence}`);
-    }
-
-    // Method to get the current sequence
-    getCurrentSequence() {
-        console.log("getCurrentSequence entered");
-        return this.settings.masterSettings.currentSequence;
-    }
-
-    getSequenceSettings(sequenceIndex) {
-        console.log("getSequenceSettings entered");
-        const sequenceKey = `Sequence${sequenceIndex}`;
-        return this.settings.masterSettings.projectSequences[sequenceKey];
-    }
-
-    setSequenceSettings(sequenceIndex, sequenceSettings) {
-        console.log("setSequenceSettings entered");
-        const sequenceKey = `Sequence${sequenceIndex}`;
-        this.settings.masterSettings.projectSequences[sequenceKey] = sequenceSettings;
-    }
-    
-
 
     getSettings(key) {
     
@@ -370,33 +446,7 @@ class UnifiedSequencerSettings {
     }
 
    
-    updateProjectSequencesUI() {
-        console.log("updateProjectSequencesUI entered");
-        if (channelIndex < 1) {
-        console.log("updateProjectSequencesUI");
-        }
-        const projectSequences = this.getSettings('projectSequences');
-        // Assuming you have a method to update the UI for each sequence
-        projectSequences.forEach((sequence, index) => {
-            updateSequenceUI(index, sequence);
-        });
-    }
-
-    
-    updateStepState(currentSequence, channelIndex, stepIndex, state) {
-        console.log("updateStepState entered");
-        if (channelIndex < 1) {
-        console.log(`[updateStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}, State: ${state}`);
-        }
-        const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
-        const channel = sequence && sequence[`ch${channelIndex}`];
-        if (channel && stepIndex < channel.steps.length) {
-            channel.steps[stepIndex] = state;
-        } else {
-            console.error('Invalid sequence, channel, or step index in updateStepState');
-        }
-    }
-    
+ 
     
     getStepState(currentSequence, channelIndex, stepIndex) {
         console.log("getStepState entered");

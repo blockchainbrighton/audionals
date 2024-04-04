@@ -1,6 +1,6 @@
 // sequenceChannelSettings_Part2.js
 
-let totalSequenceCount = 16;
+// let totalSequenceCount = 16;
 
 let isContinuousPlay = true;
 
@@ -13,22 +13,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-function initializeNewSequence(currentSequence) {
-    console.log('initializeNewSequence entered');
-    console.log(`[initializeNewSequence] Initializing new sequence. Current sequence: ${currentSequence}`);
-    // Initialize the sequence with default settings
-    let sequenceChannels = Array(16).fill().map(() => [null].concat(Array(64).fill(false)));
+// function initializeNewSequence(currentSequence) {
+//     console.log('initializeNewSequence entered');
+//     console.log(`[initializeNewSequence] Initializing new sequence. Current sequence: ${currentSequence}`);
+//     // Initialize the sequence with default settings
+//     let sequenceChannels = Array(16).fill().map(() => [null].concat(Array(64).fill(false)));
 
-    // Increment the currentSequence by 1 for the new sequence
-    let newSequenceNumber = currentSequence + 1;
-    console.log(`[initializeNewSequence] New sequence: ${currentSequence}`);
+//     // Increment the currentSequence by 1 for the new sequence
+//     let newSequenceNumber = currentSequence + 1;
+//     console.log(`[initializeNewSequence] New sequence: ${currentSequence}`);
 
 
-    // Set the new sequence with incremented number
-    window.unifiedSequencerSettings.setCurrentSequence(newSequenceNumber, sequenceChannels);
-    console.log(`[SeqDebug] [initializeNewSequence] newSequenceCreated ${currentSequence} ${sequenceChannels}`);
+//     // Set the new sequence with incremented number
+//     window.unifiedSequencerSettings.setCurrentSequence(newSequenceNumber, sequenceChannels);
+//     console.log(`[SeqDebug] [initializeNewSequence] newSequenceCreated ${currentSequence} ${sequenceChannels}`);
 
-}
+// }
 
 function loadSequence(currentSequence) {
     console.log('loadSequence entered');
@@ -61,21 +61,16 @@ function loadNextSequence() {
     console.log('loadNextSequence entered');
     let currentSequence = window.unifiedSequencerSettings.getCurrentSequence();
 
-    if (currentSequence < totalSequenceCount - 1) {
-        // Calculate the new sequence number
-        const newSequence = currentSequence + 1;
+    // Always allow moving to the next sequence.
+    const newSequence = currentSequence + 1;
+    
+    // Dynamically create the next sequence if needed and navigate to it.
+    window.unifiedSequencerSettings.setCurrentSequence(newSequence);
 
-        // Before each handleSequenceTransition call
-        console.log(`[SeqDebug] Calling handleSequenceTransition with sequence: ${newSequence}`);
-
-        // Use the handleSequenceTransition function to change the sequence
-        handleSequenceTransition(newSequence);
-
-        // Update the displayed number and UI
-        updateSequenceDisplay(newSequence);
-    } else {
-        console.warn("You've reached the last sequence.");
-    }
+    // Update UI to reflect the new sequence.
+    updateSequenceDisplay(newSequence);
+    loadSequence(newSequence);
+    console.log(`[SeqDebug] [loadNextSequence] Loading next sequence: ${newSequence}`);
 }
 
 function updateChannelUI(currentSequence, channelIndex, steps) {

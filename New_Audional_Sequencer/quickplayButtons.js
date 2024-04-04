@@ -41,14 +41,14 @@ function setActiveSequence(index) {
 }
 
 function updateActiveQuickPlayButton() {
-    // Remove 'active' class from all buttons
-    quickPlayButtons.forEach(btn => {
-        btn.classList.remove('active');
-    });
+    // // Remove 'active' class from all buttons
+    // quickPlayButtons.forEach(btn => {
+    //     btn.classList.remove('active');
+    // });
 
-    // Add 'active' class to current sequence button
-    const activeBtn = quickPlayButtons[currentSequence];
-    activeBtn.classList.add('active');
+    // // Add 'active' class to current sequence button
+    // const activeBtn = quickPlayButtons[currentSequence];
+    // activeBtn.classList.add('active');
 }
 
 function insertQuickPlayButtons() {
