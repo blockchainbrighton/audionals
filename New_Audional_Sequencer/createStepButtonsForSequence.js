@@ -37,6 +37,25 @@ function createStepButtonsForSequence() {
                 updateSpecificStepUI(currentSequence, channelIndex, i);
             });
 
+            button.addEventListener('contextmenu', (e) => {
+                console.log("Right-click detected on button:", e.target.id); // Debugging line
+                e.preventDefault(); // Prevent the context menu from showing
+            
+                // Toggle a class to indicate reverse playback
+                button.classList.toggle('reverse-playback');
+            
+                // Debugging: Log the current class list
+                console.log("Button class list after toggle:", button.classList.toString());
+            
+                // Change the button color to green to indicate reverse playback
+                if (button.classList.contains('reverse-playback')) {
+                    button.style.backgroundColor = 'green';
+                } else {
+                    // Reset to default or selected color if not in reverse mode
+                    button.style.backgroundColor = ''; // Consider a better way to manage color
+                }
+            });
+
             stepsContainer.appendChild(button);
         }
 

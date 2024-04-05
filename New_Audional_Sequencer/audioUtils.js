@@ -1,6 +1,8 @@
 // audioUtils.js
 
 const audioBuffers = new Map();
+// Using sample URLs as keys in the audioBuffers map instead of channel numbers 
+// for greater flexibility, scalability, and reusability of audio data. 
 
 
 // Function to get the ID from a URL
@@ -39,22 +41,6 @@ function bufferToBase64(buffer) {
 }
 
 
-// Function to decode audio data
-const decodeAudioData = (audioData) => {
-
-  let byteArray = new Uint8Array(audioData.slice(0, 20));
-  console.log('[HTML Debugging] [decodeAudioData] ArrayBuffer first 20 bytes:', byteArray.join(', '));
-    return new Promise((resolve, reject) => {
-      audioContext.decodeAudioData(audioData, (decodedData) => {
-          console.log('[HTML Debugging] [decodeAudioData] Audio data decoded successfully.');
-          resolve(decodedData);
-      }, (error) => {
-        console.error('[HTML Debugging] [decodeAudioData] Detailed Error:', { message: error.message, code: error.code });
-
-        reject(error);
-      });
-  });
-};
 
 async function processJSONResponse(response) {
   console.log("[processJSONResponse] Processing JSON response");
@@ -97,6 +83,71 @@ async function processHTMLResponse(htmlText) {
   return { audioData, sampleName };
 }
 
+async function decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex) {
+  console.log("[decodeAndStoreAudio] Attempting to decode audio data");
+  try {
+      const audioBuffer = await decodeAudioData(audioData);
+      console.log("[decodeAndStoreAudio] Audio data decoded");
+
+      // Create a reverse buffer by copying and reversing the audioBuffer
+      const reverseBuffer = await createReverseBuffer(audioBuffer);
+
+      // Store both buffers using distinct keys
+      audioBuffers.set(fullUrl, audioBuffer);
+      audioBuffers.set(fullUrl + "_reverse", reverseBuffer);
+
+      console.log(`[decodeAndStoreAudio] Forward and reverse audio buffers stored for ${sampleName}`);
+
+      // Update project channel name in global settings
+      window.unifiedSequencerSettings.setProjectChannelName(channelIndex, sampleName);
+      console.log(`[decodeAndStoreAudio] Project channel name updated for channel index: ${channelIndex}, sampleName: ${sampleName}`);
+  } catch (error) {
+      console.error('[decodeAndStoreAudio] Error decoding and storing audio:', error);
+  }
+}
+
+
+// Function to create a reverse buffer from an existing AudioBuffer
+
+// Accessibility: Both buffers can be accessed using their keys. 
+// For example, if you need the reverse buffer for https://example.com/audio.mp3, 
+// you would look for https://example.com/audio.mp3_reverse in the audioBuffers map.
+async function createReverseBuffer(audioBuffer) {
+  const numberOfChannels = audioBuffer.numberOfChannels;
+  const length = audioBuffer.length;
+  const sampleRate = audioBuffer.sampleRate;
+
+  // Create an empty AudioBuffer for the reversed audio
+  const reverseBuffer = audioContext.createBuffer(numberOfChannels, length, sampleRate);
+
+  // Copy and reverse each channel's data
+  for (let channel = 0; channel < numberOfChannels; channel++) {
+      const forwardData = audioBuffer.getChannelData(channel);
+      const reverseData = reverseBuffer.getChannelData(channel);
+      for (let i = 0; i < length; i++) {
+          reverseData[i] = forwardData[length - 1 - i];
+      }
+  }
+
+  return reverseBuffer;
+}
+
+
+// Function to decode audio data
+const decodeAudioData = (audioData) => {
+  let byteArray = new Uint8Array(audioData.slice(0, 20));
+  console.log('[HTML Debugging] [decodeAudioData] ArrayBuffer first 20 bytes:', byteArray.join(', '));
+    return new Promise((resolve, reject) => {
+      audioContext.decodeAudioData(audioData, (decodedData) => {
+          console.log('[HTML Debugging] [decodeAudioData] Audio data decoded successfully.');
+          resolve(decodedData);
+      }, (error) => {
+        console.error('[HTML Debugging] [decodeAudioData] Detailed Error:', { message: error.message, code: error.code });
+
+        reject(error);
+      });
+  });
+};
 
 
 async function fetchAudio(url, channelIndex) {
@@ -139,23 +190,52 @@ async function fetchAudio(url, channelIndex) {
           console.log("[fetchAndProcessAudio] Audio data set from direct audio file");
       }
 
-      console.log("[fetchAndProcessAudio] Attempting to decode audio data");
-      const audioBuffer = await decodeAudioData(audioData);
-      console.log("[fetchAndProcessAudio] Audio data decoded");
-
-      audioBuffers.set(fullUrl, audioBuffer);
-      console.log(`[fetchAndProcessAudio] Audio buffer stored for ${sampleName}`);
-
-      // Update project channel name in global settings
-      window.unifiedSequencerSettings.setProjectChannelName(channelIndex, sampleName);
-      console.log(`[fetchAndProcessAudio] Project channel name updated for channel index: ${channelIndex}, sampleName: ${sampleName}`);
+      // Now, use decodeAndStoreAudio to handle decoding and storage
+      if (audioData) {
+          await decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex);
+      } else {
+          console.error("[fetchAndProcessAudio] No audio data to process.");
+      }
   } catch (error) {
       console.error('[fetchAndProcessAudio] Error:', error);
   }
 }
-
 // Implementation assumes the existence of processJSONResponse and processHTMLResponse functions,
 // as well as the auxiliary functions like formatURL and decodeAudioData.
+
+
+
+function playSound(currentSequence, channel, currentStep) {
+  console.log('playSound entered');
+  const channelIndex = getChannelIndex(channel);
+  console.log(`[playSound Debugging] [playSound] Processing channel index: ${channelIndex}`);
+
+  const stepState = window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, currentStep);
+  console.log(`[playSound Debugging] [playSound] setting stepState using direct call to: ${stepState}`);
+  
+  if (!stepState) {
+    console.log("[playSound Debugging] [playSound] Current step is not selected. Skipping playback.");
+    return;
+  }
+
+  // Check if the current step is marked for reverse playback
+  const stepButtonId = `Sequence${currentSequence}-ch${channelIndex}-step-${currentStep}`;
+  const stepButton = document.getElementById(stepButtonId);
+  const isReversePlayback = stepButton && stepButton.classList.contains('reverse-playback');
+
+  const url = getAudioUrl(channelIndex) + (isReversePlayback ? "_reverse" : "");
+  console.log("[playSound Debugging] [playSound] Audio URL:", url);
+
+  const audioBuffer = audioBuffers.get(url);
+  if (!audioBuffer) {
+      console.log("[playSound Debugging] [playSound] No audio buffer found for URL:", url);
+      return;
+  }
+  
+  console.log("[playSound Debugging] [playSound] Audio buffer:", audioBuffer);
+
+  playTrimmedAudio(channelIndex, audioBuffer, url);
+}
 
 
 
@@ -201,36 +281,6 @@ function calculateTrimValues(channelIndex, audioBuffer) {
 }
 
 
-
-
-// Function to play sound
-// Function to play sound optimized
-function playSound(currentSequence, channel, currentStep) {
-  console.log('playSound entered');
-  const channelIndex = getChannelIndex(channel);
-  console.log(`[playSound Debugging] [playSound] Processing channel index: ${channelIndex}`);
-
-  // Direct call to window.unifiedSequencerSettings.getStepState
-  const stepState = window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, currentStep);
-  console.log(`[playSound Debugging] [playSound] setting stepState using direct call to: ${stepState}`);
-  
-  if (!stepState) {
-    console.log("[playSound Debugging] [playSound] Current step is not selected. Skipping playback.");
-    return;
-  }
-
-  const url = getAudioUrl(channelIndex);
-  console.log("[playSound Debugging] [playSound] Audio URL:", url);
-  const audioBuffer = getAudioBuffer(url);
-  if (!audioBuffer) {
-      console.log("[playSound Debugging] [playSound] No audio buffer found for URL:", url);
-      return;
-  }
-  
-  console.log("[playSound Debugging] [playSound] Audio buffer:", audioBuffer);
-
-  playTrimmedAudio(channelIndex, audioBuffer, url);
-}
 
 
 function getChannelIndex(channel) {
