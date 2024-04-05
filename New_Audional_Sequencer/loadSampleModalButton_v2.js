@@ -51,14 +51,6 @@
         return content;
     }
 
-    function updateModalButtonText(button, index) {
-        const channelName = window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[index];
-        if (channelName) {
-            button.textContent = channelName;
-        } else {
-            button.textContent = `Load new audience (${index})`;
-        }
-    }
 
     function createTextParagraph(text) {
         const paragraph = document.createElement('p');
@@ -102,7 +94,7 @@
     
         return container;
     }
-    
+
     function handleLoad(index, audionalInput, ipfsInput, idModal, loadSampleButton) {
         console.log(`[HTML Debugging] [handleLoad] Called with index: ${index}`);
         let url;

@@ -10,19 +10,33 @@ function getIDFromURL(url) {
   return parts[parts.length - 1];
 }
 
+// Logging function to reduce redundancy
+function logConversion(conversionType, details, length) {
+  console.log(`[HTML Debugging] [${conversionType}] Entered function. ${details} length: ${length}`);
+}
+
 // Function to convert base64 to an array buffer
 function base64ToArrayBuffer(base64) {
-  console.log('[HTML Debugging] [base64ToArrayBuffer] Entered function. Base64 sample:', base64.substring(0, 100));
-  const binaryString = atob(base64);
+  logConversion('base64ToArrayBuffer', 'Base64 sample', base64.substring(0, 100).length);
+  const binaryString = window.atob(base64);
   const len = binaryString.length;
   const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+    bytes[i] = binaryString.charCodeAt(i);
   }
-  console.log(`[HTML Debugging] [base64ToArrayBuffer] Generated Uint8Array length: ${bytes.length}`);
+  logConversion('base64ToArrayBuffer', 'Generated Uint8Array', bytes.length);
   return bytes.buffer;
 }
 
+// Helper function to convert an ArrayBuffer to a Base64 string
+function bufferToBase64(buffer) {
+  logConversion('bufferToBase64', 'Buffer', buffer.byteLength);
+  const bytes = new Uint8Array(buffer);
+  let binary = String.fromCharCode.apply(null, bytes);
+  const base64 = window.btoa(binary);
+  logConversion('bufferToBase64', 'Converted to base64', base64.length);
+  return base64;
+}
 
 
 // Function to decode audio data
@@ -42,159 +56,108 @@ const decodeAudioData = (audioData) => {
   });
 };
 
+async function processJSONResponse(response) {
+  console.log("[processJSONResponse] Processing JSON response");
+  const jsonResponse = await response.json();
+  console.log("[processJSONResponse] JSON response parsed");
 
-// Function to fetch and process audio data
+  const sampleName = jsonResponse.filename || '';
+  console.log(`[processJSONResponse] sampleName determined from JSON: ${sampleName}`);
 
-const fetchAudio = async (url, channelIndex) => {
-  const fullUrl = formatURL(url);
-  console.log('[HTML Debugging] [fetchAudio] Entered function. URL:', fullUrl, 'Channel Index:', channelIndex);
+  const audioData = jsonResponse.audioData ? base64ToArrayBuffer(jsonResponse.audioData.split(',')[1]) : null;
+  console.log("[processJSONResponse] audioData set from JSON");
 
-  try {
-    const response = await fetch(fullUrl);
-    const contentType = response.headers.get('Content-Type');
-    let audioData, sampleName;
+  return { audioData, sampleName };
+}
 
-    // Attempt to extract the sample name from the URL as a fallback
-    sampleName = fullUrl.split('/').pop(); // Extracts the last part of the URL, often the filename
+async function processHTMLResponse(htmlText) {
+  console.log("[processHTMLResponse] Processing HTML content");
+  const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+  const audioSourceElement = doc.querySelector('audio[data-audionalSampleName] source');
+  const sampleNameElement = doc.getElementById('sampleName');
 
-    if (contentType && contentType.includes('application/json')) {
-      // Handle JSON content
-      const jsonResponse = await response.json();
-      // Use filename from JSON if available, fallback to URL-derived name
-      sampleName = jsonResponse.filename || sampleName;
-      const base64AudioData = jsonResponse.audioData;
-      if (!base64AudioData) {
-        console.error('[HTML Debugging] [fetchAudio] No audioData found in JSON response');
-        return;
-      }
-      audioData = base64ToArrayBuffer(base64AudioData.split(',')[1]);
-    } else if (contentType && contentType.includes('text/html')) {
-      // Handle HTML content
-      const htmlText = await response.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlText, 'text/html');
-      const sampleNameElement = doc.getElementById('sampleName');
-      if (sampleNameElement) {
-        // Use the content of the div if available, fallback to URL-derived name
-        sampleName = sampleNameElement.textContent.trim() || sampleName;
-      }
-      const extractedAudioData = await importHTMLAudioData(htmlText, channelIndex);
-      if (!extractedAudioData) return;
+  let sampleName = sampleNameElement ? sampleNameElement.textContent.trim() : null;
+  console.log(`[processHTMLResponse] Sample name determined from HTML: ${sampleName}`);
 
-      audioData = extractedAudioData.startsWith('data:') ?
-        base64ToArrayBuffer(extractedAudioData.split(',')[1]) :
-        await fetch(extractedAudioData).then(res => res.arrayBuffer());
-    } else {
-      // Handle direct audio file
-      audioData = await response.arrayBuffer();
-    }
+  let audioData = null;
+  if (audioSourceElement) {
+      const base64AudioData = audioSourceElement.getAttribute('src');
+      console.log("[processHTMLResponse] Audio source element found");
 
-    // Decode and process the audio data
-    const audioBuffer = await decodeAudioData(audioData);
-    audioBuffers.set(fullUrl, audioBuffer);
-    console.log(`[HTML Debugging] [fetchAudio] Audio buffer stored.`);
-
-    // Update the project channel name in global settings
-    window.unifiedSequencerSettings.setProjectChannelName(channelIndex, sampleName);
-
-  } catch (error) {
-    console.error('[HTML Debugging] [fetchAudio] Error:', error);
-  }
-};
-
-
-// Note: The importHTMLAudioData function remains the same.
-
-async function importHTMLAudioData(htmlContent, index) {
-  console.log("[importHTMLSampleData] Entered function with index: ", index);
-  try {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlContent, 'text/html');
-      const sourceElement = doc.querySelector('audio[data-audionalSampleName] source');
-
-      if (sourceElement) {
-          const base64AudioData = sourceElement.getAttribute('src');
-          // Convert the prefix to lowercase before checking
-          if (base64AudioData.toLowerCase().startsWith('data:audio/wav;base64,') || base64AudioData.toLowerCase().startsWith('data:audio/mp3;base64,')) {
-              console.log("[importHTMLSampleData] Extracted base64 audio data.");
-              // Directly return the base64 audio data URL
-              return base64AudioData;
-          } else {
-              console.error("[importHTMLSampleData] Audio data does not start with expected base64 prefix.");
-          }
+      if (/^data:audio\/(wav|mp3);base64,/.test(base64AudioData.toLowerCase())) {
+          audioData = base64ToArrayBuffer(base64AudioData.split(',')[1]);
+          console.log("[processHTMLResponse] Audio data set from HTML");
       } else {
-          console.error("[importHTMLSampleData] Could not find the audio source element in the HTML content.");
+          console.error("[processHTMLResponse] Audio data does not have expected base64 prefix.");
       }
+  } else {
+      console.error("[processHTMLResponse] No audio source element found.");
+  }
+
+  return { audioData, sampleName };
+}
+
+
+
+async function fetchAudio(url, channelIndex) {
+  console.log(`[fetchAndProcessAudio] Entered function. URL: ${url}, Channel Index: ${channelIndex}`);
+  try {
+      const fullUrl = formatURL(url);
+      console.log(`[fetchAndProcessAudio] Formatted URL: ${fullUrl}`);
+
+      const response = await fetch(fullUrl);
+      console.log(`[fetchAndProcessAudio] Fetch response received for URL: ${fullUrl}`);
+
+      if (!response.ok) {
+          console.error(`[fetchAndProcessAudio] Fetch request failed for URL: ${fullUrl}, Status: ${response.status}`);
+          return;
+      }
+
+      const contentType = response.headers.get('Content-Type');
+      console.log(`[fetchAndProcessAudio] Content-Type of response: ${contentType}`);
+
+      let audioData;
+      let sampleName = fullUrl.split('/').pop(); // Fallback sample name from URL
+      console.log(`[fetchAndProcessAudio] Initial sampleName set to: ${sampleName}`);
+
+      if (contentType.includes('application/json')) {
+          console.log("[fetchAndProcessAudio] Processing as JSON");
+          const { audioData: processedAudioData, sampleName: processedSampleName } = await processJSONResponse(response);
+          audioData = processedAudioData;
+          sampleName = processedSampleName || sampleName;
+          console.log(`[fetchAndProcessAudio] Processed sampleName from JSON: ${sampleName}`);
+      } else if (contentType.includes('text/html')) {
+          console.log("[fetchAndProcessAudio] Processing as HTML");
+          const htmlText = await response.text();
+          const { audioData: processedAudioData, sampleName: processedSampleName } = await processHTMLResponse(htmlText);
+          audioData = processedAudioData;
+          sampleName = processedSampleName || sampleName;
+          console.log(`[fetchAndProcessAudio] Processed sampleName from HTML: ${sampleName}`);
+      } else {
+          console.log("[fetchAndProcessAudio] Processing as direct audio file");
+          audioData = await response.arrayBuffer();
+          console.log("[fetchAndProcessAudio] Audio data set from direct audio file");
+      }
+
+      console.log("[fetchAndProcessAudio] Attempting to decode audio data");
+      const audioBuffer = await decodeAudioData(audioData);
+      console.log("[fetchAndProcessAudio] Audio data decoded");
+
+      audioBuffers.set(fullUrl, audioBuffer);
+      console.log(`[fetchAndProcessAudio] Audio buffer stored for ${sampleName}`);
+
+      // Update project channel name in global settings
+      window.unifiedSequencerSettings.setProjectChannelName(channelIndex, sampleName);
+      console.log(`[fetchAndProcessAudio] Project channel name updated for channel index: ${channelIndex}, sampleName: ${sampleName}`);
   } catch (error) {
-      console.error("[importHTMLSampleData] Error parsing HTML content: ", error);
+      console.error('[fetchAndProcessAudio] Error:', error);
   }
-  // Return null in case of errors or if audio data is not found
-  return null;
 }
 
-// Helper function to convert an ArrayBuffer to a Base64 string
-function bufferToBase64(buffer) {
-  console.log('bufferToBase64 entered');
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  console.log(`[HTML Debugging] [bufferToBase64] Buffer length: ${len}`);
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const base64 = window.btoa(binary);
-  console.log(`[HTML Debugging] [bufferToBase64] Converted to base64, length: ${base64.length}`);
-  return base64;
-}
-
-// Function to play sound
-function playSound(currentSequence, channel, currentStep) {
-  console.log('playSound entered');
-  const channelIndex = getChannelIndex(channel);
-  console.log(`[playSound Debugging] [playSound] Processing channel index: ${channelIndex}`);
-
-  const stepState = getStepState(currentSequence, channelIndex, currentStep);
-  console.log(`[playSound Debugging] [playSound] setting stepState using getStepState to: ${stepState}`);
-  if (!stepState) {
-      console.log("[playSound Debugging] [playSound] Current step is not selected. Skipping playback.");
-      return;
-  }
-
-  const url = getAudioUrl(channelIndex);
-  console.log("[playSound Debugging] [playSound] Audio URL:", url);
-  const audioBuffer = getAudioBuffer(url);
-  if (!audioBuffer) {
-      console.log("[playSound Debugging] [playSound] No audio buffer found for URL:", url);
-      return;
-  }
-  
-  console.log("[playSound Debugging] [playSound] Audio buffer:", audioBuffer);
-
-  playTrimmedAudio(channelIndex, audioBuffer, url);
-}
+// Implementation assumes the existence of processJSONResponse and processHTMLResponse functions,
+// as well as the auxiliary functions like formatURL and decodeAudioData.
 
 
-function getChannelIndex(channel) {
-  return parseInt(channel.dataset.id.split('-')[1]);
-}
-
-function getStepState(currentSequence, channelIndex, currentStep) {
-  console.log(`[playSound Debugging] [getStepState called] currentSequence: ${currentSequence}, channelIndex: ${channelIndex}, currentStep: ${currentStep}`);
-  return window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, currentStep);
-}
-
-function getAudioUrl(channelIndex) {
-  // Example check to ensure URL exists for the given channel index
-  if (typeof window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex) === 'undefined') {
-    console.error(`[getAudioUrl] [ playSound ] URL not found for channel index: ${channelIndex}`);
-    return 'defaultURL'; // Provide a default URL or handle the error appropriately
-  }
-  return window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex);
-}
-
-function getAudioBuffer(url) {
-  return audioBuffers.get(url);
-}
 
 function playTrimmedAudio(channelIndex, audioBuffer, url) {
   console.log('[playTrimmedAudio] Audio buffer found for URL:', url);
@@ -240,40 +203,52 @@ function calculateTrimValues(channelIndex, audioBuffer) {
 
 
 
-async function playAuditionedSample(url) {
-  console.log('playAuditionedSample entered');
-  try {
-   // Ensure the URL is correctly formatted
-    const correctlyFormattedURL = formatURL(url);
-    const response = await fetch(correctlyFormattedURL);
-    const data = await response.json();
+// Function to play sound
+// Function to play sound optimized
+function playSound(currentSequence, channel, currentStep) {
+  console.log('playSound entered');
+  const channelIndex = getChannelIndex(channel);
+  console.log(`[playSound Debugging] [playSound] Processing channel index: ${channelIndex}`);
 
-    // Check if the expected audioData field is present
-    if (data.audioData) {
-      const audioData = base64ToArrayBuffer(data.audioData.split(',')[1]);
-
-      if (!audioContext) {
-        window.AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioContext = new AudioContext();
-      }
-
-      const audioBuffer = await decodeAudioData(audioData);
-      const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
-      source.start();
-    } else {
-      console.log("Audional data not found in response, attempting to fetch and parse content type.");
-      const contentType = await fetchAndParseContentType(url);
-      console.log(`Content type found: ${contentType}`);
-      // Additional logic to handle the content type will be added here
-    }
-  } catch (error) {
-    console.error('Error playing auditioned sample:', error);
+  // Direct call to window.unifiedSequencerSettings.getStepState
+  const stepState = window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, currentStep);
+  console.log(`[playSound Debugging] [playSound] setting stepState using direct call to: ${stepState}`);
+  
+  if (!stepState) {
+    console.log("[playSound Debugging] [playSound] Current step is not selected. Skipping playback.");
+    return;
   }
-};
+
+  const url = getAudioUrl(channelIndex);
+  console.log("[playSound Debugging] [playSound] Audio URL:", url);
+  const audioBuffer = getAudioBuffer(url);
+  if (!audioBuffer) {
+      console.log("[playSound Debugging] [playSound] No audio buffer found for URL:", url);
+      return;
+  }
+  
+  console.log("[playSound Debugging] [playSound] Audio buffer:", audioBuffer);
+
+  playTrimmedAudio(channelIndex, audioBuffer, url);
+}
 
 
+function getChannelIndex(channel) {
+  return parseInt(channel.dataset.id.split('-')[1]);
+}
+
+function getAudioUrl(channelIndex) {
+  // Example check to ensure URL exists for the given channel index
+  if (typeof window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex) === 'undefined') {
+    console.error(`[getAudioUrl] [ playSound ] URL not found for channel index: ${channelIndex}`);
+    return 'defaultURL'; // Provide a default URL or handle the error appropriately
+  }
+  return window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex);
+}
+
+function getAudioBuffer(url) {
+  return audioBuffers.get(url);
+}
 
 
 // Function to toggle the play state
@@ -324,109 +299,124 @@ function toggleMute(channelElement) {
 
 
 
-// // Function to fetch and parse the HTML to find the content type
-// async function fetchAndParseContentType(url) {
-//   console.log('[HTML Debugging] fetchAndParseContentType entered');
+// async function importHTMLAudioData(htmlContent, index) {
+//   console.log("[importHTMLSampleData] Entered function with index: ", index);
 //   try {
-//       const response = await fetch(url);
-//       const html = await response.text();
 //       const parser = new DOMParser();
-//       const doc = parser.parseFromString(html, 'text/html');
-//       const contentTypeElement = doc.querySelector('dt:contains("content type") + dd');
-//       if (contentTypeElement) {
-//         console.log('[HTML Debugging] [fetchAndParseContentType] Found content type:', contentTypeElement.textContent);
-//           return contentTypeElement.textContent;
+//       const doc = parser.parseFromString(htmlContent, 'text/html');
+//       const sourceElement = doc.querySelector('audio[data-audionalSampleName] source');
+
+//       if (sourceElement) {
+//           const base64AudioData = sourceElement.getAttribute('src');
+//           // Convert the prefix to lowercase before checking
+//           if (base64AudioData.toLowerCase().startsWith('data:audio/wav;base64,') || base64AudioData.toLowerCase().startsWith('data:audio/mp3;base64,')) {
+//               console.log("[importHTMLSampleData] Extracted base64 audio data.");
+//               // Directly return the base64 audio data URL
+//               return base64AudioData;
+//           } else {
+//               console.error("[importHTMLSampleData] Audio data does not start with expected base64 prefix.");
+//           }
 //       } else {
-//         console.log('[HTML Debugging] [fetchAndParseContentType] Content type not found.');
-//           throw new Error('Content type not found');
+//           console.error("[importHTMLSampleData] Could not find the audio source element in the HTML content.");
 //       }
 //   } catch (error) {
-//     console.error('[HTML Debugging] [fetchAndParseContentType] Error fetching or parsing HTML:', error);
+//       console.error("[importHTMLSampleData] Error parsing HTML content: ", error);
 //   }
+//   // Return null in case of errors or if audio data is not found
+//   return null;
 // }
 
-// // Function to fetch audio data
-// const fetchAudio = async (url, channelIndex,) => {
-//   console.log('[HTML Debugging] [fetchAudio] Entered function. URL:', url, 'Channel Index:', channelIndex);
+// // Function to fetch and process audio data
+
+// const fetchAudio = async (url, channelIndex) => {
+//   const fullUrl = formatURL(url);
+//   console.log('[HTML Debugging] [fetchAudio] Entered function. URL:', fullUrl, 'Channel Index:', channelIndex);
+
 //   try {
-//       const response = await fetch(url);
-//       console.log('[HTML Debugging] [fetchAudio] Response Content-Type:', response.headers.get('Content-Type'));
+//     const response = await fetch(fullUrl);
+//     const contentType = response.headers.get('Content-Type');
+//     let audioData, sampleName;
 
-//       let audioData;
-//       let filename;
+//     // Attempt to extract the sample name from the URL as a fallback
+//     sampleName = fullUrl.split('/').pop(); // Extracts the last part of the URL, often the filename
 
-//       console.log('[HTML Debugging] [fetchAudio] Response received from URL.');
-
-
-//       // Clone the response for a second read attempt if the first one fails
-//       const clonedResponse = response.clone();
-
-//       try {
-//           // Try to read the response as JSON
-//           const data = await response.json();
-//           console.log('[HTML Debugging] [fetchAudio] Response successfully read as JSON.');
-//           audioData = base64ToArrayBuffer(data.audioData.split(',')[1]);
-//           filename = data.filename || data.fileName;
-//       } catch (e) {
-//         console.log("[fetchAudio] Response is not JSON, trying to read as arrayBuffer");
-//         try {
-//               audioData = await clonedResponse.arrayBuffer();
-//               filename = url.split('/').pop();
-//               console.log('[HTML Debugging] [fetchAudio] Fallback to arrayBuffer successful. Filename:', filename);
-//           } catch (e) {
-//               console.error("Response could not be processed as JSON or as an ArrayBuffer.", e);
-//               return;
-//           }
+//     if (contentType && contentType.includes('application/json')) {
+//       // Handle JSON content
+//       const jsonResponse = await response.json();
+//       // Use filename from JSON if available, fallback to URL-derived name
+//       sampleName = jsonResponse.filename || sampleName;
+//       const base64AudioData = jsonResponse.audioData;
+//       if (!base64AudioData) {
+//         console.error('[HTML Debugging] [fetchAudio] No audioData found in JSON response');
+//         return;
 //       }
+//       audioData = base64ToArrayBuffer(base64AudioData.split(',')[1]);
+//     } else if (contentType && contentType.includes('text/html')) {
+//       // Handle HTML content
+//       const htmlText = await response.text();
+//       const parser = new DOMParser();
+//       const doc = parser.parseFromString(htmlText, 'text/html');
+//       const sampleNameElement = doc.getElementById('sampleName');
+//       if (sampleNameElement) {
+//         // Use the content of the div if available, fallback to URL-derived name
+//         sampleName = sampleNameElement.textContent.trim() || sampleName;
+//       }
+//       const extractedAudioData = await importHTMLAudioData(htmlText, channelIndex);
+//       if (!extractedAudioData) return;
 
-//       // Proceed with audio data processing
-//       console.log('[HTML Debugging] [fetchAudio] Proceeding with audio data processing.');
-//       const audioBuffer = await decodeAudioData(audioData);
-//       console.log('[HTML Debugging] [fetchAudio] Audio data decoded.');
-//       // Assuming audioBuffers is a Map to store audio buffers
-//       audioBuffers.set(url, audioBuffer);
-
-//       // Update the global object with the new URL and audio data
-//       window.unifiedSequencerSettings.updateSetting('projectURLs', url, channelIndex);
-//       window.unifiedSequencerSettings.updateSampleDuration(audioBuffer.duration, channelIndex);
-//       window.unifiedSequencerSettings.updateAllLoadSampleButtonTexts();
-//       console.log(`[HTML Debugging] [fetchAudio] Updated global object with URL: ${url} and duration: ${audioBuffer.duration} for channel index: ${channelIndex}`);
-
-//       console.log(`[HTML Debugging] [fetchAudio] Audio buffer duration: ${audioBuffer.duration} seconds.`);
-//     } catch (error) {
-//         console.error('[HTML Debugging] [fetchAudio] Error fetching audio:', error);
+//       audioData = extractedAudioData.startsWith('data:') ?
+//         base64ToArrayBuffer(extractedAudioData.split(',')[1]) :
+//         await fetch(extractedAudioData).then(res => res.arrayBuffer());
+//     } else {
+//       // Handle direct audio file
+//       audioData = await response.arrayBuffer();
 //     }
-//   };
 
-//   // Helper function to process URL
-// async function processHtmlUrls(url, index, loadSampleButton) {
-//   console.log("[HTML Debugging] [processURL] URL: ", url);
+//     // Decode and process the audio data
+//     const audioBuffer = await decodeAudioData(audioData);
+//     audioBuffers.set(fullUrl, audioBuffer);
+//     console.log(`[HTML Debugging] [fetchAudio] Audio buffer stored.`);
 
-//   try {
-//       const response = await fetch(url);
-//       const contentType = response.headers.get("Content-Type");
-//       console.log("[HTML Debugging] [processURL] Content-Type: ", contentType);
+//     // Update the project channel name in global settings
+//     window.unifiedSequencerSettings.setProjectChannelName(channelIndex, sampleName);
 
-//       if (contentType && contentType.includes("text/html")) {
-//           console.log("[HTML Debugging] [processURL] HTML content detected. Extracting audio data...");
-//           const htmlText = await response.text();
-//           // Wait for the importHTMLSampleData to process and return the direct audio URL (base64 data)
-//           const audioURL = await importHTMLAudioData(htmlText, index);
-//           // Process the extracted audio URL as if it was direct audio content
-//           if (audioURL) {
-//               fetchAudio(audioURL, index);
-//               // Log and add the URL to the global settings
-//               window.unifiedSequencerSettings.addChannelURL(index, url); // This is the new part
-//           }
-//       } else {
-//           console.log("[HTML Debugging] [processURL] Non-HTML content. Processing as direct audio URL...");
-//           fetchAudio(url, index);
-//           // Log and add the URL to the global settings
-//           window.unifiedSequencerSettings.addChannelURL(index, url); // This is the new part
-//       }
 //   } catch (error) {
-//       console.error(`[HTML Debugging] [processURL] Error fetching URL content: `, error);
+//     console.error('[HTML Debugging] [fetchAudio] Error:', error);
 //   }
-// }
+// };
+
+
+// async function playAuditionedSample(url) {
+//   console.log('playAuditionedSample entered');
+//   try {
+//    // Ensure the URL is correctly formatted
+//     const correctlyFormattedURL = formatURL(url);
+//     const response = await fetch(correctlyFormattedURL);
+//     const data = await response.json();
+
+//     // Check if the expected audioData field is present
+//     if (data.audioData) {
+//       const audioData = base64ToArrayBuffer(data.audioData.split(',')[1]);
+
+//       if (!audioContext) {
+//         window.AudioContext = window.AudioContext || window.webkitAudioContext;
+//         audioContext = new AudioContext();
+//       }
+
+//       const audioBuffer = await decodeAudioData(audioData);
+//       const source = audioContext.createBufferSource();
+//       source.buffer = audioBuffer;
+//       source.connect(audioContext.destination);
+//       source.start();
+//     } else {
+//       console.log("Audional data not found in response, attempting to fetch and parse content type.");
+//       const contentType = await fetchAndParseContentType(url);
+//       console.log(`Content type found: ${contentType}`);
+//       // Additional logic to handle the content type will be added here
+//     }
+//   } catch (error) {
+//     console.error('Error playing auditioned sample:', error);
+//   }
+// };
 
 

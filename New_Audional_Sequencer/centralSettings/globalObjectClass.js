@@ -487,19 +487,31 @@ class UnifiedSequencerSettings {
     // }
 
         // Method to update the name of a specific channel
-    setProjectChannelName(channelIndex, name) {
-        console.log("setProjectChannelName entered");
-        if (this.isValidIndex(channelIndex)) {
-            // Update only if the name is different
-            if (this.settings.masterSettings.projectChannelNames[channelIndex] !== name) {
-                this.settings.masterSettings.projectChannelNames[channelIndex] = name;
-                console.log(`[setChannelName] Channel ${channelIndex} name set to: ${name}`);
-                this.notifyObservers(); // Notify observers about the change
+/**
+ * Updates the name of a specific project channel and notifies observers of the change.
+ * @param {number} channelIndex - The index of the channel to update.
+ * @param {string} name - The new name for the channel.
+ * @returns {boolean} Indicates whether the update was successful.
+ */
+        setProjectChannelName(channelIndex, name) {
+            console.log("setProjectChannelName entered");
+            if (this.isValidIndex(channelIndex)) {
+                if (this.settings.masterSettings.projectChannelNames[channelIndex] !== name) {
+                    this.settings.masterSettings.projectChannelNames[channelIndex] = name;
+                    console.log(`[setChannelName] Channel ${channelIndex} name set to: ${name}`);
+                    this.notifyObservers(); // Notify observers about the change
+                    return true; // Indicate success
+                } else {
+                    console.log(`[setChannelName] No change for channel ${channelIndex}. Name remains: ${name}`);
+                    return false; // Indicate no change was made
+                }
+            } else {
+                console.error(`[setChannelName] Invalid channel index: ${channelIndex}`);
+                return false; // Indicate failure due to invalid index
             }
-        } else {
-            console.error(`[setChannelName] Invalid channel index: ${channelIndex}`);
         }
-    }
+
+        
 
 
     setProjectSequences(sequenceData) {

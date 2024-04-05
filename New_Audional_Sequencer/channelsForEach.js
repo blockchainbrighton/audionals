@@ -317,6 +317,7 @@ console.log("channelsForeach.js entered");
                 closeModal();
             }
         }, { capture: true, once: true });
+        input.focus(); // Automatically focus the input field for immediate typing
     }
 
     function closeModal() {

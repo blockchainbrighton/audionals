@@ -273,39 +273,35 @@ if (playButton && stopButton) {
         
 
  
-function updateLoadSampleButtonText(channelIndex, button) {
-    console.log('updateLoadSampleButtonText entered');
-    console.log(`[updateLoadSampleButtonText] Called for channel index: ${channelIndex}`);
-
-    const loadedUrl = window.unifiedSequencerSettings.channelURLs(channelIndex);
-    console.log(`[updateLoadSampleButtonText] Loaded URL for channel ${channelIndex}: ${loadedUrl}`);
-
-    if (loadedUrl) {
-        button.textContent = loadedUrl; // Update button text to show the loaded URL
-        console.log(`[updateLoadSampleButtonText] Button text updated to: ${loadedUrl}`);
-    } else {
-        button.textContent = 'Load New Audional'; // Default text if no URL is loaded
-        console.log(`[updateLoadSampleButtonText] Default text set for button`);
-    }
-}
-
-
-
-// Function to test updating the text of all loadSampleButton elements
-function testUpdateLoadSampleButtonText() {
-    console.log("[testUpdateLoadSampleButtonText] Function entered");
-
-    const channels = document.querySelectorAll('.channel');
-    channels.forEach((channel, index) => {
-        const loadSampleButton = channel.querySelector('.load-sample-button');
-        if (loadSampleButton) {
-            loadSampleButton.textContent = `Channel ${index + 1}`; // Update with placeholder text
-            console.log(`[testUpdateLoadSampleButtonText] Button text updated for channel ${index + 1}`);
-        } else {
-            console.log(`[testUpdateLoadSampleButtonText] No loadSampleButton found for channel ${index + 1}`);
+        function updateLoadSampleButtonText(channelIndex, button) {
+            console.log('updateLoadSampleButtonText entered');
+            console.log(`[updateLoadSampleButtonText] Called for channel index: ${channelIndex}`);
+        
+            // Attempt to use the channel name if it's available and not an empty string
+            const channelName = window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex];
+            const loadedUrl = window.unifiedSequencerSettings.settings.masterSettings.channelURLs[channelIndex];
+        
+            console.log(`[updateLoadSampleButtonText] Loaded URL for channel ${channelIndex}: ${loadedUrl}`);
+            console.log(`[updateLoadSampleButtonText] Channel name for channel ${channelIndex}: ${channelName}`);
+        
+            // Determine what text to display on the button
+            let buttonText;
+            if (channelName && channelName.trim() !== '') {
+                buttonText = channelName; // Use the user-defined channel name if available
+            } else if (loadedUrl) {
+                // If there's no channel name, fallback to using the ID from the URL
+                // Extract the ID or the last segment of the URL
+                const urlSegments = loadedUrl.split('/');
+                const id = urlSegments[urlSegments.length - 1]; // Get the last segment
+                buttonText = id; // Use the extracted ID as the button text
+            } else {
+                buttonText = 'Load New Audional'; // Default text if no URL is loaded
+            }
+        
+            // Update the button text based on the determined text
+            button.textContent = buttonText;
+            console.log(`[updateLoadSampleButtonText] Button text updated to: ${buttonText}`);
         }
-    });
-}
-
-
-console.log("index.js loaded");
+        
+        console.log("index.js loaded");
+        
