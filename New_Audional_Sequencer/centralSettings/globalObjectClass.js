@@ -3,31 +3,53 @@
 class UnifiedSequencerSettings {
     constructor() {
         this.observers = [];
-
         this.settings = {
             masterSettings: {
-                projectName: 'New Audx Project', // Set the project name placeholder
+                projectName: 'New Audx Project',
                 projectBPM: 120,
-                currentSequence: 0, // Initialize with a default value
-                channelURLs: new Array(16).fill(''), // Initialize with empty strings or appropriate defaults
-
-                // projectURLs: new Array(16).fill(''), 
+                currentSequence: 0,
+                channelURLs: new Array(16).fill(''),
                 trimSettings: Array.from({ length: 16 }, () => ({
                     start: 0.01,
                     end: 100.00,
                     length: 0
                 })),
-                projectChannelNames: new Array(16).fill(''), // Placeholder for channel names
-                projectSequences: this.initializeSequences(16, 16, 64) // Adjust dimensions as needed
+                pitchValues: Array.from({ length: 16 }, () => new Array(64).fill(1)),
+                projectChannelNames: new Array(16).fill(''),
+                projectSequences: this.initializeSequences(16, 16, 64)
             }
-            
         };
-
-
+        
         // Bind methods
-            this.checkSettings = this.checkSettings.bind(this);
-            this.clearMasterSettings = this.clearMasterSettings.bind(this);
+        this.checkSettings = this.checkSettings.bind(this);
+        this.clearMasterSettings = this.clearMasterSettings.bind(this);
+        this.updateStepPitchValue = this.updateStepPitchValue.bind(this);
+        this.getStepPitchValue = this.getStepPitchValue.bind(this);
+        this.loadSettings = this.loadSettings.bind(this);
+    }
+
+    // Initialize pitch values for each step in each channel
+    initializePitchValues(numChannels, numSteps) {
+        let pitchValues = Array.from({ length: numChannels }, () => new Array(numSteps).fill(1));
+        return pitchValues;
+    }
+
+    // Simplified to directly update and fetch pitch values without additional wrapping
+    updateStepPitchValue(channelIndex, stepIndex, newPitchValue) {
+        if (this.isValidIndex(channelIndex) && this.isValidStepIndex(stepIndex)) {
+            this.settings.masterSettings.pitchValues[channelIndex][stepIndex] = newPitchValue;
+            this.notifyObservers();
         }
+    }
+
+    getStepPitchValue(channelIndex, stepIndex) {
+        if (this.isValidIndex(channelIndex) && this.isValidStepIndex(stepIndex)) {
+            return this.settings.masterSettings.pitchValues[channelIndex][stepIndex];
+        } else {
+            console.error(`Invalid channel or step index. Channel: ${channelIndex}, Step: ${stepIndex}`);
+            return 1; // Fallback to default pitch
+        }
+    }
 
 
     initializeTrimSettings(numSettings) {
@@ -167,19 +189,28 @@ class UnifiedSequencerSettings {
                     this.settings.masterSettings.currentSequence = 0;
             
                     // Apply the basic settings directly
-                    this.settings.masterSettings.projectName = parsedSettings.projectName;
-                    this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
+                    this.settings.masterSettings.projectName = parsedSettings.projectName || 'New Project';
+                    this.settings.masterSettings.projectBPM = parsedSettings.projectBPM || 120;
                     
                     // Process and apply channel URLs with proper formatting
-                    if (parsedSettings.channelURLs) {
-                        for (let i = 0; i < parsedSettings.channelURLs.length; i++) {
-                            this.settings.masterSettings.channelURLs[i] = formatURL(parsedSettings.channelURLs[i]);
-                        }
-                    }
-                    
+                    this.settings.masterSettings.channelURLs = parsedSettings.channelURLs ? 
+                        parsedSettings.channelURLs.map(url => formatURL(url)) : 
+                        new Array(16).fill('');
+            
                     // Directly assign trim settings and channel names
-                    this.settings.masterSettings.trimSettings = parsedSettings.trimSettings;
-                    this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames;
+                    this.settings.masterSettings.trimSettings = parsedSettings.trimSettings || 
+                        Array.from({ length: 16 }, () => ({ start: 0.01, end: 100.00, length: 0 }));
+            
+                    this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames || 
+                        new Array(16).fill('');
+            
+                    // Deserialize and apply project sequences step settings
+                    this.settings.masterSettings.projectSequences = parsedSettings.projectSequences || 
+                        this.initializeSequences(16, 16, 64);
+            
+                    // Re-initialize pitch values for all channels and steps to default
+                    this.settings.masterSettings.pitchValues = this.initializePitchValues(16, 64);
+
             
                     // Deserialize and apply project sequences step settings
                     if (parsedSettings.projectSequences) {
@@ -199,6 +230,7 @@ class UnifiedSequencerSettings {
                         });
                     }
             
+                              
                     console.log("[internalPresetDebug] Master settings after update:", this.settings.masterSettings);
             
                     // Update UI elements based on the new settings

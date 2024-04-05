@@ -15,9 +15,18 @@ function registerObservers() {
         window.unifiedSequencerSettings.addObserver(updateProjectSequencesObserver);
         window.unifiedSequencerSettings.addObserver(updateCurrentSequenceObserver);
         window.unifiedSequencerSettings.addObserver(updateTotalSequencesObserver);
+        window.unifiedSequencerSettings.addObserver(updatePitchObserver);
     } else {
         console.error("UnifiedSequencerSettings instance not found.");
     }
+}
+
+// Observer function for pitch changes
+function updatePitchObserver(settings) {
+    console.log("[observers] updatePitchObserver called");
+    // Logic to handle pitch changes
+    // This could involve updating UI elements to reflect the new pitch values
+    // or reconfiguring audio playback to use the updated pitch settings
 }
 
 // This observer function should be placed in your observers file

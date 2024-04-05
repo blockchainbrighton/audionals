@@ -204,6 +204,20 @@ async function fetchAudio(url, channelIndex) {
 // as well as the auxiliary functions like formatURL and decodeAudioData.
 
 
+// pitchControl.js
+
+/**
+ * Applies pitch control to an AudioBufferSourceNode.
+ * 
+ * @param {AudioBufferSourceNode} source - The source node whose playback rate will be adjusted.
+ * @param {number} pitch - The desired pitch adjustment. Range: 0.1 (slow) to 10 (fast).
+ */
+function applyPitchControl(source, pitch) {
+  source.playbackRate.value = pitch;
+  console.log(`[applyPitchControl] Playback rate set to: ${pitch}`);
+}
+
+
 
 function playSound(currentSequence, channel, currentStep) {
   console.log('playSound entered');
@@ -234,27 +248,30 @@ function playSound(currentSequence, channel, currentStep) {
   
   console.log("[playSound Debugging] [playSound] Audio buffer:", audioBuffer);
 
-  playTrimmedAudio(channelIndex, audioBuffer, url);
+  playTrimmedAudio(channelIndex, audioBuffer, url, currentStep); // Add currentStep as an argument
 }
 
 
-
-function playTrimmedAudio(channelIndex, audioBuffer, url) {
+function playTrimmedAudio(channelIndex, audioBuffer, url, currentStep) {
   console.log('[playTrimmedAudio] Audio buffer found for URL:', url);
 
-  // Retrieve calculated trim values based on the audio buffer's duration
-  const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer);
+  let pitch = 1; // Default pitch
+  try {
+      pitch = window.unifiedSequencerSettings.getStepPitchValue(channelIndex, currentStep);
+  } catch (error) {
+      console.warn(`[playTrimmedAudio] Fallback to default pitch for channel: ${channelIndex}, step: ${currentStep}. Error: ${error}`);
+  }
 
-  // Create an AudioBufferSourceNode from the audio buffer
+  const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer);
   const source = audioContext.createBufferSource();
   source.buffer = audioBuffer;
 
-  // Connect the source to the gain node and then to the destination
+  // Apply pitch control
+  applyPitchControl(source, pitch);
+
   source.connect(gainNodes[channelIndex]);
   gainNodes[channelIndex].connect(audioContext.destination);
-
-  console.log(`[playTrimmedAudio] Playing audio for channel index: ${channelIndex} from ${trimStart} for duration: ${duration}`);
-  // Start playback at the calculated trim start time for the calculated duration
+  console.log(`[playTrimmedAudio] Playing audio for channel index: ${channelIndex}, step: ${currentStep}, from ${trimStart} for duration: ${duration} with pitch: ${pitch}`);
   source.start(0, trimStart, duration);
 }
 
