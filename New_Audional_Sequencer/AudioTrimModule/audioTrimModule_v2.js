@@ -10,6 +10,8 @@ class AudioTrimmer {
         this.audioBuffer = null;
         this.isPlaying = false;
         this.isLooping = false;
+        this.isReversePlayback = isReversePlayback;
+
 
         this.initializeSliderTrack(channelIndex);
 
@@ -71,13 +73,24 @@ displayValues() {
       // Method to set the audio buffer and update the waveform
       setAudioBuffer(audioBuffer) {
         console.log("[Class Functions] setAudioBuffer", { audioBuffer });
-
         this.audioBuffer = audioBuffer;
+        this.adjustTrimSettingsForReversePlayback();
         this.drawWaveform();
-        console.log(" updateDimmedAreas method called from setAudioBuffer");
         this.updateDimmedAreas();
         this.updateSliderValues();
+        console.log(" updateDimmedAreas method called from setAudioBuffer");
     }
+
+    // New method to adjust trim settings for reverse playback
+    adjustTrimSettingsForReversePlayback() {
+        if (this.isReversePlayback) {
+            // Invert the slider values for reverse playback
+            const tempStartValue = this.startSliderValue;
+            this.startSliderValue = 100 - this.endSliderValue;
+            this.endSliderValue = 100 - tempStartValue;
+        }
+    }
+
 
     drawWaveform() {
         console.log("[Class Functions] drawWaveform");

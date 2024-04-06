@@ -133,6 +133,35 @@ async function createReverseBuffer(audioBuffer) {
 }
 
 
+function calculateTrimValues(channelIndex, audioBuffer, isReversePlayback) {
+  const trimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
+
+  let trimStartPercentage = trimSettings.startSliderValue !== undefined ? trimSettings.startSliderValue : trimSettings.start;
+  let trimEndPercentage = trimSettings.endSliderValue !== undefined ? trimSettings.endSliderValue : trimSettings.end;
+
+  let trimStart = (trimStartPercentage / 100) * audioBuffer.duration;
+  let trimEnd = (trimEndPercentage / 100) * audioBuffer.duration;
+
+  if (isReversePlayback) {
+      // For reverse playback, calculate the mirrored trim positions
+      const mirroredTrimStart = audioBuffer.duration - ((trimEndPercentage / 100) * audioBuffer.duration);
+      const mirroredTrimEnd = audioBuffer.duration - ((trimStartPercentage / 100) * audioBuffer.duration);
+      trimStart = Math.max(0, Math.min(mirroredTrimStart, audioBuffer.duration));
+      trimEnd = Math.max(trimStart, Math.min(mirroredTrimEnd, audioBuffer.duration));
+  } else {
+      // For normal playback, ensure the calculated values are within the bounds of the audio buffer's duration
+      trimStart = Math.max(0, Math.min(trimStart, audioBuffer.duration));
+      trimEnd = Math.max(trimStart, Math.min(trimEnd, audioBuffer.duration));
+  }
+
+  return {
+      trimStart: trimStart,
+      duration: trimEnd - trimStart
+  };
+}
+
+
+
 // Function to decode audio data
 const decodeAudioData = (audioData) => {
   let byteArray = new Uint8Array(audioData.slice(0, 20));
@@ -252,50 +281,71 @@ function playSound(currentSequence, channel, currentStep) {
 }
 
 
+// Example modification in playTrimmedAudio function
 function playTrimmedAudio(channelIndex, audioBuffer, url, currentStep) {
   console.log('[playTrimmedAudio] Audio buffer found for URL:', url);
 
-  let pitch = 1; // Default pitch
-  try {
-      pitch = window.unifiedSequencerSettings.getStepPitchValue(channelIndex, currentStep);
-  } catch (error) {
-      console.warn(`[playTrimmedAudio] Fallback to default pitch for channel: ${channelIndex}, step: ${currentStep}. Error: ${error}`);
-  }
+  // Find the corresponding step button to check for reverse playback
+  const stepButtonId = `Sequence${window.unifiedSequencerSettings.settings.masterSettings.currentSequence}-ch${channelIndex}-step-${currentStep}`;
+  const stepButton = document.getElementById(stepButtonId);
+  const isReversePlayback = stepButton.classList.contains('reverse-playback');
 
-  const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer);
+  // Fetch the pitch value for the specific channel and step
+  const pitch = window.unifiedSequencerSettings.getStepPitchValue(channelIndex, currentStep);
+
+  // Adjust the calculation of trim values based on the reverse playback state
+  const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer, isReversePlayback);
+
+
+  // try {
+  //     pitch = window.unifiedSequencerSettings.getStepPitchValue(channelIndex, currentStep);
+  // } catch (error) {
+  //     console.warn(`[playTrimmedAudio] Fallback to default pitch for channel: ${channelIndex}, step: ${currentStep}. Error: ${error}`);
+  // }
+
   const source = audioContext.createBufferSource();
   source.buffer = audioBuffer;
-
-  // Apply pitch control
   applyPitchControl(source, pitch);
-
   source.connect(gainNodes[channelIndex]);
   gainNodes[channelIndex].connect(audioContext.destination);
+
   console.log(`[playTrimmedAudio] Playing audio for channel index: ${channelIndex}, step: ${currentStep}, from ${trimStart} for duration: ${duration} with pitch: ${pitch}`);
   source.start(0, trimStart, duration);
 }
 
+function calculateTrimValues(channelIndex, audioBuffer, isReversePlayback) {
+  console.log(`[calculateTrimValues] Called for channelIndex: ${channelIndex}, isReversePlayback: ${isReversePlayback}`);
 
-function calculateTrimValues(channelIndex, audioBuffer) {
   const trimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
+  let trimStartPercentage = trimSettings.startSliderValue !== undefined ? trimSettings.startSliderValue : 0;
+  let trimEndPercentage = trimSettings.endSliderValue !== undefined ? trimSettings.endSliderValue : 100;
 
-  // Try to accommodate both possible settings formats
-  let trimStartPercentage = trimSettings.startSliderValue !== undefined ? trimSettings.startSliderValue : trimSettings.start;
-  let trimEndPercentage = trimSettings.endSliderValue !== undefined ? trimSettings.endSliderValue : trimSettings.end;
+  console.log(`[calculateTrimValues] Trim Settings: Start = ${trimStartPercentage}%, End = ${trimEndPercentage}%`);
 
-  // Calculate start and end times in seconds
   let trimStart = (trimStartPercentage / 100) * audioBuffer.duration;
   let trimEnd = (trimEndPercentage / 100) * audioBuffer.duration;
+
+  console.log(`[calculateTrimValues] Calculated Times (before mirroring): Start = ${trimStart}s, End = ${trimEnd}s, Buffer Duration = ${audioBuffer.duration}s`);
+
+  if (isReversePlayback) {
+    // Reverse the calculation for mirrored start and end times
+    let totalDuration = audioBuffer.duration;
+    trimStart = totalDuration - ((trimEndPercentage / 100) * totalDuration);
+    trimEnd = totalDuration - ((trimStartPercentage / 100) * totalDuration);
+  }
 
   // Ensure the calculated values are within the bounds of the audio buffer's duration
   trimStart = Math.max(0, Math.min(trimStart, audioBuffer.duration));
   trimEnd = Math.max(trimStart, Math.min(trimEnd, audioBuffer.duration));
 
+  console.log(`[calculateTrimValues] Final Calculated Values: Trim Start = ${trimStart}s, Trim End = ${trimEnd}s, Duration = ${trimEnd - trimStart}s`);
+
   return {
-      trimStart: trimStart,
-      duration: trimEnd - trimStart
+    trimStart: trimStart,
+    duration: trimEnd - trimStart
   };
 }
+
 
 
 

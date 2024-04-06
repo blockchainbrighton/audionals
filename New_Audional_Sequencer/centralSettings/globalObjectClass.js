@@ -28,6 +28,17 @@ class UnifiedSequencerSettings {
         this.loadSettings = this.loadSettings.bind(this);
     }
 
+    // Validate if the provided channel index is within the expected range
+    isValidIndex(channelIndex) {
+        return channelIndex >= 0 && channelIndex < this.settings.masterSettings.pitchValues.length;
+    }
+
+    // Validate if the provided step index is within the expected range
+    isValidStepIndex(stepIndex) {
+        // Assuming a maximum of 64 steps per channel, adjust as necessary
+        return stepIndex >= 0 && stepIndex < 64; 
+    }
+
     // Initialize pitch values for each step in each channel
     initializePitchValues(numChannels, numSteps) {
         let pitchValues = Array.from({ length: numChannels }, () => new Array(numSteps).fill(1));

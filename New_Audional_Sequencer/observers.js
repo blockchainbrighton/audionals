@@ -67,14 +67,20 @@ function updateStepStateObserver(settings) {
 // Ensure the observer function for updating trim settings (updateTrimSettingsObserver)
 // correctly initializes the UI with default values if they are undefined.
 function updateTrimSettingsObserver(settings) {
-    console.log("[observers] updateTrimSettingsObserver called with:", settings)
-    if (settings && settings.masterSettings && settings.masterSettings.trimSettings) {
-        console.log("Updating Trim Settings UI:", settings.masterSettings.trimSettings);
-
-        // This assumes updateTrimSettingsUI correctly handles default values
-        updateTrimSettingsUI(settings.masterSettings.trimSettings);
-    }
+    // Iterate through all channels and steps to check for reverse playback mode
+    document.querySelectorAll('.step-button').forEach(button => {
+        const isReversePlayback = button.classList.contains('reverse-playback');
+        // If button is in reverse playback mode, adjust UI to reflect mirrored trim settings visually
+        if (isReversePlayback) {
+            // Fetch channelIndex and stepIndex from button ID or data attributes
+            const { channelIndex, stepIndex } = parseButtonId(button.id);
+            const trimSettings = settings.getTrimSettings(channelIndex);
+            const mirroredSettings = mirrorTrimSettingsForReverse(trimSettings, stepIndex);
+            updateTrimSettingsUI(mirroredSettings, channelIndex, stepIndex); // Ensure this function adjusts the UI for specific steps
+        }
+    });
 }
+
 
 
 // Observer for Project Name
