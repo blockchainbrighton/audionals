@@ -1,7 +1,5 @@
 // observers.js
 
-
-
 // Register all observers
 function registerObservers() {
     console.log("[observers] registerObservers called")
@@ -35,7 +33,7 @@ function updateStepStateObserver(settings) {
     });
 
     // Apply the current state of steps to the UI, including reverse playback
-    const currentSequenceSettings = settings.masterSettings.projectSequences['Sequence0'];
+    const currentSequenceSettings = settings.masterSettings.projectSequences[`Sequence${settings.masterSettings.currentSequence}`];
     if (currentSequenceSettings) {
         Object.keys(currentSequenceSettings).forEach(channelKey => {
             const channelIndex = parseInt(channelKey.replace('ch', ''), 10); // Assuming channel keys are 'ch0', 'ch1', etc.

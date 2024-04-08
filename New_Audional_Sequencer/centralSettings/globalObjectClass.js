@@ -79,12 +79,40 @@ class UnifiedSequencerSettings {
             const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
             const channel = sequence && sequence[`ch${channelIndex}`];
             if (channel && stepIndex < channel.steps.length) {
+                console.log(`Updating Step: Seq=${currentSequence}, Ch=${channelIndex}, Step=${stepIndex}, Active=${isActive}, Reverse=${isReverse}`);
+
                 channel.steps[stepIndex] = [isActive, isReverse || false];
                 console.log(`Step updated to: ${channel.steps[stepIndex]}`);
             } else {
                 console.error('Invalid sequence, channel, or step index in updateStepStateAndReverse');
             }
+            this.notifyObservers();
         }
+
+        updateStepState(currentSequence, channelIndex, stepIndex, newState) {
+            console.log("updateStepState entered");
+            // Assuming the steps are stored in an array format for backward compatibility
+            const sequence = `Sequence${currentSequence}`;
+            const channel = `ch${channelIndex}`;
+            let step = this.settings.masterSettings.projectSequences[sequence][channel].steps[stepIndex];
+            
+            // Check if the step's state array exists, initialize if not
+            if (!Array.isArray(step)) {
+                step = [false, false]; // Default to inactive and not reversed
+            }
+            
+            // Update the active state based on newState
+            step[0] = newState;
+        
+            // Apply the updated state back to the settings
+            this.settings.masterSettings.projectSequences[sequence][channel].steps[stepIndex] = step;
+        
+            console.log(`Step updated: Seq=${currentSequence}, Ch=${channelIndex}, Step=${stepIndex}, State=${step}`);
+            
+            // Notify observers of the change
+            this.notifyObservers();
+        }
+        
         
         
         getStepStateAndReverse(currentSequence, channelIndex, stepIndex) {
@@ -104,22 +132,45 @@ class UnifiedSequencerSettings {
                 return { isActive: false, isReverse: false };
             }
         }
-        
-        
-        updateStepState(currentSequence, channelIndex, stepIndex, state) {
-            console.log("updateStepState entered");
+
+        getStepState(currentSequence, channelIndex, stepIndex) {
+            console.log("getStepState entered");
             if (channelIndex < 1) {
-                console.log(`[updateStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}, State: ${state}`);
+                console.log(`[getStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}`);
             }
-            // Check if state is an array to maintain compatibility with new structure.
-            const existingStepState = this.getStepStateAndReverse(currentSequence, channelIndex, stepIndex);
-            // If state is true or false, it's a simple activation/deactivation without reverse info.
-            if (typeof state === 'boolean') {
-                this.updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, state, existingStepState.isReverse);
+            const stepInfo = this.getStepStateAndReverse(currentSequence, channelIndex, stepIndex);
+            if (stepInfo) {
+                // Return only the isActive part for backward compatibility.
+                return stepInfo.isActive;
             } else {
-                console.error('Invalid state type in updateStepState');
+                console.error('Invalid sequence, channel, or step index in getStepState');
+                return false;
             }
         }
+        
+
+        
+        
+        
+        // updateStepState(currentSequence, channelIndex, stepIndex, state) {
+        //     console.log("updateStepState entered");
+        //     if (channelIndex < 1) {
+        //         console.log(`[updateStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}, State: ${state}`);
+        //     }
+        //     // Check if state is an array to maintain compatibility with new structure.
+        //     const existingStepState = this.getStepStateAndReverse(currentSequence, channelIndex, stepIndex);
+        //     // If state is true or false, it's a simple activation/deactivation without reverse info.
+        //     console.log(`Updating Step: Seq=${currentSequence}, Ch=${channelIndex}, Step=${stepIndex}, Active=${isActive}`);
+
+        //     if (typeof state === 'boolean') {
+        //         this.updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, state, existingStepState.isReverse);
+        //     } else {
+        //         console.error('Invalid state type in updateStepState');
+        //     }
+        //     this.notifyObservers();
+        // }
+
+      
         
         
     // updateStepState(currentSequence, channelIndex, stepIndex, state) {
@@ -137,21 +188,7 @@ class UnifiedSequencerSettings {
     // }
     
 
-    getStepState(currentSequence, channelIndex, stepIndex) {
-        console.log("getStepState entered");
-        if (channelIndex < 1) {
-            console.log(`[getStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}`);
-        }
-        const stepInfo = this.getStepStateAndReverse(currentSequence, channelIndex, stepIndex);
-        if (stepInfo) {
-            // Return only the isActive part for backward compatibility.
-            return stepInfo.isActive;
-        } else {
-            console.error('Invalid sequence, channel, or step index in getStepState');
-            return false;
-        }
-    }
-    
+ 
     
     // getStepState(currentSequence, channelIndex, stepIndex) {
     //     console.log("getStepState entered");
@@ -342,11 +379,20 @@ class UnifiedSequencerSettings {
 
     // Method to notify all observers
     notifyObservers() {
-   
-        console.log("notifyObservers");
-        
+        console.log("notifyObservers called");
+    
+        // Log the current sequence index for clarity
+        console.log("[notifyObservers] Current sequence:", this.settings.masterSettings.currentSequence);
+    
+        // Optionally, log detailed step states for the current sequence
+        const currentSequenceKey = `Sequence${this.settings.masterSettings.currentSequence}`;
+        const currentSequence = this.settings.masterSettings.projectSequences[currentSequenceKey];
+        console.log(`[notifyObservers] Details for ${currentSequenceKey}:`, currentSequence);
+    
+        // Notify all registered observers, passing the entire settings object
         this.observers.forEach(observerFunction => observerFunction(this.settings));
     }
+    
 
     setTrimSettings(channelIndex, start, end) {
         console.log("setTrimSettings entered");

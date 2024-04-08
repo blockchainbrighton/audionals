@@ -6,64 +6,54 @@ function createStepButtonsForSequence() {
     channels.forEach((channel, channelIndex) => {
         const stepsContainer = channel.querySelector('.steps-container');
         stepsContainer.innerHTML = '';
-    
+
         let currentSequence = window.unifiedSequencerSettings.settings.masterSettings.currentSequence;
-    
+
         for (let i = 0; i < 64; i++) {
             const button = document.createElement('button');
             button.classList.add('step-button');
             button.id = `Sequence${currentSequence}-ch${channelIndex}-step-${i}`;
 
+            // Left-click to toggle activation and deactivation
             button.addEventListener('click', () => {
                 let currentStepState = window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, i);
-                window.unifiedSequencerSettings.updateStepState(currentSequence, channelIndex, i, !currentStepState);
+                // Toggle the step state
+                let newState = !currentStepState;
+                // Update step state and rely on the observer to update UI
+                window.unifiedSequencerSettings.updateStepState(currentSequence, channelIndex, i, newState);
 
-                // Toggle the 'selected' class and update color based on the loadSampleButton's color
-                if (button.classList.toggle('selected')) {
-                    const loadSampleButton = channel.querySelector('.load-sample-button');
-                    const colorClass = loadSampleButton.className.match(/\bcolor-[^ ]+/);
-                    if (colorClass) {
-                        button.classList.add(colorClass[0]);
-                    } else {
-                        // If no color class, ensure default color is used
-                        button.style.backgroundColor = 'var(--accent-color)';
-                    }
+                // Immediate UI feedback
+                if (newState) {
+                    button.classList.add('selected');
+                    button.style.backgroundColor = 'red'; // Make it red if activated
                 } else {
-                    button.classList.remove(...button.classList);
-                    button.classList.add('step-button'); // Re-add the default class
-                    button.style.backgroundColor = ''; // Remove inline style if any
+                    button.classList.remove('selected', 'reverse-playback');
+                    button.style.backgroundColor = ''; // Reset color if deactivated
                 }
-
-                updateSpecificStepUI(currentSequence, channelIndex, i);
             });
 
+            // Right-click to set the trigger green for reverse playback
             button.addEventListener('contextmenu', (e) => {
                 e.preventDefault(); // Prevent the context menu from showing
-                console.log("Right-click detected on button:", e.target.id); // Debugging line
-            
-                // Retrieve the current step state and reverse flag
-                let { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, i);
-            
-                // If marking a step as reversed, ensure it's also marked as active
-                if (!isActive || isReverse === false) {
-                    isActive = true; // Mark the step as active if it wasn't already
-                }
-                isReverse = !isReverse; // Toggle the reverse state
-            
+                console.log("Right-click detected on button:", e.target.id);
+
+                // Assuming right-click always activates the step and sets reverse
+                let isActive = true;
+                let isReverse = !button.classList.contains('reverse-playback');
+
                 // Update step state with the new active and reverse playback states
                 window.unifiedSequencerSettings.updateStepStateAndReverse(currentSequence, channelIndex, i, isActive, isReverse);
-            
-                // Directly updating UI in listeners can be replaced by observer notifications if designed that way
+
+                // Immediate UI feedback for reverse playback
                 if (isReverse) {
-                    button.classList.add('reverse-playback');
-                    button.style.backgroundColor = 'green'; // Indicate reverse playback
+                    button.classList.add('selected', 'reverse-playback');
+                    button.style.backgroundColor = 'green'; // Make it green for reverse playback
                 } else {
+                    // If toggling off reverse, keep it red for active state
                     button.classList.remove('reverse-playback');
-                    button.style.backgroundColor = ''; // Reset to default color
+                    button.style.backgroundColor = 'red';
                 }
             });
-            
-            
 
             stepsContainer.appendChild(button);
         }
