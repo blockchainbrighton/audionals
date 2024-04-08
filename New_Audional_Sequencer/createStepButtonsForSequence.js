@@ -38,28 +38,31 @@ function createStepButtonsForSequence() {
             });
 
             button.addEventListener('contextmenu', (e) => {
-                console.log("Right-click detected on button:", e.target.id); // Debugging line
                 e.preventDefault(); // Prevent the context menu from showing
+                console.log("Right-click detected on button:", e.target.id); // Debugging line
             
                 // Retrieve the current step state and reverse flag
                 let { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, i);
             
-                // Toggle reverse playback state
-                isReverse = !isReverse;
+                // If marking a step as reversed, ensure it's also marked as active
+                if (!isActive || isReverse === false) {
+                    isActive = true; // Mark the step as active if it wasn't already
+                }
+                isReverse = !isReverse; // Toggle the reverse state
             
-                // Update step state with the new reverse playback state
+                // Update step state with the new active and reverse playback states
                 window.unifiedSequencerSettings.updateStepStateAndReverse(currentSequence, channelIndex, i, isActive, isReverse);
             
-                // Update UI based on the new state
+                // Directly updating UI in listeners can be replaced by observer notifications if designed that way
                 if (isReverse) {
                     button.classList.add('reverse-playback');
-                    button.style.backgroundColor = 'green'; // Consider using a CSS class instead
+                    button.style.backgroundColor = 'green'; // Indicate reverse playback
                 } else {
                     button.classList.remove('reverse-playback');
-                    // Reset to default or selected color if not in reverse mode
-                    button.style.backgroundColor = ''; // Consider using a CSS class instead
+                    button.style.backgroundColor = ''; // Reset to default color
                 }
             });
+            
             
 
             stepsContainer.appendChild(button);

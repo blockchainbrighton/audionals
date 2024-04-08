@@ -29,6 +29,27 @@ class UnifiedSequencerSettings {
             this.clearMasterSettings = this.clearMasterSettings.bind(this);
         }
 
+        toggleStepState(sequenceIndex, channelIndex, stepIndex) {
+            // Assuming the sequence and channel indexes are already validated
+            let step = this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex];
+            if (!Array.isArray(step)) step = [false, false]; // Initialize if not already an array
+            step[0] = !step[0]; // Toggle the active state
+            this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex] = step;
+    
+            // Notify observers of the change
+            this.notifyObservers();
+        }
+    
+        toggleStepReverseState(sequenceIndex, channelIndex, stepIndex) {
+            let step = this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex];
+            if (!Array.isArray(step)) step = [false, false]; // Initialize if not already an array
+            step[1] = !step[1]; // Toggle the reverse state
+            this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex] = step;
+    
+            // Notify observers of the change
+            this.notifyObservers();
+        }
+
 
         initializeSequences(numSequences, numChannels, numSteps) {
             console.log("initializeSequences entered", numSequences, numChannels, numSteps);
