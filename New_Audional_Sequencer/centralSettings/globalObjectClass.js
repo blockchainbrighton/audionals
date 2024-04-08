@@ -30,6 +30,260 @@ class UnifiedSequencerSettings {
         }
 
 
+        initializeSequences(numSequences, numChannels, numSteps) {
+            console.log("initializeSequences entered", numSequences, numChannels, numSteps);
+            
+            let sequenceData = {};
+            for (let seq = 0; seq < numSequences; seq++) {
+                sequenceData[`Sequence${seq}`] = this.initializeChannels(numChannels, numSteps);
+            }
+            return sequenceData;
+        }
+        
+        initializeChannels(numChannels, numSteps) {
+            let channels = {};
+            for (let ch = 0; ch < numChannels; ch++) {
+                // Initialize steps as an array of arrays, with each inner array containing a single false value
+                channels[`ch${ch}`] = {
+                    steps: Array.from({ length: numSteps }, () => [false]), // Adjusted for array of arrays
+                    mute: false,
+                    url: ''
+                };
+            }
+            return channels;
+        }
+
+        updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, isReverse) {
+            console.log(`Updating Step: Seq=${currentSequence}, Ch=${channelIndex}, Step=${stepIndex}, Active=${isActive}, Reverse=${isReverse}`);
+            const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
+            const channel = sequence && sequence[`ch${channelIndex}`];
+            if (channel && stepIndex < channel.steps.length) {
+                channel.steps[stepIndex] = [isActive, isReverse || false];
+                console.log(`Step updated to: ${channel.steps[stepIndex]}`);
+            } else {
+                console.error('Invalid sequence, channel, or step index in updateStepStateAndReverse');
+            }
+        }
+        
+        
+        getStepStateAndReverse(currentSequence, channelIndex, stepIndex) {
+            console.log("getStepStateAndReverse entered");
+            const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
+            const channel = sequence && sequence[`ch${channelIndex}`];
+            if (channel && stepIndex < channel.steps.length) {
+                let step = channel.steps[stepIndex];
+                // Check if step is in the old boolean format and convert it to the new array format on-the-fly
+                if (typeof step === 'boolean') {
+                    step = [step, false]; // Convert to array format: [isActive, isReverse]
+                }
+                const [isActive, isReverse] = step;
+                return { isActive, isReverse };
+            } else {
+                console.error('Invalid sequence, channel, or step index in getStepStateAndReverse');
+                return { isActive: false, isReverse: false };
+            }
+        }
+        
+        
+        updateStepState(currentSequence, channelIndex, stepIndex, state) {
+            console.log("updateStepState entered");
+            if (channelIndex < 1) {
+                console.log(`[updateStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}, State: ${state}`);
+            }
+            // Check if state is an array to maintain compatibility with new structure.
+            const existingStepState = this.getStepStateAndReverse(currentSequence, channelIndex, stepIndex);
+            // If state is true or false, it's a simple activation/deactivation without reverse info.
+            if (typeof state === 'boolean') {
+                this.updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, state, existingStepState.isReverse);
+            } else {
+                console.error('Invalid state type in updateStepState');
+            }
+        }
+        
+        
+    // updateStepState(currentSequence, channelIndex, stepIndex, state) {
+    //     console.log("updateStepState entered");
+    //     if (channelIndex < 1) {
+    //     console.log(`[updateStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}, State: ${state}`);
+    //     }
+    //     const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
+    //     const channel = sequence && sequence[`ch${channelIndex}`];
+    //     if (channel && stepIndex < channel.steps.length) {
+    //         channel.steps[stepIndex] = state;
+    //     } else {
+    //         console.error('Invalid sequence, channel, or step index in updateStepState');
+    //     }
+    // }
+    
+
+    getStepState(currentSequence, channelIndex, stepIndex) {
+        console.log("getStepState entered");
+        if (channelIndex < 1) {
+            console.log(`[getStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}`);
+        }
+        const stepInfo = this.getStepStateAndReverse(currentSequence, channelIndex, stepIndex);
+        if (stepInfo) {
+            // Return only the isActive part for backward compatibility.
+            return stepInfo.isActive;
+        } else {
+            console.error('Invalid sequence, channel, or step index in getStepState');
+            return false;
+        }
+    }
+    
+    
+    // getStepState(currentSequence, channelIndex, stepIndex) {
+    //     console.log("getStepState entered");
+    //     if (channelIndex < 1) {
+    //     console.log(`[getStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}`);
+    //     }
+    //     const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
+    //     const channel = sequence && sequence[`ch${channelIndex}`];
+    //     if (channel && stepIndex < channel.steps.length) {
+    //         return channel.steps[stepIndex];
+    //     } else {
+    //         console.error('Invalid sequence, channel, or step index in getStepState');
+    //         return null;
+    //     }
+    // }
+    
+    exportSettings() {
+        const settingsClone = JSON.parse(JSON.stringify(this.settings.masterSettings));
+        settingsClone.currentSequence = 0;
+    
+        for (let sequenceKey in settingsClone.projectSequences) {
+            const sequence = settingsClone.projectSequences[sequenceKey];
+            for (let channelKey in sequence) {
+                const channel = sequence[channelKey];
+                const activeSteps = [];
+                channel.steps.forEach((step, index) => {
+                    if (step[0]) { // If step is active
+                        if (step.length > 1 && step[1]) {
+                            // Log details about the step being saved with reverse playback
+                            console.log(`[exportSettings] Saving step with reverse: Sequence ${sequenceKey}, Channel ${channelKey}, Step ${index + 1}`);
+                            activeSteps.push({ index: index + 1, reverse: step[1] });
+                        } else {
+                            activeSteps.push(index + 1);
+                        }
+                    }
+                });
+                channel.steps = activeSteps;
+            }
+        }
+    
+        const exportedSettings = JSON.stringify(settingsClone);
+        console.log("[exportSettings] Exported Settings:", exportedSettings);
+        return exportedSettings;
+    }
+    
+    
+    loadSettings(jsonSettings) {
+        console.log("[internalPresetDebug] loadSettings entered");
+        try {
+            // First, clear the current project settings to ensure a clean state
+            this.clearMasterSettings();
+    
+            console.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
+            const parsedSettings = typeof jsonSettings === 'string' ? JSON.parse(jsonSettings) : jsonSettings;
+            console.log("[internalPresetDebug] Parsed Settings:", parsedSettings);
+    
+            // Reset to sequence zero for a clean start
+            this.settings.masterSettings.currentSequence = 0;
+    
+            // Apply the basic settings directly
+            this.settings.masterSettings.projectName = parsedSettings.projectName;
+            this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
+            
+            // Process and apply channel URLs with proper formatting
+            if (parsedSettings.channelURLs) {
+                for (let i = 0; i < parsedSettings.channelURLs.length; i++) {
+                    this.settings.masterSettings.channelURLs[i] = formatURL(parsedSettings.channelURLs[i]);
+                }
+            }
+            
+            // Directly assign trim settings and channel names
+            this.settings.masterSettings.trimSettings = parsedSettings.trimSettings;
+            this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames;
+    
+            // Deserialize and apply project sequences step settings
+            if (parsedSettings.projectSequences) {
+                Object.keys(parsedSettings.projectSequences).forEach(sequenceKey => {
+                    let sequence = parsedSettings.projectSequences[sequenceKey];
+                    Object.keys(sequence).forEach(channelKey => {
+                        let channel = sequence[channelKey];
+                        let steps = new Array(64).fill([false, false]); // Initialize with the new steps structure
+                        channel.steps.forEach(stepData => {
+                            // Check if stepData is an object (for reverse settings) or just an index (for active steps)
+                            if (typeof stepData === 'object' && stepData.index) {
+                                const index = stepData.index - 1; // Adjusting for zero-based indexing
+                                steps[index] = [true, stepData.reverse || false];
+                                     // Log step reconstitution details, especially for reverse playback
+                            console.log(`[loadSettings] Loading step with reverse: Sequence ${sequenceKey}, Channel ${channelKey}, Step ${index + 1}, Reverse: ${stepData.reverse}`);
+                       
+                            } else if (typeof stepData === 'number') {
+                                const index = stepData - 1; // Adjusting for zero-based indexing
+                                steps[index] = [true, false]; // Mark as active, no reverse
+                            }
+                        });
+                        // Directly assign deserialized steps to the appropriate sequence and channel
+                        this.settings.masterSettings.projectSequences[sequenceKey][channelKey].steps = steps;
+                    });
+                });
+            }
+
+    
+            console.log("[internalPresetDebug] Master settings after update:", this.settings.masterSettings);
+    
+            // Update UI elements based on the new settings
+            this.updateAllLoadSampleButtonTexts();
+            // Notify observers to reflect changes in the UI and other dependent components
+            this.notifyObservers();
+    
+            // Additionally, ensure that the UI is updated to reflect the reset to sequence zero.
+            this.updateUIForSequenceZero();
+            
+        } catch (error) {
+            console.error('[internalPresetDebug] Error loading settings:', error);
+        }
+    }
+    
+    
+
+        // exportSettings() {
+        //     console.log("exportSettings entered");
+        
+        //     // Clone the masterSettings to avoid mutating the original object
+        //     const settingsClone = JSON.parse(JSON.stringify(this.settings.masterSettings));
+        
+        //     // Ensure currentSequence is set to 0 for the export
+        //     settingsClone.currentSequence = 0; // Set currentSequence to 0
+        
+        //     // Serialize step settings
+        //     for (let sequenceKey in settingsClone.projectSequences) {
+        //         const sequence = settingsClone.projectSequences[sequenceKey];
+        //         for (let channelKey in sequence) {
+        //             const channel = sequence[channelKey];
+        //             const stepIndexes = [];
+        //             channel.steps.forEach((step, index) => {
+        //                 if (step) {
+        //                     // Store index + 1 to match 1-64 numbering, instead of 0-63
+        //                     stepIndexes.push(index + 1);
+        //                 }
+        //             });
+        //             // Replace steps array with just the indexes of 'true' values
+        //             channel.steps = stepIndexes;
+        //         }
+        //     }
+        
+        //     // Convert the modified settings to a JSON string for export
+        //     const exportedSettings = JSON.stringify(settingsClone);
+        //     console.log("[exportSettings] Exported Settings:", exportedSettings);
+        //     return exportedSettings;
+        // }
+
+
+
+
     initializeTrimSettings(numSettings) {
         console.log("initializeTrimSettings entered");
         if (channelIndex < 1) {
@@ -114,38 +368,7 @@ class UnifiedSequencerSettings {
     }
 
 
-        exportSettings() {
-            console.log("exportSettings entered");
-        
-            // Clone the masterSettings to avoid mutating the original object
-            const settingsClone = JSON.parse(JSON.stringify(this.settings.masterSettings));
-        
-            // Ensure currentSequence is set to 0 for the export
-            settingsClone.currentSequence = 0; // Set currentSequence to 0
-        
-            // Serialize step settings
-            for (let sequenceKey in settingsClone.projectSequences) {
-                const sequence = settingsClone.projectSequences[sequenceKey];
-                for (let channelKey in sequence) {
-                    const channel = sequence[channelKey];
-                    const stepIndexes = [];
-                    channel.steps.forEach((step, index) => {
-                        if (step) {
-                            // Store index + 1 to match 1-64 numbering, instead of 0-63
-                            stepIndexes.push(index + 1);
-                        }
-                    });
-                    // Replace steps array with just the indexes of 'true' values
-                    channel.steps = stepIndexes;
-                }
-            }
-        
-            // Convert the modified settings to a JSON string for export
-            const exportedSettings = JSON.stringify(settingsClone);
-            console.log("[exportSettings] Exported Settings:", exportedSettings);
-            return exportedSettings;
-        }
-        
+      
         
         
             isValidIndex(index) {
@@ -153,67 +376,7 @@ class UnifiedSequencerSettings {
                 return index >= 0 && index < 16; // Directly checking against 16
             }
     
-            loadSettings(jsonSettings) {
-                console.log("[internalPresetDebug] loadSettings entered");
-                try {
-                    // First, clear the current project settings to ensure a clean state
-                    this.clearMasterSettings();
-            
-                    console.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
-                    const parsedSettings = typeof jsonSettings === 'string' ? JSON.parse(jsonSettings) : jsonSettings;
-                    console.log("[internalPresetDebug] Parsed Settings:", parsedSettings);
-            
-                    // Reset to sequence zero for a clean start
-                    this.settings.masterSettings.currentSequence = 0;
-            
-                    // Apply the basic settings directly
-                    this.settings.masterSettings.projectName = parsedSettings.projectName;
-                    this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
-                    
-                    // Process and apply channel URLs with proper formatting
-                    if (parsedSettings.channelURLs) {
-                        for (let i = 0; i < parsedSettings.channelURLs.length; i++) {
-                            this.settings.masterSettings.channelURLs[i] = formatURL(parsedSettings.channelURLs[i]);
-                        }
-                    }
-                    
-                    // Directly assign trim settings and channel names
-                    this.settings.masterSettings.trimSettings = parsedSettings.trimSettings;
-                    this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames;
-            
-                    // Deserialize and apply project sequences step settings
-                    if (parsedSettings.projectSequences) {
-                        Object.keys(parsedSettings.projectSequences).forEach(sequenceKey => {
-                            let sequence = parsedSettings.projectSequences[sequenceKey];
-                            Object.keys(sequence).forEach(channelKey => {
-                                let channel = sequence[channelKey];
-                                let steps = new Array(64).fill(false); // Assuming 64 steps per channel
-                                channel.steps.forEach(stepIndex => {
-                                    if (stepIndex >= 1 && stepIndex <= 64) {
-                                        steps[stepIndex - 1] = true;
-                                    }
-                                });
-                                // Directly assign deserialized steps to the appropriate sequence and channel
-                                this.settings.masterSettings.projectSequences[sequenceKey][channelKey].steps = steps;
-                            });
-                        });
-                    }
-            
-                    console.log("[internalPresetDebug] Master settings after update:", this.settings.masterSettings);
-            
-                    // Update UI elements based on the new settings
-                    this.updateAllLoadSampleButtonTexts();
-                    // Notify observers to reflect changes in the UI and other dependent components
-                    this.notifyObservers();
-            
-                    // Additionally, ensure that the UI is updated to reflect the reset to sequence zero.
-                    this.updateUIForSequenceZero();
-                    
-                } catch (error) {
-                    console.error('[internalPresetDebug] Error loading settings:', error);
-                }
-            }
-            
+          
         
             updateUIForSequenceZero() {
                 console.log("UI updated for sequence zero.");
@@ -307,31 +470,6 @@ class UnifiedSequencerSettings {
             console.log("[clearMasterSettings] Master settings cleared.");
         }
 
-        initializeSequences(numSequences, numChannels, numSteps) {
-            console.log("initializeSequences entered", numSequences, numChannels, numSteps);
-            
-            let sequenceData = {};
-            for (let seq = 0; seq < numSequences; seq++) {
-                sequenceData[`Sequence${seq}`] = this.initializeChannels(numChannels, numSteps);
-            }
-            return sequenceData;
-        }
-        
-        initializeChannels(numChannels, numSteps) {
-            console.log("initializeChannels entered", numChannels, numSteps);
-            
-            let channels = {};
-            for (let ch = 0; ch < numChannels; ch++) {
-                channels[`ch${ch}`] = {
-                    steps: new Array(numSteps).fill(false),
-                    mute: false, // Ensure mute is off by default
-                    url: '' // Default URL can be empty or set to a default value
-                };
-
-            }
-            return channels; 
-        }
-        
 
 
 
@@ -412,38 +550,6 @@ class UnifiedSequencerSettings {
         });
     }
 
-    
-    updateStepState(currentSequence, channelIndex, stepIndex, state) {
-        console.log("updateStepState entered");
-        if (channelIndex < 1) {
-        console.log(`[updateStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}, State: ${state}`);
-        }
-        const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
-        const channel = sequence && sequence[`ch${channelIndex}`];
-        if (channel && stepIndex < channel.steps.length) {
-            channel.steps[stepIndex] = state;
-        } else {
-            console.error('Invalid sequence, channel, or step index in updateStepState');
-        }
-    }
-    
-    
-    getStepState(currentSequence, channelIndex, stepIndex) {
-        console.log("getStepState entered");
-        if (channelIndex < 1) {
-        console.log(`[getStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}`);
-        }
-        const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
-        const channel = sequence && sequence[`ch${channelIndex}`];
-        if (channel && stepIndex < channel.steps.length) {
-            return channel.steps[stepIndex];
-        } else {
-            console.error('Invalid sequence, channel, or step index in getStepState');
-            return null;
-        }
-    }
-    
-    
     
 
     updateSetting(key, value, channelIndex = null) {

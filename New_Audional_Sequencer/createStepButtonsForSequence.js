@@ -41,20 +41,26 @@ function createStepButtonsForSequence() {
                 console.log("Right-click detected on button:", e.target.id); // Debugging line
                 e.preventDefault(); // Prevent the context menu from showing
             
-                // Toggle a class to indicate reverse playback
-                button.classList.toggle('reverse-playback');
+                // Retrieve the current step state and reverse flag
+                let { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, i);
             
-                // Debugging: Log the current class list
-                console.log("Button class list after toggle:", button.classList.toString());
+                // Toggle reverse playback state
+                isReverse = !isReverse;
             
-                // Change the button color to green to indicate reverse playback
-                if (button.classList.contains('reverse-playback')) {
-                    button.style.backgroundColor = 'green';
+                // Update step state with the new reverse playback state
+                window.unifiedSequencerSettings.updateStepStateAndReverse(currentSequence, channelIndex, i, isActive, isReverse);
+            
+                // Update UI based on the new state
+                if (isReverse) {
+                    button.classList.add('reverse-playback');
+                    button.style.backgroundColor = 'green'; // Consider using a CSS class instead
                 } else {
+                    button.classList.remove('reverse-playback');
                     // Reset to default or selected color if not in reverse mode
-                    button.style.backgroundColor = ''; // Consider a better way to manage color
+                    button.style.backgroundColor = ''; // Consider using a CSS class instead
                 }
             });
+            
 
             stepsContainer.appendChild(button);
         }

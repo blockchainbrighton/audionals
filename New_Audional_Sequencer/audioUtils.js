@@ -229,22 +229,6 @@ async function fetchAudio(url, channelIndex) {
       console.error('[fetchAndProcessAudio] Error:', error);
   }
 }
-// Implementation assumes the existence of processJSONResponse and processHTMLResponse functions,
-// as well as the auxiliary functions like formatURL and decodeAudioData.
-
-
-// // pitchControl.js
-
-// /**
-//  * Applies pitch control to an AudioBufferSourceNode.
-//  * 
-//  * @param {AudioBufferSourceNode} source - The source node whose playback rate will be adjusted.
-//  * @param {number} pitch - The desired pitch adjustment. Range: 0.1 (slow) to 10 (fast).
-//  */
-// function applyPitchControl(source, pitch) {
-//   source.playbackRate.value = pitch;
-//   console.log(`[applyPitchControl] Playback rate set to: ${pitch}`);
-// }
 
 
 
@@ -290,18 +274,9 @@ function playTrimmedAudio(channelIndex, audioBuffer, url, currentStep) {
   const stepButton = document.getElementById(stepButtonId);
   const isReversePlayback = stepButton.classList.contains('reverse-playback');
 
-  // // Fetch the pitch value for the specific channel and step
-  // const pitch = window.unifiedSequencerSettings.getStepPitchValue(channelIndex, currentStep);
 
   // Adjust the calculation of trim values based on the reverse playback state
   const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer, isReversePlayback);
-
-
-  // try {
-  //     pitch = window.unifiedSequencerSettings.getStepPitchValue(channelIndex, currentStep);
-  // } catch (error) {
-  //     console.warn(`[playTrimmedAudio] Fallback to default pitch for channel: ${channelIndex}, step: ${currentStep}. Error: ${error}`);
-  // }
 
   const source = audioContext.createBufferSource();
   source.buffer = audioBuffer;
@@ -413,127 +388,4 @@ function toggleMute(channelElement) {
   updateMuteState(channelElement, !isMuted, channelIndex);
   console.log('Mute has been toggled by the toggleMute function');
 }
-
-
-
-// async function importHTMLAudioData(htmlContent, index) {
-//   console.log("[importHTMLSampleData] Entered function with index: ", index);
-//   try {
-//       const parser = new DOMParser();
-//       const doc = parser.parseFromString(htmlContent, 'text/html');
-//       const sourceElement = doc.querySelector('audio[data-audionalSampleName] source');
-
-//       if (sourceElement) {
-//           const base64AudioData = sourceElement.getAttribute('src');
-//           // Convert the prefix to lowercase before checking
-//           if (base64AudioData.toLowerCase().startsWith('data:audio/wav;base64,') || base64AudioData.toLowerCase().startsWith('data:audio/mp3;base64,')) {
-//               console.log("[importHTMLSampleData] Extracted base64 audio data.");
-//               // Directly return the base64 audio data URL
-//               return base64AudioData;
-//           } else {
-//               console.error("[importHTMLSampleData] Audio data does not start with expected base64 prefix.");
-//           }
-//       } else {
-//           console.error("[importHTMLSampleData] Could not find the audio source element in the HTML content.");
-//       }
-//   } catch (error) {
-//       console.error("[importHTMLSampleData] Error parsing HTML content: ", error);
-//   }
-//   // Return null in case of errors or if audio data is not found
-//   return null;
-// }
-
-// // Function to fetch and process audio data
-
-// const fetchAudio = async (url, channelIndex) => {
-//   const fullUrl = formatURL(url);
-//   console.log('[HTML Debugging] [fetchAudio] Entered function. URL:', fullUrl, 'Channel Index:', channelIndex);
-
-//   try {
-//     const response = await fetch(fullUrl);
-//     const contentType = response.headers.get('Content-Type');
-//     let audioData, sampleName;
-
-//     // Attempt to extract the sample name from the URL as a fallback
-//     sampleName = fullUrl.split('/').pop(); // Extracts the last part of the URL, often the filename
-
-//     if (contentType && contentType.includes('application/json')) {
-//       // Handle JSON content
-//       const jsonResponse = await response.json();
-//       // Use filename from JSON if available, fallback to URL-derived name
-//       sampleName = jsonResponse.filename || sampleName;
-//       const base64AudioData = jsonResponse.audioData;
-//       if (!base64AudioData) {
-//         console.error('[HTML Debugging] [fetchAudio] No audioData found in JSON response');
-//         return;
-//       }
-//       audioData = base64ToArrayBuffer(base64AudioData.split(',')[1]);
-//     } else if (contentType && contentType.includes('text/html')) {
-//       // Handle HTML content
-//       const htmlText = await response.text();
-//       const parser = new DOMParser();
-//       const doc = parser.parseFromString(htmlText, 'text/html');
-//       const sampleNameElement = doc.getElementById('sampleName');
-//       if (sampleNameElement) {
-//         // Use the content of the div if available, fallback to URL-derived name
-//         sampleName = sampleNameElement.textContent.trim() || sampleName;
-//       }
-//       const extractedAudioData = await importHTMLAudioData(htmlText, channelIndex);
-//       if (!extractedAudioData) return;
-
-//       audioData = extractedAudioData.startsWith('data:') ?
-//         base64ToArrayBuffer(extractedAudioData.split(',')[1]) :
-//         await fetch(extractedAudioData).then(res => res.arrayBuffer());
-//     } else {
-//       // Handle direct audio file
-//       audioData = await response.arrayBuffer();
-//     }
-
-//     // Decode and process the audio data
-//     const audioBuffer = await decodeAudioData(audioData);
-//     audioBuffers.set(fullUrl, audioBuffer);
-//     console.log(`[HTML Debugging] [fetchAudio] Audio buffer stored.`);
-
-//     // Update the project channel name in global settings
-//     window.unifiedSequencerSettings.setProjectChannelName(channelIndex, sampleName);
-
-//   } catch (error) {
-//     console.error('[HTML Debugging] [fetchAudio] Error:', error);
-//   }
-// };
-
-
-// async function playAuditionedSample(url) {
-//   console.log('playAuditionedSample entered');
-//   try {
-//    // Ensure the URL is correctly formatted
-//     const correctlyFormattedURL = formatURL(url);
-//     const response = await fetch(correctlyFormattedURL);
-//     const data = await response.json();
-
-//     // Check if the expected audioData field is present
-//     if (data.audioData) {
-//       const audioData = base64ToArrayBuffer(data.audioData.split(',')[1]);
-
-//       if (!audioContext) {
-//         window.AudioContext = window.AudioContext || window.webkitAudioContext;
-//         audioContext = new AudioContext();
-//       }
-
-//       const audioBuffer = await decodeAudioData(audioData);
-//       const source = audioContext.createBufferSource();
-//       source.buffer = audioBuffer;
-//       source.connect(audioContext.destination);
-//       source.start();
-//     } else {
-//       console.log("Audional data not found in response, attempting to fetch and parse content type.");
-//       const contentType = await fetchAndParseContentType(url);
-//       console.log(`Content type found: ${contentType}`);
-//       // Additional logic to handle the content type will be added here
-//     }
-//   } catch (error) {
-//     console.error('Error playing auditioned sample:', error);
-//   }
-// };
-
 

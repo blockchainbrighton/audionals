@@ -28,31 +28,45 @@ function updateStepStateObserver(settings) {
     const channels = document.querySelectorAll('.channel');
     channels.forEach(channel => {
         const stepButtons = channel.querySelectorAll('.step-button');
-        stepButtons.forEach(button => button.classList.remove('selected'));
+        stepButtons.forEach(button => {
+            button.classList.remove('selected', 'reverse-playback'); // Also remove reverse playback class
+            button.style.backgroundColor = ''; // Reset the background color
+        });
     });
 
-    // Now, apply the current state of steps for sequence zero to the UI
+    // Apply the current state of steps to the UI, including reverse playback
     const currentSequenceSettings = settings.masterSettings.projectSequences['Sequence0'];
     if (currentSequenceSettings) {
         Object.keys(currentSequenceSettings).forEach(channelKey => {
             const channelIndex = parseInt(channelKey.replace('ch', ''), 10); // Assuming channel keys are 'ch0', 'ch1', etc.
-            const steps = currentSequenceSettings[channelKey].steps;
+            const channel = currentSequenceSettings[channelKey];
+            const steps = channel.steps;
             const channelElement = document.querySelector(`[data-id="Channel-${channelIndex}"]`);
 
             if (channelElement) {
                 const stepButtons = channelElement.querySelectorAll('.step-button');
                 stepButtons.forEach((button, index) => {
-                    if (steps[index]) {
+                    if (Array.isArray(steps[index])) { // Check if step state is stored in an array
+                        const [isActive, isReverse] = steps[index];
+                        if (isActive) {
+                            button.classList.add('selected');
+                            if (isReverse) {
+                                button.classList.add('reverse-playback');
+                                button.style.backgroundColor = 'green'; // Indicate reverse playback
+                            }
+                        }
+                    } else if (typeof steps[index] === 'number') { // For backward compatibility with number indices
                         button.classList.add('selected');
                     }
                 });
             }
         });
-        window.unifiedSequencerSettings.updateUIForSequenceZero(); // Adjust based on your actual implementation
     }
 
-    // If there are specific UI elements or indicators for the current sequence, update them here
+    // Consider adding a call to a function like 'updateUIForSequenceZero' if needed
+    // This can adjust the UI based on sequence-specific details
 }
+
 
 // Observer for Trim Settings
 // Ensure the observer function for updating trim settings (updateTrimSettingsObserver)
