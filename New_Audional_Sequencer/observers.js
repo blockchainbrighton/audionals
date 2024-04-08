@@ -61,6 +61,9 @@ function updateStepStateObserver(settings) {
                 });
             }
         });
+
+        console.log(`Updating UI for sequence ${settings.masterSettings.currentSequence}`);
+
     }
 
     // Consider adding a call to a function like 'updateUIForSequenceZero' if needed
@@ -144,6 +147,7 @@ function updateCurrentSequenceObserver(settings) {
     if (settings && settings.masterSettings && typeof settings.masterSettings.currentSequence === 'number') {
         console.log("[Observer] Current Sequence changed:", settings.masterSettings.currentSequence);
     }
+    console.log(`Current sequence updated to: ${settings.masterSettings.currentSequence}`);
 }
 
 

@@ -15,7 +15,7 @@ function validateAndUpdateUI(sequenceIndex) {
     }
 
     // Call UI update function with the new sequence settings
-    updateUIForSequence(sequenceIndex);
+    updateUIForSequenceZero(sequenceIndex);
     console.log(`[copyPasteDebug] UI updated for sequence index: ${sequenceIndex}`);
 
     // Additional validation logic can be added here
@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', function() {
             window.unifiedSequencerSettings.setSequenceSettings(currentSequenceIndex, copiedData.sequenceSettings);
             
             console.log(`[copyPasteDebug] Sequence settings pasted to sequence index ${currentSequenceIndex}: ${JSON.stringify(copiedData)}`);
-            updateUIForSequence(currentSequenceIndex);
+            updateUIForSequenceZero(currentSequenceIndex);
             console.log(`[copyPasteDebug] updateUIForSequence called with sequence index: ${currentSequenceIndex}`);
             console.log(`[copyPasteDebug] Current sequence index according to the global object is now: ${window.unifiedSequencerSettings.getCurrentSequence()}`);
 

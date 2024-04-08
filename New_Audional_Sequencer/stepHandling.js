@@ -131,7 +131,7 @@ function handleSequenceTransition(targetSequence) {
 
     // Delay updating the UI to ensure DOM has updated
     setTimeout(() => {
-        updateUIForSequence(targetSequence);
+        updateUIForSequenceZero(targetSequence);
         console.log(`[SeqDebug][handleSequenceTransition][stepHandling] UI updated for sequence ${targetSequence} at ${new Date().toLocaleTimeString()}`);
     }, 100); // Adjust delay as needed
 }

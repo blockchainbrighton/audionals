@@ -1,5 +1,34 @@
 // eventListeners_v2.js
 
+document.addEventListener('DOMContentLoaded', () => {
+    const prevSequenceButton = document.getElementById('prev-sequence');
+    const nextSequenceButton = document.getElementById('next-sequence');
+    const currentSequenceDisplay = document.getElementById('current-sequence-display');
+    
+    // Handler for "Previous Sequence" button click
+    prevSequenceButton.addEventListener('click', () => {
+        // Call global object method to navigate to the previous sequence
+        window.unifiedSequencerSettings.prevSequence();
+        // Update the displayed sequence number
+        const currentSequence = window.unifiedSequencerSettings.settings.masterSettings.currentSequence;
+        currentSequenceDisplay.textContent = `Sequence ${currentSequence}`;
+        // Optionally notify observers to update UI
+        window.unifiedSequencerSettings.notifyObservers();
+    });
+
+    // Handler for "Next Sequence" button click
+    nextSequenceButton.addEventListener('click', () => {
+        // Call global object method to navigate to the next sequence
+        window.unifiedSequencerSettings.nextSequence();
+        // Update the displayed sequence number
+        const currentSequence = window.unifiedSequencerSettings.settings.masterSettings.currentSequence;
+        currentSequenceDisplay.textContent = `Sequence ${currentSequence}`;
+        // Optionally notify observers to update UI
+        window.unifiedSequencerSettings.notifyObservers();
+    });
+});
+
+
 const appContainer = document.getElementById('drum-machine'); // Adjust the ID as per your HTML
 appContainer.addEventListener('click', () => {
     audioContext.resume().then(() => {

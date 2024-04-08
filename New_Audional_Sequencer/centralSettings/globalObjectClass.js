@@ -29,27 +29,31 @@ class UnifiedSequencerSettings {
             this.clearMasterSettings = this.clearMasterSettings.bind(this);
         }
 
-        toggleStepState(sequenceIndex, channelIndex, stepIndex) {
-            // Assuming the sequence and channel indexes are already validated
-            let step = this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex];
-            if (!Array.isArray(step)) step = [false, false]; // Initialize if not already an array
-            step[0] = !step[0]; // Toggle the active state
-            this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex] = step;
-    
-            // Notify observers of the change
-            this.notifyObservers();
-        }
-    
-        toggleStepReverseState(sequenceIndex, channelIndex, stepIndex) {
-            let step = this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex];
-            if (!Array.isArray(step)) step = [false, false]; // Initialize if not already an array
-            step[1] = !step[1]; // Toggle the reverse state
-            this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex] = step;
-    
-            // Notify observers of the change
-            this.notifyObservers();
-        }
 
+    // Method to navigate to the next sequence
+    nextSequence() {
+        const current = this.settings.masterSettings.currentSequence;
+        const totalSequences = Object.keys(this.settings.masterSettings.projectSequences).length;
+        if (current < totalSequences - 1) {
+            this.setCurrentSequence(current + 1);
+            console.log(`[SeqDebug] Moved to next sequence: ${this.settings.masterSettings.currentSequence}`);
+            this.notifyObservers(); // Notify observers about the change
+        }
+        console.log(`Moving from sequence ${current} to sequence ${this.settings.masterSettings.currentSequence}`);
+    }
+
+    // Method to navigate to the previous sequence
+    prevSequence() {
+        const current = this.settings.masterSettings.currentSequence;
+        if (current > 0) {
+            this.setCurrentSequence(current - 1);
+            console.log(`[SeqDebug] Moved to previous sequence: ${this.settings.masterSettings.currentSequence}`);
+            this.notifyObservers(); // Notify observers about the change
+        }
+        console.log(`Moving from sequence ${current} to sequence ${this.settings.masterSettings.currentSequence}`);
+        console.log(`Initialized sequences: ${JSON.stringify(this.settings.masterSettings.projectSequences)}`);
+
+    }
 
         initializeSequences(numSequences, numChannels, numSteps) {
             console.log("initializeSequences entered", numSequences, numChannels, numSteps);
@@ -72,6 +76,58 @@ class UnifiedSequencerSettings {
                 };
             }
             return channels;
+        }
+
+
+         // Method to get the current sequence
+    getCurrentSequence() {
+        console.log("getCurrentSequence entered");
+        return this.settings.masterSettings.currentSequence;
+    }
+
+    getSequenceSettings(sequenceIndex) {
+        console.log("getSequenceSettings entered");
+        const sequenceKey = `Sequence${sequenceIndex}`;
+        return this.settings.masterSettings.projectSequences[sequenceKey];
+    }
+
+    setSequenceSettings(sequenceIndex, sequenceSettings) {
+        console.log("setSequenceSettings entered");
+        const sequenceKey = `Sequence${sequenceIndex}`;
+        this.settings.masterSettings.projectSequences[sequenceKey] = sequenceSettings;
+    }
+    
+        // Method to update the current sequence
+        setCurrentSequence(currentSequence) {
+            console.log("[SeqDebug] setCurrentSequence entered with: ", currentSequence);
+            
+            this.settings.masterSettings.currentSequence = currentSequence;
+            console.log(`[SeqDebug] [setCurrentSequence] currentSequence set to: ${currentSequence}`);
+            console.log(`[SeqDebug] [setCurrentSequence] Object currentSequence set to: ${this.settings.masterSettings.currentSequence}`);
+        }
+
+        toggleStepState(sequenceIndex, channelIndex, stepIndex) {
+            // Assuming the sequence and channel indexes are already validated
+            let step = this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex];
+            if (!Array.isArray(step)) step = [false, false]; // Initialize if not already an array
+            step[0] = !step[0]; // Toggle the active state
+            this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex] = step;
+    
+            // Notify observers of the change
+            this.notifyObservers();
+            console.log(`Toggled step state in sequence ${sequenceIndex}, channel ${channelIndex}, step ${stepIndex}`);
+        }
+    
+        toggleStepReverseState(sequenceIndex, channelIndex, stepIndex) {
+            let step = this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex];
+            if (!Array.isArray(step)) step = [false, false]; // Initialize if not already an array
+            step[1] = !step[1]; // Toggle the reverse state
+            this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex] = step;
+    
+            // Notify observers of the change
+            this.notifyObservers();
+            console.log(`Toggled step reverese state in sequence ${sequenceIndex}, channel ${channelIndex}, step ${stepIndex}`);
+
         }
 
         updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, isReverse) {
@@ -197,6 +253,7 @@ class UnifiedSequencerSettings {
         const exportedSettings = JSON.stringify(settingsClone);
         console.log("[exportSettings] Exported Settings:", exportedSettings);
         return exportedSettings;
+
     }
     
     
@@ -254,7 +311,8 @@ class UnifiedSequencerSettings {
                 });
             }
 
-    
+            console.log(`Loaded settings: ${JSON.stringify(this.settings.masterSettings)}`);
+
             console.log("[internalPresetDebug] Master settings after update:", this.settings.masterSettings);
     
             // Update UI elements based on the new settings
@@ -506,33 +564,9 @@ class UnifiedSequencerSettings {
         this.notifyObservers(); // Notify observers about the change
     }
 
-    // Method to update the current sequence
-    setCurrentSequence(currentSequence) {
-        console.log("[SeqDebug] setCurrentSequence entered with: ", currentSequence);
-        
-        this.settings.masterSettings.currentSequence = currentSequence;
-        console.log(`[SeqDebug] [setCurrentSequence] currentSequence set to: ${currentSequence}`);
-        console.log(`[SeqDebug] [setCurrentSequence] Object currentSequence set to: ${this.settings.masterSettings.currentSequence}`);
-    }
 
-    // Method to get the current sequence
-    getCurrentSequence() {
-        console.log("getCurrentSequence entered");
-        return this.settings.masterSettings.currentSequence;
-    }
 
-    getSequenceSettings(sequenceIndex) {
-        console.log("getSequenceSettings entered");
-        const sequenceKey = `Sequence${sequenceIndex}`;
-        return this.settings.masterSettings.projectSequences[sequenceKey];
-    }
-
-    setSequenceSettings(sequenceIndex, sequenceSettings) {
-        console.log("setSequenceSettings entered");
-        const sequenceKey = `Sequence${sequenceIndex}`;
-        this.settings.masterSettings.projectSequences[sequenceKey] = sequenceSettings;
-    }
-    
+   
 
 
     getSettings(key) {
