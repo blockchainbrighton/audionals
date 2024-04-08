@@ -120,6 +120,22 @@ class UnifiedSequencerSettings {
                 console.error('Invalid state type in updateStepState');
             }
         }
+
+        getStepState(currentSequence, channelIndex, stepIndex) {
+            console.log("getStepState entered");
+            if (channelIndex < 1) {
+                console.log(`[getStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}`);
+            }
+            const stepInfo = this.getStepStateAndReverse(currentSequence, channelIndex, stepIndex);
+            if (stepInfo) {
+                // Return only the isActive part for backward compatibility.
+                return stepInfo.isActive;
+            } else {
+                console.error('Invalid sequence, channel, or step index in getStepState');
+                return false;
+            }
+        }
+        
         
         
     // updateStepState(currentSequence, channelIndex, stepIndex, state) {
@@ -137,21 +153,7 @@ class UnifiedSequencerSettings {
     // }
     
 
-    getStepState(currentSequence, channelIndex, stepIndex) {
-        console.log("getStepState entered");
-        if (channelIndex < 1) {
-            console.log(`[getStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}`);
-        }
-        const stepInfo = this.getStepStateAndReverse(currentSequence, channelIndex, stepIndex);
-        if (stepInfo) {
-            // Return only the isActive part for backward compatibility.
-            return stepInfo.isActive;
-        } else {
-            console.error('Invalid sequence, channel, or step index in getStepState');
-            return false;
-        }
-    }
-    
+   
     
     // getStepState(currentSequence, channelIndex, stepIndex) {
     //     console.log("getStepState entered");

@@ -6,69 +6,49 @@ function createStepButtonsForSequence() {
     channels.forEach((channel, channelIndex) => {
         const stepsContainer = channel.querySelector('.steps-container');
         stepsContainer.innerHTML = '';
-    
+
         let currentSequence = window.unifiedSequencerSettings.settings.masterSettings.currentSequence;
-    
+
         for (let i = 0; i < 64; i++) {
             const button = document.createElement('button');
             button.classList.add('step-button');
             button.id = `Sequence${currentSequence}-ch${channelIndex}-step-${i}`;
 
+            // Left-click Listener: Toggle Step Activation
             button.addEventListener('click', () => {
                 let currentStepState = window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, i);
-                window.unifiedSequencerSettings.updateStepState(currentSequence, channelIndex, i, !currentStepState);
+                let newState = !currentStepState; // Toggle state
+                window.unifiedSequencerSettings.updateStepState(currentSequence, channelIndex, i, newState);
 
-                // Toggle the 'selected' class and update color based on the loadSampleButton's color
-                if (button.classList.toggle('selected')) {
-                    const loadSampleButton = channel.querySelector('.load-sample-button');
-                    const colorClass = loadSampleButton.className.match(/\bcolor-[^ ]+/);
-                    if (colorClass) {
-                        button.classList.add(colorClass[0]);
-                    } else {
-                        // If no color class, ensure default color is used
-                        button.style.backgroundColor = 'var(--accent-color)';
-                    }
+                // Direct UI Update
+                if (newState) {
+                    button.classList.add('selected');
+                    button.style.backgroundColor = 'red'; // Active step
                 } else {
-                    button.classList.remove(...button.classList);
-                    button.classList.add('step-button'); // Re-add the default class
-                    button.style.backgroundColor = ''; // Remove inline style if any
+                    button.classList.remove('selected', 'reverse-playback');
+                    button.style.backgroundColor = ''; // Inactive step
                 }
-
-                updateSpecificStepUI(currentSequence, channelIndex, i);
             });
 
+            // Right-click Listener: Set Step for Reverse Playback
             button.addEventListener('contextmenu', (e) => {
-                e.preventDefault(); // Prevent the context menu from showing
-                console.log("Right-click detected on button:", e.target.id); // Debugging line
-            
-                // Retrieve the current step state and reverse flag
-                let { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, i);
-            
-                // If marking a step as reversed, ensure it's also marked as active
-                if (!isActive || isReverse === false) {
-                    isActive = true; // Mark the step as active if it wasn't already
-                }
-                isReverse = !isReverse; // Toggle the reverse state
-            
-                // Update step state with the new active and reverse playback states
-                window.unifiedSequencerSettings.updateStepStateAndReverse(currentSequence, channelIndex, i, isActive, isReverse);
-            
-                // Directly updating UI in listeners can be replaced by observer notifications if designed that way
-                if (isReverse) {
-                    button.classList.add('reverse-playback');
-                    button.style.backgroundColor = 'green'; // Indicate reverse playback
+                e.preventDefault();
+                let {isActive, isReverse} = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, i);
+                let newReverseState = !isReverse;
+                window.unifiedSequencerSettings.updateStepStateAndReverse(currentSequence, channelIndex, i, true, newReverseState);
+
+                // Direct UI Update for Reverse Playback
+                if (newReverseState) {
+                    button.classList.add('selected', 'reverse-playback');
+                    button.style.backgroundColor = 'green'; // Reverse playback
                 } else {
                     button.classList.remove('reverse-playback');
-                    button.style.backgroundColor = ''; // Reset to default color
+                    button.style.backgroundColor = 'red'; // Still active but not reverse
                 }
             });
-            
-            
 
             stepsContainer.appendChild(button);
         }
-
-        console.log(`[createStepButtonsForSequence] Completed creating step buttons for Channel ${channelIndex} in Sequence ${currentSequence}.`);
     });
 }
 
