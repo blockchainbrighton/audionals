@@ -137,38 +137,7 @@ class UnifiedSequencerSettings {
         }
         
         
-        
-    // updateStepState(currentSequence, channelIndex, stepIndex, state) {
-    //     console.log("updateStepState entered");
-    //     if (channelIndex < 1) {
-    //     console.log(`[updateStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}, State: ${state}`);
-    //     }
-    //     const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
-    //     const channel = sequence && sequence[`ch${channelIndex}`];
-    //     if (channel && stepIndex < channel.steps.length) {
-    //         channel.steps[stepIndex] = state;
-    //     } else {
-    //         console.error('Invalid sequence, channel, or step index in updateStepState');
-    //     }
-    // }
-    
-
-   
-    
-    // getStepState(currentSequence, channelIndex, stepIndex) {
-    //     console.log("getStepState entered");
-    //     if (channelIndex < 1) {
-    //     console.log(`[getStepState] Called with Sequence: ${currentSequence}, Channel: ${channelIndex}, Step: ${stepIndex}`);
-    //     }
-    //     const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
-    //     const channel = sequence && sequence[`ch${channelIndex}`];
-    //     if (channel && stepIndex < channel.steps.length) {
-    //         return channel.steps[stepIndex];
-    //     } else {
-    //         console.error('Invalid sequence, channel, or step index in getStepState');
-    //         return null;
-    //     }
-    // }
+      
     
     exportSettings() {
         const settingsClone = JSON.parse(JSON.stringify(this.settings.masterSettings));
@@ -271,41 +240,6 @@ class UnifiedSequencerSettings {
     }
     
     
-
-        // exportSettings() {
-        //     console.log("exportSettings entered");
-        
-        //     // Clone the masterSettings to avoid mutating the original object
-        //     const settingsClone = JSON.parse(JSON.stringify(this.settings.masterSettings));
-        
-        //     // Ensure currentSequence is set to 0 for the export
-        //     settingsClone.currentSequence = 0; // Set currentSequence to 0
-        
-        //     // Serialize step settings
-        //     for (let sequenceKey in settingsClone.projectSequences) {
-        //         const sequence = settingsClone.projectSequences[sequenceKey];
-        //         for (let channelKey in sequence) {
-        //             const channel = sequence[channelKey];
-        //             const stepIndexes = [];
-        //             channel.steps.forEach((step, index) => {
-        //                 if (step) {
-        //                     // Store index + 1 to match 1-64 numbering, instead of 0-63
-        //                     stepIndexes.push(index + 1);
-        //                 }
-        //             });
-        //             // Replace steps array with just the indexes of 'true' values
-        //             channel.steps = stepIndexes;
-        //         }
-        //     }
-        
-        //     // Convert the modified settings to a JSON string for export
-        //     const exportedSettings = JSON.stringify(settingsClone);
-        //     console.log("[exportSettings] Exported Settings:", exportedSettings);
-        //     return exportedSettings;
-        // }
-
-
-
 
     initializeTrimSettings(numSettings) {
         console.log("initializeTrimSettings entered");
@@ -731,14 +665,6 @@ class UnifiedSequencerSettings {
         // Update button text
         button.textContent = buttonText;
     }
-    
-    // exportSettings() {
-    //     console.log("exportSettings entered");
-    //     const exportedSettings = JSON.stringify(this.settings.masterSettings);
-    //     console.log("[exportSettings] Exported Settings:", exportedSettings);
-    //     return exportedSettings;
-    // }
-  
 
 
     // Additional methods for updating UI
