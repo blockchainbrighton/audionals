@@ -19,10 +19,17 @@ function registerObservers() {
     } else {
         console.error("UnifiedSequencerSettings instance not found.");
     }
+    console.log("[SequenceChangeDebug] All observers registered.");
+
 }
 // This observer function should be placed in your observers file
 function updateStepStateObserver(settings) {
-    console.log("[observers] updateStepStateObserver called");
+    console.log("[SequenceChangeDebug] updateStepStateObserver called");
+
+    const currentSequenceIndex = settings.masterSettings.currentSequence;
+    const currentSequenceKey = `Sequence${currentSequenceIndex}`;
+    const currentSequenceSettings = settings.masterSettings.projectSequences[currentSequenceKey];
+    console.log(`[SequenceChangeDebug] Accessing settings for Sequence${currentSequenceIndex}:`, currentSequenceSettings);
 
     // Reset UI for step buttons across all channels
     const channels = document.querySelectorAll('.channel');
@@ -34,21 +41,19 @@ function updateStepStateObserver(settings) {
         });
     });
 
-    // Dynamically access the current sequence instead of hardcoding 'Sequence0'
-    const currentSequenceIndex = settings.masterSettings.currentSequence;
-    const currentSequenceKey = `Sequence${currentSequenceIndex}`;
-    const currentSequenceSettings = settings.masterSettings.projectSequences[currentSequenceKey];
-
     if (currentSequenceSettings) {
         Object.keys(currentSequenceSettings).forEach(channelKey => {
-            const channelIndex = parseInt(channelKey.replace('ch', ''), 10); // Assuming channel keys are 'ch0', 'ch1', etc.
+            const channelIndex = parseInt(channelKey.replace('ch', ''), 10);
             const channel = currentSequenceSettings[channelKey];
             const steps = channel.steps;
             const channelElement = document.querySelector(`[data-id="Channel-${channelIndex}"]`);
 
+            console.log("[SequenceChangeDebug] UI Target Channel Element for Channel:", channelIndex, channelElement);
+
             if (channelElement) {
                 const stepButtons = channelElement.querySelectorAll('.step-button');
                 stepButtons.forEach((button, index) => {
+                    console.log(`[SequenceChangeDebug] UI Update Step Button for Channel ${channelIndex}, Step ${index}`);
                     if (Array.isArray(steps[index])) { // Check if step state is stored in an array
                         const [isActive, isReverse] = steps[index];
                         if (isActive) {
@@ -65,9 +70,8 @@ function updateStepStateObserver(settings) {
             }
         });
     }
-
-    // This adjusted function dynamically updates the UI based on the current sequence's steps.
 }
+
 
 
 // Observer for Trim Settings
@@ -132,9 +136,9 @@ function updateProjectChannelNamesObserver(settings) {
 
 // Observer for Project Sequences
 function updateProjectSequencesObserver(settings) {
-    console.log("[observers] updateProjectSequencesObserver called with:", settings)
+    console.log("[SequenceChangeDebug] updateProjectSequencesObserver called with:", settings)
     if (settings && settings.masterSettings && settings.masterSettings.projectSequences) {
-        console.log("Updating Project Sequences UI:", settings.masterSettings.projectSequences);
+        console.log("SequenceChangeDebug Updating Project Sequences UI:", settings.masterSettings.projectSequences);
 
          updateProjectSequencesUI(settings.masterSettings.projectSequences);
     }
@@ -144,15 +148,16 @@ function updateProjectSequencesObserver(settings) {
 function updateCurrentSequenceObserver(settings) {
     console.log("[SequenceChangeDebug] updateCurrentSequenceObserver called with:", settings)
     if (settings && settings.masterSettings && typeof settings.masterSettings.currentSequence === 'number') {
-        console.log("[Observer] Current Sequence changed:", settings.masterSettings.currentSequence);
+        console.log("[SequenceChangeDebug] Current Sequence changed:", settings.masterSettings.currentSequence);
+        
     }
 }
 
 
 function updateTotalSequencesObserver(settings) {
-    console.log("[Observer] updateTotalSequencesObserver called with:", settings)
+    console.log("[SequenceChangeDebug] updateTotalSequencesObserver called with:", settings)
     if (settings && settings.masterSettings && Array.isArray(settings.masterSettings.projectSequences)) {
-        console.log("[Observer] Total number of Sequences changed:", settings.masterSettings.projectSequences.length);
+        console.log("[SequenceChangeDebug] Total number of Sequences changed:", settings.masterSettings.projectSequences.length);
     }
 }
 

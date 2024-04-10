@@ -425,29 +425,33 @@ class UnifiedSequencerSettings {
             }
             
 
-            updateUIForSequence() {
-                console.log("UI updated for sequence zero.");
-            
-                // Assuming you have a way to select the current sequence UI element
-                const sequenceSelector = document.querySelector('.current-sequence-selector');
-                if (sequenceSelector) {
-                    sequenceSelector.value = 'Sequence0'; // Or however your sequence selector is structured
-                }
-            
-                // Reset step buttons to their default state for sequence zero
-                const channels = document.querySelectorAll('.channel');
-                channels.forEach((channel, channelIndex) => {
-                    const stepButtons = channel.querySelectorAll('.step-button');
-                    stepButtons.forEach((button, stepIndex) => {
-                        const stepState = this.getStepState(0, channelIndex, stepIndex);
-                        if (stepState) {
-                            button.classList.add('selected');
-                        } else {
-                            button.classList.remove('selected');
-                        }
-                    });
-                });
+            // Corrected to accept a parameter for the current sequence index
+        updateUIForSequence(currentSequenceIndex) {
+            console.log("[Debug] Updating UI for Sequence:", currentSequenceIndex);
+
+            // Dynamically setting the selector to match the current sequence
+            const sequenceSelector = document.querySelector('.current-sequence-selector');
+            if (sequenceSelector) {
+                // Update to dynamically set the value based on currentSequenceIndex
+                sequenceSelector.value = `Sequence${currentSequenceIndex}`;
             }
+            
+            // Reset step buttons to their default state for the current sequence
+            const channels = document.querySelectorAll('.channel');
+            channels.forEach((channel, channelIndex) => {
+                const stepButtons = channel.querySelectorAll('.step-button');
+                stepButtons.forEach((button, stepIndex) => {
+                    // Corrected to use currentSequenceIndex instead of hardcoding to 0
+                    const stepState = this.getStepState(currentSequenceIndex, channelIndex, stepIndex);
+                    if (stepState) {
+                        button.classList.add('selected');
+                    } else {
+                        button.classList.remove('selected');
+                    }
+                });
+            });
+        }
+
             
 
 
@@ -536,8 +540,10 @@ class UnifiedSequencerSettings {
         console.log('[SequenceChangeDebug] setCurrentSequence called with sequence:', currentSequence);
         
         this.settings.masterSettings.currentSequence = currentSequence;
-        console.log(`[SeqDebug] [setCurrentSequence] currentSequence set to: ${currentSequence}`);
-        console.log(`[SeqDebug] [setCurrentSequence] Object currentSequence set to: ${this.settings.masterSettings.currentSequence}`);
+        console.log(`[SequenceChangeDebug] [setCurrentSequence] currentSequence set to: ${currentSequence}`);
+        console.log(`[SequenceChangeDebug] [setCurrentSequence] Object currentSequence set to: ${this.settings.masterSettings.currentSequence}`);
+        this.notifyObservers(); // Notify observers about the change
+
     }
 
     // Method to get the current sequence
