@@ -542,8 +542,10 @@ class UnifiedSequencerSettings {
         this.settings.masterSettings.currentSequence = currentSequence;
         console.log(`[SequenceChangeDebug] [setCurrentSequence] currentSequence set to: ${currentSequence}`);
         console.log(`[SequenceChangeDebug] [setCurrentSequence] Object currentSequence set to: ${this.settings.masterSettings.currentSequence}`);
-        this.notifyObservers(); // Notify observers about the change
-
+        if (this.settings.masterSettings.currentSequence !== currentSequence) {
+            this.settings.masterSettings.currentSequence = currentSequence;
+            this.notifyObservers();
+        }
     }
 
     // Method to get the current sequence

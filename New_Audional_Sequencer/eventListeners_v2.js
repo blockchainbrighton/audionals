@@ -20,8 +20,36 @@ document.addEventListener("DOMContentLoaded", function() {
     let loadInternalPreset5 = document.getElementById('loadInternalPreset5');
 
     let loadButtonClicked = false; // Flag to track if the load button is clicked
-
     
+    // Previous Sequence Button
+    document.getElementById('prev-sequence').addEventListener('click', function() {
+        let currentSequence = window.unifiedSequencerSettings.getCurrentSequence();
+        let totalSequences = Object.keys(window.unifiedSequencerSettings.settings.masterSettings.projectSequences).length;
+        let prevSequence = (currentSequence - 1 + totalSequences) % totalSequences;
+        window.unifiedSequencerSettings.setCurrentSequence(prevSequence);
+        console.log(`[SeqNavigation] Moved to previous sequence: ${prevSequence}`);
+        
+        // Update the display for the current sequence number
+        document.getElementById('current-sequence-display').textContent = `Sequence ${prevSequence}`;
+        
+        // Assuming updateUIForSequence correctly handles UI updates for the current sequence
+        window.unifiedSequencerSettings.updateUIForSequence(prevSequence);
+    });
+
+    // Next Sequence Button
+    document.getElementById('next-sequence').addEventListener('click', function() {
+        let currentSequence = window.unifiedSequencerSettings.getCurrentSequence();
+        let totalSequences = Object.keys(window.unifiedSequencerSettings.settings.masterSettings.projectSequences).length;
+        let nextSequence = (currentSequence + 1) % totalSequences;
+        window.unifiedSequencerSettings.setCurrentSequence(nextSequence);
+        console.log(`[SeqNavigation] Moved to next sequence: ${nextSequence}`);
+        
+        // Update the display for the current sequence number
+        document.getElementById('current-sequence-display').textContent = `Sequence ${nextSequence}`;
+        
+        // Assuming updateUIForSequence correctly handles UI updates for the current sequence
+        window.unifiedSequencerSettings.updateUIForSequence(nextSequence);
+    });
 
     saveButton.addEventListener('click', () => {
         let settings = window.unifiedSequencerSettings.exportSettings();
@@ -103,37 +131,6 @@ document.addEventListener("DOMContentLoaded", function() {
     });
     
     
-
-    // loadFileInput.addEventListener('change', () => {
-    //     console.log('[Save/Load debug] loadFileInput change event');
-    //     let file = loadFileInput.files[0];
-    //     let reader = new FileReader();
-    //     reader.onload = async function(e) {
-    //         console.log("File read start");
-    //         let loadedSettings = JSON.parse(e.target.result);
-    //         console.log("[loadFileInput] File content:", loadedSettings);
-        
-    //         // Load new settings and update UI
-    //         window.unifiedSequencerSettings.loadSettings(loadedSettings);
-
-    
-    //         // Fetch audio for each URL in the loaded settings
-    //         if (loadedSettings.channelURLs && Array.isArray(loadedSettings.channelURLs)) {
-    //             for (let i = 0; i < loadedSettings.channelURLs.length; i++) {
-    //                 const url = loadedSettings.channelURLs[i];
-    //                 if (url) {
-    //                     // Continue with the existing logic to call fetchAudio
-    //                     const loadSampleButtonElement = document.getElementById(`load-sample-button-${i}`);
-    //                     await fetchAudio(url, i, loadSampleButtonElement);
-    //                 }
-    //             }
-    //         }
-            
-    //     };
-    
-    //     reader.readAsText(file);
-    // });
-    
     
 
     function loadPresetFromFile(filePath) {
@@ -202,3 +199,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+
+
+
+    // loadFileInput.addEventListener('change', () => {
+    //     console.log('[Save/Load debug] loadFileInput change event');
+    //     let file = loadFileInput.files[0];
+    //     let reader = new FileReader();
+    //     reader.onload = async function(e) {
+    //         console.log("File read start");
+    //         let loadedSettings = JSON.parse(e.target.result);
+    //         console.log("[loadFileInput] File content:", loadedSettings);
+        
+    //         // Load new settings and update UI
+    //         window.unifiedSequencerSettings.loadSettings(loadedSettings);
+
+    
+    //         // Fetch audio for each URL in the loaded settings
+    //         if (loadedSettings.channelURLs && Array.isArray(loadedSettings.channelURLs)) {
+    //             for (let i = 0; i < loadedSettings.channelURLs.length; i++) {
+    //                 const url = loadedSettings.channelURLs[i];
+    //                 if (url) {
+    //                     // Continue with the existing logic to call fetchAudio
+    //                     const loadSampleButtonElement = document.getElementById(`load-sample-button-${i}`);
+    //                     await fetchAudio(url, i, loadSampleButtonElement);
+    //                 }
+    //             }
+    //         }
+            
+    //     };
+    
+    //     reader.readAsText(file);
+    // });
+    

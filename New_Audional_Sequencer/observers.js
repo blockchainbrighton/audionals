@@ -146,6 +146,7 @@ function updateProjectSequencesObserver(settings) {
 
 
 function updateCurrentSequenceObserver(settings) {
+    console.log("[SequenceChangeDebug] Executing updateCurrentSequenceObserver for sequence:", currentSequence);
     console.log("[SequenceChangeDebug] updateCurrentSequenceObserver called with:", settings)
     if (settings && settings.masterSettings && typeof settings.masterSettings.currentSequence === 'number') {
         console.log("[SequenceChangeDebug] Current Sequence changed:", settings.masterSettings.currentSequence);
