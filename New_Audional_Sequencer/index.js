@@ -122,6 +122,7 @@ if (playButton && stopButton) {
     let isPaused = false;  // Add this line to declare the isPaused flag
 
     function checkContinuousPlay() {
+        console.log('[SequenceChangeDebug] Checking for continuous play.');
         const continuousPlayCheckbox = document.getElementById('continuous-play');
         let isContinuousPlay = continuousPlayCheckbox.checked;
 
@@ -182,6 +183,8 @@ if (playButton && stopButton) {
         
                 // Load the next sequence here (assuming you have a function or method to do so)
                 // For example, you can increment the sequenceCount and use it to load the next preset.
+                 console.log('[SequenceChangeDebug] Attempting to move to the next sequence.');
+
                 sequenceCount++;
                 if (sequenceCount > maxSequenceCount) {  // Assuming maxSequenceCount is the total number of sequences you have
                     sequenceCount = 1;  // Reset to the first sequence if we're at the end

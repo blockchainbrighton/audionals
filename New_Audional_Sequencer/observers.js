@@ -14,12 +14,12 @@ function registerObservers() {
         window.unifiedSequencerSettings.addObserver(updateProjectChannelNamesObserver);
         window.unifiedSequencerSettings.addObserver(updateProjectSequencesObserver);
         window.unifiedSequencerSettings.addObserver(updateCurrentSequenceObserver);
+        console.log('[SequenceChangeDebug] updateCurrentSequenceObserver registered.');
         window.unifiedSequencerSettings.addObserver(updateTotalSequencesObserver);
     } else {
         console.error("UnifiedSequencerSettings instance not found.");
     }
 }
-
 // This observer function should be placed in your observers file
 function updateStepStateObserver(settings) {
     console.log("[observers] updateStepStateObserver called");
@@ -34,8 +34,11 @@ function updateStepStateObserver(settings) {
         });
     });
 
-    // Apply the current state of steps to the UI, including reverse playback
-    const currentSequenceSettings = settings.masterSettings.projectSequences['Sequence0'];
+    // Dynamically access the current sequence instead of hardcoding 'Sequence0'
+    const currentSequenceIndex = settings.masterSettings.currentSequence;
+    const currentSequenceKey = `Sequence${currentSequenceIndex}`;
+    const currentSequenceSettings = settings.masterSettings.projectSequences[currentSequenceKey];
+
     if (currentSequenceSettings) {
         Object.keys(currentSequenceSettings).forEach(channelKey => {
             const channelIndex = parseInt(channelKey.replace('ch', ''), 10); // Assuming channel keys are 'ch0', 'ch1', etc.
@@ -63,8 +66,7 @@ function updateStepStateObserver(settings) {
         });
     }
 
-    // Consider adding a call to a function like 'updateUIForSequenceZero' if needed
-    // This can adjust the UI based on sequence-specific details
+    // This adjusted function dynamically updates the UI based on the current sequence's steps.
 }
 
 
@@ -140,7 +142,7 @@ function updateProjectSequencesObserver(settings) {
 
 
 function updateCurrentSequenceObserver(settings) {
-    console.log("[Observer] updateCurrentSequenceObserver called with:", settings)
+    console.log("[SequenceChangeDebug] updateCurrentSequenceObserver called with:", settings)
     if (settings && settings.masterSettings && typeof settings.masterSettings.currentSequence === 'number') {
         console.log("[Observer] Current Sequence changed:", settings.masterSettings.currentSequence);
     }

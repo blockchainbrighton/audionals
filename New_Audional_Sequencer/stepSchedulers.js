@@ -37,7 +37,8 @@ function resumeScheduler() {
 }
 
 function scheduleNextStep() {
-    console.log("[scheduleNextStep] Attempting to play sound for Channel:", "Step:", currentStep);
+    console.log('[SequenceChangeDebug] Scheduling next step.');
+    console.log("[SequenceChangeDebug] Attempting to play sound for Channel:", "Step:", currentStep);
 
     const bpm = window.unifiedSequencerSettings.getBPM() || 105; // Fallback to 105 BPM
     console.log(`[scheduleNextStep] Current BPM: ${bpm}`);
@@ -53,6 +54,7 @@ function scheduleNextStep() {
 
 
 function stopScheduler() {
+    console.log('[SequenceChangeDebug] Stopping scheduler.');
     channels.forEach(channel => {
         setChannelVolume(parseInt(channel.dataset.id.split('-')[1]), 0);
       });

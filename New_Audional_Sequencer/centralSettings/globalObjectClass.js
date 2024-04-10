@@ -345,8 +345,7 @@ class UnifiedSequencerSettings {
     // Method to notify all observers
     notifyObservers() {
    
-        console.log("notifyObservers");
-        
+        console.log('[SequenceChangeDebug] Notifying observers of changes.');        
         this.observers.forEach(observerFunction => observerFunction(this.settings));
     }
 
@@ -425,6 +424,32 @@ class UnifiedSequencerSettings {
                 });
             }
             
+
+            updateUIForSequence() {
+                console.log("UI updated for sequence zero.");
+            
+                // Assuming you have a way to select the current sequence UI element
+                const sequenceSelector = document.querySelector('.current-sequence-selector');
+                if (sequenceSelector) {
+                    sequenceSelector.value = 'Sequence0'; // Or however your sequence selector is structured
+                }
+            
+                // Reset step buttons to their default state for sequence zero
+                const channels = document.querySelectorAll('.channel');
+                channels.forEach((channel, channelIndex) => {
+                    const stepButtons = channel.querySelectorAll('.step-button');
+                    stepButtons.forEach((button, stepIndex) => {
+                        const stepState = this.getStepState(0, channelIndex, stepIndex);
+                        if (stepState) {
+                            button.classList.add('selected');
+                        } else {
+                            button.classList.remove('selected');
+                        }
+                    });
+                });
+            }
+            
+
 
         // Method to add a URL to the channelURLs array
         addChannelURL(index, url) {
@@ -508,7 +533,7 @@ class UnifiedSequencerSettings {
 
     // Method to update the current sequence
     setCurrentSequence(currentSequence) {
-        console.log("[SeqDebug] setCurrentSequence entered with: ", currentSequence);
+        console.log('[SequenceChangeDebug] setCurrentSequence called with sequence:', currentSequence);
         
         this.settings.masterSettings.currentSequence = currentSequence;
         console.log(`[SeqDebug] [setCurrentSequence] currentSequence set to: ${currentSequence}`);
