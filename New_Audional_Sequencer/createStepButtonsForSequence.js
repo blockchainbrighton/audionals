@@ -30,22 +30,22 @@ function createStepButtonsForSequence() {
                 }
             });
 
-            // Right-click Listener: Set Step for Reverse Playback
-            button.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                let {isActive, isReverse} = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, i);
-                let newReverseState = !isReverse;
-                window.unifiedSequencerSettings.updateStepStateAndReverse(currentSequence, channelIndex, i, true, newReverseState);
+            // // Right-click Listener: Set Step for Reverse Playback
+            // button.addEventListener('contextmenu', (e) => {
+            //     e.preventDefault();
+            //     let {isActive, isReverse} = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, i);
+            //     let newReverseState = !isReverse;
+            //     window.unifiedSequencerSettings.updateStepStateAndReverse(currentSequence, channelIndex, i, true, newReverseState);
 
-                // Direct UI Update for Reverse Playback
-                if (newReverseState) {
-                    button.classList.add('selected', 'reverse-playback');
-                    button.style.backgroundColor = 'green'; // Reverse playback
-                } else {
-                    button.classList.remove('reverse-playback');
-                    button.style.backgroundColor = 'red'; // Still active but not reverse
-                }
-            });
+            //     // Direct UI Update for Reverse Playback
+            //     if (newReverseState) {
+            //         button.classList.add('selected', 'reverse-playback');
+            //         button.style.backgroundColor = 'green'; // Reverse playback
+            //     } else {
+            //         button.classList.remove('reverse-playback');
+            //         button.style.backgroundColor = 'red'; // Still active but not reverse
+            //     }
+            // });
 
             stepsContainer.appendChild(button);
         }
