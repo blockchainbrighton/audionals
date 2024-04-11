@@ -29,28 +29,6 @@ class UnifiedSequencerSettings {
             this.clearMasterSettings = this.clearMasterSettings.bind(this);
         }
 
-        toggleStepState(sequenceIndex, channelIndex, stepIndex) {
-            // Assuming the sequence and channel indexes are already validated
-            let step = this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex];
-            if (!Array.isArray(step)) step = [false, false]; // Initialize if not already an array
-            step[0] = !step[0]; // Toggle the active state
-            this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex] = step;
-    
-            // Notify observers of the change
-            this.notifyObservers();
-        }
-    
-        toggleStepReverseState(sequenceIndex, channelIndex, stepIndex) {
-            let step = this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex];
-            if (!Array.isArray(step)) step = [false, false]; // Initialize if not already an array
-            step[1] = !step[1]; // Toggle the reverse state
-            this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex] = step;
-    
-            // Notify observers of the change
-            this.notifyObservers();
-        }
-
-
         initializeSequences(numSequences, numChannels, numSteps) {
             console.log("initializeSequences entered", numSequences, numChannels, numSteps);
             
@@ -64,9 +42,9 @@ class UnifiedSequencerSettings {
         initializeChannels(numChannels, numSteps) {
             let channels = {};
             for (let ch = 0; ch < numChannels; ch++) {
-                // Initialize steps as an array of arrays, with each inner array containing a single false value
+                // In globalObjectClass.js, within initializeChannels or similar method
                 channels[`ch${ch}`] = {
-                    steps: Array.from({ length: numSteps }, () => [false]), // Adjusted for array of arrays
+                    steps: Array.from({ length: numSteps }, () => [false, false]), // [isActive, isReverse]
                     mute: false,
                     url: ''
                 };
@@ -74,19 +52,6 @@ class UnifiedSequencerSettings {
             return channels;
         }
 
-        updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, isReverse) {
-            console.log(`Updating Step: Seq=${currentSequence}, Ch=${channelIndex}, Step=${stepIndex}, Active=${isActive}, Reverse=${isReverse}`);
-            const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
-            const channel = sequence && sequence[`ch${channelIndex}`];
-            if (channel && stepIndex < channel.steps.length) {
-                channel.steps[stepIndex] = [isActive, isReverse || false];
-                console.log(`Step updated to: ${channel.steps[stepIndex]}`);
-            } else {
-                console.error('Invalid sequence, channel, or step index in updateStepStateAndReverse');
-            }
-        }
-        
-        
         getStepStateAndReverse(currentSequence, channelIndex, stepIndex) {
             console.log("getStepStateAndReverse entered");
             const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
@@ -135,6 +100,45 @@ class UnifiedSequencerSettings {
                 return false;
             }
         }
+
+     
+        
+        
+      
+        toggleStepState(sequenceIndex, channelIndex, stepIndex) {
+            // Assuming the sequence and channel indexes are already validated
+            let step = this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex];
+            if (!Array.isArray(step)) step = [false, false]; // Initialize if not already an array
+            step[0] = !step[0]; // Toggle the active state
+            this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex] = step;
+    
+            // Notify observers of the change
+            this.notifyObservers();
+        }
+    
+        toggleStepReverseState(sequenceIndex, channelIndex, stepIndex) {
+            let step = this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex];
+            if (!Array.isArray(step)) step = [false, false]; // Initialize if not already an array
+            step[1] = !step[1]; // Toggle the reverse state
+            this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`][`ch${channelIndex}`].steps[stepIndex] = step;
+    
+            // Notify observers of the change
+            this.notifyObservers();
+        }
+
+
+       
+        updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, isReverse) {
+            const sequence = this.settings.masterSettings.projectSequences[`Sequence${currentSequence}`];
+            const channel = sequence && sequence[`ch${channelIndex}`];
+            if (channel && stepIndex < channel.steps.length) {
+                channel.steps[stepIndex] = [isActive, isReverse];
+                console.log(`Step at Seq: ${currentSequence}, Ch: ${channelIndex}, Step: ${stepIndex} updated to Active: ${isActive}, Reverse: ${isReverse}`);
+            } else {
+                console.error('Invalid sequence, channel, or step index in updateStepStateAndReverse');
+            }
+        }
+        
         
         
       

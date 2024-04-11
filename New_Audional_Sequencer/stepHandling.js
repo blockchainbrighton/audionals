@@ -129,6 +129,9 @@ function handleSequenceTransition(targetSequence) {
     resetCountersForNewSequence();
     createStepButtonsForSequence();
 
+    console.log(`[SeqDebug][handleSequenceTransition] Checking reverse state retention for sequence ${targetSequence}`);
+
+
     // Delay updating the UI to ensure DOM has updated
     setTimeout(() => {
         window.unifiedSequencerSettings.updateUIForSequence(targetSequence);

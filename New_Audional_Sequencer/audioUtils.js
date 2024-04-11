@@ -133,34 +133,6 @@ async function createReverseBuffer(audioBuffer) {
 }
 
 
-function calculateTrimValues(channelIndex, audioBuffer, isReversePlayback) {
-  const trimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
-
-  let trimStartPercentage = trimSettings.startSliderValue !== undefined ? trimSettings.startSliderValue : trimSettings.start;
-  let trimEndPercentage = trimSettings.endSliderValue !== undefined ? trimSettings.endSliderValue : trimSettings.end;
-
-  let trimStart = (trimStartPercentage / 100) * audioBuffer.duration;
-  let trimEnd = (trimEndPercentage / 100) * audioBuffer.duration;
-
-  if (isReversePlayback) {
-      // For reverse playback, calculate the mirrored trim positions
-      const mirroredTrimStart = audioBuffer.duration - ((trimEndPercentage / 100) * audioBuffer.duration);
-      const mirroredTrimEnd = audioBuffer.duration - ((trimStartPercentage / 100) * audioBuffer.duration);
-      trimStart = Math.max(0, Math.min(mirroredTrimStart, audioBuffer.duration));
-      trimEnd = Math.max(trimStart, Math.min(mirroredTrimEnd, audioBuffer.duration));
-  } else {
-      // For normal playback, ensure the calculated values are within the bounds of the audio buffer's duration
-      trimStart = Math.max(0, Math.min(trimStart, audioBuffer.duration));
-      trimEnd = Math.max(trimStart, Math.min(trimEnd, audioBuffer.duration));
-  }
-
-  return {
-      trimStart: trimStart,
-      duration: trimEnd - trimStart
-  };
-}
-
-
 
 // Function to decode audio data
 const decodeAudioData = (audioData) => {
@@ -240,15 +212,18 @@ function playSound(currentSequence, channel, currentStep) {
   const stepState = window.unifiedSequencerSettings.getStepState(currentSequence, channelIndex, currentStep);
   console.log(`[playSound Debugging] [playSound] setting stepState using direct call to: ${stepState}`);
   
-  if (!stepState) {
-    console.log("[playSound Debugging] [playSound] Current step is not selected. Skipping playback.");
+  const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
+  console.log(`[playSound Debugging] Step ${currentStep} isActive: ${isActive}, isReverse: ${isReverse}`);
+
+ // Check if the step is either active or marked for reverse playback.
+  if (!isActive && !isReverse) {
+    console.log("[playSound Debugging] [playSound] Current step is neither active nor reverse. Skipping playback.");
     return;
   }
-
+  const isReversePlayback = isReverse;
   // Check if the current step is marked for reverse playback
   const stepButtonId = `Sequence${currentSequence}-ch${channelIndex}-step-${currentStep}`;
   const stepButton = document.getElementById(stepButtonId);
-  const isReversePlayback = stepButton && stepButton.classList.contains('reverse-playback');
 
   const url = getAudioUrl(channelIndex) + (isReversePlayback ? "_reverse" : "");
   console.log("[playSound Debugging] [playSound] Audio URL:", url);
@@ -261,31 +236,27 @@ function playSound(currentSequence, channel, currentStep) {
   
   console.log("[playSound Debugging] [playSound] Audio buffer:", audioBuffer);
 
-  playTrimmedAudio(channelIndex, audioBuffer, url, currentStep); // Add currentStep as an argument
+  playTrimmedAudio(channelIndex, audioBuffer, url, currentStep, isReversePlayback); // Include isReversePlayback as an argument
 }
 
 
 // Example modification in playTrimmedAudio function
-function playTrimmedAudio(channelIndex, audioBuffer, url, currentStep) {
+function playTrimmedAudio(channelIndex, audioBuffer, url, currentStep, isReversePlayback) {
   console.log('[playTrimmedAudio] Audio buffer found for URL:', url);
+  console.log(`[playTrimmedAudio Debugging] isReversePlayback for step ${currentStep}: ${isReversePlayback}`);
 
-  // Find the corresponding step button to check for reverse playback
-  const stepButtonId = `Sequence${window.unifiedSequencerSettings.settings.masterSettings.currentSequence}-ch${channelIndex}-step-${currentStep}`;
-  const stepButton = document.getElementById(stepButtonId);
-  const isReversePlayback = stepButton ? stepButton.classList.contains('reverse-playback') : false;
-
-  // Adjust the calculation of trim values based on the reverse playback state
+  // Adjust the calculation of trim values based on the received isReversePlayback status
   const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer, isReversePlayback);
 
   const source = audioContext.createBufferSource();
   source.buffer = audioBuffer;
-  // applyPitchControl(source, pitch);
   source.connect(gainNodes[channelIndex]);
   gainNodes[channelIndex].connect(audioContext.destination);
 
   console.log(`[playTrimmedAudio] Playing audio for channel index: ${channelIndex}, step: ${currentStep}, from ${trimStart} for duration: ${duration}`);
   source.start(0, trimStart, duration);
 }
+
 
 
 function calculateTrimValues(channelIndex, audioBuffer, isReversePlayback) {

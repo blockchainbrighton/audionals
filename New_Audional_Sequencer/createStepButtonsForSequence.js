@@ -7,12 +7,28 @@ function createStepButtonsForSequence() {
         const stepsContainer = channel.querySelector('.steps-container');
         stepsContainer.innerHTML = '';
 
-        let currentSequence = window.unifiedSequencerSettings.settings.masterSettings.currentSequence;
+        let currentSequence = window.unifiedSequencerSettings.getCurrentSequence();
 
         for (let i = 0; i < 64; i++) {
             const button = document.createElement('button');
             button.classList.add('step-button');
             button.id = `Sequence${currentSequence}-ch${channelIndex}-step-${i}`;
+
+            const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, i);
+
+            // Apply 'selected' and 'reverse-playback' classes based on step state
+            if (isActive) {
+                button.classList.add('selected');
+                button.style.backgroundColor = 'red'; // Active step
+            }
+            if (isReverse) {
+                button.classList.add('reverse-playback');
+                // Ensure that the reverse state has a distinct visual cue even if not active
+                if (!isActive) {
+                    button.style.backgroundColor = 'green'; // Reverse but not active step
+                }
+            }
+
 
             // Left-click Listener: Toggle Step Activation
             button.addEventListener('click', () => {
@@ -30,22 +46,24 @@ function createStepButtonsForSequence() {
                 }
             });
 
-            // // Right-click Listener: Set Step for Reverse Playback
-            // button.addEventListener('contextmenu', (e) => {
-            //     e.preventDefault();
-            //     let {isActive, isReverse} = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, i);
-            //     let newReverseState = !isReverse;
-            //     window.unifiedSequencerSettings.updateStepStateAndReverse(currentSequence, channelIndex, i, true, newReverseState);
+            // Right-click Listener: Set Step for Reverse Playback
+            button.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                let currentSequence = window.unifiedSequencerSettings.getCurrentSequence();
+                let stepInfo = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, i);
+                let isReverse = !stepInfo.isReverse; // Toggle reverse state
+                window.unifiedSequencerSettings.updateStepStateAndReverse(currentSequence, channelIndex, i, stepInfo.isActive, isReverse);
+            
+                // Direct UI Update for Reverse Playback
+                if (isReverse) {
+                    button.classList.add('selected', 'reverse-playback');
+                    button.style.backgroundColor = 'green'; // Active step
 
-            //     // Direct UI Update for Reverse Playback
-            //     if (newReverseState) {
-            //         button.classList.add('selected', 'reverse-playback');
-            //         button.style.backgroundColor = 'green'; // Reverse playback
-            //     } else {
-            //         button.classList.remove('reverse-playback');
-            //         button.style.backgroundColor = 'red'; // Still active but not reverse
-            //     }
-            // });
+                } else {
+                    button.classList.remove('selected', 'reverse-playback');
+                }
+            });
+            
 
             stepsContainer.appendChild(button);
         }
