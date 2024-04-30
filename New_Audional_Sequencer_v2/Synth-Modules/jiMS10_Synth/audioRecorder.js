@@ -12,7 +12,9 @@ window.gainNode.connect(context.destination);
 const mimeType = MediaRecorder.isTypeSupported('audio/webm; codecs=opus') ? 'audio/webm; codecs=opus' : 'audio/webm';
 const recorder = new MediaRecorder(mediaStreamDestination.stream, { mimeType });
 const audioChunks = [];
-let audioUrl;
+
+
+// let audioUrl;
 
 recorder.ondataavailable = event => {
     if (event.data.size > 0) {
@@ -23,35 +25,68 @@ recorder.ondataavailable = event => {
     }
 };
 
-recorder.onstop = () => {
+recorder.onstop = async () => {
     console.log(`Recorder stopped, total chunks: ${audioChunks.length}`);
     if (audioChunks.length > 0) {
         const audioBlob = new Blob(audioChunks, { type: mimeType });
-        console.log('Blob size:', audioBlob.size);
-        audioUrl = URL.createObjectURL(audioBlob);
-        console.log('Recording stopped and processed, URL created:', audioUrl);
-
-        // Convert Blob to ArrayBuffer to send via postMessage
-        const reader = new FileReader();
-        reader.onload = () => {
-            const arrayBuffer = reader.result;
-            sendAudioToParent(arrayBuffer, globalSequencerChannelIndex);
-            console.log('Audio data sent to parent.');
-        };
-        reader.onerror = (e) => {
-            console.error('Failed to read audio blob:', e);
-        };
-        reader.readAsArrayBuffer(audioBlob);
-
+        const arrayBuffer = await blobToArrayBuffer(audioBlob);
+        
+        window.parent.postMessage({
+            type: 'audioData',
+            data: arrayBuffer,
+            mimeType: mimeType,
+            filename: 'SynthSample',
+            channelIndex: 0
+        }, '*');
+        console.log('Audio data sent to parent.');
     } else {
         console.error('No audio data recorded.');
     }
 };
 
+function blobToArrayBuffer(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            resolve(reader.result);
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(blob);
+    });
+}
 
 recorder.onerror = event => {
     console.error('Recorder Error:', event.error);
 };
+// recorder.onstop = () => {
+//     console.log(`Recorder stopped, total chunks: ${audioChunks.length}`);
+//     if (audioChunks.length > 0) {
+//         const audioBlob = new Blob(audioChunks, { type: mimeType });
+//         console.log('Blob size:', audioBlob.size);
+
+//         // Convert Blob to ArrayBuffer and send to parent
+//         const reader = new FileReader();
+//         reader.onload = function() {
+//             const arrayBuffer = reader.result;
+//             window.parent.postMessage({
+//                 type: 'audioData',
+//                 data: arrayBuffer,
+//                 channelIndex: 0 // Assuming channel index is 0; adjust as needed
+//             }, '*');
+//             console.log('Audio data sent to parent.');
+//         };
+//         reader.onerror = function(err) {
+//             console.error('Error reading audio blob:', err);
+//         };
+//         reader.readAsArrayBuffer(audioBlob);
+//     } else {
+//         console.error('No audio data recorded.');
+//     }
+// };
+
+// recorder.onerror = event => {
+//     console.error('Recorder Error:', event.error);
+// };
 
 // Expose the start and stop recording functions globally
 window.startAudioRecording = function() {
@@ -62,14 +97,12 @@ window.startAudioRecording = function() {
 
 window.stopAudioRecording = function() {
     console.log('Global stop recording triggered');
-    // Wait for a few seconds to capture the tail of the last note
         recorder.stop();
-        console.log('Recorder stopped after delay to capture tail sounds.');
 };
 
 
-// document.getElementById('recordButton').addEventListener('click', window.startAudioRecording);
-// document.getElementById('stopRecordButton').addEventListener('click', window.stopAudioRecording);
+document.getElementById('recordButton').addEventListener('click', window.startAudioRecording);
+document.getElementById('stopRecordButton').addEventListener('click', window.stopAudioRecording);
 
 document.getElementById('playRecordButton').addEventListener('click', () => {
     if (context.state === 'suspended') {
@@ -96,28 +129,13 @@ function playRecordedAudio() {
     }
 }
 
-// Ensure the correct channel index is used when sending audio data
-function sendAudioToParent(audioData, channelIndex) {
-    console.log(`Sending audio to parent with channel index: ${channelIndex}`);
-    // Make sure to use 'parent' directly
-    parent.postMessage({
-        type: 'audioData',
-        data: audioData,
-        channelIndex: channelIndex
-    }, '*');  // Consider specifying a more restrictive target origin for security
-}
+document.getElementById('recordButton').addEventListener('click', () => {
+    console.log('Recording started');
+    audioChunks.length = 0;
+    recorder.start();
+});
 
-
-// Listen for messages in the synthesizer iframe
-window.addEventListener('message', function(event) {
-    // Check if the message is intended for this iframe and is from the trusted parent
-    if (event.origin === window.location.origin) { // Replace with the actual expected origin
-        if (event.data.channelIndex !== undefined) {
-            console.log(`Synthesizer loaded for channel index: ${event.data.channelIndex}`);
-            // You can now use this channelIndex to tag any audio data or processing
-        }
-    } else {
-        console.error('Received message from untrusted source');
-    }
-}, false);
-
+document.getElementById('stopRecordButton').addEventListener('click', () => {
+    console.log('Stopping recording');
+    recorder.stop();
+});

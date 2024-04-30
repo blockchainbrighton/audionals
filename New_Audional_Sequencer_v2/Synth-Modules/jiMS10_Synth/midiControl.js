@@ -27,30 +27,36 @@ function onMIDIFailure() {
 const MIDI_NOTE_ON = 0x90;
 const MIDI_NOTE_OFF = 0x80;
 
-function onMIDIMessage(e) {
-    const data = e.data;
-    if (data.length < 3) {
-        console.error("Incomplete MIDI message received:", data);
-        return;
-    }
-
-    const [statusByte, noteNumber, velocity] = data;
+function onMIDIMessage(event) {
+    const [statusByte, noteNumber, velocity] = event.data;
     const messageType = statusByte & 0xF0;
     const channel = statusByte & 0x0F;
 
-    if (isRecordingMIDI && messageType === MIDI_NOTE_ON && velocity > 0 && !isRecordingStarted) {
-        window.startAudioRecording();
-    }
+    // Ignore messages from unwanted MIDI channels (2-8)
+    if (channel >= 1 && channel <= 7) return;
 
-    // Optionally, adjust or remove channel filtering if necessary
-    if (channel >= 1 && channel <= 7) {
-        console.log(`Ignoring MIDI message from channel: ${channel}`);
-        return;
+    switch (messageType) {
+        case MIDI_NOTE_ON:
+            if (velocity > 0) {
+                playMS10TriangleBass(midiNoteToFrequency(noteNumber), velocity / 127);
+    
+                // Start audio recording when MIDI recording starts
+                if (!isRecordingStarted) {
+                    window.startAudioRecording();
+                    isRecordingStarted = true;
+                    console.log('Audio recording started with first MIDI note.');
+                }
+            }
+            break;
+        case MIDI_NOTE_OFF:
+        case MIDI_NOTE_ON & velocity === 0:
+            playMS10TriangleBass(midiNoteToFrequency(noteNumber), 0);
+            break;
+        default:
+            console.log(`Unhandled MIDI message type: ${messageType.toString(16)}`);
     }
-
-    handleMIDIRecording(messageType, data);
-    processMIDIMessage(messageType, noteNumber, velocity);
 }
+
 
 function handleMIDIRecording(messageType, data) {
     if (!isRecordingMIDI) return;
@@ -84,14 +90,22 @@ function handleNoteOn(noteNumber, velocity) {
     }
     const frequency = midiNoteToFrequency(noteNumber);
     console.log(`Note On. MIDI note: ${noteNumber}, Frequency: ${frequency}`);
-    playMS10TriangleBass(frequency, velocity / 127);
+    if (isArpeggiatorOn) {
+        arpNotes.push(frequency);
+        updateArpNotesDisplay();
+    } else {
+        playMS10TriangleBass(frequency, velocity / 127);
+    }
 }
 
 function handleNoteOff(noteNumber) {
     console.log(`Note Off. MIDI note: ${noteNumber}`);
-    playMS10TriangleBass(midiNoteToFrequency(noteNumber), 0); // Note off with zero velocity
+    if (isArpeggiatorOn) {
+        const frequency = midiNoteToFrequency(noteNumber);
+        const index = arpNotes.indexOf(frequency);
+        if (index !== -1) arpNotes.splice(index, 1);
+    }
 }
-
 
 function midiNoteToFrequency(note) {
     return note < 0 || note > 127 ? null : Math.pow(2, (note - A4_MIDI_NUMBER) / 12) * A4_FREQUENCY;
@@ -114,14 +128,8 @@ navigator.requestMIDIAccess ? navigator.requestMIDIAccess().then(onMIDISuccess, 
 function startMIDIRecording() {
     isRecordingMIDI = true;
     midiRecording = []; // Reset the recording
-    isRecordingStarted = false; // Reset recording started flag
-    console.log('MIDI Recording started');
-
-    // // Start audio recording when MIDI recording starts
-    // if (window.startAudioRecording) {
-    //     window.startAudioRecording();
-    //     console.log('Audio recording started with MIDI recording.');
-    // }
+    console.log('MIDI Recording Active');
+   
 }
 
 function stopMIDIRecording() {
@@ -199,11 +207,11 @@ function manageMIDIResources() {
 function addMIDIControlEventListeners() {
     const recordButton = document.getElementById('recordMIDIButton');
     const stopRecordButton = document.getElementById('stopMIDIRecordButton');
-    // const playRecordButton = document.getElementById('playMIDIRecordButton');
+    const playRecordButton = document.getElementById('playMIDIRecordButton');
 
     if (recordButton) recordButton.addEventListener('click', startMIDIRecording);
     if (stopRecordButton) stopRecordButton.addEventListener('click', stopMIDIRecording);
-    // if (playRecordButton) playRecordButton.addEventListener('click', playBackMIDI);
+    if (playRecordButton) playRecordButton.addEventListener('click', playBackMIDI);
 }
 
 addMIDIControlEventListeners();
