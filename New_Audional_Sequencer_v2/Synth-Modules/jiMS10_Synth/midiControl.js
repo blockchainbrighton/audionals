@@ -11,7 +11,6 @@ var playbackInterval; // Declare playbackInterval globally
 let recordingStartTime = 0; // Initialize recording start time
 let isRecordingAudioStarted = false; // Flag to track if recording has started
 let currentBPM = 120; // Default BPM value
-let isQuantizeActive = false;  // Track quantization state
 
 function onMIDISuccess(e) {
     console.log("MIDI access granted.");
@@ -42,8 +41,6 @@ function processMIDIMessage(messageType, noteNumber, velocity) {
     }
 }
 
-
-
 function onMIDIMessage(event) {
     // Destructure the event data first to access statusByte, noteNumber, and velocity.
     const [statusByte, noteNumber, velocity] = event.data;
@@ -59,8 +56,6 @@ function onMIDIMessage(event) {
     // Log the MIDI message for debugging.
     console.log(`MIDI message received: ${event.data}`);
 
-   
-
     // Handle MIDI messages based on type
     switch (messageType) {
         case MIDI_NOTE_ON:
@@ -68,7 +63,7 @@ function onMIDIMessage(event) {
             if (velocity > 0) {
                 playMS10TriangleBass(midiNoteToFrequency(noteNumber), velocity / 127);
                 // Start recording if this is the first note and recording has not started
-                if (!isRecordingAudioStarted) {
+                if (!isRecordingAudioStarted && isRecordingMIDI) {
                     window.startAudioRecording();
                     isRecordingAudioStarted = true;
                     console.log('Audio recording started with first MIDI note.');
@@ -91,15 +86,6 @@ function onMIDIMessage(event) {
     }
 }
 
-// function midiNoteToFrequency(noteNumber) {
-//     // Calculate frequency from MIDI note number, assuming A4 = 440Hz at MIDI note 69
-//     return A4_FREQUENCY * Math.pow(2, (noteNumber - A4_MIDI_NUMBER) / 12);
-// }
-
-// function handleNoteOff(noteNumber) {
-//     // Log note off for debugging
-//     console.log(`Note Off. MIDI note: ${noteNumber}`);
-// }
 
 
 // This function should handle both note on and note off events
@@ -134,32 +120,30 @@ function getVolume() {
     return document.getElementById("volume").value / 100;
 }
 
-
-// Playback functionality
+// Playback and recording functions should use audio context time
 function playBackMIDI() {
-    console.log(`Playback starting with ${midiRecording.length} events.`);
     if (midiRecording.length === 0) {
-        console.log('No MIDI events to play back.');
+        console.log("No events to play back.");
         return;
     }
+    console.log(`Playback starting with ${midiRecording.length} events at AudioContext time: ${window.audioContext.currentTime}s.`);
+    const playbackStartTime = window.audioContext.currentTime;
+    const firstEventTime = midiRecording[0].timestamp / 1000; // Convert the first event's timestamp to seconds
 
-    playbackStartTime = performance.now();
     midiRecording.forEach((event, index) => {
-        const eventTime = playbackStartTime + event.timestamp;  // Correct time when event should be played
-        const currentTime = performance.now();
-        let delay = eventTime - currentTime;  // Calculate the delay based on current time
-
-        if (delay < 0) {
-            console.log(`Event ${index} missed its playback time by ${-delay}ms and will be played immediately.`);
-            delay = 0;
+        const eventTime = playbackStartTime + ((event.timestamp / 1000) - firstEventTime); // Normalize start time to zero
+        if (eventTime < window.audioContext.currentTime) {
+            console.log(`Event ${index} missed its playback time.`);
         }
-
+        window.gainNode.gain.setValueAtTime(1, eventTime); // Set gain at scheduled time
         setTimeout(() => {
             playMIDINote(event.message);
-            console.log(`Event ${index} playing at ${performance.now()}ms, scheduled for ${eventTime}ms.`);
-        }, delay);
+        }, (eventTime - window.audioContext.currentTime) * 1000); // Schedule note playback
+        console.log(`Event ${index} scheduled for ${eventTime}s, message: ${event.message}, playing in ${(eventTime - window.audioContext.currentTime) * 1000}ms.`);
     });
 }
+
+
 
 function playMIDINote(message) {
     console.log(`Playing MIDI message at time: ${performance.now()}:`, message);
@@ -168,84 +152,58 @@ function playMIDINote(message) {
     onMIDIMessage({ data: midiMessage });
 }
 
-function quantizeMidiEvent(timestamp, bpm, subdivisionsPerBeat = 32) {
-    // Calculate milliseconds per beat based on the BPM provided
-    const millisecondsPerBeat = 60000 / bpm;
-
-    // Calculate milliseconds per subdivision
-    // subdivisionsPerBeat allows quantization to finer musical timing details (e.g., eighth notes, sixteenth notes)
-    const millisecondsPerSubdivision = millisecondsPerBeat / subdivisionsPerBeat;
-
-    // Quantize the timestamp to the nearest subdivision
-    // Math.round ensures that the timestamp aligns to the closest possible subdivision point
-    const quantizedTimestamp = Math.round(timestamp / millisecondsPerSubdivision) * millisecondsPerSubdivision;
-
-    return quantizedTimestamp;
-}
-
-                
-document.getElementById('quantizeRecording').addEventListener('click', function() {
-    isQuantizeActive = !isQuantizeActive;  // Toggle quantization
-    this.classList.toggle('active');  // Toggle visual state
-    console.log('Quantize Recording: ' + (isQuantizeActive ? 'ON' : 'OFF'));
-});
-
-
 function handleMIDIRecording(messageType, data) {
-    const currentTime = performance.now();
-    if (!recordingStartTime) {
-        recordingStartTime = currentTime;  // Ensure recording start time is set at the first event
+    const currentTime = window.audioContext.currentTime * 1000; // Make sure this variable is correctly initialized and accessible
+    if (!isRecordingAudioStarted) {
+        window.startAudioRecording();
+        recordingStartTime = currentTime; // This needs to be correctly handled to avoid reference errors
+        isRecordingAudioStarted = true;
     }
     let messageTime = currentTime - recordingStartTime;
-
-    // Apply quantization if enabled
     if (isQuantizeActive) {
         messageTime = quantizeMidiEvent(messageTime, currentBPM);
     }
-
     midiRecording.push({ timestamp: messageTime, message: data });
     console.log(`Recording MIDI event: Type=${messageType}, Data=${data}, Time=${messageTime}ms after recording start.`);
 }
 
 
 
-// Ensure this function captures all note events
+
+// Make sure to use audio context's current time for recording as well
 function recordKeyboardNoteEvent(noteNumber, velocity, isNoteOn) {
     console.log(`Recording keyboard note event: Note=${noteNumber}, Velocity=${velocity}, isNoteOn=${isNoteOn}`);
     if (isRecordingMIDI) {
-        let messageTime = performance.now();
-        let status = isNoteOn ? MIDI_NOTE_ON : MIDI_NOTE_OFF;  // Use constants for clarity
+        let currentTime = window.audioContext.currentTime * 1000; // Convert seconds to milliseconds
+        let status = isNoteOn ? MIDI_NOTE_ON : MIDI_NOTE_OFF;
         let midiMessage = [status, noteNumber, velocity];
-        midiRecording.push({ timestamp: messageTime, message: midiMessage });
+        midiRecording.push({ timestamp: currentTime, message: midiMessage });
+        console.log(`Keyboard event recorded at ${currentTime}ms, MIDI message: [${status}, ${noteNumber}, ${velocity}]`);
     }
 }
 
+
 // Recording control functions
 function startMIDIRecording() {
-    console.log('MIDI Recording started.');
+    console.log('MIDI Recording readiness initiated at AudioContext time:', window.audioContext.currentTime);
     isRecordingMIDI = true;
     midiRecording = []; // Reset the recording
     if (isMetronomeActive) {
         startMetronome(currentBPM);
-      }
-      console.log("Recording started.");
-   
+    }
+    console.log("Recording officially started.");
 }
 
 function stopMIDIRecording() {
-    console.log('MIDI Recording stopped.');
+    console.log('MIDI Recording stopped at AudioContext time:', window.audioContext.currentTime);
     if (isRecordingMIDI) {
         isRecordingMIDI = false;
         clearAllIntervals();  // Clear any playback intervals
-        console.log('MIDI Recording stopped');
+        console.log('MIDI Recording and all associated intervals stopped');
         isRecordingAudioStarted = false; // Reset recording started flag
         stopMetronome();
-
-        // Stop audio recording with MIDI recording
-        if (window.stopAudioRecording) {
-            window.stopAudioRecording();
-            console.log('Audio recording stopped with MIDI recording.');
-        }
+        window.stopAudioRecording();
+        console.log('Audio recording stopped with MIDI recording.');
     }
 }
 
@@ -263,7 +221,6 @@ function manageMIDIResources() {
     console.log('Managing MIDI resources. clearAllIntervals() called.');
     clearAllIntervals();  // Add more resource management as needed
 }
-
 
 function addMIDIControlEventListeners() {
     const recordButton = document.getElementById('recordMIDIButton');
@@ -291,8 +248,40 @@ function playRecordedAudio() {
     }
 }
 
-
 addMIDIControlEventListeners();
 
 navigator.requestMIDIAccess ? navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure) : console.warn("WebMIDI is not supported in this browser.");
 
+
+// function midiNoteToFrequency(noteNumber) {
+//     // Calculate frequency from MIDI note number, assuming A4 = 440Hz at MIDI note 69
+//     return A4_FREQUENCY * Math.pow(2, (noteNumber - A4_MIDI_NUMBER) / 12);
+// }
+
+// function handleNoteOff(noteNumber) {
+//     // Log note off for debugging
+//     console.log(`Note Off. MIDI note: ${noteNumber}`);
+// }
+
+
+// function quantizeMidiEvent(timestamp, bpm, subdivisionsPerBeat = 32) {
+//     // Calculate milliseconds per beat based on the BPM provided
+//     const millisecondsPerBeat = 60000 / bpm;
+
+//     // Calculate milliseconds per subdivision
+//     // subdivisionsPerBeat allows quantization to finer musical timing details (e.g., eighth notes, sixteenth notes)
+//     const millisecondsPerSubdivision = millisecondsPerBeat / subdivisionsPerBeat;
+
+//     // Quantize the timestamp to the nearest subdivision
+//     // Math.round ensures that the timestamp aligns to the closest possible subdivision point
+//     const quantizedTimestamp = Math.round(timestamp / millisecondsPerSubdivision) * millisecondsPerSubdivision;
+
+//     return quantizedTimestamp;
+// }
+
+                
+// document.getElementById('quantizeRecording').addEventListener('click', function() {
+//     isQuantizeActive = !isQuantizeActive;  // Toggle quantization
+//     this.classList.toggle('active');  // Toggle visual state
+//     console.log('Quantize Recording: ' + (isQuantizeActive ? 'ON' : 'OFF'));
+// });

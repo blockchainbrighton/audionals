@@ -1,17 +1,11 @@
 // audioRecorder.js
 
 function setupMediaRecorder() {
-    let context = window.audioContext;
-    let gainNode = window.gainNode;
-
-    if (!context || !gainNode) {
-        console.error("AudioContext or gainNode is not initialized.");
-        return; // Stop further execution if the context or gainNode isn't available
-    }
+    const context = window.audioContext;
+    const gainNode = window.gainNode;
 
     const mediaStreamDestination = context.createMediaStreamDestination();
-    gainNode.connect(mediaStreamDestination);
-    gainNode.connect(context.destination);
+    gainNode.connect(mediaStreamDestination); // Connect gainNode to mediaStreamDestination only
 
     const mimeType = MediaRecorder.isTypeSupported('audio/webm; codecs=opus') ? 'audio/webm; codecs=opus' : 'audio/webm';
     let recorder = new MediaRecorder(mediaStreamDestination.stream, { mimeType });
@@ -35,10 +29,7 @@ function setupMediaRecorder() {
         console.log(`Recorder stopped, total chunks: ${audioChunks.length}`);
         if (audioChunks.length > 0) {
             const audioBlob = new Blob(audioChunks, { type: mimeType });
-            console.log('Blob created, converting to ArrayBuffer...');
             const arrayBuffer = await blobToArrayBuffer(audioBlob);
-            
-            console.log('ArrayBuffer created, posting message to parent...');
             window.parent.postMessage({
                 type: 'audioData',
                 data: arrayBuffer,
@@ -46,21 +37,22 @@ function setupMediaRecorder() {
                 filename: 'SynthSample',
                 channelIndex: currentChannelIndex
             }, '*');
-            console.log('Audio data sent to parent.');
         } else {
             console.error('No audio data recorded.');
         }
     };
-    
-    // Global access to recording controls
+
     window.startAudioRecording = () => {
-        console.log('Global start recording triggered');
-        audioChunks.length = 0;  // Clear the previous recordings
-        recorder.start();
+        if (recorder && recorder.state !== 'recording') {
+            audioChunks.length = 0; // Clear previous recordings
+            recorder.start();
+            console.log("Audio recording started.");
+        } else {
+            console.error("Attempted to start recording, but recorder is already in state:", recorder.state);
+        }
     };
 
     window.stopAudioRecording = () => {
-        console.log('Global stop recording triggered');
         recorder.stop();
     };
 
@@ -74,6 +66,11 @@ function setupMediaRecorder() {
             reader.readAsArrayBuffer(blob);
         });
     }
+}
+
+document.addEventListener('DOMContentLoaded', setupMediaRecorder);
+
+
     
 
 //     // document.getElementById('playRecordButton').addEventListener('click', () => {
@@ -101,9 +98,3 @@ function setupMediaRecorder() {
 //             console.error('Audio URL is not defined.');
 //         }
 //     }
-}
-
-
-// Delayed execution or tied to a user interaction
-document.addEventListener('DOMContentLoaded', setupMediaRecorder);
-
