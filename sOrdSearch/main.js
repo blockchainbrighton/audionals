@@ -139,17 +139,28 @@ function formatJsonData(data) {
 function processChildData(childData) {
     const childDetails = document.getElementById('childDetails');
     if (Array.isArray(childData) && childData.length) {
-        const childrenHtml = childData.map(child => 
-            `<div>ID: <span style="color:blue;">${child.id}</span>, 
+        const childrenHtml = childData.map(child =>
+            `<div class="child-entry" data-hash="${child.inscriptionHash}" style="cursor: pointer;">ID: <span style="color:blue;">${child.id}</span>, 
             Hash: <span style="color:green;">${child.inscriptionHash}</span>, 
             Owner: <span style="color:red;">${child.owner}</span></div>`
         ).join('');
+
         childDetails.innerHTML = childrenHtml;
+
+        document.querySelectorAll('.child-entry').forEach(item => {
+            item.addEventListener('click', function() {
+                const hash = this.getAttribute('data-hash');
+                const url = `https://content.sordinals.com/inscription-data/${hash}`;
+                window.open(url, '_blank');
+            });
+        });
     } else {
         childDetails.innerHTML = 'No children found.';
-        console.error('Received child data:', childData);  // Log the received data for debugging.
+        console.error('Received child data:', childData);
     }
 }
+
+
 
 
 
