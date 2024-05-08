@@ -143,8 +143,6 @@ function playBackMIDI() {
     });
 }
 
-
-
 function playMIDINote(message) {
     console.log(`Playing MIDI message at time: ${performance.now()}:`, message);
     const midiMessage = new Uint8Array(Object.values(message));
