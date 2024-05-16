@@ -24,9 +24,10 @@ export const startArpeggiator = () => {
   console.log('Starting arpeggiator');
   isArpeggiatorOn = true;
   currentArpIndex = 0;
-  nextNoteTime = context.currentTime;
+  nextNoteTime = context.currentTime + 0.1; // Adding a small buffer to ensure proper scheduling
   scheduleArpeggiator();
 };
+
 
 export const stopArpeggiator = () => {
   console.log('Stopping arpeggiator');
@@ -75,7 +76,7 @@ const applySpeedModifier = (interval) => {
 const scheduleArpeggiator = () => {
   while (nextNoteTime < context.currentTime + SCHEDULE_AHEAD_TIME) {
     playArpNote();
-    nextNoteTime += getNoteInterval();
+    nextNoteTime += getNoteInterval(); // Ensure the nextNoteTime is incremented correctly
   }
 
   if (isArpeggiatorOn) {
@@ -99,7 +100,9 @@ const playArpNote = () => {
 
   const currentNote = arpNotes[currentArpIndex];
   console.log(`Playing note: ${currentNote !== null ? currentNote : 'Rest'}`);
-  if (currentNote !== null) playMS10TriangleBass(currentNote);
+  if (currentNote !== null) {
+    playMS10TriangleBass(currentNote);
+  }
 
   const pattern = document.getElementById('arpPattern').value;
   const updatePattern = {
@@ -117,6 +120,7 @@ const playArpNote = () => {
     console.error('Unknown arpeggiator pattern:', pattern);
   }
 };
+
 
 export const toggleArpeggiator = () => {
   const button = document.getElementById('arpToggle');
