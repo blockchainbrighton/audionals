@@ -154,20 +154,27 @@ export const toggleArpeggiator = () => {
   }
 };
 
-export const pauseArpeggiator = () => {
-  console.log('Pausing arpeggiator');
-  isArpeggiatorOn = false;
-  clearTimeout(timerID);
-};
 
 export const updateArpNotesDisplay = () => {
   const display = document.getElementById('arpNotesDisplay');
   const ctx = display.getContext('2d');
+  
+  // Adjust canvas width to match the parent container
+  const synthContainer = document.querySelector('.synth-container');
+  display.width = synthContainer.clientWidth - 40; // Adjust for padding/margin
+
+  // Clear the canvas
   ctx.clearRect(0, 0, display.width, display.height);
+
+  // Set font style
   ctx.font = 'bold 11px Arial';
   ctx.fillStyle = '#FFFFFF';
-  const noteWidth = ctx.measureText('W#').width + 7;
+
+  // Calculate note width dynamically
+  const noteWidth = ctx.measureText('W#').width + 5; // Slightly reduced spacing
+  const groupSpacing = 15; // Extra space between groups of four notes
   let x = 10, y = 30, count = 0;
+  const notesPerRow = Math.floor(display.width / noteWidth);
 
   console.log('Updating arpeggiator notes display');
   arpNotes.forEach((note, index) => {
@@ -183,22 +190,31 @@ export const updateArpNotesDisplay = () => {
       ctx.font = 'bold 11px Arial'; // Default font size for other notes
     }
     
-    if (x + noteWidth > display.width || count >= 16) {
+    // Check if we need to wrap to the next line
+    if (x + noteWidth > display.width || count >= notesPerRow) {
       count = 0;
       x = 10;
       y += 30;
     }
+    
+    // Add a separator for every group of four notes
+    if (index % 4 === 0 && index !== 0) {
+      x += groupSpacing; // Add extra space for separator
+    }
+    
+    // Draw the note name
     ctx.fillText(noteName, x, y);
     x += noteWidth;
     count++;
   });
 };
 
+
+
 // Event Listeners for Arpeggiator Controls
 const setupEventListeners = () => {
   document.getElementById('latchMode').addEventListener('click', toggleLatchMode);
   document.getElementById('startStopArp').addEventListener('click', toggleArpeggiator);
-  document.getElementById('pauseArp').addEventListener('click', pauseArpeggiator);
   document.getElementById('addRest').addEventListener('click', () => {
     console.log('Adding rest to arpeggiator');
     arpNotes.push(null);
