@@ -1,33 +1,38 @@
 // arpeggiator.js
 
-import { playMS10TriangleBass } from './audioContext.js';
+import { playMS10TriangleBass, stopMS10TriangleBass, context } from './audioContext.js';
 
 export let isArpeggiatorOn = false;
 export let arpNotes = [];
 let currentArpIndex = 0;
-let arpTimeout = null;
+let nextNoteTime = 0; 
 let isNudgeActive = false;
+let timerID;
 
-const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const LOOKAHEAD = 25.0; // milliseconds
+const SCHEDULE_AHEAD_TIME = 0.1; // seconds
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const A4_FREQUENCY = 440;
 const A4_MIDI_NUMBER = 69;
 
 const frequencyToNoteName = (frequency) => {
   const midiNote = Math.round(12 * Math.log2(frequency / A4_FREQUENCY) + A4_MIDI_NUMBER);
-  return `${noteNames[midiNote % 12]}${Math.floor(midiNote / 12) - 1}`;
+  return `${NOTE_NAMES[midiNote % 12]}${Math.floor(midiNote / 12) - 1}`;
 };
 
 export const startArpeggiator = () => {
   console.log('Starting arpeggiator');
   isArpeggiatorOn = true;
-  currentArpIndex = 0; // Reset the index when starting
-  playArpNotes();
+  currentArpIndex = 0;
+  nextNoteTime = context.currentTime;
+  scheduleArpeggiator();
 };
 
 export const stopArpeggiator = () => {
   console.log('Stopping arpeggiator');
   isArpeggiatorOn = false;
-  clearTimeout(arpTimeout);
+  clearTimeout(timerID);
+  stopMS10TriangleBass();
 };
 
 export const addNoteToArpeggiator = (frequency) => {
@@ -51,9 +56,7 @@ const updateArpIndex = {
   })(),
   doubleStep: () => currentArpIndex = (currentArpIndex + 2) % arpNotes.length,
   randomWithRests: () => {
-    if (Math.random() > 0.8) {
-      updateArpIndex.randomize();
-    }
+    if (Math.random() > 0.8) updateArpIndex.randomize();
   }
 };
 
@@ -66,66 +69,70 @@ const applySpeedModifier = (interval) => {
     'quadruple-time': interval / 4,
     'octuple-time': interval / 8,
   };
-  return speedMap[speed] || (console.error('Unknown speed setting:', speed), interval);
+  return speedMap[speed] || interval;
 };
 
-const playArpNotes = () => {
-  console.log('Playing arpeggiator notes');
-  if (!isArpeggiatorOn || !arpNotes.length) {
-    console.log('Arpeggiator stopped or no notes to play');
-    return;
+const scheduleArpeggiator = () => {
+  while (nextNoteTime < context.currentTime + SCHEDULE_AHEAD_TIME) {
+    playArpNote();
+    nextNoteTime += getNoteInterval();
   }
 
-  const currentNote = arpNotes[currentArpIndex];
-  console.log(`Playing note: ${currentNote !== null ? currentNote : 'Rest'}`);
-  currentNote !== null && playMS10TriangleBass(currentNote);
+  if (isArpeggiatorOn) {
+    timerID = setTimeout(scheduleArpeggiator, LOOKAHEAD);
+  }
+};
 
-  const pattern = document.getElementById('arpPattern').value;
+const getNoteInterval = () => {
   const baseInterval = (60 / parseFloat(document.getElementById('arpTempo').value)) * 1000;
-  
-  // Ensure the index is updated based on the pattern
-  switch (pattern) {
-    case 'up':
-      updateArpIndex.increment();
-      break;
-    case 'down':
-      updateArpIndex.decrement();
-      break;
-    case 'random':
-      updateArpIndex.randomize();
-      break;
-    case 'up-down':
-      updateArpIndex.upDown();
-      break;
-    case 'double-step':
-      updateArpIndex.doubleStep();
-      break;
-    case 'random-rest':
-      updateArpIndex.randomWithRests();
-      break;
-    default:
-      console.error('Unknown arpeggiator pattern:', pattern);
-      break;
-  }
-
-  let interval = applySpeedModifier(baseInterval);
+  let interval = applySpeedModifier(baseInterval) / 1000;
   if (isNudgeActive) {
     interval *= 1 - (parseFloat(document.getElementById('timingAdjust').value) / 100);
   }
+  return interval;
+};
 
-  console.log(`Next note in ${interval} ms`);
-  arpTimeout = setTimeout(playArpNotes, interval);
+const playArpNote = () => {
+  if (!isArpeggiatorOn || !arpNotes.length) return;
+
+  updateArpNotesDisplay(); // Update display to show the active note
+
+  const currentNote = arpNotes[currentArpIndex];
+  console.log(`Playing note: ${currentNote !== null ? currentNote : 'Rest'}`);
+  if (currentNote !== null) playMS10TriangleBass(currentNote);
+
+  const pattern = document.getElementById('arpPattern').value;
+  const updatePattern = {
+    'up': updateArpIndex.increment,
+    'down': updateArpIndex.decrement,
+    'random': updateArpIndex.randomize,
+    'up-down': updateArpIndex.upDown,
+    'double-step': updateArpIndex.doubleStep,
+    'random-rest': updateArpIndex.randomWithRests,
+  };
+
+  if (updatePattern[pattern]) {
+    updatePattern[pattern]();
+  } else {
+    console.error('Unknown arpeggiator pattern:', pattern);
+  }
 };
 
 export const toggleArpeggiator = () => {
   const button = document.getElementById('arpToggle');
-  isArpeggiatorOn ? (button.innerText = 'Create Note Array', stopArpeggiator()) : (button.innerText = 'Stop Arpeggiator', startArpeggiator());
+  if (isArpeggiatorOn) {
+    button.innerText = 'Create Note Array';
+    stopArpeggiator();
+  } else {
+    button.innerText = 'Stop Arpeggiator';
+    startArpeggiator();
+  }
 };
 
 export const pauseArpeggiator = () => {
   console.log('Pausing arpeggiator');
-  clearTimeout(arpTimeout);
   isArpeggiatorOn = false;
+  clearTimeout(timerID);
 };
 
 export const updateArpNotesDisplay = () => {
@@ -138,9 +145,19 @@ export const updateArpNotesDisplay = () => {
   let x = 10, y = 30, count = 0;
 
   console.log('Updating arpeggiator notes display');
-  arpNotes.forEach(note => {
+  arpNotes.forEach((note, index) => {
     const noteName = note !== null ? frequencyToNoteName(note) : 'Rest';
     console.log(`Displaying note: ${noteName}`);
+    
+    // Highlight the current note
+    if (index === currentArpIndex) {
+      ctx.fillStyle = '#FF0000'; // Highlight current note in red
+      ctx.font = 'bold 14px Arial'; // Enlarge font for current note
+    } else {
+      ctx.fillStyle = '#FFFFFF'; // Default color for other notes
+      ctx.font = 'bold 11px Arial'; // Default font size for other notes
+    }
+    
     if (x + noteWidth > display.width || count >= 16) {
       count = 0;
       x = 10;
@@ -153,13 +170,20 @@ export const updateArpNotesDisplay = () => {
 };
 
 // Event Listeners for Arpeggiator Controls
-document.getElementById('arpToggle').addEventListener('click', toggleArpeggiator);
-document.getElementById('playArp').addEventListener('click', startArpeggiator);
-document.getElementById('pauseArp').addEventListener('click', pauseArpeggiator);
-document.getElementById('addRest').addEventListener('click', () => {
-  console.log('Adding rest to arpeggiator');
-  arpNotes.push(null);
-  updateArpNotesDisplay();
-});
-document.getElementById('timingAdjust').addEventListener('input', () => isNudgeActive = true);
-document.getElementById('timingAdjust').addEventListener('change', () => isNudgeActive = false);
+const setupEventListeners = () => {
+  document.getElementById('arpToggle').addEventListener('click', toggleArpeggiator);
+  document.getElementById('playArp').addEventListener('click', startArpeggiator);
+  document.getElementById('pauseArp').addEventListener('click', pauseArpeggiator);
+  document.getElementById('addRest').addEventListener('click', () => {
+    console.log('Adding rest to arpeggiator');
+    arpNotes.push(null);
+    if (isArpeggiatorOn) {
+      currentArpIndex = currentArpIndex % arpNotes.length; // Adjust index if necessary
+    }
+    updateArpNotesDisplay();
+  });
+  document.getElementById('timingAdjust').addEventListener('input', () => isNudgeActive = true);
+  document.getElementById('timingAdjust').addEventListener('change', () => isNudgeActive = false);
+};
+
+setupEventListeners();
