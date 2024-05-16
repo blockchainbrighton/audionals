@@ -1,6 +1,25 @@
 // uiHandler.js
 
 import { handleNoteEvent, onMIDISuccess, onMIDIFailure } from './midiHandler.js';
+import { updateArpNotesDisplay } from './arpeggiator.js';
+
+// Helper function to update UI elements from settings
+export function updateUIFromSettings(settings) {
+  document.getElementById('waveform').value = settings.waveform;
+  document.getElementById('attack').value = settings.attack;
+  document.getElementById('release').value = settings.release;
+  document.getElementById('cutoff').value = settings.cutoff;
+  document.getElementById('resonance').value = settings.resonance;
+  document.getElementById('volume').value = settings.volume;
+  document.getElementById('arpTempo').value = settings.arpTempo;
+  document.getElementById('arpPattern').value = settings.arpPattern;
+  document.getElementById('arpSpeed').value = settings.arpSpeed;
+  document.getElementById('useSequencerTiming').checked = settings.useSequencerTiming;
+  document.getElementById('timingAdjust').value = settings.timingAdjust;
+
+  // Update the arpeggiator notes display
+  updateArpNotesDisplay();
+}
 
 // Keyboard Mapping and Event Handling
 let baseOctave = 1;

@@ -1,6 +1,17 @@
 export const context = new (window.AudioContext || window.webkitAudioContext)();
 export let currentOscillator = null;
 
+// Function to resume audio context on any click
+const resumeAudioContext = async () => {
+  if (context.state === 'suspended') {
+    await context.resume();
+    console.log('AudioContext resumed.');
+  }
+};
+
+document.addEventListener('click', resumeAudioContext);
+
+
 export function playMS10TriangleBass(frequency = null) {
   if (currentOscillator) {
     currentOscillator.stop();
