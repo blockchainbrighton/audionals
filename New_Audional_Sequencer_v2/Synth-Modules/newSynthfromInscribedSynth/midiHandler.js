@@ -30,9 +30,7 @@ export function handleNoteEvent(note, velocity, isNoteOn) {
   if (isNoteOn) {
     console.log(`Note On. MIDI note: ${note}, Frequency: ${frequency}`);
     playMS10TriangleBass(frequency);
-    if (isArpeggiatorOn) {
-      addNoteToArpeggiator(frequency);
-    }
+    addNoteToArpeggiator(frequency);
   } else {
     console.log(`Note Off. MIDI note: ${note}`);
     // No action needed for Note Off

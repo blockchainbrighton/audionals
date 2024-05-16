@@ -8,9 +8,10 @@ let currentArpIndex = 0;
 let nextNoteTime = 0; 
 let isNudgeActive = false;
 let timerID;
+let isLatchModeOn = false;
 
-const LOOKAHEAD = 25.0; // milliseconds
-const SCHEDULE_AHEAD_TIME = 0.1; // seconds
+const LOOKAHEAD = 15.0; // milliseconds
+const SCHEDULE_AHEAD_TIME = 0.05; // seconds
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const A4_FREQUENCY = 440;
 const A4_MIDI_NUMBER = 69;
@@ -25,9 +26,9 @@ export const startArpeggiator = () => {
   isArpeggiatorOn = true;
   currentArpIndex = 0;
   nextNoteTime = context.currentTime + 0.1; // Adding a small buffer to ensure proper scheduling
+  console.log(`Initial nextNoteTime set to: ${nextNoteTime}`);
   scheduleArpeggiator();
 };
-
 
 export const stopArpeggiator = () => {
   console.log('Stopping arpeggiator');
@@ -36,9 +37,24 @@ export const stopArpeggiator = () => {
   stopMS10TriangleBass();
 };
 
+export const toggleLatchMode = () => {
+  isLatchModeOn = !isLatchModeOn;
+  const button = document.getElementById('latchMode');
+  button.style.backgroundColor = isLatchModeOn ? 'red' : '';
+  console.log(`Latch mode ${isLatchModeOn ? 'enabled' : 'disabled'}`);
+};
+
 export const addNoteToArpeggiator = (frequency) => {
-  console.log(`Adding note to arpeggiator: ${frequency}`);
-  arpNotes.push(frequency);
+  if (isLatchModeOn) {
+    console.log(`Adding note to arpeggiator: ${frequency}`);
+    arpNotes.push(frequency);
+    updateArpNotesDisplay();
+  }
+};
+
+export const deleteLastNote = () => {
+  console.log('Deleting last note from arpeggiator');
+  arpNotes.pop();
   updateArpNotesDisplay();
 };
 
@@ -77,10 +93,14 @@ const scheduleArpeggiator = () => {
   while (nextNoteTime < context.currentTime + SCHEDULE_AHEAD_TIME) {
     playArpNote();
     nextNoteTime += getNoteInterval(); // Ensure the nextNoteTime is incremented correctly
+    console.log(`Scheduled next note at: ${nextNoteTime}`);
   }
 
   if (isArpeggiatorOn) {
-    timerID = setTimeout(scheduleArpeggiator, LOOKAHEAD);
+    timerID = setTimeout(() => {
+      console.log('Scheduling next batch of notes');
+      scheduleArpeggiator();
+    }, LOOKAHEAD);
   }
 };
 
@@ -90,6 +110,7 @@ const getNoteInterval = () => {
   if (isNudgeActive) {
     interval *= 1 - (parseFloat(document.getElementById('timingAdjust').value) / 100);
   }
+  console.log(`Calculated note interval: ${interval}`);
   return interval;
 };
 
@@ -99,7 +120,8 @@ const playArpNote = () => {
   updateArpNotesDisplay(); // Update display to show the active note
 
   const currentNote = arpNotes[currentArpIndex];
-  console.log(`Playing note: ${currentNote !== null ? currentNote : 'Rest'}`);
+  const currentTime = context.currentTime;
+  console.log(`Playing note at: ${currentTime}, Note: ${currentNote !== null ? currentNote : 'Rest'}`);
   if (currentNote !== null) {
     playMS10TriangleBass(currentNote);
   }
@@ -121,11 +143,10 @@ const playArpNote = () => {
   }
 };
 
-
 export const toggleArpeggiator = () => {
-  const button = document.getElementById('arpToggle');
+  const button = document.getElementById('startStopArp');
   if (isArpeggiatorOn) {
-    button.innerText = 'Create Note Array';
+    button.innerText = 'Start Arpeggiator';
     stopArpeggiator();
   } else {
     button.innerText = 'Stop Arpeggiator';
@@ -175,8 +196,8 @@ export const updateArpNotesDisplay = () => {
 
 // Event Listeners for Arpeggiator Controls
 const setupEventListeners = () => {
-  document.getElementById('arpToggle').addEventListener('click', toggleArpeggiator);
-  document.getElementById('playArp').addEventListener('click', startArpeggiator);
+  document.getElementById('latchMode').addEventListener('click', toggleLatchMode);
+  document.getElementById('startStopArp').addEventListener('click', toggleArpeggiator);
   document.getElementById('pauseArp').addEventListener('click', pauseArpeggiator);
   document.getElementById('addRest').addEventListener('click', () => {
     console.log('Adding rest to arpeggiator');
@@ -186,6 +207,7 @@ const setupEventListeners = () => {
     }
     updateArpNotesDisplay();
   });
+  document.getElementById('deleteLastNote').addEventListener('click', deleteLastNote);
   document.getElementById('timingAdjust').addEventListener('input', () => isNudgeActive = true);
   document.getElementById('timingAdjust').addEventListener('change', () => isNudgeActive = false);
 };
