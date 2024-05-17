@@ -9,6 +9,8 @@ let nextNoteTime = 0;
 let isNudgeActive = false;
 let timerID;
 let isLatchModeOn = false;
+let initialNextNoteTime = 0; // Add this line to declare the variable
+
 
 const LOOKAHEAD = 15.0; // milliseconds
 const SCHEDULE_AHEAD_TIME = 0.05; // seconds
@@ -25,8 +27,13 @@ export const startArpeggiator = () => {
   console.log('Starting arpeggiator');
   isArpeggiatorOn = true;
   currentArpIndex = 0;
-  nextNoteTime = context.currentTime + 0.1; // Adding a small buffer to ensure proper scheduling
+  
+  // Apply the nudge value to the initial nextNoteTime
+  const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
+  const nudgeOffset = (nudgeValue / 100) * (60 / parseFloat(document.getElementById('arpTempo').value));
+  nextNoteTime = context.currentTime + 0.1 + nudgeOffset; // Adding a small buffer to ensure proper scheduling
   console.log(`Initial nextNoteTime set to: ${nextNoteTime}`);
+  
   scheduleArpeggiator();
 };
 
@@ -90,9 +97,12 @@ const applySpeedModifier = (interval) => {
 };
 
 const scheduleArpeggiator = () => {
+  const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
+  const nudgeFactor = 1 - (nudgeValue / 100);
+
   while (nextNoteTime < context.currentTime + SCHEDULE_AHEAD_TIME) {
     playArpNote();
-    nextNoteTime += getNoteInterval(); // Ensure the nextNoteTime is incremented correctly
+    nextNoteTime += getNoteInterval() * nudgeFactor; // Adjust the interval by the nudge factor
     console.log(`Scheduled next note at: ${nextNoteTime}`);
   }
 
@@ -154,7 +164,6 @@ export const toggleArpeggiator = () => {
   }
 };
 
-
 export const updateArpNotesDisplay = () => {
   const display = document.getElementById('arpNotesDisplay');
   const ctx = display.getContext('2d');
@@ -209,7 +218,11 @@ export const updateArpNotesDisplay = () => {
   });
 };
 
-
+export const adjustArpeggiatorTiming = (nudgeValue) => {
+  const nudgeFactor = 1 - (nudgeValue / 100);
+  nextNoteTime = context.currentTime + (nextNoteTime - context.currentTime) * nudgeFactor;
+  console.log(`Adjusted nextNoteTime to: ${nextNoteTime}`);
+};
 
 // Event Listeners for Arpeggiator Controls
 const setupEventListeners = () => {
@@ -225,7 +238,12 @@ const setupEventListeners = () => {
   });
   document.getElementById('deleteLastNote').addEventListener('click', deleteLastNote);
   document.getElementById('timingAdjust').addEventListener('input', () => isNudgeActive = true);
-  document.getElementById('timingAdjust').addEventListener('change', () => isNudgeActive = false);
+  document.getElementById('timingAdjust').addEventListener('change', () => {
+    isNudgeActive = false;
+    if (isArpeggiatorOn) {
+      adjustArpeggiatorTiming(parseFloat(document.getElementById('timingAdjust').value));
+    }
+  });
 };
 
 setupEventListeners();

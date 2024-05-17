@@ -1,12 +1,12 @@
-// main.js
 import './audioContext.js';
 import './midiHandler.js';
 import './arpeggiator.js';
 import './uiHandler.js';
 import './saveLoadHandler.js';
 import './midiRecordingAndPlayback.js';
+import { isArpeggiatorOn, adjustArpeggiatorTiming } from './arpeggiator.js'; // Import isArpeggiatorOn and adjustArpeggiatorTiming
 
-import { startMidiRecording, stopMidiRecording, playMidiRecording } from './midiRecordingAndPlayback.js';
+import { startMidiRecording, stopMidiRecording, playMidiRecording, midiRecording, recordingStartTime } from './midiRecordingAndPlayback.js'; // Import midiRecording and recordingStartTime
 
 document.addEventListener('DOMContentLoaded', () => {
   const openEffectsModuleButton = document.getElementById('openEffectsModule');
@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const effectsModuleIframe = document.getElementById('effectsModuleIframe');
   const recordMidiButton = document.getElementById('RecordMidi');
   const playMidiButton = document.getElementById('PlayMidi');
+  const timingAdjustSlider = document.getElementById('timingAdjust');
   let isRecording = false;
 
   openEffectsModuleButton.addEventListener('click', () => {
@@ -38,6 +39,38 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   playMidiButton.addEventListener('click', playMidiRecording);
+
+  // Nudge slider event listeners
+  timingAdjustSlider.addEventListener('change', () => {
+    const nudgeValue = parseFloat(timingAdjustSlider.value);
+
+    if (isArpeggiatorOn) {
+      // Adjust the timing for the next note without restarting
+      adjustArpeggiatorTiming(nudgeValue);
+    }
+    if (midiRecording.length > 0) {
+      // Adjust MIDI playback without restarting
+      const nudgeOffset = (nudgeValue / 100) * (midiRecording[midiRecording.length - 1].timestamp - recordingStartTime);
+
+      midiRecording.forEach((event, index) => {
+        let adjustedTimestamp = event.timestamp + nudgeOffset;
+
+        if (adjustedTimestamp < performance.now()) {
+          adjustedTimestamp = performance.now();
+        }
+
+        const delay = adjustedTimestamp - performance.now();
+        console.log(`Rescheduling event ${index + 1}/${midiRecording.length}: ${event.isNoteOn ? 'Note On' : 'Note Off'} - ${event.note} in ${delay.toFixed(2)}ms`);
+        setTimeout(() => {
+          handleMidiEvent(event);
+        }, delay);
+      });
+    }
+
+    // Snap the slider back to zero
+    timingAdjustSlider.value = 0;
+  });
+
 
   // Make the container draggable
   dragElement(effectsModuleContainer);

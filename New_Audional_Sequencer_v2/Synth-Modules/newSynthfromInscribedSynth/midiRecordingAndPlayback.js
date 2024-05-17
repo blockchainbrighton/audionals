@@ -3,13 +3,12 @@ import { playMS10TriangleBass } from './audioContext.js';
 import { midiNoteToFrequency } from './midiHandler.js';
 
 let isRecording = false;
-let isFirstNoteRecorded = false; // Flag to check if the first note is recorded
-let midiRecording = [];
-let recordingStartTime = 0;
+export let midiRecording = [];
+export let recordingStartTime = 0;
+
 
 export function startMidiRecording() {
   isRecording = true;
-  isFirstNoteRecorded = false; // Reset flag
   midiRecording = [];
   recordingStartTime = 0; // Reset start time
   console.log('MIDI recording started');
@@ -21,22 +20,36 @@ export function stopMidiRecording() {
   console.log(`Total events recorded: ${midiRecording.length}`);
 }
 
+// midiRecordingAndPlayback.js
+
 export function playMidiRecording() {
   if (midiRecording.length === 0) {
     console.log('No MIDI recording to play');
     return;
   }
 
-  const startTime = performance.now();
-  console.log(`MIDI playback started at ${startTime}`);
+  const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
+  const nudgeOffset = (nudgeValue / 100) * (midiRecording[midiRecording.length - 1].timestamp - recordingStartTime);
+
   midiRecording.forEach((event, index) => {
-    const delay = event.timestamp - recordingStartTime;
+    let adjustedTimestamp = event.timestamp + nudgeOffset;
+
+    if (adjustedTimestamp < performance.now()) {
+      adjustedTimestamp = performance.now();
+    }
+
+    const delay = adjustedTimestamp - performance.now();
     console.log(`Scheduling event ${index + 1}/${midiRecording.length}: ${event.isNoteOn ? 'Note On' : 'Note Off'} - ${event.note} in ${delay.toFixed(2)}ms`);
     setTimeout(() => {
       handleMidiEvent(event);
     }, delay);
   });
+
+  // Snap the slider back to zero
+  document.getElementById('timingAdjust').value = 0;
 }
+
+  
 
 function handleMidiEvent(event) {
   const { note, velocity, isNoteOn } = event;
@@ -68,9 +81,8 @@ export function recordMidiEvent(event) {
   console.log(`isNoteOn: ${isNoteOn}, isNoteOff: ${isNoteOff}`);
 
   if (isNoteOn || isNoteOff) {
-    if (!isFirstNoteRecorded) {
+    if (!recordingStartTime) {
       recordingStartTime = timestamp; // Set the start time to the first note's timestamp
-      isFirstNoteRecorded = true; // Mark the first note as recorded
       console.log(`First note recorded. Start time set to ${recordingStartTime}`);
     }
     midiRecording.push({ note, velocity, isNoteOn, timestamp });
