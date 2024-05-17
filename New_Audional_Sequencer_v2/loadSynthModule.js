@@ -64,6 +64,7 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
     iframe.style.width = '100%';
     iframe.style.height = 'calc(100% - 40px)';  // Adjust the height as necessary to account for padding
     iframe.style.border = 'none';
+    iframe.style.display = 'block';  // Ensure no extra space below the iframe
     floatingWindow.appendChild(iframe);
 
     // Append the floating window to the body
@@ -82,10 +83,31 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
         // Access the document within the iframe
         const iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
 
+        // Adjust the height and width of the content inside the iframe
+        const content = iframeDocument.querySelector('body');  // Assuming the main content is in the body
+        content.style.height = '100%';
+        content.style.width = '100%';
+        content.style.margin = '0';
+        content.style.padding = '0';
+        content.style.overflow = 'hidden';
+        content.style.boxSizing = 'border-box';
+
         // Get the title from the loaded HTML file
         const title = iframeDocument.title;
 
         // Set the loadSampleButton's text content to the new title
         loadSampleButton.textContent = title;
     };
+
+    // Additional logs to help diagnose issues
+    console.log('Iframe and floating window dimensions:', {
+        iframe: {
+            width: iframe.style.width,
+            height: iframe.style.height
+        },
+        floatingWindow: {
+            width: floatingWindow.style.width,
+            height: floatingWindow.style.height
+        }
+    });
 }
