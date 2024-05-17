@@ -1,6 +1,7 @@
 // midiHandler.js
 import { playMS10TriangleBass } from './audioContext.js';
 import { isArpeggiatorOn, addNoteToArpeggiator } from './arpeggiator.js';
+import { recordMidiEvent } from './midiRecordingAndPlayback.js';
 
 const A4_MIDI_NUMBER = 69;
 const A4_FREQUENCY = 440;
@@ -38,6 +39,8 @@ export function handleNoteEvent(note, velocity, isNoteOn) {
 }
 
 export function onMIDIMessage(event) {
+  recordMidiEvent(event); // Record the MIDI event
+
   const command = event.data[0] & 0xf0;
   const note = event.data[1];
   const velocity = event.data.length > 2 ? event.data[2] : 0;

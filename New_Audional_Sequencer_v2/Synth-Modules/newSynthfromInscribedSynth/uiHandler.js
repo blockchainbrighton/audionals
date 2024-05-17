@@ -2,6 +2,7 @@
 
 import { handleNoteEvent, onMIDISuccess, onMIDIFailure } from './midiHandler.js';
 import { updateArpNotesDisplay } from './arpeggiator.js';
+import { recordMidiEvent } from './midiRecordingAndPlayback.js'; // Import recordMidiEvent
 
 // Helper function to update UI elements from settings
 export function updateUIFromSettings(settings) {
@@ -105,6 +106,10 @@ document.addEventListener('keydown', (event) => {
   if (note !== null) {
     const velocity = 127;
     handleNoteEvent(note, velocity, true);
+    // Record MIDI event
+    recordMidiEvent({
+      data: [144, note, velocity]
+    });
   }
 });
 
@@ -112,5 +117,9 @@ document.addEventListener('keyup', (event) => {
   const note = keyToMIDINote(event.key);
   if (note !== null) {
     handleNoteEvent(note, 0, false);
+    // Record MIDI event
+    recordMidiEvent({
+      data: [128, note, 0]
+    });
   }
 });
