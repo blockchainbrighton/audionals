@@ -2,24 +2,72 @@
 
 function loadSynth(channelIndex, loadSampleButton, bpmValue) {
     console.log(`Loading synth for channel index: ${channelIndex}`);
+
+    // Create the floating window container
+    const floatingWindow = document.createElement('div');
+    floatingWindow.style.position = 'fixed';
+    floatingWindow.style.top = '10%';  // Adjust as necessary
+    floatingWindow.style.left = '10%';  // Adjust as necessary
+    floatingWindow.style.width = '80%';  // Adjust as necessary
+    floatingWindow.style.height = '80%';  // Adjust as necessary
+    floatingWindow.style.zIndex = '1000';  // Ensure it's on top of other elements
+    floatingWindow.style.backgroundColor = 'white';
+    floatingWindow.style.border = '2px solid black';
+    floatingWindow.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
+    floatingWindow.style.overflow = 'hidden';
+    floatingWindow.style.resize = 'both';
+    floatingWindow.style.padding = '10px';
+    
+    // Add close button to the floating window
+    const closeButton = document.createElement('div');
+    closeButton.textContent = 'X';
+    closeButton.style.position = 'absolute';
+    closeButton.style.top = '5px';
+    closeButton.style.right = '10px';
+    closeButton.style.cursor = 'pointer';
+    closeButton.style.fontSize = '20px';
+    closeButton.style.color = 'red';
+    closeButton.addEventListener('click', () => {
+        document.body.removeChild(floatingWindow);
+    });
+    floatingWindow.appendChild(closeButton);
+
+    // Make the floating window draggable
+    floatingWindow.onmousedown = function (event) {
+        let shiftX = event.clientX - floatingWindow.getBoundingClientRect().left;
+        let shiftY = event.clientY - floatingWindow.getBoundingClientRect().top;
+
+        function moveAt(pageX, pageY) {
+            floatingWindow.style.left = pageX - shiftX + 'px';
+            floatingWindow.style.top = pageY - shiftY + 'px';
+        }
+
+        function onMouseMove(event) {
+            moveAt(event.pageX, event.pageY);
+        }
+
+        document.addEventListener('mousemove', onMouseMove);
+
+        floatingWindow.onmouseup = function () {
+            document.removeEventListener('mousemove', onMouseMove);
+            floatingWindow.onmouseup = null;
+        };
+    };
+
+    floatingWindow.ondragstart = function () {
+        return false;
+    };
+
+    // Create the iframe element
     const iframe = document.createElement('iframe');
+    iframe.src = `Synth-Modules/jiMS10_v2/index.html?channelIndex=${channelIndex}`;
+    iframe.style.width = '100%';
+    iframe.style.height = 'calc(100% - 40px)';  // Adjust the height as necessary to account for padding
+    iframe.style.border = 'none';
+    floatingWindow.appendChild(iframe);
 
-    // Correct the iframe source set up, include the channelIndex in the query parameters
-    iframe.src = `Synth-Modules/jiMS10_Synth/ms10Merged.html?channelIndex=${channelIndex}`;
-    iframe.style.width = '100%';  // Adjust the width as necessary
-    iframe.style.height = '500px';  // Adjust the height as necessary
-    iframe.style.border = 'none';  // Optional: Remove the border
-
-    // Find the container where the iframe should be inserted
-    const container = document.getElementById('synthContainer');
-
-    // Remove any existing children (i.e., previously loaded iframes)
-    while (container.firstChild) {
-        container.removeChild(container.firstChild);
-    }
-
-    // Append the new iframe to the container
-    container.appendChild(iframe);
+    // Append the floating window to the body
+    document.body.appendChild(floatingWindow);
 
     // Listen for the iframe to finish loading
     iframe.onload = () => {
@@ -30,7 +78,6 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
 
         // Fetch the BPM value from the input slider and send it to the iframe
         iframe.contentWindow.postMessage({ type: 'setBPM', bpm: bpmValue }, '*');  // Send BPM value on load
-
 
         // Access the document within the iframe
         const iframeDocument = iframe.contentDocument || iframe.contentWindow.document;

@@ -133,10 +133,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const switchInput = document.createElement('input');
             switchInput.type = 'checkbox';
             switchInput.checked = false; // Effect is off by default
+
+            // Change this event listener to show a notification instead of toggling the effect
             switchInput.addEventListener('change', (event) => {
-                activeEffect.toggleBypass(event.target.checked);
-                sendResizeMessage(); // Send resize message after control change
+                event.preventDefault();
+                showNotification('Effects package not available yet.');
+                switchInput.checked = false; // Ensure it stays unchecked
             });
+
             switchDiv.appendChild(switchInput);
 
             const sliderSpan = document.createElement('span');

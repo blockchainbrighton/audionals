@@ -1,9 +1,12 @@
+import './scaleSynth.js';
 import './audioContext.js';
 import './midiHandler.js';
 import './arpeggiator.js';
 import './uiHandler.js';
 import './saveLoadHandler.js';
 import './midiRecordingAndPlayback.js';
+import './controlChannels.js';
+import './iframeMessageHandling.js';
 import { isArpeggiatorOn, adjustArpeggiatorTiming } from './arpeggiator.js'; // Import isArpeggiatorOn and adjustArpeggiatorTiming
 import { startMidiRecording, stopMidiRecording, playMidiRecording, midiRecording, recordingStartTime } from './midiRecordingAndPlayback.js'; // Import midiRecording and recordingStartTime
 
