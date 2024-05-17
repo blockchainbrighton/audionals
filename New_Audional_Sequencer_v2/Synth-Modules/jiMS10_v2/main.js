@@ -5,7 +5,6 @@ import './uiHandler.js';
 import './saveLoadHandler.js';
 import './midiRecordingAndPlayback.js';
 import { isArpeggiatorOn, adjustArpeggiatorTiming } from './arpeggiator.js'; // Import isArpeggiatorOn and adjustArpeggiatorTiming
-
 import { startMidiRecording, stopMidiRecording, playMidiRecording, midiRecording, recordingStartTime } from './midiRecordingAndPlayback.js'; // Import midiRecording and recordingStartTime
 
 document.addEventListener('DOMContentLoaded', () => {

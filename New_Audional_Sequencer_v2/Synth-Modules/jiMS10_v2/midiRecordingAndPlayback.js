@@ -1,11 +1,13 @@
 // midiRecordingAndPlayback.js
+
 import { playMS10TriangleBass } from './audioContext.js';
 import { midiNoteToFrequency } from './midiHandler.js';
 
+let isPlaying = false;
 let isRecording = false;
 export let midiRecording = [];
 export let recordingStartTime = 0;
-
+let playbackTimeouts = []; // Array to store timeouts for playback
 
 export function startMidiRecording() {
   isRecording = true;
@@ -20,36 +22,45 @@ export function stopMidiRecording() {
   console.log(`Total events recorded: ${midiRecording.length}`);
 }
 
-// midiRecordingAndPlayback.js
-
 export function playMidiRecording() {
   if (midiRecording.length === 0) {
     console.log('No MIDI recording to play');
     return;
   }
 
+  if (isPlaying) {
+    stopMidiPlayback();
+    return;
+  }
+
+  isPlaying = true;
+  document.getElementById('PlayMidi').innerText = 'Stop Midi Recording';
+
   const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
   const nudgeOffset = (nudgeValue / 100) * (midiRecording[midiRecording.length - 1].timestamp - recordingStartTime);
 
   midiRecording.forEach((event, index) => {
     let adjustedTimestamp = event.timestamp + nudgeOffset;
+    const delay = adjustedTimestamp - recordingStartTime;
 
-    if (adjustedTimestamp < performance.now()) {
-      adjustedTimestamp = performance.now();
-    }
-
-    const delay = adjustedTimestamp - performance.now();
     console.log(`Scheduling event ${index + 1}/${midiRecording.length}: ${event.isNoteOn ? 'Note On' : 'Note Off'} - ${event.note} in ${delay.toFixed(2)}ms`);
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       handleMidiEvent(event);
     }, delay);
+    playbackTimeouts.push(timeoutId);
   });
 
   // Snap the slider back to zero
   document.getElementById('timingAdjust').value = 0;
 }
 
-  
+export function stopMidiPlayback() {
+  playbackTimeouts.forEach(clearTimeout); // Clear all scheduled timeouts
+  playbackTimeouts = []; // Reset the timeouts array
+  isPlaying = false;
+  document.getElementById('PlayMidi').innerText = 'Play Midi Recording';
+  console.log('MIDI playback stopped');
+}
 
 function handleMidiEvent(event) {
   const { note, velocity, isNoteOn } = event;
