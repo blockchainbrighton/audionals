@@ -1,5 +1,12 @@
+// audioContext.js
 export const context = new (window.AudioContext || window.webkitAudioContext)();
 export let currentOscillator = null;
+let isMuted = false;
+const mainGainNode = context.createGain();
+mainGainNode.connect(context.destination);
+
+// Initialize the main gain node to a normal volume
+mainGainNode.gain.setValueAtTime(1, context.currentTime);
 
 // Function to resume audio context on any click
 const resumeAudioContext = async () => {
@@ -93,12 +100,12 @@ function playOscillatorWithEnvelope(frequency = null, ramped = false) {
   const oscillatorType = isRampedWaveform ? waveform.replace('ramped', '').toLowerCase() : waveform;
 
   const oscillator = createOscillator(oscillatorType, noteFrequency);
-  const gainNode = setupGainNode(attack, release, volume);
+  const gainNode = setupGainNode(attack, release, volume, ramped);
   const filterNode = setupFilterNode(cutoff, resonance);
 
   oscillator.connect(filterNode);
   filterNode.connect(gainNode);
-  gainNode.connect(context.destination);
+  gainNode.connect(mainGainNode); // Connect to main gain node
 
   // Start the oscillator slightly later to avoid initial clicks
   oscillator.start(context.currentTime + 0.01);
@@ -113,3 +120,11 @@ export function stopOscillator() {
     currentOscillator = null;
   }
 }
+
+export function toggleMute() {
+  isMuted = !isMuted;
+  mainGainNode.gain.setValueAtTime(isMuted ? 0 : 1, context.currentTime);
+  console.log(`Mute ${isMuted ? 'enabled' : 'disabled'}`);
+}
+
+document.getElementById('mute').addEventListener('click', toggleMute);
