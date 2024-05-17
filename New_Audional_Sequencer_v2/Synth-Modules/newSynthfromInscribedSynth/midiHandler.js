@@ -5,7 +5,7 @@ import { isArpeggiatorOn, addNoteToArpeggiator } from './arpeggiator.js';
 const A4_MIDI_NUMBER = 69;
 const A4_FREQUENCY = 440;
 
-function midiNoteToFrequency(note) {
+export function midiNoteToFrequency(note) {
   if (note < 0 || note > 127) {
     console.error('Invalid MIDI note:', note);
     return null;

@@ -11,56 +11,105 @@ const resumeAudioContext = async () => {
 
 document.addEventListener('click', resumeAudioContext);
 
-
 export function playMS10TriangleBass(frequency = null) {
-  if (currentOscillator) {
-    currentOscillator.stop();
-    currentOscillator = null;
-  }
-
-  const oscillator = context.createOscillator();
-  const gainNode = context.createGain();
-  const filterNode = context.createBiquadFilter();
-
-  oscillator.type = document.getElementById('waveform').value;
-
-  if (frequency === null) {
-    frequency = parseFloat(document.getElementById('note').value);
-    if (!isFinite(frequency)) {
-      console.error('Invalid frequency value:', frequency);
-      return;
-    }
-  }
-
-  oscillator.frequency.setValueAtTime(frequency, context.currentTime);
-
-  const attack = document.getElementById('attack').value / 1000;
-  const release = document.getElementById('release').value / 1000;
-  const cutoff = document.getElementById('cutoff').value;
-  const resonance = document.getElementById('resonance').value;
-
-  filterNode.type = 'lowpass';
-  filterNode.frequency.value = cutoff;
-  filterNode.Q.value = resonance;
-
-  const volume = document.getElementById('volume').value / 100;
-  gainNode.gain.setValueAtTime(0, context.currentTime);
-  gainNode.gain.linearRampToValueAtTime(volume, context.currentTime + attack);
-  gainNode.gain.linearRampToValueAtTime(0, context.currentTime + attack + release);
-
-  oscillator.connect(filterNode);
-  filterNode.connect(gainNode);
-  gainNode.connect(context.destination);
-
-  oscillator.start();
-  oscillator.stop(context.currentTime + attack + release);
-
-  currentOscillator = oscillator;
+  playOscillatorWithEnvelope(frequency, false);
 }
 
 export function stopMS10TriangleBass() {
   if (currentOscillator) {
     currentOscillator.stop();
+    currentOscillator = null;
+  }
+}
+
+function createOscillator(type, frequency) {
+  const oscillator = context.createOscillator();
+  oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+
+  if (type === 'pulse') {
+    // Custom pulse wave using periodic wave
+    const real = new Float32Array([0, 1, 0, 1, 0.75]); // Adjusted for more harmonics
+    const imag = new Float32Array(real.length);
+    const wave = context.createPeriodicWave(real, imag);
+    oscillator.setPeriodicWave(wave);
+  } else {
+    oscillator.type = type;
+  }
+
+  return oscillator;
+}
+
+function setupGainNode(attack, release, volume, ramped) {
+  const gainNode = context.createGain();
+  if (ramped) {
+    gainNode.gain.setValueAtTime(0.0001, context.currentTime); // Start from a very low value
+    gainNode.gain.exponentialRampToValueAtTime(volume, context.currentTime + attack);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + attack + release); // Ramp down smoothly
+  } else {
+    gainNode.gain.setValueAtTime(volume, context.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0, context.currentTime + attack + release);
+  }
+  return gainNode;
+}
+
+function setupFilterNode(cutoff, resonance) {
+  const filterNode = context.createBiquadFilter();
+  filterNode.type = 'lowpass';
+  filterNode.frequency.value = cutoff;
+  filterNode.Q.value = resonance;
+
+  return filterNode;
+}
+
+export function playOscillator(frequency = null) {
+  playOscillatorWithEnvelope(frequency, false);
+}
+
+export function playRampedOscillator(frequency = null) {
+  playOscillatorWithEnvelope(frequency, true);
+}
+
+function playOscillatorWithEnvelope(frequency = null, ramped = false) {
+  if (currentOscillator) {
+    currentOscillator.stop();
+    currentOscillator = null;
+  }
+
+  const waveform = document.getElementById('waveform').value;
+  const noteFrequency = frequency !== null ? frequency : parseFloat(document.getElementById('note').value);
+
+  if (!isFinite(noteFrequency)) {
+    console.error('Invalid frequency value:', noteFrequency);
+    return;
+  }
+
+  const attack = document.getElementById('attack').value / 1000;
+  const release = document.getElementById('release').value / 1000;
+  const cutoff = document.getElementById('cutoff').value;
+  const resonance = document.getElementById('resonance').value;
+  const volume = document.getElementById('volume').value / 100;
+
+  const isRampedWaveform = waveform.startsWith('ramped');
+  const oscillatorType = isRampedWaveform ? waveform.replace('ramped', '').toLowerCase() : waveform;
+
+  const oscillator = createOscillator(oscillatorType, noteFrequency);
+  const gainNode = setupGainNode(attack, release, volume);
+  const filterNode = setupFilterNode(cutoff, resonance);
+
+  oscillator.connect(filterNode);
+  filterNode.connect(gainNode);
+  gainNode.connect(context.destination);
+
+  // Start the oscillator slightly later to avoid initial clicks
+  oscillator.start(context.currentTime + 0.01);
+  oscillator.stop(context.currentTime + attack + release + 0.02);
+
+  currentOscillator = oscillator;
+}
+
+export function stopOscillator() {
+  if (currentOscillator) {
+    currentOscillator.stop(context.currentTime + 0.01); // Stop a tiny bit later to avoid clicks
     currentOscillator = null;
   }
 }

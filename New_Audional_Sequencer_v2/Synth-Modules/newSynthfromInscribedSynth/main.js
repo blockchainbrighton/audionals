@@ -1,28 +1,43 @@
 // main.js
-
 import './audioContext.js';
 import './midiHandler.js';
 import './arpeggiator.js';
 import './uiHandler.js';
 import './saveLoadHandler.js';
+import './midiRecordingAndPlayback.js';
+
+import { startMidiRecording, stopMidiRecording, playMidiRecording } from './midiRecordingAndPlayback.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const openEffectsModuleButton = document.getElementById('openEffectsModule');
   const effectsModuleContainer = document.getElementById('effectsModuleContainer');
   const closeEffectsModuleButton = document.getElementById('closeEffectsModule');
   const effectsModuleIframe = document.getElementById('effectsModuleIframe');
+  const recordMidiButton = document.getElementById('RecordMidi');
+  const playMidiButton = document.getElementById('PlayMidi');
+  let isRecording = false;
 
   openEffectsModuleButton.addEventListener('click', () => {
-    if (effectsModuleContainer.style.display === 'none') {
-      effectsModuleContainer.style.display = 'block';
-    } else {
-      effectsModuleContainer.style.display = 'none';
-    }
+    effectsModuleContainer.style.display = effectsModuleContainer.style.display === 'none' ? 'block' : 'none';
   });
 
   closeEffectsModuleButton.addEventListener('click', () => {
     effectsModuleContainer.style.display = 'none';
   });
+
+  recordMidiButton.addEventListener('click', () => {
+    if (isRecording) {
+      stopMidiRecording();
+      isRecording = false;
+      recordMidiButton.textContent = 'Record Midi';
+    } else {
+      startMidiRecording();
+      isRecording = true;
+      recordMidiButton.textContent = 'Stop Recording';
+    }
+  });
+
+  playMidiButton.addEventListener('click', playMidiRecording);
 
   // Make the container draggable
   dragElement(effectsModuleContainer);
