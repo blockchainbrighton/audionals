@@ -1,22 +1,93 @@
+// loadSynthModule.js - This script is used to load the synth module into a floating window when the user clicks the "Load Synth" button. 
+// It also listens for messages from the synth module and saves the arpeggiator notes and MIDI recording to local storage.
+
 function loadSynth(channelIndex, loadSampleButton, bpmValue) {
+    if (channelIndex === undefined) {
+        console.error('Error: Channel index is undefined. Stopping program.');
+        return;
+    }
     console.log(`Loading synth for channel index: ${channelIndex}`);
 
-    // Create the floating window container
+    const floatingWindow = createFloatingWindow();
+    const iframe = createIframe(channelIndex);
+    floatingWindow.appendChild(iframe);
+    document.body.appendChild(floatingWindow);
+
+    const savedSettings = getSettingsFromLocalStorage(channelIndex);
+    console.log(`Retrieved saved settings for channel ${channelIndex}:`, savedSettings);
+
+    iframe.onload = () => {
+        console.log("Synth iframe loaded successfully");
+        sendMessageToIframe(iframe, { type: 'setChannelIndex', channelIndex });
+        sendMessageToIframe(iframe, { type: 'setBPM', bpm: bpmValue });
+        if (savedSettings.arpNotes) {
+            console.log(`Sending ArpNotes to iframe: ${JSON.stringify(savedSettings.arpNotes)}`);
+            sendMessageToIframe(iframe, { type: 'setArpNotes', arpNotes: savedSettings.arpNotes });
+        }
+        if (savedSettings.midiRecording) {
+            console.log(`Sending MIDI recording to iframe: ${JSON.stringify(savedSettings.midiRecording)}`);
+            sendMessageToIframe(iframe, { type: 'setMidiRecording', midiRecording: savedSettings.midiRecording });
+        }
+
+        adjustIframeContent(iframe);
+        loadSampleButton.textContent = iframe.contentDocument.title;
+    };
+
+    listenForChildMessages(channelIndex, savedSettings);
+}
+
+
+function createIframe(channelIndex) {
+    const iframe = document.createElement('iframe');
+    iframe.src = `Synth-Modules/jiMS10_v2/index.html?channelIndex=${channelIndex}`;
+    iframe.style.width = '100%';
+    iframe.style.height = 'calc(100% - 40px)';
+    iframe.style.border = 'none';
+    iframe.style.display = 'block';
+    return iframe;
+}
+
+function sendMessageToIframe(iframe, message) {
+    iframe.contentWindow.postMessage(message, '*');
+}
+
+function updateLocalStorage(channelIndex, settings) {
+    console.log(`Saving settings to localStorage for channel ${channelIndex}: ${JSON.stringify(settings)}`);
+    localStorage.setItem(`synthSettings_${channelIndex}`, JSON.stringify(settings));
+}
+
+function getSettingsFromLocalStorage(channelIndex) {
+    const settings = JSON.parse(localStorage.getItem(`synthSettings_${channelIndex}`)) || {};
+    console.log(`Loaded settings from localStorage for channel ${channelIndex}: ${JSON.stringify(settings)}`);
+    return settings;
+}
+
+
+
+function createFloatingWindow() {
     const floatingWindow = document.createElement('div');
     floatingWindow.style.position = 'fixed';
-    floatingWindow.style.top = '10%';  // Adjust as necessary
-    floatingWindow.style.left = '10%';  // Adjust as necessary
-    floatingWindow.style.width = '80%';  // Adjust as necessary
-    floatingWindow.style.height = '80%';  // Adjust as necessary
-    floatingWindow.style.zIndex = '1000';  // Ensure it's on top of other elements
+    floatingWindow.style.top = '10%';
+    floatingWindow.style.left = '10%';
+    floatingWindow.style.width = '80%';
+    floatingWindow.style.height = '80%';
+    floatingWindow.style.zIndex = '1000';
     floatingWindow.style.backgroundColor = 'white';
     floatingWindow.style.border = '2px solid black';
     floatingWindow.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
     floatingWindow.style.overflow = 'hidden';
     floatingWindow.style.resize = 'both';
     floatingWindow.style.padding = '10px';
-    
-    // Add close button to the floating window
+
+    const closeButton = createCloseButton(floatingWindow);
+    floatingWindow.appendChild(closeButton);
+
+    makeFloatingWindowDraggable(floatingWindow);
+
+    return floatingWindow;
+}
+
+function createCloseButton(floatingWindow) {
     const closeButton = document.createElement('div');
     closeButton.textContent = 'X';
     closeButton.style.position = 'absolute';
@@ -28,12 +99,14 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
     closeButton.addEventListener('click', () => {
         document.body.removeChild(floatingWindow);
     });
-    floatingWindow.appendChild(closeButton);
 
-    // Make the floating window draggable
+    return closeButton;
+}
+
+function makeFloatingWindowDraggable(floatingWindow) {
     floatingWindow.onmousedown = function (event) {
-        let shiftX = event.clientX - floatingWindow.getBoundingClientRect().left;
-        let shiftY = event.clientY - floatingWindow.getBoundingClientRect().top;
+        const shiftX = event.clientX - floatingWindow.getBoundingClientRect().left;
+        const shiftY = event.clientY - floatingWindow.getBoundingClientRect().top;
 
         function moveAt(pageX, pageY) {
             floatingWindow.style.left = pageX - shiftX + 'px';
@@ -55,89 +128,31 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
     floatingWindow.ondragstart = function () {
         return false;
     };
+}
 
-    // Create the iframe element
-    const iframe = document.createElement('iframe');
-    iframe.src = `Synth-Modules/jiMS10_v2/index.html?channelIndex=${channelIndex}`;
-    iframe.style.width = '100%';
-    iframe.style.height = 'calc(100% - 40px)';  // Adjust the height as necessary to account for padding
-    iframe.style.border = 'none';
-    iframe.style.display = 'block';  // Ensure no extra space below the iframe
-    floatingWindow.appendChild(iframe);
 
-    // Append the floating window to the body
-    document.body.appendChild(floatingWindow);
+function adjustIframeContent(iframe) {
+    const iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
+    const content = iframeDocument.querySelector('body');
+    content.style.height = '100%';
+    content.style.width = '100%';
+    content.style.margin = '0';
+    content.style.padding = '0';
+    content.style.overflow = 'hidden';
+    content.style.boxSizing = 'border-box';
+}
 
-    // Retrieve saved settings for the given channel index
-    const savedSettings = JSON.parse(localStorage.getItem(`synthSettings_${channelIndex}`)) || {};
-    console.log(`Retrieved saved settings for channel ${channelIndex}:`, savedSettings);
-
-    // Listen for the iframe to finish loading
-    iframe.onload = () => {
-        console.log("Synth iframe loaded successfully");
-
-        // Send the channel index to the iframe once it is loaded
-        iframe.contentWindow.postMessage({ type: 'setChannelIndex', channelIndex: channelIndex }, '*');
-
-        // Fetch the BPM value from the input slider and send it to the iframe
-        iframe.contentWindow.postMessage({ type: 'setBPM', bpm: bpmValue }, '*');  // Send BPM value on load
-
-        // Send saved settings to the iframe
-        if (savedSettings.arpNotes) {
-            iframe.contentWindow.postMessage({ type: 'setArpNotes', arpNotes: savedSettings.arpNotes }, '*');
-        }
-        if (savedSettings.midiRecording) {
-            iframe.contentWindow.postMessage({ type: 'setMidiRecording', midiRecording: savedSettings.midiRecording }, '*');
-        }
-
-        // Access the document within the iframe
-        const iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
-
-        // Adjust the height and width of the content inside the iframe
-        const content = iframeDocument.querySelector('body');  // Assuming the main content is in the body
-        content.style.height = '100%';
-        content.style.width = '100%';
-        content.style.margin = '0';
-        content.style.padding = '0';
-        content.style.overflow = 'hidden';
-        content.style.boxSizing = 'border-box';
-
-        // Get the title from the loaded HTML file
-        const title = iframeDocument.title;
-
-        // Set the loadSampleButton's text content to the new title
-        loadSampleButton.textContent = title;
-    };
-
-    // Additional logs to help diagnose issues
-    console.log('Iframe and floating window dimensions:', {
-        iframe: {
-            width: iframe.style.width,
-            height: iframe.style.height
-        },
-        floatingWindow: {
-            width: floatingWindow.style.width,
-            height: floatingWindow.style.height
-        }
-    });
-
-    // Listen for messages from the sequencer channel
-    const sequencerChannel = new BroadcastChannel('sequencerChannel');
-    sequencerChannel.addEventListener('message', (event) => {
+function listenForChildMessages(channelIndex, savedSettings) {
+    window.addEventListener('message', (event) => {
         if (event.data.type === 'updateArpNotes') {
-            // Handle updated arpeggiator notes from the synth
-            const arpNotes = event.data.arpNotes;
-            console.log(`Received updated arpeggiator notes: ${arpNotes}`);
-            // Save the updated arpeggiator notes
-            savedSettings.arpNotes = arpNotes;
-            localStorage.setItem(`synthSettings_${channelIndex}`, JSON.stringify(savedSettings));
+            console.log(`Received updated arpeggiator notes: ${JSON.stringify(event.data.data)}`);
+            savedSettings.arpNotes = event.data.data;
+            updateLocalStorage(channelIndex, savedSettings);
         } else if (event.data.type === 'updateMidiRecording') {
-            // Handle updated MIDI recording from the synth
-            const midiRecording = event.data.midiRecording;
-            console.log(`Received updated MIDI recording with ${midiRecording.length} events`);
-            // Save the updated MIDI recording
-            savedSettings.midiRecording = midiRecording;
-            localStorage.setItem(`synthSettings_${channelIndex}`, JSON.stringify(savedSettings));
+            console.log(`Received updated MIDI recording with ${event.data.data.length} events: ${JSON.stringify(event.data.data)}`);
+            savedSettings.midiRecording = event.data.data;
+            updateLocalStorage(channelIndex, savedSettings);
         }
     });
 }
+

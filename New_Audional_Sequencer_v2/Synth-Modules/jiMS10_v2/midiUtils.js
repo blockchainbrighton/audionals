@@ -1,8 +1,7 @@
-// midiUtils.js
-
 import { playMS10TriangleBass } from './audioContext.js';
 import { addNoteToArpeggiator } from './arpeggiator.js';
-import { getIsRecording, midiRecording, getRecordingStartTime, startRecording, stopRecording } from './midiRecording.js';
+import { getMidiRecording, startRecording, stopRecording, recordMidiEvent } from './midiRecording.js';
+import { getChannelIndex } from './activeSynthChannelIndex.js'; 
 
 const A4_MIDI_NUMBER = 69;
 const A4_FREQUENCY = 440;
@@ -10,17 +9,32 @@ let isPlaying = false;
 let playbackTimeouts = []; // Declare playbackTimeouts
 
 export function startMidiRecording() {
-    startRecording(); // Use the function from midiRecording.js
+    const channelIndex = getChannelIndex();
+    if (channelIndex === null) {
+        console.error('[startMidiRecording] Error: Attempting to start recording without a valid channel index.');
+        return;
+    }
+    startRecording(channelIndex); // Call with channelIndex
+    console.log(`[startMidiRecording] Channel Index: ${channelIndex}`);
 }
 
 export function stopMidiRecording() {
-    stopRecording(); // Use the function from midiRecording.js
+    const channelIndex = getChannelIndex();
+    if (channelIndex === null) {
+        console.error('[stopMidiRecording] Error: Attempting to stop recording without a valid channel index.');
+        return;
+    }
+    stopRecording(channelIndex); // Call with channelIndex
+    console.log(`[stopMidiRecording] Channel Index: ${channelIndex}`);
 }
 
 export function playMidiRecording() {
+    const channelIndex = getChannelIndex();
+    const midiRecording = getMidiRecording(channelIndex);
+    console.log(`[playMidiRecording] Channel Index: ${channelIndex}`);
     console.log(`[playMidiRecording] Checking midiRecording array: ${JSON.stringify(midiRecording)}`);
     if (midiRecording.length === 0) {
-        console.log('No MIDI recording to play');
+        console.log('[playMidiRecording] No MIDI recording to play');
         return;
     }
 
@@ -32,7 +46,6 @@ export function playMidiRecording() {
     isPlaying = true;
     document.getElementById('PlayMidi').innerText = 'Stop Midi Recording';
 
-    // Normalize timestamps to start from zero
     const startTime = midiRecording[0].timestamp;
     const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
     const nudgeOffset = (nudgeValue / 100) * (midiRecording[midiRecording.length - 1].timestamp - startTime);
@@ -42,7 +55,7 @@ export function playMidiRecording() {
             let adjustedTimestamp = event.timestamp + nudgeOffset;
             const delay = adjustedTimestamp - startTime;
 
-            console.log(`Scheduling event ${index + 1}/${midiRecording.length}: Note On - ${event.note} in ${delay.toFixed(2)}ms`);
+            console.log(`[playMidiRecording] Scheduling event ${index + 1}/${midiRecording.length}: Note On - ${event.note} in ${delay.toFixed(2)}ms for channel: ${channelIndex}`);
             const timeoutId = setTimeout(() => {
                 handleNoteEvent(event.note, event.velocity, event.isNoteOn);
             }, delay);
@@ -50,8 +63,8 @@ export function playMidiRecording() {
         }
     });
 
-    // Snap the slider back to zero
-    document.getElementById('timingAdjust').value = 0;
+    document.getElementById('timingAdjust').value = 0; // Snap the slider back to zero
+    console.log(`[playMidiRecording] Channel Index: ${channelIndex}`);
 }
 
 export function stopMidiPlayback() {
@@ -59,11 +72,11 @@ export function stopMidiPlayback() {
     playbackTimeouts = []; // Reset the timeouts array
     isPlaying = false;
     document.getElementById('PlayMidi').innerText = 'Play Midi Recording';
-    console.log('MIDI playback stopped');
+    console.log('[stopMidiPlayback] MIDI playback stopped');
 }
 
 export function onMIDISuccess(midiAccess) {
-    console.log('MIDI access granted');
+    console.log('[onMIDISuccess] MIDI access granted');
     const inputs = midiAccess.inputs.values();
     for (let input = inputs.next(); input && !input.done; input = inputs.next()) {
         input.value.onmidimessage = onMIDIMessage;
@@ -71,31 +84,35 @@ export function onMIDISuccess(midiAccess) {
 }
 
 export function onMIDIFailure() {
-    console.warn('Could not access your MIDI devices.');
+    console.warn('[onMIDIFailure] Could not access your MIDI devices.');
 }
 
 export function onMIDIMessage(event) {
-    recordMidiEvent(event); // Record the MIDI event
+    const channelIndex = getChannelIndex();
+    recordMidiEvent(event, channelIndex); // Now calling the modified recordMidiEvent which uses global channel index
+    console.log(`[onMIDIMessage] Channel Index: ${channelIndex}`);
     const command = event.data[0] & 0xf0;
     const note = event.data[1];
     const velocity = event.data.length > 2 ? event.data[2] : 0;
     if (command === 144 && velocity > 0) { // Note on
         handleNoteEvent(note, velocity, true);
+        console.log(`[onMIDIMessage] Note On. MIDI note: ${note}, Velocity: ${velocity}, Channel Index: ${channelIndex}`);
     } else {
-        console.log(`Unhandled MIDI message type: ${command}`);
+        console.log(`[onMIDIMessage] Unhandled MIDI message type: ${command}, Channel Index: ${channelIndex}`);
     }
 }
 
 export function handleNoteEvent(note, velocity, isNoteOn) {
+    const channelIndex = getChannelIndex();
     const frequency = midiNoteToFrequency(note);
-    console.log(`Note On. MIDI note: ${note}, Frequency: ${frequency}`);
+    console.log(`[handleNoteEvent] Note On. MIDI note: ${note}, Frequency: ${frequency}, Channel Index: ${channelIndex}`);
     playMS10TriangleBass(frequency);
     addNoteToArpeggiator(frequency);
 }
 
 export function midiNoteToFrequency(note) {
     if (note < 0 || note > 127) {
-        console.error('Invalid MIDI note:', note);
+        console.error('[midiNoteToFrequency] Invalid MIDI note:', note);
         return null;
     }
     return Math.pow(2, (note - A4_MIDI_NUMBER) / 12) * A4_FREQUENCY;

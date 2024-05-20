@@ -1,72 +1,88 @@
-import { loadSettingsFromObject } from './saveLoadHandler.js';
-import { midiRecording, setMidiRecording } from './midiRecording.js';
+// iframeMessageHandling.js is a script that listens for messages from the parent window and responds to them by updating the synthesizer state. 
+// It also listens for messages from the synthesizer iframe and responds to them by updating the parent window. The script uses a BroadcastChannel to communicate between the parent window and the synthesizer iframe. 
+// The script also handles setting the active channel index for the synthesizer.
 
-const sequencerChannel = new BroadcastChannel('sequencerChannel');
-let currentChannelIndex;
+const SYNTH_CHANNEL = new URLSearchParams(window.location.search).get('channelIndex');
+
+
+import { loadSettingsFromObject } from './saveLoadHandler.js';
+import { getMidiRecording, setMidiRecording } from './midiRecording.js';
+import { initializeChannelIndex, setChannelIndex as setGlobalChannelIndex, getChannelIndex as getGlobalChannelIndex } from './activeSynthChannelIndex.js';
+
+const sequencerChannel = new BroadcastChannel(`synth_channel_${SYNTH_CHANNEL}`);
+
+// Initialize the channel index only once
+initializeChannelIndex(SYNTH_CHANNEL);
 
 sequencerChannel.addEventListener("message", (event) => {
+    if (event.data.channelIndex && event.data.channelIndex !== SYNTH_CHANNEL) {
+        console.log(`Ignoring message for different channel index: ${event.data.channelIndex}`);
+        return; // Ignore messages that are not for this channel index
+    }
+
     console.log(`[ms10 messageEventListener] Received message: ${JSON.stringify(event.data)}`);
 
-    if (event.data.type === 'step') {
-        console.log(`[ms10 messageEventListener] Received step: ${event.data.data.step}`);
-        onSequencerStep(event.data.data.step);
-
-        if (externalStepTimeout) {
+    switch (event.data.type) {
+        case 'step':
+            console.log(`[ms10 messageEventListener] Received step: ${event.data.data.step}`);
+            onSequencerStep(event.data.data.step);
             clearTimeout(externalStepTimeout);
-        }
-
-        externalStepTimeout = setTimeout(() => {
-            console.log(`[ms10] No external steps received for an extended period. Stopping arpeggiator.`);
-            stopArpeggiator();
-        }, 250);  
-    } else if (event.data.type === 'setArpNotes') {
-        const receivedArpNotes = event.data.arpNotes;
-        console.log(`[ms10 messageEventListener] Received Arpeggiator notes: ${JSON.stringify(receivedArpNotes)}`);
-        if (Array.isArray(receivedArpNotes)) {
-            arpNotes = receivedArpNotes;
-            updateArpNotesDisplay();
-            console.log(`[ms10 messageEventListener] Arpeggiator notes updated: ${JSON.stringify(arpNotes)}`);
-        } else {
-            console.error(`[ms10 messageEventListener] Invalid Arpeggiator notes format: ${typeof receivedArpNotes}`);
-        }
-    } else if (event.data.type === 'setMidiRecording') {
-        const receivedMidiRecording = event.data.midiRecording;
-        console.log(`[ms10 messageEventListener] Received MIDI recording: ${JSON.stringify(receivedMidiRecording)}`);
-        setMidiRecording(receivedMidiRecording); // Use the new function
-        console.log(`[ms10 messageEventListener] MIDI recording updated: ${midiRecording.length} events`);
-        console.log(`[ms10 messageEventListener] Current MIDI recording array: ${JSON.stringify(midiRecording)}`);
-    } else if (event.data.type === 'setSynthSettings') {
-        const receivedSettings = event.data.settings;
-        console.log(`[ms10 messageEventListener] Received Synth settings: ${JSON.stringify(receivedSettings)}`);
-        loadSettingsFromObject(receivedSettings);
+            externalStepTimeout = setTimeout(() => {
+                console.log(`[ms10] No external steps received for an extended period. Stopping arpeggiator.`);
+                stopArpeggiator();
+            }, 250);
+            window.parent.postMessage({ type: 'confirmStep', step: event.data.data.step }, '*');
+            break;
+        case 'setArpNotes':
+            const receivedArpNotes = event.data.arpNotes;
+            console.log(`[ms10 messageEventListener] Received Arpeggiator notes: ${JSON.stringify(receivedArpNotes)}`);
+            if (Array.isArray(receivedArpNotes)) {
+                arpNotes = receivedArpNotes;
+                updateArpNotesDisplay();
+                console.log(`[ms10 messageEventListener] Arpeggiator notes updated: ${JSON.stringify(arpNotes)}`);
+            } else {
+                console.error(`[ms10 messageEventListener] Invalid Arpeggiator notes format: ${typeof receivedArpNotes}`);
+            }
+            window.parent.postMessage({ type: 'confirmArpNotes', arpNotes: event.data.arpNotes }, '*');
+            break;
+        case 'setMidiRecording':
+            if (SYNTH_CHANNEL === null) {
+                console.error("[ms10 messageEventListener] Error: Attempting to set MIDI recording without a valid channel index.");
+                return;
+            }
+            const receivedMidiRecording = event.data.midiRecording;
+            console.log(`[ms10 messageEventListener] Received MIDI recording for channel ${SYNTH_CHANNEL}: ${JSON.stringify(receivedMidiRecording)}`);
+            setMidiRecording(receivedMidiRecording);
+            let currentMidiRecording = getMidiRecording(); // Get the updated recording to log
+            console.log(`[ms10 messageEventListener] MIDI recording updated: ${currentMidiRecording.length} events`);
+            console.log(`[ms10 messageEventListener] Current MIDI recording array: ${JSON.stringify(currentMidiRecording)}`);
+            window.parent.postMessage({ type: 'confirmMidiRecording', midiRecording: event.data.midiRecording }, '*');
+            break;
+        case 'setSynthSettings':
+            const receivedSettings = event.data.settings;
+            console.log(`[ms10 messageEventListener] Received Synth settings: ${JSON.stringify(receivedSettings)}`);
+            loadSettingsFromObject(receivedSettings);
+            window.parent.postMessage({ type: 'confirmSynthSettings', settings: event.data.settings }, '*');
+            break;
+        case 'setChannelIndex':
+            setGlobalChannelIndex(event.data.channelIndex);
+            updateUIWithChannelIndex(event.data.channelIndex);
+            break;
     }
 });
 
-window.addEventListener('message', function(event) {
-    if (event.data) {
-        console.log(`[child] Received message: ${JSON.stringify(event.data)}`);
-
-        if (event.data.type === 'setChannelIndex') {
-            const channelIndex = event.data.channelIndex;
-            currentChannelIndex = channelIndex;
-            console.log(`[child] Channel index set to ${currentChannelIndex}`);
-
-            const channelDisplay = document.getElementById('sequencerChannelDisplay');
-            if (channelDisplay) {
-                channelDisplay.textContent = `Channel ${channelIndex}`;
-            } else {
-                console.error("Channel display element not found!");
-            }
-        } else if (event.data.type === 'setBPM') {
-            const bpm = event.data.bpm;
-            console.log(`[child] BPM set to ${bpm}`);
-
-            const bpmDisplay = document.getElementById('bpmDisplay');
-            if (bpmDisplay) {
-                bpmDisplay.textContent = `${bpm} BPM`;
-            } else {
-                console.error("BPM display element not found!");
-            }
-        }
+window.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'setChannelIndex') {
+        setGlobalChannelIndex(event.data.channelIndex);
+        updateUIWithChannelIndex(event.data.channelIndex);
     }
 }, false);
+
+function updateUIWithChannelIndex(channelIndex) {
+    const channelDisplay = document.getElementById('sequencerChannelDisplay');
+    if (channelDisplay) {
+        channelDisplay.textContent = `Channel ${channelIndex}`;
+    } else {
+        console.error("Channel display element not found!");
+    }
+}
