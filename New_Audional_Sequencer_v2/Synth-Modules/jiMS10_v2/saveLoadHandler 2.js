@@ -1,7 +1,7 @@
 import { context, currentOscillator, playMS10TriangleBass, stopMS10TriangleBass } from './audioContext.js';
 import { arpNotes, isArpeggiatorOn, startArpeggiator, stopArpeggiator } from './arpeggiator.js';
 import { updateUIFromSettings } from './uiHandler.js';
-import { midiRecording, clearMidiRecording, addMidiRecording } from './midiRecordingAndPlayback.js';
+import { midiChannelRecording, clearMidiRecording, addMidiRecording } from './midiRecordingAndPlayback.js';
 
 export function saveSettings() {
   const settings = {
@@ -17,7 +17,7 @@ export function saveSettings() {
     useSequencerTiming: document.getElementById('useSequencerTiming').checked,
     timingAdjust: document.getElementById('timingAdjust').value,
     arpNotes: arpNotes,
-    midiRecording: midiRecording
+    midiChannelRecording: midiChannelRecording
   };
 
   const settingsJson = JSON.stringify(settings, null, 2);
@@ -67,7 +67,7 @@ export function loadSettingsFromObject(settings) {
   clearMidiRecording(); // Clear existing recordings
   settings.midiRecording.forEach(event => addMidiRecording(event));
 
-  console.log('Loaded MIDI Recording:', midiRecording);
+  console.log('Loaded MIDI Recording:', midiChannelRecording);
 
   // Restart arpeggiator if it was on
   if (isArpeggiatorOn) {

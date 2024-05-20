@@ -1,7 +1,6 @@
-// midiRecordingAndPlayback.js
-
 import { playMS10TriangleBass } from './audioContext.js';
 import { midiNoteToFrequency } from './midiHandler.js';
+const sequencerChannel = new BroadcastChannel('sequencerChannel');
 
 let isPlaying = false;
 let isRecording = false;
@@ -20,9 +19,12 @@ export function stopMidiRecording() {
   isRecording = false;
   console.log('MIDI recording stopped');
   console.log(`Total events recorded: ${midiRecording.length}`);
+  // Send updated midiRecording to parent
+  // sequencerChannel.postMessage({ type: 'updateMidiRecording', midiRecording });
 }
 
 export function playMidiRecording() {
+  console.log(`[playMidiRecording] Checking midiRecording array: ${JSON.stringify(midiRecording)}`);
   if (midiRecording.length === 0) {
     console.log('No MIDI recording to play');
     return;
@@ -36,12 +38,14 @@ export function playMidiRecording() {
   isPlaying = true;
   document.getElementById('PlayMidi').innerText = 'Stop Midi Recording';
 
+  // Normalize timestamps to start from zero
+  const startTime = midiRecording[0].timestamp;
   const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
-  const nudgeOffset = (nudgeValue / 100) * (midiRecording[midiRecording.length - 1].timestamp - recordingStartTime);
+  const nudgeOffset = (nudgeValue / 100) * (midiRecording[midiRecording.length - 1].timestamp - startTime);
 
   midiRecording.forEach((event, index) => {
     let adjustedTimestamp = event.timestamp + nudgeOffset;
-    const delay = adjustedTimestamp - recordingStartTime;
+    const delay = adjustedTimestamp - startTime;
 
     console.log(`Scheduling event ${index + 1}/${midiRecording.length}: ${event.isNoteOn ? 'Note On' : 'Note Off'} - ${event.note} in ${delay.toFixed(2)}ms`);
     const timeoutId = setTimeout(() => {
@@ -98,5 +102,24 @@ export function recordMidiEvent(event) {
     }
     midiRecording.push({ note, velocity, isNoteOn, timestamp });
     console.log(`MIDI event recorded: ${isNoteOn ? 'Note On' : 'Note Off'} - ${note} at ${timestamp}`);
+    // Send updated midiRecording to parent
+    sequencerChannel.postMessage({ type: 'updateMidiRecording', midiRecording });
   }
+}
+
+export function setMidiRecording(newRecording) {
+  console.log('setMidiRecording called with:', newRecording);
+  midiRecording.length = 0; // Clear the existing array
+  midiRecording.push(...newRecording); // Add all new events
+  console.log(`MIDI recording set with ${midiRecording.length} events.`);
+}
+export function clearMidiRecording() {
+  midiRecording.length = 0; // Clear the array
+  console.log('Cleared MIDI recording array.');
+}
+
+export function addMidiRecording(event) {
+  console.log('addMidiRecording called');
+  midiRecording.push(event);
+  console.log(`Added MIDI event: ${JSON.stringify(event)} to the recording array.`);
 }

@@ -1,5 +1,3 @@
-// loadSynthModule.js
-
 function loadSynth(channelIndex, loadSampleButton, bpmValue) {
     console.log(`Loading synth for channel index: ${channelIndex}`);
 
@@ -70,6 +68,10 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
     // Append the floating window to the body
     document.body.appendChild(floatingWindow);
 
+    // Retrieve saved settings for the given channel index
+    const savedSettings = JSON.parse(localStorage.getItem(`synthSettings_${channelIndex}`)) || {};
+    console.log(`Retrieved saved settings for channel ${channelIndex}:`, savedSettings);
+
     // Listen for the iframe to finish loading
     iframe.onload = () => {
         console.log("Synth iframe loaded successfully");
@@ -79,6 +81,14 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
 
         // Fetch the BPM value from the input slider and send it to the iframe
         iframe.contentWindow.postMessage({ type: 'setBPM', bpm: bpmValue }, '*');  // Send BPM value on load
+
+        // Send saved settings to the iframe
+        if (savedSettings.arpNotes) {
+            iframe.contentWindow.postMessage({ type: 'setArpNotes', arpNotes: savedSettings.arpNotes }, '*');
+        }
+        if (savedSettings.midiRecording) {
+            iframe.contentWindow.postMessage({ type: 'setMidiRecording', midiRecording: savedSettings.midiRecording }, '*');
+        }
 
         // Access the document within the iframe
         const iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
@@ -108,6 +118,26 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
         floatingWindow: {
             width: floatingWindow.style.width,
             height: floatingWindow.style.height
+        }
+    });
+
+    // Listen for messages from the sequencer channel
+    const sequencerChannel = new BroadcastChannel('sequencerChannel');
+    sequencerChannel.addEventListener('message', (event) => {
+        if (event.data.type === 'updateArpNotes') {
+            // Handle updated arpeggiator notes from the synth
+            const arpNotes = event.data.arpNotes;
+            console.log(`Received updated arpeggiator notes: ${arpNotes}`);
+            // Save the updated arpeggiator notes
+            savedSettings.arpNotes = arpNotes;
+            localStorage.setItem(`synthSettings_${channelIndex}`, JSON.stringify(savedSettings));
+        } else if (event.data.type === 'updateMidiRecording') {
+            // Handle updated MIDI recording from the synth
+            const midiRecording = event.data.midiRecording;
+            console.log(`Received updated MIDI recording with ${midiRecording.length} events`);
+            // Save the updated MIDI recording
+            savedSettings.midiRecording = midiRecording;
+            localStorage.setItem(`synthSettings_${channelIndex}`, JSON.stringify(savedSettings));
         }
     });
 }

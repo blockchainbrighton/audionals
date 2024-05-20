@@ -1,6 +1,5 @@
-// arpeggiator.js
-
 import { playMS10TriangleBass, stopMS10TriangleBass, context } from './audioContext.js';
+const sequencerChannel = new BroadcastChannel('sequencerChannel');
 
 export let isArpeggiatorOn = false;
 export let arpNotes = [];
@@ -9,8 +8,6 @@ let nextNoteTime = 0;
 let isNudgeActive = false;
 let timerID;
 let isLatchModeOn = false;
-let initialNextNoteTime = 0; // Add this line to declare the variable
-
 
 const LOOKAHEAD = 15.0; // milliseconds
 const SCHEDULE_AHEAD_TIME = 0.05; // seconds
@@ -21,6 +18,16 @@ const A4_MIDI_NUMBER = 69;
 const frequencyToNoteName = (frequency) => {
   const midiNote = Math.round(12 * Math.log2(frequency / A4_FREQUENCY) + A4_MIDI_NUMBER);
   return `${NOTE_NAMES[midiNote % 12]}${Math.floor(midiNote / 12) - 1}`;
+};
+
+export const setArpNotes = (notes) => {
+  if (Array.isArray(notes)) {
+    arpNotes = notes;
+    updateArpNotesDisplay();
+    console.log(`Arpeggiator notes updated: ${JSON.stringify(arpNotes)}`);
+  } else {
+    console.error(`Invalid Arpeggiator notes format: ${typeof notes}`);
+  }
 };
 
 export const startArpeggiator = () => {
@@ -56,6 +63,8 @@ export const addNoteToArpeggiator = (frequency) => {
     console.log(`Adding note to arpeggiator: ${frequency}`);
     arpNotes.push(frequency);
     updateArpNotesDisplay();
+    // Send updated arpNotes to parent
+    sequencerChannel.postMessage({ type: 'updateArpNotes', arpNotes });
   }
 };
 
@@ -63,6 +72,8 @@ export const deleteLastNote = () => {
   console.log('Deleting last note from arpeggiator');
   arpNotes.pop();
   updateArpNotesDisplay();
+  // Send updated arpNotes to parent
+  sequencerChannel.postMessage({ type: 'updateArpNotes', arpNotes });
 };
 
 const updateArpIndex = {
@@ -235,6 +246,8 @@ const setupEventListeners = () => {
       currentArpIndex = currentArpIndex % arpNotes.length; // Adjust index if necessary
     }
     updateArpNotesDisplay();
+    // Send updated arpNotes to parent
+    sequencerChannel.postMessage({ type: 'updateArpNotes', arpNotes });
   });
   document.getElementById('deleteLastNote').addEventListener('click', deleteLastNote);
   document.getElementById('timingAdjust').addEventListener('input', () => isNudgeActive = true);
