@@ -1,5 +1,5 @@
 import { isArpeggiatorOn, adjustArpeggiatorTiming, setArpNotes } from './arpeggiator.js';
-import { startMidiRecording, stopMidiRecording, playMidiRecording, setMidiRecording, midiRecording, recordingStartTime } from './midiRecordingAndPlayback.js';
+import { startMidiRecording, stopMidiRecording, playMidiRecording, setMidiRecording, midiRecording, recordingStartTime } from './midiController.js';
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // // Make the container draggable
     // dragElement(effectsModuleContainer);
   
-    
+
 //     function dragElement(element) {
 //       let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
 //       element.onmousedown = dragMouseDown;

@@ -1,9 +1,7 @@
 // effectsModule.js
 
-// effectsModule.js
-
 import { setArpNotes } from './arpeggiator.js';
-import { setMidiRecording } from './midiRecordingAndPlayback.js';
+import { setMidiRecording } from './midiRecording.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const openEffectsModuleButton = document.getElementById('openEffectsModule');

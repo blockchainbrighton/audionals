@@ -1,8 +1,8 @@
 // uiHandler.js
 
-import { handleNoteEvent, onMIDISuccess, onMIDIFailure } from './midiHandler.js';
+import { handleNoteEvent, onMIDISuccess, onMIDIFailure } from './Unused Files/midiHandler.js';
 import { updateArpNotesDisplay } from './arpeggiator.js';
-import { recordMidiEvent } from './midiRecordingAndPlayback.js'; // Import recordMidiEvent
+import { recordMidiEvent } from './midiRecording.js'; // Import recordMidiEvent
 
 // Helper function to update UI elements from settings
 export function updateUIFromSettings(settings) {

@@ -1,5 +1,5 @@
 import { loadSettingsFromObject } from './saveLoadHandler.js';
-import { midiRecording, clearMidiRecording, addMidiRecording, setMidiRecording } from './midiRecordingAndPlayback.js';
+import { midiRecording, setMidiRecording } from './midiRecording.js';
 
 const sequencerChannel = new BroadcastChannel('sequencerChannel');
 let currentChannelIndex;

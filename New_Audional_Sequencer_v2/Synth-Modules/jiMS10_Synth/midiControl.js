@@ -250,6 +250,19 @@ function stopMIDIRecording() {
 }
 
 
+export function setMidiRecording(newRecording) {
+    console.log('setMidiRecording called with:', newRecording);
+    midiRecording.length = 0; // Clear the existing array
+    midiRecording.push(...newRecording); // Add all new events
+    console.log(`MIDI recording set with ${midiRecording.length} events.`);
+  }
+  export function clearMidiRecording() {
+    midiRecording.length = 0; // Clear the array
+    console.log('Cleared MIDI recording array.');
+  }
+  
+
+
 function clearAllIntervals() {
     console.log('Clearing all intervals.');
     if (playbackInterval) {

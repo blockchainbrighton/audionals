@@ -1,5 +1,5 @@
 import { playMS10TriangleBass } from './audioContext.js';
-import { midiNoteToFrequency } from './midiHandler.js';
+import { midiNoteToFrequency } from './Unused Files/midiHandler.js';
 const sequencerChannel = new BroadcastChannel('sequencerChannel');
 
 let isPlaying = false;

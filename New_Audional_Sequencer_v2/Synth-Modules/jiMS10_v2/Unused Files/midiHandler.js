@@ -1,7 +1,7 @@
 // midiHandler.js
-import { playMS10TriangleBass } from './audioContext.js';
-import { isArpeggiatorOn, addNoteToArpeggiator } from './arpeggiator.js';
-import { recordMidiEvent } from './midiRecordingAndPlayback.js';
+import { playMS10TriangleBass } from '../audioContext.js';
+import { isArpeggiatorOn, addNoteToArpeggiator } from '../arpeggiator.js';
+import { recordMidiEvent } from '../midiRecording.js';
 
 const A4_MIDI_NUMBER = 69;
 const A4_FREQUENCY = 440;

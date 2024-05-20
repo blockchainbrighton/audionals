@@ -1,6 +1,6 @@
 import './scaleSynth.js';
 import './audioContext.js';
-import './midiHandler.js';
+// import './midiHandler.js';
 import './arpeggiator.js';
 import './uiHandler.js';
 import './saveLoadHandler.js';
@@ -8,3 +8,5 @@ import './controlChannels.js';
 import './iframeMessageHandling.js';
 import './effectsModule.js';
 import './midiController.js';
+import './midiUtils.js';
+import './midiRecording.js';

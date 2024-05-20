@@ -1,7 +1,7 @@
 import { context, currentOscillator, playMS10TriangleBass, stopMS10TriangleBass } from './audioContext.js';
 import { arpNotes, isArpeggiatorOn, startArpeggiator, stopArpeggiator } from './arpeggiator.js';
 import { updateUIFromSettings } from './uiHandler.js';
-import { midiRecording, clearMidiRecording, addMidiRecording } from './midiRecordingAndPlayback.js';
+import { midiRecording, clearMidiRecording, addMidiRecording } from './midiRecording.js';
 
 export function saveSettings() {
   const settings = {
