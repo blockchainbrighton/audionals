@@ -19,7 +19,7 @@ sequencerChannel.addEventListener("message", (event) => {
         return; // Ignore messages that are not for this channel index
     }
 
-    console.log(`[ms10 messageEventListener] Received message: ${JSON.stringify(event.data)}`);
+    console.log(`[PARENT MESSAGE] ms10 messageEventListener] Received message: ${JSON.stringify(event.data)}`);
 
     switch (event.data.type) {
         case 'step':

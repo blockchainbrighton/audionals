@@ -20,29 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Make the container draggable
     dragElement(effectsModuleContainer);
 
-    // Listen for messages from the iframe to dynamically adjust its size
-    window.addEventListener('message', (event) => {
-        if (event.origin !== window.location.origin) {
-            return;
-        }
-        if (event.data.type === 'resize') {
-            const { width, height } = event.data;
-            console.log(`Received resize message: width=${width}, height=${height}`);
-            effectsModuleIframe.style.width = `${width}px`;
-            effectsModuleIframe.style.height = `${height}px`;
-        }
-        if (event.data.type === 'setMidiRecording') {
-            const receivedMidiRecording = event.data.midiRecording;
-            console.log(`[main.js] Received MIDI recording: ${JSON.stringify(receivedMidiRecording)}`);
-            setMidiRecording(receivedMidiRecording);
-        }
-        if (event.data.type === 'setArpNotes') {
-            const receivedArpNotes = event.data.arpNotes;
-            console.log(`[main.js] Received Arpeggiator notes: ${JSON.stringify(receivedArpNotes)}`);
-            setArpNotes(receivedArpNotes);
-        }
-    });
-
+   
     function dragElement(element) {
         let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
         element.onmousedown = dragMouseDown;
