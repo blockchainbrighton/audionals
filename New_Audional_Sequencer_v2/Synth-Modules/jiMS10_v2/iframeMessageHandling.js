@@ -2,7 +2,7 @@
 // It also listens for messages from the synthesizer iframe and responds to them by updating the parent window. The script uses a BroadcastChannel to communicate between the parent window and the synthesizer iframe. 
 // The script also handles setting the active channel index for the synthesizer.
 
-const SYNTH_CHANNEL = new URLSearchParams(window.location.search).get('channelIndex');
+export const SYNTH_CHANNEL = new URLSearchParams(window.location.search).get('channelIndex');
 
 import { loadSettingsFromObject } from './saveLoadHandler.js';
 import { getMidiRecording, setMidiRecording } from './midiRecording.js';
@@ -71,11 +71,18 @@ sequencerChannel.addEventListener("message", (event) => {
 });
 
 window.addEventListener('message', (event) => {
+    // Handle setting the channel index
     if (event.data && event.data.type === 'setChannelIndex') {
         initializeChannelIndex(event.data.channelIndex);
         updateUIWithChannelIndex(event.data.channelIndex);
     }
+
+    // Handle setting the BPM
+    if (event.data && event.data.type === 'setBPM') {
+        updateBPMDisplay(event.data.bpm);
+    }
 }, false);
+
 
 function updateUIWithChannelIndex(channelIndex) {
     const channelDisplay = document.getElementById('sequencerChannelDisplay');
@@ -83,5 +90,15 @@ function updateUIWithChannelIndex(channelIndex) {
         channelDisplay.textContent = `Channel ${channelIndex}`;
     } else {
         console.error("Channel display element not found!");
+    }
+}
+
+// Function to update the BPM display in the UI
+function updateBPMDisplay(bpm) {
+    const bpmDisplay = document.getElementById('bpmDisplay');
+    if (bpmDisplay) {
+        bpmDisplay.textContent = `BPM: ${bpm}`;
+    } else {
+        console.error("BPM display element not found!");
     }
 }

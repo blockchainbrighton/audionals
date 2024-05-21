@@ -43,6 +43,25 @@ const recordings = new Map();
 const arpeggiatorSettings = new Map();  
 let recordingStartTime = 0;
 
+export function startMidiRecording(channelIndex) {
+    if (channelIndex === null) {
+        console.error('[startMidiRecording] Error: Attempting to start recording without a valid channel index.');
+        return;
+    }
+    startRecording(channelIndex); // Call with channelIndex
+    console.log(`[startMidiRecording] Channel Index: ${channelIndex}`);
+}
+
+export function stopMidiRecording(channelIndex) {
+    if (channelIndex === null) {
+        console.error('[stopMidiRecording] Error: Attempting to stop recording without a valid channel index.');
+        return;
+    }
+    stopRecording(channelIndex); // Call with channelIndex
+    console.log(`[stopMidiRecording] Channel Index: ${channelIndex}`);
+}
+
+
 function handleRecordButtonClick() {
     const channelIndex = getChannelIndex();
     if (isRecording) {

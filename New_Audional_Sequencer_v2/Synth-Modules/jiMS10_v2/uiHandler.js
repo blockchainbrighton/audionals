@@ -6,20 +6,33 @@ import { recordMidiEvent } from './midiRecording.js'; // Import recordMidiEvent
 
 // Helper function to update UI elements from settings
 export function updateUIFromSettings(settings) {
-  document.getElementById('waveform').value = settings.waveform;
-  document.getElementById('attack').value = settings.attack;
-  document.getElementById('release').value = settings.release;
-  document.getElementById('cutoff').value = settings.cutoff;
-  document.getElementById('resonance').value = settings.resonance;
-  document.getElementById('volume').value = settings.volume;
-  document.getElementById('arpTempo').value = settings.arpTempo;
-  document.getElementById('arpPattern').value = settings.arpPattern;
-  document.getElementById('arpSpeed').value = settings.arpSpeed;
-  document.getElementById('useSequencerTiming').checked = settings.useSequencerTiming;
-  document.getElementById('timingAdjust').value = settings.timingAdjust;
+  // Ensure the settings object is correctly formatted and contains the necessary information
+  console.log("Updating UI with settings:", settings);
+
+  if (settings.waveform) document.getElementById('waveform').value = settings.waveform;
+  if (settings.attack) document.getElementById('attack').value = settings.attack;
+  if (settings.release) document.getElementById('release').value = settings.release;
+  if (settings.cutoff) document.getElementById('cutoff').value = settings.cutoff;
+  if (settings.resonance) document.getElementById('resonance').value = settings.resonance;
+  if (settings.volume) document.getElementById('volume').value = settings.volume;
+  if (settings.arpTempo) document.getElementById('arpTempo').value = settings.arpTempo;
+  if (settings.arpPattern) document.getElementById('arpPattern').value = settings.arpPattern;
+  if (settings.arpSpeed) document.getElementById('arpSpeed').value = settings.arpSpeed;
+  if (settings.useSequencerTiming !== undefined) document.getElementById('useSequencerTiming').checked = settings.useSequencerTiming;
+  if (settings.timingAdjust) document.getElementById('timingAdjust').value = settings.timingAdjust;
 
   // Update the arpeggiator notes display
   updateArpNotesDisplay();
+
+  // Update channel and BPM displays
+  const channelDisplay = document.getElementById('sequencerChannelDisplay');
+  const bpmDisplay = document.getElementById('bpmDisplay');
+  if (channelDisplay && settings.channelIndex !== undefined) {
+    channelDisplay.textContent = `Channel: ${settings.channelIndex}`;
+  }
+  if (bpmDisplay && settings.bpm !== undefined) {
+    bpmDisplay.textContent = `BPM: ${settings.bpm}`;
+  }
 }
 
 // Keyboard Mapping and Event Handling

@@ -10,33 +10,43 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
     }
     console.log(`Loading synth for channel index: ${channelIndex}`);
 
+    // Create floating window and iframe
     const floatingWindow = createFloatingWindow();
     const iframe = createIframe(channelIndex);
     floatingWindow.appendChild(iframe);
     document.body.appendChild(floatingWindow);
 
+    // Retrieve and apply saved settings
     const savedSettings = getSettingsFromLocalStorage(channelIndex);
     console.log(`Retrieved saved settings for channel ${channelIndex}:`, savedSettings);
 
     iframe.onload = () => {
         console.log("Synth iframe loaded successfully");
+
+        // Set the channel index and BPM
         sendMessageToIframe(iframe, { type: 'setChannelIndex', channelIndex });
         sendMessageToIframe(iframe, { type: 'setBPM', bpm: bpmValue });
-        if (savedSettings.arpNotes) {
+        console.log(`Sent channel index and BPM to iframe: ${channelIndex}, ${bpmValue}`);
+
+        // Apply arp notes and MIDI recordings if available
+        if (savedSettings && savedSettings.arpNotes) {
             console.log(`Sending ArpNotes to iframe: ${JSON.stringify(savedSettings.arpNotes)}`);
             sendMessageToIframe(iframe, { type: 'setArpNotes', arpNotes: savedSettings.arpNotes });
         }
-        if (savedSettings.midiRecording) {
+        if (savedSettings && savedSettings.midiRecording) {
             console.log(`Sending MIDI recording to iframe: ${JSON.stringify(savedSettings.midiRecording)}`);
             sendMessageToIframe(iframe, { type: 'setMidiRecording', midiRecording: savedSettings.midiRecording });
         }
 
+        // Adjust iframe content based on loaded settings
         adjustIframeContent(iframe);
         loadSampleButton.textContent = iframe.contentDocument.title;
     };
 
+    // Optional: Listen for messages from the child (iframe)
     listenForChildMessages(channelIndex, savedSettings);
 }
+
 
 function createIframe(channelIndex) {
     const iframe = document.createElement('iframe');

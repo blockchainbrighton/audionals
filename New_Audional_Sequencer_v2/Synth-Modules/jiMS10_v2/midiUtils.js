@@ -1,6 +1,6 @@
 import { playMS10TriangleBass } from './audioContext.js';
 import { addNoteToArpeggiator } from './arpeggiator.js';
-import { getMidiRecording, startRecording, stopRecording, recordMidiEvent } from './midiRecording.js';
+import { getMidiRecording, recordMidiEvent } from './midiRecording.js';
 import { getChannelIndex } from './activeSynthChannelIndex.js'; 
 
 const A4_MIDI_NUMBER = 69;
@@ -8,23 +8,6 @@ const A4_FREQUENCY = 440;
 let isPlaying = false;
 let playbackTimeouts = []; // Declare playbackTimeouts
 
-export function startMidiRecording(channelIndex) {
-    if (channelIndex === null) {
-        console.error('[startMidiRecording] Error: Attempting to start recording without a valid channel index.');
-        return;
-    }
-    startRecording(channelIndex); // Call with channelIndex
-    console.log(`[startMidiRecording] Channel Index: ${channelIndex}`);
-}
-
-export function stopMidiRecording(channelIndex) {
-    if (channelIndex === null) {
-        console.error('[stopMidiRecording] Error: Attempting to stop recording without a valid channel index.');
-        return;
-    }
-    stopRecording(channelIndex); // Call with channelIndex
-    console.log(`[stopMidiRecording] Channel Index: ${channelIndex}`);
-}
 
 export function playMidiRecording(channelIndex) {
     const midiRecording = getMidiRecording(channelIndex);

@@ -1,10 +1,12 @@
 import { playMS10TriangleBass, stopMS10TriangleBass, context } from './audioContext.js';
+import { SYNTH_CHANNEL } from './iframeMessageHandling.js';
+
 const sequencerChannel = new BroadcastChannel('sequencerChannel');
 
 export let isArpeggiatorOn = false;
 export let arpNotes = [];
 let currentArpIndex = 0;
-let nextNoteTime = 0; 
+let nextNoteTime = 0;
 let isNudgeActive = false;
 let timerID;
 let isLatchModeOn = false;
@@ -20,60 +22,30 @@ const frequencyToNoteName = (frequency) => {
   return `${NOTE_NAMES[midiNote % 12]}${Math.floor(midiNote / 12) - 1}`;
 };
 
-export const setArpNotes = (notes) => {
-  if (Array.isArray(notes)) {
-    arpNotes = notes;
-    updateArpNotesDisplay();
-    console.log(`Arpeggiator notes updated: ${JSON.stringify(arpNotes)}`);
-  } else {
-    console.error(`Invalid Arpeggiator notes format: ${typeof notes}`);
-  }
-};
-
-export const startArpeggiator = () => {
-  console.log('Starting arpeggiator');
-  isArpeggiatorOn = true;
-  currentArpIndex = 0;
-  
-  // Apply the nudge value to the initial nextNoteTime
-  const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
-  const nudgeOffset = (nudgeValue / 100) * (60 / parseFloat(document.getElementById('arpTempo').value));
-  nextNoteTime = context.currentTime + 0.1 + nudgeOffset; // Adding a small buffer to ensure proper scheduling
-  console.log(`Initial nextNoteTime set to: ${nextNoteTime}`);
-  
-  scheduleArpeggiator();
-};
-
-export const stopArpeggiator = () => {
-  console.log('Stopping arpeggiator');
-  isArpeggiatorOn = false;
-  clearTimeout(timerID);
-  stopMS10TriangleBass();
-};
-
-export const toggleLatchMode = () => {
-  isLatchModeOn = !isLatchModeOn;
-  const button = document.getElementById('latchMode');
-  button.style.backgroundColor = isLatchModeOn ? 'red' : '';
-  console.log(`Latch mode ${isLatchModeOn ? 'enabled' : 'disabled'}`);
-};
-
 export const addNoteToArpeggiator = (frequency) => {
   if (isLatchModeOn) {
-    console.log(`Adding note to arpeggiator: ${frequency}`);
+    console.log(`Channel ${SYNTH_CHANNEL}: Adding note to arpeggiator: ${frequency}`);
     arpNotes.push(frequency);
     updateArpNotesDisplay();
-    // Send updated arpNotes to parent
     sequencerChannel.postMessage({ type: 'updateArpNotes', arpNotes });
   }
 };
 
 export const deleteLastNote = () => {
-  console.log('Deleting last note from arpeggiator');
+  console.log(`Channel ${SYNTH_CHANNEL}: Deleting last note from arpeggiator`);
   arpNotes.pop();
   updateArpNotesDisplay();
-  // Send updated arpNotes to parent
   sequencerChannel.postMessage({ type: 'updateArpNotes', arpNotes });
+};
+
+export const setArpNotes = (notes) => {
+  if (Array.isArray(notes)) {
+    arpNotes = notes;
+    updateArpNotesDisplay();
+    console.log(`Channel ${SYNTH_CHANNEL}: Arpeggiator notes updated: ${JSON.stringify(arpNotes)}`);
+  } else {
+    console.error(`Channel ${SYNTH_CHANNEL}: Invalid Arpeggiator notes format: ${typeof notes}`);
+  }
 };
 
 const updateArpIndex = {
@@ -95,6 +67,72 @@ const updateArpIndex = {
   }
 };
 
+export const updateArpNotesDisplay = () => {
+  const display = document.getElementById('arpNotesDisplay');
+  const ctx = display.getContext('2d');
+  const synthContainer = document.querySelector('.synth-container');
+  display.width = synthContainer.clientWidth - 40;
+
+  ctx.clearRect(0, 0, display.width, display.height);
+  ctx.font = 'bold 11px Arial';
+  ctx.fillStyle = '#FFFFFF';
+
+  const noteWidth = ctx.measureText('W#').width + 5;
+  const groupSpacing = 15;
+  let x = 10, y = 30, count = 0;
+  const notesPerRow = Math.floor(display.width / noteWidth);
+
+  console.log(`Channel ${SYNTH_CHANNEL}: Updating arpeggiator notes display`);
+
+  arpNotes.forEach((note, index) => {
+    const noteName = note !== null ? frequencyToNoteName(note) : 'Rest';
+    console.log(`Channel ${SYNTH_CHANNEL}: Displaying note: ${noteName}`);
+
+    ctx.fillStyle = index === currentArpIndex ? '#FF0000' : '#FFFFFF';
+    ctx.font = index === currentArpIndex ? 'bold 14px Arial' : 'bold 11px Arial';
+
+    if (x + noteWidth > display.width || count >= notesPerRow) {
+      count = 0;
+      x = 10;
+      y += 30;
+    }
+
+    if (index % 4 === 0 && index !== 0) {
+      x += groupSpacing;
+    }
+
+    ctx.fillText(noteName, x, y);
+    x += noteWidth;
+    count++;
+  });
+};
+
+export const startArpeggiator = () => {
+  console.log('Starting arpeggiator');
+  isArpeggiatorOn = true;
+  currentArpIndex = 0;
+
+  const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
+  const nudgeOffset = (nudgeValue / 100) * (60 / parseFloat(document.getElementById('arpTempo').value));
+  nextNoteTime = context.currentTime + 0.1 + nudgeOffset;
+  console.log(`Initial nextNoteTime set to: ${nextNoteTime}`);
+
+  scheduleArpeggiator();
+};
+
+export const stopArpeggiator = () => {
+  console.log('Stopping arpeggiator');
+  isArpeggiatorOn = false;
+  clearTimeout(timerID);
+  stopMS10TriangleBass();
+};
+
+export const toggleLatchMode = () => {
+  isLatchModeOn = !isLatchModeOn;
+  document.getElementById('latchMode').style.backgroundColor = isLatchModeOn ? 'red' : '';
+  console.log(`Latch mode ${isLatchModeOn ? 'enabled' : 'disabled'}`);
+};
+
 const applySpeedModifier = (interval) => {
   const speed = document.getElementById('arpSpeed').value;
   const speedMap = {
@@ -113,7 +151,7 @@ const scheduleArpeggiator = () => {
 
   while (nextNoteTime < context.currentTime + SCHEDULE_AHEAD_TIME) {
     playArpNote();
-    nextNoteTime += getNoteInterval() * nudgeFactor; // Adjust the interval by the nudge factor
+    nextNoteTime += getNoteInterval() * nudgeFactor;
     console.log(`Scheduled next note at: ${nextNoteTime}`);
   }
 
@@ -138,7 +176,7 @@ const getNoteInterval = () => {
 const playArpNote = () => {
   if (!isArpeggiatorOn || !arpNotes.length) return;
 
-  updateArpNotesDisplay(); // Update display to show the active note
+  updateArpNotesDisplay();
 
   const currentNote = arpNotes[currentArpIndex];
   const currentTime = context.currentTime;
@@ -157,11 +195,7 @@ const playArpNote = () => {
     'random-rest': updateArpIndex.randomWithRests,
   };
 
-  if (updatePattern[pattern]) {
-    updatePattern[pattern]();
-  } else {
-    console.error('Unknown arpeggiator pattern:', pattern);
-  }
+  updatePattern[pattern] ? updatePattern[pattern]() : console.error('Unknown arpeggiator pattern:', pattern);
 };
 
 export const toggleArpeggiator = () => {
@@ -173,60 +207,6 @@ export const toggleArpeggiator = () => {
     button.innerText = 'Stop Arpeggiator';
     startArpeggiator();
   }
-};
-
-export const updateArpNotesDisplay = () => {
-  const display = document.getElementById('arpNotesDisplay');
-  const ctx = display.getContext('2d');
-  
-  // Adjust canvas width to match the parent container
-  const synthContainer = document.querySelector('.synth-container');
-  display.width = synthContainer.clientWidth - 40; // Adjust for padding/margin
-
-  // Clear the canvas
-  ctx.clearRect(0, 0, display.width, display.height);
-
-  // Set font style
-  ctx.font = 'bold 11px Arial';
-  ctx.fillStyle = '#FFFFFF';
-
-  // Calculate note width dynamically
-  const noteWidth = ctx.measureText('W#').width + 5; // Slightly reduced spacing
-  const groupSpacing = 15; // Extra space between groups of four notes
-  let x = 10, y = 30, count = 0;
-  const notesPerRow = Math.floor(display.width / noteWidth);
-
-  console.log('Updating arpeggiator notes display');
-  arpNotes.forEach((note, index) => {
-    const noteName = note !== null ? frequencyToNoteName(note) : 'Rest';
-    console.log(`Displaying note: ${noteName}`);
-    
-    // Highlight the current note
-    if (index === currentArpIndex) {
-      ctx.fillStyle = '#FF0000'; // Highlight current note in red
-      ctx.font = 'bold 14px Arial'; // Enlarge font for current note
-    } else {
-      ctx.fillStyle = '#FFFFFF'; // Default color for other notes
-      ctx.font = 'bold 11px Arial'; // Default font size for other notes
-    }
-    
-    // Check if we need to wrap to the next line
-    if (x + noteWidth > display.width || count >= notesPerRow) {
-      count = 0;
-      x = 10;
-      y += 30;
-    }
-    
-    // Add a separator for every group of four notes
-    if (index % 4 === 0 && index !== 0) {
-      x += groupSpacing; // Add extra space for separator
-    }
-    
-    // Draw the note name
-    ctx.fillText(noteName, x, y);
-    x += noteWidth;
-    count++;
-  });
 };
 
 export const adjustArpeggiatorTiming = (nudgeValue) => {
@@ -243,10 +223,9 @@ const setupEventListeners = () => {
     console.log('Adding rest to arpeggiator');
     arpNotes.push(null);
     if (isArpeggiatorOn) {
-      currentArpIndex = currentArpIndex % arpNotes.length; // Adjust index if necessary
+      currentArpIndex = currentArpIndex % arpNotes.length;
     }
     updateArpNotesDisplay();
-    // Send updated arpNotes to parent
     sequencerChannel.postMessage({ type: 'updateArpNotes', arpNotes });
   });
   document.getElementById('deleteLastNote').addEventListener('click', deleteLastNote);
