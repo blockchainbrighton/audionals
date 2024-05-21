@@ -66,3 +66,27 @@ function makeFloatingWindowDraggable(floatingWindow) {
         return false;
     };
 }
+
+
+function createTabbedInterface() {
+    const tabContainer = document.createElement('div');
+    const iframeContainer = document.createElement('iframe');
+    iframeContainer.style.width = '100%';
+    iframeContainer.style.height = 'calc(100% - 40px)'; // Adjust height for tab height
+    iframeContainer.style.border = 'none';
+
+    const tabs = ['Synth 1', 'Synth 2', 'Synth 3']; // Example tabs
+    tabs.forEach((tab, index) => {
+        const button = document.createElement('button');
+        button.textContent = tab;
+        button.onclick = () => {
+            iframeContainer.src = `Synth-Modules/${tab}/index.html`; // Adjust src dynamically
+        };
+        tabContainer.appendChild(button);
+    });
+
+    const floatingWindow = createFloatingWindow();
+    floatingWindow.appendChild(tabContainer);
+    floatingWindow.appendChild(iframeContainer);
+    document.body.appendChild(floatingWindow);
+}
