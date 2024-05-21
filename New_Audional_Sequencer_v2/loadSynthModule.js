@@ -10,7 +10,11 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
     }
     console.log(`Loading synth for channel index: ${channelIndex}`);
 
-    // Create floating window and iframe
+    // Mark the channel as having a synthesizer
+    channelIsSynth[channelIndex] = true;
+    console.log(`Channel ${channelIndex} is set as a synthesizer channel`);
+
+    // Existing code for loading the synth
     const floatingWindow = createFloatingWindow();
     const iframe = createIframe(channelIndex);
     floatingWindow.appendChild(iframe);
@@ -18,16 +22,25 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
 
     iframe.onload = () => {
         console.log("Synth iframe loaded successfully");
-
-        // Once the iframe is loaded, set the channel index and BPM
         sendMessageToIframe(iframe, { type: 'setChannelIndex', channelIndex });
         sendMessageToIframe(iframe, { type: 'setBPM', bpm: bpmValue });
-        console.log(`Sent channel index and BPM to iframe: ${channelIndex}, ${bpmValue}`);
-
-        // Optional: Update the UI to reflect the loaded content
         loadSampleButton.textContent = iframe.contentDocument.title;
     };
 }
+
+
+// Functions to start and stop the arpeggiator in the iframe
+
+function startArpeggiatorInIframe(iframe, channelIndex) {
+    console.log(`Sending start arpeggiator command to iframe for channel ${channelIndex}`);
+    sendMessageToIframe(iframe, { type: 'startArpeggiator', channelIndex: channelIndex });
+}
+
+function stopArpeggiatorInIframe(iframe, channelIndex) {
+    console.log(`Sending stop arpeggiator command to iframe for channel ${channelIndex}`);
+    sendMessageToIframe(iframe, { type: 'stopArpeggiator', channelIndex: channelIndex });
+}
+
 
 function createIframe(channelIndex) {
     const iframe = document.createElement('iframe');
@@ -71,14 +84,3 @@ function getSettingsFromLocalStorage(channelIndex) {
     return settings ? JSON.parse(settings) : {};
 }
 
-// Functions to start and stop the arpeggiator in the iframe
-
-function startArpeggiatorInIframe(iframe, channelIndex) {
-    console.log(`Sending start arpeggiator command to iframe for channel ${channelIndex}`);
-    sendMessageToIframe(iframe, { type: 'startArpeggiator', channelIndex: channelIndex });
-}
-
-function stopArpeggiatorInIframe(iframe, channelIndex) {
-    console.log(`Sending stop arpeggiator command to iframe for channel ${channelIndex}`);
-    sendMessageToIframe(iframe, { type: 'stopArpeggiator', channelIndex: channelIndex });
-}

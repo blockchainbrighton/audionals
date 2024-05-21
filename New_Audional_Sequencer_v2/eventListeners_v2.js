@@ -164,9 +164,9 @@ document.getElementById('next-sequence').addEventListener('click', function() {
 });
 
 // Message event listener handling load, play, stop, pause commands
-window.addEventListener('message', function(event) {
-    // Implementation for handling 'load', 'play', 'stop', and 'pause' commands
-});
+// window.addEventListener('message', function(event) {
+//     // Implementation for handling 'load', 'play', 'stop', and 'pause' commands
+// });
 
 
 // Close the modal when the user clicks on <span> (x)

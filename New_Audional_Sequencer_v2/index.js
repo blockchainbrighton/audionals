@@ -15,6 +15,7 @@ const maxSequenceCount = 64; // sequences
 const allSequencesLength = 4096;
 const collectedURLs = Array(16).fill(''); 
 
+
 let timeoutId;
 let isPaused = false; // a flag to indicate if the sequencer is paused
 let pauseTime = 0;  // tracks the total paused time
@@ -37,6 +38,8 @@ let channels = document.querySelectorAll('.channel[id^="channel-"]');
 let activeChannels = 16;// new Set();
 let clearClickedOnce = Array(channels.length).fill(false);
 let clearConfirmTimeout = Array(channels.length).fill(null);
+
+let channelIsSynth = Array(16).fill(false); // Adjust the number based on your actual channel count
 
 
 if (!audioContext) {

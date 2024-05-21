@@ -118,47 +118,6 @@ window.addEventListener('message', async (event) => {
   }
 });
 
-
-
-
-
-
-// // Message handler for receiving audio buffer from synth
-// window.addEventListener('message', async (event) => {
-//   if (event.data.type === 'audioData' && event.data.data instanceof ArrayBuffer) {
-//       console.log(`Received audio data message with channel index: ${event.data.channelIndex}`); // Log when the data is received
-//       try {
-//           // Correctly pass the ArrayBuffer and channel index to the handling function
-//           await handleIncomingAudioData(event.data.data, event.data.channelIndex);
-//       } catch (error) {
-//           console.error('Failed to process audio from synth:', error);
-//       }
-//   } else {
-//       console.error('Received data is not of type ArrayBuffer');
-//   }
-// });
-
-// // Function to handle incoming audio data for both forward and reverse playback
-// async function handleIncomingAudioData(arrayBuffer, channelIndex) {
-//   console.log(`Handling incoming synth audio data for channel index: ${channelIndex}`);
-//   const sampleName = `SynthSample_${channelIndex}`;  // Example of assigning a sample name, adjust as needed
-//   const fullUrl = `synth://${channelIndex}`;  // Simulating a URL structure for synth sources
-  
-//   // Use the existing function to decode and store audio which handles forward and reverse buffers
-//   await decodeAndStoreAudio(arrayBuffer, sampleName, fullUrl, channelIndex);
-// }
-
-
-// async function integrateAudioBuffer(audioBuffer, sampleName, fullUrl, channelIndex) {
-//   // Create reverse buffer
-//   const reverseBuffer = await createReverseBuffer(audioBuffer);
-
-//   // Store and manage the buffer similar to other sequence audio
-//   decodeAndStoreAudio(audioBuffer, sampleName, fullUrl, channelIndex);
-// }
-
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Function to decode audio data
@@ -174,31 +133,6 @@ const decodeAudioData = (audioData) => {
       });
   });
 };
-
-
-// async function decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex) {
-//   console.log("[decodeAndStoreAudio] Attempting to decode audio data");
-//   try {
-//       // Decode the audio data into a buffer
-//       const audioBuffer = await decodeAudioData(audioData);
-//       console.log("[decodeAndStoreAudio] Audio data decoded");
-
-//       // Create a reverse buffer by copying and reversing the audioBuffer
-//       const reverseBuffer = await createReverseBuffer(audioBuffer);
-
-//       // Store buffers using both channel-specific keys and URL-based keys
-//       const forwardKey = `channel_${channelIndex}_forward`;
-//       const reverseKey = `channel_${channelIndex}_reverse`;
-//       const forwardUrlKey = `${fullUrl}`;
-//       const reverseUrlKey = `${fullUrl}_reverse`;
-
-//       // Use a global buffer storage (adjust according to your actual storage method)
-//       audioBuffers.set(forwardKey, audioBuffer);
-//       audioBuffers.set(reverseKey, reverseBuffer);
-//       audioBuffers.set(forwardUrlKey, audioBuffer);
-//       audioBuffers.set(reverseUrlKey, reverseBuffer);
-
-//       console.log(`[decodeAndStoreAudio] Forward and reverse audio buffers stored for channel ${channelIndex} and URL ${fullUrl}: ${sampleName}`);
 
 async function decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex) {
   console.log("[decodeAndStoreAudio] Attempting to decode audio data");
@@ -222,6 +156,11 @@ async function decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex)
       audioBuffers.set(`${fullUrl}_reverse`, reverseBuffer);
 
       console.log(`[decodeAndStoreAudio] Forward and reverse audio buffers stored for channel ${channelIndex} and URL ${fullUrl}: ${sampleName}`);
+      
+      // Mark this channel as an audio channel
+      channelIsSynth[channelIndex] = false;
+      console.log(`Channel ${channelIndex} is set as an audio channel`);
+
 
       // Disconnect existing connections if the source node is already created
       if (window.unifiedSequencerSettings.sourceNodes[channelIndex]) {
@@ -254,8 +193,6 @@ async function decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex)
   }
 }
 
-
-
 // Function to create a reverse buffer from an existing AudioBuffer
 // Accessibility: Both buffers can be accessed using their keys. 
 // For example, if you need the reverse buffer for https://example.com/audio.mp3, 
@@ -276,10 +213,6 @@ async function createReverseBuffer(audioBuffer) {
   }
   return reverseBuffer;
 }
-
-
-
-
 
 async function fetchAudio(url, channelIndex, sampleNameGiven = null, callback = null) {
   try {
@@ -339,8 +272,6 @@ async function fetchAudio(url, channelIndex, sampleNameGiven = null, callback = 
       console.error(`[fetchAndProcessAudio] Error fetching audio from URL: ${url}`, error);
   }
 }
-
-
 
 function playSound(currentSequence, channel, currentStep) {
   const channelIndex = getChannelIndex(channel);
@@ -569,3 +500,71 @@ function toggleMute(channelElement) {
 //       console.error('[decodeAndStoreAudio] Error decoding and storing audio:', error);
 //   }
 // }
+
+
+
+
+// async function decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex) {
+//   console.log("[decodeAndStoreAudio] Attempting to decode audio data");
+//   try {
+//       // Decode the audio data into a buffer
+//       const audioBuffer = await decodeAudioData(audioData);
+//       console.log("[decodeAndStoreAudio] Audio data decoded");
+
+//       // Create a reverse buffer by copying and reversing the audioBuffer
+//       const reverseBuffer = await createReverseBuffer(audioBuffer);
+
+//       // Store buffers using both channel-specific keys and URL-based keys
+//       const forwardKey = `channel_${channelIndex}_forward`;
+//       const reverseKey = `channel_${channelIndex}_reverse`;
+//       const forwardUrlKey = `${fullUrl}`;
+//       const reverseUrlKey = `${fullUrl}_reverse`;
+
+//       // Use a global buffer storage (adjust according to your actual storage method)
+//       audioBuffers.set(forwardKey, audioBuffer);
+//       audioBuffers.set(reverseKey, reverseBuffer);
+//       audioBuffers.set(forwardUrlKey, audioBuffer);
+//       audioBuffers.set(reverseUrlKey, reverseBuffer);
+
+//       console.log(`[decodeAndStoreAudio] Forward and reverse audio buffers stored for channel ${channelIndex} and URL ${fullUrl}: ${sampleName}`);
+
+
+
+
+
+
+
+// // Message handler for receiving audio buffer from synth
+// window.addEventListener('message', async (event) => {
+//   if (event.data.type === 'audioData' && event.data.data instanceof ArrayBuffer) {
+//       console.log(`Received audio data message with channel index: ${event.data.channelIndex}`); // Log when the data is received
+//       try {
+//           // Correctly pass the ArrayBuffer and channel index to the handling function
+//           await handleIncomingAudioData(event.data.data, event.data.channelIndex);
+//       } catch (error) {
+//           console.error('Failed to process audio from synth:', error);
+//       }
+//   } else {
+//       console.error('Received data is not of type ArrayBuffer');
+//   }
+// });
+
+// // Function to handle incoming audio data for both forward and reverse playback
+// async function handleIncomingAudioData(arrayBuffer, channelIndex) {
+//   console.log(`Handling incoming synth audio data for channel index: ${channelIndex}`);
+//   const sampleName = `SynthSample_${channelIndex}`;  // Example of assigning a sample name, adjust as needed
+//   const fullUrl = `synth://${channelIndex}`;  // Simulating a URL structure for synth sources
+  
+//   // Use the existing function to decode and store audio which handles forward and reverse buffers
+//   await decodeAndStoreAudio(arrayBuffer, sampleName, fullUrl, channelIndex);
+// }
+
+
+// async function integrateAudioBuffer(audioBuffer, sampleName, fullUrl, channelIndex) {
+//   // Create reverse buffer
+//   const reverseBuffer = await createReverseBuffer(audioBuffer);
+
+//   // Store and manage the buffer similar to other sequence audio
+//   decodeAndStoreAudio(audioBuffer, sampleName, fullUrl, channelIndex);
+// }
+
