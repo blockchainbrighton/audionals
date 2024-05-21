@@ -1,9 +1,13 @@
+// loadSynthModule.js
 
-function createFloatingWindow() {
-    const window = document.createElement('div');
-    window.className = 'floatingWindow';
-    return window;
-}
+let tabInterface = null;
+
+
+// function createFloatingWindow() {
+//     const window = document.createElement('div');
+//     window.className = 'floatingWindow';
+//     return window;
+// }
 
 function createIframe(channelIndex) {
     const iframe = document.createElement('iframe');
@@ -22,38 +26,14 @@ function toggleDisplay(elements, show) {
 
 function loadSynth(channelIndex, loadSampleButton, bpmValue) {
     console.log(`Loading synth for channel index: ${channelIndex}`);
+    
+    if (!tabInterface) { // Create tabbed interface if it doesn't exist
+        tabInterface = createTabbedInterface();
+    }
 
-    const floatingWindow = createFloatingWindow();
-    const iframe = createIframe(channelIndex);
-    floatingWindow.appendChild(iframe);
-    document.body.appendChild(floatingWindow);
+    addTab(tabInterface.tabContainer, tabInterface.iframeContainer, `jiMS10_v2`, channelIndex);
 
-    const minimizeButton = document.createElement('button');
-    minimizeButton.textContent = 'Minimize';
-    minimizeButton.className = 'controlButton';
-
-    const restoreButton = document.createElement('button');
-    restoreButton.textContent = 'Restore';
-    restoreButton.className = 'controlButton';
-    restoreButton.style.display = 'none';
-
-    minimizeButton.onclick = () => {
-        iframe.style.height = '30px';
-        floatingWindow.style.height = '40px';
-        toggleDisplay([minimizeButton, restoreButton], false);
-        restoreButton.style.display = 'block';
-    };
-
-    restoreButton.onclick = () => {
-        iframe.style.height = 'calc(100% - 40px)';
-        floatingWindow.style.height = '80%';
-        toggleDisplay([restoreButton, minimizeButton], false);
-        minimizeButton.style.display = 'block';
-    };
-
-    floatingWindow.appendChild(minimizeButton);
-    floatingWindow.appendChild(restoreButton);
-
+    const iframe = tabInterface.iframeContainer;
     iframe.onload = () => {
         sendMessageToIframe(iframe, { type: 'setChannelIndex', channelIndex });
         sendMessageToIframe(iframe, { type: 'setBPM', bpm: bpmValue });

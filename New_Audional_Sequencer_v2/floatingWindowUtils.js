@@ -1,92 +1,101 @@
 // floatingWindowUtils.js
-// This script provides utilities for creating and managing a floating window.
 
 function createFloatingWindow() {
     const floatingWindow = document.createElement('div');
-    floatingWindow.style.position = 'fixed';
-    floatingWindow.style.top = '10%';
-    floatingWindow.style.left = '10%';
-    floatingWindow.style.width = '80%';
-    floatingWindow.style.height = '80%';
-    floatingWindow.style.zIndex = '1000';
-    floatingWindow.style.backgroundColor = 'white';
-    floatingWindow.style.border = '2px solid black';
-    floatingWindow.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
-    floatingWindow.style.overflow = 'hidden';
-    floatingWindow.style.resize = 'both';
-    floatingWindow.style.padding = '10px';
+    floatingWindow.className = 'floatingWindow';
+    console.log("Creating floating window...");
 
-    const closeButton = createCloseButton(floatingWindow);
+    const titleBar = createTitleBar();
+    console.log("Adding title bar...");
+    floatingWindow.appendChild(titleBar);
+
+    const closeButton = createCloseButton();
+    console.log("Adding close button...");
     floatingWindow.appendChild(closeButton);
 
+    console.log("Making window draggable...");
     makeFloatingWindowDraggable(floatingWindow);
 
+    console.log("Floating window created:", floatingWindow);
     return floatingWindow;
 }
 
-function createCloseButton(floatingWindow) {
+
+function createCloseButton() {
     const closeButton = document.createElement('div');
     closeButton.textContent = 'X';
-    closeButton.style.position = 'absolute';
-    closeButton.style.top = '5px';
-    closeButton.style.right = '10px';
-    closeButton.style.cursor = 'pointer';
-    closeButton.style.fontSize = '20px';
-    closeButton.style.color = 'red';
-    closeButton.addEventListener('click', () => {
-        document.body.removeChild(floatingWindow);
-    });
+    closeButton.className = 'closeButton';
+    closeButton.addEventListener('click', () => closeButton.closest('.floatingWindow').remove());
 
     return closeButton;
 }
 
 function makeFloatingWindowDraggable(floatingWindow) {
-    floatingWindow.onmousedown = function (event) {
+    let isDragging = false;
+    const titleBar = floatingWindow.querySelector('.titleBar'); // Assuming there's a title bar for dragging
+
+    if (!titleBar) {
+        console.error("No title bar found for dragging. Please ensure there's a titleBar element.");
+        return;
+    }
+
+    titleBar.onmousedown = function (event) {
+        isDragging = true;
         const shiftX = event.clientX - floatingWindow.getBoundingClientRect().left;
         const shiftY = event.clientY - floatingWindow.getBoundingClientRect().top;
 
-        function moveAt(pageX, pageY) {
-            floatingWindow.style.left = `${pageX - shiftX}px`;
-            floatingWindow.style.top = `${pageY - shiftY}px`;
+        function onMouseMove(event) {
+            if (isDragging) {
+                floatingWindow.style.left = `${event.pageX - shiftX}px`;
+                floatingWindow.style.top = `${event.pageY - shiftY}px`;
+            }
         }
 
-        function onMouseMove(event) {
-            moveAt(event.pageX, event.pageY);
+        function onMouseUp() {
+            isDragging = false;
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
         }
 
         document.addEventListener('mousemove', onMouseMove);
-
-        floatingWindow.onmouseup = function () {
-            document.removeEventListener('mousemove', onMouseMove);
-            floatingWindow.onmouseup = null;
-        };
+        document.addEventListener('mouseup', onMouseUp);
     };
 
-    floatingWindow.ondragstart = function () {
-        return false;
-    };
+    titleBar.ondragstart = () => false;
 }
 
+function createTitleBar() {
+    const titleBar = document.createElement('div');
+    titleBar.className = 'titleBar';
+    titleBar.textContent = 'Drag Me'; // You can customize this text or style
+    return titleBar;
+}
 
 function createTabbedInterface() {
+    const floatingWindow = createFloatingWindow();
     const tabContainer = document.createElement('div');
+    tabContainer.className = 'tabContainer';
+
     const iframeContainer = document.createElement('iframe');
     iframeContainer.style.width = '100%';
-    iframeContainer.style.height = 'calc(100% - 40px)'; // Adjust height for tab height
+    iframeContainer.style.height = 'calc(100% - 40px)';
     iframeContainer.style.border = 'none';
 
-    const tabs = ['Synth 1', 'Synth 2', 'Synth 3']; // Example tabs
-    tabs.forEach((tab, index) => {
-        const button = document.createElement('button');
-        button.textContent = tab;
-        button.onclick = () => {
-            iframeContainer.src = `Synth-Modules/${tab}/index.html`; // Adjust src dynamically
-        };
-        tabContainer.appendChild(button);
-    });
-
-    const floatingWindow = createFloatingWindow();
     floatingWindow.appendChild(tabContainer);
     floatingWindow.appendChild(iframeContainer);
     document.body.appendChild(floatingWindow);
+
+    return { tabContainer, iframeContainer };
+}
+
+function addTab(tabContainer, iframeContainer, tabName, channelIndex) {
+    const button = document.createElement('button');
+    button.textContent = tabName;
+    button.onclick = () => {
+        iframeContainer.src = `Synth-Modules/${tabName}/index.html?channelIndex=${channelIndex}`;
+    };
+    if (tabContainer.childNodes.length === 0) { // If it's the first tab, load it immediately
+        button.onclick();
+    }
+    tabContainer.appendChild(button);
 }
