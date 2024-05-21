@@ -8,6 +8,5 @@ import './arpeggiator.js';
 import './uiHandler.js';
 import './saveLoadHandler.js';
 import './controlChannels.js';
-// import './effectsModule.js';
 import './midiUtils.js';
 import './midiRecording.js';

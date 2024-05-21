@@ -7,6 +7,50 @@ const SYNTH_CHANNEL = new URLSearchParams(window.location.search).get('channelIn
 
 const channelSettingsMap = new Map();
 
+export function saveToLocalStorage(settings) {
+    const settingsKey = `synth_settings_${SYNTH_CHANNEL}`;
+    localStorage.setItem(settingsKey, JSON.stringify(settings));
+}
+
+export function loadFromLocalStorage() {
+    const settingsKey = `synth_settings_${SYNTH_CHANNEL}`;
+    try {
+        const settingsJSON = localStorage.getItem(settingsKey);
+        if (settingsJSON) {
+            const settings = JSON.parse(settingsJSON);
+            loadSettingsFromObject(settings);
+        } else {
+            loadDefaultSettings();
+        }
+    } catch (e) {
+        console.error('Failed to load settings from local storage:', e);
+        loadDefaultSettings();  // Fallback to default settings on error
+    }
+}
+
+export function loadDefaultSettings() {
+    const defaultSettings = {
+        waveform: 'Sawtooth',  // Default waveform setting from the screenshot
+        attack: 25,            // Assumed default value from the screenshot
+        release: 75,           // Assumed default value from the screenshot
+        cutoff: 600,           // Assumed default value from the screenshot
+        resonance: 40,         // Assumed default value from the screenshot
+        volume: 80,            // Assumed default value from the screenshot
+        arpTempo: 120,         // Default BPM setting from the screenshot
+        arpPattern: 'Up',      // Default pattern, placeholder as it's not visible in the screenshot
+        arpSpeed: '1/16',      // Default speed, placeholder as it's not visible in the screenshot
+        timingAdjust: 0,       // Default adjustment, placeholder as it's not visible in the screenshot
+        arpNotes: [],          // Empty array for arp notes
+        midiRecording: []      // Assuming no MIDI recording is loaded by default
+    };
+
+    // Apply the default settings to the UI
+    updateUIFromSettings(defaultSettings);
+
+    // Update these settings in local storage as well
+    saveToLocalStorage(defaultSettings);
+}
+
 // Function to retrieve the current settings of the synthesizer
 export function getCurrentSynthSettings() {
     return {

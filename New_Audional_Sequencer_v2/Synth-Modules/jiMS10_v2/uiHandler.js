@@ -3,6 +3,26 @@
 import { handleNoteEvent, onMIDISuccess, onMIDIFailure } from './Unused Files/midiHandler.js';
 import { updateArpNotesDisplay } from './arpeggiator.js';
 import { recordMidiEvent } from './midiRecording.js'; // Import recordMidiEvent
+import { getCurrentSynthSettings, saveToLocalStorage } from './saveLoadHandler.js';
+
+
+// Function to initialize event listeners on synthesizer controls
+function initializeControlListeners() {
+  const controls = ['waveform', 'attack', 'release', 'cutoff', 'resonance', 'volume', 'arpTempo', 'arpPattern', 'arpSpeed', 'timingAdjust'];
+  controls.forEach(controlId => {
+    const element = document.getElementById(controlId);
+    if (element) {
+      element.addEventListener('change', () => {
+        const currentSettings = getCurrentSynthSettings();
+        saveToLocalStorage(currentSettings);
+        console.log(`Updated ${controlId} and saved settings.`);
+      });
+    }
+  });
+}
+
+// Call this function once the DOM is fully loaded or at the end of your synthesizer initialization process
+document.addEventListener('DOMContentLoaded', initializeControlListeners);
 
 // Helper function to update UI elements from settings
 export function updateUIFromSettings(settings) {

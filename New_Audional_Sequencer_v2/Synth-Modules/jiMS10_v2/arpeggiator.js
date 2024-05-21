@@ -22,12 +22,35 @@ const frequencyToNoteName = (frequency) => {
   return `${NOTE_NAMES[midiNote % 12]}${Math.floor(midiNote / 12) - 1}`;
 };
 
+const saveArpNotesToLocalStorage = () => {
+  const arpSettings = {
+      channel: SYNTH_CHANNEL,
+      notes: arpNotes
+  };
+  localStorage.setItem(`arp_settings_channel_${SYNTH_CHANNEL}`, JSON.stringify(arpSettings));
+  console.log(`Arpeggiator notes for channel ${SYNTH_CHANNEL} saved to local storage.`);
+};
+
+export const loadArpNotesFromLocalStorage = () => {
+  const savedSettings = localStorage.getItem(`arp_settings_channel_${SYNTH_CHANNEL}`);
+  if (savedSettings) {
+      const settings = JSON.parse(savedSettings);
+      arpNotes = settings.notes;
+      updateArpNotesDisplay();
+      console.log(`Loaded arpeggiator notes for channel ${SYNTH_CHANNEL} from local storage.`);
+  } else {
+      console.log(`No saved arpeggiator notes found for channel ${SYNTH_CHANNEL}. Using default configuration.`);
+  }
+};
+
+
 export const addNoteToArpeggiator = (frequency) => {
   if (isLatchModeOn) {
-    console.log(`Channel ${SYNTH_CHANNEL}: Adding note to arpeggiator: ${frequency}`);
-    arpNotes.push(frequency);
-    updateArpNotesDisplay();
-    sequencerChannel.postMessage({ type: 'updateArpNotes', arpNotes });
+      console.log(`Channel ${SYNTH_CHANNEL}: Adding note to arpeggiator: ${frequency}`);
+      arpNotes.push(frequency);
+      updateArpNotesDisplay();
+      sequencerChannel.postMessage({ type: 'updateArpNotes', arpNotes });
+      saveArpNotesToLocalStorage();  // Save changes to local storage
   }
 };
 
@@ -36,17 +59,20 @@ export const deleteLastNote = () => {
   arpNotes.pop();
   updateArpNotesDisplay();
   sequencerChannel.postMessage({ type: 'updateArpNotes', arpNotes });
+  saveArpNotesToLocalStorage();  // Save changes to local storage
 };
 
 export const setArpNotes = (notes) => {
   if (Array.isArray(notes)) {
-    arpNotes = notes;
-    updateArpNotesDisplay();
-    console.log(`Channel ${SYNTH_CHANNEL}: Arpeggiator notes updated: ${JSON.stringify(arpNotes)}`);
+      arpNotes = notes;
+      updateArpNotesDisplay();
+      console.log(`Channel ${SYNTH_CHANNEL}: Arpeggiator notes updated: ${JSON.stringify(arpNotes)}`);
+      saveArpNotesToLocalStorage();  // Save changes to local storage
   } else {
-    console.error(`Channel ${SYNTH_CHANNEL}: Invalid Arpeggiator notes format: ${typeof notes}`);
+      console.error(`Channel ${SYNTH_CHANNEL}: Invalid Arpeggiator notes format: ${typeof notes}`);
   }
 };
+
 
 const updateArpIndex = {
   increment: () => currentArpIndex = (currentArpIndex + 1) % arpNotes.length,

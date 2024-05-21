@@ -4,14 +4,23 @@
 
 export const SYNTH_CHANNEL = new URLSearchParams(window.location.search).get('channelIndex');
 
-import { loadSettingsFromObject } from './saveLoadHandler.js';
+import { loadSettingsFromObject, loadFromLocalStorage } from './saveLoadHandler.js';
 import { getMidiRecording, setMidiRecording } from './midiRecording.js';
 import { initializeChannelIndex } from './activeSynthChannelIndex.js';
 
 const sequencerChannel = new BroadcastChannel(`synth_channel_${SYNTH_CHANNEL}`);
 
-// Initialize the channel index only once
-initializeChannelIndex(SYNTH_CHANNEL);
+const initializeSynthesizer = () => {
+    // Set the active channel index first
+    initializeChannelIndex(SYNTH_CHANNEL);
+    
+    // Load arpeggiator notes from local storage
+    loadFromLocalStorage();
+
+    // Proceed with any other initialization tasks
+    // setupAudioContext();
+    // setupEventListeners();
+};
 
 sequencerChannel.addEventListener("message", (event) => {
     if (event.data.channelIndex && event.data.channelIndex !== SYNTH_CHANNEL) {
@@ -102,3 +111,6 @@ function updateBPMDisplay(bpm) {
         console.error("BPM display element not found!");
     }
 }
+
+
+window.addEventListener('DOMContentLoaded', initializeSynthesizer);
