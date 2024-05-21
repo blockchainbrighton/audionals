@@ -1,8 +1,3 @@
-// activeSynthChannelIndex.js
-
-// Module to handle the active synth channel index
-
-// Module to handle the active synth channel index
 let isChannelIndexLocked = false; // Flag to indicate if the channel index is locked
 
 // Retrieves the channel index from storage, or sets it to a default value if not found

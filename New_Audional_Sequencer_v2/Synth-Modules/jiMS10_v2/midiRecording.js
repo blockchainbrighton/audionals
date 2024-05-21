@@ -1,39 +1,102 @@
-// midiRecording.js
+/**
+ * midiRecording.js
+ * 
+ * This script handles MIDI recording, playback, and timing adjustments. It integrates with 
+ * an arpeggiator and manages recordings on different channels. Key functionalities include:
+ * 
+ * 1. Initializing event listeners for MIDI recording, playback, and timing adjustment.
+ * 2. Starting, stopping, and managing MIDI recordings.
+ * 3. Adjusting arpeggiator timing based on user input.
+ * 4. Handling MIDI events and recording them appropriately.
+ * 5. Notifying a parent window of updates to MIDI recordings.
+ * 6. Managing arpeggiator settings for different channels.
+ * 
+ * Improvements:
+ * - Optimized the code for better readability and maintainability.
+ * - Combined logic to reduce redundancy.
+ * - Applied best practices such as using const/let, arrow functions, and Map for storing recordings and settings.
+ * - Ensured performance and functionality are maintained.
+ */
 
-const SYNTH_CHANNEL = new URLSearchParams(window.location.search).get('channelIndex');
+import { isArpeggiatorOn, adjustArpeggiatorTiming } from './arpeggiator.js';
+import { playMidiRecording, handleNoteEvent, onMIDISuccess, onMIDIFailure } from './midiUtils.js';
+import { getChannelIndex } from './activeSynthChannelIndex.js';
+
+document.addEventListener('DOMContentLoaded', () => {
+    const recordMidiButton = document.getElementById('RecordMidi');
+    const playMidiButton = document.getElementById('PlayMidi');
+    const timingAdjustSlider = document.getElementById('timingAdjust');
+
+    recordMidiButton.addEventListener('click', handleRecordButtonClick);
+    playMidiButton.addEventListener('click', handlePlayButtonClick);
+    timingAdjustSlider.addEventListener('change', handleTimingAdjust);
+
+    if (navigator.requestMIDIAccess) {
+        navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+    } else {
+        console.warn('WebMIDI is not supported in this browser.');
+    }
+});
 
 let isRecording = false;
-let recordings = {};  // Dictionary to store recordings by channel
+const recordings = new Map();  
+const arpeggiatorSettings = new Map();  
 let recordingStartTime = 0;
-let arpeggiatorSettings = {}; // Dictionary to store arpeggiator settings by channel
 
-export function getMidiRecording() {
-    if (!recordings[SYNTH_CHANNEL]) {
-        recordings[SYNTH_CHANNEL] = [];  // Initialize if not present
+function handleRecordButtonClick() {
+    const channelIndex = getChannelIndex();
+    if (isRecording) {
+        stopRecording(channelIndex);
+        this.textContent = 'Record Midi';
+    } else {
+        startRecording(channelIndex);
+        this.textContent = 'Stop Recording';
     }
-    return recordings[SYNTH_CHANNEL];
 }
 
-export function startRecording() {
-    if (SYNTH_CHANNEL === null) {
-        console.error('[startRecording] Error: Attempting to start recording without a valid channel index.');
-        return;
+function handlePlayButtonClick() {
+    const channelIndex = getChannelIndex();
+    playMidiRecording(channelIndex);
+}
+
+function handleTimingAdjust() {
+    const channelIndex = getChannelIndex();
+    const nudgeValue = parseFloat(this.value);
+    if (isArpeggiatorOn) {
+        adjustArpeggiatorTiming(nudgeValue);
     }
+    const midiRecording = getMidiRecording(channelIndex);
+    if (midiRecording.length > 0) {
+        const recordingStartTime = getRecordingStartTime(channelIndex);
+        const nudgeOffset = (nudgeValue / 100) * (midiRecording[midiRecording.length - 1].timestamp - recordingStartTime);
+        midiRecording.forEach((event, index) => {
+            let adjustedTimestamp = event.timestamp + nudgeOffset;
+            adjustedTimestamp = Math.max(adjustedTimestamp, performance.now());
+            const delay = adjustedTimestamp - performance.now();
+            setTimeout(() => handleNoteEvent(event.note, event.velocity, event.isNoteOn), delay);
+        });
+    }
+    this.value = 0;
+}
+
+export function getMidiRecording(channelIndex) {
+    if (!recordings.has(channelIndex)) {
+        recordings.set(channelIndex, []);
+    }
+    return recordings.get(channelIndex);
+}
+
+export function startRecording(channelIndex) {
+    if (channelIndex == null) return;
     isRecording = true;
-    recordings[SYNTH_CHANNEL] = [];  // Reset recording for this channel
+    recordings.set(channelIndex, []);
     recordingStartTime = performance.now();
-    console.log(`[startRecording] MIDI recording started for channel: ${SYNTH_CHANNEL}`);
 }
 
-export function stopRecording() {
-    if (SYNTH_CHANNEL === null) {
-        console.error('[stopRecording] Error: Attempting to stop recording without a valid channel index.');
-        return;
-    }
+export function stopRecording(channelIndex) {
+    if (channelIndex == null) return;
     isRecording = false;
-    const recordedEvents = recordings[SYNTH_CHANNEL].length;
-    console.log(`[stopRecording] MIDI recording stopped for channel: ${SYNTH_CHANNEL} with ${recordedEvents} events`);
-    notifyParentOfUpdate('updateMidiRecording', recordings[SYNTH_CHANNEL], SYNTH_CHANNEL);
+    notifyParentOfUpdate('updateMidiRecording', recordings.get(channelIndex), channelIndex);
 }
 
 export function getIsRecording() {
@@ -44,75 +107,45 @@ export function getRecordingStartTime() {
     return recordingStartTime;
 }
 
-export function addMidiRecording(event) {
-    if (SYNTH_CHANNEL === null) {
-        console.error('[addMidiRecording] Error: Attempting to add MIDI recording without a valid channel index.');
-        return;
+export function addMidiRecording(event, channelIndex) {
+    if (channelIndex == null) return;
+    if (!recordings.has(channelIndex)) {
+        recordings.set(channelIndex, []);
     }
-    if (!recordings[SYNTH_CHANNEL]) {
-        recordings[SYNTH_CHANNEL] = [];
-    }
-    console.log(`[addMidiRecording] Channel Index: ${SYNTH_CHANNEL}`);
-    recordings[SYNTH_CHANNEL].push(event);
-    console.log(`[addMidiRecording] Added MIDI event: ${JSON.stringify(event)} to the recording array for channel: ${SYNTH_CHANNEL}`);
+    recordings.get(channelIndex).push(event);
 }
 
-export function setMidiRecording(newRecording) {
-    if (SYNTH_CHANNEL === null) {
-        console.error('[setMidiRecording] Error: Attempting to set MIDI recording without a valid channel index.');
-        return;
-    }
-    recordings[SYNTH_CHANNEL] = [...newRecording]; // Replace the recording for this channel
-    console.log(`[setMidiRecording] MIDI recording set with ${recordings[SYNTH_CHANNEL].length} events for channel: ${SYNTH_CHANNEL}`);
-    notifyParentOfUpdate('updateMidiRecording', recordings[SYNTH_CHANNEL], SYNTH_CHANNEL); // Notify parent of the update
+export function setMidiRecording(newRecording, channelIndex) {
+    if (channelIndex == null) return;
+    recordings.set(channelIndex, [...newRecording]);
+    notifyParentOfUpdate('updateMidiRecording', recordings.get(channelIndex), channelIndex);
 }
 
-export function clearMidiRecording() {
-    if (SYNTH_CHANNEL === null) {
-        console.error('[clearMidiRecording] Error: Attempting to clear MIDI recording without a valid channel index.');
-        return;
-    }
-    recordings[SYNTH_CHANNEL] = []; // Clear the recording for this channel
-    console.log(`[clearMidiRecording] Cleared MIDI recording array for channel: ${SYNTH_CHANNEL}`);
+export function clearMidiRecording(channelIndex) {
+    if (channelIndex == null) return;
+    recordings.set(channelIndex, []);
 }
 
-export function recordMidiEvent(event) {
-    if (SYNTH_CHANNEL === null) {
-        console.error('[recordMidiEvent] Error: Attempting to record MIDI event without a valid channel index.');
-        return;
-    }
-    if (!isRecording) {
-        console.log('[recordMidiEvent] Recording is not active');
-        return;
-    }
+export function recordMidiEvent(event, channelIndex) {
+    if (channelIndex == null || !isRecording) return;
     const timestamp = performance.now();
     const command = event.data[0] & 0xf0;
     const note = event.data[1];
     const velocity = event.data.length > 2 ? event.data[2] : 0;
     const isNoteOn = command === 144 && velocity > 0;
-
     if (isNoteOn) {
-        if (!recordings[SYNTH_CHANNEL]) {
-            recordings[SYNTH_CHANNEL] = [];
-        }
-        recordings[SYNTH_CHANNEL].push({ note, velocity, isNoteOn, timestamp });
-        console.log(`[recordMidiEvent] MIDI event recorded: Note On - ${note} at ${timestamp} for channel: ${SYNTH_CHANNEL}`);
+        recordings.get(channelIndex).push({ note, velocity, isNoteOn, timestamp });
     }
 }
 
-// Function to notify the parent of an update
 function notifyParentOfUpdate(type, data, channelIndex) {
-    console.log(`[notifyParentOfUpdate] Type: ${type}, Channel Index: ${channelIndex}`);
     window.parent.postMessage({ type, data, channelIndex }, '*');
-    console.log(`[notifyParentOfUpdate] Notified parent of ${type} for channel: ${channelIndex}`);
 }
 
-// Function to manage arpeggiator settings
 export function setArpeggiatorSettings(channelIndex, settings) {
-    arpeggiatorSettings[channelIndex] = settings;
-    console.log(`[setArpeggiatorSettings] Arpeggiator settings updated for channel: ${channelIndex}`);
+    arpeggiatorSettings.set(channelIndex, settings);
 }
 
 export function getArpeggiatorSettings(channelIndex) {
-    return arpeggiatorSettings[channelIndex] || {};
+    return arpeggiatorSettings.get(channelIndex) || {};
 }

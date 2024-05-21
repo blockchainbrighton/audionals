@@ -1,3 +1,23 @@
+/**
+ * This script manages MIDI recording and playback functionality in a web application.
+ * It provides an interface for recording MIDI input, playing back recorded MIDI data,
+ * and adjusting the timing of the MIDI playback.
+
+ * Imports:
+ * - `isArpeggiatorOn`, `adjustArpeggiatorTiming` from 'arpeggiator.js'
+ * - `startMidiRecording`, `stopMidiRecording`, `playMidiRecording`, `handleNoteEvent`, `onMIDISuccess`, `onMIDIFailure` from 'midiUtils.js'
+ * - `getIsRecording`, `getMidiRecording`, `getRecordingStartTime` from 'midiRecording.js'
+ * - `getChannelIndex` from 'activeSynthChannelIndex.js'
+
+ * Key functionalities:
+ * - Sets up event listeners for DOM elements to handle recording and playback actions.
+ * - Toggles MIDI recording state and updates the Record button's label accordingly.
+ * - Plays back the recorded MIDI data when the Play button is clicked.
+ * - Adjusts the timing of MIDI playback based on user input from a timing adjustment slider.
+ * - Initializes the WebMIDI API if supported by the browser, handling success and failure cases.
+ */
+
+
 import { isArpeggiatorOn, adjustArpeggiatorTiming } from './arpeggiator.js';
 import { startMidiRecording, stopMidiRecording, playMidiRecording, handleNoteEvent, onMIDISuccess, onMIDIFailure } from './midiUtils.js';
 import { getIsRecording, getMidiRecording, getRecordingStartTime } from './midiRecording.js';
@@ -13,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     recordMidiButton.addEventListener('click', () => {
         const currentChannelIndex = getChannelIndex();
-        if (getIsRecording(currentChannelIndex)) {
+        if (getIsRecording()) {
             stopMidiRecording(currentChannelIndex);
             recordMidiButton.textContent = 'Record Midi';
         } else {

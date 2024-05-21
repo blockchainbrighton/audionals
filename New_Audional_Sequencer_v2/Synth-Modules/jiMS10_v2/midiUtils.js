@@ -8,8 +8,7 @@ const A4_FREQUENCY = 440;
 let isPlaying = false;
 let playbackTimeouts = []; // Declare playbackTimeouts
 
-export function startMidiRecording() {
-    const channelIndex = getChannelIndex();
+export function startMidiRecording(channelIndex) {
     if (channelIndex === null) {
         console.error('[startMidiRecording] Error: Attempting to start recording without a valid channel index.');
         return;
@@ -18,8 +17,7 @@ export function startMidiRecording() {
     console.log(`[startMidiRecording] Channel Index: ${channelIndex}`);
 }
 
-export function stopMidiRecording() {
-    const channelIndex = getChannelIndex();
+export function stopMidiRecording(channelIndex) {
     if (channelIndex === null) {
         console.error('[stopMidiRecording] Error: Attempting to stop recording without a valid channel index.');
         return;
@@ -28,8 +26,7 @@ export function stopMidiRecording() {
     console.log(`[stopMidiRecording] Channel Index: ${channelIndex}`);
 }
 
-export function playMidiRecording() {
-    const channelIndex = getChannelIndex();
+export function playMidiRecording(channelIndex) {
     const midiRecording = getMidiRecording(channelIndex);
     console.log(`[playMidiRecording] Channel Index: ${channelIndex}`);
     console.log(`[playMidiRecording] Checking midiRecording array: ${JSON.stringify(midiRecording)}`);

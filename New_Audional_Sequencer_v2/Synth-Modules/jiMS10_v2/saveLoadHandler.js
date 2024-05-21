@@ -96,39 +96,3 @@ document.getElementById('loadSettingsButton').addEventListener('click', () => {
   document.getElementById('loadSettingsFile').click();
 });
 
-// export function saveSettingsToLocalStorage() {
-//   const settings = {
-//     channelIndex: SYNTH_CHANNEL,
-//     waveform: document.getElementById('waveform').value,
-//     attack: document.getElementById('attack').value,
-//     release: document.getElementById('release').value,
-//     cutoff: document.getElementById('cutoff').value,
-//     resonance: document.getElementById('resonance').value,
-//     volume: document.getElementById('volume').value,
-//     arpTempo: document.getElementById('arpTempo').value,
-//     arpPattern: document.getElementById('arpPattern').value,
-//     arpSpeed: document.getElementById('arpSpeed').value,
-//     useSequencerTiming: document.getElementById('useSequencerTiming').checked,
-//     timingAdjust: document.getElementById('timingAdjust').value,
-//     arpNotes: arpNotes,
-//     midiRecording: getMidiRecording() // Retrieve the MIDI recording
-//   };
-
-//   localStorage.setItem(`synthSettings_${SYNTH_CHANNEL}`, JSON.stringify(settings));
-//   console.log(`Settings saved to localStorage for channel ${SYNTH_CHANNEL}`);
-// }
-
-// export function loadSettingsFromLocalStorage() {
-//   const settingsString = localStorage.getItem(`synthSettings_${SYNTH_CHANNEL}`);
-//   if (settingsString) {
-//     const settings = JSON.parse(settingsString);
-//     if (settings.channelIndex === SYNTH_CHANNEL) {
-//       loadSettingsFromObject(settings);
-//       console.log(`Settings loaded from localStorage for channel ${SYNTH_CHANNEL}:`, settings);
-//     } else {
-//       console.error(`Stored settings do not match the current channel index: ${SYNTH_CHANNEL}`);
-//     }
-//   } else {
-//     console.log(`No settings found in localStorage for channel ${SYNTH_CHANNEL}`);
-//   }
-// }

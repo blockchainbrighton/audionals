@@ -8,7 +8,7 @@ import './saveLoadHandler.js';
 import './controlChannels.js';
 import './iframeMessageHandling.js';
 import './effectsModule.js';
-import './midiController.js';
+// import './midiController.js';
 import './midiUtils.js';
 import './midiRecording.js';
 import './activeSynthChannelIndex.js';

@@ -4,10 +4,9 @@
 
 const SYNTH_CHANNEL = new URLSearchParams(window.location.search).get('channelIndex');
 
-
 import { loadSettingsFromObject } from './saveLoadHandler.js';
 import { getMidiRecording, setMidiRecording } from './midiRecording.js';
-import { initializeChannelIndex, setChannelIndex as setGlobalChannelIndex, getChannelIndex as getGlobalChannelIndex } from './activeSynthChannelIndex.js';
+import { initializeChannelIndex } from './activeSynthChannelIndex.js';
 
 const sequencerChannel = new BroadcastChannel(`synth_channel_${SYNTH_CHANNEL}`);
 
@@ -52,8 +51,8 @@ sequencerChannel.addEventListener("message", (event) => {
             }
             const receivedMidiRecording = event.data.midiRecording;
             console.log(`[ms10 messageEventListener] Received MIDI recording for channel ${SYNTH_CHANNEL}: ${JSON.stringify(receivedMidiRecording)}`);
-            setMidiRecording(receivedMidiRecording);
-            let currentMidiRecording = getMidiRecording(); // Get the updated recording to log
+            setMidiRecording(receivedMidiRecording, SYNTH_CHANNEL);
+            let currentMidiRecording = getMidiRecording(SYNTH_CHANNEL); // Get the updated recording to log
             console.log(`[ms10 messageEventListener] MIDI recording updated: ${currentMidiRecording.length} events`);
             console.log(`[ms10 messageEventListener] Current MIDI recording array: ${JSON.stringify(currentMidiRecording)}`);
             window.parent.postMessage({ type: 'confirmMidiRecording', midiRecording: event.data.midiRecording }, '*');
@@ -65,7 +64,7 @@ sequencerChannel.addEventListener("message", (event) => {
             window.parent.postMessage({ type: 'confirmSynthSettings', settings: event.data.settings }, '*');
             break;
         case 'setChannelIndex':
-            setGlobalChannelIndex(event.data.channelIndex);
+            initializeChannelIndex(event.data.channelIndex);
             updateUIWithChannelIndex(event.data.channelIndex);
             break;
     }
@@ -73,7 +72,7 @@ sequencerChannel.addEventListener("message", (event) => {
 
 window.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'setChannelIndex') {
-        setGlobalChannelIndex(event.data.channelIndex);
+        initializeChannelIndex(event.data.channelIndex);
         updateUIWithChannelIndex(event.data.channelIndex);
     }
 }, false);
