@@ -2,22 +2,6 @@
 
 let tabInterface = null;
 
-
-// function createFloatingWindow() {
-//     const window = document.createElement('div');
-//     window.className = 'floatingWindow';
-//     return window;
-// }
-
-function createIframe(channelIndex) {
-    const iframe = document.createElement('iframe');
-    iframe.src = `Synth-Modules/jiMS10_v2/index.html?channelIndex=${channelIndex}`;
-    iframe.style.width = '100%';
-    iframe.style.height = 'calc(100% - 40px)';
-    iframe.style.border = 'none';
-    return iframe;
-}
-
 function toggleDisplay(elements, show) {
     elements.forEach(element => {
         element.style.display = show ? 'block' : 'none';

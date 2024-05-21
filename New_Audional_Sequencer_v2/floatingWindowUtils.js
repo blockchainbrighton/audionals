@@ -76,10 +76,11 @@ function createTabbedInterface() {
     const tabContainer = document.createElement('div');
     tabContainer.className = 'tabContainer';
 
-    const iframeContainer = document.createElement('iframe');
+    // Instead of one iframe, we use a container for multiple iframes.
+    const iframeContainer = document.createElement('div');
     iframeContainer.style.width = '100%';
     iframeContainer.style.height = 'calc(100% - 40px)';
-    iframeContainer.style.border = 'none';
+    iframeContainer.style.position = 'relative'; // Position iframes absolutely within
 
     floatingWindow.appendChild(tabContainer);
     floatingWindow.appendChild(iframeContainer);
@@ -88,14 +89,46 @@ function createTabbedInterface() {
     return { tabContainer, iframeContainer };
 }
 
-function addTab(tabContainer, iframeContainer, tabName, channelIndex) {
+function addTab(tabContainer, iframeContainer, tabName, channelIndex, loadSampleButtonId) {
     const button = document.createElement('button');
-    button.textContent = tabName;
-    button.onclick = () => {
-        iframeContainer.src = `Synth-Modules/${tabName}/index.html?channelIndex=${channelIndex}`;
-    };
-    if (tabContainer.childNodes.length === 0) { // If it's the first tab, load it immediately
-        button.onclick();
+    button.textContent = tabName + " - Channel " + channelIndex;  // Display tab name with channel index
+
+    // Create a new iframe or reuse existing one
+    let iframe = iframeContainer.querySelector(`iframe[data-channel='${channelIndex}']`);
+    if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.setAttribute('data-channel', channelIndex);
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.position = 'absolute';
+        iframe.style.top = '0';
+        iframe.style.display = 'none';  // Start hidden
+        iframe.src = `Synth-Modules/${tabName}/index.html?channelIndex=${channelIndex}`;
+        iframeContainer.appendChild(iframe);
     }
+
+    button.onclick = () => {
+        const iframes = iframeContainer.querySelectorAll('iframe');
+        const loadSampleButton = document.getElementById(loadSampleButtonId);  // Retrieve the button by ID
+
+        // Hide all iframes
+        iframes.forEach(iframe => iframe.style.display = 'none');
+        // Show the selected tab's iframe
+        iframe.style.display = 'block';
+
+        // Update the Load Sample button text to reflect the loaded synth
+        if (loadSampleButton) {
+            loadSampleButton.textContent = tabName + " - Channel " + channelIndex;  // Set the button text
+        }
+    };
+
+    if (tabContainer.childNodes.length === 0) {  // If it's the first tab, load and show it immediately
+        iframe.style.display = 'block';
+        const loadSampleButton = document.getElementById(loadSampleButtonId);  // Retrieve the button by ID
+        if (loadSampleButton) {
+            loadSampleButton.textContent = tabName + " - Channel " + channelIndex;  // Set the button text
+        }
+    }
+
     tabContainer.appendChild(button);
 }
