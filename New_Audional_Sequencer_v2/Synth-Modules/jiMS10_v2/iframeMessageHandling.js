@@ -31,6 +31,14 @@ sequencerChannel.addEventListener("message", (event) => {
     console.log(`[PARENT MESSAGE] ms10 messageEventListener] Received message: ${JSON.stringify(event.data)}`);
 
     switch (event.data.type) {
+        case 'startArpeggiator':
+            startArpeggiator();
+            console.log(`Arpeggiator started for channel ${SYNTH_CHANNEL}`);
+            break;
+        case 'stopArpeggiator':
+            stopArpeggiator();
+            console.log(`Arpeggiator stopped for channel ${SYNTH_CHANNEL}`);
+            break;
         case 'step':
             console.log(`[ms10 messageEventListener] Received step: ${event.data.data.step}`);
             onSequencerStep(event.data.data.step);

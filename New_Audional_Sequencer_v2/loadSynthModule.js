@@ -71,3 +71,14 @@ function getSettingsFromLocalStorage(channelIndex) {
     return settings ? JSON.parse(settings) : {};
 }
 
+// Functions to start and stop the arpeggiator in the iframe
+
+function startArpeggiatorInIframe(iframe, channelIndex) {
+    console.log(`Sending start arpeggiator command to iframe for channel ${channelIndex}`);
+    sendMessageToIframe(iframe, { type: 'startArpeggiator', channelIndex: channelIndex });
+}
+
+function stopArpeggiatorInIframe(iframe, channelIndex) {
+    console.log(`Sending stop arpeggiator command to iframe for channel ${channelIndex}`);
+    sendMessageToIframe(iframe, { type: 'stopArpeggiator', channelIndex: channelIndex });
+}
