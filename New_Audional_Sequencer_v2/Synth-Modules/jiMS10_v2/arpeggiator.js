@@ -111,7 +111,7 @@ export const updateArpNotesDisplay = () => {
   console.log(`Channel ${SYNTH_CHANNEL}: Updating arpeggiator notes display`);
 
   arpNotes.forEach((note, index) => {
-    const noteName = note !== null ? frequencyToNoteName(note) : 'Rest';
+    const noteName = note !== null ? frequencyToNoteName(note) : 'R';
     console.log(`Channel ${SYNTH_CHANNEL}: Displaying note: ${noteName}`);
 
     ctx.fillStyle = index === currentArpIndex ? '#FF0000' : '#FFFFFF';
