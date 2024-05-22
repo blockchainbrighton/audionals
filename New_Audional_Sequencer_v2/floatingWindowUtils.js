@@ -120,10 +120,17 @@ function addTab(tabContainer, iframeContainer, tabName, channelIndex, loadSample
         if (loadSampleButton) {
             loadSampleButton.textContent = tabName + " - Channel " + channelIndex;  // Set the button text
         }
+
+        // Remove 'activeTab' class from all buttons
+        const buttons = tabContainer.querySelectorAll('button');
+        buttons.forEach(btn => btn.classList.remove('activeTab'));
+        // Add 'activeTab' class to the clicked button
+        button.classList.add('activeTab');
     };
 
     if (tabContainer.childNodes.length === 0) {  // If it's the first tab, load and show it immediately
         iframe.style.display = 'block';
+        button.classList.add('activeTab');  // Mark the first tab as active initially
         const loadSampleButton = document.getElementById(loadSampleButtonId);  // Retrieve the button by ID
         if (loadSampleButton) {
             loadSampleButton.textContent = tabName + " - Channel " + channelIndex;  // Set the button text
