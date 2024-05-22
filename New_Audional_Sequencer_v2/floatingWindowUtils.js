@@ -92,6 +92,7 @@ function createTabbedInterface() {
 function addTab(tabContainer, iframeContainer, tabName, channelIndex, loadSampleButtonId) {
     const button = document.createElement('button');
     button.textContent = tabName + " - Channel " + channelIndex;  // Display tab name with channel index
+    button.className = 'inactiveTab';  // Initially, mark the button as inactive
 
     // Create a new iframe or reuse existing one
     let iframe = iframeContainer.querySelector(`iframe[data-channel='${channelIndex}']`);
@@ -121,16 +122,22 @@ function addTab(tabContainer, iframeContainer, tabName, channelIndex, loadSample
             loadSampleButton.textContent = tabName + " - Channel " + channelIndex;  // Set the button text
         }
 
-        // Remove 'activeTab' class from all buttons
+        // Remove 'activeTab' class from all buttons and add 'inactiveTab' class
         const buttons = tabContainer.querySelectorAll('button');
-        buttons.forEach(btn => btn.classList.remove('activeTab'));
-        // Add 'activeTab' class to the clicked button
+        buttons.forEach(btn => {
+            btn.classList.remove('activeTab');
+            btn.classList.add('inactiveTab');
+        });
+
+        // Add 'activeTab' class to the clicked button and remove 'inactiveTab' class
         button.classList.add('activeTab');
+        button.classList.remove('inactiveTab');
     };
 
     if (tabContainer.childNodes.length === 0) {  // If it's the first tab, load and show it immediately
         iframe.style.display = 'block';
         button.classList.add('activeTab');  // Mark the first tab as active initially
+        button.classList.remove('inactiveTab');  // Remove inactive class from the first tab
         const loadSampleButton = document.getElementById(loadSampleButtonId);  // Retrieve the button by ID
         if (loadSampleButton) {
             loadSampleButton.textContent = tabName + " - Channel " + channelIndex;  // Set the button text
