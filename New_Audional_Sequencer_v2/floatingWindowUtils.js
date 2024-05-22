@@ -20,7 +20,6 @@ function createFloatingWindow() {
     return floatingWindow;
 }
 
-
 function createCloseButton() {
     const closeButton = document.createElement('div');
     closeButton.textContent = 'X';
@@ -32,7 +31,7 @@ function createCloseButton() {
 
 function makeFloatingWindowDraggable(floatingWindow) {
     let isDragging = false;
-    const titleBar = floatingWindow.querySelector('.titleBar'); // Assuming there's a title bar for dragging
+    const titleBar = floatingWindow.querySelector('.titleBar');
 
     if (!titleBar) {
         console.error("No title bar found for dragging. Please ensure there's a titleBar element.");
@@ -67,7 +66,7 @@ function makeFloatingWindowDraggable(floatingWindow) {
 function createTitleBar() {
     const titleBar = document.createElement('div');
     titleBar.className = 'titleBar';
-    titleBar.textContent = 'Drag Me'; // You can customize this text or style
+    titleBar.textContent = 'Drag Me';
     return titleBar;
 }
 
@@ -76,11 +75,10 @@ function createTabbedInterface() {
     const tabContainer = document.createElement('div');
     tabContainer.className = 'tabContainer';
 
-    // Instead of one iframe, we use a container for multiple iframes.
     const iframeContainer = document.createElement('div');
     iframeContainer.style.width = '100%';
     iframeContainer.style.height = 'calc(100% - 40px)';
-    iframeContainer.style.position = 'relative'; // Position iframes absolutely within
+    iframeContainer.style.position = 'relative';
 
     floatingWindow.appendChild(tabContainer);
     floatingWindow.appendChild(iframeContainer);
@@ -91,10 +89,9 @@ function createTabbedInterface() {
 
 function addTab(tabContainer, iframeContainer, tabName, channelIndex, loadSampleButtonId) {
     const button = document.createElement('button');
-    button.textContent = tabName + " - Channel " + channelIndex;  // Display tab name with channel index
-    button.className = 'inactiveTab';  // Initially, mark the button as inactive
+    button.textContent = `${tabName} - Channel ${channelIndex}`;
+    button.className = 'inactiveTab';
 
-    // Create a new iframe or reuse existing one
     let iframe = iframeContainer.querySelector(`iframe[data-channel='${channelIndex}']`);
     if (!iframe) {
         iframe = document.createElement('iframe');
@@ -103,44 +100,39 @@ function addTab(tabContainer, iframeContainer, tabName, channelIndex, loadSample
         iframe.style.height = '100%';
         iframe.style.position = 'absolute';
         iframe.style.top = '0';
-        iframe.style.display = 'none';  // Start hidden
+        iframe.style.display = 'none';
         iframe.src = `Synth-Modules/${tabName}/index.html?channelIndex=${channelIndex}`;
         iframeContainer.appendChild(iframe);
     }
 
     button.onclick = () => {
         const iframes = iframeContainer.querySelectorAll('iframe');
-        const loadSampleButton = document.getElementById(loadSampleButtonId);  // Retrieve the button by ID
+        const loadSampleButton = document.getElementById(loadSampleButtonId);
 
-        // Hide all iframes
         iframes.forEach(iframe => iframe.style.display = 'none');
-        // Show the selected tab's iframe
         iframe.style.display = 'block';
 
-        // Update the Load Sample button text to reflect the loaded synth
         if (loadSampleButton) {
-            loadSampleButton.textContent = tabName + " - Channel " + channelIndex;  // Set the button text
+            loadSampleButton.textContent = `${tabName} - Channel ${channelIndex}`;
         }
 
-        // Remove 'activeTab' class from all buttons and add 'inactiveTab' class
         const buttons = tabContainer.querySelectorAll('button');
         buttons.forEach(btn => {
             btn.classList.remove('activeTab');
             btn.classList.add('inactiveTab');
         });
 
-        // Add 'activeTab' class to the clicked button and remove 'inactiveTab' class
         button.classList.add('activeTab');
         button.classList.remove('inactiveTab');
     };
 
-    if (tabContainer.childNodes.length === 0) {  // If it's the first tab, load and show it immediately
+    if (tabContainer.childNodes.length === 0) {
         iframe.style.display = 'block';
-        button.classList.add('activeTab');  // Mark the first tab as active initially
-        button.classList.remove('inactiveTab');  // Remove inactive class from the first tab
-        const loadSampleButton = document.getElementById(loadSampleButtonId);  // Retrieve the button by ID
+        button.classList.add('activeTab');
+        button.classList.remove('inactiveTab');
+        const loadSampleButton = document.getElementById(loadSampleButtonId);
         if (loadSampleButton) {
-            loadSampleButton.textContent = tabName + " - Channel " + channelIndex;  // Set the button text
+            loadSampleButton.textContent = `${tabName} - Channel ${channelIndex}`;
         }
     }
 

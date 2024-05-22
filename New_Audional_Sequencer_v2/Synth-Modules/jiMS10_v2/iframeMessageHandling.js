@@ -23,12 +23,13 @@ const initializeSynthesizer = () => {
 };
 
 sequencerChannel.addEventListener("message", (event) => {
+    console.log(`[PARENT MESSAGE] ms10 messageEventListener] Received message: ${JSON.stringify(event.data)}`);
+
     if (event.data.channelIndex && event.data.channelIndex !== SYNTH_CHANNEL) {
         console.log(`Ignoring message for different channel index: ${event.data.channelIndex}`);
         return; // Ignore messages that are not for this channel index
     }
 
-    console.log(`[PARENT MESSAGE] ms10 messageEventListener] Received message: ${JSON.stringify(event.data)}`);
 
     switch (event.data.type) {
         case 'startArpeggiator':
@@ -88,30 +89,30 @@ sequencerChannel.addEventListener("message", (event) => {
 });
 
 window.addEventListener('message', (event) => {
-    // Handle setting the channel index
+    console.log('Received message:', event.data);
+
     if (event.data && event.data.type === 'setChannelIndex') {
         initializeChannelIndex(event.data.channelIndex);
         updateUIWithChannelIndex(event.data.channelIndex);
     }
 
-    // Handle setting the BPM
     if (event.data && event.data.type === 'setBPM') {
+        console.log(`Updating BPM display to: ${event.data.bpm}`);
         updateBPMDisplay(event.data.bpm);
     }
 }, false);
 
-
 function updateUIWithChannelIndex(channelIndex) {
     const channelDisplay = document.getElementById('sequencerChannelDisplay');
     if (channelDisplay) {
-        channelDisplay.textContent = `Channel ${channelIndex}`;
+        channelDisplay.textContent = `Channel: ${channelIndex}`;
     } else {
         console.error("Channel display element not found!");
     }
 }
 
-// Function to update the BPM display in the UI
 function updateBPMDisplay(bpm) {
+    console.log(`Inside updateBPMDisplay with bpm: ${bpm}`);
     const bpmDisplay = document.getElementById('bpmDisplay');
     if (bpmDisplay) {
         bpmDisplay.textContent = `BPM: ${bpm}`;
