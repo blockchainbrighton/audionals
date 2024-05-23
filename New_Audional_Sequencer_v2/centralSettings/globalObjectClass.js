@@ -13,7 +13,7 @@ class UnifiedSequencerSettings {
                 projectBPM: 120,
                 currentSequence: 0,
                 channelURLs: new Array(16).fill(''),
-                channelVolume: new Array(16).fill(1),
+                channelVolume: new Array(16).fill(0.5),
                 channelPlaybackSpeed: new Array(16).fill(1), // Default speed is normal (1x)
                 trimSettings: Array.from({ length: 16 }, () => ({ start: 0.01, end: 100.00, length: 0 })),
                 projectChannelNames: new Array(16).fill('Load Sample'),
