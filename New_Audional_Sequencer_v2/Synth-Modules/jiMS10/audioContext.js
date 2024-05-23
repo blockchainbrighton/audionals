@@ -125,7 +125,7 @@ export function toggleMute() {
   isMuted = !isMuted;
   mainGainNode.gain.setValueAtTime(isMuted ? 0 : 1, context.currentTime);
   console.log(`Mute ${isMuted ? 'enabled' : 'disabled'}`);
-  document.getElementById('mute').textContent = isMuted ? 'Unmute' : 'Mute';
+  document.getElementById('mute').textContent = isMuted ? 'UNMUTE' : 'MUTE';
 }
 
 document.getElementById('mute').addEventListener('click', toggleMute);

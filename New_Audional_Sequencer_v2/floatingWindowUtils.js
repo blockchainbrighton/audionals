@@ -45,8 +45,20 @@ function makeFloatingWindowDraggable(floatingWindow) {
 
         function onMouseMove(event) {
             if (isDragging) {
-                floatingWindow.style.left = `${event.pageX - shiftX}px`;
-                floatingWindow.style.top = `${event.pageY - shiftY}px`;
+                let newLeft = event.pageX - shiftX;
+                let newTop = event.pageY - shiftY;
+
+                // Boundary checks
+                const parentRect = document.body.getBoundingClientRect();
+                const floatRect = floatingWindow.getBoundingClientRect();
+
+                if (newLeft < parentRect.left) newLeft = parentRect.left;
+                if (newTop < parentRect.top) newTop = parentRect.top;
+                if (newLeft + floatRect.width > parentRect.right) newLeft = parentRect.right - floatRect.width;
+                if (newTop + floatRect.height > parentRect.bottom) newTop = parentRect.bottom - floatRect.height;
+
+                floatingWindow.style.left = `${newLeft}px`;
+                floatingWindow.style.top = `${newTop}px`;
             }
         }
 

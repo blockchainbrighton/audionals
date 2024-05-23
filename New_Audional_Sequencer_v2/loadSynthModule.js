@@ -15,7 +15,7 @@ function loadSynth(channelIndex, loadSampleButtonId, bpmValue) {
         tabInterface = createTabbedInterface();
     }
 
-    addTab(tabInterface.tabContainer, tabInterface.iframeContainer, `jiMS10_v2`, channelIndex, loadSampleButtonId);
+    addTab(tabInterface.tabContainer, tabInterface.iframeContainer, `jiMS10`, channelIndex, loadSampleButtonId);
 
     const iframe = tabInterface.iframeContainer.querySelector(`iframe[data-channel='${channelIndex}']`);
     if (iframe) {
