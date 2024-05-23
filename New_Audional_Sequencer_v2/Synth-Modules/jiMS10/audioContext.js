@@ -46,18 +46,66 @@ function createOscillator(type, frequency) {
   return oscillator;
 }
 
-function setupGainNode(attack, release, volume, ramped) {
+function setupGainNode(attack, release, volume) {
   const gainNode = context.createGain();
-  if (ramped) {
-    gainNode.gain.setValueAtTime(0.0001, context.currentTime); // Start from a very low value
+  // Always start with a near-zero volume to avoid clicks
+  gainNode.gain.setValueAtTime(0.0001, context.currentTime);
+
+  if (attack > 0) {
+    // Apply attack ramping if there's an attack value
     gainNode.gain.exponentialRampToValueAtTime(volume, context.currentTime + attack);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + attack + release); // Ramp down smoothly
   } else {
+    // Instantly set to full volume if no attack
     gainNode.gain.setValueAtTime(volume, context.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0, context.currentTime + attack + release);
   }
+
+  // Always apply release ramping
+  gainNode.gain.setValueAtTime(volume, context.currentTime + attack); // Ensure volume is set after attack
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + attack + release);
   return gainNode;
 }
+
+// function playOscillatorWithEnvelope(frequency = null) {
+//   if (currentOscillator) {
+//     currentOscillator.stop();
+//     currentOscillator = null;
+//   }
+
+//   const waveform = document.getElementById('waveform').value;
+//   const noteFrequency = frequency !== null ? frequency : parseFloat(document.getElementById('note').value);
+//   if (!isFinite(noteFrequency)) {
+//     console.error('Invalid frequency value:', noteFrequency);
+//     return;
+//   }
+
+//   const attack = parseFloat(document.getElementById('attack').value) / 1000;  // Convert ms to seconds
+//   const release = parseFloat(document.getElementById('release').value) / 1000; // Convert ms to seconds
+//   const cutoff = parseFloat(document.getElementById('cutoff').value);
+//   const resonance = parseFloat(document.getElementById('resonance').value);
+//   const volume = parseFloat(document.getElementById('volume').value) / 100;
+
+//   const oscillator = createOscillator(waveform, noteFrequency);
+//   const gainNode = setupGainNode(attack, release, volume);
+//   const filterNode = setupFilterNode(cutoff, resonance);
+
+//   oscillator.connect(filterNode);
+//   filterNode.connect(gainNode);
+//   gainNode.connect(mainGainNode); // Connect to main gain node
+
+//   // Start the oscillator slightly later to avoid initial clicks
+//   oscillator.start(context.currentTime + 0.01);
+//   oscillator.stop(context.currentTime + attack + release + 0.02);
+
+//   currentOscillator = oscillator;
+// }
+
+
+// function applyAttackRamping(gainNode, attackTime, targetVolume) {
+//   gainNode.gain.cancelScheduledValues(context.currentTime);
+//   gainNode.gain.setValueAtTime(0.0001, context.currentTime);  // Start from near silence
+//   gainNode.gain.exponentialRampToValueAtTime(targetVolume, context.currentTime + attackTime);
+// }
+
 
 function setupFilterNode(cutoff, resonance) {
   const filterNode = context.createBiquadFilter();
