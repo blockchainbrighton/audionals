@@ -416,30 +416,31 @@ function togglePlayState(isPlaying, startStopFunction, firstButton, secondButton
   }
 }
 
-// Function to update the mute state in a single function
+// Function to update the mute state with volume memory
 function updateMuteState(channel, isMuted) {
   const channelIndex = parseInt(channel.dataset.id.split('-')[1]);
   channel.dataset.muted = isMuted ? 'true' : 'false';
   const muteButton = channel.querySelector('.mute-button');
-
   muteButton.classList.toggle('selected', isMuted);
 
-  // Access gainNodes from global settings
   const gainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
   if (gainNode) {
-    // Mute or unmute using gain node
-    gainNode.gain.value = isMuted ? 0 : 1; // Mute the channel if isMuted is true, otherwise set volume to 1
+    if (isMuted) {
+      // Store the current volume before muting
+      window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex] = gainNode.gain.value;
+      gainNode.gain.value = 0; // Mute the channel
+    } else {
+      // Restore the volume to the previously stored state
+      const previousVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex];
+      gainNode.gain.value = previousVolume;
+    }
   } else {
     console.error("GainNode not found for channel:", channelIndex);
   }
-
-  // // Update the dim state of the channel
-  // updateDimState(channel, channelIndex);
 }
 
 // Function to handle manual toggle of the mute button
 function toggleMute(channelElement) {
-  const channelIndex = parseInt(channelElement.dataset.id.split('-')[1]);
   const isMuted = channelElement.dataset.muted === 'true';
   updateMuteState(channelElement, !isMuted);
 }

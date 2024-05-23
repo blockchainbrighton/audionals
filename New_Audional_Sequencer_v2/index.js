@@ -32,7 +32,7 @@ let gainNodes = Array(16).fill(null);
 let isMuted = false;
 let channelMutes = []; // Declare the channelMutes array as a global variable
 let muteState = false
-let volumeStates = Array(16).fill(1); // Start with full volume for all channels
+// let volumeStates = Array(16).fill(1); // Start with 25% volume for all channels
 let soloedChannels = Array(16).fill(false); // Assuming you have 16 channels
 let channels = document.querySelectorAll('.channel[id^="channel-"]');
 let activeChannels = 16;// new Set();
