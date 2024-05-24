@@ -8,8 +8,7 @@ import { SYNTH_CHANNEL } from './iframeMessageHandling.js';
 
 const A4_MIDI_NUMBER = 69;
 const A4_FREQUENCY = 440;
-let isPlaying = false;
-let playbackTimeouts = []; // Declare playbackTimeouts
+
 
 
 export function onMIDISuccess(midiAccess) {
@@ -25,55 +24,6 @@ export function onMIDISuccess(midiAccess) {
 export function onMIDIFailure() {
     console.error('Failed to access MIDI devices.');
 }
-
-export function playMidiRecording() {
-    const channelIndex = SYNTH_CHANNEL;
-    const midiRecording = getMidiRecording(channelIndex);
-    console.log(`[playMidiRecording] Channel Index: ${channelIndex}`);
-    console.log(`[playMidiRecording] Checking midiRecording array: ${JSON.stringify(midiRecording)}`);
-    if (midiRecording.length === 0) {
-        console.log('[playMidiRecording] No MIDI recording to play');
-        return;
-    }
-
-    if (isPlaying) {
-        console.log('[playMidiRecording] Playback already in progress. Stopping current playback.');
-        stopMidiPlayback(); // Make sure to stop any ongoing playback first
-    }
-
-    isPlaying = true;
-    document.getElementById('PlayMidi').innerText = 'Stop Midi Recording';
-
-    const startTime = performance.now(); // Get the current time for better sync
-    const recordingStartTimestamp = midiRecording[0].timestamp;
-    const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
-    const nudgeOffset = (nudgeValue / 100) * (midiRecording[midiRecording.length - 1].timestamp - recordingStartTimestamp);
-
-    midiRecording.forEach((event, index) => {
-        if (event.isNoteOn) { // Only schedule Note On events
-            let adjustedTimestamp = event.timestamp + nudgeOffset;
-            const delay = adjustedTimestamp - recordingStartTimestamp + (performance.now() - startTime);
-
-            console.log(`[playMidiRecording] Scheduling event ${index + 1}/${midiRecording.length}: Note On - ${event.note} at ${delay.toFixed(2)}ms for channel: ${channelIndex}`);
-            const timeoutId = setTimeout(() => {
-                handleNoteEvent(event.note, event.velocity, event.isNoteOn);
-            }, delay);
-            playbackTimeouts.push(timeoutId);
-        }
-    });
-
-    document.getElementById('timingAdjust').value = 0; // Snap the slider back to zero after adjustments
-    console.log(`[playMidiRecording] Playback initiated for Channel Index: ${channelIndex}`);
-}
-
-export function stopMidiPlayback() {
-    playbackTimeouts.forEach(clearTimeout); // Clear all scheduled timeouts
-    playbackTimeouts = []; // Reset the timeouts array
-    isPlaying = false;
-    document.getElementById('PlayMidi').innerText = 'Play Midi Recording';
-    console.log('[stopMidiPlayback] MIDI playback stopped');
-}
-
 
 
 

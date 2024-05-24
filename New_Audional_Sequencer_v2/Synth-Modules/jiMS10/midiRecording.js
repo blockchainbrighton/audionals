@@ -1,11 +1,12 @@
 // midiRecording.js
 
-import { playMidiRecording, handleNoteEvent, onMIDISuccess, onMIDIFailure, notifyParentOfUpdate } from './midiUtils.js';
+import { handleNoteEvent, onMIDISuccess, onMIDIFailure, notifyParentOfUpdate } from './midiUtils.js';
 import { SYNTH_CHANNEL } from './iframeMessageHandling.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     setupMIDIControls();
     requestMIDIAccess();
+    loadMidiRecordingsFromLocalStorage(SYNTH_CHANNEL);  // Load the recordings
 });
 
 function setupMIDIControls() {
@@ -27,37 +28,80 @@ function requestMIDIAccess() {
 }
 
 let isRecording = false;
-const recordings = new Map();  
+let isWarning = false;
+let warningTimeout;
+
+let isPlaying = false;
+const recordings = new Map();
+let playbackTimeouts = [];
 
 function handleRecordButtonClick() {
     const channelIndex = SYNTH_CHANNEL;
+    const recordButton = document.getElementById('RecordMidi');
+    const warningMessage = document.getElementById('recordWarning');
+
     console.log(`[handleRecordButtonClick] Button pressed for channel ${channelIndex}`);
 
-    // Toggle the recording state and update the button text accordingly
-    if (isRecording) {
-        stopRecording(channelIndex);
-        this.textContent = 'Record Midi';
-        console.log(`[handleRecordButtonClick] Recording stopped for channel ${channelIndex}`);
-    } else {
+    if (isWarning) {
+        clearTimeout(warningTimeout);
+        warningMessage.style.display = 'none';
         startRecording(channelIndex);
-        this.textContent = 'Stop Recording';
+        recordButton.textContent = 'RECORDING...';
+        recordButton.classList.remove('flash');
+        recordButton.classList.add('on');
+        isWarning = false;
         console.log(`[handleRecordButtonClick] Recording started for channel ${channelIndex}`);
+    } else if (isRecording) {
+        stopRecording(channelIndex);
+        recordButton.textContent = 'Record Midi';
+        recordButton.classList.remove('on');
+        console.log(`[handleRecordButtonClick] Recording stopped for channel ${channelIndex}`);
+        isRecording = false;
+    } else {
+        warningMessage.style.display = 'block';
+        isWarning = true;
+        warningTimeout = setTimeout(() => {
+            warningMessage.style.display = 'none';
+            recordButton.classList.remove('flash');
+            isWarning = false;
+        }, 3000);
+        recordButton.classList.add('flash');
+        console.log(`[handleRecordButtonClick] Warning: About to record on channel ${channelIndex}`);
     }
 
-    // Log the current state of recording and the recording array's existence
     console.log(`[handleRecordButtonClick] isRecording: ${isRecording}`);
     const recordingExists = recordings.has(channelIndex) ? 'exists' : 'does not exist';
     console.log(`[handleRecordButtonClick] Recording array for channel ${channelIndex} ${recordingExists}`);
 
-    // Optionally, log the contents of the recording array if it exists
     if (recordings.has(channelIndex)) {
         console.log(`[handleRecordButtonClick] Current recording for channel ${channelIndex}:`, JSON.stringify(recordings.get(channelIndex)));
     }
 }
 
+// Add this to the end of your existing JavaScript
+document.addEventListener('DOMContentLoaded', () => {
+    const recordButton = document.getElementById('RecordMidi');
+    const warningMessage = document.createElement('div');
+    warningMessage.id = 'recordWarning';
+    warningMessage.textContent = 'Warning: This will overwrite the previous recording!';
+    document.body.appendChild(warningMessage);
+});
+
+// Add this to the end of your existing JavaScript
+document.addEventListener('DOMContentLoaded', () => {
+    const recordButton = document.getElementById('RecordMidi');
+    const warningMessage = document.createElement('div');
+    warningMessage.id = 'recordWarning';
+    warningMessage.textContent = 'Warning: This will overwrite the previous recording!';
+    document.body.appendChild(warningMessage);
+});
+
 function handlePlayButtonClick() {
-    const channelIndex = SYNTH_CHANNEL;
-    playMidiRecording(channelIndex);
+    if (isPlaying) {
+        stopMidiPlayback();
+    } else {
+        playMidiRecording();
+    }
 }
 
 function handleTimingAdjust() {
@@ -68,6 +112,54 @@ function handleTimingAdjust() {
         adjustPlaybackTiming(midiRecording, nudgeValue);
     }
     this.value = 0;
+}
+
+export function playMidiRecording() {
+    const channelIndex = SYNTH_CHANNEL;
+    const midiRecording = getMidiRecording(channelIndex);
+    console.log(`[playMidiRecording] Channel Index: ${channelIndex}`);
+    console.log(`[playMidiRecording] Checking midiRecording array: ${JSON.stringify(midiRecording)}`);
+    if (midiRecording.length === 0) {
+        console.log('[playMidiRecording] No MIDI recording to play');
+        return;
+    }
+
+    if (isPlaying) {
+        console.log('[playMidiRecording] Playback already in progress. Stopping current playback.');
+        stopMidiPlayback();
+    }
+
+    isPlaying = true;
+    document.getElementById('PlayMidi').innerText = 'Stop Midi Recording';
+
+    const startTime = performance.now();
+    const recordingStartTimestamp = midiRecording[0].timestamp;
+    const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
+    const nudgeOffset = (nudgeValue / 100) * (midiRecording[midiRecording.length - 1].timestamp - recordingStartTimestamp);
+
+    midiRecording.forEach((event, index) => {
+        if (event.isNoteOn) {
+            let adjustedTimestamp = event.timestamp + nudgeOffset;
+            const delay = adjustedTimestamp - recordingStartTimestamp + (performance.now() - startTime);
+
+            console.log(`[playMidiRecording] Scheduling event ${index + 1}/${midiRecording.length}: Note On - ${event.note} at ${delay.toFixed(2)}ms for channel: ${channelIndex}`);
+            const timeoutId = setTimeout(() => {
+                handleNoteEvent(event.note, event.velocity, event.isNoteOn);
+            }, delay);
+            playbackTimeouts.push(timeoutId);
+        }
+    });
+
+    document.getElementById('timingAdjust').value = 0;
+    console.log(`[playMidiRecording] Playback initiated for Channel Index: ${channelIndex}`);
+}
+
+export function stopMidiPlayback() {
+    playbackTimeouts.forEach(clearTimeout);
+    playbackTimeouts = [];
+    isPlaying = false;
+    document.getElementById('PlayMidi').innerText = 'Play Recorded Midi';
+    console.log('[stopMidiPlayback] MIDI playback stopped');
 }
 
 function adjustPlaybackTiming(midiRecording, nudgeValue) {
@@ -90,10 +182,12 @@ export function startRecording(channelIndex) {
 export function stopRecording(channelIndex) {
     if (channelIndex == null) return;
     isRecording = false;
+    saveMidiRecordingsToLocalStorage(channelIndex);  // Save the recording
     notifyParentOfUpdate('updateMidiRecording', recordings.get(channelIndex), channelIndex);
 }
 
-export function recordMidiEvent(event, channelIndex) {
+
+export function recordMidiEvent(event, channelIndex = SYNTH_CHANNEL) {
     console.log(`[recordMidiEvent] Received event on channel ${channelIndex}`);
     if (channelIndex == null || !isRecording) {
         console.log(`[recordMidiEvent] Ignored: Recording not active or channelIndex is null.`);
@@ -152,3 +246,24 @@ export function clearMidiRecording(channelIndex) {
     if (channelIndex == null) return;
     recordings.set(channelIndex, []);
 }
+
+
+const saveMidiRecordingsToLocalStorage = (channelIndex) => {
+    const midiSettings = {
+        channel: channelIndex,
+        recordings: getMidiRecording(channelIndex)
+    };
+    localStorage.setItem(`midi_settings_channel_${channelIndex}`, JSON.stringify(midiSettings));
+    console.log(`MIDI recordings for channel ${channelIndex} saved to local storage.`);
+};
+
+export const loadMidiRecordingsFromLocalStorage = (channelIndex) => {
+    const savedSettings = localStorage.getItem(`midi_settings_channel_${channelIndex}`);
+    if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        recordings.set(channelIndex, settings.recordings);
+        console.log(`Loaded MIDI recordings for channel ${channelIndex} from local storage.`);
+    } else {
+        console.log(`No saved MIDI recordings found for channel ${channelIndex}.`);
+    }
+};
