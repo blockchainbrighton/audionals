@@ -1,8 +1,9 @@
 // uiHandler.js
 
-import { handleNoteEvent, onMIDISuccess, onMIDIFailure } from './Unused Files/midiHandler.js';
+import { handleNoteEvent, onMIDISuccess, onMIDIFailure } from './midiUtils.js';
 import { updateArpNotesDisplay } from './arpeggiator.js';
 import { recordMidiEvent } from './midiRecording.js'; // Import recordMidiEvent
+import { SYNTH_CHANNEL } from './iframeMessageHandling.js';
 import { getCurrentSynthSettings, saveToLocalStorage } from './saveLoadHandler.js';
 
 
@@ -142,7 +143,7 @@ document.addEventListener('keydown', (event) => {
     // Record MIDI event
     recordMidiEvent({
       data: [144, note, velocity]
-    });
+    }, SYNTH_CHANNEL); // Pass SYNTH_CHANNEL here
   }
 });
 
@@ -153,6 +154,6 @@ document.addEventListener('keyup', (event) => {
     // Record MIDI event
     recordMidiEvent({
       data: [128, note, 0]
-    });
+    }, SYNTH_CHANNEL); // Pass SYNTH_CHANNEL here
   }
 });
