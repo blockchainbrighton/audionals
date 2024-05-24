@@ -49,7 +49,7 @@ export function updateUIFromSettings(settings) {
   const channelDisplay = document.getElementById('sequencerChannelDisplay');
   const bpmDisplay = document.getElementById('bpmDisplay');
   if (channelDisplay && settings.channelIndex !== undefined) {
-    channelDisplay.textContent = `Channel: ${settings.channelIndex}`;
+    channelDisplay.textContent = `Ch ${settings.channelIndex}`;
   }
   if (bpmDisplay && settings.bpm !== undefined) {
     bpmDisplay.textContent = `BPM: ${settings.bpm}`;

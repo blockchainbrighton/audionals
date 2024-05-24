@@ -20,14 +20,27 @@ function createFloatingWindow() {
     return floatingWindow;
 }
 
+function showFloatingWindow() {
+    if (tabInterface) {
+        tabInterface.floatingWindow.style.display = 'block';
+    }
+}
+
+
 function createCloseButton() {
     const closeButton = document.createElement('div');
     closeButton.textContent = 'X';
     closeButton.className = 'closeButton';
-    closeButton.addEventListener('click', () => closeButton.closest('.floatingWindow').remove());
+    closeButton.addEventListener('click', () => {
+        const floatingWindow = closeButton.closest('.floatingWindow');
+        if (floatingWindow) {
+            floatingWindow.style.display = 'none'; // Hide the floating window
+        }
+    });
 
     return closeButton;
 }
+
 
 function makeFloatingWindowDraggable(floatingWindow) {
     let isDragging = false;
@@ -96,57 +109,83 @@ function createTabbedInterface() {
     floatingWindow.appendChild(iframeContainer);
     document.body.appendChild(floatingWindow);
 
-    return { tabContainer, iframeContainer };
+    return { tabContainer, iframeContainer, floatingWindow };
 }
+
 
 function addTab(tabContainer, iframeContainer, tabName, channelIndex, loadSampleButtonId) {
-    const button = document.createElement('button');
-    button.textContent = `${tabName} - Channel ${channelIndex}`;
-    button.className = 'inactiveTab';
+    let existingTab = null;
+    let existingIframe = null;
 
-    let iframe = iframeContainer.querySelector(`iframe[data-channel='${channelIndex}']`);
-    if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.setAttribute('data-channel', channelIndex);
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
-        iframe.style.position = 'absolute';
-        iframe.style.top = '0';
-        iframe.style.display = 'none';
-        iframe.src = `Synth-Modules/${tabName}/index.html?channelIndex=${channelIndex}`;
-        iframeContainer.appendChild(iframe);
-    }
+    // Check if a tab for the specified channel already exists
+    tabContainer.querySelectorAll('button').forEach(button => {
+        if (button.textContent.includes(`Channel ${channelIndex}`)) {
+            existingTab = button;
+        }
+    });
 
-    button.onclick = () => {
-        const iframes = iframeContainer.querySelectorAll('iframe');
-        const loadSampleButton = document.getElementById(loadSampleButtonId);
+    // Check if an iframe for the specified channel already exists
+    iframeContainer.querySelectorAll('iframe').forEach(iframe => {
+        if (iframe.getAttribute('data-channel') === String(channelIndex)) {
+            existingIframe = iframe;
+        }
+    });
 
-        iframes.forEach(iframe => iframe.style.display = 'none');
-        iframe.style.display = 'block';
+    if (existingTab && existingIframe) {
+        // If the tab and iframe already exist, activate the existing tab
+        existingTab.click();
+    } else {
+        // If the tab and iframe do not exist, create them
+        const button = document.createElement('button');
+        button.textContent = `${tabName} - Channel ${channelIndex}`;
+        button.className = 'inactiveTab';
 
-        if (loadSampleButton) {
-            loadSampleButton.textContent = `${tabName} - Channel ${channelIndex}`;
+        let iframe = existingIframe; // Define iframe variable here
+
+        if (!existingIframe) {
+            iframe = document.createElement('iframe');
+            iframe.setAttribute('data-channel', channelIndex);
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.position = 'absolute';
+            iframe.style.top = '0';
+            iframe.style.display = 'none';
+            iframe.src = `Synth-Modules/${tabName}/index.html?channelIndex=${channelIndex}`;
+            iframeContainer.appendChild(iframe);
         }
 
-        const buttons = tabContainer.querySelectorAll('button');
-        buttons.forEach(btn => {
-            btn.classList.remove('activeTab');
-            btn.classList.add('inactiveTab');
-        });
+        button.onclick = () => {
+            const iframes = iframeContainer.querySelectorAll('iframe');
+            const loadSampleButton = document.getElementById(loadSampleButtonId);
 
-        button.classList.add('activeTab');
-        button.classList.remove('inactiveTab');
-    };
+            iframes.forEach(iframe => iframe.style.display = 'none');
+            iframe.style.display = 'block';
 
-    if (tabContainer.childNodes.length === 0) {
-        iframe.style.display = 'block';
-        button.classList.add('activeTab');
-        button.classList.remove('inactiveTab');
-        const loadSampleButton = document.getElementById(loadSampleButtonId);
-        if (loadSampleButton) {
-            loadSampleButton.textContent = `${tabName} - Channel ${channelIndex}`;
+            if (loadSampleButton) {
+                loadSampleButton.textContent = `${tabName} - Channel ${channelIndex}`;
+            }
+
+            const buttons = tabContainer.querySelectorAll('button');
+            buttons.forEach(btn => {
+                btn.classList.remove('activeTab');
+                btn.classList.add('inactiveTab');
+            });
+
+            button.classList.add('activeTab');
+            button.classList.remove('inactiveTab');
+        };
+
+        if (tabContainer.childNodes.length === 0 || !existingTab) {
+            iframe.style.display = 'block';
+            button.classList.add('activeTab');
+            button.classList.remove('inactiveTab');
+            const loadSampleButton = document.getElementById(loadSampleButtonId);
+            if (loadSampleButton) {
+                loadSampleButton.textContent = `${tabName} - Channel ${channelIndex}`;
+            }
         }
-    }
 
-    tabContainer.appendChild(button);
+        tabContainer.appendChild(button);
+    }
 }
+
