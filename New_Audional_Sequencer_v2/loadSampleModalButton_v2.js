@@ -378,8 +378,21 @@ function showCustomContextMenu(contextEvent, x, y, channelIndex, loadSampleButto
 
     // Define menu options
     const options = [
-        { label: 'Add User Channel Name', action: () => showChannelNamingModal(channelIndex, loadSampleButton) },
-        { label: 'Load Synth', action: () => loadSynth(channelIndex, loadSampleButton, bpmValue) }, // Updated to pass BPM
+        { 
+            label: 'Add User Channel Name', 
+            action: () => {
+                showChannelNamingModal(channelIndex, loadSampleButton);
+                closeCustomContextMenu(); // Close the menu after action is performed
+            } 
+        },
+        { 
+            label: 'Load Synth', 
+            action: () => {
+                loadSynth(channelIndex, loadSampleButton, bpmValue);
+                closeCustomContextMenu(); // Close the menu after action is performed
+            } 
+        }, 
+        // Updated to pass BPM
         // { label: 'Copy Ordinal ID', action: () => { console.log('Copy Ordinal ID clicked'); copyOrdinalId(channelIndex); } },
         // { label: 'Copy Channel Settings (coming soon)', action: () => console.log('Copy Channel Settings clicked') },
         // { label: 'Set Channel Colour', action: () => showColorPicker(contextEvent, button) },

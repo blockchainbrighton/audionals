@@ -42,6 +42,12 @@ function handleRecordButtonClick() {
 
     console.log(`[handleRecordButtonClick] Button pressed for channel ${channelIndex}`);
 
+    // Stop playback if it's currently playing
+    if (isPlaying) {
+        stopMidiPlayback();
+        updatePlayButton();
+    }
+
     if (isWarning) {
         clearTimeout(warningTimeout);
         warningMessage.style.display = 'none';
@@ -78,29 +84,58 @@ function handleRecordButtonClick() {
     }
 }
 
-// Add this to the end of your existing JavaScript
 document.addEventListener('DOMContentLoaded', () => {
     const recordButton = document.getElementById('RecordMidi');
-    const warningMessage = document.createElement('div');
-    warningMessage.id = 'recordWarning';
-    warningMessage.textContent = 'Warning: This will overwrite the previous recording!';
-    document.body.appendChild(warningMessage);
-});
 
-// Add this to the end of your existing JavaScript
-document.addEventListener('DOMContentLoaded', () => {
-    const recordButton = document.getElementById('RecordMidi');
+    // Create the main warning message
     const warningMessage = document.createElement('div');
     warningMessage.id = 'recordWarning';
+    warningMessage.style.fontSize = '15px'; // Larger text for the main warning
     warningMessage.textContent = 'Warning: This will overwrite the previous recording!';
+
+    // Create the smaller text message
+    const smallerMessage = document.createElement('div');
+    smallerMessage.id = 'recordInfo';
+    smallerMessage.style.fontSize = '12px'; // Smaller text size
+    smallerMessage.textContent = 'Click again to commence recording';
+
+    // Append both messages to the body
+    warningMessage.appendChild(smallerMessage);
     document.body.appendChild(warningMessage);
 });
 
 function handlePlayButtonClick() {
+    const playButton = document.getElementById('PlayMidi');
+    if (isRecording) {
+        stopRecording(SYNTH_CHANNEL);
+        updateRecordButton();
+    }
+
     if (isPlaying) {
         stopMidiPlayback();
     } else {
         playMidiRecording();
+    }
+    updatePlayButton();
+}
+
+function updateRecordButton() {
+    const recordButton = document.getElementById('RecordMidi');
+    if (isRecording) {
+        recordButton.textContent = 'RECORDING...';
+        recordButton.classList.add('on');
+    } else {
+        recordButton.textContent = 'Record Midi';
+        recordButton.classList.remove('on');
+    }
+}
+
+function updatePlayButton() {
+    const playButton = document.getElementById('PlayMidi');
+    if (isPlaying) {
+        playButton.textContent = 'Stop Midi Recording';
+    } else {
+        playButton.textContent = 'Play Recorded Midi';
     }
 }
 
@@ -130,7 +165,7 @@ export function playMidiRecording() {
     }
 
     isPlaying = true;
-    document.getElementById('PlayMidi').innerText = 'Stop Midi Recording';
+    updatePlayButton();
 
     const startTime = performance.now();
     const recordingStartTimestamp = midiRecording[0].timestamp;
@@ -158,7 +193,7 @@ export function stopMidiPlayback() {
     playbackTimeouts.forEach(clearTimeout);
     playbackTimeouts = [];
     isPlaying = false;
-    document.getElementById('PlayMidi').innerText = 'Play Recorded Midi';
+    updatePlayButton();
     console.log('[stopMidiPlayback] MIDI playback stopped');
 }
 
@@ -176,12 +211,14 @@ function adjustPlaybackTiming(midiRecording, nudgeValue) {
 export function startRecording(channelIndex) {
     if (channelIndex == null) return;
     isRecording = true;
+    updateRecordButton();
     recordings.set(channelIndex, []);
 }
 
 export function stopRecording(channelIndex) {
     if (channelIndex == null) return;
     isRecording = false;
+    updateRecordButton();
     saveMidiRecordingsToLocalStorage(channelIndex);  // Save the recording
     notifyParentOfUpdate('updateMidiRecording', recordings.get(channelIndex), channelIndex);
 }

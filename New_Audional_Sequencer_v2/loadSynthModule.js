@@ -8,14 +8,14 @@ function toggleDisplay(elements, show) {
     });
 }
 
-function loadSynth(channelIndex, loadSampleButtonId, bpmValue) {
+function loadSynth(channelIndex, loadSampleButton, bpmValue) {
     console.log(`[PARENT] Loading synth for channel index: ${channelIndex}`);
     
     if (!tabInterface) { // Create tabbed interface if it doesn't exist
         tabInterface = createTabbedInterface();
     }
 
-    addTab(tabInterface.tabContainer, tabInterface.iframeContainer, `jiMS10`, channelIndex, loadSampleButtonId);
+    addTab(tabInterface.tabContainer, tabInterface.iframeContainer, `jiMS10`, channelIndex, loadSampleButton.id);
 
     const iframe = tabInterface.iframeContainer.querySelector(`iframe[data-channel='${channelIndex}']`);
     if (iframe) {
@@ -27,13 +27,31 @@ function loadSynth(channelIndex, loadSampleButtonId, bpmValue) {
             console.log('[PARENT] Sending setBPM with bpmValue:', bpmValue);
             sendMessageToIframe(iframe, { type: 'setBPM', bpm: bpmValue });
 
-            const loadSampleButton = document.getElementById(loadSampleButtonId);
             if (loadSampleButton) {
-                loadSampleButton.textContent = iframe.contentDocument.title;
+                console.log('[PARENT] Updating button text to "jiMS10 Synth Loaded"');
+                // Update the button text to display the instrument name and the channel index
+                loadSampleButton.textContent = `jiMS10 Synth ${channelIndex}`;
+                
+                // Update the global settings with the new channel name
+                window.unifiedSequencerSettings.setChannelName(channelIndex, `Ch ${channelIndex} : jiMS10 Synth`);
+                
+                // Call the function to update the button text
+                window.unifiedSequencerSettings.updateLoadSampleButtonText(channelIndex, loadSampleButton);
+                
+                // Call the function to update the UI for the current sequence
+                window.unifiedSequencerSettings.updateUIForSequence(window.unifiedSequencerSettings.settings.masterSettings.currentSequence);
+            } else {
+                console.error('[PARENT] Load sample button not found:', loadSampleButton.id);
             }
         };
+    } else {
+        console.error('[PARENT] iframe not found for channel index:', channelIndex);
     }
 }
+
+
+
+
 
 function sendMessageToIframe(iframe, message) {
     console.log('[PARENT] Sending message to iframe:', message);

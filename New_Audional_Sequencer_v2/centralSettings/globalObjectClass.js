@@ -815,9 +815,7 @@ updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, is
                 this.settings.masterSettings.projectChannelNames[channelIndex] = name;
                 console.log(`[setChannelName] Channel ${channelIndex} name set to: ${name}`);
                 // Update UI after setting the channel name
-                this.updateProjectChannelNamesUI(this.settings.masterSettings.projectChannelNames);
-                // Notify observers or trigger any necessary updates
-                // this.notifyObservers();
+                this.updateProjectChannelNamesUI(channelIndex, name);
                 return true; // Indicate success
             } else {
                 console.log(`[setChannelName] No change for channel ${channelIndex}. Name remains: ${name}`);
@@ -828,22 +826,42 @@ updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, is
             return false; // Indicate failure due to invalid index
         }
     }
-    
+
+    updateProjectChannelNamesUI(channelIndex, name) {
+        const defaultName = 'Load Sample'; // Default placeholder
+        let effectiveName = name;
+
+        // Safely access the URL to use as a fallback name
+        const channelUrl = this.settings.masterSettings.channelURLs[channelIndex];
+        const urlName = channelUrl ? channelUrl.split('/').pop().split('#')[0] : defaultName;
+
+        if (!effectiveName) {
+            effectiveName = urlName;
+        }
+
+        console.log("[updateProjectChannelNamesUI] Updating with name:", effectiveName);
+
+        // Ensure the UI is updated
+        const nameDisplay = document.getElementById(`channel-name-${channelIndex}`);
+        if (nameDisplay) {
+            nameDisplay.textContent = effectiveName;
+        }
+
+        // Also update the name in the global settings array to prevent issues on export or re-load
+        this.settings.masterSettings.projectChannelNames[channelIndex] = effectiveName;
+    }
+
     getChannelName(channelIndex) {
         console.log("getChannelName entered");
         return this.settings.masterSettings.projectChannelNames[channelIndex];
     }
-    
-
 
     setProjectSequences(sequenceData) {
         console.log("setProjectSequences entered");
         this.settings.masterSettings.projectSequences = sequenceData;
         console.log(`[setProjectSequences] Project sequences set:`, sequenceData);
-        console.log ('[setProjectSequences] currentSequence set to:', this.settings.masterSettings.currentSequence)
+        console.log('[setProjectSequences] currentSequence set to:', this.settings.masterSettings.currentSequence);
     }
-
-
   
     
         
@@ -874,36 +892,39 @@ updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, is
     // WORKING VERSION
     updateLoadSampleButtonText(channelIndex, button) {
         console.log("updateLoadSampleButtonText entered");
-    
+
         // Ensure the button exists
         if (!button) {
             console.error(`updateLoadSampleButtonText: Button not found for channelIndex ${channelIndex}`);
             return;
         }
-    
+
         let buttonText = 'Load New Audional'; // Default text
-    
+        console.log(`[updateLoadSampleButtonText] Default text: ${buttonText}`);
+
         // Check if masterSettings are correctly initialized
         if (!this.settings || !this.settings.masterSettings) {
             console.error('updateLoadSampleButtonText: masterSettings not properly initialized');
             button.textContent = buttonText;
             return;
         }
-    
+
         // Accessing projectChannelNames and channelURLs from settings
         const { projectChannelNames, channelURLs } = this.settings.masterSettings;
-    
+
         // Check if arrays are correctly initialized
         if (!Array.isArray(projectChannelNames) || !Array.isArray(channelURLs)) {
             console.error('updateLoadSampleButtonText: projectChannelNames or channelURLs is not an array');
             button.textContent = buttonText;
             return;
         }
-    
+
         // Check if indices exist in the arrays
         const channelName = projectChannelNames[channelIndex];
         const loadedUrl = channelURLs[channelIndex];
-    
+
+        console.log(`[updateLoadSampleButtonText] Channel Name: ${channelName}, Loaded URL: ${loadedUrl}`);
+
         if (channelName) {
             buttonText = channelName;
         } else if (loadedUrl) {
@@ -912,34 +933,36 @@ updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, is
             const lastPart = urlParts[urlParts.length - 1];
             buttonText = lastPart;
         }
-    
+
+        console.log(`[updateLoadSampleButtonText] Final button text: ${buttonText}`);
+        
         // Update button text
         button.textContent = buttonText;
     }
 
-    updateProjectChannelNamesUI(channelIndex, name) {
-        const defaultName = 'Load Sample'; // Default placeholder
-        let effectiveName = name;
+    // updateProjectChannelNamesUI(channelIndex, name) {
+    //     const defaultName = 'Load Sample'; // Default placeholder
+    //     let effectiveName = name;
     
-        // Safely access the URL to use as a fallback name
-        const channelUrl = this.settings.masterSettings.channelURLs[channelIndex];
-        const urlName = channelUrl ? channelUrl.split('/').pop().split('#')[0] : defaultName;
+    //     // Safely access the URL to use as a fallback name
+    //     const channelUrl = this.settings.masterSettings.channelURLs[channelIndex];
+    //     const urlName = channelUrl ? channelUrl.split('/').pop().split('#')[0] : defaultName;
     
-        if (!effectiveName) {
-            effectiveName = urlName;
-        }
+    //     if (!effectiveName) {
+    //         effectiveName = urlName;
+    //     }
     
-        console.log("[updateProjectChannelNamesUI] Updating with name:", effectiveName);
+    //     console.log("[updateProjectChannelNamesUI] Updating with name:", effectiveName);
     
-        // Ensure the UI is updated
-        const nameDisplay = document.getElementById(`channel-name-${channelIndex}`);
-        if (nameDisplay) {
-            nameDisplay.textContent = effectiveName;
-        }
+    //     // Ensure the UI is updated
+    //     const nameDisplay = document.getElementById(`channel-name-${channelIndex}`);
+    //     if (nameDisplay) {
+    //         nameDisplay.textContent = effectiveName;
+    //     }
     
-        // Also update the name in the global settings array to prevent issues on export or re-load
-        this.settings.masterSettings.projectChannelNames[channelIndex] = effectiveName;
-    }
+    //     // Also update the name in the global settings array to prevent issues on export or re-load
+    //     this.settings.masterSettings.projectChannelNames[channelIndex] = effectiveName;
+    // }
     
     
     
