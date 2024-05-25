@@ -26,7 +26,6 @@ function showFloatingWindow() {
     }
 }
 
-
 function createCloseButton() {
     const closeButton = document.createElement('div');
     closeButton.textContent = 'X';
@@ -40,7 +39,6 @@ function createCloseButton() {
 
     return closeButton;
 }
-
 
 function makeFloatingWindowDraggable(floatingWindow) {
     let isDragging = false;
@@ -112,6 +110,16 @@ function createTabbedInterface() {
     return { tabContainer, iframeContainer, floatingWindow };
 }
 
+function saveMapping(channelIndex, iframeId) {
+    const mappings = JSON.parse(localStorage.getItem('channelIframeMappings')) || {};
+    mappings[channelIndex] = iframeId;
+    localStorage.setItem('channelIframeMappings', JSON.stringify(mappings));
+}
+
+function getMapping(channelIndex) {
+    const mappings = JSON.parse(localStorage.getItem('channelIframeMappings')) || {};
+    return mappings[channelIndex];
+}
 
 function addTab(tabContainer, iframeContainer, tabName, channelIndex, loadSampleButtonId) {
     let existingTab = null;
@@ -124,12 +132,13 @@ function addTab(tabContainer, iframeContainer, tabName, channelIndex, loadSample
         }
     });
 
+    // Retrieve iframe ID from localStorage
+    const iframeId = getMapping(channelIndex);
+
     // Check if an iframe for the specified channel already exists
-    iframeContainer.querySelectorAll('iframe').forEach(iframe => {
-        if (iframe.getAttribute('data-channel') === String(channelIndex)) {
-            existingIframe = iframe;
-        }
-    });
+    if (iframeId) {
+        existingIframe = iframeContainer.querySelector(`iframe[data-channel='${iframeId}']`);
+    }
 
     if (existingTab && existingIframe) {
         // If the tab and iframe already exist, activate the existing tab
@@ -152,6 +161,9 @@ function addTab(tabContainer, iframeContainer, tabName, channelIndex, loadSample
             iframe.style.display = 'none';
             iframe.src = `Synth-Modules/${tabName}/index.html?channelIndex=${channelIndex}`;
             iframeContainer.appendChild(iframe);
+
+            // Save the new mapping
+            saveMapping(channelIndex, channelIndex);
         }
 
         button.onclick = () => {
@@ -188,4 +200,3 @@ function addTab(tabContainer, iframeContainer, tabName, channelIndex, loadSample
         tabContainer.appendChild(button);
     }
 }
-

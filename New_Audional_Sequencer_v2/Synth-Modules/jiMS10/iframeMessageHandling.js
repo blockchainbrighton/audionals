@@ -3,7 +3,6 @@
 // It also listens for messages from the synthesizer iframe and responds to them by updating the parent window. The script uses a BroadcastChannel to communicate between the parent window and the synthesizer iframe. 
 // The script also handles setting the active channel index for the synthesizer.
 // iframeMessageHandling.js 
-
 export const SYNTH_CHANNEL = new URLSearchParams(window.location.search).get('channelIndex');
 
 import { loadSettingsFromObject, loadFromLocalStorage } from './saveLoadHandler.js';
@@ -36,16 +35,10 @@ stopChannel.onmessage = (event) => {
     }
 };
 
-
 sequencerChannel.addEventListener("message", (event) => {
     console.log(`[PARENT MESSAGE] ms10 messageEventListener] Received message: ${JSON.stringify(event.data)}`);
 
-    if (event.data.channelIndex && event.data.channelIndex !== SYNTH_CHANNEL) {
-        console.log(`Ignoring message for different channel index: ${event.data.channelIndex}`);
-        return; // Ignore messages that are not for this channel index
-    }
-
-
+    // Ignore the channel index check and process all messages
     switch (event.data.type) {
         case 'startArpeggiator':
             startArpeggiator();
@@ -84,8 +77,8 @@ sequencerChannel.addEventListener("message", (event) => {
             }
             const receivedMidiRecording = event.data.midiRecording;
             console.log(`[ms10 messageEventListener] Received MIDI recording for channel ${SYNTH_CHANNEL}: ${JSON.stringify(receivedMidiRecording)}`);
-            setMidiRecording(receivedMidiRecording, SYNTH_CHANNEL);
-            let currentMidiRecording = getMidiRecording(SYNTH_CHANNEL); // Get the updated recording to log
+            setMidiRecording(receivedMidiRecording, 0); // Pass channel 0 as placeholder
+            let currentMidiRecording = getMidiRecording(0); // Get the updated recording to log
             console.log(`[ms10 messageEventListener] MIDI recording updated: ${currentMidiRecording.length} events`);
             console.log(`[ms10 messageEventListener] Current MIDI recording array: ${JSON.stringify(currentMidiRecording)}`);
             window.parent.postMessage({ type: 'confirmMidiRecording', midiRecording: event.data.midiRecording }, '*');
@@ -138,6 +131,5 @@ function updateBPMDisplay(bpm) {
         console.error("BPM display element not found!");
     }
 }
-
 
 window.addEventListener('DOMContentLoaded', initializeSynthesizer);

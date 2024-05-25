@@ -103,9 +103,3 @@ window.addEventListener('beforeunload', () => {
     console.log('BroadcastChannel closed');
 });
 
-// // Add event listener to the stop button to call stopAllSynths
-// stopButton.addEventListener('click', () => {
-//     console.log('Stop button clicked');
-//     console.log('Calling stopAllSynths');
-//     stopAllSynths();
-// });

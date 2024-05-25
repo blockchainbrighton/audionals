@@ -280,24 +280,52 @@ async function fetchAudio(url, channelIndex, sampleNameGiven = null, callback = 
   }
 }
 
+function getIframeIdByChannelIndex(channelIndex) {
+  const mappings = JSON.parse(localStorage.getItem('channelIframeMappings')) || {};
+  return mappings[channelIndex];
+}
 
 function playSound(currentSequence, channel, currentStep) {
   const channelIndex = getChannelIndex(channel);
   const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
 
-  // Initialize the BroadcastChannel and send messages immediately
+  // Original BroadcastChannel for the current channel index
   const sequencerChannel = new BroadcastChannel(`synth_channel_${channelIndex}`);
   // console.log(`[playSound] Preparing to send message to channel: synth_channel_${channelIndex}`);
+
+  // Retrieve the iframe ID using the channel index mapping
+  const iframeId = getIframeIdByChannelIndex(channelIndex);
+  let iframeSequencerChannel = null;
+
+  if (iframeId) {
+      // Initialize an additional BroadcastChannel for the iframe-specific channel
+      iframeSequencerChannel = new BroadcastChannel(`synth_channel_${iframeId}`);
+  }
 
   if (isActive) {
       sequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
       console.log(`[playSound] Message sent: startArpeggiator for channel ${channelIndex}`);
+
+      if (iframeSequencerChannel) {
+          iframeSequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
+          console.log(`[playSound] Message sent to iframe: startArpeggiator for channel ${channelIndex}`);
+      }
   } else if (isReverse) {
       sequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
       console.log(`[playSound] Message sent: stopArpeggiator for channel ${channelIndex}`);
+
+      if (iframeSequencerChannel) {
+          iframeSequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
+          console.log(`[playSound] Message sent to iframe: stopArpeggiator for channel ${channelIndex}`);
+      }
   }
-  sequencerChannel.close(); // Close the channel after sending the message
+  sequencerChannel.close(); // Close the original channel after sending the message
   console.log(`[playSound] Sequencer message channel closed: synth_channel_${channelIndex}`);
+
+  if (iframeSequencerChannel) {
+      iframeSequencerChannel.close(); // Close the iframe-specific channel after sending the message
+      console.log(`[playSound] Sequencer message channel closed: synth_channel_${iframeId}`);
+  }
 
   // Manage audio playback
   if (!isActive && !isReverse) {
@@ -336,7 +364,6 @@ function playSound(currentSequence, channel, currentStep) {
 
   window.unifiedSequencerSettings.sourceNodes[channelIndex] = source;
 }
-
 
 
 
