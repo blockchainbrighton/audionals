@@ -38,7 +38,7 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
 
             // Set the channel type to synth
             if (!presetData.preset1.channels[channelIndex]) {
-                presetData.preset1.channels[channelIndex] = { steps: Array(4096).fill(false), mute: false, url: null, type: 'synth' };
+                presetData.preset1.channels[channelIndex] = { steps: Array(4096).fill(false), mute: true, url: null, type: 'synth' };
             } else {
                 presetData.preset1.channels[channelIndex].type = 'synth';
             }

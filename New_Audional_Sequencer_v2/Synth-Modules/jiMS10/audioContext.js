@@ -1,12 +1,13 @@
 // audioContext.js
+
 export const context = new (window.AudioContext || window.webkitAudioContext)();
 export let currentOscillator = null;
-let isMuted = false;
+let isMuted = true;  // Initialize isMuted as true
 const mainGainNode = context.createGain();
 mainGainNode.connect(context.destination);
 
-// Initialize the main gain node to a normal volume
-mainGainNode.gain.setValueAtTime(1, context.currentTime);
+// Initialize the main gain node to a muted volume
+mainGainNode.gain.setValueAtTime(0, context.currentTime);
 
 // Function to resume audio context on any click
 const resumeAudioContext = async () => {
@@ -70,48 +71,6 @@ function setupGainNode(attack, release, volume) {
   return gainNode;
 }
 
-// function playOscillatorWithEnvelope(frequency = null) {
-//   if (currentOscillator) {
-//     currentOscillator.stop();
-//     currentOscillator = null;
-//   }
-
-//   const waveform = document.getElementById('waveform').value;
-//   const noteFrequency = frequency !== null ? frequency : parseFloat(document.getElementById('note').value);
-//   if (!isFinite(noteFrequency)) {
-//     console.error('Invalid frequency value:', noteFrequency);
-//     return;
-//   }
-
-//   const attack = parseFloat(document.getElementById('attack').value) / 1000;  // Convert ms to seconds
-//   const release = parseFloat(document.getElementById('release').value) / 1000; // Convert ms to seconds
-//   const cutoff = parseFloat(document.getElementById('cutoff').value);
-//   const resonance = parseFloat(document.getElementById('resonance').value);
-//   const volume = parseFloat(document.getElementById('volume').value) / 100;
-
-//   const oscillator = createOscillator(waveform, noteFrequency);
-//   const gainNode = setupGainNode(attack, release, volume);
-//   const filterNode = setupFilterNode(cutoff, resonance);
-
-//   oscillator.connect(filterNode);
-//   filterNode.connect(gainNode);
-//   gainNode.connect(mainGainNode); // Connect to main gain node
-
-//   // Start the oscillator slightly later to avoid initial clicks
-//   oscillator.start(context.currentTime + 0.01);
-//   oscillator.stop(context.currentTime + attack + release + 0.02);
-
-//   currentOscillator = oscillator;
-// }
-
-
-// function applyAttackRamping(gainNode, attackTime, targetVolume) {
-//   gainNode.gain.cancelScheduledValues(context.currentTime);
-//   gainNode.gain.setValueAtTime(0.0001, context.currentTime);  // Start from near silence
-//   gainNode.gain.exponentialRampToValueAtTime(targetVolume, context.currentTime + attackTime);
-// }
-
-
 function setupFilterNode(cutoff, resonance) {
   const filterNode = context.createBiquadFilter();
   filterNode.type = 'lowpass';
@@ -130,6 +89,12 @@ export function playRampedOscillator(frequency = null) {
 }
 
 function playOscillatorWithEnvelope(frequency = null, ramped = false) {
+  // Check if muted and return if true
+  if (isMuted) {
+    console.log('Synth is muted, not playing oscillator.');
+    return;
+  }
+
   if (currentOscillator) {
     currentOscillator.stop();
     currentOscillator = null;
@@ -178,7 +143,31 @@ export function toggleMute() {
   isMuted = !isMuted;
   mainGainNode.gain.setValueAtTime(isMuted ? 0 : 1, context.currentTime);
   console.log(`Mute ${isMuted ? 'enabled' : 'disabled'}`);
-  document.getElementById('mute').textContent = isMuted ? 'UNMUTE' : 'MUTE';
+
+  const muteButton = document.getElementById('mute');
+  muteButton.textContent = isMuted ? 'UNMUTE' : 'MUTE';  // Reverse these to match logical mute state
+  console.log(`Setting button text to: ${muteButton.textContent}`);
+
+  if (isMuted) {
+      muteButton.classList.remove('on');  // Muted should mean not lit
+      console.log('Removing class "on" from mute button');
+  } else {
+      muteButton.classList.add('on');     // Unmuted should mean lit
+      console.log('Adding class "on" to mute button');
+  }
 }
 
+
 document.getElementById('mute').addEventListener('click', toggleMute);
+
+// Initialize mute button state
+window.addEventListener('DOMContentLoaded', () => {
+  const muteButton = document.getElementById('mute');
+  if (muteButton) {
+    muteButton.classList.add('on');
+    muteButton.setAttribute('aria-pressed', 'true');
+    muteButton.textContent = 'UNMUTE'; // Ensure the text says "UNMUTE"
+    isMuted = true;
+    mainGainNode.gain.setValueAtTime(0, context.currentTime);
+  }
+});

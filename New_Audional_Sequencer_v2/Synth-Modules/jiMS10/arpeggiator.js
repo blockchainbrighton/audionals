@@ -17,6 +17,40 @@ const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 
 const A4_FREQUENCY = 440;
 const A4_MIDI_NUMBER = 69;
 
+
+
+export const startArpeggiator = () => {
+  console.log('Starting arpeggiator');
+  isArpeggiatorOn = true;
+  currentArpIndex = 0;
+
+  const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
+  const nudgeOffset = (nudgeValue / 100) * (60 / parseFloat(document.getElementById('arpTempo').value));
+  nextNoteTime = context.currentTime + 0.1 + nudgeOffset;
+  console.log(`Initial nextNoteTime set to: ${nextNoteTime}`);
+
+  scheduleArpeggiator();
+  // Toggle button class
+  document.getElementById('startStopArp').classList.add('on');
+};
+
+
+export const stopArpeggiator = () => {
+  if (!isArpeggiatorOn) {
+    console.log('Arpeggiator is already stopped.');
+    return;
+  }
+  console.log('Stopping arpeggiator');
+  isArpeggiatorOn = false;
+  if (timerID) {
+    clearTimeout(timerID);
+    timerID = null;
+  }
+  stopMS10TriangleBass();  // Ensure this function stops the synth effectively
+  // Toggle button class
+  document.getElementById('startStopArp').classList.remove('on');
+};
+
 const frequencyToNoteName = (frequency) => {
   const midiNote = Math.round(12 * Math.log2(frequency / A4_FREQUENCY) + A4_MIDI_NUMBER);
   return `${NOTE_NAMES[midiNote % 12]}${Math.floor(midiNote / 12) - 1}`;
@@ -133,37 +167,6 @@ export const updateArpNotesDisplay = () => {
   });
 };
 
-export const startArpeggiator = () => {
-  console.log('Starting arpeggiator');
-  isArpeggiatorOn = true;
-  currentArpIndex = 0;
-
-  const nudgeValue = parseFloat(document.getElementById('timingAdjust').value);
-  const nudgeOffset = (nudgeValue / 100) * (60 / parseFloat(document.getElementById('arpTempo').value));
-  nextNoteTime = context.currentTime + 0.1 + nudgeOffset;
-  console.log(`Initial nextNoteTime set to: ${nextNoteTime}`);
-
-  scheduleArpeggiator();
-  // Toggle button class
-  document.getElementById('startStopArp').classList.add('on');
-};
-
-
-export const stopArpeggiator = () => {
-  if (!isArpeggiatorOn) {
-    console.log('Arpeggiator is already stopped.');
-    return;
-  }
-  console.log('Stopping arpeggiator');
-  isArpeggiatorOn = false;
-  if (timerID) {
-    clearTimeout(timerID);
-    timerID = null;
-  }
-  stopMS10TriangleBass();  // Ensure this function stops the synth effectively
-  // Toggle button class
-  document.getElementById('startStopArp').classList.remove('on');
-};
 
 export const toggleLatchMode = () => {
   isLatchModeOn = !isLatchModeOn;
