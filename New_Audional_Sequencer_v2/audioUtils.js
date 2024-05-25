@@ -285,46 +285,58 @@ function playSound(currentSequence, channel, currentStep) {
   const channelIndex = getChannelIndex(channel);
   const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
 
+  // Initialize the BroadcastChannel and send messages immediately
+  const sequencerChannel = new BroadcastChannel(`synth_channel_${channelIndex}`);
+  // console.log(`[playSound] Preparing to send message to channel: synth_channel_${channelIndex}`);
+
+  if (isActive) {
+      sequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
+      console.log(`[playSound] Message sent: startArpeggiator for channel ${channelIndex}`);
+  } else if (isReverse) {
+      sequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
+      console.log(`[playSound] Message sent: stopArpeggiator for channel ${channelIndex}`);
+  }
+  sequencerChannel.close(); // Close the channel after sending the message
+  console.log(`[playSound] Sequencer message channel closed: synth_channel_${channelIndex}`);
+
+  // Manage audio playback
   if (!isActive && !isReverse) {
-    // Skip playback if the current step is not active and not marked for reverse playback.
-    return;
+      // Skip playback if the current step is not active and not marked for reverse playback.
+      return;
   }
 
   const bufferKey = `channel_${channelIndex}_${isReverse ? 'reverse' : 'forward'}`;
   const audioBuffer = audioBuffers.get(bufferKey);
-
   if (!audioBuffer) {
-    console.error(`[playSound] No audio buffer found for ${bufferKey}`);
-    return;
+      console.error(`[playSound] No audio buffer found for ${bufferKey}`);
+      return;
   }
 
-  // Instead of calling another function, handle playback directly here for efficiency.
   const audioContext = window.unifiedSequencerSettings.audioContext;
   const source = audioContext.createBufferSource();
   source.buffer = audioBuffer;
-  source.started = false;  // Add a started flag
 
   const gainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
   if (!gainNode) {
-    console.error("No gain node found for channel", channelIndex);
-    return;
+      console.error("No gain node found for channel", channelIndex);
+      return;
   }
 
   source.playbackRate.setValueAtTime(window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex], audioContext.currentTime);
-    source.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+  source.connect(gainNode);
+  gainNode.connect(audioContext.destination);
 
-    const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
-    source.start(0, trimStart, duration);
-    source.started = true;  // Set the started flag to true after calling start()
+  const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
+  source.start(0, trimStart, duration);
 
-    source.onended = () => {
-        source.disconnect();
-        window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
-    };
+  source.onended = () => {
+      source.disconnect();
+      window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
+  };
 
-    window.unifiedSequencerSettings.sourceNodes[channelIndex] = source;
+  window.unifiedSequencerSettings.sourceNodes[channelIndex] = source;
 }
+
 
 
 

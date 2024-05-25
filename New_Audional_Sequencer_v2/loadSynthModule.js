@@ -1,5 +1,12 @@
 // loadSynthModule.js
 
+// Define presetData globally
+const presetData = {
+    preset1: {
+        channels: Array.from({ length: 16 }, () => ({ steps: Array(4096).fill(false), mute: false, url: null, type: 'audio' }))
+    }
+};
+
 let tabInterface = null;
 
 function toggleDisplay(elements, show) {
@@ -29,6 +36,16 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
             console.log('[PARENT] Sending setBPM with bpmValue:', bpmValue);
             sendMessageToIframe(iframe, { type: 'setBPM', bpm: bpmValue });
 
+            // Set the channel type to synth
+            if (!presetData.preset1.channels[channelIndex]) {
+                presetData.preset1.channels[channelIndex] = { steps: Array(4096).fill(false), mute: false, url: null, type: 'synth' };
+            } else {
+                presetData.preset1.channels[channelIndex].type = 'synth';
+            }
+
+            console.log(`[PARENT] Channel type set to synth for channel index: ${channelIndex}`);
+            console.log(presetData.preset1.channels[channelIndex]);
+
             if (loadSampleButton) {
                 console.log('[PARENT] Updating button text to "jiMS10 Synth Loaded"');
                 loadSampleButton.textContent = `jiMS10 Synth ${channelIndex}`;
@@ -43,10 +60,6 @@ function loadSynth(channelIndex, loadSampleButton, bpmValue) {
         console.error('[PARENT] iframe not found for channel index:', channelIndex);
     }
 }
-
-
-
-
 
 
 function sendMessageToIframe(iframe, message) {
@@ -68,3 +81,31 @@ function getSettingsFromLocalStorage(channelIndex) {
     const settings = localStorage.getItem(`synthSettings_${channelIndex}`);
     return settings ? JSON.parse(settings) : {};
 }
+
+
+// Function to stop the arpeggiator and synthesizer for all channels
+// Initialize the BroadcastChannel outside of the stopAllSynths function to avoid re-creating it unnecessarily
+const stopChannel = new BroadcastChannel('stopAllSynthsChannel');
+
+function stopAllSynths() {
+    console.log('[stopAllSynths] Stopping all synths');
+    try {
+        // Post the message to stop all synths
+        stopChannel.postMessage({ type: 'stopAll' });
+    } catch (error) {
+        console.error('Error posting message on stopChannel:', error);
+    }
+}
+
+// Ensure the channel is closed when the window or document is unloaded to clean up resources
+window.addEventListener('beforeunload', () => {
+    stopChannel.close();
+    console.log('BroadcastChannel closed');
+});
+
+// // Add event listener to the stop button to call stopAllSynths
+// stopButton.addEventListener('click', () => {
+//     console.log('Stop button clicked');
+//     console.log('Calling stopAllSynths');
+//     stopAllSynths();
+// });

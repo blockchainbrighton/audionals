@@ -128,10 +128,15 @@ if (playButton && stopButton) {
         
 
           stopButton.addEventListener('click', () => {
+            console.log('Stop button clicked');
+            console.log(' calling stopAllSynths');
+            stopAllSynths();  // Assuming you have a function to stop all synths
+          
             
               if (isPlaying) {
                   stopScheduler();
                   emitStop();
+              
                   stopButton.classList.add('selected');
                   playButton.classList.remove('selected');
                   isPlaying = false;

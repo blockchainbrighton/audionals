@@ -8,7 +8,7 @@ export let arpNotes = [];
 let currentArpIndex = 0;
 let nextNoteTime = 0;
 let isNudgeActive = false;
-let timerID;
+let timerID = null;
 let isLatchModeOn = false;
 
 const LOOKAHEAD = 15.0; // milliseconds
@@ -144,13 +144,25 @@ export const startArpeggiator = () => {
   console.log(`Initial nextNoteTime set to: ${nextNoteTime}`);
 
   scheduleArpeggiator();
+  // Toggle button class
+  document.getElementById('startStopArp').classList.add('on');
 };
 
+
 export const stopArpeggiator = () => {
+  if (!isArpeggiatorOn) {
+    console.log('Arpeggiator is already stopped.');
+    return;
+  }
   console.log('Stopping arpeggiator');
   isArpeggiatorOn = false;
-  clearTimeout(timerID);
-  stopMS10TriangleBass();
+  if (timerID) {
+    clearTimeout(timerID);
+    timerID = null;
+  }
+  stopMS10TriangleBass();  // Ensure this function stops the synth effectively
+  // Toggle button class
+  document.getElementById('startStopArp').classList.remove('on');
 };
 
 export const toggleLatchMode = () => {

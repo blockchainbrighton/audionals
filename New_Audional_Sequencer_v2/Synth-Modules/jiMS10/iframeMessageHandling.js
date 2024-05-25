@@ -1,12 +1,15 @@
-// iframeMessageHandling.js is a script that listens for messages from the parent window and responds to them by updating the synthesizer state. 
+// iframeMessageHandling.js 
+// is a script that listens for messages from the parent window and responds to them by updating the synthesizer state. 
 // It also listens for messages from the synthesizer iframe and responds to them by updating the parent window. The script uses a BroadcastChannel to communicate between the parent window and the synthesizer iframe. 
 // The script also handles setting the active channel index for the synthesizer.
+// iframeMessageHandling.js 
 
 export const SYNTH_CHANNEL = new URLSearchParams(window.location.search).get('channelIndex');
 
 import { loadSettingsFromObject, loadFromLocalStorage } from './saveLoadHandler.js';
 import { getMidiRecording, setMidiRecording } from './midiRecording.js';
 import { initializeChannelIndex } from './activeSynthChannelIndex.js';
+import { loadArpNotesFromLocalStorage, startArpeggiator, stopArpeggiator } from './arpeggiator.js';
 
 const sequencerChannel = new BroadcastChannel(`synth_channel_${SYNTH_CHANNEL}`);
 
@@ -20,7 +23,19 @@ const initializeSynthesizer = () => {
     // Proceed with any other initialization tasks
     // setupAudioContext();
     // setupEventListeners();
+    loadArpNotesFromLocalStorage();
 };
+
+// Dedicated channel for stopping all synths
+const stopChannel = new BroadcastChannel('stopAllSynthsChannel');
+stopChannel.onmessage = (event) => {
+    console.log('[Iframe] Stop all synths received');
+    if (event.data.type === 'stopAll') {
+        console.log('[Iframe] Stop all synths received');
+        stopArpeggiator();  // Your function to stop synths
+    }
+};
+
 
 sequencerChannel.addEventListener("message", (event) => {
     console.log(`[PARENT MESSAGE] ms10 messageEventListener] Received message: ${JSON.stringify(event.data)}`);
@@ -91,14 +106,17 @@ sequencerChannel.addEventListener("message", (event) => {
 window.addEventListener('message', (event) => {
     console.log('Received message:', event.data);
 
-    if (event.data && event.data.type === 'setChannelIndex') {
-        initializeChannelIndex(event.data.channelIndex);
-        updateUIWithChannelIndex(event.data.channelIndex);
-    }
+    if (!event.data) return;
 
-    if (event.data && event.data.type === 'setBPM') {
-        console.log(`Updating BPM display to: ${event.data.bpm}`);
-        updateBPMDisplay(event.data.bpm);
+    switch (event.data.type) {
+        case 'setChannelIndex':
+            initializeChannelIndex(event.data.channelIndex);
+            updateUIWithChannelIndex(event.data.channelIndex);
+            break;
+        case 'setBPM':
+            console.log(`Updating BPM display to: ${event.data.bpm}`);
+            updateBPMDisplay(event.data.bpm);
+            break;
     }
 }, false);
 

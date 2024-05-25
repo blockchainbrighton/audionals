@@ -23,9 +23,14 @@ export function playMS10TriangleBass(frequency = null) {
 }
 
 export function stopMS10TriangleBass() {
+  console.log('stopMS10TriangleBass entered');
   if (currentOscillator) {
-    currentOscillator.stop();
+    console.log('currentOscillator exists');
+    currentOscillator.stop(context.currentTime + 0.01);
+    console.log('currentOscillator stopped');
+    currentOscillator.disconnect();
     currentOscillator = null;
+    console.log('currentOscillator set to null');
   }
 }
 
