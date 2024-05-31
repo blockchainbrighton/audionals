@@ -32,6 +32,9 @@ class UnifiedSequencerSettings {
         this.setChannelVolume = this.setChannelVolume.bind(this);
         this.setChannelPlaybackSpeed = this.setChannelPlaybackSpeed.bind(this); // Bind the new method
         this.updateTotalSequences = this.updateTotalSequences.bind(this);
+        this.resetCountersForNewSequence = this.resetCountersForNewSequence.bind(this);  // Ensure this is bound
+        this.handleSequenceTransition = this.handleSequenceTransition.bind(this);  // Ensure this is bound
+
     }
 
     getBPM() {
@@ -420,55 +423,66 @@ updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, is
                 try {
                     this.clearMasterSettings();
                     console.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
-            
+        
                     const parsedSettings = typeof jsonSettings === 'string' ? JSON.parse(jsonSettings) : jsonSettings;
-            
-                    // Set up basic settings first
+        
                     this.settings.masterSettings.currentSequence = 0;
                     this.settings.masterSettings.projectName = parsedSettings.projectName;
                     this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
-            
-                    // Ensure playback speeds are set
+        
                     this.globalPlaybackSpeed = parsedSettings.globalPlaybackSpeed || 1;
                     this.channelPlaybackSpeed = parsedSettings.channelPlaybackSpeed || new Array(16).fill(1);
-            
-                    // Initialize gain nodes early with default values
+        
                     this.initializeGainNodes();
-            
-                    // Then update URL and volume settings
+        
                     if (parsedSettings.channelURLs) {
                         const urlPromises = parsedSettings.channelURLs.map(url => this.formatURL(url));
                         this.settings.masterSettings.channelURLs = await Promise.all(urlPromises);
                     }
-            
-                    // Update volumes from settings, ensuring gain nodes are ready
+        
                     if (parsedSettings.channelVolume) {
                         parsedSettings.channelVolume.forEach((volume, index) => {
                             this.setChannelVolume(index, volume);
                         });
                     }
-            
+        
                     this.settings.masterSettings.trimSettings = parsedSettings.trimSettings;
                     this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames;
                     this.deserializeAndApplyProjectSequences(parsedSettings);
-            
+        
                     console.log("[internalPresetDebug] Master settings after update:", this.settings.masterSettings);
                     this.updateProjectNameUI(this.settings.masterSettings.projectName);
                     this.updateBPMUI(this.settings.masterSettings.projectBPM);
                     this.updateAllLoadSampleButtonTexts();
                     this.updateProjectChannelNamesUI(this.settings.masterSettings.projectChannelNames);
-            
+        
                     this.setCurrentSequence(0);
                     this.updateUIForSequence(this.settings.masterSettings.currentSequence);
-                    handleSequenceTransition(0);
-            
+                    this.handleSequenceTransition(0);
+        
                 } catch (error) {
                     console.error('[internalPresetDebug] Error loading settings:', error);
                 }
             }
-            
-            
-            
+        
+            resetCountersForNewSequence(startStep = 0) {
+                this.currentStep = startStep;
+                this.beatCount = Math.floor(startStep / 4);
+                this.barCount = Math.floor(startStep / 16);
+                this.totalStepCount = startStep;
+                console.log(`Counters reset for new sequence starting at step ${startStep}`);
+            }
+        
+            handleSequenceTransition(targetSequence, startStep) {
+                this.setCurrentSequence(targetSequence);
+                console.log(`Sequence set to ${targetSequence}`);
+                const currentSequenceDisplay = document.getElementById('current-sequence-display');
+                if (currentSequenceDisplay) {
+                    currentSequenceDisplay.innerHTML = `Sequence: ${targetSequence}`;
+                }
+                this.resetCountersForNewSequence(startStep);
+                createStepButtonsForSequence();
+            }
             
             deserializeAndApplyProjectSequences(parsedSettings) {
                 if (parsedSettings.projectSequences) {

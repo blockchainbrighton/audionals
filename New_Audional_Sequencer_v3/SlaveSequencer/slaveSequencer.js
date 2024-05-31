@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentStep = 0;
     let currentSequence = 0;
     let timeoutId;
-    let startTime; // Declare startTime to use later
+    let startTime;
     let nextStepTime;
     let isPaused = false;
     let pauseTime = 0;
@@ -21,13 +21,21 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`[slave] Received message from parent at ${new Date().toISOString()}:`);
         console.log(JSON.stringify(event.data));
         const message = event.data;
-    
+
         switch (message.type) {
             case 'PLAY':
                 startTime = message.startTime;
                 nextStepTime = startTime;
-                setMasterBPM(message.bpm); // Set BPM
+                setMasterBPM(message.bpm);
                 startScheduler();
+                break;
+            case 'PAUSE':
+                pauseTime = message.pauseTime;
+                pauseScheduler();
+                break;
+            case 'RESUME':
+                nextStepTime = message.nextStepTime;
+                resumeScheduler();
                 break;
             case 'STOP':
                 stopScheduler();
@@ -39,12 +47,63 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'SYNC_SETTINGS':
                 window.unifiedSequencerSettings.loadSettings(message.settings);
-                setMasterBPM(message.bpm); // Ensure BPM is set from master
+                setMasterBPM(message.bpm);
+                break;
+            case 'SCHEDULE_NEXT_STEP':
+                nextStepTime = message.nextStepTime;
+                stepDuration = message.stepDuration;
+                scheduleNextStep();
+                break;
+            case 'RESET_STEP_LIGHTS':
+                resetStepLights();
+                break;
+            case 'RENDER_PLAYHEAD':
+                renderPlayhead(document.querySelectorAll('.step-button'), message.currentStep);
+                break;
+            case 'PLAY_STEP':
+                playStep(message.currentStep, message.currentSequence);
+                break;
+            case 'INCREMENT_COUNTERS':
+                incrementStepCounters(message);
+                break;
+            case 'SEQUENCE_TRANSITION':
+                handleSequenceTransition(message.targetSequence, message.startStep);
+                break;
+            case 'RESET_COUNTERS':
+                resetCountersForNewSequence(message.startStep);
                 break;
             default:
                 console.warn(`[slave] Received unknown message type at ${new Date().toISOString()}: ${message.type}`);
         }
     });
+
+    function incrementStepCounters(message) {
+        currentStep = message.currentStep;
+        totalStepCount = message.totalStepCount;
+        nextStepTime = message.nextStepTime;
+        beatCount = message.beatCount;
+        barCount = message.barCount;
+        sequenceCount = message.sequenceCount;
+    }
+
+    function handleSequenceTransition(targetSequence, startStep) {
+        window.unifiedSequencerSettings.setCurrentSequence(targetSequence);
+        console.log(`[slave] Sequence set to ${targetSequence}`);
+        const currentSequenceDisplay = document.getElementById('current-sequence-display');
+        if (currentSequenceDisplay) {
+            currentSequenceDisplay.innerHTML = `Sequence: ${targetSequence}`;
+        }
+        resetCountersForNewSequence(startStep);
+        createStepButtonsForSequence();
+    }
+
+    function resetCountersForNewSequence(startStep = 0) {
+        currentStep = startStep;
+        beatCount = Math.floor(startStep / 4);
+        barCount = Math.floor(startStep / 16);
+        totalStepCount = startStep;
+        console.log(`Counters reset for new sequence starting at step ${startStep}`);
+    }
 
     function setMasterBPM(bpm) {
         if (bpm !== undefined) {
@@ -54,25 +113,23 @@ document.addEventListener('DOMContentLoaded', () => {
             console.warn(`[slave] Attempted to set BPM to undefined. Ignoring.`);
         }
     }
-    
-    
+
     function startScheduler() {
         console.log(`[slave] Starting scheduler at ${new Date().toISOString()}`);
         clearTimeout(timeoutId);
         window.unifiedSequencerSettings.audioContext.resume();
         startTime = window.unifiedSequencerSettings.audioContext.currentTime;
         nextStepTime = startTime;
-    
+
         const currentBPM = window.unifiedSequencerSettings.getBPM();
         console.log(`[slave] Current BPM from global settings at ${new Date().toISOString()}: ${currentBPM}`);
-    
+
         scheduleNextStep();
     }
 
     function pauseScheduler() {
         clearTimeout(timeoutId);
         window.unifiedSequencerSettings.audioContext.suspend();
-        pauseTime = window.unifiedSequencerSettings.audioContext.currentTime;
         isPaused = true;
     }
 
@@ -172,8 +229,9 @@ document.addEventListener('DOMContentLoaded', () => {
         let isContinuousPlay = continuousPlayCheckbox.checked;
 
         if (isContinuousPlay && isLastStep) {
-            let nextSequence = (currentSequence + 1) % window.unifiedSequencerSettings.numSequences;
-            handleSequenceTransition(nextSequence, 0);
+            currentSequence = (currentSequence + 1) % window.unifiedSequencerSettings.numSequences;
+            resetCountersForNewSequence(0);
+            createStepButtonsForSequence();
         }
     }
 
@@ -196,36 +254,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentStep === 0) {
             sequenceCount++;
         }
-    }
-
-    function handleSequenceTransition(targetSequence, startStep) {
-        console.log(`[slave] Handling sequence transition to sequence ${targetSequence}`);
-        window.unifiedSequencerSettings.setCurrentSequence(targetSequence);
-        console.log(`Sequence set to ${targetSequence}`);
-
-        const currentSequenceDisplay = document.getElementById('current-sequence-display');
-        if (currentSequenceDisplay) {
-            currentSequenceDisplay.innerHTML = `Sequence: ${targetSequence}`;
-        }
-
-        if (startStep === undefined) {
-            startStep = currentStep;
-        }
-
-        resetCountersForNewSequence(startStep);
-        createStepButtonsForSequence();
-
-        setTimeout(() => {
-            window.unifiedSequencerSettings.updateUIForSequence(targetSequence);
-        }, 100);
-    }
-
-    function resetCountersForNewSequence(startStep = 0) {
-        currentStep = startStep;
-        beatCount = Math.floor(startStep / 4);
-        barCount = Math.floor(startStep / 16);
-        totalStepCount = startStep;
-        console.log(`Counters reset for new sequence starting at step ${startStep}`);
     }
 
     function resetStepLights() {
