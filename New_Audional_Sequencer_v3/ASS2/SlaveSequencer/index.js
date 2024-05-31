@@ -51,31 +51,6 @@ if (!audioContext) {
 }
 
 
-let slaveWindow;
-
-function openSlaveSequencer() {
-    slaveWindow = window.open('SlaveSequencer/slaveSequencer.html', 'Slave Sequencer');
-}
-
-
-function sendPlayMessage() {
-    if (slaveWindow) {
-        slaveWindow.postMessage({ type: 'PLAY' }, '*');
-    }
-}
-
-function sendStopMessage() {
-    if (slaveWindow) {
-        slaveWindow.postMessage({ type: 'STOP' }, '*');
-    }
-}
-
-function syncSettingsWithSlave() {
-    if (slaveWindow) {
-        const settings = window.unifiedSequencerSettings.exportSettings();
-        slaveWindow.postMessage({ type: 'SYNC_SETTINGS', settings }, '*');
-    }
-}
     
 
 if (playButton && stopButton) {
@@ -114,7 +89,6 @@ if (playButton && stopButton) {
 
             if (!isPlaying) {
                 startScheduler();
-                sendPlayMessage();
                 emitPlay(); 
                 playButton.classList.add('selected');
                 stopButton.classList.remove('selected');
@@ -161,7 +135,6 @@ if (playButton && stopButton) {
             
               if (isPlaying) {
                   stopScheduler();
-                  sendStopMessage();
                   emitStop();
               
                   stopButton.classList.add('selected');
@@ -181,16 +154,6 @@ if (playButton && stopButton) {
           console.error("Play or Stop button is not defined");
         }
 
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const openSlaveButton = document.getElementById('open-slave');
-            openSlaveButton.addEventListener('click', () => {
-                openSlaveSequencer();
-                syncSettingsWithSlave();
-            });
-        
-            window.unifiedSequencerSettings.observers.push(syncSettingsWithSlave);
-        });
 
 
     // // Function to update the dim state based on gain value
