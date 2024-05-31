@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let timeoutId;
 
     window.addEventListener('message', (event) => {
+      // stringified logs for clarity
+      console.log(JSON.stringify(event.data));
         const message = event.data;
         if (message.type === 'PLAY') {
             startScheduler();
@@ -19,32 +21,5 @@ document.addEventListener('DOMContentLoaded', () => {
             window.unifiedSequencerSettings.loadSettings(message.settings);
         }
     });
+    });
 
-    function startScheduler() {
-        if (!isPlaying) {
-            playStep(currentStep, currentSequence);
-            isPlaying = true;
-        }
-    }
-
-    function stopScheduler() {
-        if (isPlaying) {
-            clearTimeout(timeoutId);
-            isPlaying = false;
-        }
-    }
-
-    function playStep(step, sequence) {
-        // Play logic here (mirroring the master sequencer)
-        // Ensure you have access to all the necessary variables and functions
-        // (such as playSound, renderPlayhead, handleStep, etc.)
-
-        timeoutId = setTimeout(() => {
-            playStep(step, sequence);
-        }, 100); // Set appropriate step interval
-    }
-
-    function resetStepLights() {
-        // Implement step light reset logic
-    }
-});
