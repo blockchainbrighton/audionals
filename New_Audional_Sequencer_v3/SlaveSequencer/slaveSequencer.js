@@ -18,10 +18,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let stepDuration;
 
     window.addEventListener('message', (event) => {
-        console.log("[slave] Received message from parent:")
+        console.log(`[slave] Received message from parent at ${new Date().toISOString()}:`);
         console.log(JSON.stringify(event.data));
         const message = event.data;
-
+    
         switch (message.type) {
             case 'PLAY':
                 startTime = message.startTime;
@@ -40,20 +40,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.unifiedSequencerSettings.loadSettings(message.settings);
                 break;
             default:
-                console.warn("Received unknown message type:", message.type);
+                console.warn(`[slave] Received unknown message type at ${new Date().toISOString()}: ${message.type}`);
         }
     });
-
+    
     function startScheduler() {
-        console.log('[slave] Starting scheduler.');
+        console.log(`[slave] Starting scheduler at ${new Date().toISOString()}`);
         clearTimeout(timeoutId);
         window.unifiedSequencerSettings.audioContext.resume();
         startTime = window.unifiedSequencerSettings.audioContext.currentTime;
         nextStepTime = startTime;
-
+    
         const currentBPM = window.unifiedSequencerSettings.getBPM();
-        console.log(`Current BPM from global settings: ${currentBPM}`);
-
+        console.log(`[slave] Current BPM from global settings at ${new Date().toISOString()}: ${currentBPM}`);
+    
         scheduleNextStep();
     }
 
@@ -136,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function playStep(currentStep, currentSequence) {
-        console.log(`[slave] Playing step ${currentStep} for sequence ${currentSequence}`);
+        console.log(`[slave] Playing step ${currentStep} for sequence ${currentSequence} at ${new Date().toISOString()}`);
         const presetData = presets.preset1;
 
         for (let channelIndex = 0; channelIndex < 16; channelIndex++) {

@@ -57,17 +57,17 @@ function openSlaveSequencer() {
     slaveWindow = window.open('SlaveSequencer/slaveSequencer.html', 'Slave Sequencer');
 }
 
-
 function sendPlayMessage(startTime) {
     if (slaveWindow) {
         slaveWindow.postMessage({ type: 'PLAY', startTime }, '*');
+        console.log(`[master] Sent PLAY message at ${new Date().toISOString()} with startTime: ${startTime}`);
     }
 }
-
 
 function sendStopMessage() {
     if (slaveWindow) {
         slaveWindow.postMessage({ type: 'STOP' }, '*');
+        console.log(`[master] Sent STOP message at ${new Date().toISOString()}`);
     }
 }
 
@@ -75,6 +75,7 @@ function syncSettingsWithSlave() {
     if (slaveWindow) {
         const settings = window.unifiedSequencerSettings.exportSettings();
         slaveWindow.postMessage({ type: 'SYNC_SETTINGS', settings }, '*');
+        console.log(`[master] Sent SYNC_SETTINGS message at ${new Date().toISOString()}`);
     }
 }
     

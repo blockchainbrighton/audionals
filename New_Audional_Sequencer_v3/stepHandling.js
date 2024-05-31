@@ -35,7 +35,8 @@ function renderPlayhead(buttons, currentStep) {
 }
 
 function playStep() {
-    // console.log("[stepHandling][playStep] Function entered");
+    
+    console.log("[master] [stepHandling][playStep] Function entered at at " + new Date().toISOString());
 
     const currentSequence = window.unifiedSequencerSettings.getCurrentSequence();
     const presetData = presets.preset1;
