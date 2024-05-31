@@ -1,7 +1,7 @@
 // stepSchedulers.js
 
 function startScheduler() {
-    clearTimeout(timeoutId); // Clear the current timeout without closing the audio context
+    clearTimeout(timeoutId);
     window.unifiedSequencerSettings.audioContext.resume();
     startTime = window.unifiedSequencerSettings.audioContext.currentTime;
     nextStepTime = startTime;
@@ -10,6 +10,13 @@ function startScheduler() {
     console.log(`[startScheduler] Current BPM from global settings: ${currentBPM}`);
 
     scheduleNextStep();
+    // Send start time to the slave
+    if (slaveWindow) {
+        slaveWindow.postMessage({
+            type: 'PLAY',
+            startTime: startTime  // Include the start time in the play message
+        }, '*');
+    }
 }
 
 function pauseScheduler() {
