@@ -58,11 +58,12 @@ function openSlaveSequencer() {
 }
 
 
-function sendPlayMessage() {
+function sendPlayMessage(startTime) {
     if (slaveWindow) {
-        slaveWindow.postMessage({ type: 'PLAY' }, '*');
+        slaveWindow.postMessage({ type: 'PLAY', startTime }, '*');
     }
 }
+
 
 function sendStopMessage() {
     if (slaveWindow) {
@@ -113,8 +114,10 @@ if (playButton && stopButton) {
             let isContinuousPlay = continuousPlayCheckbox.checked;
 
             if (!isPlaying) {
+                // Capture the start time before starting playback
+                startTime = audioContext.currentTime;
+                sendPlayMessage(startTime);
                 startScheduler();
-                sendPlayMessage();
                 emitPlay(); 
                 playButton.classList.add('selected');
                 stopButton.classList.remove('selected');
