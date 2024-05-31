@@ -34,6 +34,26 @@ class UnifiedSequencerSettings {
         this.updateTotalSequences = this.updateTotalSequences.bind(this);
     }
 
+    getBPM() {
+        return this.settings.masterSettings.projectBPM;
+    }
+
+    setBPM(newBPM) {
+        this.settings.masterSettings.projectBPM = newBPM;
+        this.updateBPMUI(newBPM); // Update the UI whenever BPM is set
+    }
+
+    updateBPMUI(bpm) {
+        const bpmSlider = document.getElementById('bpm-slider');
+        const bpmDisplay = document.getElementById('bpm-display');
+        if (bpmSlider && bpmDisplay) {
+            bpmSlider.value = bpm;
+            bpmDisplay.textContent = bpm;
+            console.log("BPM UI updated:", bpm);
+        }
+    }
+
+
     // New method to update the total number of sequences
     updateTotalSequences() {
         let lastActiveSequence = -1;
@@ -811,14 +831,7 @@ updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, is
         }
     }
 
-    getBPM() {
-        return this.settings.masterSettings.projectBPM;
-    }
-
-    setBPM(newBPM) {
-        this.settings.masterSettings.projectBPM = newBPM;
-    }
-
+  
     
     // setTrimSettings(settings) {
     //     this.settings.masterSettings.trimSettings = settings;
@@ -1042,16 +1055,6 @@ updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, is
         if (projectNameInput) {
             projectNameInput.value = projectName || "AUDX Project";
             console.log("Project name UI updated:", projectName);
-        }
-    }
-
-    updateBPMUI(bpm) {
-        const bpmSlider = document.getElementById('bpm-slider');
-        const bpmDisplay = document.getElementById('bpm-display');
-        if (bpmSlider && bpmDisplay) {
-            bpmSlider.value = bpm;
-            bpmDisplay.textContent = bpm;
-            console.log("BPM UI updated:", bpm);
         }
     }
 

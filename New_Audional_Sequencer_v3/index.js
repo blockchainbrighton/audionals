@@ -59,8 +59,9 @@ function openSlaveSequencer() {
 
 function sendPlayMessage(startTime) {
     if (slaveWindow) {
-        slaveWindow.postMessage({ type: 'PLAY', startTime }, '*');
-        console.log(`[master] Sent PLAY message at ${new Date().toISOString()} with startTime: ${startTime}`);
+        const bpm = window.unifiedSequencerSettings.getBPM();
+        slaveWindow.postMessage({ type: 'PLAY', startTime, bpm }, '*');
+        console.log(`[master] Sent PLAY message at ${new Date().toISOString()} with startTime: ${startTime} and BPM: ${bpm}`);
     }
 }
 
@@ -74,10 +75,12 @@ function sendStopMessage() {
 function syncSettingsWithSlave() {
     if (slaveWindow) {
         const settings = window.unifiedSequencerSettings.exportSettings();
-        slaveWindow.postMessage({ type: 'SYNC_SETTINGS', settings }, '*');
-        console.log(`[master] Sent SYNC_SETTINGS message at ${new Date().toISOString()}`);
+        const bpm = window.unifiedSequencerSettings.getBPM();
+        slaveWindow.postMessage({ type: 'SYNC_SETTINGS', settings, bpm }, '*');
+        console.log(`[master] Sent SYNC_SETTINGS message at ${new Date().toISOString()} with BPM: ${bpm}`);
     }
 }
+
     
 
 if (playButton && stopButton) {

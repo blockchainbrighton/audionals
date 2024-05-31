@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'PLAY':
                 startTime = message.startTime;
                 nextStepTime = startTime;
+                setMasterBPM(message.bpm); // Set BPM
                 startScheduler();
                 break;
             case 'STOP':
@@ -38,11 +39,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'SYNC_SETTINGS':
                 window.unifiedSequencerSettings.loadSettings(message.settings);
+                setMasterBPM(message.bpm); // Ensure BPM is set from master
                 break;
             default:
                 console.warn(`[slave] Received unknown message type at ${new Date().toISOString()}: ${message.type}`);
         }
     });
+
+    function setMasterBPM(bpm) {
+        if (bpm !== undefined) {
+            console.log(`[slave] Setting BPM to ${bpm} as per master's instructions.`);
+            window.unifiedSequencerSettings.setBPM(bpm);
+        } else {
+            console.warn(`[slave] Attempted to set BPM to undefined. Ignoring.`);
+        }
+    }
+    
     
     function startScheduler() {
         console.log(`[slave] Starting scheduler at ${new Date().toISOString()}`);
@@ -75,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function scheduleNextStep() {
         console.log(`[slave] Scheduling next step at ${nextStepTime}`);
-        const bpm = window.unifiedSequencerSettings.getBPM() || 105;
+        const bpm = window.unifiedSequencerSettings.getBPM() || 120;
         stepDuration = 60 / bpm / 4;
 
         timeoutId = setTimeout(() => {
