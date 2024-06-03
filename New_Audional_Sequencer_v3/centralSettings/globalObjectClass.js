@@ -694,7 +694,7 @@ updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, is
         this.settings.masterSettings.channelPlaybackSpeed = new Array(16).fill(1); // Default speed is normal (1x)
     
         // Reinitialize sequences to default state
-        this.settings.masterSettings.projectSequences = this.initializeSequences(16, 16, 64);
+        this.settings.masterSettings.projectSequences = this.initializeSequences(64, 16, 64);
     
         console.log("[clearMasterSettings] Master settings cleared.");
     }

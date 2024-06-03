@@ -1,12 +1,15 @@
 // fileAndAudioHandling.js
 var globalJsonData = null;
-let bpm = 0, activeSources = [];
+let bpm = 0;
 var globalAudioBuffers = [];
 var globalTrimTimes = {};
 var globalVolumeLevels = {};
 var globalPlaybackSpeeds = {};
+let globalReversedAudioBuffers = {};
 
 
+
+let isReversePlay = false;
 
 async function loadJsonFromUrl(url) {
     try {
@@ -61,6 +64,94 @@ const analyzeJsonStructure = (data, parentKey, stats, currentPath = "") => {
 const incrementTypeCount = (types, type) => {
     types[type] = (types[type] || 0) + 1;
 };
+
+
+async function processAudioUrl(url, index, audioContext) {
+    const channelIndex = index + 1;
+    console.log(`[processAudioUrl] Processing URL at index: ${index}, Channel: ${channelIndex}, URL: ${url}`);
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to fetch from URL: ${url}, Status: ${response.status}`);
+        
+        const contentType = response.headers.get("Content-Type");
+        let audioBuffer = await fetchAndDecodeAudio(response, contentType, audioContext);
+
+        if (audioBuffer) {
+            globalAudioBuffers.push({ buffer: audioBuffer, channel: `Channel ${channelIndex}` });
+            console.log(`[processAudioUrl] AudioBuffer stored for URL at index: ${index}, Channel: ${channelIndex}`);
+        } else {
+            logErrorDetails(index, channelIndex, url, contentType);
+        }
+    } catch (error) {
+        console.error(`Error fetching or decoding audio for Channel ${channelIndex}:`, error);
+    }
+}
+
+async function fetchAndDecodeAudio(response, contentType, audioContext) {
+    if (/audio\/(wav|mpeg|mp4)/.test(contentType) || /video\/mp4/.test(contentType)) {
+        const arrayBuffer = await response.arrayBuffer();
+        console.log(`[fetchAndDecodeAudio] ArrayBuffer length: ${arrayBuffer.byteLength}`);
+        return audioContext.decodeAudioData(arrayBuffer);
+    }
+
+    const textData = await response.text();
+    let base64AudioData = null;
+    if (/application\/json/.test(contentType)) {
+        base64AudioData = JSON.parse(textData).audioData;
+    } else if (/text\/html/.test(contentType)) {
+        base64AudioData = extractBase64FromHTML(textData);
+    }
+
+    if (base64AudioData) {
+        const arrayBuffer = base64ToArrayBuffer(base64AudioData.split(",")[1]);
+        console.log(`[fetchAndDecodeAudio] ArrayBuffer length from base64: ${arrayBuffer.byteLength}`);
+        return audioContext.decodeAudioData(arrayBuffer);
+    }
+
+    if (/audio\//.test(contentType)) {
+        const arrayBuffer = await response.arrayBuffer();
+        console.log(`[fetchAndDecodeAudio] ArrayBuffer length for direct URL audio: ${arrayBuffer.byteLength}`);
+        return audioContext.decodeAudioData(arrayBuffer);
+    }
+
+    console.log(`[fetchAndDecodeAudio] Unsupported content type: ${contentType}`);
+    return null;
+}
+
+
+
+function preprocessAndSchedulePlayback() {
+    if (!globalJsonData?.projectSequences) {
+        return console.error("Global sequence data is not available or empty.");
+    }
+
+    const bpm = globalJsonData.projectBPM;
+    preprocessedSequences = Object.fromEntries(
+        Object.entries(globalJsonData.projectSequences).map(([sequenceName, channels]) => [
+            sequenceName,
+            Object.fromEntries(
+                Object.entries(channels)
+                    .filter(([, channelData]) => channelData.steps?.length)
+                    .map(([channelName, channelData]) => [
+                        channelName,
+                        channelData.steps.map(step => ({ step, timing: step * (60 / bpm) }))
+                    ])
+            )
+        ])
+    );
+
+    isReadyToPlay = true;
+    console.log("Preprocessed sequences:", preprocessedSequences);
+}
+
+function calculateReversedTrimTimes(trimTimes) {
+    return {
+        startTrim: 1.0 - trimTimes.endTrim,
+        endTrim: 1.0 - trimTimes.startTrim
+    };
+}
+
 
 function prepareForPlayback(jsonData, stats) {
     const { channelURLs, trimSettings, channelVolume, channelPlaybackSpeed, projectSequences, projectName, projectBPM } = jsonData;
@@ -154,66 +245,6 @@ function prepareForPlayback(jsonData, stats) {
 
 
 
-
-
-async function fetchAndProcessAudioData(channelURLs) {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    await Promise.all(channelURLs.map((url, index) => processAudioUrl(url, index, audioContext)));
-}
-
-async function processAudioUrl(url, index, audioContext) {
-    const channelIndex = index + 1;
-    console.log(`[processAudioUrl] Processing URL at index: ${index}, Channel: ${channelIndex}, URL: ${url}`);
-
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Failed to fetch from URL: ${url}, Status: ${response.status}`);
-        
-        const contentType = response.headers.get("Content-Type");
-        let audioBuffer = await fetchAndDecodeAudio(response, contentType, audioContext);
-
-        if (audioBuffer) {
-            globalAudioBuffers.push({ buffer: audioBuffer, channel: `Channel ${channelIndex}` });
-            console.log(`[processAudioUrl] AudioBuffer stored for URL at index: ${index}, Channel: ${channelIndex}`);
-        } else {
-            logErrorDetails(index, channelIndex, url, contentType);
-        }
-    } catch (error) {
-        console.error(`Error fetching or decoding audio for Channel ${channelIndex}:`, error);
-    }
-}
-
-async function fetchAndDecodeAudio(response, contentType, audioContext) {
-    if (/audio\/(wav|mpeg|mp4)/.test(contentType) || /video\/mp4/.test(contentType)) {
-        const arrayBuffer = await response.arrayBuffer();
-        console.log(`[fetchAndDecodeAudio] ArrayBuffer length: ${arrayBuffer.byteLength}`);
-        return audioContext.decodeAudioData(arrayBuffer);
-    }
-
-    const textData = await response.text();
-    let base64AudioData = null;
-    if (/application\/json/.test(contentType)) {
-        base64AudioData = JSON.parse(textData).audioData;
-    } else if (/text\/html/.test(contentType)) {
-        base64AudioData = extractBase64FromHTML(textData);
-    }
-
-    if (base64AudioData) {
-        const arrayBuffer = base64ToArrayBuffer(base64AudioData.split(",")[1]);
-        console.log(`[fetchAndDecodeAudio] ArrayBuffer length from base64: ${arrayBuffer.byteLength}`);
-        return audioContext.decodeAudioData(arrayBuffer);
-    }
-
-    if (/audio\//.test(contentType)) {
-        const arrayBuffer = await response.arrayBuffer();
-        console.log(`[fetchAndDecodeAudio] ArrayBuffer length for direct URL audio: ${arrayBuffer.byteLength}`);
-        return audioContext.decodeAudioData(arrayBuffer);
-    }
-
-    console.log(`[fetchAndDecodeAudio] Unsupported content type: ${contentType}`);
-    return null;
-}
-
 function logErrorDetails(index, channelIndex, url, contentType) {
     console.error(`[processAudioUrl] No audio buffer created for URL at index: ${index}, Channel: ${channelIndex}`);
     console.log(`[processAudioUrl] Content-Type of response: ${contentType}`);
@@ -264,29 +295,71 @@ function base64ToArrayBuffer(base64) {
 
 
 
-function preprocessAndSchedulePlayback() {
-    if (!globalJsonData?.projectSequences) {
-        return console.error("Global sequence data is not available or empty.");
+
+function playAudioForChannel(channelNumber) {
+    if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+    }
+    console.log("Playing audio for channel:", channelNumber);
+
+    const channel = `Channel ${channelNumber}`;
+    const audioBufferData = globalAudioBuffers.find(bufferData => bufferData.channel === channel);
+
+    if (audioBufferData && audioBufferData.buffer) {
+        const source = audioCtx.createBufferSource();
+        const trimTimes = globalTrimTimes[channel];
+
+        if (isReversePlay) {
+            source.buffer = reverseAudioBuffer(audioBufferData.buffer);
+            if (trimTimes) {
+                const reversedTrimTimes = calculateReversedTrimTimes(trimTimes);
+                playBuffer(source.buffer, reversedTrimTimes, channel, 0);
+            } else {
+                playBuffer(source.buffer, { startTrim: 0, endTrim: 1 }, channel, 0);
+            }
+        } else {
+            if (trimTimes) {
+                playBuffer(audioBufferData.buffer, trimTimes, channel, 0);
+            } else {
+                playBuffer(audioBufferData.buffer, { startTrim: 0, endTrim: 1 }, channel, 0);
+            }
+        }
+    } else {
+        console.error("No audio buffer or trim times found for channel:", channelNumber);
+    }
+}
+
+
+
+
+
+function reverseAudioBuffer(buffer, channel) {
+    const numberOfChannels = buffer.numberOfChannels;
+    const reversedBuffer = audioCtx.createBuffer(numberOfChannels, buffer.length, buffer.sampleRate);
+
+    for (let channelIndex = 0; channelIndex < numberOfChannels; channelIndex++) {
+        const originalData = buffer.getChannelData(channelIndex);
+        const reversedData = reversedBuffer.getChannelData(channelIndex);
+        for (let i = 0; i < buffer.length; i++) {
+            reversedData[i] = originalData[buffer.length - 1 - i];
+        }
     }
 
-    const bpm = globalJsonData.projectBPM;
-    preprocessedSequences = Object.fromEntries(
-        Object.entries(globalJsonData.projectSequences).map(([sequenceName, channels]) => [
-            sequenceName,
-            Object.fromEntries(
-                Object.entries(channels)
-                    .filter(([, channelData]) => channelData.steps?.length)
-                    .map(([channelName, channelData]) => [
-                        channelName,
-                        channelData.steps.map(step => ({ step, timing: step * (60 / bpm) }))
-                    ])
-            )
-        ])
-    );
-
-    isReadyToPlay = true;
-    console.log("Preprocessed sequences:", preprocessedSequences);
+    globalReversedAudioBuffers[channel] = reversedBuffer;
+    return reversedBuffer;
 }
+
+// Ensure reverse buffers are created after fetching and processing audio data
+async function fetchAndProcessAudioData(channelURLs) {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    await Promise.all(channelURLs.map((url, index) => processAudioUrl(url, index, audioContext)));
+    
+    // Create reversed buffers
+    globalAudioBuffers.forEach(bufferData => {
+        reverseAudioBuffer(bufferData.buffer, bufferData.channel);
+    });
+}
+
 
 
 function startPlaybackLoop() {
@@ -317,18 +390,25 @@ function playSequenceStep(time) {
 function playChannelStep(channelName, stepData, time) {
     const channel = `Channel ${parseInt(channelName.slice(2)) + 1}`;
     console.log(`[playChannelStep] Playing step for ${channel} at time ${time}`);
-    
+
     const audioBufferData = globalAudioBuffers.find(bufferData => bufferData.channel === channel);
     const trimTimes = globalTrimTimes[channel];
-    
+
     console.log(`[playChannelStep] Found buffer for ${channel}: ${!!audioBufferData}, trimTimes: ${JSON.stringify(trimTimes)}`);
 
     if (audioBufferData?.buffer && trimTimes) {
-        playBuffer(audioBufferData.buffer, trimTimes, channel, time);
+        if (stepData.reverse) {
+            const reversedBuffer = reverseAudioBuffer(audioBufferData.buffer);
+            const reversedTrimTimes = calculateReversedTrimTimes(trimTimes);
+            playBuffer(reversedBuffer, reversedTrimTimes, channel, time);
+        } else {
+            playBuffer(audioBufferData.buffer, trimTimes, channel, time);
+        }
     } else {
         console.error(`No audio buffer or trim times found for ${channel}`);
     }
 }
+
 
 
 
@@ -464,12 +544,12 @@ function resetPlayback() {
     currentStep = 0;
 }
 
-document.addEventListener("keydown", async (e) => {
-    if (e.key === " ") {
-        e.preventDefault();
-        togglePlayback();
-    }
-});
+// document.addEventListener("keydown", async (e) => {
+//     if (e.key === " ") {
+//         e.preventDefault();
+//         togglePlayback();
+//     }
+// });
 
 window.addEventListener("beforeunload", () => {
     clearInterval(intervalID);
@@ -484,67 +564,6 @@ const keyChannelMap = {
     q: 11, w: 12, e: 13, r: 14, t: 15, y: 16
 };
 
-let isReversePlay = false;
-
-function playAudioForChannel(channelNumber) {
-    if (audioCtx.state === "suspended") {
-        audioCtx.resume();
-    }
-    console.log("Playing audio for channel:", channelNumber);
-
-    const channel = `Channel ${channelNumber}`;
-    const audioBufferData = globalAudioBuffers.find(bufferData => bufferData.channel === channel);
-
-    if (audioBufferData && audioBufferData.buffer) {
-        const source = audioCtx.createBufferSource();
-        if (isReversePlay) {
-            source.buffer = reverseAudioBuffer(audioBufferData.buffer);
-            source.connect(audioCtx.destination);
-            source.start(0, 0, source.buffer.duration);
-        } else {
-            const trimTimes = globalTrimTimes[channel];
-            if (trimTimes) {
-                const bufferDuration = audioBufferData.buffer.duration;
-                const startTime = bufferDuration * trimTimes.startTrim;
-                const duration = bufferDuration * (trimTimes.endTrim - trimTimes.startTrim);
-                source.buffer = audioBufferData.buffer;
-                source.connect(audioCtx.destination);
-                source.start(0, startTime, duration);
-            }
-        }
-    } else {
-        console.error("No audio buffer or trim times found for channel:", channelNumber);
-    }
-}
-
-
-function reverseAudioBuffer(buffer) {
-    const numberOfChannels = buffer.numberOfChannels;
-    const reversedBuffer = audioCtx.createBuffer(numberOfChannels, buffer.length, buffer.sampleRate);
-
-    for (let channel = 0; channel < numberOfChannels; channel++) {
-        const originalData = buffer.getChannelData(channel);
-        const reversedData = reversedBuffer.getChannelData(channel);
-        for (let i = 0; i < buffer.length; i++) {
-            reversedData[i] = originalData[buffer.length - 1 - i];
-        }
-    }
-
-    return reversedBuffer;
-}
-
-
-document.addEventListener("keydown", (e) => {
-    const key = e.key.toLowerCase();
-    if (e.shiftKey && key === "r") {
-        isReversePlay = !isReversePlay;
-        console.log("Reverse play is now:", isReversePlay ? "enabled" : "disabled");
-        return;
-    }
-    if (keyChannelMap.hasOwnProperty(key)) {
-        playAudioForChannel(keyChannelMap[key]);
-    }
-});
 
 
 
@@ -554,3 +573,78 @@ document.addEventListener("keydown", (e) => {
 
 // Additional Controls like volume and playback speed
 
+document.addEventListener('keydown', (event) => {
+    if (event.key === 's' || event.key === 'S') {
+        playReverseBuffersInSequence();
+    }
+});
+
+
+function playReverseBuffersInSequence() {
+    if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+    }
+
+    const channels = Object.keys(globalTrimTimes);
+    let startTime = audioCtx.currentTime;
+
+    channels.forEach(channel => {
+        const reversedBuffer = globalReversedAudioBuffers[channel];
+        const trimTimes = globalTrimTimes[channel];
+
+        if (reversedBuffer && trimTimes) {
+            const reversedTrimTimes = calculateReversedTrimTimes(trimTimes);
+            playBufferAtTime(reversedBuffer, reversedTrimTimes, channel, startTime);
+            startTime += (reversedBuffer.duration * (reversedTrimTimes.endTrim - reversedTrimTimes.startTrim)) / globalPlaybackSpeeds[channel];
+        } else {
+            console.error(`No reversed buffer or trim times found for ${channel}`);
+        }
+    });
+}
+
+function playBufferAtTime(buffer, { startTrim, endTrim }, channel, time) {
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+
+    // Apply playback speed
+    const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
+    source.playbackRate.value = playbackSpeed;
+
+    // Create a gain node
+    const gainNode = audioCtx.createGain();
+    const volume = globalVolumeLevels[channel] || 1.0;
+    gainNode.gain.value = volume;
+
+    source.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    const startTime = startTrim * buffer.duration;
+    const duration = (endTrim - startTrim) * buffer.duration;
+    source.start(time, startTime, duration);
+
+    console.log(`Channel ${channel}: Scheduled reverse play at ${time}, Start Time: ${startTime}, Duration: ${duration}, Volume: ${volume}, Speed: ${playbackSpeed}`);
+}
+
+
+function playBufferAtTime(buffer, { startTrim, endTrim }, channel, time) {
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+
+    // Apply playback speed
+    const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
+    source.playbackRate.value = playbackSpeed;
+
+    // Create a gain node
+    const gainNode = audioCtx.createGain();
+    const volume = globalVolumeLevels[channel] || 1.0;
+    gainNode.gain.value = volume;
+
+    source.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    const startTime = startTrim * buffer.duration;
+    const duration = (endTrim - startTrim) * buffer.duration;
+    source.start(time, startTime, duration);
+
+    console.log(`Channel ${channel}: Scheduled reverse play at ${time}, Start Time: ${startTime}, Duration: ${duration}, Volume: ${volume}, Speed: ${playbackSpeed}`);
+}
