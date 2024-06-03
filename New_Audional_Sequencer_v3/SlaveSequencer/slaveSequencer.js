@@ -16,11 +16,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let barCount = 1;
     let sequenceCount = 0;
     let stepDuration;
+    let lastProcessedSequenceNumber = -1; // Initialize the variable
 
     window.addEventListener('message', (event) => {
         console.log(`[slave] Received message from parent at ${new Date().toISOString()}:`);
         console.log(JSON.stringify(event.data));
         const message = event.data;
+
+        // Ensure messages are processed in the correct order
+        if (message.sequenceNumber <= lastProcessedSequenceNumber) {
+            console.warn(`[slave] Discarding out-of-order or duplicate message: ${message.sequenceNumber}`);
+            return;
+        }
+        lastProcessedSequenceNumber = message.sequenceNumber;
 
         switch (message.type) {
             case 'PLAY':
@@ -147,7 +155,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const bpm = window.unifiedSequencerSettings.getBPM() || 120;
         stepDuration = 60 / bpm / 4;
 
+        // Clear any existing timeouts
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+
         timeoutId = setTimeout(() => {
+            console.log(`[slave] About to play step ${currentStep} of sequence ${currentSequence}`);
             playStep(currentStep, currentSequence);
             scheduleNextStep();
         }, (nextStepTime - window.unifiedSequencerSettings.audioContext.currentTime) * 1000);

@@ -74,8 +74,10 @@ function playStep() {
         slaveWindow.postMessage({
             type: 'PLAY_STEP',
             currentStep: currentStep,
-            currentSequence: currentSequence
+            currentSequence: currentSequence,
+            timestamp: new Date().toISOString()
         }, '*');
+        console.log(`[master] Sent PLAY_STEP message at ${new Date().toISOString()} with currentStep: ${currentStep}`);
     }
 }
 

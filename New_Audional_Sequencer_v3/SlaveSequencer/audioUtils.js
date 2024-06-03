@@ -304,27 +304,27 @@ function playSound(currentSequence, channel, currentStep) {
 
   if (isActive) {
       sequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
-      console.log(`[playSound] Message sent: startArpeggiator for channel ${channelIndex}`);
+      // console.log(`[playSound] Message sent: startArpeggiator for channel ${channelIndex}`);
 
       if (iframeSequencerChannel) {
           iframeSequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
-          console.log(`[playSound] Message sent to iframe: startArpeggiator for channel ${channelIndex}`);
+          // console.log(`[playSound] Message sent to iframe: startArpeggiator for channel ${channelIndex}`);
       }
   } else if (isReverse) {
       sequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
-      console.log(`[playSound] Message sent: stopArpeggiator for channel ${channelIndex}`);
+      // console.log(`[playSound] Message sent: stopArpeggiator for channel ${channelIndex}`);
 
       if (iframeSequencerChannel) {
           iframeSequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
-          console.log(`[playSound] Message sent to iframe: stopArpeggiator for channel ${channelIndex}`);
+          // console.log(`[playSound] Message sent to iframe: stopArpeggiator for channel ${channelIndex}`);
       }
   }
   sequencerChannel.close(); // Close the original channel after sending the message
-  console.log(`[playSound] Sequencer message channel closed: synth_channel_${channelIndex}`);
+  // console.log(`[playSound] Sequencer message channel closed: synth_channel_${channelIndex}`);
 
   if (iframeSequencerChannel) {
       iframeSequencerChannel.close(); // Close the iframe-specific channel after sending the message
-      console.log(`[playSound] Sequencer message channel closed: synth_channel_${iframeId}`);
+      // console.log(`[playSound] Sequencer message channel closed: synth_channel_${iframeId}`);
   }
 
   // Manage audio playback

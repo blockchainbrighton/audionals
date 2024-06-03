@@ -40,7 +40,7 @@ function scheduleNextStep() {
     // console.log('[SequenceChangeDebug] Scheduling next step.');
     // console.log("[SequenceChangeDebug] Attempting to play sound for Channel:", "Step:", currentStep);
 
-    const bpm = window.unifiedSequencerSettings.getBPM() || 105; // Fallback to 105 BPM
+    const bpm = window.unifiedSequencerSettings.getBPM() || 120; // Fallback to 105 BPM
     // console.log(`[scheduleNextStep] Current BPM: ${bpm}`);
 
     stepDuration = 60 / bpm / 4;
