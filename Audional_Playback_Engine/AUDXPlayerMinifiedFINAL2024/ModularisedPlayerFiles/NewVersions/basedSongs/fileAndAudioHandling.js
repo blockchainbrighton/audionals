@@ -4,6 +4,8 @@ let bpm = 0, activeSources = [];
 var globalAudioBuffers = [];
 var globalTrimTimes = {};
 var globalVolumeLevels = {};
+var globalPlaybackSpeeds = {};
+
 
 
 async function loadJsonFromUrl(url) {
@@ -61,8 +63,13 @@ const incrementTypeCount = (types, type) => {
 };
 
 function prepareForPlayback(jsonData, stats) {
-    const { channelURLs, trimSettings, channelVolume, projectSequences, projectName, projectBPM } = jsonData;
+    const { channelURLs, trimSettings, channelVolume, channelPlaybackSpeed, projectSequences, projectName, projectBPM } = jsonData;
     bpm = projectBPM;
+
+    // Initialize global trim times and playback speeds if not defined
+    globalTrimTimes = {};
+    globalVolumeLevels = {};
+    globalPlaybackSpeeds = {};
 
     // Process trim settings
     trimSettings.forEach((setting, index) => {
@@ -72,7 +79,7 @@ function prepareForPlayback(jsonData, stats) {
         };
     });
 
-    // Check if channelVolume exists before processing
+    // Process volume settings
     if (Array.isArray(channelVolume) && channelVolume.length) {
         channelVolume.forEach((volume, index) => {
             globalVolumeLevels[`Channel ${index + 1}`] = parseFloat(volume);
@@ -84,11 +91,44 @@ function prepareForPlayback(jsonData, stats) {
         });
     }
 
+    // Process playback speed settings
+    if (Array.isArray(channelPlaybackSpeed) && channelPlaybackSpeed.length) {
+        channelPlaybackSpeed.forEach((speed, index) => {
+            globalPlaybackSpeeds[`Channel ${index + 1}`] = Math.max(0.1, Math.min(parseFloat(speed), 100));
+        });
+    } else {
+        // If channelPlaybackSpeed does not exist, set all channels to default speed of 1.0
+        channelURLs.forEach((url, index) => {
+            globalPlaybackSpeeds[`Channel ${index + 1}`] = 1.0; // Default playback speed
+        });
+    }
+
     // Prepare sequences for playback
     const sequences = Object.entries(projectSequences).reduce((result, [sequenceName, channels]) => {
-        result[sequenceName] = Object.entries(channels).map(([channelName, channelData]) => 
-            `${channelName}: [${channelData.steps.length > 0 ? channelData.steps.join(", ") : "No active steps"}]`
-        );
+        result[sequenceName] = {
+            normalSteps: {},
+            reverseSteps: {}
+        };
+
+        Object.entries(channels).forEach(([channelName, channelData]) => {
+            const normalSteps = [];
+            const reverseSteps = [];
+
+            channelData.steps.forEach(step => {
+                if (typeof step === 'object' && step.reverse) {
+                    reverseSteps.push(step.index);
+                } else {
+                    normalSteps.push(typeof step === 'object' ? step.index : step);
+                }
+            });
+
+            result[sequenceName].normalSteps[channelName] = normalSteps;
+            result[sequenceName].reverseSteps[channelName] = reverseSteps;
+
+            console.log(`Sequence ${sequenceName}, Channel ${channelName} - Normal Steps: ${JSON.stringify(normalSteps)}`);
+            console.log(`Sequence ${sequenceName}, Channel ${channelName} - Reverse Steps: ${JSON.stringify(reverseSteps)}`);
+        });
+
         return result;
     }, {});
 
@@ -99,8 +139,8 @@ function prepareForPlayback(jsonData, stats) {
         channelURLs,
         trimTimes: trimSettings.map((setting, index) => ({
             channel: `Channel ${index + 1}`,
-            startTrim: parseFloat(setting.startSliderValue),
-            endTrim: parseFloat(setting.endSliderValue)
+            startTrim: parseFloat(setting.startSliderValue) / 100,
+            endTrim: parseFloat(setting.endSliderValue) / 100
         })),
         stats: {
             channelsWithUrls: stats.channelsWithUrls,
@@ -111,6 +151,8 @@ function prepareForPlayback(jsonData, stats) {
         sequences
     };
 }
+
+
 
 
 
@@ -295,9 +337,13 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
 
+    // Apply playback speed
+    const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
+    source.playbackRate.value = playbackSpeed;
+
     // Create a gain node
     const gainNode = audioCtx.createGain();
-    const volume = globalVolumeLevels[channel] || 1.0; // Default volume to 1.0 (100%) if not set
+    const volume = globalVolumeLevels[channel] || 1.0;
     gainNode.gain.value = volume;
 
     source.connect(gainNode);
@@ -307,7 +353,7 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     const duration = (endTrim - startTrim) * buffer.duration;
     source.start(time, startTime, duration);
 
-    console.log(`Channel ${channel}: Scheduled play at ${time}, Start Time: ${startTime}, Duration: ${duration}, Volume: ${volume}`);
+    console.log(`Channel ${channel}: Scheduled play at ${time}, Start Time: ${startTime}, Duration: ${duration}, Volume: ${volume}, Speed: ${playbackSpeed}`);
 
     const channelIndex = channel.startsWith("Channel ") ? parseInt(channel.replace("Channel ", ""), 10) - 1 : null;
     if (channelIndex === null) {
@@ -317,6 +363,7 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     AudionalPlayerMessages.postMessage({ action: "activeStep", channelIndex, step: currentStep });
     document.dispatchEvent(new CustomEvent("internalAudioPlayback", { detail: { action: "activeStep", channelIndex, step: currentStep } }));
 }
+
 
 
 
