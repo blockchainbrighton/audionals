@@ -714,11 +714,11 @@ updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, is
 
     // Method to update the current sequence
     setCurrentSequence(currentSequence) {
-        console.log('[SequenceChangeDebug] setCurrentSequence called with sequence:', currentSequence);
+        // console.log('[SequenceChangeDebug] setCurrentSequence called with sequence:', currentSequence);
         
         this.settings.masterSettings.currentSequence = currentSequence;
-        console.log(`[SequenceChangeDebug] [setCurrentSequence] currentSequence set to: ${currentSequence}`);
-        console.log(`[SequenceChangeDebug] [setCurrentSequence] Object currentSequence set to: ${this.settings.masterSettings.currentSequence}`);
+        // console.log(`[SequenceChangeDebug] [setCurrentSequence] currentSequence set to: ${currentSequence}`);
+        // console.log(`[SequenceChangeDebug] [setCurrentSequence] Object currentSequence set to: ${this.settings.masterSettings.currentSequence}`);
         if (this.settings.masterSettings.currentSequence !== currentSequence) {
             this.settings.masterSettings.currentSequence = currentSequence;
             this.notifyObservers();

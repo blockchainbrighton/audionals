@@ -39,7 +39,7 @@ function renderPlayhead(buttons, currentStep) {
 }
 
 function playStep() {
-    console.log("[master] [stepHandling][playStep] Function entered at " + new Date().toISOString());
+    // console.log("[master] [stepHandling][playStep] Function entered at " + new Date().toISOString());
 
     const currentSequence = window.unifiedSequencerSettings.getCurrentSequence();
     const presetData = presets.preset1;
@@ -116,7 +116,7 @@ function incrementStepCounters() {
 
 function handleSequenceTransition(targetSequence, startStep) {
     window.unifiedSequencerSettings.setCurrentSequence(targetSequence);
-    console.log(`[SeqDebug][stepHandling] Sequence set to ${targetSequence}`);
+    // console.log(`[SeqDebug][stepHandling] Sequence set to ${targetSequence}`);
 
     const currentSequenceDisplay = document.getElementById('current-sequence-display');
     if (currentSequenceDisplay) {
@@ -149,7 +149,7 @@ function resetCountersForNewSequence(startStep = 0) {
     beatCount = Math.floor(startStep / 4);
     barCount = Math.floor(startStep / 16);
     totalStepCount = startStep;
-    console.log(`[resetCountersForNewSequence] Counters reset for new sequence starting at step ${startStep}`);
+    // console.log(`[resetCountersForNewSequence] Counters reset for new sequence starting at step ${startStep}`);
 
     // Send reset counters info to the slave
     if (slaveWindow) {
