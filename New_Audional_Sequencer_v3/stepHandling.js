@@ -16,20 +16,16 @@ function handleStep(channel, channelData, totalStepCount) {
 }
 
 function renderPlayhead(buttons, currentStep) {
-    buttons.forEach((button, buttonIndex) => {
-        button.classList.remove('playing');
-        button.classList.remove('triggered');
-
+    const buttonsArray = Array.from(buttons);
+    buttonsArray.forEach((button, buttonIndex) => {
+        button.classList.remove('playing', 'triggered');
         if (buttonIndex === currentStep) {
             button.classList.add('playing');
         }
-
         if (button.classList.contains('selected')) {
             button.classList.add('triggered');
         }
     });
-
-    // Send playhead render info to the slave
     if (slaveWindow) {
         slaveWindow.postMessage({
             type: 'RENDER_PLAYHEAD',
@@ -38,11 +34,10 @@ function renderPlayhead(buttons, currentStep) {
     }
 }
 
-function playStep() {
-    // console.log("[master] [stepHandling][playStep] Function entered at " + new Date().toISOString());
 
-    const currentSequence = window.unifiedSequencerSettings.getCurrentSequence();
-    const presetData = presets.preset1;
+async function playStep() {
+    const currentSequence = await window.unifiedSequencerSettings.getCurrentSequence();
+    const presetData = await presets.preset1;
 
     for (let channelIndex = 0; channelIndex < 16; channelIndex++) {
         const channel = channels[channelIndex];
@@ -69,7 +64,6 @@ function playStep() {
         handleSequenceTransition(nextSequence, 0);
     }
 
-    // Send play step info to the slave
     if (slaveWindow) {
         slaveWindow.postMessage({
             type: 'PLAY_STEP',
@@ -77,9 +71,9 @@ function playStep() {
             currentSequence: currentSequence,
             timestamp: new Date().toISOString()
         }, '*');
-        console.log(`[master] Sent PLAY_STEP message at ${new Date().toISOString()} with currentStep: ${currentStep}`);
     }
 }
+
 
 function incrementStepCounters() {
     currentStep = (currentStep + 1) % 64;

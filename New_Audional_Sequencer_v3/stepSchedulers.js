@@ -29,11 +29,12 @@ function pauseScheduler() {
 function resumeScheduler() {
   if(isPaused) {
       // Replace the startTime adjustment with a nextStepTime reset
-      window.unifiedSequencerSettings.audioContext.resume();
-      nextStepTime = window.unifiedSequencerSettings.audioContext.currentTime;
-      isPaused = false;
-  }
-  scheduleNextStep(); // Begin scheduling steps again
+      window.unifiedSequencerSettings.audioContext.resume().then(() => {
+        nextStepTime = window.unifiedSequencerSettings.audioContext.currentTime;
+        isPaused = false;
+        scheduleNextStep();  // Begin scheduling steps again
+    });
+}
 }
 
 function scheduleNextStep() {
@@ -49,7 +50,7 @@ function scheduleNextStep() {
     timeoutId = setTimeout(() => {
         playStep();
         scheduleNextStep();
-    }, (nextStepTime - audioContext.currentTime) * 1000);
+    }, (nextStepTime - window.unifiedSequencerSettings.audioContext.currentTime) * 1000);
 }
 
 
