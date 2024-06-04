@@ -2,8 +2,8 @@
 
 // Define the color palette
 const colorPalette = {
-    primary: ["#ee0000", "white", "#3c37ff", "#ffa501", "#3bcd26", "#8d0000", "#03007a", "#b46500", "#18530f"],
-    secondary: ["#ffa501", "#ee0000", "#3c37ff", "#18530f", "#b46500", "#ffcf78", "#3c37ff", "#fe7d7d", "#71e260", "#8d0000", "#18530f", "#03007a"],
+    primary: ["#FFA500", "#FF5733", "#FFD700", "#FF7F50", "#20B2AA", "#7FFF00", "#00FF00", "#00FA9A", "#00FFFF"],
+    secondary: ["orange", "blue", "lightseagreen", "darkorange", "#00001E", "#43111E", "red", "green", "yellow", "purple", "pink", "cyan", "magenta", "lime", "teal", "maroon", "navy", "olive", "silver", "gold", "indigo"],
     hslColors: Array.from({ length: 360 }, (_, i) => `hsl(${i}, 100%, 50%)`)
 };
 
@@ -27,25 +27,11 @@ function getHslColor(a, factor) {
 // Function to get dynamic RGB color
 function getDynamicRgb(x1, y1, x2, y2) {
     const distance = Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2)) / 50;
-    return `rgba(0, 0, 255, ${distance})`;
-}
-
-function getWeightedRandomEffect(effects, weights) {
-    let totalWeight = weights.reduce((acc, weight) => acc + weight, 0);
-    let randomValue = Math.random() * totalWeight;
-
-    for (let i = 0; i < effects.length; i++) {
-        if (randomValue < weights[i]) {
-            return effects[i];
-        }
-        randomValue -= weights[i];
-    }
+    return `rgba(255, 165, 0, ${distance})`;
 }
 
 // Main function to get colors
-function getColorSettings1(o, a, l) {
-
-
+function getColors(o, a, l) {
     return [
         // CRAZY EYES
 
@@ -480,10 +466,6 @@ function getColorSettings1(o, a, l) {
         `rgb(${Math.floor(127 * Math.sin(Date.now()) + 128)}, ${Math.floor(127 * Math.sin(Date.now() / 1000) + 128)}, ${Math.floor(127 * Math.sin(Date.now() / 2000) + 128)})`, // Trippy Eyes
     ];
 }
-
-
-    
-
 
 // Preset random settings
 const presetSettings = Array.from({ length: 100 }, (_, i) => ({

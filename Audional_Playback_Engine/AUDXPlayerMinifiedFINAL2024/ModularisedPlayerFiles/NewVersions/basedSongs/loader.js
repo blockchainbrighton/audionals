@@ -18,7 +18,7 @@ const scriptsToLoad = [
     // 'https://ordinals.com/content/733a31b5f2eaf821cb5164f269405c8082edc9c18e15373ed0cbc8409225b783i0',
     'fileAndAudioHandling.js',
     // 'https://ordinals.com/content/d3e9c74e8b9e358c37b50ef363ab77efe29370ccfb4cd9c4e32a5c4a5b0fabdbi0', // Colour settings
-    'colourSettingsUSA.js',
+    'colourSettingsUS2.js',
     'https://ordinals.com/content/1db7c640e5d08a1bc069125ad52c7b82933ffd2ffad1276f98707071c1ea15efi0',
 ];
 
