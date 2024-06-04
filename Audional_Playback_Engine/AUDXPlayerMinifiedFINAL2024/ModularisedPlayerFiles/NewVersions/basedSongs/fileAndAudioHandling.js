@@ -1,23 +1,22 @@
 // fileAndAudioHandling.js
-var globalJsonData = null;
+let globalJsonData = null;
 let bpm = 0;
-var globalAudioBuffers = [];
-var globalTrimTimes = {};
-var globalVolumeLevels = {};
-var globalPlaybackSpeeds = {};
+let globalAudioBuffers = [];
+let globalTrimTimes = {};
+let globalVolumeLevels = {};
+let globalPlaybackSpeeds = {};
 let globalReversedAudioBuffers = {};
-
-
-
 let isReversePlay = false;
+
+let audioWorker, preprocessedSequences = {}, isReadyToPlay = false, currentStep = 0, beatCount = 0, barCount = 0, currentSequence = 0, isPlaying = false, playbackTimeoutId = null, nextNoteTime = 0;
+
 
 async function loadJsonFromUrl(url) {
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-        const jsonData = await response.json();
-        // console.log("Loaded JSON data:", jsonData);
-
+        globalJsonData = await response.json();
+        
         const stats = {
             channelsWithUrls: 0,
             sequencesCount: 0,
@@ -26,213 +25,189 @@ async function loadJsonFromUrl(url) {
             types: {}
         };
 
-        analyzeJsonStructure(globalJsonData = jsonData, "", stats);
-        const playbackData = prepareForPlayback(jsonData, stats);
+        analyzeJsonStructure(globalJsonData, stats);
+        const playbackData = prepareForPlayback(globalJsonData, stats);
+
         await fetchAndProcessAudioData(playbackData.channelURLs);
-        preprocessAndSchedulePlayback();
+        preprocessAndSchedulePlayback(playbackData);
     } catch (error) {
         console.error("Could not load JSON data from URL:", error);
     }
 }
 
-
-const analyzeJsonStructure = (data, parentKey, stats, currentPath = "") => {
+function analyzeJsonStructure(data, stats) {
     if (data.projectSequences && typeof data.projectSequences === 'object') {
-        Object.entries(data.projectSequences).forEach(([sequenceName, sequenceData]) => {
+        for (const [sequenceName, sequenceData] of Object.entries(data.projectSequences)) {
             stats.activeStepsPerSequence[sequenceName] = 0;
             stats.activeChannelsPerSequence[sequenceName] = [];
-            Object.entries(sequenceData).forEach(([channelName, channelData]) => {
-                if (channelData.steps && Array.isArray(channelData.steps) && channelData.steps.length > 0) {
+            for (const [channelName, channelData] of Object.entries(sequenceData)) {
+                if (Array.isArray(channelData.steps) && channelData.steps.length > 0) {
                     stats.activeStepsPerSequence[sequenceName] += channelData.steps.length;
                     stats.activeChannelsPerSequence[sequenceName].push(channelName);
                 }
-            });
-        });
-    }
-
-    Object.entries(data).forEach(([key, value]) => {
-        if (key !== "projectSequences") {
-            const valueType = Array.isArray(value) ? "array" : typeof value;
-            incrementTypeCount(stats.types, valueType);
-            if (valueType === "object" || valueType === "array") {
-                analyzeJsonStructure(value, key, stats, currentPath ? `${currentPath}.${key}` : key);
             }
         }
+    }
+
+    for (const [key, value] of Object.entries(data)) {
+        if (key !== "projectSequences") {
+            const valueType = Array.isArray(value) ? "array" : typeof value;
+            stats.types[valueType] = (stats.types[valueType] || 0) + 1;
+            if (valueType === "object" || valueType === "array") {
+                analyzeJsonStructure(value, stats);
+            }
+        }
+    }
+}
+
+function findAndSetEndSequence(playbackData) {
+    if (playbackData && playbackData.sequences) {
+        let previousSequence = null;
+        for (const sequence of Object.values(playbackData.sequences)) {
+            const isEmpty = Object.values(sequence.normalSteps).every(steps => steps.length === 0);
+            if (isEmpty) {
+                if (previousSequence) {
+                    playbackData.endSequence = previousSequence;
+                    console.log("End sequence set to:", previousSequence);
+                    break;
+                }
+            }
+            previousSequence = sequence;
+        }
+    }
+}
+
+
+// Ensure reverse buffers are created after fetching and processing audio data
+async function fetchAndProcessAudioData(channelURLs) {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    await Promise.all(channelURLs.map((url, index) => processAudioUrl(url, index, audioContext)));
+
+    // Create reversed buffers
+    globalAudioBuffers.forEach(bufferData => {
+        reverseAudioBuffer(bufferData.buffer, bufferData.channel);
     });
-};
-
-const incrementTypeCount = (types, type) => {
-    types[type] = (types[type] || 0) + 1;
-};
-
+}
 
 async function processAudioUrl(url, index, audioContext) {
-    const channelIndex = index + 1;
-    // console.log(`[processAudioUrl] Processing URL at index: ${index}, Channel: ${channelIndex}, URL: ${url}`);
-
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to fetch from URL: ${url}, Status: ${response.status}`);
-        
+
         const contentType = response.headers.get("Content-Type");
-        let audioBuffer = await fetchAndDecodeAudio(response, contentType, audioContext);
+        const audioBuffer = await fetchAndDecodeAudio(response, contentType, audioContext);
 
         if (audioBuffer) {
-            globalAudioBuffers.push({ buffer: audioBuffer, channel: `Channel ${channelIndex}` });
-            // console.log(`[processAudioUrl] AudioBuffer stored for URL at index: ${index}, Channel: ${channelIndex}`);
+            globalAudioBuffers.push({ buffer: audioBuffer, channel: `Channel ${index + 1}` });
         } else {
-            logErrorDetails(index, channelIndex, url, contentType);
+            console.error(`Failed to decode audio for URL: ${url}`);
         }
     } catch (error) {
-        console.error(`Error fetching or decoding audio for Channel ${channelIndex}:`, error);
+        console.error(`Error fetching or decoding audio for Channel ${index + 1}:`, error);
     }
 }
 
 async function fetchAndDecodeAudio(response, contentType, audioContext) {
-    if (/audio\/(wav|mpeg|mp4)/.test(contentType) || /video\/mp4/.test(contentType)) {
-        const arrayBuffer = await response.arrayBuffer();
-        console.log(`[fetchAndDecodeAudio] ArrayBuffer length: ${arrayBuffer.byteLength}`);
+    let arrayBuffer;
+    if (/audio\/(wav|mpeg|mp4)|video\/mp4/.test(contentType)) {
+        arrayBuffer = await response.arrayBuffer();
+    } else {
+        const textData = await response.text();
+        let base64AudioData = null;
+        if (/application\/json/.test(contentType)) {
+            base64AudioData = JSON.parse(textData).audioData;
+        } else if (/text\/html/.test(contentType)) {
+            base64AudioData = extractBase64FromHTML(textData);
+        }
+        if (base64AudioData) {
+            arrayBuffer = base64ToArrayBuffer(base64AudioData.split(",")[1]);
+        }
+    }
+    if (arrayBuffer) {
         return audioContext.decodeAudioData(arrayBuffer);
     }
-
-    const textData = await response.text();
-    let base64AudioData = null;
-    if (/application\/json/.test(contentType)) {
-        base64AudioData = JSON.parse(textData).audioData;
-    } else if (/text\/html/.test(contentType)) {
-        base64AudioData = extractBase64FromHTML(textData);
-    }
-
-    if (base64AudioData) {
-        const arrayBuffer = base64ToArrayBuffer(base64AudioData.split(",")[1]);
-        console.log(`[fetchAndDecodeAudio] ArrayBuffer length from base64: ${arrayBuffer.byteLength}`);
-        return audioContext.decodeAudioData(arrayBuffer);
-    }
-
-    if (/audio\//.test(contentType)) {
-        const arrayBuffer = await response.arrayBuffer();
-        console.log(`[fetchAndDecodeAudio] ArrayBuffer length for direct URL audio: ${arrayBuffer.byteLength}`);
-        return audioContext.decodeAudioData(arrayBuffer);
-    }
-
-    console.log(`[fetchAndDecodeAudio] Unsupported content type: ${contentType}`);
+    console.error(`Unsupported content type: ${contentType}`);
     return null;
 }
 
 
 
-function preprocessAndSchedulePlayback() {
-    if (!globalJsonData?.projectSequences) {
-        return console.error("Global sequence data is not available or empty.");
+function preprocessAndSchedulePlayback(playbackData) {
+    if (!playbackData || !playbackData.sequences) {
+        return console.error("Playback data is not available or empty.");
     }
 
-    const bpm = globalJsonData.projectBPM;
+    bpm = playbackData.bpm;
     preprocessedSequences = Object.fromEntries(
-        Object.entries(globalJsonData.projectSequences).map(([sequenceName, channels]) => [
+        Object.entries(playbackData.sequences).map(([sequenceName, channels]) => [
             sequenceName,
             Object.fromEntries(
-                Object.entries(channels)
-                    .filter(([, channelData]) => channelData.steps?.length)
-                    .map(([channelName, channelData]) => [
+                Object.entries(channels.normalSteps)
+                    .filter(([, steps]) => steps.length)
+                    .map(([channelName, steps]) => [
                         channelName,
-                        channelData.steps.map(step => ({ step, timing: step * (60 / bpm) }))
+                        steps.map(step => ({ step, timing: step * (60 / bpm) }))
                     ])
             )
         ])
     );
 
-    isReadyToPlay = true;
-    // console.log("Preprocessed sequences:", preprocessedSequences);
+    // Set isReadyToPlay to true only if there are valid sequences
+    isReadyToPlay = Object.keys(preprocessedSequences).some(sequence => Object.keys(preprocessedSequences[sequence]).length > 0);
+    console.log("Preprocessed sequences:", preprocessedSequences);
 }
 
-function calculateReversedTrimTimes(trimTimes) {
-    return {
-        startTrim: 1.0 - trimTimes.endTrim,
-        endTrim: 1.0 - trimTimes.startTrim
-    };
-}
+
 
 
 function prepareForPlayback(jsonData, stats) {
     const { channelURLs, trimSettings, channelVolume, channelPlaybackSpeed, projectSequences, projectName, projectBPM } = jsonData;
     bpm = projectBPM;
 
-    // Initialize global trim times and playback speeds if not defined
+    // Initialize global settings
+    const channelCount = channelURLs.length;
     globalTrimTimes = {};
     globalVolumeLevels = {};
     globalPlaybackSpeeds = {};
 
-    // Process trim settings
-    trimSettings.forEach((setting, index) => {
-        globalTrimTimes[`Channel ${index + 1}`] = {
-            startTrim: parseFloat(setting.startSliderValue) / 100,
-            endTrim: parseFloat(setting.endSliderValue) / 100
+    // Process trim settings, volume, and playback speed in a single loop
+    for (let i = 0; i < channelCount; i++) {
+        globalTrimTimes[`Channel ${i + 1}`] = {
+            startTrim: parseFloat(trimSettings[i]?.startSliderValue) / 100 || 0,
+            endTrim: parseFloat(trimSettings[i]?.endSliderValue) / 100 || 1
         };
-    });
-
-    // Process volume settings
-    if (Array.isArray(channelVolume) && channelVolume.length) {
-        channelVolume.forEach((volume, index) => {
-            globalVolumeLevels[`Channel ${index + 1}`] = parseFloat(volume);
-        });
-    } else {
-        // If channelVolume does not exist, set all channels to default volume of 1.0
-        channelURLs.forEach((url, index) => {
-            globalVolumeLevels[`Channel ${index + 1}`] = 1.0; // Default volume
-        });
-    }
-
-    // Process playback speed settings
-    if (Array.isArray(channelPlaybackSpeed) && channelPlaybackSpeed.length) {
-        channelPlaybackSpeed.forEach((speed, index) => {
-            globalPlaybackSpeeds[`Channel ${index + 1}`] = Math.max(0.1, Math.min(parseFloat(speed), 100));
-        });
-    } else {
-        // If channelPlaybackSpeed does not exist, set all channels to default speed of 1.0
-        channelURLs.forEach((url, index) => {
-            globalPlaybackSpeeds[`Channel ${index + 1}`] = 1.0; // Default playback speed
-        });
+        globalVolumeLevels[`Channel ${i + 1}`] = parseFloat(channelVolume[i]) || 1.0;
+        globalPlaybackSpeeds[`Channel ${i + 1}`] = Math.max(0.1, Math.min(parseFloat(channelPlaybackSpeed[i]), 100)) || 1.0;
     }
 
     // Prepare sequences for playback
     const sequences = Object.entries(projectSequences).reduce((result, [sequenceName, channels]) => {
-        result[sequenceName] = {
-            normalSteps: {},
-            reverseSteps: {}
-        };
+        const normalSteps = {};
+        const reverseSteps = {};
 
-        Object.entries(channels).forEach(([channelName, channelData]) => {
-            const normalSteps = [];
-            const reverseSteps = [];
+        for (const [channelName, channelData] of Object.entries(channels)) {
+            normalSteps[channelName] = [];
+            reverseSteps[channelName] = [];
 
-            channelData.steps.forEach(step => {
+            for (const step of channelData.steps) {
                 if (typeof step === 'object' && step.reverse) {
-                    reverseSteps.push(step.index);
+                    reverseSteps[channelName].push(step.index);
                 } else {
-                    normalSteps.push(typeof step === 'object' ? step.index : step);
+                    normalSteps[channelName].push(typeof step === 'object' ? step.index : step);
                 }
-            });
+            }
+        }
 
-            result[sequenceName].normalSteps[channelName] = normalSteps;
-            result[sequenceName].reverseSteps[channelName] = reverseSteps;
-
-        //     console.log(`Sequence ${sequenceName}, Channel ${channelName} - Normal Steps: ${JSON.stringify(normalSteps)}`);
-        //     console.log(`Sequence ${sequenceName}, Channel ${channelName} - Reverse Steps: ${JSON.stringify(reverseSteps)}`);
-        });
-
+        result[sequenceName] = { normalSteps, reverseSteps };
         return result;
     }, {});
 
-    return {
+    const playbackData = {
         projectName,
         bpm: projectBPM,
-        channels: channelURLs.length,
+        channels: channelCount,
         channelURLs,
-        trimTimes: trimSettings.map((setting, index) => ({
-            channel: `Channel ${index + 1}`,
-            startTrim: parseFloat(setting.startSliderValue) / 100,
-            endTrim: parseFloat(setting.endSliderValue) / 100
-        })),
+        trimTimes: globalTrimTimes,
         stats: {
             channelsWithUrls: stats.channelsWithUrls,
             sequencesCount: stats.sequencesCount,
@@ -241,8 +216,12 @@ function prepareForPlayback(jsonData, stats) {
         },
         sequences
     };
-}
 
+    // Set end sequence if there are empty sequences
+    findAndSetEndSequence(playbackData);
+
+    return playbackData;
+}
 
 
 function logErrorDetails(index, channelIndex, url, contentType) {
@@ -250,6 +229,7 @@ function logErrorDetails(index, channelIndex, url, contentType) {
     console.log(`[processAudioUrl] Content-Type of response: ${contentType}`);
     console.log(`[processAudioUrl] URL: ${url}`);
 }
+
 
 function extractBase64FromHTML(htmlContent) {
     try {
@@ -293,9 +273,6 @@ function base64ToArrayBuffer(base64) {
     }
 }
 
-
-
-
 function playAudioForChannel(channelNumber) {
     if (audioCtx.state === "suspended") {
         audioCtx.resume();
@@ -311,26 +288,15 @@ function playAudioForChannel(channelNumber) {
 
         if (isReversePlay) {
             source.buffer = reverseAudioBuffer(audioBufferData.buffer);
-            if (trimTimes) {
-                const reversedTrimTimes = calculateReversedTrimTimes(trimTimes);
-                playBuffer(source.buffer, reversedTrimTimes, channel, 0);
-            } else {
-                playBuffer(source.buffer, { startTrim: 0, endTrim: 1 }, channel, 0);
-            }
+            const reversedTrimTimes = trimTimes ? calculateReversedTrimTimes(trimTimes) : { startTrim: 0, endTrim: 1 };
+            playBuffer(source.buffer, reversedTrimTimes, channel, 0);
         } else {
-            if (trimTimes) {
-                playBuffer(audioBufferData.buffer, trimTimes, channel, 0);
-            } else {
-                playBuffer(audioBufferData.buffer, { startTrim: 0, endTrim: 1 }, channel, 0);
-            }
+            playBuffer(audioBufferData.buffer, trimTimes || { startTrim: 0, endTrim: 1 }, channel, 0);
         }
     } else {
         console.error("No audio buffer or trim times found for channel:", channelNumber);
     }
 }
-
-
-
 
 
 function reverseAudioBuffer(buffer, channel) {
@@ -349,22 +315,18 @@ function reverseAudioBuffer(buffer, channel) {
     return reversedBuffer;
 }
 
-// Ensure reverse buffers are created after fetching and processing audio data
-async function fetchAndProcessAudioData(channelURLs) {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    await Promise.all(channelURLs.map((url, index) => processAudioUrl(url, index, audioContext)));
-    
-    // Create reversed buffers
-    globalAudioBuffers.forEach(bufferData => {
-        reverseAudioBuffer(bufferData.buffer, bufferData.channel);
-    });
+function calculateReversedTrimTimes(trimTimes) {
+    return {
+        startTrim: 1.0 - trimTimes.endTrim,
+        endTrim: 1.0 - trimTimes.startTrim
+    };
 }
 
 
 
 function startPlaybackLoop() {
     if (!globalJsonData) return;
-    globalJsonData.projectBPM;
+    bpm = globalJsonData.projectBPM;
 }
 
 function playSequenceStep(time) {
@@ -375,6 +337,12 @@ function playSequenceStep(time) {
     const sequenceKeys = Object.keys(preprocessedSequences);
     currentSequence %= sequenceKeys.length;
     const currentSequenceData = preprocessedSequences[sequenceKeys[currentSequence]];
+
+    // Check if the current sequence is empty and skip if necessary
+    if (Object.keys(currentSequenceData).length === 0) {
+        incrementStepAndSequence(sequenceKeys.length);
+        return;
+    }
 
     Object.entries(currentSequenceData).forEach(([channelName, steps]) => {
         const stepData = steps.find(step => step.step === currentStep);
@@ -389,29 +357,17 @@ function playSequenceStep(time) {
 
 function playChannelStep(channelName, stepData, time) {
     const channel = `Channel ${parseInt(channelName.slice(2)) + 1}`;
-    // console.log(`[playChannelStep] Playing step for ${channel} at time ${time}`);
-
     const audioBufferData = globalAudioBuffers.find(bufferData => bufferData.channel === channel);
     const trimTimes = globalTrimTimes[channel];
 
-    // console.log(`[playChannelStep] Found buffer for ${channel}: ${!!audioBufferData}, trimTimes: ${JSON.stringify(trimTimes)}`);
-
     if (audioBufferData?.buffer && trimTimes) {
-        if (stepData.reverse) {
-            const reversedBuffer = reverseAudioBuffer(audioBufferData.buffer);
-            const reversedTrimTimes = calculateReversedTrimTimes(trimTimes);
-            playBuffer(reversedBuffer, reversedTrimTimes, channel, time);
-        } else {
-            playBuffer(audioBufferData.buffer, trimTimes, channel, time);
-        }
+        const buffer = stepData.reverse ? globalReversedAudioBuffers[channel] : audioBufferData.buffer;
+        const playTimes = stepData.reverse ? calculateReversedTrimTimes(trimTimes) : trimTimes;
+        playBuffer(buffer, playTimes, channel, time);
     } else {
         console.error(`No audio buffer or trim times found for ${channel}`);
     }
 }
-
-
-
-
 
 function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     const source = audioCtx.createBufferSource();
@@ -433,8 +389,6 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     const duration = (endTrim - startTrim) * buffer.duration;
     source.start(time, startTime, duration);
 
-    // console.log(`Channel ${channel}: Scheduled play at ${time}, Start Time: ${startTime}, Duration: ${duration}, Volume: ${volume}, Speed: ${playbackSpeed}`);
-
     const channelIndex = channel.startsWith("Channel ") ? parseInt(channel.replace("Channel ", ""), 10) - 1 : null;
     if (channelIndex === null) {
         return console.error("Invalid bufferKey format:", channel);
@@ -444,13 +398,9 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     document.dispatchEvent(new CustomEvent("internalAudioPlayback", { detail: { action: "activeStep", channelIndex, step: currentStep } }));
 }
 
-
-
-
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const AudionalPlayerMessages = new BroadcastChannel("channel_playback");
 
-let audioWorker, preprocessedSequences = {}, isReadyToPlay = false, currentStep = 0, beatCount = 0, barCount = 0, currentSequence = 0, isPlaying = false, playbackTimeoutId = null, nextNoteTime = 0;
 
 function initializeWorker() {
     if (window.Worker) {
@@ -493,7 +443,6 @@ function initializeWorker() {
     }
 }
 
-
 function scheduleNotes() {
     let currentTime = audioCtx.currentTime;
     if (nextNoteTime < currentTime) {
@@ -508,7 +457,6 @@ function scheduleNotes() {
 function getStepDuration() {
     return 60 / (globalJsonData?.projectBPM || 120) / 4;
 }
-
 
 function incrementStepAndSequence(sequenceCount) {
     currentStep = (currentStep + 1) % 64;
@@ -544,13 +492,6 @@ function resetPlayback() {
     currentStep = 0;
 }
 
-// document.addEventListener("keydown", async (e) => {
-//     if (e.key === " ") {
-//         e.preventDefault();
-//         togglePlayback();
-//     }
-// });
-
 window.addEventListener("beforeunload", () => {
     clearInterval(intervalID);
     if (audioWorker) {
@@ -559,26 +500,11 @@ window.addEventListener("beforeunload", () => {
     audioCtx.suspend().then(() => console.log("AudioContext suspended successfully."));
 });
 
-const keyChannelMap = {
-    1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 0: 10,
-    q: 11, w: 12, e: 13, r: 14, t: 15, y: 16
-};
-
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Additional Controls like volume and playback speed
-
 document.addEventListener('keydown', (event) => {
     if (event.key === 's' || event.key === 'S') {
         playReverseBuffersInSequence();
     }
 });
-
 
 function playReverseBuffersInSequence() {
     if (audioCtx.state === "suspended") {
