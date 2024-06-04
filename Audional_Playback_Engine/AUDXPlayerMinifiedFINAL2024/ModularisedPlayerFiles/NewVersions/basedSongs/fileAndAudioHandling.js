@@ -16,7 +16,7 @@ async function loadJsonFromUrl(url) {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         const jsonData = await response.json();
-        console.log("Loaded JSON data:", jsonData);
+        // console.log("Loaded JSON data:", jsonData);
 
         const stats = {
             channelsWithUrls: 0,
@@ -68,7 +68,7 @@ const incrementTypeCount = (types, type) => {
 
 async function processAudioUrl(url, index, audioContext) {
     const channelIndex = index + 1;
-    console.log(`[processAudioUrl] Processing URL at index: ${index}, Channel: ${channelIndex}, URL: ${url}`);
+    // console.log(`[processAudioUrl] Processing URL at index: ${index}, Channel: ${channelIndex}, URL: ${url}`);
 
     try {
         const response = await fetch(url);
@@ -79,7 +79,7 @@ async function processAudioUrl(url, index, audioContext) {
 
         if (audioBuffer) {
             globalAudioBuffers.push({ buffer: audioBuffer, channel: `Channel ${channelIndex}` });
-            console.log(`[processAudioUrl] AudioBuffer stored for URL at index: ${index}, Channel: ${channelIndex}`);
+            // console.log(`[processAudioUrl] AudioBuffer stored for URL at index: ${index}, Channel: ${channelIndex}`);
         } else {
             logErrorDetails(index, channelIndex, url, contentType);
         }
@@ -142,7 +142,7 @@ function preprocessAndSchedulePlayback() {
     );
 
     isReadyToPlay = true;
-    console.log("Preprocessed sequences:", preprocessedSequences);
+    // console.log("Preprocessed sequences:", preprocessedSequences);
 }
 
 function calculateReversedTrimTimes(trimTimes) {
@@ -216,8 +216,8 @@ function prepareForPlayback(jsonData, stats) {
             result[sequenceName].normalSteps[channelName] = normalSteps;
             result[sequenceName].reverseSteps[channelName] = reverseSteps;
 
-            console.log(`Sequence ${sequenceName}, Channel ${channelName} - Normal Steps: ${JSON.stringify(normalSteps)}`);
-            console.log(`Sequence ${sequenceName}, Channel ${channelName} - Reverse Steps: ${JSON.stringify(reverseSteps)}`);
+        //     console.log(`Sequence ${sequenceName}, Channel ${channelName} - Normal Steps: ${JSON.stringify(normalSteps)}`);
+        //     console.log(`Sequence ${sequenceName}, Channel ${channelName} - Reverse Steps: ${JSON.stringify(reverseSteps)}`);
         });
 
         return result;
@@ -300,7 +300,7 @@ function playAudioForChannel(channelNumber) {
     if (audioCtx.state === "suspended") {
         audioCtx.resume();
     }
-    console.log("Playing audio for channel:", channelNumber);
+    // console.log("Playing audio for channel:", channelNumber);
 
     const channel = `Channel ${channelNumber}`;
     const audioBufferData = globalAudioBuffers.find(bufferData => bufferData.channel === channel);
@@ -389,12 +389,12 @@ function playSequenceStep(time) {
 
 function playChannelStep(channelName, stepData, time) {
     const channel = `Channel ${parseInt(channelName.slice(2)) + 1}`;
-    console.log(`[playChannelStep] Playing step for ${channel} at time ${time}`);
+    // console.log(`[playChannelStep] Playing step for ${channel} at time ${time}`);
 
     const audioBufferData = globalAudioBuffers.find(bufferData => bufferData.channel === channel);
     const trimTimes = globalTrimTimes[channel];
 
-    console.log(`[playChannelStep] Found buffer for ${channel}: ${!!audioBufferData}, trimTimes: ${JSON.stringify(trimTimes)}`);
+    // console.log(`[playChannelStep] Found buffer for ${channel}: ${!!audioBufferData}, trimTimes: ${JSON.stringify(trimTimes)}`);
 
     if (audioBufferData?.buffer && trimTimes) {
         if (stepData.reverse) {
@@ -433,7 +433,7 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     const duration = (endTrim - startTrim) * buffer.duration;
     source.start(time, startTime, duration);
 
-    console.log(`Channel ${channel}: Scheduled play at ${time}, Start Time: ${startTime}, Duration: ${duration}, Volume: ${volume}, Speed: ${playbackSpeed}`);
+    // console.log(`Channel ${channel}: Scheduled play at ${time}, Start Time: ${startTime}, Duration: ${duration}, Volume: ${volume}, Speed: ${playbackSpeed}`);
 
     const channelIndex = channel.startsWith("Channel ") ? parseInt(channel.replace("Channel ", ""), 10) - 1 : null;
     if (channelIndex === null) {
@@ -625,26 +625,3 @@ function playBufferAtTime(buffer, { startTrim, endTrim }, channel, time) {
     console.log(`Channel ${channel}: Scheduled reverse play at ${time}, Start Time: ${startTime}, Duration: ${duration}, Volume: ${volume}, Speed: ${playbackSpeed}`);
 }
 
-
-function playBufferAtTime(buffer, { startTrim, endTrim }, channel, time) {
-    const source = audioCtx.createBufferSource();
-    source.buffer = buffer;
-
-    // Apply playback speed
-    const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
-    source.playbackRate.value = playbackSpeed;
-
-    // Create a gain node
-    const gainNode = audioCtx.createGain();
-    const volume = globalVolumeLevels[channel] || 1.0;
-    gainNode.gain.value = volume;
-
-    source.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
-    const startTime = startTrim * buffer.duration;
-    const duration = (endTrim - startTrim) * buffer.duration;
-    source.start(time, startTime, duration);
-
-    console.log(`Channel ${channel}: Scheduled reverse play at ${time}, Start Time: ${startTime}, Duration: ${duration}, Volume: ${volume}, Speed: ${playbackSpeed}`);
-}
