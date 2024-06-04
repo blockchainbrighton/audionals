@@ -1,227 +1,226 @@
 // fileAndAudioHandling.js
-let globalJsonData = null;
-let bpm = 0;
-let globalAudioBuffers = [];
-let globalTrimTimes = {};
-let globalVolumeLevels = {};
-let globalPlaybackSpeeds = {};
-let globalReversedAudioBuffers = {};
-let isReversePlay = false;
+// let globalJsonData = null;
+// let bpm = 0;
+// let globalAudioBuffers = [];
+// let globalTrimTimes = {};
+// let globalVolumeLevels = {};
+// let globalPlaybackSpeeds = {};
+// let globalReversedAudioBuffers = {};
+// let isReversePlay = false;
 
-let audioWorker, preprocessedSequences = {}, isReadyToPlay = false, currentStep = 0, beatCount = 0, barCount = 0, currentSequence = 0, isPlaying = false, playbackTimeoutId = null, nextNoteTime = 0;
+// let audioWorker, preprocessedSequences = {}, isReadyToPlay = false, currentStep = 0, beatCount = 0, barCount = 0, currentSequence = 0, isPlaying = false, playbackTimeoutId = null, nextNoteTime = 0;
 
 
-async function loadJsonFromUrl(url) {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-        globalJsonData = await response.json();
+// async function loadJsonFromUrl(url) {
+//     try {
+//         const response = await fetch(url);
+//         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+//         globalJsonData = await response.json();
         
-        const stats = {
-            channelsWithUrls: 0,
-            sequencesCount: 0,
-            activeStepsPerSequence: {},
-            activeChannelsPerSequence: {},
-            types: {}
-        };
+//         const stats = {
+//             channelsWithUrls: 0,
+//             sequencesCount: 0,
+//             activeStepsPerSequence: {},
+//             activeChannelsPerSequence: {},
+//             types: {}
+//         };
 
-        analyzeJsonStructure(globalJsonData, stats);
-        const playbackData = prepareForPlayback(globalJsonData, stats);
+//         analyzeJsonStructure(globalJsonData, stats);
+//         const playbackData = prepareForPlayback(globalJsonData, stats);
 
-        await fetchAndProcessAudioData(playbackData.channelURLs);
-        preprocessAndSchedulePlayback(playbackData);
-    } catch (error) {
-        console.error("Could not load JSON data from URL:", error);
-    }
-}
+//         await fetchAndProcessAudioData(playbackData.channelURLs);
+//         preprocessAndSchedulePlayback(playbackData);
+//     } catch (error) {
+//         console.error("Could not load JSON data from URL:", error);
+//     }
+// }
 
-function analyzeJsonStructure(data, stats) {
-    if (data.projectSequences && typeof data.projectSequences === 'object') {
-        for (const [sequenceName, sequenceData] of Object.entries(data.projectSequences)) {
-            stats.activeStepsPerSequence[sequenceName] = 0;
-            stats.activeChannelsPerSequence[sequenceName] = [];
-            for (const [channelName, channelData] of Object.entries(sequenceData)) {
-                if (Array.isArray(channelData.steps) && channelData.steps.length > 0) {
-                    stats.activeStepsPerSequence[sequenceName] += channelData.steps.length;
-                    stats.activeChannelsPerSequence[sequenceName].push(channelName);
-                }
-            }
-        }
-    }
+// function analyzeJsonStructure(data, stats) {
+//     if (data.projectSequences && typeof data.projectSequences === 'object') {
+//         for (const [sequenceName, sequenceData] of Object.entries(data.projectSequences)) {
+//             stats.activeStepsPerSequence[sequenceName] = 0;
+//             stats.activeChannelsPerSequence[sequenceName] = [];
+//             for (const [channelName, channelData] of Object.entries(sequenceData)) {
+//                 if (Array.isArray(channelData.steps) && channelData.steps.length > 0) {
+//                     stats.activeStepsPerSequence[sequenceName] += channelData.steps.length;
+//                     stats.activeChannelsPerSequence[sequenceName].push(channelName);
+//                 }
+//             }
+//         }
+//     }
 
-    for (const [key, value] of Object.entries(data)) {
-        if (key !== "projectSequences") {
-            const valueType = Array.isArray(value) ? "array" : typeof value;
-            stats.types[valueType] = (stats.types[valueType] || 0) + 1;
-            if (valueType === "object" || valueType === "array") {
-                analyzeJsonStructure(value, stats);
-            }
-        }
-    }
-}
+//     for (const [key, value] of Object.entries(data)) {
+//         if (key !== "projectSequences") {
+//             const valueType = Array.isArray(value) ? "array" : typeof value;
+//             stats.types[valueType] = (stats.types[valueType] || 0) + 1;
+//             if (valueType === "object" || valueType === "array") {
+//                 analyzeJsonStructure(value, stats);
+//             }
+//         }
+//     }
+// }
 
-function findAndSetEndSequence(playbackData) {
-    if (playbackData && playbackData.sequences) {
-        let previousSequence = null;
-        for (const sequence of Object.values(playbackData.sequences)) {
-            const isEmpty = Object.values(sequence.normalSteps).every(steps => steps.length === 0);
-            if (isEmpty) {
-                if (previousSequence) {
-                    playbackData.endSequence = previousSequence;
-                    console.log("End sequence set to:", previousSequence);
-                    break;
-                }
-            }
-            previousSequence = sequence;
-        }
-    }
-}
+// function findAndSetEndSequence(playbackData) {
+//     if (playbackData && playbackData.sequences) {
+//         let previousSequence = null;
+//         for (const sequence of Object.values(playbackData.sequences)) {
+//             const isEmpty = Object.values(sequence.normalSteps).every(steps => steps.length === 0);
+//             if (isEmpty) {
+//                 if (previousSequence) {
+//                     playbackData.endSequence = previousSequence;
+//                     console.log("End sequence set to:", previousSequence);
+//                     break;
+//                 }
+//             }
+//             previousSequence = sequence;
+//         }
+//     }
+// }
 
+// // Ensure reverse buffers are created after fetching and processing audio data
+// async function fetchAndProcessAudioData(channelURLs) {
+//     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+//     await Promise.all(channelURLs.map((url, index) => processAudioUrl(url, index, audioContext)));
 
-// Ensure reverse buffers are created after fetching and processing audio data
-async function fetchAndProcessAudioData(channelURLs) {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    await Promise.all(channelURLs.map((url, index) => processAudioUrl(url, index, audioContext)));
+//     // Create reversed buffers
+//     globalAudioBuffers.forEach(bufferData => {
+//         reverseAudioBuffer(bufferData.buffer, bufferData.channel);
+//     });
+// }
 
-    // Create reversed buffers
-    globalAudioBuffers.forEach(bufferData => {
-        reverseAudioBuffer(bufferData.buffer, bufferData.channel);
-    });
-}
+// async function processAudioUrl(url, index, audioContext) {
+//     try {
+//         const response = await fetch(url);
+//         if (!response.ok) throw new Error(`Failed to fetch from URL: ${url}, Status: ${response.status}`);
 
-async function processAudioUrl(url, index, audioContext) {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Failed to fetch from URL: ${url}, Status: ${response.status}`);
+//         const contentType = response.headers.get("Content-Type");
+//         const audioBuffer = await fetchAndDecodeAudio(response, contentType, audioContext);
 
-        const contentType = response.headers.get("Content-Type");
-        const audioBuffer = await fetchAndDecodeAudio(response, contentType, audioContext);
+//         if (audioBuffer) {
+//             globalAudioBuffers.push({ buffer: audioBuffer, channel: `Channel ${index + 1}` });
+//         } else {
+//             console.error(`Failed to decode audio for URL: ${url}`);
+//         }
+//     } catch (error) {
+//         console.error(`Error fetching or decoding audio for Channel ${index + 1}:`, error);
+//     }
+// }
 
-        if (audioBuffer) {
-            globalAudioBuffers.push({ buffer: audioBuffer, channel: `Channel ${index + 1}` });
-        } else {
-            console.error(`Failed to decode audio for URL: ${url}`);
-        }
-    } catch (error) {
-        console.error(`Error fetching or decoding audio for Channel ${index + 1}:`, error);
-    }
-}
-
-async function fetchAndDecodeAudio(response, contentType, audioContext) {
-    let arrayBuffer;
-    if (/audio\/(wav|mpeg|mp4)|video\/mp4/.test(contentType)) {
-        arrayBuffer = await response.arrayBuffer();
-    } else {
-        const textData = await response.text();
-        let base64AudioData = null;
-        if (/application\/json/.test(contentType)) {
-            base64AudioData = JSON.parse(textData).audioData;
-        } else if (/text\/html/.test(contentType)) {
-            base64AudioData = extractBase64FromHTML(textData);
-        }
-        if (base64AudioData) {
-            arrayBuffer = base64ToArrayBuffer(base64AudioData.split(",")[1]);
-        }
-    }
-    if (arrayBuffer) {
-        return audioContext.decodeAudioData(arrayBuffer);
-    }
-    console.error(`Unsupported content type: ${contentType}`);
-    return null;
-}
-
-
-
-function preprocessAndSchedulePlayback(playbackData) {
-    if (!playbackData || !playbackData.sequences) {
-        return console.error("Playback data is not available or empty.");
-    }
-
-    bpm = playbackData.bpm;
-    preprocessedSequences = Object.fromEntries(
-        Object.entries(playbackData.sequences).map(([sequenceName, channels]) => [
-            sequenceName,
-            Object.fromEntries(
-                Object.entries(channels.normalSteps)
-                    .filter(([, steps]) => steps.length)
-                    .map(([channelName, steps]) => [
-                        channelName,
-                        steps.map(step => ({ step, timing: step * (60 / bpm) }))
-                    ])
-            )
-        ])
-    );
-
-    // Set isReadyToPlay to true only if there are valid sequences
-    isReadyToPlay = Object.keys(preprocessedSequences).some(sequence => Object.keys(preprocessedSequences[sequence]).length > 0);
-    console.log("Preprocessed sequences:", preprocessedSequences);
-}
+// async function fetchAndDecodeAudio(response, contentType, audioContext) {
+//     let arrayBuffer;
+//     if (/audio\/(wav|mpeg|mp4)|video\/mp4/.test(contentType)) {
+//         arrayBuffer = await response.arrayBuffer();
+//     } else {
+//         const textData = await response.text();
+//         let base64AudioData = null;
+//         if (/application\/json/.test(contentType)) {
+//             base64AudioData = JSON.parse(textData).audioData;
+//         } else if (/text\/html/.test(contentType)) {
+//             base64AudioData = extractBase64FromHTML(textData);
+//         }
+//         if (base64AudioData) {
+//             arrayBuffer = base64ToArrayBuffer(base64AudioData.split(",")[1]);
+//         }
+//     }
+//     if (arrayBuffer) {
+//         return audioContext.decodeAudioData(arrayBuffer);
+//     }
+//     console.error(`Unsupported content type: ${contentType}`);
+//     return null;
+// }
 
 
 
+// function preprocessAndSchedulePlayback(playbackData) {
+//     if (!playbackData || !playbackData.sequences) {
+//         return console.error("Playback data is not available or empty.");
+//     }
 
-function prepareForPlayback(jsonData, stats) {
-    const { channelURLs, trimSettings, channelVolume, channelPlaybackSpeed, projectSequences, projectName, projectBPM } = jsonData;
-    bpm = projectBPM;
+//     bpm = playbackData.bpm;
+//     preprocessedSequences = Object.fromEntries(
+//         Object.entries(playbackData.sequences).map(([sequenceName, channels]) => [
+//             sequenceName,
+//             Object.fromEntries(
+//                 Object.entries(channels.normalSteps)
+//                     .filter(([, steps]) => steps.length)
+//                     .map(([channelName, steps]) => [
+//                         channelName,
+//                         steps.map(step => ({ step, timing: step * (60 / bpm) }))
+//                     ])
+//             )
+//         ])
+//     );
 
-    // Initialize global settings
-    const channelCount = channelURLs.length;
-    globalTrimTimes = {};
-    globalVolumeLevels = {};
-    globalPlaybackSpeeds = {};
+//     // Set isReadyToPlay to true only if there are valid sequences
+//     isReadyToPlay = Object.keys(preprocessedSequences).some(sequence => Object.keys(preprocessedSequences[sequence]).length > 0);
+//     console.log("Preprocessed sequences:", preprocessedSequences);
+// }
 
-    // Process trim settings, volume, and playback speed in a single loop
-    for (let i = 0; i < channelCount; i++) {
-        globalTrimTimes[`Channel ${i + 1}`] = {
-            startTrim: parseFloat(trimSettings[i]?.startSliderValue) / 100 || 0,
-            endTrim: parseFloat(trimSettings[i]?.endSliderValue) / 100 || 1
-        };
-        globalVolumeLevels[`Channel ${i + 1}`] = parseFloat(channelVolume[i]) || 1.0;
-        globalPlaybackSpeeds[`Channel ${i + 1}`] = Math.max(0.1, Math.min(parseFloat(channelPlaybackSpeed[i]), 100)) || 1.0;
-    }
 
-    // Prepare sequences for playback
-    const sequences = Object.entries(projectSequences).reduce((result, [sequenceName, channels]) => {
-        const normalSteps = {};
-        const reverseSteps = {};
 
-        for (const [channelName, channelData] of Object.entries(channels)) {
-            normalSteps[channelName] = [];
-            reverseSteps[channelName] = [];
 
-            for (const step of channelData.steps) {
-                if (typeof step === 'object' && step.reverse) {
-                    reverseSteps[channelName].push(step.index);
-                } else {
-                    normalSteps[channelName].push(typeof step === 'object' ? step.index : step);
-                }
-            }
-        }
+// function prepareForPlayback(jsonData, stats) {
+//     const { channelURLs, trimSettings, channelVolume, channelPlaybackSpeed, projectSequences, projectName, projectBPM } = jsonData;
+//     bpm = projectBPM;
 
-        result[sequenceName] = { normalSteps, reverseSteps };
-        return result;
-    }, {});
+//     // Initialize global settings
+//     const channelCount = channelURLs.length;
+//     globalTrimTimes = {};
+//     globalVolumeLevels = {};
+//     globalPlaybackSpeeds = {};
 
-    const playbackData = {
-        projectName,
-        bpm: projectBPM,
-        channels: channelCount,
-        channelURLs,
-        trimTimes: globalTrimTimes,
-        stats: {
-            channelsWithUrls: stats.channelsWithUrls,
-            sequencesCount: stats.sequencesCount,
-            activeStepsPerSequence: stats.activeStepsPerSequence,
-            activeChannelsPerSequence: stats.activeChannelsPerSequence
-        },
-        sequences
-    };
+//     // Process trim settings, volume, and playback speed in a single loop
+//     for (let i = 0; i < channelCount; i++) {
+//         globalTrimTimes[`Channel ${i + 1}`] = {
+//             startTrim: parseFloat(trimSettings[i]?.startSliderValue) / 100 || 0,
+//             endTrim: parseFloat(trimSettings[i]?.endSliderValue) / 100 || 1
+//         };
+//         globalVolumeLevels[`Channel ${i + 1}`] = parseFloat(channelVolume[i]) || 1.0;
+//         globalPlaybackSpeeds[`Channel ${i + 1}`] = Math.max(0.1, Math.min(parseFloat(channelPlaybackSpeed[i]), 100)) || 1.0;
+//     }
 
-    // Set end sequence if there are empty sequences
-    findAndSetEndSequence(playbackData);
+//     // Prepare sequences for playback
+//     const sequences = Object.entries(projectSequences).reduce((result, [sequenceName, channels]) => {
+//         const normalSteps = {};
+//         const reverseSteps = {};
 
-    return playbackData;
-}
+//         for (const [channelName, channelData] of Object.entries(channels)) {
+//             normalSteps[channelName] = [];
+//             reverseSteps[channelName] = [];
+
+//             for (const step of channelData.steps) {
+//                 if (typeof step === 'object' && step.reverse) {
+//                     reverseSteps[channelName].push(step.index);
+//                 } else {
+//                     normalSteps[channelName].push(typeof step === 'object' ? step.index : step);
+//                 }
+//             }
+//         }
+
+//         result[sequenceName] = { normalSteps, reverseSteps };
+//         return result;
+//     }, {});
+
+//     const playbackData = {
+//         projectName,
+//         bpm: projectBPM,
+//         channels: channelCount,
+//         channelURLs,
+//         trimTimes: globalTrimTimes,
+//         stats: {
+//             channelsWithUrls: stats.channelsWithUrls,
+//             sequencesCount: stats.sequencesCount,
+//             activeStepsPerSequence: stats.activeStepsPerSequence,
+//             activeChannelsPerSequence: stats.activeChannelsPerSequence
+//         },
+//         sequences
+//     };
+
+//     // Set end sequence if there are empty sequences
+//     findAndSetEndSequence(playbackData);
+
+//     return playbackData;
+// }
 
 
 function logErrorDetails(index, channelIndex, url, contentType) {
