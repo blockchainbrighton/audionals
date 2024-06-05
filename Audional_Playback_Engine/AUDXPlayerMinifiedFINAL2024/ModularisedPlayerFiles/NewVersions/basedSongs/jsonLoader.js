@@ -9,6 +9,7 @@ let globalReversedAudioBuffers = {};
 let isReversePlay = false;
 
 let audioWorker, preprocessedSequences = {}, isReadyToPlay = false, currentStep = 0, beatCount = 0, barCount = 0, currentSequence = 0, isPlaying = false, playbackTimeoutId = null, nextNoteTime = 0;
+let totalSequences = 0;  // New variable to hold the total number of sequences
 
 
 
@@ -79,8 +80,9 @@ function findAndSetEndSequence(playbackData) {
 }
 
 function prepareForPlayback(jsonData, stats) {
-    const { channelURLs, trimSettings, channelVolume, channelPlaybackSpeed, projectSequences, projectName, projectBPM } = jsonData;
+    const { channelURLs, trimSettings, channelVolume, channelPlaybackSpeed, projectSequences, projectName, projectBPM, currentSequence } = jsonData;
     bpm = projectBPM;
+    totalSequences = currentSequence; // Set total sequences from currentSequence
 
     const channelCount = channelURLs.length;
     globalTrimTimes = {};
@@ -136,7 +138,6 @@ function prepareForPlayback(jsonData, stats) {
 
     return playbackData;
 }
-
 
 function preprocessAndSchedulePlayback(playbackData) {
     if (!playbackData || !playbackData.sequences) {
