@@ -289,47 +289,31 @@ function playSound(currentSequence, channel, currentStep) {
   const channelIndex = getChannelIndex(channel);
   const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
 
-  // Original BroadcastChannel for the current channel index
   const sequencerChannel = new BroadcastChannel(`synth_channel_${channelIndex}`);
-  // console.log(`[playSound] Preparing to send message to channel: synth_channel_${channelIndex}`);
-
-  // Retrieve the iframe ID using the channel index mapping
   const iframeId = getIframeIdByChannelIndex(channelIndex);
   let iframeSequencerChannel = null;
 
   if (iframeId) {
-      // Initialize an additional BroadcastChannel for the iframe-specific channel
       iframeSequencerChannel = new BroadcastChannel(`synth_channel_${iframeId}`);
   }
 
   if (isActive) {
       sequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
-      // console.log(`[playSound] Message sent: startArpeggiator for channel ${channelIndex}`);
-
       if (iframeSequencerChannel) {
           iframeSequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
-          // console.log(`[playSound] Message sent to iframe: startArpeggiator for channel ${channelIndex}`);
       }
   } else if (isReverse) {
       sequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
-      // console.log(`[playSound] Message sent: stopArpeggiator for channel ${channelIndex}`);
-
       if (iframeSequencerChannel) {
           iframeSequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
-          // console.log(`[playSound] Message sent to iframe: stopArpeggiator for channel ${channelIndex}`);
       }
   }
-  sequencerChannel.close(); // Close the original channel after sending the message
-  // console.log(`[playSound] Sequencer message channel closed: synth_channel_${channelIndex}`);
-
+  sequencerChannel.close();
   if (iframeSequencerChannel) {
-      iframeSequencerChannel.close(); // Close the iframe-specific channel after sending the message
-      // console.log(`[playSound] Sequencer message channel closed: synth_channel_${iframeId}`);
+      iframeSequencerChannel.close();
   }
 
-  // Manage audio playback
   if (!isActive && !isReverse) {
-      // Skip playback if the current step is not active and not marked for reverse playback.
       return;
   }
 
@@ -350,14 +334,33 @@ function playSound(currentSequence, channel, currentStep) {
       return;
   }
 
-  source.playbackRate.setValueAtTime(window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex], audioContext.currentTime);
+  const playbackSpeed = window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex];
+  source.playbackRate.setValueAtTime(playbackSpeed, audioContext.currentTime);
   source.connect(gainNode);
   gainNode.connect(audioContext.destination);
 
-  const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
+  const { trimStart, duration, trimEnd } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
+
+  const fadeDuration = 0.02; // 20 milliseconds in seconds
+  const actualFadeDuration = fadeDuration / playbackSpeed; // Adjust fade duration based on playback speed
+  const adjustedDuration = duration / playbackSpeed; // Adjusted duration for playback speed
+  const userVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex]; // Get the user-defined volume
+
+  // Apply fade-in
+  gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+  gainNode.gain.linearRampToValueAtTime(userVolume, audioContext.currentTime + actualFadeDuration);
+
+  // Start playback
   source.start(0, trimStart, duration);
 
+  // Apply fade-out
+  gainNode.gain.setValueAtTime(userVolume, audioContext.currentTime + adjustedDuration - actualFadeDuration);
+  gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + adjustedDuration);
+
   source.onended = () => {
+      // Ensure gain is returned to user volume after fade-out
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime); // Set to 0 before ramping up to prevent clicks
+      gainNode.gain.linearRampToValueAtTime(userVolume, audioContext.currentTime + actualFadeDuration); // Restore user volume
       source.disconnect();
       window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
   };
@@ -366,41 +369,33 @@ function playSound(currentSequence, channel, currentStep) {
 }
 
 
-
-
-
 function calculateTrimValues(channelIndex, audioBuffer, isReversePlayback) {
-  // console.log(`[calculateTrimValues] Called for channelIndex: ${channelIndex}, isReversePlayback: ${isReversePlayback}`);
-
   const trimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
   let trimStartPercentage = trimSettings.startSliderValue !== undefined ? trimSettings.startSliderValue : 0;
   let trimEndPercentage = trimSettings.endSliderValue !== undefined ? trimSettings.endSliderValue : 100;
 
-  // console.log(`[calculateTrimValues] Trim Settings: Start = ${trimStartPercentage}%, End = ${trimEndPercentage}%`);
-
   let trimStart = (trimStartPercentage / 100) * audioBuffer.duration;
   let trimEnd = (trimEndPercentage / 100) * audioBuffer.duration;
 
-  // console.log(`[calculateTrimValues] Calculated Times (before mirroring): Start = ${trimStart}s, End = ${trimEnd}s, Buffer Duration = ${audioBuffer.duration}s`);
-
   if (isReversePlayback) {
-    // Reverse the calculation for mirrored start and end times
-    let totalDuration = audioBuffer.duration;
-    trimStart = totalDuration - ((trimEndPercentage / 100) * totalDuration);
-    trimEnd = totalDuration - ((trimStartPercentage / 100) * totalDuration);
+      let totalDuration = audioBuffer.duration;
+      trimStart = totalDuration - ((trimEndPercentage / 100) * totalDuration);
+      trimEnd = totalDuration - ((trimStartPercentage / 100) * totalDuration);
   }
 
-  // Ensure the calculated values are within the bounds of the audio buffer's duration
   trimStart = Math.max(0, Math.min(trimStart, audioBuffer.duration));
   trimEnd = Math.max(trimStart, Math.min(trimEnd, audioBuffer.duration));
 
-  // console.log(`[calculateTrimValues] Final Calculated Values: Trim Start = ${trimStart}s, Trim End = ${trimEnd}s, Duration = ${trimEnd - trimStart}s`);
-
+  const trimDuration = trimEnd - trimStart;
+  
   return {
-    trimStart: trimStart,
-    duration: trimEnd - trimStart
+      trimStart: trimStart,
+      duration: trimDuration,
+      trimEnd: trimEnd
   };
 }
+
+
 
 
 

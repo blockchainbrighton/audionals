@@ -34,27 +34,6 @@ class UnifiedSequencerSettings {
         this.updateTotalSequences = this.updateTotalSequences.bind(this);
     }
 
-    // New method to update the total number of sequences
-    updateTotalSequences() {
-        let lastActiveSequence = -1;
-        for (let seq = 0; seq < this.numSequences; seq++) {
-            const sequence = this.settings.masterSettings.projectSequences[`Sequence${seq}`];
-            if (!sequence) continue; // Skip if sequence is not defined
-            for (let ch = 0; ch < this.numChannels; ch++) {
-                const channel = sequence[`ch${ch}`];
-                if (channel && channel.steps.some(step => step.isActive)) {
-                    lastActiveSequence = seq;
-                    break;
-                }
-            }
-        }
-        this.numSequences = lastActiveSequence + 1;
-        console.log(`Total sequences updated to ${this.numSequences}`);
-    }
-
-
-   
-
     initializeSourceNodes() {
         for (let i = 0; i < this.numChannels; i++) {
             const source = this.audioContext.createBufferSource(); // Create a new buffer source node
@@ -65,11 +44,65 @@ class UnifiedSequencerSettings {
     }
 
     initializeGainNodes() {
-        for (let i = 0; i < this.numChannels; i++) {
-            const gainNode = this.audioContext.createGain();
-            gainNode.gain.setValueAtTime(this.settings.masterSettings.channelVolume[i], this.audioContext.currentTime);
-            gainNode.connect(this.audioContext.destination);
-            this.gainNodes.push(gainNode);
+        if (this.gainNodes.length === 0) { // Only initialize if gain nodes haven't been created
+            for (let i = 0; i < this.numChannels; i++) {
+                const gainNode = this.audioContext.createGain();
+                gainNode.gain.setValueAtTime(this.settings.masterSettings.channelVolume[i], this.audioContext.currentTime);
+                gainNode.connect(this.audioContext.destination);
+                this.gainNodes.push(gainNode);
+            }
+        }
+    }
+
+    async loadSettings(jsonSettings) {
+        console.log("[internalPresetDebug] loadSettings entered");
+        try {
+            this.clearMasterSettings();
+            console.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
+    
+            const parsedSettings = typeof jsonSettings === 'string' ? JSON.parse(jsonSettings) : jsonSettings;
+    
+            // Set up basic settings first
+            this.settings.masterSettings.currentSequence = 0;
+            this.settings.masterSettings.projectName = parsedSettings.projectName;
+            this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
+    
+            // Ensure playback speeds are set
+            this.globalPlaybackSpeed = parsedSettings.globalPlaybackSpeed || 1;
+            this.channelPlaybackSpeed = parsedSettings.channelPlaybackSpeed || new Array(16).fill(1);
+    
+            // Initialize gain nodes early with default values
+            this.initializeGainNodes();
+    
+            // Then update URL and volume settings
+            if (parsedSettings.channelURLs) {
+                const urlPromises = parsedSettings.channelURLs.map(url => this.formatURL(url));
+                this.settings.masterSettings.channelURLs = await Promise.all(urlPromises);
+            }
+    
+            // Update volumes from settings, ensuring gain nodes are ready
+            if (parsedSettings.channelVolume) {
+                parsedSettings.channelVolume.forEach((volume, index) => {
+                    this.setChannelVolume(index, volume);
+                });
+            }
+    
+            this.settings.masterSettings.trimSettings = parsedSettings.trimSettings;
+            this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames;
+            this.deserializeAndApplyProjectSequences(parsedSettings);
+    
+            console.log("[internalPresetDebug] Master settings after update:", this.settings.masterSettings);
+            this.updateProjectNameUI(this.settings.masterSettings.projectName);
+            this.updateBPMUI(this.settings.masterSettings.projectBPM);
+            this.updateAllLoadSampleButtonTexts();
+            this.updateProjectChannelNamesUI(this.settings.masterSettings.projectChannelNames);
+    
+            this.setCurrentSequence(0);
+            this.updateUIForSequence(this.settings.masterSettings.currentSequence);
+            handleSequenceTransition(0);
+    
+        } catch (error) {
+            console.error('[internalPresetDebug] Error loading settings:', error);
         }
     }
 
@@ -81,7 +114,10 @@ class UnifiedSequencerSettings {
             console.error(`Cannot set volume for channel ${channelIndex}: Gain node is undefined.`);
         }
     }
-    
+
+
+
+
 
     setGlobalPlaybackSpeed(speed) {
         this.globalPlaybackSpeed = speed;
@@ -111,6 +147,30 @@ class UnifiedSequencerSettings {
             console.log(`Source node for channel ${channelIndex} is not initialized or lacks a buffer.`);
         }
     }
+
+    
+    
+
+    // New method to update the total number of sequences
+    updateTotalSequences() {
+        let lastActiveSequence = -1;
+        for (let seq = 0; seq < this.numSequences; seq++) {
+            const sequence = this.settings.masterSettings.projectSequences[`Sequence${seq}`];
+            if (!sequence) continue; // Skip if sequence is not defined
+            for (let ch = 0; ch < this.numChannels; ch++) {
+                const channel = sequence[`ch${ch}`];
+                if (channel && channel.steps.some(step => step.isActive)) {
+                    lastActiveSequence = seq;
+                    break;
+                }
+            }
+        }
+        this.numSequences = lastActiveSequence + 1;
+        console.log(`Total sequences updated to ${this.numSequences}`);
+    }
+
+
+   
 
 
     // setChannelSpeed(channelIndex, speed) {
@@ -395,57 +455,6 @@ updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, is
                 return exportedSettings;
             }
     
-            async loadSettings(jsonSettings) {
-                console.log("[internalPresetDebug] loadSettings entered");
-                try {
-                    this.clearMasterSettings();
-                    console.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
-            
-                    const parsedSettings = typeof jsonSettings === 'string' ? JSON.parse(jsonSettings) : jsonSettings;
-            
-                    // Set up basic settings first
-                    this.settings.masterSettings.currentSequence = 0;
-                    this.settings.masterSettings.projectName = parsedSettings.projectName;
-                    this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
-            
-                    // Ensure playback speeds are set
-                    this.globalPlaybackSpeed = parsedSettings.globalPlaybackSpeed || 1;
-                    this.channelPlaybackSpeed = parsedSettings.channelPlaybackSpeed || new Array(16).fill(1);
-            
-                    // Initialize gain nodes early with default values
-                    this.initializeGainNodes();
-            
-                    // Then update URL and volume settings
-                    if (parsedSettings.channelURLs) {
-                        const urlPromises = parsedSettings.channelURLs.map(url => this.formatURL(url));
-                        this.settings.masterSettings.channelURLs = await Promise.all(urlPromises);
-                    }
-            
-                    // Update volumes from settings, ensuring gain nodes are ready
-                    if (parsedSettings.channelVolume) {
-                        parsedSettings.channelVolume.forEach((volume, index) => {
-                            this.setChannelVolume(index, volume);
-                        });
-                    }
-            
-                    this.settings.masterSettings.trimSettings = parsedSettings.trimSettings;
-                    this.settings.masterSettings.projectChannelNames = parsedSettings.projectChannelNames;
-                    this.deserializeAndApplyProjectSequences(parsedSettings);
-            
-                    console.log("[internalPresetDebug] Master settings after update:", this.settings.masterSettings);
-                    this.updateProjectNameUI(this.settings.masterSettings.projectName);
-                    this.updateBPMUI(this.settings.masterSettings.projectBPM);
-                    this.updateAllLoadSampleButtonTexts();
-                    this.updateProjectChannelNamesUI(this.settings.masterSettings.projectChannelNames);
-            
-                    this.setCurrentSequence(0);
-                    this.updateUIForSequence(this.settings.masterSettings.currentSequence);
-                    handleSequenceTransition(0);
-            
-                } catch (error) {
-                    console.error('[internalPresetDebug] Error loading settings:', error);
-                }
-            }
             
             
             
