@@ -116,39 +116,38 @@ class UnifiedSequencerSettings {
     }
 
 
-    exportSettings() {
+    exportSettings(pretty = true) {
         const settingsClone = JSON.parse(JSON.stringify(this.settings.masterSettings));
         settingsClone.currentSequence = 0;
-        
+    
         // Include global and channel-specific playback speeds
         settingsClone.globalPlaybackSpeed = this.globalPlaybackSpeed;
         settingsClone.channelPlaybackSpeed = Array.isArray(this.channelPlaybackSpeed) ? [...this.channelPlaybackSpeed] : new Array(16).fill(1);
-        
+    
         // Ensure that channelVolume is an array before trying to spread it
         settingsClone.channelVolume = Array.isArray(this.settings.masterSettings.channelVolume) ? [...this.settings.masterSettings.channelVolume] : new Array(16).fill(1);
-
     
         for (let sequenceKey in settingsClone.projectSequences) {
             const sequence = settingsClone.projectSequences[sequenceKey];
             for (let channelKey in sequence) {
                 const channel = sequence[channelKey];
                 const activeSteps = []; // Array to hold active or reversed steps with non-default settings
-            
+    
                 // Iterate over steps
                 channel.steps.forEach((step, index) => {
                     // Proceed if the step is active or in reverse
                     if (step.isActive || step.isReverse) {
                         const stepData = { index: index + 1 }; // Store step index (1-based)
-            
+    
                         // Include 'reverse' only if true
                         if (step.isReverse) stepData.reverse = true;
-            
+    
                         // Include 'volume' and 'pitch' only if they deviate from 1
                         // Assume default volume is 1 if not present
                         const stepVolume = step.volume !== undefined ? step.volume : 1;
                         if (stepVolume !== 1) stepData.volume = stepVolume;
                         if (step.pitch !== 1) stepData.pitch = step.pitch;
-            
+    
                         // Add to activeSteps only if there's more data beyond 'index'
                         if (Object.keys(stepData).length > 1) {
                             activeSteps.push(stepData);
@@ -158,17 +157,22 @@ class UnifiedSequencerSettings {
                         }
                     }
                 });
-            
+    
                 // Replace original steps array with the compact activeSteps array
                 channel.steps = activeSteps;
+    
+                // Remove the mute and url fields
+                delete channel.mute;
+                delete channel.url;
             }
         }
     
-        const exportedSettings = JSON.stringify(settingsClone);
+        const exportedSettings = JSON.stringify(settingsClone, null, pretty ? 2 : 0); // Adding indentation if pretty is true
         console.log("[exportSettings] Exported Settings:", exportedSettings);
         return exportedSettings;
     }
-
+    
+    
     
     
     
@@ -204,26 +208,22 @@ class UnifiedSequencerSettings {
                             };
                         }
                     });
-                    
+    
+                    // Assign new steps to the channel
                     this.settings.masterSettings.projectSequences[sequenceKey][channelKey].steps = newSteps;
-
+    
+                    // Ensure mute and url fields exist, for internal consistency
+                    this.settings.masterSettings.projectSequences[sequenceKey][channelKey].mute = false;
+                    this.settings.masterSettings.projectSequences[sequenceKey][channelKey].url = "";
                 });
             });
         }
-        // console.log(`[classDebug] Initial state post-load for channel 1, step 1:`, this.getStepStateAndReverse(0, 1, 1));
-
-    }
-    
+    }    
 
 async formatURL(url) {
 // Asynchronous operation example (placeholder)
 return new Promise(resolve => setTimeout(() => resolve(url), 100)); // Simulates async processing
 }
-
-
-
-
-
 
 
     setGlobalPlaybackSpeed(speed) {
@@ -255,8 +255,6 @@ return new Promise(resolve => setTimeout(() => resolve(url), 100)); // Simulates
         }
     }
 
-    
-    
 
     // New method to update the total number of sequences
     updateTotalSequences() {
@@ -275,17 +273,6 @@ return new Promise(resolve => setTimeout(() => resolve(url), 100)); // Simulates
         this.numSequences = lastActiveSequence + 1;
         console.log(`Total sequences updated to ${this.numSequences}`);
     }
-
-
-   
-
-
-    // setChannelSpeed(channelIndex, speed) {
-    //     if (channelIndex >= 0 && channelIndex < this.sourceNodes.length) {
-    //         this.sourceNodes[channelIndex].playbackRate.setValueAtTime(speed, this.audioContext.currentTime);
-    //         this.settings.masterSettings.channelPlaybackSpeed[channelIndex] = speed; // Update setting
-    //     }
-    // }
 
     checkSettings() {
         console.log("Current Global Settings:", this.settings);
