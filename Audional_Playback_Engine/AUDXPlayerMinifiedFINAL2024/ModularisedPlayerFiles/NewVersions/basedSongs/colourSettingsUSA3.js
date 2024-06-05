@@ -25,10 +25,11 @@ function getHslColor(a, factor) {
 }
 
 // Function to get dynamic RGB color
-function getDynamicRgb(x1, y1, x2, y2) {
+function getDynamicRgb(x1, y1, x2, y2, r, g, b) {
     const distance = Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2)) / 50;
-    return `rgba(0, 0, 255, ${distance})`;
+    return `rgba(${r}, ${g}, ${b}, ${distance})`;
 }
+
 
 function getWeightedRandomEffect(effects, weights) {
     let totalWeight = weights.reduce((acc, weight) => acc + weight, 0);
@@ -169,14 +170,7 @@ function getColors(o, a, l) {
 
 
 
-        // IGUANA EYES
         
-        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y), // iguana eyes ** Need to update RBB colour function **
-
-
-
-
-
 
         `rgb(${Array.from({ length: 3 }, () => Math.random() * ((l[0].z + R) / (2 * R) * 255)).join(",")})`, // Disco Eyes
         getRandomColor([colorPalette.primary, colorPalette.secondary]),
@@ -290,6 +284,37 @@ function getColors(o, a, l) {
         (Math.floor((l[0].z + R) / (2 * R) * 255) > 128 ? `rgb(${Math.floor((l[0].z + R) / (2 * R) * 255) % 255}, ${(Math.floor((l[0].z + R) / (2 * R) * 255) + 85) % 255}, ${(Math.floor((l[0].z + R) / (2 * R) * 255) + 170) % 255})` : "alternative-color"), // green
         (Math.floor((l[0].z + R) / (2 * R) * 255) > 128 ? `rgb(${Math.floor((l[0].z + R) / (2 * R) * 255)}, ${Math.floor((l[0].z + R) / (2 * R) * 255)}, ${Math.floor((l[0].z + R) / (2 * R) * 255) + 50})` : "alternative-color"), // grey
         (Math.floor((l[0].z + R) / (2 * R) * 255) > 128 ? Math.floor((l[0].z + R) / (2 * R) * 255) > 128 ? "blue" : "red" : "alternative-color"), // blue
+
+
+        // IGUANA EYES
+        
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 255, 165, 0),    // IGUANA EYES // Orange
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 255, 87, 51),   // Coral
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 255, 215, 0),   // Gold
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 255, 127, 80),  // Coral2
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 0, 255, 0),     // Lime
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 0, 255, 255),   // Cyan
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 132, 80, 17),   // Very dark orange
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 0, 25, 0),      // Very dark green
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 0, 0, 255),     // Blue
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 32, 178, 170),  // Lightseagreen
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 255, 140, 0),   // Darkorange
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 0, 0, 30),      // Very dark blue
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 77, 0, 0),      // Dark red
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 255, 0, 0),     // Red
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 0, 128, 0),     // Green
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 128, 0, 128),   // Purple
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 255, 0, 255),   // Magenta
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 0, 255, 0),     // Lime (repeated)
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 0, 128, 128),   // Teal
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 128, 0, 0),     // Maroon
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 0, 0, 128),     // Navy
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 128, 128, 0),   // Olive
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 192, 192, 192), // Silver
+        getDynamicRgb(l[2].x, l[2].y, l[2].x, l[0].y, 75, 0, 130),    // Indigo
+
+
+
 
 
         // LIQUID GRAVITY
@@ -502,7 +527,7 @@ let currentSettingIndex = 0;
 function applyCurrentSetting() {
     const setting = presetSettings[currentSettingIndex];
     const colors = getColors(setting.o, setting.a, setting.l, setting.R);
-    console.log(`Current Setting Index: ${currentSettingIndex}`, colors);
+    // console.log(`Current Setting Index: ${currentSettingIndex}`, colors);
     // Apply colors to your application as needed
 }
 
