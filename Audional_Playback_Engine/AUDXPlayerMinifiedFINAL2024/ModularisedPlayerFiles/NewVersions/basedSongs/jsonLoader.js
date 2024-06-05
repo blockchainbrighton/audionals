@@ -11,6 +11,9 @@ let isReversePlay = false;
 let audioWorker, preprocessedSequences = {}, isReadyToPlay = false, currentStep = 0, beatCount = 0, barCount = 0, currentSequence = 0, isPlaying = false, playbackTimeoutId = null, nextNoteTime = 0;
 let totalSequences = 0;  // New variable to hold the total number of sequences
 
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const AudionalPlayerMessages = new BroadcastChannel("channel_playback");
+
 
 
 async function loadJsonFromUrl(url) {

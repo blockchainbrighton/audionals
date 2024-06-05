@@ -42,3 +42,4 @@ loadScriptsSequentially(scriptsToLoad, 0, () => {
         initializeApp();
     }
 });
+
