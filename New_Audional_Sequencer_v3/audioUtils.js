@@ -285,88 +285,108 @@ function getIframeIdByChannelIndex(channelIndex) {
   return mappings[channelIndex];
 }
 
+// List of channels where fades should be applied
+const fadeChannels = [6, 7, 8, 11, 12, 13, 14, 15];
+
 function playSound(currentSequence, channel, currentStep) {
-  const channelIndex = getChannelIndex(channel);
-  const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
+    const channelIndex = getChannelIndex(channel);
+    const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
 
-  const sequencerChannel = new BroadcastChannel(`synth_channel_${channelIndex}`);
-  const iframeId = getIframeIdByChannelIndex(channelIndex);
-  let iframeSequencerChannel = null;
+    const sequencerChannel = new BroadcastChannel(`synth_channel_${channelIndex}`);
+    const iframeId = getIframeIdByChannelIndex(channelIndex);
+    let iframeSequencerChannel = null;
 
-  if (iframeId) {
-      iframeSequencerChannel = new BroadcastChannel(`synth_channel_${iframeId}`);
-  }
+    if (iframeId) {
+        iframeSequencerChannel = new BroadcastChannel(`synth_channel_${iframeId}`);
+    }
 
-  if (isActive) {
-      sequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
-      if (iframeSequencerChannel) {
-          iframeSequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
-      }
-  } else if (isReverse) {
-      sequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
-      if (iframeSequencerChannel) {
-          iframeSequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
-      }
-  }
-  sequencerChannel.close();
-  if (iframeSequencerChannel) {
-      iframeSequencerChannel.close();
-  }
+    if (isActive) {
+        sequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
+        if (iframeSequencerChannel) {
+            iframeSequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
+        }
+    } else if (isReverse) {
+        sequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
+        if (iframeSequencerChannel) {
+            iframeSequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
+        }
+    }
+    sequencerChannel.close();
+    if (iframeSequencerChannel) {
+        iframeSequencerChannel.close();
+    }
 
-  if (!isActive && !isReverse) {
-      return;
-  }
+    if (!isActive && !isReverse) {
+        return;
+    }
 
-  const bufferKey = `channel_${channelIndex}_${isReverse ? 'reverse' : 'forward'}`;
-  const audioBuffer = audioBuffers.get(bufferKey);
-  if (!audioBuffer) {
-      console.error(`[playSound] No audio buffer found for ${bufferKey}`);
-      return;
-  }
+    const bufferKey = `channel_${channelIndex}_${isReverse ? 'reverse' : 'forward'}`;
+    const audioBuffer = audioBuffers.get(bufferKey);
+    if (!audioBuffer) {
+        console.error(`[playSound] No audio buffer found for ${bufferKey}`);
+        return;
+    }
 
-  const audioContext = window.unifiedSequencerSettings.audioContext;
-  const source = audioContext.createBufferSource();
-  source.buffer = audioBuffer;
+    const audioContext = window.unifiedSequencerSettings.audioContext;
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
 
-  const gainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
-  if (!gainNode) {
-      console.error("No gain node found for channel", channelIndex);
-      return;
-  }
+    const gainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
+    if (!gainNode) {
+        console.error("No gain node found for channel", channelIndex);
+        return;
+    }
 
-  const playbackSpeed = window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex];
-  source.playbackRate.setValueAtTime(playbackSpeed, audioContext.currentTime);
-  source.connect(gainNode);
-  gainNode.connect(audioContext.destination);
+    const playbackSpeed = window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex];
+    source.playbackRate.setValueAtTime(playbackSpeed, audioContext.currentTime);
+    source.connect(gainNode);
+    gainNode.connect(audioContext.destination);
 
-  const { trimStart, duration, trimEnd } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
+    const { trimStart, duration, trimEnd } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
 
-  const fadeDuration = 0.02; // 20 milliseconds in seconds
-  const actualFadeDuration = fadeDuration / playbackSpeed; // Adjust fade duration based on playback speed
-  const adjustedDuration = duration / playbackSpeed; // Adjusted duration for playback speed
-  const userVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex]; // Get the user-defined volume
+    const fadeDuration = 0.02; // 20 milliseconds in seconds
+    const actualFadeDuration = fadeDuration / playbackSpeed; // Adjust fade duration based on playback speed
+    const adjustedDuration = duration / playbackSpeed; // Adjusted duration for playback speed
+    const userVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex]; // Get the user-defined volume
 
-  // Apply fade-in
-  gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-  gainNode.gain.linearRampToValueAtTime(userVolume, audioContext.currentTime + actualFadeDuration);
+    const trimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
+    const isTrimmed = trimSettings.startSliderValue !== 0 || trimSettings.endSliderValue !== 100;
 
-  // Start playback
-  source.start(0, trimStart, duration);
+    // Check if fades should be applied for this channel
+    const applyFades = fadeChannels.includes(channelIndex) && isTrimmed;
 
-  // Apply fade-out
-  gainNode.gain.setValueAtTime(userVolume, audioContext.currentTime + adjustedDuration - actualFadeDuration);
-  gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + adjustedDuration);
+    if (applyFades) {
+        // Apply fade-in
+        gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(userVolume, audioContext.currentTime + actualFadeDuration);
 
-  source.onended = () => {
-      // Ensure gain is returned to user volume after fade-out
-      gainNode.gain.setValueAtTime(0, audioContext.currentTime); // Set to 0 before ramping up to prevent clicks
-      gainNode.gain.linearRampToValueAtTime(userVolume, audioContext.currentTime + actualFadeDuration); // Restore user volume
-      source.disconnect();
-      window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
-  };
+        // Start playback
+        source.start(0, trimStart, duration);
 
-  window.unifiedSequencerSettings.sourceNodes[channelIndex] = source;
+        // Apply fade-out
+        gainNode.gain.setValueAtTime(userVolume, audioContext.currentTime + adjustedDuration - actualFadeDuration);
+        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + adjustedDuration);
+
+        source.onended = () => {
+            // Ensure gain is returned to user volume after fade-out
+            gainNode.gain.setValueAtTime(0, audioContext.currentTime); // Set to 0 before ramping up to prevent clicks
+            gainNode.gain.linearRampToValueAtTime(userVolume, audioContext.currentTime + actualFadeDuration); // Restore user volume
+            source.disconnect();
+            window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
+        };
+    } else {
+        // Start playback without fades
+        source.start(0, trimStart, duration);
+        source.onended = () => {
+            source.disconnect();
+            window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
+        };
+    }
+
+    window.unifiedSequencerSettings.sourceNodes[channelIndex] = source;
 }
+
+
 
 
 function calculateTrimValues(channelIndex, audioBuffer, isReversePlayback) {
