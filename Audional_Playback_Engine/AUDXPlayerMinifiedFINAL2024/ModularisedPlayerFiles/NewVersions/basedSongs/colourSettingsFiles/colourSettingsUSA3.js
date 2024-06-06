@@ -2,8 +2,35 @@
 
 // Define the color palette
 const colorPalette = {
-    primary: ["#ee0000", "white", "#3c37ff", "#ffa501", "#3bcd26", "#8d0000", "#03007a", "#b46500", "#18530f"],
-    secondary: ["#ffa501", "#ee0000", "#3c37ff", "#18530f", "#b46500", "#ffcf78", "#3c37ff", "#fe7d7d", "#71e260", "#8d0000", "#18530f", "#03007a"],
+    primary: [
+        { hex: "#FFA500", class: "color-orange" }, // orange
+        { hex: "#FF5733", class: "color-coral" }, // coral
+        { hex: "#FFD700", class: "color-gold" }, // gold
+        { hex: "#FF7F50", class: "color-coral2" }, // coral
+        { hex: "#00FF00", class: "color-lime" }, // lime
+        { hex: "#00FFFF", class: "color-cyan" },  // cyan
+        { hex: "#845011", class: "color-verydarkorange" }, // very dark orange
+        { hex: "#001900", class: "color-verydarkgreen" }, // very dark green
+    ],
+    secondary: [
+        { hex: "#FFA500", class: "color-orange" }, 
+        { hex: "#0000FF", class: "color-blue" }, 
+        { hex: "#20B2AA", class: "color-lightseagreen" }, 
+        { hex: "#FF8C00", class: "color-darkorange" }, 
+        { hex: "#00001E", class: "color-verydarkblue" }, // very dark blue
+        { hex: "#4d0000", class: "color-darkred" }, // dark red
+        { hex: "#FF0000", class: "color-red" }, 
+        { hex: "#008000", class: "color-green" }, 
+        { hex: "#800080", class: "color-purple" }, 
+        { hex: "#FF00FF", class: "color-magenta" }, 
+        { hex: "#00FF00", class: "color-lime" }, 
+        { hex: "#008080", class: "color-teal" }, 
+        { hex: "#800000", class: "color-maroon" }, 
+        { hex: "#000080", class: "color-navy" }, 
+        { hex: "#808000", class: "color-olive" }, 
+        { hex: "#C0C0C0", class: "color-silver" }, 
+        { hex: "#4B0082", class: "color-indigo" }
+    ],
     hslColors: Array.from({ length: 360 }, (_, i) => `hsl(${i}, 100%, 50%)`)
 };
 
@@ -45,6 +72,7 @@ function getWeightedRandomEffect(effects, weights) {
 
 // Main function to get colors
 function getColors(o, a, l) {
+
 
 
     return [
@@ -510,40 +538,46 @@ function getColors(o, a, l) {
     
 
 
-// Preset random settings
-const presetSettings = Array.from({ length: 100 }, (_, i) => ({
-    o: Math.random(),
-    a: Math.random() * 360,
-    l: [
-        { x: Math.random() * 1000, y: Math.random() * 1000, z: Math.random() * 1000 },
-        { x: Math.random() * 1000, y: Math.random() * 1000, z: Math.random() * 1000 }
-    ],
-    R: Math.random() * 1000
-}));
+// // Preset random settings
+// const presetSettings = Array.from({ length: 100 }, (_, i) => ({
+//     o: Math.random(),
+//     a: Math.random() * 360,
+//     l: [
+//         { x: Math.random() * 1000, y: Math.random() * 1000, z: Math.random() * 1000 },
+//         { x: Math.random() * 1000, y: Math.random() * 1000, z: Math.random() * 1000 }
+//     ],
+//     R: Math.random() * 1000
+// }));
 
-let currentSettingIndex = 0;
+// let currentSettingIndex = 0;
 
-// Function to apply the current color setting
-function applyCurrentSetting() {
-    const setting = presetSettings[currentSettingIndex];
-    const colors = getColors(setting.o, setting.a, setting.l, setting.R);
-    // console.log(`Current Setting Index: ${currentSettingIndex}`, colors);
-    // Apply colors to your application as needed
-}
+// // Function to display the current setting index
+// function displayCurrentSettingIndex() {
+//     console.log(`Current Setting Index: ${currentSettingIndex}`);
+// }
 
-// Event listeners for arrow keys
-document.addEventListener('keydown', (event) => {
-    switch (event.key) {
-        case 'ArrowUp':
-            currentSettingIndex = (currentSettingIndex + 1) % presetSettings.length;
-            applyCurrentSetting();
-            break;
-        case 'ArrowDown':
-            currentSettingIndex = (currentSettingIndex - 1 + presetSettings.length) % presetSettings.length;
-            applyCurrentSetting();
-            break;
-    }
-});
+// // Function to apply the current color setting
+// function applyCurrentSetting() {
+//     console.log(`Current Setting Index: ${currentSettingIndex}`);
+//     const setting = presetSettings[currentSettingIndex];
+//     const colors = getColors(setting.o, setting.a, setting.l, setting.R);
+//     displayCurrentSettingIndex(); // Display the current setting index
+//     // Apply colors to your application as needed
+// }
 
-// Initial application of the first setting
-applyCurrentSetting();
+// // Event listeners for arrow keys
+// document.addEventListener('keydown', (event) => {
+//     switch (event.key) {
+//         case 'ArrowUp':
+//             currentSettingIndex = (currentSettingIndex + 1) % presetSettings.length;
+//             applyCurrentSetting();
+//             break;
+//         case 'ArrowDown':
+//             currentSettingIndex = (currentSettingIndex - 1 + presetSettings.length) % presetSettings.length;
+//             applyCurrentSetting();
+//             break;
+//     }
+// });
+
+// // Initial application of the first setting
+// applyCurrentSetting();

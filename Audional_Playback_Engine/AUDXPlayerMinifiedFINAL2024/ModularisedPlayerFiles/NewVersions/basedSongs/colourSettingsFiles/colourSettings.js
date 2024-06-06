@@ -1,5 +1,6 @@
 // colourSettings.js
 
+
 // Define the color palette
 const colorPalette = {
     primary: ["#FFA500", "#FF5733", "#FFD700", "#FF7F50", "#20B2AA", "#7FFF00", "#00FF00", "#00FA9A", "#00FFFF"],
@@ -31,7 +32,7 @@ function getDynamicRgb(x1, y1, x2, y2) {
 }
 
 // Main function to get colors
-function getColorSettings1(o, a, l) {
+function getColors(o, a, l) {
     return [
         getRandomColor([colorPalette.primary, colorPalette.secondary]),
         getRandomColor([colorPalette.primary, colorPalette.secondary]),
@@ -160,8 +161,9 @@ let currentSettingIndex = 0;
 
 // Function to apply the current color setting
 function applyCurrentSetting() {
+
     const setting = presetSettings[currentSettingIndex];
-    const colors = getColorSettings1(setting.o, setting.a, setting.l, setting.R);
+    const colors = getColors(setting.o, setting.a, setting.l, setting.R);
     console.log(`Current Setting Index: ${currentSettingIndex}`, colors);
     // Apply colors to your application as needed
 }
