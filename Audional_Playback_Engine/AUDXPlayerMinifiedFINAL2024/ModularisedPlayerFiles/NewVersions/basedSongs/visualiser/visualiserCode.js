@@ -147,7 +147,7 @@ document.addEventListener("internalAudioPlayback", (event) => {
         const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
         const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
 
-        log(`AccessLevel=${AccessLevel}, ArrayIndex=${arrayIndex}, ArrayLength=${arrayLengths[arrayIndex]}`);
+        log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nArrayLength=${arrayLengths[arrayIndex]}\nIndex=${arrayIndex}`);
         
         if (!arrayLengths[arrayIndex]) {
             errorLog("Invalid array length:", arrayLengths[arrayIndex]);
