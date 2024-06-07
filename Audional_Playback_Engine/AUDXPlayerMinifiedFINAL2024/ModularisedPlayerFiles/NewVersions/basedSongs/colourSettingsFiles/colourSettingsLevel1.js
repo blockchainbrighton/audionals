@@ -1,4 +1,5 @@
 // colourSettings5.js
+console.log("Colour settings level 1 loaded");
 
 // Define the color palette
 const colorPalette = {
@@ -35,6 +36,7 @@ const colorPalette = {
 };
 
 
+
 // Function to get a random color from a palette
 function getRandomColor(palette) {
     const colors = palette.flat();
@@ -58,6 +60,8 @@ function getDynamicRgb(x1, y1, x2, y2, r, g, b) {
     return `rgba(${r}, ${g}, ${b}, ${distance})`;
 }
 
+{
+const R = 100; // Set a default or required value for R in this context
 
 // Function to get colors
 function getColors1(o, a, l) {
@@ -100,137 +104,99 @@ function getColors1(o, a, l) {
 
     // Return dynamic color settings
     return [
-
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
 
             (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
             `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
             "#422000",
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
+            // 4 stripe close scatters
+            getConditionalColor(l[0].x, l[0].y, 3, "red", "black"), // 
+            getConditionalColor(l[0].x, l[0].y, 3, "white", "black"), //      
+            getConditionalColor(l[0].x, l[0].y, 3, "blue", "black"), // 
+            getConditionalColor(l[0].x, l[0].y, 3, "orange", "black"), //
+            getConditionalColor(l[0].x, l[0].y, 3, "green", "black"), //
 
-            // CRAZY EYES
-        
-            (randomValues[1] * (l0zR / (3 * R) * 75)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))})` : 
-                "#000a39",
+            // 4 stripe Wide Scatters 
+            getConditionalColor(l[1].x, l[1].y, 3, "red", "black"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "white", "black"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "blue", "black"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "orange", "black"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "green", "black"), // Wide 4 Row Scatter
 
-            (randomValues[2] * (l1zR / (111 * R) * 299999)) > 32 ? 
-                `rgb(${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))}, ${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))}, ${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))})` : 
-                "alternative-color",
-
-            (randomValues[3] * (l0zR / (0.01 * R) * 0.17)) > 32 ? 
-                `rgb(${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))}, ${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))}, ${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))})` : 
-                "alternative-color",
-
-            (randomValues[4] * (l0zR / (0.1 * R) * 255)) > 32 ? 
-                `rgb(${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))}, ${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))}, ${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))})` : 
-                "alternative-color",
-
-            (randomValues[5] * (l0zR / (4 * R) * 255)) > 32 ? 
-                `rgb(${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))}, ${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))}, ${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))})` : 
-                "alternative-color",
-
-            (randomValues[6] * (l0zR / (0.01 * R) * 255)) > 32 ? 
-                `rgb(${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))}, ${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))}, ${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))})` : 
-                "alternative-color",
-
-            (randomValues[7] * (l0zR / (2.5 * R) * 55)) > 32 ? 
-                `rgb(${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))}, ${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))}, ${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))})` : 
-                "alternative-color",
-
-            (randomValues[8] * (l0zR / (2 * R) * 255)) > 32 ? 
-                `rgb(${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))})` : 
-                "alternative-color",
-
-            (randomValues[9] * (l0zR / (5 * R) * 255)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))})` : 
-                "red",
-
-            (randomValues[10] * (l0zR / (5 * R) * 255)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))})` : 
-                "blue",
-
-            (randomValues[11] * (l0zR / (5 * R) * 255)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))})` : 
-                "orange",
-
-            (randomValues[12] * (l0zR / (5 * R) * 255)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))})` : 
-                "green",
-
-            (randomValues[13] * (l0zR / (5 * R) * 255)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))})` : 
-                "grey",
-
-            (randomValues[14] * (l0zR / (111 * R) * 255)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))})` : 
-                "#5a0000",
-
-            (randomValues[15] * (l0zR / (111 * R) * 255)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))})` : 
-                "blue",
-
-            (randomValues[16] * (l0zR / (111 * R) * 255)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))})` : 
-                "green",
-
-            (randomValues[17] * (l0zR / (111 * R) * 255)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))})` : 
-                "grey",
-
-            (randomValues[18] * (l0zR / (111 * R) * 255)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))})` : 
-                "#1f1f1f",
-
-            (randomValues[19] * (l0zR / (3 * R) * 75)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))})` : 
-                "#390000",
-
-            (randomValues[20] * (l0zR / (3 * R) * 75)) > 0.1 ? 
-                `rgb(${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))})` : 
-                "#00390e",
-
-            `rgb(${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))})`, // Disco Eyes
-
-            randomColor1, // Using precomputed random color
-
-            // RAINBOW Cycle Scatters
-            getConditionalColor(l[0].x, l[0].y, 0.1, randomColor1, "black"), // Cycle Scatter
-            getConditionalColor(l[1].x, l[0].y, 0.1, randomColor2, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[0].y, 0.2, randomColor3, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[0].y, 0.3, randomColor4, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[0].y, 0.5, randomColor5, "black"), // Rainbow scatter
-
-            getConditionalColor(l[0].x, l[1].y, 0.05, randomColor1, "black"), // Cycle Scatter
-            getConditionalColor(l[1].x, l[1].y, 0.05, randomColor2, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 0.01, randomColor3, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 0.001, randomColor4, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 0.0001, randomColor5, "black"), // Rainbow scatter
-
-            getConditionalColor(l[1].x, l[1].y, 1, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 2, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 3, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 4, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 5, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 6, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 7, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 8, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 9, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 10, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 11, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 12, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 13, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 14, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 15, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 16, randomColor6, "black"), // Rainbow scatter
-            getConditionalColor(l[1].x, l[1].y, 17, randomColor6, "black"), // Rainbow scatter
+            // 3 stripe wide scatters
+            getConditionalColor(l[1].x, l[1].y, 5, "red", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "white", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "blue", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "orange", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "green", "black"), // Wide 3 Row Scatter
 
 
+            // 1 stripe wide scatters NO BACKGROUND
+            getConditionalColor(l[1].x, l[1].y, 10, "red", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "white", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "blue", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "orange", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "green", "black"), // Wide 3 Row Scatter
+
+
+            
+    
             getConditionalColor(l[0].x, l[0].y, 0.1, "orange", "black"), // Cycle Scatter
             getConditionalColor(l[0].x, l[0].y, 0.05, "red", "black"), // Cycle Scatter
             getConditionalColor(l[0].x, l[0].y, 0.0111, "#444444", "black"), // Cycle scatter
 
+
+            getConditionalColor(x2, y0, 600, "green", "black"),
+            getConditionalColor(x2, y0, 600, "blue", "black"),
+            getConditionalColor(x2, y0, 600, "red", "black"),
+
+            getConditionalColor(x2, y0, -300, "orange", "black"),
+            getConditionalColor(x2, y0, -300, "green", "black"),
+            getConditionalColor(x2, y0, -300, "blue", "black"),
+            getConditionalColor(x2, y0, -300, "red", "black"),
+
+
+
+
+
+            getConditionalColor(x1, y0, -100, "orange", "black"),
+            getConditionalColor(x1, y0, -100, "green", "black"),
+            getConditionalColor(x1, y0, -100, "blue", "black"),
+            getConditionalColor(x1, y0, -100, "red", "black"),
+
+       
+            getConditionalColor(x3, y0, 100, "orange", "black"),
+            getConditionalColor(x3, y0, 100, "green", "black"),
+            getConditionalColor(x3, y0, 100, "blue", "black"),
+            getConditionalColor(x3, y0, 100, "red", "black"),
+
+
+
+
+            // CRAWLERS ON BLACK BACKGROUND
+            getConditionalColor(x0, y0, 345, "red", "black"), // Top Left Edge Crawler
+            getConditionalColor(x0, y0, 345, "white", "black"), // Top Left Edge Crawler
+            getConditionalColor(x0, y0, 345, "blue", "black"), // Top Left Edge Crawler
+            getConditionalColor(x0, y0, 345, "orange", "black"), // Top Left Edge Crawler
+            getConditionalColor(x0, y0, 345, "green", "black"), // Top Left Edge Crawler
                    ];
 
     }
+
+// Function to return the length of the array generated by getColors1
+function getColors1Length() {
+    // Safely generate a default color array for length calculation
+    const defaultL = [{ z: 0, x: 0, y: 0 }, { z: 0, x: 0, y: 0 }, { z: 0, x: 0, y: 0 }];
+    const length = getColors1(null, null, defaultL).length;
+    console.log(`getColors1 length: ${length}`);
+    return length;
+}
+
+// Log the length of the colors array when the file is loaded
+getColors1Length();
+
+}

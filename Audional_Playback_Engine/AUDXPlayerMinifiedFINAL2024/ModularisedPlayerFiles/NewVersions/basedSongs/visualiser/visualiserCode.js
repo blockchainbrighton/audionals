@@ -1,25 +1,44 @@
-// visualiser.js
 console.log("Visualiser.js loaded");
 let isChannel11Active = false;
+
+// Array length placeholders
+let arrayLengths = {
+    1: 0, // Length of array from level 1
+    2: 0, // Length of array from level 2
+    3: 0  // Length of array from level 3
+};
 
 function randomWithSeed(t) {
     const e = 1e4 * Math.sin(t);
     return e - Math.floor(e);
 }
+
 function calculateCCI2(channelIndex) {
-    const value = 25 * randomWithSeed(seed + channelIndex);
+    const value = 100 * randomWithSeed(seed + channelIndex);
     return Math.floor(value) + 1;
 }
 
 // Function to generate a number between 1 and 3 based on seed
-function generateArrayNumber(seed) {
+function generateArrayLevel(seed) {
     const randomValue = randomWithSeed(seed);
     return Math.floor(randomValue * 3) + 1; // Generates 1, 2, or 3
 }
 
-// Assume seed is defined somewhere in your code
-let arrayNumber = generateArrayNumber(seed);
+// Function to select array index based on seed, array level, and channel index
+function selectArrayIndex(seed, arrayLevel, channelIndex) {
+    const randomValue = randomWithSeed(seed + channelIndex * 100); // Varied offset to get a different random value
+    return Math.floor(randomValue * arrayLevel) + 1; // Generates 1 to arrayLevel
+}
 
+//  seed is defined in the HTML file
+let arrayLevel = generateArrayLevel(seed); // Define globally for use throughout the code
+
+function updateVisualizer(cci2, arrayIndex, channelIndex) {
+    // Function to handle visual updates using cci2 and arrayIndex
+    // This is where the actual visual update logic will reside
+    console.log(`Updating visual: CCI2=${cci2}, ArrayLevel=${arrayLevel}, ChannelIndex=${channelIndex}, ArrayIndex=${arrayIndex}`);
+    immediateVisualUpdate();
+}
 document.addEventListener("internalAudioPlayback", (event) => {
     const { action, channelIndex, step } = event.detail;
 
@@ -30,8 +49,11 @@ document.addEventListener("internalAudioPlayback", (event) => {
         immediateVisualUpdate();
     } else if (action === "activeStep") {
         cci2 = calculateCCI2(channelIndex);
-        arrayNumber = generateArrayNumber(seed); // Update arrayNumber for each active step
-        console.log(`Received channel playback: Channel ${channelIndex}. CCI2 updated to ${cci2} based on seed ${seed}. Generated array number: ${arrayNumber}.`);
+        arrayLevel = generateArrayLevel(seed); // Update arrayLevel for each active step
+        const arrayIndex = selectArrayIndex(seed, arrayLevel, channelIndex); // Determine which array to use
+
+        // Update visual only during actual visual change
+        updateVisualizer(cci2, arrayIndex, channelIndex);
     }
 });
 
@@ -49,8 +71,11 @@ AudionalPlayerMessages.onmessage = (message) => {
     } else {
         const { channelIndex } = message.data;
         cci2 = calculateCCI2(channelIndex);
-        arrayNumber = generateArrayNumber(seed); // Update arrayNumber for each message
-        console.log(`Received channel playback: Channel ${channelIndex}. CCI2 updated to ${cci2} based on seed ${seed}. Generated array number: ${arrayNumber}.`);
+        arrayLevel = generateArrayLevel(seed); // Update arrayLevel for each message
+        const arrayIndex = selectArrayIndex(seed, arrayLevel, channelIndex); // Determine which array to use
+
+        // Update visual only during actual visual change
+        updateVisualizer(cci2, arrayIndex, channelIndex);
     }
 };
 
@@ -134,12 +159,14 @@ cp.drawObjectD2 = function(t, e) {
 
         let angle = 180 * Math.atan2(coordinates[0].y - S / 2, coordinates[0].x - S / 2) / Math.PI;
 
+        // Determine which color array to use based on arrayLevel
+        const arrayIndex = selectArrayIndex(seed, arrayLevel, 0); // Assuming channel 0 for visual update
         let colors;
-        if (arrayNumber === 1) {
+        if (arrayIndex === 1) {
             colors = getColors1(angle, e, vertices);
-        } else if (arrayNumber === 2) {
+        } else if (arrayIndex === 2) {
             colors = getColors2(angle, e, vertices);
-        } else if (arrayNumber === 3) {
+        } else if (arrayIndex === 3 && arrayLevel === 3) { // Ensure only level 3 can access getColors3
             colors = getColors3(angle, e, vertices);
         }
 
@@ -149,6 +176,7 @@ cp.drawObjectD2 = function(t, e) {
         cx.stroke();
     }
 };
+
 
 requestAnimationFrame(d);
 

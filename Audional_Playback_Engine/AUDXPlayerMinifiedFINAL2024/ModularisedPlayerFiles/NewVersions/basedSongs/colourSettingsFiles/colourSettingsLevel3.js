@@ -1,6 +1,11 @@
 // colourSettingsLevel3.js
 
+console.log("Colour settings level 3 loaded");
 
+
+{
+    const R = 100; // Set a default or required value for R in this context
+    
 // Main function to get colors
 function getColors3(o, a, l) {
     const randomValues = Array.from({ length: 24 }, () => Math.random());
@@ -54,57 +59,32 @@ function getColors3(o, a, l) {
 
     return [
 
-          // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
 
-          (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
-          `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
-          "#422000",
+            (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
+            `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
+            "#422000",
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-
-            // BOTTOM RIGHT CORNER 
-            getConditionalColor(x2, y0, 600, "red", "blue"),
-            getConditionalColor(x2, y0, 600, "red", "green"),
-            getConditionalColor(x2, y0, 600, "red", "orange"),
-            getConditionalColor(x2, y0, 600, "red", "white"),
-            getConditionalColor(x2, y0, 600, "red", "black"),
-            getConditionalColor(x2, y0, 600, "blue", "red"),
-            getConditionalColor(x2, y0, 600, "blue", "green"),
-            getConditionalColor(x2, y0, 600, "blue", "orange"),
-            getConditionalColor(x2, y0, 600, "blue", "white"),
-            getConditionalColor(x2, y0, 600, "blue", "black"),
-            getConditionalColor(x2, y0, 600, "green", "blue"),
-            getConditionalColor(x2, y0, 600, "green", "red"),
-            getConditionalColor(x2, y0, 600, "green", "orange"),
-            getConditionalColor(x2, y0, 600, "green", "white"),
-            getConditionalColor(x2, y0, 600, "green", "black"),
-            getConditionalColor(x2, y0, 600, "orange", "red"),
-            getConditionalColor(x2, y0, 600, "orange", "green"),
-            getConditionalColor(x2, y0, 600, "orange", "blue"),
-            getConditionalColor(x2, y0, 600, "orange", "white"),
-            getConditionalColor(x2, y0, 600, "orange", "black"),
-
-            // 3 SQUARE MIDDLE CRAWLER
-            getConditionalColor(x2, y0, -300, "red", "blue"),
-            getConditionalColor(x2, y0, -300, "red", "green"),
-            getConditionalColor(x2, y0, -300, "red", "orange"),
-            getConditionalColor(x2, y0, -300, "red", "white"),
-            getConditionalColor(x2, y0, -300, "red", "black"),
-            getConditionalColor(x2, y0, -300, "blue", "red"),
-            getConditionalColor(x2, y0, -300, "blue", "green"),
-            getConditionalColor(x2, y0, -300, "blue", "orange"),
-            getConditionalColor(x2, y0, -300, "blue", "white"),
-            getConditionalColor(x2, y0, -300, "blue", "black"),
-            getConditionalColor(x2, y0, -300, "green", "blue"),
-            getConditionalColor(x2, y0, -300, "green", "red"),
-            getConditionalColor(x2, y0, -300, "green", "orange"),
-            getConditionalColor(x2, y0, -300, "green", "white"),
-            getConditionalColor(x2, y0, -300, "green", "black"),
-            getConditionalColor(x2, y0, -300, "orange", "red"),
-            getConditionalColor(x2, y0, -300, "orange", "green"),
-            getConditionalColor(x2, y0, -300, "orange", "blue"),
-            getConditionalColor(x2, y0, -300, "orange", "white"),
-            getConditionalColor(x2, y0, -300, "orange", "black"),
+                 // MIDDLE LINE CRAWLER TOP LEFT
+                 getConditionalColor(x3, y0, 100, "red", "blue"),
+                 getConditionalColor(x3, y0, 100, "red", "green"),
+                 getConditionalColor(x3, y0, 100, "red", "orange"),
+                 getConditionalColor(x3, y0, 100, "red", "white"),
+                 getConditionalColor(x3, y0, 100, "blue", "red"),
+                 getConditionalColor(x3, y0, 100, "blue", "green"),
+                 getConditionalColor(x3, y0, 100, "blue", "orange"),
+                 getConditionalColor(x3, y0, 100, "blue", "white"),
+                 getConditionalColor(x3, y0, 100, "green", "blue"),
+                 getConditionalColor(x3, y0, 100, "green", "red"),
+                 getConditionalColor(x3, y0, 100, "green", "orange"),
+                 getConditionalColor(x3, y0, 100, "green", "white"),
+                 getConditionalColor(x3, y0, 100, "orange", "red"),
+                 getConditionalColor(x3, y0, 100, "orange", "green"),
+                 getConditionalColor(x3, y0, 100, "orange", "blue"),
+                 getConditionalColor(x3, y0, 100, "orange", "white"),
 
 
             // MIDDLE LINE CRAWLER BOTTOM RIGHT
@@ -112,51 +92,56 @@ function getColors3(o, a, l) {
             getConditionalColor(x1, y0, -100, "red", "green"),
             getConditionalColor(x1, y0, -100, "red", "orange"),
             getConditionalColor(x1, y0, -100, "red", "white"),
-            getConditionalColor(x1, y0, -100, "red", "black"),
             getConditionalColor(x1, y0, -100, "blue", "red"),
             getConditionalColor(x1, y0, -100, "blue", "green"),
             getConditionalColor(x1, y0, -100, "blue", "orange"),
             getConditionalColor(x1, y0, -100, "blue", "white"),
-            getConditionalColor(x1, y0, -100, "blue", "black"),
             getConditionalColor(x1, y0, -100, "green", "blue"),
             getConditionalColor(x1, y0, -100, "green", "red"),
             getConditionalColor(x1, y0, -100, "green", "orange"),
             getConditionalColor(x1, y0, -100, "green", "white"),
-            getConditionalColor(x1, y0, -100, "green", "black"),
             getConditionalColor(x1, y0, -100, "orange", "red"),
             getConditionalColor(x1, y0, -100, "orange", "green"),
             getConditionalColor(x1, y0, -100, "orange", "blue"),
             getConditionalColor(x1, y0, -100, "orange", "white"),
-            getConditionalColor(x1, y0, -100, "orange", "black"),
 
-            // MIDDLE LINE CRAWLER TOP LEFT
-            getConditionalColor(x3, y0, 100, "red", "blue"),
-            getConditionalColor(x3, y0, 100, "red", "green"),
-            getConditionalColor(x3, y0, 100, "red", "orange"),
-            getConditionalColor(x3, y0, 100, "red", "white"),
-            getConditionalColor(x3, y0, 100, "red", "black"),
-            getConditionalColor(x3, y0, 100, "blue", "red"),
-            getConditionalColor(x3, y0, 100, "blue", "green"),
-            getConditionalColor(x3, y0, 100, "blue", "orange"),
-            getConditionalColor(x3, y0, 100, "blue", "white"),
-            getConditionalColor(x3, y0, 100, "blue", "black"),
-            getConditionalColor(x3, y0, 100, "green", "blue"),
-            getConditionalColor(x3, y0, 100, "green", "red"),
-            getConditionalColor(x3, y0, 100, "green", "orange"),
-            getConditionalColor(x3, y0, 100, "green", "white"),
-            getConditionalColor(x3, y0, 100, "green", "black"),
-            getConditionalColor(x3, y0, 100, "orange", "red"),
-            getConditionalColor(x3, y0, 100, "orange", "green"),
-            getConditionalColor(x3, y0, 100, "orange", "blue"),
-            getConditionalColor(x3, y0, 100, "orange", "white"),
-            getConditionalColor(x3, y0, 100, "orange", "black"),
+                 // 3 SQUARE MIDDLE CRAWLER
+                 getConditionalColor(x2, y0, -300, "red", "blue"),
+                 getConditionalColor(x2, y0, -300, "red", "green"),
+                 getConditionalColor(x2, y0, -300, "red", "orange"),
+                 getConditionalColor(x2, y0, -300, "red", "white"),
+                 getConditionalColor(x2, y0, -300, "blue", "red"),
+                 getConditionalColor(x2, y0, -300, "blue", "green"),
+                 getConditionalColor(x2, y0, -300, "blue", "orange"),
+                 getConditionalColor(x2, y0, -300, "blue", "white"),
+                 getConditionalColor(x2, y0, -300, "green", "blue"),
+                 getConditionalColor(x2, y0, -300, "green", "red"),
+                 getConditionalColor(x2, y0, -300, "green", "orange"),
+                 getConditionalColor(x2, y0, -300, "green", "white"),
+                 getConditionalColor(x2, y0, -300, "orange", "red"),
+                 getConditionalColor(x2, y0, -300, "orange", "green"),
+                 getConditionalColor(x2, y0, -300, "orange", "blue"),
+                 getConditionalColor(x2, y0, -300, "orange", "white"),
 
-            // CRAWLERS ON BLACK BACKGROUND
-            getConditionalColor(x0, y0, 345, "red", "black"), // Top Left Edge Crawler
-            getConditionalColor(x0, y0, 345, "white", "black"), // Top Left Edge Crawler
-            getConditionalColor(x0, y0, 345, "blue", "black"), // Top Left Edge Crawler
-            getConditionalColor(x0, y0, 345, "orange", "black"), // Top Left Edge Crawler
-            getConditionalColor(x0, y0, 345, "green", "black"), // Top Left Edge Crawler
+
+            // BOTTOM RIGHT CORNER 
+            getConditionalColor(x2, y0, 600, "red", "blue"),
+            getConditionalColor(x2, y0, 600, "red", "green"),
+            getConditionalColor(x2, y0, 600, "red", "orange"),
+            getConditionalColor(x2, y0, 600, "red", "white"),
+            getConditionalColor(x2, y0, 600, "blue", "red"),
+            getConditionalColor(x2, y0, 600, "blue", "green"),
+            getConditionalColor(x2, y0, 600, "blue", "orange"),
+            getConditionalColor(x2, y0, 600, "blue", "white"),
+            getConditionalColor(x2, y0, 600, "green", "blue"),
+            getConditionalColor(x2, y0, 600, "green", "red"),
+            getConditionalColor(x2, y0, 600, "green", "orange"),
+            getConditionalColor(x2, y0, 600, "green", "white"),
+            getConditionalColor(x2, y0, 600, "orange", "red"),
+            getConditionalColor(x2, y0, 600, "orange", "green"),
+            getConditionalColor(x2, y0, 600, "orange", "blue"),
+            getConditionalColor(x2, y0, 600, "orange", "white"),
+            getConditionalColor(x2, y0, 600, "orange", "black"),
 
             // EU Flag Styles
             getConditionalColor(x0, y0, 15, "orange", "blue"),
@@ -223,6 +208,49 @@ function getColors3(o, a, l) {
             `rgb(${Math.floor(255 * Math.sin(Date.now() / 1600) + 128)}, ${Math.floor(255 * Math.sin(Date.now() / 1800) + 128)}, ${Math.floor(200 * Math.sin(Date.now() / 2000) + 55)})`,
 
 
+            // RAINBOW Cycle Scatters
+            getConditionalColor(l[0].x, l[0].y, 0.1, randomColor1, "black"), // Cycle Scatter
+            getConditionalColor(l[1].x, l[0].y, 0.1, randomColor2, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[0].y, 0.2, randomColor3, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[0].y, 0.3, randomColor4, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[0].y, 0.5, randomColor5, "black"), // Rainbow scatter
+
+            getConditionalColor(l[0].x, l[1].y, 0.05, randomColor1, "black"), // Cycle Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.05, randomColor2, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 0.01, randomColor3, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 0.001, randomColor4, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 0.0001, randomColor5, "black"), // Rainbow scatter
+
+            getConditionalColor(l[1].x, l[1].y, 1, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 2, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 3, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 4, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 5, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 6, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 7, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 8, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 9, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 10, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 11, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 12, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 13, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 14, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 15, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 16, randomColor6, "black"), // Rainbow scatter
+            getConditionalColor(l[1].x, l[1].y, 17, randomColor6, "black"), // Rainbow scatter
+
+            // Scatter with SOLID BG  // TICKER TAPE PARADE
+
+            getConditionalColor(l[1].x, l[1].y, 3, "grey", "red"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "grey", "white"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "grey", "blue"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "grey", "orange"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "grey", "green"), // Wide 4 Row Scatter
+            getConditionalColor(l[0].x, l[0].y, 0.0111, "#444444", "black"), // cycle scatter
+
+            randomColor1, // Using precomputed random color
+
+          
 
 
             // Spinning Eyes
@@ -235,3 +263,15 @@ function getColors3(o, a, l) {
         ];
 
     }
+
+// Function to return the length of the array generated by getColors3
+function getColors3Length() {
+    const defaultL = [{ z: 0, x: 0, y: 0 }, { z: 0, x: 0, y: 0 }, { z: 0, x: 0, y: 0 }];
+    const length = getColors3(null, null, defaultL).length;
+    console.log(`getColors3 length: ${length}`);
+    return length;
+}
+
+// Log the length of the colors array when the file is loaded
+getColors3Length();
+}
