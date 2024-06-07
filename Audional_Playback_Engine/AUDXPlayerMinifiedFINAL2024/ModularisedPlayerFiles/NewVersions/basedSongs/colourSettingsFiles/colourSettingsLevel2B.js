@@ -216,32 +216,6 @@ function getColors2(o, a, l) {
 
 
 
-            // IGUANA EYES
-            getDynamicRgb(x2, y2, x2, y0, 255, 165, 0),    // IGUANA EYES // Orange
-            getDynamicRgb(x2, y2, x2, y0, 255, 87, 51),   // Coral
-            getDynamicRgb(x2, y2, x2, y0, 255, 215, 0),   // Gold
-            getDynamicRgb(x2, y2, x2, y0, 255, 127, 80),  // Coral2
-            getDynamicRgb(x2, y2, x2, y0, 0, 255, 0),     // Lime
-            getDynamicRgb(x2, y2, x2, y0, 0, 255, 255),   // Cyan
-            getDynamicRgb(x2, y2, x2, y0, 132, 80, 17),   // Very dark orange
-            getDynamicRgb(x2, y2, x2, y0, 0, 25, 0),      // Very dark green
-            getDynamicRgb(x2, y2, x2, y0, 0, 0, 255),     // Blue
-            getDynamicRgb(x2, y2, x2, y0, 32, 178, 170),  // Lightseagreen
-            getDynamicRgb(x2, y2, x2, y0, 255, 140, 0),   // Darkorange
-            getDynamicRgb(x2, y2, x2, y0, 0, 0, 30),      // Very dark blue
-            getDynamicRgb(x2, y2, x2, y0, 77, 0, 0),      // Dark red
-            getDynamicRgb(x2, y2, x2, y0, 255, 0, 0),     // Red
-            getDynamicRgb(x2, y2, x2, y0, 0, 128, 0),     // Green
-            getDynamicRgb(x2, y2, x2, y0, 128, 0, 128),   // Purple
-            getDynamicRgb(x2, y2, x2, y0, 255, 0, 255),   // Magenta
-            getDynamicRgb(x2, y2, x2, y0, 0, 255, 0),     // Lime (repeated)
-            getDynamicRgb(x2, y2, x2, y0, 0, 128, 128),   // Teal
-            getDynamicRgb(x2, y2, x2, y0, 128, 0, 0),     // Maroon
-            getDynamicRgb(x2, y2, x2, y0, 0, 0, 128),     // Navy
-            getDynamicRgb(x2, y2, x2, y0, 128, 128, 0),   // Olive
-            getDynamicRgb(x2, y2, x2, y0, 192, 192, 192), // Silver
-            getDynamicRgb(x2, y2, x2, y0, 75, 0, 130),    // Indigo
-
             // LIQUID GRAVITY 
             // TOP LEFT CORNER
             getConditionalColor(x0, y0, 444, "red", "blue"),

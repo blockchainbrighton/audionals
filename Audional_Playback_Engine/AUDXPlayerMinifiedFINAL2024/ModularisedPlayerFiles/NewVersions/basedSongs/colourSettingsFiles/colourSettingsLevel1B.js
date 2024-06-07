@@ -127,14 +127,35 @@ function getColors1(o, a, l) {
             getConditionalColor(l[1].x, l[1].y, 3, "orange", "black"), // Wide 4 Row Scatter
             getConditionalColor(l[1].x, l[1].y, 3, "green", "black"), // Wide 4 Row Scatter
 
-            // 3 stripe wide scatters
-            getConditionalColor(l[1].x, l[1].y, 5, "red", "black"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 5, "white", "black"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 5, "blue", "black"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 5, "orange", "black"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 5, "green", "black"), // Wide 3 Row Scatter
+            // // 3 stripe wide scatters
+            // getConditionalColor(l[1].x, l[1].y, 5, "red", "black"), // Wide 3 Row Scatter
+            // getConditionalColor(l[1].x, l[1].y, 5, "white", "black"), // Wide 3 Row Scatter
+            // getConditionalColor(l[1].x, l[1].y, 5, "blue", "black"), // Wide 3 Row Scatter
+            // getConditionalColor(l[1].x, l[1].y, 5, "orange", "black"), // Wide 3 Row Scatter
+            // getConditionalColor(l[1].x, l[1].y, 5, "green", "black"), // Wide 3 Row Scatter
+            (randomValues[4] * (l0zR / (0.1 * R) * 255)) > 32 ? 
+            `rgb(${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))}, ${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))}, ${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))})` : 
+            "alternative-color",
+  
+            (randomValues[5] * (l0zR / (4 * R) * 255)) > 32 ? 
+                `rgb(${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))}, ${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))}, ${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))})` : 
+                "alternative-color",
+    
+            (randomValues[6] * (l0zR / (0.01 * R) * 255)) > 32 ? 
+                `rgb(${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))}, ${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))}, ${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))})` : 
+                "alternative-color",
+    
+            (randomValues[7] * (l0zR / (2.5 * R) * 55)) > 32 ? 
+                `rgb(${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))}, ${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))}, ${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))})` : 
+                "alternative-color",
+  
 
-
+            // 1 stripe scatter on DARK GREY BG
+            getConditionalColor(l[1].x, l[1].y, 10, "red", "#0b0b0b"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "white", "#0b0b0b"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "blue", "#0b0b0b"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "orange", "#0b0b0b"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "green", "#0b0b0b"), // Wide 3 Row Scatter
             // 1 stripe wide scatters NO BACKGROUND
             getConditionalColor(l[1].x, l[1].y, 10, "red", "black"), // Wide 3 Row Scatter
             getConditionalColor(l[1].x, l[1].y, 10, "white", "black"), // Wide 3 Row Scatter
@@ -145,19 +166,19 @@ function getColors1(o, a, l) {
 
             
     
-            getConditionalColor(l[0].x, l[0].y, 0.1, "orange", "black"), // Cycle Scatter
-            getConditionalColor(l[0].x, l[0].y, 0.05, "red", "black"), // Cycle Scatter
-            getConditionalColor(l[0].x, l[0].y, 0.0111, "#444444", "black"), // Cycle scatter
+            // getConditionalColor(l[0].x, l[0].y, 0.1, "orange", "black"), // Cycle Scatter
+            // getConditionalColor(l[0].x, l[0].y, 0.05, "red", "black"), // Cycle Scatter
+            // getConditionalColor(l[0].x, l[0].y, 0.0111, "#444444", "black"), // Cycle scatter
 
 
-            getConditionalColor(x2, y0, 600, "green", "black"),
-            getConditionalColor(x2, y0, 600, "blue", "black"),
-            getConditionalColor(x2, y0, 600, "red", "black"),
+            // getConditionalColor(x2, y0, 600, "green", "black"),
+            // getConditionalColor(x2, y0, 600, "blue", "black"),
+            // getConditionalColor(x2, y0, 600, "red", "black"),
 
-            getConditionalColor(x2, y0, -300, "orange", "black"),
-            getConditionalColor(x2, y0, -300, "green", "black"),
-            getConditionalColor(x2, y0, -300, "blue", "black"),
-            getConditionalColor(x2, y0, -300, "red", "black"),
+            // getConditionalColor(x2, y0, -300, "orange", "black"),
+            // getConditionalColor(x2, y0, -300, "green", "black"),
+            // getConditionalColor(x2, y0, -300, "blue", "black"),
+            // getConditionalColor(x2, y0, -300, "red", "black"),
 
 
 
@@ -183,7 +204,28 @@ function getColors1(o, a, l) {
             // getConditionalColor(x0, y0, 345, "blue", "black"), // Top Left Edge Crawler
             // getConditionalColor(x0, y0, 345, "orange", "black"), // Top Left Edge Crawler
             // getConditionalColor(x0, y0, 345, "green", "black"), // Top Left Edge Crawler
-                   ];
+                  
+        
+            // IGUANA EYES
+            getDynamicRgb(x2, y2, x2, y0, 255, 165, 0),    // IGUANA EYES // Orange
+            getDynamicRgb(x2, y2, x2, y0, 255, 215, 0),   // Gold
+            getDynamicRgb(x2, y2, x2, y0, 0, 255, 255),   // Cyan
+            getDynamicRgb(x2, y2, x2, y0, 132, 80, 17),   // Very dark orange
+            getDynamicRgb(x2, y2, x2, y0, 0, 25, 0),      // Very dark green
+            getDynamicRgb(x2, y2, x2, y0, 0, 0, 255),     // Blue
+            getDynamicRgb(x2, y2, x2, y0, 255, 140, 0),   // Darkorange
+            getDynamicRgb(x2, y2, x2, y0, 0, 0, 30),      // Very dark blue
+            getDynamicRgb(x2, y2, x2, y0, 77, 0, 0),      // Dark red
+            getDynamicRgb(x2, y2, x2, y0, 255, 0, 0),     // Red
+            getDynamicRgb(x2, y2, x2, y0, 0, 128, 0),     // Green
+            getDynamicRgb(x2, y2, x2, y0, 128, 0, 128),   // Purple
+            getDynamicRgb(x2, y2, x2, y0, 255, 0, 255),   // Magenta
+            getDynamicRgb(x2, y2, x2, y0, 128, 0, 0),     // Maroon
+            getDynamicRgb(x2, y2, x2, y0, 192, 192, 192), // Silver
+            getDynamicRgb(x2, y2, x2, y0, 75, 0, 130),    // Indigo
+
+        
+        ];
 
     }
 
