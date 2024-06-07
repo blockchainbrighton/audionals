@@ -1,5 +1,12 @@
 console.log("Visualiser.js loaded");
 let isChannel11Active = false;
+let activeChannelIndex = null;
+let isPlaybackActive = false;
+let renderingState = {}; // Object to track rendering state for each channel
+let activeArrayIndex = {}; // Track the active array index for each channel
+
+
+
 
 // Array length placeholders
 let arrayLengths = {
@@ -99,12 +106,27 @@ function updateVisualizer(cci2, arrayIndex, channelIndex) {
     immediateVisualUpdate();
 }
 
+function shouldUpdateVisualizer(channelIndex, arrayIndex, cci2) {
+    const previousState = renderingState[channelIndex] || {};
+
+    if (previousState.arrayIndex !== arrayIndex || previousState.cci2 !== cci2) {
+        renderingState[channelIndex] = { arrayIndex, cci2 };
+        return true;
+    }
+
+    return false;
+}
+
 
 let needImmediateUpdate = false;
 
 function immediateVisualUpdate() {
-    needImmediateUpdate = true;
+    if (needImmediateUpdate) {
+        // Perform any necessary immediate updates
+        needImmediateUpdate = false; // Reset flag
+    }
 }
+
 
 document.addEventListener("internalAudioPlayback", (event) => {
     const { action, channelIndex, step } = event.detail;
@@ -112,9 +134,15 @@ document.addEventListener("internalAudioPlayback", (event) => {
     if (action === "stop") {
         cci2 = initialCCI2;
         isChannel11Active = false;
+        isPlaybackActive = false;
+        activeChannelIndex = null;
+        activeArrayIndex = {}; // Reset active array index
+        renderingState = {}; // Reset rendering state
         log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
         immediateVisualUpdate();
     } else if (action === "activeStep") {
+        isPlaybackActive = true;
+        activeChannelIndex = channelIndex;
         AccessLevel = generateAccessLevel(seed);
         const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
         const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
@@ -128,19 +156,27 @@ document.addEventListener("internalAudioPlayback", (event) => {
 
         cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
 
-        log(`Calculated CCI2=${cci2} for ArrayLength=${arrayLengths[arrayIndex]}`);
-        
-        updateVisualizer(cci2, arrayIndex, channelIndex);
+        if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
+            activeArrayIndex[channelIndex] = arrayIndex; // Update active array index
+            updateVisualizer(cci2, arrayIndex, channelIndex);
+        }
     }
 });
 
 AudionalPlayerMessages.onmessage = (message) => {
+    if (!isPlaybackActive) return;
+
     if (message.data.action === "stop") {
         cci2 = initialCCI2;
         isChannel11Active = false;
+        isPlaybackActive = false;
+        activeChannelIndex = null;
+        activeArrayIndex = {}; // Reset active array index
+        renderingState = {}; // Reset rendering state
         log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
     } else {
         const { channelIndex } = message.data;
+        activeChannelIndex = channelIndex;
         AccessLevel = generateAccessLevel(seed);
         const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
         const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
@@ -154,11 +190,13 @@ AudionalPlayerMessages.onmessage = (message) => {
 
         cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
 
-        log(`Calculated CCI2=${cci2} for ArrayLength=${arrayLengths[arrayIndex]}`);
-        
-        updateVisualizer(cci2, arrayIndex, channelIndex);
+        if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
+            activeArrayIndex[channelIndex] = arrayIndex; // Update active array index
+            updateVisualizer(cci2, arrayIndex, channelIndex);
+        }
     }
 };
+
 
 
 // Log function to control frequency and relevance
@@ -242,6 +280,10 @@ function d(e) {
 }
 
 cp.drawObjectD2 = function(t, e) {
+    if (!isPlaybackActive || activeChannelIndex === null) {
+        return; // Skip rendering if playback is not active or no active channel
+    }
+
     for (let s of t.f) {
         let vertices = s.map((e) => t.v[e]);
         let coordinates = vertices.map((t) => ({ x: t.x, y: t.y }));
@@ -257,7 +299,8 @@ cp.drawObjectD2 = function(t, e) {
 
         let angle = 180 * Math.atan2(coordinates[0].y - S / 2, coordinates[0].x - S / 2) / Math.PI;
 
-        // Use the unified array selection function
+        // Render only the active array for the current channel
+        const currentArrayIndex = activeArrayIndex[activeChannelIndex];
         let colors = getColorArray(angle, e, vertices, AccessLevel);
 
         if (!colors || colors.length === 0) {
@@ -272,15 +315,22 @@ cp.drawObjectD2 = function(t, e) {
     }
 };
 
+
+
+
 requestAnimationFrame(d);
 
 function getColorArray(angle, time, vertices, accessLevel) {
     const allowedArrays = accessLevelMappings[accessLevel];
-    
-    // Deterministic selection: Use a combination of angle, time, and vertices length
-    const arrayIndex = allowedArrays[(Math.floor(angle + time + vertices.length) % allowedArrays.length)];
+    const channelArrayIndex = activeArrayIndex[activeChannelIndex]; // Use the active array index for the channel
 
-    switch (arrayIndex) {
+    // Ensure we are only accessing allowed arrays
+    if (!allowedArrays.includes(channelArrayIndex)) {
+        console.error(`Array index ${channelArrayIndex} not allowed for AccessLevel ${accessLevel}`);
+        return [];
+    }
+
+    switch (channelArrayIndex) {
         case 1:
             return getColors1(angle, time, vertices);
         case 2:
@@ -288,9 +338,10 @@ function getColorArray(angle, time, vertices, accessLevel) {
         case 3:
             return getColors3(angle, time, vertices);
         default:
-            console.error(`Invalid arrayIndex ${arrayIndex}`);
+            console.error(`Invalid arrayIndex ${channelArrayIndex}`);
             return [];
     }
 }
+
 
 async function ensureAudioContextState(){window.audioCtx&&"suspended"===audioCtx.state&&(await audioCtx.resume(),console.log("AudioContext resumed"))}document.addEventListener("DOMContentLoaded",ensureAudioContextState),document.addEventListener("click",(async()=>{await ensureAudioContextState(),togglePlayback()}));
