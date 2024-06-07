@@ -8,14 +8,47 @@ let arrayLengths = {
     3: 0  // Length of array from level 3
 };
 
+// Function to initialize array lengths from color settings
+function initializeArrayLengths() {
+    try {
+        arrayLengths[1] = getColors1Length() || 0; // Fallback to 0 if undefined
+    } catch (e) {
+        console.error("Failed to get length for array 1", e);
+    }
+    try {
+        arrayLengths[2] = getColors2Length() || 0; // Fallback to 0 if undefined
+    } catch (e) {
+        console.error("Failed to get length for array 2", e);
+    }
+    try {
+        arrayLengths[3] = getColors3Length() || 0; // Fallback to 0 if undefined
+    } catch (e) {
+        console.error("Failed to get length for array 3", e);
+    }
+    console.log("Initialized array lengths:", arrayLengths);
+}
+
+// Initialize array lengths on load
+initializeArrayLengths();
+
+
 function randomWithSeed(t) {
     const e = 1e4 * Math.sin(t);
     return e - Math.floor(e);
 }
 
-function calculateCCI2(channelIndex) {
-    const value = 100 * randomWithSeed(seed + channelIndex);
-    return Math.floor(value) + 1;
+// Revised version to ensure valid range and avoid issues
+function calculateCCI2(channelIndex, arrayLength) {
+    if (!arrayLength || arrayLength <= 0) {
+        console.error("Invalid array length:", arrayLength);
+        return 1; // Default to a safe value
+    }
+    
+    // Avoid potential issues when channelIndex is zero
+    const value = 100 * randomWithSeed(seed + (channelIndex + 1)); // Ensure non-zero seed
+    const scaledValue = Math.floor((value / 100) * arrayLength); // Scale to array length
+    
+    return Math.min(Math.max(scaledValue + 1, 1), arrayLength); // Ensure within bounds
 }
 
 // Function to generate a number between 1 and 3 based on seed
@@ -36,9 +69,14 @@ let arrayLevel = generateArrayLevel(seed); // Define globally for use throughout
 function updateVisualizer(cci2, arrayIndex, channelIndex) {
     // Function to handle visual updates using cci2 and arrayIndex
     // This is where the actual visual update logic will reside
-    console.log(`Updating visual: CCI2=${cci2}, ArrayLevel=${arrayLevel}, ChannelIndex=${channelIndex}, ArrayIndex=${arrayIndex}`);
-    immediateVisualUpdate();
+    console.log(`Updating visual:
+        ArrayLevel=${arrayLevel}
+        ChannelIndex=${channelIndex}
+        CCI2=${cci2}
+        ArrayIndex=${arrayIndex}`);
+          immediateVisualUpdate();
 }
+
 document.addEventListener("internalAudioPlayback", (event) => {
     const { action, channelIndex, step } = event.detail;
 
@@ -48,14 +86,29 @@ document.addEventListener("internalAudioPlayback", (event) => {
         console.log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
         immediateVisualUpdate();
     } else if (action === "activeStep") {
-        cci2 = calculateCCI2(channelIndex);
         arrayLevel = generateArrayLevel(seed); // Update arrayLevel for each active step
-        const arrayIndex = selectArrayIndex(seed, arrayLevel, channelIndex); // Determine which array to use
+        const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex; // Handle zero case
+        const arrayIndex = selectArrayIndex(seed, arrayLevel, safeChannelIndex); // Determine which array to use
+        
+        // Debugging logs
+        console.log(`ArrayLevel=${arrayLevel}, ArrayIndex=${arrayIndex}, ArrayLength=${arrayLengths[arrayIndex]}`);
+        
+        // Validate array length before calculation
+        if (!arrayLengths[arrayIndex]) {
+            console.error("Invalid array length:", arrayLengths[arrayIndex]);
+            return;
+        }
 
+        // Calculate CCI2 based on the length of the selected array
+        cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
+
+        console.log(`Calculated CCI2=${cci2} for ArrayLength=${arrayLengths[arrayIndex]}`);
+        
         // Update visual only during actual visual change
         updateVisualizer(cci2, arrayIndex, channelIndex);
     }
 });
+
 
 let needImmediateUpdate = false;
 
@@ -70,10 +123,23 @@ AudionalPlayerMessages.onmessage = (message) => {
         console.log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
     } else {
         const { channelIndex } = message.data;
-        cci2 = calculateCCI2(channelIndex);
         arrayLevel = generateArrayLevel(seed); // Update arrayLevel for each message
-        const arrayIndex = selectArrayIndex(seed, arrayLevel, channelIndex); // Determine which array to use
+        const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex; // Handle zero case
+        const arrayIndex = selectArrayIndex(seed, arrayLevel, safeChannelIndex); // Determine which array to use
+        
+        console.log(`ArrayLevel=${arrayLevel}, ArrayIndex=${arrayIndex}, ArrayLength=${arrayLengths[arrayIndex]}`);
+        
+        // Validate array length before calculation
+        if (!arrayLengths[arrayIndex]) {
+            console.error("Invalid array length:", arrayLengths[arrayIndex]);
+            return;
+        }
 
+        // Calculate CCI2 based on the length of the selected array
+        cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
+
+        console.log(`Calculated CCI2=${cci2} for ArrayLength=${arrayLengths[arrayIndex]}`);
+        
         // Update visual only during actual visual change
         updateVisualizer(cci2, arrayIndex, channelIndex);
     }
