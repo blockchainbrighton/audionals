@@ -54,6 +54,13 @@ function getColors2(o, a, l) {
 
     return [
 
+        // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
+
+          (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
+          `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
+          "#422000",
+
+
 
             // 4 stripe close scatters
             getConditionalColor(l[0].x, l[0].y, 3, "red", "black"), // 

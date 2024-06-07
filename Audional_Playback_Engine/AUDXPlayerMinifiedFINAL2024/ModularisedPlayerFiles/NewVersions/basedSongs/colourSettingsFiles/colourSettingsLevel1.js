@@ -34,6 +34,7 @@ const colorPalette = {
     hslColors: Array.from({ length: 360 }, (_, i) => `hsl(${i}, 100%, 50%)`)
 };
 
+
 // Function to get a random color from a palette
 function getRandomColor(palette) {
     const colors = palette.flat();
@@ -58,13 +59,12 @@ function getDynamicRgb(x1, y1, x2, y2, r, g, b) {
 }
 
 
-// Main function to get colors
+// Function to get colors
 function getColors1(o, a, l) {
     const randomValues = Array.from({ length: 24 }, () => Math.random());
     const l0zR = l[0].z + R;
     const l2zR = l[2].z + R;
     const l1zR = l[1].z + R;
-
     const primaryAndSecondaryColors = [...colorPalette.primary, ...colorPalette.secondary];
     const randomColor1 = getRandomColor(primaryAndSecondaryColors).hex;
     const randomColor2 = getRandomColor(primaryAndSecondaryColors).hex;
@@ -73,15 +73,12 @@ function getColors1(o, a, l) {
     const randomColor5 = getRandomColor(primaryAndSecondaryColors).hex;
     const randomColor6 = getRandomColor(primaryAndSecondaryColors).hex;
 
+    // Variables using the input `a` and `l`
     const sinValue = Math.abs(Math.sin(a / 3000));
-
     const x = l[0].x;
     const y = l[0].y;
     const divisor = 1000;
-
-
     const zR255 = Math.floor((l[0].z + R) / (2 * R) * 255);
-
     const y2 = l[2].y;
     const x0 = l[0].x;
     const y0 = l[0].y;
@@ -89,14 +86,7 @@ function getColors1(o, a, l) {
     const x2 = l[2].x - 1500;
     const x3 = l[1].x - 555;
 
-    const hslFactor1 = 1;
-    const hslFactor2 = 72 * 5;
-    const hslFactor3 = 18 * 20;
-    const hslFactor4 = 360;
-    const hslFactor5 = 0.0005 * 180;
-    const hslFactor6 = 0.09 * 0.88;
-
-    // Store Date.now() in a variable to avoid multiple calls
+    // Date-based variables
     const now = Date.now();
     const sinNow = Math.sin(now);
     const sinNowDiv1000 = Math.sin(now / 1000);
@@ -108,12 +98,10 @@ function getColors1(o, a, l) {
 
     const redYellowTrippyEyes = `rgb(${Math.floor(127 * sinNow + 512)}, ${Math.floor(127 * sinNow + 128)}, ${Math.floor(127 * sinNowDiv1000 + 8)})`;
 
-
+    // Return dynamic color settings
     return [
 
-
             // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
-            getConditionalColor(x2, y0, -300, "red", "blue"),
 
             (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
             `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 

@@ -2,12 +2,10 @@
 console.log("Visualiser.js loaded");
 let isChannel11Active = false;
 
-function randomWithSeed(seed) {
-    // Linear Congruential Generator (LCG)
-    seed = (seed * 1664525 + 1013904223) % 0xFFFFFFFF;
-    return seed / 0xFFFFFFFF;
+function randomWithSeed(t) {
+    const e = 1e4 * Math.sin(t);
+    return e - Math.floor(e);
 }
-
 function calculateCCI2(channelIndex) {
     const value = 25 * randomWithSeed(seed + channelIndex);
     return Math.floor(value) + 1;
