@@ -129,6 +129,9 @@ function immediateVisualUpdate() {
 
 
 document.addEventListener("internalAudioPlayback", (event) => {
+    // Log the entire event detail for debugging
+    console.log("internalAudioPlayback event received:", event.detail);
+
     const { action, channelIndex, step } = event.detail;
 
     if (action === "stop") {
@@ -147,6 +150,7 @@ document.addEventListener("internalAudioPlayback", (event) => {
         const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
         const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
 
+        // Updated log message with column format
         log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nArrayLength=${arrayLengths[arrayIndex]}\nIndex=${arrayIndex}`);
         
         if (!arrayLengths[arrayIndex]) {
@@ -164,6 +168,9 @@ document.addEventListener("internalAudioPlayback", (event) => {
 });
 
 AudionalPlayerMessages.onmessage = (message) => {
+    // Log the entire message data for debugging
+    console.log("AudionalPlayerMessages received:", message.data);
+
     if (!isPlaybackActive) return;
 
     if (message.data.action === "stop") {
@@ -181,7 +188,8 @@ AudionalPlayerMessages.onmessage = (message) => {
         const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
         const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
 
-        log(`AccessLevel=${AccessLevel}, ArrayIndex=${arrayIndex}, ArrayLength=${arrayLengths[arrayIndex]}`);
+        // Updated log message with column format
+        log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nArrayLength=${arrayLengths[arrayIndex]}\nIndex=${arrayIndex}`);
         
         if (!arrayLengths[arrayIndex]) {
             errorLog("Invalid array length:", arrayLengths[arrayIndex]);
@@ -280,9 +288,8 @@ function d(e) {
 }
 
 cp.drawObjectD2 = function(t, e) {
-    if (!isPlaybackActive || activeChannelIndex === null) {
-        return; // Skip rendering if playback is not active or no active channel
-    }
+    // Use initial color for fill if playback is not active or no active channel
+    let initialFill = (!isPlaybackActive || activeChannelIndex === null);
 
     for (let s of t.f) {
         let vertices = s.map((e) => t.v[e]);
@@ -299,21 +306,33 @@ cp.drawObjectD2 = function(t, e) {
 
         let angle = 180 * Math.atan2(coordinates[0].y - S / 2, coordinates[0].x - S / 2) / Math.PI;
 
-        // Render only the active array for the current channel
-        const currentArrayIndex = activeArrayIndex[activeChannelIndex];
-        let colors = getColorArray(angle, e, vertices, AccessLevel);
+        // Render using first color from getColors1 if initial fill
+        if (initialFill) {
+            let initialColors = getColors1(angle, e, vertices);
+            if (!initialColors || initialColors.length === 0) {
+                console.error(`No colors returned for initial display.`);
+                return;
+            }
+            cx.fillStyle = initialColors[0]; // Use the first color for initial fill
+        } else {
+            // Render using active array for the current channel
+            const currentArrayIndex = activeArrayIndex[activeChannelIndex];
+            let colors = getColorArray(angle, e, vertices, AccessLevel);
 
-        if (!colors || colors.length === 0) {
-            console.error(`No colors returned for AccessLevel: ${AccessLevel}`);
-            return;
+            if (!colors || colors.length === 0) {
+                console.error(`No colors returned for AccessLevel: ${AccessLevel}`);
+                return;
+            }
+
+            cx.fillStyle = colors[cci2 % colors.length];
         }
 
-        cx.fillStyle = colors[cci2 % colors.length];
         cx.fill();
         cx.strokeStyle = "black";
         cx.stroke();
     }
 };
+
 
 
 
