@@ -62,6 +62,11 @@ function getColors3(o, a, l) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
 
+
+            `rgb(${Math.floor(127 * sinNow + 128)}, ${Math.floor(127 * sinNowDiv1000 + 128)}, ${Math.floor(127 * sinNowDiv2000 + 128)})`, // Trippy Eyes
+
+            getConditionalColor(x1, y0, 14, "orange", "black"), 
+
             (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
             `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
             "#422000",
@@ -169,7 +174,6 @@ function getColors3(o, a, l) {
             getConditionalColor(x1, y0, 11, "purple", "black"), 
             getConditionalColor(x2, y0, 12, "blue", "black"), 
             getConditionalColor(x3, y0, 13, "white", "black"), 
-            getConditionalColor(x1, y0, 14, "orange", "black"), 
             getConditionalColor(x2, y0, 15, "red", "black"),
             getConditionalColor(x3, y0, 16, "orange", "black"), 
             getConditionalColor(x1, y0, 17, "white", "black"),
@@ -254,7 +258,6 @@ function getColors3(o, a, l) {
 
 
             // Spinning Eyes
-            `rgb(${Math.floor(127 * sinNow + 128)}, ${Math.floor(127 * sinNowDiv1000 + 128)}, ${Math.floor(127 * sinNowDiv2000 + 128)})`, // Trippy Eyes
             `rgb(${Math.floor(127 * sinNow + 4)}, ${Math.floor(127 * sinNowDiv10 + 128)}, ${Math.floor(127 * sinNowDiv5000 + 32)})`, // Trippy Eyes
             redYellowTrippyEyes, // Red/Yellow trippy eyes
             `rgb(${Math.floor(111 * sinNow + 200000)}, ${Math.floor(127 * sinNow + 12)}, ${Math.floor(127 * sinNowDiv100 + 4)})`, // Trippy Eyes Red/orange

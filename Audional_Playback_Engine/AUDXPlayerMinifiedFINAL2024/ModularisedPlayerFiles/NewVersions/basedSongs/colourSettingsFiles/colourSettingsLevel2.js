@@ -73,6 +73,7 @@ function getColors2(o, a, l) {
           `rgb(${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))})` : 
           "#000a39",
 
+
       (randomValues[2] * (l1zR / (111 * R) * 299999)) > 32 ? 
           `rgb(${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))}, ${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))}, ${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))})` : 
           "alternative-color",
@@ -197,22 +198,22 @@ function getColors2(o, a, l) {
 
          
 
-            // STARING EYES
+             // STARING EYES
             `rgb(${randomValues[31] > 0.5 ? Math.floor((l[0].z + R) / (2 * R) * 255) : 100}, ${Math.floor((l[0].z + R) / (2 * R) * 255)}, ${Math.floor((l[0].z + R) / (2 * R) * 255)})`, // Spinning Red Disco Eyes
 
 
-            // // FULL SHAPE COLOUR (50/50)
-            // sinValue < 0.5 ? "red" : "blue", // Full Shape Colour
-            // // Math.abs(Math.sin(a / 3000)) < 0.5 ? "red" : "blue", // Full Shape Colour
+            // FULL SHAPE COLOUR (50/50)
+            sinValue < 0.5 ? "red" : "blue", // Full Shape Colour
+            // Math.abs(Math.sin(a / 3000)) < 0.5 ? "red" : "blue", // Full Shape Colour
 
-            // getConditionalColor(x, y, 280, "green", "darkorange"), 
-            // getConditionalColor(x, y, 111, "white", "red"), 
-            // getConditionalColor(x, y, 120, "blue", "blue"), 
-            // getConditionalColor(x, y, 111, "red", "darkorange"), 
-            // getConditionalColor(x, y, 95, "blue", "blue"),
-            // getConditionalColor(x, y, 111, "green", "white"),
-            // getConditionalColor(x, y, 111, "darkgreen", "grey"),
-            // getConditionalColor(x, y, 111, "lightorange", "darkgrey"),
+            getConditionalColor(x, y, 280, "green", "darkorange"), 
+            getConditionalColor(x, y, 111, "white", "red"), 
+            getConditionalColor(x, y, 120, "blue", "blue"), 
+            getConditionalColor(x, y, 111, "red", "darkorange"), 
+            getConditionalColor(x, y, 95, "blue", "blue"),
+            getConditionalColor(x, y, 111, "green", "white"),
+            getConditionalColor(x, y, 111, "darkgreen", "grey"),
+            getConditionalColor(x, y, 111, "lightorange", "darkgrey"),
 
 
 

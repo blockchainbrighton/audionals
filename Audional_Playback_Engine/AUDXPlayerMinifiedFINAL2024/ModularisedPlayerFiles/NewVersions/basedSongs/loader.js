@@ -23,10 +23,10 @@ const scriptsToLoad = [
     'fileAndAudioHandling.js',
     // 'https://ordinals.com/content/d3e9c74e8b9e358c37b50ef363ab77efe29370ccfb4cd9c4e32a5c4a5b0fabdbi0', // Colour settings
     
-    // 'colourSettingsFiles/colourSettings6.js',
-    'colourSettingsFiles/colourSettingsLevel1B.js',
-    'colourSettingsFiles/colourSettingsLevel2B.js',
-    'colourSettingsFiles/colourSettingsLevel3B.js',
+    // 'colourSettingsFiles/colourSettings4.js',
+    'colourSettingsFiles/colourSettingsLevel1.js',
+    'colourSettingsFiles/colourSettingsLevel2.js',
+    'colourSettingsFiles/colourSettingsLevel3.js',
 
     // 'https://ordinals.com/content/1db7c640e5d08a1bc069125ad52c7b82933ffd2ffad1276f98707071c1ea15efi0',
     'visualiser/visualiserCode.js',

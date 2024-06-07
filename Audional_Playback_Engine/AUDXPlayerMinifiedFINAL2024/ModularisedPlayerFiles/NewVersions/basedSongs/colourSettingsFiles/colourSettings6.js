@@ -119,7 +119,6 @@ function getColors(o, a, l) {
 
 
             // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
-            getConditionalColor(x2, y0, -300, "red", "blue"),
 
             (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
             `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
@@ -246,7 +245,8 @@ function getColors(o, a, l) {
 
 
 
-       
+                   getConditionalColor(x2, y0, -300, "red", "blue"),
+
        
 
             getConditionalColor(l[0].x, l[0].y, 0.1, "orange", "black"), // Cycle Scatter

@@ -163,26 +163,26 @@ function getColors1(o, a, l) {
 
 
 
-            // getConditionalColor(x1, y0, -100, "orange", "black"),
-            // getConditionalColor(x1, y0, -100, "green", "black"),
-            // getConditionalColor(x1, y0, -100, "blue", "black"),
-            // getConditionalColor(x1, y0, -100, "red", "black"),
+            getConditionalColor(x1, y0, -100, "orange", "black"),
+            getConditionalColor(x1, y0, -100, "green", "black"),
+            getConditionalColor(x1, y0, -100, "blue", "black"),
+            getConditionalColor(x1, y0, -100, "red", "black"),
 
        
-            // getConditionalColor(x3, y0, 100, "orange", "black"),
-            // getConditionalColor(x3, y0, 100, "green", "black"),
-            // getConditionalColor(x3, y0, 100, "blue", "black"),
-            // getConditionalColor(x3, y0, 100, "red", "black"),
+            getConditionalColor(x3, y0, 100, "orange", "black"),
+            getConditionalColor(x3, y0, 100, "green", "black"),
+            getConditionalColor(x3, y0, 100, "blue", "black"),
+            getConditionalColor(x3, y0, 100, "red", "black"),
 
 
 
 
-            // // CRAWLERS ON BLACK BACKGROUND
-            // getConditionalColor(x0, y0, 345, "red", "black"), // Top Left Edge Crawler
-            // getConditionalColor(x0, y0, 345, "white", "black"), // Top Left Edge Crawler
-            // getConditionalColor(x0, y0, 345, "blue", "black"), // Top Left Edge Crawler
-            // getConditionalColor(x0, y0, 345, "orange", "black"), // Top Left Edge Crawler
-            // getConditionalColor(x0, y0, 345, "green", "black"), // Top Left Edge Crawler
+            // CRAWLERS ON BLACK BACKGROUND
+            getConditionalColor(x0, y0, 345, "red", "black"), // Top Left Edge Crawler
+            getConditionalColor(x0, y0, 345, "white", "black"), // Top Left Edge Crawler
+            getConditionalColor(x0, y0, 345, "blue", "black"), // Top Left Edge Crawler
+            getConditionalColor(x0, y0, 345, "orange", "black"), // Top Left Edge Crawler
+            getConditionalColor(x0, y0, 345, "green", "black"), // Top Left Edge Crawler
                    ];
 
     }

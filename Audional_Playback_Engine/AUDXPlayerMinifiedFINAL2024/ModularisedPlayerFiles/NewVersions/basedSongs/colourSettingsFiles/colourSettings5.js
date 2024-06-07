@@ -71,114 +71,114 @@ function getColors(o, a, l) {
 
         
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (3 * R) * 75)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "#000a39";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (3 * R) * 75)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "#000a39";
+        })(),
 
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[1].z + R + 1111) / (111 * R) * 299999)); // dark grey Spinning Eyes
-        //     return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[1].z + R + 1111) / (111 * R) * 299999)); // dark grey Spinning Eyes
+            return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
+        })(),
 
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (0.01 * R) * 0.17)); // dark grey Spinning Eyes
-        //     return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (0.01 * R) * 0.17)); // dark grey Spinning Eyes
+            return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
+        })(),
 
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (0.1 * R) * 255)); // White Robotic Spinning Eyes
-        //     return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (0.1 * R) * 255)); // White Robotic Spinning Eyes
+            return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
+        })(),
 
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (4 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (4 * R) * 255)); // Grey Spinning Eyes
+            return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
+        })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (0.01 * R) * 255)); // White Robotic Spinning Eyes
-        //     return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
-        // })(),
-
-
-
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (2.5 * R) * 55)); // dark Grey Spinning Eyes
-        //     return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (0.01 * R) * 255)); // White Robotic Spinning Eyes
+            return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
+        })(),
 
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (2 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
-        // })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (5 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "red";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (2.5 * R) * 55)); // dark Grey Spinning Eyes
+            return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
+        })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (5 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "blue";
-        // })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (5 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "orange";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (2 * R) * 255)); // Grey Spinning Eyes
+            return o > 32 ? `rgb(${o}, ${o}, ${o})` : "alternative-color";
+        })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (5 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "green";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (5 * R) * 255)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "red";
+        })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (5 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "grey";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (5 * R) * 255)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "blue";
+        })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (111 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "#5a0000";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (5 * R) * 255)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "orange";
+        })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (111 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "blue";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (5 * R) * 255)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "green";
+        })(),
+
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (5 * R) * 255)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "grey";
+        })(),
+
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (111 * R) * 255)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "#5a0000";
+        })(),
+
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (111 * R) * 255)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "blue";
+        })(),
 
  
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (111 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "green";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (111 * R) * 255)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "green";
+        })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (111 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "grey";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (111 * R) * 255)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "grey";
+        })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (111 * R) * 255)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "#1f1f1f";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (111 * R) * 255)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "#1f1f1f";
+        })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (3 * R) * 75)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "#390000";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (3 * R) * 75)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "#390000";
+        })(),
 
-        // (() => {
-        //     const o = Math.floor(Math.random() * ((l[0].z + R) / (3 * R) * 75)); // Grey Spinning Eyes
-        //     return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "#00390e";
-        // })(),
+        (() => {
+            const o = Math.floor(Math.random() * ((l[0].z + R) / (3 * R) * 75)); // Grey Spinning Eyes
+            return o > 0.1 ? `rgb(${o}, ${o}, ${o})` : "#00390e";
+        })(),
 
 
 
