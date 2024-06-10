@@ -298,7 +298,7 @@ async function togglePlayback() {
         startPlaybackLoop();
     } else {
         await audioCtx.suspend();
-        resetPlayback();
+        resetAllStates();
         if (typeof cci2 !== "undefined" && typeof initialCCI2 !== "undefined") {
             cci2 = initialCCI2;
             console.log(`CCI2 reset to initial value ${initialCCI2} without stopping animation.`);
@@ -309,10 +309,33 @@ async function togglePlayback() {
     }
 }
 
-function resetPlayback() {
+// fileAndAudioHandling.js
+
+function resetAllStates() {
+    // Reset audio playback state
     currentSequence = 0;
     currentStep = 0;
+    isPlaying = false;
+    isReversePlay = false;
+    nextNoteTime = 0;
+
+    // Reset visualizer states
+    if (typeof cci2 !== "undefined" && typeof initialCCI2 !== "undefined") {
+        cci2 = initialCCI2;
+    }
+    isChannel11Active = false;
+    isPlaybackActive = false;
+    activeChannelIndex = null;
+    activeArrayIndex = {};
+    renderingState = {};
+    
+    console.log('All states reset to initial values.');
+    
+    if (typeof immediateVisualUpdate === "function") {
+        immediateVisualUpdate();
+    }
 }
+
 
 window.addEventListener("beforeunload", () => {
     clearInterval(intervalID);

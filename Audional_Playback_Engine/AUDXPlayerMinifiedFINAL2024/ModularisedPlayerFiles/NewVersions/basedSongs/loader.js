@@ -34,7 +34,8 @@ const scriptsToLoad = [
 
 // Function to initialize the application
 function initializeApp() {
-    loadJsonFromUrl(window.jsonDataUrl); // Call the function defined in one of the loaded scripts
+    resetAllStates();  // Ensure states are reset when the app initializes
+    loadJsonFromUrl(window.jsonDataUrl);
     initializeWorker();
 }
 
