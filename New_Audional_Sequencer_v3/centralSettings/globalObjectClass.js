@@ -254,20 +254,31 @@ return new Promise(resolve => setTimeout(() => resolve(url), 100)); // Simulates
             console.error("Channel index out of bounds");
             return;
         }
-
+    
         // Update the channel-specific playback speed
         this.channelPlaybackSpeed[channelIndex] = speed;
+    
+        // Ensure the source node exists and has a buffer before updating the playback rate
         const sourceNode = this.sourceNodes[channelIndex];
-
         if (sourceNode && sourceNode.buffer) {
-            // Apply the new speed setting to the source node
             sourceNode.playbackRate.setValueAtTime(speed, this.audioContext.currentTime);
             console.log(`Playback speed for channel ${channelIndex} set to ${speed}x`);
         } else {
             console.log(`Source node for channel ${channelIndex} is not initialized or lacks a buffer.`);
         }
     }
-
+    
+    updatePlaybackSpeed(channelIndex) {
+        // This function should be called only when a source node exists
+        const sourceNode = this.sourceNodes[channelIndex];
+        if (sourceNode && sourceNode.buffer) {
+            sourceNode.playbackRate.setValueAtTime(this.channelPlaybackSpeed[channelIndex], this.audioContext.currentTime);
+            console.log(`Playback speed for channel ${channelIndex} updated to ${this.channelPlaybackSpeed[channelIndex]}x`);
+        } else {
+            console.log(`Source node for channel ${channelIndex} is not initialized or lacks a buffer.`);
+        }
+    }
+    
 
     // New method to update the total number of sequences
     updateTotalSequences() {
