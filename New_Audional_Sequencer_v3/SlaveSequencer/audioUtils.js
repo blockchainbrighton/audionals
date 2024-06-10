@@ -1,6 +1,8 @@
 // audioUtils.js
 
 const audioBuffers = new Map();
+const activeAudioSources = new Set();
+
 // Using sample URLs as keys in the audioBuffers map instead of channel numbers 
 // for greater flexibility, scalability, and reusability of audio data. 
 
@@ -286,12 +288,12 @@ function getIframeIdByChannelIndex(channelIndex) {
 }
 
 function playSound(currentSequence, channel, currentStep) {
+  console.log("[playSound] Active audio sources:", activeAudioSources.size);
   const channelIndex = getChannelIndex(channel);
   const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
 
   // Original BroadcastChannel for the current channel index
   const sequencerChannel = new BroadcastChannel(`synth_channel_${channelIndex}`);
-  // console.log(`[playSound] Preparing to send message to channel: synth_channel_${channelIndex}`);
 
   // Retrieve the iframe ID using the channel index mapping
   const iframeId = getIframeIdByChannelIndex(channelIndex);
@@ -304,27 +306,22 @@ function playSound(currentSequence, channel, currentStep) {
 
   if (isActive) {
       sequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
-      // console.log(`[playSound] Message sent: startArpeggiator for channel ${channelIndex}`);
 
       if (iframeSequencerChannel) {
           iframeSequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
-          // console.log(`[playSound] Message sent to iframe: startArpeggiator for channel ${channelIndex}`);
       }
   } else if (isReverse) {
       sequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
-      // console.log(`[playSound] Message sent: stopArpeggiator for channel ${channelIndex}`);
 
       if (iframeSequencerChannel) {
           iframeSequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
-          // console.log(`[playSound] Message sent to iframe: stopArpeggiator for channel ${channelIndex}`);
       }
   }
+
   sequencerChannel.close(); // Close the original channel after sending the message
-  // console.log(`[playSound] Sequencer message channel closed: synth_channel_${channelIndex}`);
 
   if (iframeSequencerChannel) {
       iframeSequencerChannel.close(); // Close the iframe-specific channel after sending the message
-      // console.log(`[playSound] Sequencer message channel closed: synth_channel_${iframeId}`);
   }
 
   // Manage audio playback
@@ -357,14 +354,31 @@ function playSound(currentSequence, channel, currentStep) {
   const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
   source.start(0, trimStart, duration);
 
+  // Track active source for stopping
+  activeAudioSources.add(source);
+
   source.onended = () => {
       source.disconnect();
+      activeAudioSources.delete(source); // Remove source from active set when it ends
       window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
   };
 
   window.unifiedSequencerSettings.sourceNodes[channelIndex] = source;
 }
 
+function stopAllAudio() {
+  console.log("[stopAllAudio] Active audio sources before stopping:", activeAudioSources.size);
+
+  activeAudioSources.forEach(source => {
+      try {
+          source.stop(0); // Use 0 as the argument to stop immediately
+          source.disconnect();
+      } catch (error) {
+          console.error('[stopAllAudio] Error stopping audio source:', error);
+      }
+  });
+  activeAudioSources.clear(); // Clear the set after stopping all sources
+}
 
 
 // // Example modification in playTrimmedAudio function

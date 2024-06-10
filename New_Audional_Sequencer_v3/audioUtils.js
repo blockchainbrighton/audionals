@@ -1,6 +1,8 @@
 // audioUtils.js
 
 const audioBuffers = new Map();
+const activeAudioSources = new Set();
+
 // Using sample URLs as keys in the audioBuffers map instead of channel numbers 
 // for greater flexibility, scalability, and reusability of audio data. 
 
@@ -340,12 +342,12 @@ function playSound(currentSequence, channel, currentStep) {
   const playbackSpeed = window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex];
   source.playbackRate.setValueAtTime(playbackSpeed, audioContext.currentTime);
 
-    // Create a new gain node for fades to avoid interfering with user volume control
-    const fadeGainNode = audioContext.createGain();
-    fadeGainNode.connect(userGainNode);
-    source.connect(fadeGainNode);
+  // Create a new gain node for fades to avoid interfering with user volume control
+  const fadeGainNode = audioContext.createGain();
+  fadeGainNode.connect(userGainNode);
+  source.connect(fadeGainNode);
 
-  const { trimStart, duration, trimEnd } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
+  const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
 
   const fadeDuration = 0.0025; // 20 milliseconds in seconds
   const actualFadeDuration = fadeDuration / playbackSpeed; // Adjust fade duration based on playback speed
@@ -358,6 +360,9 @@ function playSound(currentSequence, channel, currentStep) {
   // Check if fades should be applied for this channel
   const applyFades = fadeChannels.includes(channelIndex) && isTrimmed;
 
+  // Track active source for stopping
+  activeAudioSources.add(source);
+
   if (applyFades) {
       // Apply fade-in
       fadeGainNode.gain.setValueAtTime(0, audioContext.currentTime);
@@ -369,24 +374,34 @@ function playSound(currentSequence, channel, currentStep) {
       // Apply fade-out
       fadeGainNode.gain.setValueAtTime(userVolume, audioContext.currentTime + adjustedDuration - actualFadeDuration);
       fadeGainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + adjustedDuration);
-
-      source.onended = () => {
-          fadeGainNode.disconnect();
-          source.disconnect();
-          window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
-      };
   } else {
       // Start playback without fades
       source.start(0, trimStart, duration);
-      source.onended = () => {
-          source.disconnect();
-          window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
-      };
   }
+
+  source.onended = () => {
+      fadeGainNode.disconnect();
+      source.disconnect();
+      activeAudioSources.delete(source); // Remove source from active set when it ends
+      window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
+  };
 
   window.unifiedSequencerSettings.sourceNodes[channelIndex] = source;
 }
 
+
+function stopAllAudio() {
+  console.log("[stopAllAudio] Stopping all audio buffers");
+  activeAudioSources.forEach(source => {
+      try {
+          source.stop(0); // Use 0 as the argument to stop immediately
+          source.disconnect();
+      } catch (error) {
+          console.error('[stopAllAudio] Error stopping audio source:', error);
+      }
+  });
+  activeAudioSources.clear(); // Clear the set after stopping all sources
+}
 
 
 function calculateTrimValues(channelIndex, audioBuffer, isReversePlayback) {

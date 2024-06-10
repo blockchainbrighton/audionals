@@ -160,29 +160,28 @@ if (playButton && stopButton) {
         });
         
 
-          stopButton.addEventListener('click', () => {
+        stopButton.addEventListener('click', () => {
             console.log('Stop button clicked');
-            console.log(' calling stopAllSynths');
-            stopAllSynths();  // Assuming you have a function to stop all synths
-          
-            
-              if (isPlaying) {
-                  stopScheduler();
-                  sendStopMessage();
-                  emitStop();
-              
-                  stopButton.classList.add('selected');
-                  playButton.classList.remove('selected');
-                  isPlaying = false;
-                  isPaused = false;  // Reset the isPaused flag when stopping the sequencer
-                  beatCount = 0;  // reset the beat count
-                  barCount = 0; // reset the bar count
-                  sequenceCount = 0; // reset the sequence count
-                  currentStep = 0;  // reset the step count
-                  totalStepCount = 0;
-                  resetStepLights();  // reset the step lights
-              }
-          });
+            stopAllSynths(); // Custom function - ensure it's defined
+            stopAllAudio(); // Stop all audio playback
+        
+            if (isPlaying) {
+                stopScheduler(); // Custom function - ensure it's defined
+                sendStopMessage(); // Custom function - ensure it's defined
+                emitStop(); // Custom function - ensure it's defined
+        
+                stopButton.classList.add('selected');
+                playButton.classList.remove('selected');
+                isPlaying = false;
+                isPaused = false; // Reset the isPaused flag when stopping the sequencer
+                beatCount = 0; // reset the beat count
+                barCount = 0; // reset the bar count
+                sequenceCount = 0; // reset the sequence count
+                currentStep = 0; // reset the step count
+                totalStepCount = 0;
+                resetStepLights(); // Custom function - ensure it's defined
+            }
+        });        
 
         } else {
           console.error("Play or Stop button is not defined");
