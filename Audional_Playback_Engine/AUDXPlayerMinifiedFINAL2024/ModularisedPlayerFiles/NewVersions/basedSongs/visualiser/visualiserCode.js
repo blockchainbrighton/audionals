@@ -1,12 +1,10 @@
 console.log("Visualiser.js loaded");
+
 let isChannel11Active = false;
 let activeChannelIndex = null;
 let isPlaybackActive = false;
 let renderingState = {}; // Object to track rendering state for each channel
 let activeArrayIndex = {}; // Track the active array index for each channel
-
-
-
 
 // Array length placeholders
 let arrayLengths = {
@@ -20,7 +18,6 @@ const accessLevelMappings = {
     2: [1, 2],     // Access Level 2 can access Colors1 and Colors2
     3: [1, 2, 3]   // Access Level 3 can access Colors1, Colors2, and Colors3
 };
-
 
 // Function to initialize array lengths from color settings
 function initializeArrayLengths() {
@@ -45,7 +42,6 @@ function initializeArrayLengths() {
 // Initialize array lengths on load
 initializeArrayLengths();
 
-
 function randomWithSeed(t) {
     const e = 1e4 * Math.sin(t);
     return e - Math.floor(e);
@@ -58,12 +54,12 @@ function calculateCCI2(channelIndex, arrayLength) {
         return 1; // Default to a safe value
     }
     
-    // Avoid potential issues when channelIndex is zero
     const value = 100 * randomWithSeed(seed + (channelIndex + 1)); // Ensure non-zero seed
     const scaledValue = Math.floor((value / 100) * arrayLength); // Scale to array length
     
-    return Math.min(Math.max(scaledValue + 1, 1), arrayLength); // Ensure within bounds
+    return Math.min(Math.max(scaledValue, 0), arrayLength - 1); // Ensure within bounds
 }
+
 
 // Function to generate a number between 1 and 3 based on seed
 function generateAccessLevel(seed) {
@@ -74,35 +70,22 @@ function generateAccessLevel(seed) {
 // Improved function to select array index based on access level and prevent collisions
 function selectArrayIndex(seed, AccessLevel, channelIndex) {
     const randomValue = randomWithSeed(seed + channelIndex * 100);
-    let arrayIndex;
     switch (AccessLevel) {
-        case 1:
-            arrayIndex = 1; // Only array 1 is accessible
-            break;
-        case 2:
-            arrayIndex = Math.floor(randomValue * 2) + 1; // Arrays 1 and 2 are accessible
-            break;
-        case 3:
-            arrayIndex = Math.floor(randomValue * 3) + 1; // Arrays 1, 2, and 3 are accessible
-            break;
+        case 1: return 1; // Only array 1 is accessible
+        case 2: return Math.floor(randomValue * 2) + 1; // Arrays 1 and 2 are accessible
+        case 3: return Math.floor(randomValue * 3) + 1; // Arrays 1, 2, and 3 are accessible
         default:
             console.error(`Invalid AccessLevel: ${AccessLevel}`);
-            arrayIndex = 1; // Default to safe value
+            return 1; // Default to safe value
     }
-    return arrayIndex;
 }
 
-//  seed is defined in the HTML file
+// seed is defined in the HTML file
 let AccessLevel = generateAccessLevel(seed); // Define globally for use throughout the code
 
 function updateVisualizer(cci2, arrayIndex, channelIndex) {
     // Function to handle visual updates using cci2 and arrayIndex
-    // This is where the actual visual update logic will reside
-    console.log(`Updating visual:
-        AccessLevel=${AccessLevel}
-        ChannelIndex=${channelIndex}
-        CCI2=${cci2}
-        ArrayIndex=${arrayIndex}`);
+    console.log(`Updating visual:\nAccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nCCI2=${cci2}\nIndex=${arrayIndex}`);
     immediateVisualUpdate();
 }
 
@@ -117,21 +100,16 @@ function shouldUpdateVisualizer(channelIndex, arrayIndex, cci2) {
     return false;
 }
 
-
 let needImmediateUpdate = false;
 
 function immediateVisualUpdate() {
     if (needImmediateUpdate) {
-        // Perform any necessary immediate updates
         needImmediateUpdate = false; // Reset flag
     }
 }
 
-
+// Optimized event handler
 document.addEventListener("internalAudioPlayback", (event) => {
-    // Log the entire event detail for debugging
-    console.log("internalAudioPlayback event received:", event.detail);
-
     const { action, channelIndex, step } = event.detail;
 
     if (action === "stop") {
@@ -141,66 +119,65 @@ document.addEventListener("internalAudioPlayback", (event) => {
         activeChannelIndex = null;
         activeArrayIndex = {}; // Reset active array index
         renderingState = {}; // Reset rendering state
-        log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
+        console.log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
         immediateVisualUpdate();
     } else if (action === "activeStep") {
-        isPlaybackActive = true;
-        activeChannelIndex = channelIndex;
-        AccessLevel = generateAccessLevel(seed);
-        const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
-        const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
+        if (!isPlaybackActive || activeChannelIndex !== channelIndex) {
+            isPlaybackActive = true;
+            activeChannelIndex = channelIndex;
+            AccessLevel = generateAccessLevel(seed);
+            const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
+            const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
 
-        // Updated log message with column format
-        log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nArrayLength=${arrayLengths[arrayIndex]}\nIndex=${arrayIndex}`);
-        
-        if (!arrayLengths[arrayIndex]) {
-            errorLog("Invalid array length:", arrayLengths[arrayIndex]);
-            return;
-        }
+            console.log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nCCI2=${cci2}\nIndex=${arrayIndex}`);
+            
+            if (!arrayLengths[arrayIndex]) {
+                console.error("Invalid array length:", arrayLengths[arrayIndex]);
+                return;
+            }
 
-        cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
+            cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
 
-        if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
-            activeArrayIndex[channelIndex] = arrayIndex; // Update active array index
-            updateVisualizer(cci2, arrayIndex, channelIndex);
+            if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
+                activeArrayIndex[channelIndex] = arrayIndex; // Update active array index
+                updateVisualizer(cci2, arrayIndex, channelIndex);
+            }
         }
     }
 });
 
 AudionalPlayerMessages.onmessage = (message) => {
-    // Log the entire message data for debugging
-    console.log("AudionalPlayerMessages received:", message.data);
+    const { action, channelIndex } = message.data;
+    if (!isPlaybackActive && action !== "stop") return;
 
-    if (!isPlaybackActive) return;
-
-    if (message.data.action === "stop") {
+    if (action === "stop") {
         cci2 = initialCCI2;
         isChannel11Active = false;
         isPlaybackActive = false;
         activeChannelIndex = null;
         activeArrayIndex = {}; // Reset active array index
         renderingState = {}; // Reset rendering state
-        log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
+        console.log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
     } else {
-        const { channelIndex } = message.data;
-        activeChannelIndex = channelIndex;
-        AccessLevel = generateAccessLevel(seed);
-        const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
-        const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
+        if (activeChannelIndex !== channelIndex) {
+            activeChannelIndex = channelIndex;
+            AccessLevel = generateAccessLevel(seed);
+            const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
+            const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
 
-        // Updated log message with column format
-        log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nArrayLength=${arrayLengths[arrayIndex]}\nIndex=${arrayIndex}`);
-        
-        if (!arrayLengths[arrayIndex]) {
-            errorLog("Invalid array length:", arrayLengths[arrayIndex]);
-            return;
-        }
+            console.log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nCCI2=${cci2}\nIndex=${arrayIndex}`);
+            
+            if (!arrayLengths[arrayIndex]) {
+                console.error("Invalid array length:", arrayLengths[arrayIndex]);
+                return;
+            }
 
-        cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
+            cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
 
-        if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
-            activeArrayIndex[channelIndex] = arrayIndex; // Update active array index
-            updateVisualizer(cci2, arrayIndex, channelIndex);
+            if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
+                activeArrayIndex[channelIndex] = arrayIndex; // Update active array index
+                updateVisualizer(cci2, arrayIndex, channelIndex);
+            }
         }
     }
 };

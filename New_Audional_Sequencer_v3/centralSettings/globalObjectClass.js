@@ -12,6 +12,7 @@ class UnifiedSequencerSettings {
         this.settings = {
             masterSettings: {
                 projectName: 'New Audx Project',
+                artistName: '', // Initialize with default empty string
                 projectBPM: 120,
                 currentSequence: 0,
                 channelURLs: new Array(this.numChannels).fill(''),
@@ -75,6 +76,11 @@ class UnifiedSequencerSettings {
             this.settings.masterSettings.currentSequence = 0;
             this.settings.masterSettings.projectName = parsedSettings.projectName;
             this.settings.masterSettings.projectBPM = parsedSettings.projectBPM;
+            
+            // Add artistName field if present
+            if (parsedSettings.artistName) {
+                this.settings.masterSettings.artistName = parsedSettings.artistName;
+            }
     
             // Ensure playback speeds are set
             this.globalPlaybackSpeed = parsedSettings.globalPlaybackSpeed || 1;
@@ -114,6 +120,7 @@ class UnifiedSequencerSettings {
             console.error('[internalPresetDebug] Error loading settings:', error);
         }
     }
+    
 
 
     exportSettings(pretty = true) {
@@ -126,6 +133,11 @@ class UnifiedSequencerSettings {
     
         // Ensure that channelVolume is an array before trying to spread it
         settingsClone.channelVolume = Array.isArray(this.settings.masterSettings.channelVolume) ? [...this.settings.masterSettings.channelVolume] : new Array(16).fill(1);
+    
+        // Include artistName if it exists
+        if (this.settings.masterSettings.artistName) {
+            settingsClone.artistName = this.settings.masterSettings.artistName;
+        }
     
         for (let sequenceKey in settingsClone.projectSequences) {
             const sequence = settingsClone.projectSequences[sequenceKey];
@@ -171,6 +183,7 @@ class UnifiedSequencerSettings {
         console.log("[exportSettings] Exported Settings:", exportedSettings);
         return exportedSettings;
     }
+    
     
     
     
@@ -671,6 +684,7 @@ updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, is
     
         // Reset basic project settings to defaults
         this.settings.masterSettings.projectName = 'New Audx Project';
+        this.settings.masterSettings.artistName = ''; // Reset artist name to default empty string
         this.settings.masterSettings.projectBPM = 120; // Default BPM
         this.settings.masterSettings.currentSequence = 0; // Initialize to first sequence
     

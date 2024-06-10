@@ -7,6 +7,8 @@ console.log("Colour settings level 2 loaded");
 
 // Main function to get colors
 function getColors2(o, a, l) {
+    const v = l; // Alias for clarity, where l represents vertices
+
     const randomValues = Array.from({ length: 24 }, () => Math.random());
     const l0zR = l[0].z + R;
     const l2zR = l[2].z + R;
@@ -67,130 +69,9 @@ function getColors2(o, a, l) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-          // CRAZY EYES
-        
-          (randomValues[1] * (l0zR / (3 * R) * 75)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))})` : 
-          "#000a39",
-
-
-      (randomValues[2] * (l1zR / (111 * R) * 299999)) > 32 ? 
-          `rgb(${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))}, ${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))}, ${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))})` : 
-          "alternative-color",
-
-      (randomValues[3] * (l0zR / (0.01 * R) * 0.17)) > 32 ? 
-          `rgb(${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))}, ${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))}, ${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))})` : 
-          "alternative-color",
-
-      (randomValues[4] * (l0zR / (0.1 * R) * 255)) > 32 ? 
-          `rgb(${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))}, ${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))}, ${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))})` : 
-          "alternative-color",
-
-      (randomValues[5] * (l0zR / (4 * R) * 255)) > 32 ? 
-          `rgb(${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))}, ${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))}, ${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))})` : 
-          "alternative-color",
-
-      (randomValues[6] * (l0zR / (0.01 * R) * 255)) > 32 ? 
-          `rgb(${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))}, ${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))}, ${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))})` : 
-          "alternative-color",
-
-      (randomValues[7] * (l0zR / (2.5 * R) * 55)) > 32 ? 
-          `rgb(${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))}, ${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))}, ${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))})` : 
-          "alternative-color",
-
-      (randomValues[8] * (l0zR / (2 * R) * 255)) > 32 ? 
-          `rgb(${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))})` : 
-          "alternative-color",
-
-      (randomValues[9] * (l0zR / (5 * R) * 255)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))})` : 
-          "red",
-
-      (randomValues[10] * (l0zR / (5 * R) * 255)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))})` : 
-          "blue",
-
-      (randomValues[11] * (l0zR / (5 * R) * 255)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))})` : 
-          "orange",
-
-      (randomValues[12] * (l0zR / (5 * R) * 255)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))})` : 
-          "green",
-
-      (randomValues[13] * (l0zR / (5 * R) * 255)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))})` : 
-          "grey",
-
-      (randomValues[14] * (l0zR / (111 * R) * 255)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))})` : 
-          "#5a0000",
-
-      (randomValues[15] * (l0zR / (111 * R) * 255)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))})` : 
-          "blue",
-
-      (randomValues[16] * (l0zR / (111 * R) * 255)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))})` : 
-          "green",
-
-      (randomValues[17] * (l0zR / (111 * R) * 255)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))})` : 
-          "grey",
-
-      (randomValues[18] * (l0zR / (111 * R) * 255)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))})` : 
-          "#1f1f1f",
-
-      (randomValues[19] * (l0zR / (3 * R) * 75)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))})` : 
-          "#390000",
-
-      (randomValues[20] * (l0zR / (3 * R) * 75)) > 0.1 ? 
-          `rgb(${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))})` : 
-          "#00390e",
-
-      `rgb(${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))})`, // Disco Eyes
-
 
            
-            // 1 stripe scatter on DARK RED BG
-            getConditionalColor(l[1].x, l[1].y, 10, "red", "#160000"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "white", "#160000"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "blue", "#160000"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "orange", "#160000"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "green", "#160000"), // Wide 3 Row Scatter
-
-            // 1 stripe scatter on DARK BLUE BG
-            getConditionalColor(l[1].x, l[1].y, 10, "red", "#000016"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "white", "#000016"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "blue", "#000016"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "orange", "#000016"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "green", "#000016"), // Wide 3 Row Scatter
-
-            // 1 stripe scatter on DARK ORANGE BG
-            getConditionalColor(l[1].x, l[1].y, 10, "red", "#221300"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "white", "#221300"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "blue", "#221300"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "orange", "#221300"), // Wide 3 Row Scatter             
-            getConditionalColor(l[1].x, l[1].y, 10, "green", "#221300"), // Wide 3 Row Scatter
-
-
-            // 1 stripe scatter on DARK GREEN BG
-            getConditionalColor(l[1].x, l[1].y, 10, "red", "#001400"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "white", "#001400"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "blue", "#001400"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "orange", "#001400"), // Wide 3 Row Scatter             
-            getConditionalColor(l[1].x, l[1].y, 10, "green", "#001400"), // Wide 3 Row Scatter
-
-
-            // 1 stripe scatter on DARK GREY BG
-            getConditionalColor(l[1].x, l[1].y, 10, "red", "#0b0b0b"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "white", "#0b0b0b"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "blue", "#0b0b0b"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "orange", "#0b0b0b"), // Wide 3 Row Scatter
-            getConditionalColor(l[1].x, l[1].y, 10, "green", "#0b0b0b"), // Wide 3 Row Scatter
-
+          
        
             // DISCO BALL
             getRandomColor([colorPalette.hslColors]), // DISCO
@@ -203,68 +84,208 @@ function getColors2(o, a, l) {
 
 
             // FULL SHAPE COLOUR (50/50)
-            sinValue < 0.5 ? "red" : "blue", // Full Shape Colour
+            // sinValue < 0.5 ? "red" : "blue", // Full Shape Colour
             // Math.abs(Math.sin(a / 3000)) < 0.5 ? "red" : "blue", // Full Shape Colour
 
-            getConditionalColor(x, y, 280, "green", "darkorange"), 
-            getConditionalColor(x, y, 111, "white", "red"), 
-            getConditionalColor(x, y, 120, "blue", "blue"), 
-            getConditionalColor(x, y, 111, "red", "darkorange"), 
-            getConditionalColor(x, y, 95, "blue", "blue"),
-            getConditionalColor(x, y, 111, "green", "white"),
-            getConditionalColor(x, y, 111, "darkgreen", "grey"),
-            getConditionalColor(x, y, 111, "lightorange", "darkgrey"),
+            // getConditionalColor(x, y, 280, "green", "darkorange"), 
+            // getConditionalColor(x, y, 111, "white", "red"), 
+            // getConditionalColor(x, y, 120, "blue", "blue"), 
+            // getConditionalColor(x, y, 111, "red", "darkorange"), 
+            // getConditionalColor(x, y, 95, "blue", "blue"),
+            // getConditionalColor(x, y, 111, "green", "white"),
+            // getConditionalColor(x, y, 111, "darkgreen", "grey"),
+            // getConditionalColor(x, y, 111, "lightorange", "darkgrey"),
 
+            // MIDDLE LINE CRAWLER TOP LEFT
+            getConditionalColor(x3, y0, 100, "red", "grey"),
+            getConditionalColor(x3, y0, 100, "red", "grey"),
+            getConditionalColor(x3, y0, 100, "red", "gray"),
+            getConditionalColor(x3, y0, 100, "red", "white"),
+            getConditionalColor(x3, y0, 100, "blue", "red"),
+            getConditionalColor(x3, y0, 100, "blue", "gray"),
+            getConditionalColor(x3, y0, 100, "blue", "orange"),
+            getConditionalColor(x3, y0, 100, "blue", "white"),
+            getConditionalColor(x3, y0, 100, "green", "blue"),
+            getConditionalColor(x3, y0, 100, "green", "red"),
+            getConditionalColor(x3, y0, 100, "black", "red"),
+            getConditionalColor(x3, y0, 100, "purple", "orange"),
+            getConditionalColor(x3, y0, 100, "black", "white"),
+            getConditionalColor(x3, y0, 100, "orange", "red"),
+            getConditionalColor(x3, y0, 100, "purple", "gray"),
+            getConditionalColor(x3, y0, 100, "black", "blue"),
+            getConditionalColor(x3, y0, 100, "gray", "white"),
+
+
+            // MIDDLE LINE CRAWLER BOTTOM RIGHT
+            getConditionalColor(x1, y0, -100, "red", "blue"),
+            getConditionalColor(x1, y0, -100, "red", "grey"),
+            getConditionalColor(x1, y0, -100, "red", "orange"),
+            getConditionalColor(x1, y0, -100, "red", "white"),
+            getConditionalColor(x1, y0, -100, "blue", "red"),
+            getConditionalColor(x1, y0, -100, "blue", "purple"),
+            getConditionalColor(x1, y0, -100, "blue", "orange"),
+            getConditionalColor(x1, y0, -100, "blue", "white"),
+            getConditionalColor(x1, y0, -100, "green", "blue"),
+            getConditionalColor(x1, y0, -100, "green", "red"),
+            getConditionalColor(x1, y0, -100, "green", "orange"),
+            getConditionalColor(x1, y0, -100, "green", "white"),
+            getConditionalColor(x1, y0, -100, "orange", "red"),
+            getConditionalColor(x1, y0, -100, "orange", "maroon"), 
+            getConditionalColor(x1, y0, -100, "orange", "blue"),
+            getConditionalColor(x1, y0, -100, "orange", "white"),
+
+            // 3 SQUARE MIDDLE CRAWLER
+            getConditionalColor(x2, y0, -300, "red", "blue"),
+            getConditionalColor(x2, y0, -300, "red", "black"),
+            getConditionalColor(x2, y0, -300, "red", "orange"),
+            getConditionalColor(x2, y0, -300, "red", "white"),
+            getConditionalColor(x2, y0, -300, "blue", "red"),
+            getConditionalColor(x2, y0, -300, "blue", "red"),
+            getConditionalColor(x2, y0, -300, "blue", "orange"),
+            getConditionalColor(x2, y0, -300, "blue", "white"),
+            getConditionalColor(x2, y0, -300, "green", "blue"),
+            getConditionalColor(x2, y0, -300, "green", "red"),
+            getConditionalColor(x2, y0, -300, "green", "orange"),
+            getConditionalColor(x2, y0, -300, "green", "white"),
+            getConditionalColor(x2, y0, -300, "orange", "red"),
+            getConditionalColor(x2, y0, -300, "orange", "black"),
+            getConditionalColor(x2, y0, -300, "orange", "blue"),
+            getConditionalColor(x2, y0, -300, "orange", "white"),
+
+
+            // BOTTOM RIGHT CORNER 
+            getConditionalColor(x2, y0, 600, "red", "blue"),
+            getConditionalColor(x2, y0, 600, "red", "black"),
+            getConditionalColor(x2, y0, 600, "red", "orange"),
+            getConditionalColor(x2, y0, 600, "red", "white"),
+            getConditionalColor(x2, y0, 600, "blue", "red"),
+            getConditionalColor(x2, y0, 600, "blue", "gray"),
+            getConditionalColor(x2, y0, 600, "blue", "orange"),
+            getConditionalColor(x2, y0, 600, "blue", "white"),
+            getConditionalColor(x2, y0, 600, "green", "blue"),
+            getConditionalColor(x2, y0, 600, "green", "red"),
+            getConditionalColor(x2, y0, 600, "green", "orange"),
+            getConditionalColor(x2, y0, 600, "green", "white"),
+            getConditionalColor(x2, y0, 600, "orange", "red"),
+            getConditionalColor(x2, y0, 600, "orange", "black"),
+            getConditionalColor(x2, y0, 600, "orange", "blue"),
+            getConditionalColor(x2, y0, 600, "orange", "white"),
+            getConditionalColor(x2, y0, 600, "orange", "black"),
+
+            // EU Flag Styles
+            getConditionalColor(x0, y0, 15, "orange", "blue"),
+            getConditionalColor(x0, y0, 15, "red", "blue"), 
+            getConditionalColor(x0, y0, 15, "red", "white"), 
+            getConditionalColor(x0, y0, 15, "white", "blue"), 
+            getConditionalColor(x0, y0, 15, "blue", "white"), 
+            getConditionalColor(x0, y0, 15, "white", "red"), 
+            getConditionalColor(x0, y0, 15, "orange", "blue"), 
+            getConditionalColor(x0, y0, 15, "red", "orange"),
+            getConditionalColor(x0, y0, 15, "orange", "white"), 
+            getConditionalColor(x0, y0, 15, "white", "orange"),
+            getConditionalColor(x0, y0, 15, "grey", "red"),
+            getConditionalColor(x0, y0, 15, "grey", "blue"),
+            getConditionalColor(x0, y0, 15, "grey", "black"),
+            getConditionalColor(x0, y0, 15, "grey", "orange"),
+            getConditionalColor(x0, y0, 15, "red", "grey"),
+            getConditionalColor(x0, y0, 15, "blue", "grey"),
+            getConditionalColor(x0, y0, 15, "green", "grey"),
+            getConditionalColor(x0, y0, 15, "orange", "grey"),
+
+            getConditionalColor(x1, y0, 8, "orange", "black"),
+            getConditionalColor(x2, y0, 9, "red", "black"), 
+            getConditionalColor(x3, y0, 10, "white", "black"), 
+            getConditionalColor(x1, y0, 11, "purple", "black"), 
+            getConditionalColor(x2, y0, 12, "blue", "black"), 
+            getConditionalColor(x3, y0, 13, "white", "black"), 
+            getConditionalColor(x2, y0, 15, "red", "black"),
+            getConditionalColor(x3, y0, 16, "orange", "black"), 
+            getConditionalColor(x1, y0, 17, "white", "black"),
+            getConditionalColor(x2, y0, 16, "grey", "black"),
+            getConditionalColor(x3, y0, 15, "grey", "black"),
+            getConditionalColor(x1, y0, 14, "grey", "black"),
+            getConditionalColor(x2, y0, 13, "grey", "black"),
+            getConditionalColor(x3, y0, 12, "red", "black"),
+            getConditionalColor(x1, y0, 11, "blue", "black"),
+            getConditionalColor(x2, y0, 10, "green", "black"),
+            getConditionalColor(x3, y0, 9, "orange", "black"),
 
 
             // IGUANA EYES
-            getDynamicRgb(x2, y2, x2, y0, 255, 165, 0),    // IGUANA EYES // Orange
-            getDynamicRgb(x2, y2, x2, y0, 255, 87, 51),   // Coral
-            getDynamicRgb(x2, y2, x2, y0, 255, 215, 0),   // Gold
-            getDynamicRgb(x2, y2, x2, y0, 255, 127, 80),  // Coral2
-            getDynamicRgb(x2, y2, x2, y0, 0, 255, 0),     // Lime
-            getDynamicRgb(x2, y2, x2, y0, 0, 255, 255),   // Cyan
+
             getDynamicRgb(x2, y2, x2, y0, 132, 80, 17),   // Very dark orange
             getDynamicRgb(x2, y2, x2, y0, 0, 25, 0),      // Very dark green
-            getDynamicRgb(x2, y2, x2, y0, 0, 0, 255),     // Blue
-            getDynamicRgb(x2, y2, x2, y0, 32, 178, 170),  // Lightseagreen
             getDynamicRgb(x2, y2, x2, y0, 255, 140, 0),   // Darkorange
             getDynamicRgb(x2, y2, x2, y0, 0, 0, 30),      // Very dark blue
             getDynamicRgb(x2, y2, x2, y0, 77, 0, 0),      // Dark red
-            getDynamicRgb(x2, y2, x2, y0, 255, 0, 0),     // Red
-            getDynamicRgb(x2, y2, x2, y0, 0, 128, 0),     // Green
-            getDynamicRgb(x2, y2, x2, y0, 128, 0, 128),   // Purple
-            getDynamicRgb(x2, y2, x2, y0, 255, 0, 255),   // Magenta
-            getDynamicRgb(x2, y2, x2, y0, 0, 255, 0),     // Lime (repeated)
-            getDynamicRgb(x2, y2, x2, y0, 0, 128, 128),   // Teal
-            getDynamicRgb(x2, y2, x2, y0, 128, 0, 0),     // Maroon
-            getDynamicRgb(x2, y2, x2, y0, 0, 0, 128),     // Navy
-            getDynamicRgb(x2, y2, x2, y0, 128, 128, 0),   // Olive
-            getDynamicRgb(x2, y2, x2, y0, 192, 192, 192), // Silver
-            getDynamicRgb(x2, y2, x2, y0, 75, 0, 130),    // Indigo
+
+
+            // getDynamicRgb(x2, y2, x2, y0, 255, 87, 51),   // Coral
+            // getDynamicRgb(x2, y2, x2, y0, 255, 127, 80),  // Coral2
+            // getDynamicRgb(x2, y2, x2, y0, 0, 255, 0),     // Lime
+            // getDynamicRgb(x2, y2, x2, y0, 0, 255, 255),   // Cyan
+            // getDynamicRgb(x2, y2, x2, y0, 32, 178, 170),  // Lightseagreen
+
+
+            // getDynamicRgb(x2, y2, x2, y0, 255, 0, 255),   // Magenta
+            // getDynamicRgb(x2, y2, x2, y0, 0, 255, 0),     // Lime (repeated)
+            // getDynamicRgb(x2, y2, x2, y0, 0, 128, 128),   // Teal
+            // getDynamicRgb(x2, y2, x2, y0, 128, 0, 0),     // Maroon
+            // getDynamicRgb(x2, y2, x2, y0, 0, 0, 128),     // Navy
+            // // getDynamicRgb(x2, y2, x2, y0, 128, 128, 0),   // Olive
+            // getDynamicRgb(x2, y2, x2, y0, 75, 0, 130),    // Indigo
 
             // LIQUID GRAVITY 
             // TOP LEFT CORNER
-            getConditionalColor(x0, y0, 444, "red", "blue"),
-            getConditionalColor(x0, y0, 444, "red", "green"),
-            getConditionalColor(x0, y0, 444, "red", "orange"),
-            getConditionalColor(x0, y0, 444, "red", "white"),
-            getConditionalColor(x0, y0, 444, "red", "black"),
-            getConditionalColor(x0, y0, 444, "blue", "red"),
-            getConditionalColor(x0, y0, 444, "blue", "green"),
-            getConditionalColor(x0, y0, 444, "blue", "orange"),
-            getConditionalColor(x0, y0, 444, "blue", "white"),
-            getConditionalColor(x0, y0, 444, "blue", "black"),
-            getConditionalColor(x0, y0, 444, "green", "blue"),
-            getConditionalColor(x0, y0, 444, "green", "red"),
-            getConditionalColor(x0, y0, 444, "green", "orange"),
-            getConditionalColor(x0, y0, 444, "green", "white"),
-            getConditionalColor(x0, y0, 444, "green", "black"),
-            getConditionalColor(x0, y0, 444, "orange", "red"),
-            getConditionalColor(x0, y0, 444, "orange", "green"),
-            getConditionalColor(x0, y0, 444, "orange", "blue"),
-            getConditionalColor(x0, y0, 444, "orange", "white"),
-            getConditionalColor(x0, y0, 444, "orange", "black"),
+            // getConditionalColor(x0, y0, 444, "verydarkred", "darkblue"),
+            // getConditionalColor(x0, y0, 444, "verydarkred", "darkgreen"),
+            // getConditionalColor(x0, y0, 444, "verydarkred", "darkorange"),
+            // getConditionalColor(x0, y0, 444, "verydarkred", "white"),
+            // getConditionalColor(x0, y0, 444, "verydarkred", "black"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "darkred"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "darkgreen"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "darkorange"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "white"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "black"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "verydarkblue"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "verydarkred"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "orange"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "white"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "black"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "red"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "green"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "blue"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "white"),
+            // getConditionalColor(x0, y0, 444, "verydarkblue", "black"),
+
+            // getConditionalColor(x2, y0, 600, "green", "black"),
+            // getConditionalColor(x2, y0, 600, "blue", "black"),
+            // getConditionalColor(x2, y0, 600, "red", "black"),
+
+            // getConditionalColor(x2, y0, -300, "orange", "black"),
+            // getConditionalColor(x2, y0, -300, "green", "black"),
+            // getConditionalColor(x2, y0, -300, "blue", "black"),
+            // getConditionalColor(x2, y0, -300, "red", "black"),
+
+
+
+            // getConditionalColor(x1, y0, -100, "orange", "black"),
+            // getConditionalColor(x1, y0, -100, "green", "black"),
+            // getConditionalColor(x1, y0, -100, "blue", "black"),
+            // getConditionalColor(x1, y0, -100, "red", "black"),
+
+       
+            // getConditionalColor(x3, y0, 100, "orange", "black"),
+            // getConditionalColor(x3, y0, 100, "green", "black"),
+            // getConditionalColor(x3, y0, 100, "blue", "black"),
+            // getConditionalColor(x3, y0, 100, "red", "black"),
+
+                    //   // CRAWLERS ON BLACK BACKGROUND
+                    //   getConditionalColor(x0, y0, 345, "red", "black"), // Top Left Edge Crawler
+                    //   getConditionalColor(x0, y0, 345, "white", "black"), // Top Left Edge Crawler
+                    //   getConditionalColor(x0, y0, 345, "blue", "black"), // Top Left Edge Crawler
+                    //   getConditionalColor(x0, y0, 345, "orange", "black"), // Top Left Edge Crawler
+                    //   getConditionalColor(x0, y0, 345, "green", "black"), // Top Left Edge Crawler
 
               ];
 

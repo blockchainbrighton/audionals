@@ -8,6 +8,8 @@ console.log("Colour settings level 3 loaded");
     
 // Main function to get colors
 function getColors3(o, a, l) {
+    const v = l; // Alias for clarity, where l represents vertices
+
     const randomValues = Array.from({ length: 24 }, () => Math.random());
     const l0zR = l[0].z + R;
     const l2zR = l[2].z + R;
@@ -62,7 +64,6 @@ function getColors3(o, a, l) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
 
-
             `rgb(${Math.floor(127 * sinNow + 128)}, ${Math.floor(127 * sinNowDiv1000 + 128)}, ${Math.floor(127 * sinNowDiv2000 + 128)})`, // Trippy Eyes
 
             getConditionalColor(x1, y0, 14, "orange", "black"), 
@@ -73,118 +74,211 @@ function getColors3(o, a, l) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-                 // MIDDLE LINE CRAWLER TOP LEFT
-                 getConditionalColor(x3, y0, 100, "red", "blue"),
-                 getConditionalColor(x3, y0, 100, "red", "green"),
-                 getConditionalColor(x3, y0, 100, "red", "orange"),
-                 getConditionalColor(x3, y0, 100, "red", "white"),
-                 getConditionalColor(x3, y0, 100, "blue", "red"),
-                 getConditionalColor(x3, y0, 100, "blue", "green"),
-                 getConditionalColor(x3, y0, 100, "blue", "orange"),
-                 getConditionalColor(x3, y0, 100, "blue", "white"),
-                 getConditionalColor(x3, y0, 100, "green", "blue"),
-                 getConditionalColor(x3, y0, 100, "green", "red"),
-                 getConditionalColor(x3, y0, 100, "green", "orange"),
-                 getConditionalColor(x3, y0, 100, "green", "white"),
-                 getConditionalColor(x3, y0, 100, "orange", "red"),
-                 getConditionalColor(x3, y0, 100, "orange", "green"),
-                 getConditionalColor(x3, y0, 100, "orange", "blue"),
-                 getConditionalColor(x3, y0, 100, "orange", "white"),
+                // IGUANA EYES
+                getDynamicRgb(x2, y2, x2, y0, 255, 215, 0),   // Gold
+                getDynamicRgb(x2, y2, x2, y0, 192, 192, 192), // Silver
+                getDynamicRgb(x2, y2, x2, y0, 255, 165, 0),   // Orange
+                getDynamicRgb(x2, y2, x2, y0, 128, 0, 128),   // Purple
+                getDynamicRgb(x2, y2, x2, y0, 255, 0, 0),     // Red
+                getDynamicRgb(x2, y2, x2, y0, 0, 128, 0),     // Green
+                getDynamicRgb(x2, y2, x2, y0, 0, 0, 255),     // Blue
 
 
-            // MIDDLE LINE CRAWLER BOTTOM RIGHT
-            getConditionalColor(x1, y0, -100, "red", "blue"),
-            getConditionalColor(x1, y0, -100, "red", "green"),
-            getConditionalColor(x1, y0, -100, "red", "orange"),
-            getConditionalColor(x1, y0, -100, "red", "white"),
-            getConditionalColor(x1, y0, -100, "blue", "red"),
-            getConditionalColor(x1, y0, -100, "blue", "green"),
-            getConditionalColor(x1, y0, -100, "blue", "orange"),
-            getConditionalColor(x1, y0, -100, "blue", "white"),
-            getConditionalColor(x1, y0, -100, "green", "blue"),
-            getConditionalColor(x1, y0, -100, "green", "red"),
-            getConditionalColor(x1, y0, -100, "green", "orange"),
-            getConditionalColor(x1, y0, -100, "green", "white"),
-            getConditionalColor(x1, y0, -100, "orange", "red"),
-            getConditionalColor(x1, y0, -100, "orange", "green"),
-            getConditionalColor(x1, y0, -100, "orange", "blue"),
-            getConditionalColor(x1, y0, -100, "orange", "white"),
+               // #0 Original Crazy One
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 128 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
 
-                 // 3 SQUARE MIDDLE CRAWLER
-                 getConditionalColor(x2, y0, -300, "red", "blue"),
-                 getConditionalColor(x2, y0, -300, "red", "green"),
-                 getConditionalColor(x2, y0, -300, "red", "orange"),
-                 getConditionalColor(x2, y0, -300, "red", "white"),
-                 getConditionalColor(x2, y0, -300, "blue", "red"),
-                 getConditionalColor(x2, y0, -300, "blue", "green"),
-                 getConditionalColor(x2, y0, -300, "blue", "orange"),
-                 getConditionalColor(x2, y0, -300, "blue", "white"),
-                 getConditionalColor(x2, y0, -300, "green", "blue"),
-                 getConditionalColor(x2, y0, -300, "green", "red"),
-                 getConditionalColor(x2, y0, -300, "green", "orange"),
-                 getConditionalColor(x2, y0, -300, "green", "white"),
-                 getConditionalColor(x2, y0, -300, "orange", "red"),
-                 getConditionalColor(x2, y0, -300, "orange", "green"),
-                 getConditionalColor(x2, y0, -300, "orange", "blue"),
-                 getConditionalColor(x2, y0, -300, "orange", "white"),
+// #67 Dynamic alternative-color based on lightness - GREY SCALE CRAZY ONE
+((lightness) => lightness > 128 ? `rgb(${lightness}, ${lightness}, ${lightness})` : 'dark-mode-color')(Math.random() * Math.floor((v[0].z + R) / (2 * R) * 255)),
+
+// #72
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 64 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #73
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 32 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #74
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 16 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #75
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 8 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #76
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (3 * R) * 255));
+    return colorValue > 64 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #77
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (4 * R) * 255));
+    return colorValue > 32 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #78
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (5 * R) * 255));
+    return colorValue > 16 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #79
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (6 * R) * 255));
+    return colorValue > 8 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
 
 
-            // BOTTOM RIGHT CORNER 
-            getConditionalColor(x2, y0, 600, "red", "blue"),
-            getConditionalColor(x2, y0, 600, "red", "green"),
-            getConditionalColor(x2, y0, 600, "red", "orange"),
-            getConditionalColor(x2, y0, 600, "red", "white"),
-            getConditionalColor(x2, y0, 600, "blue", "red"),
-            getConditionalColor(x2, y0, 600, "blue", "green"),
-            getConditionalColor(x2, y0, 600, "blue", "orange"),
-            getConditionalColor(x2, y0, 600, "blue", "white"),
-            getConditionalColor(x2, y0, 600, "green", "blue"),
-            getConditionalColor(x2, y0, 600, "green", "red"),
-            getConditionalColor(x2, y0, 600, "green", "orange"),
-            getConditionalColor(x2, y0, 600, "green", "white"),
-            getConditionalColor(x2, y0, 600, "orange", "red"),
-            getConditionalColor(x2, y0, 600, "orange", "green"),
-            getConditionalColor(x2, y0, 600, "orange", "blue"),
-            getConditionalColor(x2, y0, 600, "orange", "white"),
-            getConditionalColor(x2, y0, 600, "orange", "black"),
 
-            // EU Flag Styles
-            getConditionalColor(x0, y0, 15, "orange", "blue"),
-            getConditionalColor(x0, y0, 15, "red", "blue"), 
-            getConditionalColor(x0, y0, 15, "red", "white"), 
-            getConditionalColor(x0, y0, 15, "white", "blue"), 
-            getConditionalColor(x0, y0, 15, "blue", "white"), 
-            getConditionalColor(x0, y0, 15, "white", "red"), 
-            getConditionalColor(x0, y0, 15, "orange", "blue"), 
-            getConditionalColor(x0, y0, 15, "red", "orange"),
-            getConditionalColor(x0, y0, 15, "orange", "white"), 
-            getConditionalColor(x0, y0, 15, "white", "orange"),
-            getConditionalColor(x0, y0, 15, "grey", "red"),
-            getConditionalColor(x0, y0, 15, "grey", "blue"),
-            getConditionalColor(x0, y0, 15, "grey", "green"),
-            getConditionalColor(x0, y0, 15, "grey", "orange"),
-            getConditionalColor(x0, y0, 15, "red", "grey"),
-            getConditionalColor(x0, y0, 15, "blue", "grey"),
-            getConditionalColor(x0, y0, 15, "green", "grey"),
-            getConditionalColor(x0, y0, 15, "orange", "grey"),
 
-            getConditionalColor(x1, y0, 8, "orange", "black"),
-            getConditionalColor(x2, y0, 9, "red", "black"), 
-            getConditionalColor(x3, y0, 10, "white", "black"), 
-            getConditionalColor(x1, y0, 11, "purple", "black"), 
-            getConditionalColor(x2, y0, 12, "blue", "black"), 
-            getConditionalColor(x3, y0, 13, "white", "black"), 
-            getConditionalColor(x2, y0, 15, "red", "black"),
-            getConditionalColor(x3, y0, 16, "orange", "black"), 
-            getConditionalColor(x1, y0, 17, "white", "black"),
-            getConditionalColor(x2, y0, 16, "grey", "black"),
-            getConditionalColor(x3, y0, 15, "grey", "black"),
-            getConditionalColor(x1, y0, 14, "grey", "black"),
-            getConditionalColor(x2, y0, 13, "grey", "black"),
-            getConditionalColor(x3, y0, 12, "red", "black"),
-            getConditionalColor(x1, y0, 11, "blue", "black"),
-            getConditionalColor(x2, y0, 10, "green", "black"),
-            getConditionalColor(x3, y0, 9, "orange", "black"),
+// #82 Mixing thresholds for an unpredictable pattern
+(() => {
+    const threshold = [64, 128, 32, 16].sort(() => 0.5 - Math.random())[0];
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > threshold ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #83 Dynamic range with a random factor affecting lightness
+(() => {
+    const randomFactor = Math.random() < 0.5 ? 2 : 3;
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (randomFactor * R) * 255));
+    return colorValue > 50 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'dark-mode-color';
+})(),
+
+// #84 Using a cosine function for a cyclic grayscale effect
+(() => {
+    const colorValue = Math.floor((Math.cos(Date.now() / 1000) + 1) / 2 * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 100 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #85 Incorporating sine for alternating dark and light cycles
+(() => {
+    const colorValue = Math.floor((Math.sin(Date.now() / 2000) + 1) / 2 * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 75 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'dark-mode-color';
+})(),
+
+// #86 Adjusting color based on a quadratic curve for depth
+(() => {
+    const colorValue = Math.floor(Math.pow(Math.random(), 2) * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 90 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #87 Leveraging a logarithmic scale for fine-tuned shades
+(() => {
+    const colorValue = Math.floor(Math.log(Math.random() * 10 + 1) / Math.log(11) * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 60 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #88 Utilizing exponential growth for sharp contrast
+(() => {
+    const colorValue = Math.floor(Math.pow(Math.random() * 2, 2) * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 120 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #89 Blending thresholds for a subtle grayscale dance
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (9 * R) * 255));
+    return colorValue > 10 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'light-mode-color';
+})(),
+
+
+          // CRAZY EYES
+        
+          (randomValues[1] * (l0zR / (3 * R) * 75)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))})` : 
+          "#000a39",
+
+
+      (randomValues[2] * (l1zR / (111 * R) * 299999)) > 32 ? 
+          `rgb(${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))}, ${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))}, ${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))})` : 
+          "alternative-color",
+
+      (randomValues[3] * (l0zR / (0.01 * R) * 0.17)) > 32 ? 
+          `rgb(${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))}, ${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))}, ${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))})` : 
+          "alternative-color",
+
+      (randomValues[4] * (l0zR / (0.1 * R) * 255)) > 32 ? 
+          `rgb(${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))}, ${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))}, ${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))})` : 
+          "alternative-color",
+
+      (randomValues[5] * (l0zR / (4 * R) * 255)) > 32 ? 
+          `rgb(${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))}, ${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))}, ${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))})` : 
+          "alternative-color",
+
+      (randomValues[6] * (l0zR / (0.01 * R) * 255)) > 32 ? 
+          `rgb(${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))}, ${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))}, ${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))})` : 
+          "alternative-color",
+
+      (randomValues[7] * (l0zR / (2.5 * R) * 55)) > 32 ? 
+          `rgb(${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))}, ${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))}, ${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))})` : 
+          "alternative-color",
+
+      (randomValues[8] * (l0zR / (2 * R) * 255)) > 32 ? 
+          `rgb(${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))})` : 
+          "alternative-color",
+
+      (randomValues[9] * (l0zR / (5 * R) * 255)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))})` : 
+          "red",
+
+      (randomValues[10] * (l0zR / (5 * R) * 255)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))})` : 
+          "blue",
+
+      (randomValues[11] * (l0zR / (5 * R) * 255)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))})` : 
+          "orange",
+
+      (randomValues[12] * (l0zR / (5 * R) * 255)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))})` : 
+          "green",
+
+      (randomValues[13] * (l0zR / (5 * R) * 255)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))})` : 
+          "grey",
+
+      (randomValues[14] * (l0zR / (111 * R) * 255)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))})` : 
+          "#5a0000",
+
+      (randomValues[15] * (l0zR / (111 * R) * 255)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))})` : 
+          "blue",
+
+      (randomValues[16] * (l0zR / (111 * R) * 255)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))})` : 
+          "green",
+
+      (randomValues[17] * (l0zR / (111 * R) * 255)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))})` : 
+          "grey",
+
+      (randomValues[18] * (l0zR / (111 * R) * 255)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))})` : 
+          "#1f1f1f",
+
+      (randomValues[19] * (l0zR / (3 * R) * 75)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))})` : 
+          "#390000",
+
+      (randomValues[20] * (l0zR / (3 * R) * 75)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))})` : 
+          "#00390e",
+
+      `rgb(${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))})`, // Disco Eyes
 
             // STROBES
             getHslColor(a, hslFactor1), // STROBE

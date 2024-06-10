@@ -4,16 +4,22 @@ console.log("Colour settings level 1 loaded");
 // Define the color palette
 const colorPalette = {
     primary: [
-        { hex: "#FFA500", class: "color-orange" }, // orange
-        { hex: "#FF5733", class: "color-coral" }, // coral
+        { hex: "#00387a", class: "color-blue" }, 
+        { hex: "#800080", class: "color-purple" }, 
+        { hex: "#FF00FF", class: "color-magenta" }, 
+        { hex: "#008000", class: "color-green" }, 
+        { hex: "#cd8400", class: "color-orange" }, // orange
         { hex: "#FFD700", class: "color-gold" }, // gold
-        { hex: "#FF7F50", class: "color-coral2" }, // coral
-        { hex: "#00FF00", class: "color-lime" }, // lime
         { hex: "#00FFFF", class: "color-cyan" },  // cyan
         { hex: "#845011", class: "color-verydarkorange" }, // very dark orange
         { hex: "#001900", class: "color-verydarkgreen" }, // very dark green
+        { hex: "#00001E", class: "color-verydarkblue" }, // very dark blue
+        { hex: "#4d0000", class: "color-darkred" }, // dark red
+        { hex: "#800000", class: "color-maroon" }, 
+
     ],
     secondary: [
+        { hex: "#FFD700", class: "color-gold" }, // gold
         { hex: "#FFA500", class: "color-orange" }, 
         { hex: "#0000FF", class: "color-blue" }, 
         { hex: "#20B2AA", class: "color-lightseagreen" }, 
@@ -24,11 +30,9 @@ const colorPalette = {
         { hex: "#008000", class: "color-green" }, 
         { hex: "#800080", class: "color-purple" }, 
         { hex: "#FF00FF", class: "color-magenta" }, 
-        { hex: "#00FF00", class: "color-lime" }, 
         { hex: "#008080", class: "color-teal" }, 
         { hex: "#800000", class: "color-maroon" }, 
         { hex: "#000080", class: "color-navy" }, 
-        { hex: "#808000", class: "color-olive" }, 
         { hex: "#C0C0C0", class: "color-silver" }, 
         { hex: "#4B0082", class: "color-indigo" }
     ],
@@ -49,6 +53,25 @@ function getConditionalColor(x, y, divisor, trueColor, falseColor) {
     return (Math.floor(x / divisor) + Math.floor(y / divisor)) % 111 === 0 ? trueColor : falseColor;
 }
 
+// Function to retrieve color hex from the palette
+function getColorFromPalette(colorName, palette) {
+    for (const category in palette) {
+        for (const color of palette[category]) {
+            if (color.class.includes(`color-${colorName}`)) {
+                return color.hex;
+            }
+        }
+    }
+    throw new Error(`Color ${colorName} not found in palette.`);
+}
+
+// Function to get conditional color using the palette
+function getConditionalColor2(x, y, divisor, trueColor, falseColor, palette) {
+    const trueColorHex = getColorFromPalette(trueColor, palette);
+    const falseColorHex = getColorFromPalette(falseColor, palette);
+    return (Math.floor(x / divisor) + Math.floor(y / divisor)) % 111 === 0 ? trueColorHex : falseColorHex;
+}
+
 // Function to get HSL color
 function getHslColor(a, factor) {
     return `hsl(${a % factor * 360}, 100%, 50%)`;
@@ -65,6 +88,8 @@ const R = 100; // Set a default or required value for R in this context
 
 // Function to get colors
 function getColors1(o, a, l) {
+    const v = l; // Alias for clarity, where l represents vertices
+
     const randomValues = Array.from({ length: 24 }, () => Math.random());
     const l0zR = l[0].z + R;
     const l2zR = l[2].z + R;
@@ -106,10 +131,11 @@ function getColors1(o, a, l) {
     return [
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
+   
 
             (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
             `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
-            "#422000",
+            "#FF0000",
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -127,12 +153,39 @@ function getColors1(o, a, l) {
             getConditionalColor(l[1].x, l[1].y, 3, "orange", "black"), // Wide 4 Row Scatter
             getConditionalColor(l[1].x, l[1].y, 3, "green", "black"), // Wide 4 Row Scatter
 
+            // Dramatic Colors
+            getConditionalColor(l[1].x, l[1].y, 3, "magenta", "black"),   // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "cyan", "black"),      // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "yellow", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "purple", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "lime", "black"),      // Wide 4 Row Scatter
+
+            // Dark Dramatic Colors
+            getConditionalColor(l[1].x, l[1].y, 3, "darkmagenta", "black"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "darkcyan", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "goldenrod", "black"),   // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "indigo", "black"),      // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 3, "darkolivegreen", "black"), // Wide 4 Row Scatter
+
             // 3 stripe wide scatters
             getConditionalColor(l[1].x, l[1].y, 5, "red", "black"), // Wide 3 Row Scatter
             getConditionalColor(l[1].x, l[1].y, 5, "white", "black"), // Wide 3 Row Scatter
             getConditionalColor(l[1].x, l[1].y, 5, "blue", "black"), // Wide 3 Row Scatter
             getConditionalColor(l[1].x, l[1].y, 5, "orange", "black"), // Wide 3 Row Scatter
             getConditionalColor(l[1].x, l[1].y, 5, "green", "black"), // Wide 3 Row Scatter
+
+            getConditionalColor(l[1].x, l[1].y, 5, "magenta", "black"),   // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "cyan", "black"),      // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "yellow", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "purple", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "lime", "black"),      // Wide 4 Row Scatter
+
+            // Dark Dramatic Colors
+            getConditionalColor(l[1].x, l[1].y, 5, "darkmagenta", "black"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "darkcyan", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "goldenrod", "black"),   // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "indigo", "black"),      // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 5, "darkolivegreen", "black"), // Wide 4 Row Scatter
 
 
             // 1 stripe wide scatters NO BACKGROUND
@@ -142,47 +195,123 @@ function getColors1(o, a, l) {
             getConditionalColor(l[1].x, l[1].y, 10, "orange", "black"), // Wide 3 Row Scatter
             getConditionalColor(l[1].x, l[1].y, 10, "green", "black"), // Wide 3 Row Scatter
 
+            getConditionalColor(l[1].x, l[1].y, 10, "magenta", "black"),   // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "cyan", "black"),      // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "grey", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "purple", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "white", "black"),      // Wide 4 Row Scatter
 
-            
+            // Dark Dramatic Colors
+            getConditionalColor(l[1].x, l[1].y, 10, "darkmagenta", "black"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "darkcyan", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "goldenrod", "black"),   // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "indigo", "black"),      // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 10, "darkolivegreen", "black"), // Wide 4 Row Scatter
+
+
+            // 3 stripe wide scatters
+            getConditionalColor(l[1].x, l[1].y, 0.1, "red", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "white", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "blue", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "orange", "black"), // Wide 3 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "green", "black"), // Wide 3 Row Scatter
+
+            getConditionalColor(l[1].x, l[1].y, 0.1, "magenta", "black"),   // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "cyan", "black"),      // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "yellow", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "purple", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "lime", "black"),      // Wide 4 Row Scatter
+
+            // Dark Dramatic Colors
+            getConditionalColor(l[1].x, l[1].y, 0.1, "darkmagenta", "black"), // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "darkcyan", "black"),    // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "goldenrod", "black"),   // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "indigo", "black"),      // Wide 4 Row Scatter
+            getConditionalColor(l[1].x, l[1].y, 0.1, "darkolivegreen", "black"), // Wide 4 Row Scatter
+        
     
             getConditionalColor(l[0].x, l[0].y, 0.1, "orange", "black"), // Cycle Scatter
             getConditionalColor(l[0].x, l[0].y, 0.05, "red", "black"), // Cycle Scatter
             getConditionalColor(l[0].x, l[0].y, 0.0111, "#444444", "black"), // Cycle scatter
 
 
-            getConditionalColor(x2, y0, 600, "green", "black"),
-            getConditionalColor(x2, y0, 600, "blue", "black"),
-            getConditionalColor(x2, y0, 600, "red", "black"),
+  // 1 stripe scatter on DARK RED BG
+  getConditionalColor(l[1].x, l[1].y, 3, "red", "#160000"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 3, "white", "#160000"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 3, "0b0b0b", "#160000"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 3, "orange", "#160000"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 3, "indigo", "#160000"), // Wide 3 Row Scatter
 
-            getConditionalColor(x2, y0, -300, "orange", "black"),
-            getConditionalColor(x2, y0, -300, "green", "black"),
-            getConditionalColor(x2, y0, -300, "blue", "black"),
-            getConditionalColor(x2, y0, -300, "red", "black"),
+  // 1 stripe scatter on DARK BLUE BG
+  getConditionalColor(l[1].x, l[1].y, 3, "red", "#000016"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 3, "white", "#000016"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 3, "0b0b0b", "#000016"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 3, "orange", "#000016"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 3, "indigo", "#000016"), // Wide 3 Row Scatte5
 
-
-
-
-
-            getConditionalColor(x1, y0, -100, "orange", "black"),
-            getConditionalColor(x1, y0, -100, "green", "black"),
-            getConditionalColor(x1, y0, -100, "blue", "black"),
-            getConditionalColor(x1, y0, -100, "red", "black"),
-
-       
-            getConditionalColor(x3, y0, 100, "orange", "black"),
-            getConditionalColor(x3, y0, 100, "green", "black"),
-            getConditionalColor(x3, y0, 100, "blue", "black"),
-            getConditionalColor(x3, y0, 100, "red", "black"),
+  // 1 stripe scatter on DARK ORANGE BG
+  getConditionalColor(l[1].x, l[1].y, 5, "red", "#221300"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 5, "white", "#221300"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 5, "0b0b0b", "#221300"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 5, "orange", "#221300"), // Wide 3 Row Scatter             
+  getConditionalColor(l[1].x, l[1].y, 5, "indigo", "#221300"), // Wide 3 Row Scatter
 
 
+  // 1 stripe scatter on DARK GREEN BG
+  getConditionalColor(l[1].x, l[1].y, 5, "red", "#001400"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 5, "white", "#001400"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 5, "0b0b0b", "#001400"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 5, "orange", "#001400"), // Wide 3 Row Scatter             
+  getConditionalColor(l[1].x, l[1].y, 5, "indigo", "#001400"), // Wide 3 Row Scatter
 
 
-            // CRAWLERS ON BLACK BACKGROUND
-            getConditionalColor(x0, y0, 345, "red", "black"), // Top Left Edge Crawler
-            getConditionalColor(x0, y0, 345, "white", "black"), // Top Left Edge Crawler
-            getConditionalColor(x0, y0, 345, "blue", "black"), // Top Left Edge Crawler
-            getConditionalColor(x0, y0, 345, "orange", "black"), // Top Left Edge Crawler
-            getConditionalColor(x0, y0, 345, "green", "black"), // Top Left Edge Crawler
+  // 1 stripe scatter on DARK GREY BG
+  getConditionalColor(l[1].x, l[1].y, 8, "red", "#0b0b0b"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 8, "white", "#0b0b0b"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 8, "0b0b0b", "#0b0b0b"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 8, "orange", "#0b0b0b"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 8, "indigo", "#0b0b0b"), // Wide 3 Row Scatter
+
+
+
+  getConditionalColor(l[1].x, l[1].y, 10, "magenta", "black"),   // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 10, "cyan", "black"),      // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 10, "yellow", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 10, "purple", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 10, "lime", "black"),      // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 10, "red", "black"),   // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 10, "grey", "black"),      // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 10, "white", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 10, "orange", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 10, "blue", "black"),      // Wide 4 Row Scatter
+
+  getConditionalColor(l[0].x, l[1].y, 10, "magenta", "black"),   // Wide 4 Row Scatter
+  getConditionalColor(l[0].x, l[1].y, 10, "cyan", "black"),      // Wide 4 Row Scatter
+  getConditionalColor(l[0].x, l[1].y, 10, "yellow", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[0].x, l[1].y, 10, "purple", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[0].x, l[1].y, 10, "lime", "black"),      // Wide 4 Row Scatter
+  getConditionalColor(l[0].x, l[1].y, 10, "red", "black"),   // Wide 4 Row Scatter
+  getConditionalColor(l[0].x, l[1].y, 10, "grey", "black"),      // Wide 4 Row Scatter
+  getConditionalColor(l[0].x, l[1].y, 10, "white", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[0].x, l[1].y, 10, "orange", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[0].x, l[1].y, 10, "blue", "black"),      // Wide 4 Row Scatter
+
+  getConditionalColor(l[1].x, l[0].y, 10, "magenta", "black"),   // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[0].y, 10, "cyan", "black"),      // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[0].y, 10, "yellow", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[0].y, 10, "purple", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[0].y, 10, "lime", "black"),      // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[0].y, 10, "red", "black"),   // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[0].y, 10, "grey", "black"),      // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[0].y, 10, "white", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[0].y, 10, "orange", "black"),    // Wide 4 Row Scatter
+  getConditionalColor(l[1].x, l[0].y, 10, "blue", "black"),      // Wide 4 Row Scatter
+
+
+
+
+
+  
                    ];
 
     }
