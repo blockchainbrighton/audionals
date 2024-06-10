@@ -290,7 +290,7 @@ function getIframeIdByChannelIndex(channelIndex) {
 // List of channels where fades should be applied
 const fadeChannels = [6, 7, 11, 12, 13, 15];
 
-async function playSound(currentSequence, channel, currentStep) {
+function playSound(currentSequence, channel, currentStep) {
   const channelIndex = getChannelIndex(channel);
   const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
 
@@ -330,22 +330,17 @@ async function playSound(currentSequence, channel, currentStep) {
   }
 
   const audioContext = window.unifiedSequencerSettings.audioContext;
-  const playbackSpeed = window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex];
-
-  // Create offline buffer if playback speed is significantly different from 1
-  let bufferToUse = audioBuffer;
-  if (playbackSpeed !== 1) {
-      bufferToUse = await createOfflineAudioBuffer(audioBuffer, playbackSpeed);
-  }
-
   const source = audioContext.createBufferSource();
-  source.buffer = bufferToUse;
+  source.buffer = audioBuffer;
 
   const userGainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
   if (!userGainNode) {
       console.error("No gain node found for channel", channelIndex);
       return;
   }
+
+  const playbackSpeed = window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex];
+  source.playbackRate.setValueAtTime(playbackSpeed, audioContext.currentTime);
 
   // Create a new gain node for fades to avoid interfering with user volume control
   const fadeGainNode = audioContext.createGain();
@@ -395,31 +390,20 @@ async function playSound(currentSequence, channel, currentStep) {
 }
 
 function createOfflineAudioBuffer(originalBuffer, playbackRate) {
-  const offlineContext = new OfflineAudioContext(
-      originalBuffer.numberOfChannels,
-      originalBuffer.length / playbackRate,
-      originalBuffer.sampleRate
-  );
+    const offlineContext = new OfflineAudioContext(
+        originalBuffer.numberOfChannels,
+        originalBuffer.length / playbackRate,
+        originalBuffer.sampleRate
+    );
 
-  return new Promise((resolve, reject) => {
-      try {
-          const source = offlineContext.createBufferSource();
-          source.buffer = originalBuffer;
-          source.playbackRate.value = playbackRate;
-          source.connect(offlineContext.destination);
-          source.start();
+    const source = offlineContext.createBufferSource();
+    source.buffer = originalBuffer;
+    source.playbackRate.value = playbackRate;
+    source.connect(offlineContext.destination);
+    source.start();
 
-          offlineContext.startRendering().then(renderedBuffer => {
-              resolve(renderedBuffer);
-          }).catch(error => {
-              reject(error);
-          });
-      } catch (error) {
-          reject(error);
-      }
-  });
+    return offlineContext.startRendering().then(renderedBuffer => renderedBuffer);
 }
-
 
 function stopAllAudio() {
   console.log("[stopAllAudio] Stopping all audio buffers");
