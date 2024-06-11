@@ -112,6 +112,7 @@ function prepareForPlayback(jsonData, stats) {
             for (const step of channelData.steps) {
                 if (typeof step === 'object' && step.reverse) {
                     reverseSteps[channelName].push(step.index);
+                    console.log(`Detected reverse step: ${step.index} on channel: ${channelName} in sequence: ${sequenceName}`);
                 } else {
                     normalSteps[channelName].push(typeof step === 'object' ? step.index : step);
                 }
@@ -151,17 +152,31 @@ function preprocessAndSchedulePlayback(playbackData) {
     preprocessedSequences = Object.fromEntries(
         Object.entries(playbackData.sequences).map(([sequenceName, channels]) => [
             sequenceName,
-            Object.fromEntries(
-                Object.entries(channels.normalSteps)
-                    .filter(([, steps]) => steps.length)
-                    .map(([channelName, steps]) => [
-                        channelName,
-                        steps.map(step => ({ step, timing: step * (60 / bpm) }))
-                    ])
-            )
+            {
+                normalSteps: Object.fromEntries(
+                    Object.entries(channels.normalSteps)
+                        .filter(([, steps]) => Array.isArray(steps) && steps.length)
+                        .map(([channelName, steps]) => [
+                            channelName,
+                            steps.map(step => ({ step, timing: step * (60 / bpm) }))
+                        ])
+                ),
+                reverseSteps: Object.fromEntries(
+                    Object.entries(channels.reverseSteps)
+                        .filter(([, steps]) => Array.isArray(steps) && steps.length)
+                        .map(([channelName, steps]) => [
+                            channelName,
+                            steps.map(step => ({ step, timing: step * (60 / bpm) }))
+                        ])
+                )
+            }
         ])
     );
 
-    isReadyToPlay = Object.keys(preprocessedSequences).some(sequence => Object.keys(preprocessedSequences[sequence]).length > 0);
-    console.log("Preprocessed sequences:", preprocessedSequences);
+    isReadyToPlay = Object.keys(preprocessedSequences).some(sequence => {
+        return Object.keys(preprocessedSequences[sequence].normalSteps).length > 0 ||
+               Object.keys(preprocessedSequences[sequence].reverseSteps).length > 0;
+    });
+
+    console.log("Preprocessed sequences (including reverse steps):", preprocessedSequences);
 }

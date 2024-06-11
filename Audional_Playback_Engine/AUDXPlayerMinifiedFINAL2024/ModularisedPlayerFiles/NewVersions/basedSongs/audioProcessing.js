@@ -95,6 +95,8 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     const startTime = startTrim * buffer.duration;
     const duration = (endTrim - startTrim) * buffer.duration;
     source.start(time, startTime, duration);
+    console.log(`Playing buffer from ${startTime} to ${startTime + duration} on channel ${channel} at time ${time}`);
+
 
     const channelIndex = channel.startsWith("Channel ") ? parseInt(channel.replace("Channel ", ""), 10) - 1 : null;
     if (channelIndex === null) {

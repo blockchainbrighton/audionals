@@ -1,53 +1,8 @@
 // fileAndAudioHandling.js
 
-function logErrorDetails(index, channelIndex, url, contentType) {
-    console.error(`[processAudioUrl] No audio buffer created for URL at index: ${index}, Channel: ${channelIndex}`);
-    console.log(`[processAudioUrl] Content-Type of response: ${contentType}`);
-    console.log(`[processAudioUrl] URL: ${url}`);
-}
 
 
-function extractBase64FromHTML(htmlContent) {
-    try {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlContent, "text/html");
-        const audioSourceElement = doc.querySelector("audio[data-audionalSampleName] source");
-
-        if (audioSourceElement) {
-            const src = audioSourceElement.getAttribute("src");
-            console.log(`[extractBase64FromHTML] Audio source element found: ${src}`);
-            if (/^data:audio\/(wav|mp3|mp4);base64,/.test(src.toLowerCase())) {
-                console.log("[extractBase64FromHTML] Base64 encoded audio source found.");
-                return src;
-            } else if (/audio\//.test(src.toLowerCase())) {
-                console.log("[extractBase64FromHTML] Direct audio source found.");
-                return src;
-            }
-            console.error("[extractBase64FromHTML] Audio data does not start with expected base64 prefix.");
-        } else {
-            console.error("[extractBase64FromHTML] Could not find the audio source element in the HTML content.");
-        }
-    } catch (error) {
-        console.error("[extractBase64FromHTML] Error parsing HTML content: ", error);
-    }
-    return null;
-}
-
-function base64ToArrayBuffer(base64) {
-    try {
-        const binaryString = window.atob(base64);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        console.log(`[base64ToArrayBuffer] Successfully converted base64 to ArrayBuffer of length ${bytes.length}`);
-        return bytes.buffer;
-    } catch (error) {
-        console.error("[base64ToArrayBuffer] Error converting base64 to ArrayBuffer: ", error);
-        return null;
-    }
-}
+// fileAndAudioHandling.js
 
 function playAudioForChannel(channelNumber) {
     if (audioCtx.state === "suspended") {
@@ -61,13 +16,22 @@ function playAudioForChannel(channelNumber) {
     if (audioBufferData && audioBufferData.buffer) {
         const source = audioCtx.createBufferSource();
         const trimTimes = globalTrimTimes[channel];
+        let playTimes = trimTimes || { startTrim: 0, endTrim: 1 };
+        let buffer = audioBufferData.buffer;
 
         if (isReversePlay) {
-            source.buffer = reverseAudioBuffer(audioBufferData.buffer);
-            const reversedTrimTimes = trimTimes ? calculateReversedTrimTimes(trimTimes) : { startTrim: 0, endTrim: 1 };
-            playBuffer(source.buffer, reversedTrimTimes, channel, 0);
+            buffer = reverseAudioBuffer(audioBufferData.buffer);
+            playTimes = calculateReversedTrimTimes(trimTimes);
+        }
+
+        playBuffer(buffer, playTimes, channel, 0);
+        // Notify visualizer
+        const channelIndex = channel.startsWith("Channel ") ? parseInt(channel.replace("Channel ", ""), 10) - 1 : null;
+        if (channelIndex !== null) {
+            AudionalPlayerMessages.postMessage({ action: "activeStep", channelIndex, step: currentStep });
+            document.dispatchEvent(new CustomEvent("internalAudioPlayback", { detail: { action: "activeStep", channelIndex, step: currentStep } }));
         } else {
-            playBuffer(audioBufferData.buffer, trimTimes || { startTrim: 0, endTrim: 1 }, channel, 0);
+            console.error("Invalid bufferKey format:", channel);
         }
     } else {
         console.error("No audio buffer or trim times found for channel:", channelNumber);
@@ -75,21 +39,6 @@ function playAudioForChannel(channelNumber) {
 }
 
 
-function reverseAudioBuffer(buffer, channel) {
-    const numberOfChannels = buffer.numberOfChannels;
-    const reversedBuffer = audioCtx.createBuffer(numberOfChannels, buffer.length, buffer.sampleRate);
-
-    for (let channelIndex = 0; channelIndex < numberOfChannels; channelIndex++) {
-        const originalData = buffer.getChannelData(channelIndex);
-        const reversedData = reversedBuffer.getChannelData(channelIndex);
-        for (let i = 0; i < buffer.length; i++) {
-            reversedData[i] = originalData[buffer.length - 1 - i];
-        }
-    }
-
-    globalReversedAudioBuffers[channel] = reversedBuffer;
-    return reversedBuffer;
-}
 
 function calculateReversedTrimTimes(trimTimes) {
     return {
@@ -104,6 +53,8 @@ function startPlaybackLoop() {
     if (!globalJsonData) return;
     bpm = globalJsonData.projectBPM;
 }
+
+// fileAndAudioHandling.js
 
 function playSequenceStep(time) {
     if (!isReadyToPlay || !Object.keys(preprocessedSequences).length) {
@@ -120,7 +71,24 @@ function playSequenceStep(time) {
         return;
     }
 
-    Object.entries(currentSequenceData).forEach(([channelName, steps]) => {
+    Object.entries(currentSequenceData.normalSteps).forEach(([channelName, steps]) => {
+        if (!Array.isArray(steps)) {
+            console.error(`Expected steps to be an array, but got:`, steps);
+            return;
+        }
+
+        const stepData = steps.find(step => step.step === currentStep);
+        if (stepData) {
+            playChannelStep(channelName, stepData, time);
+        }
+    });
+
+    Object.entries(currentSequenceData.reverseSteps).forEach(([channelName, steps]) => {
+        if (!Array.isArray(steps)) {
+            console.error(`Expected steps to be an array, but got:`, steps);
+            return;
+        }
+
         const stepData = steps.find(step => step.step === currentStep);
         if (stepData) {
             playChannelStep(channelName, stepData, time);
@@ -131,19 +99,31 @@ function playSequenceStep(time) {
 }
 
 
+
 function playChannelStep(channelName, stepData, time) {
     const channel = `Channel ${parseInt(channelName.slice(2)) + 1}`;
     const audioBufferData = globalAudioBuffers.find(bufferData => bufferData.channel === channel);
     const trimTimes = globalTrimTimes[channel];
 
     if (audioBufferData?.buffer && trimTimes) {
-        const buffer = stepData.reverse ? globalReversedAudioBuffers[channel] : audioBufferData.buffer;
-        const playTimes = stepData.reverse ? calculateReversedTrimTimes(trimTimes) : trimTimes;
+        const isReversed = stepData.reverse;
+        const buffer = isReversed ? reverseAudioBuffer(audioBufferData.buffer) : audioBufferData.buffer;
+        const playTimes = isReversed ? calculateReversedTrimTimes(trimTimes) : trimTimes;
+        
+        console.log(`Playing ${isReversed ? "reversed" : "normal"} step:`, stepData.step, `on channel:`, channel);
+
         playBuffer(buffer, playTimes, channel, time);
+
+        // Notify visualizer
+        const channelIndex = parseInt(channel.replace("Channel ", ""), 10) - 1;
+        AudionalPlayerMessages.postMessage({ action: "activeStep", channelIndex, step: stepData.step });
+        document.dispatchEvent(new CustomEvent("internalAudioPlayback", { detail: { action: "activeStep", channelIndex, step: stepData.step } }));
     } else {
         console.error(`No audio buffer or trim times found for ${channel}`);
     }
 }
+
+
 
 const fadeChannels = [6, 7, 11, 12, 13, 15];
 
