@@ -33,20 +33,30 @@ const scriptsToLoad = [
     'visualiser/visualiserCode.js',
 ];
 
-// Function to initialize the application
+function ensureAudioContextState() {
+    return new Promise((resolve) => {
+        if (window.audioCtx && audioCtx.state === "suspended") {
+            audioCtx.resume().then(() => {
+                console.log("AudioContext resumed");
+                resolve();
+            });
+        } else {
+            resolve();
+        }
+    });
+}
+
 function initializeApp() {
-    resetAllStates();  // Ensure states are reset when the app initializes
+    resetAllStates();
     loadJsonFromUrl(window.jsonDataUrl);
     initializeWorker();
 }
 
-// Start loading scripts and set initializeApp as the callback to be called after all scripts are loaded
-loadScriptsSequentially(scriptsToLoad, 0, () => {
-    if(document.readyState === 'loading') {  
-        // The document is still loading, we can add an event listener
+loadScriptsSequentially(scriptsToLoad, 0, async () => {
+    await ensureAudioContextState();
+    if (document.readyState === 'loading') {
         document.addEventListener("DOMContentLoaded", initializeApp);
-    } else {  
-        // `DOMContentLoaded` has already fired, call the function directly
+    } else {
         initializeApp();
     }
 });

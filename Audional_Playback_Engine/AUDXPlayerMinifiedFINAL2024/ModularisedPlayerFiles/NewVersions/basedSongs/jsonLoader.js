@@ -9,19 +9,17 @@ let globalReversedAudioBuffers = {};
 let isReversePlay = false;
 
 let audioWorker, preprocessedSequences = {}, isReadyToPlay = false, currentStep = 0, beatCount = 0, barCount = 0, currentSequence = 0, isPlaying = false, playbackTimeoutId = null, nextNoteTime = 0;
-let totalSequences = 0;  // New variable to hold the total number of sequences
+let totalSequences = 0;
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const AudionalPlayerMessages = new BroadcastChannel("channel_playback");
-
-
 
 async function loadJsonFromUrl(url) {
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         globalJsonData = await response.json();
-        
+
         const stats = {
             channelsWithUrls: 0,
             sequencesCount: 0,
@@ -45,11 +43,11 @@ function analyzeJsonStructure(data, stats) {
         for (const [sequenceName, sequenceData] of Object.entries(data.projectSequences)) {
             stats.activeStepsPerSequence[sequenceName] = 0;
             stats.activeChannelsPerSequence[sequenceName] = [];
+
             for (const [channelName, channelData] of Object.entries(sequenceData)) {
-                if (Array.isArray(channelData.steps) && channelData.steps.length > 0) {
-                    stats.activeStepsPerSequence[sequenceName] += channelData.steps.length;
-                    stats.activeChannelsPerSequence[sequenceName].push(channelName);
-                }
+                const normalizedChannelName = `Channel ${parseInt(channelName.slice(2)) + 1}`;
+                stats.activeStepsPerSequence[sequenceName] += channelData.steps.length;
+                stats.activeChannelsPerSequence[sequenceName].push(normalizedChannelName);
             }
         }
     }
@@ -70,12 +68,10 @@ function findAndSetEndSequence(playbackData) {
         let previousSequence = null;
         for (const sequence of Object.values(playbackData.sequences)) {
             const isEmpty = Object.values(sequence.normalSteps).every(steps => steps.length === 0);
-            if (isEmpty) {
-                if (previousSequence) {
-                    playbackData.endSequence = previousSequence;
-                    console.log("End sequence set to:", previousSequence);
-                    break;
-                }
+            if (isEmpty && previousSequence) {
+                playbackData.endSequence = previousSequence;
+                console.log("End sequence set to:", previousSequence);
+                break;
             }
             previousSequence = sequence;
         }
@@ -85,7 +81,7 @@ function findAndSetEndSequence(playbackData) {
 function prepareForPlayback(jsonData, stats) {
     const { channelURLs, trimSettings, channelVolume, channelPlaybackSpeed, projectSequences, projectName, projectBPM, currentSequence } = jsonData;
     bpm = projectBPM;
-    totalSequences = currentSequence; // Set total sequences from currentSequence
+    totalSequences = currentSequence;
 
     const channelCount = channelURLs.length;
     globalTrimTimes = {};
@@ -93,12 +89,13 @@ function prepareForPlayback(jsonData, stats) {
     globalPlaybackSpeeds = {};
 
     for (let i = 0; i < channelCount; i++) {
-        globalTrimTimes[`Channel ${i + 1}`] = {
+        const channelIndex = i + 1;
+        globalTrimTimes[`Channel ${channelIndex}`] = {
             startTrim: parseFloat(trimSettings[i]?.startSliderValue) / 100 || 0,
             endTrim: parseFloat(trimSettings[i]?.endSliderValue) / 100 || 1
         };
-        globalVolumeLevels[`Channel ${i + 1}`] = parseFloat(channelVolume[i]) || 1.0;
-        globalPlaybackSpeeds[`Channel ${i + 1}`] = Math.max(0.1, Math.min(parseFloat(channelPlaybackSpeed[i]), 100)) || 1.0;
+        globalVolumeLevels[`Channel ${channelIndex}`] = parseFloat(channelVolume[i]) || 1.0;
+        globalPlaybackSpeeds[`Channel ${channelIndex}`] = Math.max(0.1, Math.min(parseFloat(channelPlaybackSpeed[i]), 100)) || 1.0;
     }
 
     const sequences = Object.entries(projectSequences).reduce((result, [sequenceName, channels]) => {
@@ -106,15 +103,17 @@ function prepareForPlayback(jsonData, stats) {
         const reverseSteps = {};
 
         for (const [channelName, channelData] of Object.entries(channels)) {
-            normalSteps[channelName] = [];
-            reverseSteps[channelName] = [];
+            const normalizedChannelName = `Channel ${parseInt(channelName.slice(2)) + 1}`;
+            normalSteps[normalizedChannelName] = [];
+            reverseSteps[normalizedChannelName] = [];
 
             for (const step of channelData.steps) {
-                if (typeof step === 'object' && step.reverse) {
-                    reverseSteps[channelName].push(step.index);
-                    console.log(`Detected reverse step: ${step.index} on channel: ${channelName} in sequence: ${sequenceName}`);
+                const stepIndex = typeof step === 'object' ? step.index : step;
+                if (step.reverse) {
+                    reverseSteps[normalizedChannelName].push(stepIndex);
+                    console.log(`Detected reverse step: ${stepIndex} on channel: ${normalizedChannelName} in sequence: ${sequenceName}`);
                 } else {
-                    normalSteps[channelName].push(typeof step === 'object' ? step.index : step);
+                    normalSteps[normalizedChannelName].push(stepIndex);
                 }
             }
         }
@@ -153,30 +152,26 @@ function preprocessAndSchedulePlayback(playbackData) {
         Object.entries(playbackData.sequences).map(([sequenceName, channels]) => [
             sequenceName,
             {
-                normalSteps: Object.fromEntries(
-                    Object.entries(channels.normalSteps)
-                        .filter(([, steps]) => Array.isArray(steps) && steps.length)
-                        .map(([channelName, steps]) => [
-                            channelName,
-                            steps.map(step => ({ step, timing: step * (60 / bpm) }))
-                        ])
-                ),
-                reverseSteps: Object.fromEntries(
-                    Object.entries(channels.reverseSteps)
-                        .filter(([, steps]) => Array.isArray(steps) && steps.length)
-                        .map(([channelName, steps]) => [
-                            channelName,
-                            steps.map(step => ({ step, timing: step * (60 / bpm) }))
-                        ])
-                )
+                normalSteps: processSteps(channels.normalSteps),
+                reverseSteps: processSteps(channels.reverseSteps)
             }
         ])
     );
 
-    isReadyToPlay = Object.keys(preprocessedSequences).some(sequence => {
-        return Object.keys(preprocessedSequences[sequence].normalSteps).length > 0 ||
-               Object.keys(preprocessedSequences[sequence].reverseSteps).length > 0;
+    isReadyToPlay = Object.values(preprocessedSequences).some(sequence => {
+        return Object.keys(sequence.normalSteps).length > 0 || Object.keys(sequence.reverseSteps).length > 0;
     });
 
     console.log("Preprocessed sequences (including reverse steps):", preprocessedSequences);
+}
+
+function processSteps(steps) {
+    return Object.fromEntries(
+        Object.entries(steps)
+            .filter(([, stepArray]) => Array.isArray(stepArray) && stepArray.length)
+            .map(([channelName, stepArray]) => [
+                channelName,
+                stepArray.map(step => ({ step, timing: step * (60 / bpm) }))
+            ])
+    );
 }

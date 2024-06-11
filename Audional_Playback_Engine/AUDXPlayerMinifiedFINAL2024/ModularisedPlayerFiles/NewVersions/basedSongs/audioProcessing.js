@@ -2,30 +2,27 @@
 
 async function fetchAndProcessAudioData(channelURLs) {
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    await Promise.all(channelURLs.map((url, index) => processAudioUrl(url, index, audioContext)));
-    
-    // Create reversed buffers
-    globalAudioBuffers.forEach(bufferData => {
-        reverseAudioBuffer(bufferData.buffer, bufferData.channel);
-    });
+    await Promise.all(channelURLs.map((url, index) => processAudioUrl(url, index + 1, audioContext)));
+
+    // Create reversed buffers only for channels with reverse steps
+    createReversedBuffersForChannelsWithReverseSteps();
 }
 
-async function processAudioUrl(url, index, audioContext) {
-    const channelIndex = index + 1;
+async function processAudioUrl(url, channelIndex, audioContext) {
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to fetch from URL: ${url}, Status: ${response.status}`);
         
         const contentType = response.headers.get("Content-Type");
-        let audioBuffer = await fetchAndDecodeAudio(response, contentType, audioContext);
+        const audioBuffer = await fetchAndDecodeAudio(response, contentType, audioContext);
 
         if (audioBuffer) {
             globalAudioBuffers.push({ buffer: audioBuffer, channel: `Channel ${channelIndex}` });
         } else {
-            logErrorDetails(index, channelIndex, url, contentType);
+            console.error(`Failed to decode audio for Channel ${channelIndex}:`, url);
         }
     } catch (error) {
-        console.error(`Error fetching or decoding audio for Channel ${channelIndex}:`, error);
+        console.error(`Error processing audio URL for Channel ${channelIndex}:`, error);
     }
 }
 
@@ -60,19 +57,39 @@ async function fetchAndDecodeAudio(response, contentType, audioContext) {
     return null;
 }
 
-function reverseAudioBuffer(buffer, channel) {
-    const numberOfChannels = buffer.numberOfChannels;
-    const reversedBuffer = audioCtx.createBuffer(numberOfChannels, buffer.length, buffer.sampleRate);
+function createReversedBuffersForChannelsWithReverseSteps() {
+    const channelsWithReverseSteps = new Set();
 
-    for (let channelIndex = 0; channelIndex < numberOfChannels; channelIndex++) {
-        const originalData = buffer.getChannelData(channelIndex);
-        const reversedData = reversedBuffer.getChannelData(channelIndex);
-        for (let i = 0; i < buffer.length; i++) {
-            reversedData[i] = originalData[buffer.length - 1 - i];
+    for (const sequence of Object.values(globalJsonData.projectSequences)) {
+        for (const [channelName, channelData] of Object.entries(sequence)) {
+            if (channelData.steps.some(step => step.reverse)) {
+                channelsWithReverseSteps.add(`Channel ${parseInt(channelName.slice(2)) + 1}`);
+            }
         }
     }
 
-    globalReversedAudioBuffers[channel] = reversedBuffer;
+    globalAudioBuffers.forEach(({ buffer, channel }) => {
+        if (channelsWithReverseSteps.has(channel)) {
+            globalReversedAudioBuffers[channel] = createReversedBuffer(buffer);
+            console.log(`Reversed audio buffers created for ${channel}`);
+        }
+    });
+
+    console.log("Channels with reverse steps:", [...channelsWithReverseSteps]);
+}
+
+function createReversedBuffer(buffer) {
+    const reversedBuffer = audioCtx.createBuffer(
+        buffer.numberOfChannels,
+        buffer.length,
+        buffer.sampleRate
+    );
+
+    for (let i = 0; i < buffer.numberOfChannels; i++) {
+        const channelData = buffer.getChannelData(i);
+        reversedBuffer.getChannelData(i).set([...channelData].reverse());
+    }
+
     return reversedBuffer;
 }
 
@@ -80,14 +97,11 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
 
-    // Apply playback speed
     const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
     source.playbackRate.value = playbackSpeed;
 
-    // Create a gain node
     const gainNode = audioCtx.createGain();
-    const volume = globalVolumeLevels[channel] || 1.0;
-    gainNode.gain.value = volume;
+    gainNode.gain.value = globalVolumeLevels[channel] || 1.0;
 
     source.connect(gainNode);
     gainNode.connect(audioCtx.destination);
@@ -95,39 +109,15 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     const startTime = startTrim * buffer.duration;
     const duration = (endTrim - startTrim) * buffer.duration;
     source.start(time, startTime, duration);
-    console.log(`Playing buffer from ${startTime} to ${startTime + duration} on channel ${channel} at time ${time}`);
+    console.log(`Playing buffer from ${startTime} to ${startTime + duration} on ${channel} at time ${time}`);
 
-
-    const channelIndex = channel.startsWith("Channel ") ? parseInt(channel.replace("Channel ", ""), 10) - 1 : null;
-    if (channelIndex === null) {
-        return console.error("Invalid bufferKey format:", channel);
+    const channelIndex = parseInt(channel.replace("Channel ", ""), 10);
+    if (isNaN(channelIndex)) {
+        return console.error("Invalid channel format:", channel);
     }
 
-    AudionalPlayerMessages.postMessage({ action: "activeStep", channelIndex, step: currentStep });
-    document.dispatchEvent(new CustomEvent("internalAudioPlayback", { detail: { action: "activeStep", channelIndex, step: currentStep } }));
-}
-
-function playBufferAtTime(buffer, { startTrim, endTrim }, channel, time) {
-    const source = audioCtx.createBufferSource();
-    source.buffer = buffer;
-
-    // Apply playback speed
-    const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
-    source.playbackRate.value = playbackSpeed;
-
-    // Create a gain node
-    const gainNode = audioCtx.createGain();
-    const volume = globalVolumeLevels[channel] || 1.0;
-    gainNode.gain.value = volume;
-
-    source.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
-    const startTime = startTrim * buffer.duration;
-    const duration = (endTrim - startTrim) * buffer.duration;
-    source.start(time, startTime, duration);
-
-    console.log(`Channel ${channel}: Scheduled reverse play at ${time}, Start Time: ${startTime}, Duration: ${duration}, Volume: ${volume}, Speed: ${playbackSpeed}`);
+    AudionalPlayerMessages.postMessage({ action: "activeStep", channelIndex: channelIndex - 1, step: currentStep });
+    document.dispatchEvent(new CustomEvent("internalAudioPlayback", { detail: { action: "activeStep", channelIndex: channelIndex - 1, step: currentStep } }));
 }
 
 function base64ToArrayBuffer(base64) {
@@ -141,7 +131,7 @@ function base64ToArrayBuffer(base64) {
         console.log(`[base64ToArrayBuffer] Successfully converted base64 to ArrayBuffer of length ${bytes.length}`);
         return bytes.buffer;
     } catch (error) {
-        console.error("[base64ToArrayBuffer] Error converting base64 to ArrayBuffer: ", error);
+        console.error("[base64ToArrayBuffer] Error converting base64 to ArrayBuffer:", error);
         return null;
     }
 }
@@ -154,7 +144,6 @@ function extractBase64FromHTML(htmlContent) {
 
         if (audioSourceElement) {
             const src = audioSourceElement.getAttribute("src");
-            console.log(`[extractBase64FromHTML] Audio source element found: ${src}`);
             if (/^data:audio\/(wav|mp3|mp4);base64,/.test(src.toLowerCase())) {
                 console.log("[extractBase64FromHTML] Base64 encoded audio source found.");
                 return src;
@@ -167,7 +156,7 @@ function extractBase64FromHTML(htmlContent) {
             console.error("[extractBase64FromHTML] Could not find the audio source element in the HTML content.");
         }
     } catch (error) {
-        console.error("[extractBase64FromHTML] Error parsing HTML content: ", error);
+        console.error("[extractBase64FromHTML] Error parsing HTML content:", error);
     }
     return null;
 }
