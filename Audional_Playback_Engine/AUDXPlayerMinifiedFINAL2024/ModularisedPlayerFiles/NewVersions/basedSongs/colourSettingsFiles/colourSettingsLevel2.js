@@ -173,13 +173,13 @@ function getColors2(o, a, l) {
             getConditionalColor(x2, y0, 600, "orange", "black"),
 
             // EU Flag Styles
-            getConditionalColor(x0, y0, 15, "orange", "blue"),
+            // getConditionalColor(x0, y0, 15, "orange", "blue"),
             getConditionalColor(x0, y0, 15, "red", "blue"), 
             getConditionalColor(x0, y0, 15, "red", "white"), 
             getConditionalColor(x0, y0, 15, "white", "blue"), 
             getConditionalColor(x0, y0, 15, "blue", "white"), 
             getConditionalColor(x0, y0, 15, "white", "red"), 
-            getConditionalColor(x0, y0, 15, "orange", "blue"), 
+            // getConditionalColor(x0, y0, 15, "orange", "blue"), 
             getConditionalColor(x0, y0, 15, "red", "orange"),
             getConditionalColor(x0, y0, 15, "orange", "white"), 
             getConditionalColor(x0, y0, 15, "white", "orange"),
