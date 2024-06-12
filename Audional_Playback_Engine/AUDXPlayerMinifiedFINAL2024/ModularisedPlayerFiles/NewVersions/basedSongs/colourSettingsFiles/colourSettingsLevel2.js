@@ -237,55 +237,55 @@ function getColors2(o, a, l) {
 
             // LIQUID GRAVITY 
             // TOP LEFT CORNER
-            // getConditionalColor(x0, y0, 444, "verydarkred", "darkblue"),
-            // getConditionalColor(x0, y0, 444, "verydarkred", "darkgreen"),
-            // getConditionalColor(x0, y0, 444, "verydarkred", "darkorange"),
-            // getConditionalColor(x0, y0, 444, "verydarkred", "white"),
-            // getConditionalColor(x0, y0, 444, "verydarkred", "black"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "darkred"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "darkgreen"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "darkorange"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "white"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "black"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "verydarkblue"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "verydarkred"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "orange"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "white"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "black"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "red"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "green"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "blue"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "white"),
-            // getConditionalColor(x0, y0, 444, "verydarkblue", "black"),
+            getConditionalColor(x0, y0, 444, "verydarkred", "darkblue"),
+            getConditionalColor(x0, y0, 444, "verydarkred", "darkgreen"),
+            getConditionalColor(x0, y0, 444, "verydarkred", "darkorange"),
+            getConditionalColor(x0, y0, 444, "verydarkred", "white"),
+            getConditionalColor(x0, y0, 444, "verydarkred", "black"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "darkred"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "darkgreen"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "darkorange"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "white"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "black"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "verydarkblue"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "verydarkred"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "orange"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "white"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "black"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "red"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "green"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "blue"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "white"),
+            getConditionalColor(x0, y0, 444, "verydarkblue", "black"),
 
-            // getConditionalColor(x2, y0, 600, "green", "black"),
-            // getConditionalColor(x2, y0, 600, "blue", "black"),
-            // getConditionalColor(x2, y0, 600, "red", "black"),
+            getConditionalColor(x2, y0, 600, "green", "black"),
+            getConditionalColor(x2, y0, 600, "blue", "black"),
+            getConditionalColor(x2, y0, 600, "red", "black"),
 
-            // getConditionalColor(x2, y0, -300, "orange", "black"),
-            // getConditionalColor(x2, y0, -300, "green", "black"),
-            // getConditionalColor(x2, y0, -300, "blue", "black"),
-            // getConditionalColor(x2, y0, -300, "red", "black"),
+            getConditionalColor(x2, y0, -300, "orange", "black"),
+            getConditionalColor(x2, y0, -300, "green", "black"),
+            getConditionalColor(x2, y0, -300, "blue", "black"),
+            getConditionalColor(x2, y0, -300, "red", "black"),
 
 
 
-            // getConditionalColor(x1, y0, -100, "orange", "black"),
-            // getConditionalColor(x1, y0, -100, "green", "black"),
-            // getConditionalColor(x1, y0, -100, "blue", "black"),
-            // getConditionalColor(x1, y0, -100, "red", "black"),
+            getConditionalColor(x1, y0, -100, "orange", "black"),
+            getConditionalColor(x1, y0, -100, "green", "black"),
+            getConditionalColor(x1, y0, -100, "blue", "black"),
+            getConditionalColor(x1, y0, -100, "red", "black"),
 
        
-            // getConditionalColor(x3, y0, 100, "orange", "black"),
-            // getConditionalColor(x3, y0, 100, "green", "black"),
-            // getConditionalColor(x3, y0, 100, "blue", "black"),
-            // getConditionalColor(x3, y0, 100, "red", "black"),
+            getConditionalColor(x3, y0, 100, "orange", "black"),
+            getConditionalColor(x3, y0, 100, "green", "black"),
+            getConditionalColor(x3, y0, 100, "blue", "black"),
+            getConditionalColor(x3, y0, 100, "red", "black"),
 
-                    //   // CRAWLERS ON BLACK BACKGROUND
-                    //   getConditionalColor(x0, y0, 345, "red", "black"), // Top Left Edge Crawler
-                    //   getConditionalColor(x0, y0, 345, "white", "black"), // Top Left Edge Crawler
-                    //   getConditionalColor(x0, y0, 345, "blue", "black"), // Top Left Edge Crawler
-                    //   getConditionalColor(x0, y0, 345, "orange", "black"), // Top Left Edge Crawler
-                    //   getConditionalColor(x0, y0, 345, "green", "black"), // Top Left Edge Crawler
+                      // CRAWLERS ON BLACK BACKGROUND
+                      getConditionalColor(x0, y0, 345, "red", "black"), // Top Left Edge Crawler
+                      getConditionalColor(x0, y0, 345, "white", "black"), // Top Left Edge Crawler
+                      getConditionalColor(x0, y0, 345, "blue", "black"), // Top Left Edge Crawler
+                      getConditionalColor(x0, y0, 345, "orange", "black"), // Top Left Edge Crawler
+                      getConditionalColor(x0, y0, 345, "green", "black"), // Top Left Edge Crawler
 
               ];
 

@@ -1,7 +1,7 @@
 // jsonLoader.js
 
 
-let globalVolumeMultiplier = 1.5;  // Default to no change
+let globalVolumeMultiplier = 0.8;  // Default to no change
 
 
 let globalJsonData = null;

@@ -249,12 +249,12 @@ function getColors1(o, a, l) {
   getConditionalColor(l[1].x, l[1].y, 3, "orange", "#000016"), // Wide 3 Row Scatter
   getConditionalColor(l[1].x, l[1].y, 3, "indigo", "#000016"), // Wide 3 Row Scatte5
 
-  // 1 stripe scatter on DARK ORANGE BG
-  getConditionalColor(l[1].x, l[1].y, 5, "red", "#221300"), // Wide 3 Row Scatter
-  getConditionalColor(l[1].x, l[1].y, 5, "white", "#221300"), // Wide 3 Row Scatter
-  getConditionalColor(l[1].x, l[1].y, 5, "0b0b0b", "#221300"), // Wide 3 Row Scatter
-  getConditionalColor(l[1].x, l[1].y, 5, "orange", "#221300"), // Wide 3 Row Scatter             
-  getConditionalColor(l[1].x, l[1].y, 5, "indigo", "#221300"), // Wide 3 Row Scatter
+  // 1 stripe scatter on DARK PURPLE BG
+  getConditionalColor(l[1].x, l[1].y, 5, "red", "#0D0016"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 5, "white", "#0D0016"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 5, "0b0b0b", "#0D0016"), // Wide 3 Row Scatter
+  getConditionalColor(l[1].x, l[1].y, 5, "orange", "#0D0016"), // Wide 3 Row Scatter             
+  getConditionalColor(l[1].x, l[1].y, 5, "indigo", "#0D0016"), // Wide 3 Row Scatter
 
 
   // 1 stripe scatter on DARK GREEN BG

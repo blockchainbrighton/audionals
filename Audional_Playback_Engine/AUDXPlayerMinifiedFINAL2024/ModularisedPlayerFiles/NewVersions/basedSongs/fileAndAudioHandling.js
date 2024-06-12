@@ -151,7 +151,6 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
 
     console.log(`[playBuffer] Channel: ${channel}, Volume: ${adjustedVolume} (original: ${channelVolume}), Playback Speed: ${playbackSpeed}`);
 
-    // Connect playback gain node directly to the audio context destination for independent volume control
     source.connect(playbackGainNode);
     playbackGainNode.connect(audioCtx.destination);
 
@@ -160,25 +159,27 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
 
     console.log(`[playBuffer] Playing buffer from ${startTime} to ${startTime + duration} on ${channel} at time ${time}`);
 
-    // Apply fades on the playback gain node
-    applyFades(playbackGainNode, adjustedVolume, playbackSpeed, time, duration);
+    // Bypass fades temporarily
+    // applyFades(playbackGainNode, adjustedVolume, playbackSpeed, time, duration);
 
     source.start(time, startTime, duration);
     notifyVisualizer(parseInt(channel.replace("Channel ", ""), 10) - 1);
 }
 
+
 function applyFades(gainNode, volume, playbackSpeed, time, duration) {
-    const fadeThreshold = 0.5; // Buffers shorter than 0.3 seconds are considered short
-    const minFadeDuration = 0.005; // Minimum fade duration to avoid clicks for short buffers
-    const actualFadeDuration = (duration < fadeThreshold) ? Math.min(minFadeDuration, duration / 2) : Math.min(fadeDuration, duration / 2);
-    const endTime = audioCtx.currentTime + time + duration;
+    console.log(`[applyFades] Bypassing fades for diagnosis.`);
+    // const fadeThreshold = 0.5; // Buffers shorter than 0.3 seconds are considered short
+    // const minFadeDuration = 0.005; // Minimum fade duration to avoid clicks for short buffers
+    // const actualFadeDuration = (duration < fadeThreshold) ? Math.min(minFadeDuration, duration / 2) : Math.min(fadeDuration, duration / 2);
+    // const endTime = audioCtx.currentTime + time + duration;
 
-    console.log(`[applyFades] Applying fades: Volume: ${volume}, Actual Fade Duration: ${actualFadeDuration}, Duration: ${duration}, End Time: ${endTime}`);
+    // console.log(`[applyFades] Applying fades: Volume: ${volume}, Actual Fade Duration: ${actualFadeDuration}, Duration: ${duration}, End Time: ${endTime}`);
 
-    gainNode.gain.setValueAtTime(0, audioCtx.currentTime + time);
-    gainNode.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + time + actualFadeDuration);
-    gainNode.gain.setValueAtTime(volume, endTime - actualFadeDuration);
-    gainNode.gain.linearRampToValueAtTime(0, endTime);
+    // gainNode.gain.setValueAtTime(0, audioCtx.currentTime + time);
+    // gainNode.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + time + actualFadeDuration);
+    // gainNode.gain.setValueAtTime(volume, endTime - actualFadeDuration);
+    // gainNode.gain.linearRampToValueAtTime(0, endTime);
 }
 
 
