@@ -281,12 +281,12 @@ function getColors3(o, a, l) {
       `rgb(${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))})`, // Disco Eyes
 
             // STROBES
-            // getHslColor(a, hslFactor1), // STROBE
-            // getHslColor(a + 1, hslFactor1), // STROBE
-            // getHslColor(a, hslFactor2), // STROBE
-            // getHslColor(a + 18, hslFactor3), // Strobe  
-            // getHslColor(a + 18, hslFactor2), // Yellow Strobe
-            // getHslColor(7 * a % hslFactor4, hslFactor4), // colour changing strobe
+            getHslColor(a, hslFactor1), // STROBE
+            getHslColor(a + 1, hslFactor1), // STROBE
+            getHslColor(a, hslFactor2), // STROBE
+            getHslColor(a + 18, hslFactor3), // Strobe  
+            getHslColor(a + 18, hslFactor2), // Yellow Strobe
+            getHslColor(7 * a % hslFactor4, hslFactor4), // colour changing strobe
             getHslColor(a - 1, hslFactor5), // red/orange flicker
             getHslColor(a % hslFactor6, 0.76), // red/orange flicker
 
@@ -294,16 +294,16 @@ function getColors3(o, a, l) {
             `rgb(${Math.floor(506 * sinNow + 750)}, ${Math.floor(sinNowDivMinus17 / -750 * 127)}, ${Math.floor(2000 * sinNowDiv2000 + 10002)})`, // PINK 
             // SLOWLY ROTATING AND FADING COLOURS
             `rgb(${Math.floor(255 * Math.sin(Date.now() / 1200) + 128)}, ${Math.floor(200 * Math.sin(Date.now() / 1400) + 55)}, ${Math.floor(150 * Math.sin(Date.now() / 1600) + 105)})`,
-            // `rgb(${Math.floor(200 * Math.sin(Date.now() / 1000) + 55)}, ${Math.floor(200 * Math.sin(Date.now() / 1300) + 55)}, ${Math.floor(200 * Math.sin(Date.now() / 1700) + 55)})`,
-            // `rgb(${Math.floor(100 * Math.sin(Date.now() / 1100) + 155)}, ${Math.floor(150 * Math.sin(Date.now() / 1900) + 105)}, ${Math.floor(255 * Math.sin(Date.now() / 2100) + 128)})`,
-            // `rgb(${Math.floor(150 * Math.sin(Date.now() / 1800) + 105)}, ${Math.floor(255 * Math.sin(Date.now() / 1500) + 128)}, ${Math.floor(100 * Math.sin(Date.now() / 1900) + 155)})`,
-            // `rgb(${Math.floor(100 * Math.sin(Date.now() / 1300) + 155)}, ${Math.floor(200 * Math.sin(Date.now() / 1500) + 55)}, ${Math.floor(255 * Math.sin(Date.now() / 1700) + 128)})`,
-            // `rgb(${Math.floor(255 * Math.sin(Date.now() / 1100) + 128)}, ${Math.floor(255 * Math.sin(Date.now() / 1300) + 128)}, ${Math.floor(255 * Math.sin(Date.now() / 1500) + 128)})`,
-            // `rgb(${Math.floor(150 * Math.sin(Date.now() / 2000) + 105)}, ${Math.floor(100 * Math.sin(Date.now() / 2200) + 155)}, ${Math.floor(255 * Math.sin(Date.now() / 2500) + 128)})`,
-            // `rgb(${Math.floor(255 * Math.sin(Date.now() / 1500) + 128)}, ${Math.floor(200 * Math.sin(Date.now() / 1700) + 55)}, ${Math.floor(150 * Math.sin(Date.now() / 1900) + 105)})`,
-            // `rgb(${Math.floor(255 * Math.sin(Date.now() / 2100) + 128)}, ${Math.floor(100 * Math.sin(Date.now() / 2300) + 155)}, ${Math.floor(255 * Math.sin(Date.now() / 2500) + 128)})`,
-            // `rgb(${Math.floor(255 * Math.sin(Date.now() / 1800) + 128)}, ${Math.floor(255 * Math.sin(Date.now() / 2000) + 128)}, ${Math.floor(255 * Math.sin(Date.now() / 2200) + 128)})`,
-            // `rgb(${Math.floor(255 * Math.sin(Date.now() / 1600) + 128)}, ${Math.floor(255 * Math.sin(Date.now() / 1800) + 128)}, ${Math.floor(200 * Math.sin(Date.now() / 2000) + 55)})`,
+            `rgb(${Math.floor(200 * Math.sin(Date.now() / 1000) + 55)}, ${Math.floor(200 * Math.sin(Date.now() / 1300) + 55)}, ${Math.floor(200 * Math.sin(Date.now() / 1700) + 55)})`,
+            `rgb(${Math.floor(100 * Math.sin(Date.now() / 1100) + 155)}, ${Math.floor(150 * Math.sin(Date.now() / 1900) + 105)}, ${Math.floor(255 * Math.sin(Date.now() / 2100) + 128)})`,
+            `rgb(${Math.floor(150 * Math.sin(Date.now() / 1800) + 105)}, ${Math.floor(255 * Math.sin(Date.now() / 1500) + 128)}, ${Math.floor(100 * Math.sin(Date.now() / 1900) + 155)})`,
+            `rgb(${Math.floor(100 * Math.sin(Date.now() / 1300) + 155)}, ${Math.floor(200 * Math.sin(Date.now() / 1500) + 55)}, ${Math.floor(255 * Math.sin(Date.now() / 1700) + 128)})`,
+            `rgb(${Math.floor(255 * Math.sin(Date.now() / 1100) + 128)}, ${Math.floor(255 * Math.sin(Date.now() / 1300) + 128)}, ${Math.floor(255 * Math.sin(Date.now() / 1500) + 128)})`,
+            `rgb(${Math.floor(150 * Math.sin(Date.now() / 2000) + 105)}, ${Math.floor(100 * Math.sin(Date.now() / 2200) + 155)}, ${Math.floor(255 * Math.sin(Date.now() / 2500) + 128)})`,
+            `rgb(${Math.floor(255 * Math.sin(Date.now() / 1500) + 128)}, ${Math.floor(200 * Math.sin(Date.now() / 1700) + 55)}, ${Math.floor(150 * Math.sin(Date.now() / 1900) + 105)})`,
+            `rgb(${Math.floor(255 * Math.sin(Date.now() / 2100) + 128)}, ${Math.floor(100 * Math.sin(Date.now() / 2300) + 155)}, ${Math.floor(255 * Math.sin(Date.now() / 2500) + 128)})`,
+            `rgb(${Math.floor(255 * Math.sin(Date.now() / 1800) + 128)}, ${Math.floor(255 * Math.sin(Date.now() / 2000) + 128)}, ${Math.floor(255 * Math.sin(Date.now() / 2200) + 128)})`,
+            `rgb(${Math.floor(255 * Math.sin(Date.now() / 1600) + 128)}, ${Math.floor(255 * Math.sin(Date.now() / 1800) + 128)}, ${Math.floor(200 * Math.sin(Date.now() / 2000) + 55)})`,
 
 
             // RAINBOW Cycle Scatters

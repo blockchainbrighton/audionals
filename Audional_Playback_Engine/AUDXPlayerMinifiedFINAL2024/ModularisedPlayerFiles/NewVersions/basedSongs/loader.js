@@ -16,7 +16,8 @@ function loadScriptsSequentially(scripts, index = 0, callback) {
 // Define the scripts to be loaded
 const scriptsToLoad = [
     // 'https://ordinals.com/content/733a31b5f2eaf821cb5164f269405c8082edc9c18e15373ed0cbc8409225b783i0',
-    
+    'audioContextManager.js', // 'audioContextManager.js
+
     'jsonLoader.js',
     
     'audioProcessing.js',

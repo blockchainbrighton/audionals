@@ -1,25 +1,64 @@
 // fileAndAudioHandling.js
 
 let isToggleInProgress = false;
+// Maintain gain nodes
+const gainNodes = {};
 
-// Function to play audio for a specific channel
+function getOrCreateGainNode(channel) {
+    if (!gainNodes[channel]) {
+        gainNodes[channel] = audioCtx.createGain();
+        gainNodes[channel].connect(audioCtx.destination);
+        console.log(`[getOrCreateGainNode] Created new gain node for ${channel}`);
+    } else {
+        console.log(`[getOrCreateGainNode] Retrieved existing gain node for ${channel}`);
+    }
+    return gainNodes[channel];
+}
+
+function updateVolumesDuringPlayback() {
+    globalAudioBuffers.forEach(({ gainNode, channel }) => {
+        const channelVolume = parseVolumeLevel(globalVolumeLevels[channel]);
+        gainNode.gain.setValueAtTime(channelVolume * globalVolumeMultiplier, audioCtx.currentTime);
+    });
+}
+
+// Call this function whenever the global volume multiplier changes and playback is ongoing
+
+
+
+async function resumeAudioContext() {
+    await window.AudioContextManager.resume();
+}
+
+async function ensureAudioContextState() {
+    await resumeAudioContext();
+    console.log("AudioContext state:", audioCtx.state);
+}
+
+document.addEventListener("click", async () => {
+    if (typeof window.ensureAudioContextState === 'function') {
+        await window.ensureAudioContextState();
+        togglePlayback();
+    } else {
+        console.error("ensureAudioContextState is not defined or not a function");
+    }
+});
+
+window.addEventListener("beforeunload", cleanUpWorker);
+
 function playAudioForChannel(channelNumber) {
-    resumeAudioContext();
-
+    resumeAudioContextIfNeeded();
     const channel = `Channel ${channelNumber}`;
     const audioBufferData = globalAudioBuffers.find(bufferData => bufferData.channel === channel);
 
-    if (audioBufferData && audioBufferData.buffer) {
-        let buffer = audioBufferData.buffer;
-        let playTimes = globalTrimTimes[channel] || { startTrim: 0, endTrim: 1 };
-
-        if (isReversePlay && globalReversedAudioBuffers[channel]) {
-            buffer = globalReversedAudioBuffers[channel];
-            playTimes = calculateReversedTrimTimes(globalTrimTimes[channel]);
-            console.log(`Playing reversed buffer for ${channel}`);
-        } else {
-            console.log(`Playing normal buffer for ${channel}`);
-        }
+    if (audioBufferData?.buffer) {
+        const buffer = isReversePlay && globalReversedAudioBuffers[channel] 
+            ? globalReversedAudioBuffers[channel] 
+            : audioBufferData.buffer;
+        
+        const playTimes = isReversePlay && globalReversedAudioBuffers[channel] 
+            ? calculateReversedTrimTimes(globalTrimTimes[channel]) 
+            : globalTrimTimes[channel] || { startTrim: 0, endTrim: 1 };
 
         playBuffer(buffer, playTimes, channel, 0);
         notifyVisualizer(channelNumber - 1);
@@ -28,7 +67,6 @@ function playAudioForChannel(channelNumber) {
     }
 }
 
-// Function to calculate reversed trim times
 function calculateReversedTrimTimes(trimTimes) {
     return {
         startTrim: 1.0 - trimTimes.endTrim,
@@ -36,13 +74,12 @@ function calculateReversedTrimTimes(trimTimes) {
     };
 }
 
-// Function to start the playback loop
 function startPlaybackLoop() {
-    if (!globalJsonData) return;
-    bpm = globalJsonData.projectBPM;
+    if (globalJsonData) {
+        bpm = globalJsonData.projectBPM;
+    }
 }
 
-// Function to play a sequence step at a given time
 function playSequenceStep(time) {
     if (!isReadyToPlay || !Object.keys(preprocessedSequences).length) {
         return console.error("Sequence data is not ready or empty.");
@@ -52,25 +89,22 @@ function playSequenceStep(time) {
     currentSequence %= sequenceKeys.length;
     const currentSequenceData = preprocessedSequences[sequenceKeys[currentSequence]];
 
-    if (Object.keys(currentSequenceData).length === 0) {
+    if (!Object.keys(currentSequenceData).length) {
         incrementStepAndSequence(sequenceKeys.length);
         return;
     }
 
-    // Play normal and reverse steps
-    playSteps(currentSequenceData.normalSteps, time, false);
+    playSteps(currentSequenceData.normalSteps, time);
     playSteps(currentSequenceData.reverseSteps, time, true);
-
     incrementStepAndSequence(sequenceKeys.length);
 }
 
-// Helper function to play steps
-function playSteps(stepsData, time, isReversed) {
+function playSteps(stepsData, time, isReverse = false) {
     for (const [channelName, steps] of Object.entries(stepsData)) {
         if (Array.isArray(steps)) {
             const stepData = steps.find(step => step.step === currentStep);
             if (stepData) {
-                playChannelStep(channelName, stepData, time, isReversed);
+                playChannelStep(channelName, stepData, time, isReverse);
             }
         } else {
             console.error(`Expected steps to be an array, but got:`, steps);
@@ -78,35 +112,30 @@ function playSteps(stepsData, time, isReversed) {
     }
 }
 
-// Function to play a specific step on a channel
-function playChannelStep(channelName, stepData, time, isReversed) {
-    const channel = channelName; // Use normalized channel name directly
+function playChannelStep(channelName, stepData, time, isReverse) {
+    const channel = channelName;
     const audioBufferData = globalAudioBuffers.find(bufferData => bufferData.channel === channel);
     const trimTimes = globalTrimTimes[channel];
 
     if (audioBufferData?.buffer && trimTimes) {
-        const buffer = isReversed ? globalReversedAudioBuffers[channel] : audioBufferData.buffer;
-        const playTimes = isReversed ? calculateReversedTrimTimes(trimTimes) : trimTimes;
+        const buffer = isReverse ? globalReversedAudioBuffers[channel] : audioBufferData.buffer;
+        const playTimes = isReverse ? calculateReversedTrimTimes(trimTimes) : trimTimes;
 
-        console.log(`Playing ${isReversed ? "reversed" : "normal"} step: ${stepData.step} on ${channel} at time ${time}`);
+        console.log(`Playing ${isReverse ? "reversed" : "normal"} step: ${stepData.step} on ${channel} at time ${time}`);
         playBuffer(buffer, playTimes, channel, time);
-
         notifyVisualizer(parseInt(channel.slice(8)) - 1, stepData.step);
     } else {
         console.error(`No audio buffer or trim times found for ${channel}`);
     }
 }
 
-// Function to notify the visualizer of the current step
 function notifyVisualizer(channelIndex, step) {
     AudionalPlayerMessages.postMessage({ action: "activeStep", channelIndex, step });
     document.dispatchEvent(new CustomEvent("internalAudioPlayback", { detail: { action: "activeStep", channelIndex, step } }));
 }
 
-// Array of channels where fades should be applied
-const fadeChannels = [6, 7, 11, 12, 13, 15];
+const fadeDuration = 0.01; // 30 milliseconds
 
-// Function to play an audio buffer
 function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
@@ -114,47 +143,52 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
     source.playbackRate.value = playbackSpeed;
 
-    const gainNode = audioCtx.createGain();
-    const volume = globalVolumeLevels[channel] || 1.0;
-    gainNode.gain.value = volume;
+    // Create a new gain node for this playback instance
+    const playbackGainNode = audioCtx.createGain();
+    const channelVolume = parseVolumeLevel(globalVolumeLevels[channel] || 1.0);
+    const adjustedVolume = channelVolume * globalVolumeMultiplier;  // Apply global volume multiplier
+    playbackGainNode.gain.value = adjustedVolume;
 
-    source.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
+    console.log(`[playBuffer] Channel: ${channel}, Volume: ${adjustedVolume} (original: ${channelVolume}), Playback Speed: ${playbackSpeed}`);
+
+    // Connect playback gain node directly to the audio context destination for independent volume control
+    source.connect(playbackGainNode);
+    playbackGainNode.connect(audioCtx.destination);
 
     const startTime = startTrim * buffer.duration;
-    const duration = (endTrim - startTrim) * buffer.duration;
+    const duration = (endTrim - startTrim) * buffer.duration / playbackSpeed; // Adjust for playback speed
 
-    const channelNumber = parseInt(channel.replace("Channel ", ""), 10);
-    const applyFades = fadeChannels.includes(channelNumber) && (startTrim !== 0 || endTrim !== 1);
+    console.log(`[playBuffer] Playing buffer from ${startTime} to ${startTime + duration} on ${channel} at time ${time}`);
 
-    if (applyFades) {
-        applyFade(gainNode, volume, duration, playbackSpeed, time);
-    }
+    // Apply fades on the playback gain node
+    applyFades(playbackGainNode, adjustedVolume, playbackSpeed, time, duration);
 
     source.start(time, startTime, duration);
-
-    console.log(`Playing buffer from ${startTime} to ${startTime + duration} on ${channel} at time ${time}`);
-    notifyVisualizer(channelNumber - 1);
+    notifyVisualizer(parseInt(channel.replace("Channel ", ""), 10) - 1);
 }
 
-// Function to apply fades to an audio gain node
-function applyFade(gainNode, volume, duration, playbackSpeed, time) {
-    const fadeDuration = 0.02; // 20 milliseconds
-    const adjustedFadeDuration = fadeDuration / playbackSpeed;
-    const adjustedDuration = duration / playbackSpeed;
+function applyFades(gainNode, volume, playbackSpeed, time, duration) {
+    const fadeThreshold = 0.5; // Buffers shorter than 0.3 seconds are considered short
+    const minFadeDuration = 0.005; // Minimum fade duration to avoid clicks for short buffers
+    const actualFadeDuration = (duration < fadeThreshold) ? Math.min(minFadeDuration, duration / 2) : Math.min(fadeDuration, duration / 2);
+    const endTime = audioCtx.currentTime + time + duration;
+
+    console.log(`[applyFades] Applying fades: Volume: ${volume}, Actual Fade Duration: ${actualFadeDuration}, Duration: ${duration}, End Time: ${endTime}`);
 
     gainNode.gain.setValueAtTime(0, audioCtx.currentTime + time);
-    gainNode.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + time + adjustedFadeDuration);
-
-    gainNode.gain.setValueAtTime(volume, audioCtx.currentTime + time + adjustedDuration - adjustedFadeDuration);
-    gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + time + adjustedDuration);
+    gainNode.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + time + actualFadeDuration);
+    gainNode.gain.setValueAtTime(volume, endTime - actualFadeDuration);
+    gainNode.gain.linearRampToValueAtTime(0, endTime);
 }
 
-// Function to initialize the Web Worker
+
+
+
+
+// Initialize and manage Web Worker
 function initializeWorker() {
     if (!window.Worker) {
-        console.error("Web Workers are not supported in your browser.");
-        return;
+        return console.error("Web Workers are not supported in your browser.");
     }
 
     const workerBlob = new Blob([`
@@ -163,7 +197,7 @@ function initializeWorker() {
 
         self.onmessage = ({ data }) => {
             if (data.action === 'start') {
-                stepDuration = data.stepDuration * 1000 * 0.5;
+                stepDuration = data.stepDuration * 500; // Convert to milliseconds
                 startScheduling();
             } else if (data.action === 'stop') {
                 clearInterval(timerID);
@@ -188,21 +222,14 @@ function initializeWorker() {
     window.addEventListener("beforeunload", cleanUpWorker);
 }
 
-// Function to start the Web Worker
 function startWorker() {
-    if (audioWorker) {
-        audioWorker.postMessage({ action: "start", stepDuration: getStepDuration() });
-    }
+    audioWorker?.postMessage({ action: "start", stepDuration: getStepDuration() });
 }
 
-// Function to stop the Web Worker
 function stopWorker() {
-    if (audioWorker) {
-        audioWorker.postMessage({ action: "stop" });
-    }
+    audioWorker?.postMessage({ action: "stop" });
 }
 
-// Function to schedule notes for playback
 function scheduleNotes() {
     const currentTime = audioCtx.currentTime;
     nextNoteTime = Math.max(nextNoteTime, currentTime);
@@ -212,12 +239,10 @@ function scheduleNotes() {
     }
 }
 
-// Function to get the duration of each step
 function getStepDuration() {
     return 60 / (globalJsonData?.projectBPM || 120) / 4;
 }
 
-// Function to increment the step and sequence
 function incrementStepAndSequence(sequenceCount) {
     currentStep = (currentStep + 1) % 64;
     if (currentStep === 0) {
@@ -225,14 +250,13 @@ function incrementStepAndSequence(sequenceCount) {
     }
 }
 
-// Function to initialize playback
 async function initializePlayback() {
     await resumeAudioContext();
     startPlaybackLoop();
     startWorker();
+    console.log("Playback initialized");
 }
 
-// Function to stop playback
 async function stopPlayback() {
     stopWorker();
     await audioCtx.suspend();
@@ -240,11 +264,9 @@ async function stopPlayback() {
     resetVisualState();
 }
 
-// Function to toggle playback
 async function togglePlayback() {
     if (isToggleInProgress) {
-        console.log("[togglePlayback] Playback toggle in progress, ignoring click.");
-        return;
+        return console.log("[togglePlayback] Playback toggle in progress, ignoring click.");
     }
 
     isToggleInProgress = true;
@@ -252,6 +274,8 @@ async function togglePlayback() {
 
     try {
         if (!isPlaying) {
+            // Reapply global volume multiplier before playback starts
+            setGlobalVolumeMultiplier(globalVolumeMultiplier);
             await initializePlayback();
             isPlaying = true;
         } else {
@@ -265,15 +289,7 @@ async function togglePlayback() {
     }
 }
 
-// Function to resume the audio context if suspended
-async function resumeAudioContext() {
-    if (audioCtx.state === "suspended") {
-        await audioCtx.resume();
-        console.log("AudioContext resumed");
-    }
-}
 
-// Function to reset all states
 function resetAllStates() {
     currentSequence = 0;
     currentStep = 0;
@@ -284,7 +300,6 @@ function resetAllStates() {
     console.log('All states reset to initial values.');
 }
 
-// Function to reset visual state
 function resetVisualState() {
     if (typeof cci2 !== "undefined" && typeof initialCCI2 !== "undefined") {
         cci2 = initialCCI2;
@@ -300,23 +315,14 @@ function resetVisualState() {
     }
 }
 
-// Function to clean up the Web Worker
 function cleanUpWorker() {
     clearInterval(intervalID);
-    if (audioWorker) {
-        audioWorker.terminate();
-    }
+    audioWorker?.terminate();
     audioCtx.suspend().then(() => console.log("AudioContext suspended successfully."));
 }
 
-// Unified Click Listener with proper context state management
-document.addEventListener('click', async () => {
-    await ensureAudioContextState();
-    togglePlayback();
-});
-
-async function ensureAudioContextState() {
-    await resumeAudioContext();
+function resumeAudioContextIfNeeded() {
+    if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+    }
 }
-
-window.addEventListener("beforeunload", cleanUpWorker);

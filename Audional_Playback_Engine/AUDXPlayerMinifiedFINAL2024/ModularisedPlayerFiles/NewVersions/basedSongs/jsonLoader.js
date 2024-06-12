@@ -1,4 +1,9 @@
 // jsonLoader.js
+
+
+let globalVolumeMultiplier = 1.5;  // Default to no change
+
+
 let globalJsonData = null;
 let bpm = 0;
 let globalAudioBuffers = [];
@@ -8,10 +13,13 @@ let globalPlaybackSpeeds = {};
 let globalReversedAudioBuffers = {};
 let isReversePlay = false;
 
+
+
+const audioCtx = window.AudioContextManager.getAudioContext();
+
 let audioWorker, preprocessedSequences = {}, isReadyToPlay = false, currentStep = 0, beatCount = 0, barCount = 0, currentSequence = 0, isPlaying = false, playbackTimeoutId = null, nextNoteTime = 0;
 let totalSequences = 0;
 
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const AudionalPlayerMessages = new BroadcastChannel("channel_playback");
 
 async function loadJsonFromUrl(url) {
@@ -91,12 +99,19 @@ function prepareForPlayback(jsonData, stats) {
     for (let i = 0; i < channelCount; i++) {
         const channelIndex = i + 1;
         globalTrimTimes[`Channel ${channelIndex}`] = {
-            startTrim: parseFloat(trimSettings[i]?.startSliderValue) / 100 || 0,
-            endTrim: parseFloat(trimSettings[i]?.endSliderValue) / 100 || 1
+            startTrim: parseFloat((trimSettings[i]?.startSliderValue || 0) / 100).toFixed(3),
+            endTrim: parseFloat((trimSettings[i]?.endSliderValue || 100) / 100).toFixed(3)
         };
-        globalVolumeLevels[`Channel ${channelIndex}`] = parseFloat(channelVolume[i]) || 1.0;
-        globalPlaybackSpeeds[`Channel ${channelIndex}`] = Math.max(0.1, Math.min(parseFloat(channelPlaybackSpeed[i]), 100)) || 1.0;
+        const volumeLevel = parseFloat(channelVolume[i] || 1.0).toFixed(3);
+        globalVolumeLevels[`Channel ${channelIndex}`] = volumeLevel;
+        const playbackSpeed = parseFloat(Math.max(0.1, Math.min(channelPlaybackSpeed[i], 100)) || 1.0).toFixed(3);
+        globalPlaybackSpeeds[`Channel ${channelIndex}`] = playbackSpeed;
+
+        console.log(`[prepareForPlayback] Channel ${channelIndex}: Volume set to ${volumeLevel}, Playback speed set to ${playbackSpeed}`);
     }
+
+    // Log volume settings after they are set
+    logVolumeSettings();
 
     const sequences = Object.entries(projectSequences).reduce((result, [sequenceName, channels]) => {
         const normalSteps = {};
@@ -171,7 +186,15 @@ function processSteps(steps) {
             .filter(([, stepArray]) => Array.isArray(stepArray) && stepArray.length)
             .map(([channelName, stepArray]) => [
                 channelName,
-                stepArray.map(step => ({ step, timing: step * (60 / bpm) }))
+                stepArray.map(step => ({ step, timing: parseFloat((step * (60 / bpm)).toFixed(3)) }))
             ])
     );
+}
+
+
+function logVolumeSettings() {
+    console.log("Volume Settings:");
+    for (const [channel, volume] of Object.entries(globalVolumeLevels)) {
+        console.log(`[logVolumeSettings] ${channel}: Volume level set to ${volume}`);
+    }
 }

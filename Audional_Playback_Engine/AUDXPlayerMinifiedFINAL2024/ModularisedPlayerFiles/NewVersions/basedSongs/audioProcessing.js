@@ -1,8 +1,7 @@
 // audioProcessing.js
 
 async function fetchAndProcessAudioData(channelURLs) {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    await Promise.all(channelURLs.map((url, index) => processAudioUrl(url, index + 1, audioContext)));
+    await Promise.all(channelURLs.map((url, index) => processAudioUrl(url, index + 1, audioCtx)));
 
     // Create reversed buffers only for channels with reverse steps
     createReversedBuffersForChannelsWithReverseSteps();
@@ -17,7 +16,17 @@ async function processAudioUrl(url, channelIndex, audioContext) {
         const audioBuffer = await fetchAndDecodeAudio(response, contentType, audioContext);
 
         if (audioBuffer) {
-            globalAudioBuffers.push({ buffer: audioBuffer, channel: `Channel ${channelIndex}` });
+            // Create a new gain node for this channel
+            const gainNode = audioContext.createGain();
+            const channelVolume = parseVolumeLevel(globalVolumeLevels[`Channel ${channelIndex}`]);
+            const adjustedVolume = channelVolume * globalVolumeMultiplier;
+            gainNode.gain.value = adjustedVolume;
+
+            console.log(`[processAudioUrl] Channel ${channelIndex}: Gain node set with volume level: ${adjustedVolume} (original: ${channelVolume}, multiplier: ${globalVolumeMultiplier})`);
+
+            // Apply fade-in/out to the buffer
+            const processedBuffer = applyFadeInOut(audioBuffer, audioContext);
+            globalAudioBuffers.push({ buffer: processedBuffer, gainNode, channel: `Channel ${channelIndex}` });
         } else {
             console.error(`Failed to decode audio for Channel ${channelIndex}:`, url);
         }
@@ -25,6 +34,25 @@ async function processAudioUrl(url, channelIndex, audioContext) {
         console.error(`Error processing audio URL for Channel ${channelIndex}:`, error);
     }
 }
+
+
+
+function setGlobalVolumeMultiplier(multiplier) {
+    globalVolumeMultiplier = Math.max(0.0, multiplier);  // Ensure multiplier is not negative
+
+    console.log(`[setGlobalVolumeMultiplier] Global volume multiplier set to ${globalVolumeMultiplier}`);
+
+    // Update existing gain nodes
+    globalAudioBuffers.forEach(({ gainNode, channel }) => {
+        const channelVolume = parseVolumeLevel(globalVolumeLevels[channel]);
+        gainNode.gain.value = channelVolume * globalVolumeMultiplier;
+        console.log(`[setGlobalVolumeMultiplier] Adjusted ${channel} volume to ${gainNode.gain.value} (original: ${channelVolume})`);
+    });
+}
+
+
+
+
 
 async function fetchAndDecodeAudio(response, contentType, audioContext) {
     if (/audio\/(wav|mpeg|mp4)/.test(contentType) || /video\/mp4/.test(contentType)) {
@@ -68,15 +96,16 @@ function createReversedBuffersForChannelsWithReverseSteps() {
         }
     }
 
-    globalAudioBuffers.forEach(({ buffer, channel }) => {
+    globalAudioBuffers.forEach(({ buffer, gainNode, channel }) => {
         if (channelsWithReverseSteps.has(channel)) {
             globalReversedAudioBuffers[channel] = createReversedBuffer(buffer);
-            console.log(`Reversed audio buffers created for ${channel}`);
+            console.log(`Reversed audio buffers created for ${channel} with gain value: ${gainNode.gain.value}`);
         }
     });
 
     console.log("Channels with reverse steps:", [...channelsWithReverseSteps]);
 }
+
 
 function createReversedBuffer(buffer) {
     const reversedBuffer = audioCtx.createBuffer(
@@ -93,31 +122,72 @@ function createReversedBuffer(buffer) {
     return reversedBuffer;
 }
 
-function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
-    const source = audioCtx.createBufferSource();
-    source.buffer = buffer;
+function clampVolume(volume) {
+    return Math.max(0.0, Math.min(volume, 3.0));
+}
 
-    const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
-    source.playbackRate.value = playbackSpeed;
+function parseVolumeLevel(level) {
+    const defaultVolume = 1.0;
+    let volume = defaultVolume;
 
-    const gainNode = audioCtx.createGain();
-    gainNode.gain.value = globalVolumeLevels[channel] || 1.0;
-
-    source.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
-    const startTime = startTrim * buffer.duration;
-    const duration = (endTrim - startTrim) * buffer.duration;
-    source.start(time, startTime, duration);
-    console.log(`Playing buffer from ${startTime} to ${startTime + duration} on ${channel} at time ${time}`);
-
-    const channelIndex = parseInt(channel.replace("Channel ", ""), 10);
-    if (isNaN(channelIndex)) {
-        return console.error("Invalid channel format:", channel);
+    if (typeof level === 'number') {
+        volume = level;
+    } else if (typeof level === 'string') {
+        volume = parseFloat(level);
     }
 
-    AudionalPlayerMessages.postMessage({ action: "activeStep", channelIndex: channelIndex - 1, step: currentStep });
-    document.dispatchEvent(new CustomEvent("internalAudioPlayback", { detail: { action: "activeStep", channelIndex: channelIndex - 1, step: currentStep } }));
+    if (isNaN(volume)) {
+        volume = defaultVolume;
+    }
+
+    const clampedVolume = clampVolume(volume);
+
+    console.log(`[parseVolumeLevel] Input level: ${level}, Parsed volume: ${volume}, Clamped volume: ${clampedVolume}`);
+
+    return clampedVolume;
+}
+
+
+function applyFadeInOut(buffer, audioContext, fadeDuration = 0.01) {
+    const shortBufferThreshold = 5; // Duration below which buffers are considered short (in seconds)
+    const bufferDuration = buffer.duration;
+    const sampleRate = buffer.sampleRate;
+
+    if (bufferDuration < shortBufferThreshold) {
+        // Skip fading for very short buffers to preserve transients
+        console.log(`[applyFadeInOut] Skipped fading for short buffer with duration ${bufferDuration}`);
+        return buffer;
+    }
+
+    const fadeInSamples = fadeDuration * sampleRate;
+    const fadeOutSamples = fadeDuration * sampleRate;
+
+    const newBuffer = audioContext.createBuffer(
+        buffer.numberOfChannels,
+        buffer.length,
+        sampleRate
+    );
+
+    for (let i = 0; i < buffer.numberOfChannels; i++) {
+        const inputData = buffer.getChannelData(i);
+        const outputData = newBuffer.getChannelData(i);
+
+        for (let j = 0; j < buffer.length; j++) {
+            if (j < fadeInSamples) {
+                // Apply fade-in
+                outputData[j] = inputData[j] * (j / fadeInSamples);
+            } else if (j > buffer.length - fadeOutSamples) {
+                // Apply fade-out
+                outputData[j] = inputData[j] * ((buffer.length - j) / fadeOutSamples);
+            } else {
+                outputData[j] = inputData[j];
+            }
+        }
+    }
+
+    console.log(`[applyFadeInOut] Applied fade-in and fade-out to buffer with duration ${bufferDuration}`);
+
+    return newBuffer;
 }
 
 function base64ToArrayBuffer(base64) {
@@ -159,11 +229,4 @@ function extractBase64FromHTML(htmlContent) {
         console.error("[extractBase64FromHTML] Error parsing HTML content:", error);
     }
     return null;
-}
-
-function calculateReversedTrimTimes(trimTimes) {
-    return {
-        startTrim: 1.0 - trimTimes.endTrim,
-        endTrim: 1.0 - trimTimes.startTrim
-    };
 }
