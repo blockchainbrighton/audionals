@@ -247,30 +247,24 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
 
 
 async function stopPlayback() {
-    console.log(`Stopping ${activeSources.length} active sources`);
+    console.log(`Stopping all active sources`);
 
-    activeSources.forEach(source => {
-        const channel = sourceChannelMap.get(source);
-        if (channel) {
-            const gainNode = getOrCreateGainNode(channel);
-
-            // Apply fade-out and reset gain
+    Object.keys(activeSources).forEach(channel => {
+        activeSources[channel].forEach(({ source, gainNode }) => {
+            // Apply fade-out and stop source
             gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
             gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
             gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
 
-            setTimeout(() => {
-                source.stop();
-                console.log(`Stopped source for channel: ${channel}`);
-                gainNode.gain.setValueAtTime(0, audioCtx.currentTime); // Reset gain
-                sourceChannelMap.delete(source);
-            }, 50); // Duration should match fade-out duration
-        }
+            source.stop(audioCtx.currentTime + 0.05);
+        });
+
+        // Clear the active sources list for the channel
+        activeSources[channel] = [];
     });
 
-    // Clear active sources after fade-out completes
+    // Suspend the audio context and reset playback state after fade-out completes
     setTimeout(() => {
-        activeSources = [];
         audioCtx.suspend().then(() => {
             resetPlaybackState();
             console.log("Playback stopped and active sources cleared");
