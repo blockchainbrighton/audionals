@@ -199,7 +199,7 @@ function logInitialAssignments() {
         }
 
         console.log("Initial Assignments:", assignments.join("; "));
-    }, 500);
+    }, 100);
 }
 
 // Delay execution of logInitialAssignments by 500 milliseconds

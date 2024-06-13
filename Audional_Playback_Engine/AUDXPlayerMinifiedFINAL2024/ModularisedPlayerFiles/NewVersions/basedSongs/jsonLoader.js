@@ -3,14 +3,17 @@
 let globalVolumeMultiplier = 0.8;  // Default to no change
 let globalJsonData = null;
 let bpm = 0;
-let globalAudioBuffers = [];
-let globalGainNodes = new Map(); // Use a Map for gain nodes
+
+
+const sourceChannelMap = new Map();
 let globalTrimTimes = {};
 let globalVolumeLevels = {};
 let globalPlaybackSpeeds = {};
+let activeSources = []; // Store references to active buffer sources
+let globalGainNodes = new Map(); // Use a Map for gain nodes
+let globalAudioBuffers = [];
 let globalReversedAudioBuffers = {};
 let isReversePlay = false;
-let activeSources = []; // Store references to active buffer sources
 
 
 const audioCtx = window.AudioContextManager.getAudioContext();
