@@ -1,19 +1,5 @@
 // fileAndAudioHandling.js
 
-let isToggleInProgress = false;
-// Maintain gain nodes
-const gainNodes = {};
-
-function getOrCreateGainNode(channel) {
-    if (!gainNodes[channel]) {
-        gainNodes[channel] = audioCtx.createGain();
-        gainNodes[channel].connect(audioCtx.destination);
-        console.log(`[getOrCreateGainNode] Created new gain node for ${channel}`);
-    } else {
-        console.log(`[getOrCreateGainNode] Retrieved existing gain node for ${channel}`);
-    }
-    return gainNodes[channel];
-}
 
 function updateVolumesDuringPlayback() {
     globalAudioBuffers.forEach(({ gainNode, channel }) => {
@@ -21,9 +7,6 @@ function updateVolumesDuringPlayback() {
         gainNode.gain.setValueAtTime(channelVolume * globalVolumeMultiplier, audioCtx.currentTime);
     });
 }
-
-// Call this function whenever the global volume multiplier changes and playback is ongoing
-
 
 
 async function resumeAudioContext() {
@@ -55,12 +38,12 @@ function playAudioForChannel(channelNumber) {
         const buffer = isReversePlay && globalReversedAudioBuffers[channel] 
             ? globalReversedAudioBuffers[channel] 
             : audioBufferData.buffer;
-        
-        const playTimes = isReversePlay && globalReversedAudioBuffers[channel] 
-            ? calculateReversedTrimTimes(globalTrimTimes[channel]) 
+
+        const playTimes = isReversePlay && globalReversedAudioBuffers[channel]
+            ? calculateReversedTrimTimes(globalTrimTimes[channel])
             : globalTrimTimes[channel] || { startTrim: 0, endTrim: 1 };
 
-        playBuffer(buffer, playTimes, channel, 0);
+        playBuffer(buffer, playTimes, channel, audioCtx.currentTime);
         notifyVisualizer(channelNumber - 1);
     } else {
         console.error(`No audio buffer or trim times found for ${channel}`);
@@ -137,55 +120,6 @@ function notifyVisualizer(channelIndex, step) {
 
 const fadeDuration = 0.01; // 30 milliseconds
 
-function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
-    const source = audioCtx.createBufferSource();
-    source.buffer = buffer;
-
-    const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
-    source.playbackRate.value = playbackSpeed;
-
-    // Create a new gain node for this playback instance
-    const playbackGainNode = audioCtx.createGain();
-    const channelVolume = parseVolumeLevel(globalVolumeLevels[channel] || 1.0);
-    const adjustedVolume = channelVolume * globalVolumeMultiplier;  // Apply global volume multiplier
-    playbackGainNode.gain.value = adjustedVolume;
-
-    console.log(`[playBuffer] Channel: ${channel}, Volume: ${adjustedVolume} (original: ${channelVolume}), Playback Speed: ${playbackSpeed}`);
-
-    source.connect(playbackGainNode);
-    playbackGainNode.connect(audioCtx.destination);
-
-    const startTime = startTrim * buffer.duration;
-    const duration = (endTrim - startTrim) * buffer.duration / playbackSpeed; // Adjust for playback speed
-
-    console.log(`[playBuffer] Playing buffer from ${startTime} to ${startTime + duration} on ${channel} at time ${time}`);
-
-    // Bypass fades temporarily
-    // applyFades(playbackGainNode, adjustedVolume, playbackSpeed, time, duration);
-
-    source.start(time, startTime, duration);
-    notifyVisualizer(parseInt(channel.replace("Channel ", ""), 10) - 1);
-}
-
-
-// function applyFades(gainNode, volume, playbackSpeed, time, duration) {
-//     console.log(`[applyFades] Bypassing fades for diagnosis.`);
-//     // const fadeThreshold = 0.5; // Buffers shorter than 0.3 seconds are considered short
-//     // const minFadeDuration = 0.005; // Minimum fade duration to avoid clicks for short buffers
-//     // const actualFadeDuration = (duration < fadeThreshold) ? Math.min(minFadeDuration, duration / 2) : Math.min(fadeDuration, duration / 2);
-//     // const endTime = audioCtx.currentTime + time + duration;
-
-//     // console.log(`[applyFades] Applying fades: Volume: ${volume}, Actual Fade Duration: ${actualFadeDuration}, Duration: ${duration}, End Time: ${endTime}`);
-
-//     // gainNode.gain.setValueAtTime(0, audioCtx.currentTime + time);
-//     // gainNode.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + time + actualFadeDuration);
-//     // gainNode.gain.setValueAtTime(volume, endTime - actualFadeDuration);
-//     // gainNode.gain.linearRampToValueAtTime(0, endTime);
-// }
-
-
-
-
 
 // Initialize and manage Web Worker
 function initializeWorker() {
@@ -260,41 +194,88 @@ async function initializePlayback() {
 }
 
 function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
+    // fadeOutPreviousBuffers(channel); // Fade out previous buffers
+
+    // Create a new source for each buffer
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
 
     // Configure playback parameters
     const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
     source.playbackRate.value = playbackSpeed;
+
     const playbackGainNode = audioCtx.createGain();
-    playbackGainNode.gain.value = parseVolumeLevel(globalVolumeLevels[channel] || 1.0) * globalVolumeMultiplier;
+    const targetVolume = parseVolumeLevel(globalVolumeLevels[channel] || 1.0) * globalVolumeMultiplier;
+
+    // Apply fade-in
+    playbackGainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+    playbackGainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    playbackGainNode.gain.linearRampToValueAtTime(targetVolume, audioCtx.currentTime + 0.05);
 
     source.connect(playbackGainNode);
     playbackGainNode.connect(audioCtx.destination);
 
-    // Calculate start time and duration
     const startTime = startTrim * buffer.duration;
     const duration = (endTrim - startTrim) * buffer.duration / playbackSpeed;
 
-    // Start playback
     source.start(time, startTime, duration);
 
-    // Add the source to the active sources list
-    activeSources.push(source);
+    // Track the source and gain node
+    if (!activeSources[channel]) activeSources[channel] = [];
+    activeSources[channel].push({ source, gainNode: playbackGainNode });
 
     console.log(`[playBuffer] Created and started source for channel: ${channel}, startTime: ${startTime}, duration: ${duration}`);
 }
 
+
+// function fadeOutPreviousBuffers(channel, fadeDuration = 0.05) {
+//     if (activeSources[channel]) {
+//         activeSources[channel].forEach(({ gainNode, source }) => {
+//             // Apply fade-out
+//             gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+//             gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
+//             gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + fadeDuration);
+
+//             // Stop source after fade-out
+//             setTimeout(() => source.stop(), fadeDuration * 1000);
+//         });
+
+//         // Clear the previous active sources list for the channel
+//         activeSources[channel] = [];
+//     }
+// }
+
+
 async function stopPlayback() {
     console.log(`Stopping ${activeSources.length} active sources`);
+
     activeSources.forEach(source => {
-        source.stop();
-        console.log(`Stopped source for channel: ${source.buffer.channelData}`);
+        const channel = sourceChannelMap.get(source);
+        if (channel) {
+            const gainNode = getOrCreateGainNode(channel);
+
+            // Apply fade-out and reset gain
+            gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
+
+            setTimeout(() => {
+                source.stop();
+                console.log(`Stopped source for channel: ${channel}`);
+                gainNode.gain.setValueAtTime(0, audioCtx.currentTime); // Reset gain
+                sourceChannelMap.delete(source);
+            }, 50); // Duration should match fade-out duration
+        }
     });
-    activeSources = []; // Clear the list
-    await audioCtx.suspend();
-    resetPlaybackState();
-    console.log("Playback stopped and active sources cleared");
+
+    // Clear active sources after fade-out completes
+    setTimeout(() => {
+        activeSources = [];
+        audioCtx.suspend().then(() => {
+            resetPlaybackState();
+            console.log("Playback stopped and active sources cleared");
+        });
+    }, 50); // Duration should match fade-out duration
 }
 
 function resetPlaybackState() {

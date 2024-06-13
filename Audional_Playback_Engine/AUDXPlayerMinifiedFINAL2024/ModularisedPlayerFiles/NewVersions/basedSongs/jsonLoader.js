@@ -16,6 +16,10 @@ let globalReversedAudioBuffers = {};
 let isReversePlay = false;
 
 
+let isToggleInProgress = false;
+// Maintain gain nodes
+const gainNodes = {};
+
 const audioCtx = window.AudioContextManager.getAudioContext();
 
 let audioWorker, preprocessedSequences = {}, isReadyToPlay = false, currentStep = 0, beatCount = 0, barCount = 0, currentSequence = 0, isPlaying = false, playbackTimeoutId = null, nextNoteTime = 0;

@@ -7,31 +7,44 @@ async function fetchAndProcessAudioData(channelURLs) {
     createReversedBuffersForChannelsWithReverseSteps();
 }
 
+function getOrCreateGainNode(channel) {
+    if (!gainNodes[channel]) {
+        gainNodes[channel] = audioCtx.createGain();
+        gainNodes[channel].connect(audioCtx.destination);
+        console.log(`[getOrCreateGainNode] Created new gain node for ${channel}`);
+    } else {
+        console.log(`[getOrCreateGainNode] Retrieved existing gain node for ${channel}`);
+    }
+    return gainNodes[channel];
+}
+
+
 async function processAudioUrl(url, channelIndex, audioContext) {
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to fetch from URL: ${url}, Status: ${response.status}`);
-        
+
         const contentType = response.headers.get("Content-Type");
         const audioBuffer = await fetchAndDecodeAudio(response, contentType, audioContext);
 
         if (audioBuffer) {
-            // Create a new gain node for this channel
-            const gainNode = audioContext.createGain();
-            const channelVolume = parseVolumeLevel(globalVolumeLevels[`Channel ${channelIndex}`]);
+            const channelName = `Channel ${channelIndex}`;
+            const gainNode = getOrCreateGainNode(channelName);
+
+            const channelVolume = parseVolumeLevel(globalVolumeLevels[channelName]);
             const adjustedVolume = channelVolume * globalVolumeMultiplier;
             gainNode.gain.value = adjustedVolume;
 
-            console.log(`[processAudioUrl] Channel ${channelIndex}: Gain node set with volume level: ${adjustedVolume} (original: ${channelVolume}, multiplier: ${globalVolumeMultiplier})`);
+            console.log(`[processAudioUrl] ${channelName}: Gain node set with volume level: ${adjustedVolume} (original: ${channelVolume}, multiplier: ${globalVolumeMultiplier})`);
 
-            // Apply fade-in/out to the buffer
             const processedBuffer = applyFadeInOut(audioBuffer, audioContext);
-            globalAudioBuffers.push({ buffer: processedBuffer, gainNode, channel: `Channel ${channelIndex}` });
+
+            globalAudioBuffers.push({ buffer: processedBuffer, gainNode, channel: channelName });
         } else {
-            console.error(`Failed to decode audio for Channel ${channelIndex}:`, url);
+            console.error(`Failed to decode audio for ${channelName}:`, url);
         }
     } catch (error) {
-        console.error(`Error processing audio URL for Channel ${channelIndex}:`, error);
+        console.error(`Error processing audio URL for ${channelName}:`, error);
     }
 }
 
@@ -96,10 +109,10 @@ function createReversedBuffersForChannelsWithReverseSteps() {
         }
     }
 
-    globalAudioBuffers.forEach(({ buffer, gainNode, channel }) => {
+    globalAudioBuffers.forEach(({ buffer, channel }) => {
         if (channelsWithReverseSteps.has(channel)) {
             globalReversedAudioBuffers[channel] = createReversedBuffer(buffer);
-            console.log(`Reversed audio buffers created for ${channel} with gain value: ${gainNode.gain.value}`);
+            console.log(`Reversed audio buffers created for ${channel}`);
         }
     });
 
