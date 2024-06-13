@@ -18,7 +18,6 @@ function getOrCreateGainNode(channel) {
     return gainNodes[channel];
 }
 
-
 async function processAudioUrl(url, channelIndex, audioContext) {
     try {
         const response = await fetch(url);
@@ -37,9 +36,7 @@ async function processAudioUrl(url, channelIndex, audioContext) {
 
             console.log(`[processAudioUrl] ${channelName}: Gain node set with volume level: ${adjustedVolume} (original: ${channelVolume}, multiplier: ${globalVolumeMultiplier})`);
 
-            const processedBuffer = applyFadeInOut(audioBuffer, audioContext);
-
-            globalAudioBuffers.push({ buffer: processedBuffer, gainNode, channel: channelName });
+            globalAudioBuffers.push({ buffer: audioBuffer, gainNode, channel: channelName });
         } else {
             console.error(`Failed to decode audio for ${channelName}:`, url);
         }
@@ -47,7 +44,6 @@ async function processAudioUrl(url, channelIndex, audioContext) {
         console.error(`Error processing audio URL for ${channelName}:`, error);
     }
 }
-
 
 
 function setGlobalVolumeMultiplier(multiplier) {
@@ -161,47 +157,6 @@ function parseVolumeLevel(level) {
 }
 
 
-function applyFadeInOut(buffer, audioContext, fadeDuration = 0.01) {
-    const shortBufferThreshold = 5; // Duration below which buffers are considered short (in seconds)
-    const bufferDuration = buffer.duration;
-    const sampleRate = buffer.sampleRate;
-
-    if (bufferDuration < shortBufferThreshold) {
-        // Skip fading for very short buffers to preserve transients
-        console.log(`[applyFadeInOut] Skipped fading for short buffer with duration ${bufferDuration}`);
-        return buffer;
-    }
-
-    const fadeInSamples = fadeDuration * sampleRate;
-    const fadeOutSamples = fadeDuration * sampleRate;
-
-    const newBuffer = audioContext.createBuffer(
-        buffer.numberOfChannels,
-        buffer.length,
-        sampleRate
-    );
-
-    for (let i = 0; i < buffer.numberOfChannels; i++) {
-        const inputData = buffer.getChannelData(i);
-        const outputData = newBuffer.getChannelData(i);
-
-        for (let j = 0; j < buffer.length; j++) {
-            if (j < fadeInSamples) {
-                // Apply fade-in
-                outputData[j] = inputData[j] * (j / fadeInSamples);
-            } else if (j > buffer.length - fadeOutSamples) {
-                // Apply fade-out
-                outputData[j] = inputData[j] * ((buffer.length - j) / fadeOutSamples);
-            } else {
-                outputData[j] = inputData[j];
-            }
-        }
-    }
-
-    console.log(`[applyFadeInOut] Applied fade-in and fade-out to buffer with duration ${bufferDuration}`);
-
-    return newBuffer;
-}
 
 function base64ToArrayBuffer(base64) {
     try {
