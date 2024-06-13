@@ -1,18 +1,16 @@
 // jsonLoader.js
 
-
 let globalVolumeMultiplier = 0.8;  // Default to no change
-
-
 let globalJsonData = null;
 let bpm = 0;
 let globalAudioBuffers = [];
+let globalGainNodes = new Map(); // Use a Map for gain nodes
 let globalTrimTimes = {};
 let globalVolumeLevels = {};
 let globalPlaybackSpeeds = {};
 let globalReversedAudioBuffers = {};
 let isReversePlay = false;
-
+let activeSources = []; // Store references to active buffer sources
 
 
 const audioCtx = window.AudioContextManager.getAudioContext();
@@ -190,7 +188,6 @@ function processSteps(steps) {
             ])
     );
 }
-
 
 function logVolumeSettings() {
     console.log("Volume Settings:");

@@ -67,6 +67,7 @@ function playAudioForChannel(channelNumber) {
     }
 }
 
+
 function calculateReversedTrimTimes(trimTimes) {
     return {
         startTrim: 1.0 - trimTimes.endTrim,
@@ -167,20 +168,20 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
 }
 
 
-function applyFades(gainNode, volume, playbackSpeed, time, duration) {
-    console.log(`[applyFades] Bypassing fades for diagnosis.`);
-    // const fadeThreshold = 0.5; // Buffers shorter than 0.3 seconds are considered short
-    // const minFadeDuration = 0.005; // Minimum fade duration to avoid clicks for short buffers
-    // const actualFadeDuration = (duration < fadeThreshold) ? Math.min(minFadeDuration, duration / 2) : Math.min(fadeDuration, duration / 2);
-    // const endTime = audioCtx.currentTime + time + duration;
+// function applyFades(gainNode, volume, playbackSpeed, time, duration) {
+//     console.log(`[applyFades] Bypassing fades for diagnosis.`);
+//     // const fadeThreshold = 0.5; // Buffers shorter than 0.3 seconds are considered short
+//     // const minFadeDuration = 0.005; // Minimum fade duration to avoid clicks for short buffers
+//     // const actualFadeDuration = (duration < fadeThreshold) ? Math.min(minFadeDuration, duration / 2) : Math.min(fadeDuration, duration / 2);
+//     // const endTime = audioCtx.currentTime + time + duration;
 
-    // console.log(`[applyFades] Applying fades: Volume: ${volume}, Actual Fade Duration: ${actualFadeDuration}, Duration: ${duration}, End Time: ${endTime}`);
+//     // console.log(`[applyFades] Applying fades: Volume: ${volume}, Actual Fade Duration: ${actualFadeDuration}, Duration: ${duration}, End Time: ${endTime}`);
 
-    // gainNode.gain.setValueAtTime(0, audioCtx.currentTime + time);
-    // gainNode.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + time + actualFadeDuration);
-    // gainNode.gain.setValueAtTime(volume, endTime - actualFadeDuration);
-    // gainNode.gain.linearRampToValueAtTime(0, endTime);
-}
+//     // gainNode.gain.setValueAtTime(0, audioCtx.currentTime + time);
+//     // gainNode.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + time + actualFadeDuration);
+//     // gainNode.gain.setValueAtTime(volume, endTime - actualFadeDuration);
+//     // gainNode.gain.linearRampToValueAtTime(0, endTime);
+// }
 
 
 
@@ -258,12 +259,56 @@ async function initializePlayback() {
     console.log("Playback initialized");
 }
 
-async function stopPlayback() {
-    stopWorker();
-    await audioCtx.suspend();
-    resetAllStates();
-    resetVisualState();
+function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+
+    // Configure playback parameters
+    const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
+    source.playbackRate.value = playbackSpeed;
+    const playbackGainNode = audioCtx.createGain();
+    playbackGainNode.gain.value = parseVolumeLevel(globalVolumeLevels[channel] || 1.0) * globalVolumeMultiplier;
+
+    source.connect(playbackGainNode);
+    playbackGainNode.connect(audioCtx.destination);
+
+    // Calculate start time and duration
+    const startTime = startTrim * buffer.duration;
+    const duration = (endTrim - startTrim) * buffer.duration / playbackSpeed;
+
+    // Start playback
+    source.start(time, startTime, duration);
+
+    // Add the source to the active sources list
+    activeSources.push(source);
+
+    console.log(`[playBuffer] Created and started source for channel: ${channel}, startTime: ${startTime}, duration: ${duration}`);
 }
+
+async function stopPlayback() {
+    console.log(`Stopping ${activeSources.length} active sources`);
+    activeSources.forEach(source => {
+        source.stop();
+        console.log(`Stopped source for channel: ${source.buffer.channelData}`);
+    });
+    activeSources = []; // Clear the list
+    await audioCtx.suspend();
+    resetPlaybackState();
+    console.log("Playback stopped and active sources cleared");
+}
+
+function resetPlaybackState() {
+    currentSequence = 0;
+    currentStep = 0;
+    isReversePlay = false;
+    nextNoteTime = 0;
+    resetVisualState();
+
+    console.log('Playback-specific states reset.');
+}
+
+
+
 
 async function togglePlayback() {
     if (isToggleInProgress) {
@@ -275,8 +320,6 @@ async function togglePlayback() {
 
     try {
         if (!isPlaying) {
-            // Reapply global volume multiplier before playback starts
-            setGlobalVolumeMultiplier(globalVolumeMultiplier);
             await initializePlayback();
             isPlaying = true;
         } else {
@@ -289,6 +332,7 @@ async function togglePlayback() {
         isToggleInProgress = false;
     }
 }
+
 
 
 function resetAllStates() {
@@ -322,8 +366,9 @@ function cleanUpWorker() {
     audioCtx.suspend().then(() => console.log("AudioContext suspended successfully."));
 }
 
-function resumeAudioContextIfNeeded() {
+async function resumeAudioContextIfNeeded() {
     if (audioCtx.state === "suspended") {
-        audioCtx.resume();
+        await audioCtx.resume();
     }
 }
+
