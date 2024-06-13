@@ -175,14 +175,16 @@ AudionalPlayerMessages.onmessage = (message) => {
         }
     }
 };
+
 // Function to log initial assignments for all channels
 function logInitialAssignments() {
     setTimeout(() => {
         const assignments = [];
         const totalChannels = 16; // Adjust this number based on your application
 
-        // Compute the access level once
+        // Compute the access level once and log it
         const accessLevel = generateAccessLevel(seed);
+        console.log(`Access Level: ${accessLevel}`);
 
         for (let channelIndex = 1; channelIndex <= totalChannels; channelIndex++) {
             const arrayIndex = selectArrayIndex(seed, accessLevel, channelIndex);
@@ -192,15 +194,16 @@ function logInitialAssignments() {
             renderingState[channelIndex] = { arrayIndex, cci2 };
             activeArrayIndex[channelIndex] = arrayIndex;
 
+            // Log only the array index and CCI2
             assignments.push(`Channel ${channelIndex}: ArrayIndex=${arrayIndex}, CCI2=${cci2}`);
         }
 
         console.log("Initial Assignments:", assignments.join("; "));
     }, 500);
 }
-    // Delay execution of logInitialAssignments by 500 milliseconds
-setTimeout(logInitialAssignments, 500);
 
+// Delay execution of logInitialAssignments by 500 milliseconds
+setTimeout(logInitialAssignments, 500);
 
 // Log function to control frequency and relevance
 let lastLogTime = 0;
