@@ -50,7 +50,7 @@
         const projectNameElement = createElement('project-name-display', projectName, container);
         const byElement = createElement('by-display', 'by', container);
         const artistNameElement = createElement('artist-name-display', artistName, container);
-        const visualArtistElement = createElement('visual-artist-display', 'visuals by', container);
+        const visualArtistElement = createElement('visual-artist-display', 'and', container);
         const visualArtistNameElement = createElement('visual-artist-name-display', visualArtistName, container);
 
         const { cooldownTime, projectNameDuration, byDuration, artistNameDuration, visualArtistDuration, visualArtistNameDuration } = timings;

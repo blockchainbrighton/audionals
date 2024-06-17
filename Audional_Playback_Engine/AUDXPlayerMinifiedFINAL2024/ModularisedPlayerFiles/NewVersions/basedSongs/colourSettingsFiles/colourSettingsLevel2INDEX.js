@@ -9,27 +9,11 @@ console.log("Colour settings level 2 loaded");
 function getColors2(o, a, l) {
     const v = l; // Alias for clarity, where l represents vertices
 
-    const randomValues = Array.from({ length: 24 }, () => Math.random());
-    const l0zR = l[0].z + R;
-    const l2zR = l[2].z + R;
-    const l1zR = l[1].z + R;
-
-    const primaryAndSecondaryColors = [...colorPalette.primary, ...colorPalette.secondary];
-    const randomColor1 = getRandomColor(primaryAndSecondaryColors).hex;
-    const randomColor2 = getRandomColor(primaryAndSecondaryColors).hex;
-    const randomColor3 = getRandomColor(primaryAndSecondaryColors).hex;
-    const randomColor4 = getRandomColor(primaryAndSecondaryColors).hex;
-    const randomColor5 = getRandomColor(primaryAndSecondaryColors).hex;
-    const randomColor6 = getRandomColor(primaryAndSecondaryColors).hex;
-
-    const sinValue = Math.abs(Math.sin(a / 3000));
 
     const x = l[0].x;
     const y = l[0].y;
-    const divisor = 1000;
 
 
-    const zR255 = Math.floor((l[0].z + R) / (2 * R) * 255);
 
     const y2 = l[2].y;
     const x0 = l[0].x;
@@ -38,51 +22,11 @@ function getColors2(o, a, l) {
     const x2 = l[2].x - 1500;
     const x3 = l[1].x - 555;
 
-    const hslFactor1 = 1;
-    const hslFactor2 = 72 * 5;
-    const hslFactor3 = 18 * 20;
-    const hslFactor4 = 360;
-    const hslFactor5 = 0.0005 * 180;
-    const hslFactor6 = 0.09 * 0.88;
-
-    // Store Date.now() in a variable to avoid multiple calls
-    const now = Date.now();
-    const sinNow = Math.sin(now);
-    const sinNowDiv1000 = Math.sin(now / 1000);
-    const sinNowDiv2000 = Math.sin(now / 2000);
-    const sinNowDiv10 = Math.sin(now / 10);
-    const sinNowDiv5000 = Math.sin(now / 5000);
-    const sinNowDiv100 = Math.sin(now / 100);
-    const sinNowDivMinus17 = Math.sin(now / -17);
-
-    const redYellowTrippyEyes = `rgb(${Math.floor(127 * sinNow + 512)}, ${Math.floor(127 * sinNow + 128)}, ${Math.floor(127 * sinNowDiv1000 + 8)})`;
-
 
     return [
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
-
-            (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
-            `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
-            "#422000",
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
            
-          
-       
-            // DISCO BALL
-            getRandomColor([colorPalette.hslColors]), // DISCO
-            randomValues[22] > 0.5 ? `hsl(${Math.floor(60 * randomValues[23]) + 180}, 70%, 50%)` : `hsl(${Math.floor(40 * randomValues[24]) + 10}, 90%, 60%)`, // Disco Ball
-
-         
-
-             // STARING EYES
-            `rgb(${randomValues[31] > 0.5 ? Math.floor((l[0].z + R) / (2 * R) * 255) : 100}, ${Math.floor((l[0].z + R) / (2 * R) * 255)}, ${Math.floor((l[0].z + R) / (2 * R) * 255)})`, // Spinning Red Disco Eyes
-
-
+    
             // FULL SHAPE COLOUR (50/50)
             // sinValue < 0.5 ? "red" : "blue", // Full Shape Colour
             // Math.abs(Math.sin(a / 3000)) < 0.5 ? "red" : "blue", // Full Shape Colour

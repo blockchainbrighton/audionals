@@ -25,9 +25,9 @@ window.titleConfig = {
     },
     colors: {
         projectNameColor: "#ff0000", // Red
-        byColor: "#ffa500", // Orange
+        byColor: "#FFD700", // Orange
         artistNameColor: "#ff0000", // Red
-        visualArtistColor: "#ffa500", // Orange
+        visualArtistColor: "#FFD700", // Orange
         visualArtistNameColor: "#ff0000" // Red
     }
 };

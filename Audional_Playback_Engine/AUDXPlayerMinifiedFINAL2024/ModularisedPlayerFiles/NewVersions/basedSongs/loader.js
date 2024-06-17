@@ -27,7 +27,7 @@ const scriptsToLoad = [
     'colourSettingsFiles/colourPaletteINDEX.js',
     'colourSettingsFiles/colourSettingsLevel1INDEX.js',
     'colourSettingsFiles/colourSettingsLevel2INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel3.js',
+    'colourSettingsFiles/colourSettingsLevel3INDEX.js',
     'visualiser/visualiserCode.js',
 
     // TITLES SCRIPTS (OPTIONAL)
