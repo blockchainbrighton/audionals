@@ -55,6 +55,9 @@
 
         const { cooldownTime, projectNameDuration, byDuration, artistNameDuration, visualArtistDuration, visualArtistNameDuration } = timings;
 
+        // Apply colors after creating elements
+        applyColors();
+        
         // Function to show the title sequence
         function showTitleSequence() {
             console.log("[titleDisplay] showTitleSequence called. Animation playing:", animationPlaying);
@@ -84,6 +87,23 @@
                 }, byDuration)); // Start artist name
             }, projectNameDuration)); // Start "by" animation
         }
+
+        function applyColors() {
+            const { colors } = window.titleConfig;
+            
+            if (!colors) {
+                console.warn('[titleDisplay] No color configuration found.');
+                return;
+            }
+        
+            // Apply colors to respective elements
+            document.getElementById('project-name-display').style.color = colors.projectNameColor || '#000';
+            document.getElementById('by-display').style.color = colors.byColor || '#000';
+            document.getElementById('artist-name-display').style.color = colors.artistNameColor || '#000';
+            document.getElementById('visual-artist-display').style.color = colors.visualArtistColor || '#000';
+            document.getElementById('visual-artist-name-display').style.color = colors.visualArtistNameColor || '#000';
+        }
+        
 
         // Listen for custom playbackStarted event
         document.addEventListener('playbackStarted', () => {

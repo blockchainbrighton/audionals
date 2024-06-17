@@ -16,14 +16,22 @@ window.titleConfig = {
     artistName: "melophonic",
     visualArtistName: "SQYZY",
     timings: {
-        cooldownTime: 60000, // 60 seconds cooldown
-        projectNameDuration: 12000, // Show project name for 12 seconds
-        byDuration: 4000, // Show 'by' for 4 seconds
-        artistNameDuration: 12000, // Show artist name for 12 seconds
-        visualArtistDuration: 4000, // Show 'visuals by' for 4 seconds
-        visualArtistNameDuration: 24000 // Show visual artist name for 24 seconds
+        cooldownTime: 60000,
+        projectNameDuration: 12000,
+        byDuration: 4000,
+        artistNameDuration: 12000,
+        visualArtistDuration: 4000,
+        visualArtistNameDuration: 24000
+    },
+    colors: {
+        projectNameColor: "#ff0000", // Red
+        byColor: "#ffa500", // Orange
+        artistNameColor: "#ff0000", // Red
+        visualArtistColor: "#ffa500", // Orange
+        visualArtistNameColor: "#ff0000" // Red
     }
 };
+
 
 
 // Dynamically load the loader.js script after setting up the environment
