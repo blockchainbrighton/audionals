@@ -26,10 +26,6 @@ function getRandomColor(palette) {
     return colors[randomIndex];
 }
 
-// Function to get conditional color
-function getConditionalColor(x, y, divisor, trueColor, falseColor) {
-    return (Math.floor(x / divisor) + Math.floor(y / divisor)) % 111 === 0 ? trueColor : falseColor;
-}
 
 // Function to retrieve color hex from the palette
 function getColorFromPalette(colorName, palette) {
@@ -43,22 +39,52 @@ function getColorFromPalette(colorName, palette) {
     throw new Error(`Color ${colorName} not found in palette.`);
 }
 
-// Function to get conditional color using the palette
-function getConditionalColor2(x, y, divisor, trueColor, falseColor, palette) {
-    const trueColorHex = getColorFromPalette(trueColor, palette);
-    const falseColorHex = getColorFromPalette(falseColor, palette);
-    return (Math.floor(x / divisor) + Math.floor(y / divisor)) % 111 === 0 ? trueColorHex : falseColorHex;
-}
+
 
 // Function to get HSL color
 function getHslColor(a, factor) {
     return `hsl(${a % factor * 360}, 100%, 50%)`;
 }
 
+// Function to convert hex to RGB
+function hexToRgb(hex) {
+    hex = hex.replace("#", "");
+    if (hex.length === 3) {
+        hex = hex.split("").map(c => c + c).join("");
+    }
+    const bigint = parseInt(hex, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return { r, g, b };
+}
+
 // Function to get dynamic RGB color
 function getDynamicRgb(x1, y1, x2, y2, r, g, b) {
     const distance = Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2)) / 50;
     return `rgba(${r}, ${g}, ${b}, ${distance})`;
+}
+
+
+// Function to get dynamic RGB color using indices from the palette
+function getDynamicRgbWithIndex(x1, y1, x2, y2, colorIndex, palette) {
+    const hex = getHexFromIndex(colorIndex, palette);
+    const { r, g, b } = hexToRgb(hex);
+    const distance = Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2)) / 50;
+    return `rgba(${r}, ${g}, ${b}, ${distance})`;
+}
+
+// Function to get conditional color
+function getConditionalColor(x, y, divisor, trueColor, falseColor) {
+    return (Math.floor(x / divisor) + Math.floor(y / divisor)) % 111 === 0 ? trueColor : falseColor;
+}
+
+
+// Function to get conditional color using the palette
+function getConditionalColor2(x, y, divisor, trueColor, falseColor, palette) {
+    const trueColorHex = getColorFromPalette(trueColor, palette);
+    const falseColorHex = getColorFromPalette(falseColor, palette);
+    return (Math.floor(x / divisor) + Math.floor(y / divisor)) % 111 === 0 ? trueColorHex : falseColorHex;
 }
 
 {

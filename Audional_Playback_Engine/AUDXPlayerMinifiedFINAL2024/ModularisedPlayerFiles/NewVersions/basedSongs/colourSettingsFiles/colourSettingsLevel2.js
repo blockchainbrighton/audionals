@@ -97,119 +97,128 @@ function getColors2(o, a, l) {
             // getConditionalColor(x, y, 111, "lightorange", "darkgrey"),
 
             // MIDDLE LINE CRAWLER TOP LEFT
-            getConditionalColor(x3, y0, 100, "red", "grey"),
-            getConditionalColor(x3, y0, 100, "red", "grey"),
-            getConditionalColor(x3, y0, 100, "red", "gray"),
-            getConditionalColor(x3, y0, 100, "red", "white"),
-            getConditionalColor(x3, y0, 100, "blue", "red"),
-            getConditionalColor(x3, y0, 100, "blue", "gray"),
-            getConditionalColor(x3, y0, 100, "blue", "orange"),
-            getConditionalColor(x3, y0, 100, "blue", "white"),
-            getConditionalColor(x3, y0, 100, "green", "blue"),
-            getConditionalColor(x3, y0, 100, "green", "red"),
-            getConditionalColor(x3, y0, 100, "black", "red"),
-            getConditionalColor(x3, y0, 100, "purple", "orange"),
-            getConditionalColor(x3, y0, 100, "black", "white"),
-            getConditionalColor(x3, y0, 100, "orange", "red"),
-            getConditionalColor(x3, y0, 100, "purple", "gray"),
-            getConditionalColor(x3, y0, 100, "black", "blue"),
-            getConditionalColor(x3, y0, 100, "gray", "white"),
 
+            // Updated conditional color settings
+            getConditionalColorWithIndex(x, y, 280, 4, 14, window.colorPalette), // Green -> 4, DarkOrange -> 14
+            getConditionalColorWithIndex(x, y, 111, 21, 15, window.colorPalette), // White -> 21, Red -> 15
+            getConditionalColorWithIndex(x, y, 120, 10, 10, window.colorPalette), // VeryDarkBlue -> 10, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x, y, 111, 15, 14, window.colorPalette), // Red -> 15, DarkOrange -> 14
+            getConditionalColorWithIndex(x, y, 95, 10, 10, window.colorPalette), // VeryDarkBlue -> 10, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x, y, 111, 4, 21, window.colorPalette), // Green -> 4, White -> 21
+            getConditionalColorWithIndex(x, y, 111, 9, 13, window.colorPalette), // VeryDarkGreen -> 9, DimGray -> 13
+            getConditionalColorWithIndex(x, y, 111, 5, 13, window.colorPalette), // Orange -> 5, DimGray -> 13
+
+            // MIDDLE LINE CRAWLER TOP LEFT
+            getConditionalColorWithIndex(x3, y0, 100, 15, 13, window.colorPalette), // Red -> 15, DimGray -> 13
+            getConditionalColorWithIndex(x3, y0, 100, 15, 13, window.colorPalette), // Red -> 15, DimGray -> 13
+            getConditionalColorWithIndex(x3, y0, 100, 15, 13, window.colorPalette), // Red -> 15, DimGray -> 13
+            getConditionalColorWithIndex(x3, y0, 100, 15, 21, window.colorPalette), // Red -> 15, White -> 21
+            getConditionalColorWithIndex(x3, y0, 100, 10, 15, window.colorPalette), // VeryDarkBlue -> 10, Red -> 15
+            getConditionalColorWithIndex(x3, y0, 100, 10, 13, window.colorPalette), // VeryDarkBlue -> 10, DimGray -> 13
+            getConditionalColorWithIndex(x3, y0, 100, 10, 5, window.colorPalette), // VeryDarkBlue -> 10, Orange -> 5
+            getConditionalColorWithIndex(x3, y0, 100, 10, 21, window.colorPalette), // VeryDarkBlue -> 10, White -> 21
+            getConditionalColorWithIndex(x3, y0, 100, 4, 10, window.colorPalette), // Green -> 4, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x3, y0, 100, 4, 15, window.colorPalette), // Green -> 4, Red -> 15
+            getConditionalColorWithIndex(x3, y0, 100, 1, 15, window.colorPalette), // Black -> 1, Red -> 15
+            getConditionalColorWithIndex(x3, y0, 100, 2, 5, window.colorPalette), // Purple -> 2, Orange -> 5
+            getConditionalColorWithIndex(x3, y0, 100, 1, 21, window.colorPalette), // Black -> 1, White -> 21
+            getConditionalColorWithIndex(x3, y0, 100, 5, 15, window.colorPalette), // Orange -> 5, Red -> 15
+            getConditionalColorWithIndex(x3, y0, 100, 2, 13, window.colorPalette), // Purple -> 2, DimGray -> 13
+            getConditionalColorWithIndex(x3, y0, 100, 1, 10, window.colorPalette), // Black -> 1, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x3, y0, 100, 13, 21, window.colorPalette), // DimGray -> 13, White -> 21
 
             // MIDDLE LINE CRAWLER BOTTOM RIGHT
-            getConditionalColor(x1, y0, -100, "red", "blue"),
-            getConditionalColor(x1, y0, -100, "red", "grey"),
-            getConditionalColor(x1, y0, -100, "red", "orange"),
-            getConditionalColor(x1, y0, -100, "red", "white"),
-            getConditionalColor(x1, y0, -100, "blue", "red"),
-            getConditionalColor(x1, y0, -100, "blue", "purple"),
-            getConditionalColor(x1, y0, -100, "blue", "orange"),
-            getConditionalColor(x1, y0, -100, "blue", "white"),
-            getConditionalColor(x1, y0, -100, "green", "blue"),
-            getConditionalColor(x1, y0, -100, "green", "red"),
-            getConditionalColor(x1, y0, -100, "green", "orange"),
-            getConditionalColor(x1, y0, -100, "green", "white"),
-            getConditionalColor(x1, y0, -100, "orange", "red"),
-            getConditionalColor(x1, y0, -100, "orange", "maroon"), 
-            getConditionalColor(x1, y0, -100, "orange", "blue"),
-            getConditionalColor(x1, y0, -100, "orange", "white"),
+            getConditionalColorWithIndex(x1, y0, -100, 15, 10, window.colorPalette), // Red -> 15, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x1, y0, -100, 15, 13, window.colorPalette), // Red -> 15, DimGray -> 13
+            getConditionalColorWithIndex(x1, y0, -100, 15, 5, window.colorPalette), // Red -> 15, Orange -> 5
+            getConditionalColorWithIndex(x1, y0, -100, 15, 21, window.colorPalette), // Red -> 15, White -> 21
+            getConditionalColorWithIndex(x1, y0, -100, 10, 15, window.colorPalette), // VeryDarkBlue -> 10, Red -> 15
+            getConditionalColorWithIndex(x1, y0, -100, 10, 2, window.colorPalette), // VeryDarkBlue -> 10, Purple -> 2
+            getConditionalColorWithIndex(x1, y0, -100, 10, 5, window.colorPalette), // VeryDarkBlue -> 10, Orange -> 5
+            getConditionalColorWithIndex(x1, y0, -100, 10, 21, window.colorPalette), // VeryDarkBlue -> 10, White -> 21
+            getConditionalColorWithIndex(x1, y0, -100, 4, 10, window.colorPalette), // Green -> 4, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x1, y0, -100, 4, 15, window.colorPalette), // Green -> 4, Red -> 15
+            getConditionalColorWithIndex(x1, y0, -100, 4, 5, window.colorPalette), // Green -> 4, Orange -> 5
+            getConditionalColorWithIndex(x1, y0, -100, 4, 21, window.colorPalette), // Green -> 4, White -> 21
+            getConditionalColorWithIndex(x1, y0, -100, 5, 15, window.colorPalette), // Orange -> 5, Red -> 15
+            getConditionalColorWithIndex(x1, y0, -100, 5, 12, window.colorPalette), // Orange -> 5, Maroon -> 12
+            getConditionalColorWithIndex(x1, y0, -100, 5, 10, window.colorPalette), // Orange -> 5, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x1, y0, -100, 5, 21, window.colorPalette), // Orange -> 5, White -> 21
 
             // 3 SQUARE MIDDLE CRAWLER
-            getConditionalColor(x2, y0, -300, "red", "blue"),
-            getConditionalColor(x2, y0, -300, "red", "black"),
-            getConditionalColor(x2, y0, -300, "red", "orange"),
-            getConditionalColor(x2, y0, -300, "red", "white"),
-            getConditionalColor(x2, y0, -300, "blue", "red"),
-            getConditionalColor(x2, y0, -300, "blue", "red"),
-            getConditionalColor(x2, y0, -300, "blue", "orange"),
-            getConditionalColor(x2, y0, -300, "blue", "white"),
-            getConditionalColor(x2, y0, -300, "green", "blue"),
-            getConditionalColor(x2, y0, -300, "green", "red"),
-            getConditionalColor(x2, y0, -300, "green", "orange"),
-            getConditionalColor(x2, y0, -300, "green", "white"),
-            getConditionalColor(x2, y0, -300, "orange", "red"),
-            getConditionalColor(x2, y0, -300, "orange", "black"),
-            getConditionalColor(x2, y0, -300, "orange", "blue"),
-            getConditionalColor(x2, y0, -300, "orange", "white"),
+            getConditionalColorWithIndex(x2, y0, -300, 15, 10, window.colorPalette), // Red -> 15, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x2, y0, -300, 15, 1, window.colorPalette), // Red -> 15, Black -> 1
+            getConditionalColorWithIndex(x2, y0, -300, 15, 5, window.colorPalette), // Red -> 15, Orange -> 5
+            getConditionalColorWithIndex(x2, y0, -300, 15, 21, window.colorPalette), // Red -> 15, White -> 21
+            getConditionalColorWithIndex(x2, y0, -300, 10, 15, window.colorPalette), // VeryDarkBlue -> 10, Red -> 15
+            getConditionalColorWithIndex(x2, y0, -300, 10, 15, window.colorPalette), // VeryDarkBlue -> 10, Red -> 15
+            getConditionalColorWithIndex(x2, y0, -300, 10, 5, window.colorPalette), // VeryDarkBlue -> 10, Orange -> 5
+            getConditionalColorWithIndex(x2, y0, -300, 10, 21, window.colorPalette), // VeryDarkBlue -> 10, White -> 21
+            getConditionalColorWithIndex(x2, y0, -300, 4, 10, window.colorPalette), // Green -> 4, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x2, y0, -300, 4, 15, window.colorPalette), // Green -> 4, Red -> 15
+            getConditionalColorWithIndex(x2, y0, -300, 4, 5, window.colorPalette), // Green -> 4, Orange -> 5
+            getConditionalColorWithIndex(x2, y0, -300, 4, 21, window.colorPalette), // Green -> 4, White -> 21
+            getConditionalColorWithIndex(x2, y0, -300, 5, 15, window.colorPalette), // Orange -> 5, Red -> 15
+            getConditionalColorWithIndex(x2, y0, -300, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
+            getConditionalColorWithIndex(x2, y0, -300, 5, 10, window.colorPalette), // Orange -> 5, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x2, y0, -300, 5, 21, window.colorPalette), // Orange -> 5, White -> 21
 
-
-            // BOTTOM RIGHT CORNER 
-            getConditionalColor(x2, y0, 600, "red", "blue"),
-            getConditionalColor(x2, y0, 600, "red", "black"),
-            getConditionalColor(x2, y0, 600, "red", "orange"),
-            getConditionalColor(x2, y0, 600, "red", "white"),
-            getConditionalColor(x2, y0, 600, "blue", "red"),
-            getConditionalColor(x2, y0, 600, "blue", "gray"),
-            getConditionalColor(x2, y0, 600, "blue", "orange"),
-            getConditionalColor(x2, y0, 600, "blue", "white"),
-            getConditionalColor(x2, y0, 600, "green", "blue"),
-            getConditionalColor(x2, y0, 600, "green", "red"),
-            getConditionalColor(x2, y0, 600, "green", "orange"),
-            getConditionalColor(x2, y0, 600, "green", "white"),
-            getConditionalColor(x2, y0, 600, "orange", "red"),
-            getConditionalColor(x2, y0, 600, "orange", "black"),
-            getConditionalColor(x2, y0, 600, "orange", "blue"),
-            getConditionalColor(x2, y0, 600, "orange", "white"),
-            getConditionalColor(x2, y0, 600, "orange", "black"),
+            // BOTTOM RIGHT CORNER
+            getConditionalColorWithIndex(x2, y0, 600, 15, 10, window.colorPalette), // Red -> 15, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x2, y0, 600, 15, 1, window.colorPalette), // Red -> 15, Black -> 1
+            getConditionalColorWithIndex(x2, y0, 600, 15, 5, window.colorPalette), // Red -> 15, Orange -> 5
+            getConditionalColorWithIndex(x2, y0, 600, 15, 21, window.colorPalette), // Red -> 15, White -> 21
+            getConditionalColorWithIndex(x2, y0, 600, 10, 15, window.colorPalette), // VeryDarkBlue -> 10, Red -> 15
+            getConditionalColorWithIndex(x2, y0, 600, 10, 13, window.colorPalette), // VeryDarkBlue -> 10, DimGray -> 13
+            getConditionalColorWithIndex(x2, y0, 600, 10, 5, window.colorPalette), // VeryDarkBlue -> 10, Orange -> 5
+            getConditionalColorWithIndex(x2, y0, 600, 10, 21, window.colorPalette), // VeryDarkBlue -> 10, White -> 21
+            getConditionalColorWithIndex(x2, y0, 600, 4, 10, window.colorPalette), // Green -> 4, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x2, y0, 600, 4, 15, window.colorPalette), // Green -> 4, Red -> 15
+            getConditionalColorWithIndex(x2, y0, 600, 4, 5, window.colorPalette), // Green -> 4, Orange -> 5
+            getConditionalColorWithIndex(x2, y0, 600, 4, 21, window.colorPalette), // Green -> 4, White -> 21
+            getConditionalColorWithIndex(x2, y0, 600, 5, 15, window.colorPalette), // Orange -> 5, Red -> 15
+            getConditionalColorWithIndex(x2, y0, 600, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
+            getConditionalColorWithIndex(x2, y0, 600, 5, 10, window.colorPalette), // Orange -> 5, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x2, y0, 600, 5, 21, window.colorPalette), // Orange -> 5, White -> 21
+            getConditionalColorWithIndex(x2, y0, 600, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
 
             // EU Flag Styles
-            getConditionalColor(x0, y0, 15, "orange", "blue"),
-            getConditionalColor(x0, y0, 15, "red", "blue"), 
-            getConditionalColor(x0, y0, 15, "red", "white"), 
-            getConditionalColor(x0, y0, 15, "white", "blue"), 
-            getConditionalColor(x0, y0, 15, "blue", "white"), 
-            getConditionalColor(x0, y0, 15, "white", "red"), 
-            getConditionalColor(x0, y0, 15, "orange", "blue"), 
-            getConditionalColor(x0, y0, 15, "red", "orange"),
-            getConditionalColor(x0, y0, 15, "orange", "white"), 
-            getConditionalColor(x0, y0, 15, "white", "orange"),
-            getConditionalColor(x0, y0, 15, "grey", "red"),
-            getConditionalColor(x0, y0, 15, "grey", "blue"),
-            getConditionalColor(x0, y0, 15, "grey", "black"),
-            getConditionalColor(x0, y0, 15, "grey", "orange"),
-            getConditionalColor(x0, y0, 15, "red", "grey"),
-            getConditionalColor(x0, y0, 15, "blue", "grey"),
-            getConditionalColor(x0, y0, 15, "green", "grey"),
-            getConditionalColor(x0, y0, 15, "orange", "grey"),
+            getConditionalColorWithIndex(x0, y0, 15, 5, 10, window.colorPalette), // Orange -> 5, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x0, y0, 15, 15, 10, window.colorPalette), // Red -> 15, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x0, y0, 15, 15, 21, window.colorPalette), // Red -> 15, White -> 21
+            getConditionalColorWithIndex(x0, y0, 15, 21, 10, window.colorPalette), // White -> 21, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x0, y0, 15, 10, 21, window.colorPalette), // VeryDarkBlue -> 10, White -> 21
+            getConditionalColorWithIndex(x0, y0, 15, 21, 15, window.colorPalette), // White -> 21, Red -> 15
+            getConditionalColorWithIndex(x0, y0, 15, 5, 10, window.colorPalette), // Orange -> 5, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x0, y0, 15, 15, 5, window.colorPalette), // Red -> 15, Orange -> 5
+            getConditionalColorWithIndex(x0, y0, 15, 5, 21, window.colorPalette), // Orange -> 5, White -> 21
+            getConditionalColorWithIndex(x0, y0, 15, 21, 5, window.colorPalette), // White -> 21, Orange -> 5
+            getConditionalColorWithIndex(x0, y0, 15, 13, 15, window.colorPalette), // DimGray -> 13, Red -> 15
+            getConditionalColorWithIndex(x0, y0, 15, 13, 10, window.colorPalette), // DimGray -> 13, VeryDarkBlue -> 10
+            getConditionalColorWithIndex(x0, y0, 15, 13, 1, window.colorPalette), // DimGray -> 13, Black -> 1
+            getConditionalColorWithIndex(x0, y0, 15, 13, 5, window.colorPalette), // DimGray -> 13, Orange -> 5
+            getConditionalColorWithIndex(x0, y0, 15, 15, 13, window.colorPalette), // Red -> 15, DimGray -> 13
+            getConditionalColorWithIndex(x0, y0, 15, 10, 13, window.colorPalette), // VeryDarkBlue -> 10, DimGray -> 13
+            getConditionalColorWithIndex(x0, y0, 15, 4, 13, window.colorPalette), // Green -> 4, DimGray -> 13
+            getConditionalColorWithIndex(x0, y0, 15, 5, 13, window.colorPalette), // Orange -> 5, DimGray -> 13
 
-            getConditionalColor(x1, y0, 8, "orange", "black"),
-            getConditionalColor(x2, y0, 9, "red", "black"), 
-            getConditionalColor(x3, y0, 10, "white", "black"), 
-            getConditionalColor(x1, y0, 11, "purple", "black"), 
-            getConditionalColor(x2, y0, 12, "blue", "black"), 
-            getConditionalColor(x3, y0, 13, "white", "black"), 
-            getConditionalColor(x2, y0, 15, "red", "black"),
-            getConditionalColor(x3, y0, 16, "orange", "black"), 
-            getConditionalColor(x1, y0, 17, "white", "black"),
-            getConditionalColor(x2, y0, 16, "grey", "black"),
-            getConditionalColor(x3, y0, 15, "grey", "black"),
-            getConditionalColor(x1, y0, 14, "grey", "black"),
-            getConditionalColor(x2, y0, 13, "grey", "black"),
-            getConditionalColor(x3, y0, 12, "red", "black"),
-            getConditionalColor(x1, y0, 11, "blue", "black"),
-            getConditionalColor(x2, y0, 10, "green", "black"),
-            getConditionalColor(x3, y0, 9, "orange", "black"),
-
+            getConditionalColorWithIndex(x1, y0, 8, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
+            getConditionalColorWithIndex(x2, y0, 9, 15, 1, window.colorPalette), // Red -> 15, Black -> 1
+            getConditionalColorWithIndex(x3, y0, 10, 21, 1, window.colorPalette), // White -> 21, Black -> 1
+            getConditionalColorWithIndex(x1, y0, 11, 2, 1, window.colorPalette), // Purple -> 2, Black -> 1
+            getConditionalColorWithIndex(x2, y0, 12, 10, 1, window.colorPalette), // VeryDarkBlue -> 10, Black -> 1
+            getConditionalColorWithIndex(x3, y0, 13, 21, 1, window.colorPalette), // White -> 21, Black -> 1
+            getConditionalColorWithIndex(x2, y0, 15, 15, 1, window.colorPalette), // Red -> 15, Black -> 1
+            getConditionalColorWithIndex(x3, y0, 16, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
+            getConditionalColorWithIndex(x1, y0, 17, 21, 1, window.colorPalette), // White -> 21, Black -> 1
+            getConditionalColorWithIndex(x2, y0, 16, 13, 1, window.colorPalette), // DimGray -> 13, Black -> 1
+            getConditionalColorWithIndex(x3, y0, 15, 13, 1, window.colorPalette), // DimGray -> 13, Black -> 1
+            getConditionalColorWithIndex(x1, y0, 14, 13, 1, window.colorPalette), // DimGray -> 13, Black -> 1
+            getConditionalColorWithIndex(x2, y0, 13, 13, 1, window.colorPalette), // DimGray -> 13, Black -> 1
+            getConditionalColorWithIndex(x3, y0, 12, 15, 1, window.colorPalette), // Red -> 15, Black -> 1
+            getConditionalColorWithIndex(x1, y0, 11, 10, 1, window.colorPalette), // VeryDarkBlue -> 10, Black -> 1
+            getConditionalColorWithIndex(x2, y0, 10, 4, 1, window.colorPalette), // Green -> 4, Black -> 1
+            getConditionalColorWithIndex(x3, y0, 9, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
 
             // IGUANA EYES
 

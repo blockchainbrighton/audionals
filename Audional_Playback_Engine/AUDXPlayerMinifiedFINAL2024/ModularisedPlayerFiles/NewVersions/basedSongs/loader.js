@@ -26,7 +26,7 @@ const scriptsToLoad = [
     'fileAndAudioHandling.js',
     'colourSettingsFiles/colourPaletteINDEX.js',
     'colourSettingsFiles/colourSettingsLevel1INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel2.js',
+    'colourSettingsFiles/colourSettingsLevel2INDEX.js',
     'colourSettingsFiles/colourSettingsLevel3.js',
     'visualiser/visualiserCode.js',
 
