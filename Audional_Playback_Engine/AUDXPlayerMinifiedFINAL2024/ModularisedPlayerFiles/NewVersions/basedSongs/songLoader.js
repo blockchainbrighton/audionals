@@ -1,18 +1,30 @@
-// // songLoader.js
-
-
 // songLoader.js
 
-// Set the HTML title dynamically
+// This file is supplied by the user and must contain the URL for the JSON data file to be loaded
+
+// Set the HTML title dynamically (OPTIONAL)
 document.title = "OB1 Song 1 by melophonic : Visuals by SQYZY";
 
-// Store JSON data URL in a global variable
+// *** THIS IS THE URL TO THE AUDX SONGFILE ***
+// Store JSON data URL in a global variable ()
 window.jsonDataUrl = "testSongFiles/SP1.json";
 
-// // Create and append the canvas element to the body
-// const canvas = document.createElement('canvas');
-// canvas.id = 'cv';
-// document.body.appendChild(canvas);
+
+// Set the title configuration (OPTIONAL)
+window.titleConfig = {
+    projectName: "TRUTH",
+    artistName: "melophonic",
+    visualArtistName: "SQYZY",
+    timings: {
+        cooldownTime: 60000, // 60 seconds cooldown
+        projectNameDuration: 12000, // Show project name for 12 seconds
+        byDuration: 4000, // Show 'by' for 4 seconds
+        artistNameDuration: 12000, // Show artist name for 12 seconds
+        visualArtistDuration: 4000, // Show 'visuals by' for 4 seconds
+        visualArtistNameDuration: 24000 // Show visual artist name for 24 seconds
+    }
+};
+
 
 // Dynamically load the loader.js script after setting up the environment
 const script = document.createElement('script');
