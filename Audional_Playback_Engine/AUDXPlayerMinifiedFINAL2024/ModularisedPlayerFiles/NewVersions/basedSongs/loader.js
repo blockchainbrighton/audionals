@@ -24,6 +24,8 @@ const scriptsToLoad = [
     'colourSettingsFiles/colourSettingsLevel3.js',
     'visualiser/visualiserCode.js',
     'visualiser/titleDisplays.js'
+    // 'visualiser/titleDisplayCore.js',
+    // 'visualiser/titleDisplayUser.js',
 ];
 
 // Function to ensure AudioContext is in a running state

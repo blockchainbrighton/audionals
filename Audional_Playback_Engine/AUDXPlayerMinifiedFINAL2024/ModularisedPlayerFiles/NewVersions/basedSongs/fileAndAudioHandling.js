@@ -1,5 +1,20 @@
 // fileAndAudioHandling.js
 
+document.addEventListener("click", async () => {
+    console.log("[fileAndAudioHandling.js] Click event detected.");
+    if (typeof window.ensureAudioContextState === 'function') {
+        await window.ensureAudioContextState();
+        console.log("[fileAndAudioHandling.js] AudioContext ensured.");
+        togglePlayback();
+        console.log("[fileAndAudioHandling.js] Playback started. Dispatching playbackStarted event.");
+
+        // Dispatch custom event to notify playback has started
+        const event = new CustomEvent('playbackStarted');
+        document.dispatchEvent(event);
+    } else {
+        console.error("[fileAndAudioHandling.js] ensureAudioContextState is not defined or not a function");
+    }
+});
 
 function updateVolumesDuringPlayback() {
     globalAudioBuffers.forEach(({ gainNode, channel }) => {
@@ -17,15 +32,6 @@ async function ensureAudioContextState() {
     await resumeAudioContext();
     console.log("AudioContext state:", audioCtx.state);
 }
-
-document.addEventListener("click", async () => {
-    if (typeof window.ensureAudioContextState === 'function') {
-        await window.ensureAudioContextState();
-        togglePlayback();
-    } else {
-        console.error("ensureAudioContextState is not defined or not a function");
-    }
-});
 
 window.addEventListener("beforeunload", cleanUpWorker);
 
