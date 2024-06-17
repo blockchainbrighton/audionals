@@ -18,8 +18,6 @@ function loadScriptsSequentially(scripts, index = 0, callback) {
     }
 }
 
-
-
 // Function to ensure AudioContext is in a running state
 function ensureAudioContextState() {
     return new Promise((resolve) => {
@@ -60,7 +58,7 @@ fetch(window.jsonDataUrl)
         console.log("Settings loaded:", data);
 
         // After settings are loaded, load the rest of the scripts
-        loadScriptsSequentially(scriptsToLoad, 0, async () => {
+        loadScriptsSequentially(window.scriptsToLoad, 0, async () => {
             await ensureAudioContextState();
             if (document.readyState === 'loading') {
                 document.addEventListener("DOMContentLoaded", initializeApp);
@@ -70,21 +68,3 @@ fetch(window.jsonDataUrl)
         });
     })
     .catch(error => console.error('Error loading settings:', error));
-
-
-    // Define the scripts to be loaded
-const scriptsToLoad = [
-    'audioContextManager.js',
-    'jsonLoader.js',
-    'audioProcessing.js',
-    'fileAndAudioHandling.js',
-    'colourSettingsFiles/colourPaletteINDEX.js',
-    'colourSettingsFiles/colourSettingsLevel1INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel2INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel3INDEX.js',
-    'visualiser/visualiserCode.js',
-
-    // TITLES SCRIPTS (OPTIONAL)
-    'visualiser/userTitlesConfig.js',
-    'visualiser/titleDisplays.js'
-];

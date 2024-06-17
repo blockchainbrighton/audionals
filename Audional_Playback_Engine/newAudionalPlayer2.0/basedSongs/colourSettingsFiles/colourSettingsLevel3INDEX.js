@@ -289,23 +289,3 @@ getColors3Length();
 }
 
 
-
-
-
-// // #67 Dynamic alternative-color based on lightness - GREY SCALE CRAZY ONE
-// ((lightness) => lightness > 128 ? `rgb(${lightness}, ${lightness}, ${lightness})` : 'dark-mode-color')(Math.random() * Math.floor((v[0].z + R) / (2 * R) * 255)),
-
-// // #72
-// (() => {
-//     const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
-//     return colorValue > 64 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
-// })(),
-
-// // #73
-// (() => {
-//     const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
-//     return colorValue > 32 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
-// })(),
-
-
-
