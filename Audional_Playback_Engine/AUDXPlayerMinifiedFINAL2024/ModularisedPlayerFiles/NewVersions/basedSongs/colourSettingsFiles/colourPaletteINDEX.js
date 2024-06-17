@@ -1,3 +1,5 @@
+// colourPaletteINDEX.js
+
 console.log("Color palette script loaded");
 
 window.colorPalette = {
@@ -39,3 +41,5 @@ window.colorPalette = {
     // HSL colors remain unchanged
     hslColors: Array.from({ length: 360 }, (_, i) => `hsl(${i}, 100%, 50%)`)
 };
+
+
