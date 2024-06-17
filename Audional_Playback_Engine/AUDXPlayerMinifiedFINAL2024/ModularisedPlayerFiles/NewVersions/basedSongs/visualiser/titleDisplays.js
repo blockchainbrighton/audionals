@@ -1,16 +1,15 @@
-let visualArtistName = 'SQYZY'; // Hard-coded visual artist name
-
 (function() {
     // Function to setup the title display
     function setupTitleDisplay() {
         console.log("[titleDisplay] setupTitleDisplay called.");
-        if (!window.settings) {
-            console.error('[titleDisplay] Settings not loaded yet');
+        
+        if (!window.settings || !window.titleConfig) {
+            console.error('[titleDisplay] Settings or titleConfig not loaded yet');
             return;
         }
 
-        const { projectName, artistName } = window.settings;
-        console.log("[titleDisplay] Settings loaded:", window.settings);
+        const { projectName, artistName, visualArtistName, timings } = window.titleConfig;
+        console.log("[titleDisplay] titleConfig loaded:", window.titleConfig);
 
         // Create container for the title display
         const container = document.createElement('div');
@@ -50,7 +49,7 @@ let visualArtistName = 'SQYZY'; // Hard-coded visual artist name
         console.log("[titleDisplay] Visual artist name element created.");
 
         let animationPlaying = false; // Flag to prevent multiple animations
-        const cooldownTime = 60000; // 60 seconds cooldown
+        const { cooldownTime, projectNameDuration, byDuration, artistNameDuration, visualArtistDuration, visualArtistNameDuration } = timings;
         let lastAnimationEnd = 0; // Timestamp of last animation end
 
         // Function to clear previous animations
@@ -88,11 +87,11 @@ let visualArtistName = 'SQYZY'; // Hard-coded visual artist name
                                     animationPlaying = false;
                                     lastAnimationEnd = Date.now();
                                     console.log("[titleDisplay] Title sequence completed.");
-                                }, 24000); // Duration for visual artist name (total 20s: 2s fade in, 10s hold, 8s fade out with shrinking)
-                            }, 4000); // Start visual artist name 14s after visual artist (total 15s for visual artist: 2s fade in, 5s hold, 8s fade out)
-                        }, 12000); // Start visual artist 18s after artist name (total 20s for artist name: 2s fade in, 10s hold, 8s fade out)
-                    }, 4000); // Start artist name 12s after by starts (total 15s for "by": 2s fade in, 5s hold, 8s fade out)
-                }, 12000); // Start "by" animation 18s after project name (total 20s for project name: 2s fade in, 10s hold, 8s fade out)
+                                }, visualArtistNameDuration); // Duration for visual artist name
+                            }, visualArtistDuration); // Start visual artist name
+                        }, artistNameDuration); // Start visual artist
+                    }, byDuration); // Start artist name
+                }, projectNameDuration); // Start "by" animation
             }
         }
 
@@ -105,8 +104,8 @@ let visualArtistName = 'SQYZY'; // Hard-coded visual artist name
 
     function waitForSettings() {
         console.log("[titleDisplay] Waiting for settings...");
-        if (window.settings) {
-            console.log("[titleDisplay] Settings found, setting up title display.");
+        if (window.settings && window.titleConfig) {
+            console.log("[titleDisplay] Settings and titleConfig found, setting up title display.");
             setupTitleDisplay();
         } else {
             setTimeout(waitForSettings, 100);

@@ -1,5 +1,10 @@
 // loader.js
 
+// Create and append the canvas element to the body
+const canvas = document.createElement('canvas');
+canvas.id = 'cv';
+document.body.appendChild(canvas);
+
 // Function to dynamically load scripts sequentially
 function loadScriptsSequentially(scripts, index = 0, callback) {
     if (index < scripts.length) {
@@ -23,6 +28,9 @@ const scriptsToLoad = [
     'colourSettingsFiles/colourSettingsLevel2.js',
     'colourSettingsFiles/colourSettingsLevel3.js',
     'visualiser/visualiserCode.js',
+
+    // TITLES SCRIPTS (OPTIONAL)
+    'visualiser/userTitlesConfig.js',
     'visualiser/titleDisplays.js'
     // 'visualiser/titleDisplayCore.js',
     // 'visualiser/titleDisplayUser.js',

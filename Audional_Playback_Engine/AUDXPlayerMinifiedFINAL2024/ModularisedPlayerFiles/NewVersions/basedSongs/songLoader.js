@@ -9,10 +9,10 @@ document.title = "OB1 Song 1 by melophonic : Visuals by SQYZY";
 // Store JSON data URL in a global variable
 window.jsonDataUrl = "testSongFiles/SP1.json";
 
-// Create and append the canvas element to the body
-const canvas = document.createElement('canvas');
-canvas.id = 'cv';
-document.body.appendChild(canvas);
+// // Create and append the canvas element to the body
+// const canvas = document.createElement('canvas');
+// canvas.id = 'cv';
+// document.body.appendChild(canvas);
 
 // Dynamically load the loader.js script after setting up the environment
 const script = document.createElement('script');
