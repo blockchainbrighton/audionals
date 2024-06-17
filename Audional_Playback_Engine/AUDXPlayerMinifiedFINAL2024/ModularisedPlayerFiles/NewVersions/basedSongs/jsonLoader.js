@@ -109,7 +109,8 @@ function prepareForPlayback(jsonData, stats) {
         globalVolumeLevels[`Channel ${channelIndex}`] = Number(channelVolume[i] || 1.0).toFixed(3);
         globalPlaybackSpeeds[`Channel ${channelIndex}`] = Number(Math.max(0.1, Math.min(channelPlaybackSpeed[i], 100)) || 1.0).toFixed(3);
 
-        console.log(`[prepareForPlayback] Channel ${channelIndex}: Volume set to ${globalVolumeLevels[`Channel ${channelIndex}`]}, Playback speed set to ${globalPlaybackSpeeds[`Channel ${channelIndex}`]}`);
+        console.log(`[prepareForPlayback] [finalDebug] Channel ${channelIndex}: Volume set to ${globalVolumeLevels[`Channel ${channelIndex}`]}, Playback speed set to ${globalPlaybackSpeeds[`Channel ${channelIndex}`]},Trim Settings: ${JSON.stringify(globalTrimTimes)}`);
+
     });
 
     logVolumeSettings();

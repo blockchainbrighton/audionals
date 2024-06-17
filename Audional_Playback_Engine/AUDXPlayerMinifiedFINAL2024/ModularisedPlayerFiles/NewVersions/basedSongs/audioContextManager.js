@@ -17,6 +17,7 @@
         }
 
         async resume() {
+            console.log(`[resume] [finalDebug] AudioContext State: ${this.audioCtx.state}`);
             if (this.audioCtx.state === "suspended") {
                 await this.audioCtx.resume();
                 console.log("AudioContext resumed");

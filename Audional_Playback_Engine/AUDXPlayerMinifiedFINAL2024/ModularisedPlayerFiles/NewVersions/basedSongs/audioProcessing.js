@@ -25,6 +25,7 @@ async function processAudioUrl(url, channelIndex, audioContext) {
 
         const contentType = response.headers.get("Content-Type");
         const audioBuffer = await fetchAndDecodeAudio(response, contentType, audioContext);
+        console.log(`[processAudioUrl] [finalDebug] Buffer for ${channelIndex}:`, audioBuffer);
 
         if (audioBuffer) {
             const channelName = `Channel ${channelIndex}`;
