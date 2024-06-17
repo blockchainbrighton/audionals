@@ -90,44 +90,40 @@ function findAndSetEndSequence(playbackData) {
         }
     }
 }
-
 function prepareForPlayback(jsonData, stats) {
     const { channelURLs, trimSettings, channelVolume, channelPlaybackSpeed, projectSequences, projectName, projectBPM, currentSequence } = jsonData;
     bpm = projectBPM;
     totalSequences = currentSequence;
 
-    const channelCount = channelURLs.length;
     globalTrimTimes = {};
     globalVolumeLevels = {};
     globalPlaybackSpeeds = {};
 
-    for (let i = 0; i < channelCount; i++) {
+    channelURLs.forEach((_, i) => {
         const channelIndex = i + 1;
+        const trim = trimSettings[i] || {};
         globalTrimTimes[`Channel ${channelIndex}`] = {
-            startTrim: parseFloat((trimSettings[i]?.startSliderValue || 0) / 100).toFixed(3),
-            endTrim: parseFloat((trimSettings[i]?.endSliderValue || 100) / 100).toFixed(3)
+            startTrim: Number((trim.startSliderValue || 0) / 100).toFixed(3),
+            endTrim: Number((trim.endSliderValue || 100) / 100).toFixed(3)
         };
-        const volumeLevel = parseFloat(channelVolume[i] || 1.0).toFixed(3);
-        globalVolumeLevels[`Channel ${channelIndex}`] = volumeLevel;
-        const playbackSpeed = parseFloat(Math.max(0.1, Math.min(channelPlaybackSpeed[i], 100)) || 1.0).toFixed(3);
-        globalPlaybackSpeeds[`Channel ${channelIndex}`] = playbackSpeed;
+        globalVolumeLevels[`Channel ${channelIndex}`] = Number(channelVolume[i] || 1.0).toFixed(3);
+        globalPlaybackSpeeds[`Channel ${channelIndex}`] = Number(Math.max(0.1, Math.min(channelPlaybackSpeed[i], 100)) || 1.0).toFixed(3);
 
-        console.log(`[prepareForPlayback] Channel ${channelIndex}: Volume set to ${volumeLevel}, Playback speed set to ${playbackSpeed}`);
-    }
+        console.log(`[prepareForPlayback] Channel ${channelIndex}: Volume set to ${globalVolumeLevels[`Channel ${channelIndex}`]}, Playback speed set to ${globalPlaybackSpeeds[`Channel ${channelIndex}`]}`);
+    });
 
-    // Log volume settings after they are set
     logVolumeSettings();
 
     const sequences = Object.entries(projectSequences).reduce((result, [sequenceName, channels]) => {
         const normalSteps = {};
         const reverseSteps = {};
 
-        for (const [channelName, channelData] of Object.entries(channels)) {
+        Object.entries(channels).forEach(([channelName, channelData]) => {
             const normalizedChannelName = `Channel ${parseInt(channelName.slice(2)) + 1}`;
             normalSteps[normalizedChannelName] = [];
             reverseSteps[normalizedChannelName] = [];
 
-            for (const step of channelData.steps) {
+            channelData.steps.forEach(step => {
                 const stepIndex = typeof step === 'object' ? step.index : step;
                 if (step.reverse) {
                     reverseSteps[normalizedChannelName].push(stepIndex);
@@ -135,8 +131,8 @@ function prepareForPlayback(jsonData, stats) {
                 } else {
                     normalSteps[normalizedChannelName].push(stepIndex);
                 }
-            }
-        }
+            });
+        });
 
         result[sequenceName] = { normalSteps, reverseSteps };
         return result;
@@ -145,7 +141,7 @@ function prepareForPlayback(jsonData, stats) {
     const playbackData = {
         projectName,
         bpm: projectBPM,
-        channels: channelCount,
+        channels: channelURLs.length,
         channelURLs,
         trimTimes: globalTrimTimes,
         stats: {
@@ -191,7 +187,7 @@ function processSteps(steps) {
             .filter(([, stepArray]) => Array.isArray(stepArray) && stepArray.length)
             .map(([channelName, stepArray]) => [
                 channelName,
-                stepArray.map(step => ({ step, timing: parseFloat((step * (60 / bpm)).toFixed(3)) }))
+                stepArray.map(step => ({ step, timing: Number(step * (60 / bpm)).toFixed(3) }))
             ])
     );
 }

@@ -1,6 +1,6 @@
 // loader.js
 
-// Function to dynamically load scripts in order
+// Function to dynamically load scripts sequentially
 function loadScriptsSequentially(scripts, index = 0, callback) {
     if (index < scripts.length) {
         const script = document.createElement('script');
@@ -40,15 +40,26 @@ function ensureAudioContextState() {
     });
 }
 
-// Initialize the application
+// Function to initialize the application
 function initializeApp() {
+    window.cci2 = 0;
+    window.initialCCI2 = 0;
     resetAllStates();
     loadJsonFromUrl(window.jsonDataUrl);
     initializeWorker();
 }
 
-// Load settings and then scripts
-fetch('testSongFiles/SP1.json')
+// Set up the body style for the canvas
+document.body.style.cssText = `
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+`;
+
+// Fetch settings and then load scripts
+fetch(window.jsonDataUrl)
     .then(response => response.json())
     .then(data => {
         window.settings = data; // Assign to global variable
