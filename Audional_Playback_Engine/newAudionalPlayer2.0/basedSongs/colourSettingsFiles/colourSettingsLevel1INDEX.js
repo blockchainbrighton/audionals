@@ -21,15 +21,11 @@ initializeHexCache(colorPalette);
 
 // Retrieve hex color from index
 function getHexFromIndex(index, palette) {
-    // Use the provided palette if available
-    if (palette) {
-        const hex = hexCache[index];
-        if (hex) {
-            return hex;
-        }
-        throw new Error(`Color with index ${index} not found in provided palette.`);
+    const hex = hexCache[index];
+    if (hex) {
+        return hex;
     }
-    throw new Error(`Color with index ${index} not found in cache.`);
+    throw new Error(`Color with index ${index} not found in provided palette.`);
 }
 
 // Function to get conditional color using cached indices
@@ -91,6 +87,52 @@ function getDynamicRgbWithIndex(x1, y1, x2, y2, colorIndex, palette) {
     return `rgba(${r}, ${g}, ${b}, ${Math.min(distance, 1)})`; // Ensure alpha does not exceed 1
 }
 
+
+
+const fallbackColors = ["#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF"];
+const modulatorNumbers = [1, 10, 100, 250, 500, 1000, 2000, 3000, 4000, 5000, 10000, 25000, 50000];
+
+// Function to initialize and cache the fallback color and modulator
+const initializeSelections = (function() {
+    let selections = null; // Cached selections
+
+    return function() {
+        if (selections === null) { // Execute only once
+            // Convert seed to BigInt for handling large numbers
+            const seed = BigInt(window.seed);
+            if (typeof seed !== 'bigint' || seed < 0n) {
+                throw new Error("[Seed] Seed must be a valid positive BigInt.");
+            }
+
+            const fallbackIndex = Number(seed % BigInt(fallbackColors.length));
+            const modulatorIndex = Number(seed % BigInt(modulatorNumbers.length));
+
+            const fallbackColor = fallbackColors[fallbackIndex];
+            const modulator = modulatorNumbers[modulatorIndex];
+
+            // Log the seed and selected values once
+            console.log(`[Seed] Seed value: ${seed}`);
+            console.log(`[Seed] Calculated fallback index: ${fallbackIndex}`);
+            console.log(`[Seed] Selected fallback color using seed: ${fallbackColor}`);
+            console.log(`[Seed] Calculated modulator index: ${modulatorIndex}`);
+            console.log(`[Seed] Selected modulator value: ${modulator}`);
+
+            selections = { fallbackColor, modulator };
+        }
+        return selections;
+    };
+})();
+
+// Function to get the fallback color
+function getFallbackColor() {
+    return initializeSelections().fallbackColor;
+}
+
+// Function to get the modulator
+function getModulatorByIndex() {
+    return initializeSelections().modulator;
+}
+
 function getColorSettings(colorSetting) {
     const settings = {
         peach: { rFactor: 1, gFactor: 2, bFactor: 3 },
@@ -101,33 +143,15 @@ function getColorSettings(colorSetting) {
     return settings[colorSetting] || settings.default;
 }
 
-const fallbackColors = ["#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF"];
+// Usage:
+// Initialize seed with a specific value or use a random value
+// or
+// window.seed = Math.floor(Math.random() * 100000); // For random seed testing
 
-// Function to initialize and cache the fallback color
-const getFallbackColor = (function() {
-    let fallbackColor = null; // Cached fallback color
-
-    return function() {
-        if (fallbackColor === null) { // Execute only once
-            const fallbackIndex = window.seed % fallbackColors.length; // Determine fallback index using seed
-            // Log the seed
-            console.log(`Seed value: ${window.seed}`);
-            fallbackColor = fallbackColors[fallbackIndex];
-            console.log(`Selected fallback color using seed: ${fallbackColor}`); // Log the selected color
-            getModulatorByIndex(); // Log the modulator number
-        }
-        return fallbackColor;
-    };
-})();
-
-const modulatorNumbers = [100, 1000, 2000, 3000, 4000, 5000, 10000, 100000];
-
-function getModulatorByIndex(index) {
-    console.log(`Modulator index: ${index}`);
-    const m = window.seed % modulatorNumbers.length; // Determine fallback index using seed
-
-    return modulatorNumbers[index % modulatorNumbers.length]; // Ensure index wraps around
-}
+const fallbackColor = getFallbackColor();
+const modulator = getModulatorByIndex();
+console.log(`[Seed] Final fallback color: ${fallbackColor}`);
+console.log(`[Seed] Final modulator value: ${modulator}`);
 
 
 function dynamicRgb(randomValue, baseZ, factor, colorSetting) {
@@ -178,24 +202,24 @@ function getConditionalColor(x, y, divisor, trueColor, falseColor) {
   
 
     
-    
+      // Use a complete range of color indexes from 1 to 23
+      const colorIndexes = Array.from({ length: 23 }, (_, i) => i + 1);
 
   
       // Return dynamic color settings
       return [
 
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
    
 
             // (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
             // `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
             // "#FF0000",
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 
-        ...Array.from({ length: 22 }, (_, i) => dynamicRgb(randomValues[i % randomValues.length], l2zR, i + 5000)),
   
         // 4 stripe close scatters
         ...Array.from({ length: 5 }, (_, i) =>

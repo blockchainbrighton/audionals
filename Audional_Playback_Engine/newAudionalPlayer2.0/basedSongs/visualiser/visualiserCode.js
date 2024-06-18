@@ -58,10 +58,21 @@ function calculateCCI2(channelIndex, arrayLength) {
     return Math.min(Math.max(scaledValue, 0), arrayLength - 1);
 }
 
-function generateAccessLevel(seed) {
-    const randomValue = randomWithSeed(seed);
-    return Math.floor(randomValue * 3) + 1;
-}
+// Function to generate and cache the access level
+const generateAccessLevel = (function() {
+    let accessLevel = null; // Cached access level
+
+    return function(seed) {
+        if (accessLevel === null) { // Execute only once
+            const randomValue = randomWithSeed(seed);
+            accessLevel = Math.floor(randomValue * 3) + 1;
+
+            // Log the access level once
+            console.log(`[Seed] Generated access level: ${accessLevel}`);
+        }
+        return accessLevel;
+    };
+})();
 
 function selectArrayIndex(seed, AccessLevel, channelIndex) {
     const randomValue = randomWithSeed(seed + channelIndex * 100);
