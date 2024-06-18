@@ -2,15 +2,7 @@
     let titleSequenceTimeouts = []; // Store timeouts to clear later
     let animationPlaying = false; // Flag to prevent multiple animations
 
-    document.addEventListener('customTitleDisplay', (event) => {
-        console.log("[titleDisplay] Custom title display event received:", event.detail);
-        showTitleSequence(); // You may want to modify this to show specific parts based on event details
-    });
-
-    document.addEventListener('singleTitleDisplay', (event) => {
-        console.log("[titleDisplay] Single title display event received:", event.detail);
-        showSingleTitleElement(event.detail);
-    });
+   
 
     // Utility function to create and append elements
     function createElement(id, text, container) {
@@ -144,6 +136,18 @@
             clearAnimations(); // Clear animations when playback stops
             animationPlaying = false;
         });
+        document.addEventListener('customTitleDisplay', (event) => {
+            console.log("[titleDisplay] Custom title display event received:", event.detail);
+            showTitleSequence(); // You may want to modify this to show specific parts based on event details
+        });
+    
+        // Consolidated listener for single title element display
+        document.addEventListener('singleTitleDisplay', (event) => {
+            const elementName = event.detail;
+            console.log(`[titleDisplay] Single title display event received for: ${elementName}`);
+            showSingleTitleElement(elementName);
+        });
+
     }
 
     // Function to wait for settings and titleConfig to load

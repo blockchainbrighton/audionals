@@ -144,25 +144,6 @@ function getColors2(o, a, l) {
            getConditionalColorWithIndex(x0, y0, 15, 4, 13, window.colorPalette), // Green -> 4, DimGray -> 13
            getConditionalColorWithIndex(x0, y0, 15, 5, 13, window.colorPalette), // Orange -> 5, DimGray -> 13
 
-        //    getConditionalColorWithIndex(x1, y0, 8, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
-        //    getConditionalColorWithIndex(x2, y0, 9, 15, 1, window.colorPalette), // Red -> 15, Black -> 1
-        //    getConditionalColorWithIndex(x3, y0, 10, 21, 1, window.colorPalette), // White -> 21, Black -> 1
-        //    getConditionalColorWithIndex(x1, y0, 11, 2, 1, window.colorPalette), // Purple -> 2, Black -> 1
-        //    getConditionalColorWithIndex(x2, y0, 12, 10, 1, window.colorPalette), // VeryDarkBlue -> 10, Black -> 1
-        //    getConditionalColorWithIndex(x3, y0, 13, 21, 1, window.colorPalette), // White -> 21, Black -> 1
-        //    getConditionalColorWithIndex(x2, y0, 15, 15, 1, window.colorPalette), // Red -> 15, Black -> 1
-        //    getConditionalColorWithIndex(x3, y0, 16, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
-        //    getConditionalColorWithIndex(x1, y0, 17, 21, 1, window.colorPalette), // White -> 21, Black -> 1
-        //    getConditionalColorWithIndex(x2, y0, 16, 13, 1, window.colorPalette), // DimGray -> 13, Black -> 1
-        //    getConditionalColorWithIndex(x3, y0, 15, 13, 1, window.colorPalette), // DimGray -> 13, Black -> 1
-        //    getConditionalColorWithIndex(x1, y0, 14, 13, 1, window.colorPalette), // DimGray -> 13, Black -> 1
-        //    getConditionalColorWithIndex(x2, y0, 13, 13, 1, window.colorPalette), // DimGray -> 13, Black -> 1
-        //    getConditionalColorWithIndex(x3, y0, 12, 15, 1, window.colorPalette), // Red -> 15, Black -> 1
-        //    getConditionalColorWithIndex(x1, y0, 11, 10, 1, window.colorPalette), // VeryDarkBlue -> 10, Black -> 1
-        //    getConditionalColorWithIndex(x2, y0, 10, 4, 1, window.colorPalette), // Green -> 4, Black -> 1
-        //    getConditionalColorWithIndex(x3, y0, 9, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
-
-
             // IGUANA EYES
 
             getDynamicRgbWithIndex(x2, y2, x2, y0, 8, window.colorPalette),  // Very dark orange -> index 8
@@ -171,64 +152,7 @@ function getColors2(o, a, l) {
             getDynamicRgbWithIndex(x2, y2, x2, y0, 10, window.colorPalette), // Very dark blue -> index 10
             getDynamicRgbWithIndex(x2, y2, x2, y0, 11, window.colorPalette), // Dark red -> index 11
 
-
-            // getDynamicRgb(x2, y2, x2, y0, 255, 87, 51),   // Coral
-            // getDynamicRgb(x2, y2, x2, y0, 255, 127, 80),  // Coral2
-            // getDynamicRgb(x2, y2, x2, y0, 0, 255, 0),     // Lime
-            // getDynamicRgb(x2, y2, x2, y0, 0, 255, 255),   // Cyan
-            // getDynamicRgb(x2, y2, x2, y0, 32, 178, 170),  // Lightseagreen
-
-
-            // getDynamicRgb(x2, y2, x2, y0, 255, 0, 255),   // Magenta
-            // getDynamicRgb(x2, y2, x2, y0, 0, 255, 0),     // Lime (repeated)
-            // getDynamicRgb(x2, y2, x2, y0, 0, 128, 128),   // Teal
-            // getDynamicRgb(x2, y2, x2, y0, 128, 0, 0),     // Maroon
-            // getDynamicRgb(x2, y2, x2, y0, 0, 0, 128),     // Navy
-            // // getDynamicRgb(x2, y2, x2, y0, 128, 128, 0),   // Olive
-            // getDynamicRgb(x2, y2, x2, y0, 75, 0, 130),    // Indigo
-
-            // LIQUID GRAVITY 
-        //    // TOP LEFT CORNER
-        //    getConditionalColorWithIndex(x0, y0, 444, 11, 10, window.colorPalette), // Very dark red -> index 11, Very dark blue -> index 10
-        //    getConditionalColorWithIndex(x0, y0, 444, 11, 9, window.colorPalette),  // Very dark red -> index 11, Very dark green -> index 9
-        //    getConditionalColorWithIndex(x0, y0, 444, 11, 14, window.colorPalette), // Very dark red -> index 11, Dark orange -> index 14
-        //    getConditionalColorWithIndex(x0, y0, 444, 11, 21, window.colorPalette), // Very dark red -> index 11, White -> index 21
-        //    getConditionalColorWithIndex(x0, y0, 444, 11, 1, window.colorPalette),  // Very dark red -> index 11, Black -> index 1
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 11, window.colorPalette), // Very dark blue -> index 10, Very dark red -> index 11
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 9, window.colorPalette),  // Very dark blue -> index 10, Very dark green -> index 9
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 14, window.colorPalette), // Very dark blue -> index 10, Dark orange -> index 14
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 21, window.colorPalette), // Very dark blue -> index 10, White -> index 21
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 1, window.colorPalette),  // Very dark blue -> index 10, Black -> index 1
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 10, window.colorPalette), // Very dark blue -> index 10, Very dark blue -> index 10
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 11, window.colorPalette), // Very dark blue -> index 10, Very dark red -> index 11
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 5, window.colorPalette),  // Very dark blue -> index 10, Orange -> index 5
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 21, window.colorPalette), // Very dark blue -> index 10, White -> index 21
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 1, window.colorPalette),  // Very dark blue -> index 10, Black -> index 1
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 15, window.colorPalette), // Very dark blue -> index 10, Red -> index 15
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 4, window.colorPalette),  // Very dark blue -> index 10, Green -> index 4
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 10, window.colorPalette), // Very dark blue -> index 10, Very dark blue -> index 10
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 21, window.colorPalette), // Very dark blue -> index 10, White -> index 21
-        //    getConditionalColorWithIndex(x0, y0, 444, 10, 1, window.colorPalette),  // Very dark blue -> index 10, Black -> index 1
-
-        //    getConditionalColorWithIndex(x2, y0, 600, 4, 1, window.colorPalette),  // Green -> index 4, Black -> index 1
-        //    getConditionalColorWithIndex(x2, y0, 600, 10, 1, window.colorPalette), // Very dark blue -> index 10, Black -> index 1
-        //    getConditionalColorWithIndex(x2, y0, 600, 15, 1, window.colorPalette), // Red -> index 15, Black -> index 1
-
-        //    getConditionalColorWithIndex(x2, y0, -300, 5, 1, window.colorPalette), // Orange -> index 5, Black -> index 1
-        //    getConditionalColorWithIndex(x2, y0, -300, 4, 1, window.colorPalette), // Green -> index 4, Black -> index 1
-        //    getConditionalColorWithIndex(x2, y0, -300, 10, 1, window.colorPalette), // Very dark blue -> index 10, Black -> index 1
-        //    getConditionalColorWithIndex(x2, y0, -300, 15, 1, window.colorPalette), // Red -> index 15, Black -> index 1
-
-        //    getConditionalColorWithIndex(x1, y0, -100, 5, 1, window.colorPalette),  // Orange -> index 5, Black -> index 1
-        //    getConditionalColorWithIndex(x1, y0, -100, 4, 1, window.colorPalette),  // Green -> index 4, Black -> index 1
-        //    getConditionalColorWithIndex(x1, y0, -100, 10, 1, window.colorPalette), // Very dark blue -> index 10, Black -> index 1
-        //    getConditionalColorWithIndex(x1, y0, -100, 15, 1, window.colorPalette), // Red -> index 15, Black -> index 1
-
-        //    getConditionalColorWithIndex(x3, y0, 100, 5, 1, window.colorPalette),  // Orange -> index 5, Black -> index 1
-        //    getConditionalColorWithIndex(x3, y0, 100, 4, 1, window.colorPalette),  // Green -> index 4, Black -> index 1
-        //    getConditionalColorWithIndex(x3, y0, 100, 10, 1, window.colorPalette), // Very dark blue -> index 10, Black -> index 1
-        //    getConditionalColorWithIndex(x3, y0, 100, 15, 1, window.colorPalette), // Red -> index 15, Black -> index 1
-
+        
            ];
 
     }

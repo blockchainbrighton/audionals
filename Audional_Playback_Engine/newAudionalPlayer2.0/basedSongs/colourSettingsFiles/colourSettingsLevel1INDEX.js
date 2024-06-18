@@ -5,6 +5,8 @@ console.log("Colour settings level 1 loaded");
 const hexCache = {};
 const colorNameCache = {};
 const hslCache = {};
+const rgbCache = {};
+
 
 function initializeHexCache(palette) {
     for (const category in palette) {
@@ -16,13 +18,13 @@ function initializeHexCache(palette) {
 
 initializeHexCache(colorPalette);
 
-function getHexFromIndex(index) {
-    const hex = hexCache[index];
-    if (hex) {
-        return hex;
-    }
-    throw new Error(`Color with index ${index} not found in palette.`);
-}
+// function getHexFromIndex(index) {
+//     const hex = hexCache[index];
+//     if (hex) {
+//         return hex;
+//     }
+//     throw new Error(`Color with index ${index} not found in palette.`);
+// }
 
 // Function to get conditional color using cached indices
 function getConditionalColorWithIndex(x, y, divisor, trueColorIndex, falseColorIndex, palette) {
@@ -71,9 +73,7 @@ function getHslColor(a, factor) {
     return hsl;
 }
 
-// Cache for RGB values
-const rgbCache = {};
-
+// Convert hex to RGB with caching
 // Convert hex to RGB with caching
 function hexToRgb(hex) {
     if (rgbCache[hex]) {
@@ -84,6 +84,7 @@ function hexToRgb(hex) {
     if (hex.length === 3) {
         hex = hex.split("").map(c => c + c).join("");
     }
+
     const bigint = parseInt(hex, 16);
     const rgb = {
         r: (bigint >> 16) & 255,
@@ -94,12 +95,25 @@ function hexToRgb(hex) {
     return rgb;
 }
 
+// Retrieve hex color from index
+function getHexFromIndex(index, palette) {
+    // Use the provided palette if available
+    if (palette) {
+        const hex = hexCache[index];
+        if (hex) {
+            return hex;
+        }
+        throw new Error(`Color with index ${index} not found in provided palette.`);
+    }
+    throw new Error(`Color with index ${index} not found in cache.`);
+}
+
 // Function to get dynamic RGB color using cached indices
 function getDynamicRgbWithIndex(x1, y1, x2, y2, colorIndex, palette) {
     const hex = getHexFromIndex(colorIndex, palette);
     const { r, g, b } = hexToRgb(hex);
     const distance = Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2)) / 50;
-    return `rgba(${r}, ${g}, ${b}, ${distance})`;
+    return `rgba(${r}, ${g}, ${b}, ${Math.min(distance, 1)})`; // Ensure alpha does not exceed 1
 }
 
 // Function to get dynamic RGB color
@@ -160,6 +174,20 @@ function getColors1(o, a, l) {
             getConditionalColorWithIndex(l[1].x, l[1].y, 3, 1, 1, colorPalette),  // "blue" -> index 1
             getConditionalColorWithIndex(l[1].x, l[1].y, 3, 5, 1, colorPalette),  // "orange" -> index 5
             getConditionalColorWithIndex(l[1].x, l[1].y, 3, 4, 1, colorPalette),  // "green" -> index 4
+
+                // 4 stripe close scatters
+                getConditionalColorWithIndex(l[0].x, l[0].y, 10, 15, 1, colorPalette), // "red" -> index 15
+                getConditionalColorWithIndex(l[0].x, l[0].y, 10, 18, 1, colorPalette), // "white" -> index 18
+                getConditionalColorWithIndex(l[0].x, l[0].y, 10, 1, 1, colorPalette),  // "blue" -> index 1
+                getConditionalColorWithIndex(l[0].x, l[0].y, 10, 5, 1, colorPalette),  // "orange" -> index 5
+                getConditionalColorWithIndex(l[0].x, l[0].y, 10, 4, 1, colorPalette),  // "green" -> index 4
+    
+                // 4 stripe Wide Scatters
+                getConditionalColorWithIndex(l[1].x, l[0].y, 1.77, 15, 1, colorPalette), // "red" -> index 15
+                getConditionalColorWithIndex(l[1].x, l[0].y, 1.77, 18, 1, colorPalette), // "white" -> index 18
+                getConditionalColorWithIndex(l[1].x, l[0].y, 1.77, 1, 1, colorPalette),  // "blue" -> index 1
+                getConditionalColorWithIndex(l[1].x, l[0].y, 1.77, 5, 1, colorPalette),  // "orange" -> index 5
+                getConditionalColorWithIndex(l[1].x, l[0].y, 1.77, 4, 1, colorPalette),  // "green" -> index 4
 
             // Dramatic Colors
             getConditionalColorWithIndex(l[1].x, l[1].y, 3, 3, 1, colorPalette),  // "magenta" -> index 3
@@ -307,9 +335,6 @@ function getColors1(o, a, l) {
             getConditionalColorWithIndex(l[1].x, l[0].y, 10, 19, 1, colorPalette), // "white" -> index 19
             getConditionalColorWithIndex(l[1].x, l[0].y, 10, 6, 1, colorPalette),  // "orange" -> index 6
             getConditionalColorWithIndex(l[1].x, l[0].y, 10, 2, 1, colorPalette)   // "blue" -> index 2
-
-
-
   
                    ];
 

@@ -9,12 +9,12 @@ window.scriptsToLoad = [
     // TITLES / CREDITS SCRIPTS (OPTIONAL)
     'visualiser/titleDisplays.js',
 
-    'fileAndAudioHandling.js',
+    'fileAndAudioHandling_minified.js',
     'colourSettingsFiles/colourPaletteINDEX_minified.js',
     'colourSettingsFiles/colourSettingsLevel1INDEX_minified.js',
     'colourSettingsFiles/colourSettingsLevel2INDEX_minified.js',
     'colourSettingsFiles/colourSettingsLevel3INDEX_minified.js',
-    'visualiser/visualiserCode.js',
+    'visualiser/visualiserCode_minified.js',
 
 ];
 

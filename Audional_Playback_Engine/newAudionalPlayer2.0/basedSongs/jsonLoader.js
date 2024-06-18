@@ -1,6 +1,6 @@
 // jsonLoader.js
 
-let globalVolumeMultiplier = 0.8;  // Default to no change
+let globalVolumeMultiplier = 1;  // Default to no change
 let globalJsonData = null;
 let bpm = 0;
 
@@ -196,9 +196,8 @@ function preprocessAndSchedulePlayback(playbackData) {
     isReadyToPlay = Object.values(preprocessedSequences).some(sequence => {
         return Object.keys(sequence.normalSteps).length > 0 || Object.keys(sequence.reverseSteps).length > 0;
     });
-
-    // console.log("Preprocessed sequences (including reverse steps):", preprocessedSequences);
 }
+
 
 function processSteps(steps) {
     return Object.fromEntries(
@@ -212,7 +211,6 @@ function processSteps(steps) {
 }
 
 function logVolumeSettings() {
-    // console.log("Volume Settings:");
     for (const [channel, volume] of Object.entries(globalVolumeLevels)) {
         // console.log(`[logVolumeSettings] ${channel}: Volume level set to ${volume}`);
     }

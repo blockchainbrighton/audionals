@@ -132,33 +132,6 @@ function createReversedBuffer(buffer) {
     return reversedBuffer;
 }
 
-function clampVolume(volume) {
-    return Math.max(0.0, Math.min(volume, 3.0));
-}
-
-function parseVolumeLevel(level) {
-    const defaultVolume = 1.0;
-    let volume = defaultVolume;
-
-    if (typeof level === 'number') {
-        volume = level;
-    } else if (typeof level === 'string') {
-        volume = parseFloat(level);
-    }
-
-    if (isNaN(volume)) {
-        volume = defaultVolume;
-    }
-
-    const clampedVolume = clampVolume(volume);
-
-    // console.log(`[parseVolumeLevel] Input level: ${level}, Parsed volume: ${volume}, Clamped volume: ${clampedVolume}`);
-
-    return clampedVolume;
-}
-
-
-
 function base64ToArrayBuffer(base64) {
     try {
         const binaryString = window.atob(base64);

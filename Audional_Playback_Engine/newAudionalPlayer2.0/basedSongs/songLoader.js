@@ -21,7 +21,7 @@ window.titleConfig = {
         byDuration: 4000,
         artistNameDuration: 12000,
         visualArtistDuration: 4000,
-        visualArtistNameDuration: 23000
+        visualArtistNameDuration: 22000
     },
     colors: {
         projectNameColor: "#ff0000", // Red
