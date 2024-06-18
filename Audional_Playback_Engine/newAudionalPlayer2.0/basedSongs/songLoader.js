@@ -7,7 +7,7 @@ document.title = "OB1 Song 1 by melophonic : Visuals by SQYZY";
 
 // *** THIS IS THE URL TO THE AUDX SONGFILE ***
 // Store JSON data URL in a global variable ()
-window.jsonDataUrl = "testSongFiles/SP1.json";
+window.jsonDataUrl = "testSongFiles/TRUTH.json";
 
 
 // Set the title configuration (OPTIONAL)

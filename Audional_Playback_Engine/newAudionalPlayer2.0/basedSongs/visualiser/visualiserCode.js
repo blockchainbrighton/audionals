@@ -235,6 +235,8 @@ const cx = cv.getContext("2d");
 cv.width = S;
 cv.height = S;
 
+
+
 // Worker script with batch processing
 const workerScript = `
 self.onmessage = function(e) {
@@ -272,6 +274,8 @@ function getConditionalColor(x, y, divisor, trueColor, falseColor) {
 const blob = new Blob([workerScript], { type: "application/javascript" });
 const workerScriptURL = URL.createObjectURL(blob);
 const rainbowWorker = new Worker(workerScriptURL);
+URL.revokeObjectURL(workerScriptURL); // Add this line
+
 
 function sendRainbowRequest(id, vertices, angle, palette) {
     rainbowWorker.postMessage({
@@ -289,6 +293,36 @@ rainbowWorker.onmessage = function(e) {
 };
 
 class Cy{constructor(t,e,s,i){this.c=t,this.r=e,this.h=s,this.s=i,this.gV(),this.gF()}updateVertices(t){this.v=t}gV(){this.v=[];for(let t=0;t<=this.s;t++){let e=this.c.y-this.h/2+t/this.s*this.h;for(let s=0;s<=this.s;s++){let i=s/this.s*2*Math.PI,c=this.c.x+this.r*Math.cos(i),a=this.c.z+this.r*Math.sin(i);this.v.push({x:c,y:e,z:a})}}}gF(){this.f=[];for(let t=0;t<this.s;t++)for(let e=0;e<this.s;e++){let s=t*(this.s+1)+e,i=s+1,c=s+this.s+1,a=c+1;this.f.push([s,i,c]),this.f.push([i,a,c])}}rP(t,e){sendRotationRequest(this.id,this.v,t,e)}}class Sp{constructor(t,e,s){this.c=t,this.r=e,this.s=s,this.gV(),this.gF()}updateVertices(t){this.v=t}gV(){this.v=[];for(let t=0;t<=this.s;t++){let e=t/this.s*Math.PI;for(let s=0;s<=this.s;s++){let i=s/this.s*2*Math.PI,c=this.c.x+this.r*Math.sin(e)*Math.cos(i),a=this.c.y+this.r*Math.sin(e)*Math.sin(i),o=this.c.z+this.r*Math.cos(e);this.v.push({x:c,y:a,z:o})}}}gF(){this.f=[];for(let t=0;t<this.s;t++)for(let e=0;e<this.s;e++){let s=t*(this.s+1)+e,i=s+1,c=s+this.s+1,a=c+1;this.f.push([s,i,c]),this.f.push([i,a,c])}}rP(t,e){sendRotationRequest(this.id,this.v,t,e)}}
+
+function sendRotationRequest(id, vertices, pivot, angle) {
+    rotationWorker.postMessage({ id, vertices, pivot, angle });
+}
+
+// Define the worker for handling rotations
+const rotationWorkerScript = `
+self.onmessage = function(e) {
+    const { id, vertices, pivot, angle } = e.data;
+    const updatedVertices = vertices.map(v => {
+        let x = v.x - pivot.x,
+            y = v.y - pivot.y,
+            x1 = x * Math.cos(angle) - y * Math.sin(angle),
+            y1 = x * Math.sin(angle) + y * Math.cos(angle);
+        return { x: x1 + pivot.x, y: y1 + pivot.y, z: v.z };
+    });
+    postMessage({ id, updatedVertices });
+};
+`;
+
+const rotationBlob = new Blob([rotationWorkerScript], { type: "application/javascript" });
+const rotationWorkerScriptURL = URL.createObjectURL(rotationBlob);
+const rotationWorker = new Worker(rotationWorkerScriptURL);
+
+rotationWorker.onmessage = function(e) {
+    const { id, updatedVertices } = e.data;
+    // Update the corresponding object with the new vertices
+    if (id === "cy") cp.cy.updateVertices(updatedVertices);
+    else if (id.startsWith("sp")) cp[id].updateVertices(updatedVertices);
+};
 
 class Cp {
     constructor(t, e, s, i) {

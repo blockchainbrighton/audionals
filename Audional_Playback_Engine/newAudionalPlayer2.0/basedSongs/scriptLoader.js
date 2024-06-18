@@ -2,19 +2,19 @@
 
 // Define the scripts to be loaded
 window.scriptsToLoad = [
-    'audioContextManager.js',
+    'audioContextManager_minified.js',
     'jsonLoader_minified.js',
-    'audioProcessing.js',
+    'audioProcessing_minified.js',
 
     // TITLES / CREDITS SCRIPTS (OPTIONAL)
     'visualiser/titleDisplays.js',
 
-    'fileAndAudioHandling.js',
+    'fileAndAudioHandling_minified.js',
     'colourSettingsFiles/colourPaletteINDEX_minified.js',
-    'colourSettingsFiles/colourSettingsLevel1INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel2INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel3INDEX.js',
-    'visualiser/visualiserCode_minified.js',
+    'colourSettingsFiles/colourSettingsLevel1INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel2INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel3INDEX_minified.js',
+    'visualiser/visualiserCode.js',
 
 ];
 
