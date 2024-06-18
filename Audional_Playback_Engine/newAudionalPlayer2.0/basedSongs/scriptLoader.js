@@ -5,20 +5,20 @@ window.scriptsToLoad = [
     'audioContextManager_minified.js',
     'jsonLoader_minified.js',
     'audioProcessing_minified.js',
+    'fileAndAudioHandling_minified.js',
 
     // TITLES / CREDITS SCRIPTS (OPTIONAL)
-    'visualiser/titleDisplays.js',
+    'visualiser/titleDisplays_minified.js',
 
-    'fileAndAudioHandling_minified.js',
-    'colourSettingsFiles/colourPaletteINDEX.js',
-    'colourSettingsFiles/colourSettingsLevel1INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel2INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel3INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel4INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel5INDEX.js',
-    'colourSettingsFiles/colorWorker.js',
-    'colourSettingsFiles/colourSettingsLevel6INDEX.js',
-    'visualiser/visualiserCode.js',
+
+    'colourSettingsFiles/colourPaletteINDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel1INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel2INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel3INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel4INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel5INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel6INDEX_minified.js',
+    'visualiser/visualiserCode_minified.js',
 
 ];
 
