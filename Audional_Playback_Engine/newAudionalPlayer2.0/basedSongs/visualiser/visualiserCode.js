@@ -288,6 +288,56 @@ rainbowWorker.onmessage = function(e) {
     updateScatterColors(id, updatedColors);
 };
 
+const visualizerWorkerScript = `
+self.onmessage = function(e) {
+    const { type, id, data } = e.data;
+
+    switch (type) {
+        case 'COLOR_SETTINGS':
+            const { vertices, primaryAndSecondaryColors, factors, randomValues } = data;
+            const colorsArray = Array.from({ length: 5 }, () => {
+                return primaryAndSecondaryColors[Math.floor(Math.random() * primaryAndSecondaryColors.length)].hex;
+            });
+
+            const updatedColors = vertices.map((v, index) => {
+                return {
+                    index,
+                    colors: [
+                        getConditionalColor(v.x, v.y, 0.1, colorsArray[0], "black"),
+                        getConditionalColor(v.x, v.y, 0.2, colorsArray[1], "black"),
+                        getConditionalColor(v.x, v.y, 0.3, colorsArray[2], "black"),
+                        getConditionalColor(v.x, v.y, 0.5, colorsArray[3], "black"),
+                        getConditionalColor(v.x, v.y, 0.05, colorsArray[4], "black")
+                    ]
+                };
+            });
+
+            postMessage({ type, id, updatedColors });
+            break;
+
+        case 'DYNAMIC_RGB':
+            const { randomValue, baseZ, factor } = data;
+            const colorValue = Math.floor(randomValue * ((baseZ + 255) / (factor * 100) * 255));
+            const rgbColor = colorValue > 0.01 ? \`rgb(\${colorValue}, \${colorValue}, \${colorValue})\` : "#FF0000";
+            postMessage({ type, id, rgbColor });
+            break;
+
+        default:
+            console.error('Unknown message type:', type);
+            break;
+    }
+};
+
+function getConditionalColor(x, y, divisor, trueColor, falseColor) {
+    return ((x / divisor | 0) + (y / divisor | 0)) % 111 === 0 ? trueColor : falseColor;
+}
+`;
+
+const visualizerBlob = new Blob([visualizerWorkerScript], { type: "application/javascript" });
+const visualizerWorkerURL = URL.createObjectURL(visualizerBlob);
+const visualizerWorker = new Worker(visualizerWorkerURL);
+URL.revokeObjectURL(visualizerWorkerURL);
+
 // Worker script for handling rotations
 const rotationWorkerScript = `
 self.onmessage = function(e) {

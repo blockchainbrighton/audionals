@@ -1,172 +1,91 @@
 // colourSettingsLevel2.js
+
 console.log("Colour settings level 2 loaded");
 
 {
   const R = 100; // Set a default or required value for R in this context
-  
 
-// Main function to get colors
-function getColors2(o, a, l) {
+  // Main function to get colors
+  function getColors2(o, a, l) {
     const v = l; // Alias for clarity, where l represents vertices
 
+    // Cache values of x, y, z for reuse
+    const { x: x0, y: y0, z: z0 } = l[0];
+    const { x: x1, y: y1 } = l[1];
+    const { x: x2, y: y2 } = l[2];
 
-    const x = l[0].x;
-    const y = l[0].y;
+    // Precompute shifted x values
+    const x1Shifted = x1 - 1500;
+    const x2Shifted = x2 - 1500;
+    const x3Shifted = x1 - 555;
 
+    // Pre-generate random values for reuse
+    const randomValues = Array.from({ length: 24 }, () => Math.random());
 
+    // Precompute commonly used values
+    const now = Date.now();
+    const sinNow = Math.sin(now);
+    const sinNowDiv1000 = Math.sin(now / 1000);
+    const sinNowDiv2000 = Math.sin(now / 2000);
+    const sinNowDiv10 = Math.sin(now / 10);
+    const sinNowDiv5000 = Math.sin(now / 5000);
+    const sinNowDiv100 = Math.sin(now / 100);
+    const sinNowDivMinus17 = Math.sin(now / -17);
 
-    const y2 = l[2].y;
-    const x0 = l[0].x;
-    const y0 = l[0].y;
-    const x1 = l[1].x - 1500;
-    const x2 = l[2].x - 1500;
-    const x3 = l[1].x - 555;
+    // Precompute dynamic RGB colors
+    const dynamicRgbColors = [
+      getDynamicRgbWithIndex(x2, y2, x2, y0, 8, window.colorPalette),  // Very dark orange -> index 8
+      getDynamicRgbWithIndex(x2, y2, x2, y0, 9, window.colorPalette),  // Very dark green -> index 9
+      getDynamicRgbWithIndex(x2, y2, x2, y0, 14, window.colorPalette), // Darkorange -> index 14
+      getDynamicRgbWithIndex(x2, y2, x2, y0, 10, window.colorPalette), // Very dark blue -> index 10
+      getDynamicRgbWithIndex(x2, y2, x2, y0, 11, window.colorPalette)  // Dark red -> index 11
+    ];
 
-
+    // Return enhanced array of color variations
     return [
+      // FULL SHAPE COLOUR (50/50)
+      ...[280, 111, 120, 111, 95, 111, 111, 111].map((divisor, i) =>
+        getConditionalColorWithIndex(x0, y0, divisor, [4, 21, 10, 15, 10, 4, 9, 5][i], [14, 15, 10, 14, 10, 21, 13, 13][i], window.colorPalette)
+      ),
 
-           
-    
-            // FULL SHAPE COLOUR (50/50)
-            // sinValue < 0.5 ? "red" : "blue", // Full Shape Colour
-            // Math.abs(Math.sin(a / 3000)) < 0.5 ? "red" : "blue", // Full Shape Colour
+      // MIDDLE LINE CRAWLER TOP LEFT
+      ...Array.from({ length: 16 }, (_, i) =>
+        getConditionalColorWithIndex(x3Shifted, y0, 100, [15, 15, 15, 15, 10, 10, 10, 10, 4, 4, 1, 2, 1, 5, 2, 1][i], [13, 13, 13, 21, 15, 13, 5, 21, 10, 15, 15, 5, 21, 15, 13, 10][i], window.colorPalette)
+      ),
 
-            // getConditionalColor(x, y, 280, "green", "darkorange"), 
-            // getConditionalColor(x, y, 111, "white", "red"), 
-            // getConditionalColor(x, y, 120, "blue", "blue"), 
-            // getConditionalColor(x, y, 111, "red", "darkorange"), 
-            // getConditionalColor(x, y, 95, "blue", "blue"),
-            // getConditionalColor(x, y, 111, "green", "white"),
-            // getConditionalColor(x, y, 111, "darkgreen", "grey"),
-            // getConditionalColor(x, y, 111, "lightorange", "darkgrey"),
+      // MIDDLE LINE CRAWLER BOTTOM RIGHT
+      ...Array.from({ length: 16 }, (_, i) =>
+        getConditionalColorWithIndex(x1Shifted, y0, -100, [15, 15, 15, 15, 10, 10, 10, 10, 4, 4, 4, 4, 5, 5, 5, 5][i], [10, 13, 5, 21, 15, 2, 5, 21, 10, 15, 5, 21, 15, 12, 10, 21][i], window.colorPalette)
+      ),
 
-           // Updated conditional color settings
-           getConditionalColorWithIndex(x, y, 280, 4, 14, window.colorPalette), // Green -> 4, DarkOrange -> 14
-           getConditionalColorWithIndex(x, y, 111, 21, 15, window.colorPalette), // White -> 21, Red -> 15
-           getConditionalColorWithIndex(x, y, 120, 10, 10, window.colorPalette), // VeryDarkBlue -> 10, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x, y, 111, 15, 14, window.colorPalette), // Red -> 15, DarkOrange -> 14
-           getConditionalColorWithIndex(x, y, 95, 10, 10, window.colorPalette), // VeryDarkBlue -> 10, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x, y, 111, 4, 21, window.colorPalette), // Green -> 4, White -> 21
-           getConditionalColorWithIndex(x, y, 111, 9, 13, window.colorPalette), // VeryDarkGreen -> 9, DimGray -> 13
-           getConditionalColorWithIndex(x, y, 111, 5, 13, window.colorPalette), // Orange -> 5, DimGray -> 13
+      // 3 SQUARE MIDDLE CRAWLER
+      ...Array.from({ length: 16 }, (_, i) =>
+        getConditionalColorWithIndex(x2Shifted, y0, -300, [15, 15, 15, 15, 10, 10, 10, 10, 4, 4, 4, 4, 5, 5, 5, 5][i], [10, 1, 5, 21, 15, 15, 5, 21, 10, 15, 5, 21, 15, 1, 10, 21][i], window.colorPalette)
+      ),
 
-           // MIDDLE LINE CRAWLER TOP LEFT
-           getConditionalColorWithIndex(x3, y0, 100, 15, 13, window.colorPalette), // Red -> 15, DimGray -> 13
-           getConditionalColorWithIndex(x3, y0, 100, 15, 13, window.colorPalette), // Red -> 15, DimGray -> 13
-           getConditionalColorWithIndex(x3, y0, 100, 15, 13, window.colorPalette), // Red -> 15, DimGray -> 13
-           getConditionalColorWithIndex(x3, y0, 100, 15, 21, window.colorPalette), // Red -> 15, White -> 21
-           getConditionalColorWithIndex(x3, y0, 100, 10, 15, window.colorPalette), // VeryDarkBlue -> 10, Red -> 15
-           getConditionalColorWithIndex(x3, y0, 100, 10, 13, window.colorPalette), // VeryDarkBlue -> 10, DimGray -> 13
-           getConditionalColorWithIndex(x3, y0, 100, 10, 5, window.colorPalette), // VeryDarkBlue -> 10, Orange -> 5
-           getConditionalColorWithIndex(x3, y0, 100, 10, 21, window.colorPalette), // VeryDarkBlue -> 10, White -> 21
-           getConditionalColorWithIndex(x3, y0, 100, 4, 10, window.colorPalette), // Green -> 4, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x3, y0, 100, 4, 15, window.colorPalette), // Green -> 4, Red -> 15
-           getConditionalColorWithIndex(x3, y0, 100, 1, 15, window.colorPalette), // Black -> 1, Red -> 15
-           getConditionalColorWithIndex(x3, y0, 100, 2, 5, window.colorPalette), // Purple -> 2, Orange -> 5
-           getConditionalColorWithIndex(x3, y0, 100, 1, 21, window.colorPalette), // Black -> 1, White -> 21
-           getConditionalColorWithIndex(x3, y0, 100, 5, 15, window.colorPalette), // Orange -> 5, Red -> 15
-           getConditionalColorWithIndex(x3, y0, 100, 2, 13, window.colorPalette), // Purple -> 2, DimGray -> 13
-           getConditionalColorWithIndex(x3, y0, 100, 1, 10, window.colorPalette), // Black -> 1, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x3, y0, 100, 13, 21, window.colorPalette), // DimGray -> 13, White -> 21
+      // BOTTOM RIGHT CORNER
+      ...Array.from({ length: 20 }, (_, i) =>
+        getConditionalColorWithIndex(x2, y0, 600, [15, 15, 15, 15, 10, 10, 10, 10, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5][i], [10, 1, 5, 21, 15, 13, 5, 21, 10, 15, 5, 21, 15, 1, 10, 21, 1, 21, 1, 21][i], window.colorPalette)
+      ),
 
-           // MIDDLE LINE CRAWLER BOTTOM RIGHT
-           getConditionalColorWithIndex(x1, y0, -100, 15, 10, window.colorPalette), // Red -> 15, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x1, y0, -100, 15, 13, window.colorPalette), // Red -> 15, DimGray -> 13
-           getConditionalColorWithIndex(x1, y0, -100, 15, 5, window.colorPalette), // Red -> 15, Orange -> 5
-           getConditionalColorWithIndex(x1, y0, -100, 15, 21, window.colorPalette), // Red -> 15, White -> 21
-           getConditionalColorWithIndex(x1, y0, -100, 10, 15, window.colorPalette), // VeryDarkBlue -> 10, Red -> 15
-           getConditionalColorWithIndex(x1, y0, -100, 10, 2, window.colorPalette), // VeryDarkBlue -> 10, Purple -> 2
-           getConditionalColorWithIndex(x1, y0, -100, 10, 5, window.colorPalette), // VeryDarkBlue -> 10, Orange -> 5
-           getConditionalColorWithIndex(x1, y0, -100, 10, 21, window.colorPalette), // VeryDarkBlue -> 10, White -> 21
-           getConditionalColorWithIndex(x1, y0, -100, 4, 10, window.colorPalette), // Green -> 4, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x1, y0, -100, 4, 15, window.colorPalette), // Green -> 4, Red -> 15
-           getConditionalColorWithIndex(x1, y0, -100, 4, 5, window.colorPalette), // Green -> 4, Orange -> 5
-           getConditionalColorWithIndex(x1, y0, -100, 4, 21, window.colorPalette), // Green -> 4, White -> 21
-           getConditionalColorWithIndex(x1, y0, -100, 5, 15, window.colorPalette), // Orange -> 5, Red -> 15
-           getConditionalColorWithIndex(x1, y0, -100, 5, 12, window.colorPalette), // Orange -> 5, Maroon -> 12
-           getConditionalColorWithIndex(x1, y0, -100, 5, 10, window.colorPalette), // Orange -> 5, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x1, y0, -100, 5, 21, window.colorPalette), // Orange -> 5, White -> 21
+      // EU Flag Styles
+      ...Array.from({ length: 18 }, (_, i) =>
+        getConditionalColorWithIndex(x0, y0, 15, [5, 15, 15, 21, 10, 21, 5, 15, 5, 21, 13, 13, 13, 13, 15, 10, 4, 5][i], [10, 10, 21, 10, 21, 15, 10, 5, 21, 5, 15, 10, 1, 5, 13, 13, 13, 13][i], window.colorPalette)
+      ),
 
-           // 3 SQUARE MIDDLE CRAWLER
-           getConditionalColorWithIndex(x2, y0, -300, 15, 10, window.colorPalette), // Red -> 15, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x2, y0, -300, 15, 1, window.colorPalette), // Red -> 15, Black -> 1
-           getConditionalColorWithIndex(x2, y0, -300, 15, 5, window.colorPalette), // Red -> 15, Orange -> 5
-           getConditionalColorWithIndex(x2, y0, -300, 15, 21, window.colorPalette), // Red -> 15, White -> 21
-           getConditionalColorWithIndex(x2, y0, -300, 10, 15, window.colorPalette), // VeryDarkBlue -> 10, Red -> 15
-           getConditionalColorWithIndex(x2, y0, -300, 10, 15, window.colorPalette), // VeryDarkBlue -> 10, Red -> 15
-           getConditionalColorWithIndex(x2, y0, -300, 10, 5, window.colorPalette), // VeryDarkBlue -> 10, Orange -> 5
-           getConditionalColorWithIndex(x2, y0, -300, 10, 21, window.colorPalette), // VeryDarkBlue -> 10, White -> 21
-           getConditionalColorWithIndex(x2, y0, -300, 4, 10, window.colorPalette), // Green -> 4, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x2, y0, -300, 4, 15, window.colorPalette), // Green -> 4, Red -> 15
-           getConditionalColorWithIndex(x2, y0, -300, 4, 5, window.colorPalette), // Green -> 4, Orange -> 5
-           getConditionalColorWithIndex(x2, y0, -300, 4, 21, window.colorPalette), // Green -> 4, White -> 21
-           getConditionalColorWithIndex(x2, y0, -300, 5, 15, window.colorPalette), // Orange -> 5, Red -> 15
-           getConditionalColorWithIndex(x2, y0, -300, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
-           getConditionalColorWithIndex(x2, y0, -300, 5, 10, window.colorPalette), // Orange -> 5, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x2, y0, -300, 5, 21, window.colorPalette), // Orange -> 5, White -> 21
+      // IGUANA EYES
+      ...dynamicRgbColors
+    ];
+  }
 
-           // BOTTOM RIGHT CORNER
-           getConditionalColorWithIndex(x2, y0, 600, 15, 10, window.colorPalette), // Red -> 15, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x2, y0, 600, 15, 1, window.colorPalette), // Red -> 15, Black -> 1
-           getConditionalColorWithIndex(x2, y0, 600, 15, 5, window.colorPalette), // Red -> 15, Orange -> 5
-           getConditionalColorWithIndex(x2, y0, 600, 15, 21, window.colorPalette), // Red -> 15, White -> 21
-           getConditionalColorWithIndex(x2, y0, 600, 10, 15, window.colorPalette), // VeryDarkBlue -> 10, Red -> 15
-           getConditionalColorWithIndex(x2, y0, 600, 10, 13, window.colorPalette), // VeryDarkBlue -> 10, DimGray -> 13
-           getConditionalColorWithIndex(x2, y0, 600, 10, 5, window.colorPalette), // VeryDarkBlue -> 10, Orange -> 5
-           getConditionalColorWithIndex(x2, y0, 600, 10, 21, window.colorPalette), // VeryDarkBlue -> 10, White -> 21
-           getConditionalColorWithIndex(x2, y0, 600, 4, 10, window.colorPalette), // Green -> 4, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x2, y0, 600, 4, 15, window.colorPalette), // Green -> 4, Red -> 15
-           getConditionalColorWithIndex(x2, y0, 600, 4, 5, window.colorPalette), // Green -> 4, Orange -> 5
-           getConditionalColorWithIndex(x2, y0, 600, 4, 21, window.colorPalette), // Green -> 4, White -> 21
-           getConditionalColorWithIndex(x2, y0, 600, 5, 15, window.colorPalette), // Orange -> 5, Red -> 15
-           getConditionalColorWithIndex(x2, y0, 600, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
-           getConditionalColorWithIndex(x2, y0, 600, 5, 10, window.colorPalette), // Orange -> 5, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x2, y0, 600, 5, 21, window.colorPalette), // Orange -> 5, White -> 21
-           getConditionalColorWithIndex(x2, y0, 600, 5, 1, window.colorPalette), // Orange -> 5, Black -> 1
-
-           // EU Flag Styles
-           getConditionalColorWithIndex(x0, y0, 15, 5, 10, window.colorPalette), // Orange -> 5, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x0, y0, 15, 15, 10, window.colorPalette), // Red -> 15, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x0, y0, 15, 15, 21, window.colorPalette), // Red -> 15, White -> 21
-           getConditionalColorWithIndex(x0, y0, 15, 21, 10, window.colorPalette), // White -> 21, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x0, y0, 15, 10, 21, window.colorPalette), // VeryDarkBlue -> 10, White -> 21
-           getConditionalColorWithIndex(x0, y0, 15, 21, 15, window.colorPalette), // White -> 21, Red -> 15
-           getConditionalColorWithIndex(x0, y0, 15, 5, 10, window.colorPalette), // Orange -> 5, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x0, y0, 15, 15, 5, window.colorPalette), // Red -> 15, Orange -> 5
-           getConditionalColorWithIndex(x0, y0, 15, 5, 21, window.colorPalette), // Orange -> 5, White -> 21
-           getConditionalColorWithIndex(x0, y0, 15, 21, 5, window.colorPalette), // White -> 21, Orange -> 5
-           getConditionalColorWithIndex(x0, y0, 15, 13, 15, window.colorPalette), // DimGray -> 13, Red -> 15
-           getConditionalColorWithIndex(x0, y0, 15, 13, 10, window.colorPalette), // DimGray -> 13, VeryDarkBlue -> 10
-           getConditionalColorWithIndex(x0, y0, 15, 13, 1, window.colorPalette), // DimGray -> 13, Black -> 1
-           getConditionalColorWithIndex(x0, y0, 15, 13, 5, window.colorPalette), // DimGray -> 13, Orange -> 5
-           getConditionalColorWithIndex(x0, y0, 15, 15, 13, window.colorPalette), // Red -> 15, DimGray -> 13
-           getConditionalColorWithIndex(x0, y0, 15, 10, 13, window.colorPalette), // VeryDarkBlue -> 10, DimGray -> 13
-           getConditionalColorWithIndex(x0, y0, 15, 4, 13, window.colorPalette), // Green -> 4, DimGray -> 13
-           getConditionalColorWithIndex(x0, y0, 15, 5, 13, window.colorPalette), // Orange -> 5, DimGray -> 13
-
-            // IGUANA EYES
-
-            getDynamicRgbWithIndex(x2, y2, x2, y0, 8, window.colorPalette),  // Very dark orange -> index 8
-            getDynamicRgbWithIndex(x2, y2, x2, y0, 9, window.colorPalette),  // Very dark green -> index 9
-            getDynamicRgbWithIndex(x2, y2, x2, y0, 14, window.colorPalette), // Darkorange -> index 14
-            getDynamicRgbWithIndex(x2, y2, x2, y0, 10, window.colorPalette), // Very dark blue -> index 10
-            getDynamicRgbWithIndex(x2, y2, x2, y0, 11, window.colorPalette), // Dark red -> index 11
-
-        
-           ];
-
-    }
-
-
-
-// Function to return the length of the array generated by getColors2
-function getColors2Length() {
+  // Function to return the length of the array generated by getColors2
+  function getColors2Length() {
     const defaultL = [{ z: 0, x: 0, y: 0 }, { z: 0, x: 0, y: 0 }, { z: 0, x: 0, y: 0 }];
     const length = getColors2(null, null, defaultL).length;
     console.log(`getColors2 length: ${length}`);
     return length;
-}
+  }
 
-// Log the length of the colors array when the file is loaded
-getColors2Length();
+  // Log the length of the colors array when the file is loaded
+  getColors2Length();
 }
