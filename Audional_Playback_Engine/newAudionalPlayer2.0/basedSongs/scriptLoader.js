@@ -11,7 +11,7 @@ window.scriptsToLoad = [
 
     'fileAndAudioHandling_minified.js',
     'colourSettingsFiles/colourPaletteINDEX_minified.js',
-    'colourSettingsFiles/colourSettingsLevel1INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel1INDEX.js',
     'colourSettingsFiles/colourSettingsLevel2INDEX_minified.js',
     'colourSettingsFiles/colourSettingsLevel3INDEX_minified.js',
     'visualiser/visualiserCode.js',

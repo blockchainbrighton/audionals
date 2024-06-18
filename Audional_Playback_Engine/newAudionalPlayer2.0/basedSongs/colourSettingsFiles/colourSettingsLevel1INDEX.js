@@ -118,7 +118,7 @@ function getDynamicRgb(x1, y1, x2, y2, r, g, b) {
 
 // Function to get conditional color
 function getConditionalColor(x, y, divisor, trueColor, falseColor) {
-    return (Math.floor(x / divisor) + Math.floor(y / divisor)) % 111 === 0 ? trueColor : falseColor;
+    return ((x / divisor | 0) + (y / divisor | 0)) % 111 === 0 ? trueColor : falseColor;
 }
 
 
