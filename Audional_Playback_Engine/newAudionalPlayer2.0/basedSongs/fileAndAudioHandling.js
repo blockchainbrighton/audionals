@@ -238,7 +238,7 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     const duration = (endTrim - startTrim) * buffer.duration / (globalPlaybackSpeeds[channel] || 1.0);
 
     // Log details including the calculated duration for debugging purposes
-    console.log(`[playBuffer] [finalDebug] Buffer: ${buffer}, Start Trim: ${startTrim}, End Trim: ${endTrim}, Start Time: ${startTime}, Duration: ${duration}`);
+    // console.log(`[playBuffer] [finalDebug] Buffer: ${buffer}, Start Trim: ${startTrim}, End Trim: ${endTrim}, Start Time: ${startTime}, Duration: ${duration}`);
 
     // Create a new source for each buffer
     const source = audioCtx.createBufferSource();
@@ -269,7 +269,7 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
     activeSources[channel].push({ source, gainNode: playbackGainNode });
 
     // Log the creation and starting of the source for debugging purposes
-    console.log(`[playBuffer] Created and started source for channel: ${channel}, startTime: ${startTime}, duration: ${duration}`);
+    // console.log(`[playBuffer] Created and started source for channel: ${channel}, startTime: ${startTime}, duration: ${duration}`);
 }
 
 

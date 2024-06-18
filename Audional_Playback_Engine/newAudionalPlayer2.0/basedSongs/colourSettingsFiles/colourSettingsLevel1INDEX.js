@@ -18,13 +18,19 @@ function initializeHexCache(palette) {
 
 initializeHexCache(colorPalette);
 
-// function getHexFromIndex(index) {
-//     const hex = hexCache[index];
-//     if (hex) {
-//         return hex;
-//     }
-//     throw new Error(`Color with index ${index} not found in palette.`);
-// }
+
+// Retrieve hex color from index
+function getHexFromIndex(index, palette) {
+    // Use the provided palette if available
+    if (palette) {
+        const hex = hexCache[index];
+        if (hex) {
+            return hex;
+        }
+        throw new Error(`Color with index ${index} not found in provided palette.`);
+    }
+    throw new Error(`Color with index ${index} not found in cache.`);
+}
 
 // Function to get conditional color using cached indices
 function getConditionalColorWithIndex(x, y, divisor, trueColorIndex, falseColorIndex, palette) {
@@ -95,18 +101,6 @@ function hexToRgb(hex) {
     return rgb;
 }
 
-// Retrieve hex color from index
-function getHexFromIndex(index, palette) {
-    // Use the provided palette if available
-    if (palette) {
-        const hex = hexCache[index];
-        if (hex) {
-            return hex;
-        }
-        throw new Error(`Color with index ${index} not found in provided palette.`);
-    }
-    throw new Error(`Color with index ${index} not found in cache.`);
-}
 
 // Function to get dynamic RGB color using cached indices
 function getDynamicRgbWithIndex(x1, y1, x2, y2, colorIndex, palette) {

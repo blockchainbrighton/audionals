@@ -235,7 +235,59 @@ const cx = cv.getContext("2d");
 cv.width = S;
 cv.height = S;
 
-const workerScript="\nself.onmessage = function(e) {\n    const { id, vertices, pivot, angle } = e.data;\n    const updatedVertices = vertices.map(v => {\n        let x = v.x - pivot.x,\n            y = v.y - pivot.y,\n            x1 = x * Math.cos(angle) - y * Math.sin(angle),\n            y1 = x * Math.sin(angle) + y * Math.cos(angle);\n        return { x: x1 + pivot.x, y: y1 + pivot.y, z: v.z };\n    });\n\n    postMessage({ id, updatedVertices });\n};\n",blob=new Blob([workerScript],{type:"application/javascript"}),workerScriptURL=URL.createObjectURL(blob),rotationWorker=new Worker(workerScriptURL);function sendRotationRequest(t,e,s,i){rotationWorker.postMessage({id:t,vertices:e,pivot:s,angle:i})}function generateVerticesRequest(t,e,s,i){rotationWorker.postMessage({taskType:"generateVertices",data:{id:t,c:e,r:s,s:i}})}rotationWorker.onmessage=function(t){const{id:e,updatedVertices:s}=t.data;"cy"===e?cp.cy.updateVertices(s):e.startsWith("sp")&&cp[e].updateVertices(s)};
+// Worker script with batch processing
+const workerScript = `
+self.onmessage = function(e) {
+    const { id, vertices, angle, primaryAndSecondaryColors } = e.data;
+
+    // Compute colors for the vertices
+    const updatedColors = vertices.map((v, index) => {
+        const randomColor1 = primaryAndSecondaryColors[Math.floor(Math.random() * primaryAndSecondaryColors.length)].hex;
+        const randomColor2 = primaryAndSecondaryColors[Math.floor(Math.random() * primaryAndSecondaryColors.length)].hex;
+        const randomColor3 = primaryAndSecondaryColors[Math.floor(Math.random() * primaryAndSecondaryColors.length)].hex;
+        const randomColor4 = primaryAndSecondaryColors[Math.floor(Math.random() * primaryAndSecondaryColors.length)].hex;
+        const randomColor5 = primaryAndSecondaryColors[Math.floor(Math.random() * primaryAndSecondaryColors.length)].hex;
+
+        // Use conditional color function
+        return {
+            index,
+            colors: [
+                getConditionalColor(v.x, v.y, 0.1, randomColor1, "black"),
+                getConditionalColor(v.x, v.y, 0.2, randomColor2, "black"),
+                getConditionalColor(v.x, v.y, 0.3, randomColor3, "black"),
+                getConditionalColor(v.x, v.y, 0.5, randomColor4, "black"),
+                getConditionalColor(v.x, v.y, 0.05, randomColor5, "black")
+            ]
+        };
+    });
+
+    postMessage({ id, updatedColors });
+};
+
+function getConditionalColor(x, y, divisor, trueColor, falseColor) {
+    return (Math.floor(x / divisor) + Math.floor(y / divisor)) % 111 === 0 ? trueColor : falseColor;
+}
+`;
+
+const blob = new Blob([workerScript], { type: "application/javascript" });
+const workerScriptURL = URL.createObjectURL(blob);
+const rainbowWorker = new Worker(workerScriptURL);
+
+function sendRainbowRequest(id, vertices, angle, palette) {
+    rainbowWorker.postMessage({
+        id,
+        vertices,
+        angle,
+        primaryAndSecondaryColors: palette
+    });
+}
+
+rainbowWorker.onmessage = function(e) {
+    const { id, updatedColors } = e.data;
+    // Handle the updated colors on the main thread
+    updateScatterColors(id, updatedColors);
+};
+
 class Cy{constructor(t,e,s,i){this.c=t,this.r=e,this.h=s,this.s=i,this.gV(),this.gF()}updateVertices(t){this.v=t}gV(){this.v=[];for(let t=0;t<=this.s;t++){let e=this.c.y-this.h/2+t/this.s*this.h;for(let s=0;s<=this.s;s++){let i=s/this.s*2*Math.PI,c=this.c.x+this.r*Math.cos(i),a=this.c.z+this.r*Math.sin(i);this.v.push({x:c,y:e,z:a})}}}gF(){this.f=[];for(let t=0;t<this.s;t++)for(let e=0;e<this.s;e++){let s=t*(this.s+1)+e,i=s+1,c=s+this.s+1,a=c+1;this.f.push([s,i,c]),this.f.push([i,a,c])}}rP(t,e){sendRotationRequest(this.id,this.v,t,e)}}class Sp{constructor(t,e,s){this.c=t,this.r=e,this.s=s,this.gV(),this.gF()}updateVertices(t){this.v=t}gV(){this.v=[];for(let t=0;t<=this.s;t++){let e=t/this.s*Math.PI;for(let s=0;s<=this.s;s++){let i=s/this.s*2*Math.PI,c=this.c.x+this.r*Math.sin(e)*Math.cos(i),a=this.c.y+this.r*Math.sin(e)*Math.sin(i),o=this.c.z+this.r*Math.cos(e);this.v.push({x:c,y:a,z:o})}}}gF(){this.f=[];for(let t=0;t<this.s;t++)for(let e=0;e<this.s;e++){let s=t*(this.s+1)+e,i=s+1,c=s+this.s+1,a=c+1;this.f.push([s,i,c]),this.f.push([i,a,c])}}rP(t,e){sendRotationRequest(this.id,this.v,t,e)}}
 
 class Cp {

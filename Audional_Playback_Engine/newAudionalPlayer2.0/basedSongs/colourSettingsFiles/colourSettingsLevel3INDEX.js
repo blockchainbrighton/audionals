@@ -56,7 +56,7 @@ function getColors3(o, a, l) {
     const sinNowDiv100 = Math.sin(now / 100);
     const sinNowDivMinus17 = Math.sin(now / -17);
 
-    const redYellowTrippyEyes = `rgb(${Math.floor(127 * sinNow + 512)}, ${Math.floor(127 * sinNow + 128)}, ${Math.floor(127 * sinNowDiv1000 + 8)})`;
+    // const redYellowTrippyEyes = `rgb(${Math.floor(127 * sinNow + 512)}, ${Math.floor(127 * sinNow + 128)}, ${Math.floor(127 * sinNowDiv1000 + 8)})`;
 
 
     return [
@@ -268,7 +268,7 @@ function getColors3(o, a, l) {
 
             // Spinning Eyes
             `rgb(${Math.floor(127 * sinNow + 4)}, ${Math.floor(127 * sinNowDiv10 + 128)}, ${Math.floor(127 * sinNowDiv5000 + 32)})`, // Trippy Eyes
-            redYellowTrippyEyes, // Red/Yellow trippy eyes
+            // redYellowTrippyEyes, // Red/Yellow trippy eyes
             `rgb(${Math.floor(111 * sinNow + 200000)}, ${Math.floor(127 * sinNow + 12)}, ${Math.floor(127 * sinNowDiv100 + 4)})`, // Trippy Eyes Red/orange
             `rgb(${Math.floor(127 * sinNow + 128)}, ${Math.floor(127 * sinNowDiv1000 + 128)}, ${Math.floor(127 * sinNowDiv2000 + 128)})`, // Trippy Eyes full spectrum
             `rgb(${Math.floor(127 * sinNow + 128)}, ${Math.floor(127 * sinNowDiv1000 + 128)}, ${Math.floor(127 * sinNowDiv2000 + 128)})`, // Trippy Eyes
