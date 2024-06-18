@@ -11,13 +11,19 @@ let activeArrayIndex = {};
 let arrayLengths = {
     1: 0,
     2: 0,
-    3: 0
+    3: 0,
+    4: 0,
+    5: 0,
+
 };
 
 const accessLevelMappings = {
     1: [1],
     2: [1, 2],
-    3: [1, 2, 3]
+    3: [1, 2, 3],
+    4: [1, 3], // Placeholder mapping
+    5: [3, 4, 5], // Placeholder mapping
+
 };
 
 function initializeArrayLengths() {
@@ -35,6 +41,16 @@ function initializeArrayLengths() {
         arrayLengths[3] = getColors3Length() || 0;
     } catch (e) {
         console.error("Failed to get length for array 3", e);
+    }
+    try {
+        arrayLengths[4] = getColors4Length() || 0;
+    } catch (e) {
+        console.error("Failed to get length for array 4", e);
+    }
+    try {
+        arrayLengths[5] = getColors5Length() || 0; // Ensure it logs length for array 5
+    } catch (e) {
+        console.error("Failed to get length for array 5", e);
     }
     console.log("Initialized array lengths:", arrayLengths);
 }
@@ -58,35 +74,64 @@ function calculateCCI2(channelIndex, arrayLength) {
     return Math.min(Math.max(scaledValue, 0), arrayLength - 1);
 }
 
-// Function to generate and cache the access level
-const generateAccessLevel = (function() {
-    let accessLevel = null; // Cached access level
+// // Function to generate and cache the access level
+// const generateAccessLevel = (function() {
+//     let accessLevel = null; // Cached access level
 
-    return function(seed) {
-        if (accessLevel === null) { // Execute only once
-            const randomValue = randomWithSeed(seed);
-            accessLevel = Math.floor(randomValue * 3) + 1;
+//     return function(seed) {
+//         if (accessLevel === null) { // Execute only once
+//             const randomValue = randomWithSeed(seed);
+//             accessLevel = Math.floor(randomValue * 5) + 1;
 
-            // Log the access level once
-            console.log(`[Seed] Generated access level: ${accessLevel}`);
-        }
-        return accessLevel;
-    };
-})();
+//             // Log the access level once
+//             console.log(`[Seed] Generated access level: ${accessLevel}`);
+//         }
+//         return accessLevel;
+//     };
+// })();
+
+// Function to generate the access level with skewed distribution
+// Updated function to generate the access level with proper skewing
+function generateAccessLevel(seed) {
+    const randomValue = randomWithSeed(seed);
+    const skewFactor = 0.3; // Adjust this factor to skew the distribution (> 1 to skew towards lower values)
+    const skewedValue = Math.pow(randomValue, skewFactor);
+    const accessLevel = Math.floor((1 - skewedValue) * 5) + 1;
+    return Math.min(Math.max(accessLevel, 1), 5); // Ensure the value is between 1 and 5
+}
+
+
 
 function selectArrayIndex(seed, AccessLevel, channelIndex) {
     const randomValue = randomWithSeed(seed + channelIndex * 100);
-    switch (AccessLevel) {
-        case 1: return 1;
-        case 2: return Math.floor(randomValue * 2) + 1;
-        case 3: return Math.floor(randomValue * 3) + 1;
-        default:
-            console.error(`Invalid AccessLevel: ${AccessLevel}`);
-            return 1;
-    }
+    const allowedArrays = accessLevelMappings[AccessLevel];
+    const arrayChoice = Math.floor(randomValue * allowedArrays.length);
+    return allowedArrays[arrayChoice];
 }
 
 let AccessLevel = generateAccessLevel(seed);
+
+function testAccessLevelDistribution() {
+    const seedCount = 10000000; // 10 million seeds
+    const accessLevelCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+    for (let i = 0; i < seedCount; i++) {
+        const seed = i; // Using the loop index as the seed
+        const accessLevel = generateAccessLevel(seed);
+        accessLevelCounts[accessLevel]++;
+    }
+
+    console.log("Access Level Distribution:");
+    for (let level in accessLevelCounts) {
+        const count = accessLevelCounts[level];
+        const percentage = (count / seedCount * 100).toFixed(2);
+        console.log(`Access Level ${level}: ${percentage}%`);
+    }
+}
+
+// Run the test
+testAccessLevelDistribution();
+
 
 function updateVisualizer(cci2, arrayIndex, channelIndex) {
     console.log(`Updating visual:\nAccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nCCI2=${cci2}\nIndex=${arrayIndex}`);
@@ -570,6 +615,10 @@ function getColorArray(angle, time, vertices, accessLevel) {
             return getColors2(angle, time, vertices);
         case 3:
             return getColors3(angle, time, vertices);
+        case 4:
+            return getColors4(angle, time, vertices); 
+        case 5:
+            return getColors5(angle, time, vertices); 
         default:
             console.error(`Invalid arrayIndex ${channelArrayIndex}`);
             return [];
