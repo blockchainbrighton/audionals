@@ -14,6 +14,7 @@ let arrayLengths = {
     3: 0,
     4: 0,
     5: 0,
+    6: 0,
 
 };
 
@@ -21,8 +22,9 @@ const accessLevelMappings = {
     1: [1],
     2: [1, 2],
     3: [1, 2, 3],
-    4: [1, 3], // Placeholder mapping
-    5: [3, 4, 5], // Placeholder mapping
+    4: [1,2, 3, 4], // Placeholder mapping
+    5: [4, 5], // Placeholder mapping
+    6: [1, 2, 3, 4, 5, 6], // Placeholder mapping
 
 };
 
@@ -51,6 +53,11 @@ function initializeArrayLengths() {
         arrayLengths[5] = getColors5Length() || 0; // Ensure it logs length for array 5
     } catch (e) {
         console.error("Failed to get length for array 5", e);
+    }
+    try {
+        arrayLengths[6] = getColors6Length() || 0; // Ensure it logs length for array 6
+    } catch (e) {
+        console.error("Failed to get length for array 6", e);
     }
     console.log("Initialized array lengths:", arrayLengths);
 }
@@ -92,13 +99,38 @@ function calculateCCI2(channelIndex, arrayLength) {
 
 // Function to generate the access level with skewed distribution
 // Updated function to generate the access level with proper skewing
+// Update to include level 6
 function generateAccessLevel(seed) {
     const randomValue = randomWithSeed(seed);
-    const skewFactor = 0.3; // Adjust this factor to skew the distribution (> 1 to skew towards lower values)
+    const skewFactor = 0.5; // Adjust this factor to skew the distribution (> 1 to skew towards lower values)
     const skewedValue = Math.pow(randomValue, skewFactor);
-    const accessLevel = Math.floor((1 - skewedValue) * 5) + 1;
-    return Math.min(Math.max(accessLevel, 1), 5); // Ensure the value is between 1 and 5
+    const accessLevel = Math.floor((1 - skewedValue) * 6) + 1;
+    return Math.min(Math.max(accessLevel, 1), 6); // Ensure the value is between 1 and 6
 }
+
+function logTestValuesForAccessLevels() {
+    const seedRange = 1000000; // Range of seeds to test (adjust as needed)
+    const valuesNeeded = 5; // Number of values to collect for each access level
+    const accessLevelValues = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+    const collectedCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6:0 };
+
+    for (let seed = 0; seed < seedRange && Object.values(collectedCounts).some(count => count < valuesNeeded); seed++) {
+        const accessLevel = generateAccessLevel(seed);
+
+        if (collectedCounts[accessLevel] < valuesNeeded) {
+            accessLevelValues[accessLevel].push(seed);
+            collectedCounts[accessLevel]++;
+        }
+    }
+
+    console.log("Test Values for Each Access Level:");
+    for (let level = 1; level <= 6; level++) {
+        console.log(`Access Level ${level}:`, accessLevelValues[level]);
+    }
+}
+
+// Run the function to log test values
+logTestValuesForAccessLevels();
 
 
 
@@ -113,7 +145,7 @@ let AccessLevel = generateAccessLevel(seed);
 
 function testAccessLevelDistribution() {
     const seedCount = 10000000; // 10 million seeds
-    const accessLevelCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    const accessLevelCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }; // Include level 6
 
     for (let i = 0; i < seedCount; i++) {
         const seed = i; // Using the loop index as the seed
@@ -619,6 +651,8 @@ function getColorArray(angle, time, vertices, accessLevel) {
             return getColors4(angle, time, vertices); 
         case 5:
             return getColors5(angle, time, vertices); 
+        case 6:
+            return getColors6(angle, time, vertices); 
         default:
             console.error(`Invalid arrayIndex ${channelArrayIndex}`);
             return [];

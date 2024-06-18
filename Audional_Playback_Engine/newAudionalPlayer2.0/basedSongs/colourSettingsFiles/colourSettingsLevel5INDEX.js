@@ -14,7 +14,7 @@ function getColors5(o, a, l) {
 
     // Pre-generate random values and colors
     const randomValues = Array.from({ length: 50 }, () => Math.random()); // Increased number of random values for more variety
-    const primaryAndSecondaryColors = ["#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#00FFFF", "#FF00FF"]; // Example colors
+    const primaryAndSecondaryColors = ["#FF0000", "#00FF00", "#0000FF", "#FFD700", "#C0C0C0", "#FF1493", "#B20000", "#000000", "#8000FF"]; // Example colors
     const randomColors = Array.from({ length: 20 }, () => randomRGB(1)); // Generate more random colors
 
     const sinValue = Math.abs(Math.sin(a / 3000));
@@ -35,32 +35,154 @@ function getColors5(o, a, l) {
 
     // Enhanced color variations using precomputed values
     return [
-        ...Array.from({ length: 40 }, (_, i) => {
-            const modulator = modulators[i % modulators.length];
-            const colorFactor = colorFactors[i % colorFactors.length];
-            const scale = scales[i % scales.length];
-            const colorValue = Math.floor(randomValues[i] * (l0zR / scale) * 255 * colorFactor);
-            return colorValue > 10 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : randomColors[i % randomColors.length];
-        }),
+       
+             // #0 Original Crazy One
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 128 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
 
-        // Example: Adding RGB colors with modulators for variety
-        ...Array.from({ length: 30 }, (_, i) => {
-            const modulator = modulators[i % modulators.length];
-            return `rgb(${Math.floor(Math.random() * 255 * modulator)}, ${Math.floor(Math.random() * 255 * modulator)}, ${Math.floor(Math.random() * 255 * modulator)})`;
-        }),
+// #67 Dynamic alternative-color based on lightness - GREY SCALE CRAZY ONE
+((lightness) => lightness > 128 ? `rgb(${lightness}, ${lightness}, ${lightness})` : 'dark-mode-color')(Math.random() * Math.floor((v[0].z + R) / (2 * R) * 255)),
 
-        // Additional color variations with primary and secondary colors
-        ...primaryAndSecondaryColors.map(color => {
-            const modulator = modulators[Math.floor(Math.random() * modulators.length)];
-            return `rgba(${parseInt(color.slice(1, 3), 16) * modulator}, ${parseInt(color.slice(3, 5), 16) * modulator}, ${parseInt(color.slice(5, 7), 16) * modulator}, ${Math.random().toFixed(2)})`;
-        }),
+// #72
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 64 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
 
-        // Use random factors and primary/secondary colors
-        ...Array.from({ length: 30 }, (_, i) => {
-            const color = primaryAndSecondaryColors[i % primaryAndSecondaryColors.length];
-            const modulator = modulators[Math.floor(Math.random() * modulators.length)];
-            return `rgba(${parseInt(color.slice(1, 3), 16) * modulator}, ${parseInt(color.slice(3, 5), 16) * modulator}, ${parseInt(color.slice(5, 7), 16) * modulator}, ${randomValues[i % randomValues.length].toFixed(2)})`;
-        }),
+// #73
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 32 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #74
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 16 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #75
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 8 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #76
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (3 * R) * 255));
+    return colorValue > 64 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #77
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (4 * R) * 255));
+    return colorValue > 32 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #78
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (5 * R) * 255));
+    return colorValue > 16 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #79
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (6 * R) * 255));
+    return colorValue > 8 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+
+
+
+// #82 Mixing thresholds for an unpredictable pattern
+(() => {
+    const threshold = [64, 128, 32, 16].sort(() => 0.5 - Math.random())[0];
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > threshold ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #83 Dynamic range with a random factor affecting lightness
+(() => {
+    const randomFactor = Math.random() < 0.5 ? 2 : 3;
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (randomFactor * R) * 255));
+    return colorValue > 50 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'dark-mode-color';
+})(),
+
+// #84 Using a cosine function for a cyclic grayscale effect
+(() => {
+    const colorValue = Math.floor((Math.cos(Date.now() / 1000) + 1) / 2 * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 100 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #85 Incorporating sine for alternating dark and light cycles
+(() => {
+    const colorValue = Math.floor((Math.sin(Date.now() / 2000) + 1) / 2 * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 75 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'dark-mode-color';
+})(),
+
+// #86 Adjusting color based on a quadratic curve for depth
+(() => {
+    const colorValue = Math.floor(Math.pow(Math.random(), 2) * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 90 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #87 Leveraging a logarithmic scale for fine-tuned shades
+(() => {
+    const colorValue = Math.floor(Math.log(Math.random() * 10 + 1) / Math.log(11) * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 60 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #88 Utilizing exponential growth for sharp contrast
+(() => {
+    const colorValue = Math.floor(Math.pow(Math.random() * 2, 2) * ((v[0].z + R) / (2 * R) * 255));
+    return colorValue > 120 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'alternative-color';
+})(),
+
+// #89 Blending thresholds for a subtle grayscale dance
+(() => {
+    const colorValue = Math.floor(Math.random() * ((v[0].z + R) / (9 * R) * 255));
+    return colorValue > 10 ? `rgb(${colorValue}, ${colorValue}, ${colorValue})` : 'light-mode-color';
+})(),
+
+
+    //       // CRAZY EYES
+        
+          (randomValues[1] * (l0zR / (3 * R) * 75)) > 0.1 ? 
+          `rgb(${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[1] * (l0zR / (3 * R) * 75))})` : 
+          "#000a39",
+
+
+      (randomValues[2] * (l1zR / (111 * R) * 299999)) > 32 ? 
+          `rgb(${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))}, ${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))}, ${Math.floor(randomValues[2] * (l1zR / (111 * R) * 299999))})` : 
+          "alternative-color",
+
+      (randomValues[3] * (l0zR / (0.01 * R) * 0.17)) > 32 ? 
+          `rgb(${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))}, ${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))}, ${Math.floor(randomValues[3] * (l0zR / (0.01 * R) * 0.17))})` : 
+          "alternative-color",
+
+      (randomValues[4] * (l0zR / (0.1 * R) * 255)) > 32 ? 
+          `rgb(${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))}, ${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))}, ${Math.floor(randomValues[4] * (l0zR / (0.1 * R) * 255))})` : 
+          "alternative-color",
+
+      (randomValues[5] * (l0zR / (4 * R) * 255)) > 32 ? 
+          `rgb(${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))}, ${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))}, ${Math.floor(randomValues[5] * (l0zR / (4 * R) * 255))})` : 
+          "alternative-color",
+
+      (randomValues[6] * (l0zR / (0.01 * R) * 255)) > 32 ? 
+          `rgb(${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))}, ${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))}, ${Math.floor(randomValues[6] * (l0zR / (0.01 * R) * 255))})` : 
+          "alternative-color",
+
+      (randomValues[7] * (l0zR / (2.5 * R) * 55)) > 32 ? 
+          `rgb(${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))}, ${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))}, ${Math.floor(randomValues[7] * (l0zR / (2.5 * R) * 55))})` : 
+          "alternative-color",
+
+      (randomValues[8] * (l0zR / (2 * R) * 255)) > 32 ? 
+          `rgb(${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))})` : 
+          "alternative-color",
+
+
     ];
 }
 

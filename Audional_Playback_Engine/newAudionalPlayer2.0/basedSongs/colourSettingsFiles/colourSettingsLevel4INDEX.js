@@ -100,6 +100,59 @@ console.log("Colour settings level 4 loaded");
              getConditionalColor(l[1].x, l[1].y, 16, randomColor6, "black"), // Rainbow scatter
              getConditionalColor(l[1].x, l[1].y, 17, randomColor6, "black"), // Rainbow scatter
 
+
+
+             // STARING EYES:
+
+
+            (randomValues[9] * (l0zR / (5 * R) * 255)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[9] * (l0zR / (5 * R) * 255))})` : 
+                "red",
+
+            (randomValues[10] * (l0zR / (5 * R) * 255)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[10] * (l0zR / (5 * R) * 255))})` : 
+                "blue",
+
+            (randomValues[11] * (l0zR / (5 * R) * 255)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[11] * (l0zR / (5 * R) * 255))})` : 
+                "orange",
+
+            (randomValues[12] * (l0zR / (5 * R) * 255)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[12] * (l0zR / (5 * R) * 255))})` : 
+                "green",
+
+            (randomValues[13] * (l0zR / (5 * R) * 255)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))}, ${Math.floor(randomValues[13] * (l0zR / (5 * R) * 255))})` : 
+                "grey",
+
+            (randomValues[14] * (l0zR / (111 * R) * 255)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[14] * (l0zR / (111 * R) * 255))})` : 
+                "#5a0000",
+
+            (randomValues[15] * (l0zR / (111 * R) * 255)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[15] * (l0zR / (111 * R) * 255))})` : 
+                "blue",
+
+            (randomValues[16] * (l0zR / (111 * R) * 255)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[16] * (l0zR / (111 * R) * 255))})` : 
+                "green",
+
+            (randomValues[17] * (l0zR / (111 * R) * 255)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[17] * (l0zR / (111 * R) * 255))})` : 
+                "grey",
+
+            (randomValues[18] * (l0zR / (111 * R) * 255)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))}, ${Math.floor(randomValues[18] * (l0zR / (111 * R) * 255))})` : 
+                "#1f1f1f",
+
+            (randomValues[19] * (l0zR / (3 * R) * 75)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[19] * (l0zR / (3 * R) * 75))})` : 
+                "#390000",
+
+            (randomValues[20] * (l0zR / (3 * R) * 75)) > 0.1 ? 
+                `rgb(${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))}, ${Math.floor(randomValues[20] * (l0zR / (3 * R) * 75))})` : 
+                "#00390e",
+
         ];
     }
     
