@@ -18,20 +18,6 @@ function loadScriptsSequentially(scripts, index = 0, callback) {
     }
 }
 
-// Function to ensure AudioContext is in a running state
-function ensureAudioContextState() {
-    return new Promise((resolve) => {
-        if (window.audioCtx && audioCtx.state === "suspended") {
-            audioCtx.resume().then(() => {
-                console.log("AudioContext resumed");
-                resolve();
-            });
-        } else {
-            resolve();
-        }
-    });
-}
-
 // Function to initialize the application
 function initializeApp() {
     window.cci2 = 0;

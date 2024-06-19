@@ -50,27 +50,37 @@ console.log("Colour settings level 2 loaded");
 
       // MIDDLE LINE CRAWLER TOP LEFT
       ...Array.from({ length: 16 }, (_, i) =>
-        getConditionalColorWithIndex(x3Shifted, y0, 100, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], [13, 13, 13, 20, 15, 13, 5, 19, 10, 15, 15, 5, 21, 15, 13, 10][i], window.colorPalette)
+        getConditionalColorWithIndex(x3Shifted, y0, 100, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], window.colorPalette)
       ),
 
       // MIDDLE LINE CRAWLER BOTTOM RIGHT
       ...Array.from({ length: 16 }, (_, i) =>
-        getConditionalColorWithIndex(x1Shifted, y0, -100, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], [10, 13, 5, 19, 15, 2, 5, 21, 10, 15, 5, 21, 15, 12, 10, 18][i], window.colorPalette)
+        getConditionalColorWithIndex(x1Shifted, y0, -100, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], window.colorPalette)
       ),
 
       // 3 SQUARE MIDDLE CRAWLER
       ...Array.from({ length: 16 }, (_, i) =>
-        getConditionalColorWithIndex(x2Shifted, y0, -300, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], [10, 1, 5, 21, 15, 15, 5, 17, 10, 15, 5, 21, 15, 1, 10, 18][i], window.colorPalette)
+        getConditionalColorWithIndex(x2Shifted, y0, -300, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], window.colorPalette)
+      ),
+
+      // 3 SQUARE MIDDLE CRAWLER BLACK BG
+      ...Array.from({ length: 16 }, (_, i) =>
+        getConditionalColorWithIndex(x2Shifted, y0, -300, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1][i], window.colorPalette)
+      ),
+
+      // 3 SQUARE MIDDLE CRAWLER BLACK BG
+      ...Array.from({ length: 16 }, (_, i) =>
+        getConditionalColorWithIndex(x2Shifted, y0, -300, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1][i], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], window.colorPalette)
       ),
 
       // BOTTOM RIGHT CORNER
       ...Array.from({ length: 20 }, (_, i) =>
-        getConditionalColorWithIndex(x2, y0, 600, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], [10, 1, 5, 18, 15, 13, 5, 21, 10, 15, 5, 19, 15, 1, 10, 20, 1, 20, 1, 17][i], window.colorPalette)
+        getConditionalColorWithIndex(x2, y0, 600, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], window.colorPalette)
       ),
 
       // EU Flag Styles
       ...Array.from({ length: 18 }, (_, i) =>
-        getConditionalColorWithIndex(x0, y0, 15, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], [10, 10, 1, 10, 19, 15, 10, 5, 1, 5, 15, 10, 1, 5, 13, 13, 13, 13][i], window.colorPalette)
+        getConditionalColorWithIndex(x0, y0, 15, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], window.colorPalette)
       ),
 
     //   // IGUANA EYES

@@ -79,12 +79,14 @@ function playAudioForChannel(channelNumber) {
             ? calculateReversedTrimTimes(globalTrimTimes[channel])
             : globalTrimTimes[channel] || { startTrim: 0, endTrim: 1 };
 
+        fadeOutPreviousBuffers(channel);
         playBuffer(buffer, playTimes, channel, audioCtx.currentTime);
         notifyVisualizer(channelNumber - 1);
     } else {
         console.error(`No audio buffer or trim times found for ${channel}`);
     }
 }
+
 
 
 function calculateReversedTrimTimes(trimTimes) {
@@ -151,11 +153,18 @@ function playChannelStep(channelName, stepData, time, isReverse) {
 function scheduleNotes() {
     const currentTime = audioCtx.currentTime;
     nextNoteTime = Math.max(nextNoteTime, currentTime);
+
     while (nextNoteTime < currentTime + 0.1) {
         playSequenceStep(nextNoteTime);
         nextNoteTime += getStepDuration();
+
+        // // Ensure nextNoteTime resets if it gets too far ahead
+        // if (nextNoteTime > currentTime + 0.1) {
+        //     nextNoteTime = currentTime + getStepDuration();
+        }
     }
-}
+// }
+
 
 function notifyVisualizer(channelIndex, step) {
     AudionalPlayerMessages.postMessage({ action: "activeStep", channelIndex, step });
@@ -229,47 +238,38 @@ async function initializePlayback() {
 }
 
 function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
-    // Ensure the trim values are within a valid range
     startTrim = Math.max(0, Math.min(startTrim, 1));
     endTrim = Math.max(startTrim, Math.min(endTrim, 1));
 
-    // Calculate the actual start time and duration based on the trim settings and buffer duration
     const startTime = startTrim * buffer.duration;
-    const duration = (endTrim - startTrim) * buffer.duration / (globalPlaybackSpeeds[channel] || 1.0);
+    const duration = (endTrim - startTrim) * buffer.duration;
 
-    // Log details including the calculated duration for debugging purposes
-    // console.log(`[playBuffer] [finalDebug] Buffer: ${buffer}, Start Trim: ${startTrim}, End Trim: ${endTrim}, Start Time: ${startTime}, Duration: ${duration}`);
-
-    // Create a new source for each buffer
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
 
-    // Configure playback parameters, including playback rate
     const playbackSpeed = globalPlaybackSpeeds[channel] || 1.0;
     source.playbackRate.value = playbackSpeed;
 
     const playbackGainNode = audioCtx.createGain();
     const targetVolume = parseVolumeLevel(globalVolumeLevels[channel] || 1.0) * globalVolumeMultiplier;
 
-    // Apply fade-in to the gain node to avoid clicks and ensure smooth volume increase
     const currentTime = audioCtx.currentTime;
     playbackGainNode.gain.cancelScheduledValues(currentTime);
     playbackGainNode.gain.setValueAtTime(0, currentTime);
     playbackGainNode.gain.linearRampToValueAtTime(targetVolume, currentTime + 0.01);
 
-    // Connect the buffer source to the gain node and the gain node to the destination
     source.connect(playbackGainNode);
     playbackGainNode.connect(audioCtx.destination);
 
-    // Start the buffer playback
-    source.start(time, startTime, duration);
+    // Adjust the duration calculation to account for playback rate
+    source.start(time, startTime, duration / playbackSpeed);
 
-    // Track the active sources and their corresponding gain nodes
     if (!activeSources[channel]) activeSources[channel] = [];
     activeSources[channel].push({ source, gainNode: playbackGainNode });
 
-    // Log the creation and starting of the source for debugging purposes
-    // console.log(`[playBuffer] Created and started source for channel: ${channel}, startTime: ${startTime}, duration: ${duration}`);
+    source.onended = () => {
+        activeSources[channel] = activeSources[channel].filter(activeSource => activeSource.source !== source);
+    };
 }
 
 
@@ -293,30 +293,28 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
 
 
 async function stopPlayback() {
-    console.log(`Stopping all active sources`);
+    console.log("Stopping all active sources");
 
     Object.keys(activeSources).forEach(channel => {
         activeSources[channel].forEach(({ source, gainNode }) => {
-            // Apply fade-out and stop source
             gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
             gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
             gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
-
             source.stop(audioCtx.currentTime + 0.05);
+            source.disconnect();
+            gainNode.disconnect();
         });
-
-        // Clear the active sources list for the channel
         activeSources[channel] = [];
     });
 
-    // Suspend the audio context and reset playback state after fade-out completes
     setTimeout(() => {
         audioCtx.suspend().then(() => {
             resetPlaybackState();
             console.log("Playback stopped and active sources cleared");
         });
-    }, 50); // Duration should match fade-out duration
+    }, 50);
 }
+
 
 function resetPlaybackState() {
     currentSequence = 0;
@@ -328,6 +326,19 @@ function resetPlaybackState() {
     console.log('Playback-specific states reset.');
 }
 
+function fadeOutPreviousBuffers(channel, fadeDuration = 0.05) {
+    if (activeSources[channel]) {
+        activeSources[channel].forEach(({ gainNode, source }) => {
+            gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + fadeDuration);
+            source.stop(audioCtx.currentTime + fadeDuration);
+            source.disconnect();
+            gainNode.disconnect();
+        });
+        activeSources[channel] = [];
+    }
+}
 
 
 

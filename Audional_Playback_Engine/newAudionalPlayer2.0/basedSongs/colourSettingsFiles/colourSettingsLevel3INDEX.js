@@ -69,19 +69,19 @@ console.log("Colour settings level 3 loaded");
             getConditionalColorWithIndex(x0, y0, 250, 10, 1, window.colorPalette),
             ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(index => getConditionalColorWithIndex(x0, y0, 345, index, 1, window.colorPalette)),
     
-            // // IGUANA EYES
-            // ...[
-            //     [255, 215, 0],
-            //     [192, 192, 192],
-            //     [255, 165, 0],
-            //     [128, 0, 128],
-            //     [255, 0, 0],
-            //     [0, 128, 0],
-            //     [0, 0, 255]
-            // ].map(([r, g, b]) => getDynamicRgb(x2, y2, x2, y0, r, g, b)),
+            // IGUANA EYES
+            ...[
+                [255, 215, 0],
+                [192, 192, 192],
+                [255, 165, 0],
+                [128, 0, 128],
+                [255, 0, 0],
+                [0, 128, 0],
+                [0, 0, 255]
+            ].map(([r, g, b]) => getDynamicRgb(x2, y2, x2, y0, r, g, b)),
     
-            // Disco Eyes
-            `rgb(${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))})`,
+            // // Disco Eyes
+            // `rgb(${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[21] * (l0zR / (2 * R) * 255))})`,
     
             // STROBES
             ...[
@@ -106,12 +106,7 @@ console.log("Colour settings level 3 loaded");
                 return `rgb(${r}, ${g}, ${b})`;
             }),
 
-            // Spinning Eyes
-            ...[
-                [127 * sinNow + 4, 127 * sinNowDiv10 + 128, 127 * sinNowDiv5000 + 32],
-                [111 * sinNow + 200000, 127 * sinNow + 12, 127 * sinNowDiv100 + 4],
-                [127 * sinNow + 128, 127 * sinNowDiv1000 + 128, 127 * sinNowDiv2000 + 128]
-            ].map(([r, g, b]) => `rgb(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)})`)
+
         ];
     }
     

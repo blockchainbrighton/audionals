@@ -22,9 +22,13 @@ const accessLevelMappings = {
     1: [1],
     2: [1, 2],
     3: [1, 2, 3],
-    4: [1, 2, 3, 4], // Placeholder mapping
-    5: [1, 3, 4, 5], // Placeholder mapping
-    6: [1, 2, 3, 4, 5, 6], // Placeholder mapping
+    4: [1, 2, 3], 
+    5: [1, 2, 3, 4, 5], 
+    6: [1, 2, 3, 4, 5, 6], 
+    7: [1, 3, 5], 
+    8: [1, 4, 6], 
+    9: [1, 5, 6], 
+    10:[1, 6], 
 
 };
 
@@ -102,17 +106,17 @@ function calculateCCI2(channelIndex, arrayLength) {
 // Update to include level 6
 function generateAccessLevel(seed) {
     const randomValue = randomWithSeed(seed);
-    const skewFactor = 0.5; // Adjust this factor to skew the distribution (> 1 to skew towards lower values)
+    const skewFactor = 0.3; // Adjust this factor to skew the distribution (> 1 to skew towards lower values)
     const skewedValue = Math.pow(randomValue, skewFactor);
-    const accessLevel = Math.floor((1 - skewedValue) * 6) + 1;
-    return Math.min(Math.max(accessLevel, 1), 6); // Ensure the value is between 1 and 6
+    const accessLevel = Math.floor((1 - skewedValue) * 10) + 1;
+    return Math.min(Math.max(accessLevel, 1), 10); // Ensure the value is between 1 and 6
 }
 
 function logTestValuesForAccessLevels() {
     const seedRange = 1000000; // Range of seeds to test (adjust as needed)
-    const valuesNeeded = 5; // Number of values to collect for each access level
-    const accessLevelValues = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
-    const collectedCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6:0 };
+    const valuesNeeded = 10; // Number of values to collect for each access level
+    const accessLevelValues = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [] };
+    const collectedCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
 
     for (let seed = 0; seed < seedRange && Object.values(collectedCounts).some(count => count < valuesNeeded); seed++) {
         const accessLevel = generateAccessLevel(seed);
@@ -124,7 +128,7 @@ function logTestValuesForAccessLevels() {
     }
 
     console.log("Test Values for Each Access Level:");
-    for (let level = 1; level <= 6; level++) {
+    for (let level = 1; level <= 10; level++) {
         console.log(`Access Level ${level}:`, accessLevelValues[level]);
     }
 }
@@ -145,7 +149,7 @@ let AccessLevel = generateAccessLevel(seed);
 
 function testAccessLevelDistribution() {
     const seedCount = 10000000; // 10 million seeds
-    const accessLevelCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }; // Include level 6
+    const accessLevelCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
 
     for (let i = 0; i < seedCount; i++) {
         const seed = i; // Using the loop index as the seed
