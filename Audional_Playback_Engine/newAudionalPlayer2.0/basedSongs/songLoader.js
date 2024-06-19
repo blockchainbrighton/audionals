@@ -3,7 +3,7 @@
 // This file is supplied by the user and must contain the URL for the JSON data file to be loaded
 
 // Set the HTML title dynamically (OPTIONAL)
-document.title = "OB1 Song 1 by melophonic : Visuals by SQYZY";
+document.title = "TRUTH";
 
 // *** THIS IS THE URL TO THE AUDX SONGFILE ***
 // Store JSON data URL in a global variable ()
@@ -20,8 +20,8 @@ window.titleConfig = {
         projectNameDuration: 12000,
         byDuration: 4000,
         artistNameDuration: 12000,
-        visualArtistDuration: 4000,
-        visualArtistNameDuration: 22000
+        visualArtistDuration: 3000,
+        visualArtistNameDuration: 30000
     },
     colors: {
         projectNameColor: "#ff0000", // Red

@@ -213,9 +213,9 @@ function getConditionalColor(x, y, divisor, trueColor, falseColor) {
             // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
    
 
-            // (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
-            // `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
-            // "#FF0000",
+            (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
+            `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
+            "#FF0000",
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -223,59 +223,59 @@ function getConditionalColor(x, y, divisor, trueColor, falseColor) {
   
         // 4 stripe close scatters
         ...Array.from({ length: 5 }, (_, i) =>
-          getConditionalColorWithIndex(x0, y0, 3, [15, 18, 1, 5, 4][i], 1, window.colorPalette)
+          getConditionalColorWithIndex(x0, y0, 3, [1, 2, 3, 4, 5][i], 1, window.colorPalette)
         ),
   
         // 4 stripe Wide Scatters
         ...Array.from({ length: 5 }, (_, i) =>
-          getConditionalColorWithIndex(x1, y1, 3, [15, 18, 1, 5, 4][i], 1, window.colorPalette)
+          getConditionalColorWithIndex(x1, y1, 3, [11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], 1, window.colorPalette)
         ),
   
         // Repeated close and wide scatters with different divisors
         ...[10, 1.77].flatMap(divisor =>
           Array.from({ length: 5 }, (_, i) =>
-            getConditionalColorWithIndex(l[0].x, l[0].y, divisor, [15, 18, 1, 5, 4][i], 1, window.colorPalette)
+            getConditionalColorWithIndex(l[0].x, l[0].y, divisor, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10][i], 1, window.colorPalette)
           )
         ),
   
         // Dramatic Colors
         ...Array.from({ length: 5 }, (_, i) =>
-          getConditionalColorWithIndex(l[1].x, l[1].y, 3, [3, 7, 6, 2, 16][i], 1, window.colorPalette)
+          getConditionalColorWithIndex(l[1].x, l[1].y, 3, [11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], 1, window.colorPalette)
         ),
   
         // Dark Dramatic Colors
         ...Array.from({ length: 5 }, (_, i) =>
-          getConditionalColorWithIndex(l[1].x, l[1].y, 3, [3, 7, 14, 19, 9][i], 1, window.colorPalette)
+          getConditionalColorWithIndex(l[1].x, l[1].y, 3, [1, 2, 3, 4, 5][i], 1, window.colorPalette)
         ),
   
         // 3 stripe wide scatters
         ...Array.from({ length: 10 }, (_, i) =>
-          getConditionalColorWithIndex(l[1].x, l[1].y, 5, [16, 19, 2, 6, 5, 4, 8, 7, 3, 17][i], 1, window.colorPalette)
+          getConditionalColorWithIndex(l[1].x, l[1].y, 5, [11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], 1, window.colorPalette)
         ),
   
         // 1 stripe wide scatters NO BACKGROUND
         ...Array.from({ length: 10 }, (_, i) =>
-          getConditionalColorWithIndex(l[1].x, l[1].y, 10, [16, 19, 2, 6, 5, 4, 8, 19, 3, 19][i], 1, window.colorPalette)
+          getConditionalColorWithIndex(l[1].x, l[1].y, 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10][i], 1, window.colorPalette)
         ),
   
         // Dark Dramatic Colors
         ...Array.from({ length: 5 }, (_, i) =>
-          getConditionalColorWithIndex(l[1].x, l[1].y, 10, [4, 8, 15, 20, 10][i], 1, window.colorPalette)
+          getConditionalColorWithIndex(l[1].x, l[1].y, 10, [11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], 1, window.colorPalette)
         ),
   
         // Wide 4 Row Scatter
         ...Array.from({ length: 10 }, (_, i) =>
-          getConditionalColorWithIndex(l[1].x, l[1].y, 10, [4, 8, 7, 3, 17, 16, 19, 19, 6, 2][i], 1, window.colorPalette)
+          getConditionalColorWithIndex(l[1].x, l[1].y, 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10][i], 1, window.colorPalette)
         ),
   
         // Additional color variation
         ...Array.from({ length: 10 }, (_, i) =>
-          getConditionalColorWithIndex(l[0].x, l[1].y, 10, [4, 8, 7, 3, 17, 16, 19, 19, 6, 2][i], 1, window.colorPalette)
+          getConditionalColorWithIndex(l[0].x, l[1].y, 10, [11, 12, 13, 14, 15, 16, 17, 18, 19, 20][i], 1, window.colorPalette)
         ),
   
         // Repeated patterns with different positions
         ...Array.from({ length: 10 }, (_, i) =>
-          getConditionalColorWithIndex(l[1].x, l[0].y, 10, [4, 8, 7, 3, 17, 16, 19, 19, 6, 2][i], 1, window.colorPalette)
+          getConditionalColorWithIndex(l[1].x, l[0].y, 10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10][i], 1, window.colorPalette)
         )
       ];
     }

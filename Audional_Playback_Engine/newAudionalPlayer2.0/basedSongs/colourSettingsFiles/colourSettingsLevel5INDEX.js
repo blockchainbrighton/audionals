@@ -182,6 +182,14 @@ function getColors5(o, a, l) {
           `rgb(${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))}, ${Math.floor(randomValues[8] * (l0zR / (2 * R) * 255))})` : 
           "alternative-color",
 
+             // IGUANA EYES
+             [
+                // Gold color: RGB (255, 215, 0)
+                [255, 215, 0],
+                // Silver color: RGB (192, 192, 192)
+                [192, 192, 192],
+                
+            ].map(([r, g, b]) => getDynamicRgb(x2, y2, x2, y0, r, g, b)),
 
     ];
 }

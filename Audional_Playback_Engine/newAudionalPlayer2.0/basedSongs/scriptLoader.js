@@ -12,13 +12,13 @@ window.scriptsToLoad = [
 
 
     'colourSettingsFiles/colourPaletteINDEX_minified.js',
-    'colourSettingsFiles/colourSettingsLevel1INDEX_minified.js',
-    'colourSettingsFiles/colourSettingsLevel2INDEX_minified.js',
-    'colourSettingsFiles/colourSettingsLevel3INDEX_minified.js',
-    'colourSettingsFiles/colourSettingsLevel4INDEX_minified.js',
-    'colourSettingsFiles/colourSettingsLevel5INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel1INDEX.js',
+    'colourSettingsFiles/colourSettingsLevel2INDEX.js',
+    'colourSettingsFiles/colourSettingsLevel3INDEX.js',
+    'colourSettingsFiles/colourSettingsLevel4INDEX.js',
+    'colourSettingsFiles/colourSettingsLevel5INDEX.js',
     'colourSettingsFiles/colourSettingsLevel6INDEX_minified.js',
-    'visualiser/visualiserCode_minified.js',
+    'visualiser/visualiserCode.js',
 
 ];
 

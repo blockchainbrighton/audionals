@@ -5,16 +5,10 @@ console.log("Colour settings level 4 loaded");
 
     // Main function to get colors
     function getColors4(o, a, l) {
-    
         // Pre-generate random values and colors
-        // const primaryAndSecondaryColors = [...colorPalette.primary, ...colorPalette.secondary];
-        // const randomColors = Array.from({ length: 6 }, () => getRandomColor(primaryColors).hex);
         const randomValues = Array.from({ length: 24 }, () => Math.random());
-
-
     
         const now = Date.now();
-  
 
         const primaryColors = [...colorPalette.primary];
         const randomColor1 = getRandomColor(primaryColors).hex;
@@ -49,24 +43,49 @@ console.log("Colour settings level 4 loaded");
             Math.sin(now / 1800),
             Math.sin(now / 1500),
             Math.sin(now / 1900),
-
         ];
 
         // Enhanced color variations using precomputed values
         return [
-
-            ...Array.from({ length: 22 }, (_, i) => dynamicRgb(randomValues[i % randomValues.length], l2zR, i + modulator)),
-
-                // IGUANA EYES
+            // IGUANA EYES
             ...[
-                [255, 215, 0],
-                [192, 192, 192],
-                [255, 165, 0],
-                [128, 0, 128],
+                // Deep Red (Dark Red): RGB (178, 0, 0)
+                [178, 0, 0],
+                // Dark Green (Very Dark Green): RGB (0, 77, 0)
+                [0, 77, 0],
+                // Dark Blue (Navy): RGB (0, 0, 128)
+                [0, 0, 128],
+                // Dark Purple (Indigo): RGB (75, 0, 130)
+                [75, 0, 130],
+                // Dark Cyan (Teal): RGB (0, 206, 209)
+                [0, 206, 209],
+                // Magenta: RGB (255, 0, 255)
+                [255, 0, 255],
+                // Dark Grey (Dim Gray): RGB (105, 105, 105)
+                [105, 105, 105],
+                // Dark Brown (Closest: Maroon): RGB (128, 0, 0)
+                [128, 0, 0],
+                // Dark Olive Green (Very Dark Green): RGB (0, 77, 0)
+                [0, 77, 0],
+                // Dark Slate Blue (Indigo): RGB (75, 0, 130)
+                [75, 0, 130],
+                // Dark Violet (Indigo): RGB (75, 0, 130)
+                [75, 0, 130],
+                // Dark Turquoise (Teal): RGB (0, 206, 209)
+                [0, 206, 209],
+                // Purple: RGB (128, 0, 255)
+                [128, 0, 255],
+                // Red: RGB (255, 0, 0)
                 [255, 0, 0],
-                [0, 128, 0],
-                [0, 0, 255]
+                // Green: RGB (0, 255, 0)
+                [0, 255, 0],
+                // Blue: RGB (0, 0, 255)
+                [0, 0, 255],
+                
             ].map(([r, g, b]) => getDynamicRgb(x2, y2, x2, y0, r, g, b)),
+            
+
+                
     
 
              // RAINBOW Cycle Scatters
@@ -102,7 +121,7 @@ console.log("Colour settings level 4 loaded");
 
 
 
-             // STARING EYES:
+            //  STARING EYES:
 
 
             (randomValues[9] * (l0zR / (5 * R) * 255)) > 0.1 ? 

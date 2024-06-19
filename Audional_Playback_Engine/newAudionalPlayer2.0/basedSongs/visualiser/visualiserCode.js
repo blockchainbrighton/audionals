@@ -22,8 +22,8 @@ const accessLevelMappings = {
     1: [1],
     2: [1, 2],
     3: [1, 2, 3],
-    4: [1,2, 3, 4], // Placeholder mapping
-    5: [4, 5], // Placeholder mapping
+    4: [1, 2, 3, 4], // Placeholder mapping
+    5: [1, 3, 4, 5], // Placeholder mapping
     6: [1, 2, 3, 4, 5, 6], // Placeholder mapping
 
 };
