@@ -40,3 +40,11 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
         activeSources[channel] = activeSources[channel].filter(activeSource => activeSource.source !== source);
     };
 }
+
+
+function calculateReversedTrimTimes(trimTimes) {
+    return {
+        startTrim: 1.0 - trimTimes.endTrim,
+        endTrim: 1.0 - trimTimes.startTrim
+    };
+}
