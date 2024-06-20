@@ -53,7 +53,7 @@ window.titleConfig = {
         displayText_2: 0, // by
         displayText_3: 1000, // melophonic
         displayText_4: 0, // and
-        displayText_5: 2000  // SQYZY
+        displayText_5: 7500  // SQYZY
     },
     colors: {
         displayText_1: "#000000",
