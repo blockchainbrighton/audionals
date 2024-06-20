@@ -34,34 +34,3 @@ async function stopPlayback() {
     }, 50);
 }
 
-function resetPlaybackState() {
-    currentSequence = 0;
-    currentStep = 0;
-    isReversePlay = false;
-    nextNoteTime = 0;
-    resetVisualState();
-
-    console.log('Playback-specific states reset.');
-}
-
-function resetAllStates() {
-    resetPlaybackState();
-    resetVisualState();
-    // Add any other state resets needed for your application
-    console.log("All states reset.");
-}
-
-function resetVisualState() {
-    if (typeof cci2 !== "undefined" && typeof initialCCI2 !== "undefined") {
-        cci2 = initialCCI2;
-    }
-    isChannel11Active = false;
-    isPlaybackActive = false;
-    activeChannelIndex = null;
-    activeArrayIndex = {};
-    renderingState = {};
-
-    if (typeof immediateVisualUpdate === "function") {
-        immediateVisualUpdate();
-    }
-}

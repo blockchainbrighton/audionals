@@ -24,23 +24,6 @@ document.addEventListener("click", async () => {
 
 const defaultVolume = 1.0;
 
-function parseVolumeLevel(level) {
-    const volume = (typeof level === 'number') ? level : parseFloat(level);
-    return clampVolume(isNaN(volume) ? defaultVolume : volume);
-}
-
-function clampVolume(volume) {
-    return Math.max(0.0, Math.min(volume, 3.0));
-}
-
-async function resumeAudioContext() {
-    await window.AudioContextManager.resume();
-}
-
-async function ensureAudioContextState() {
-    await resumeAudioContext();
-    console.log("AudioContext state:", audioCtx.state);
-}
 
 window.addEventListener("beforeunload", cleanUpWorker);
 
