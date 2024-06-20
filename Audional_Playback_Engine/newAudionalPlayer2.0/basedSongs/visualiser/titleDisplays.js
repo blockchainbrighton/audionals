@@ -28,9 +28,8 @@
             return;
         }
 
-        const { projectName, artistName, visualArtistName, timings } = window.titleConfig;
-
-        if (!projectName || !artistName || !visualArtistName || !timings) {
+        const { projectName, artistName, visualArtistName, timings, colors, fontSizes } = window.titleConfig;
+        if (!projectName || !artistName || !visualArtistName || !timings || !colors || !fontSizes) {
             return;
         }
 
@@ -46,10 +45,10 @@
         const visualArtistElement = createElement('visual-artist-display', 'and', container);
         const visualArtistNameElement = createElement('visual-artist-name-display', visualArtistName, container);
 
-        const { cooldownTime, projectNameDuration, byDuration, artistNameDuration, visualArtistDuration, visualArtistNameDuration } = timings;
+        const { projectNameDuration, byDuration, artistNameDuration, visualArtistDuration, visualArtistNameDuration } = timings;
 
-        // Apply colors after creating elements
-        applyColors();
+        // Apply colors and font sizes
+        applyStyles();
 
         // Function to show the title sequence
         function showTitleSequence() {
@@ -62,7 +61,7 @@
                 titleSequenceTimeouts.push(setTimeout(() => {
                     artistNameElement.classList.add('show-artist-name');
                     titleSequenceTimeouts.push(setTimeout(() => {
-                        visualArtistElement.classList.add('show-visual-artist');
+                        visualArtistElement.classList.add('show-and');
                         titleSequenceTimeouts.push(setTimeout(() => {
                             visualArtistNameElement.classList.add('show-visual-artist-name');
                             titleSequenceTimeouts.push(setTimeout(() => {
@@ -70,10 +69,10 @@
                                 animationPlaying = false;
                                 console.log("[titleDisplay] Title sequence completed.");
                             }, visualArtistNameDuration)); // Duration for visual artist name
-                        }, visualArtistDuration)); // Start visual artist name
-                    }, artistNameDuration)); // Start visual artist
+                        }, visualArtistDuration - 1000)); // Start visual artist name
+                    }, artistNameDuration)); // Start and
                 }, byDuration)); // Start artist name
-            }, projectNameDuration)); // Start "by" animation
+            }, window.titleConfig.timings.projectNameDuration + 1000)); // Delay "by" by 1 second
         }
 
         // Function to show a single title element
@@ -108,39 +107,102 @@
             }, duration));
         }
 
-        function applyColors() {
-            const { colors } = window.titleConfig;
-            
-            if (!colors) {
-                console.warn('[titleDisplay] No color configuration found.');
+        // Timer functions
+        let titleTimer = null;
+
+        function startTitleTimer(callbacks) {
+            const { triggerTimes } = window.titleConfig;
+
+            if (!triggerTimes) {
+                console.warn('[titleDisplay] No trigger times configuration found.');
                 return;
             }
-        
-            // Apply colors to respective elements
-            document.getElementById('project-name-display').style.color = colors.projectNameColor || '#000';
-            document.getElementById('by-display').style.color = colors.byColor || '#000';
-            document.getElementById('artist-name-display').style.color = colors.artistNameColor || '#000';
-            document.getElementById('visual-artist-display').style.color = colors.visualArtistColor || '#000';
-            document.getElementById('visual-artist-name-display').style.color = colors.visualArtistNameColor || '#000';
+
+            // Convert trigger times to milliseconds and sort them
+            const sortedTriggerTimes = Object.entries(triggerTimes)
+                .filter(([_, timeString]) => timeString) // Filter out null values
+                .map(([name, timeString]) => [name, timeStringToMilliseconds(timeString)])
+                .sort((a, b) => a[1] - b[1]);
+
+            let currentIndex = 0;
+            const startTime = Date.now();
+
+            titleTimer = setInterval(() => {
+                const currentTime = Date.now() - startTime;
+                if (currentIndex < sortedTriggerTimes.length) {
+                    const [eventName, eventTime] = sortedTriggerTimes[currentIndex];
+
+                    if (currentTime >= eventTime) {
+                        console.log(`[titleDisplay] Triggering event: ${eventName} at time: ${eventTime}`);
+                        if (callbacks[eventName]) {
+                            callbacks[eventName]();
+                        } else {
+                            console.error(`[titleDisplay] No callback found for event: ${eventName}`);
+                        }
+                        currentIndex++;
+                    }
+                } else {
+                    stopTitleTimer();
+                }
+            }, 100); // Check every 100ms
+        }
+
+        function stopTitleTimer() {
+            if (titleTimer) {
+                clearInterval(titleTimer);
+                titleTimer = null;
+                console.log('[titleDisplay] Title timer stopped.');
+            }
+        }
+
+        function applyStyles() {
+            const { colors, fontSizes } = window.titleConfig;
+
+            if (!colors || !fontSizes) {
+                console.warn('[titleDisplay] No style configuration found.');
+                return;
+            }
+
+            // Apply colors and font sizes to respective elements
+            projectNameElement.style.color = colors.projectNameColor || '#000';
+            projectNameElement.style.fontSize = fontSizes.projectNameFontSize || '16px';
+            byElement.style.color = colors.byColor || '#000';
+            byElement.style.fontSize = fontSizes.byFontSize || '12px';
+            artistNameElement.style.color = colors.artistNameColor || '#000';
+            artistNameElement.style.fontSize = fontSizes.artistNameFontSize || '16px';
+            visualArtistElement.style.color = colors.visualArtistColor || '#000';
+            visualArtistElement.style.fontSize = fontSizes.visualArtistFontSize || '12px';
+            visualArtistNameElement.style.color = colors.visualArtistNameColor || '#000';
+            visualArtistNameElement.style.fontSize = fontSizes.visualArtistNameFontSize || '16px';
         }
 
         // Listen for custom playbackStarted event
         document.addEventListener('playbackStarted', () => {
             console.log("[titleDisplay] playbackStarted event received.");
             showTitleSequence();
+
+            // Start the title timer with callbacks for each event
+            startTitleTimer({
+                projectName: () => showSingleTitleElement('projectName'),
+                artistName: () => showSingleTitleElement('artistName'),
+                visualArtistName: () => showSingleTitleElement('visualArtistName'),
+                // Add more callbacks as needed
+            });
         });
 
-        // Listen for custom playbackStopped event to clear animations (if needed)
+        // Listen for custom playbackStopped event to clear animations and stop the timer
         document.addEventListener('playbackStopped', () => {
             console.log("[titleDisplay] playbackStopped event received.");
             clearAnimations(); // Clear animations when playback stops
             animationPlaying = false;
+            stopTitleTimer(); // Stop the title timer
         });
+
         document.addEventListener('customTitleDisplay', (event) => {
             console.log("[titleDisplay] Custom title display event received:", event.detail);
             showTitleSequence(); // You may want to modify this to show specific parts based on event details
         });
-    
+
         // Consolidated listener for single title element display
         document.addEventListener('singleTitleDisplay', (event) => {
             const elementName = event.detail;
@@ -163,3 +225,9 @@
 
     waitForSettings();
 })();
+
+// Helper function to convert time string (minutes:seconds:hundredths) to milliseconds
+function timeStringToMilliseconds(timeString) {
+    const [minutes, seconds, hundredths] = timeString.split(':').map(Number);
+    return (minutes * 60000) + (seconds * 1000) + (hundredths * 10);
+}

@@ -15,28 +15,50 @@ script.src = 'scriptLoader.js';
 document.head.appendChild(script);
 
 
+// songLoader.js
 
 // Set the title configuration (OPTIONAL)
 window.titleConfig = {
     projectName: "TRUTH",
     artistName: "melophonic",
     visualArtistName: "SQYZY",
+    triggerTimes: {
+        projectName: "100:00:00", // Example: 1 minute, 0 seconds, 50 hundredths (i.e., 60.5 seconds)
+        artistName: "100:00:00",  // Example: 1 minute, 10 seconds, 5 hundredths (i.e., 70.05 seconds)
+        visualArtistName: "100:00:00", // Example: 1 minute, 20 seconds, 50 hundredths (i.e., 80.5 seconds)
+        by: "100:00:00" // Add a slight delay
+
+    },
     timings: {
-        cooldownTime: 60000,
-        projectNameDuration: 12000,
-        byDuration: 4000,
-        artistNameDuration: 12000,
-        visualArtistDuration: 3000,
-        visualArtistNameDuration: 30000
+        projectNameDuration: 15000, // Duration to display project name
+        byDuration: 3000, // Duration to display "by"
+        artistNameDuration: 12000, // Duration to display artist name
+        visualArtistDuration: 1000, // Duration to display "and"
+        visualArtistNameDuration: 36000 // Duration to display visual artist name
     },
     colors: {
-        projectNameColor: "#ff0000", // Red
-        byColor: "#000000", // Dim Grey
-        artistNameColor: "#ff0000", // Red
-        visualArtistColor: "#000000", // Dim Grey
-        visualArtistNameColor: "#ff0000" // Red
+        projectNameColor: "#000000", // Color for project name
+        byColor: "#000000", // Color for "by"
+        artistNameColor: "#000000", // Color for artist name
+        visualArtistColor: "#000000", // Color for visual artist
+        visualArtistNameColor: "#000000" // Color for visual artist name
+    },
+    fontSizes: {
+        projectNameFontSize: "90px", // Font size for project name
+        byFontSize: "48px", // Font size for "by"
+        artistNameFontSize: "64px", // Font size for artist name
+        visualArtistFontSize: "32px", // Font size for visual artist
+        visualArtistNameFontSize: "47px" // Font size for visual artist name
+    },
+    fontStyles: {
+        projectNameFontStyle: "bold", // Font style for project name
+        byFontStyle: "normal", // Font style for "by"
+        artistNameFontStyle: "bold", // Font style for artist name
+        visualArtistFontStyle: "normal", // Font style for visual artist
+        visualArtistNameFontStyle: "bold" // Font style for visual artist name
     }
 };
+
 
 
 
