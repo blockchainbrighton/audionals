@@ -17,12 +17,19 @@ console.log("Colour settings level 4 loaded");
         return color ? `rgb(${color.rgb.r}, ${color.rgb.g}, ${color.rgb.b})` : "black";
     }
 
+      // Helper function to get random color from the palette
+      function getRandomColor(palette) {
+        const randomIndex = Math.floor(Math.random() * palette.length);
+        return palette[randomIndex];
+    }
+
     // Main function to get colors
     // Main function to get colors
+// Main function to get colors
 function getColors4(o, a, l) {
     // Pre-generate random values and colors
-    const randomValues = Array.from({ length: 24 }, () => Math.random());
-
+    const randomValues = Array.from({ length: 6 }, () => Math.random());
+    
     const now = Date.now();
     const sinNow = Math.sin(now);
     const sinNowDiv1000 = Math.sin(now / 1000);
@@ -32,13 +39,14 @@ function getColors4(o, a, l) {
     const sinNowDiv100 = Math.sin(now / 100);
     const sinNowDivMinus17 = Math.sin(now / -17);
 
-    const primaryColors = [...colorPalette.primary];
+    const primaryColors = [...window.colorPalette.primary];
     const randomColor1 = getRandomColor(primaryColors).hex;
     const randomColor2 = getRandomColor(primaryColors).hex;
     const randomColor3 = getRandomColor(primaryColors).hex;
     const randomColor4 = getRandomColor(primaryColors).hex;
     const randomColor5 = getRandomColor(primaryColors).hex;
     const randomColor6 = getRandomColor(primaryColors).hex;
+
 
     const sinValue = Math.abs(Math.sin(a / 3000));
 
@@ -74,8 +82,22 @@ function getColors4(o, a, l) {
         75 / (3 * R), // Factor for the third set of colors
     ];
 
+    // Helper function to generate color settings for a specific color base
+    function generateColorSettings(baseColor) {
+        return [
+            computeColor(randomValues[0], ((l2zR + 255) / (11 * R) * 255), baseColor),
+            computeColor(randomValues[1], ((l0zR + 255) / (5 * R) * 255), baseColor),
+            computeColor(randomValues[2], ((l1zR + 255) / (7 * R) * 255), baseColor),
+            computeColor(randomValues[3], ((l0zR + 255) / (3 * R) * 255), baseColor),
+            computeColor(randomValues[4], ((l1zR + 255) / (8 * R) * 255), baseColor),
+        ];
+    }
+
+   
+
+
     // Generate IGUANA EYES colors using colorPalette indices
-    const iguanaEyesIndices = [11, 9, 10, 19, 16, 3, 13, 12, 9, 19, 19, 16, 2, 15, 4, 10];
+    const iguanaEyesIndices = [11, 9, 10, 19, 16, 3, 13, 12, 9, 19, 19, 16, 2, 15, 4, 10, 24, 25, 26, 27, 28, 29, 30];
     const iguanaEyesColors = iguanaEyesIndices.map(index =>
         getDynamicRgb(x2, y2, x2, y0, ...Object.values(window.colorPalette.primary.find(c => c.index === index).rgb))
     );
@@ -147,7 +169,14 @@ function getColors4(o, a, l) {
         ...rainbowCycleScatters,
         ...staringEyesColors,
         ...trippyEyesColors,
+  
+        ...generateColorSettings("red"),
+        ...generateColorSettings("green"),
+        ...generateColorSettings("blue"),
+        ...generateColorSettings("yellow"),
+        ...generateColorSettings("purple"),
     ];
+
 
 }
 

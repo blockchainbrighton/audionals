@@ -14,15 +14,17 @@ window.scriptsToLoad = [
 
     
     // TITLES / CREDITS SCRIPTS (OPTIONAL)
-    'visualiser/titleDisplays_2.js',
+    'visualiser/titleDisplays_2_minified.js',
 
-    'https://ordinals.com/content/68268de54425d46e3bd8da0b7efb79f57fad18a777e3493c916457047efd3920i0', // colourPalette.js
+    // 'https://ordinals.com/content/68268de54425d46e3bd8da0b7efb79f57fad18a777e3493c916457047efd3920i0', // colourPalette.js
+    'colourSettingsFiles/colourPaletteINDEX_minified.js',
+    'colourSettingsFiles/colourSettingsMaster.js',
     'colourSettingsFiles/colourSettingsLevel1INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel2INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel3INDEX.js',
+    'colourSettingsFiles/colourSettingsLevel2INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel3INDEX_minified.js',
     'colourSettingsFiles/colourSettingsLevel4INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel5INDEX.js',
-    'colourSettingsFiles/colourSettingsLevel6INDEX.js',
+    'colourSettingsFiles/colourSettingsLevel5INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel6INDEX_minified.js',
     'visualiser/visualiserCode.js',
 
 ];

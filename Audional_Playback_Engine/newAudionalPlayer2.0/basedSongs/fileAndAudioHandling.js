@@ -8,12 +8,12 @@ function notifyVisualizer(channelIndex, step) {
 }
 
 document.addEventListener("click", async () => {
-    console.log("[fileAndAudioHandling.js] Click event detected.");
+    // console.log("[fileAndAudioHandling.js] Click event detected.");
     if (typeof window.ensureAudioContextState === 'function') {
         await window.ensureAudioContextState();
-        console.log("[fileAndAudioHandling.js] AudioContext ensured.");
+        // console.log("[fileAndAudioHandling.js] AudioContext ensured.");
         await togglePlayback();
-        console.log("[fileAndAudioHandling.js] Playback started. Dispatching playbackStarted event.");
+        // console.log("[fileAndAudioHandling.js] Playback started. Dispatching playbackStarted event.");
 
         // Dispatch custom event to notify playback has started
         document.dispatchEvent(new CustomEvent('playbackStarted'));
@@ -29,11 +29,11 @@ window.addEventListener("beforeunload", cleanUpWorker);
 
 async function togglePlayback() {
     if (isToggleInProgress) {
-        return console.log("[togglePlayback] Playback toggle in progress, ignoring click.");
+        // return console.log("[togglePlayback] Playback toggle in progress, ignoring click.");
     }
 
     isToggleInProgress = true;
-    console.log(`[togglePlayback] ${isPlaying ? "Stopping" : "Initiating"} playback...`);
+    // console.log(`[togglePlayback] ${isPlaying ? "Stopping" : "Initiating"} playback...`);
 
     try {
         if (!isPlaying) {

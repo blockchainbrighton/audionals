@@ -28,7 +28,7 @@ function playBuffer(buffer, { startTrim, endTrim }, channel, time) {
 
     // Log actual playback time
     if (currentTime > time) {
-        console.warn(`[playBuffer] Buffer for channel "${channel}" scheduled for ${time.toFixed(3)} missed at ${currentTime.toFixed(3)}.`);
+        // console.warn(`[playBuffer] Buffer for channel "${channel}" scheduled for ${time.toFixed(3)} missed at ${currentTime.toFixed(3)}.`);
     } else {
         // console.log(`[playBuffer] Buffer for channel "${channel}" played on time at ${time.toFixed(3)}.`);
     }
@@ -74,14 +74,14 @@ function resetPlaybackState() {
     nextNoteTime = 0;
     resetVisualState();
 
-    console.log('Playback-specific states reset.');
+    // console.log('Playback-specific states reset.');
 }
 
 function resetAllStates() {
     resetPlaybackState();
     resetVisualState();
     // Add any other state resets needed for your application
-    console.log("All states reset.");
+    // console.log("All states reset.");
 }
 
 function resetVisualState() {

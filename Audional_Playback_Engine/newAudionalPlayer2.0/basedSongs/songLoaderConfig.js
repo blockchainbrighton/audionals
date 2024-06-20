@@ -7,7 +7,7 @@ document.title = "TRUTH";
 
 // *** THIS IS THE URL TO THE AUDX SONGFILE ***
 // Store JSON data URL in a global variable ()
-window.jsonDataUrl = "testSongFiles/TRUTH.json";
+window.jsonDataUrl = "testSongFiles/TRUTH_AUDX5.json";
 
 // Dynamically load the loader.js script after setting up the environment
 const script = document.createElement('script');
@@ -17,7 +17,7 @@ document.head.appendChild(script);
 
 window.titleConfig = {
     displayText_1: "TRUTH",
-    displayText_2: "by",
+    displayText_2: "",
     displayText_3: "melophonic",
     displayText_4: "and",
     displayText_5: "SQYZY",
@@ -42,14 +42,14 @@ window.titleConfig = {
         displayText_5: 48500  // SQYZY
     },
     fadeInDuration: {
-        displayText_1: 14000, // TRUTH
+        displayText_1: 32000, // TRUTH
         displayText_2: 0,     // by
         displayText_3: 0,  // melophonic
         displayText_4: 0,     // and
-        displayText_5: 12000   // SQYZY
+        displayText_5: 32000   // SQYZY
     },
     fadeOutDuration: {
-        displayText_1: 1000, // TRUTH
+        displayText_1: 32000, // TRUTH
         displayText_2: 0, // by
         displayText_3: 1000, // melophonic
         displayText_4: 0, // and

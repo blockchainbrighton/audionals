@@ -1,16 +1,5 @@
 // sequenceOperations.js
 
-// Initialize sequence and step tracking
-let currentStep = 0;
-let currentSequence = 0;
-let isReadyToPlay = false; // Ensure this is set to true when ready to play
-const preprocessedSequences = {}; // Ensure this is populated with sequence data
-const globalAudioBuffers = []; // Populate with actual audio buffer data
-const globalTrimTimes = {}; // Populate with trim times for each channel
-const globalReversedAudioBuffers = {}; // Populate with reversed audio buffers
-let nextNoteTime = 0;
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
 // Utility function to dispatch sequence events
 function dispatchSequenceEvent(eventName, detail) {
     const event = new CustomEvent(eventName, { detail });
@@ -102,6 +91,6 @@ function incrementStepAndSequence(sequenceCount) {
 // Example listener setup for subsequent files to respond to sequence updates
 document.addEventListener('sequenceUpdated', (event) => {
     const { currentSequence, currentStep } = event.detail;
-    console.log(`Sequence Updated: Sequence ${currentSequence}, Step ${currentStep}`);
+    // console.log(`Sequence Updated: Sequence ${currentSequence}, Step ${currentStep}`);
     // Additional logic for subsequent parts of the application
 });

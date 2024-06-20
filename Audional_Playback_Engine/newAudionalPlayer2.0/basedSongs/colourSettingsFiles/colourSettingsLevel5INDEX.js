@@ -102,7 +102,7 @@ function getColors5(o, a, l) {
         })(),
 
         // GLITCHING GRAYSCALE CRAZY FROGS
-        ...[1, 2, 3, 4, 5, 6, 7, 8].map(i => 
+        ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 25, 26, 27, 28, 29, 30].map(i => 
             calculateGrayscale(randomValues[i], l0zR / (i % 2 ? 3 * R : 0.01 * R) * (i % 2 ? 75 : 255), 32)
         ),
 

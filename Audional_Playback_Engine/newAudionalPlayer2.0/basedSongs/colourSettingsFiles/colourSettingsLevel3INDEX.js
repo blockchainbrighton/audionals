@@ -63,11 +63,11 @@ console.log("Colour settings level 3 loaded");
 
 
             // CRAWLERS ON BLACK BACKGROUND
-            ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(index => getConditionalColorWithIndex(x0, y0, 345, index, 1, window.colorPalette)),
+            ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 25, 26, 27, 28, 29, 30].map(index => getConditionalColorWithIndex(x0, y0, 345, index, 1, window.colorPalette)),
             getConditionalColorWithIndex(x0, y0, 500, 15, 1, window.colorPalette),
             getConditionalColorWithIndex(x0, y0, 100, 21, 1, window.colorPalette),
             getConditionalColorWithIndex(x0, y0, 250, 10, 1, window.colorPalette),
-            ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(index => getConditionalColorWithIndex(x0, y0, 345, index, 1, window.colorPalette)),
+            ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 25, 26, 27, 28, 29, 30].map(index => getConditionalColorWithIndex(x0, y0, 345, index, 1, window.colorPalette)),
     
             // IGUANA EYES
             ...[
