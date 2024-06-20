@@ -162,11 +162,11 @@ const analyzeSequences = (data) => {
   return analysis;
 };
 
-// Read the input JSON file
-const inputFilePath = path.join(__dirname, 'TRUTH.json');
-const outputDir = path.join(__dirname, 'serializedFiles');
-const outputFilePath = path.join(outputDir, 'TRUTH_serialized.json');
+// Specify the directory containing input JSON files
+const inputDir = path.join(__dirname, 'jsonFiles');  // Ensure this directory exists and contains your JSON files
+const outputDir = path.join(__dirname, 'serializedFiles');  // Directory to store serialized JSON files
 
+// Ensure the output directory exists
 if (!fs.existsSync(outputDir)) {
   fs.mkdirSync(outputDir);
 }
