@@ -9,6 +9,12 @@ document.title = "TRUTH";
 // Store JSON data URL in a global variable ()
 window.jsonDataUrl = "testSongFiles/TRUTH.json";
 
+// Dynamically load the loader.js script after setting up the environment
+const script = document.createElement('script');
+script.src = 'scriptLoader.js';
+document.head.appendChild(script);
+
+
 
 // Set the title configuration (OPTIONAL)
 window.titleConfig = {
@@ -32,12 +38,6 @@ window.titleConfig = {
     }
 };
 
-
-
-// Dynamically load the loader.js script after setting up the environment
-const script = document.createElement('script');
-script.src = 'scriptLoader.js';
-document.head.appendChild(script);
 
 
 // // Set the HTML title dynamically

@@ -21,7 +21,7 @@ window.scriptsToLoad = [
     'visualiser/titleDisplays_minified.js',
 
 
-    'colourSettingsFiles/colourPaletteINDEX.js',
+    'colourSettingsFiles/colourPaletteINDEX_minified.js',
     'colourSettingsFiles/colourSettingsLevel1INDEX.js',
     'colourSettingsFiles/colourSettingsLevel2INDEX.js',
     'colourSettingsFiles/colourSettingsLevel3INDEX.js',
