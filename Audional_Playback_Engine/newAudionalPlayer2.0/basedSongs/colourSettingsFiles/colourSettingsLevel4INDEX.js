@@ -11,184 +11,146 @@ console.log("Colour settings level 4 loaded");
             : defaultColor;
     }
 
+     // Function to fetch hex color from palette by index
+     function getHexFromIndex(index) {
+        const color = window.colorPalette.primary.find(c => c.index === index);
+        return color ? color.hex : "#000000"; // Default to black if index not found
+    }
+
+    // Function to convert hex to RGB color
+    function hexToRgb(hex) {
+        hex = hex.replace("#", "");
+        if (hex.length === 3) {
+            hex = hex.split("").map(c => c + c).join("");
+        }
+        const bigint = parseInt(hex, 16);
+        return {
+            r: (bigint >> 16) & 255,
+            g: (bigint >> 8) & 255,
+            b: bigint & 255
+        };
+    }
+
     // Function to fetch color from palette by index
     function getColorByIndex(index) {
         const color = window.colorPalette.primary.find(c => c.index === index);
         return color ? `rgb(${color.rgb.r}, ${color.rgb.g}, ${color.rgb.b})` : "black";
     }
 
-      // Helper function to get random color from the palette
-      function getRandomColor(palette) {
+    // Helper function to get random color from the palette
+    function getRandomColor() {
+        const palette = window.colorPalette.primary;
         const randomIndex = Math.floor(Math.random() * palette.length);
-        return palette[randomIndex];
+        return palette[randomIndex].hex;
+    }
+
+      // Function to get dynamic RGB color using sine and random values
+      function getDynamicRgbColor(computedColor, hex) {
+        const { r, g, b } = hexToRgb(hex);
+        return `rgb(${Math.floor(computedColor * r)}, ${Math.floor(computedColor * g)}, ${Math.floor(computedColor * b)})`;
     }
 
     // Main function to get colors
-    // Main function to get colors
-// Main function to get colors
-function getColors4(o, a, l) {
-    // Pre-generate random values and colors
-    const randomValues = Array.from({ length: 6 }, () => Math.random());
-    
-    const now = Date.now();
-    const sinNow = Math.sin(now);
-    const sinNowDiv1000 = Math.sin(now / 1000);
-    const sinNowDiv2000 = Math.sin(now / 2000);
-    const sinNowDiv10 = Math.sin(now / 10);
-    const sinNowDiv5000 = Math.sin(now / 5000);
-    const sinNowDiv100 = Math.sin(now / 100);
-    const sinNowDivMinus17 = Math.sin(now / -17);
+    function getColors4(o, a, l) {
+        const now = Date.now();
 
-    const primaryColors = [...window.colorPalette.primary];
-    const randomColor1 = getRandomColor(primaryColors).hex;
-    const randomColor2 = getRandomColor(primaryColors).hex;
-    const randomColor3 = getRandomColor(primaryColors).hex;
-    const randomColor4 = getRandomColor(primaryColors).hex;
-    const randomColor5 = getRandomColor(primaryColors).hex;
-    const randomColor6 = getRandomColor(primaryColors).hex;
+        // Pre-generate random values
+        const randomValues = Array.from({ length: 6 }, () => Math.random());
 
+        // Cache sine values
+        const sinNow = Math.sin(now);
+        const sinValues = [
+            sinNow,
+            Math.sin(now / 10),
+            Math.sin(now / 100),
+            Math.sin(now / 1000),
+            Math.sin(now / 2000),
+            Math.sin(now / 5000),
+            sinNowDiv10 = Math.sin(now / 10),
+            sinNowDiv100 = Math.sin(now / 100),
+            sinNowDiv5000 = Math.sin(now / 5000),
+        ];
 
-    const sinValue = Math.abs(Math.sin(a / 3000));
+        // Cache vertex and l values
+        const { x: x0, y: y0, z: z0 } = l[0];
+        const { x: x1, y: y1 } = l[1];
+        const { x: x2, y: y2 } = l[2];
 
-    // Cache values of x, y, z for reuse
-    const { x: x0, y: y0, z: z0 } = l[0];
-    const { x: x1, y: y1 } = l[1];
-    const { x: x2, y: y2 } = l[2];
+        const l0zR = z0 + R;
+        const l1zR = l[1].z + R;
+        const l2zR = l[2].z + R;
 
-    const l0zR = z0 + R;
-    const l2zR = l[2].z + R;
-    const l1zR = l[1].z + R;
+        // Generate IGUANA EYES colors using colorPalette indices
+        const iguanaEyesIndices = [11, 9, 10, 19, 16, 3, 13, 12, 9, 19, 19, 16, 2, 15, 4, 10, 24, 25, 26, 27, 28, 29, 30];
+        const iguanaEyesColors = iguanaEyesIndices.map(index => {
+            const color = window.colorPalette.primary.find(c => c.index === index);
+            return color ? `rgb(${color.rgb.r}, ${color.rgb.g}, ${color.rgb.b})` : "black";
+        });
 
-    // Precompute sine values to use in variations
-    const sinValues = [
-        Math.sin(now / 1200),
-        Math.sin(now / 1400),
-        Math.sin(now / 1600),
-        Math.sin(now / 1000),
-        Math.sin(now / 1300),
-        Math.sin(now / 1700),
-        Math.sin(now / 1100),
-        Math.sin(now / 1900),
-        Math.sin(now / 2100),
-        Math.sin(now / 1800),
-        Math.sin(now / 1500),
-        Math.sin(now / 1900),
-    ];
+        // Generate Rainbow Cycle Scatters
+        const multipliers = [0.1, 0.2, 0.3, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+        const rainbowCycleScatters = multipliers.flatMap(multiplier => [
+            getConditionalColor(l[0].x, l[0].y, multiplier, getRandomColor(), "black"),
+            getConditionalColor(l[0].x, l[1].y, multiplier * 0.5, getRandomColor(), "black"),
+            getConditionalColor(l[1].x, l[1].y, multiplier, getRandomColor(), "black")
+        ]);
 
-    // Cache values for color computation
-    const colorFactors = [
-        255 / (5 * R), // Factor for the first set of colors
-        255 / (111 * R), // Factor for the second set of colors
-        75 / (3 * R), // Factor for the third set of colors
-    ];
+        // Generate Staring Eyes Colors
+        const staringEyesFactors = [
+            { factor: 255 / (75 * R), default: "#FF0000" },   // color-red
+            { factor: 255 / (75 * R), default: "#0000FF" },   // color-verydarkblue
+            { factor: 255 / (75 * R), default: "#FF8800" },   // color-orange
+            { factor: 255 / (75 * R), default: "#00FF00" },   // color-green
+            { factor: 255 / (75 * R), default: "#696969" },   // color-dimgray
+            { factor: 255 / (111 * R), default: "#B20000" },  // color-darkred
+            { factor: 255 / (111 * R), default: "#0000FF" },  // color-verydarkblue
+            { factor: 255 / (111 * R), default: "#00FF00" },  // color-green
+            { factor: 255 / (111 * R), default: "#696969" },  // color-dimgray
+            { factor: 255 / (111 * R), default: "#8000FF" },  // color-purple
+            { factor: 75 / (3 * R), default: "#004D00" },     // color-verydarkgreen
+            { factor: 75 / (3 * R), default: "#800000" },     // color-maroon
+            { factor: 75 / (3 * R), default: "#00CED1" },     // color-teal
+            { factor: 75 / (3 * R), default: "#00BFFF" },     // color-deepskyblue
+            { factor: 75 / (3 * R), default: "#FF1493" },     // color-deeppink
+            { factor: 255 / (9 * R), default: "#FFFFFF" },    // color-white
+            { factor: 255 / (9 * R), default: "#C0C0C0" },    // color-silver
+            { factor: 255 / (9 * R), default: "#FFD700" },    // color-gold
+            { factor: 255 / (9 * R), default: "#FF5500" },    // color-verydarkorange
+            { factor: 255 / (9 * R), default: "#FF00FF" },    // color-magenta
+            { factor: 255 / (15 * R), default: "#000000" },   // color-black
+            { factor: 255 / (15 * R), default: "#4B0082" },   // color-indigo
+            { factor: 255 / (15 * R), default: "#FF8C00" },   // color-darkorange
+        ];
+        const staringEyesColors = staringEyesFactors.map((entry, i) => {
+            const variation = Math.abs(Math.sin(now / (1000 + i * 200)) + Math.cos(now / (500 + i * 100)));
+            const computedColor = randomValues[i % randomValues.length] * variation * (l0zR / entry.factor);
+            return computedColor > 0.1
+                ? `rgb(${Math.floor(computedColor)}, ${Math.floor(computedColor)}, ${Math.floor(computedColor)})`
+                : entry.default;
+        });
 
-    // Helper function to generate color settings for a specific color base
-    function generateColorSettings(baseColor) {
+        // Generate Trippy Eyes Colors
+        const trippyEyesColors = [
+            `rgb(${Math.floor(127 * sinNow + 4)}, ${Math.floor(127 * sinNowDiv10 + 128)}, ${Math.floor(127 * sinNowDiv5000 + 32)})`,
+            `rgb(${Math.floor(111 * sinNow + 200000)}, ${Math.floor(127 * sinNow + 12)}, ${Math.floor(127 * sinNowDiv100 + 4)})`
+        ];
+
         return [
-            computeColor(randomValues[0], ((l2zR + 255) / (11 * R) * 255), baseColor),
-            computeColor(randomValues[1], ((l0zR + 255) / (5 * R) * 255), baseColor),
-            computeColor(randomValues[2], ((l1zR + 255) / (7 * R) * 255), baseColor),
-            computeColor(randomValues[3], ((l0zR + 255) / (3 * R) * 255), baseColor),
-            computeColor(randomValues[4], ((l1zR + 255) / (8 * R) * 255), baseColor),
+            ...iguanaEyesColors,
+            ...rainbowCycleScatters,
+            ...staringEyesColors,
+            ...trippyEyesColors,
         ];
     }
 
-   
-
-
-    // Generate IGUANA EYES colors using colorPalette indices
-    const iguanaEyesIndices = [11, 9, 10, 19, 16, 3, 13, 12, 9, 19, 19, 16, 2, 15, 4, 10, 24, 25, 26, 27, 28, 29, 30];
-    const iguanaEyesColors = iguanaEyesIndices.map(index =>
-        getDynamicRgb(x2, y2, x2, y0, ...Object.values(window.colorPalette.primary.find(c => c.index === index).rgb))
-    );
-
-    // RAINBOW Cycle Scatters
-    const multipliers = [0.1, 0.2, 0.3, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
-    const baseIndices = [randomColor1, randomColor2, randomColor3, randomColor4, randomColor5, randomColor6];
-    const rainbowCycleScatters = [];
-
-    for (let i = 0; i < 5; i++) {
-        rainbowCycleScatters.push(getConditionalColor(l[0].x, l[0].y, multipliers[i], baseIndices[i], "black"));
+    // Function to return the length of the array generated by getColors4
+    function getColors4Length() {
+        const defaultL = [{ z: 0, x: 0, y: 0 }, { z: 0, x: 0, y: 0 }, { z: 0, x: 0, y: 0 }];
+        const length = getColors4(null, null, defaultL).length;
+        console.log(`getColors4 length: ${length}`);
+        return length;
     }
 
-    for (let i = 0; i < 5; i++) {
-        rainbowCycleScatters.push(getConditionalColor(l[0].x, l[1].y, multipliers[i] * 0.5, baseIndices[i], "black"));
-    }
-
-    for (let i = 0; i < multipliers.length; i++) {
-        rainbowCycleScatters.push(getConditionalColor(l[1].x, l[1].y, multipliers[i], randomColor6, "black"));
-    }
-
-    // STARING EYES
-    const staringEyesFactors = [
-        { factor: 255 / (75 * R), default: "#FF0000" },   // color-red
-        { factor: 255 / (75 * R), default: "#0000FF" },   // color-verydarkblue
-        { factor: 255 / (75 * R), default: "#FF8800" },   // color-orange
-        { factor: 255 / (75 * R), default: "#00FF00" },   // color-green
-        { factor: 255 / (75 * R), default: "#696969" },   // color-dimgray
-        { factor: 255 / (111 * R), default: "#B20000" },  // color-darkred
-        { factor: 255 / (111 * R), default: "#0000FF" },  // color-verydarkblue
-        { factor: 255 / (111 * R), default: "#00FF00" },  // color-green
-        { factor: 255 / (111 * R), default: "#696969" },  // color-dimgray
-        { factor: 255 / (111 * R), default: "#8000FF" },  // color-purple
-        { factor: 75 / (3 * R), default: "#004D00" },     // color-verydarkgreen
-        { factor: 75 / (3 * R), default: "#800000" },     // color-maroon
-        { factor: 75 / (3 * R), default: "#00CED1" },     // color-teal
-        { factor: 75 / (3 * R), default: "#00BFFF" },     // color-deepskyblue
-        { factor: 75 / (3 * R), default: "#FF1493" },     // color-deeppink
-        { factor: 255 / (9 * R), default: "#FFFFFF" },    // color-white
-        { factor: 255 / (9 * R), default: "#C0C0C0" },    // color-silver
-        { factor: 255 / (9 * R), default: "#FFD700" },    // color-gold
-        { factor: 255 / (9 * R), default: "#FF5500" },    // color-verydarkorange
-        { factor: 255 / (9 * R), default: "#FF00FF" },    // color-magenta
-        { factor: 255 / (15 * R), default: "#000000" },   // color-black
-        { factor: 255 / (15 * R), default: "#4B0082" },   // color-indigo
-        { factor: 255 / (15 * R), default: "#FF8C00" },   // color-darkorange
-    ];
-
-    const staringEyesColors = staringEyesFactors.map((entry, i) => {
-        // Introduce more variability based on sin and cos functions to spread effect across sphere
-        const variation = Math.abs(Math.sin(now / (1000 + i * 200)) + Math.cos(now / (500 + i * 100)));
-        const computedColor = randomValues[i] * variation * (l0zR / entry.factor);
-    
-        return computedColor > 0.1
-            ? `rgb(${Math.floor(computedColor)}, ${Math.floor(computedColor)}, ${Math.floor(computedColor)})`
-            : entry.default;
-    });
-    
-
-    // Trippy Eyes color settings
-    const trippyEyesColors = [
-        [127 * sinNow + 4, 127 * sinNowDiv10 + 128, 127 * sinNowDiv5000 + 32],
-        [111 * sinNow + 200000, 127 * sinNow + 12, 127 * sinNowDiv100 + 4],
-        [127 * sinNow + 128, 127 * sinNowDiv1000 + 128, 127 * sinNowDiv2000 + 128]
-    ].map(([r, g, b]) => `rgb(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)})`);
-    
-    return [
-        ...iguanaEyesColors,
-        ...rainbowCycleScatters,
-        ...staringEyesColors,
-        ...trippyEyesColors,
-  
-        ...generateColorSettings("red"),
-        ...generateColorSettings("green"),
-        ...generateColorSettings("blue"),
-        ...generateColorSettings("yellow"),
-        ...generateColorSettings("purple"),
-    ];
-
-
-}
-
-// Function to return the length of the array generated by getColors4
-function getColors4Length() {
-    const defaultL = [{ z: 0, x: 0, y: 0 }, { z: 0, x: 0, y: 0 }, { z: 0, x: 0, y: 0 }];
-    const length = getColors4(null, null, defaultL).length;
-    console.log(`getColors4 length: ${length}`);
-    return length;
-}
-
-// Log the length of the colors array when the file is loaded
-getColors4Length();
-
+    // Log the length of the colors array when the file is loaded
+    getColors4Length();
 }

@@ -2,6 +2,10 @@
 
 console.log("Visualiser.js loaded");
 
+// *** TRIPPY MODE ***
+let clearCanvas = true; // *** Global flag to control canvas clearing *** SWITCH to false for TRIPPY ARTWORK MODE
+
+
 let isChannel11Active = false;
 let activeChannelIndex = null;
 let isPlaybackActive = false;
@@ -20,16 +24,16 @@ let arrayLengths = {
 };
 
 const accessLevelMappings = {
-    1: [7],
+    1: [1],
     2: [1, 2],
     3: [1, 2, 3],
     4: [2], 
-    5: [3], 
+    5: [5], 
     6: [1, 2, 5],
     7: [1, 2, 3, 4, 5, 6], 
     8: [1, 4, 6], 
     9: [1, 5, 6], 
-    10:[6], 
+    10:[6, 7], 
 
 };
 
@@ -199,121 +203,93 @@ function immediateVisualUpdate() {
     }
 }
 
-document.addEventListener("internalAudioPlayback", (event) => {
+document.addEventListener("internalAudioPlayback", handleAudioPlaybackEvent);
+AudionalPlayerMessages.onmessage = (message) => handleAudioPlaybackEvent({ detail: message.data });
+
+function handleAudioPlaybackEvent(event) {
     const { action, channelIndex, step } = event.detail;
 
     if (action === "stop") {
-        cci2 = initialCCI2;
-        isChannel11Active = false;
-        isPlaybackActive = false;
-        activeChannelIndex = null;
-        activeArrayIndex = {};
-        renderingState = {};
-        console.log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
-        immediateVisualUpdate();
+        resetPlayback();
     } else if (action === "activeStep") {
-        if (!isPlaybackActive || activeChannelIndex !== channelIndex) {
-            isPlaybackActive = true;
-            activeChannelIndex = channelIndex;
-            AccessLevel = generateAccessLevel(seed);
-            const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
-            const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
+        handleActiveStep(channelIndex);
+    }
+}
 
-            console.log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nCCI2=${cci2}\nIndex=${arrayIndex}`);
-            
-            if (!arrayLengths[arrayIndex]) {
-                console.error("Invalid array length:", arrayLengths[arrayIndex]);
-                return;
-            }
+function resetPlayback() {
+    cci2 = initialCCI2;
+    isChannel11Active = false;
+    isPlaybackActive = false;
+    activeChannelIndex = null;
+    activeArrayIndex = {};
+    renderingState = {};
+    console.log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
+    immediateVisualUpdate();
+}
 
-            cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
+function handleActiveStep(channelIndex) {
+    if (!isPlaybackActive || activeChannelIndex !== channelIndex) {
+        isPlaybackActive = true;
+        activeChannelIndex = channelIndex;
+        AccessLevel = generateAccessLevel(seed);
+        const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
+        const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
 
-            if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
-                activeArrayIndex[channelIndex] = arrayIndex;
-                updateVisualizer(cci2, arrayIndex, channelIndex);
-            }
+        console.log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nCCI2=${cci2}\nIndex=${arrayIndex}`);
 
+        if (!arrayLengths[arrayIndex]) {
+            console.error("Invalid array length:", arrayLengths[arrayIndex]);
+            return;
+        }
+
+        cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
+
+        if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
+            activeArrayIndex[channelIndex] = arrayIndex;
+            updateVisualizer(cci2, arrayIndex, channelIndex);
         }
     }
-});
+}
 
-AudionalPlayerMessages.onmessage = (message) => {
-    const { action, channelIndex } = message.data;
-    if (!isPlaybackActive && action !== "stop") return;
-
-    if (action === "stop") {
-        cci2 = initialCCI2;
-        isChannel11Active = false;
-        isPlaybackActive = false;
-        activeChannelIndex = null;
-        activeArrayIndex = {};
-        renderingState = {};
-        console.log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
-    } else {
-        if (activeChannelIndex !== channelIndex) {
-            activeChannelIndex = channelIndex;
-            AccessLevel = generateAccessLevel(seed);
-            const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
-            const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
-
-            console.log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nCCI2=${cci2}\nIndex=${arrayIndex}`);
-            
-            if (!arrayLengths[arrayIndex]) {
-                console.error("Invalid array length:", arrayLengths[arrayIndex]);
-                return;
-            }
-
-            cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
-
-            if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
-                activeArrayIndex[channelIndex] = arrayIndex;
-                updateVisualizer(cci2, arrayIndex, channelIndex);
-            }
-
-        }
-    }
-};
 
 // Function to log initial assignments for all channels
 function logInitialAssignments() {
-    setTimeout(() => {
-        const assignments = [];
-        const totalChannels = 16; // Adjust this number based on your application
+    const assignments = [];
+    const totalChannels = 16; // Adjust this number based on your application
 
-        // Compute the access level once and log it
-        const accessLevel = generateAccessLevel(seed);
-        console.log(`Access Level: ${accessLevel}`);
+    // Compute the access level once and log it
+    const accessLevel = generateAccessLevel(seed);
+    console.log(`Access Level: ${accessLevel}`);
 
-        for (let channelIndex = 1; channelIndex <= totalChannels; channelIndex++) {
-            const arrayIndex = selectArrayIndex(seed, accessLevel, channelIndex);
-            const cci2 = calculateCCI2(channelIndex, arrayLengths[arrayIndex]);
+    for (let channelIndex = 1; channelIndex <= totalChannels; channelIndex++) {
+        const arrayIndex = selectArrayIndex(seed, accessLevel, channelIndex);
+        const cci2 = calculateCCI2(channelIndex, arrayLengths[arrayIndex]);
 
-            // Update the rendering state and active array index
-            renderingState[channelIndex] = { arrayIndex, cci2 };
-            activeArrayIndex[channelIndex] = arrayIndex;
+        // Update the rendering state and active array index
+        renderingState[channelIndex] = { arrayIndex, cci2 };
+        activeArrayIndex[channelIndex] = arrayIndex;
 
-            // Log only the array index and CCI2
-            assignments.push(`Channel ${channelIndex}: ArrayIndex=${arrayIndex}, CCI2=${cci2}`);
-        }
+        // Log only the array index and CCI2
+        assignments.push(`Channel ${channelIndex}: ArrayIndex=${arrayIndex}, CCI2=${cci2}`);
+    }
 
-        console.log("Initial Assignments:", assignments.join("; "));
-    }, 100);
+    console.log("Initial Assignments:", assignments.join("; "));
 }
 
-// Delay execution of logInitialAssignments by 500 milliseconds
+// Delay execution of logInitialAssignments by 500 milliseconds only if necessary
 setTimeout(logInitialAssignments, 500);
 
 // Log function to control frequency and relevance
 let lastLogTime = 0;
 const logFrequency = 1000; // Log every 1000ms (1 second)
-function log(message) {
+
+function throttledLog(message) {
     const now = Date.now();
     if (now - lastLogTime > logFrequency) {
         console.log(message);
         lastLogTime = now;
     }
 }
-
 // Separate error logging
 function errorLog(message, data) {
     console.error(message, data);
@@ -339,24 +315,13 @@ self.onmessage = function(e) {
     const { id, vertices, primaryAndSecondaryColors } = e.data;
 
     // Pre-generate random colors array
-    const colorsArray = Array.from({ length: 5 }, () => {
-        return primaryAndSecondaryColors[Math.floor(Math.random() * primaryAndSecondaryColors.length)].hex;
-    });
+    const colorsArray = primaryAndSecondaryColors.map(color => color.hex).slice(0, 5);
 
     // Compute colors for the vertices
-    const updatedColors = vertices.map((v, index) => {
-        // Use conditional color function
-        return {
-            index,
-            colors: [
-                getConditionalColor(v.x, v.y, 0.1, colorsArray[0], "black"),
-                getConditionalColor(v.x, v.y, 0.2, colorsArray[1], "black"),
-                getConditionalColor(v.x, v.y, 0.3, colorsArray[2], "black"),
-                getConditionalColor(v.x, v.y, 0.5, colorsArray[3], "black"),
-                getConditionalColor(v.x, v.y, 0.05, colorsArray[4], "black")
-            ]
-        };
-    });
+    const updatedColors = vertices.map((v, index) => ({
+        index,
+        colors: colorsArray.map((color, idx) => getConditionalColor(v.x, v.y, [0.1, 0.2, 0.3, 0.5, 0.05][idx], color, "black"))
+    }));
 
     postMessage({ id, updatedColors });
 };
@@ -371,18 +336,16 @@ const workerScriptURL = URL.createObjectURL(blob);
 const rainbowWorker = new Worker(workerScriptURL);
 URL.revokeObjectURL(workerScriptURL);
 
-function sendRainbowRequest(id, vertices, angle, palette) {
+function sendRainbowRequest(id, vertices, palette) {
     rainbowWorker.postMessage({
         id,
         vertices,
-        angle,
         primaryAndSecondaryColors: palette
     });
 }
 
 rainbowWorker.onmessage = function(e) {
     const { id, updatedColors } = e.data;
-    // Handle the updated colors on the main thread
     updateScatterColors(id, updatedColors);
 };
 
@@ -392,20 +355,22 @@ self.onmessage = function(e) {
 
     switch (type) {
         case 'COLOR_SETTINGS':
-            const { vertices, primaryAndSecondaryColors, factors, randomValues } = data;
-            const colorsArray = Array.from({ length: 5 }, () => {
-                return primaryAndSecondaryColors[Math.floor(Math.random() * primaryAndSecondaryColors.length)].hex;
-            });
+            const { vertices, primaryAndSecondaryColors } = data;
+            const colorsArray = primaryAndSecondaryColors.map(color => color.hex);
+            
+            // Pre-generate indices for colors
+            const randomIndices = Array.from({ length: 5 }, () => Math.floor(Math.random() * colorsArray.length));
 
             const updatedColors = vertices.map((v, index) => {
+                const colorSet = randomIndices.map(i => colorsArray[i]);
                 return {
                     index,
                     colors: [
-                        getConditionalColor(v.x, v.y, 0.1, colorsArray[0], "black"),
-                        getConditionalColor(v.x, v.y, 0.2, colorsArray[1], "black"),
-                        getConditionalColor(v.x, v.y, 0.3, colorsArray[2], "black"),
-                        getConditionalColor(v.x, v.y, 0.5, colorsArray[3], "black"),
-                        getConditionalColor(v.x, v.y, 0.05, colorsArray[4], "black")
+                        getConditionalColor(v.x, v.y, 0.1, colorSet[0], "black"),
+                        getConditionalColor(v.x, v.y, 0.2, colorSet[1], "black"),
+                        getConditionalColor(v.x, v.y, 0.3, colorSet[2], "black"),
+                        getConditionalColor(v.x, v.y, 0.5, colorSet[3], "black"),
+                        getConditionalColor(v.x, v.y, 0.05, colorSet[4], "black")
                     ]
                 };
             });
@@ -415,7 +380,8 @@ self.onmessage = function(e) {
 
         case 'DYNAMIC_RGB':
             const { randomValue, baseZ, factor } = data;
-            const colorValue = Math.floor(randomValue * ((baseZ + 255) / (factor * 100) * 255));
+            const scaledValue = (baseZ + 255) / (factor * 100);
+            const colorValue = Math.floor(randomValue * scaledValue * 255);
             const rgbColor = colorValue > 0.01 ? \`rgb(\${colorValue}, \${colorValue}, \${colorValue})\` : "#FF0000";
             postMessage({ type, id, rgbColor });
             break;
@@ -431,12 +397,12 @@ function getConditionalColor(x, y, divisor, trueColor, falseColor) {
 }
 `;
 
+
 const visualizerBlob = new Blob([visualizerWorkerScript], { type: "application/javascript" });
 const visualizerWorkerURL = URL.createObjectURL(visualizerBlob);
 const visualizerWorker = new Worker(visualizerWorkerURL);
 URL.revokeObjectURL(visualizerWorkerURL);
 
-// Worker script for handling rotations
 const rotationWorkerScript = `
 self.onmessage = function(e) {
     const { id, vertices, pivot, angle } = e.data;
@@ -444,11 +410,11 @@ self.onmessage = function(e) {
     const sinA = Math.sin(angle);
 
     const updatedVertices = vertices.map(v => {
-        let x = v.x - pivot.x,
-            y = v.y - pivot.y,
-            x1 = x * cosA - y * sinA,
-            y1 = x * sinA + y * cosA;
-        return { x: x1 + pivot.x, y: y1 + pivot.y, z: v.z };
+        const dx = v.x - pivot.x;
+        const dy = v.y - pivot.y;
+        const x1 = dx * cosA - dy * sinA + pivot.x;
+        const y1 = dx * sinA + dy * cosA + pivot.y;
+        return { x: x1, y: y1, z: v.z };
     });
     postMessage({ id, updatedVertices });
 };
@@ -465,7 +431,6 @@ function sendRotationRequest(id, vertices, pivot, angle) {
 
 rotationWorker.onmessage = function(e) {
     const { id, updatedVertices } = e.data;
-    // Update the corresponding object with the new vertices
     if (id === "cy") cp.cy.updateVertices(updatedVertices);
     else if (id.startsWith("sp")) cp[id].updateVertices(updatedVertices);
 };
@@ -479,32 +444,41 @@ class Cy {
         this.gV();
         this.gF();
     }
-    updateVertices(t) { this.v = t; }
+
+    updateVertices(t) { 
+        this.v = t; 
+    }
+
     gV() {
-        this.v = [];
+        const vertices = [];
+        const increment = 2 * Math.PI / this.s;
         for (let t = 0; t <= this.s; t++) {
-            let e = this.c.y - this.h / 2 + t / this.s * this.h;
+            const y = this.c.y - this.h / 2 + t / this.s * this.h;
             for (let s = 0; s <= this.s; s++) {
-                let i = s / this.s * 2 * Math.PI,
-                    c = this.c.x + this.r * Math.cos(i),
-                    a = this.c.z + this.r * Math.sin(i);
-                this.v.push({ x: c, y: e, z: a });
+                const angle = s * increment;
+                const x = this.c.x + this.r * Math.cos(angle);
+                const z = this.c.z + this.r * Math.sin(angle);
+                vertices.push({ x, y, z });
             }
         }
+        this.v = vertices;
     }
+
     gF() {
-        this.f = [];
-        for (let t = 0; t < this.s; t++)
+        const faces = [];
+        const stride = this.s + 1;
+        for (let t = 0; t < this.s; t++) {
             for (let e = 0; e < this.s; e++) {
-                let s = t * (this.s + 1) + e,
-                    i = s + 1,
-                    c = s + this.s + 1,
-                    a = c + 1;
-                this.f.push([s, i, c]);
-                this.f.push([i, a, c]);
+                const s = t * stride + e;
+                faces.push([s, s + 1, s + stride], [s + 1, s + stride + 1, s + stride]);
             }
+        }
+        this.f = faces;
     }
-    rP(t, e) { sendRotationRequest(this.id, this.v, t, e); }
+
+    rP(t, e) { 
+        sendRotationRequest(this.id, this.v, t, e); 
+    }
 }
 
 class Sp {
@@ -515,33 +489,46 @@ class Sp {
         this.gV();
         this.gF();
     }
-    updateVertices(t) { this.v = t; }
+
+    updateVertices(t) { 
+        this.v = t; 
+    }
+
     gV() {
-        this.v = [];
+        const vertices = [];
+        const increment = 2 * Math.PI / this.s;
         for (let t = 0; t <= this.s; t++) {
-            let e = t / this.s * Math.PI;
+            const phi = t / this.s * Math.PI;
+            const sinPhi = Math.sin(phi);
+            const cosPhi = Math.cos(phi);
             for (let s = 0; s <= this.s; s++) {
-                let i = s / this.s * 2 * Math.PI,
-                    c = this.c.x + this.r * Math.sin(e) * Math.cos(i),
-                    a = this.c.y + this.r * Math.sin(e) * Math.sin(i),
-                    o = this.c.z + this.r * Math.cos(e);
-                this.v.push({ x: c, y: a, z: o });
+                const theta = s * increment;
+                const sinTheta = Math.sin(theta);
+                const cosTheta = Math.cos(theta);
+                const x = this.c.x + this.r * sinPhi * cosTheta;
+                const y = this.c.y + this.r * sinPhi * sinTheta;
+                const z = this.c.z + this.r * cosPhi;
+                vertices.push({ x, y, z });
             }
         }
+        this.v = vertices;
     }
+
     gF() {
-        this.f = [];
-        for (let t = 0; t < this.s; t++)
+        const faces = [];
+        const stride = this.s + 1;
+        for (let t = 0; t < this.s; t++) {
             for (let e = 0; e < this.s; e++) {
-                let s = t * (this.s + 1) + e,
-                    i = s + 1,
-                    c = s + this.s + 1,
-                    a = c + 1;
-                this.f.push([s, i, c]);
-                this.f.push([i, a, c]);
+                const s = t * stride + e;
+                faces.push([s, s + 1, s + stride], [s + 1, s + stride + 1, s + stride]);
             }
+        }
+        this.f = faces;
     }
-    rP(t, e) { sendRotationRequest(this.id, this.v, t, e); }
+
+    rP(t, e) { 
+        sendRotationRequest(this.id, this.v, t, e); 
+    }
 }
 
 class Cp {
@@ -566,23 +553,22 @@ class Cp {
     }
 }
 
-let t,
-    cp = new Cp({ x: S / 2, y: S / 2, z: 0 }, R, H, 30),
-    os1 = new Sp({ x: S / 2 - OR, y: S / 2, z: 0 }, SR, 30),
-    os2 = new Sp({ x: S / 2 + OR, y: S / 2, z: 0 }, SR, 30);
+// Global initialization
+let t;
+const cp = new Cp({ x: S / 2, y: S / 2, z: 0 }, R, H, 30);
+const os1 = new Sp({ x: S / 2 - OR, y: S / 2, z: 0 }, SR, 30);
+const os2 = new Sp({ x: S / 2 + OR, y: S / 2, z: 0 }, SR, 30);
+
+
 
 function d(e) {
-    let s;
-
-    cx.clearRect(0, 0, S, S);
-
-    if (t === undefined) {
-        s = 0;
-    } else {
-        s = RS * (e - t) * 100;
-    }
-
+    let s = t === undefined ? 0 : RS * (e - t) * 100;
     t = e;
+
+    // Check the clearCanvas flag
+    if (clearCanvas) {
+        cx.clearRect(0, 0, S, S);
+    }
 
     cp.rP(cp.c, s);
     cp.drawObjectD2(cp.cy, e);
@@ -596,9 +582,11 @@ cp.drawObjectD2 = function(t, e) {
     // Use initial color for fill if playback is not active or no active channel
     let initialFill = (!isPlaybackActive || activeChannelIndex === null);
 
+    cx.strokeStyle = "black"; // Set stroke style once outside the loop
+
     for (let s of t.f) {
-        let vertices = s.map((e) => t.v[e]);
-        let coordinates = vertices.map((t) => ({ x: t.x, y: t.y }));
+        let vertices = s.map(e => t.v[e]);
+        let coordinates = vertices.map(t => ({ x: t.x, y: t.y }));
 
         cx.beginPath();
         cx.moveTo(coordinates[0].x, coordinates[0].y);
@@ -606,39 +594,41 @@ cp.drawObjectD2 = function(t, e) {
         for (let t = 1; t < coordinates.length; t++) {
             cx.lineTo(coordinates[t].x, coordinates[t].y);
         }
-
         cx.closePath();
 
+        // Compute the angle once
         let angle = 180 * Math.atan2(coordinates[0].y - S / 2, coordinates[0].x - S / 2) / Math.PI;
 
-        // Render using first color from getColors1 if initial fill
+        // Determine the color based on the current fill state
+        let colors;
         if (initialFill) {
-            let initialColors = getColors1(angle, e, vertices);
-            if (!initialColors || initialColors.length === 0) {
+            colors = getColors1(angle, e, vertices);
+            if (!colors || colors.length === 0) {
                 console.error(`No colors returned for initial display.`);
                 return;
             }
-            cx.fillStyle = initialColors[0]; // Use the first color for initial fill
         } else {
-            // Render using active array for the current channel
             const currentArrayIndex = activeArrayIndex[activeChannelIndex];
-            let colors = getColorArray(angle, e, vertices, AccessLevel);
-
+            colors = getColorArray(angle, e, vertices, AccessLevel);
             if (!colors || colors.length === 0) {
                 console.error(`No colors returned for AccessLevel: ${AccessLevel}`);
                 return;
             }
+        }
 
-            cx.fillStyle = colors[cci2 % colors.length];
+        // Set fillStyle only if it changes
+        const fillColor = colors[0]; // Using the first color or based on some logic
+        if (cx.fillStyle !== fillColor) {
+            cx.fillStyle = fillColor;
         }
 
         cx.fill();
-        cx.strokeStyle = "black";
         cx.stroke();
     }
 };
 
 requestAnimationFrame(d);
+
 
 function getColorArray(angle, time, vertices, accessLevel) {
     const allowedArrays = accessLevelMappings[accessLevel];
@@ -672,4 +662,3 @@ function getColorArray(angle, time, vertices, accessLevel) {
 }
 
 
-// async function ensureAudioContextState(){window.audioCtx&&"suspended"===audioCtx.state&&(await audioCtx.resume(),console.log("AudioContext resumed"))}document.addEventListener("DOMContentLoaded",ensureAudioContextState),document.addEventListener("click",(async()=>{await ensureAudioContextState()}));

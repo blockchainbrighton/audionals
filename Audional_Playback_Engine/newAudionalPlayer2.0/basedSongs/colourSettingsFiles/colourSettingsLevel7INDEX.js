@@ -23,41 +23,100 @@
       // Compute sine values for dynamic colors
       const now = Date.now();
       const sinNow = Math.sin(now);
-
+  
       // Use a complete range of color indexes from 1 to 23
       const colorIndexes = Array.from({ length: 23 }, (_, i) => i + 1);
       const calculatedColor = Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255));
   
       // Return dynamic color settings
       return [
-        // // Original colors
-        // (calculatedColor > 0.01 ? 
-        //   `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
-        //   "#FF0000"), // Bright red
+        // Original colors
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#FF0000"), // Bright red
 
-        // (calculatedColor > 0.01 ? 
-        //   `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
-        //   "#00FF00"), // Bright green
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#00FF00"), // Bright green
 
-        // (calculatedColor > 0.01 ? 
-        //   `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
-        //   "#0000FF"), // Bright blue
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#0000FF"), // Bright blue
 
-        // // Additional exciting colors
-        // (calculatedColor > 0.01 ? 
-        //   `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
-        //   "#FF1493"), // Deep pink
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#FF1493"), // Deep pink
 
-        // (calculatedColor > 0.01 ? 
-        //   `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
-        //   "#800080"), // Deep purple
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#800080"), // Deep purple
 
-        // Rainbow effect using sine wave to create a gradient
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#FFA500"), // Bitcoin orange
 
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#FFFFFF"), // White (grayscale)
 
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#808080"), // Grey (grayscale)
+
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#000000"), // Black (grayscale)
+
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#C0C0C0"), // Silver
+
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#FFD700"), // Gold
+
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#FF4500"), // Orange red
+
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#4B0082"), // Indigo
+
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#FF6347"), // Tomato
+
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#9400D3"), // Dark violet
+
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#FFDAB9"), // Peach puff
+
+        (calculatedColor > 0.01 ? 
+          `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+          "#F7931A"), // Dark turquoise
+
+        
+        // Rainbow pulse effect using sine wave to create a gradient
+        `rgb(${Math.floor(127.5 * (1 + Math.sin(0.1 * now)))}, ${Math.floor(127.5 * (1 + Math.sin(0.3 * now + 2 * Math.PI / 3)))}, ${Math.floor(127.5 * (1 + Math.sin(0.3 * now + 4 * Math.PI / 3)))})`, // Rainbow 3
+
+        `rgb(${Math.floor(127.5 * (1 + Math.sin(0.2 * now)))}, ${Math.floor(127.5 * (1 + Math.sin(0.4 * now + 2 * Math.PI / 3)))}, ${Math.floor(127.5 * (1 + Math.sin(0.4 * now + 4 * Math.PI / 3)))})`, // Rainbow 4
+    
         `rgb(${Math.floor(127.5 * (1 + Math.sin(0.3 * now)))}, ${Math.floor(127.5 * (1 + Math.sin(0.3 * now + 2 * Math.PI / 3)))}, ${Math.floor(127.5 * (1 + Math.sin(0.3 * now + 4 * Math.PI / 3)))})`, // Rainbow 3
 
         `rgb(${Math.floor(127.5 * (1 + Math.sin(0.4 * now)))}, ${Math.floor(127.5 * (1 + Math.sin(0.4 * now + 2 * Math.PI / 3)))}, ${Math.floor(127.5 * (1 + Math.sin(0.4 * now + 4 * Math.PI / 3)))})`, // Rainbow 4
+       
+        `rgb(${Math.floor(127.5 * (1 + Math.sin(0.1 * now)))}, ${Math.floor(127.5 * (1 + Math.sin(0.1 * now + 2 * Math.PI / 3)))}, ${Math.floor(127.5 * (1 + Math.sin(0.1 * now + 4 * Math.PI / 3)))})`, // Rainbow 3
+
+        `rgb(${Math.floor(127.5 * (1 + Math.sin(0.2 * now)))}, ${Math.floor(127.5 * (1 + Math.sin(0.2 * now + 2 * Math.PI / 3)))}, ${Math.floor(127.5 * (1 + Math.sin(0.2 * now + 4 * Math.PI / 3)))})`, // Rainbow 4
+    
+        `rgb(${Math.floor(127.5 * (1 + Math.sin(0.3 * now)))}, ${Math.floor(127.5 * (1 + Math.sin(0.3 * now + 2 * Math.PI / 3)))}, ${Math.floor(127.5 * (1 + Math.sin(0.3 * now + 4 * Math.PI / 3)))})`, // Rainbow 3
+
+        `rgb(${Math.floor(127.5 * (1 + Math.sin(0.4 * now)))}, ${Math.floor(127.5 * (1 + Math.sin(0.4 * now + 2 * Math.PI / 3)))}, ${Math.floor(127.5 * (1 + Math.sin(0.4 * now + 4 * Math.PI / 3)))})`, // Rainbow 4
+     
       ];
     }
   
