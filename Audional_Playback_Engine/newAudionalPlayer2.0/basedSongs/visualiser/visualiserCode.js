@@ -2,10 +2,6 @@
 
 console.log("Visualiser.js loaded");
 
-// *** TRIPPY MODE ***
-let clearCanvas = true; // *** Global flag to control canvas clearing *** SWITCH to false for TRIPPY ARTWORK MODE
-
-
 let isChannel11Active = false;
 let activeChannelIndex = null;
 let isPlaybackActive = false;
@@ -203,93 +199,121 @@ function immediateVisualUpdate() {
     }
 }
 
-document.addEventListener("internalAudioPlayback", handleAudioPlaybackEvent);
-AudionalPlayerMessages.onmessage = (message) => handleAudioPlaybackEvent({ detail: message.data });
-
-function handleAudioPlaybackEvent(event) {
+document.addEventListener("internalAudioPlayback", (event) => {
     const { action, channelIndex, step } = event.detail;
 
     if (action === "stop") {
-        resetPlayback();
+        cci2 = initialCCI2;
+        isChannel11Active = false;
+        isPlaybackActive = false;
+        activeChannelIndex = null;
+        activeArrayIndex = {};
+        renderingState = {};
+        console.log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
+        immediateVisualUpdate();
     } else if (action === "activeStep") {
-        handleActiveStep(channelIndex);
-    }
-}
+        if (!isPlaybackActive || activeChannelIndex !== channelIndex) {
+            isPlaybackActive = true;
+            activeChannelIndex = channelIndex;
+            AccessLevel = generateAccessLevel(seed);
+            const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
+            const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
 
-function resetPlayback() {
-    cci2 = initialCCI2;
-    isChannel11Active = false;
-    isPlaybackActive = false;
-    activeChannelIndex = null;
-    activeArrayIndex = {};
-    renderingState = {};
-    console.log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
-    immediateVisualUpdate();
-}
+            console.log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nCCI2=${cci2}\nIndex=${arrayIndex}`);
+            
+            if (!arrayLengths[arrayIndex]) {
+                console.error("Invalid array length:", arrayLengths[arrayIndex]);
+                return;
+            }
 
-function handleActiveStep(channelIndex) {
-    if (!isPlaybackActive || activeChannelIndex !== channelIndex) {
-        isPlaybackActive = true;
-        activeChannelIndex = channelIndex;
-        AccessLevel = generateAccessLevel(seed);
-        const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
-        const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
+            cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
 
-        console.log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nCCI2=${cci2}\nIndex=${arrayIndex}`);
+            if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
+                activeArrayIndex[channelIndex] = arrayIndex;
+                updateVisualizer(cci2, arrayIndex, channelIndex);
+            }
 
-        if (!arrayLengths[arrayIndex]) {
-            console.error("Invalid array length:", arrayLengths[arrayIndex]);
-            return;
-        }
-
-        cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
-
-        if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
-            activeArrayIndex[channelIndex] = arrayIndex;
-            updateVisualizer(cci2, arrayIndex, channelIndex);
         }
     }
-}
+});
 
+AudionalPlayerMessages.onmessage = (message) => {
+    const { action, channelIndex } = message.data;
+    if (!isPlaybackActive && action !== "stop") return;
+
+    if (action === "stop") {
+        cci2 = initialCCI2;
+        isChannel11Active = false;
+        isPlaybackActive = false;
+        activeChannelIndex = null;
+        activeArrayIndex = {};
+        renderingState = {};
+        console.log(`Stop received. CCI2 reset to initial value ${initialCCI2}`);
+    } else {
+        if (activeChannelIndex !== channelIndex) {
+            activeChannelIndex = channelIndex;
+            AccessLevel = generateAccessLevel(seed);
+            const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
+            const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
+
+            console.log(`AccessLevel=${AccessLevel}\nArrayIndex=${arrayIndex}\nCCI2=${cci2}\nIndex=${arrayIndex}`);
+            
+            if (!arrayLengths[arrayIndex]) {
+                console.error("Invalid array length:", arrayLengths[arrayIndex]);
+                return;
+            }
+
+            cci2 = calculateCCI2(safeChannelIndex, arrayLengths[arrayIndex]);
+
+            if (shouldUpdateVisualizer(channelIndex, arrayIndex, cci2)) {
+                activeArrayIndex[channelIndex] = arrayIndex;
+                updateVisualizer(cci2, arrayIndex, channelIndex);
+            }
+
+        }
+    }
+};
 
 // Function to log initial assignments for all channels
 function logInitialAssignments() {
-    const assignments = [];
-    const totalChannels = 16; // Adjust this number based on your application
+    setTimeout(() => {
+        const assignments = [];
+        const totalChannels = 16; // Adjust this number based on your application
 
-    // Compute the access level once and log it
-    const accessLevel = generateAccessLevel(seed);
-    console.log(`Access Level: ${accessLevel}`);
+        // Compute the access level once and log it
+        const accessLevel = generateAccessLevel(seed);
+        console.log(`Access Level: ${accessLevel}`);
 
-    for (let channelIndex = 1; channelIndex <= totalChannels; channelIndex++) {
-        const arrayIndex = selectArrayIndex(seed, accessLevel, channelIndex);
-        const cci2 = calculateCCI2(channelIndex, arrayLengths[arrayIndex]);
+        for (let channelIndex = 1; channelIndex <= totalChannels; channelIndex++) {
+            const arrayIndex = selectArrayIndex(seed, accessLevel, channelIndex);
+            const cci2 = calculateCCI2(channelIndex, arrayLengths[arrayIndex]);
 
-        // Update the rendering state and active array index
-        renderingState[channelIndex] = { arrayIndex, cci2 };
-        activeArrayIndex[channelIndex] = arrayIndex;
+            // Update the rendering state and active array index
+            renderingState[channelIndex] = { arrayIndex, cci2 };
+            activeArrayIndex[channelIndex] = arrayIndex;
 
-        // Log only the array index and CCI2
-        assignments.push(`Channel ${channelIndex}: ArrayIndex=${arrayIndex}, CCI2=${cci2}`);
-    }
+            // Log only the array index and CCI2
+            assignments.push(`Channel ${channelIndex}: ArrayIndex=${arrayIndex}, CCI2=${cci2}`);
+        }
 
-    console.log("Initial Assignments:", assignments.join("; "));
+        console.log("Initial Assignments:", assignments.join("; "));
+    }, 100);
 }
 
-// Delay execution of logInitialAssignments by 500 milliseconds only if necessary
+// Delay execution of logInitialAssignments by 500 milliseconds
 setTimeout(logInitialAssignments, 500);
 
 // Log function to control frequency and relevance
 let lastLogTime = 0;
 const logFrequency = 1000; // Log every 1000ms (1 second)
-
-function throttledLog(message) {
+function log(message) {
     const now = Date.now();
     if (now - lastLogTime > logFrequency) {
         console.log(message);
         lastLogTime = now;
     }
 }
+
 // Separate error logging
 function errorLog(message, data) {
     console.error(message, data);
@@ -315,13 +339,24 @@ self.onmessage = function(e) {
     const { id, vertices, primaryAndSecondaryColors } = e.data;
 
     // Pre-generate random colors array
-    const colorsArray = primaryAndSecondaryColors.map(color => color.hex).slice(0, 5);
+    const colorsArray = Array.from({ length: 5 }, () => {
+        return primaryAndSecondaryColors[Math.floor(Math.random() * primaryAndSecondaryColors.length)].hex;
+    });
 
     // Compute colors for the vertices
-    const updatedColors = vertices.map((v, index) => ({
-        index,
-        colors: colorsArray.map((color, idx) => getConditionalColor(v.x, v.y, [0.1, 0.2, 0.3, 0.5, 0.05][idx], color, "black"))
-    }));
+    const updatedColors = vertices.map((v, index) => {
+        // Use conditional color function
+        return {
+            index,
+            colors: [
+                getConditionalColor(v.x, v.y, 0.1, colorsArray[0], "black"),
+                getConditionalColor(v.x, v.y, 0.2, colorsArray[1], "black"),
+                getConditionalColor(v.x, v.y, 0.3, colorsArray[2], "black"),
+                getConditionalColor(v.x, v.y, 0.5, colorsArray[3], "black"),
+                getConditionalColor(v.x, v.y, 0.05, colorsArray[4], "black")
+            ]
+        };
+    });
 
     postMessage({ id, updatedColors });
 };
@@ -336,16 +371,18 @@ const workerScriptURL = URL.createObjectURL(blob);
 const rainbowWorker = new Worker(workerScriptURL);
 URL.revokeObjectURL(workerScriptURL);
 
-function sendRainbowRequest(id, vertices, palette) {
+function sendRainbowRequest(id, vertices, angle, palette) {
     rainbowWorker.postMessage({
         id,
         vertices,
+        angle,
         primaryAndSecondaryColors: palette
     });
 }
 
 rainbowWorker.onmessage = function(e) {
     const { id, updatedColors } = e.data;
+    // Handle the updated colors on the main thread
     updateScatterColors(id, updatedColors);
 };
 
@@ -560,6 +597,7 @@ const os1 = new Sp({ x: S / 2 - OR, y: S / 2, z: 0 }, SR, 30);
 const os2 = new Sp({ x: S / 2 + OR, y: S / 2, z: 0 }, SR, 30);
 
 
+let clearCanvas = true; // *** Global flag to control canvas clearing *** SWITCH INTO TRIPPY ARTWORK MODE
 
 function d(e) {
     let s = t === undefined ? 0 : RS * (e - t) * 100;
@@ -582,11 +620,9 @@ cp.drawObjectD2 = function(t, e) {
     // Use initial color for fill if playback is not active or no active channel
     let initialFill = (!isPlaybackActive || activeChannelIndex === null);
 
-    cx.strokeStyle = "black"; // Set stroke style once outside the loop
-
     for (let s of t.f) {
-        let vertices = s.map(e => t.v[e]);
-        let coordinates = vertices.map(t => ({ x: t.x, y: t.y }));
+        let vertices = s.map((e) => t.v[e]);
+        let coordinates = vertices.map((t) => ({ x: t.x, y: t.y }));
 
         cx.beginPath();
         cx.moveTo(coordinates[0].x, coordinates[0].y);
@@ -594,41 +630,39 @@ cp.drawObjectD2 = function(t, e) {
         for (let t = 1; t < coordinates.length; t++) {
             cx.lineTo(coordinates[t].x, coordinates[t].y);
         }
+
         cx.closePath();
 
-        // Compute the angle once
         let angle = 180 * Math.atan2(coordinates[0].y - S / 2, coordinates[0].x - S / 2) / Math.PI;
 
-        // Determine the color based on the current fill state
-        let colors;
+        // Render using first color from getColors1 if initial fill
         if (initialFill) {
-            colors = getColors1(angle, e, vertices);
-            if (!colors || colors.length === 0) {
+            let initialColors = getColors1(angle, e, vertices);
+            if (!initialColors || initialColors.length === 0) {
                 console.error(`No colors returned for initial display.`);
                 return;
             }
+            cx.fillStyle = initialColors[0]; // Use the first color for initial fill
         } else {
+            // Render using active array for the current channel
             const currentArrayIndex = activeArrayIndex[activeChannelIndex];
-            colors = getColorArray(angle, e, vertices, AccessLevel);
+            let colors = getColorArray(angle, e, vertices, AccessLevel);
+
             if (!colors || colors.length === 0) {
                 console.error(`No colors returned for AccessLevel: ${AccessLevel}`);
                 return;
             }
-        }
 
-        // Set fillStyle only if it changes
-        const fillColor = colors[0]; // Using the first color or based on some logic
-        if (cx.fillStyle !== fillColor) {
-            cx.fillStyle = fillColor;
+            cx.fillStyle = colors[cci2 % colors.length];
         }
 
         cx.fill();
+        cx.strokeStyle = "black";
         cx.stroke();
     }
 };
 
 requestAnimationFrame(d);
-
 
 function getColorArray(angle, time, vertices, accessLevel) {
     const allowedArrays = accessLevelMappings[accessLevel];
