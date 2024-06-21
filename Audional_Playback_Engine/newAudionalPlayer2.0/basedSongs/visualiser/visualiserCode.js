@@ -2,6 +2,11 @@
 
 console.log("Visualiser.js loaded");
 
+
+// *** TRIPPY MODE - turn on false
+let clearCanvas = true; // *** Global flag to control canvas clearing *** SWITCH INTO TRIPPY ARTWORK MODE
+
+
 let isChannel11Active = false;
 let activeChannelIndex = null;
 let isPlaybackActive = false;
@@ -28,7 +33,7 @@ const accessLevelMappings = {
     6: [1, 2, 5],
     7: [1, 2, 3, 4, 5, 6], 
     8: [1, 4, 6], 
-    9: [1, 5, 6], 
+    9: [4, 5, 6], 
     10:[6, 7], 
 
 };
@@ -91,25 +96,10 @@ function calculateCCI2(channelIndex, arrayLength) {
     return Math.min(Math.max(scaledValue, 0), arrayLength - 1);
 }
 
-// // Function to generate and cache the access level
-// const generateAccessLevel = (function() {
-//     let accessLevel = null; // Cached access level
-
-//     return function(seed) {
-//         if (accessLevel === null) { // Execute only once
-//             const randomValue = randomWithSeed(seed);
-//             accessLevel = Math.floor(randomValue * 5) + 1;
-
-//             // Log the access level once
-//             console.log(`[Seed] Generated access level: ${accessLevel}`);
-//         }
-//         return accessLevel;
-//     };
-// })();
 
 // Function to generate the access level with skewed distribution
 // Updated function to generate the access level with proper skewing
-// Update to include level 6
+// Update to include level 10
 function generateAccessLevel(seed) {
     const randomValue = randomWithSeed(seed);
     const skewFactor = 0.3; // Adjust this factor to skew the distribution (> 1 to skew towards lower values)
@@ -597,7 +587,6 @@ const os1 = new Sp({ x: S / 2 - OR, y: S / 2, z: 0 }, SR, 30);
 const os2 = new Sp({ x: S / 2 + OR, y: S / 2, z: 0 }, SR, 30);
 
 
-let clearCanvas = true; // *** Global flag to control canvas clearing *** SWITCH INTO TRIPPY ARTWORK MODE
 
 function d(e) {
     let s = t === undefined ? 0 : RS * (e - t) * 100;
