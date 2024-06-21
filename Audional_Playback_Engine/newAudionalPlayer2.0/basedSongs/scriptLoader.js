@@ -25,6 +25,7 @@ window.scriptsToLoad = [
     'colourSettingsFiles/colourSettingsLevel4INDEX.js',
     'colourSettingsFiles/colourSettingsLevel5INDEX_minified.js',
     'colourSettingsFiles/colourSettingsLevel6INDEX_minified.js',
+    'colourSettingsFiles/colourSettingsLevel7INDEX.js',
     'visualiser/visualiserCode.js',
 
 ];

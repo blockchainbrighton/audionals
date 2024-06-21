@@ -15,11 +15,12 @@ let arrayLengths = {
     4: 0,
     5: 0,
     6: 0,
+    7: 0,
 
 };
 
 const accessLevelMappings = {
-    1: [1],
+    1: [7],
     2: [1, 2],
     3: [1, 2, 3],
     4: [2], 
@@ -62,6 +63,11 @@ function initializeArrayLengths() {
         arrayLengths[6] = getColors6Length() || 0; // Ensure it logs length for array 6
     } catch (e) {
         console.error("Failed to get length for array 6", e);
+    }
+    try {
+        arrayLengths[7] = getColors7Length() || 0; // Ensure it logs length for array 6
+    } catch (e) {
+        console.error("Failed to get length for array 7", e);
     }
     console.log("Initialized array lengths:", arrayLengths);
 }
@@ -657,6 +663,8 @@ function getColorArray(angle, time, vertices, accessLevel) {
             return getColors5(angle, time, vertices); 
         case 6:
             return getColors6(angle, time, vertices); 
+        case 7:
+            return getColors7(angle, time, vertices); 
         default:
             console.error(`Invalid arrayIndex ${channelArrayIndex}`);
             return [];
