@@ -2,10 +2,10 @@
 
 console.log("Visualiser.js loaded");
 
-
 // *** TRIPPY MODE - turn on false
-let clearCanvas = true; // *** Global flag to control canvas clearing *** SWITCH INTO TRIPPY ARTWORK MODE
+let shouldActivateTrippy = false; // To store trippy mode status before playback
 
+let clearCanvas = true; // *** Global flag to control canvas clearing *** SWITCH INTO TRIPPY ARTWORK MODE
 
 let isChannel11Active = false;
 let activeChannelIndex = null;
@@ -21,59 +21,41 @@ let arrayLengths = {
     5: 0,
     6: 0,
     7: 0,
-
 };
 
 const accessLevelMappings = {
     1: [1],
     2: [1, 2],
     3: [1, 2, 3],
-    4: [2], 
-    5: [5], 
+    4: [2],
+    5: [5],
     6: [1, 2, 5],
-    7: [1, 2, 3, 4, 5, 6], 
-    8: [1, 4, 6], 
-    9: [4, 5, 6], 
-    10:[6, 7], 
-
+    7: [1, 2, 3, 4, 5, 6],
+    8: [1, 4, 6],
+    9: [4, 5, 6],
+    10: [6, 7],
 };
 
 function initializeArrayLengths() {
-    try {
-        arrayLengths[1] = getColors1Length() || 0;
-    } catch (e) {
-        console.error("Failed to get length for array 1", e);
-    }
-    try {
-        arrayLengths[2] = getColors2Length() || 0;
-    } catch (e) {
-        console.error("Failed to get length for array 2", e);
-    }
-    try {
-        arrayLengths[3] = getColors3Length() || 0;
-    } catch (e) {
-        console.error("Failed to get length for array 3", e);
-    }
-    try {
-        arrayLengths[4] = getColors4Length() || 0;
-    } catch (e) {
-        console.error("Failed to get length for array 4", e);
-    }
-    try {
-        arrayLengths[5] = getColors5Length() || 0; // Ensure it logs length for array 5
-    } catch (e) {
-        console.error("Failed to get length for array 5", e);
-    }
-    try {
-        arrayLengths[6] = getColors6Length() || 0; // Ensure it logs length for array 6
-    } catch (e) {
-        console.error("Failed to get length for array 6", e);
-    }
-    try {
-        arrayLengths[7] = getColors7Length() || 0; // Ensure it logs length for array 6
-    } catch (e) {
-        console.error("Failed to get length for array 7", e);
-    }
+    const getColorsLengthFunctions = [
+        getColors1Length,
+        getColors2Length,
+        getColors3Length,
+        getColors4Length,
+        getColors5Length,
+        getColors6Length,
+        getColors7Length,
+    ];
+
+    getColorsLengthFunctions.forEach((getLength, index) => {
+        const arrayIndex = index + 1;
+        try {
+            arrayLengths[arrayIndex] = getLength() || 0;
+        } catch (e) {
+            console.error(`Failed to get length for array ${arrayIndex}`, e);
+        }
+    });
+
     console.log("Initialized array lengths:", arrayLengths);
 }
 
@@ -92,77 +74,193 @@ function calculateCCI2(channelIndex, arrayLength) {
 
     const value = 100 * randomWithSeed(seed + (channelIndex + 1));
     const scaledValue = Math.floor((value / 100) * arrayLength);
-
     return Math.min(Math.max(scaledValue, 0), arrayLength - 1);
 }
 
-
-// Function to generate the access level with skewed distribution
-// Updated function to generate the access level with proper skewing
-// Update to include level 10
-function generateAccessLevel(seed) {
-    const randomValue = randomWithSeed(seed);
-    const skewFactor = 0.3; // Adjust this factor to skew the distribution (> 1 to skew towards lower values)
-    const skewedValue = Math.pow(randomValue, skewFactor);
-    const accessLevel = Math.floor((1 - skewedValue) * 10) + 1;
-    return Math.min(Math.max(accessLevel, 1), 10); // Ensure the value is between 1 and 6
+function shouldActivateTrippyArtwork(seed) {
+    return randomWithSeed(seed) < 0.01; // 1% chance
 }
 
-function logTestValuesForAccessLevels() {
-    const seedRange = 1000000; // Range of seeds to test (adjust as needed)
+function generateAccessLevel(seed) {
+    const skewFactor = 0.3; // Adjust this factor to skew the distribution
+    const skewedValue = Math.pow(randomWithSeed(seed), skewFactor);
+    return Math.min(Math.max(Math.floor((1 - skewedValue) * 10) + 1, 1), 10); // Ensure value is between 1 and 10
+}
+
+function generateAccessLevelAndTrippy(seed) {
+    return {
+        accessLevel: generateAccessLevel(seed),
+        isTrippy: shouldActivateTrippyArtwork(seed)
+    };
+}
+
+// Function to handle playback state changes
+function handlePlaybackStateChange() {
+    if (isPlaybackActive) {
+        clearCanvas = !shouldActivateTrippy; // Use the stored trippy mode status
+        console.log(`Trippy Mode Activated: ${shouldActivateTrippy ? "true" : "false"}`);
+    } else {
+        clearCanvas = true; // Ensure normal mode when playback stops
+        console.log("Trippy Mode Deactivated");
+    }
+}
+
+// Function to handle first active step and enable trippy mode
+function activateTrippyModeOnFirstStep(event) {
+    const { action, channelIndex } = event.detail;
+    if (action === "activeStep") {
+        isPlaybackActive = true;
+        shouldActivateTrippy = true; // Activate trippy mode
+        handlePlaybackStateChange();
+        document.removeEventListener("internalAudioPlayback", activateTrippyModeOnFirstStep);
+        console.log("First active step received, trippy mode activated, stopping further listening for steps.");
+    }
+}
+
+// Function to handle stop message and disable trippy mode
+function deactivateTrippyModeOnStop(event) {
+    const { action } = event.detail;
+    if (action === "stop") {
+        isPlaybackActive = false;
+        shouldActivateTrippy = false; // Deactivate trippy mode
+        handlePlaybackStateChange();
+        document.addEventListener("internalAudioPlayback", activateTrippyModeOnFirstStep);
+        console.log("Stop received, trippy mode deactivated, resuming listening for active steps.");
+    }
+}
+
+// Start listening for the first active step
+document.addEventListener("internalAudioPlayback", activateTrippyModeOnFirstStep);
+
+// Always listen for stop messages
+document.addEventListener("internalAudioPlayback", deactivateTrippyModeOnStop);
+
+// Example functions to simulate playback events
+function onPlaybackStart() {
+    isPlaybackActive = true;
+    shouldActivateTrippy = true; // Activate trippy mode when playback starts
+    handlePlaybackStateChange();
+}
+
+function onPlaybackStop() {
+    isPlaybackActive = false;
+    shouldActivateTrippy = false; // Deactivate trippy mode when playback stops
+    handlePlaybackStateChange();
+}
+
+function logTestValuesAndDistribution() {
+    const seedRange = 1000000; // Range of seeds to test for values
+    const seedCount = 10000000; // Total seeds for distribution test
     const valuesNeeded = 10; // Number of values to collect for each access level
     const accessLevelValues = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [] };
-    const collectedCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
+    const accessLevelCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
+    const trippySeeds = [];
+    let trippyCount = 0;
+    let collectedCount = 0;
 
-    for (let seed = 0; seed < seedRange && Object.values(collectedCounts).some(count => count < valuesNeeded); seed++) {
-        const accessLevel = generateAccessLevel(seed);
+    for (let seed = 0; seed < seedCount; seed++) {
+        const { accessLevel, isTrippy } = generateAccessLevelAndTrippy(seed);
 
-        if (collectedCounts[accessLevel] < valuesNeeded) {
+        // Collect access level values
+        if (seed < seedRange && accessLevelValues[accessLevel].length < valuesNeeded) {
             accessLevelValues[accessLevel].push(seed);
-            collectedCounts[accessLevel]++;
+            collectedCount++;
+        }
+
+        // Count access level for distribution
+        accessLevelCounts[accessLevel]++;
+
+        // Collect trippy seeds
+        if (isTrippy && trippySeeds.length < valuesNeeded) {
+            trippySeeds.push(seed);
+        }
+
+        // Track trippy activation count
+        if (isTrippy) {
+            trippyCount++;
+        }
+
+        // Break early if both collections are filled
+        if (collectedCount >= valuesNeeded * 10 && trippySeeds.length >= valuesNeeded) {
+            break;
         }
     }
 
+    logAccessLevelValues(accessLevelValues);
+    logAccessLevelDistribution(accessLevelCounts, seedCount, trippyCount);
+    console.log("Seeds that activate Trippy Mode:", trippySeeds);
+}
+
+function logAccessLevelValues(accessLevelValues) {
     console.log("Test Values for Each Access Level:");
     for (let level = 1; level <= 10; level++) {
         console.log(`Access Level ${level}:`, accessLevelValues[level]);
     }
 }
 
-// Run the function to log test values
-logTestValuesForAccessLevels();
-
-
-
-function selectArrayIndex(seed, AccessLevel, channelIndex) {
-    const randomValue = randomWithSeed(seed + channelIndex * 100);
-    const allowedArrays = accessLevelMappings[AccessLevel];
-    const arrayChoice = Math.floor(randomValue * allowedArrays.length);
-    return allowedArrays[arrayChoice];
-}
-
-let AccessLevel = generateAccessLevel(seed);
-
-function testAccessLevelDistribution() {
-    const seedCount = 10000000; // 10 million seeds
-    const accessLevelCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-
-    for (let i = 0; i < seedCount; i++) {
-        const seed = i; // Using the loop index as the seed
-        const accessLevel = generateAccessLevel(seed);
-        accessLevelCounts[accessLevel]++;
-    }
-
+function logAccessLevelDistribution(accessLevelCounts, seedCount, trippyCount) {
     console.log("Access Level Distribution:");
     for (let level in accessLevelCounts) {
         const count = accessLevelCounts[level];
-        const percentage = (count / seedCount * 100).toFixed(2);
+        const percentage = ((count / seedCount) * 100).toFixed(2);
         console.log(`Access Level ${level}: ${percentage}%`);
+    }
+    const trippyPercentage = ((trippyCount / seedCount) * 100).toFixed(2);
+    console.log(`Trippy Mode Activation: ${trippyPercentage}%`);
+}
+
+// Execute tests and logs
+logTestValuesAndDistribution();
+
+function selectArrayIndex(seed, accessLevel, channelIndex) {
+    const randomValue = randomWithSeed(seed + channelIndex * 100);
+    const allowedArrays = accessLevelMappings[accessLevel];
+    return allowedArrays[Math.floor(randomValue * allowedArrays.length)];
+}
+
+function logInitialAssignments() {
+    setTimeout(() => {
+        const assignments = [];
+        const totalChannels = 16; // Adjust this number based on your application
+
+        const { accessLevel, isTrippy } = generateAccessLevelAndTrippy(seed);
+        console.log(`Access Level: ${accessLevel}, Trippy Mode: ${isTrippy ? "true" : "false"}`);
+
+        for (let channelIndex = 1; channelIndex <= totalChannels; channelIndex++) {
+            const arrayIndex = selectArrayIndex(seed, accessLevel, channelIndex);
+            const cci2 = calculateCCI2(channelIndex, arrayLengths[arrayIndex]);
+
+            renderingState[channelIndex] = { arrayIndex, cci2 };
+            activeArrayIndex[channelIndex] = arrayIndex;
+
+            assignments.push(`Channel ${channelIndex}: ArrayIndex=${arrayIndex}, CCI2=${cci2}`);
+        }
+
+        console.log("Initial Assignments:", assignments.join("; "));
+
+    }, 100);
+}
+
+// Execute tests and logs
+logTestValuesAndDistribution();
+setTimeout(logInitialAssignments, 500);
+
+// Log function to control frequency and relevance
+let lastLogTime = 0;
+const logFrequency = 1000; // Log every 1000ms (1 second)
+function log(message) {
+    const now = Date.now();
+    if (now - lastLogTime > logFrequency) {
+        console.log(message);
+        lastLogTime = now;
     }
 }
 
-// Run the test
-testAccessLevelDistribution();
+
+// Separate error logging
+function errorLog(message, data) {
+    console.error(message, data);
+}
 
 
 function updateVisualizer(cci2, arrayIndex, channelIndex) {
@@ -264,50 +362,6 @@ AudionalPlayerMessages.onmessage = (message) => {
     }
 };
 
-// Function to log initial assignments for all channels
-function logInitialAssignments() {
-    setTimeout(() => {
-        const assignments = [];
-        const totalChannels = 16; // Adjust this number based on your application
-
-        // Compute the access level once and log it
-        const accessLevel = generateAccessLevel(seed);
-        console.log(`Access Level: ${accessLevel}`);
-
-        for (let channelIndex = 1; channelIndex <= totalChannels; channelIndex++) {
-            const arrayIndex = selectArrayIndex(seed, accessLevel, channelIndex);
-            const cci2 = calculateCCI2(channelIndex, arrayLengths[arrayIndex]);
-
-            // Update the rendering state and active array index
-            renderingState[channelIndex] = { arrayIndex, cci2 };
-            activeArrayIndex[channelIndex] = arrayIndex;
-
-            // Log only the array index and CCI2
-            assignments.push(`Channel ${channelIndex}: ArrayIndex=${arrayIndex}, CCI2=${cci2}`);
-        }
-
-        console.log("Initial Assignments:", assignments.join("; "));
-    }, 100);
-}
-
-// Delay execution of logInitialAssignments by 500 milliseconds
-setTimeout(logInitialAssignments, 500);
-
-// Log function to control frequency and relevance
-let lastLogTime = 0;
-const logFrequency = 1000; // Log every 1000ms (1 second)
-function log(message) {
-    const now = Date.now();
-    if (now - lastLogTime > logFrequency) {
-        console.log(message);
-        lastLogTime = now;
-    }
-}
-
-// Separate error logging
-function errorLog(message, data) {
-    console.error(message, data);
-}
 
 
 let scaleFactor = 3;
