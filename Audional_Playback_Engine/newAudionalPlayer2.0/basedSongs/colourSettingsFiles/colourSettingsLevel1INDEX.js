@@ -19,17 +19,16 @@
   
       // Pre-generate random values for reuse
       const randomValues = Array.from({ length: 6 }, () => Math.random());
+      const colorFactor = randomValues[0] * ((l2zR + 255) / (11 * R) * 255);
+
   
       // Compute sine values for dynamic colors
       const now = Date.now();
       const sinNow = Math.sin(now);
   
-
-    
       // Use a complete range of color indexes from 1 to 23
       const colorIndexes = Array.from({ length: 23 }, (_, i) => i + 1);
 
-  
       // Return dynamic color settings
       return [
 
@@ -37,9 +36,10 @@
             // THE FIRST COLOUR SETTING LINE IN THE ARRAY IS THE ONE THAT IS USED WHEN THE PAGE LOADS
    
 
-            (randomValues[0] * ((l2zR + 255) / (11 * R) * 255)) > 0.01 ? 
-            `rgb(${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))}, ${Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255))})` : 
-            "#FF0000",
+            // colorFactor > 0.01 
+            // ? `rgb(${Math.floor(colorFactor)}, ${Math.floor(colorFactor)}, ${Math.floor(colorFactor)})`
+            // : "#FF0000",
+
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -48,7 +48,7 @@
   
         // 4 stripe close scatters
         ...Array.from({ length: 5 }, (_, i) =>
-          getConditionalColorWithIndex(x0, y0, 3, [1, 2, 3, 4, 5][i], 1, window.colorPalette)
+          getConditionalColorWithIndex(x0, y0, 3, [2, 3, 4, 5, 1][i], 1, window.colorPalette)
         ),
   
         // 4 stripe Wide Scatters

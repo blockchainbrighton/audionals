@@ -1,138 +1,124 @@
+// visualiserWorkers.js
 
-// Worker script with batch processing for color calculations
+// Worker script for color calculations
 const workerScript = `
 self.onmessage = function(e) {
     const { id, vertices, primaryAndSecondaryColors } = e.data;
 
-    // Pre-generate random colors array
-    const colorsArray = Array.from({ length: 5 }, () => {
-        return primaryAndSecondaryColors[Math.floor(Math.random() * primaryAndSecondaryColors.length)].hex;
-    });
-
-    // Compute colors for the vertices
-    const updatedColors = vertices.map((v, index) => {
-        // Use conditional color function
-        return {
-            index,
-            colors: [
-                getConditionalColor(v.x, v.y, 0.1, colorsArray[0], "black"),
-                getConditionalColor(v.x, v.y, 0.2, colorsArray[1], "black"),
-                getConditionalColor(v.x, v.y, 0.3, colorsArray[2], "black"),
-                getConditionalColor(v.x, v.y, 0.5, colorsArray[3], "black"),
-                getConditionalColor(v.x, v.y, 0.05, colorsArray[4], "black")
-            ]
-        };
-    });
+    const colorsArray = generateColorsArray(primaryAndSecondaryColors, 5);
+    const updatedColors = vertices.map((v, index) => ({
+        index,
+        colors: [
+            getConditionalColor(v.x, v.y, 0.1, colorsArray[0], "black"),
+            getConditionalColor(v.x, v.y, 0.2, colorsArray[1], "black"),
+            getConditionalColor(v.x, v.y, 0.3, colorsArray[2], "black"),
+            getConditionalColor(v.x, v.y, 0.5, colorsArray[3], "black"),
+            getConditionalColor(v.x, v.y, 0.05, colorsArray[4], "black")
+        ]
+    }));
 
     postMessage({ id, updatedColors });
 };
 
-function getConditionalColor(x, y, divisor, trueColor, falseColor) {
-    return ((x / divisor | 0) + (y / divisor | 0)) % 111 === 0 ? trueColor : falseColor;
-}
+const generateColorsArray = (colors, length) => Array.from({ length }, () => colors[Math.floor(Math.random() * colors.length)].hex);
+
+const getConditionalColor = (x, y, divisor, trueColor, falseColor) => 
+    ((x / divisor | 0) + (y / divisor | 0)) % 111 === 0 ? trueColor : falseColor;
 `;
 
-const blob = new Blob([workerScript], { type: "application/javascript" });
-const workerScriptURL = URL.createObjectURL(blob);
-const rainbowWorker = new Worker(workerScriptURL);
-URL.revokeObjectURL(workerScriptURL);
+const createWorkerFromScript = (script) => {
+    const blob = new Blob([script], { type: "application/javascript" });
+    const url = URL.createObjectURL(blob);
+    const worker = new Worker(url);
+    URL.revokeObjectURL(url);
+    return worker;
+};
 
-function sendRainbowRequest(id, vertices, angle, palette) {
-    rainbowWorker.postMessage({
-        id,
-        vertices,
-        angle,
-        primaryAndSecondaryColors: palette
-    });
-}
+const rainbowWorker = createWorkerFromScript(workerScript);
 
-rainbowWorker.onmessage = function(e) {
+const sendRainbowRequest = (id, vertices, angle, palette) => {
+    rainbowWorker.postMessage({ id, vertices, angle, primaryAndSecondaryColors: palette });
+};
+
+rainbowWorker.onmessage = (e) => {
     const { id, updatedColors } = e.data;
-    // Handle the updated colors on the main thread
     updateScatterColors(id, updatedColors);
 };
 
+// Worker script for visualizer handling
 const visualizerWorkerScript = `
 self.onmessage = function(e) {
     const { type, id, data } = e.data;
 
     switch (type) {
         case 'COLOR_SETTINGS':
-            const { vertices, primaryAndSecondaryColors } = data;
-            const colorsArray = primaryAndSecondaryColors.map(color => color.hex);
-            
-            // Pre-generate indices for colors
-            const randomIndices = Array.from({ length: 5 }, () => Math.floor(Math.random() * colorsArray.length));
-
-            const updatedColors = vertices.map((v, index) => {
-                const colorSet = randomIndices.map(i => colorsArray[i]);
-                return {
-                    index,
-                    colors: [
-                        getConditionalColor(v.x, v.y, 0.1, colorSet[0], "black"),
-                        getConditionalColor(v.x, v.y, 0.2, colorSet[1], "black"),
-                        getConditionalColor(v.x, v.y, 0.3, colorSet[2], "black"),
-                        getConditionalColor(v.x, v.y, 0.5, colorSet[3], "black"),
-                        getConditionalColor(v.x, v.y, 0.05, colorSet[4], "black")
-                    ]
-                };
-            });
-
-            postMessage({ type, id, updatedColors });
+            handleColorSettings(id, data);
             break;
-
         case 'DYNAMIC_RGB':
-            const { randomValue, baseZ, factor } = data;
-            const scaledValue = (baseZ + 255) / (factor * 100);
-            const colorValue = Math.floor(randomValue * scaledValue * 255);
-            const rgbColor = colorValue > 0.01 ? \`rgb(\${colorValue}, \${colorValue}, \${colorValue})\` : "#FF0000";
-            postMessage({ type, id, rgbColor });
+            handleDynamicRGB(id, data);
             break;
-
         default:
             console.error('Unknown message type:', type);
             break;
     }
 };
 
-function getConditionalColor(x, y, divisor, trueColor, falseColor) {
-    return ((x / divisor | 0) + (y / divisor | 0)) % 111 === 0 ? trueColor : falseColor;
-}
+const handleColorSettings = (id, { vertices, primaryAndSecondaryColors }) => {
+    const colorsArray = primaryAndSecondaryColors.map(color => color.hex);
+    const randomIndices = Array.from({ length: 5 }, () => Math.floor(Math.random() * colorsArray.length));
+    const updatedColors = vertices.map((v, index) => ({
+        index,
+        colors: [
+            getConditionalColor(v.x, v.y, 0.1, colorsArray[randomIndices[0]], "black"),
+            getConditionalColor(v.x, v.y, 0.2, colorsArray[randomIndices[1]], "black"),
+            getConditionalColor(v.x, v.y, 0.3, colorsArray[randomIndices[2]], "black"),
+            getConditionalColor(v.x, v.y, 0.5, colorsArray[randomIndices[3]], "black"),
+            getConditionalColor(v.x, v.y, 0.05, colorsArray[randomIndices[4]], "black")
+        ]
+    }));
+
+    postMessage({ type: 'COLOR_SETTINGS', id, updatedColors });
+};
+
+const handleDynamicRGB = (id, { randomValue, baseZ, factor }) => {
+    const scaledValue = (baseZ + 255) / (factor * 100);
+    const colorValue = Math.floor(randomValue * scaledValue * 255);
+    const rgbColor = colorValue > 0.01 ? \`rgb(\${colorValue}, \${colorValue}, \${colorValue})\` : "#FF0000";
+    postMessage({ type: 'DYNAMIC_RGB', id, rgbColor });
+};
+
+const getConditionalColor = (x, y, divisor, trueColor, falseColor) => 
+    ((x / divisor | 0) + (y / divisor | 0)) % 111 === 0 ? trueColor : falseColor;
 `;
 
+const visualizerWorker = createWorkerFromScript(visualizerWorkerScript);
 
-const visualizerBlob = new Blob([visualizerWorkerScript], { type: "application/javascript" });
-const visualizerWorkerURL = URL.createObjectURL(visualizerBlob);
-const visualizerWorker = new Worker(visualizerWorkerURL);
-URL.revokeObjectURL(visualizerWorkerURL);
-
+// Worker script for rotating vertices
 const rotationWorkerScript = `
 self.onmessage = function(e) {
     const { id, vertices, pivot, angle } = e.data;
+    const updatedVertices = rotateVertices(vertices, pivot, angle);
+    postMessage({ id, updatedVertices });
+};
+
+const rotateVertices = (vertices, pivot, angle) => {
     const cosA = Math.cos(angle);
     const sinA = Math.sin(angle);
-
-    const updatedVertices = vertices.map(v => {
+    return vertices.map(v => {
         const dx = v.x - pivot.x;
         const dy = v.y - pivot.y;
-        const x1 = dx * cosA - dy * sinA + pivot.x;
-        const y1 = dx * sinA + dy * cosA + pivot.y;
-        return { x: x1, y: y1, z: v.z };
+        return { x: dx * cosA - dy * sinA + pivot.x, y: dx * sinA + dy * cosA + pivot.y, z: v.z };
     });
-    postMessage({ id, updatedVertices });
 };
 `;
 
-const rotationBlob = new Blob([rotationWorkerScript], { type: "application/javascript" });
-const rotationWorkerScriptURL = URL.createObjectURL(rotationBlob);
-const rotationWorker = new Worker(rotationWorkerScriptURL);
-URL.revokeObjectURL(rotationWorkerScriptURL);
+const rotationWorker = createWorkerFromScript(rotationWorkerScript);
 
-function sendRotationRequest(id, vertices, pivot, angle) {
+const sendRotationRequest = (id, vertices, pivot, angle) => {
     rotationWorker.postMessage({ id, vertices, pivot, angle });
-}
+};
 
-rotationWorker.onmessage = function(e) {
+rotationWorker.onmessage = (e) => {
     const { id, updatedVertices } = e.data;
     if (id === "cy") cp.cy.updateVertices(updatedVertices);
     else if (id.startsWith("sp")) cp[id].updateVertices(updatedVertices);

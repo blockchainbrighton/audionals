@@ -66,8 +66,84 @@ console.log("Color settings level 6 loaded");
         const l2zR = z2 + R;
         const l1zR = z1 + R;
 
+        // Use a complete range of color indexes from 1 to 23
+        const colorIndexes = Array.from({ length: 23 }, (_, i) => i + 1);
+        const calculatedColor = Math.floor(randomValues[0] * ((l2zR + 255) / (11 * R) * 255));
+  
+
         // Enhanced color variations using precomputed values
         return [
+
+        // OMB EYES
+        // Original colors
+        (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#FF0000"), // Bright red
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#00FF00"), // Bright green
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#0000FF"), // Bright blue
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#FF1493"), // Deep pink
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#800080"), // Deep purple
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#FFA500"), // Bitcoin orange
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#FFFFFF"), // White (grayscale)
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#808080"), // Grey (grayscale)
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#000000"), // Black (grayscale)
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#C0C0C0"), // Silver
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#FFD700"), // Gold
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#FF4500"), // Orange red
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#4B0082"), // Indigo
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#FF6347"), // Tomato
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#9400D3"), // Dark violet
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#FFDAB9"), // Peach puff
+  
+          (calculatedColor > 0.01 ? 
+            `rgb(${calculatedColor}, ${calculatedColor}, ${calculatedColor})` : 
+            "#F7931A"), // Dark turquoise
+
             // Colorful Crazy Frogs
             generateColor(l, 128),
             generateLightnessColor(Math.random() * Math.floor((l[0].z + R) / (2 * R) * 255)),
