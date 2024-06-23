@@ -3,12 +3,10 @@
 console.log("Initialization.js loaded");
 
 // Initialize trippy mode state
-let isTrippy = false;  // Tracks if trippy mode should be active based on seed
+let isTrippy = false;  // Tracks if trippy mode should be active
 let isPlaybackActive = false;  // Tracks playback state
-let playbackLoopCount = 0;
+let playbackLoopCount = 0; // Track the number of playback loops
 let hasLoggedFirstLoop = false; // To track if the first loop has been logged
-
-
 
 // Listen to sequenceUpdated event
 document.addEventListener('sequenceUpdated', (event) => {
@@ -18,7 +16,14 @@ document.addEventListener('sequenceUpdated', (event) => {
     if (currentSequence === 0 && currentStep === 0) {
         playbackLoopCount++;
         console.log(`Playback loop count: ${playbackLoopCount}`);
-        // Optionally, notify visualizer of loop count
+
+        // Set isTrippy to true if playbackLoopCount reaches 2 or more
+        if (playbackLoopCount >= 2) {
+            isTrippy = true;
+            console.log('isTrippy activated');
+        }
+
+        // Notify visualizer of loop count
         notifyVisualizerLoopCount(playbackLoopCount);
     }
 });
@@ -27,16 +32,6 @@ function notifyVisualizerLoopCount(loopCount) {
     // Function to notify visualizer of loop count (implementation depends on visualizer setup)
     AudionalPlayerMessages.postMessage({ action: "loopCount", loopCount });
 }
-
-// // Determine if trippy artwork should activate
-// const shouldActivateTrippyArtwork = (seed) => randomWithSeed(seed) < 0.01; // 1% chance
-
-// // Generate access level and set isTrippy status based on seed
-// const generateAccessLevelAndTrippy = (seed) => {
-//     const accessLevel = generateAccessLevel(seed);
-//     isTrippy = shouldActivateTrippyArtwork(seed);  // Directly set isTrippy here
-//     return { accessLevel, isTrippy };
-// };
 
 // Global flag to control canvas clearing
 let clearCanvas = true;
