@@ -28,14 +28,14 @@ window.scriptsToLoad = [
     'colourSettingsFiles/colourSettingsLevel6INDEX.js',
     'colourSettingsFiles/colourSettingsLevel7INDEX.js',
 
-    'visualiser/initVisualiser.js',
-    'visualiser/visualiserHelperFunctions.js',
-    'visualiser/visualiserLogging.js',
-    'visualiser/visualiserMessageHandling.js',
-    'visualiser/visualiserWorkers.js',
+    'visualiser/initVisualiser_minified.js',
+    'visualiser/visualiserHelperFunctions_minified.js',
+    'visualiser/visualiserLogging_minified.js',
+    'visualiser/visualiserMessageHandling_minified.js',
+    'visualiser/visualiserWorkers_minified.js',
     // 'visualiser/visualiserCode.js',
-    'visualiser/visualiserGeometry.js',
-    'visualiser/visualiserDrawingColours.js',
+    'visualiser/visualiserGeometry_minified.js',
+    'visualiser/visualiserDrawingColours_minified.js',
 
 ];
 
