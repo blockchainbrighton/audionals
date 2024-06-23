@@ -1,3 +1,5 @@
+// initVisualiser.js
+
 console.log("Initialization.js loaded");
 
 // Initialize trippy mode state
@@ -6,6 +8,32 @@ let isPlaybackActive = false;  // Tracks playback state
 let playbackLoopCount = 0; // Track the number of playback loops
 let hasLoggedFirstLoop = false; // To track if the first loop has been logged
 let clearCanvas = true;
+
+
+
+const randomWithSeed = (seed) => {
+    const value = 10000 * Math.sin(seed);
+    return value - Math.floor(value);
+};
+
+const calculateCCI2 = (channelIndex, arrayLength) => {
+    if (!arrayLength || arrayLength <= 0) {
+        console.error("Invalid array length:", arrayLength);
+        return 1;
+    }
+
+    const value = 100 * randomWithSeed(seed + (channelIndex + 1));
+    const scaledValue = Math.floor((value / 100) * arrayLength);
+    return Math.min(Math.max(scaledValue, 0), arrayLength - 1);
+};
+
+const generateAccessLevel = (seed) => {
+    const skewFactor = 0.3;
+    const skewedValue = Math.pow(randomWithSeed(seed), skewFactor);
+    return Math.min(Math.max(Math.floor((1 - skewedValue) * 10) + 1, 1), 10);
+};
+
+
 
 let renderingState = {};
 let activeArrayIndex = {};
@@ -48,26 +76,4 @@ const accessLevelMappings = {
     8: [1, 4, 6],
     9: [4, 5, 6],
     10: [6, 7],
-};
-
-const randomWithSeed = (seed) => {
-    const value = 10000 * Math.sin(seed);
-    return value - Math.floor(value);
-};
-
-const calculateCCI2 = (channelIndex, arrayLength) => {
-    if (!arrayLength || arrayLength <= 0) {
-        console.error("Invalid array length:", arrayLength);
-        return 1;
-    }
-
-    const value = 100 * randomWithSeed(seed + (channelIndex + 1));
-    const scaledValue = Math.floor((value / 100) * arrayLength);
-    return Math.min(Math.max(scaledValue, 0), arrayLength - 1);
-};
-
-const generateAccessLevel = (seed) => {
-    const skewFactor = 0.3;
-    const skewedValue = Math.pow(randomWithSeed(seed), skewFactor);
-    return Math.min(Math.max(Math.floor((1 - skewedValue) * 10) + 1, 1), 10);
 };
