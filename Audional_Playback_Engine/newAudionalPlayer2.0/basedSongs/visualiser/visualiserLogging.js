@@ -7,19 +7,17 @@ function logTestValuesAndDistribution() {
 
     const accessLevelValues = {};
     const accessLevelCounts = {};
-    const trippySeeds = [];
 
     for (let level = 1; level <= 10; level++) {
         accessLevelValues[level] = [];
         accessLevelCounts[level] = 0;
     }
 
-    let trippyCount = 0;
     let collectedCount = 0;
 
     // Process each seed
     for (let seed = 0; seed < seedCount; seed++) {
-        const { accessLevel, isTrippy } = generateAccessLevelAndTrippy(seed);
+        const accessLevel = generateAccessLevel(seed); // Only access level is generated
 
         // Collect access level values
         if (seed < seedRange && accessLevelValues[accessLevel].length < valuesNeeded) {
@@ -30,25 +28,14 @@ function logTestValuesAndDistribution() {
         // Count access level for distribution
         accessLevelCounts[accessLevel]++;
 
-        // Collect trippy seeds
-        if (isTrippy && trippySeeds.length < valuesNeeded) {
-            trippySeeds.push(seed);
-        }
-
-        // Track trippy activation count
-        if (isTrippy) {
-            trippyCount++;
-        }
-
         // Early exit if collection requirements are met
-        if (collectedCount >= valuesNeeded * 10 && trippySeeds.length >= valuesNeeded) {
+        if (collectedCount >= valuesNeeded * 10) {
             break;
         }
     }
 
     logAccessLevelValues(accessLevelValues);
-    logAccessLevelDistribution(accessLevelCounts, seedCount, trippyCount);
-    console.log("Seeds that activate Trippy Mode:", trippySeeds);
+    logAccessLevelDistribution(accessLevelCounts, seedCount);
 }
 
 function logAccessLevelValues(accessLevelValues) {
@@ -58,24 +45,22 @@ function logAccessLevelValues(accessLevelValues) {
     }
 }
 
-function logAccessLevelDistribution(accessLevelCounts, seedCount, trippyCount) {
+function logAccessLevelDistribution(accessLevelCounts, seedCount) {
     console.log("Access Level Distribution:");
     for (const [level, count] of Object.entries(accessLevelCounts)) {
         const percentage = ((count / seedCount) * 100).toFixed(2);
         console.log(`Access Level ${level}: ${percentage}%`);
     }
-    const trippyPercentage = ((trippyCount / seedCount) * 100).toFixed(2);
-    console.log(`Trippy Mode Activation: ${trippyPercentage}%`);
 }
 
-function logInitialAssignments(seed, generateAccessLevelAndTrippy, selectArrayIndex, calculateCCI2, arrayLengths, renderingState, activeArrayIndex) {
+function logInitialAssignments(seed, generateAccessLevel, selectArrayIndex, calculateCCI2, arrayLengths, renderingState, activeArrayIndex) {
     setTimeout(() => {
         const assignments = [];
         const totalChannels = 16; // Adjust this number based on your application
 
         try {
-            const { accessLevel, isTrippy } = generateAccessLevelAndTrippy(seed);
-            console.log(`Access Level: ${accessLevel}, Trippy Mode: ${isTrippy ? "true" : "false"}`);
+            const accessLevel = generateAccessLevel(seed);
+            console.log(`Access Level: ${accessLevel}`);
 
             for (let channelIndex = 1; channelIndex <= totalChannels; channelIndex++) {
                 const arrayIndex = selectArrayIndex(seed, accessLevel, channelIndex);
@@ -98,7 +83,7 @@ function logInitialAssignments(seed, generateAccessLevelAndTrippy, selectArrayIn
 logTestValuesAndDistribution();
 setTimeout(() => {
     // Replace the placeholders with actual references if available
-    logInitialAssignments(seed, generateAccessLevelAndTrippy, selectArrayIndex, calculateCCI2, arrayLengths, renderingState, activeArrayIndex);
+    logInitialAssignments(seed, generateAccessLevel, selectArrayIndex, calculateCCI2, arrayLengths, renderingState, activeArrayIndex);
 }, 500);
 
 // Log function to control frequency and relevance

@@ -35,8 +35,17 @@ const handleActiveStepAction = (channelIndex) => {
             activeArrayIndex[channelIndex] = arrayIndex;
             updateVisualizer(cci2, arrayIndex, channelIndex);
         }
+        
+        // Log the first loop when playback starts
+        if (!hasLoggedFirstLoop) {
+            playbackLoopCount++;
+            hasLoggedFirstLoop = true;
+            console.log(`Playback loop count: ${playbackLoopCount} (first loop)`);
+            notifyVisualizerLoopCount(playbackLoopCount);
+        }
     }
 };
+
 
 const triggerTitleSequence = () => {
     const event = new Event('playbackStarted');
