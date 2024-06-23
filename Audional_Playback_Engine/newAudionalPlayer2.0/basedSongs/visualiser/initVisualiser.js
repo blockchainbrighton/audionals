@@ -3,10 +3,11 @@
 console.log("Initialization.js loaded");
 
 // Initialize trippy mode state
-let isTrippy = false;  // Tracks if trippy mode should be active
+let isTrippy = true;  // Tracks if trippy mode should be active
 let isPlaybackActive = false;  // Tracks playback state
 let playbackLoopCount = 0; // Track the number of playback loops
 let hasLoggedFirstLoop = false; // To track if the first loop has been logged
+let clearCanvas = true;
 
 // Listen to sequenceUpdated event
 document.addEventListener('sequenceUpdated', (event) => {
@@ -21,6 +22,8 @@ document.addEventListener('sequenceUpdated', (event) => {
         if (playbackLoopCount >= 2) {
             isTrippy = true;
             console.log('isTrippy activated');
+            // Ensure playback state changes are handled
+            handlePlaybackStateChange();
         }
 
         // Notify visualizer of loop count
@@ -28,13 +31,32 @@ document.addEventListener('sequenceUpdated', (event) => {
     }
 });
 
+// Function to notify visualizer of loop count (implementation depends on visualizer setup)
 function notifyVisualizerLoopCount(loopCount) {
-    // Function to notify visualizer of loop count (implementation depends on visualizer setup)
     AudionalPlayerMessages.postMessage({ action: "loopCount", loopCount });
 }
 
-// Global flag to control canvas clearing
-let clearCanvas = true;
+// Ensure DOM is loaded before adding keydown event listener
+document.addEventListener('DOMContentLoaded', () => {
+    console.log("DOM fully loaded and parsed");
+
+    // Listen for Shift + T key press to toggle trippy mode manually
+    document.addEventListener('keydown', (event) => {
+        if (event.shiftKey && event.code === 'KeyT') {
+            isTrippy = !isTrippy;  // Toggle the trippy mode
+            console.log(`Trippy mode ${isTrippy ? 'activated' : 'deactivated'} by manual input`);
+            // Handle playback state change on manual toggle
+            handlePlaybackStateChange();
+            // Optional: Notify visualizer of trippy mode change if necessary
+            notifyVisualizerTrippyMode(isTrippy);
+        }
+    });
+});
+
+// Optional: Notify visualizer of trippy mode change if necessary
+function notifyVisualizerTrippyMode(isTrippy) {
+    AudionalPlayerMessages.postMessage({ action: "trippyMode", isTrippy });
+}
 
 let renderingState = {};
 let activeArrayIndex = {};
