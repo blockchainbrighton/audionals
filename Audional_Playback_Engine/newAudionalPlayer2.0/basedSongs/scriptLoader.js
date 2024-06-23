@@ -33,7 +33,6 @@ window.scriptsToLoad = [
     'visualiser/visualiserLogging_minified.js',
     'visualiser/visualiserMessageHandling_minified.js',
     'visualiser/visualiserWorkers_minified.js',
-    // 'visualiser/visualiserCode.js',
     'visualiser/visualiserGeometry_minified.js',
     'visualiser/visualiserDrawingColours_minified.js',
 
