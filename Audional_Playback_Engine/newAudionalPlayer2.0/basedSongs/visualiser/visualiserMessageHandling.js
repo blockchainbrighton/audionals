@@ -77,7 +77,6 @@ AudionalPlayerMessages.onmessage = (message) => {
 };
 
 
-
 document.addEventListener('sequenceUpdated', (event) => {
     const { currentSequence, currentStep } = event.detail;
 
@@ -85,10 +84,35 @@ document.addEventListener('sequenceUpdated', (event) => {
         playbackLoopCount++;
         console.log(`Playback loop count: ${playbackLoopCount}`);
 
-        if (playbackLoopCount >= 2) {
-            isTrippy = true;
-            console.log('isTrippy activated');
-            handlePlaybackStateChange();
+        // Log the current access level
+        console.log(`Current Access Level: ${AccessLevel}`);
+
+        // Calculate required loops for isTrippy based on AccessLevel
+        let requiredLoopsForTrippy;
+        if (AccessLevel === 1 && AccessLevel <= 2) {
+            requiredLoopsForTrippy = 4;
+        } else if (AccessLevel >= 3 && AccessLevel <= 4) {
+            requiredLoopsForTrippy = 3;
+        } else if (AccessLevel >= 5 && AccessLevel <= 6) {
+            requiredLoopsForTrippy = 2;
+        } else {
+            requiredLoopsForTrippy = 0;
+        }
+
+        // Activate isTrippy if playbackLoopCount meets the required loops for the current AccessLevel
+        if (playbackLoopCount >= requiredLoopsForTrippy) {
+            if (!isTrippy) {
+                isTrippy = true;
+                console.log('isTrippy activated');
+                handlePlaybackStateChange();
+            }
+        } else {
+            // Deactivate isTrippy if the loop count does not meet the threshold
+            if (isTrippy) {
+                isTrippy = false;
+                console.log('isTrippy deactivated');
+                handlePlaybackStateChange();
+            }
         }
 
         notifyVisualizerLoopCount(playbackLoopCount);
@@ -99,19 +123,20 @@ function notifyVisualizerLoopCount(loopCount) {
     AudionalPlayerMessages.postMessage({ action: "loopCount", loopCount });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    console.log("DOM fully loaded and parsed");
 
-    document.addEventListener('keydown', (event) => {
-        if (event.shiftKey && event.code === 'KeyT') {
-            isTrippy = !isTrippy;  // Toggle the trippy mode
-            console.log(`Trippy mode ${isTrippy ? 'activated' : 'deactivated'} by manual input`);
-            handlePlaybackStateChange();
-            notifyVisualizerTrippyMode(isTrippy);
-        }
-    });
-});
+// document.addEventListener('DOMContentLoaded', () => {
+//     console.log("DOM fully loaded and parsed");
 
-function notifyVisualizerTrippyMode(isTrippy) {
-    AudionalPlayerMessages.postMessage({ action: "trippyMode", isTrippy });
-}
+//     document.addEventListener('keydown', (event) => {
+//         if (event.shiftKey && event.code === 'KeyT') {
+//             isTrippy = !isTrippy;  // Toggle the trippy mode
+//             console.log(`Trippy mode ${isTrippy ? 'activated' : 'deactivated'} by manual input`);
+//             handlePlaybackStateChange();
+//             notifyVisualizerTrippyMode(isTrippy);
+//         }
+//     });
+// });
+
+// function notifyVisualizerTrippyMode(isTrippy) {
+//     AudionalPlayerMessages.postMessage({ action: "trippyMode", isTrippy });
+// }

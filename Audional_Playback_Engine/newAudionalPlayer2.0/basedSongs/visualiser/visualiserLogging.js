@@ -9,6 +9,7 @@ function logTestValuesAndDistribution() {
     const accessLevelValues = {};
     const accessLevelCounts = {};
 
+    // Initialize containers for access level values and counts
     for (let level = 1; level <= 10; level++) {
         accessLevelValues[level] = [];
         accessLevelCounts[level] = 0;
@@ -18,7 +19,7 @@ function logTestValuesAndDistribution() {
 
     // Process each seed
     for (let seed = 0; seed < seedCount; seed++) {
-        const accessLevel = generateAccessLevel(seed); // This line still uses a generated access level for distribution
+        const accessLevel = generateAccessLevel(seed); // Generate access level
 
         // Collect access level values
         if (seed < seedRange && accessLevelValues[accessLevel].length < valuesNeeded) {
@@ -31,6 +32,7 @@ function logTestValuesAndDistribution() {
 
         // Early exit if collection requirements are met
         if (collectedCount >= valuesNeeded * 10) {
+            console.log("Collected enough values, exiting early.");
             break;
         }
     }
@@ -38,7 +40,6 @@ function logTestValuesAndDistribution() {
     logAccessLevelValues(accessLevelValues);
     logAccessLevelDistribution(accessLevelCounts, seedCount);
 }
-
 
 function logAccessLevelValues(accessLevelValues) {
     console.log("Test Values for Each Access Level:");
