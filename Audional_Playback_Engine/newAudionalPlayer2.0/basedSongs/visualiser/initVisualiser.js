@@ -9,7 +9,8 @@ let playbackLoopCount = 0; // Track the number of playback loops
 let hasLoggedFirstLoop = false; // To track if the first loop has been logged
 let clearCanvas = true;
 
-
+// Global access level variable
+let AccessLevel = null; // This will be set during initialization
 
 const randomWithSeed = (seed) => {
     const value = 10000 * Math.sin(seed);
@@ -32,6 +33,10 @@ const generateAccessLevel = (seed) => {
     const skewedValue = Math.pow(randomWithSeed(seed), skewFactor);
     return Math.min(Math.max(Math.floor((1 - skewedValue) * 10) + 1, 1), 10);
 };
+
+// Generate access level at initialization
+AccessLevel = generateAccessLevel(seed);
+console.log(`AccessLevel=${AccessLevel}`);
 
 
 

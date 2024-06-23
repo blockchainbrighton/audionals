@@ -13,7 +13,8 @@ const handleActiveStepAction = (channelIndex) => {
     if (!isPlaybackActive || activeChannelIndex !== channelIndex) {
         isPlaybackActive = true;
         activeChannelIndex = channelIndex;
-        AccessLevel = generateAccessLevel(seed);
+
+        // Use the global AccessLevel
         const safeChannelIndex = channelIndex === 0 ? 1 : channelIndex;
         const arrayIndex = selectArrayIndex(seed, AccessLevel, safeChannelIndex);
 
@@ -35,7 +36,7 @@ const handleActiveStepAction = (channelIndex) => {
             activeArrayIndex[channelIndex] = arrayIndex;
             updateVisualizer(cci2, arrayIndex, channelIndex);
         }
-        
+
         // Log the first loop when playback starts
         if (!hasLoggedFirstLoop) {
             playbackLoopCount++;

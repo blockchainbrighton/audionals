@@ -17,7 +17,7 @@ function logTestValuesAndDistribution() {
 
     // Process each seed
     for (let seed = 0; seed < seedCount; seed++) {
-        const accessLevel = generateAccessLevel(seed); // Only access level is generated
+        const accessLevel = generateAccessLevel(seed); // This line still uses a generated access level for distribution
 
         // Collect access level values
         if (seed < seedRange && accessLevelValues[accessLevel].length < valuesNeeded) {
@@ -38,6 +38,7 @@ function logTestValuesAndDistribution() {
     logAccessLevelDistribution(accessLevelCounts, seedCount);
 }
 
+
 function logAccessLevelValues(accessLevelValues) {
     console.log("Test Values for Each Access Level:");
     for (const [level, values] of Object.entries(accessLevelValues)) {
@@ -53,17 +54,17 @@ function logAccessLevelDistribution(accessLevelCounts, seedCount) {
     }
 }
 
-function logInitialAssignments(seed, generateAccessLevel, selectArrayIndex, calculateCCI2, arrayLengths, renderingState, activeArrayIndex) {
+function logInitialAssignments(seed, selectArrayIndex, calculateCCI2, arrayLengths, renderingState, activeArrayIndex) {
     setTimeout(() => {
         const assignments = [];
         const totalChannels = 16; // Adjust this number based on your application
 
         try {
-            const accessLevel = generateAccessLevel(seed);
-            console.log(`Access Level: ${accessLevel}`);
+            // Use global AccessLevel
+            console.log(`Access Level: ${AccessLevel}`);
 
             for (let channelIndex = 1; channelIndex <= totalChannels; channelIndex++) {
-                const arrayIndex = selectArrayIndex(seed, accessLevel, channelIndex);
+                const arrayIndex = selectArrayIndex(seed, AccessLevel, channelIndex);
                 const cci2 = calculateCCI2(channelIndex, arrayLengths[arrayIndex]);
 
                 renderingState[channelIndex] = { arrayIndex, cci2 };
@@ -79,12 +80,12 @@ function logInitialAssignments(seed, generateAccessLevel, selectArrayIndex, calc
     }, 100);
 }
 
-// Execute tests and logs
-logTestValuesAndDistribution();
-setTimeout(() => {
-    // Replace the placeholders with actual references if available
-    logInitialAssignments(seed, generateAccessLevel, selectArrayIndex, calculateCCI2, arrayLengths, renderingState, activeArrayIndex);
-}, 500);
+// // Execute tests and logs
+// logTestValuesAndDistribution();
+// setTimeout(() => {
+//     // Replace the placeholders with actual references if available
+//     logInitialAssignments(seed, generateAccessLevel, selectArrayIndex, calculateCCI2, arrayLengths, renderingState, activeArrayIndex);
+// }, 500);
 
 // Log function to control frequency and relevance
 let lastLogTime = 0;
