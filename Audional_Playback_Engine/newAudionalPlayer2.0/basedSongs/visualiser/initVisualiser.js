@@ -7,44 +7,6 @@ let playbackLoopCount = 0; // Track the number of playback loops
 let hasLoggedFirstLoop = false; // To track if the first loop has been logged
 let clearCanvas = true;
 
-document.addEventListener('sequenceUpdated', (event) => {
-    const { currentSequence, currentStep } = event.detail;
-
-    if (currentSequence === 0 && currentStep === 0) {
-        playbackLoopCount++;
-        console.log(`Playback loop count: ${playbackLoopCount}`);
-
-        if (playbackLoopCount >= 2) {
-            isTrippy = true;
-            console.log('isTrippy activated');
-            handlePlaybackStateChange();
-        }
-
-        notifyVisualizerLoopCount(playbackLoopCount);
-    }
-});
-
-function notifyVisualizerLoopCount(loopCount) {
-    AudionalPlayerMessages.postMessage({ action: "loopCount", loopCount });
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    console.log("DOM fully loaded and parsed");
-
-    document.addEventListener('keydown', (event) => {
-        if (event.shiftKey && event.code === 'KeyT') {
-            isTrippy = !isTrippy;  // Toggle the trippy mode
-            console.log(`Trippy mode ${isTrippy ? 'activated' : 'deactivated'} by manual input`);
-            handlePlaybackStateChange();
-            notifyVisualizerTrippyMode(isTrippy);
-        }
-    });
-});
-
-function notifyVisualizerTrippyMode(isTrippy) {
-    AudionalPlayerMessages.postMessage({ action: "trippyMode", isTrippy });
-}
-
 let renderingState = {};
 let activeArrayIndex = {};
 
