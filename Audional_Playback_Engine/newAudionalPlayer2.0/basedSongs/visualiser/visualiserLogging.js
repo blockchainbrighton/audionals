@@ -1,5 +1,6 @@
 // visualiserLogging.js
 
+// This function is for production only and shoudl be removed in live code
 function logTestValuesAndDistribution() {
     const seedRange = 1000000; // Range of seeds to test for values
     const seedCount = 10000000; // Total seeds for distribution test
