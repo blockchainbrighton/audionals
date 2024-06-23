@@ -90,10 +90,12 @@ document.addEventListener('sequenceUpdated', (event) => {
         // Calculate required loops for isTrippy based on AccessLevel
         let requiredLoopsForTrippy;
         if (AccessLevel === 1 && AccessLevel <= 2) {
-            requiredLoopsForTrippy = 4;
+            requiredLoopsForTrippy = 5;
         } else if (AccessLevel >= 3 && AccessLevel <= 4) {
-            requiredLoopsForTrippy = 3;
+            requiredLoopsForTrippy = 4;
         } else if (AccessLevel >= 5 && AccessLevel <= 6) {
+            requiredLoopsForTrippy = 3;
+        } else if (AccessLevel >= 7 && AccessLevel <= 8) {
             requiredLoopsForTrippy = 2;
         } else {
             requiredLoopsForTrippy = 0;

@@ -38,7 +38,11 @@ const generateAccessLevel = (seed) => {
 AccessLevel = generateAccessLevel(seed);
 console.log(`AccessLevel=${AccessLevel}`);
 
-
+// Check access level and set isTrippy if necessary
+if (AccessLevel === 9 || AccessLevel === 10) {
+    isTrippy = true;
+    console.log("Trippy mode activated!");
+}
 
 let renderingState = {};
 let activeArrayIndex = {};
