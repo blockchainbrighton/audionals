@@ -1,7 +1,7 @@
 console.log("Initialization.js loaded");
 
 // Initialize trippy mode state
-let isTrippy = true;  // Tracks if trippy mode should be active
+let isTrippy = false;  // Tracks if trippy mode should be active
 let isPlaybackActive = false;  // Tracks playback state
 let playbackLoopCount = 0; // Track the number of playback loops
 let hasLoggedFirstLoop = false; // To track if the first loop has been logged
