@@ -174,7 +174,8 @@ fs.readdir(inputDir, (err, files) => {
   files.filter(file => path.extname(file) === '.json')
     .forEach(file => {
       const inputFilePath = path.join(inputDir, file);
-      const outputFilePath = path.join(outputDir, file);
+      const baseFileName = path.basename(file, '.json');
+      const outputFilePath = path.join(outputDir, `${baseFileName}_serialized.json`);
 
       fs.readFile(inputFilePath, 'utf8', (err, data) => {
         if (err) return console.error('Error reading input file:', err);
@@ -189,7 +190,7 @@ fs.readdir(inputDir, (err, files) => {
           fs.writeFile(outputFilePath, JSON.stringify(serializedContent), 'utf8', err => {
             if (err) return console.error('Error writing output file:', err);
 
-            const patternMapFilePath = path.join(outputDir, `${path.basename(file, '.json')}_patterns.json`);
+            const patternMapFilePath = path.join(outputDir, `${baseFileName}_patterns.json`);
             fs.writeFile(patternMapFilePath, JSON.stringify(patternMap), 'utf8', err => {
               if (err) return console.error('Error writing pattern map file:', err);
 
