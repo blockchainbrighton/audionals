@@ -70,11 +70,13 @@ const serialize = data => {
   for (const [key, value] of Object.entries(data)) {
     const shortKey = reverseKeyMap[key] ?? key;
 
-    if (key === 'channelURLs' || key === 'projectChannelNames') {
-      // Directly assign channelURLs and projectChannelNames without alteration
+    if (key === 'channelURLs') {
+      // Directly assign channelURLs without alteration
       serializedData[shortKey] = value;
     } else if (Array.isArray(value)) {
-      serializedData[shortKey] = value.map(v => typeof v === 'number' ? roundToFourDecimals(v) : serialize(v));
+      serializedData[shortKey] = ['projectChannelNames'].includes(key)
+        ? value.map((v, i) => reverseChannelMap[i] ?? v) // Map channel names to letters
+        : value.map(v => typeof v === 'number' ? roundToFourDecimals(v) : serialize(v));
     } else if (typeof value === 'object' && value !== null) {
       serializedData[shortKey] = key === 'projectSequences'
         ? Object.entries(value).reduce((acc, [seqKey, channels]) => {
@@ -148,8 +150,10 @@ fs.readdir(inputDir, (err, files) => {
   files.filter(file => path.extname(file) === '.json')
     .forEach(file => {
       const inputFilePath = path.join(inputDir, file);
-      const serializedFileName = file.replace('.json', '-serialized.json');
-      const outputFilePath = path.join(outputDir, serializedFileName);
+      
+      // Modify file name to include _s before the extension
+      const fileInfo = path.parse(file);
+      const outputFilePath = path.join(outputDir, `${fileInfo.name}_s${fileInfo.ext}`);
 
       fs.readFile(inputFilePath, 'utf8', (err, data) => {
         if (err) return console.error('Error reading input file:', err);
@@ -161,7 +165,7 @@ fs.readdir(inputDir, (err, files) => {
 
           console.log(`Sequence Analysis for ${file}:`, JSON.stringify(sequenceAnalysis, null, 2));
 
-          fs.writeFile(outputFilePath, JSON.stringify(serializedData, null, 2), 'utf8', err => {
+          fs.writeFile(outputFilePath, JSON.stringify(serializedData), 'utf8', err => {
             if (err) return console.error('Error writing output file:', err);
 
             const compressedFilePath = `${outputFilePath}.gz`;

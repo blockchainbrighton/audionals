@@ -91,7 +91,7 @@ fs.readdir(inputDir, (err, files) => {
   files.filter(file => path.extname(file) === '.gz')
     .forEach(file => {
       const inputFilePath = path.join(inputDir, file);
-      const outputFilePath = path.join(outputDir, file.replace('.gz', '-deserialized.json'));
+      const outputFilePath = path.join(outputDir, file.replace('.gz', '_d.json'));
 
       const gunzip = zlib.createGunzip();
       const inputStream = fs.createReadStream(inputFilePath);
