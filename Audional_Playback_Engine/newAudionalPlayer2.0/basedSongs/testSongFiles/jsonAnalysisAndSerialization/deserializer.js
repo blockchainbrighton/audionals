@@ -1,108 +1,146 @@
-// deserializer.js
-const fs = require('fs');
+const fs = require('fs').promises;
+const zlib = require('zlib');
+const util = require('util');
 const path = require('path');
 
-// Reverse mapping for deserialization
-const reverseKeyMap = {
-  pN: 'projectName',
-  aN: 'artistName',
-  pB: 'projectBPM',
-  cS: 'currentSequence',
-  cU: 'channelURLs',
-  cV: 'channelVolume',
-  cP: 'channelPlaybackSpeed',
-  tS: 'trimSettings',
-  pCN: 'projectChannelNames',
-  sS: 'startSliderValue',
-  eS: 'endSliderValue',
-  tD: 'totalSampleDuration',
-  st: 'steps',
-  en: 'end',
-  pS: 'projectSequences'
+const gunzip = util.promisify(zlib.gunzip);
+
+// Key mappings (same as in serialization)
+const keyMap = {
+  0: 'projectName',
+  1: 'artistName',
+  2: 'projectBPM',
+  3: 'currentSequence',
+  4: 'channelURLs',
+  5: 'channelVolume',
+  6: 'channelPlaybackSpeed',
+  7: 'trimSettings',
+  8: 'projectChannelNames',
+  9: 'startSliderValue',
+  10: 'endSliderValue',
+  11: 'totalSampleDuration',
+  12: 'start',
+  13: 'end',
+  14: 'projectSequences',
+  15: 'steps'
 };
 
-// Helper function to expand compressed steps
-const expandSteps = (compressedSteps) => {
-  const steps = [];
-  for (const entry of compressedSteps) {
-    if (typeof entry === 'number') {
-      steps.push(entry);
-    } else if (typeof entry === 'string' && entry.endsWith('r')) {
-      const index = parseInt(entry.slice(0, -1), 10);
-      steps.push({ index, reverse: true });
-    } else if (entry.range) {
-      const [start, end] = entry.range;
+const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([k, v]) => [v, +k]));
+
+// Channel mappings
+const channelMap = Array.from({ length: 16 }, (_, i) => String.fromCharCode(65 + i));
+const reverseChannelMap = Object.fromEntries(channelMap.map((letter, i) => [letter, i]));
+
+// Utility function to decompress step ranges
+const decompressSteps = (steps) => {
+  const decompressed = [];
+  steps.forEach(step => {
+    if (typeof step === 'number') {
+      decompressed.push(step);
+    } else if (typeof step === 'string' && step.endsWith('r')) {
+      decompressed.push({ index: parseInt(step), reverse: true });
+    } else if (step.r) {
+      const [start, end] = step.r;
       for (let i = start; i <= end; i++) {
-        steps.push(i);
+        decompressed.push(i);
       }
     }
-  }
-  return steps;
+  });
+  return decompressed;
 };
 
-// Deserialize JSON
-const deserialize = (data) => {
-  const deserializedData = {};
+// Utility function to reverse the key mapping
+const reverseMapping = (data, map) => {
+  return Object.keys(data).reduce((acc, key) => {
+    const originalKey = keyMap[key] || key;
+    acc[originalKey] = data[key];
+    return acc;
+  }, {});
+};
 
+// Utility function to reverse the channel mapping
+const reverseChannelMapping = (data) => {
+  return Object.keys(data).reduce((acc, key) => {
+    const originalKey = reverseChannelMap[key] !== undefined ? reverseChannelMap[key] : key;
+    acc[originalKey] = data[key];
+    return acc;
+  }, {});
+};
+
+// Function to reconstruct the original data structure
+const reconstructData = (data, patternMap, isSteps = false) => {
+  if (isSteps) {
+    return decompressSteps(patternMap[data]);
+  }
+
+  const reconstructed = {};
   for (const [key, value] of Object.entries(data)) {
-    const longKey = reverseKeyMap[key] || key;
+    const originalKey = keyMap[key] || key;
 
     if (Array.isArray(value)) {
-      deserializedData[longKey] = value.map(v => typeof v === 'object' ? deserialize(v) : v);
-    } else if (typeof value === 'object' && value !== null) {
-      if (key === 'pS') {
-        const deserializedSequences = {};
-        for (const [seqKey, channels] of Object.entries(value)) {
-          const longSeqKey = seqKey.replace('s', 'Sequence');
-          const deserializedChannels = {};
-          for (const [chKey, chValue] of Object.entries(channels)) {
-            if (chValue.st) {
-              deserializedChannels[chKey] = { steps: expandSteps(chValue.st) };
-            }
-          }
-          deserializedSequences[longSeqKey] = deserializedChannels;
-        }
-        deserializedData[longKey] = deserializedSequences;
+      if (originalKey === 'channelURLs') {
+        reconstructed[originalKey] = value;
+      } else if (originalKey === 'projectChannelNames') {
+        reconstructed[originalKey] = value.map(v => reverseChannelMap[v] ?? v);
       } else {
-        deserializedData[longKey] = deserialize(value);
+        reconstructed[originalKey] = value.map(v => {
+          return typeof v === 'number' ? v : reconstructData(v, patternMap, originalKey === 'steps');
+        });
       }
+    } else if (typeof value === 'object' && value !== null) {
+      reconstructed[originalKey] = originalKey === 'projectSequences'
+        ? Object.entries(value).reduce((acc, [seqKey, channels]) => {
+            const originalSeqKey = `Sequence${seqKey.slice(1)}`;
+            const originalChannels = Object.entries(channels).reduce((chAcc, [chKey, chValue]) => {
+              const originalChKey = reverseChannelMap[chKey] !== undefined ? reverseChannelMap[chKey] : chKey;
+              if (chValue.steps) {
+                chAcc[originalChKey] = {
+                  steps: reconstructData(chValue.steps, patternMap, true)
+                };
+              }
+              return chAcc;
+            }, {});
+            acc[originalSeqKey] = originalChannels;
+            return acc;
+          }, {})
+        : reconstructData(value, patternMap);
     } else {
-      deserializedData[longKey] = value;
+      reconstructed[originalKey] = value;
     }
   }
-
-  return deserializedData;
+  return reconstructed;
 };
 
-// Read the serialized JSON file
-const inputFilePath = path.join(__dirname, 'serializedFiles', 'TRUTH_serialized.json');
-const outputFilePath = path.join(__dirname, 'deserializedFiles', 'TRUTH_deserialized.json');
-const outputDir = path.dirname(outputFilePath);
+// Function to load and decompress serialized data
+const loadSerializedData = async (serializedFilePath, patternMapFilePath) => {
+  const [compressedData, patternData] = await Promise.all([
+    fs.readFile(serializedFilePath),
+    fs.readFile(patternMapFilePath, 'utf8')
+  ]);
+  const decompressedData = await gunzip(compressedData);
+  return {
+    serializedContent: JSON.parse(decompressedData.toString()),
+    patternMap: JSON.parse(patternData)
+  };
+};
 
-if (!fs.existsSync(outputDir)) {
-  fs.mkdirSync(outputDir);
-}
+// Main deserialization function
+const deserialize = async (serializedFilePath, patternMapFilePath) => {
+  const { serializedContent, patternMap } = await loadSerializedData(serializedFilePath, patternMapFilePath);
+  return reconstructData(serializedContent, patternMap);
+};
 
-fs.readFile(inputFilePath, 'utf8', (err, data) => {
-  if (err) {
-    console.error('Error reading input file:', err);
-    return;
-  }
-
+// Usage example
+const main = async () => {
   try {
-    const serializedData = JSON.parse(data);
-    const deserializedData = deserialize(serializedData);
+    const serializedFilePath = path.join(__dirname, 'serializedFiles', 'TRUTH_AUDX_17_serialized.json.gz');
+    const patternMapFilePath = path.join(__dirname, 'serializedFiles', 'TRUTH_AUDX_17_patterns.json');
 
-    // Write the deserialized data to a new file
-    fs.writeFile(outputFilePath, JSON.stringify(deserializedData, null, 2), 'utf8', (err) => {
-      if (err) {
-        console.error('Error writing output file:', err);
-        return;
-      }
-
-      console.log('Deserialized data saved to', outputFilePath);
-    });
-  } catch (parseError) {
-    console.error('Error parsing JSON:', parseError);
+    const originalData = await deserialize(serializedFilePath, patternMapFilePath);
+    console.log('Deserialized Data:', JSON.stringify(originalData, null, 2));
+  } catch (err) {
+    console.error('Error deserializing data:', err);
   }
-});
+};
+
+main();
