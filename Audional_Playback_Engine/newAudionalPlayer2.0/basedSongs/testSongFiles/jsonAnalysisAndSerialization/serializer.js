@@ -8,7 +8,7 @@ const keyMap = {
   1: 'artistName',
   2: 'projectBPM',
   3: 'currentSequence',
-  4: 'channelURLs', // keep full URLs in the serialized output
+  4: 'channelURLs',
   5: 'channelVolume',
   6: 'channelPlaybackSpeed',
   7: 'trimSettings',
@@ -26,7 +26,7 @@ const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([k, v]) => 
 
 // Channel number to letter mapping
 const channelMap = Array.from({ length: 16 }, (_, i) => String.fromCharCode(65 + i));
-const reverseChannelMap = Object.fromEntries(channelMap.map((letter, i) => [letter, i]));
+const reverseChannelMap = Object.fromEntries(channelMap.map((letter, i) => [i, letter]));
 
 // Round to four decimal places
 const roundToFourDecimals = num => Math.round(num * 10000) / 10000;
@@ -64,64 +64,37 @@ const compressSteps = steps => {
   return compressed;
 };
 
-const serializeAndDeduplicatePatterns = data => {
+const serialize = data => {
   const serializedData = {};
-  const patternMap = {};
-  let patternId = 0;
 
-  const findOrAddPattern = pattern => {
-    const patternString = JSON.stringify(pattern);
-    if (patternMap[patternString] !== undefined) {
-      return patternMap[patternString];
+  for (const [key, value] of Object.entries(data)) {
+    const shortKey = reverseKeyMap[key] ?? key;
+
+    if (Array.isArray(value)) {
+      serializedData[shortKey] = ['channelURLs', 'projectChannelNames'].includes(key)
+        ? value.map((v, i) => reverseChannelMap[i] ?? v) // Map channel names to letters
+        : value.map(v => typeof v === 'number' ? roundToFourDecimals(v) : serialize(v));
+    } else if (typeof value === 'object' && value !== null) {
+      serializedData[shortKey] = key === 'projectSequences'
+        ? Object.entries(value).reduce((acc, [seqKey, channels]) => {
+            const shortSeqKey = seqKey.replace('Sequence', 's');
+            const filteredChannels = Object.entries(channels).reduce((chAcc, [chKey, chValue]) => {
+              const letter = reverseChannelMap[chKey] ?? chKey; // Convert channel number to letter
+              if (chValue.steps?.length) {
+                chAcc[letter] = { [reverseKeyMap['steps']]: compressSteps(chValue.steps) };
+              }
+              return chAcc;
+            }, {});
+            if (Object.keys(filteredChannels).length) acc[shortSeqKey] = filteredChannels;
+            return acc;
+          }, {})
+        : serialize(value);
+    } else {
+      serializedData[shortKey] = typeof value === 'number' ? roundToFourDecimals(value) : value;
     }
-    const id = patternId++;
-    patternMap[patternString] = id;
-    return id;
-  };
+  }
 
-  const serialize = (data, isSteps = false) => {
-    if (isSteps) {
-      return findOrAddPattern(data);
-    }
-
-    const serialized = {};
-    for (const [key, value] of Object.entries(data)) {
-      const shortKey = reverseKeyMap[key] ?? key;
-
-      if (Array.isArray(value)) {
-        if (key === 'channelURLs') {
-          // Preserve the full channel URLs
-          serialized[shortKey] = value;
-        } else if (key === 'projectChannelNames') {
-          // Map channel numbers to letters
-          serialized[shortKey] = value.map((v, i) => reverseChannelMap[i] ?? v);
-        } else {
-          serialized[shortKey] = value.map(v => typeof v === 'number' ? roundToFourDecimals(v) : serialize(v, shortKey === reverseKeyMap['steps']));
-        }
-      } else if (typeof value === 'object' && value !== null) {
-        serialized[shortKey] = key === 'projectSequences'
-          ? Object.entries(value).reduce((acc, [seqKey, channels]) => {
-              const shortSeqKey = seqKey.replace('Sequence', 's');
-              const filteredChannels = Object.entries(channels).reduce((chAcc, [chKey, chValue]) => {
-                const letter = channelMap[chKey] ?? chKey;
-                if (chValue.steps?.length) {
-                  chAcc[letter] = { [reverseKeyMap['steps']]: serialize(chValue.steps, true) };
-                }
-                return chAcc;
-              }, {});
-              if (Object.keys(filteredChannels).length) acc[shortSeqKey] = filteredChannels;
-              return acc;
-            }, {})
-          : serialize(value);
-      } else {
-        serialized[shortKey] = typeof value === 'number' ? roundToFourDecimals(value) : value;
-      }
-    }
-    return serialized;
-  };
-
-  const serializedContent = serialize(data);
-  return { serializedContent, patternMap: Object.fromEntries(Object.entries(patternMap).map(([pattern, id]) => [id, JSON.parse(pattern)])) };
+  return serializedData;
 };
 
 const analyzeSequences = data => {
@@ -174,32 +147,26 @@ fs.readdir(inputDir, (err, files) => {
   files.filter(file => path.extname(file) === '.json')
     .forEach(file => {
       const inputFilePath = path.join(inputDir, file);
-      const baseFileName = path.basename(file, '.json');
-      const outputFilePath = path.join(outputDir, `${baseFileName}_serialized.json`);
+      const outputFilePath = path.join(outputDir, file);
 
       fs.readFile(inputFilePath, 'utf8', (err, data) => {
         if (err) return console.error('Error reading input file:', err);
 
         try {
           const jsonData = JSON.parse(data);
-          const { serializedContent, patternMap } = serializeAndDeduplicatePatterns(jsonData);
+          const serializedData = serialize(jsonData);
           const sequenceAnalysis = analyzeSequences(jsonData);
 
           console.log(`Sequence Analysis for ${file}:`, JSON.stringify(sequenceAnalysis, null, 2));
 
-          fs.writeFile(outputFilePath, JSON.stringify(serializedContent), 'utf8', err => {
+          fs.writeFile(outputFilePath, JSON.stringify(serializedData), 'utf8', err => {
             if (err) return console.error('Error writing output file:', err);
 
-            const patternMapFilePath = path.join(outputDir, `${baseFileName}_patterns.json`);
-            fs.writeFile(patternMapFilePath, JSON.stringify(patternMap), 'utf8', err => {
-              if (err) return console.error('Error writing pattern map file:', err);
-
-              const compressedFilePath = `${outputFilePath}.gz`;
-              fs.createReadStream(outputFilePath)
-                .pipe(zlib.createGzip())
-                .pipe(fs.createWriteStream(compressedFilePath))
-                .on('finish', () => console.log('Compressed data saved to', compressedFilePath));
-            });
+            const compressedFilePath = `${outputFilePath}.gz`;
+            fs.createReadStream(outputFilePath)
+              .pipe(zlib.createGzip())
+              .pipe(fs.createWriteStream(compressedFilePath))
+              .on('finish', () => console.log('Compressed data saved to', compressedFilePath));
           });
         } catch (parseError) {
           console.error('Error parsing JSON:', parseError);
