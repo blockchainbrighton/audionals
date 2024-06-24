@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serialization and Analysis</title>
+</head>
+<body>
+    <h1>Serialization and Analysis</h1>
+    <input type="file" id="fileInput" accept=".json" multiple />
+    <pre id="output"></pre>
+
+    <script>
+        const fetchAndExtractPako = (url, callback) => {
+            fetch(url)
+                .then(response => response.text())
+                .then(data => {
+                    const scriptStart = data.indexOf('!function');
+                    const scriptEnd = data.indexOf('</script>', scriptStart);
+                    if (scriptStart === -1 || scriptEnd === -1) {
+                        console.error('Pako library script not found in the fetched content.');
+                        return;
+                    }
+                    const pakoScript = data.slice(scriptStart, scriptEnd).trim();
+
+                    // Create a script element and execute it
+                    const script = document.createElement('script');
+                    script.textContent = pakoScript;
+                    document.head.appendChild(script);
+                    document.head.removeChild(script);
+
+                    if (typeof pako === 'undefined') {
+                        console.error('Pako library is not defined after script execution.');
+                        return;
+                    }
+
+                    console.log('Pako library is ready to be used.');
+                    callback();
+                })
+                .catch(err => {
+                    console.error('Error fetching Pako library:', err);
+                });
+        };
+
+        document.getElementById('fileInput').addEventListener('change', (event) => {
+            const files = event.target.files;
+            const output = document.getElementById('output');
+
+            fetchAndExtractPako('https://ordinals.com/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0', () => {
+                Array.from(files).forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        try {
+                            const jsonData = JSON.parse(reader.result);
+                            const serializedData = serialize(jsonData);
+                            const sequenceAnalysis = analyzeSequences(jsonData);
+
+                            console.log(`Sequence Analysis for ${file.name}:`, JSON.stringify(sequenceAnalysis, null, 2));
+
+                            const compressedData = pako.gzip(JSON.stringify(serializedData));
+                            const blob = new Blob([compressedData], { type: 'application/gzip' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `${file.name.split('.').slice(0, -1).join('.')}_s.json.gz`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+
+                            output.textContent += `Compressed data for ${file.name} saved.\n`;
+                        } catch (parseError) {
+                            console.error('Error parsing JSON:', parseError);
+                            output.textContent += `Error parsing JSON for ${file.name}.\n`;
+                        }
+                    };
+                    reader.readAsText(file);
+                });
+            });
+        });
+
+        // Remaining code for serialize and analyzeSequences functions would be here...
+
+    </script>
+</body>
+</html>

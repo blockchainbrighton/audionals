@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deserialize Data</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/zlib.js/0.3.1/zlib.min.js"></script>
+</head>
+<body>
+    <button id="fetchData">Fetch and Deserialize Data</button>
+    <script>
+        const keyMap = {
+            0: 'projectName',
+            1: 'artistName',
+            2: 'projectBPM',
+            3: 'currentSequence',
+            4: 'channelURLs',
+            5: 'channelVolume',
+            6: 'channelPlaybackSpeed',
+            7: 'trimSettings',
+            8: 'projectChannelNames',
+            9: 'startSliderValue',
+            10: 'endSliderValue',
+            11: 'totalSampleDuration',
+            12: 'start',
+            13: 'end',
+            14: 'projectSequences',
+            15: 'steps'
+        };
+
+        const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([k, v]) => [v, +k]));
+
+        const channelMap = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)); // A-Z
+        const reverseChannelMap = Object.fromEntries(channelMap.map((letter, i) => [letter, i]));
+
+        // Decompress steps function
+        const decompressSteps = compressedSteps => {
+            const steps = [];
+
+            compressedSteps.forEach(step => {
+                if (typeof step === 'number') {
+                    steps.push(step);
+                } else if (typeof step === 'object' && 'r' in step) {
+                    const [start, end] = step.r;
+                    for (let i = start; i <= end; i++) {
+                        steps.push(i);
+                    }
+                } else if (typeof step === 'string' && step.endsWith('r')) {
+                    steps.push({ index: parseInt(step.slice(0, -1), 10), reverse: true });
+                }
+            });
+
+            return steps;
+        };
+
+        // Deserialization function
+        const deserialize = serializedData => {
+            const data = {};
+
+            for (const [shortKey, value] of Object.entries(serializedData)) {
+                const fullKey = keyMap[shortKey] ?? shortKey;
+
+                if (Array.isArray(value)) {
+                    data[fullKey] = value.map(v => typeof v === 'object' ? deserialize(v) : v);
+                } else if (typeof value === 'object' && value !== null) {
+                    data[fullKey] = fullKey === 'projectSequences'
+                        ? Object.entries(value).reduce((acc, [shortSeqKey, channels]) => {
+                            const seqKey = shortSeqKey.replace('s', 'Sequence');
+                            const expandedChannels = Object.entries(channels).reduce((chAcc, [letter, chValue]) => {
+                                const chKey = `ch${reverseChannelMap[letter]}`;
+                                chAcc[chKey] = { steps: decompressSteps(chValue[reverseKeyMap['steps']] || []) };
+                                return chAcc;
+                            }, {});
+                            acc[seqKey] = expandedChannels;
+                            return acc;
+                        }, {})
+                        : deserialize(value);
+                } else {
+                    data[fullKey] = value;
+                }
+            }
+
+            return data;
+        };
+
+        // Function to handle fetching, decompressing, and deserializing data
+        const processSerializedData = async (url) => {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const compressedData = await response.arrayBuffer();
+
+                // Decompress data using Zlib.Gunzip
+                const gunzip = new Zlib.Gunzip(new Uint8Array(compressedData));
+                const decompressedData = gunzip.decompress();
+
+                // Convert to string and parse JSON
+                const jsonString = new TextDecoder('utf-8').decode(decompressedData);
+                const serializedData = JSON.parse(jsonString);
+                const originalData = deserialize(serializedData);
+
+                console.log('Deserialized Data:', originalData);
+
+                // Return the deserialized data for further processing
+                return originalData;
+            } catch (error) {
+                console.error('Error processing data:', error);
+            }
+        };
+
+        document.getElementById('fetchData').addEventListener('click', () => {
+            const dataUrl = 'serializedFiles/TRUTH_AUDX_17_s.json.gz'; // Update with actual URL
+            processSerializedData(dataUrl);
+        });
+    </script>
+</body>
+</html>
