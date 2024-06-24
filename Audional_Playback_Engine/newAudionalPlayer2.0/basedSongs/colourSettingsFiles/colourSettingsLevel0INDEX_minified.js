@@ -1,0 +1,3 @@
+// colourSettingsLevel0.js
+
+{const o=100;function getColors0(t,n,r){const{x:l,y:e,z:g}=r[0],{x:a,y:h}=r[1],{x:s,y:y}=r[2],f=(r[1].z,r[2].z+o),x=Array.from({length:6},(()=>Math.random()))[0]*((f+255)/(11*o)*255),c=Date.now();Math.sin(c),Array.from({length:23},((o,t)=>t+1));return[x>.01?`rgb(${Math.floor(x)}, ${Math.floor(x)}, ${Math.floor(x)})`:"#FF0000",...[10,1.77].flatMap((o=>Array.from({length:5},((t,n)=>getConditionalColorWithIndex(r[0].x,r[0].y,o,[1,2,3,4,5,6,7,8,9,10][n],1,window.colorPalette)))))]}function getColors0Length(){const o=getColors0(null,null,[{z:0,x:0,y:0},{z:0,x:0,y:0},{z:0,x:0,y:0}]).length;return console.log(`getColors0 length: ${o}`),o}getColors0Length()}
