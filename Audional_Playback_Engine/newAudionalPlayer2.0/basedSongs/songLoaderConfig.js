@@ -5,7 +5,7 @@ src="https://ordinals.com/content/e575d3519ca3d6eb6a8d34e4c969dee9ef72b84766fd3f
 
 // *** THIS IS THE URL TO THE AUDX SONGFILE ***
 // Store JSON data URL in a global variable ()
-window.jsonDataUrl = "testSongFiles/TRUTH_AUDX_17.json";
+window.jsonDataUrl = "testSongFiles/TRUTH_AUDX_17_DS.json";
 
 
 // TRUMP SONG
