@@ -1,6 +1,5 @@
 // playbackManager.js
 
-
 async function playTimeline() {
     if (timeline.length > 0) {
         if (!playbackStopped) {
@@ -18,8 +17,6 @@ async function playTimeline() {
         await playMediaWrapper(currentIndex);
     }
 }
-
-
 
 function stopTimeline() {
     currentIndex = 0;
@@ -54,9 +51,15 @@ async function playMediaWrapper(index) {
         media.type = 'video';
     } else if (contentType.includes('image')) {
         media.type = 'image';
+    } else if (contentType.includes('audio')) {
+        media.type = 'audio';
+    } else if (contentType.includes('text')) {
+        media.type = 'text';
+    } else if (contentType.includes('html')) {
+        media.type = 'html';
     } else {
-        alert('Unsupported media type!');
         console.error(`[${getCurrentTimestamp()}] Unsupported media type: ${media.url}`);
+        scheduleNextMedia(Date.now());
         return;
     }
 
@@ -98,4 +101,46 @@ function scheduleNextMedia(endTime) {
             }
         }
     }
+}
+
+function playMedia(media, mediaContainer, index) {
+    return new Promise((resolve, reject) => {
+        let element;
+
+        if (media.type === 'image' || media.type === 'video' || media.type === 'audio') {
+            element = document.createElement(media.type === 'image' ? 'img' : media.type);
+            element.src = media.url;
+            element.controls = media.type !== 'image';
+            element.style.objectFit = 'cover';
+            element.style.width = '100%';
+            element.style.height = '100%';
+        } else if (media.type === 'text' || media.type === 'html') {
+            element = document.createElement('iframe');
+            element.src = media.url;
+            element.style.width = '100%';
+            element.style.height = '100%';
+        }
+
+        if (element) {
+            element.onload = () => {
+                setTimeout(() => {
+                    element.remove();
+                    resolve();
+                }, media.duration * 1000);
+            };
+            element.onerror = (error) => {
+                console.error(`[${getCurrentTimestamp()}] Error loading media: ${media.url}`, error);
+                reject(error);
+            };
+            mediaContainer.appendChild(element);
+        } else {
+            console.error(`[${getCurrentTimestamp()}] Failed to create element for media: ${media.url}`);
+            reject(new Error('Failed to create media element'));
+        }
+    });
+}
+
+function getCurrentTimestamp() {
+    const now = new Date();
+    return now.toISOString();
 }
