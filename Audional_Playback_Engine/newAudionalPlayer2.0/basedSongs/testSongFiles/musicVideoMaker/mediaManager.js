@@ -41,6 +41,30 @@ function updateAudio(index, audio) {
 
 function resetControls() {
     document.getElementById('media-url').value = '';
-    document.getElementById('media-duration').value = '';
+    document.getElementById('media-duration').value = '5.00';
     document.getElementById('media-audio').checked = false;
+}
+
+function saveTimeline() {
+    const json = JSON.stringify(timeline, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'timeline.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function loadTimeline(event) {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const json = e.target.result;
+            timeline = JSON.parse(json);
+            updateTimelineUI();
+        };
+        reader.readAsText(file);
+    }
 }
