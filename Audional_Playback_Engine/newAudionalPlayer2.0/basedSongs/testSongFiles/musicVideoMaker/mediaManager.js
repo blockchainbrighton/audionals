@@ -1,3 +1,5 @@
+// mediaManager.js
+
 let timeline = [];
 
 function addMedia() {
@@ -13,14 +15,15 @@ function addMedia() {
     if (url && duration > 0) {
         const media = { url, duration, audio };
         timeline.push(media);
-        console.log('Media added:', media);
+        console.log(`[${getCurrentTimestamp()}] Media added:`, media);
+        console.log(`[${getCurrentTimestamp()}] Media details - URL: ${url}, Duration: ${duration}, Audio: ${audio}`);
         updateTimelineUI();
         resetControls();
     }
 }
 
 function removeMedia(index) {
-    console.log('Removing media at index:', index);
+    console.log(`[${getCurrentTimestamp()}] Removing media at index: ${index}`);
     timeline.splice(index, 1);
     updateTimelineUI();
 }
@@ -28,13 +31,13 @@ function removeMedia(index) {
 function updateDuration(index, duration) {
     duration = parseFloat(duration);
     if (duration > 0) {
-        console.log('Updating duration at index:', index, 'to:', duration);
+        console.log(`[${getCurrentTimestamp()}] Updating duration at index: ${index} to: ${duration}`);
         timeline[index].duration = duration;
     }
 }
 
 function updateAudio(index, audio) {
-    console.log('Updating audio at index:', index, 'to:', audio);
+    console.log(`[${getCurrentTimestamp()}] Updating audio at index: ${index} to: ${audio}`);
     timeline[index].audio = audio;
     updateTimelineUI();
 }
@@ -68,3 +71,9 @@ function loadTimeline(event) {
         reader.readAsText(file);
     }
 }
+
+function getCurrentTimestamp() {
+    const now = new Date();
+    return now.toISOString();
+}
+
