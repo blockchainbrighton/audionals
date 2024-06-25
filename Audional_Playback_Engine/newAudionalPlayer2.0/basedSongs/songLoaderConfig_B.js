@@ -1,4 +1,4 @@
-// songLoader.js
+// songLoaderConfig_B.js
 
 // Define the function to load a script
 function loadScript(src, callback) {
