@@ -1,4 +1,4 @@
-// jsonLoader.js
+// jsonLoader_NoBlobs.js
 
 let globalVolumeMultiplier = 1;  // Default to no change
 let globalJsonData = null;
@@ -27,27 +27,29 @@ let totalSequences = 0;
 
 const AudionalPlayerMessages = new BroadcastChannel("channel_playback");
 
-async function loadJsonFromUrl(e) {
+async function loadJsonFromLocalStorage() {
     try {
-        const n = await fetch(e);
-        if (!n.ok) throw new Error(`HTTP error! Status: ${n.status}`);
-        globalJsonData = await n.json();
+        const data = localStorage.getItem('jsonData');
+        if (!data) throw new Error('No data found in localStorage');
+
+        globalJsonData = JSON.parse(data);
         console.log("[debug] Loaded JSON data:", globalJsonData);
-        
+
         const t = { channelsWithUrls: 0, sequencesCount: 0, activeStepsPerSequence: {}, activeChannelsPerSequence: {}, types: {} };
         analyzeJsonStructure(globalJsonData, t);
-        
+
         const s = prepareForPlayback(globalJsonData, t);
         console.log("[debug] Prepared data for playback:", s);
-        
+
         await fetchAndProcessAudioData(s.channelURLs);
-        
+
         preprocessAndSchedulePlayback(s);
         console.log("[debug] Preprocessed sequences:", preprocessedSequences);
     } catch (e) {
-        console.error("Could not load JSON data from URL:", e);
+        console.error("Could not load JSON data from local storage:", e);
     }
 }
+
 
 
 function analyzeJsonStructure(data, stats) {

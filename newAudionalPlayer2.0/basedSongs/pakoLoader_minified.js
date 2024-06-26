@@ -106,7 +106,7 @@ const processSerializedData = async (url) => {
 
         // Load the next script
         const scriptLoader = document.createElement('script');
-        scriptLoader.src = 'songLoaderConfig_B.js';
+        scriptLoader.src = 'songLoaderConfig_B_NoBlobs.js';
         document.head.appendChild(scriptLoader);
 
     } catch (error) {

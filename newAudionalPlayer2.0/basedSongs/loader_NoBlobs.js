@@ -21,7 +21,7 @@ function initializeApp() {
     window.cci2 = 0;
     window.initialCCI2 = 0;
     resetAllStates();
-    loadJsonFromUrl(window.jsonDataUrl);
+    loadJsonFromLocalStorage(window.jsonDataUrl);
 
 
     const jsonData = JSON.parse(localStorage.getItem('jsonData'));

@@ -1,4 +1,4 @@
-// pakoLoader.js
+// pakoLoader_NoBlobs.js
 
 const keyMap = {
     0: 'projectName',
@@ -84,36 +84,6 @@ const loadPako = async () => {
     }
 };
 
-const processSerializedData = async (url) => {
-    try {
-        await loadPako();
-        const response = await fetch(url);
-
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
-        }
-
-        const compressedData = await response.arrayBuffer();
-        const decompressedData = pako.inflate(new Uint8Array(compressedData));
-        const jsonString = new TextDecoder('utf-8').decode(decompressedData);
-        const serializedData = JSON.parse(jsonString);
-        const originalData = deserialize(serializedData);
-        console.log('Deserialized Data:', originalData);
-
-        // Create a Blob from the deserialized data and set the URL
-        const blob = new Blob([JSON.stringify(originalData)], { type: 'application/json' });
-        window.jsonDataUrl = URL.createObjectURL(blob);
-
-        // Load the next script
-        const scriptLoader = document.createElement('script');
-        scriptLoader.src = 'songLoaderConfig_B_NoBlobs.js';
-        document.head.appendChild(scriptLoader);
-
-    } catch (error) {
-        console.error('Error processing data:', error);
-    }
-};
-
 // const processSerializedData = async (url) => {
 //     try {
 //         await loadPako();
@@ -130,15 +100,56 @@ const processSerializedData = async (url) => {
 //         const originalData = deserialize(serializedData);
 //         console.log('Deserialized Data:', originalData);
 
-//         // Store the deserialized data in localStorage
-//         localStorage.setItem('jsonData', JSON.stringify(originalData));
+//         // Create a Blob from the deserialized data and set the URL
+//         const blob = new Blob([JSON.stringify(originalData)], { type: 'application/json' });
+//         window.jsonDataUrl = URL.createObjectURL(blob);
 
 //         // Load the next script
 //         const scriptLoader = document.createElement('script');
-//         scriptLoader.src = 'songLoaderConfig_B.js';
+//         scriptLoader.src = 'songLoaderConfig_B_NoBlobs.js';
 //         document.head.appendChild(scriptLoader);
 
 //     } catch (error) {
 //         console.error('Error processing data:', error);
 //     }
 // };
+
+const processSerializedData = async (url) => {
+    try {
+        await loadPako();
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+
+        const compressedData = await response.arrayBuffer();
+        const decompressedData = pako.inflate(new Uint8Array(compressedData));
+        const jsonString = new TextDecoder('utf-8').decode(decompressedData);
+        const serializedData = JSON.parse(jsonString);
+        const originalData = deserialize(serializedData);
+        console.log('Deserialized Data:', originalData);
+
+        // Store the deserialized data in localStorage
+        localStorage.setItem('jsonData', JSON.stringify(originalData));
+
+        // Load the next script
+        const scriptLoader = document.createElement('script');
+        scriptLoader.src = 'songLoaderConfig_B_NoBlobs.js';
+        document.head.appendChild(scriptLoader);
+
+    } catch (error) {
+        console.error('Error processing data:', error);
+    }
+};
+
+// Function to retrieve data from localStorage and simulate the old jsonDataUrl usage
+const getJsonData = () => {
+    const data = localStorage.getItem('jsonData');
+    if (data) {
+        return JSON.parse(data);
+    } else {
+        console.error('No data found in localStorage');
+        return null;
+    }
+};
