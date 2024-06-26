@@ -22,28 +22,11 @@ function loadScriptsInOrder(scripts, finalCallback) {
     loadNextScript(0);
 }
 
-const scriptFiles = [
-    'scripts/audionalPlayerScripts.js',
-    'scripts/titleDisplayScripts.js',
-    'scripts/colourPaletteScrips.js',
-    'scripts/colourSettingsScripts.js',
-    'scripts/visualiserScripts.js',
-    'scripts/visualiserLoggingScripts.js'
-];
-
-loadScriptsInOrder(scriptFiles, () => {
-    // Combine all script arrays into the main scriptsToLoad array
-    window.scriptsToLoad = [
-        ...window.audionalPlayerScripts,
-        ...window.titleDisplayScripts,
-        ...window.colourPaletteScrips,
-        ...window.colourSettingsScripts,
-        ...window.visualiserScripts,
-        ...window.visualiserLoggingScripts
-    ];
-
-    // Load the main loader script
-    loadScript('loader_NoBlobs.js', () => {
-        console.log("[debug] loader_NoBlobs.js loaded successfully.");
-    });
+// Load the arrays and initialization script first, then initialize the rest
+loadScript('scriptArraysAndInitialization.js', () => {
+    if (typeof initializeScripts === 'function') {
+        initializeScripts();
+    } else {
+        console.error('[debug] Error: initializeScripts function is not defined.');
+    }
 });
