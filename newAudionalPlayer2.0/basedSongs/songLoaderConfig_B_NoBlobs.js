@@ -16,7 +16,7 @@ loadScript('https://ordinals.com/content/e575d3519ca3d6eb6a8d34e4c969dee9ef72b84
     console.log("Deserialized Data URL:", window.jsonDataUrl);
 
     // Load the next script
-    loadScript('scriptLoader_NoBlobs.js', () => {
+    loadScript('scriptLoaderMaster_NoBlobs.js', () => {
         console.log("[debug] scriptLoader_NoBlobsB.js loaded successfully.");
     });
 });
