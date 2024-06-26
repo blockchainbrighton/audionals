@@ -1,0 +1,3 @@
+// visualiserLoggingUtils.js
+
+const TOTAL_CHANNELS=16;let lastLog=0;const logFreq=1e3,log=o=>{const e=Date.now();e-lastLog>1e3&&(console.log(o),lastLog=e)},errorLog=(o,e)=>console.error(o,e),logAccessLevelValues=o=>{console.log("Test Values for Each Access Level:"),o.forEach(((o,e)=>console.log(`Access Level ${e+1}:`,o)))},logAccessLevelDistribution=(o,e)=>{console.log("Access Level Distribution:"),o.forEach(((o,s)=>console.log(`Access Level ${s+1}: ${(o/e*100).toFixed(2)}%`)))};

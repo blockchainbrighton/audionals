@@ -14,23 +14,6 @@ document.body.style.cssText = `
     margin: 0;
 `;
 
-const loadScriptsSequentially = (scripts, index = 0, callback) => {
-    if (index < scripts.length) {
-        const script = document.createElement('script');
-        script.src = scripts[index];
-        script.onload = () => {
-            console.log(`[debug] Loaded script: ${scripts[index]}`);
-            loadScriptsSequentially(scripts, index + 1, callback); // Load next script once the current one is done
-        };
-        script.onerror = () => {
-            console.error(`[debug] Error loading script: ${scripts[index]}`);
-        };
-        document.head.appendChild(script);
-    } else if (typeof callback === "function") {
-        console.log("[debug] All scripts loaded successfully.");
-        callback();
-    }
-};
 
 const initializeApp = () => {
     console.log("[debug] Initializing app.");

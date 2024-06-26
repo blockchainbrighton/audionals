@@ -1,0 +1,3 @@
+// visualiserLogInitialAssignments.js
+
+let assignmentsComplete=!1;const logInitialAssignments=(e,s,n,t,o,i)=>{setTimeout((()=>{const l=[];try{console.log(`Access Level: ${AccessLevel}`);for(let c=1;c<=TOTAL_CHANNELS;c++){const r=s(e,AccessLevel,c),a=n(c,t[r]);o[c]={arrayIndex:r,cci2:a},i[c]=r,l.push(`Channel ${c}: ArrayIndex=${r}, CCI2=${a}`)}console.log("Initial Assignments:",l.join("; ")),assignmentsComplete=!0}catch(e){errorLog("Error during initial assignments",e)}}),100)};

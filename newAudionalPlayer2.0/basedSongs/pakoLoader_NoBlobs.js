@@ -84,35 +84,6 @@ const loadPako = async () => {
     }
 };
 
-// const processSerializedData = async (url) => {
-//     try {
-//         await loadPako();
-//         const response = await fetch(url);
-
-//         if (!response.ok) {
-//             throw new Error('Network response was not ok');
-//         }
-
-//         const compressedData = await response.arrayBuffer();
-//         const decompressedData = pako.inflate(new Uint8Array(compressedData));
-//         const jsonString = new TextDecoder('utf-8').decode(decompressedData);
-//         const serializedData = JSON.parse(jsonString);
-//         const originalData = deserialize(serializedData);
-//         console.log('Deserialized Data:', originalData);
-
-//         // Create a Blob from the deserialized data and set the URL
-//         const blob = new Blob([JSON.stringify(originalData)], { type: 'application/json' });
-//         window.jsonDataUrl = URL.createObjectURL(blob);
-
-//         // Load the next script
-//         const scriptLoader = document.createElement('script');
-//         scriptLoader.src = 'songLoaderConfig_B_NoBlobs.js';
-//         document.head.appendChild(scriptLoader);
-
-//     } catch (error) {
-//         console.error('Error processing data:', error);
-//     }
-// };
 
 const processSerializedData = async (url) => {
     try {
@@ -133,6 +104,9 @@ const processSerializedData = async (url) => {
         // Store the deserialized data in localStorage
         localStorage.setItem('jsonData', JSON.stringify(originalData));
 
+        // Set window.jsonDataUrl to ensure it's defined
+        window.jsonDataUrl = 'stored in localStorage';
+
         // Load the next script
         const scriptLoader = document.createElement('script');
         scriptLoader.src = 'songLoaderConfig_B_NoBlobs.js';
@@ -143,7 +117,7 @@ const processSerializedData = async (url) => {
     }
 };
 
-// Function to retrieve data from localStorage and simulate the old jsonDataUrl usage
+
 const getJsonData = () => {
     const data = localStorage.getItem('jsonData');
     if (data) {
@@ -153,3 +127,4 @@ const getJsonData = () => {
         return null;
     }
 };
+

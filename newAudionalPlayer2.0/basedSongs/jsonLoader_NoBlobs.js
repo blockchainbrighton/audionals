@@ -1,31 +1,9 @@
 // jsonLoader_NoBlobs.js
 
-let globalVolumeMultiplier = 1;  // Default to no change
-let globalJsonData = null;
-let bpm = 0;
-
-
-const sourceChannelMap = new Map();
-let globalTrimTimes = {};
-let globalVolumeLevels = {};
-let globalPlaybackSpeeds = {};
-let activeSources = []; // Store references to active buffer sources
-let globalGainNodes = new Map(); // Use a Map for gain nodes
-let globalAudioBuffers = [];
-let globalReversedAudioBuffers = {};
-let isReversePlay = false;
-
-
-let isToggleInProgress = false;
-// Maintain gain nodes
-const gainNodes = {};
-
-const audioCtx = window.AudioContextManager.getAudioContext();
-
-let audioWorker, preprocessedSequences = {}, isReadyToPlay = false, currentStep = 0, beatCount = 0, barCount = 0, currentSequence = 0, isPlaying = false, playbackTimeoutId = null, nextNoteTime = 0;
-let totalSequences = 0;
-
-const AudionalPlayerMessages = new BroadcastChannel("channel_playback");
+let globalVolumeMultiplier = 1, globalJsonData = null, bpm = 0, isReversePlay = false, isToggleInProgress = false, isReadyToPlay = false;
+const sourceChannelMap = new Map(), globalTrimTimes = {}, globalVolumeLevels = {}, globalPlaybackSpeeds = {}, activeSources = [], globalGainNodes = new Map(), globalAudioBuffers = [], globalReversedAudioBuffers = {};
+const gainNodes = {}, audioCtx = window.AudioContextManager.getAudioContext(), AudionalPlayerMessages = new BroadcastChannel("channel_playback");
+let audioWorker, preprocessedSequences = {}, currentStep = 0, beatCount = 0, barCount = 0, currentSequence = 0, isPlaying = false, playbackTimeoutId = null, nextNoteTime = 0, totalSequences = 0;
 
 async function loadJsonFromLocalStorage() {
     try {
@@ -35,22 +13,20 @@ async function loadJsonFromLocalStorage() {
         globalJsonData = JSON.parse(data);
         console.log("[debug] Loaded JSON data:", globalJsonData);
 
-        const t = { channelsWithUrls: 0, sequencesCount: 0, activeStepsPerSequence: {}, activeChannelsPerSequence: {}, types: {} };
-        analyzeJsonStructure(globalJsonData, t);
+        const stats = { channelsWithUrls: 0, sequencesCount: 0, activeStepsPerSequence: {}, activeChannelsPerSequence: {}, types: {} };
+        analyzeJsonStructure(globalJsonData, stats);
 
-        const s = prepareForPlayback(globalJsonData, t);
-        console.log("[debug] Prepared data for playback:", s);
+        const playbackData = prepareForPlayback(globalJsonData, stats);
+        console.log("[debug] Prepared data for playback:", playbackData);
 
-        await fetchAndProcessAudioData(s.channelURLs);
+        await fetchAndProcessAudioData(playbackData.channelURLs);
 
-        preprocessAndSchedulePlayback(s);
+        preprocessAndSchedulePlayback(playbackData);
         console.log("[debug] Preprocessed sequences:", preprocessedSequences);
     } catch (e) {
         console.error("Could not load JSON data from local storage:", e);
     }
 }
-
-
 
 function analyzeJsonStructure(data, stats) {
     if (data.projectSequences && typeof data.projectSequences === 'object') {
@@ -70,38 +46,26 @@ function analyzeJsonStructure(data, stats) {
         if (key !== "projectSequences") {
             const valueType = Array.isArray(value) ? "array" : typeof value;
             stats.types[valueType] = (stats.types[valueType] || 0) + 1;
-            if (valueType === "object" || valueType === "array") {
-                analyzeJsonStructure(value, stats);
-            }
+            if (valueType === "object" || valueType === "array") analyzeJsonStructure(value, stats);
         }
     }
 }
 
 function findAndSetEndSequence(playbackData) {
     if (playbackData && playbackData.sequences) {
-        let previousSequence = null;
-        let foundEnd = false;
+        let previousSequence = null, foundEnd = false;
 
-        // Iterate over each sequence
-        for (const [key, sequence] of Object.entries(playbackData.sequences)) {
-            // Check if all channels in normalSteps are empty
+        for (const sequence of Object.values(playbackData.sequences)) {
             const isEmpty = Object.values(sequence.normalSteps).every(steps => steps.length === 0);
-            
-            // Check if this sequence should be marked as the end
             if (isEmpty && previousSequence) {
                 playbackData.endSequence = previousSequence;
                 foundEnd = true;
                 console.log("End sequence set to:", previousSequence);
                 break;
             }
-
-            // Set previous sequence only if this one is not empty
-            if (!isEmpty) {
-                previousSequence = sequence;
-            }
+            if (!isEmpty) previousSequence = sequence;
         }
 
-        // If no end found, set the last sequence as the end
         if (!foundEnd && previousSequence) {
             playbackData.endSequence = previousSequence;
             console.log("End sequence set to the last non-empty sequence:", previousSequence);
@@ -114,49 +78,30 @@ function prepareForPlayback(jsonData, stats) {
     bpm = projectBPM;
     totalSequences = currentSequence;
 
-    globalTrimTimes = {};
-    globalVolumeLevels = {};
-    globalPlaybackSpeeds = {};
-
     channelURLs.forEach((_, i) => {
         const channelIndex = i + 1;
         const trim = trimSettings[i] || {};
         globalTrimTimes[`Channel ${channelIndex}`] = {
-            startTrim: Number((trim.startSliderValue || 0) / 100).toFixed(3),
-            endTrim: Number((trim.endSliderValue || 100) / 100).toFixed(3)
+            startTrim: (trim.startSliderValue || 0) / 100,
+            endTrim: (trim.endSliderValue || 100) / 100
         };
-        globalVolumeLevels[`Channel ${channelIndex}`] = Number(channelVolume[i] || 1.0).toFixed(3);
-        globalPlaybackSpeeds[`Channel ${channelIndex}`] = Number(Math.max(0.1, Math.min(channelPlaybackSpeed[i], 100)) || 1.0).toFixed(3);
-
-        // console.log(`[prepareForPlayback] [finalDebug] Channel ${channelIndex}: Volume set to ${globalVolumeLevels[`Channel ${channelIndex}`]}, Playback speed set to ${globalPlaybackSpeeds[`Channel ${channelIndex}`]},Trim Settings: ${JSON.stringify(globalTrimTimes)}`);
-
+        globalVolumeLevels[`Channel ${channelIndex}`] = (channelVolume[i] || 1.0).toFixed(3);
+        globalPlaybackSpeeds[`Channel ${channelIndex}`] = Math.max(0.1, Math.min(channelPlaybackSpeed[i], 100)).toFixed(3);
     });
 
-    logVolumeSettings();
-
-    const sequences = Object.entries(projectSequences).reduce((result, [sequenceName, channels]) => {
-        const normalSteps = {};
-        const reverseSteps = {};
-
+    const sequences = Object.fromEntries(Object.entries(projectSequences).map(([sequenceName, channels]) => {
+        const normalSteps = {}, reverseSteps = {};
         Object.entries(channels).forEach(([channelName, channelData]) => {
             const normalizedChannelName = `Channel ${parseInt(channelName.slice(2)) + 1}`;
             normalSteps[normalizedChannelName] = [];
             reverseSteps[normalizedChannelName] = [];
-
             channelData.steps.forEach(step => {
                 const stepIndex = typeof step === 'object' ? step.index : step;
-                if (step.reverse) {
-                    reverseSteps[normalizedChannelName].push(stepIndex);
-                    // console.log(`Detected reverse step: ${stepIndex} on channel: ${normalizedChannelName} in sequence: ${sequenceName}`);
-                } else {
-                    normalSteps[normalizedChannelName].push(stepIndex);
-                }
+                (step.reverse ? reverseSteps : normalSteps)[normalizedChannelName].push(stepIndex);
             });
         });
-
-        result[sequenceName] = { normalSteps, reverseSteps };
-        return result;
-    }, {});
+        return [sequenceName, { normalSteps, reverseSteps }];
+    }));
 
     const playbackData = {
         projectName,
@@ -164,12 +109,7 @@ function prepareForPlayback(jsonData, stats) {
         channels: channelURLs.length,
         channelURLs,
         trimTimes: globalTrimTimes,
-        stats: {
-            channelsWithUrls: stats.channelsWithUrls,
-            sequencesCount: stats.sequencesCount,
-            activeStepsPerSequence: stats.activeStepsPerSequence,
-            activeChannelsPerSequence: stats.activeChannelsPerSequence
-        },
+        stats,
         sequences
     };
 
@@ -179,40 +119,25 @@ function prepareForPlayback(jsonData, stats) {
 }
 
 function preprocessAndSchedulePlayback(playbackData) {
-    if (!playbackData || !playbackData.sequences) {
-        return console.error("Playback data is not available or empty.");
-    }
+    if (!playbackData || !playbackData.sequences) return console.error("Playback data is not available or empty.");
 
     bpm = playbackData.bpm;
-    preprocessedSequences = Object.fromEntries(
-        Object.entries(playbackData.sequences).map(([sequenceName, channels]) => [
-            sequenceName,
-            {
-                normalSteps: processSteps(channels.normalSteps),
-                reverseSteps: processSteps(channels.reverseSteps)
-            }
-        ])
-    );
+    preprocessedSequences = Object.fromEntries(Object.entries(playbackData.sequences).map(([sequenceName, channels]) => [
+        sequenceName,
+        {
+            normalSteps: processSteps(channels.normalSteps),
+            reverseSteps: processSteps(channels.reverseSteps)
+        }
+    ]));
 
-    isReadyToPlay = Object.values(preprocessedSequences).some(sequence => {
-        return Object.keys(sequence.normalSteps).length > 0 || Object.keys(sequence.reverseSteps).length > 0;
-    });
+    isReadyToPlay = Object.values(preprocessedSequences).some(sequence => Object.keys(sequence.normalSteps).length > 0 || Object.keys(sequence.reverseSteps).length > 0);
 }
-
 
 function processSteps(steps) {
     return Object.fromEntries(
-        Object.entries(steps)
-            .filter(([, stepArray]) => Array.isArray(stepArray) && stepArray.length)
-            .map(([channelName, stepArray]) => [
-                channelName,
-                stepArray.map(step => ({ step, timing: Number(step * (60 / bpm)).toFixed(3) }))
-            ])
+        Object.entries(steps).filter(([, stepArray]) => stepArray.length).map(([channelName, stepArray]) => [
+            channelName,
+            stepArray.map(step => ({ step, timing: (step * (60 / bpm)).toFixed(3) }))
+        ])
     );
-}
-
-function logVolumeSettings() {
-    for (const [channel, volume] of Object.entries(globalVolumeLevels)) {
-        // console.log(`[logVolumeSettings] ${channel}: Volume level set to ${volume}`);
-    }
 }

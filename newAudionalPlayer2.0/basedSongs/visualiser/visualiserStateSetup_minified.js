@@ -1,0 +1,3 @@
+// visualiserStateSetup.js
+
+const logTestValuesAndDistribution=()=>{const e=1e7,t=Array.from({length:10},(()=>[])),a=Array.from({length:10},(()=>0));let l=0;for(let n=0;n<e;n++){const e=generateAccessLevel(n)-1;if(n<1e6&&t[e].length<10&&l<100&&(t[e].push(n),l++),a[e]++,l>=100){console.log("Collected enough values, exiting early.");break}}logAccessLevelValues(t),logAccessLevelDistribution(a,e)};document.addEventListener("playbackStarted",(()=>{window.playbackStartTime=Date.now(),console.log(`Playback started at ${window.playbackStartTime}`)})),logTestValuesAndDistribution(),setTimeout((()=>{logInitialAssignments(seed,selectArrayIndex,calculateCCI2,arrayLengths,renderingState,activeArrayIndex)}),500);

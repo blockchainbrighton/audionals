@@ -49,3 +49,4 @@ mainLoaderScript.src = 'loader_NoBlobs.js';
 mainLoaderScript.onload = () => console.log("[debug] loader_NoBlobs.js loaded successfully.");
 mainLoaderScript.onerror = () => console.error("[debug] Error loading loader_NoBlobs.js");
 document.head.appendChild(mainLoaderScript);
+
