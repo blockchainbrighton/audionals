@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TRUTH</title>
+    <link rel="stylesheet" href="/content/27679fb51975e991284bebdaa2e340ab0f4002ea5423c8849106e4dabbd43627i0">
+    <script>
+        window.seed = 199;
+        const dataUrl = "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0"; // gzipSongFile.js
+    </script>
+    <!-- <script src="main.js"></script> -->
+     <script>
+    // main.js
+    const keyMap = {
+        0: 'projectName',
+        1: 'artistName',
+        2: 'projectBPM',
+        3: 'currentSequence',
+        4: 'channelURLs',
+        5: 'channelVolume',
+        6: 'channelPlaybackSpeed',
+        7: 'trimSettings',
+        8: 'projectChannelNames',
+        9: 'startSliderValue',
+        10: 'endSliderValue',
+        11: 'totalSampleDuration',
+        12: 'start',
+        13: 'end',
+        14: 'projectSequences',
+        15: 'steps'
+    };
+
+    const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([k, v]) => [v, +k]));
+    const channelMap = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)); // A-Z
+    const reverseChannelMap = Object.fromEntries(channelMap.map((letter, i) => [letter, i]));
+
+    const decompressSteps = compressedSteps => compressedSteps.flatMap(step => 
+        typeof step === 'number' ? step :
+        typeof step === 'object' && 'r' in step ? Array.from({ length: step.r[1] - step.r[0] + 1 }, (_, i) => step.r[0] + i) :
+        typeof step === 'string' && step.endsWith('r') ? { index: parseInt(step.slice(0, -1), 10), reverse: true } : []
+    );
+
+    const recursiveDeserialize = data => Array.isArray(data) ? data.map(v => typeof v === 'object' ? recursiveDeserialize(v) : v) :
+        typeof data === 'object' && data !== null ? Object.entries(data).reduce((acc, [shortKey, value]) => {
+            const fullKey = keyMap[shortKey] ?? shortKey;
+            acc[fullKey] = fullKey === 'projectSequences'
+                ? Object.entries(value).reduce((seqAcc, [shortSeqKey, channels]) => {
+                    const seqKey = shortSeqKey.replace('s', 'Sequence');
+                    seqAcc[seqKey] = Object.entries(channels).reduce((chAcc, [letter, chValue]) => {
+                        const chKey = `ch${reverseChannelMap[letter]}`;
+                        chAcc[chKey] = { steps: decompressSteps(chValue[reverseKeyMap['steps']] || []) };
+                        return chAcc;
+                    }, {});
+                    return seqAcc;
+                }, {})
+                : recursiveDeserialize(value);
+            return acc;
+        }, {}) : data;
+
+    const deserialize = serializedData => recursiveDeserialize(serializedData);
+
+    const loadPako = async () => {
+        try {
+            const response = await fetch('/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0');
+            const htmlContent = await response.text();
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            const pakoScript = Array.from(tempDiv.querySelectorAll('script')).find(script => script.textContent.includes('pako'));
+
+            if (!pakoScript) throw new Error('Pako library not found in the HTML content.');
+
+            const scriptElement = document.createElement('script');
+            scriptElement.textContent = pakoScript.textContent;
+            document.head.appendChild(scriptElement);
+            console.log('Pako library loaded:', pako);
+        } catch (error) {
+            console.error('Error loading Pako:', error);
+        }
+    };
+
+    const processSerializedData = async url => {
+        try {
+            await loadPako();
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Network response was not ok');
+
+            const compressedData = await response.arrayBuffer();
+            const decompressedData = pako.inflate(new Uint8Array(compressedData));
+            const serializedData = JSON.parse(new TextDecoder('utf-8').decode(decompressedData));
+            const originalData = deserialize(serializedData);
+            console.log('Deserialized Data:', originalData);
+
+            localStorage.setItem('jsonData', JSON.stringify(originalData));
+            window.jsonDataUrl = 'stored in localStorage';
+
+            // songLoaderConfig_B_NoBlobs.js
+            const loadScript = (e, o) => {
+                const d = document.createElement("script");
+                d.src = e;
+                d.onload = o;
+                d.onerror = () => console.error(`[debug] Error loading script: ${e}`);
+                document.head.appendChild(d);
+            };
+
+            loadScript("/content/e575d3519ca3d6eb6a8d34e4c969dee9ef72b84766fd3f8f2ed2aeead06a4f66i0", () => {
+                console.log("[debug] titleConfig.js loaded successfully.");
+                console.log("Deserialized Data URL:", window.jsonDataUrl);
+
+                const loadScriptsInOrder = (scripts, callback) => {
+                    const loadNextScript = index => {
+                        if (index >= scripts.length) {
+                            callback();
+                        } else {
+                            loadScript(scripts[index], () => loadNextScript(index + 1));
+                        }
+                    };
+                    loadNextScript(0);
+                };
+
+                // audioContextManager.js
+                !function(){if(!window.AudioContextManager){class t{constructor(){return t.instance||(this.audioCtx=new(window.AudioContext||window.webkitAudioContext),t.instance=this),t.instance}getAudioContext(){return this.audioCtx}async resume(){console.log(`[resume] [finalDebug] AudioContext State: ${this.audioCtx.state}`),"suspended"===this.audioCtx.state&&(await this.audioCtx.resume(),console.log("AudioContext resumed"))}}window.AudioContextManager=new t}}();
+
+                // jsonLoader_NoBlobs.js
+                let intervalID=null,gVolMult=1,gJsonData=null,bpm=0,isRevPlay=!1,isToggle=!1,isReady=!1;
+                const srcChanMap=new Map,gTrimTimes={},gVolLevels={},gPlaySpeeds={},actSources=[],gGainNodes=new Map,
+                    gAudioBufs=[],gRevAudioBufs={},gainNodes={},audioCtx=window.AudioContextManager.getAudioContext(),
+                    audPlayerMsgs=new BroadcastChannel("channel_playback");
+                let audioWorker,preSeq={},curStep=0,beatCount=0,barCount=0,curSeq=0,isPlaying=!1,playTimeoutId=null,
+                    nextNoteTime=0,totSeq=0;
+
+                const loadJson = async () => {
+                    if (gJsonData) {
+                        try {
+                            console.log("[debug] Loaded JSON data:", gJsonData);
+                            const stats = { channelsWithUrls: 0, sequencesCount: 0, activeStepsPerSequence: {}, activeChannelsPerSequence: {}, types: {} };
+                            const preparedData = preparePlayback(gJsonData, stats);
+                            console.log("[debug] Prepared data for playback:", preparedData);
+                            await fetchAndProcessAudioData(preparedData.channelURLs);
+                            preprocessSchedulePlayback(preparedData);
+                            console.log("[debug] Preprocessed sequences:", preSeq);
+                        } catch (e) {
+                            console.error("Could not load JSON data from memory:", e);
+                        }
+                    } else {
+                        console.error("No data found in memory");
+                    }
+                };
+
+                const analyzeJson = (data, stats) => {
+                    if (data.projectSequences && typeof data.projectSequences === 'object') {
+                        for (const [seqKey, seq] of Object.entries(data.projectSequences)) {
+                            stats.activeStepsPerSequence[seqKey] = 0;
+                            stats.activeChannelsPerSequence[seqKey] = [];
+                            for (const [chKey, ch] of Object.entries(seq)) {
+                                const channelName = `Channel ${parseInt(chKey.slice(2)) + 1}`;
+                                stats.activeStepsPerSequence[seqKey] += ch.steps.length;
+                                stats.activeChannelsPerSequence[seqKey].push(channelName);
+                            }
+                        }
+                    }
+                    for (const [key, value] of Object.entries(data)) {
+                        if (key !== 'projectSequences') {
+                            const type = Array.isArray(value) ? 'array' : typeof value;
+                            stats.types[type] = (stats.types[type] || 0) + 1;
+                            if (type === 'object' || type === 'array') analyzeJson(value, stats);
+                        }
+                    }
+                };
+
+                const setEndSeq = playbackData => {
+                    if (playbackData && playbackData.sequences) {
+                        let lastNonEmptySeq = null;
+                        let endSeqSet = false;
+                        for (const seq of Object.values(playbackData.sequences)) {
+                            if (Object.values(seq.normalSteps).every(steps => steps.length === 0) && lastNonEmptySeq) {
+                                playbackData.endSequence = lastNonEmptySeq;
+                                endSeqSet = true;
+                                console.log("End sequence set to:", lastNonEmptySeq);
+                                break;
+                            }
+                            if (Object.values(seq.normalSteps).some(steps => steps.length > 0)) {
+                                lastNonEmptySeq = seq;
+                            }
+                        }
+                        if (!endSeqSet && lastNonEmptySeq) {
+                            playbackData.endSequence = lastNonEmptySeq;
+                            console.log("End sequence set to the last non-empty sequence:", lastNonEmptySeq);
+                        }
+                    }
+                };
+
+                const preparePlayback = (data, stats) => {
+                    const { channelURLs, trimSettings, channelVolume, channelPlaybackSpeed, projectSequences, projectName, projectBPM, currentSequence } = data;
+                    bpm = projectBPM;
+                    totSeq = currentSequence;
+                    channelURLs.forEach((url, i) => {
+                        const channel = `Channel ${i + 1}`;
+                        const trim = trimSettings[i] || {};
+                        gTrimTimes[channel] = { startTrim: (trim.startSliderValue || 0) / 100, endTrim: (trim.endSliderValue || 100) / 100 };
+                        gVolLevels[channel] = (channelVolume[i] || 1).toFixed(3);
+                        gPlaySpeeds[channel] = Math.max(.1, Math.min(channelPlaybackSpeed[i], 100)).toFixed(3);
+                    });
+                    const sequences = Object.fromEntries(Object.entries(projectSequences).map(([seqKey, seq]) => {
+                        const normalSteps = {}, reverseSteps = {};
+                        for (const [chKey, ch] of Object.entries(seq)) {
+                            const channel = `Channel ${parseInt(chKey.slice(2)) + 1}`;
+                            normalSteps[channel] = [];
+                            reverseSteps[channel] = [];
+                            ch.steps.forEach(step => {
+                                const stepIndex = typeof step === 'object' ? step.index : step;
+                                (step.reverse ? reverseSteps : normalSteps)[channel].push(stepIndex);
+                            });
+                        }
+                        return [seqKey, { normalSteps, reverseSteps }];
+                    }));
+                    const playbackData = { projectName, bpm: projectBPM, channels: channelURLs.length, channelURLs, trimTimes: gTrimTimes, stats, sequences };
+                    setEndSeq(playbackData);
+                    return playbackData;
+                };
+
+                const preprocessSchedulePlayback = playbackData => {
+                    if (!playbackData || !playbackData.sequences) {
+                        return console.error("Playback data is not available or empty.");
+                    }
+                    bpm = playbackData.bpm;
+                    preSeq = Object.fromEntries(Object.entries(playbackData.sequences).map(([seqKey, seq]) => [seqKey, {
+                        normalSteps: processSteps(seq.normalSteps),
+                        reverseSteps: processSteps(seq.reverseSteps)
+                    }]));
+                    isReady = Object.values(preSeq).some(seq => Object.keys(seq.normalSteps).length > 0 || Object.keys(seq.reverseSteps).length > 0);
+                };
+
+                const processSteps = steps => Object.fromEntries(Object.entries(steps).filter(([, steps]) => steps.length).map(([channel, steps]) => [channel, steps.map(step => ({ step, timing: (step * (60 / bpm)).toFixed(3) }))]));
+
+                // Embed the content of the first script directly
+                window.audionalPlayerScripts = [
+                    "/content/204885c72322cbaa0272bae20c992db17e4c88da9938bbff9ba1fa7dd325fa4bi0",
+                    "/content/150e020d5e6ea8b53b7b3d2160f25f65c2e550d413f9c53d9e1cfb101d6914f2i0",
+                    "/content/935828577e4762caaf32b76a0f74cb4f37bdcdbdae1d27a7c93d000d5cfe9d28i0",
+                    "/content/bab2b37e0abcce41d784d65d94a5c3c266228c2d8bd3ecdee4fba7986f5a042ei0",
+                    "/content/1a5cafb61e4a320434fc4087e203d2a5f695ba9112635b960fc9d7dcb961d9fci0",
+                    "/content/a3d8a40fcde6935f16b49ad7c9e9aa185f01d1618f4e35828415f6cc27377a47i0",
+                    "/content/17c6cb4f92d47043da52ce8334c41961c588b7955488e56f08264840ef63a4eei0"
+                ];
+
+                const scriptFiles = [
+                    "/content/5e2a8243e075f7a23e94f9bd4de5154c260f4157317bce504372523cf8d24c8ai0",
+                    "/content/7e14b0798d8244ba8b94a9e474a05000ccc335aa51aa69b06b53bea73224fa71i0",
+                    "/content/9a90ce273218fdf878e9c36e35f4ac4ebf47f9fb93ba00eabfe8a51958b90b4ei0",
+                    "/content/c0a912d642dba6d9e02ac59744c516b88d052630301f410535e6167809cd8ceai0",
+                    "/content/fd3da6a5f15f8a379e7219302997ae07d152d69ba413a0e36cb9bb85cbb1f14fi0"
+                ];   
+
+                const initializeScripts = () => {
+                    loadScriptsInOrder(scriptFiles, () => {
+                        window.scriptsToLoad = [
+                            ...window.audionalPlayerScripts,
+                            ...window.titleDisplayScripts,
+                            ...window.colourPaletteScrips,
+                            ...window.colourSettingsScripts,
+                            ...window.visualiserScripts,
+                            ...window.visualiserLoggingScripts
+                        ];
+                        loadScript('/content/f9b3a2f4a426432ead5c01e2e80c18cc7eb14f567cbea8254f66f7fa5a7d0061i0', () => {
+                            console.log("[debug] loader_NoBlobs.js loaded successfully.");
+                        });
+                    });
+                };
+
+                if (typeof initializeScripts === "function") {
+                    initializeScripts();
+                } else {
+                    console.error("[debug] Error: initializeScripts function is not defined.");
+                }
+            });
+
+        } catch (error) {
+            console.error('Error processing data:', error);
+        }
+    };
+
+    const getJsonData = () => {
+        const data = localStorage.getItem('jsonData');
+        if (data) {
+            return JSON.parse(data);
+        } else {
+            console.error('No data found in localStorage');
+            return null;
+        }
+    };
+
+    processSerializedData(dataUrl);
+
+        </script>
+    </head>
+<body>
+</body>
+</html>
