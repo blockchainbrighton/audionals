@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Slideshow</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background-color: black;
+            height: 100%;
+        }
+        #slideshow {
+            width: 100%;
+            height: 100vh;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="slideshow"></div>
+
+    <script>
+        const domain = "https://ordinals.com/content/";
+        const imageIds = [
+            "d49b750c8e9d65e007410118f2c12f1fd12737edc193f09f3967da751f8fd8f9i0",
+            "7a22e504d45051234a951d9a229f399c35ebaaf956fd15c51ebbd68064f55646i0",
+            "6f815abdd9d9768aa3a031d181ce229de4f68991a8021e5c3c1cc4dcbb93c7eci0",
+            "2348253fc0f4fb1e08e5eaf88e4612eecdec9c0d130432b428299e0bc4a0cedci0",
+            "9986d4bdea14e45a6b97e36c317521be8c60bce0d7fc828bd2aeb1248df8fe60i0",
+            "19e01a64f28a0b1079b1fbe8aec4ed691606ef5c8faf5fe896afd97bd328c685i0",
+            "11e182e15a3ddbc1ae31e220c5e00d80fda1b556894f722455e46c47230f5523i0",
+            "c07325cc71f4bb9361b9eb9e505b7e40a75388a0a0619bc70372b39fa0b6d513i0",
+            "c9e284671798037ae62710e0ac340e3f27e51102a3599af5d077efa3c23023c4i0",
+            "1204eba80084c38af63187be0fe3e0fae0e844ea32de0037a82d6d6dbb4f2d6di6",
+            "8b491640519cc1ea89ed791686a79d7f92eacb774667bdc94bac0d62ef1fa0bfi0",
+            "aa065e345c587079e1f9c5969a4dd5a8a5c7da6cc8ccda96204badcd9e153f43i7"
+        ];
+
+        const images = imageIds.map(id => `${domain}${id}`);
+        let currentIndex = 0;
+        const slideshowElement = document.getElementById('slideshow');
+
+        // Create an AudioContext for precise timing
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        function preloadImages(urls) {
+            return urls.map(url => {
+                const img = new Image();
+                img.src = url;
+                img.onload = () => console.log(`Preloaded: ${url}`);
+                img.onerror = () => console.error(`Error loading: ${url}`);
+                return img;
+            });
+        }
+
+        function getFormattedTime() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+            return `${hours}:${minutes}:${seconds}.${milliseconds}`;
+        }
+
+        function showNextImage() {
+            const now = getFormattedTime();
+            console.log(`[${now}] Showing image: ${images[currentIndex]}`);
+            slideshowElement.style.backgroundImage = `url(${images[currentIndex]})`;
+            currentIndex = (currentIndex + 1) % images.length;
+        }
+
+        function startSlideshow() {
+            // Initial image display
+            showNextImage();
+
+            // Schedule the next images using the Web Audio API's precise timing
+            const interval = 4; // 4 seconds
+            let nextTime = audioContext.currentTime + interval;
+
+            function scheduleNextImage() {
+                const now = audioContext.currentTime;
+                const delay = nextTime - now;
+                setTimeout(() => {
+                    showNextImage();
+                    nextTime += interval;
+                    scheduleNextImage();
+                }, delay * 1000);
+            }
+
+            scheduleNextImage();
+        }
+
+        // Preload images
+        preloadImages(images);
+
+        // Start the slideshow
+        startSlideshow();
+    </script>
+</body>
+</html>
