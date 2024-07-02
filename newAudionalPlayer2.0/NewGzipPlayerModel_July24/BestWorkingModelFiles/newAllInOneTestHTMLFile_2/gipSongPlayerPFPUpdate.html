@@ -33,58 +33,77 @@
         return window.playbackStartTime ? Date.now() - window.playbackStartTime : 0;
     }
 
-    function downloadCurrentVisualState() {
-        console.log("downloadCurrentVisualState function called");
+    function captureCanvas(callback) {
         const canvases = document.querySelectorAll('canvas');
-        canvases.forEach((canvas, i) => console.log(`Canvas ${i} dimensions: ${canvas.width} x ${canvas.height}`));
         const canvas = canvases[1];
-        if (!canvas) return console.error("No canvas element found.");
+        if (!canvas) {
+            console.error("No canvas element found.");
+            return;
+        }
+
         console.log("Canvas selected with dimensions:", canvas.width, canvas.height);
-        setTimeout(() => {
-            const metadata = {
-                accessLevel: AccessLevel,
-                seed: window.seed,
-                assignments: getAssignments(),
-                timecode: getTimecode()
-            };
-            console.log("Metadata collected:", metadata);
-            const metadataString = `
+
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = canvas.width;
+        finalCanvas.height = canvas.height;
+        const ctx = finalCanvas.getContext('2d');
+        ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
+        console.log("Image drawn on finalCanvas with dimensions:", finalCanvas.width, finalCanvas.height);
+
+        const captureTimecode = getTimecode();
+        callback(finalCanvas, captureTimecode);
+    }
+
+    function processAndDownloadCanvas(finalCanvas, timecode) {
+        const metadata = {
+            accessLevel: AccessLevel,
+            seed: window.seed,
+            assignments: getAssignments(),
+            timecode: timecode // Use the captured timecode
+        };
+
+        console.log("Metadata collected:", metadata);
+
+        const metadataString = `
     Seed: ${metadata.seed}
     Access Level: ${metadata.accessLevel}
     Channel Effect Assignments: 
     ${metadata.assignments.join('\n')}
     Timecode: ${metadata.timecode} ms
-            `.trim();
-            const finalCanvas = document.createElement('canvas');
-            finalCanvas.width = canvas.width;
-            finalCanvas.height = canvas.height;
-            const ctx = finalCanvas.getContext('2d');
-            ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
-            console.log("Image drawn on finalCanvas with dimensions:", finalCanvas.width, finalCanvas.height);
-            const padding = 10, fontSize = 12, lineHeight = fontSize * 1.2;
-            ctx.font = `${fontSize}px Arial`;
-            ctx.fillStyle = '#1b1b1b';
-            ctx.shadowColor = 'black';
-            ctx.shadowBlur = 4;
-            ctx.textAlign = 'right';
-            metadataString.split('\n').reverse().forEach((line, i) => {
-                ctx.fillText(line, finalCanvas.width - padding, finalCanvas.height - padding - (i * lineHeight));
-            });
-            console.log("Text drawn on finalCanvas");
-            finalCanvas.toBlob(blob => {
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = `visual_state_${new Date().toISOString()}.jpeg`;
-                link.click();
-                console.log("Download link clicked");
-            }, 'image/jpeg');
-        }, 1000);
+        `.trim();
+
+        const padding = 10, fontSize = 12, lineHeight = fontSize * 1.2;
+        const ctx = finalCanvas.getContext('2d');
+        ctx.font = `${fontSize}px Arial`;
+        ctx.fillStyle = '#1b1b1b';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+        ctx.textAlign = 'right';
+
+        metadataString.split('\n').reverse().forEach((line, i) => {
+            ctx.fillText(line, finalCanvas.width - padding, finalCanvas.height - padding - (i * lineHeight));
+        });
+
+        console.log("Text drawn on finalCanvas");
+
+        finalCanvas.toBlob(blob => {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `visual_state_${new Date().toISOString()}.jpeg`;
+            link.click();
+            console.log("Download link clicked");
+        }, 'image/jpeg');
     }
 
-    document.addEventListener('keydown', (e) => {
-        console.log("Keydown event detected:", e.key);
-        if (e.key.toLowerCase() === 'p') downloadCurrentVisualState();
-    });
+    function handleKeydown(event) {
+        console.log("Keydown event detected:", event.key);
+        if (event.key.toLowerCase() === 'p') {
+            captureCanvas(processAndDownloadCanvas);
+        }
+    }
+
+    document.addEventListener('keydown', handleKeydown);
+
 
     </script>
     
