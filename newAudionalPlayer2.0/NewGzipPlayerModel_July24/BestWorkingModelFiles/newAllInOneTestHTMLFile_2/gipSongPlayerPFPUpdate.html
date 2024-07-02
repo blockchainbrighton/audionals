@@ -12,106 +12,82 @@
     <script src="/content/799b9bb3e731b50c366365f22b9504f7704f9a51d3d45572d0d980b7a192000di0"></script>
 
     <script>
-        function getAssignments() {
-            const assignments = [];
-            for (let channelIndex = 1; channelIndex <= TOTAL_CHANNELS; channelIndex++) {
-                const { arrayIndex, cci2 } = renderingState[channelIndex] || {};
-                if (arrayIndex !== undefined && cci2 !== undefined) {
-                    assignments.push(`Channel ${channelIndex}: ArrayIndex=${arrayIndex}, CCI2=${cci2}`);
-                }
+     function getAssignments() {
+        const assignments = [];
+        for (let i = TOTAL_CHANNELS; i >= 1; i--) {
+            const { arrayIndex, cci2 } = renderingState[i] || {};
+            if (arrayIndex !== undefined && cci2 !== undefined) {
+                assignments.push(`Channel ${TOTAL_CHANNELS - i + 1}: ArrayIndex=${arrayIndex}, CCI2=${cci2}`);
             }
-            console.log("Assignments gathered:", assignments);
-            return assignments;
         }
+        console.log("Assignments gathered:", assignments);
+        return assignments;
+    }
 
-        document.addEventListener('playbackStarted', () => {
-            window.playbackStartTime = Date.now();
-            console.log(`Playback started at ${window.playbackStartTime}`);
-        });
+    document.addEventListener('playbackStarted', () => {
+        window.playbackStartTime = Date.now();
+        console.log(`Playback started at ${window.playbackStartTime}`);
+    });
 
-        function getTimecode() {
-            return typeof window.playbackStartTime === 'undefined' ? 0 : Date.now() - window.playbackStartTime;
-        }
+    function getTimecode() {
+        return window.playbackStartTime ? Date.now() - window.playbackStartTime : 0;
+    }
 
-        function downloadCurrentVisualStateWithText_New() {
-            console.log("downloadCurrentVisualStateWithText_New function called");
-
-            // Log all canvas elements
-            const canvases = document.querySelectorAll('canvas');
-            canvases.forEach((canvas, index) => {
-                console.log(`Canvas ${index} dimensions: ${canvas.width} x ${canvas.height}`);
-            });
-
-            // Select the canvas with larger dimensions
-            const canvas = canvases[1]; // Select the second canvas which is 1162 x 1162
-            if (!canvas) {
-                return console.error("No canvas element found.");
-            }
-
-            console.log("Canvas selected with dimensions:", canvas.width, canvas.height);
-
-            // Ensure the canvas is fully rendered before capturing
-            setTimeout(() => {
-                // Metadata
-                const metadata = {
-                    accessLevel: AccessLevel,
-                    assignments: getAssignments(),
-                    timecode: getTimecode() // Time in milliseconds since the start of playback
-                };
-
-                console.log("Metadata collected:", metadata);
-
-                // Convert metadata to readable string
-                const metadataString = `
+    function downloadCurrentVisualState() {
+        console.log("downloadCurrentVisualState function called");
+        const canvases = document.querySelectorAll('canvas');
+        canvases.forEach((canvas, i) => console.log(`Canvas ${i} dimensions: ${canvas.width} x ${canvas.height}`));
+        const canvas = canvases[1];
+        if (!canvas) return console.error("No canvas element found.");
+        console.log("Canvas selected with dimensions:", canvas.width, canvas.height);
+        setTimeout(() => {
+            const metadata = {
+                accessLevel: AccessLevel,
+                seed: window.seed,
+                assignments: getAssignments(),
+                timecode: getTimecode()
+            };
+            console.log("Metadata collected:", metadata);
+            const metadataString = `
+    Seed: ${metadata.seed}
     Access Level: ${metadata.accessLevel}
-    Assignments: 
+    Channel Effect Assignments: 
     ${metadata.assignments.join('\n')}
     Timecode: ${metadata.timecode} ms
-                `.trim();
+            `.trim();
+            const finalCanvas = document.createElement('canvas');
+            finalCanvas.width = canvas.width;
+            finalCanvas.height = canvas.height;
+            const ctx = finalCanvas.getContext('2d');
+            ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
+            console.log("Image drawn on finalCanvas with dimensions:", finalCanvas.width, finalCanvas.height);
+            const padding = 10, fontSize = 12, lineHeight = fontSize * 1.2;
+            ctx.font = `${fontSize}px Arial`;
+            ctx.fillStyle = '#1b1b1b';
+            ctx.shadowColor = 'black';
+            ctx.shadowBlur = 4;
+            ctx.textAlign = 'right';
+            metadataString.split('\n').reverse().forEach((line, i) => {
+                ctx.fillText(line, finalCanvas.width - padding, finalCanvas.height - padding - (i * lineHeight));
+            });
+            console.log("Text drawn on finalCanvas");
+            finalCanvas.toBlob(blob => {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `visual_state_${new Date().toISOString()}.jpeg`;
+                link.click();
+                console.log("Download link clicked");
+            }, 'image/jpeg');
+        }, 1000);
+    }
 
-                // Create a new canvas for the final image with embedded text
-                const finalCanvas = document.createElement('canvas');
-                finalCanvas.width = canvas.width;  // Use the original canvas width
-                finalCanvas.height = canvas.height; // Use the original canvas height
+    document.addEventListener('keydown', (e) => {
+        console.log("Keydown event detected:", e.key);
+        if (e.key.toLowerCase() === 'p') downloadCurrentVisualState();
+    });
 
-                const ctx = finalCanvas.getContext('2d');
-                ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
-
-                console.log("Image drawn on finalCanvas with dimensions:", finalCanvas.width, finalCanvas.height);
-
-                // Draw text metadata at the bottom-right corner
-                const padding = 10;
-                const fontSize = 12;
-                const lineHeight = fontSize * 1.2;
-                ctx.font = `${fontSize}px Arial`;
-                ctx.fillStyle = 'red';
-                ctx.shadowColor = 'black';
-                ctx.shadowBlur = 4;
-                ctx.textAlign = 'right';
-
-                metadataString.split('\n').forEach((line, index) => {
-                    ctx.fillText(line, finalCanvas.width - padding, finalCanvas.height - padding - (index * lineHeight));
-                });
-
-                console.log("Text drawn on finalCanvas");
-
-                // Convert the final canvas to a Blob and download
-                finalCanvas.toBlob((finalBlob) => {
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(finalBlob);
-                    link.download = `visual_state_${new Date().toISOString()}.jpeg`;
-                    link.click();
-                    console.log("Download link clicked");
-                }, 'image/jpeg');
-            }, 1000); // Delay to ensure full rendering
-        }
-
-        document.addEventListener('keydown', (event) => {
-            console.log("Keydown event detected:", event.key);
-            if (event.key === 'p' || event.key === 'P') {
-                downloadCurrentVisualStateWithText_New();
-            }
-        });
     </script>
+    
+    
 </body>
 </html>
