@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TRUTH</title>
+</head>
+<body>
+    <!-- Your existing scripts and variables -->
+    <script>
+        window.seed = 98;
+        window.songDataUrl = "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0";
+    </script>
+    <script src="/content/799b9bb3e731b50c366365f22b9504f7704f9a51d3d45572d0d980b7a192000di0"></script>
+
+    <script>
+        function getAssignments() {
+            const assignments = [];
+            for (let channelIndex = 1; channelIndex <= TOTAL_CHANNELS; channelIndex++) {
+                const { arrayIndex, cci2 } = renderingState[channelIndex] || {};
+                if (arrayIndex !== undefined && cci2 !== undefined) {
+                    assignments.push(`Channel ${channelIndex}: ArrayIndex=${arrayIndex}, CCI2=${cci2}`);
+                }
+            }
+            console.log("Assignments gathered:", assignments);
+            return assignments;
+        }
+
+        document.addEventListener('playbackStarted', () => {
+            window.playbackStartTime = Date.now();
+            console.log(`Playback started at ${window.playbackStartTime}`);
+        });
+
+        function getTimecode() {
+            return typeof window.playbackStartTime === 'undefined' ? 0 : Date.now() - window.playbackStartTime;
+        }
+
+        function downloadCurrentVisualStateWithText_New() {
+            console.log("downloadCurrentVisualStateWithText_New function called");
+
+            // Log all canvas elements
+            const canvases = document.querySelectorAll('canvas');
+            canvases.forEach((canvas, index) => {
+                console.log(`Canvas ${index} dimensions: ${canvas.width} x ${canvas.height}`);
+            });
+
+            // Select the canvas with larger dimensions
+            const canvas = canvases[1]; // Select the second canvas which is 1162 x 1162
+            if (!canvas) {
+                return console.error("No canvas element found.");
+            }
+
+            console.log("Canvas selected with dimensions:", canvas.width, canvas.height);
+
+            // Ensure the canvas is fully rendered before capturing
+            setTimeout(() => {
+                // Metadata
+                const metadata = {
+                    accessLevel: AccessLevel,
+                    assignments: getAssignments(),
+                    timecode: getTimecode() // Time in milliseconds since the start of playback
+                };
+
+                console.log("Metadata collected:", metadata);
+
+                // Convert metadata to readable string
+                const metadataString = `
+    Access Level: ${metadata.accessLevel}
+    Assignments: 
+    ${metadata.assignments.join('\n')}
+    Timecode: ${metadata.timecode} ms
+                `.trim();
+
+                // Create a new canvas for the final image with embedded text
+                const finalCanvas = document.createElement('canvas');
+                finalCanvas.width = canvas.width;  // Use the original canvas width
+                finalCanvas.height = canvas.height; // Use the original canvas height
+
+                const ctx = finalCanvas.getContext('2d');
+                ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
+
+                console.log("Image drawn on finalCanvas with dimensions:", finalCanvas.width, finalCanvas.height);
+
+                // Draw text metadata at the bottom-right corner
+                const padding = 10;
+                const fontSize = 12;
+                const lineHeight = fontSize * 1.2;
+                ctx.font = `${fontSize}px Arial`;
+                ctx.fillStyle = 'red';
+                ctx.shadowColor = 'black';
+                ctx.shadowBlur = 4;
+                ctx.textAlign = 'right';
+
+                metadataString.split('\n').forEach((line, index) => {
+                    ctx.fillText(line, finalCanvas.width - padding, finalCanvas.height - padding - (index * lineHeight));
+                });
+
+                console.log("Text drawn on finalCanvas");
+
+                // Convert the final canvas to a Blob and download
+                finalCanvas.toBlob((finalBlob) => {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(finalBlob);
+                    link.download = `visual_state_${new Date().toISOString()}.jpeg`;
+                    link.click();
+                    console.log("Download link clicked");
+                }, 'image/jpeg');
+            }, 1000); // Delay to ensure full rendering
+        }
+
+        document.addEventListener('keydown', (event) => {
+            console.log("Keydown event detected:", event.key);
+            if (event.key === 'p' || event.key === 'P') {
+                downloadCurrentVisualStateWithText_New();
+            }
+        });
+    </script>
+</body>
+</html>
