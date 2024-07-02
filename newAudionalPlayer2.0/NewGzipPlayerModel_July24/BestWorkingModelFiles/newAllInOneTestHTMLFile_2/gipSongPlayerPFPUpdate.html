@@ -6,13 +6,12 @@
 <body>
     <!-- Your existing scripts and variables -->
     <script>
-        window.seed = 2229;
+        window.seed = 558;
         window.songDataUrl = "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0";
     </script>
     <script src="/content/799b9bb3e731b50c366365f22b9504f7704f9a51d3d45572d0d980b7a192000di0"></script>
 
     <script>
-
 function getAssignments() {
     const a = [];
     for (let i = TOTAL_CHANNELS; i >= 1; i--) {
@@ -25,31 +24,29 @@ function getAssignments() {
     return a;
 }
 
+let playbackStarted = false;
+const psTimeEvent = (status) => {
+    playbackStarted = status;
+    console.log(`Playback ${status ? 'started' : 'stopped'}.`);
+    console.log("Playback state:", playbackStarted);
+};
 document.addEventListener('playbackStarted', () => {
     window.psTime = Date.now();
-    console.log(`Playback started at ${window.psTime}`);
+    psTimeEvent(true);
 });
+document.addEventListener('playbackStopped', () => psTimeEvent(false));
 
-function getTimecode() {
-    return window.psTime ? Date.now() - window.psTime : 0;
-}
+const getTimecode = () => window.psTime ? Date.now() - window.psTime : 0;
 
 function captureCanvas(cb) {
     const c = document.querySelectorAll('canvas')[1];
-    if (!c) {
-        console.error("No canvas element found.");
-        return;
-    }
-
+    if (!c) return console.error("No canvas element found.");
     console.log("Canvas selected with dimensions:", c.width, c.height);
 
     const fc = document.createElement('canvas');
-    fc.width = c.width;
-    fc.height = c.height;
-    const ctx = fc.getContext('2d');
-    ctx.drawImage(c, 0, 0, fc.width, fc.height);
+    Object.assign(fc, { width: c.width, height: c.height });
+    fc.getContext('2d').drawImage(c, 0, 0, fc.width, fc.height);
     console.log("Image drawn on finalCanvas with dimensions:", fc.width, fc.height);
-
     cb(fc, getTimecode());
 }
 
@@ -60,7 +57,6 @@ function processAndDownloadCanvas(fc, t) {
         assignments: getAssignments(),
         timecode: t
     };
-
     console.log("Metadata collected:", m);
 
     const ms = `
@@ -71,24 +67,26 @@ ${m.assignments.join('\n')}
 Timecode: ${m.timecode} ms
     `.trim();
 
-    const p = 10, fs = 12, lh = fs * 1.2;
     const ctx = fc.getContext('2d');
-    ctx.font = `${fs}px Arial`;
-    ctx.fillStyle = '#1b1b1b';
-    ctx.shadowColor = 'black';
-    ctx.shadowBlur = 4;
-    ctx.textAlign = 'right';
+    Object.assign(ctx, {
+        font: '14px Arial',
+        fillStyle: '#1b1b1b',
+        shadowColor: 'black',
+        textAlign: 'right'
+    });
 
     ms.split('\n').reverse().forEach((line, i) => {
-        ctx.fillText(line, fc.width - p, fc.height - p - (i * lh));
+        ctx.fillText(line, fc.width - 10, fc.height - 10 - (i * 16.8));
     });
 
     console.log("Text drawn on finalCanvas");
 
     fc.toBlob(blob => {
         const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `visual_state_${new Date().toISOString()}.jpeg`;
+        Object.assign(link, {
+            href: URL.createObjectURL(blob),
+            download: `visual_state_${new Date().toISOString()}.jpeg`
+        });
         link.click();
         console.log("Download link clicked");
     }, 'image/jpeg');
@@ -96,21 +94,21 @@ Timecode: ${m.timecode} ms
 
 let lastCapture = 0;
 
-function handleKeydown(e) {
+document.addEventListener('keydown', e => {
     console.log("Keydown event detected:", e.key);
     const now = Date.now();
     if (e.key.toLowerCase() === 'p') {
-        console.log("isTrippy value:", isTrippy); // Log the isTrippy value
-        if (now - lastCapture >= 30000) {
+        console.log("The isTrippy value:", isTrippy);
+        console.log("Playback state at keydown:", playbackStarted);
+        if (isTrippy && playbackStarted && now - lastCapture >= 30000) {
             lastCapture = now;
             captureCanvas(processAndDownloadCanvas);
         } else {
-            console.log("Capture attempt blocked: Too soon since the last capture.");
+            console.log("Capture attempt blocked: Either too soon since the last capture or invalid conditions.");
         }
     }
-}
+});
 
-document.addEventListener('keydown', handleKeydown);
 
     </script>
     
