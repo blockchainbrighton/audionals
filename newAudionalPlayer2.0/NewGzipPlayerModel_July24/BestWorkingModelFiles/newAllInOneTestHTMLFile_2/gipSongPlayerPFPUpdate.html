@@ -6,104 +6,111 @@
 <body>
     <!-- Your existing scripts and variables -->
     <script>
-        window.seed = 98;
+        window.seed = 2229;
         window.songDataUrl = "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0";
     </script>
     <script src="/content/799b9bb3e731b50c366365f22b9504f7704f9a51d3d45572d0d980b7a192000di0"></script>
 
     <script>
-     function getAssignments() {
-        const assignments = [];
-        for (let i = TOTAL_CHANNELS; i >= 1; i--) {
-            const { arrayIndex, cci2 } = renderingState[i] || {};
-            if (arrayIndex !== undefined && cci2 !== undefined) {
-                assignments.push(`Channel ${TOTAL_CHANNELS - i + 1}: ArrayIndex=${arrayIndex}, CCI2=${cci2}`);
-            }
+
+function getAssignments() {
+    const a = [];
+    for (let i = TOTAL_CHANNELS; i >= 1; i--) {
+        const { arrayIndex: ai, cci2: c } = renderingState[i] || {};
+        if (ai !== undefined && c !== undefined) {
+            a.push(`Channel ${TOTAL_CHANNELS - i + 1}: ArrayIndex=${ai}, CCI2=${c}`);
         }
-        console.log("Assignments gathered:", assignments);
-        return assignments;
+    }
+    console.log("Assignments gathered:", a);
+    return a;
+}
+
+document.addEventListener('playbackStarted', () => {
+    window.psTime = Date.now();
+    console.log(`Playback started at ${window.psTime}`);
+});
+
+function getTimecode() {
+    return window.psTime ? Date.now() - window.psTime : 0;
+}
+
+function captureCanvas(cb) {
+    const c = document.querySelectorAll('canvas')[1];
+    if (!c) {
+        console.error("No canvas element found.");
+        return;
     }
 
-    document.addEventListener('playbackStarted', () => {
-        window.playbackStartTime = Date.now();
-        console.log(`Playback started at ${window.playbackStartTime}`);
+    console.log("Canvas selected with dimensions:", c.width, c.height);
+
+    const fc = document.createElement('canvas');
+    fc.width = c.width;
+    fc.height = c.height;
+    const ctx = fc.getContext('2d');
+    ctx.drawImage(c, 0, 0, fc.width, fc.height);
+    console.log("Image drawn on finalCanvas with dimensions:", fc.width, fc.height);
+
+    cb(fc, getTimecode());
+}
+
+function processAndDownloadCanvas(fc, t) {
+    const m = {
+        accessLevel: AccessLevel,
+        seed: window.seed,
+        assignments: getAssignments(),
+        timecode: t
+    };
+
+    console.log("Metadata collected:", m);
+
+    const ms = `
+Seed: ${m.seed}
+Access Level: ${m.accessLevel}
+Channel Effect Assignments: 
+${m.assignments.join('\n')}
+Timecode: ${m.timecode} ms
+    `.trim();
+
+    const p = 10, fs = 12, lh = fs * 1.2;
+    const ctx = fc.getContext('2d');
+    ctx.font = `${fs}px Arial`;
+    ctx.fillStyle = '#1b1b1b';
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 4;
+    ctx.textAlign = 'right';
+
+    ms.split('\n').reverse().forEach((line, i) => {
+        ctx.fillText(line, fc.width - p, fc.height - p - (i * lh));
     });
 
-    function getTimecode() {
-        return window.playbackStartTime ? Date.now() - window.playbackStartTime : 0;
-    }
+    console.log("Text drawn on finalCanvas");
 
-    function captureCanvas(callback) {
-        const canvases = document.querySelectorAll('canvas');
-        const canvas = canvases[1];
-        if (!canvas) {
-            console.error("No canvas element found.");
-            return;
-        }
+    fc.toBlob(blob => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `visual_state_${new Date().toISOString()}.jpeg`;
+        link.click();
+        console.log("Download link clicked");
+    }, 'image/jpeg');
+}
 
-        console.log("Canvas selected with dimensions:", canvas.width, canvas.height);
+let lastCapture = 0;
 
-        const finalCanvas = document.createElement('canvas');
-        finalCanvas.width = canvas.width;
-        finalCanvas.height = canvas.height;
-        const ctx = finalCanvas.getContext('2d');
-        ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
-        console.log("Image drawn on finalCanvas with dimensions:", finalCanvas.width, finalCanvas.height);
-
-        const captureTimecode = getTimecode();
-        callback(finalCanvas, captureTimecode);
-    }
-
-    function processAndDownloadCanvas(finalCanvas, timecode) {
-        const metadata = {
-            accessLevel: AccessLevel,
-            seed: window.seed,
-            assignments: getAssignments(),
-            timecode: timecode // Use the captured timecode
-        };
-
-        console.log("Metadata collected:", metadata);
-
-        const metadataString = `
-    Seed: ${metadata.seed}
-    Access Level: ${metadata.accessLevel}
-    Channel Effect Assignments: 
-    ${metadata.assignments.join('\n')}
-    Timecode: ${metadata.timecode} ms
-        `.trim();
-
-        const padding = 10, fontSize = 12, lineHeight = fontSize * 1.2;
-        const ctx = finalCanvas.getContext('2d');
-        ctx.font = `${fontSize}px Arial`;
-        ctx.fillStyle = '#1b1b1b';
-        ctx.shadowColor = 'black';
-        ctx.shadowBlur = 4;
-        ctx.textAlign = 'right';
-
-        metadataString.split('\n').reverse().forEach((line, i) => {
-            ctx.fillText(line, finalCanvas.width - padding, finalCanvas.height - padding - (i * lineHeight));
-        });
-
-        console.log("Text drawn on finalCanvas");
-
-        finalCanvas.toBlob(blob => {
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `visual_state_${new Date().toISOString()}.jpeg`;
-            link.click();
-            console.log("Download link clicked");
-        }, 'image/jpeg');
-    }
-
-    function handleKeydown(event) {
-        console.log("Keydown event detected:", event.key);
-        if (event.key.toLowerCase() === 'p') {
+function handleKeydown(e) {
+    console.log("Keydown event detected:", e.key);
+    const now = Date.now();
+    if (e.key.toLowerCase() === 'p') {
+        console.log("isTrippy value:", isTrippy); // Log the isTrippy value
+        if (now - lastCapture >= 30000) {
+            lastCapture = now;
             captureCanvas(processAndDownloadCanvas);
+        } else {
+            console.log("Capture attempt blocked: Too soon since the last capture.");
         }
     }
+}
 
-    document.addEventListener('keydown', handleKeydown);
-
+document.addEventListener('keydown', handleKeydown);
 
     </script>
     
