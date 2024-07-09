@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+</head>
+<body>
+    
+    <!-- Load the second script with the getObiImage function -->
+    <script>
+        async function fetchImage(ordinalIdOrUrl, callback) {
+            const logPrefix = '[fetchImage]';
+            console.log(`${logPrefix} Called with:`, ordinalIdOrUrl);
+            const url = ordinalIdOrUrl.startsWith('http') ? ordinalIdOrUrl : `/content/${ordinalIdOrUrl}`;
+            console.log(`${logPrefix} Fetching URL:`, url);
+
+            try {
+                const response = await fetch(url);
+                console.log(`${logPrefix} Fetch response status:`, response.status);
+                const htmlContent = await response.text();
+                console.log(`${logPrefix} HTML content length:`, htmlContent.length);
+
+                const base64Image = extractBase64Image(htmlContent);
+
+                if (base64Image) {
+                    console.log(`${logPrefix} Base64 image extracted successfully`);
+                    callback(null, `data:image/jpeg;base64,${base64Image}`);
+                } else {
+                    console.log(`${logPrefix} Base64 image not found in HTML`);
+                    callback('Image not found');
+                }
+            } catch (error) {
+                console.error(`${logPrefix} Error fetching the HTML content:`, error);
+                callback('Error fetching the HTML content');
+            }
+        }
+
+        function extractBase64Image(html) {
+            const logPrefix = '[extractBase64Image]';
+            console.log(`${logPrefix} Extracting base64 image from HTML`);
+            const imgTagStart = html.indexOf('<img id="OB1_Image" src="data:image/jpeg;base64,');
+            if (imgTagStart === -1) {
+                console.log(`${logPrefix} Image tag not found`);
+                return null;
+            }
+
+            const base64Start = html.indexOf('base64,', imgTagStart) + 7;
+            const base64End = html.indexOf('"', base64Start);
+            const base64Image = html.substring(base64Start, base64End);
+            console.log(`${logPrefix} Extracted base64 image length:`, base64Image.length);
+            return base64Image;
+        }
+
+        // Expose the function to the global window object
+        window.getObiImage = fetchImage;
+    </script>
+    
+    <!-- Load the main script that loads songs, titles, and artwork -->
+    <!-- <script src="/content/97f07b14fc2d984a2f1fa19dc0662204cf02f792576f0e85882715b74870cb81i0"></script> LOADS SONG, TITLES AND ARTWORK -->
+  
+    <!-- Inserted scripts from the first script to load -->
+    <script>
+        // PART 2 LOAD SONGFILE, ALBUM ARTWORK AND SET TITLE
+        window.seed = 1; // A generic seed to ensure the program runs.
+        document.title = "FROM DAY ONE"; // Song Title to appear in Tab
+        window.songDataUrl = "/content/633100d631767ddb9a309f5a2a66f5a66d5abd839f3b1c55642690d484189971i0"; // Song File in .gz format
+        
+        // Function to set album art URL and retry if necessary
+        function setAlbumArtUrl(ordinalId, retryCount = 3, checkInterval = 1000) {
+            const logPrefix = '[setAlbumArtUrl]';
+            console.log(`${logPrefix} Starting to fetch album artwork for ordinal ID:`, ordinalId);
+
+            window.getObiImage(ordinalId, (error, imageUrl) => {
+                if (error) {
+                    console.error(`${logPrefix} Error fetching the album artwork:`, error);
+                    if (retryCount > 0) {
+                        console.log(`${logPrefix} Retrying... attempts left: ${retryCount}`);
+                        setTimeout(() => setAlbumArtUrl(ordinalId, retryCount - 1), 1000);
+                    } else {
+                        window.albumArtUrl = 'default/image/path.jpg'; // Fallback image
+                        console.log(`${logPrefix} Using fallback image`);
+                    }
+                } else {
+                    console.log(`${logPrefix} Fetched album artwork URL:`, imageUrl);
+                    window.albumArtUrl = imageUrl; // Set the fetched image URL
+                    verifyImageUrl(imageUrl, ordinalId, checkInterval, retryCount);
+                }
+                console.log(`${logPrefix} window.albumArtUrl set to:`, window.albumArtUrl);
+            });
+        }
+
+        // Function to periodically check and verify the image URL
+        function verifyImageUrl(expectedUrl, ordinalId, checkInterval, retryCount) {
+            const logPrefix = '[verifyImageUrl]';
+            setTimeout(() => {
+                if (window.albumArtUrl !== expectedUrl) {
+                    console.log(`${logPrefix} Image URL mismatch detected, resetting...`);
+                    setAlbumArtUrl(ordinalId, retryCount - 1, checkInterval);
+                } else {
+                    console.log(`${logPrefix} Image URL verified:`, window.albumArtUrl);
+                }
+            }, checkInterval);
+        }
+
+        // Isolate the image setting process
+        function initializeAlbumArt() {
+            const logPrefix = '[initializeAlbumArt]';
+            try {
+                const ordinalId = 'e7d344ef3098d0889856978c4d2e81ccf2358f7f8b66feecc71e03036c59ad48i0';
+                console.log(`${logPrefix} Initializing album art with ordinal ID:`, ordinalId);
+                setAlbumArtUrl(ordinalId);
+            } catch (error) {
+                console.error(`${logPrefix} Unexpected error during album art initialization:`, error);
+            }
+        }
+
+        // Initialize the album art
+        initializeAlbumArt();
+    </script>
+
+    <!-- Last section of the original HTML file -->
+    <script src="/content/1a110290a15492d3a02b1db8f7d982bc880dfe14b7ed0c9afe6531af4592e055i0"></script> <!-- CSS OVERRIDES -->
+</body>
+</html>

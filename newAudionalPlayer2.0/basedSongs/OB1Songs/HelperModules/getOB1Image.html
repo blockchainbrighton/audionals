@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extract Image from Ordinal ID</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        input, button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+        }
+        #imageContainer {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Extract Image from Ordinal ID</h1>
+    <input type="text" id="ordinalIdInput" placeholder="Enter Ordinal ID or URL">
+    <button onclick="fetchImage()">Fetch Image</button>
+    <div id="imageContainer"></div>
+
+    <script>
+        async function fetchImage() {
+            const ordinalIdInput = document.getElementById('ordinalIdInput').value;
+            const url = ordinalIdInput.startsWith('http') ? ordinalIdInput : `https://ordinals.com/content/${ordinalIdInput}`;
+
+            try {
+                const response = await fetch(url);
+                const htmlContent = await response.text();
+                const base64Image = extractBase64Image(htmlContent);
+
+                if (base64Image) {
+                    displayImage(base64Image);
+                } else {
+                    displayError('Image not found');
+                }
+            } catch (error) {
+                console.error('Error fetching the HTML content:', error);
+                displayError('Error fetching the HTML content');
+            }
+        }
+
+        function extractBase64Image(html) {
+            const imgTagStart = html.indexOf('<img id="OB1_Image" src="data:image/jpeg;base64,');
+            if (imgTagStart === -1) {
+                return null;
+            }
+            
+            const base64Start = html.indexOf('base64,', imgTagStart) + 7;
+            const base64End = html.indexOf('"', base64Start);
+            return html.substring(base64Start, base64End);
+        }
+
+        function displayImage(base64Data) {
+            const imgElement = document.createElement('img');
+            imgElement.src = `data:image/jpeg;base64,${base64Data}`;
+            document.getElementById('imageContainer').innerHTML = '';
+            document.getElementById('imageContainer').appendChild(imgElement);
+        }
+
+        function displayError(message) {
+            document.getElementById('imageContainer').innerText = message;
+        }
+
+        // Function to be called by other programs
+        window.getObiImage = async function(ordinalIdOrUrl, callback) {
+            const url = ordinalIdOrUrl.startsWith('http') ? ordinalIdOrUrl : `https://ordinals.com/content/${ordinalIdOrUrl}`;
+
+            try {
+                const response = await fetch(url);
+                const htmlContent = await response.text();
+                const base64Image = extractBase64Image(htmlContent);
+
+                if (base64Image) {
+                    callback(null, `data:image/jpeg;base64,${base64Image}`);
+                } else {
+                    callback('Image not found');
+                }
+            } catch (error) {
+                console.error('Error fetching the HTML content:', error);
+                callback('Error fetching the HTML content');
+            }
+        }
+    </script>
+</body>
+</html>

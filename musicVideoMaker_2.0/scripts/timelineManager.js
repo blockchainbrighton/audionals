@@ -47,22 +47,34 @@ function displayImageInCanvas(url) {
 }
 
 function initResize(e) {
+    const mediaItem = e.target.parentElement;
+    mediaItem.classList.add('resizing');
     window.addEventListener('mousemove', resize, false);
     window.addEventListener('mouseup', stopResize, false);
 }
 
 function resize(e) {
-    const mediaItem = e.target.parentElement;
-    const minWidth = 50; // Minimum width of the media item
-    const maxWidth = document.getElementById('timeline-track').offsetWidth - mediaItem.offsetLeft; // Maximum width within timeline
+    const mediaItem = document.querySelector('.media-item.resizing');
+    if (mediaItem) {
+        const timelineTrack = document.getElementById('timeline-track');
+        const mediaItems = Array.from(document.querySelectorAll('.media-item'));
+        const index = mediaItems.indexOf(mediaItem);
+        const nextItem = mediaItems[index + 1];
+        const minWidth = 50; // Minimum width of the media item
+        const maxWidth = nextItem ? nextItem.offsetLeft - mediaItem.offsetLeft : timelineTrack.offsetWidth - mediaItem.offsetLeft;
 
-    const newWidth = e.clientX - mediaItem.offsetLeft;
-    if (newWidth > minWidth && newWidth < maxWidth) {
-        mediaItem.style.width = `${newWidth}px`;
+        const newWidth = e.clientX - mediaItem.offsetLeft;
+        if (newWidth > minWidth && newWidth < maxWidth) {
+            mediaItem.style.width = `${newWidth}px`;
+        }
     }
 }
 
-function stopResize(e) {
+function stopResize() {
+    const mediaItem = document.querySelector('.media-item.resizing');
+    if (mediaItem) {
+        mediaItem.classList.remove('resizing');
+    }
     window.removeEventListener('mousemove', resize, false);
     window.removeEventListener('mouseup', stopResize, false);
 }
@@ -71,11 +83,12 @@ function updateTransportLine() {
     const videoPreview = document.getElementById('video-preview');
     const transportLine = document.getElementById('transport-line');
     const timelineTrack = document.getElementById('timeline-track');
+    const currentTimelineLengthLabel = document.getElementById('current-timeline-length');
+    const timelineLength = parseInt(currentTimelineLengthLabel.textContent.match(/\d+/)[0], 10);
 
     const currentTime = videoPreview.currentTime;
-    const duration = videoPreview.duration;
     const timelineWidth = timelineTrack.offsetWidth;
-    const transportPosition = (currentTime / duration) * timelineWidth;
+    const transportPosition = (currentTime / timelineLength) * timelineWidth;
     transportLine.style.left = `${transportPosition}px`;
 }
 
@@ -109,4 +122,3 @@ function handleDrop(e) {
     // Remove visual feedback for drop area
     timelineTrack.style.borderColor = '';
 }
-

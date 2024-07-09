@@ -48,7 +48,6 @@ function addThumbnail(url, type) {
     mediaURLInput.value = '';
 }
 
-
 function initializeDragAndDrop(element) {
     element.draggable = true;
     element.addEventListener('dragstart', handleDragStart, false);
@@ -71,14 +70,4 @@ function handleDrop(e) {
     if (target.classList.contains('timeline-track') || target.classList.contains('media-item')) {
         addToTimeline(url, 'image');
     }
-}
-
-// Continue to the next script
-loadScript('timelinePlayback.js');
-
-function loadScript(src) {
-    const script = document.createElement('script');
-    script.src = src;
-    script.type = 'text/javascript';
-    document.body.appendChild(script);
 }

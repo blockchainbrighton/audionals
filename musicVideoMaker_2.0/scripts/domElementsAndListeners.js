@@ -1,5 +1,3 @@
-// domElementsAndListeners.js
-
 document.addEventListener('DOMContentLoaded', () => {
     const mediaBucket = document.getElementById('media-thumbnails');
     const timelineTrack = document.getElementById('timeline-track');
@@ -10,6 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const stopButton = document.getElementById('btn-stop');
     const mediaURLInput = document.getElementById('media-url');
     const transportLine = document.getElementById('transport-line');
+    const timelineLengthInput = document.getElementById('timeline-length');
+    const setTimelineLengthButton = document.getElementById('btn-set-timeline-length');
+    const currentTimelineLengthLabel = document.getElementById('current-timeline-length');
+    const timelineStartLabel = document.getElementById('timeline-start');
+    const timelineEndLabel = document.getElementById('timeline-end');
     let playbackInterval;
 
     importButton.addEventListener('click', () => {
@@ -47,13 +50,17 @@ document.addEventListener('DOMContentLoaded', () => {
         transportLine.style.left = '0px';
     });
 
-    // Continue to the next script
-    loadScript('mediaHandling.js');
-});
+    setTimelineLengthButton.addEventListener('click', () => {
+        const timelineLength = parseInt(timelineLengthInput.value, 10);
+        if (!isNaN(timelineLength) && timelineLength > 0) {
+            setTimelineLength(timelineLength);
+        }
+    });
 
-function loadScript(src) {
-    const script = document.createElement('script');
-    script.src = src;
-    script.type = 'text/javascript';
-    document.body.appendChild(script);
-}
+    function setTimelineLength(length) {
+        const timelineContainerWidth = document.querySelector('.timeline').offsetWidth;
+        timelineTrack.style.width = `${timelineContainerWidth}px`;
+        currentTimelineLengthLabel.textContent = `Current Timeline Length: ${length} seconds`;
+        timelineEndLabel.textContent = `${length}s`;
+    }
+});
