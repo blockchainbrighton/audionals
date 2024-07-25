@@ -93,35 +93,36 @@ function openModal(index, loadSampleButton) {
     ];
     
 
-// Find the dropdown element
-const ogAudionalDropdown = createOGDropdown('Load any OB1 or OG Audional Inscription:', ogSampleUrls);
-ogAudionalDropdown.querySelector('select').id = `og-audional-dropdown-${index}`;
+    // Find the dropdown element
+    const ogAudionalDropdown = createOGDropdown('Load any OB1 or OG Audional Inscription:', ogSampleUrls);
+    ogAudionalDropdown.querySelector('select').id = `og-audional-dropdown-${index}`;
 
-// Inject CSS for pulsing effect into the head of the document
-const style = document.createElement('style');
-style.type = 'text/css';
-style.innerHTML = `
-    @keyframes pulse-green {
-        0% { box-shadow: 0 0 0 0 rgba(0, 255, 0, 0.7); }
-        70% { box-shadow: 0 0 0 10px rgba(0, 255, 0, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(0, 255, 0, 0); }
-    }
-    .pulse-green {
-        animation: pulse-green 2s infinite;
-    }
-`;
-document.head.appendChild(style);
+    // Inject CSS for pulsing effect into the head of the document
+    const style = document.createElement('style');
+    style.type = 'text/css';
+    style.innerHTML = `
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(0, 255, 0, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 255, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 255, 0, 0); }
+        }
+        .pulse-green {
+            animation: pulse-green 2s infinite;
+        }
+    `;
+    document.head.appendChild(style);
 
-// Add the 'pulse-green' class to the dropdown
-ogAudionalDropdown.classList.add('pulse-green');
+    // Add the 'pulse-green' class to the dropdown
+    ogAudionalDropdown.classList.add('pulse-green');
 
-modalContent.appendChild(ogAudionalDropdown);
-ogAudionalDropdown.querySelector('select').addEventListener('change', (event) => handleDropdownChange(event, index, modal, loadSampleButton));
+    modalContent.appendChild(ogAudionalDropdown);
+    ogAudionalDropdown.querySelector('select').addEventListener('change', (event) => handleDropdownChange(event, index, modal, loadSampleButton));
 
     ogAudionalDropdown.querySelector('select').id = `og-audional-dropdown-${index}`;
     modalContent.appendChild(ogAudionalDropdown);
     ogAudionalDropdown.querySelector('select').addEventListener('change', (event) => handleDropdownChange(event, index, modal, loadSampleButton));
     
+    modalContent.appendChild(createPlayButton(index));
     const actions = [
         { text: 'Load Audio', action: () => handleAction(index, modal, loadSampleButton) },
         { text: 'Cancel', action: () => closeModal(modal) },
@@ -152,6 +153,16 @@ ogAudionalDropdown.querySelector('select').addEventListener('change', (event) =>
     return modal;
 }
 
+function createPlayButton(index) {
+    const playButton = document.createElement('button', 'play-button');
+    playButton.textContent = 'Play';
+    playButton.onclick = function() {
+        console.log('Play button clicked');
+        playSoundOnce(index);
+    }
+    // playButton.classList.add('play-button');
+    return playButton;
+}
 
 function createOGDropdown(label, options) {
     const container = createElement('div', 'dropdown-container');

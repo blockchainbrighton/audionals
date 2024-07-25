@@ -7,6 +7,15 @@ appContainer.addEventListener('click', () => {
     });
 });
 
+document.addEventListener("DOMContentLoaded", function() {
+    const playButtons = document.querySelectorAll('.control-play-sample-button');
+    playButtons.forEach((button, index) => {
+        button.addEventListener('click', (event) => {
+            event.stopPropagation(); // Stop propagation to prevent the document-level click handler from closing the modal immediately
+            playSoundOnce(index);
+        });
+    });
+});
 
 document.addEventListener("DOMContentLoaded", function() {
     let saveButton = document.getElementById('save-button');
