@@ -52,7 +52,7 @@ function updateActiveQuickPlayButton() {
 }
 
 function insertQuickPlayButtons() {
-   // console.log("insertQuickPlayButtons called!");
+   console.log("insertQuickPlayButtons called!");
 
     const checkBox = document.getElementById('continuous-play');
     const quickPlayButton = document.getElementById('quick-play-button');

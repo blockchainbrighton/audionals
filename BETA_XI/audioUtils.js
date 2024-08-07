@@ -290,6 +290,77 @@ function getIframeIdByChannelIndex(channelIndex) {
 // List of channels where fades should be applied
 const fadeChannels = [6, 7, 11, 12, 13, 15];
 
+function playSoundOnce(channelIndex) {
+  const { isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
+  const sequencerChannel = new BroadcastChannel(`synth_channel_${channelIndex}`);
+  const bufferKey = `channel_${channelIndex}_${isReverse ? 'reverse' : 'forward'}`;
+  console.log('bufferKey', bufferKey, channelIndex);
+  const audioBuffer = audioBuffers.get(bufferKey);
+  if (!audioBuffer) {
+      console.error(`[playSound] No audio buffer found for ${bufferKey}`);
+      return;
+  }
+
+  const audioContext = window.unifiedSequencerSettings.audioContext;
+  const source = audioContext.createBufferSource();
+  source.buffer = audioBuffer;
+
+  const userGainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
+  if (!userGainNode) {
+      console.error("No gain node found for channel", channelIndex);
+      return;
+  }
+
+  const playbackSpeed = window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex];
+  source.playbackRate.setValueAtTime(playbackSpeed, audioContext.currentTime);
+
+  // Create a new gain node for fades to avoid interfering with user volume control
+  const fadeGainNode = audioContext.createGain();
+  fadeGainNode.connect(userGainNode);
+  source.connect(fadeGainNode);
+
+  const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
+
+  const fadeDuration = 0.0025; // 20 milliseconds in seconds
+  const actualFadeDuration = fadeDuration / playbackSpeed; // Adjust fade duration based on playback speed
+  const adjustedDuration = duration / playbackSpeed; // Adjusted duration for playback speed
+  const userVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex]; // Get the user-defined volume
+
+  const trimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
+  const isTrimmed = trimSettings.startSliderValue !== 0 || trimSettings.endSliderValue !== 100;
+
+  // Check if fades should be applied for this channel
+  const applyFades = fadeChannels.includes(channelIndex) && isTrimmed;
+
+  // Track active source for stopping
+  activeAudioSources.add(source);
+
+  if (applyFades) {
+      // Apply fade-in
+      fadeGainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      fadeGainNode.gain.linearRampToValueAtTime(userVolume, audioContext.currentTime + actualFadeDuration);
+
+      // Start playback
+      source.start(0, trimStart, duration);
+
+      // Apply fade-out
+      fadeGainNode.gain.setValueAtTime(userVolume, audioContext.currentTime + adjustedDuration - actualFadeDuration);
+      fadeGainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + adjustedDuration);
+  } else {
+      // Start playback without fades
+      source.start(0, trimStart, duration);
+  }
+
+  source.onended = () => {
+      fadeGainNode.disconnect();
+      source.disconnect();
+      activeAudioSources.delete(source); // Remove source from active set when it ends
+      window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
+  };
+
+  window.unifiedSequencerSettings.sourceNodes[channelIndex] = source;
+}
+
 function playSound(currentSequence, channel, currentStep) {
   const channelIndex = getChannelIndex(channel);
   const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
