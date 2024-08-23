@@ -300,6 +300,19 @@ class UnifiedSequencerSettings {
             settingsClone.artistName = this.settings.masterSettings.artistName;
         }
     
+        // Remove domains from URLs in channelURLs
+        if (Array.isArray(settingsClone.channelURLs)) {
+            settingsClone.channelURLs = settingsClone.channelURLs.map(url => {
+                try {
+                    const urlObj = new URL(url);
+                    return urlObj.pathname;  // Return just the path (e.g., /content/ID)
+                } catch (e) {
+                    console.warn(`Invalid URL: ${url}`);
+                    return url;  // In case the URL is already just a path or invalid
+                }
+            });
+        }
+    
         // Process the steps
         for (let sequenceKey in settingsClone.projectSequences) {
             const sequence = settingsClone.projectSequences[sequenceKey];
@@ -355,6 +368,7 @@ class UnifiedSequencerSettings {
             console.error("Failed to generate serialized format JSON for download.");
         }
     }
+    
     
     serialize(data) {
         const keyMap = {
