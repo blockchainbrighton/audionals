@@ -216,10 +216,14 @@ async function createReverseBuffer(audioBuffer) {
   }
   return reverseBuffer;
 }
-
 async function fetchAudio(url, channelIndex, sampleNameGiven = null, callback = null) {
   try {
-      const fullUrl = formatURL(url);
+      // Add the base domain if it's missing
+      const baseDomain = "https://ordinals.com";
+      const fullUrl = url.startsWith('/content/') ? `${baseDomain}${url}` : url;
+      
+      console.log(`[fetchAudio] Processing URL: ${fullUrl}`); // Log the full URL being processed
+
       const response = await fetch(fullUrl);
 
       if (!response.ok) {
@@ -229,14 +233,11 @@ async function fetchAudio(url, channelIndex, sampleNameGiven = null, callback = 
 
       const contentType = response.headers.get('Content-Type');
       let audioData;
-      // Initially, do not change the sample name if it already exists.
       let sampleName = window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex];
 
-      // Determine the content type and process accordingly
       if (contentType.includes('application/json')) {
           const { audioData: processedAudioData, sampleName: processedSampleName } = await processJSONResponse(response, channelIndex);
           audioData = processedAudioData;
-          // Only update the sampleName if it hasn't been set by the user.
           if (!sampleName) {
               sampleName = processedSampleName || sampleNameGiven || fullUrl.split('/').pop();
           }
@@ -244,21 +245,17 @@ async function fetchAudio(url, channelIndex, sampleNameGiven = null, callback = 
           const htmlText = await response.text();
           const { audioData: processedAudioData, sampleName: processedSampleName } = await processHTMLResponse(htmlText);
           audioData = processedAudioData;
-          // Only update the sampleName if it hasn't been set by the user.
           if (!sampleName) {
               sampleName = processedSampleName || sampleNameGiven || fullUrl.split('/').pop();
           }
-      } else if (contentType.includes('audio/flac')) { // Recognize FLAC content type
+      } else if (contentType.includes('audio/flac')) {
           audioData = await response.arrayBuffer();
-          // Only update the sampleName if it hasn't been set by the user.
           if (!sampleName) {
               sampleName = sampleNameGiven || fullUrl.split('/').pop().split('#')[0].split('?')[0] || 'Unnamed Sample';
           }
       } else {
           audioData = await response.arrayBuffer();
-          // Only update the sampleName if it hasn't been set by the user.
           if (!sampleName) {
-              // Use the filename from the URL as a fallback if the sampleName is empty or undefined
               sampleName = sampleNameGiven || fullUrl.split('/').pop().split('#')[0].split('?')[0] || 'Unnamed Sample';
           }
       }
@@ -266,7 +263,6 @@ async function fetchAudio(url, channelIndex, sampleNameGiven = null, callback = 
       if (audioData) {
           await decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex);
 
-          // The name will only be updated in the UI and settings if it wasn't previously set by the user
           if (!window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex]) {
               window.unifiedSequencerSettings.updateProjectChannelNamesUI(channelIndex, sampleName);
               window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex] = sampleName;
