@@ -25,6 +25,9 @@ class AudioTrimmer {
         this.endSliderValue = trimSettings.endSliderValue || 100;
 
         this.displayTimeout = null;
+
+        // Animation Frame Request ID
+        this.animationFrameRequest = null;
     }
 
     initializeSliderTrack() {
