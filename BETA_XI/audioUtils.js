@@ -181,10 +181,6 @@ async function decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex)
           console.log(`[decodeAndStoreAudio] Buffer assigned to source node for channel ${channelIndex}`);
       }
 
-      // Update UI or other components that depend on these buffers
-      window.unifiedSequencerSettings.updateProjectChannelNamesUI(channelIndex, sampleName);
-      console.log(`[decodeAndStoreAudio] UI updated with new sample name for channel ${channelIndex}`);
-
       // Optionally, trigger any UI updates or callbacks that need these buffers
       if (typeof updateWaveformDisplay === "function") {
           updateWaveformDisplay(channelIndex, audioBuffer);
@@ -268,7 +264,6 @@ async function fetchAudio(url, channelIndex, sampleNameGiven = null, callback = 
 
           // The name will only be updated in the UI and settings if it wasn't previously set by the user
           if (!window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex]) {
-              window.unifiedSequencerSettings.updateProjectChannelNamesUI(channelIndex, sampleName);
               window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex] = sampleName;
           }
           window.unifiedSequencerSettings.settings.masterSettings.channelURLs[channelIndex] = fullUrl;
