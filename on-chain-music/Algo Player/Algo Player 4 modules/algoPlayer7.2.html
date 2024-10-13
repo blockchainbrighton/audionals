@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Parent HTML with Embedded iFrame</title>
+    <script>
+        // Define songDataUrls globally in the parent
+        window.songDataUrls = [
+            "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0", 
+            "/content/b22f1c85371b58a9cdac19b2baa50b1f9025a28d44cdfaad539d0527aa7d894ei0", 
+            "/content/8aec0a99a5617b9da98a5b63a11a5143f0cac3cfa662d9515c2285de03ef95d4i0",
+            "/content/6d288c0c82653001bb32497889dd1486e8afec9b0671a95fa9e10f99c20737bbi0",
+            "/content/07ff7bdc47e5272a3ff55cc46d2b189d510562a057a2c24112f3d0376950484di0", 
+            "/content/119a3ccd1dfd7e987cca139f86d16717d845a22dd6afc59ad492527b95ae9a91i0",
+            "/content/db9131cfe8e933e8e639f007dcd2b582a80bfd2be42b0eafa4d2e206332d6785i0", 
+            "/content/fb0d2abcd1fa5bf2622579f0990435b48d41291f71626fc2e36a93e6ea6b3b85i0", 
+            "/content/3359ce42359274ddbd2184d9f75a38b7e59b1d5f24512959e29c377fc8ca604ai0",
+            "/content/633100d631767ddb9a309f5a2a66f5a66d5abd839f3b1c55642690d484189971i0",
+            "/content/85436950f53c57aa0c510071d2d5f1c187e1d21e4e57210fcae152c4c7b6a768i0", 
+            "/content/e3ca12dd7516b4e486af4e3fa7f4ebc535d825034ff3c9da4954f354572dcf61i0",
+            "/content/d0496a8e1657ce470807c8d47dcb5f1018a32d8ec8e50d490ad49411ffee1457i0",
+        ];
+
+        // Initialize seed and song index
+        window.seed = null;
+        let currentSongIndex = 0;
+
+        // Function to request seed or generate a random one
+        function requestSeed() {
+            const seedInput = document.getElementById('seedInput').value;
+            if (seedInput) {
+                const parsedSeed = parseInt(seedInput, 10);
+                if (!isNaN(parsedSeed)) {
+                    window.seed = parsedSeed;
+                    console.log("Seed updated to: ", window.seed);
+                } else {
+                    alert("Invalid input. Please enter a valid number.");
+                    return;
+                }
+            } else {
+                window.seed = Math.floor(Math.random() * 10000);
+                console.log("Random seed generated: ", window.seed);
+            }
+
+            // Refresh the iframe with the new seed and first song
+            refreshIframe();
+        }
+
+        // Function to refresh the iframe with current seed and song index
+        function refreshIframe() {
+            const iframe = document.getElementById('childFrame');
+            iframe.contentWindow.postMessage({ 
+                seed: window.seed, 
+                songIndex: currentSongIndex,
+                songDataUrls: window.songDataUrls 
+            }, '*');
+            console.log("Iframe refreshed with seed:", window.seed, "song index:", currentSongIndex);
+        }
+
+        // Function to handle "Next" button click
+        function nextSong() {
+            window.seed += 1; // Increment the seed
+            currentSongIndex = (currentSongIndex + 1) % window.songDataUrls.length; // Cycle through songs
+            refreshIframe(); // Refresh the iframe with the new seed and song
+        }
+
+        // Function to update the scale of the iframe
+        function updateScale(value) {
+            const childFrame = document.getElementById('childFrame');
+            childFrame.contentWindow.postMessage({ scale: value }, '*');
+
+            // Adjust iframe size based on scale
+            const scaleFactor = parseFloat(value);
+            const baseSize = 1240; // Original size of the iframe
+            childFrame.style.width = (baseSize * scaleFactor) + 'px';
+            childFrame.style.height = (baseSize * scaleFactor) + 'px';
+        }
+
+        // Handle messages from the iframe
+        window.addEventListener('message', function(event) {
+            if (event.data === 'requestSeed') {
+                const iframe = document.getElementById('childFrame');
+                iframe.contentWindow.postMessage({ 
+                    seed: window.seed, 
+                    songIndex: currentSongIndex,
+                    songDataUrls: window.songDataUrls 
+                }, '*');
+            }
+        });
+
+        // Send initial data to iframe when it loads
+        window.onload = () => {
+            document.getElementById('playButton').addEventListener('click', requestSeed);
+            document.getElementById('nextButton').addEventListener('click', nextSong);
+
+            const iframe = document.getElementById('childFrame');
+            iframe.addEventListener('load', () => {
+                iframe.contentWindow.postMessage({ 
+                    seed: window.seed, 
+                    songIndex: currentSongIndex,
+                    songDataUrls: window.songDataUrls 
+                }, '*');
+            });
+        };
+    </script>
+
+    <style>
+        /* Style to center the iframe */
+        body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f0f0f0;
+            position: relative;
+            transform: scale(0.7);
+        }
+
+        iframe {
+            width: 1240px;
+            height: 1240px;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Style for the slider */
+        #scaleControl {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            width: 200px;
+        }
+
+        /* Style for the seed input and refresh button */
+        #seedControl {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        #seedInput {
+            width: 100px;
+            padding: 5px;
+            margin-left: 10px;
+        }
+
+        #playButton, #refreshButton, #nextButton {
+            margin-left: 10px;
+            padding: 5px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        #playButton:hover, #refreshButton:hover, #nextButton:hover {
+            background-color: #0056b3;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* Hide overflow to prevent scrollbars */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: black;
+        }
+        
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+    
+        canvas {
+            width: 100%; /* Make canvas fill its container */
+            height: 100%; /* Maintain aspect ratio */
+        }
+    </style>
+</head>
+<body>
+    <!-- Controls -->
+    <div id="scaleControl">
+        <label for="scaleSlider">Scale:</label>
+        <input type="range" id="scaleSlider" min="0.5" max="2" step="0.1" value="1" oninput="updateScale(this.value)">
+    </div>
+
+    <div id="seedControl">
+        <label for="seedInput">Seed:</label>
+        <input type="number" id="seedInput" placeholder="Enter seed">
+        <button id="playButton">Play</button>
+        <button id="refreshButton" onclick="refreshIframe()">Refresh</button>
+        <button id="nextButton">Next</button>
+    </div>
+
+    <!-- Embedded iFrame -->
+    <iframe id="childFrame" srcdoc="
+        <!DOCTYPE html>
+        <html lang=&quot;en&quot;>
+        <head>
+            <meta charset=&quot;UTF-8&quot;>
+            <meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0, user-scalable=yes&quot;>
+            <title>Seed Input Page</title>
+            <script>
+                // Initialize variables
+                window.seed = null;
+                window.songDataUrls = [];
+                window.songIndex = 0;
+
+                // Listen for messages from the parent
+                window.addEventListener('message', function(event) {
+                    if (event.data.songDataUrls) {
+                        window.songDataUrls = event.data.songDataUrls;
+                        console.log('Received songDataUrls from parent:', window.songDataUrls);
+                    }
+                    if (event.data.seed !== undefined) {
+                        window.seed = event.data.seed;
+                        console.log('Received seed from parent:', window.seed);
+                    }
+                    if (event.data.songIndex !== undefined) {
+                        window.songIndex = event.data.songIndex;
+                        console.log('Received songIndex from parent:', window.songIndex);
+                    }
+                    if (event.data.scale !== undefined) {
+                        const baseScale = 1;
+                        document.getElementById('canvas-container').style.transform = 'scale(' + (event.data.scale * baseScale) + ')';
+                    }
+
+                    // Initialize the program when both seed and songDataUrls are received
+                    if (window.seed !== null && window.songDataUrls.length > 0) {
+                        initializeProgram();
+                    }
+                });
+
+                // Request seed and songDataUrls from parent when the iframe loads
+                window.parent.postMessage('requestSeed', '*');
+
+                // Initialize the program
+                function initializeProgram() {
+                    console.log('Initializing program with seed:', window.seed);
+                    if (window.songDataUrls && window.songDataUrls.length > 0) {
+                        console.log(`[${new Date().toISOString()}] Using songDataUrls received from parent.`);
+                        processSerializedData(window.songDataUrls);
+                        // Continue with initialization
+                        IIFE2();
+                        IIFE3();
+                        IIFE4();
+                        IIFE5();
+                        IIFE6();
+                    } else {
+                        console.warn('songDataUrls not available yet.');
+                    }
+                }
+        </script>
+    <style>
+     
+    </style>
+    </head>
+    <body>
+
+
+
+      
+        <script>
+            // IIFE #1
+            (function IIFE1() {
+                console.log(`[${new Date().toISOString()}] First IIFE [init] starting with seed:`, window.seed);
+
+                function init() {
+                    console.log(`[${new Date().toISOString()}] init function called.`);
+                    try {
+                        console.log(`[${new Date().toISOString()}] Calling setupStylesAndCanvas...`);
+                        setupStylesAndCanvas();
+                        console.log(`[${new Date().toISOString()}] setupStylesAndCanvas completed successfully.`);
+                        
+                        
+                        if (songDataUrls && songDataUrls.length > 0) {
+                            console.log(`[${new Date().toISOString()}] songDataUrls array is defined and has ${songDataUrls.length} items. Proceeding with processing...`);
+                            processSerializedData(songDataUrls);
+                            console.log(`[${new Date().toISOString()}] processSerializedData completed successfully.`);
+                        } else {
+                            console.warn(`[${new Date().toISOString()}] songDataUrls array is either undefined or empty.`);
+                        }
+                    } catch (error) {
+                        console.error(`[${new Date().toISOString()}] Error in init function:`, error);
+                    }
+                }
+
+                window.init = init;
+                window.addEventListener('load', function() {
+                    console.log(`[${new Date().toISOString()}] Window load event triggered.`);
+                    init();
+                    console.log(`[${new Date().toISOString()}] init function execution completed.`);
+                });
+
+                console.log(`[${new Date().toISOString()}] First IIFE [init] completed.`);
+            })();
+
+            // IIFE #2
+            (function IIFE2() {
+                console.log(`[${new Date().toISOString()}] Second IIFE [hashstring] starting with seed:`, window.seed);
+
+                function hashString(str) {
+                    console.log(`[${new Date().toISOString()}] hashString function called with input:`, str);
+                    let rotationCount = parseInt(str.split(&quot;i&quot;)[1]);
+                    console.log(`[${new Date().toISOString()}] Rotation count parsed:`, rotationCount);
+                    
+                    let characters = str.split(&quot;&quot;);
+                    for (let i = 0; i < rotationCount; i++) {
+                        let char = characters.shift();
+                        characters.push(char);
+                    }
+                    str = characters.join(&quot;&quot;);
+                    console.log(`[${new Date().toISOString()}] String after rotation:`, str);
+
+                    let hash = 0;
+                    for (let i = 0; i < str.length; i++) {
+                        hash = (31 * hash + str.charCodeAt(i)) % Number.MAX_SAFE_INTEGER;
+                    }
+                    const finalHash = hash % 1400000000;
+                    console.log(`[${new Date().toISOString()}] Final hash calculated:`, finalHash);
+                    return finalHash;
+                }
+
+                const seedValue = hashString(&quot;4482324585393f1523e8c28a02605c0b1c95d2779510921da0f131a5e6da5843i0&quot;);
+                console.log(`[${new Date().toISOString()}] Hash string returned seed value:`, seedValue);
+                console.log(`[${new Date().toISOString()}] Using global seed:`, window.seed);
+
+                function seededRandom(localSeed) {
+                    console.log(`[${new Date().toISOString()}] seededRandom function called with localSeed:`, localSeed);
+                    const x = Math.sin(localSeed) * 10000;
+                    const result = x - Math.floor(x);
+                    console.log(`[${new Date().toISOString()}] seededRandom result:`, result);
+                    return result;
+                }
+
+                function setPlaybackStatus(status) {
+                    console.log(`[${new Date().toISOString()}] setPlaybackStatus called with status:`, status);
+                    window.playbackStarted = status;
+                }
+
+                function initializePlayback() {
+                    console.log(`[${new Date().toISOString()}] initializePlayback function called.`);
+                    if (window.playbackStarted === undefined) {
+                        console.log(`[${new Date().toISOString()}] playbackStarted is undefined, initializing to false.`);
+                        window.playbackStarted = false;
+                    }
+
+                    document.addEventListener(&quot;playbackStarted&quot;, () => {
+                        console.log(`[${new Date().toISOString()}] playbackStarted event triggered.`);
+                        window.psTime = Date.now();
+                        setPlaybackStatus(true);
+                        console.log(`[${new Date().toISOString()}] Playback started at:`, window.psTime);
+                        displayText();  // Assuming displayText is another globally available function
+                    });
+
+                    document.addEventListener(&quot;playbackStopped&quot;, () => {
+                        console.log(`[${new Date().toISOString()}] playbackStopped event triggered.`);
+                        setPlaybackStatus(false);
+                        console.log(`[${new Date().toISOString()}] Playback stopped.`);
+                    });
+                }
+
+                function enforceDocumentTitle() {
+                    console.log(`[${new Date().toISOString()}] enforceDocumentTitle function called.`);
+                    document.title = &quot;? ? ?&quot;;
+                    const titleObserver = new MutationObserver(() => {
+                        if (document.title !== &quot;? ? ?&quot;) {
+                            console.log(`[${new Date().toISOString()}] Document title changed, resetting to ? ? ?`);
+                            document.title = &quot;? ? ?&quot;;
+                        }
+                    });
+                    titleObserver.observe(document.querySelector(&quot;title&quot;), { childList: true, subtree: true });
+                    console.log(`[${new Date().toISOString()}] Title observer set up successfully.`);
+                }
+
+                window.addEventListener('load', function() {
+                    console.log(`[${new Date().toISOString()}] window.onload triggered.`);
+                    enforceDocumentTitle();
+                    displayPlayText();  // Assuming displayPlayText is another globally available function
+                    console.log(`[${new Date().toISOString()}] onload functions executed successfully.`);
+                });
+
+                // Expose functions globally
+                window.hashString = hashString;
+                window.seededRandom = seededRandom;  // Make seededRandom globally available
+                window.setPlaybackStatus = setPlaybackStatus;
+                window.initializePlayback = initializePlayback;
+                window.enforceDocumentTitle = enforceDocumentTitle;
+
+                // Initialize the playback settings
+                initializePlayback();
+
+                console.log(`[${new Date().toISOString()}] Second IIFE [hashstring] completed.`);
+            })();
+
+            (function IIFE3() {
+                function setupStylesAndCanvas() {
+                    const styleElement = document.createElement(&quot;style&quot;);
+                    styleElement.textContent = `canvas { position: absolute; }`;
+                    document.head.appendChild(styleElement);
+            
+                    const canvasContainer = document.createElement(&quot;div&quot;);
+                    canvasContainer.id = &quot;canvas-container&quot;;
+                    const canvas = document.createElement(&quot;canvas&quot;);
+                    canvasContainer.appendChild(canvas);
+                    document.body.appendChild(canvasContainer);
+                }
+            
+                window.setupStylesAndCanvas = setupStylesAndCanvas;
+            })();
+            
+
+            // IIFE #4
+            (function IIFE4() {
+                console.log(`[${new Date().toISOString()}] Fourth IIFE [keymap] running with seed:`, window.seed);
+
+                const keyMap = {
+                    0: &quot;projectName&quot;, 1: &quot;artistName&quot;, 2: &quot;projectBPM&quot;, 3: &quot;currentSequence&quot;, 
+                    4: &quot;channelURLs&quot;, 5: &quot;channelVolume&quot;, 6: &quot;channelPlaybackSpeed&quot;, 
+                    7: &quot;trimSettings&quot;, 8: &quot;projectChannelNames&quot;, 9: &quot;startSliderValue&quot;, 
+                    10: &quot;endSliderValue&quot;, 11: &quot;totalSampleDuration&quot;, 12: &quot;start&quot;, 
+                    13: &quot;end&quot;, 14: &quot;projectSequences&quot;, 15: &quot;steps&quot;
+                };
+
+                const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([e, r]) => [r, +e]));
+                const channelMap = Array.from({ length: 26 }, (e, r) => String.fromCharCode(65 + r));
+                const reverseChannelMap = Object.fromEntries(channelMap.map((e, r) => [e, r]));
+
+                function decompressSteps(e) {
+                    console.log(`[${new Date().toISOString()}] decompressSteps function called.`);
+                    return e.flatMap(e => {
+                        if (typeof e === &quot;number&quot;) return e;
+                        if (typeof e === &quot;object&quot; && &quot;r&quot; in e) {
+                            const [r, t] = e.r;
+                            return Array.from({ length: t - r + 1 }, (e, t) => r + t);
+                        }
+                        return typeof e === &quot;string&quot; && e.endsWith(&quot;r&quot;) ? { index: parseInt(e.slice(0, -1), 10), reverse: !0 } : void 0;
+                    });
+                }
+
+                function deserialize(e) {
+                    console.log(`[${new Date().toISOString()}] deserialize function called.`);
+                    const r = e => Array.isArray(e) ? e.map(e => typeof e === &quot;object&quot; ? r(e) : e) : typeof e === &quot;object&quot; && e !== null ? Object.entries(e).reduce((e, [t, n]) => {
+                        const a = keyMap[t] ?? t;
+                        return e[a] = a === &quot;projectSequences&quot; ? Object.entries(n).reduce((e, [r, t]) => (e[r.replace(&quot;s&quot;, &quot;Sequence&quot;)] = Object.entries(t).reduce((e, [r, t]) => {
+                            var n;
+                            return e[`ch${reverseChannelMap[r]}`] = { steps: (n = t[reverseKeyMap.steps] || [], n.flatMap(e => {
+                                if (typeof e === &quot;number&quot;) return e;
+                                if (typeof e === &quot;object&quot; && &quot;r&quot; in e) {
+                                    const [r, t] = e.r;
+                                    return Array.from({ length: t - r + 1 }, (e, t) => r + t);
+                                }
+                                return typeof e === &quot;string&quot; && e.endsWith(&quot;r&quot;) ? { index: parseInt(e.slice(0, -1), 10), reverse: !0 } : void 0;
+                            })) }, e;
+                        }, {}), e), {}) : r(n), e;
+                    }, {}) : e;
+                    return r(e);
+                }
+
+                async function loadPako() {
+                    console.log(`[${new Date().toISOString()}] Starting loadPako function...`);
+
+                    try {
+                        console.log(`[${new Date().toISOString()}] Fetching content for Pako library...`);
+                        const t = await fetch(&quot;/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0&quot;);
+                        
+                        console.log(`[${new Date().toISOString()}] Fetch response received:`, t);
+                        const o = await t.text();
+                        console.log(`[${new Date().toISOString()}] Fetched content successfully, length of content:`, o.length);
+
+                        const e = document.createElement(&quot;div&quot;);
+                        e.innerHTML = o;
+                        console.log(`[${new Date().toISOString()}] HTML content parsed into DOM.`);
+
+                        const n = e.querySelectorAll(&quot;script&quot;);
+                        console.log(`[${new Date().toISOString()}] Script tags found in HTML:`, n.length);
+
+                        const c = Array.from(n).find(t => t.textContent.includes(&quot;pako&quot;));
+                        if (!c) {
+                            console.error(`[${new Date().toISOString()}] Pako library not found in the HTML content.`);
+                            throw new Error(&quot;Pako library not found in the HTML content.&quot;);
+                        }
+                        console.log(`[${new Date().toISOString()}] Pako script found in HTML content.`);
+
+                        const r = document.createElement(&quot;script&quot;);
+                        r.textContent = c.textContent;
+                        console.log(`[${new Date().toISOString()}] Pako script element created.`);
+
+                        document.head.appendChild(r);
+                        console.log(`[${new Date().toISOString()}] Pako script appended to document head.`);
+
+                        // Ensure pako is available globally before logging it
+                        if (window.pako) {
+                            console.log(`[${new Date().toISOString()}] Pako library loaded successfully:`, window.pako);
+                        } else {
+                            console.error(`[${new Date().toISOString()}] Pako is not available after script injection.`);
+                        }
+
+                    } catch (t) {
+                        console.error(`[${new Date().toISOString()}] Error occurred during Pako loading:`, t);
+                    }
+                }
+
+                window.decompressSteps = decompressSteps;
+                window.deserialize = deserialize;
+                window.loadPako = loadPako;
+
+                console.log(`[${new Date().toISOString()}] Fourth IIFE [keymap] completed.`);
+            })();
+
+            (function IIFE5() {
+                async function fetchAndDeserialize(url) {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`Network error: ${url}`);
+                    const arrayBuffer = await response.arrayBuffer();
+                    const inflated = pako.inflate(new Uint8Array(arrayBuffer));
+                    return deserialize(JSON.parse(new TextDecoder(&quot;utf-8&quot;).decode(inflated)));
+                }
+            
+                function seededRandom(seed) {
+                    const x = Math.sin(seed) * 10000;
+                    return x - Math.floor(x);
+                }
+            
+                function shuffleArray(array, seed) {
+                    for (let i = array.length - 1; i > 0; i--) {
+                        const j = Math.floor(seededRandom(seed) * (i + 1));
+                        [array[i], array[j]] = [array[j], array[i]];
+                        seed++;
+                    }
+                    return array;
+                }
+            
+                function selectBPM(availableBPMs, seed) {
+                    return availableBPMs[Math.floor(seededRandom(seed) * availableBPMs.length)];
+                }
+            
+                async function processSerializedData(urls) {
+                    await loadPako();
+                    const data = (await Promise.all(urls.map(fetchAndDeserialize))).filter(Boolean);
+                    const baseBPM = selectBPM([80, 100, 120, 140, 160, 180, 240], window.seed);
+            
+                    data.forEach(dataset => {
+                        const bpmRatio = baseBPM / dataset.projectBPM;
+                        dataset.channelPlaybackSpeed = dataset.channelPlaybackSpeed.map(speed => speed * bpmRatio);
+                    });
+            
+                    const allChannels = data.flatMap((dataset, idx) =>
+                        dataset.channelURLs.map((url, i) => ({
+                            url,
+                            volume: dataset.channelVolume[i],
+                            speed: dataset.channelPlaybackSpeed[i],
+                            trim: dataset.trimSettings[i],
+                            source: `data${idx + 1}`,
+                            index: i
+                        }))
+                    );
+            
+                    const selectedChannels = shuffleArray(allChannels, window.seed).slice(0, 24);
+                    const combinedData = {
+                        ...data[0],
+                        projectBPM: baseBPM,
+                        channelURLs: selectedChannels.map(ch => ch.url),
+                        channelVolume: selectedChannels.map(ch => ch.volume),
+                        channelPlaybackSpeed: selectedChannels.map(ch => ch.speed),
+                        trimSettings: selectedChannels.map(ch => ch.trim),
+                        projectSequences: {}
+                    };
+            
+                    const projectSources = data.reduce((acc, dataset, i) => {
+                        acc[`data${i + 1}`] = dataset;
+                        return acc;
+                    }, {});
+            
+                    Object.keys(data[0].projectSequences).forEach(seq => {
+                        combinedData.projectSequences[seq] = {};
+                        selectedChannels.forEach((ch, i) => {
+                            combinedData.projectSequences[seq][`ch${i}`] = projectSources[ch.source]?.projectSequences[seq]?.[`ch${ch.index}`] || { steps: [] };
+                        });
+                    });
+            
+                    window.jsonDataUrl = URL.createObjectURL(new Blob([JSON.stringify(combinedData)], { type: &quot;application/json&quot; }));
+                    const script = document.createElement(&quot;script&quot;);
+                    script.src = &quot;/content/6e226872d6612da632fcf29824b6f52c3672a745e194032e4f91c351e47d75c9i0&quot;;
+                    document.head.appendChild(script);
+                }
+            
+                window.fetchAndDeserialize = fetchAndDeserialize;
+                window.processSerializedData = processSerializedData;
+                window.seededRandom = seededRandom;
+                window.shuffleArray = shuffleArray;
+                window.selectBPM = selectBPM;
+            })();
+            
+</script>
+</body>
+</html>"
+frameborder="0">
+</iframe>
+
+</body>
+</html>
+
