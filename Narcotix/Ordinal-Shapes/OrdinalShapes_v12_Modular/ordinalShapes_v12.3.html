@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Neon Shape Drawer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- External CSS -->
+    <style>
+        /* CSS Variables for Consistency */
+        :root {
+            --background-color: #000;
+            --header-bg: #1e1e1e;
+            --header-color: #fff;
+            --control-bg: rgba(30, 30, 30, 0.8);
+            --control-color: #fff;
+            --stroke-color: rgba(57,255,20,1);
+            --font-family: Arial, sans-serif;
+        }
+
+        /* Reset and Basic Styling */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: var(--font-family);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            background: var(--background-color);
+            color: var(--control-color);
+        }
+        #header {
+            background: var(--header-bg);
+            color: var(--header-color);
+            padding: 10px 20px;
+            text-align: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+        #main {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 10px;
+            flex-grow: 1;
+            padding: 10px;
+            background: var(--background-color);
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            padding-top: 100%; /* 1:1 Aspect Ratio */
+            background: var(--background-color);
+        }
+        .canvas-container canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        /* Controls Panel Styling */
+        .controls-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--control-bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .controls-panel h2 {
+            margin-bottom: 20px;
+        }
+        .control-group {
+            margin-bottom: 15px;
+            width: 80%;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+        .control-group output {
+            display: block;
+            text-align: right;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">Neon Shape Drawer</div>
+    <div id="main">
+        <!-- Canvas Containers will be dynamically generated -->
+    </div>
+
+<!-- Settings Script -->
+<script>
+    (function(global) {
+        global.NeonShapeDrawer = global.NeonShapeDrawer || {};
+
+        // Abbreviations for Settings
+        global.NeonShapeDrawer.SETTING_ABBREVIATIONS = {
+            speed: 'sp',
+            offset: 'of',
+            frequency: 'fr',
+            tailLength: 'tl',
+            noiseLevel: 'nl',
+            timeSpeed: 'ts',
+        };
+
+        // Mapping from Abbreviation to Full Setting Name
+        global.NeonShapeDrawer.ABBREV_TO_SETTING = (function() {
+            const map = {};
+            const abbreviations = global.NeonShapeDrawer.SETTING_ABBREVIATIONS;
+            for (const key in abbreviations) {
+                if (abbreviations.hasOwnProperty(key)) {
+                    map[abbreviations[key]] = key;
+                }
+            }
+            return map;
+        })();
+
+        /* Serialized Phases Sets */
+
+        // Serialized Phases Set 1: Linear Flow with Gradual Increases
+        global.NeonShapeDrawer.serializedPhasesSet1 = [
+            // Initial set
+            { a: 'of', t: 'set', v: 50 },
+            
+            // Gradually increase speed
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.0 },
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.5 },
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.0 },
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.5 },
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 3.0 },
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 3.5 },
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 4.0 },
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 4.5 },
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 5.0 },
+        
+            // Gradually increase frequency
+            { a: 'fr', t: 'inc', s: 0.2, tgt: 2.0 },
+            { a: 'fr', t: 'inc', s: 0.2, tgt: 4.0 },
+            { a: 'fr', t: 'inc', s: 0.2, tgt: 6.0 },
+            { a: 'fr', t: 'inc', s: 0.2, tgt: 8.0 },
+            { a: 'fr', t: 'inc', s: 0.2, tgt: 10.0 },
+        
+            // Gradually increase tailLength
+            { a: 'tl', t: 'inc', s: 5, tgt: 300 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 600 },
+            { a: 'tl', t: 'inc', s: 20, tgt: 800 },
+            { a: 'tl', t: 'inc', s: 20, tgt: 1000 },
+        
+            // Gradually increase noiseLevel
+            { a: 'nl', t: 'inc', s: 1, tgt: 5 },
+            { a: 'nl', t: 'inc', s: 1, tgt: 10 },
+        
+            // Gradually decrease offset to zero
+            { a: 'of', t: 'dec', s: 5, tgt: 45 },
+            { a: 'of', t: 'dec', s: 5, tgt: 40 },
+            { a: 'of', t: 'dec', s: 5, tgt: 35 },
+            { a: 'of', t: 'dec', s: 5, tgt: 30 },
+            { a: 'of', t: 'dec', s: 5, tgt: 25 },
+            { a: 'of', t: 'dec', s: 5, tgt: 20 },
+            { a: 'of', t: 'dec', s: 5, tgt: 15 },
+            { a: 'of', t: 'dec', s: 5, tgt: 10 },
+            { a: 'of', t: 'dec', s: 5, tgt: 5 },
+            { a: 'of', t: 'dec', s: 5, tgt: 0 },
+        ];
+
+        // Serialized Phases Set 2: Intertwined Settings with Small Steps
+        global.NeonShapeDrawer.serializedPhasesSet2 = [
+            // Initial set
+            { a: 'of', t: 'set', v: 50 },
+        
+            // Increase speed and frequency together
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.0 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 2.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.5 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 3.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.0 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 4.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.5 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 5.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 3.0 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 6.0 },
+        
+            // Increase tailLength and noiseLevel
+            { a: 'tl', t: 'inc', s: 50, tgt: 150 },
+            { a: 'nl', t: 'inc', s: 1, tgt: 3 },
+        
+            { a: 'tl', t: 'inc', s: 5, tgt: 200 },
+            { a: 'nl', t: 'inc', s: 1, tgt: 5 },
+        
+            { a: 'tl', t: 'inc', s: 10, tgt: 300 },
+            { a: 'nl', t: 'inc', s: 1, tgt: 7 },
+        
+            { a: 'tl', t: 'inc', s: 20, tgt: 500 },
+            { a: 'nl', t: 'inc', s: 1, tgt: 10 },
+        
+            { a: 'tl', t: 'inc', s: 50, tgt: 1000 },
+        
+            // Decrease offset smoothly
+            { a: 'of', t: 'dec', s: 2, tgt: 48 },
+            { a: 'of', t: 'dec', s: 2, tgt: 46 },
+            { a: 'of', t: 'dec', s: 2, tgt: 44 },
+            { a: 'of', t: 'dec', s: 2, tgt: 42 },
+            { a: 'of', t: 'dec', s: 2, tgt: 40 },
+            { a: 'of', t: 'dec', s: 2, tgt: 38 },
+            { a: 'of', t: 'dec', s: 2, tgt: 36 },
+            { a: 'of', t: 'dec', s: 2, tgt: 34 },
+            { a: 'of', t: 'dec', s: 2, tgt: 32 },
+            { a: 'of', t: 'dec', s: 2, tgt: 30 },
+            { a: 'of', t: 'dec', s: 2, tgt: 28 },
+            { a: 'of', t: 'dec', s: 2, tgt: 26 },
+            { a: 'of', t: 'dec', s: 2, tgt: 24 },
+            { a: 'of', t: 'dec', s: 2, tgt: 22 },
+            { a: 'of', t: 'dec', s: 2, tgt: 20 },
+            { a: 'of', t: 'dec', s: 2, tgt: 18 },
+            { a: 'of', t: 'dec', s: 2, tgt: 16 },
+            { a: 'of', t: 'dec', s: 2, tgt: 14 },
+            { a: 'of', t: 'dec', s: 2, tgt: 12 },
+            { a: 'of', t: 'dec', s: 2, tgt: 10 },
+            { a: 'of', t: 'dec', s: 2, tgt: 8 },
+            { a: 'of', t: 'dec', s: 2, tgt: 6 },
+            { a: 'of', t: 'dec', s: 2, tgt: 4 },
+            { a: 'of', t: 'dec', s: 2, tgt: 2 },
+            { a: 'of', t: 'dec', s: 2, tgt: 0 },
+        ];
+
+        // Serialized Phases Set 3: Smooth Oscillations with Small Steps
+        global.NeonShapeDrawer.serializedPhasesSet3 = [
+            // Initial set
+            { a: 'of', t: 'set', v: 50 },
+        
+            // Oscillate speed and frequency
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.0 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 2.0 },
+            { a: 'sp', t: 'dec', s: 0.05, tgt: 0.95 },
+            { a: 'fr', t: 'dec', s: 0.1, tgt: 1.9 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.05 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 2.1 },
+            { a: 'sp', t: 'dec', s: 0.05, tgt: 1.0 },
+            { a: 'fr', t: 'dec', s: 0.1, tgt: 2.0 },
+        
+            // Oscillate tailLength and noiseLevel
+            { a: 'tl', t: 'inc', s: 10, tgt: 20 },
+            { a: 'nl', t: 'inc', s: 0.5, tgt: 1.0 },
+            { a: 'tl', t: 'dec', s: 1, tgt: 15 },
+            { a: 'nl', t: 'dec', s: 0.5, tgt: 0.5 },
+        
+            { a: 'tl', t: 'inc', s: 10, tgt: 25 },
+            { a: 'nl', t: 'inc', s: 0.5, tgt: 1.5 },
+            { a: 'tl', t: 'dec', s: 1, tgt: 20 },
+            { a: 'nl', t: 'dec', s: 0.5, tgt: 1.0 },
+        
+            // Final ramp-up to full settings
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.0 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 4.0 },
+            { a: 'tl', t: 'inc', s: 5, tgt: 1000 },
+            { a: 'nl', t: 'inc', s: 0.5, tgt: 10 },
+        
+            // Gradually decrease offset to zero
+            { a: 'of', t: 'dec', s: 2, tgt: 48 },
+            { a: 'of', t: 'dec', s: 2, tgt: 46 },
+            { a: 'of', t: 'dec', s: 2, tgt: 44 },
+            { a: 'of', t: 'dec', s: 2, tgt: 42 },
+            { a: 'of', t: 'dec', s: 2, tgt: 40 },
+            { a: 'of', t: 'dec', s: 2, tgt: 38 },
+            { a: 'of', t: 'dec', s: 2, tgt: 36 },
+            { a: 'of', t: 'dec', s: 2, tgt: 34 },
+            { a: 'of', t: 'dec', s: 2, tgt: 32 },
+            { a: 'of', t: 'dec', s: 2, tgt: 30 },
+            { a: 'of', t: 'dec', s: 2, tgt: 28 },
+            { a: 'of', t: 'dec', s: 2, tgt: 26 },
+            { a: 'of', t: 'dec', s: 2, tgt: 24 },
+            { a: 'of', t: 'dec', s: 2, tgt: 22 },
+            { a: 'of', t: 'dec', s: 2, tgt: 20 },
+            { a: 'of', t: 'dec', s: 2, tgt: 18 },
+            { a: 'of', t: 'dec', s: 2, tgt: 16 },
+            { a: 'of', t: 'dec', s: 2, tgt: 14 },
+            { a: 'of', t: 'dec', s: 2, tgt: 12 },
+            { a: 'of', t: 'dec', s: 2, tgt: 10 },
+            { a: 'of', t: 'dec', s: 2, tgt: 8 },
+            { a: 'of', t: 'dec', s: 2, tgt: 6 },
+            { a: 'of', t: 'dec', s: 2, tgt: 4 },
+            { a: 'of', t: 'dec', s: 2, tgt: 2 },
+            { a: 'of', t: 'dec', s: 2, tgt: 0 },
+        ];
+
+        // Serialized Phases Set 4: Layered Adjustments with Interleaved Settings
+        global.NeonShapeDrawer.serializedPhasesSet4 = [
+            // Initial set
+            { a: 'of', t: 'set', v: 50 },
+        
+            // Layer 1: Increase speed and tailLength
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.0 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 20 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.5 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 30 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.0 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 40 },
+        
+            // Layer 2: Increase frequency and noiseLevel
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 2.0 },
+            { a: 'nl', t: 'inc', s: 0.5, tgt: 1.0 },
+        
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 3.0 },
+            { a: 'nl', t: 'inc', s: 0.5, tgt: 2.0 },
+        
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 4.0 },
+            { a: 'nl', t: 'inc', s: 0.5, tgt: 3.0 },
+        
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 5.0 },
+            { a: 'nl', t: 'inc', s: 0.5, tgt: 4.0 },
+        
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 6.0 },
+            { a: 'nl', t: 'inc', s: 0.5, tgt: 5.0 },
+        
+            // Layer 3: Decrease offset smoothly
+            { a: 'of', t: 'dec', s: 1, tgt: 49 },
+            { a: 'of', t: 'dec', s: 1, tgt: 48 },
+            { a: 'of', t: 'dec', s: 1, tgt: 47 },
+            { a: 'of', t: 'dec', s: 1, tgt: 46 },
+            { a: 'of', t: 'dec', s: 1, tgt: 45 },
+            { a: 'of', t: 'dec', s: 1, tgt: 44 },
+            { a: 'of', t: 'dec', s: 1, tgt: 43 },
+            { a: 'of', t: 'dec', s: 1, tgt: 42 },
+            { a: 'of', t: 'dec', s: 1, tgt: 41 },
+            { a: 'of', t: 'dec', s: 1, tgt: 40 },
+            { a: 'of', t: 'dec', s: 1, tgt: 39 },
+            { a: 'of', t: 'dec', s: 1, tgt: 38 },
+            { a: 'of', t: 'dec', s: 1, tgt: 37 },
+            { a: 'of', t: 'dec', s: 1, tgt: 36 },
+            { a: 'of', t: 'dec', s: 1, tgt: 35 },
+            { a: 'of', t: 'dec', s: 1, tgt: 34 },
+            { a: 'of', t: 'dec', s: 1, tgt: 33 },
+            { a: 'of', t: 'dec', s: 1, tgt: 32 },
+            { a: 'of', t: 'dec', s: 1, tgt: 31 },
+            { a: 'of', t: 'dec', s: 1, tgt: 30 },
+            { a: 'of', t: 'dec', s: 1, tgt: 29 },
+            { a: 'of', t: 'dec', s: 1, tgt: 28 },
+            { a: 'of', t: 'dec', s: 1, tgt: 27 },
+            { a: 'of', t: 'dec', s: 1, tgt: 26 },
+            { a: 'of', t: 'dec', s: 1, tgt: 25 },
+            { a: 'of', t: 'dec', s: 1, tgt: 24 },
+            { a: 'of', t: 'dec', s: 1, tgt: 23 },
+            { a: 'of', t: 'dec', s: 1, tgt: 22 },
+            { a: 'of', t: 'dec', s: 1, tgt: 21 },
+            { a: 'of', t: 'dec', s: 1, tgt: 20 },
+            { a: 'of', t: 'dec', s: 1, tgt: 19 },
+            { a: 'of', t: 'dec', s: 1, tgt: 18 },
+            { a: 'of', t: 'dec', s: 1, tgt: 17 },
+            { a: 'of', t: 'dec', s: 1, tgt: 16 },
+            { a: 'of', t: 'dec', s: 1, tgt: 15 },
+            { a: 'of', t: 'dec', s: 1, tgt: 14 },
+            { a: 'of', t: 'dec', s: 1, tgt: 13 },
+            { a: 'of', t: 'dec', s: 1, tgt: 12 },
+            { a: 'of', t: 'dec', s: 1, tgt: 11 },
+            { a: 'of', t: 'dec', s: 1, tgt: 10 },
+            { a: 'of', t: 'dec', s: 1, tgt: 9 },
+            { a: 'of', t: 'dec', s: 1, tgt: 8 },
+            { a: 'of', t: 'dec', s: 1, tgt: 7 },
+            { a: 'of', t: 'dec', s: 1, tgt: 6 },
+            { a: 'of', t: 'dec', s: 1, tgt: 5 },
+            { a: 'of', t: 'dec', s: 1, tgt: 4 },
+            { a: 'of', t: 'dec', s: 1, tgt: 3 },
+            { a: 'of', t: 'dec', s: 1, tgt: 2 },
+            { a: 'of', t: 'dec', s: 2, tgt: 0 },
+        ];
+
+        // Serialized Phases Set 5: Random Smooth Transitions
+        global.NeonShapeDrawer.serializedPhasesSet5 = [
+            // Initial set
+            { a: 'of', t: 'set', v: 50 },
+        
+            // Smoothly increase speed and noiseLevel
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.0 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 2.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.5 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 4.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.0 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 6.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.5 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 8.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 3.0 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 10.0 },
+        
+            // Smoothly increase frequency and tailLength
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 2.0 },
+            { a: 'tl', t: 'inc', s: 5, tgt: 100 },
+        
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 4.0 },
+            { a: 'tl', t: 'inc', s: 5, tgt: 200 },
+        
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 6.0 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 300 },
+        
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 8.0 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 400 },
+        
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 10.0 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 500 },
+        
+            // Gradually decrease offset to zero
+            { a: 'of', t: 'dec', s: 2, tgt: 48 },
+            { a: 'of', t: 'dec', s: 2, tgt: 46 },
+            { a: 'of', t: 'dec', s: 2, tgt: 44 },
+            { a: 'of', t: 'dec', s: 2, tgt: 42 },
+            { a: 'of', t: 'dec', s: 2, tgt: 40 },
+            { a: 'of', t: 'dec', s: 2, tgt: 38 },
+            { a: 'of', t: 'dec', s: 2, tgt: 36 },
+            { a: 'of', t: 'dec', s: 2, tgt: 34 },
+            { a: 'of', t: 'dec', s: 2, tgt: 32 },
+            { a: 'of', t: 'dec', s: 2, tgt: 30 },
+            { a: 'of', t: 'dec', s: 2, tgt: 28 },
+            { a: 'of', t: 'dec', s: 2, tgt: 26 },
+            { a: 'of', t: 'dec', s: 2, tgt: 24 },
+            { a: 'of', t: 'dec', s: 2, tgt: 22 },
+            { a: 'of', t: 'dec', s: 2, tgt: 20 },
+            { a: 'of', t: 'dec', s: 2, tgt: 18 },
+            { a: 'of', t: 'dec', s: 2, tgt: 16 },
+            { a: 'of', t: 'dec', s: 2, tgt: 14 },
+            { a: 'of', t: 'dec', s: 2, tgt: 12 },
+            { a: 'of', t: 'dec', s: 2, tgt: 10 },
+            { a: 'of', t: 'dec', s: 2, tgt: 8 },
+            { a: 'of', t: 'dec', s: 2, tgt: 6 },
+            { a: 'of', t: 'dec', s: 2, tgt: 4 },
+            { a: 'of', t: 'dec', s: 2, tgt: 2 },
+            { a: 'of', t: 'dec', s: 2, tgt: 0 },
+        ];
+
+        // Serialized Phases Set 6: Zigzag Adjustments for Organic Flow
+        global.NeonShapeDrawer.serializedPhasesSet6 = [
+            // Initial set
+            { a: 'of', t: 'set', v: 50 },
+        
+            // Zigzag increase speed and frequency
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.0 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 2.0 },
+            { a: 'sp', t: 'dec', s: 0.05, tgt: 0.95 },
+            { a: 'fr', t: 'dec', s: 0.1, tgt: 1.9 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.05 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 2.1 },
+            { a: 'sp', t: 'dec', s: 0.05, tgt: 1.0 },
+            { a: 'fr', t: 'dec', s: 0.1, tgt: 2.0 },
+        
+            // Zigzag increase tailLength and noiseLevel
+            { a: 'tl', t: 'inc', s: 10, tgt: 20 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 1.0 },
+            { a: 'tl', t: 'dec', s: 10, tgt: 15 },
+            { a: 'nl', t: 'dec', s: 0.2, tgt: 0.8 },
+        
+            { a: 'tl', t: 'inc', s: 10, tgt: 25 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 1.2 },
+            { a: 'tl', t: 'dec', s: 10, tgt: 20 },
+            { a: 'nl', t: 'dec', s: 0.2, tgt: 1.0 },
+        
+            // Smooth ramp-up to final settings
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.5 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 3.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.0 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 4.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.5 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 5.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 3.0 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 6.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 3.5 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 7.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 4.0 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 8.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 4.5 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 9.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 5.0 },
+            { a: 'fr', t: 'inc', s: 0.1, tgt: 10.0 },
+        
+            // Final ramp-up for tailLength and noiseLevel
+            { a: 'tl', t: 'inc', s: 10, tgt: 600 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 2.0 },
+        
+            { a: 'tl', t: 'inc', s: 5, tgt: 800 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 4.0 },
+        
+            { a: 'tl', t: 'inc', s: 5, tgt: 1000 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 6.0 },
+        
+            { a: 'nl', t: 'inc', s: 4, tgt: 10 },
+        
+            // Gradually decrease offset to zero
+            { a: 'of', t: 'dec', s: 2, tgt: 48 },
+            { a: 'of', t: 'dec', s: 2, tgt: 46 },
+            { a: 'of', t: 'dec', s: 2, tgt: 44 },
+            { a: 'of', t: 'dec', s: 2, tgt: 42 },
+            { a: 'of', t: 'dec', s: 2, tgt: 40 },
+            { a: 'of', t: 'dec', s: 2, tgt: 38 },
+            { a: 'of', t: 'dec', s: 2, tgt: 36 },
+            { a: 'of', t: 'dec', s: 2, tgt: 34 },
+            { a: 'of', t: 'dec', s: 2, tgt: 32 },
+            { a: 'of', t: 'dec', s: 2, tgt: 30 },
+            { a: 'of', t: 'dec', s: 2, tgt: 28 },
+            { a: 'of', t: 'dec', s: 2, tgt: 26 },
+            { a: 'of', t: 'dec', s: 2, tgt: 24 },
+            { a: 'of', t: 'dec', s: 2, tgt: 22 },
+            { a: 'of', t: 'dec', s: 2, tgt: 20 },
+            { a: 'of', t: 'dec', s: 2, tgt: 18 },
+            { a: 'of', t: 'dec', s: 2, tgt: 16 },
+            { a: 'of', t: 'dec', s: 2, tgt: 14 },
+            { a: 'of', t: 'dec', s: 2, tgt: 12 },
+            { a: 'of', t: 'dec', s: 2, tgt: 10 },
+            { a: 'of', t: 'dec', s: 2, tgt: 8 },
+            { a: 'of', t: 'dec', s: 2, tgt: 6 },
+            { a: 'of', t: 'dec', s: 2, tgt: 4 },
+            { a: 'of', t: 'dec', s: 2, tgt: 2 },
+            { a: 'of', t: 'dec', s: 2, tgt: 0 },
+        ];
+
+        // Serialized Phases Set 7: Cascading Smooth Adjustments
+        global.NeonShapeDrawer.serializedPhasesSet7 = [
+            // Initial set
+            { a: 'of', t: 'set', v: 50 },
+        
+            // Cascade adjustments in a cascading manner
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.0 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 1.0 },
+        
+            { a: 'tl', t: 'inc', s: 20, tgt: 40 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 2.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 1.5 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 1.5 },
+        
+            { a: 'tl', t: 'inc', s: 20, tgt: 60 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 4.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.0 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 2.0 },
+        
+            { a: 'tl', t: 'inc', s: 20, tgt: 80 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 6.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 2.5 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 2.5 },
+        
+            { a: 'tl', t: 'inc', s: 20, tgt: 100 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 8.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 3.0 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 3.0 },
+        
+            { a: 'tl', t: 'inc', s: 20, tgt: 120 },
+            { a: 'nl', t: 'inc', s: 0.2, tgt: 10.0 },
+        
+            // Final ramp-up to full settings
+            { a: 'sp', t: 'inc', s: 0.05, tgt: 5.0 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 10.0 },
+        
+            { a: 'tl', t: 'inc', s: 100, tgt: 1000 },
+        
+            // Gradually decrease offset to zero
+            { a: 'of', t: 'dec', s: 1, tgt: 49 },
+            { a: 'of', t: 'dec', s: 1, tgt: 48 },
+            { a: 'of', t: 'dec', s: 1, tgt: 47 },
+            { a: 'of', t: 'dec', s: 1, tgt: 46 },
+            { a: 'of', t: 'dec', s: 1, tgt: 45 },
+            { a: 'of', t: 'dec', s: 1, tgt: 44 },
+            { a: 'of', t: 'dec', s: 1, tgt: 43 },
+            { a: 'of', t: 'dec', s: 1, tgt: 42 },
+            { a: 'of', t: 'dec', s: 1, tgt: 41 },
+            { a: 'of', t: 'dec', s: 1, tgt: 40 },
+            { a: 'of', t: 'dec', s: 1, tgt: 39 },
+            { a: 'of', t: 'dec', s: 1, tgt: 38 },
+            { a: 'of', t: 'dec', s: 1, tgt: 37 },
+            { a: 'of', t: 'dec', s: 1, tgt: 36 },
+            { a: 'of', t: 'dec', s: 1, tgt: 35 },
+            { a: 'of', t: 'dec', s: 1, tgt: 34 },
+            { a: 'of', t: 'dec', s: 1, tgt: 33 },
+            { a: 'of', t: 'dec', s: 1, tgt: 32 },
+            { a: 'of', t: 'dec', s: 1, tgt: 31 },
+            { a: 'of', t: 'dec', s: 1, tgt: 30 },
+            { a: 'of', t: 'dec', s: 1, tgt: 29 },
+            { a: 'of', t: 'dec', s: 1, tgt: 28 },
+            { a: 'of', t: 'dec', s: 1, tgt: 27 },
+            { a: 'of', t: 'dec', s: 1, tgt: 26 },
+            { a: 'of', t: 'dec', s: 1, tgt: 25 },
+            { a: 'of', t: 'dec', s: 1, tgt: 24 },
+            { a: 'of', t: 'dec', s: 1, tgt: 23 },
+            { a: 'of', t: 'dec', s: 1, tgt: 22 },
+            { a: 'of', t: 'dec', s: 1, tgt: 21 },
+            { a: 'of', t: 'dec', s: 1, tgt: 20 },
+            { a: 'of', t: 'dec', s: 1, tgt: 19 },
+            { a: 'of', t: 'dec', s: 1, tgt: 18 },
+            { a: 'of', t: 'dec', s: 1, tgt: 17 },
+            { a: 'of', t: 'dec', s: 1, tgt: 16 },
+            { a: 'of', t: 'dec', s: 1, tgt: 15 },
+            { a: 'of', t: 'dec', s: 1, tgt: 14 },
+            { a: 'of', t: 'dec', s: 1, tgt: 13 },
+            { a: 'of', t: 'dec', s: 1, tgt: 12 },
+            { a: 'of', t: 'dec', s: 1, tgt: 11 },
+            { a: 'of', t: 'dec', s: 1, tgt: 10 },
+            { a: 'of', t: 'dec', s: 1, tgt: 9 },
+            { a: 'of', t: 'dec', s: 1, tgt: 8 },
+            { a: 'of', t: 'dec', s: 1, tgt: 7 },
+            { a: 'of', t: 'dec', s: 1, tgt: 6 },
+            { a: 'of', t: 'dec', s: 1, tgt: 5 },
+            { a: 'of', t: 'dec', s: 1, tgt: 4 },
+            { a: 'of', t: 'dec', s: 1, tgt: 3 },
+            { a: 'of', t: 'dec', s: 1, tgt: 2 },
+            { a: 'of', t: 'dec', s: 2, tgt: 0 },
+        ];
+
+        // Serialized Phases Set 8: Wave-Like Adjustments
+        global.NeonShapeDrawer.serializedPhasesSet8 = [
+            // Initial set
+            { a: 'of', t: 'set', v: 50 },
+        
+            // Wave 1
+            { a: 'sp', t: 'inc', s: 0.03, tgt: 0.5 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 1.5 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 30 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 1.0 },
+        
+            { a: 'sp', t: 'dec', s: 0.03, tgt: 0.4 },
+            { a: 'fr', t: 'dec', s: 0.05, tgt: 1.4 },
+            { a: 'tl', t: 'dec', s: 10, tgt: 25 },
+            { a: 'nl', t: 'dec', s: 0.1, tgt: 0.8 },
+        
+            // Wave 2
+            { a: 'sp', t: 'inc', s: 0.03, tgt: 0.6 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 1.6 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 35 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 1.2 },
+        
+            { a: 'sp', t: 'dec', s: 0.03, tgt: 0.5 },
+            { a: 'fr', t: 'dec', s: 0.05, tgt: 1.5 },
+            { a: 'tl', t: 'dec', s: 10, tgt: 30 },
+            { a: 'nl', t: 'dec', s: 0.1, tgt: 1.0 },
+        
+            // Wave 3
+            { a: 'sp', t: 'inc', s: 0.03, tgt: 0.7 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 1.7 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 40 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 1.4 },
+        
+            { a: 'sp', t: 'dec', s: 0.03, tgt: 0.6 },
+            { a: 'fr', t: 'dec', s: 0.05, tgt: 1.6 },
+            { a: 'tl', t: 'dec', s: 10, tgt: 35 },
+            { a: 'nl', t: 'dec', s: 0.1, tgt: 1.2 },
+        
+            // Smooth ramp-up to final settings
+            { a: 'sp', t: 'inc', s: 0.1, tgt: 5.0 },
+            { a: 'fr', t: 'inc', s: 0.2, tgt: 10.0 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 1000 },
+            { a: 'nl', t: 'inc', s: 0.5, tgt: 10.0 },
+        
+            // Gradually decrease offset to zero
+            { a: 'of', t: 'dec', s: 2, tgt: 48 },
+            { a: 'of', t: 'dec', s: 2, tgt: 46 },
+            { a: 'of', t: 'dec', s: 2, tgt: 44 },
+            { a: 'of', t: 'dec', s: 2, tgt: 42 },
+            { a: 'of', t: 'dec', s: 2, tgt: 40 },
+            { a: 'of', t: 'dec', s: 2, tgt: 38 },
+            { a: 'of', t: 'dec', s: 2, tgt: 36 },
+            { a: 'of', t: 'dec', s: 2, tgt: 34 },
+            { a: 'of', t: 'dec', s: 2, tgt: 32 },
+            { a: 'of', t: 'dec', s: 2, tgt: 30 },
+            { a: 'of', t: 'dec', s: 2, tgt: 28 },
+            { a: 'of', t: 'dec', s: 2, tgt: 26 },
+            { a: 'of', t: 'dec', s: 2, tgt: 24 },
+            { a: 'of', t: 'dec', s: 2, tgt: 22 },
+            { a: 'of', t: 'dec', s: 2, tgt: 20 },
+            { a: 'of', t: 'dec', s: 2, tgt: 18 },
+            { a: 'of', t: 'dec', s: 2, tgt: 16 },
+            { a: 'of', t: 'dec', s: 2, tgt: 14 },
+            { a: 'of', t: 'dec', s: 2, tgt: 12 },
+            { a: 'of', t: 'dec', s: 2, tgt: 10 },
+            { a: 'of', t: 'dec', s: 2, tgt: 8 },
+            { a: 'of', t: 'dec', s: 2, tgt: 6 },
+            { a: 'of', t: 'dec', s: 2, tgt: 4 },
+            { a: 'of', t: 'dec', s: 2, tgt: 2 },
+            { a: 'of', t: 'dec', s: 2, tgt: 0 },
+        ];
+
+        // Serialized Phases Set 9: Gradual Overlapping Adjustments
+        global.NeonShapeDrawer.serializedPhasesSet9 = [
+            // Initial set
+            { a: 'of', t: 'set', v: 50 },
+        
+            // Start overlapping adjustments
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 1.0 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 1.5 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 1.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 1.5 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 2.0 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 2.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 2.0 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 2.5 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 3.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 2.5 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 3.0 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 4.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 3.0 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 3.5 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 5.0 },
+        
+            // Continue overlapping adjustments
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 3.5 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 4.0 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 6.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 4.0 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 4.5 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 7.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 4.5 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 5.0 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 8.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 5.0 },
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 5.5 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 9.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 5.0 }, // Maintain speed
+            { a: 'fr', t: 'inc', s: 0.05, tgt: 6.0 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 10.0 },
+        
+            { a: 'tl', t: 'inc', s: 5, tgt: 100 },
+            { a: 'tl', t: 'inc', s: 5, tgt: 150 },
+            { a: 'tl', t: 'inc', s: 5, tgt: 200 },
+            { a: 'tl', t: 'inc', s: 5, tgt: 250 },
+            { a: 'tl', t: 'inc', s: 5, tgt: 300 },
+            { a: 'tl', t: 'inc', s: 5, tgt: 350 },
+            { a: 'tl', t: 'inc', s: 5, tgt: 400 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 500 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 600 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 700 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 800 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 900 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 1000 },
+        
+            // Gradually decrease offset to zero
+            { a: 'of', t: 'dec', s: 2, tgt: 48 },
+            { a: 'of', t: 'dec', s: 2, tgt: 46 },
+            { a: 'of', t: 'dec', s: 2, tgt: 44 },
+            { a: 'of', t: 'dec', s: 2, tgt: 42 },
+            { a: 'of', t: 'dec', s: 2, tgt: 40 },
+            { a: 'of', t: 'dec', s: 2, tgt: 38 },
+            { a: 'of', t: 'dec', s: 2, tgt: 36 },
+            { a: 'of', t: 'dec', s: 2, tgt: 34 },
+            { a: 'of', t: 'dec', s: 2, tgt: 32 },
+            { a: 'of', t: 'dec', s: 2, tgt: 30 },
+            { a: 'of', t: 'dec', s: 2, tgt: 28 },
+            { a: 'of', t: 'dec', s: 2, tgt: 26 },
+            { a: 'of', t: 'dec', s: 2, tgt: 24 },
+            { a: 'of', t: 'dec', s: 2, tgt: 22 },
+            { a: 'of', t: 'dec', s: 2, tgt: 20 },
+            { a: 'of', t: 'dec', s: 2, tgt: 18 },
+            { a: 'of', t: 'dec', s: 2, tgt: 16 },
+            { a: 'of', t: 'dec', s: 2, tgt: 14 },
+            { a: 'of', t: 'dec', s: 2, tgt: 12 },
+            { a: 'of', t: 'dec', s: 2, tgt: 10 },
+            { a: 'of', t: 'dec', s: 2, tgt: 8 },
+            { a: 'of', t: 'dec', s: 2, tgt: 6 },
+            { a: 'of', t: 'dec', s: 2, tgt: 4 },
+            { a: 'of', t: 'dec', s: 2, tgt: 2 },
+            { a: 'of', t: 'dec', s: 2, tgt: 0 },
+        ];
+
+        // Serialized Phases Set 10: Spiral Adjustments for Complex Flow
+        global.NeonShapeDrawer.serializedPhasesSet10 = [
+            // Initial set
+            { a: 'of', t: 'set', v: 50 },
+        
+            // Spiral outward adjustments
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 0.6 },
+            { a: 'fr', t: 'inc', s: 0.04, tgt: 1.2 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 30 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 1.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 0.8 },
+            { a: 'fr', t: 'inc', s: 0.04, tgt: 1.6 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 40 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 2.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 1.0 },
+            { a: 'fr', t: 'inc', s: 0.04, tgt: 2.0 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 50 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 3.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 1.2 },
+            { a: 'fr', t: 'inc', s: 0.04, tgt: 2.4 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 60 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 4.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 1.4 },
+            { a: 'fr', t: 'inc', s: 0.04, tgt: 2.8 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 70 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 5.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 1.6 },
+            { a: 'fr', t: 'inc', s: 0.04, tgt: 3.2 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 80 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 6.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 1.8 },
+            { a: 'fr', t: 'inc', s: 0.04, tgt: 3.6 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 90 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 7.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 2.0 },
+            { a: 'fr', t: 'inc', s: 0.04, tgt: 4.0 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 100 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 8.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 2.2 },
+            { a: 'fr', t: 'inc', s: 0.04, tgt: 4.4 },
+            { a: 'tl', t: 'inc', s: 5, tgt: 110 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 9.0 },
+        
+            { a: 'sp', t: 'inc', s: 0.02, tgt: 2.4 },
+            { a: 'fr', t: 'inc', s: 0.04, tgt: 4.8 },
+            { a: 'tl', t: 'inc', s: 5, tgt: 120 },
+            { a: 'nl', t: 'inc', s: 0.1, tgt: 10.0 },
+        
+            // Final ramp-up to full settings
+            { a: 'sp', t: 'inc', s: 0.1, tgt: 5.0 },
+            { a: 'fr', t: 'inc', s: 0.2, tgt: 10.0 },
+            { a: 'tl', t: 'inc', s: 10, tgt: 1000 },
+            { a: 'nl', t: 'inc', s: 0.5, tgt: 10.0 },
+        
+            // Gradually decrease offset to zero
+            { a: 'of', t: 'dec', s: 2, tgt: 48 },
+            { a: 'of', t: 'dec', s: 2, tgt: 46 },
+            { a: 'of', t: 'dec', s: 2, tgt: 44 },
+            { a: 'of', t: 'dec', s: 2, tgt: 42 },
+            { a: 'of', t: 'dec', s: 2, tgt: 40 },
+            { a: 'of', t: 'dec', s: 2, tgt: 38 },
+            { a: 'of', t: 'dec', s: 2, tgt: 36 },
+            { a: 'of', t: 'dec', s: 2, tgt: 34 },
+            { a: 'of', t: 'dec', s: 2, tgt: 32 },
+            { a: 'of', t: 'dec', s: 2, tgt: 30 },
+            { a: 'of', t: 'dec', s: 2, tgt: 28 },
+            { a: 'of', t: 'dec', s: 2, tgt: 26 },
+            { a: 'of', t: 'dec', s: 2, tgt: 24 },
+            { a: 'of', t: 'dec', s: 2, tgt: 22 },
+            { a: 'of', t: 'dec', s: 2, tgt: 20 },
+            { a: 'of', t: 'dec', s: 2, tgt: 18 },
+            { a: 'of', t: 'dec', s: 2, tgt: 16 },
+            { a: 'of', t: 'dec', s: 2, tgt: 14 },
+            { a: 'of', t: 'dec', s: 2, tgt: 12 },
+            { a: 'of', t: 'dec', s: 2, tgt: 10 },
+            { a: 'of', t: 'dec', s: 2, tgt: 8 },
+            { a: 'of', t: 'dec', s: 2, tgt: 6 },
+            { a: 'of', t: 'dec', s: 2, tgt: 4 },
+            { a: 'of', t: 'dec', s: 2, tgt: 2 },
+            { a: 'of', t: 'dec', s: 2, tgt: 0 },
+        ];
+
+
+        /* Function to Set Current Serialized Phases */
+        /**
+         * Sets the current serializedPhases to one of the predefined sets.
+         * @param {number} setNumber - The number of the serializedPhases set (1-10).
+         */
+        global.NeonShapeDrawer.setSerializedPhases = function(setNumber) {
+            const setName = 'serializedPhasesSet' + setNumber;
+            if(global.NeonShapeDrawer[setName]) {
+                global.NeonShapeDrawer.serializedPhases = global.NeonShapeDrawer[setName];
+                console.log(`Serialized phases set to ${setName}`);
+                // Optionally, reinitialize step sequence and restart interval if needed
+                if(typeof global.NeonShapeDrawer.generateStepSequence === 'function') {
+                    global.NeonShapeDrawer.generateStepSequence();
+                }
+                if(typeof global.NeonShapeDrawer.startStepInterval === 'function') {
+                    global.NeonShapeDrawer.startStepInterval();
+                }
+            } else {
+                console.error(`Serialized phases set ${setName} does not exist.`);
+            }
+        };
+
+        /* Default Initialization with Set 1 */
+        global.NeonShapeDrawer.setSerializedPhases(9); // Default to Set 1
+
+    })(window);
+</script>
+
+    <!-- Utilities Script -->
+    <script>
+        (function(global) {
+            const NS = global.NeonShapeDrawer;
+
+            // Utility Functions for Shape Points
+            NS.getShapePoints = function(name, c) {
+                const shapeFunctions = {
+                    "Capsule": () => NS.getCapsulePoints(c, 400, 200),
+                    "Oval": () => NS.getOvalPoints(c, 400, 200),
+                    "Circle": () => NS.getOvalPoints(c, 250, 250),
+                    "Diamond": () => NS.interpolateShape([
+                        { x: c.x, y: c.y - 100 },
+                        { x: c.x + 150, y: c.y },
+                        { x: c.x, y: c.y + 100 },
+                        { x: c.x - 150, y: c.y }
+                    ], 50),
+                    "Pentagon": () => NS.interpolateShape(NS.generateVertices(c, 150, 5, -Math.PI / 2), 50),
+                    "Hexagon": () => NS.interpolateShape(NS.generateVertices(c, 150, 6, -Math.PI / 2), 50),
+                    "Star": () => NS.interpolateShape(NS.generateStarVertices(c, 150, 75, 5, -Math.PI / 2), 50),
+                    "Rectangle": () => NS.getRectanglePoints(c, 300, 200, 50),
+                    "ReuleauxTriangle": () => NS.getReuleauxTrianglePoints(c, 150, 300)
+                };
+                return shapeFunctions[name] ? shapeFunctions[name]() : [];
+            };
+
+            NS.getOvalPoints = function(c, w, h, numPoints = 360) {
+                const points = [];
+                for (let a = 0; a < numPoints; a++) {
+                    const rad = a * Math.PI / 180;
+                    points.push({ x: c.x + (w / 2) * Math.cos(rad), y: c.y + (h / 2) * Math.sin(rad) });
+                }
+                return points;
+            };
+
+            NS.getCapsulePoints = function(c, width, height, numPoints = 360) {
+                const pts = [];
+                const radius = height / 2;
+                let halfWidth = Math.max(width / 2 - radius, 0);
+                for (let i = 0; i < numPoints; i++) {
+                    const p = i / numPoints;
+                    let x, y;
+                    if (p < 0.25) {
+                        const angle = (Math.PI / 2) + (p / 0.25) * Math.PI;
+                        x = c.x - halfWidth + radius * Math.cos(angle);
+                        y = c.y + radius * Math.sin(angle);
+                    } else if (p < 0.5) {
+                        const t = (p - 0.25) / 0.25;
+                        x = (c.x - halfWidth) + (2 * halfWidth) * t;
+                        y = c.y - radius;
+                    } else if (p < 0.75) {
+                        const angle = (3 * Math.PI / 2) + ((p - 0.5) / 0.25) * Math.PI;
+                        x = c.x + halfWidth + radius * Math.cos(angle);
+                        y = c.y + radius * Math.sin(angle);
+                    } else {
+                        const t = (p - 0.75) / 0.25;
+                        x = (c.x + halfWidth) - (2 * halfWidth) * t;
+                        y = c.y + radius;
+                    }
+                    pts.push({ x, y });
+                }
+                return pts;
+            };
+
+            NS.generateVertices = function(c, r, sides, angleOffset = 0) {
+                const verts = [];
+                for (let i = 0; i < sides; i++) {
+                    verts.push({
+                        x: c.x + r * Math.cos(angleOffset + 2 * Math.PI * i / sides),
+                        y: c.y + r * Math.sin(angleOffset + 2 * Math.PI * i / sides)
+                    });
+                }
+                return verts;
+            };
+
+            NS.generateStarVertices = function(c, outerR, innerR, points, angleOffset = 0) {
+                const verts = [];
+                for (let i = 0; i < points * 2; i++) {
+                    const angle = angleOffset + i * Math.PI / points;
+                    const r = (i % 2 === 0) ? outerR : innerR;
+                    verts.push({ x: c.x + r * Math.cos(angle), y: c.y + r * Math.sin(angle) });
+                }
+                return verts;
+            };
+
+            NS.interpolateShape = function(verts, pointsPerSide) {
+                const pts = [];
+                verts.forEach((p0, i) => {
+                    const p1 = verts[(i + 1) % verts.length];
+                    for (let t = 0; t < pointsPerSide; t++) {
+                        pts.push({
+                            x: p0.x + (p1.x - p0.x) * t / pointsPerSide,
+                            y: p0.y + (p1.y - p0.y) * t / pointsPerSide
+                        });
+                    }
+                });
+                return pts;
+            };
+
+            NS.getRectanglePoints = function(c, width, height, pointsPerSide = 50) {
+                const halfW = width / 2, halfH = height / 2;
+                const corners = [
+                    { x: c.x - halfW, y: c.y - halfH },
+                    { x: c.x + halfW, y: c.y - halfH },
+                    { x: c.x + halfW, y: c.y + halfH },
+                    { x: c.x - halfW, y: c.y + halfH }
+                ];
+                return NS.interpolateShape(corners, pointsPerSide);
+            };
+
+            NS.getReuleauxTrianglePoints = function(c, radius, numPoints = 300) {
+                const points = [];
+                const numPointsPerArc = Math.floor(numPoints / 3);
+                const angleOffset = -Math.PI / 2; // Start pointing upwards
+
+                // Calculate the correct arc radius (side length of the equilateral triangle)
+                const arcRadius = radius * Math.sqrt(3);
+
+                // Calculate the three vertices of the equilateral triangle
+                const vertices = [];
+                for (let i = 0; i < 3; i++) {
+                    const angle = angleOffset + (2 * Math.PI * i) / 3;
+                    vertices.push({
+                        x: c.x + radius * Math.cos(angle),
+                        y: c.y + radius * Math.sin(angle)
+                    });
+                }
+
+                // For each arc, draw from one vertex to the next, centered at the opposite vertex
+                for (let i = 0; i < 3; i++) {
+                    const startVertex = vertices[i];
+                    const endVertex = vertices[(i + 1) % 3];
+                    const centerVertex = vertices[(i + 2) % 3];
+
+                    // Compute the angle from the centerVertex to startVertex and endVertex
+                    let startAngle = Math.atan2(startVertex.y - centerVertex.y, startVertex.x - centerVertex.x);
+                    let endAngle = Math.atan2(endVertex.y - centerVertex.y, endVertex.x - centerVertex.x);
+
+                    // Adjust angles for proper drawing direction
+                    if (endAngle < startAngle) {
+                        endAngle += 2 * Math.PI;
+                    }
+
+                    const angleStep = (endAngle - startAngle) / numPointsPerArc;
+
+                    for (let j = 0; j < numPointsPerArc; j++) {
+                        const angle = startAngle + j * angleStep;
+                        points.push({
+                            x: centerVertex.x + arcRadius * Math.cos(angle),
+                            y: centerVertex.y + arcRadius * Math.sin(angle)
+                        });
+                    }
+                }
+                return points;
+            };
+        })(window);
+    </script>
+
+    <!-- Shape Class Script -->
+    <script>
+        (function(global) {
+            const NS = global.NeonShapeDrawer;
+
+            NS.Shape = function(canvas, shapeName, settings) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.shapeName = shapeName;
+                this.settings = settings;
+                this.animationIndex = 0;
+                this.oscillationOffset = 0;
+                this.center = { x: 0, y: 0 };
+                this.shapePoints = [];
+
+                this.resizeCanvas();
+                window.addEventListener('resize', this.resizeCanvas.bind(this));
+
+                this.shapePoints = NS.getShapePoints(this.shapeName, this.center);
+                this.animate();
+            };
+
+            NS.Shape.prototype.resizeCanvas = function() {
+                const parent = this.canvas.parentElement;
+                this.canvas.width = parent.clientWidth;
+                this.canvas.height = parent.clientHeight;
+                this.center = { x: this.canvas.width / 2, y: this.canvas.height / 2 };
+                this.shapePoints = NS.getShapePoints(this.shapeName, this.center);
+            };
+
+            NS.Shape.prototype.setSettings = function(newSettings) {
+                Object.assign(this.settings, newSettings);
+            };
+
+            NS.Shape.prototype.animate = function() {
+                const { speed, offset, frequency, tailLength, noiseLevel } = this.settings;
+                this.ctx.fillStyle = '#000';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                if (this.shapePoints.length > 0) {
+                    this.animationIndex = (this.animationIndex + speed / 10) % this.shapePoints.length;
+                    this.oscillationOffset += frequency * 0.05;
+                    for (let i = 0; i < tailLength; i++) {
+                        let idx = Math.floor((this.animationIndex - i * (speed / 10)) % this.shapePoints.length);
+                        if (idx < 0) idx += this.shapePoints.length;
+                        const idxNext = (idx + 1) % this.shapePoints.length;
+                        const pCurrent = this.shapePoints[idx], pNext = this.shapePoints[idxNext];
+                        const dx = pNext.x - pCurrent.x, dy = pNext.y - pCurrent.y;
+                        const length = Math.hypot(dx, dy) || 1;
+                        const perp = { x: -dy / length, y: dx / length };
+                        const osc = Math.sin(this.oscillationOffset + i * 0.3) * offset * (1 - i / tailLength);
+                        const noise = () => (Math.random() - 0.5) * 2 * noiseLevel;
+                        const nx = pCurrent.x + perp.x * osc + noise(), ny = pCurrent.y + perp.y * osc + noise();
+                        const nnx = pNext.x + perp.x * osc + noise(), nny = pNext.y + perp.y * osc + noise();
+                        const fade = Math.max(0, 255 - Math.floor((i / tailLength) * 255));
+                        this.ctx.strokeStyle = `rgba(57,255,${Math.min(20, fade)},1)`;
+                        this.ctx.lineWidth = 2;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(nx, ny);
+                        this.ctx.lineTo(nnx, nny);
+                        this.ctx.stroke();
+                    }
+                }
+                requestAnimationFrame(this.animate.bind(this));
+            };
+        })(window);
+    </script>
+
+    <!-- Main Application Script -->
+    <script>
+        (function(global) {
+            const NS = global.NeonShapeDrawer;
+
+            // Configuration Constants
+            NS.SHAPE_NAMES = ["Capsule", "Star", "Pentagon", "Oval", "Diamond", "Circle", "Hexagon", "ReuleauxTriangle", "Rectangle"];
+            NS.TOTAL_CANVASES = NS.SHAPE_NAMES.length + 1; // +1 for controls
+
+            // Initial Settings
+            NS.settings = {
+                speed: 0.1,
+                offset: 0,
+                frequency: 1,
+                tailLength: 1,
+                noiseLevel: 0,
+                timeSpeed: 10
+            };
+
+            NS.stepIntervalID = null;
+            NS.stepSequence = [];
+            NS.currentStepIndex = 0;
+
+            // Generate Step Sequence from Serialized Instructions
+            NS.generateStepSequence = function() {
+                NS.stepSequence = [];
+                const tempSettings = Object.assign({}, NS.settings);
+
+                NS.serializedPhases.forEach(function(phase) {
+                    const { a, t, s, tgt, v } = phase; // a: abbreviation, t: type, s: step, tgt: target, v: value (for set)
+                    const property = NS.ABBREV_TO_SETTING[a];
+                    if (!property) {
+                        console.warn(`Unknown abbreviation: ${a}`);
+                        return;
+                    }
+
+                    if (t === 'set') {
+                        NS.stepSequence.push({ property: property, value: v });
+                        tempSettings[property] = v;
+                    } else {
+                        const direction = t === 'inc' ? 1 : -1;
+                        let nextValue = tempSettings[property] + direction * s;
+                        const compare = t === 'inc' ? 
+                            function(val) { return val <= tgt; } : 
+                            function(val) { return val >= tgt; };
+                        const decimalPlaces = (s.toString().split('.')[1] || '').length;
+
+                        while (compare(nextValue)) {
+                            const roundedValue = parseFloat(nextValue.toFixed(decimalPlaces));
+                            NS.stepSequence.push({ property: property, value: roundedValue });
+                            tempSettings[property] = roundedValue;
+                            nextValue += direction * s;
+                        }
+                        // Ensure target is included
+                        if ((direction === 1 && tempSettings[property] < tgt) ||
+                            (direction === -1 && tempSettings[property] > tgt)) {
+                            NS.stepSequence.push({ property: property, value: tgt });
+                            tempSettings[property] = tgt;
+                        }
+                    }
+                });
+
+                console.log(`Total steps to be executed: ${NS.stepSequence.length}`);
+            };
+
+            // Apply a Single Step
+            NS.applyStep = function(step) {
+                const { property, value } = step;
+                NS.settings[property] = value;
+                NS.applySettings();
+                NS.updateControls();
+                console.log(`Set ${property} to ${value}`);
+            };
+
+            // Apply Settings to All Shapes
+            NS.applySettings = function() {
+                NS.shapeInstances.forEach(function(shape) {
+                    shape.setSettings(NS.settings);
+                });
+            };
+
+            // Update Control Displays
+            NS.updateControls = function() {
+                for (const key in NS.controlValues) {
+                    if (NS.controlValues.hasOwnProperty(key)) {
+                        NS.controlValues[key].textContent = NS.settings[key].toFixed ? NS.settings[key].toFixed(1) : NS.settings[key];
+                        if (parseFloat(NS.controls[key].value) !== NS.settings[key]) {
+                            NS.controls[key].value = NS.settings[key];
+                        }
+                    }
+                }
+            };
+
+            // Start Step Interval
+            NS.startStepInterval = function() {
+                clearInterval(NS.stepIntervalID);
+                const intervalDuration = 1000 / NS.settings.timeSpeed;
+                NS.stepIntervalID = setInterval(function() {
+                    if (NS.currentStepIndex >= NS.stepSequence.length) {
+                        console.log("All steps completed.");
+                        clearInterval(NS.stepIntervalID);
+                        return;
+                    }
+                    NS.applyStep(NS.stepSequence[NS.currentStepIndex++]);
+                }, intervalDuration);
+            };
+
+            // Restart Interval when Time Speed Changes
+            NS.restartStepInterval = function() {
+                NS.startStepInterval();
+            };
+
+            // Initialize the Application
+            NS.init = function() {
+                NS.generateStepSequence();
+                NS.startStepInterval();
+                NS.updateControls();
+            };
+
+            // Generate Canvas Containers Dynamically
+            NS.generateCanvasContainers = function() {
+                const mainContainer = document.getElementById('main');
+                NS.SHAPE_NAMES.forEach(function(name, index) {
+                    const container = document.createElement('div');
+                    container.classList.add('canvas-container');
+                    const canvas = document.createElement('canvas');
+                    canvas.id = `drawing-canvas-${index + 1}`;
+                    container.appendChild(canvas);
+                    mainContainer.appendChild(container);
+                });
+            };
+
+            // Create Controls Panel with Abbreviations
+            NS.createControlsPanel = function() {
+                const mainContainer = document.getElementById('main');
+                const controlsContainer = document.createElement('div');
+                controlsContainer.classList.add('canvas-container');
+                const controlsPanel = document.createElement('div');
+                controlsPanel.classList.add('controls-panel');
+                controlsPanel.id = 'controls-panel';
+
+                // Generate Control Groups
+                const controlHTML = [
+                    { id: 'speed', label: `Speed [${NS.SETTING_ABBREVIATIONS.speed}]`, min: 0.1, max: 5.0, step: 0.1, value: NS.settings.speed },
+                    { id: 'offset', label: `Offset [${NS.SETTING_ABBREVIATIONS.offset}]`, min: 0, max: 50, step: 5, value: NS.settings.offset },
+                    { id: 'frequency', label: `Frequency [${NS.SETTING_ABBREVIATIONS.frequency}]`, min: 0.1, max: 5.0, step: 0.1, value: NS.settings.frequency },
+                    { id: 'tailLength', label: `Tail Length [${NS.SETTING_ABBREVIATIONS.tailLength}]`, min: 1, max: 1000, step: 10, value: NS.settings.tailLength },
+                    { id: 'noiseLevel', label: `Noise Level [${NS.SETTING_ABBREVIATIONS.noiseLevel}]`, min: 0, max: 10, step: 1, value: NS.settings.noiseLevel },
+                    { id: 'timeSpeed', label: `Time Speed [${NS.SETTING_ABBREVIATIONS.timeSpeed}]`, min: 0.1, max: 10.0, step: 0.1, value: NS.settings.timeSpeed }
+                ].map(function(ctrl) {
+                    return `
+                        <div class="control-group">
+                            <label for="${ctrl.id}-control">${ctrl.label}: <span id="${ctrl.id}-value">${ctrl.value}</span></label>
+                            <input type="range" id="${ctrl.id}-control" min="${ctrl.min}" max="${ctrl.max}" step="${ctrl.step}" value="${ctrl.value}">
+                        </div>
+                    `;
+                }).join('');
+
+                controlsPanel.innerHTML = `
+                    <h2>Controls</h2>
+                    ${controlHTML}
+                `;
+
+                controlsContainer.appendChild(controlsPanel);
+                mainContainer.appendChild(controlsContainer);
+            };
+
+            // Initialize Shapes
+            NS.initializeShapes = function() {
+                NS.shapeInstances = [];
+                NS.SHAPE_NAMES.forEach(function(name, index) {
+                    const canvas = document.getElementById(`drawing-canvas-${index + 1}`);
+                    const shape = new NS.Shape(canvas, name, NS.settings);
+                    NS.shapeInstances.push(shape);
+                });
+            };
+
+            // Setup Controls
+            NS.setupControls = function() {
+                NS.controls = {
+                    speed: document.getElementById('speed-control'),
+                    offset: document.getElementById('offset-control'),
+                    frequency: document.getElementById('frequency-control'),
+                    tailLength: document.getElementById('tailLength-control'),
+                    noiseLevel: document.getElementById('noiseLevel-control'),
+                    timeSpeed: document.getElementById('timeSpeed-control')
+                };
+
+                NS.controlValues = {
+                    speed: document.getElementById('speed-value'),
+                    offset: document.getElementById('offset-value'),
+                    frequency: document.getElementById('frequency-value'),
+                    tailLength: document.getElementById('tailLength-value'),
+                    noiseLevel: document.getElementById('noiseLevel-value'),
+                    timeSpeed: document.getElementById('timeSpeed-value')
+                };
+
+                // Event Listeners for Controls
+                for (const key in NS.controls) {
+                    if (NS.controls.hasOwnProperty(key)) {
+                        NS.controls[key].addEventListener('input', function(e) {
+                            const value = parseFloat(e.target.value);
+                            NS.settings[key] = isNaN(value) ? e.target.value : value;
+                            NS.controlValues[key].textContent = NS.settings[key].toFixed ? NS.settings[key].toFixed(1) : NS.settings[key];
+                            NS.applySettings();
+                            if (key === 'timeSpeed') {
+                                NS.restartStepInterval();
+                            }
+                        });
+                    }
+                }
+            };
+
+            // Function to Load External Serialized Instructions (Future Use)
+            NS.loadExternalInstructions = function(newSerializedPhases) {
+                if (Array.isArray(newSerializedPhases)) {
+                    // Replace the existing serializedPhases
+                    NS.serializedPhases.length = 0; // Clear current phases
+                    newSerializedPhases.forEach(function(phase) {
+                        NS.serializedPhases.push(phase);
+                    });
+
+                    // Reset current step sequence
+                    NS.stepSequence = [];
+                    NS.currentStepIndex = 0;
+                    NS.generateStepSequence();
+                    NS.startStepInterval();
+                } else {
+                    console.error("Invalid serializedInstructions format. Expected an array.");
+                }
+            };
+
+            // Initialize the entire application
+            NS.initApplication = function() {
+                NS.generateCanvasContainers();
+                NS.createControlsPanel();
+                NS.initializeShapes();
+                NS.setupControls();
+                NS.init();
+            };
+
+            // Run the application once the DOM is fully loaded
+            document.addEventListener('DOMContentLoaded', NS.initApplication);
+        })(window);
+    </script>
+</body>
+</html>

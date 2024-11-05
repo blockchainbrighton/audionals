@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Web3 Audio Sequencer Playback Engine Test</title>
+</head>
+<body>
+    <h1>Web3 Audio Sequencer Playback Engine Test</h1>
+    <p>Check the console for the 2D array of songs and channels with metadata.</p>
+
+    <!-- Section 1 - Load Song Files and Create 2D Channel Array with All Metadata -->
+    <!-- This section also sets flags for single or multiple songs in the array -->
+    <script>
+        // ---------------------- Global Data ---------------------- //
+        window.globalData = {
+            isSingleSong: false,
+            isMultipleSongs: false,
+            songs: []
+        };
+
+        // ---------------------- Configuration ---------------------- //
+
+        // Key mapping for deserialization process
+        const keyMap = {
+            0: "projectName",
+            1: "artistName",
+            2: "projectBPM",
+            3: "currentSequence",
+            4: "channelURLs",
+            5: "channelVolume",
+            6: "channelPlaybackSpeed",
+            7: "trimSettings",
+            8: "projectChannelNames",
+            9: "startSliderValue",
+            10: "endSliderValue",
+            11: "totalSampleDuration",
+            12: "start",
+            13: "end",
+            14: "projectSequences",
+            15: "steps"
+        };
+
+        // Reverse keyMap for reverse lookup
+        const reverseKeyMap = Object.fromEntries(
+            Object.entries(keyMap).map(([key, value]) => [value, +key])
+        );
+
+        // Create a map of letters 'A' to 'Z' representing channels
+        const channelMap = Array.from({ length: 26 }, (_, index) => String.fromCharCode(65 + index));
+
+        // Reverse map to convert channel letters back to their index
+        const reverseChannelMap = Object.fromEntries(
+            channelMap.map((letter, index) => [letter, index])
+        );
+
+        // ---------------------- Utility Functions ---------------------- //
+
+        /**
+         * Load the Pako library dynamically from a Web3 content endpoint.
+         */
+        const loadPako = async () => {
+            try {
+                // Load Pako from Web3 content endpoint
+                const pakoUrl = "/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0";
+                const response = await fetch(pakoUrl);
+                if (!response.ok) throw new Error(`Failed to fetch Pako script: ${response.statusText}`);
+
+                const textContent = await response.text();
+                const scriptContent = new DOMParser().parseFromString(textContent, "text/html").querySelector("script")?.textContent;
+
+                if (!scriptContent?.includes("pako")) {
+                    throw new Error("Pako library not found in the fetched content.");
+                }
+
+                const scriptElement = document.createElement("script");
+                scriptElement.textContent = scriptContent;
+                document.head.appendChild(scriptElement);
+
+                console.log("Pako library loaded successfully from Web3 content endpoint.");
+            } catch (error) {
+                console.error("Error loading Pako library:", error);
+                throw error;
+            }
+        };
+
+        /**
+         * Decompress the steps data.
+         * @param {Array} steps - The steps data to decompress.
+         * @returns {Array} - The decompressed steps.
+         */
+        const decompressSteps = (steps) => steps.flatMap(step => {
+            if (typeof step === "number") return step;
+
+            if (step && typeof step === "object" && "r" in step) {
+                const [start, end] = step.r;
+                return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+            }
+
+            if (typeof step === "string" && step.endsWith("r")) {
+                return { index: parseInt(step.slice(0, -1), 10), reverse: true };
+            }
+
+            return [];
+        });
+
+        /**
+         * Deserialize the fetched JSON data using the provided keyMap.
+         * @param {Object} data - The JSON data to deserialize.
+         * @returns {Object} - The deserialized data.
+         */
+        const deserialize = (data) => {
+            const recursiveDeserialize = (obj) => {
+                if (Array.isArray(obj)) {
+                    return obj.map(item => (typeof item === "object" ? recursiveDeserialize(item) : item));
+                }
+                if (obj && typeof obj === "object") {
+                    return Object.entries(obj).reduce((acc, [key, value]) => {
+                        const mappedKey = keyMap[key] || key;
+                        if (mappedKey === "projectSequences") {
+                            acc[mappedKey] = Object.entries(value).reduce((sequenceAcc, [seqKey, seqValue]) => {
+                                const sequenceName = seqKey.replace(/^s/, "Sequence");
+                                sequenceAcc[sequenceName] = Object.entries(seqValue).reduce((trackAcc, [trackKey, trackValue]) => {
+                                    const channelName = `ch${reverseChannelMap[trackKey]}`;
+                                    const steps = trackValue[reverseKeyMap.steps] || [];
+                                    trackAcc[channelName] = {
+                                        steps: decompressSteps(steps)
+                                    };
+                                    return trackAcc;
+                                }, {});
+                                return sequenceAcc;
+                            }, {});
+                        } else {
+                            acc[mappedKey] = recursiveDeserialize(value);
+                        }
+                        return acc;
+                    }, {});
+                }
+                return obj;
+            };
+
+            return recursiveDeserialize(data);
+        };
+
+        /**
+         * Fetch and deserialize data from a given URL.
+         * @param {string} url - The URL to fetch data from.
+         * @returns {Object} - The deserialized data.
+         */
+        const fetchAndDeserialize = async (url) => {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Network response was not ok for URL: ${url}`);
+
+                const arrayBuffer = await response.arrayBuffer();
+                const inflatedData = pako.inflate(new Uint8Array(arrayBuffer));
+                const jsonString = new TextDecoder("utf-8").decode(inflatedData);
+                return deserialize(JSON.parse(jsonString));
+            } catch (error) {
+                console.error(`Error in fetchAndDeserialize for URL ${url}:`, error);
+                throw error;
+            }
+        };
+
+        /**
+         * Fetch and process multiple URLs concurrently.
+         * @param {Array<string>} urls - The list of URLs to process.
+         * @returns {Array<Object>} - An array of deserialized data objects.
+         */
+        const fetchAndProcessData = async (urls) => {
+            try {
+                const fetchPromises = urls.map(url => fetchAndDeserialize(url).catch(error => {
+                    console.error(`Failed to process URL ${url}:`, error);
+                    return null;
+                }));
+
+                const results = (await Promise.all(fetchPromises)).filter(Boolean);
+
+                if (!results.length) throw new Error("No valid data was processed.");
+                return results;
+            } catch (error) {
+                console.error("Error in fetchAndProcessData:", error);
+                throw error;
+            }
+        };
+
+        /**
+         * Process the deserialized data to extract songs and their channels with metadata.
+         * @param {Array<Object>} deserializedData - The array of deserialized song data.
+         * @returns {Array<Object>} - An array representing songs and their metadata and channels.
+         */
+        const processSongsAndChannels = (deserializedData) => {
+            const songsArray = deserializedData.map((songData, songIndex) => {
+                const song = {
+                    id: songData.projectName || `Song_${songIndex + 1}`,
+                    bpm: songData.projectBPM || 120, // Default BPM
+                    sequences: songData.projectSequences || {}, // Include projectSequences data
+                    channels: []
+                };
+
+                const channelURLs = songData.channelURLs || [];
+                const channelVolume = songData.channelVolume || [];
+                const channelPlaybackSpeed = songData.channelPlaybackSpeed || [];
+                const trimSettings = songData.trimSettings || [];
+
+                for (let i = 0; i < 16; i++) { // Up to 16 channels
+                    const channel = {
+                        id: channelMap[i] || `Channel_${i + 1}`,
+                        url: channelURLs[i] || `URL_not_found`,
+                        metadata: {
+                            volume: channelVolume[i] !== undefined ? channelVolume[i] : 1.0, // Default volume
+                            playbackSpeed: channelPlaybackSpeed[i] !== undefined ? channelPlaybackSpeed[i] : 1.0, // Default speed
+                            trimStartPercentage: trimSettings[i]?.startSliderValue !== undefined ? trimSettings[i].startSliderValue : 0, // Default start trim percentage
+                            trimEndPercentage: trimSettings[i]?.endSliderValue !== undefined ? trimSettings[i].endSliderValue : 100, // Default end trim percentage
+                            totalSampleDuration: trimSettings[i]?.totalSampleDuration !== undefined ? trimSettings[i].totalSampleDuration : 0 // Default duration
+                        }
+                    };
+                    song.channels.push(channel);
+                }
+
+                return song;
+            });
+
+            return songsArray;
+        };
+
+        /**
+         * Log the structured 2D array of songs and channels with metadata in a single line format.
+         * @param {Array<Object>} songsArray - The 2D array to log.
+         */
+        const logSongsArray = (songsArray) => {
+            console.log(`Total Songs: ${songsArray.length}`);
+            songsArray.forEach((song, songIndex) => {
+                console.log(`Song #${songIndex + 1}: ${song.id}, BPM: ${song.bpm}`);
+                song.channels.forEach((channel, channelIndex) => {
+                    console.log(
+                        `  Channel ${channelIndex + 1} - ${channel.id}, URL: ${channel.url}, ` +
+                        `Volume: ${channel.metadata.volume}, Playback Speed: ${channel.metadata.playbackSpeed}, ` +
+                        `Trim Start %: ${channel.metadata.trimStartPercentage}, Trim End %: ${channel.metadata.trimEndPercentage}, ` +
+                        `Total Sample Duration: ${channel.metadata.totalSampleDuration}`
+                    );
+                });
+            });
+
+            // Set global flags based on the number of songs
+            window.globalData.isSingleSong = songsArray.length === 1;
+            window.globalData.isMultipleSongs = songsArray.length > 1;
+
+            console.log(`Flags set - isSingleSong: ${window.globalData.isSingleSong}, isMultipleSongs: ${window.globalData.isMultipleSongs}`);
+        };
+
+        // ---------------------- Initialization ---------------------- //
+
+        /**
+         * Initialize the data processing workflow.
+         */
+        const init = async () => {
+            console.log('Init function called. Preparing to process song data URLs...');
+
+            const songDataUrls = [
+                "/content/119a3ccd1dfd7e987cca139f86d16717d845a22dd6afc59ad492527b95ae9a91i0",
+                "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0",
+                // Add or remove song URLs as needed
+            ];
+
+            // Filter out any commented or invalid URLs
+            const validSongUrls = songDataUrls.filter(url => !url.trim().startsWith('//') && url.trim() !== '');
+
+            console.log(`Found ${validSongUrls.length} valid song data URLs to process.`);
+
+            if (validSongUrls.length) {
+                try {
+                    console.log('Loading Pako library...');
+                    await loadPako();
+
+                    console.log('Fetching and deserializing song data...');
+                    const deserializedData = await fetchAndProcessData(validSongUrls);
+
+                    console.log('Processing songs and channels...');
+                    const songsArray = processSongsAndChannels(deserializedData);
+
+                    // Store songsArray in globalData for later access
+                    window.globalData.songs = songsArray;
+
+                    console.log('Logging the 2D array of songs and channels with metadata:');
+                    logSongsArray(songsArray);
+
+                    // Initialize DataChecker and Audio Buffers after songs data is loaded
+                    if (window.DataChecker && typeof window.DataChecker.initialize === 'function') {
+                        window.DataChecker.initialize();
+                    } else {
+                        console.error('DataChecker module is not available.');
+                    }
+
+                    if (typeof initAudioBuffers === 'function') {
+                        await initAudioBuffers();
+                    } else {
+                        console.error('initAudioBuffers function is not available.');
+                    }
+
+                    console.log('Init function execution complete.');
+                } catch (error) {
+                    console.error('Error during initialization:', error);
+                }
+            } else {
+                console.log('No valid song data URLs to process.');
+            }
+        };
+
+        // Attach the init function to window to ensure it's accessible
+        window.init = init;
+
+        // Automatically invoke the init function on DOMContentLoaded
+        window.addEventListener('DOMContentLoaded', () => {
+            window.init();
+        });
+    </script>
+
+    <!-- Section 2 - Data Checker Module -->
+    <script>
+        // dataChecker.js
+
+        /**
+        * DataChecker Module
+        * 
+        * This module provides functions to validate and correct song data within the globalData object.
+        * It ensures that totalSampleDuration values are accurate and fills in any missing or zero durations.
+        */
+
+        const DataChecker = (() => {
+            /**
+             * Confirms that all channels in the specified song have a totalSampleDuration greater than zero.
+             * @param {Object} song - The song object to validate.
+             * @returns {boolean} - Returns true if all channels have valid durations, false otherwise.
+             */
+            const confirmTotalDurations = (song) => {
+                let allValid = true;
+                song.channels.forEach(channel => {
+                    if (typeof channel.metadata.totalSampleDuration !== 'number' || channel.metadata.totalSampleDuration <= 0) {
+                        console.warn(`Channel ${channel.id} in Song "${song.id}" has invalid totalSampleDuration: ${channel.metadata.totalSampleDuration}`);
+                        allValid = false;
+                    }
+                });
+                return allValid;
+            };
+
+            /**
+             * Fills in zero or missing totalSampleDuration values based on trim settings.
+             * Assumes that totalSampleDuration can be approximated from trimEndPercentage - trimStartPercentage.
+             * Note: This is a placeholder logic and should be replaced with actual duration fetching if available.
+             * @param {Object} song - The song object to modify.
+             */
+            const fillZeroDurations = (song) => {
+                song.channels.forEach(channel => {
+                    if (channel.metadata.totalSampleDuration === 0) {
+                        const trimStart = channel.metadata.trimStartPercentage;
+                        const trimEnd = channel.metadata.trimEndPercentage;
+                        // Placeholder logic: Assuming totalSampleDuration can be estimated from trim percentages
+                        // For example, if trimEndPercentage is 100 and trimStartPercentage is 0, set duration to 100 seconds
+                        if (trimEnd > trimStart) {
+                            channel.metadata.totalSampleDuration = trimEnd - trimStart;
+                            console.info(`Filled totalSampleDuration for Channel ${channel.id} in Song "${song.id}" with value: ${channel.metadata.totalSampleDuration}`);
+                        } else {
+                            console.warn(`Cannot fill totalSampleDuration for Channel ${channel.id} in Song "${song.id}" due to invalid trim percentages.`);
+                        }
+                    }
+                });
+            };
+
+            /**
+             * Logs the totalSampleDuration status for all songs.
+             * @param {Array<Object>} songs - The array of song objects to log.
+             */
+            const logDurationStatus = (songs) => {
+                songs.forEach(song => {
+                    console.log(`\nChecking totalSampleDuration for Song: "${song.id}"`);
+                    const isValid = confirmTotalDurations(song);
+                    if (!isValid) {
+                        console.log(`Filling zero or missing totalSampleDuration values for Song: "${song.id}"`);
+                        fillZeroDurations(song);
+                    } else {
+                        console.log(`All channels in Song "${song.id}" have valid totalSampleDuration values.`);
+                    }
+                });
+            };
+
+            /**
+             * Initializes the data checking process.
+             * Should be called after songs data has been loaded and processed.
+             */
+            const initialize = () => {
+                if (!window.globalData || !Array.isArray(window.globalData.songs)) {
+                    console.error('DataChecker: globalData.songs is not available.');
+                    return;
+                }
+
+                const songs = window.globalData.songs;
+
+                console.log('\n--- DataChecker Initialization ---');
+                logDurationStatus(songs);
+                console.log('--- DataChecker Initialization Complete ---\n');
+            };
+
+            // Expose the initialize function
+            return {
+                initialize
+            };
+        })();
+
+        // Attach DataChecker to the window object for accessibility
+        window.DataChecker = DataChecker;
+    </script>
+
+    <!-- Section 3 - Audio Buffering and Mapping -->
+    <script>
+        // audioBuffering.js
+
+        // ---------------------- Audio Buffering and Mapping ---------------------- //
+
+        // Ensure that audioContext is globally accessible
+        window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Initialize audioBuffers and reverseAudioBuffers globally
+        window.audioBuffers = {}; // { [songId]: { [channelId]: AudioBuffer } }
+        window.reverseAudioBuffers = {}; // { [songId]: { [channelId]: AudioBuffer } }
+
+        /**
+         * Calculate the actual trim times based on the total sample duration and trim settings.
+         * @param {number} totalSampleDuration - The total sample duration in seconds.
+         * @param {number} startTrimPercentage - The start trim time as a percentage (0 to 100).
+         * @param {number} endTrimPercentage - The end trim time as a percentage (0 to 100).
+         * @returns {Object} - The actual trim times in seconds.
+         */
+        const calculateActualTrimTimes = (totalSampleDuration, startTrimPercentage, endTrimPercentage) => {
+            const startTrim = (totalSampleDuration * startTrimPercentage) / 100;
+            const endTrim = (totalSampleDuration * endTrimPercentage) / 100;
+            return { startTrim, endTrim };
+        };
+
+        /**
+         * Fetch and decode audio data from a URL.
+         * @param {string} audioUrl - The URL of the audio file.
+         * @returns {Promise<ArrayBuffer>} - The fetched audio data as an ArrayBuffer.
+         */
+        const fetchAudioData = async (audioUrl) => {
+            try {
+                const response = await fetch(audioUrl);
+                if (!response.ok) throw new Error(`Network response was not ok for URL: ${audioUrl}`);
+                const arrayBuffer = await response.arrayBuffer();
+                return arrayBuffer;
+            } catch (error) {
+                console.error(`Error fetching audio data from URL ${audioUrl}:`, error);
+                throw error;
+            }
+        };
+
+        /**
+         * Decode audio data to AudioBuffer.
+         * @param {ArrayBuffer} arrayBuffer - The audio data as an ArrayBuffer.
+         * @returns {Promise<AudioBuffer>} - The decoded AudioBuffer.
+         */
+        const decodeAudioData = async (arrayBuffer) => {
+            return new Promise((resolve, reject) => {
+                window.audioContext.decodeAudioData(arrayBuffer, (audioBuffer) => {
+                    resolve(audioBuffer);
+                }, (error) => {
+                    reject(error);
+                });
+            });
+        };
+
+        /**
+         * Create an audio buffer from the provided audio URL and trim settings.
+         * @param {string} audioUrl - The URL of the audio file.
+         * @param {number} startTrim - The start trim time in seconds.
+         * @param {number} endTrim - The end trim time in seconds.
+         * @param {Object} channel - The channel object to update totalSampleDuration if needed.
+         * @returns {Promise<AudioBuffer|null>} - The created audio buffer or null if failed.
+         */
+        const createAudioBuffer = async (audioUrl, startTrim, endTrim, channel) => {
+            try {
+                const arrayBuffer = await fetchAudioData(audioUrl);
+                const fullAudioBuffer = await decodeAudioData(arrayBuffer);
+
+                const sampleRate = fullAudioBuffer.sampleRate;
+                const totalSamples = fullAudioBuffer.length;
+                const actualDuration = fullAudioBuffer.duration; // Actual duration in seconds
+
+                // Update totalSampleDuration if it's zero
+                if (channel.metadata.totalSampleDuration === 0) {
+                    channel.metadata.totalSampleDuration = actualDuration;
+                    console.info(`Updated totalSampleDuration for Channel ${channel.id} in Song "${songId}" to actual duration: ${actualDuration} seconds`);
+                }
+
+                // Recalculate trim times based on updated totalSampleDuration
+                const { startTrim: newStartTrim, endTrim: newEndTrim } = calculateActualTrimTimes(
+                    channel.metadata.totalSampleDuration,
+                    channel.metadata.trimStartPercentage,
+                    channel.metadata.trimEndPercentage
+                );
+
+                // Calculate the sample frames for trim times
+                const startSampleTrim = Math.floor(newStartTrim * sampleRate);
+                const endSampleTrim = Math.floor(newEndTrim * sampleRate);
+                const trimmedLength = endSampleTrim - startSampleTrim;
+
+                if (startSampleTrim < 0 || endSampleTrim > totalSamples || trimmedLength <= 0) {
+                    console.warn(`Invalid trim times for URL ${audioUrl}: startTrim=${newStartTrim}, endTrim=${newEndTrim}`);
+                    return null;
+                }
+
+                // Create a new audio buffer for the trimmed audio
+                const trimmedAudioBuffer = window.audioContext.createBuffer(
+                    fullAudioBuffer.numberOfChannels,
+                    trimmedLength,
+                    sampleRate
+                );
+
+                // Copy the trimmed data into the new buffer
+                for (let channelIndex = 0; channelIndex < fullAudioBuffer.numberOfChannels; channelIndex++) {
+                    const fullChannelData = fullAudioBuffer.getChannelData(channelIndex);
+                    const trimmedChannelData = trimmedAudioBuffer.getChannelData(channelIndex);
+                    trimmedChannelData.set(fullChannelData.subarray(startSampleTrim, endSampleTrim));
+                }
+
+                return trimmedAudioBuffer;
+            } catch (error) {
+                console.error(`Error creating audio buffer for URL ${audioUrl}:`, error);
+                return null;
+            }
+        };
+
+        /**
+         * Create a reverse audio buffer from the provided audio buffer.
+         * @param {AudioBuffer} audioBuffer - The original audio buffer.
+         * @returns {AudioBuffer|null} - The created reverse audio buffer or null if input is invalid.
+         */
+        const createReverseAudioBuffer = (audioBuffer) => {
+            if (!audioBuffer) return null;
+
+            const numberOfChannels = audioBuffer.numberOfChannels;
+            const sampleRate = audioBuffer.sampleRate;
+            const length = audioBuffer.length;
+            const reverseAudioBuffer = window.audioContext.createBuffer(numberOfChannels, length, sampleRate);
+
+            for (let channel = 0; channel < numberOfChannels; channel++) {
+                const originalChannelData = audioBuffer.getChannelData(channel);
+                const reverseChannelData = reverseAudioBuffer.getChannelData(channel);
+
+                for (let i = 0; i < length; i++) {
+                    reverseChannelData[i] = originalChannelData[length - i - 1];
+                }
+            }
+
+            return reverseAudioBuffer;
+        };
+
+        /**
+         * Initialize audio buffers for all songs and channels.
+         */
+        const initAudioBuffers = async () => {
+            const songs = window.globalData.songs;
+
+            for (const song of songs) {
+                const songId = song.id;
+                window.audioBuffers[songId] = {};
+                window.reverseAudioBuffers[songId] = {};
+
+                for (const channel of song.channels) {
+                    const channelId = channel.id;
+                    const audioUrl = channel.url;
+                    const metadata = channel.metadata;
+
+                    const totalSampleDuration = metadata.totalSampleDuration;
+                    const trimStartPercentage = metadata.trimStartPercentage;
+                    const trimEndPercentage = metadata.trimEndPercentage;
+
+                    // Calculate actual trim times
+                    const { startTrim, endTrim } = calculateActualTrimTimes(
+                        totalSampleDuration,
+                        trimStartPercentage,
+                        trimEndPercentage
+                    );
+
+                    try {
+                        // Create audio buffer and update totalSampleDuration if needed
+                        const audioBuffer = await createAudioBuffer(audioUrl, startTrim, endTrim, channel);
+                        if (audioBuffer) {
+                            window.audioBuffers[songId][channelId] = audioBuffer;
+
+                            // Create reverse audio buffer
+                            const reverseAudioBuffer = createReverseAudioBuffer(audioBuffer);
+                            if (reverseAudioBuffer) {
+                                window.reverseAudioBuffers[songId][channelId] = reverseAudioBuffer;
+                            }
+
+                            console.log(`Audio buffers created for Song: ${songId}, Channel: ${channelId}`);
+                        } else {
+                            console.warn(`Audio buffer not created for Song: ${songId}, Channel: ${channelId}`);
+                        }
+                    } catch (error) {
+                        console.error(`Failed to create audio buffers for Song: ${songId}, Channel: ${channelId}`, error);
+                    }
+                }
+            }
+
+            console.log('Audio buffers initialization complete.');
+        };
+    </script>
+
+    <!-- Section 4 - Data Checker and Audio Buffer Initialization Integration -->
+    <script>
+        /**
+         * Ensure that DataChecker and Audio Buffer Initialization are integrated within the init function.
+         * Since the main init function now calls DataChecker.initialize() and initAudioBuffers(),
+         * we do not need separate event listeners.
+         */
+    </script>
+</body>
+</html>

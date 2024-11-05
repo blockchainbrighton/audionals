@@ -1,0 +1,474 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Audionals - Web3 Music Player</title><custommetadata><script>const artworkUrl = ["/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];const songDataUrls=["/content/6d288c0c82653001bb32497889dd1486e8afec9b0671a95fa9e10f99c20737bbi0","/content/85436950f53c57aa0c510071d2d5f1c187e1d21e4e57210fcae152c4c7b6a768i0","/content/a4fb0b49181975450a6710f20128eb0b3acc51f4aa1ce87ebdbc9607562013a2i0","/content/8aec0a99a5617b9da98a5b63a11a5143f0cac3cfa662d9515c2285de03ef95d4i0","/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0","/content/119a3ccd1dfd7e987cca139f86d16717d845a22dd6afc59ad492527b95ae9a91i0","/content/b22f1c85371b58a9cdac19b2baa50b1f9025a28d44cdfaad539d0527aa7d894ei0","/content/633100d631767ddb9a309f5a2a66f5a66d5abd839f3b1c55642690d484189971i0","/content/db9131cfe8e933e8e639f007dcd2b582a80bfd2be42b0eafa4d2e206332d6785i0","/content/fb0d2abcd1fa5bf2622579f0990435b48d41291f71626fc2e36a93e6ea6b3b85i0","/content/e3ca12dd7516b4e486af4e3fa7f4ebc535d825034ff3c9da4954f354572dcf61i0","/content/d0496a8e1657ce470807c8d47dcb5f1018a32d8ec8e50d490ad49411ffee1457i0","/content/07ff7bdc47e5272a3ff55cc46d2b189d510562a057a2c24112f3d0376950484di0"];</script></custommetadata>
+<globaldefinitions>
+
+
+<script>
+const globalData=window.globalData={isSingleSong:!1,isMultipleSongs:!0,isNormalPlayer:!0,isLoopedPlayback:!1,isSequentialPlayback:!0,isRemixPlayer:!1,songsArray:[],audioBuffers:{},reverseAudioBuffers:{},audioFetchCache:new Map,isArtworkCover:!0,isVisualiserCover:!1,initialSampleOrder:[],isPlaying:!1,audioContext:new(window.AudioContext||window.webkitAudioContext)};function startPlayback(){document.dispatchEvent(new CustomEvent("startPlaybackRequested"))}function stopPlayback(){document.dispatchEvent(new CustomEvent("stopPlaybackRequested"))}document.addEventListener("playbackStarted",(()=>{globalData.isPlaying=!0,console.log("Playback has started.")})),document.addEventListener("playbackStopped",(()=>{globalData.isPlaying=!1,console.log("Playback has stopped.")}));</script></globaldefinitions><style>body{font-family:Arial,sans-serif;margin:0;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background-color:#000}#artworkCover{position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,.8);display:flex;justify-content:center;align-items:center;z-index:1000;cursor:pointer;transition:opacity .3s ease}#artworkCover.hidden{opacity:0;pointer-events:none}#artworkImage{max-width:80%;max-height:80%;object-fit:contain;border:4px solid #fff;border-radius:10px;box-shadow:0 0 20px rgba(255,255,255,.5);cursor:pointer}#loadingSpinner{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);border:8px solid #f3f3f3;border-top:8px solid #3498db;border-radius:50%;width:60px;height:60px;animation:spin 2s linear infinite;z-index:1001;display:none}@keyframes spin{0%{transform:rotate(0) translate(-50%,-50%)}100%{transform:rotate(360deg) translate(-50%,-50%)}}</style></head><htmlelements><body><h1>Audionals</h1><div id="loadingSpinner"></div><div id="artworkCover"><img id="artworkImage" src="" alt="Artwork Cover"></div></htmlelements>
+<!-- Additional module to fix resuming audio context with any click or gestures -->
+<script>
+    (function () {
+      document.addEventListener('DOMContentLoaded', function () {
+        const globalData = window.globalData || {};
+        const audioContext = globalData.audioContext;
+  
+        if (audioContext) {
+          const resumeContext = async () => {
+            if (audioContext.state === 'suspended') {
+              try {
+                await audioContext.resume();
+                console.log("AudioContext resumed successfully.");
+              } catch (error) {
+                console.error("Failed to resume AudioContext:", error);
+              }
+            }
+          };
+  
+          // Add event listeners for user interaction to resume the AudioContext
+          document.addEventListener('click', resumeContext);
+          document.addEventListener('keydown', resumeContext);
+  
+          console.log("AudioContext resumption listeners added.");
+        } else {
+          console.warn("AudioContext not found.");
+        }
+      });
+    })();
+  </script>
+
+<!-- Section 1 - Loading and Preparing Song Data  -->
+<script src="/content/44088e23250de51c70149b344a11ba29fe39850ac9b3bf2aa99e73f5d29c4825i0"></script>
+ <!-- Section 2 - audioProcessingAndManagement.js -->
+ <script src="/content/f4cc99813b43f71b3e781d3c99f24a6a7a5b1004ea0efce3b225011e347b8df0i0"></script>
+<!-- Section 3 - Playback -->
+<!-- <script src="/content/5390a133eff2fc881396c3e60cb53b16044c996008f9eef7fa12624b1b5c8323i0"></script> -->
+<!-- Section 3 - Playback Engine (Updated for Lazy Loading Integration) -->
+<section>
+    <script>
+        (() => {
+            const globalData = window.globalData || (window.globalData = {});
+            const audioContext = globalData.audioContext;
+        
+            // Initialize playback state
+            globalData.isPlaying = false;
+        
+            // Variables
+            const lookahead = 0.1; // Time in seconds to look ahead for scheduling
+            const schedulerInterval = 25; // Scheduler loop interval in milliseconds
+            let schedulerTimerID = null;
+            let sequenceStates = {};
+            let currentSongIndex = 0;
+            const missingBuffers = new Set();
+        
+            /**
+             * Toggles playback on and off.
+             */
+            const togglePlayback = () => {
+                globalData.isPlaying ? stopPlayback() : startPlayback();
+            };
+        
+            /**
+             * Starts playback for the current song.
+             * Initializes sequence states and starts the scheduler loop.
+             */
+            const startPlayback = () => {
+                if (globalData.isPlaying) {
+                    console.log('Playback is already in progress.');
+                    return;
+                }
+        
+                const { songsArray, audioBuffers, reverseAudioBuffers } = globalData;
+                if (!songsArray.length) {
+                    console.error("No songs available for playback.");
+                    return;
+                }
+        
+                // Update totalSongs dynamically
+                const totalSongs = songsArray.length;
+        
+                // Ensure currentSongIndex is within bounds
+                if (currentSongIndex >= totalSongs) {
+                    currentSongIndex = 0;
+                }
+        
+                const song = songsArray[currentSongIndex];
+                const sequences = song.projectSequences || {};
+                console.log(`Starting playback for Song: ${song.id} (${currentSongIndex + 1}/${totalSongs}) with ${Object.keys(sequences).length} sequences.`);
+                console.log(`Song BPM: ${song.bpm}`);
+        
+                const stepsPerBeat = 4;
+                const stepDuration = (60 / song.bpm) / stepsPerBeat;
+                const sequenceDuration = 64 * stepDuration;
+        
+                // Reset sequenceStates and missingBuffers for the new song
+                sequenceStates = {};
+                missingBuffers.clear();
+        
+                let sequenceStartOffset = 0;
+                for (const [sequenceName, sequence] of Object.entries(sequences)) {
+                    const startTime = audioContext.currentTime + sequenceStartOffset;
+                    sequenceStates[sequenceName] = {
+                        nextStepIndex: 0,
+                        nextStepTime: startTime,
+                        stepDuration,
+                        startTime,
+                        endTime: startTime + sequenceDuration,
+                        completed: false
+                    };
+                    console.log(`Initialized scheduler for sequence: ${sequenceName} starting at +${sequenceStartOffset.toFixed(2)}s`);
+                    sequenceStartOffset += sequenceDuration;
+                }
+        
+                globalData.isPlaying = true;
+                schedulerTimerID = setInterval(() => schedulerLoop(song, audioBuffers, reverseAudioBuffers), schedulerInterval);
+                console.log('Playback started.');
+                document.dispatchEvent(new CustomEvent("playbackStarted", { detail: { success: true } }));
+            };
+        
+            /**
+             * Stops playback and resets the Playback Engine state.
+             */
+            const stopPlayback = () => {
+                if (!globalData.isPlaying) {
+                    console.log('Playback is not in progress.');
+                    return;
+                }
+        
+                if (schedulerTimerID) clearInterval(schedulerTimerID);
+                globalData.isPlaying = false;
+                sequenceStates = {};
+                missingBuffers.clear();
+                console.log('Playback stopped and sequence states reset.');
+                document.dispatchEvent(new CustomEvent("playbackStopped", { detail: { success: true } }));
+            };
+        
+            /**
+             * The main scheduler loop that schedules audio playback.
+             * @param {Object} song - The current song object.
+             * @param {Object} audioBuffers - The loaded audio buffers.
+             * @param {Object} reverseAudioBuffers - The loaded reverse audio buffers.
+             */
+         // Add keydown event listener for arrow key navigation
+document.addEventListener('keydown', (event) => {
+    const totalSongs = globalData.songsArray.length;
+    
+    // Stop current playback before switching songs
+    if (globalData.isPlaying) {
+        stopPlayback(); // Simulate stopping the current song
+    }
+
+    if (event.key === 'ArrowRight') {
+        // Move to the next song
+        currentSongIndex = (currentSongIndex + 1) % totalSongs; // Loop back to the first song if at the end
+        console.log(`Skipping to next song: ${globalData.songsArray[currentSongIndex].id}`);
+    } else if (event.key === 'ArrowLeft') {
+        // Move to the previous song
+        currentSongIndex = (currentSongIndex - 1 + totalSongs) % totalSongs; // Loop back to the last song if at the beginning
+        console.log(`Skipping to previous song: ${globalData.songsArray[currentSongIndex].id}`);
+    }
+
+    // Start playback of the next/previous song
+    resetPlayback();  // Reset playback settings for the new song
+    startPlayback();  // Start the new song
+});
+
+const schedulerLoop = (song, audioBuffers, reverseAudioBuffers) => {
+    const currentTime = audioContext.currentTime;
+    let allSequencesCompleted = true;
+
+    for (const [sequenceName, sequence] of Object.entries(song.projectSequences || {})) {
+        const state = sequenceStates[sequenceName];
+        if (!state || state.completed) continue;
+
+        // Check if the sequence has ended
+        if (currentTime >= state.endTime) {
+            state.completed = true;
+            console.log(`Sequence ${sequenceName} has completed.`);
+            continue;
+        }
+
+        allSequencesCompleted = false;
+
+        // Schedule steps within the lookahead window
+        while (state.nextStepTime < currentTime + lookahead && globalData.isPlaying) {
+            const stepIndex = state.nextStepIndex;
+            const stepTime = state.nextStepTime;
+
+            for (const [trackName, trackData] of Object.entries(sequence)) {
+                const channelIndex = parseInt(trackName.replace('ch', ''), 10);
+                const channel = song.channels[channelIndex];
+
+                if (!channel) {
+                    console.warn(`Channel index ${channelIndex} not found in song ${song.id}.`);
+                    continue;
+                }
+
+                const steps = trackData.steps || [];
+                const step = steps.find(s => (typeof s === "number" && s === stepIndex) || (s.index === stepIndex));
+
+                if (step !== undefined) {
+                    const reverse = typeof step === "object" && step.reverse;
+                    schedulePlayback(song, channel, stepTime, reverse, audioBuffers, reverseAudioBuffers, state.stepDuration);
+                }
+            }
+
+            state.nextStepIndex += 1;
+            if (state.nextStepIndex >= 64) {
+                state.completed = true;
+                console.log(`Sequence ${sequenceName} has completed all steps.`);
+                break;
+            }
+            state.nextStepTime += state.stepDuration;
+        }
+    }
+
+    if (allSequencesCompleted) {
+        console.log("All sequences have completed.");
+
+        const totalSongs = globalData.songsArray.length;
+
+        // Handle looping and sequential playback based on flags
+        if (globalData.isLoopedPlayback) {
+            if (globalData.isMultipleSongs && globalData.isSequentialPlayback) {
+                // Move to the next song in the list
+                currentSongIndex += 1;
+                if (currentSongIndex >= totalSongs) {
+                    currentSongIndex = 0; // Loop back to the first song
+                    console.log("Reached the end of the playlist. Looping back to the first song.");
+                } else {
+                    console.log(`Moving to next song: ${globalData.songsArray[currentSongIndex].id} (${currentSongIndex + 1}/${totalSongs})`);
+                }
+                resetPlayback();
+                startPlayback();
+            } else {
+                // Loop the current song
+                console.log(`Looping the current song: ${song.id}`);
+                resetPlayback();
+                startPlayback();
+            }
+        } else if (globalData.isMultipleSongs && globalData.isSequentialPlayback) {
+            // Move to the next song without looping
+            currentSongIndex += 1;
+            if (currentSongIndex < totalSongs) {
+                console.log(`Moving to next song: ${globalData.songsArray[currentSongIndex].id} (${currentSongIndex + 1}/${totalSongs})`);
+                resetPlayback();
+                startPlayback();
+            } else {
+                // Reached the end of the playlist
+                console.log("Reached the end of the playlist. Stopping playback.");
+                stopPlayback();
+            }
+        } else {
+            // Single song playback without looping
+            console.log("Playback has completed the single song.");
+            stopPlayback();
+        }
+    }
+};
+
+        
+            /**
+             * Schedules playback of an individual audio buffer.
+             * @param {Object} song - The current song object.
+             * @param {Object} channel - The current channel object.
+             * @param {number} time - The scheduled start time in seconds.
+             * @param {boolean} reverse - Indicates if the audio should be played in reverse.
+             * @param {Object} audioBuffers - The loaded audio buffers.
+             * @param {Object} reverseAudioBuffers - The loaded reverse audio buffers.
+             * @param {number} stepDuration - Duration of each step in seconds.
+             */
+            const schedulePlayback = (song, channel, time, reverse, audioBuffers, reverseAudioBuffers, stepDuration) => {
+                const bufferKey = `${song.id}_${channel.id}_${reverse ? 'reverse' : 'normal'}`;
+                const buffer = reverse ? reverseAudioBuffers[song.id]?.[channel.id] : audioBuffers[song.id]?.[channel.id];
+        
+                if (!buffer) {
+                    if (!missingBuffers.has(bufferKey)) {
+                        missingBuffers.add(bufferKey);
+                        console.warn(`Audio buffer missing for Song: ${song.id}, Channel: ${channel.id}${reverse ? " (Reverse)" : ""}`);
+                    }
+                    return;
+                }
+        
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.playbackRate.value = channel.metadata.playbackSpeed || 1;
+                source.connect(globalData.masterGain || audioContext.destination);
+                source.start(time);
+            };
+        
+            /**
+             * Resets the Playback Engine for the next song.
+             */
+            const resetPlayback = () => {
+                // Stop current playback and reset states without completely stopping the engine
+                if (schedulerTimerID) clearInterval(schedulerTimerID);
+                sequenceStates = {};
+                missingBuffers.clear();
+                console.log('Playback reset for the next song.');
+            };
+        
+            /**
+             * Initializes the Playback Engine.
+             * Ensures that songs are available and sets up necessary components.
+             */
+            const initializePlaybackEngine = () => {
+                const { songsArray } = globalData;
+                if (!songsArray.length) {
+                    console.error("No songs available for playback.");
+                    return;
+                }
+                console.log("Playback Engine Initialization Complete.");
+                console.log("Playback is ready. Click the artwork to start.");
+            };
+        
+            /**
+             * Sets up event listeners for custom events dispatched by other sections.
+             */
+            const setupEventListeners = () => {
+                // Listen for the initialAudioBuffersReady event to initialize the playback engine
+                document.addEventListener("initialAudioBuffersReady", (event) => {
+                    if (event.detail.success) {
+                        initializePlaybackEngine();
+                        console.log("Initial audio buffers are ready.");
+                    }
+                });
+        
+                // Listen for the allAudioBuffersReady event to log completion
+                document.addEventListener("allAudioBuffersReady", (event) => {
+                    if (event.detail.success) {
+                        console.log("All audio buffers have been loaded and are ready.");
+                    }
+                });
+        
+                // Listen for the playbackStarted event if needed elsewhere
+                document.addEventListener("playbackStarted", (event) => {
+                    if (event.detail.success) {
+                        console.log("Playback has been successfully started.");
+                    }
+                });
+        
+                // Listen for the playbackStopped event if needed elsewhere
+                document.addEventListener("playbackStopped", (event) => {
+                    if (event.detail.success) {
+                        console.log("Playback has been successfully stopped.");
+                    }
+                });
+            };
+        
+            /**
+             * Sets up the artwork click event listener and initializes the playback engine.
+             */
+            const setupArtworkClickListener = () => {
+                document.addEventListener('DOMContentLoaded', () => {
+                    const artworkCover = document.getElementById('artworkCover');
+                    const artworkImage = document.getElementById('artworkImage');
+                    const displayArtworkCover = () => {
+                        artworkCover.classList.remove('hidden');
+                        loadingSpinner.style.display = 'none';
+                    };
+                    if (globalData.isArtworkCover && artworkUrl.length > 0) {
+                        artworkImage.src = artworkUrl[0];
+                        displayArtworkCover();
+                        artworkImage.addEventListener('click', togglePlayback);
+                    }
+                });
+            };
+        
+            /**
+             * Starts the entire setup process.
+             * If audio buffers are already loaded, initialize immediately.
+             * Otherwise, wait for the initialAudioBuffersReady event.
+             */
+            const startSetup = () => {
+                setupEventListeners();
+                setupArtworkClickListener();
+                if (Object.keys(globalData.audioBuffers || {}).length) {
+                    // If audioBuffers are already loaded, initialize playback
+                    initializePlaybackEngine();
+                }
+            };
+        
+            // Initialization
+            startSetup();
+        
+        })();
+        </script>
+        
+</section>
+
+
+
+<!-- FIX - Preventing Unwanted Keystrokes -->
+ <!-- Overriding Script to Block Unwanted Key Presses -->
+<script>
+    (function() {
+      // List of allowed keys
+      const allowedKeys = ['ArrowLeft', 'ArrowRight'];
+  
+      document.addEventListener('keydown', function(event) {
+        if (!allowedKeys.includes(event.key)) {
+          event.preventDefault();
+          event.stopPropagation();
+          console.log(`Blocked key: ${event.key}`);
+        }
+      }, true); // Use capturing phase to intercept before other listeners
+    })();
+  </script>
+
+
+<script>
+    (function() {
+      const globalData = window.globalData || {};
+      const audioContext = globalData.audioContext;
+  
+      if (audioContext) {
+        audioContext.onstatechange = function() {
+          console.log(`AudioContext state changed to: ${audioContext.state}`);
+        };
+        console.log("AudioContext state change listener added.");
+      } else {
+        console.warn("AudioContext not found. Cannot monitor state changes.");
+      }
+    })();
+  </script>
+  
+  <script>
+    (function() {
+      function logPlaylistStatus() {
+        console.log("----- Playlist Status -----");
+        console.log(`Total Songs: ${window.globalData.songsArray.length}`);
+        console.log(`isPlaying: ${window.globalData.isPlaying}`);
+        console.log("---------------------------");
+      }
+  
+      document.addEventListener('playbackStarted', logPlaylistStatus);
+      document.addEventListener('playbackStopped', logPlaylistStatus);
+  
+      // Initial log
+      logPlaylistStatus();
+    })();
+  </script>
+  
+  <script>
+    (function() {
+      document.addEventListener('playbackStarted', function() {
+        console.log("Verified: 'playbackStarted' event has been dispatched.");
+      });
+  
+      document.addEventListener('playbackStopped', function() {
+        console.log("Verified: 'playbackStopped' event has been dispatched.");
+      });
+  
+      console.log("Event dispatch verification listeners added.");
+    })();
+  </script>
+  
+  <script>
+    (function() {
+      setInterval(function() {
+        console.log("Current globalData State:", JSON.stringify(window.globalData, null, 2));
+      }, 5000); // Logs every 5 seconds
+    })();
+  </script>
+  
+  
+</html>

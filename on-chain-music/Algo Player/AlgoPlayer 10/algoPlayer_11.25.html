@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Web3 Audio Sequencer Playback Engine Optimized</title>
+  
+    <script>
+        const artworkUrl = ["/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
+        const songDataUrls = [
+            "/content/8aec0a99a5617b9da98a5b63a11a5143f0cac3cfa662d9515c2285de03ef95d4i0", // CHEESE ** MIGHT BE THIS ONE THAT IS OUT OF SYNC??
+
+            "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0", // TRUTH
+
+            "/content/6d288c0c82653001bb32497889dd1486e8afec9b0671a95fa9e10f99c20737bbi0", // KORA
+
+            "/content/119a3ccd1dfd7e987cca139f86d16717d845a22dd6afc59ad492527b95ae9a91i0", // MLK I HAVE A DREAM
+
+            "/content/db9131cfe8e933e8e639f007dcd2b582a80bfd2be42b0eafa4d2e206332d6785i0", // ModernProgress
+
+            "/content/07ff7bdc47e5272a3ff55cc46d2b189d510562a057a2c24112f3d0376950484di0", // CHOPPIN' IT UP
+
+            "/content/fb0d2abcd1fa5bf2622579f0990435b48d41291f71626fc2e36a93e6ea6b3b85i0", // HUMANITY // Turn Down Channels 1 + 2 (Apollo 13) Turn down Channel 5 - Hindenburg /  Turn channel 8 up - Hi hats
+
+            "/content/a4fb0b49181975450a6710f20128eb0b3acc51f4aa1ce87ebdbc9607562013a2i0", // MintyFresh Vibes
+
+            "/content/633100d631767ddb9a309f5a2a66f5a66d5abd839f3b1c55642690d484189971i0", // ON DAY ONE
+
+            "/content/85436950f53c57aa0c510071d2d5f1c187e1d21e4e57210fcae152c4c7b6a768i0", // Rhythm and Bass 240
+
+            "/content/e3ca12dd7516b4e486af4e3fa7f4ebc535d825034ff3c9da4954f354572dcf61i0", // Crazy Ass Bitch
+
+            "/content/d0496a8e1657ce470807c8d47dcb5f1018a32d8ec8e50d490ad49411ffee1457i0", // Rhythm and Bass 60
+
+            "/content/b22f1c85371b58a9cdac19b2baa50b1f9025a28d44cdfaad539d0527aa7d894ei0", // ON-CHAIN IN THE MEMBRANE
+        ];
+        const globalData = window.globalData = {
+            isSingleSong: false,
+            isMultipleSongs: true,
+            isNormalPlayer: true,
+            isLoopedPlayback: false,
+            isSequentialPlayback: true,
+            isRemixPlayer: false,
+            songsArray: [],
+            audioBuffers: {},
+            reverseAudioBuffers: {},
+            audioFetchCache: new Map(),
+            isArtworkCover: true,
+            isVisualiserCover: false,
+            initialSampleOrder: [],
+            isPlaying: false,
+            audioContext: new (window.AudioContext || window.webkitAudioContext)(),
+        };
+        function startPlayback() {
+            document.dispatchEvent(new CustomEvent("startPlaybackRequested"));
+        }
+        function stopPlayback() {
+            document.dispatchEvent(new CustomEvent("stopPlaybackRequested"));
+        }
+        document.addEventListener("playbackStarted", () => {
+            globalData.isPlaying = true;
+            console.log("Playback has started.");
+        });
+        document.addEventListener("playbackStopped", () => {
+            globalData.isPlaying = false;
+            console.log("Playback has stopped.");
+        });
+    </script>
+      <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0; padding: 0;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            height: 100vh; background-color: #000;
+        }
+        #artworkCover {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1000; cursor: pointer; transition: opacity 0.3s ease;
+        }
+        #artworkCover.hidden { opacity: 0; pointer-events: none; }
+        #artworkImage {
+            max-width: 80%; max-height: 80%; object-fit: contain;
+            border: 4px solid #fff; border-radius: 10px;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+        }
+        #loadingSpinner {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            border: 8px solid #f3f3f3; border-top: 8px solid #3498db;
+            border-radius: 50%; width: 60px; height: 60px;
+            animation: spin 2s linear infinite; z-index: 1001; display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg) translate(-50%, -50%); }
+            100% { transform: rotate(360deg) translate(-50%, -50%); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Audionals</h1>
+    <div id="loadingSpinner"></div>
+    <div id="artworkCover">
+        <img id="artworkImage" src="" alt="Artwork Cover">
+    </div>
+
+
+
+<!-- Section 1 - Data Loading and Processing -->
+ <!-- This module is an immediately invoked asynchronous function that processes song data URLs, fetches and decompresses the data, processes it, and updates the global application state. Below is a detailed breakdown of each stage of the module:
+
+/*
+
+
+Summary:
+
+This module is responsible for loading and preparing song data for playback in a web application. 
+It handles data fetching, decompression, parsing, and processing, updating global application state variables, 
+and ensuring that the UI elements like the artwork image are correctly set up. 
+The module is designed to be efficient by reducing variable sizes and combining steps where possible, 
+without altering the overall functionality.
+
+* Variable Initialization:
+ * Field Names (fieldNames) and Indices (fieldIndices):
+ * - fieldNames is an array containing string identifiers for various project fields.
+ * - fieldIndices is an object mapping each field name in fieldNames to its index, allowing quick access to field positions.
+ * 
+ * Channel Letters (channelLetters) and Indices (channelIndices):
+ * - channelLetters is an array of letters from 'A' to 'P', representing up to 16 channels.
+ * - channelIndices is an object mapping each letter to its index, facilitating channel identification.
+ * 
+ * Function fetchData:
+ * Purpose:
+ * - Fetches, decompresses, and processes song data from a given URL.
+ * 
+ * Steps:
+ * 1. Fetch Data:
+ *    - Uses fetch to retrieve data from the URL.
+ *    - Checks if the response is OK; if not, throws an error.
+ * 
+ * 2. Decompress Data:
+ *    - Uses the pako library to decompress the fetched data, which is expected to be in a compressed binary format.
+ * 
+ * 3. Parse and Process Data:
+ *    - Converts the decompressed binary data into a UTF-8 string.
+ *    - Parses the string into a JSON object.
+ *    - Recursively processes the JSON object to:
+ *      - Map field indices to field names using fieldNames and fieldIndices.
+ *      - Format sequences and steps, including handling of reversed steps and step ranges.
+ * 
+ * Function getInitialSampleOrder:
+ * Purpose:
+ * - Determines the initial sample order based on the first two sequences in the project data.
+ * 
+ * Steps:
+ * - Iterates over the first two sorted sequences.
+ * - For each sequence, iterates over up to 16 channels.
+ * - For each channel, examines up to 16 steps.
+ * - Collects unique channel IDs and their reverse status into an array.
+ * 
+ * Function setArtworkImage:
+ * Purpose:
+ * - Updates the artwork image on the webpage.
+ * 
+ * Steps:
+ * - Selects the image element with ID artworkImage.
+ * - If the element exists, sets its src attribute to the provided URL and displays the image.
+ * - Logs a warning if the image element is not found.
+ * 
+ * Main Execution Block:
+ * 1. Filter Valid URLs:
+ *    - Filters songDataUrls to exclude empty strings and comments (lines starting with //).
+ * 
+ * 2. Import pako Library:
+ *    - Dynamically imports the pako library required for data decompression.
+ *    - Handles any errors during the import.
+ * 
+ * 3. Fetch and Process Data:
+ *    - Uses fetchData to fetch and process data from each valid URL.
+ *    - Collects the processed data along with their indices.
+ *    - Filters out any failed fetches and ensures at least some data was successfully processed.
+ * 
+ * 4. Process Songs Data:
+ *    - Sorts the data items based on their original indices to maintain order.
+ *    - Maps each data item to a song object containing:
+ *      - ID and Metadata:
+ *        - Assigns a song ID using the project name or a default.
+ *        - Includes artist name and BPM, with defaults if not provided.
+ * 
+ *      - Channels:
+ *        - Constructs channel objects using channelLetters for IDs.
+ *        - Populates metadata like volume, playback speed, trim settings, and reversal requirements.
+ * 
+ *      - Project Sequences:
+ *        - Includes the processed project sequences.
+ * 
+ *    - Stores the array of song objects in globalData.songsArray.
+ * 
+ * 5. Set Initial Sample Order:
+ *    - If there are songs, calls getInitialSampleOrder using the first song's data.
+ *    - Stores the result in globalData.initialSampleOrder.
+ * 
+ * 6. Update Artwork and Flags:
+ *    - If globalData.isArtworkCover is true and artworkUrl is available, updates the artwork image.
+ *    - Sets flags globalData.isSingleSong and globalData.isMultipleSongs based on the number of songs.
+ * 
+ * 7. Dispatch Event:
+ *    - Dispatches a dataLoadingComplete event with details about the loaded songs, including their IDs and the total number of sequences.
+ * 
+ * Error Handling:
+ * Catch Block:
+ * - Catches any errors that occur during the execution of the main block.
+ * - Logs an initialization error message along with the error details.
+ */
+
+ -->
+
+<section1Minified>
+<script>
+(async()=>{const e=["projectName","artistName","projectBPM","currentSequence","channelURLs","channelVolume","channelPlaybackSpeed","trimSettings","projectChannelNames","startSliderValue","endSliderValue","totalSampleDuration","start","end","projectSequences","steps"],t=e.reduce(((e,t,r)=>({...e,[t]:r})),{}),r=Array.from({length:16},((e,t)=>String.fromCharCode(65+t))),a=r.reduce(((e,t,r)=>({...e,[t]:r})),{});try{const o=songDataUrls.filter((e=>e.trim()&&!e.trim().startsWith("//")));if(o.length){await(async()=>{try{const{default:e}=await import("/content/fba6f95fb1152db43304a27dce8cb8c65509eba6ab0b6958cedeb33e5f443077i0");window.pako=e}catch(e){throw console.error("Error loading Pako library:",e),e}})();const n=await(async r=>{const o=(await Promise.all(r.map(((r,o)=>(async r=>{try{const o=await fetch(r);if(!o.ok)throw new Error(`Network response was not ok for URL: ${r}`);const n=await o.arrayBuffer(),s=window.pako.inflate(new Uint8Array(n)),l=JSON.parse(new TextDecoder("utf-8").decode(s)),c=r=>Array.isArray(r)?r.map(c):r&&"object"==typeof r?Object.entries(r).reduce(((r,[o,n])=>{const s=e[o]||o;return r[s]="projectSequences"===s?Object.fromEntries(Object.entries(n).map((([e,r])=>[`Sequence${e.replace(/^s/,"")}`,Object.fromEntries(Object.entries(r).map((([e,r])=>[`ch${a[e]}`,{steps:(r[t.steps]||[]).flatMap((e=>"number"==typeof e?e:e?.r?Array.from({length:e.r[1]-e.r[0]+1},((t,r)=>e.r[0]+r)):"string"==typeof e&&e.endsWith("r")?{index:parseInt(e.slice(0,-1),10),reverse:!0}:[]))}])))]))):c(n),r}),{}):r;return c(l)}catch(e){throw console.error(`Error fetching/deserializing URL ${r}:`,e),e}})(r).then((e=>({data:e,idx:o}))).catch((e=>(console.error(`Failed to process URL ${r}:`,e),null))))))).filter(Boolean);if(!o.length)throw new Error("No valid data was processed.");return o})(o),s=e=>{const t=e.sort(((e,t)=>e.idx-t.idx)).map((({data:e,idx:t})=>{const{projectName:a=`Song_${t+1}`,artistName:o="Unknown Artist",projectBPM:n=120,projectSequences:s={},channelURLs:l=[],channelVolume:c=[],channelPlaybackSpeed:i=[],trimSettings:d={}}=e,g=r.map(((e,t)=>({id:e,url:l[t]||"URL_not_found",metadata:{volume:c[t]??1,playbackSpeed:i[t]??1,trimStartTime_Percentage:d[t]?.start||0,trimEndTime_Percentage:d[t]?.end||100,requiresReversal:Object.values(s).some((e=>Object.values(e).some((e=>e.steps.some((e=>"object"==typeof e&&e.reverse))))))}})));return{id:`Song ${t+1}: ${a}`,artist:o,bpm:n,totalSequences:Object.keys(s).length,channels:g,projectSequences:s}}));return globalData.songsArray=t,t.length&&(globalData.initialSampleOrder=(e=>{const{projectSequences:t}=e,r=[];return Object.keys(t).sort().slice(0,2).forEach((e=>{const a=t[e];Object.values(a).slice(0,16).forEach((({steps:e},t)=>{e.slice(0,16).forEach((e=>{if("number"==typeof e||"object"==typeof e&&void 0!==e.index){const a=`${t}_${e.reverse?"r":"f"}`;r.some((e=>`${e.channelId}_${e.reverse?"r":"f"}`===a))||r.push({channelId:`ch${t}`,reverse:e.reverse||!1})}}))}))})),r})(t[0])),t},l=s(n);console.log(`Total Songs: ${l.length}`),l.forEach((({id:e,artist:t,bpm:r,totalSequences:a,channels:o,projectSequences:n})=>{console.log(`\n${e} by ${t} - BPM: ${r} - Total Sequences: ${a}`),o.forEach((({id:e,metadata:t},r)=>{const{volume:a,playbackSpeed:o,trimStartTime_Percentage:n,trimEndTime_Percentage:s,requiresReversal:l}=t;console.log(`\tChannel ${r+1} - ${e}, Volume: ${a}, Speed: ${o}, Trim: ${n}% - ${s}%, Reversal: ${l}`)})),console.log(`\tProject Sequences:\n${JSON.stringify(n,null,2)}`)})),globalData.initialSampleOrder.length&&(console.log(`\nInitial Sample Order for ${l[0].id}:`),globalData.initialSampleOrder.forEach((({channelId:e,reverse:t},r)=>{console.log(`\t${r+1}. Channel: ${e}, Reverse: ${t}`)}))),globalData.isArtworkCover&&artworkUrl.length&&(console.log("\nArtwork URL(s):",artworkUrl),(e=>{const t=document.getElementById("artworkImage");t?(t.src=e,t.parentElement.style.display="flex"):console.warn("Artwork cover elements not found.")})(artworkUrl[0])),globalData.isSingleSong=1===l.length,globalData.isMultipleSongs=l.length>1,console.log(`\nFlags - Single Song: ${globalData.isSingleSong}, Multiple Songs: ${globalData.isMultipleSongs}`),document.dispatchEvent(new CustomEvent("dataLoadingComplete",{detail:{success:!0,totalSongs:l.length,songs:l.map((({id:e,totalSequences:t})=>({id:e,totalSequences:t})))}}))}else console.log("No valid song data URLs to process.")}catch(e){console.error("Initialization error:",e)}})();
+</script>
+</section1Minified>
+
+ <!-- // audioProcessingAndManagement.js -->
+ <section2Minified>
+<script>
+(async()=>{const e=window.globalData||(window.globalData={}),n=e.audioContext||(e.audioContext=new(window.AudioContext||window.webkitAudioContext)),o=e=>Uint8Array.from(atob(e),(e=>e.charCodeAt(0))).buffer,a=(e,n)=>{if("json"===n&&e.audioData){const n=e.audioData.match(/base64,([A-Za-z0-9+/=]+)/);return n?n[1]:null}if("html"===n){const n=e.match(/<audio[^>]*data-audionalSampleName[^>]*>\s*<source[^>]*src="data:audio\/[^;]+;base64,([^"]+)"/i);return n?n[1]:null}return null},t=e=>{const n=e.replace(/\s+/g,"");return n.length%4==0&&/^[A-Za-z0-9+/]+={0,2}$/.test(n)},r=(e,n=.5)=>{let o=0;for(let n=0;n<e.numberOfChannels;n++){const a=e.getChannelData(n);for(let e of a){const n=Math.abs(e);n>o&&(o=n)}}const a=o>0?n/o:1;if(1!==a){for(let n=0;n<e.numberOfChannels;n++){const o=e.getChannelData(n);for(let e=0;e<o.length;e++)o[e]*=a}console.log(`Normalized AudioBuffer to ${n} with factor ${a.toFixed(4)}`)}return e},s=e=>{const n=new Float32Array(e.length);for(let o=0,a=e.length;o<a;o++)n[o]=e[a-o-1];return n},i=e=>e.split("/").pop()||"Unknown",l=async(l,d,c)=>{const{id:u,channels:f}=l,{id:g,url:h,metadata:{trimStartTime_Percentage:m,trimEndTime_Percentage:p,requiresReversal:w}}=d;try{const l=await fetch(h);if(!l.ok)return void console.warn(`Fetch failed for ${h}. Skipping ${g}.`);const d=l.headers.get("Content-Type")||"",f=await(async(r,s,i)=>{const l=e.audioFetchCache||(e.audioFetchCache=new Map);if(l.has(i))return l.get(i);try{let e;if(/audio\/(wav|mpeg|mp4)|video\/mp4/.test(s))e=await n.decodeAudioData(await r.arrayBuffer()),console.log(`Decoded audio from ${i}`);else if(/application\/json/.test(s)){const s=JSON.parse(await r.text()),l=a(s,"json");if(!l||!t(l))return console.warn(`Invalid/missing base64 in JSON for ${i}`),null;e=await n.decodeAudioData(o(l)),console.log(`Decoded JSON audio from ${i}`)}else if(/text\/html/.test(s)){const s=await r.text(),l=a(s,"html");if(!l||!t(l))return console.warn(`Invalid/missing base64 in HTML for ${i}`),null;e=await n.decodeAudioData(o(l)),console.log(`Decoded HTML audio from ${i}`)}else{if(!/audio\//.test(s))return console.warn(`Unsupported content type (${s}) for ${i}`),null;e=await n.decodeAudioData(await r.arrayBuffer()),console.log(`Decoded audio from ${i}`)}return l.set(i,e),e}catch(e){return console.warn(`Decoding error for ${i}: ${e.message}`),null}})(l,d,h);if(!f)return void console.warn(`Decoding failed for ${u}, ${g}. Skipping.`);if(p<=m)return void console.warn(`Invalid trim percentages for ${u}, ${g}. Skipping.`);const $=Math.floor(m/100*f.duration*f.sampleRate),v=Math.floor(p/100*f.duration*f.sampleRate),y=v-$;if(y<=0)return void console.warn(`Non-positive trimmed length for ${u}, ${g}. Skipping.`);const A=n.createBuffer(f.numberOfChannels,y,f.sampleRate);for(let e=0;e<f.numberOfChannels;e++)A.getChannelData(e).set(f.getChannelData(e).subarray($,v));const C=r(A,.5);if(e.audioBuffers=e.audioBuffers||{},e.reverseAudioBuffers=e.reverseAudioBuffers||{},e.audioBuffers[u]=e.audioBuffers[u]||{},e.reverseAudioBuffers[u]=e.reverseAudioBuffers[u]||{},e.audioBuffers[u][g]=C,w){const o=(e=>{const o=n.createBuffer(e.numberOfChannels,e.length,e.sampleRate);for(let n=0;n<e.numberOfChannels;n++)o.getChannelData(n).set(s(e.getChannelData(n)));return o})(C);e.reverseAudioBuffers[u][g]=r(o,.5)}c.push({"Song ID":u,"Channel ID":g,"Audio File":i(h),"Full Duration (s)":f.duration.toFixed(2),"Trimmed Duration (s)":C.duration.toFixed(2),"Requires Reversal":w}),console.log(`Processed ${u}, ${g}${w?" (Reversed)":""}`)}catch(e){console.warn(`Error processing ${u}, ${g}: ${e.message}`)}},d=e=>{e.length?console.table(e):console.warn("No audio samples processed.")},c=async()=>{const{songsArray:o,initialSampleOrder:a}=e;if(!o.length)return void console.error("No songs to process.");const t=[],r=a.map((e=>{const n=o.find((n=>n.id===e.songId));return n&&n.channels.find((n=>n.id===e.channelId))?l(n,n.channels.find((n=>n.id===e.channelId)),t):null})).filter((e=>e));await Promise.all(r),d(t),console.log("Initial audio buffers ready."),(()=>{const o=n.createGain();o.gain.value=.7,o.connect(n.destination),e.masterGain=o,console.log("Master Gain initialized with gain:",o.gain.value)})(),document.dispatchEvent(new CustomEvent("initialAudioBuffersReady",{detail:{success:!0}}))},u=async()=>{try{await(async()=>{"suspended"===n.state&&await n.resume()})(),await c(),(async()=>{const{songsArray:n,initialSampleOrder:o}=e;if(!n.length)return void console.error("No songs to process.");const a=[],t=n.flatMap((e=>e.channels.map((n=>({song:e,channel:n}))))),r=new Set(o.map((e=>`${e.songId}-${e.channelId}`))),s=t.filter((({song:e,channel:n})=>!r.has(`${e.id}-${n.id}`))),i=[];for(;s.length;)i.push(s.splice(0,4));for(const e of i)await Promise.all(e.map((({song:e,channel:n})=>l(e,n,a))));d(a),console.log("All background audio buffers processed."),document.dispatchEvent(new CustomEvent("allAudioBuffersReady",{detail:{success:!0}}))})().catch((e=>console.error("Background processing error:",e)))}catch(e){console.error("Audio processing initialization error:",e)}};document.addEventListener("dataLoadingComplete",u),e.songsArray?.length&&u(),document.addEventListener("initialAudioBuffersReady",(()=>{console.log("Initial buffers ready. Press 'P' to play.")}))})();
+</script>
+</section2Minified>
+
+<!-- Section 2 - Audio Processing and Management -->
+ <!-- audioProdcessingAndManagement.js -->
+ <script src="/content/f4cc99813b43f71b3e781d3c99f24a6a7a5b1004ea0efce3b225011e347b8df0i0"></script>
+
+
+
+
+ <!-- Section 3 - Playback Engine (Updated for Robust Stopping and Preventing Unintended Resumption) -->
+<!-- playback.js -->
+<script>
+!function(){const e=window.globalData||(window.globalData={}),t=e.audioContext;e.isPlaying=!1;let n,s={},o=0,i=new Set,a=[];const c=()=>e.isPlaying?d():r(),r=()=>{if(e.isPlaying)return;const{songsArray:a,audioBuffers:c,reverseAudioBuffers:r}=e;if(!a.length)return;o>=a.length&&(o=0);const d=a[o],u=d.projectSequences||{},p=15/d.bpm,m=64*p;s={},i.clear();let g=0;for(const e in u){const n=t.currentTime+g;s[e]={nextStepIndex:0,nextStepTime:n,stepDur:p,startTime:n,endTime:n+m,completed:!1},g+=m}e.isPlaying=!0,n=setInterval((()=>l(d,c,r)),25),document.dispatchEvent(new CustomEvent("playbackStarted",{detail:{success:!0}}))},d=()=>{e.isPlaying&&(clearInterval(n),e.isPlaying=!1,s={},i.clear(),a.forEach((e=>{e.stop(),e.disconnect()})),a=[],document.dispatchEvent(new CustomEvent("playbackStopped",{detail:{success:!0}})))};document.addEventListener("keydown",(t=>{const n=e.songsArray.length;"ArrowRight"===t.key?o=(o+1)%n:"ArrowLeft"===t.key&&(o=(o-1+n)%n),e.isPlaying&&(d(),r())}));const l=(n,o,i)=>{const a=t.currentTime;let c=!0;for(const t in n.projectSequences||{}){const r=s[t];if(r&&!r.completed)if(a>=r.endTime)r.completed=!0;else for(c=!1;r.nextStepTime<a+.1&&e.isPlaying;){const e=r.nextStepIndex;for(const s in n.projectSequences[t]){const a=parseInt(s.replace("ch",""),10),c=n.channels[a];if(!c)continue;const d=(n.projectSequences[t][s].steps||[]).find((t=>t===e||t.index===e));if(void 0!==d){const e="object"==typeof d&&d.reverse;u(n,c,r.nextStepTime,e,o,i)}}if(r.nextStepIndex++,r.nextStepIndex>=64){r.completed=!0;break}r.nextStepTime+=r.stepDur}}c&&p(n)},u=(n,s,o,c,r,d)=>{const l=c?d[n.id]?.[s.id]:r[n.id]?.[s.id];if(!l){const e=`${n.id}_${s.id}_${c?"reverse":"normal"}`;return void(i.has(e)||i.add(e))}const u=t.createBufferSource();u.buffer=l,u.playbackRate.value=s.metadata.playbackSpeed||1,u.connect(e.masterGain||t.destination),u.start(o),a.push(u)},p=t=>{const n=e.songsArray.length;e.isLoopedPlayback?e.isMultipleSongs&&e.isSequentialPlayback?(o=(o+1)%n,r()):r():e.isMultipleSongs&&e.isSequentialPlayback?(o++,o<n?r():d()):d()},m=()=>{e.songsArray.length&&console.log("Playback Engine Initialized.")};document.addEventListener("initialAudioBuffersReady",(e=>{e.detail.success&&m()})),document.addEventListener("DOMContentLoaded",(()=>{const t=document.getElementById("artworkImage");e.isArtworkCover&&artworkUrl.length&&(t.src=artworkUrl[0],document.getElementById("artworkCover").classList.remove("hidden"),document.getElementById("loadingSpinner").style.display="none",t.addEventListener("click",c))})),Object.keys(e.audioBuffers||{}).length&&m()}();
+</script>
+
+
+
+
+</body>
+</html>

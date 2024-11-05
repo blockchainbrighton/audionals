@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Web3 Audio Sequencer Playback Engine Optimized</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0; padding: 0;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            height: 100vh; background-color: #000;
+        }
+        #artworkCover {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1000; cursor: pointer; transition: opacity 0.3s ease;
+        }
+        #artworkCover.hidden { opacity: 0; pointer-events: none; }
+        #artworkImage {
+            max-width: 80%; max-height: 80%; object-fit: contain;
+            border: 4px solid #fff; border-radius: 10px;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+        }
+        #loadingSpinner {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            border: 8px solid #f3f3f3; border-top: 8px solid #3498db;
+            border-radius: 50%; width: 60px; height: 60px;
+            animation: spin 2s linear infinite; z-index: 1001; display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg) translate(-50%, -50%); }
+            100% { transform: rotate(360deg) translate(-50%, -50%); }
+        }
+    </style>
+    <script>
+        const artworkUrl = ["/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
+        const songDataUrls = [
+            "/content/a4fb0b49181975450a6710f20128eb0b3acc51f4aa1ce87ebdbc9607562013a2i0",
+            "/content/6d288c0c82653001bb32497889dd1486e8afec9b0671a95fa9e10f99c20737bbi0",
+            "/content/8aec0a99a5617b9da98a5b63a11a5143f0cac3cfa662d9515c2285de03ef95d4i0",
+            "/content/85436950f53c57aa0c510071d2d5f1c187e1d21e4e57210fcae152c4c7b6a768i0",
+            "/content/e3ca12dd7516b4e486af4e3fa7f4ebc535d825034ff3c9da4954f354572dcf61i0",
+            "/content/b22f1c85371b58a9cdac19b2baa50b1f9025a28d44cdfaad539d0527aa7d894ei0",
+        ];
+        const globalData = window.globalData = {
+            isSingleSong: false,
+            isMultipleSongs: true,
+            isNormalPlayer: true,
+            isLoopedPlayback: false,
+            isSequentialPlayback: true,
+            isRemixPlayer: false,
+            songsArray: [],
+            audioBuffers: {},
+            reverseAudioBuffers: {},
+            audioFetchCache: new Map(),
+            isArtworkCover: true,
+            isVisualiserCover: false,
+            initialSampleOrder: [],
+            isPlaying: false,
+            audioContext: new (window.AudioContext || window.webkitAudioContext)(),
+        };
+        function startPlayback() {
+            document.dispatchEvent(new CustomEvent("startPlaybackRequested"));
+        }
+        function stopPlayback() {
+            document.dispatchEvent(new CustomEvent("stopPlaybackRequested"));
+        }
+        document.addEventListener("playbackStarted", () => {
+            globalData.isPlaying = true;
+            console.log("Playback has started.");
+        });
+        document.addEventListener("playbackStopped", () => {
+            globalData.isPlaying = false;
+            console.log("Playback has stopped.");
+        });
+    </script>
+</head>
+<body>
+    <h1>Audionals</h1>
+    <div id="loadingSpinner"></div>
+    <div id="artworkCover">
+        <img id="artworkImage" src="" alt="Artwork Cover">
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const artworkCover = document.getElementById('artworkCover');
+            const artworkImage = document.getElementById('artworkImage');
+            const displayArtworkCover = () => {
+                artworkCover.classList.remove('hidden');
+                loadingSpinner.style.display = 'none';
+            };
+            if (globalData.isArtworkCover && artworkUrl.length > 0) {
+                artworkImage.src = artworkUrl[0];
+                displayArtworkCover();
+                artworkImage.addEventListener('click', () => {
+                    globalData.isPlaying ? stopPlayback() : startPlayback();
+                });
+            }
+        });
+    </script>
+    <section>
+        <script>
+            (async () => {
+                const keyMap = {
+                    0: "projectName", 1: "artistName", 2: "projectBPM", 3: "currentSequence",
+                    4: "channelURLs", 5: "channelVolume", 6: "channelPlaybackSpeed",
+                    7: "trimSettings", 8: "projectChannelNames", 9: "startSliderValue",
+                    10: "endSliderValue", 11: "totalSampleDuration", 12: "start", 13: "end",
+                    14: "projectSequences", 15: "steps"
+                };
+                const reverseChannelMap = Object.fromEntries(
+                    Array.from({ length: 26 }, (_, i) => [String.fromCharCode(65 + i), i])
+                );
+                const loadPako = async () => {
+                    const { default: pako } = await import('/content/fba6f95fb1152db43304a27dce8cb8c65509eba6ab0b6958cedeb33e5f443077i0');
+                    window.pako = pako;
+                };
+                const decompressSteps = steps => steps.flatMap(step => {
+                    if (typeof step === "number") return step;
+                    if (step?.r) {
+                        const [start, end] = step.r;
+                        return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+                    }
+                    if (typeof step === "string" && step.endsWith("r"))
+                        return { index: parseInt(step.slice(0, -1), 10), reverse: true };
+                    return [];
+                });
+                const deserialize = data => {
+                    const recurse = obj => {
+                        if (Array.isArray(obj)) return obj.map(recurse);
+                        if (obj && typeof obj === "object") {
+                            return Object.entries(obj).reduce((acc, [k, v]) => {
+                                const key = keyMap[k] || k;
+                                if (key === "projectSequences") {
+                                    acc[key] = Object.entries(v).reduce((seqAcc, [seqK, seqV]) => {
+                                        const seqName = `Sequence${seqK.replace(/^s/, "")}`;
+                                        seqAcc[seqName] = Object.entries(seqV).reduce((trackAcc, [trackK, trackV]) => {
+                                            const chName = `ch${reverseChannelMap[trackK]}`;
+                                            const steps = trackV[15] || [];
+                                            trackAcc[chName] = { steps: decompressSteps(steps) };
+                                            return trackAcc;
+                                        }, {});
+                                        return seqAcc;
+                                    }, {});
+                                } else {
+                                    acc[key] = recurse(v);
+                                }
+                                return acc;
+                            }, {});
+                        }
+                        return obj;
+                    };
+                    return recurse(data);
+                };
+                const fetchAndDeserialize = async url => {
+                    const response = await fetch(url);
+                    const arrayBuffer = await response.arrayBuffer();
+                    const inflatedData = window.pako.inflate(new Uint8Array(arrayBuffer));
+                    const jsonString = new TextDecoder("utf-8").decode(inflatedData);
+                    return deserialize(JSON.parse(jsonString));
+                };
+                const processSongsAndChannels = deserializedData => {
+                    globalData.songsArray = deserializedData.map((songData, index) => {
+                        const {
+                            projectName = `Song_${index + 1}`, artistName = "Unknown Artist",
+                            projectBPM = 120, projectSequences = {}, channelURLs = [],
+                            channelVolume = [], channelPlaybackSpeed = [], trimSettings = {}
+                        } = songData;
+                        const channels = Array.from({ length: 16 }, (_, i) => ({
+                            id: String.fromCharCode(65 + i),
+                            url: channelURLs[i] || `URL_not_found`,
+                            metadata: {
+                                volume: channelVolume[i] ?? 1.0,
+                                playbackSpeed: channelPlaybackSpeed[i] ?? 1.0,
+                                trimStartTime_Percentage: trimSettings[i]?.start || 0,
+                                trimEndTime_Percentage: trimSettings[i]?.end || 100,
+                                requiresReversal: false
+                            }
+                        }));
+                        Object.values(projectSequences).forEach(sequence => {
+                            Object.entries(sequence).forEach(([channelSequenceId, channelSequence]) => {
+                                const steps = channelSequence.steps || [];
+                                const hasReverseStep = steps.some(step => typeof step === 'object' && step.reverse);
+                                if (hasReverseStep) {
+                                    const match = channelSequenceId.match(/^ch(\d+)$/);
+                                    if (match) {
+                                        const channelIndex = parseInt(match[1], 10);
+                                        if (!isNaN(channelIndex) && channelIndex >= 0 && channelIndex < channels.length) {
+                                            channels[channelIndex].metadata.requiresReversal = true;
+                                        }
+                                    }
+                                }
+                            });
+                        });
+                        return {
+                            id: `Song ${index + 1}: ${projectName}`,
+                            artist: artistName,
+                            bpm: projectBPM,
+                            totalSequences: Object.keys(projectSequences).length,
+                            channels,
+                            projectSequences
+                        };
+                    });
+                };
+                try {
+                    if (songDataUrls.length) {
+                        await loadPako();
+                        const fetchPromises = songDataUrls.map(url => fetchAndDeserialize(url).catch(() => null));
+                        const deserializedData = (await Promise.all(fetchPromises)).filter(Boolean);
+                        processSongsAndChannels(deserializedData);
+                    } else {
+                        console.log('No valid song data URLs to process.');
+                    }
+                } catch (error) {
+                    console.error('Error during initialization:', error);
+                }
+            })();
+        </script>
+    </section>
+    <section>
+        <script>
+            (async () => {
+                const { audioContext, songsArray, initialSampleOrder } = globalData;
+                const base64ToArrayBuffer = base64 => Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
+                const extractBase64FromJSON = jsonData => {
+                    try {
+                        const parsed = JSON.parse(jsonData);
+                        if (parsed.audioData) return parsed.audioData.split("base64,")[1];
+                    } catch { }
+                    return null;
+                };
+                const fetchAndDecodeAudio = async (response, contentType, url) => {
+                    const cache = globalData.audioFetchCache;
+                    if (cache.has(url)) return cache.get(url);
+                    let audioBuffer;
+                    try {
+                        if (/audio\/(wav|mpeg|mp4)|video\/mp4/.test(contentType)) {
+                            audioBuffer = await audioContext.decodeAudioData(await response.arrayBuffer());
+                        } else if (/application\/json/.test(contentType)) {
+                            const base64Data = extractBase64FromJSON(await response.text());
+                            if (base64Data) {
+                                audioBuffer = await audioContext.decodeAudioData(base64ToArrayBuffer(base64Data));
+                            }
+                        }
+                        cache.set(url, audioBuffer);
+                        return audioBuffer;
+                    } catch { return null; }
+                };
+                const normalizeAudioBuffer = (audioBuffer, targetPeak = 0.5) => {
+                    let maxAmplitude = 0;
+                    for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+                        const channelData = audioBuffer.getChannelData(channel);
+                        maxAmplitude = Math.max(maxAmplitude, ...channelData.map(Math.abs));
+                    }
+                    const scalingFactor = maxAmplitude > 0 ? targetPeak / maxAmplitude : 1;
+                    if (scalingFactor !== 1) {
+                        for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+                            const channelData = audioBuffer.getChannelData(channel);
+                            for (let i = 0; i < channelData.length; i++) {
+                                channelData[i] *= scalingFactor;
+                            }
+                        }
+                    }
+                    return audioBuffer;
+                };
+                const processChannel = async (song, channel) => {
+                    try {
+                        const response = await fetch(channel.url);
+                        if (!response.ok) return;
+                        const contentType = response.headers.get("Content-Type") || "";
+                        const audioBuffer = await fetchAndDecodeAudio(response, contentType, channel.url);
+                        if (!audioBuffer) return;
+                        const { trimStartTime_Percentage, trimEndTime_Percentage, requiresReversal } = channel.metadata;
+                        if (trimEndTime_Percentage <= trimStartTime_Percentage) return;
+                        const trimStartTime = (trimStartTime_Percentage / 100) * audioBuffer.duration;
+                        const trimEndTime = (trimEndTime_Percentage / 100) * audioBuffer.duration;
+                        const startSample = Math.floor(trimStartTime * audioBuffer.sampleRate);
+                        const endSample = Math.floor(trimEndTime * audioBuffer.sampleRate);
+                        const trimmedLength = endSample - startSample;
+                        if (trimmedLength <= 0) return;
+                        const trimmedAudioBuffer = audioContext.createBuffer(audioBuffer.numberOfChannels, trimmedLength, audioBuffer.sampleRate);
+                        for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
+                            trimmedAudioBuffer.getChannelData(i).set(audioBuffer.getChannelData(i).subarray(startSample, endSample));
+                        }
+                        const normalizedAudioBuffer = normalizeAudioBuffer(trimmedAudioBuffer, 0.5);
+                        globalData.audioBuffers[song.id] = globalData.audioBuffers[song.id] || {};
+                        globalData.audioBuffers[song.id][channel.id] = normalizedAudioBuffer;
+                        if (requiresReversal) {
+                            const reverseBuffer = audioContext.createBuffer(audioBuffer.numberOfChannels, trimmedLength, audioBuffer.sampleRate);
+                            for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
+                                reverseBuffer.getChannelData(i).set([...normalizedAudioBuffer.getChannelData(i)].reverse());
+                            }
+                            globalData.reverseAudioBuffers[song.id] = globalData.reverseAudioBuffers[song.id] || {};
+                            globalData.reverseAudioBuffers[song.id][channel.id] = normalizeAudioBuffer(reverseBuffer, 0.5);
+                        }
+                    } catch { }
+                };
+                const processInitialAudioChannels = async () => {
+                    if (!songsArray.length) return;
+                    const initialPromises = [];
+                    for (const song of songsArray) {
+                        for (const channel of song.channels) {
+                            initialPromises.push(processChannel(song, channel));
+                        }
+                    }
+                    await Promise.all(initialPromises);
+                    console.log("Initial audio buffers for playback are ready.");
+                    document.dispatchEvent(new CustomEvent("initialAudioBuffersReady", { detail: { success: true } }));
+                };
+                const initAudioProcessing = async () => {
+                    await processInitialAudioChannels();
+                };
+                document.addEventListener("dataLoadingComplete", initAudioProcessing);
+                if (songsArray.length) initAudioProcessing();
+            })();
+        </script>
+    </section>
+    <section>
+        <script>
+            (() => {
+                const { audioContext, songsArray } = globalData;
+                const missingBuffers = new Set();
+                let currentSongIndex = 0;
+                let isPlaying = false;
+                let schedulerTimerID = null;
+                let sequenceStates = {};
+                const startPlayback = () => {
+                    if (!songsArray.length) return;
+                    const song = songsArray[currentSongIndex];
+                    const sequences = song.projectSequences || {};
+                    const stepsPerBeat = 4;
+                    const stepDuration = (60 / song.bpm) / stepsPerBeat;
+                    const sequenceDuration = 64 * stepDuration;
+                    sequenceStates = {};
+                    missingBuffers.clear();
+                    let sequenceStartOffset = 0;
+                    for (const sequenceName of Object.keys(sequences)) {
+                        const startTime = audioContext.currentTime + sequenceStartOffset;
+                        sequenceStates[sequenceName] = {
+                            nextStepIndex: 0,
+                            nextStepTime: startTime,
+                            stepDuration,
+                            startTime,
+                            endTime: startTime + sequenceDuration,
+                            completed: false
+                        };
+                        sequenceStartOffset += sequenceDuration;
+                    }
+                    isPlaying = true;
+                    schedulerTimerID = setInterval(() => schedulerLoop(song), 25);
+                    console.log('Playback started.');
+                    globalData.isPlaying = true;
+                    document.dispatchEvent(new CustomEvent("playbackStarted"));
+                };
+                const stopPlayback = () => {
+                    if (schedulerTimerID) clearInterval(schedulerTimerID);
+                    isPlaying = false;
+                    sequenceStates = {};
+                    missingBuffers.clear();
+                    console.log('Playback stopped.');
+                    globalData.isPlaying = false;
+                    document.dispatchEvent(new CustomEvent("playbackStopped"));
+                };
+                const schedulerLoop = song => {
+                    const currentTime = audioContext.currentTime;
+                    let allSequencesCompleted = true;
+                    for (const [sequenceName, sequence] of Object.entries(song.projectSequences || {})) {
+                        const state = sequenceStates[sequenceName];
+                        if (!state || state.completed) continue;
+                        if (currentTime >= state.endTime) {
+                            state.completed = true;
+                            continue;
+                        }
+                        allSequencesCompleted = false;
+                        while (state.nextStepTime < currentTime + 0.1 && isPlaying) {
+                            const stepIndex = state.nextStepIndex;
+                            const stepTime = state.nextStepTime;
+                            for (const [trackName, trackData] of Object.entries(sequence)) {
+                                const channelIndex = parseInt(trackName.replace('ch', ''), 10);
+                                const channel = song.channels[channelIndex];
+                                if (!channel) continue;
+                                const steps = trackData.steps || [];
+                                const step = steps.find(s => (typeof s === "number" && s === stepIndex) || (s.index === stepIndex));
+                                if (step !== undefined) {
+                                    const reverse = typeof step === "object" && step.reverse;
+                                    schedulePlayback(song, channel, stepTime, reverse, state.stepDuration);
+                                }
+                            }
+                            state.nextStepIndex += 1;
+                            if (state.nextStepIndex >= 64) {
+                                state.completed = true;
+                                break;
+                            }
+                            state.nextStepTime += state.stepDuration;
+                        }
+                    }
+                    if (allSequencesCompleted) stopPlayback();
+                };
+                const schedulePlayback = (song, channel, time, reverse) => {
+                    const buffer = reverse ? globalData.reverseAudioBuffers[song.id]?.[channel.id] : globalData.audioBuffers[song.id]?.[channel.id];
+                    if (!buffer) {
+                        const bufferKey = `${song.id}_${channel.id}_${reverse ? 'reverse' : 'normal'}`;
+                        if (!missingBuffers.has(bufferKey)) {
+                            missingBuffers.add(bufferKey);
+                            console.warn(`Audio buffer missing for Song: ${song.id}, Channel: ${channel.id}${reverse ? " (Reverse)" : ""}`);
+                        }
+                        return;
+                    }
+                    const source = audioContext.createBufferSource();
+                    source.buffer = buffer;
+                    source.playbackRate.value = channel.metadata.playbackSpeed || 1;
+                    source.connect(globalData.masterGain || audioContext.destination);
+                    source.start(time);
+                };
+                document.addEventListener("startPlaybackRequested", () => {
+                    if (!globalData.isPlaying) startPlayback();
+                });
+                document.addEventListener("stopPlaybackRequested", () => {
+                    if (globalData.isPlaying) stopPlayback();
+                });
+                const setupPlaybackEngine = () => {
+                    console.log('Playback Engine setup complete.');
+                };
+                document.addEventListener("initialAudioBuffersReady", setupPlaybackEngine);
+            })();
+        </script>
+    </section>
+</body>
+</html>

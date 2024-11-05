@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bitcoin Block Info</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      background-color: #f8f8f8;
+      padding: 10px;
+      text-align: center;
+      border-bottom: 1px solid #ddd;
+    }
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    #blocks {
+      flex: 3;
+      padding: 20px;
+      overflow-y: auto;
+      border-right: 1px solid #ddd;
+    }
+    #stats {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .block {
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      padding: 15px;
+      margin-bottom: 15px;
+      background-color: #f9f9f9;
+    }
+    .block-header {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    .block-detail {
+      font-size: 14px;
+      margin-bottom: 5px;
+    }
+    #stats h2 {
+      font-size: 20px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 5px;
+    }
+    .stat-category {
+      margin-bottom: 20px;
+    }
+    .stat-item {
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    @media (max-width: 768px) {
+      main {
+        flex-direction: column;
+      }
+      #blocks, #stats {
+        flex: none;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+      }
+    }
+  </style>
+  <!-- Import recursive library from the latest inscription -->
+  <script type="module">
+    import { getBlockHeight, getBlockInfo } from '/content/89fbbeca30c87535f9db283da584006c90076f220dbf410a01985a1840e0ea0ci0';
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      const blocksDiv = document.getElementById('blocks');
+      const statsDiv = document.getElementById('stats');
+      let loggedBlocks = []; // Array to store block info
+
+      // Statistics data
+      let stats = {
+        totalBlocks: 0,
+        totalNonce: 0,
+        nonceLengths: [],
+        totalHashes: 0,
+        hashFrequencies: {},
+        differencesInNonces: [],
+        lastNonce: null,
+        totalTransactions: 0,
+        transactionsPerBlock: [],
+        totalDifficulty: 0,
+        difficulties: [],
+        blockTimestamps: [],
+        merkleRootFrequencies: {},
+        confirmationCounts: {}
+      };
+
+      function truncateData(data, maxLength = 30) {
+        return data.length > maxLength ? data.substring(0, maxLength) + "..." : data;
+      }
+
+      function createBlockElement(block) {
+        const blockEl = document.createElement('div');
+        blockEl.className = 'block';
+
+        const header = document.createElement('div');
+        header.className = 'block-header';
+        header.textContent = `Block #${block.height}`;
+        blockEl.appendChild(header);
+
+        const details = [
+          `Hash: ${truncateData(block.hash)}`,
+          `Previous Block: ${truncateData(block.previous_block)}`,
+          `Merkle Root: ${truncateData(block.merkle_root)}`,
+          `Confirmations: ${block.confirmations}`,
+          `Timestamp: ${new Date(block.timestamp * 1000).toLocaleString()}`,
+          `Transaction Count: ${block.transaction_count}`,
+          `Difficulty: ${block.difficulty}`,
+          `Nonce: ${block.nonce}`
+        ];
+
+        details.forEach(detail => {
+          const detailEl = document.createElement('div');
+          detailEl.className = 'block-detail';
+          detailEl.textContent = detail;
+          blockEl.appendChild(detailEl);
+        });
+
+        return blockEl;
+      }
+
+      function updateBlocksUI() {
+        blocksDiv.innerHTML = '<h2>Blocks</h2>';
+        loggedBlocks.slice().reverse().forEach(block => {
+          const blockEl = createBlockElement(block);
+          blocksDiv.appendChild(blockEl);
+        });
+      }
+
+      function calculateMedian(arr) {
+        const sorted = [...arr].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 !== 0 ? sorted[mid] : ((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2);
+      }
+
+      function updateStats() {
+        statsDiv.innerHTML = `<h2>Statistics</h2>`;
+
+        // Calculate averages
+        const averageNonce = stats.totalBlocks ? (stats.totalNonce / stats.totalBlocks).toFixed(2) : 0;
+        const averageNonceLength = stats.nonceLengths.length ? (stats.nonceLengths.reduce((a, b) => a + b, 0) / stats.nonceLengths.length).toFixed(2) : 0;
+        const averageDifferences = stats.differencesInNonces.length ? (stats.differencesInNonces.reduce((a, b) => a + b, 0) / stats.differencesInNonces.length).toFixed(2) : 0;
+        const averageTransactions = stats.totalBlocks ? (stats.totalTransactions / stats.totalBlocks).toFixed(2) : 0;
+        const medianTransactions = stats.transactionsPerBlock.length ? calculateMedian(stats.transactionsPerBlock) : 0;
+        const averageDifficulty = stats.totalBlocks ? (stats.totalDifficulty / stats.totalBlocks).toFixed(2) : 0;
+        const averageTimeBetweenBlocks = stats.blockTimestamps.length > 1
+          ? (stats.blockTimestamps.slice(1).reduce((a, b, idx) => a + (b - stats.blockTimestamps[idx]), 0) / (stats.blockTimestamps.length - 1)).toFixed(2)
+          : 0;
+
+        // Most common hash prefix (e.g., first 4 characters)
+        let mostCommonHashPrefix = 'N/A';
+        let maxHashFrequency = 0;
+        for (const prefix in stats.hashFrequencies) {
+          if (stats.hashFrequencies[prefix] > maxHashFrequency) {
+            maxHashFrequency = stats.hashFrequencies[prefix];
+            mostCommonHashPrefix = prefix;
+          }
+        }
+
+        // Most common Merkle Root prefix
+        let mostCommonMerklePrefix = 'N/A';
+        let maxMerkleFrequency = 0;
+        for (const prefix in stats.merkleRootFrequencies) {
+          if (stats.merkleRootFrequencies[prefix] > maxMerkleFrequency) {
+            maxMerkleFrequency = stats.merkleRootFrequencies[prefix];
+            mostCommonMerklePrefix = prefix;
+          }
+        }
+
+        // Confirmation distribution
+        let confirmationDistribution = '';
+        for (const [conf, count] of Object.entries(stats.confirmationCounts)) {
+          confirmationDistribution += `Confirmations ${conf}: ${count} blocks<br>`;
+        }
+
+        // Total unique hash prefixes
+        const totalUniqueHashPrefixes = Object.keys(stats.hashFrequencies).length;
+        const totalUniqueMerklePrefixes = Object.keys(stats.merkleRootFrequencies).length;
+
+        const statCategories = {
+          "General": [
+            `Total Blocks: ${stats.totalBlocks}`,
+            `Average Nonce: ${averageNonce}`,
+            `Average Nonce Length: ${averageNonceLength}`,
+            `Average Difference in Nonces: ${averageDifferences}`
+          ],
+          "Transactions": [
+            `Total Transactions: ${stats.totalTransactions}`,
+            `Average Transactions per Block: ${averageTransactions}`,
+            `Median Transactions per Block: ${medianTransactions}`
+          ],
+          "Difficulty": [
+            `Total Difficulty: ${stats.totalDifficulty}`,
+            `Average Difficulty: ${averageDifficulty}`
+          ],
+          "Hash Analysis": [
+            `Most Common Hash Prefix: ${mostCommonHashPrefix} (${maxHashFrequency} times)`,
+            `Total Unique Hash Prefixes: ${totalUniqueHashPrefixes}`
+          ],
+          "Merkle Root Analysis": [
+            `Most Common Merkle Root Prefix: ${mostCommonMerklePrefix} (${maxMerkleFrequency} times)`,
+            `Total Unique Merkle Root Prefixes: ${totalUniqueMerklePrefixes}`
+          ],
+          "Time Analysis": [
+            `Average Time Between Blocks: ${averageTimeBetweenBlocks} seconds`
+          ],
+          "Confirmations": [
+            confirmationDistribution || 'No confirmation data available.'
+          ]
+        };
+
+        for (const [category, items] of Object.entries(statCategories)) {
+          const categoryEl = document.createElement('div');
+          categoryEl.className = 'stat-category';
+
+          const categoryHeader = document.createElement('h3');
+          categoryHeader.textContent = category;
+          categoryEl.appendChild(categoryHeader);
+
+          items.forEach(item => {
+            const itemEl = document.createElement('div');
+            itemEl.className = 'stat-item';
+            itemEl.innerHTML = item;
+            categoryEl.appendChild(itemEl);
+          });
+
+          statsDiv.appendChild(categoryEl);
+        }
+      }
+
+      async function updateBlockData() {
+        try {
+          const blockHeight = await getBlockHeight();
+          // Check if the latest block is already logged
+          if (loggedBlocks.length === 0 || loggedBlocks[loggedBlocks.length - 1].height !== blockHeight) {
+            const blockInfo = await getBlockInfo(blockHeight);
+            loggedBlocks.push(blockInfo);
+
+            // Update statistics
+            stats.totalBlocks += 1;
+            const nonceValue = parseInt(blockInfo.nonce, 10);
+            stats.totalNonce += isNaN(nonceValue) ? 0 : nonceValue;
+            const nonceLength = blockInfo.nonce ? blockInfo.nonce.toString().length : 0;
+            stats.nonceLengths.push(nonceLength);
+            stats.totalHashes += 1;
+
+            // Calculate difference in nonces
+            if (stats.lastNonce !== null && !isNaN(nonceValue) && !isNaN(parseInt(stats.lastNonce, 10))) {
+              const difference = Math.abs(nonceValue - parseInt(stats.lastNonce, 10));
+              stats.differencesInNonces.push(difference);
+            }
+            stats.lastNonce = blockInfo.nonce;
+
+            // Update hash frequencies (e.g., first 4 characters)
+            const hashPrefix = blockInfo.hash.substring(0, 4);
+            if (stats.hashFrequencies[hashPrefix]) {
+              stats.hashFrequencies[hashPrefix] += 1;
+            } else {
+              stats.hashFrequencies[hashPrefix] = 1;
+            }
+
+            // Update Merkle Root frequencies
+            const merklePrefix = blockInfo.merkle_root.substring(0, 4);
+            if (stats.merkleRootFrequencies[merklePrefix]) {
+              stats.merkleRootFrequencies[merklePrefix] += 1;
+            } else {
+              stats.merkleRootFrequencies[merklePrefix] = 1;
+            }
+
+            // Update transactions data
+            stats.totalTransactions += blockInfo.transaction_count;
+            stats.transactionsPerBlock.push(blockInfo.transaction_count);
+
+            // Update difficulty
+            stats.totalDifficulty += parseFloat(blockInfo.difficulty);
+            stats.difficulties.push(parseFloat(blockInfo.difficulty));
+
+            // Update timestamps
+            stats.blockTimestamps.push(blockInfo.timestamp);
+
+            // Update confirmation counts
+            const confirmations = blockInfo.confirmations;
+            if (stats.confirmationCounts[confirmations]) {
+              stats.confirmationCounts[confirmations] += 1;
+            } else {
+              stats.confirmationCounts[confirmations] = 1;
+            }
+
+            updateBlocksUI();
+            updateStats();
+          }
+        } catch (error) {
+          console.error('Error fetching block data:', error);
+        }
+      }
+
+      // Initial fetch of block data
+      await updateBlockData();
+
+      // Set interval to check for new block height every 10 seconds
+      setInterval(updateBlockData, 10000); // Check every 10 seconds
+    });
+  </script>
+</head>
+<body>
+  <header>
+    <h1>Bitcoin Block Information Dashboard</h1>
+  </header>
+  <main>
+    <div id="blocks">
+      <h2>Blocks</h2>
+      <!-- Blocks will be dynamically inserted here -->
+    </div>
+    <div id="stats">
+      <h2>Statistics</h2>
+      <!-- Statistics will be dynamically inserted here -->
+    </div>
+  </main>
+</body>
+</html>

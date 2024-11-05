@@ -1,0 +1,2 @@
+// togglePlayButtonStyles.js
+function togglePlayButton(){const t=document.getElementById("playButton");t?(t.addEventListener("click",(()=>{t.classList.toggle("playing"),console.log("'playing' class toggled.")})),console.log("Play button event listener attached.")):console.error("playButton not found.")}document.addEventListener("playerLayoutInjected",togglePlayButton),document.addEventListener("DOMContentLoaded",(()=>{setTimeout(togglePlayButton,1e3)}));

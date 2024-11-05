@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Neon Shape Drawer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- External CSS -->
+    <style>
+        /* CSS Variables for Consistency */
+        :root {
+            --background-color: #000;
+            --header-bg: #1e1e1e;
+            --header-color: #fff;
+            --control-bg: rgba(30, 30, 30, 0.8);
+            --control-color: #fff;
+            --stroke-color: rgba(57,255,20,1);
+            --font-family: Arial, sans-serif;
+        }
+
+        /* Reset and Basic Styling */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: var(--font-family);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            background: var(--background-color);
+            color: var(--control-color);
+        }
+        #header {
+            background: var(--header-bg);
+            color: var(--header-color);
+            padding: 10px 20px;
+            text-align: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+        #main {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 10px;
+            flex-grow: 1;
+            padding: 10px;
+            background: var(--background-color);
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            padding-top: 100%; /* 1:1 Aspect Ratio */
+            background: var(--background-color);
+        }
+        .canvas-container canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        /* Controls Panel Styling */
+        .controls-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--control-bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .controls-panel h2 {
+            margin-bottom: 20px;
+        }
+        .control-group {
+            margin-bottom: 15px;
+            width: 80%;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+        .control-group output {
+            display: block;
+            text-align: right;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">Neon Shape Drawer</div>
+    <div id="main">
+        <!-- Canvas Containers will be dynamically generated -->
+    </div>
+
+   <!-- Settings Script -->
+<script>
+    (function(global) {
+        global.NeonShapeDrawer = global.NeonShapeDrawer || {};
+
+        const NS = global.NeonShapeDrawer;
+
+        // Abbreviations for Settings
+        NS.SETTING_ABBREVIATIONS = {
+            speed: 'sp',
+            offset: 'of',
+            frequency: 'fr',
+            tailLength: 'tl',
+            noiseLevel: 'nl',
+            timeSpeed: 'ts',
+        };
+
+        // Mapping from Abbreviation to Full Setting Name
+        NS.ABBREV_TO_SETTING = (function() {
+            const map = {};
+            const abbreviations = NS.SETTING_ABBREVIATIONS;
+            for (const key in abbreviations) {
+                if (abbreviations.hasOwnProperty(key)) {
+                    map[abbreviations[key]] = key;
+                }
+            }
+            return map;
+        })();
+
+        /* Shared Fade Types */
+        NS.FADE_TYPES = {
+            linear: {
+                description: 'Constant rate of change',
+                stepRate: 10.0, // Percentage of the difference to apply each step
+            },
+            convex: {
+                description: 'Accelerating rate of change',
+                stepRate: 12.0,
+            },
+            exponential: {
+                description: 'Rapid, non-linear increase in change rate',
+                stepRate: 15.0,
+            },
+            concave: {
+                description: 'Decelerating rate of change',
+                stepRate: 8.0,
+            },
+            logarithmic: {
+                description: 'Slow start, rapid increase',
+                stepRate: 9.0,
+            },
+            sigmoid: {
+                description: 'Gradual start and end with rapid middle change',
+                stepRate: 11.0,
+            },
+            stepwise: {
+                description: 'Discrete jumps in values',
+                stepRate: 20.0,
+            },
+            cubic: {
+                description: 'Smooth, cubic progression',
+                stepRate: 13.0,
+            },
+            bounce: {
+                description: 'Overshoot and settle',
+                stepRate: 14.0,
+            },
+            elastic: {
+                description: 'Oscillating overshoots',
+                stepRate: 16.0,
+            },
+            // Add more fade types as needed
+        };
+
+        /* Function to Apply Fade Type */
+        /**
+         * Applies a fade type to calculate the next value towards the target.
+         * @param {number} currentValue - The current value of the setting.
+         * @param {string} fadeType - The type of fade to apply.
+         * @param {number} target - The target value to reach.
+         * @returns {number} - The updated value after applying the fade.
+         */
+        NS.applyFade = function(currentValue, fadeType, target) {
+            const fade = NS.FADE_TYPES[fadeType];
+            if (!fade) {
+                console.error(`Fade type "${fadeType}" is not defined.`);
+                return currentValue;
+            }
+
+            const difference = target - currentValue;
+            const step = difference * (fade.stepRate / 100);
+
+            // Determine action type based on difference
+            if (difference > 0) {
+                // Increment
+                return parseFloat((currentValue + step).toFixed(2));
+            } else if (difference < 0) {
+                // Decrement
+                return parseFloat((currentValue + step).toFixed(2));
+            } else {
+                // No change
+                return currentValue;
+            }
+        };
+
+        /* Serialized Phases Sets with Shared Fade Types */
+
+        // Serialized Phases Set 1: Linear Journey
+        NS.serializedPhasesSet1 = [
+            { a: 'of', t: 'set', v: 50 },
+            { a: 'sp', t: 'inc', fadeType: 'linear', target: 5.0 },
+            { a: 'fr', t: 'inc', fadeType: 'linear', target: 10.0 },
+            { a: 'tl', t: 'inc', fadeType: 'linear', target: 1000 },
+            { a: 'nl', t: 'inc', fadeType: 'linear', target: 10.0 },
+            { a: 'of', t: 'dec', fadeType: 'linear', target: 0 },
+        ];
+
+        // Serialized Phases Set 2: Exponential Acceleration
+        NS.serializedPhasesSet2 = [
+            { a: 'of', t: 'set', v: 50 },
+            { a: 'sp', t: 'inc', fadeType: 'exponential', target: 5.0 },
+            { a: 'fr', t: 'inc', fadeType: 'exponential', target: 10.0 },
+            { a: 'tl', t: 'inc', fadeType: 'exponential', target: 1000 },
+            { a: 'nl', t: 'inc', fadeType: 'exponential', target: 10.0 },
+            { a: 'of', t: 'dec', fadeType: 'exponential', target: 0 },
+        ];
+
+        // Serialized Phases Set 3: Concave Deceleration
+        NS.serializedPhasesSet3 = [
+            { a: 'of', t: 'set', v: 50 },
+            { a: 'sp', t: 'inc', fadeType: 'concave', target: 5.0 },
+            { a: 'fr', t: 'inc', fadeType: 'concave', target: 10.0 },
+            { a: 'tl', t: 'inc', fadeType: 'concave', target: 1000 },
+            { a: 'nl', t: 'inc', fadeType: 'concave', target: 10.0 },
+            { a: 'of', t: 'dec', fadeType: 'concave', target: 0 },
+        ];
+
+        // Serialized Phases Set 4: Convex Acceleration with Oscillations
+        NS.serializedPhasesSet4 = [
+            { a: 'of', t: 'set', v: 50 },
+            { a: 'sp', t: 'inc', fadeType: 'convex', target: 5.0 },
+            { a: 'fr', t: 'inc', fadeType: 'convex', target: 10.0 },
+            { a: 'sp', t: 'dec', fadeType: 'convex', target: 3.0 },
+            { a: 'fr', t: 'dec', fadeType: 'convex', target: 8.0 },
+            { a: 'sp', t: 'inc', fadeType: 'convex', target: 5.0 },
+            { a: 'fr', t: 'inc', fadeType: 'convex', target: 10.0 },
+            { a: 'tl', t: 'inc', fadeType: 'convex', target: 1000 },
+            { a: 'nl', t: 'inc', fadeType: 'convex', target: 10.0 },
+            { a: 'of', t: 'dec', fadeType: 'convex', target: 0 },
+        ];
+
+        // Serialized Phases Set 5: Logarithmic Growth
+        NS.serializedPhasesSet5 = [
+            { a: 'of', t: 'set', v: 50 },
+            { a: 'sp', t: 'inc', fadeType: 'logarithmic', target: 5.0 },
+            { a: 'fr', t: 'inc', fadeType: 'logarithmic', target: 10.0 },
+            { a: 'tl', t: 'inc', fadeType: 'logarithmic', target: 1000 },
+            { a: 'nl', t: 'inc', fadeType: 'logarithmic', target: 10.0 },
+            { a: 'of', t: 'dec', fadeType: 'logarithmic', target: 0 },
+        ];
+
+        // Serialized Phases Set 6: Sigmoid Progression
+        NS.serializedPhasesSet6 = [
+            { a: 'of', t: 'set', v: 50 },
+            { a: 'sp', t: 'inc', fadeType: 'sigmoid', target: 5.0 },
+            { a: 'fr', t: 'inc', fadeType: 'sigmoid', target: 10.0 },
+            { a: 'tl', t: 'inc', fadeType: 'sigmoid', target: 1000 },
+            { a: 'nl', t: 'inc', fadeType: 'sigmoid', target: 10.0 },
+            { a: 'of', t: 'dec', fadeType: 'sigmoid', target: 0 },
+        ];
+
+        // Serialized Phases Set 7: Stepwise Increments
+        NS.serializedPhasesSet7 = [
+            { a: 'of', t: 'set', v: 50 },
+            { a: 'sp', t: 'inc', fadeType: 'stepwise', target: 5.0 },
+            { a: 'sp', t: 'inc', fadeType: 'stepwise', target: 10.0 },
+            { a: 'fr', t: 'inc', fadeType: 'stepwise', target: 15.0 },
+            { a: 'fr', t: 'inc', fadeType: 'stepwise', target: 20.0 },
+            { a: 'tl', t: 'inc', fadeType: 'stepwise', target: 1500 },
+            { a: 'tl', t: 'inc', fadeType: 'stepwise', target: 2000 },
+            { a: 'nl', t: 'inc', fadeType: 'stepwise', target: 20.0 },
+            { a: 'nl', t: 'dec', fadeType: 'stepwise', target: 10.0 },
+            { a: 'of', t: 'dec', fadeType: 'stepwise', target: 0 },
+        ];
+
+        // Serialized Phases Set 8: Cubic Smoothness
+        NS.serializedPhasesSet8 = [
+            { a: 'of', t: 'set', v: 50 },
+            { a: 'sp', t: 'inc', fadeType: 'cubic', target: 5.0 },
+            { a: 'fr', t: 'inc', fadeType: 'cubic', target: 10.0 },
+            { a: 'tl', t: 'inc', fadeType: 'cubic', target: 1000 },
+            { a: 'nl', t: 'inc', fadeType: 'cubic', target: 10.0 },
+            { a: 'of', t: 'dec', fadeType: 'cubic', target: 0 },
+        ];
+
+        // Serialized Phases Set 9: Bouncing Overshoots
+        NS.serializedPhasesSet9 = [
+            { a: 'of', t: 'set', v: 50 },
+            { a: 'sp', t: 'inc', fadeType: 'bounce', target: 6.0 },
+            { a: 'sp', t: 'dec', fadeType: 'bounce', target: 5.0 },
+            { a: 'fr', t: 'inc', fadeType: 'bounce', target: 11.0 },
+            { a: 'fr', t: 'dec', fadeType: 'bounce', target: 10.0 },
+            { a: 'tl', t: 'inc', fadeType: 'bounce', target: 1100 },
+            { a: 'tl', t: 'dec', fadeType: 'bounce', target: 1000 },
+            { a: 'nl', t: 'inc', fadeType: 'bounce', target: 11.0 },
+            { a: 'nl', t: 'dec', fadeType: 'bounce', target: 10.0 },
+            { a: 'of', t: 'dec', fadeType: 'bounce', target: 0 },
+        ];
+
+        // Serialized Phases Set 10: Elastic Oscillations
+        NS.serializedPhasesSet10 = [
+            { a: 'of', t: 'set', v: 50 },
+            { a: 'sp', t: 'inc', fadeType: 'elastic', target: 5.0 },
+            { a: 'sp', t: 'dec', fadeType: 'elastic', target: 4.0 },
+            { a: 'sp', t: 'inc', fadeType: 'elastic', target: 5.0 },
+            { a: 'fr', t: 'inc', fadeType: 'elastic', target: 10.0 },
+            { a: 'fr', t: 'dec', fadeType: 'elastic', target: 9.0 },
+            { a: 'fr', t: 'inc', fadeType: 'elastic', target: 10.0 },
+            { a: 'tl', t: 'inc', fadeType: 'elastic', target: 1000 },
+            { a: 'tl', t: 'dec', fadeType: 'elastic', target: 900 },
+            { a: 'nl', t: 'inc', fadeType: 'elastic', target: 10.0 },
+            { a: 'nl', t: 'dec', fadeType: 'elastic', target: 9.0 },
+            { a: 'of', t: 'dec', fadeType: 'elastic', target: 0 },
+        ];
+
+        // Function to Set Current Serialized Phases
+        /**
+         * Sets the current serializedPhases to one of the predefined sets.
+         * @param {number|string} setIdentifier - The identifier of the serializedPhases set (1-10 or set name).
+         */
+        NS.setSerializedPhases = function(setIdentifier) {
+            let setName = '';
+
+            if (typeof setIdentifier === 'number') {
+                setName = 'serializedPhasesSet' + setIdentifier;
+            } else if (typeof setIdentifier === 'string') {
+                setName = setIdentifier;
+            } else {
+                console.error('Invalid setIdentifier type. Must be a number or string.');
+                return;
+            }
+
+            if (NS[setName]) {
+                NS.serializedPhases = NS[setName];
+                console.log(`Serialized phases set to ${setName}`);
+            } else {
+                console.error(`Serialized phases set ${setName} does not exist.`);
+            }
+        };
+
+        // Default to Set 1
+        NS.setSerializedPhases(8);
+
+    })(window);
+</script>
+
+    <!-- Utilities Script -->
+    <script>
+        (function(global) {
+            const NS = global.NeonShapeDrawer;
+
+            // Utility Functions for Shape Points
+            NS.getShapePoints = function(name, c) {
+                const shapeFunctions = {
+                    "Capsule": () => NS.getCapsulePoints(c, 400, 200),
+                    "Oval": () => NS.getOvalPoints(c, 400, 200),
+                    "Circle": () => NS.getOvalPoints(c, 250, 250),
+                    "Diamond": () => NS.interpolateShape([
+                        { x: c.x, y: c.y - 100 },
+                        { x: c.x + 150, y: c.y },
+                        { x: c.x, y: c.y + 100 },
+                        { x: c.x - 150, y: c.y }
+                    ], 50),
+                    "Pentagon": () => NS.interpolateShape(NS.generateVertices(c, 150, 5, -Math.PI / 2), 50),
+                    "Hexagon": () => NS.interpolateShape(NS.generateVertices(c, 150, 6, -Math.PI / 2), 50),
+                    "Star": () => NS.interpolateShape(NS.generateStarVertices(c, 150, 75, 5, -Math.PI / 2), 50),
+                    "Rectangle": () => NS.getRectanglePoints(c, 300, 200, 50),
+                    "ReuleauxTriangle": () => NS.getReuleauxTrianglePoints(c, 150, 300)
+                };
+                return shapeFunctions[name] ? shapeFunctions[name]() : [];
+            };
+
+            NS.getOvalPoints = function(c, w, h, numPoints = 360) {
+                const points = [];
+                for (let a = 0; a < numPoints; a++) {
+                    const rad = a * Math.PI / 180;
+                    points.push({ x: c.x + (w / 2) * Math.cos(rad), y: c.y + (h / 2) * Math.sin(rad) });
+                }
+                return points;
+            };
+
+            NS.getCapsulePoints = function(c, width, height, numPoints = 360) {
+                const pts = [];
+                const radius = height / 2;
+                let halfWidth = Math.max(width / 2 - radius, 0);
+                for (let i = 0; i < numPoints; i++) {
+                    const p = i / numPoints;
+                    let x, y;
+                    if (p < 0.25) {
+                        const angle = (Math.PI / 2) + (p / 0.25) * Math.PI;
+                        x = c.x - halfWidth + radius * Math.cos(angle);
+                        y = c.y + radius * Math.sin(angle);
+                    } else if (p < 0.5) {
+                        const t = (p - 0.25) / 0.25;
+                        x = (c.x - halfWidth) + (2 * halfWidth) * t;
+                        y = c.y - radius;
+                    } else if (p < 0.75) {
+                        const angle = (3 * Math.PI / 2) + ((p - 0.5) / 0.25) * Math.PI;
+                        x = c.x + halfWidth + radius * Math.cos(angle);
+                        y = c.y + radius * Math.sin(angle);
+                    } else {
+                        const t = (p - 0.75) / 0.25;
+                        x = (c.x + halfWidth) - (2 * halfWidth) * t;
+                        y = c.y + radius;
+                    }
+                    pts.push({ x, y });
+                }
+                return pts;
+            };
+
+            NS.generateVertices = function(c, r, sides, angleOffset = 0) {
+                const verts = [];
+                for (let i = 0; i < sides; i++) {
+                    verts.push({
+                        x: c.x + r * Math.cos(angleOffset + 2 * Math.PI * i / sides),
+                        y: c.y + r * Math.sin(angleOffset + 2 * Math.PI * i / sides)
+                    });
+                }
+                return verts;
+            };
+
+            NS.generateStarVertices = function(c, outerR, innerR, points, angleOffset = 0) {
+                const verts = [];
+                for (let i = 0; i < points * 2; i++) {
+                    const angle = angleOffset + i * Math.PI / points;
+                    const r = (i % 2 === 0) ? outerR : innerR;
+                    verts.push({ x: c.x + r * Math.cos(angle), y: c.y + r * Math.sin(angle) });
+                }
+                return verts;
+            };
+
+            NS.interpolateShape = function(verts, pointsPerSide) {
+                const pts = [];
+                verts.forEach((p0, i) => {
+                    const p1 = verts[(i + 1) % verts.length];
+                    for (let t = 0; t < pointsPerSide; t++) {
+                        pts.push({
+                            x: p0.x + (p1.x - p0.x) * t / pointsPerSide,
+                            y: p0.y + (p1.y - p0.y) * t / pointsPerSide
+                        });
+                    }
+                });
+                return pts;
+            };
+
+            NS.getRectanglePoints = function(c, width, height, pointsPerSide = 50) {
+                const halfW = width / 2, halfH = height / 2;
+                const corners = [
+                    { x: c.x - halfW, y: c.y - halfH },
+                    { x: c.x + halfW, y: c.y - halfH },
+                    { x: c.x + halfW, y: c.y + halfH },
+                    { x: c.x - halfW, y: c.y + halfH }
+                ];
+                return NS.interpolateShape(corners, pointsPerSide);
+            };
+
+            NS.getReuleauxTrianglePoints = function(c, radius, numPoints = 300) {
+                const points = [];
+                const numPointsPerArc = Math.floor(numPoints / 3);
+                const angleOffset = -Math.PI / 2; // Start pointing upwards
+
+                // Calculate the correct arc radius (side length of the equilateral triangle)
+                const arcRadius = radius * Math.sqrt(3);
+
+                // Calculate the three vertices of the equilateral triangle
+                const vertices = [];
+                for (let i = 0; i < 3; i++) {
+                    const angle = angleOffset + (2 * Math.PI * i) / 3;
+                    vertices.push({
+                        x: c.x + radius * Math.cos(angle),
+                        y: c.y + radius * Math.sin(angle)
+                    });
+                }
+
+                // For each arc, draw from one vertex to the next, centered at the opposite vertex
+                for (let i = 0; i < 3; i++) {
+                    const startVertex = vertices[i];
+                    const endVertex = vertices[(i + 1) % 3];
+                    const centerVertex = vertices[(i + 2) % 3];
+
+                    // Compute the angle from the centerVertex to startVertex and endVertex
+                    let startAngle = Math.atan2(startVertex.y - centerVertex.y, startVertex.x - centerVertex.x);
+                    let endAngle = Math.atan2(endVertex.y - centerVertex.y, endVertex.x - centerVertex.x);
+
+                    // Adjust angles for proper drawing direction
+                    if (endAngle < startAngle) {
+                        endAngle += 2 * Math.PI;
+                    }
+
+                    const angleStep = (endAngle - startAngle) / numPointsPerArc;
+
+                    for (let j = 0; j < numPointsPerArc; j++) {
+                        const angle = startAngle + j * angleStep;
+                        points.push({
+                            x: centerVertex.x + arcRadius * Math.cos(angle),
+                            y: centerVertex.y + arcRadius * Math.sin(angle)
+                        });
+                    }
+                }
+                return points;
+            };
+        })(window);
+    </script>
+
+    <!-- Shape Class Script -->
+    <script>
+        (function(global) {
+            const NS = global.NeonShapeDrawer;
+
+            NS.Shape = function(canvas, shapeName, settings) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.shapeName = shapeName;
+                this.settings = Object.assign({}, settings);
+                this.animationIndex = 0;
+                this.oscillationOffset = 0;
+                this.center = { x: 0, y: 0 };
+                this.shapePoints = [];
+
+                this.resizeCanvas();
+                window.addEventListener('resize', this.resizeCanvas.bind(this));
+
+                this.shapePoints = NS.getShapePoints(this.shapeName, this.center);
+                this.animate();
+            };
+
+            NS.Shape.prototype.resizeCanvas = function() {
+                const parent = this.canvas.parentElement;
+                this.canvas.width = parent.clientWidth;
+                this.canvas.height = parent.clientHeight;
+                this.center = { x: this.canvas.width / 2, y: this.canvas.height / 2 };
+                this.shapePoints = NS.getShapePoints(this.shapeName, this.center);
+            };
+
+            NS.Shape.prototype.setSettings = function(newSettings) {
+                Object.assign(this.settings, newSettings);
+            };
+
+            NS.Shape.prototype.animate = function() {
+                const { speed, offset, frequency, tailLength, noiseLevel } = this.settings;
+                this.ctx.fillStyle = '#000';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                if (this.shapePoints.length > 0) {
+                    this.animationIndex = (this.animationIndex + speed / 10) % this.shapePoints.length;
+                    this.oscillationOffset += frequency * 0.05;
+                    for (let i = 0; i < tailLength; i++) {
+                        let idx = Math.floor((this.animationIndex - i * (speed / 10)) % this.shapePoints.length);
+                        if (idx < 0) idx += this.shapePoints.length;
+                        const idxNext = (idx + 1) % this.shapePoints.length;
+                        const pCurrent = this.shapePoints[idx], pNext = this.shapePoints[idxNext];
+                        const dx = pNext.x - pCurrent.x, dy = pNext.y - pCurrent.y;
+                        const length = Math.hypot(dx, dy) || 1;
+                        const perp = { x: -dy / length, y: dx / length };
+                        const osc = Math.sin(this.oscillationOffset + i * 0.3) * offset * (1 - i / tailLength);
+                        const noise = () => (Math.random() - 0.5) * 2 * noiseLevel;
+                        const nx = pCurrent.x + perp.x * osc + noise(), ny = pCurrent.y + perp.y * osc + noise();
+                        const nnx = pNext.x + perp.x * osc + noise(), nny = pNext.y + perp.y * osc + noise();
+                        const fade = Math.max(0, 255 - Math.floor((i / tailLength) * 255));
+                        this.ctx.strokeStyle = `rgba(57,255,${Math.min(20, fade)},1)`;
+                        this.ctx.lineWidth = 2;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(nx, ny);
+                        this.ctx.lineTo(nnx, nny);
+                        this.ctx.stroke();
+                    }
+                }
+                requestAnimationFrame(this.animate.bind(this));
+            };
+        })(window);
+    </script>
+
+    <!-- Main Application Script -->
+    <script>
+        (function(global) {
+            const NS = global.NeonShapeDrawer;
+
+            // Configuration Constants
+            NS.SHAPE_NAMES = ["Capsule", "Star", "Pentagon", "Oval", "Diamond", "Circle", "Hexagon", "ReuleauxTriangle", "Rectangle"];
+            NS.TOTAL_CANVASES = NS.SHAPE_NAMES.length + 1; // +1 for controls
+
+            // Initial Settings
+            NS.settings = {
+                speed: 0.1,
+                offset: 0,
+                frequency: 1,
+                tailLength: 1,
+                noiseLevel: 0,
+                timeSpeed: 1
+            };
+
+            NS.stepIntervalID = null;
+            NS.stepSequence = [];
+            NS.currentStepIndex = 0;
+
+            // Generate Step Sequence from Serialized Instructions
+            NS.generateStepSequence = function() {
+                NS.stepSequence = [];
+                const tempSettings = Object.assign({}, NS.settings);
+
+                NS.serializedPhases.forEach(function(phase) {
+                    const { a, t, fadeType, target, v } = phase;
+                    const property = NS.ABBREV_TO_SETTING[a];
+                    if (!property) {
+                        console.warn(`Unknown setting abbreviation: ${a}`);
+                        return;
+                    }
+
+                    if (t === 'set') {
+                        NS.stepSequence.push({ property: property, value: v });
+                        tempSettings[property] = v;
+                    } else {
+                        let currentValue = tempSettings[property];
+                        let targetValue = target;
+                        let iterations = 0;
+                        let maxIterations = 100;
+                        while (iterations++ < maxIterations && Math.abs(currentValue - targetValue) > 0.01) {
+                            currentValue = NS.applyFade(currentValue, fadeType, targetValue);
+                            NS.stepSequence.push({ property: property, value: currentValue });
+                            tempSettings[property] = currentValue;
+                        }
+                        // Set to exact target at the end
+                        NS.stepSequence.push({ property: property, value: targetValue });
+                        tempSettings[property] = targetValue;
+                    }
+                });
+
+                console.log(`Total steps to be executed: ${NS.stepSequence.length}`);
+            };
+
+            // Apply a Single Step
+            NS.applyStep = function(step) {
+                const { property, value } = step;
+                NS.settings[property] = value;
+                NS.applySettings();
+                NS.updateControls();
+                // console.log(`Set ${property} to ${value}`);
+            };
+
+            // Apply Settings to All Shapes
+            NS.applySettings = function() {
+                NS.shapeInstances.forEach(function(shape) {
+                    shape.setSettings(NS.settings);
+                });
+            };
+
+            // Update Control Displays
+            NS.updateControls = function() {
+                for (const key in NS.controlValues) {
+                    if (NS.controlValues.hasOwnProperty(key)) {
+                        NS.controlValues[key].textContent = NS.settings[key].toFixed ? NS.settings[key].toFixed(1) : NS.settings[key];
+                        if (parseFloat(NS.controls[key].value) !== NS.settings[key]) {
+                            NS.controls[key].value = NS.settings[key];
+                        }
+                    }
+                }
+            };
+
+            // Start Step Interval
+            NS.startStepInterval = function() {
+                clearInterval(NS.stepIntervalID);
+                const intervalDuration = 1000 / NS.settings.timeSpeed;
+                NS.stepIntervalID = setInterval(function() {
+                    if (NS.currentStepIndex >= NS.stepSequence.length) {
+                        console.log("All steps completed.");
+                        clearInterval(NS.stepIntervalID);
+                        return;
+                    }
+                    NS.applyStep(NS.stepSequence[NS.currentStepIndex++]);
+                }, intervalDuration);
+            };
+
+            // Restart Interval when Time Speed Changes
+            NS.restartStepInterval = function() {
+                NS.startStepInterval();
+            };
+
+            // Initialize the Application
+            NS.init = function() {
+                // Initialize settings with default values
+                NS.settings.speed = 0.1;        // 'sp'
+                NS.settings.offset = 50;        // 'of'
+                NS.settings.frequency = 1;      // 'fr'
+                NS.settings.tailLength = 1;     // 'tl'
+                NS.settings.noiseLevel = 0;     // 'nl'
+                NS.settings.timeSpeed = 1;      // 'ts'
+
+                NS.generateStepSequence();
+                NS.startStepInterval();
+                NS.updateControls();
+            };
+
+            // Generate Canvas Containers Dynamically
+            NS.generateCanvasContainers = function() {
+                const mainContainer = document.getElementById('main');
+                NS.SHAPE_NAMES.forEach(function(name, index) {
+                    const container = document.createElement('div');
+                    container.classList.add('canvas-container');
+                    const canvas = document.createElement('canvas');
+                    canvas.id = `drawing-canvas-${index + 1}`;
+                    container.appendChild(canvas);
+                    mainContainer.appendChild(container);
+                });
+
+                // Add controls panel container
+                const controlsContainer = document.createElement('div');
+                controlsContainer.classList.add('canvas-container');
+                controlsContainer.id = 'controls-container';
+                mainContainer.appendChild(controlsContainer);
+            };
+
+            // Create Controls Panel with Abbreviations
+            NS.createControlsPanel = function() {
+                const controlsContainer = document.getElementById('controls-container');
+                const controlsPanel = document.createElement('div');
+                controlsPanel.classList.add('controls-panel');
+                controlsPanel.id = 'controls-panel';
+
+                // Generate Control Groups
+                const controlHTML = [
+                    { id: 'speed', label: `Speed [${NS.SETTING_ABBREVIATIONS.speed}]`, min: 0.1, max: 5.0, step: 0.1, value: NS.settings.speed },
+                    { id: 'offset', label: `Offset [${NS.SETTING_ABBREVIATIONS.offset}]`, min: 0, max: 50, step: 1, value: NS.settings.offset },
+                    { id: 'frequency', label: `Frequency [${NS.SETTING_ABBREVIATIONS.frequency}]`, min: 0.1, max: 5.0, step: 0.1, value: NS.settings.frequency },
+                    { id: 'tailLength', label: `Tail Length [${NS.SETTING_ABBREVIATIONS.tailLength}]`, min: 1, max: 1000, step: 10, value: NS.settings.tailLength },
+                    { id: 'noiseLevel', label: `Noise Level [${NS.SETTING_ABBREVIATIONS.noiseLevel}]`, min: 0, max: 10, step: 0.1, value: NS.settings.noiseLevel },
+                    { id: 'timeSpeed', label: `Time Speed [${NS.SETTING_ABBREVIATIONS.timeSpeed}]`, min: 0.1, max: 10.0, step: 0.1, value: NS.settings.timeSpeed }
+                ].map(function(ctrl) {
+                    return `
+                        <div class="control-group">
+                            <label for="${ctrl.id}-control">${ctrl.label}: <span id="${ctrl.id}-value">${ctrl.value}</span></label>
+                            <input type="range" id="${ctrl.id}-control" min="${ctrl.min}" max="${ctrl.max}" step="${ctrl.step}" value="${ctrl.value}">
+                        </div>
+                    `;
+                }).join('');
+
+                controlsPanel.innerHTML = `
+                    <h2>Controls</h2>
+                    ${controlHTML}
+                `;
+
+                controlsContainer.appendChild(controlsPanel);
+            };
+
+            // Initialize Shapes
+            NS.initializeShapes = function() {
+                NS.shapeInstances = [];
+                NS.SHAPE_NAMES.forEach(function(name, index) {
+                    const canvas = document.getElementById(`drawing-canvas-${index + 1}`);
+                    const shape = new NS.Shape(canvas, name, NS.settings);
+                    NS.shapeInstances.push(shape);
+                });
+            };
+
+            // Setup Controls
+            NS.setupControls = function() {
+                NS.controls = {
+                    speed: document.getElementById('speed-control'),
+                    offset: document.getElementById('offset-control'),
+                    frequency: document.getElementById('frequency-control'),
+                    tailLength: document.getElementById('tailLength-control'),
+                    noiseLevel: document.getElementById('noiseLevel-control'),
+                    timeSpeed: document.getElementById('timeSpeed-control')
+                };
+
+                NS.controlValues = {
+                    speed: document.getElementById('speed-value'),
+                    offset: document.getElementById('offset-value'),
+                    frequency: document.getElementById('frequency-value'),
+                    tailLength: document.getElementById('tailLength-value'),
+                    noiseLevel: document.getElementById('noiseLevel-value'),
+                    timeSpeed: document.getElementById('timeSpeed-value')
+                };
+
+                // Event Listeners for Controls
+                for (const key in NS.controls) {
+                    if (NS.controls.hasOwnProperty(key)) {
+                        NS.controls[key].addEventListener('input', function(e) {
+                            const value = parseFloat(e.target.value);
+                            NS.settings[key] = isNaN(value) ? e.target.value : value;
+                            NS.controlValues[key].textContent = NS.settings[key].toFixed ? NS.settings[key].toFixed(1) : NS.settings[key];
+                            NS.applySettings();
+                            if (key === 'timeSpeed') {
+                                NS.restartStepInterval();
+                            }
+                        });
+                    }
+                }
+            };
+
+            // Initialize the entire application
+            NS.initApplication = function() {
+                NS.generateCanvasContainers();
+                NS.createControlsPanel();
+                NS.initializeShapes();
+                NS.setupControls();
+                NS.init();
+            };
+
+            // Run the application once the DOM is fully loaded
+            document.addEventListener('DOMContentLoaded', NS.initApplication);
+        })(window);
+    </script>
+</body>
+</html>

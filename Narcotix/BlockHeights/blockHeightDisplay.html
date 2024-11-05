@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bitcoin Block Info</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+    #blockHeight {
+      font-size: 48px;
+      font-weight: bold;
+      margin-top: 20px;
+      color: black;
+    }
+    #log {
+      font-size: 16px;
+      color: black;
+      margin-top: 20px;
+      text-align: center;
+      white-space: pre-wrap;
+      padding: 0 10px;
+    }
+    .data-item {
+      margin-bottom: 5px;
+    }
+  </style>
+  <!-- Import recursive library from the latest inscription -->
+  <script type="module">
+    import { getBlockHeight, getBlockInfo } from '/content/89fbbeca30c87535f9db283da584006c90076f220dbf410a01985a1840e0ea0ci0';
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      const logDiv = document.getElementById('log');
+      const blockHeightDiv = document.getElementById('blockHeight');
+      let lastLoggedBlockHeight = null;
+      let loggedBlocks = {};  // To track blocks and their confirmations
+
+      function logMessage(message) {
+        logDiv.textContent += message + '\n';
+      }
+
+      function truncateData(data, maxLength = 30) {
+        return data.length > maxLength ? data.substring(0, maxLength) + "..." : data;
+      }
+
+      try {
+        logMessage("Fetching current block data...");
+
+        // Fetch and display block height and additional block information
+        async function updateBlockData() {
+          try {
+            const blockHeight = await getBlockHeight();
+            blockHeightDiv.textContent = `Current Block Height: ${blockHeight}`;
+
+            // Check and update confirmations for previously logged blocks
+            for (let height in loggedBlocks) {
+              const blockInfo = await getBlockInfo(parseInt(height));
+              if (blockInfo.confirmations > loggedBlocks[height]) {
+                logMessage(`Block ${height} now has ${blockInfo.confirmations} confirmations`);
+                loggedBlocks[height] = blockInfo.confirmations;  // Update confirmations
+              }
+            }
+
+            // Log the new block only once, then track confirmations
+            if (!loggedBlocks[blockHeight]) {
+              const blockInfo = await getBlockInfo(blockHeight);
+              loggedBlocks[blockHeight] = blockInfo.confirmations;  // Store initial confirmations
+
+              // Log new block info
+              logMessage(`\nNew Block Mined: ${blockHeight}`);
+              logMessage("Block Hash: " + truncateData(blockInfo.hash));
+              logMessage("Prev Block: " + truncateData(blockInfo.previous_block));
+              logMessage("Merkle Root: " + truncateData(blockInfo.merkle_root));
+              logMessage("Confirmations: " + blockInfo.confirmations);
+              logMessage("Timestamp: " + new Date(blockInfo.timestamp * 1000).toLocaleString());
+              logMessage("Tx Count: " + blockInfo.transaction_count);
+              logMessage("Difficulty: " + blockInfo.difficulty);
+              logMessage("Nonce: " + blockInfo.nonce);
+            }
+
+          } catch (error) {
+            blockHeightDiv.textContent = 'Error fetching block data';
+            logMessage(`Error: ${error.message}`);
+          }
+        }
+
+        // Initial fetch of block data
+        await updateBlockData();
+
+        // Set interval to check for new block height and confirmations every 10 seconds
+        setInterval(updateBlockData, 10000); // Check every 10 seconds
+
+      } catch (error) {
+        blockHeightDiv.textContent = 'Failed to load data';
+        logMessage(`Error initializing API: ${error.message}`);
+      }
+    });
+  </script>
+</head>
+<body>
+  <div id="blockHeight">Loading block height...</div>
+  <div id="log">Logs will appear here</div>
+</body>
+</html>

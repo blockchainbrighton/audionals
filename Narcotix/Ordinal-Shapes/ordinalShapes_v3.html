@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Neon Shape Drawer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden;background:#000}
+#header{background:#1e1e1e;color:#fff;padding:10px 20px;text-align:center;font-size:20px;position:relative}
+#sidebar-toggle{display:none;position:absolute;top:15px;left:15px;background:#39ff14;color:#000;border:none;padding:10px;border-radius:5px;cursor:pointer;z-index:1000}
+#main{display:flex;flex:1;overflow:hidden}
+#sidebar{width:250px;background:#1e1e1e;color:#fff;padding:20px;overflow-y:auto;transition:transform .3s ease-in-out}
+.shape-button{width:100%;padding:10px;margin-bottom:10px;background:#aaa;color:#000;border:2px solid #fff;border-radius:5px;cursor:pointer;text-align:center;font-size:16px}
+.shape-button.selected{background:#39ff14}
+.slider-container{margin-top:20px}
+.slider-label{margin-bottom:5px;font-size:14px}
+.slider{width:100%;-webkit-appearance:none;height:8px;border-radius:4px;background:#aaa;outline:none;margin-bottom:15px}
+.slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#39ff14;cursor:pointer;border:none;box-shadow:0 0 2px #000}
+#canvas-container{flex-grow:1;background:#000;position:relative}
+canvas{width:100%;height:100%;display:block}
+@media(max-width:768px){#main{flex-direction:column}#sidebar{position:absolute;top:0;left:0;height:100%;transform:translateX(-100%);z-index:999}#sidebar.open{transform:translateX(0)}#sidebar-toggle{display:block}}
+</style>
+</head>
+<body>
+    <div id="header">
+        <button id="sidebar-toggle">Menu</button>
+        Neon Shape Drawer
+    </div>
+    <div id="main">
+        <div id="sidebar">
+            <h2>Select Shape</h2>
+            <div id="shape-buttons"></div>
+            <div class="slider-container">
+                <div class="slider-label" id="speed-label">Speed (%): 0.1</div>
+                <input type="range" id="speed-slider" class="slider" min="0.1" max="5" step="0.1" value="0.1">
+            </div>
+            <div class="slider-container">
+                <div class="slider-label" id="offset-label">Offset: 0</div>
+                <input type="range" id="offset-slider" class="slider" min="0" max="50" step="5" value="0">
+            </div>
+            <div class="slider-container">
+                <div class="slider-label" id="frequency-label">Frequency: 0.1</div>
+                <input type="range" id="frequency-slider" class="slider" min="0.1" max="100" step="0.1" value="0.1">
+            </div>
+            <div class="slider-container">
+                <div class="slider-label" id="tail-length-label">Tail Length: 1</div>
+                <input type="range" id="tail-length-slider" class="slider" min="1" max="1000" step="1" value="1">
+            </div>
+            <div class="slider-container">
+                <div class="slider-label" id="noise-level-label">Noise Level: 0</div>
+                <input type="range" id="noise-level-slider" class="slider" min="0" max="10" step="1" value="0">
+            </div>
+        </div>
+        <div id="canvas-container">
+            <canvas id="drawing-canvas"></canvas>
+        </div>
+    </div>
+    <script>
+    // DOM Elements
+    const canvas = document.getElementById('drawing-canvas'),
+        ctx = canvas.getContext('2d'),
+        shapeButtonsContainer = document.getElementById('shape-buttons'),
+        speedSlider = document.getElementById('speed-slider'),
+        offsetSlider = document.getElementById('offset-slider'),
+        frequencySlider = document.getElementById('frequency-slider'),
+        tailLengthSlider = document.getElementById('tail-length-slider'),
+        noiseLevelSlider = document.getElementById('noise-level-slider'),
+        speedLabel = document.getElementById('speed-label'),
+        offsetLabel = document.getElementById('offset-label'),
+        frequencyLabel = document.getElementById('frequency-label'),
+        tailLengthLabel = document.getElementById('tail-length-label'),
+        noiseLevelLabel = document.getElementById('noise-level-label'),
+        sidebar = document.getElementById('sidebar'),
+        sidebarToggle = document.getElementById('sidebar-toggle');
+    
+    // Colors
+    const NEON_GREEN = 'rgb(57,255,20)';
+    
+    // Shape names
+    const shapeNames = ["Capsule","Star","Pentagon","Oval","Diamond","Circle","Hexagon"];
+    
+    // Animation variables
+    let selectedShape = null,
+        shapePoints = [],
+        animationIndex = 0,
+        oscillationOffset = 0;
+    
+    // Slider values
+    let speed = +speedSlider.value,
+        offset = +offsetSlider.value,
+        frequency = +frequencySlider.value,
+        tailLength = +tailLengthSlider.value,
+        noiseLevel = +noiseLevelSlider.value;
+    
+    // Center point
+    let center = { x: 0, y: 0 };
+    
+    // Initialize shape buttons
+    shapeNames.forEach((name, index) => {
+        const button = document.createElement('div');
+        button.classList.add('shape-button');
+        button.textContent = name;
+        button.addEventListener('click', () => {
+            document.querySelectorAll('.shape-button').forEach(btn => btn.classList.remove('selected'));
+            button.classList.add('selected');
+            selectedShape = index;
+            shapePoints = getShapePoints(name, center);
+            animationIndex = 0;
+            if (window.innerWidth <= 768) sidebar.classList.remove('open');
+        });
+        shapeButtonsContainer.appendChild(button);
+    });
+    
+    // Update slider labels
+    function updateLabels() {
+        speedLabel.textContent = `Speed (%): ${speed}`;
+        offsetLabel.textContent = `Offset: ${offset}`;
+        frequencyLabel.textContent = `Frequency: ${frequency}`;
+        tailLengthLabel.textContent = `Tail Length: ${tailLength}`;
+        noiseLevelLabel.textContent = `Noise Level: ${noiseLevel}`;
+    }
+    
+    // Slider event listeners
+    [speedSlider, offsetSlider, frequencySlider, tailLengthSlider, noiseLevelSlider].forEach(slider => {
+        slider.addEventListener('input', () => {
+            speed = +speedSlider.value;
+            offset = +offsetSlider.value;
+            frequency = +frequencySlider.value;
+            tailLength = +tailLengthSlider.value;
+            noiseLevel = +noiseLevelSlider.value;
+            updateLabels();
+        });
+    });
+    
+    updateLabels();
+    
+    // Sidebar toggle
+    sidebarToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
+    
+    // Shape generation functions
+    function getOvalPoints(c, w, h, numPoints = 360) {
+        const pts = [];
+        for (let a = 0; a < numPoints; a++) {
+            const rad = a * Math.PI / 180;
+            pts.push({ x: c.x + (w / 2) * Math.cos(rad), y: c.y + (h / 2) * Math.sin(rad) });
+        }
+        return pts;
+    }
+
+    // Corrected Capsule Point Generation
+    function getCapsulePoints(c, width, height, numPoints = 360) {
+        const pts = [];
+        const radius = height / 2;
+        let halfWidth = width / 2 - radius; // The straight part of the capsule
+
+        // Ensure that halfWidth is non-negative
+        if (halfWidth < 0) {
+            console.warn("Width is too small for the given height. Adjusting halfWidth to 0.");
+            halfWidth = 0;
+        }
+
+        for (let i = 0; i < numPoints; i++) {
+            const p = i / numPoints; // Normalized position [0, 1)
+
+            if (p < 0.25) {
+                // Left Semicircle: 90° to 270°
+                const angle = (Math.PI / 2) + (p / 0.25) * Math.PI; // PI/2 to 3PI/2
+                const x = c.x - halfWidth + radius * Math.cos(angle);
+                const y = c.y + radius * Math.sin(angle);
+                pts.push({ x, y });
+            } else if (p < 0.5) {
+                // Top Straight Line: Left to Right
+                const t = (p - 0.25) / 0.25; // 0 to 1
+                const x = (c.x - halfWidth) + (2 * halfWidth) * t;
+                const y = c.y - radius;
+                pts.push({ x, y });
+            } else if (p < 0.75) {
+                // Right Semicircle: 270° to 450° (equivalent to 90°)
+                const angle = (3 * Math.PI / 2) + ((p - 0.5) / 0.25) * Math.PI; // 3PI/2 to 5PI/2
+                const x = c.x + halfWidth + radius * Math.cos(angle);
+                const y = c.y + radius * Math.sin(angle);
+                pts.push({ x, y });
+            } else {
+                // Bottom Straight Line: Right to Left
+                const t = (p - 0.75) / 0.25; // 0 to 1
+                const x = (c.x + halfWidth) - (2 * halfWidth) * t;
+                const y = c.y + radius;
+                pts.push({ x, y });
+            }
+        }
+
+        return pts;
+    }
+    
+    function generateVertices(c, r, sides, angleOffset = 0) {
+        const verts = [];
+        for (let i = 0; i < sides; i++) {
+            const angle = angleOffset + 2 * Math.PI * i / sides;
+            verts.push({ x: c.x + r * Math.cos(angle), y: c.y + r * Math.sin(angle) });
+        }
+        return verts;
+    }
+
+    function generateStarVertices(c, outerR, innerR, points, angleOffset = 0) {
+        const verts = [];
+        for (let i = 0; i < points * 2; i++) {
+            const angle = angleOffset + i * Math.PI / points;
+            const r = (i % 2 === 0) ? outerR : innerR;
+            verts.push({ x: c.x + r * Math.cos(angle), y: c.y + r * Math.sin(angle) });
+        }
+        return verts;
+    }
+
+    function interpolateShape(verts, pointsPerSide) {
+        const pts = [];
+        const numVerts = verts.length;
+        for (let i = 0; i < numVerts; i++) {
+            const p0 = verts[i], p1 = verts[(i + 1) % numVerts];
+            for (let t = 0; t < pointsPerSide; t++) {
+                pts.push({ x: p0.x + (p1.x - p0.x) * t / pointsPerSide, y: p0.y + (p1.y - p0.y) * t / pointsPerSide });
+            }
+        }
+        return pts;
+    }
+
+    function getShapePoints(name, c) {
+        switch (name) {
+            case "Capsule":
+                return getCapsulePoints(c, 400, 200);
+            case "Oval":
+                return getOvalPoints(c, 400, 200);
+            case "Circle":
+                return getOvalPoints(c, 400, 400);
+            case "Diamond":
+                // Diamond with equal sides and unequal diagonals
+                return interpolateShape([
+                    { x: c.x, y: c.y - 100 },  // Top
+                    { x: c.x + 150, y: c.y },  // Right
+                    { x: c.x, y: c.y + 100 },  // Bottom
+                    { x: c.x - 150, y: c.y }   // Left
+                ], 50);
+            case "Pentagon":
+                return interpolateShape(generateVertices(c, 150, 5, -Math.PI / 2), 50);
+            case "Hexagon":
+                return interpolateShape(generateVertices(c, 150, 6, -Math.PI / 2), 50);
+            case "Star":
+                return interpolateShape(generateStarVertices(c, 150, 75, 5, -Math.PI / 2), 50);
+            default:
+                return [];
+        }
+    }
+
+    // Resize canvas
+    function resizeCanvas() {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+        center = { x: canvas.width / 2, y: canvas.height / 2 };
+        if (selectedShape !== null) {
+            shapePoints = getShapePoints(shapeNames[selectedShape], center);
+        }
+    }
+    
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    
+    // Define Phases for Step Sequence
+    const phases = [
+        // 1. Offset set to full (50)
+        { property: 'offset', type: 'set', value: 50 },
+
+        // 2. Speed: +0.1 up to 1.0
+        { property: 'speed', type: 'increment', step: 0.1, target: 1.0 },
+
+        // 3. TailLength: +1 up to10
+        { property: 'tailLength', type: 'increment', step: 1, target: 10 },
+
+        // 4. NoiseLevel: +1 up to5
+        { property: 'noiseLevel', type: 'increment', step: 1, target: 5 },
+
+        // 5. TailLength: +1 up to20
+        { property: 'tailLength', type: 'increment', step: 1, target: 20 },
+
+        // 6. Speed: +0.1 up to2.0
+        { property: 'speed', type: 'increment', step: 0.1, target: 2.0 },
+
+        // 7. TailLength: +10 up to100
+        { property: 'tailLength', type: 'increment', step: 10, target: 100 },
+
+        // 8. NoiseLevel: +1 up to10
+        { property: 'noiseLevel', type: 'increment', step: 1, target: 10 },
+
+        // 9. TailLength: +10 up to200
+        { property: 'tailLength', type: 'increment', step: 10, target: 200 },
+
+        // 10. NoiseLevel: -1 down to5
+        { property: 'noiseLevel', type: 'decrement', step: 1, target: 5 },
+
+        // 11. Offset: -5 down to25
+        { property: 'offset', type: 'decrement', step: 5, target: 25 },
+
+        // 12. TailLength: +50 up to400
+        { property: 'tailLength', type: 'increment', step: 50, target: 400 },
+
+        // 13. Offset: +5 up to50
+        { property: 'offset', type: 'increment', step: 5, target: 50 },
+
+        // 14. NoiseLevel: -1 down to0
+        { property: 'noiseLevel', type: 'decrement', step: 1, target: 0 },
+
+        // 15. Offset: -5 down to25
+        { property: 'offset', type: 'decrement', step: 5, target: 25 },
+
+        // 16. TailLength: +50 up to750
+        { property: 'tailLength', type: 'increment', step: 50, target: 750 },
+
+        // 17. Offset: -5 down to10
+        { property: 'offset', type: 'decrement', step: 5, target: 10 },
+
+        // 18. NoiseLevel: +1 up to10
+        { property: 'noiseLevel', type: 'increment', step: 1, target: 10 },
+
+        // 19. TailLength: +50 up to1000
+        { property: 'tailLength', type: 'increment', step: 50, target: 1000 },
+
+        // 20. Speed: +1 up to5.0
+        { property: 'speed', type: 'increment', step: 1, target: 5.0 },
+    ];
+
+    // Generate Steps from Phases
+    const steps = [];
+    phases.forEach(phase => {
+        const slider = getSliderElement(phase.property);
+        if (!slider) return;
+
+        const currentValue = parseFloat(slider.value);
+        const target = phase.target;
+        const step = phase.step;
+        const type = phase.type;
+
+        if (type === 'set') {
+            steps.push({ property: phase.property, type: 'set', value: phase.value });
+        } else if (type === 'increment') {
+            let nextValue = currentValue + step;
+            while (nextValue <= target + 1e-6) { // Adding a small epsilon to handle floating point precision
+                steps.push({ property: phase.property, type: 'set', value: parseFloat(nextValue.toFixed(getDecimalPlaces(step))) });
+                nextValue += step;
+            }
+        } else if (type === 'decrement') {
+            let nextValue = currentValue - step;
+            while (nextValue >= target - 1e-6) { // Adding a small epsilon to handle floating point precision
+                steps.push({ property: phase.property, type: 'set', value: parseFloat(nextValue.toFixed(getDecimalPlaces(step))) });
+                nextValue -= step;
+            }
+        }
+    });
+
+    // Helper function to get slider element by property name
+    function getSliderElement(property) {
+        switch(property) {
+            case 'speed':
+                return speedSlider;
+            case 'offset':
+                return offsetSlider;
+            case 'frequency':
+                return frequencySlider;
+            case 'tailLength':
+                return tailLengthSlider;
+            case 'noiseLevel':
+                return noiseLevelSlider;
+            default:
+                return null;
+        }
+    }
+
+    // Helper function to determine decimal places based on step size
+    function getDecimalPlaces(step) {
+        const stepStr = step.toString();
+        if (stepStr.includes('.')) {
+            return stepStr.split('.')[1].length;
+        }
+        return 0;
+    }
+
+    // Initialize Steps array based on Phases
+    const stepSequence = [];
+    phases.forEach(phase => {
+        const slider = getSliderElement(phase.property);
+        if (!slider) return;
+
+        const currentValue = parseFloat(slider.value);
+        const target = phase.target;
+        const step = phase.step;
+        const type = phase.type;
+
+        if (type === 'set') {
+            stepSequence.push({ property: phase.property, type: 'set', value: phase.value });
+        } else if (type === 'increment') {
+            let nextValue = currentValue + step;
+            while (nextValue <= target + 1e-6) { // Adding a small epsilon to handle floating point precision
+                stepSequence.push({ property: phase.property, type: 'set', value: parseFloat(nextValue.toFixed(getDecimalPlaces(step))) });
+                nextValue += step;
+            }
+        } else if (type === 'decrement') {
+            let nextValue = currentValue - step;
+            while (nextValue >= target - 1e-6) { // Adding a small epsilon to handle floating point precision
+                stepSequence.push({ property: phase.property, type: 'set', value: parseFloat(nextValue.toFixed(getDecimalPlaces(step))) });
+                nextValue -= step;
+            }
+        }
+    });
+
+    // Current step index
+    let currentStepIndex = 0;
+
+    // Event listener for spacebar press
+    document.addEventListener('keydown', function(event) {
+        if (event.code === 'Space') {
+            event.preventDefault(); // Prevent default spacebar scrolling
+            applyNextStep();
+        }
+    });
+
+    function applyNextStep() {
+        if (currentStepIndex >= stepSequence.length) {
+            console.log("All steps completed.");
+            return;
+        }
+
+        const step = stepSequence[currentStepIndex];
+        const slider = getSliderElement(step.property);
+        if (!slider) {
+            console.warn(`No slider found for property: ${step.property}`);
+            currentStepIndex++;
+            return;
+        }
+
+        // Set the slider value
+        slider.value = step.value;
+        // Trigger the input event to update labels and variables
+        slider.dispatchEvent(new Event('input'));
+
+        console.log(`Step ${currentStepIndex + 1}: Set ${step.property} to ${step.value}`);
+
+        currentStepIndex++;
+    }
+
+    // Animation loop
+    function animate() {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (shapePoints.length > 0) {
+            animationIndex = (animationIndex + speed / 10) % shapePoints.length;
+            oscillationOffset += frequency * 0.05;
+            for (let i = 0; i < tailLength; i++) {
+                let idx = Math.floor((animationIndex - i * (speed / 10)) % shapePoints.length);
+                if (idx < 0) idx += shapePoints.length;
+                const idxNext = (idx + 1) % shapePoints.length;
+                const pCurrent = shapePoints[idx], pNext = shapePoints[idxNext];
+                const dx = pNext.x - pCurrent.x, dy = pNext.y - pCurrent.y;
+                const length = Math.hypot(dx, dy) || 1;
+                const perp = { x: -dy / length, y: dx / length };
+                const osc = Math.sin(oscillationOffset + i * 0.3) * offset * (1 - i / tailLength);
+                const noise = () => (Math.random() - 0.5) * 2 * noiseLevel;
+                const nx = pCurrent.x + perp.x * osc + noise(), ny = pCurrent.y + perp.y * osc + noise();
+                const nnx = pNext.x + perp.x * osc + noise(), nny = pNext.y + perp.y * osc + noise();
+                const fade = Math.max(0, 255 - Math.floor((i / tailLength) * 255));
+                ctx.strokeStyle = `rgba(57,255,${Math.min(20, fade)},1)`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(nx, ny);
+                ctx.lineTo(nnx, nny);
+                ctx.stroke();
+            }
+        }
+        requestAnimationFrame(animate);
+    }
+    
+    animate();
+    
+    // Auto-select first shape
+    document.querySelectorAll('.shape-button')[0].click();
+    
+    // Close sidebar on outside click (mobile)
+    document.addEventListener('click', e => {
+        if (window.innerWidth <= 768 && !sidebar.contains(e.target) && !sidebarToggle.contains(e.target)) {
+            sidebar.classList.remove('open');
+        }
+    });
+    </script>
+</body>
+</html>

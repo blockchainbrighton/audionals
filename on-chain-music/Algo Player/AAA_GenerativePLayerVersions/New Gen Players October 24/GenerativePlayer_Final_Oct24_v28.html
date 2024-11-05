@@ -1,0 +1,1592 @@
+<!--Tracks are not progressing through seeds during normal playback -->
+<!-- Could do with some more balances to help with repetitive loops -->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audionals - Web3 Music Player</title>
+    <link rel="stylesheet" href="/content/7a309a161e838ba93740684338b3d97f3c1226c046d8b1137afc2353b4bf16e1i0">
+
+    <style>
+        :root {
+            --panel-bg-color: #333;
+            --panel-text-color: #fff;
+            --track-list-panel-bg-color: #444;
+            --button-bg-color: #444;
+            --button-hover-bg-color: #555;
+            --button-active-bg-color: #777;
+            --input-bg-color: #555;
+            --border-radius: 8px;
+            --padding: 10px;
+            --box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            --transition-duration: 0.3s;
+            --text-color: #fff;
+            --bpm-bg-color: orange;
+            --seed-bg-color: green;
+            --font-size: 16px;
+        }
+        /* Common Panel Styles */
+        #seed-management-panel,
+        #track-list-panel {
+            position: fixed;
+            background-color: var(--panel-bg-color);
+            color: var(--panel-text-color);
+            padding: var(--padding);
+            border-radius: var(--border-radius);
+            z-index: 10000;
+            box-shadow: var(--box-shadow);
+            transition: all var(--transition-duration) ease;
+        }
+        /* Specific Panel Positions and Sizes */
+        #seed-management-panel {
+            top: 10px;
+            right: 10px;
+            width: 320px;
+        }
+        #track-list-panel {
+            bottom: 10px;
+            left: 10px;
+            width: 300px;
+            background-color: var(--track-list-panel-bg-color);
+        }
+        .hidden {
+            display: none;
+        }
+        @media (max-width: 600px) {
+            #seed-management-panel,
+            #track-list-panel {
+                width: 90%;
+                left: 5%;
+                right: 5%;
+            }
+        }
+        /* Canvas Styling */
+        #seed-mgmt-canvas {
+            width: 100%;
+            height: 100px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #222;
+        }
+        /* Previous Seeds Container */
+        #previous-seeds-container {
+            margin-top: 15px;
+        }
+        #previous-seeds-container h3,
+        #seed-input-section h3 {
+            margin-bottom: 5px;
+        }
+        #previous-seeds-container ul {
+            list-style: none;
+            padding: 0;
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #444;
+        }
+        #previous-seeds-container li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 10px;
+            border-bottom: 1px solid #555;
+        }
+        #previous-seeds-container li:last-child {
+            border-bottom: none;
+        }
+        #previous-seeds-container button {
+            background-color: #666;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 2px 6px;
+            cursor: pointer;
+            transition: background-color var(--transition-duration) ease;
+            margin-left: 10px;
+        }
+        #previous-seeds-container button:hover {
+            background-color: #888;
+        }
+        /* Seed Input Section */
+        #seed-input-section {
+            margin-top: 15px;
+        }
+        #seed-input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 5px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: var(--input-bg-color);
+            color: var(--panel-text-color);
+            transition: border 0.2s ease;
+        }
+        #seed-input:focus {
+            border: 2px solid #00f;
+            outline: none;
+        }
+        /* Clear Seeds Section */
+        #clear-seeds-section {
+            margin-top: 15px;
+            text-align: center;
+        }
+        #clear-seeds-button {
+            width: 100%;
+            padding: 8px;
+            background-color: #b22222;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color var(--transition-duration) ease;
+            margin-top: 5px;
+        }
+        #clear-seeds-button:hover {
+            background-color: #ff6347;
+        }
+        /* Button Styles */
+        button {
+            background-color: var(--button-bg-color);
+            color: var(--panel-text-color);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color var(--transition-duration) ease;
+            padding: 10px 15px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: var(--button-hover-bg-color);
+        }
+        button:active {
+            background-color: var(--button-active-bg-color);
+        }
+        button:focus {
+            outline: 2px solid #00f;
+        }
+        /* Canvas and Now Playing */
+        #loadingSpinner {
+            z-index: 1000;
+        }
+        #artworkCover img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+        #nowPlayingContainer {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(20, 20, 20, 0.95);
+            color: #fff;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            text-align: center;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            transition: background-color 0.3s ease;
+        }
+        #nowPlayingContainer:hover {
+            background-color: rgba(20, 20, 20, 1);
+        }
+        #nowPlayingText {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 5px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+        #nowPlayingContainer .current-seed {
+            display: block;
+            font-size: 0.9em;
+            color: #ccc;
+            margin-bottom: 5px;
+        }
+        #nowPlayingContainer .title {
+            display: block;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        /* New BPM Selection Styles */
+        .bpm-selection {
+            margin-top: 15px;
+        }
+
+        .bpm-selection h3 {
+            margin-bottom: 5px;
+        }
+
+        .bpm-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .bpm-option {
+            display: flex;
+            align-items: center;
+            background-color: var(--input-bg-color);
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color var(--transition-duration) ease;
+        }
+
+        .bpm-option input[type="checkbox"] {
+            margin-right: 5px;
+            cursor: pointer;
+        }
+
+        .bpm-option:hover {
+            background-color: #666;
+        }
+
+        /* Optional: Highlight selected BPMs */
+        .bpm-option input[type="checkbox"]:checked + label {
+            color: var(--bpm-bg-color);
+            font-weight: bold;
+        }
+
+
+    </style>
+</head>
+
+
+<body>
+    <HTMLsection>
+        <span class="songTitle">The Infinite Ordinal Remix</span>
+        <h1>Audionals</h1>
+        
+        <!-- Seed Management Panel -->
+        <div id="seed-management-panel" class="hidden" role="dialog" aria-labelledby="seed-panel-title" aria-hidden="true">
+            <h2 id="seed-panel-title">Seed Management</h2>
+            
+            <!-- Seed and BPM Display -->
+            <canvas id="seed-mgmt-canvas" width="300" height="100" aria-label="Seed and BPM Information"></canvas>
+            
+            <!-- Previous Seeds List -->
+            <div id="previous-seeds-container">
+                <h3>Previous Seeds</h3>
+                <ul></ul>
+            </div>
+            
+            <!-- Seed Input Section -->
+            <div id="seed-input-section">
+                <h3>Load a Specific Seed</h3>
+                <input type="text" id="seed-input" placeholder="Enter 16-digit Seed" aria-label="Enter Seed">
+                <button id="load-seed-button" aria-label="Load Seed">Load Seed</button>
+            </div>
+            
+            <!-- BPM Selection Section -->
+            <div class="bpm-selection">
+                <h3>Select BPM(s) to Filter</h3>
+                <div class="bpm-options">
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-60" value="60" checked>
+                        <label for="bpm-60">60 BPM</label>
+                    </div>
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-120" value="120" checked>
+                        <label for="bpm-120">120 BPM</label>
+                    </div>
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-140" value="140" checked>
+                        <label for="bpm-140">140 BPM</label>
+                    </div>
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-160" value="160" checked>
+                        <label for="bpm-160">160 BPM</label>
+                    </div>
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-180" value="180" checked>
+                        <label for="bpm-180">180 BPM</label>
+                    </div>
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-240" value="240" checked>
+                        <label for="bpm-240">240 BPM</label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Clear Seeds Button -->
+            <div id="clear-seeds-section">
+                <button id="clear-seeds-button" aria-label="Clear Previous Seeds">Clear Previous Seeds</button>
+            </div>
+            
+            <!-- Generate Mixes Button -->
+            <div id="generate-mixes-section" style="margin-top: 15px; text-align: center;">
+                <button id="generate-mixes-button" aria-label="Generate Mixes">Generate Mixes</button>
+            </div>
+        </div>
+        
+        <div id="loadingSpinner"></div>
+        <div id="artworkCover"><img id="artworkImage" src="" alt="Artwork Cover"></div>
+        <div id="trackListingPanel">
+            <h2>Track Listings:</h2>
+            <div id="metadataContent"></div>
+        </div>
+        
+        <div id="nowPlayingContainer">
+            <span class="current-seed">Seed: N/A</span>
+            <span class="title">The Infinite Ordinal Remix</span>
+            <span class="artistName">melophonic</span>
+            <!-- Hidden Elements for Playback Engine -->
+            <span class="songTitle" style="display: none;"></span>
+        </div>
+        
+        <div id="buttonContainer">
+            <button id="playButton" onclick="globalData.togglePlayback()" aria-label="Play or Stop Music">Play / Stop</button>
+            <button id="prevButton" onclick="handlePreviousSong()" aria-label="Previous Song">Previous</button>
+            <button id="nextButton" onclick="handleNextSong()" aria-label="Next Song">Next</button>
+            <button id="toggle-track-panel-button" onclick="toggleTrackListAndPopulate()" aria-label="Toggle Track List Panel">Track List</button>
+            <button id="toggle-seed-panel-button" onclick="togglePanel('seed-management-panel')" aria-label="Toggle Seed Management Panel">Seed Panel</button>
+        </div>
+        
+        <!-- Track List Panel -->
+        <div id="track-list-panel" class="hidden" role="dialog" aria-labelledby="track-list-title" aria-hidden="true">
+            <h2 id="track-list-title">Track List</h2>
+            <div id="track-list-container"></div>
+        </div>
+    </HTMLsection>
+
+    <!-- Songs and Artwork -->
+    <script src="/content/616ef4c1bef02cb6c0f785ef76b98df4e379e8f01e2b31e2ae9e68449485f2bci0"></script> 
+    <!-- Global Data -->
+    <script src="/content/e8496fa0bcb3cad6bc173cd1ef2564b9548b43b306634bdafce47083efd7619ai0"></script> 
+
+
+    <!-- Seed Management -->
+    <script>
+
+    // Initialize the playback state
+    globalData.isPlaying = false;
+
+        (() => {
+            const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
+            const toggleClass = 'hidden';
+
+            window.togglePanel = (panelId) => {
+                const panel = document.getElementById(panelId);
+                if (panel) {
+                    panel.classList.toggle(toggleClass);
+                    const isHidden = panel.classList.contains(toggleClass);
+                    panel.setAttribute('aria-hidden', isHidden);
+                } else {
+                    console.error(`${panelId.replace(/-/g, ' ')} not found.`);
+                }
+            };
+
+            window.populateTrackList = () => {
+                const container = document.getElementById('track-list-container');
+                container.innerHTML = '';
+                const songs = globalData?.songsArray;
+                if (songs?.length) {
+                    songs.forEach(({ id, artist }) => {
+                        const trackItem = document.createElement('div');
+                        trackItem.className = 'track-item';
+                        trackItem.innerHTML = `<div class="track-name">${id}</div><div class="track-artist">${artist}</div>`;
+                        container.appendChild(trackItem);
+                    });
+                } else {
+                    container.textContent = "No tracks available.";
+                }
+            };
+
+            window.toggleTrackListAndPopulate = () => {
+                togglePanel('track-list-panel');
+                const panel = document.getElementById('track-list-panel');
+                if (panel && !panel.classList.contains(toggleClass)) populateTrackList();
+            };
+
+            const generateSeed = () => {
+                let seed = '';
+                while (true) {
+                    seed = Array.from({ length: 16 }, () => Math.floor(Math.random() * 10)).join('');
+                    if (BigInt(seed) <= BigInt(Number.MAX_SAFE_INTEGER)) break;
+                }
+                return seed;
+            };
+
+            const mapSeedToBpm = (seed) => {
+                const hash = seed.split("").reduce((acc, char) => {
+                    const digit = parseInt(char, 10);
+                    return (10 * acc + (isNaN(digit) ? 0 : digit)) % 1000000007;
+                }, 0);
+                const bpm = bpmOptions[hash % bpmOptions.length];
+                log(`Seed: ${seed}, Hash: ${hash}, Selected BPM: ${bpm}`);
+                return bpm;
+            };
+
+            const getQueryParam = (param) => new URLSearchParams(window.location.search).get(param);
+            const fixedProductionSeed = "";
+            let initialSeed = getQueryParam('seed') || fixedProductionSeed || generateSeed();
+
+            if (!/^\d{16}$/.test(initialSeed) || BigInt(initialSeed) > BigInt(Number.MAX_SAFE_INTEGER)) {
+                log(`Invalid seed provided: "${initialSeed}". Generating a new seed.`);
+                initialSeed = generateSeed();
+            }
+
+            window.seed = initialSeed;
+            log(`Using seed: ${window.seed}`);
+
+            const prngSeedNumber = BigInt(window.seed);
+            log(`Converted seed to BigInt: ${prngSeedNumber}`);
+
+            const bpmOptions = [80, 100, 120, 140, 160, 180, 240];
+            const bpm = mapSeedToBpm(window.seed);
+
+            const loadPreviousSeeds = () => {
+                const seeds = JSON.parse(localStorage.getItem("previousSeeds")) || [];
+                displayPreviousSeeds(seeds);
+                return seeds;
+            };
+
+            const saveSeed = (seed) => {
+                const seeds = loadPreviousSeeds();
+                if (!seeds.includes(seed)) {
+                    seeds.push(seed);
+                    localStorage.setItem("previousSeeds", JSON.stringify(seeds));
+                    displayPreviousSeeds(seeds);
+                    log(`Seed saved: ${seed}`);
+                }
+            };
+
+            const displayPreviousSeeds = (seeds) => {
+                const container = document.getElementById("previous-seeds-container");
+                if (!container) return;
+                const ul = container.querySelector('ul');
+                if (!ul) return;
+                ul.innerHTML = seeds.length ? seeds.map(seed => `
+                    <li>
+                        <span>${seed}</span>
+                        <button onclick="copyToClipboard('${seed}')">Copy</button>
+                    </li>`).join('') : "<li>No previous seeds.</li>";
+            };
+
+            window.copyToClipboard = (seed) => {
+                navigator.clipboard.writeText(seed)
+                    .then(() => alert(`Seed copied to clipboard: ${seed}`))
+                    .catch(err => console.error("Could not copy text:", err));
+            };
+
+            const clearPreviousSeeds = () => {
+                if (confirm("Are you sure you want to clear all previous seeds?")) {
+                    localStorage.removeItem("previousSeeds");
+                    displayPreviousSeeds([]);
+                    log("All previous seeds have been cleared.");
+                }
+            };
+
+            const displaySeedAndBPM = (seed, bpm, title = "The Infinite Ordinal Remix") => {
+                const canvas = document.getElementById("seed-mgmt-canvas");
+                if (!canvas) return;
+                const ctx = canvas.getContext("2d");
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--seed-bg-color') || 'green';
+                ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bpm-bg-color') || 'orange';
+                ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-color') || 'white';
+                ctx.font = `${getComputedStyle(document.documentElement).getPropertyValue('--font-size') || '16px'} Arial`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(`Seed: ${seed}`, canvas.width / 2, canvas.height / 4);
+                ctx.fillText(`BPM: ${bpm}`, canvas.width / 2, (3 * canvas.height) / 4);
+                saveSeed(seed);
+                const seedDisplay = document.querySelector('#nowPlayingContainer .current-seed');
+                if (seedDisplay) {
+                    seedDisplay.textContent = `Seed: ${seed}`;
+                    log(`Updated current seed display: ${seed}`);
+                }
+                const titleDisplay = document.querySelector('#nowPlayingContainer .title');
+                if (titleDisplay && title) {
+                    titleDisplay.textContent = title;
+                    log(`Updated current song title: ${title}`);
+                }
+            };
+
+            window.displaySeedAndBPM = displaySeedAndBPM;
+
+            const validateSeedInput = (seed) => {
+                if (!/^\d{16}$/.test(seed)) {
+                    alert("Seed must be a 16-digit numeric string.");
+                    return false;
+                }
+                if (BigInt(seed) > BigInt(Number.MAX_SAFE_INTEGER)) {
+                    alert(`Seed must be a number up to ${Number.MAX_SAFE_INTEGER}.`);
+                    return false;
+                }
+                return true;
+            };
+
+
+
+            const setupEventListeners = () => {
+                document.addEventListener("DOMContentLoaded", () => {
+                    // Ensure that songsArray has at least one song
+                    if (globalData.songsArray.length > 0) {
+                        const firstSong = globalData.songsArray[0];
+                        displaySeedAndBPM(firstSong.seed, firstSong.bpm, firstSong.id);
+                        // Set currentSongIndex to 0 to point to the first song
+                        globalData.currentSongIndex = 0;
+                    } else {
+                        console.warn("No song mixes generated.");
+                    }
+                    loadPreviousSeeds();
+                });
+                document.getElementById("clear-seeds-button")?.addEventListener("click", clearPreviousSeeds);
+
+                document.getElementById("load-seed-button")?.addEventListener("click", () => {
+                    const seedInput = document.getElementById("seed-input").value.trim();
+                    if (!seedInput) {
+                        alert("Please enter a seed.");
+                        return;
+                    }
+                    if (!validateSeedInput(seedInput)) return;
+                    const url = new URL(window.location);
+                    url.searchParams.set('seed', seedInput);
+                    window.location.href = url.toString();
+                });
+
+                const seedInputField = document.getElementById("seed-input");
+                if (seedInputField) {
+                    seedInputField.addEventListener("keypress", (e) => {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            document.getElementById("load-seed-button").click();
+                        }
+                    });
+                }
+            };
+
+            function updateSeedDisplay() {
+                const currentSong = globalData.songsArray[globalData.currentSongIndex];
+                if (currentSong) {
+                    const seed = currentSong.seed;
+                    const bpm = currentSong.bpm;
+                    const title = currentSong.id;
+                    displaySeedAndBPM(seed, bpm, title);
+                } else {
+                    console.warn("Current song index is out of bounds.");
+                }
+            }
+            window.updateSeedDisplay = updateSeedDisplay;
+
+            function getSelectedBPMs() {
+                const bpmOptions = [60, 120, 140, 160, 180, 240];
+                const selectedBPMs = bpmOptions.filter(bpm => {
+                    const checkbox = document.getElementById(`bpm-${bpm}`);
+                    return checkbox && checkbox.checked;
+                });
+                return selectedBPMs;
+            }
+
+            function playSongAtIndex(index) {
+                const song = globalData.songsArray[index];
+                if (song) {
+                    globalData.loadSong(song); // Calls Playback Engine's loadSong
+                    updateSeedDisplay();
+                } else {
+                    console.warn('Invalid song index:', index);
+                }
+            }
+
+            window.handleNextSong = function() {
+                const selectedBPMs = getSelectedBPMs();
+                const songsArray = globalData.songsArray;
+                const totalSongs = songsArray.length;
+                let currentIndex = globalData.currentSongIndex;
+                let found = false;
+
+                for (let i = 1; i <= totalSongs; i++) {
+                    const nextIndex = (currentIndex + i) % totalSongs;
+                    const song = songsArray[nextIndex];
+                    if (selectedBPMs.includes(song.bpm)) {
+                        playSongAtIndex(nextIndex);
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    alert('No more songs with selected BPMs.');
+                }
+            };
+
+            window.handlePreviousSong = function() {
+                const selectedBPMs = getSelectedBPMs();
+                const songsArray = globalData.songsArray;
+                const totalSongs = songsArray.length;
+                let currentIndex = globalData.currentSongIndex;
+                let found = false;
+
+                for (let i = 1; i <= totalSongs; i++) {
+                    const prevIndex = (currentIndex - i + totalSongs) % totalSongs;
+                    const song = songsArray[prevIndex];
+                    if (selectedBPMs.includes(song.bpm)) {
+                        playSongAtIndex(prevIndex);
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    alert('No more songs with selected BPMs.');
+                }
+            };
+            setupEventListeners();
+        })();
+    </script>
+
+    <!-- Effects Configuration Script (effects.js) -->
+    <script>
+        (() => {
+            window.EffectsModule = window.EffectsModule || {};
+            window.EffectsModule.effectsConfig = { 
+                pitchShift: { 
+                    enabled: true, 
+                    defaultProbability: 1, 
+                    shifts: [0.25, 0.5, 1, 2, 4]
+                },
+                harmonize: { 
+                    enabled: true, 
+                    defaultProbability: 0.02, 
+                    intervals: [1.2599, 1.4983],
+                    maxHarmonyChannels: 2
+                },
+                delay: {
+                    enabled: true, 
+                    defaultProbability: 1, 
+                    noteValue: 'quarter',
+                    maxDelayRepeats: 16
+                },
+                reverse: {
+                    enabled: true, 
+                    defaultProbability: 1
+                },
+                pan: {
+                    enabled: true,
+                    defaultProbability: 1,
+                    positions: [-1, 1]
+                },
+                reverb: {
+                    enabled: true, 
+                    defaultProbability: 1, 
+                    decayTimeRange: [2, 7], 
+                    mixRange: [0.3, 0.9]
+                },
+                filter: {
+                    enabled: true, 
+                    defaultProbability: 0.7, 
+                    types: ['lowpass', 'highpass', 'bandpass'], 
+                    frequencyRange: [300, 8000], 
+                    QRange: [1, 10]
+                },
+                tremolo: {
+                    enabled: true, 
+                    defaultProbability: 0.6, 
+                    rateRange: [4, 12],   
+                    depthRange: [0.6, 1]
+                },
+                distortion: {
+                    enabled: true, 
+                    defaultProbability: 0.5, 
+                    amountRange: [1, 15]
+                },
+                bitcrusher: {
+                    enabled: true, 
+                    defaultProbability: 0.3, 
+                    bitDepthRange: [2, 6],    
+                    sampleRateRange: [8000, 22050]
+                }
+            };
+            window.EffectsModule.getEffectParams = function(effectName, currentSequence, prng) {
+                const effect = this.effectsConfig[effectName];
+                if (!effect || !effect.enabled) return null;
+                return prng() < effect.defaultProbability ? effect : null;
+            };
+            document.dispatchEvent(new Event('effectsLoaded'));
+        })();
+    </script>
+
+    <!-- Main Script (main.js) -->
+    <script>
+        (async () => {
+            function waitForEffects() {
+                return new Promise((resolve) => {
+                    if (window.EffectsModule && window.EffectsModule.effectsConfig) {
+                        resolve();
+                    } else {
+                        document.addEventListener('effectsLoaded', resolve, { once: true });
+                    }
+                });
+            }
+            await waitForEffects();
+
+            const loopSampleIds = new Set([
+                "7c42769c1763cc8f045aada7914e8158223e45e7a4f197b49f918b1c005d36fci0",
+                "3364803cb3032ce95f4138a214c15a9b36dcb70f574a477f27615d448e1cdeb8i0",
+            ]);
+
+            const keyNames = [
+                "projectName",
+                "artistName",
+                "projectBPM",
+                "currentSequence",
+                "channelURLs",
+                "channelVolume",
+                "channelPlaybackSpeed",
+                "trimSettings",
+                "projectChannelNames",
+                "startSliderValue",
+                "endSliderValue",
+                "totalSampleDuration",
+                "start",
+                "end",
+                "projectSequences",
+                "steps"
+            ];
+
+            const keyMap = keyNames.reduce((map, key, index) => {
+                map[key] = index;
+                return map;
+            }, {});
+
+            const channelIds = Array.from({ length: 16 }, (_, index) => String.fromCharCode(65 + index)); // 'A' to 'P'
+            const channelIdMap = channelIds.reduce((map, id, index) => {
+                map[id] = index;
+                return map;
+            }, {});
+
+            const fetchAndProcessSongData = async (url) => {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`Network error for ${url}`);
+                    const compressedData = new Uint8Array(await response.arrayBuffer());
+                    const inflatedData = window.pako.inflate(compressedData);
+                    const jsonString = new TextDecoder("utf-8").decode(inflatedData);
+                    const parsedData = JSON.parse(jsonString);
+                    const processParsedData = (data) => {
+                        const recurse = (obj) => {
+                            if (Array.isArray(obj)) {
+                                return obj.map(recurse);
+                            } else if (obj && typeof obj === "object") {
+                                return Object.entries(obj).reduce((accumulator, [key, value]) => {
+                                    const mappedKey = keyNames[key] || key;
+                                    accumulator[mappedKey] = mappedKey === "projectSequences"
+                                        ? Object.fromEntries(
+                                            Object.entries(value).map(([seqKey, seqValue]) => {
+                                                const sequenceName = `Sequence${seqKey.replace(/^s/, "")}`;
+                                                const channels = Object.fromEntries(
+                                                    Object.entries(seqValue).map(([channelKey, channelValue]) => {
+                                                        const steps = channelValue[keyMap.steps] || [];
+                                                        const processedSteps = steps.flatMap((step) => {
+                                                            if (typeof step === "number") {
+                                                                return step;
+                                                            } else if (step?.r) {
+                                                                const [start, end] = step.r;
+                                                                return Array.from({ length: end - start + 1 }, (_, idx) => start + idx);
+                                                            } else if (typeof step === "string" && step.endsWith("r")) {
+                                                                return { index: parseInt(step.slice(0, -1), 10), reverse: true };
+                                                            } else {
+                                                                return [];
+                                                            }
+                                                        });
+                                                        return [`ch${channelIdMap[channelKey]}`, { steps: processedSteps }];
+                                                    })
+                                                );
+                                                return [sequenceName, channels];
+                                            })
+                                        )
+                                        : recurse(value);
+                                    return accumulator;
+                                }, {});
+                            } else {
+                                return obj;
+                            }
+                        };
+                        return recurse(data);
+                    };
+                    return processParsedData(parsedData);
+                } catch (error) {
+                    console.error(`[Initialization] Error fetching/deserializing ${url}:`, error);
+                    throw error;
+                }
+            };
+
+            const prepareInitialSampleOrder = ({ projectSequences }) => {
+                const sampleSet = new Set();
+                const sampleOrder = [];
+                Object.keys(projectSequences)
+                    .sort((a, b) => +a.slice(9) - +b.slice(9))
+                    .forEach(seqK => {
+                        Object.entries(projectSequences[seqK]).forEach(([chId, { steps }]) => {
+                            steps.forEach(step => {
+                                if (typeof step === "number" || step?.index !== undefined) {
+                                    const id = `${chId}_${step.reverse ? 'r' : 'f'}`;
+                                    if (!sampleSet.has(id)) {
+                                        sampleSet.add(id);
+                                        sampleOrder.push({ channelId: chId, reverse: step.reverse || false });
+                                    }
+                                }
+                            });
+                        });
+                    });
+                return sampleOrder;
+            };
+
+            const setArtworkImage = url => {
+                const el = document.getElementById("artworkImage");
+                if (el) {
+                    el.src = url;
+                    el.parentElement.style.display = "flex";
+                }
+            };
+
+            // Global Sample Cache
+             const sampleCache = {};
+
+            // Function to generate a unique key for each sample based on URL and processing parameters
+            const generateSampleKey = (url, params = {}) => {
+                let key = url;
+                if (params.reversed) key += '_reversed';
+                if (params.playbackSpeed && params.playbackSpeed !== 1) key += `_speed_${params.playbackSpeed}`;
+                // Include other parameters as needed
+                return key;
+            };
+
+            // Function to load and process a sample
+            const loadAndProcessSample = async (url, params = {}) => {
+                const key = generateSampleKey(url, params);
+
+                // Check if the processed sample is already in the cache
+                if (sampleCache[key]) {
+                    console.log(`Reusing cached sample: ${key}`);
+                    return sampleCache[key];
+                }
+
+                // Load the sample (fetch the audio data)
+                const response = await fetch(url);
+                const arrayBuffer = await response.arrayBuffer();
+
+                // Decode the audio data
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                let audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+                // Apply processing if needed
+                if (params.reversed) {
+                    // Reverse the audio buffer
+                    for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
+                        Array.prototype.reverse.call(audioBuffer.getChannelData(i));
+                    }
+                }
+
+                if (params.playbackSpeed && params.playbackSpeed !== 1) {
+                    // Adjust playback speed (time-stretching or pitch-shifting)
+                    // Implement time-stretching or pitch-shifting as needed
+                    // For simplicity, let's assume we adjust the playback rate during playback
+                }
+
+                // Store the processed sample in the cache
+                sampleCache[key] = audioBuffer;
+
+                console.log(`Processed and cached sample: ${key}`);
+
+                return audioBuffer;
+            };
+
+            function applyEffects(channel, index, newSong, currentSequence, bpm, effectsContext, prng) {
+                const effectsMap = [
+                    { name: 'pitchShift', applyFn: (ch, params) => applyRandomPitchShift(ch, params, prng) },
+                    { name: 'harmonize', applyFn: (ch, params) => addHarmony(ch, index, newSong, params, effectsContext, prng) },
+                    { name: 'delay', applyFn: (ch, params) => applyIntermittentDelay(ch, params, bpm) },
+                    { name: 'reverse', applyFn: (ch, params) => applyReverseEffect(ch) },
+                    { name: 'filter', applyFn: (ch, params) => applyFilterEffect(ch, params, prng) },
+                    { name: 'tremolo', applyFn: (ch, params) => applyTremoloEffect(ch, params, prng) },
+                    { name: 'distortion', applyFn: (ch, params) => applyDistortionEffect(ch, params, prng) },
+                    { name: 'bitcrusher', applyFn: (ch, params) => applyBitcrusherEffect(ch, params, prng) },
+                    { name: 'pan', applyFn: (ch, params) => applyPanEffect(ch, params, prng) },
+                    { name: 'reverb', applyFn: (ch, params) => applyReverbEffect(ch, params, prng) },
+                    { name: 'volumeChange', applyFn: (ch, params) => applyVolumeChange(ch, params, prng) }
+                ];
+
+                
+
+                effectsMap.forEach(effect => {
+                    const effectParams = window.EffectsModule.getEffectParams(effect.name, currentSequence, prng);
+                    if (effectParams) effect.applyFn(channel, effectParams);
+                });
+
+                // After applying effects, load and process the sample
+                const sampleParams = {
+                    reversed: channel.metadata.requiresReversal,
+                    playbackSpeed: channel.metadata.playbackSpeed,
+                    // Include other processing parameters as needed
+                };
+
+                if (effectsContext.totalGain > effectsContext.maxTotalGain) {
+                    const reductionFactor = effectsContext.maxTotalGain / effectsContext.totalGain;
+                    channel.metadata.volume = (channel.metadata.volume || 1) * reductionFactor;
+                }
+                effectsContext.totalGain += channel.metadata.volume || 1;
+            }
+
+            // Reintroduce the applyRandomPitchShift function
+            const applyRandomPitchShift = (channel, { shifts }, prng) => {
+                const shift = shifts[Math.floor(prng() * shifts.length)];
+                channel.metadata.playbackSpeed *= shift;
+            };
+
+            const addHarmony = (originalChannel, index, newSong, { intervals, maxHarmonyChannels }, context, prng) => {
+                if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
+                intervals.forEach(interval => {
+                    if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
+                    const harmony = JSON.parse(JSON.stringify(originalChannel));
+                    harmony.id = `${originalChannel.id}_harmony_${index}_${interval}`;
+                    harmony.metadata.playbackSpeed *= interval;
+                    harmony.metadata.volume = (harmony.metadata.volume || 1) * 0.8;
+                    newSong.channels.push(harmony);
+                    context.harmonyChannelsAdded++;
+                });
+            };
+
+            const applyIntermittentDelay = (channel, { noteValue, maxDelayRepeats }, bpm) => {
+                const beatDuration = 60000 / bpm;
+                const delayMap = { 'quarter': beatDuration, 'eighth': beatDuration / 2, 'sixteenth': beatDuration / 4 };
+                channel.metadata.delay = { time: delayMap[noteValue] || beatDuration, repeats: maxDelayRepeats };
+            };
+
+            const applyReverseEffect = channel => {
+                channel.metadata.requiresReversal = true;
+            };
+
+            const applyVolumeChange = (channel, { range }, prng) => {
+                const [min, max] = range;
+                channel.metadata.volume = (channel.metadata.volume || 1) * (prng() * (max - min) + min);
+            };
+
+            const applyPanEffect = (channel, { positions }, prng) => {
+                channel.metadata.pan = positions[Math.floor(prng() * positions.length)];
+            };
+
+            const applyReverbEffect = (channel, { decayTimeRange, mixRange }, prng) => {
+                channel.metadata.reverb = {
+                    decayTime: prng() * (decayTimeRange[1] - decayTimeRange[0]) + decayTimeRange[0],
+                    mix: prng() * (mixRange[1] - mixRange[0]) + mixRange[0]
+                };
+            };
+
+            const applyFilterEffect = (channel, { types, frequencyRange, QRange }, prng) => {
+                channel.metadata.filter = {
+                    type: types[Math.floor(prng() * types.length)],
+                    frequency: prng() * (frequencyRange[1] - frequencyRange[0]) + frequencyRange[0],
+                    Q: prng() * (QRange[1] - QRange[0]) + QRange[0]
+                };
+            };
+
+            const applyTremoloEffect = (channel, { rateRange, depthRange }, prng) => {
+                channel.metadata.tremolo = {
+                    rate: prng() * (rateRange[1] - rateRange[0]) + rateRange[0],
+                    depth: prng() * (depthRange[1] - depthRange[0]) + depthRange[0]
+                };
+            };
+
+            const applyDistortionEffect = (channel, { amountRange }, prng) => {
+                channel.metadata.distortion = {
+                    amount: prng() * (amountRange[1] - amountRange[0]) + amountRange[0]
+                };
+            };
+
+            const applyBitcrusherEffect = (channel, { bitDepthRange, sampleRateRange }, prng) => {
+                channel.metadata.bitcrusher = {
+                    bitDepth: Math.floor(prng() * (bitDepthRange[1] - bitDepthRange[0] + 1)) + bitDepthRange[0],
+                    sampleRate: prng() * (sampleRateRange[1] - sampleRateRange[0]) + sampleRateRange[0]
+                };
+            };
+
+            const validSongDataUrls = songDataUrls.filter((url) => url.trim() && !url.trim().startsWith("//"));
+
+            if (validSongDataUrls.length) {
+                if (!window.pako) {
+                    await (async function loadPako() {
+                        try {
+                            const response = await fetch("/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0");
+                            const textContent = await response.text();
+                            const scriptElement = new DOMParser().parseFromString(textContent, "text/html").querySelector("script");
+                            if (!scriptElement || !scriptElement.textContent.includes("pako")) {
+                                throw new Error("Pako library not found.");
+                            }
+                            document.head.append(
+                                Object.assign(document.createElement("script"), { textContent: scriptElement.textContent })
+                            );
+                        } catch (error) {
+                            console.error("[Initialization] Error loading Pako:", error);
+                        }
+                    })();
+                }
+                const songDataArray = await Promise.all(
+                    validSongDataUrls.map(async (url, index) => {
+                        try {
+                            const data = await fetchAndProcessSongData(url);
+                            return { data, index };
+                        } catch (error) {
+                            console.error(`[Initialization] Failed ${url}:`, error);
+                            return null;
+                        }
+                    })
+                ).then(dataArray => {
+                    const validDataArray = dataArray.filter(Boolean);
+                    if (!validDataArray.length) throw new Error("[Initialization] No valid data.");
+                    return validDataArray;
+                });
+
+                const originalSongs = songDataArray
+                    .sort((a, b) => a.index - b.index)
+                    .map(({ data, index }) => {
+                        const {
+                            projectName = "The Infinite Ordinal",
+                            artistName = "melophonic",
+                            projectBPM = 120,
+                            projectSequences = {},
+                            channelURLs = [],
+                            channelVolume = [],
+                            channelPlaybackSpeed = [],
+                            trimSettings = {}
+                        } = data;
+
+                        const channels = channelIds.map((id, idx) => {
+                            const channelSequence = Object.entries(projectSequences).reduce((acc, [sequenceName, sequenceData]) => {
+                                const channelData = sequenceData[`ch${idx}`];
+                                if (channelData) acc.push({ sequenceName, steps: channelData.steps });
+                                return acc;
+                            }, []);
+                            const metadata = {
+                                volume: channelVolume[idx] ?? 1,
+                                playbackSpeed: channelPlaybackSpeed[idx] ?? 1,
+                                trimStartTime_Percentage: trimSettings[idx]?.start || 0,
+                                trimEndTime_Percentage: trimSettings[idx]?.end || 100,
+                                requiresReversal: channelSequence.some(seq => seq.steps.some(step => typeof step === "object" && step.reverse)),
+                                channelSequence,
+                                originalBPM: projectBPM
+                            };
+                            const sampleId = channelURLs[idx];
+                            if (loopSampleIds.has(sampleId)) {
+                                metadata.isLoop = true;
+                            }
+                            return { id, url: sampleId || "URL_not_found", metadata };
+                        });
+                        return {
+                            id: `Song ${index + 1}: ${projectName}`,
+                            artist: artistName,
+                            bpm: projectBPM,
+                            totalSequences: Object.keys(projectSequences).length,
+                            totalChannels: channels.length,
+                            channels,
+                            projectSequences
+                        };
+                    });
+
+                const allChannels = originalSongs.flatMap(song => song.channels);
+
+                function lcg64(seed) {
+                    let state = seed;
+                    const a = 6364136223846793005n;
+                    const c = 1442695040888963407n;
+                    const m = 18446744073709551616n; // 2^64
+                    return function() {
+                        state = (a * state + c) % m;
+                        return Number(state) / Number(m);
+                    }
+                }
+
+                const getRandomChannels = (channelsArray, num, prng) => {
+                    const shuffled = [...channelsArray];
+                    for (let i = shuffled.length - 1; i > 0; i--) {
+                        const j = Math.floor(prng() * (i + 1));
+                        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                    }
+                    return shuffled.slice(0, num);
+                };
+
+               // Modify the song generation function to accommodate asynchronous processing
+               async function generateRandomMixes(seedString, numMixes = 100, filteredBPMs = null) {
+                    const newSongs = [];
+                    const bpmOptions = [60, 120, 140, 160, 180, 240];
+                    let baseSeed;
+
+                    try {
+                        baseSeed = BigInt(seedString);
+                    } catch (error) {
+                        console.error(`[generateRandomMixes] Invalid seed string: "${seedString}". Using base seed 0.`);
+                        baseSeed = 0n;
+                    }
+
+                    // Determine the starting seed
+                    let currentSeed = (baseSeed === 0n) ? 1n : baseSeed;
+
+                    // Helper function to initialize PRNG and get BPM
+                    const getBPMFromSeed = (seed) => {
+                        const prng = lcg64(seed);
+                        return bpmOptions[Math.floor(prng() * bpmOptions.length)];
+                    };
+
+                    // Helper function to find the next seed that produces the desired BPM
+                    const findNextValidSeed = (startingSeed, filteredBPMs, maxAttempts = 1000000) => {
+                        let seed = startingSeed;
+                        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                            const bpm = getBPMFromSeed(seed);
+                            if (bpm === filteredBPMs) {
+                                return seed;
+                            }
+                            seed += 1n;
+                        }
+                        throw new Error(`[generateRandomMixes] Unable to find a seed that produces BPM ${filteredBPMs} within ${maxAttempts} attempts.`);
+                    };
+
+                    for (let mixIndex = 0; mixIndex < numMixes; mixIndex++) {
+                        if (filteredBPMs !== null) {
+                            // Filtered Mode: Find the next seed that generates the desired BPM
+                            try {
+                                currentSeed = findNextValidSeed(currentSeed, filteredBPMs);
+                            } catch (error) {
+                                console.error(error.message);
+                                break; // Exit the loop if unable to find a valid seed
+                            }
+                        }
+
+                        const uniqueSeedNum = currentSeed;
+                        const prng = lcg64(uniqueSeedNum);
+                        
+                        // Select BPM based on PRNG
+                        let selectedBPM;
+                        if (filteredBPMs !== null) {
+                            selectedBPM = filteredBPMs;
+                        } else {
+                            selectedBPM = bpmOptions[Math.floor(prng() * bpmOptions.length)];
+                        }
+
+                        const randomChannels = getRandomChannels(allChannels, 28, prng);
+                        const activationPoints = [
+                            { startSeq: 1, count: 16 },
+                            { startSeq: 5, count: 4 },
+                            { startSeq: 17, count: 4 },
+                            { startSeq: 25, count: 4 }
+                        ];
+                        const channelsWithActivation = [];
+                        let channelOffset = 0;
+
+                        activationPoints.forEach(point => {
+                            for (let i = 0; i < point.count; i++) {
+                                if (channelOffset < randomChannels.length) {
+                                    channelsWithActivation.push({
+                                        channel: JSON.parse(JSON.stringify(randomChannels[channelOffset])),
+                                        activationSeq: point.startSeq
+                                    });
+                                    channelOffset++;
+                                }
+                            }
+                        });
+
+                        const sequenceSet = new Set();
+                        channelsWithActivation.forEach(({ channel }) =>
+                            channel.metadata.channelSequence?.forEach(seq => sequenceSet.add(seq.sequenceName))
+                        );
+
+                        const sequences = Array.from(sequenceSet).sort((a, b) => {
+                            const aNum = parseInt(a.replace('Sequence', '')) || 0;
+                            const bNum = parseInt(b.replace('Sequence', '')) || 0;
+                            return aNum - bNum;
+                        });
+
+                        const newSong = {
+                            id: `The Infinite Ordinal Remix #${mixIndex + 1}`,
+                            projectName: `The Infinite Ordinal`,
+                            artist: `melophonic`,
+                            bpm: selectedBPM,
+                            totalSequences: sequences.length,
+                            totalChannels: channelsWithActivation.length,
+                            channels: [],
+                            projectSequences: sequences.reduce((acc, seq) => ({ ...acc, [seq]: {} }), {}),
+                            seed: uniqueSeedNum.toString()
+                        };
+
+                        const effectsContext = {
+                            harmonyChannelsAdded: 0,
+                            maxHarmonyChannels: window.EffectsModule?.effectsConfig?.harmonize?.maxHarmonyChannels || 2,
+                            totalGain: 0,
+                            maxTotalGain: 10
+                        };
+
+                        // Process channels asynchronously
+                        await Promise.all(channelsWithActivation.map(async ({ channel, activationSeq }, index) => {
+                            const chId = `ch${index}`;
+                            const newChannel = {
+                                id: chId,
+                                url: channel.url,
+                                metadata: {
+                                    ...channel.metadata,
+                                    originalBPM: newSong.bpm,
+                                    activationSeq
+                                }
+                            };
+                            await applyEffects(newChannel, index, newSong, activationSeq, newSong.bpm, effectsContext, prng);
+                            newSong.channels.push(newChannel);
+                            channel.metadata.channelSequence?.forEach(seqData => {
+                                if (!newSong.projectSequences[seqData.sequenceName]) {
+                                    newSong.projectSequences[seqData.sequenceName] = {};
+                                }
+                                newSong.projectSequences[seqData.sequenceName][chId] = { steps: seqData.steps };
+                            });
+                        }));
+
+                        newSongs.push(newSong);
+
+                        if (filteredBPMs !== null) {
+                            // Move to the next seed for the subsequent mix
+                            currentSeed = uniqueSeedNum + 1n;
+                        } else {
+                            // Unfiltered Mode: Increment seed by one
+                            currentSeed += 1n;
+                        }
+                    }
+
+                    console.log(`[generateRandomMixes] Generated ${newSongs.length} song mixes.`);
+                    return newSongs;
+                }
+
+        // After generating the songs, ensure that samples are processed and cached
+        const generatedSongs = await generateRandomMixes(window.seed);
+        Object.assign(globalData, {
+            songsArray: generatedSongs,
+            currentSongIndex: 0,
+            currentSequenceIndex: 0,
+            initialSampleOrder: generatedSongs.length ? prepareInitialSampleOrder(generatedSongs[0]) : null,
+            isSingleSong: generatedSongs.length === 1,
+            isMultipleSongs: generatedSongs.length > 1
+        });
+                if (globalData.isArtworkCover && artworkUrl.length) setArtworkImage(artworkUrl[0]);
+                document.dispatchEvent(new CustomEvent("dataLoadingComplete", {
+                    detail: {
+                        success: true,
+                        totalSongs: globalData.songsArray.length,
+                        songs: globalData.songsArray.map(({ id, totalSequences }) => ({ id, totalSequences }))
+                    }
+                }));
+                window.generateRandomMixes = generateRandomMixes;
+            } else {
+                console.log("[Initialization] No valid song data URLs to process.");
+            }
+        })();
+    </script>
+
+
+
+    <!-- Load Player Scripts AFTER data loading is complete -->
+    <script>
+        document.addEventListener("dataLoadingComplete", (event) => {
+            const remainingScriptUrls = [
+                "/content/5c03e882ab5a531271b2e93a80d8a9d72cb533c580bec1567020f5cd61595560i0", // projectArtistMapping
+                "/content/016f153f011f6a23b8fccd0efcc7945913ee97f241c7a2df7c71c4fa7c9a5fb3i0", // unifiedMetadataManagement
+                "/content/ef622be8aeeac45fdbdc291dd0db739d24c2c667c5c3ce7662f2b8c7f2c3de58i0", // GainNodeHelpers
+                "/content/f4cc99813b43f71b3e781d3c99f24a6a7a5b1004ea0efce3b225011e347b8df0i0", // audioProcessingAndManagement
+                "/content/7b305327f2951d219532ef0cb46b2039b23f2cfd0d8d0e827f3fe1b2b754b5a9i0", // DynamicGainBalancing
+                "/content/8b5b09cfedbc0c6a187816181f8d33f90c5bbd15fc10af47008176effb866a47i0", // keyboardControlsAndEventListeners
+                // "/content/7f1e3b45f22f943ddfb90a0b9811671185f720bb303f002215b9e0fd932f299ci0", // playbackEngine
+
+                ];
+
+            const loadScriptsSequentially = (urls) => {
+                if (urls.length === 0) return;
+                const src = urls.shift();
+                const script = document.createElement("script");
+                script.src = src;
+                script.async = false;
+                script.onload = () => loadScriptsSequentially(urls);
+                script.onerror = (e) => {
+                    console.error(`[Script Loader] Error loading script: ${src}`, e);
+                    loadScriptsSequentially(urls);
+                };
+                document.body.appendChild(script);
+            };
+
+            loadScriptsSequentially([...remainingScriptUrls]);
+            updateSeedDisplay(); // Update seed display after loading is complete
+        });
+    </script>
+
+<script>
+    // playbackEngine.js
+    (() => {
+        const e = window.globalData || (window.globalData = {
+            isPlaying: false,
+            currentSongIndex: 0,
+            songsArray: [],
+            audioBuffers: {},
+            reverseAudioBuffers: {},
+            audioContext: new (window.AudioContext || window.webkitAudioContext)(),
+            masterGain: null,
+            gainNodes: {},
+            isArtworkCover: true,
+            isVisualiserCover: false
+        });
+
+        const { audioContext: n } = e,
+              t = 0.1,
+              o = 25;
+
+        let a = null,
+            r = {};
+
+        const s = new Set(),
+              i = new Set();
+
+        function c() {
+            const { songsArray: iArr, currentSongIndex: l } = e;
+            if (!iArr.length) {
+                console.error("No songs available for playback.");
+                return;
+            }
+
+            const p = iArr[l % iArr.length],
+                  y = p.projectSequences || {},
+                  f = 60 / p.bpm / 4,
+                  m = 64 * f;
+
+            e.currentSongIndex %= iArr.length;
+            r = {};
+            s.clear();
+
+            console.log(`Starting playback for Song: ${p.id} (${e.currentSongIndex + 1}/${iArr.length}) with ${Object.keys(y).length} sequences.`);
+            console.log(`Song BPM: ${p.bpm}`);
+
+            let b = 0;
+            for (const [eSeq, tSeq] of Object.entries(y)) {
+                r[eSeq] = {
+                    nextStepIndex: 0,
+                    nextStepTime: n.currentTime + b,
+                    stepDuration: f,
+                    endTime: n.currentTime + b + m,
+                    completed: false
+                };
+                b += m;
+            }
+
+            e.currentSongId = p.id;
+            GainNodeHelper.createGainNodesForSong(p);
+            GainNodeHelper.prepareNextSong(iArr[(e.currentSongIndex + 1) % iArr.length]);
+            e.isPlaying = true;
+
+            a = setInterval(() => {
+                function step(oSeq) {
+                    const aTime = n.currentTime;
+                    let allCompleted = true;
+
+                    for (const [nSeq, iSeq] of Object.entries(oSeq.projectSequences || {})) {
+                        const cSeq = r[nSeq];
+                        if (cSeq && !cSeq.completed) {
+                            if (aTime >= cSeq.endTime) {
+                                cSeq.completed = true;
+                                console.log(`Sequence ${nSeq} has completed.`);
+                            } else {
+                                allCompleted = false;
+                                while (cSeq.nextStepTime <= aTime + t && e.isPlaying) {
+                                    const { nextStepIndex: stepIdx, nextStepTime: stepTime, stepDuration: stepDur } = cSeq;
+                                    for (const [channelKey, channelData] of Object.entries(iSeq)) {
+                                        const channelIndex = parseInt(channelKey.slice(2), 10);
+                                        const channel = oSeq.channels[channelIndex];
+                                        if (!channel) {
+                                            console.warn(`Channel index ${channelIndex} not found in song ${oSeq.id}.`);
+                                            continue;
+                                        }
+                                        const step = channelData.steps?.find(stepItem => typeof stepItem === "number" ? stepItem === stepIdx : stepItem.index === stepIdx);
+                                        if (step !== undefined) {
+                                            const isReversed = typeof step === "object" && step.reverse;
+                                            u(oSeq, channel, stepTime, isReversed);
+                                        }
+                                    }
+                                    cSeq.nextStepIndex++;
+                                    if (cSeq.nextStepIndex >= 64) {
+                                        cSeq.completed = true;
+                                        console.log(`Sequence ${nSeq} has completed all steps.`);
+                                        break;
+                                    }
+                                    cSeq.nextStepTime += stepDur;
+                                }
+                            }
+                        }
+                    }
+
+                    if (allCompleted) {
+                        console.log("All sequences have completed.");
+                        function handleEnd() {
+                            if (!e.isPlaying) return;
+                            e.currentSongIndex = (e.currentSongIndex + 1) % e.songsArray.length;
+                            setTimeout(() => {
+                                if (e.isPlaying) {
+                                    c(); // Start playback for the next song
+                                }
+                            }, 200);
+                        }
+                        handleEnd();
+                    }
+                }
+                step(p);
+            }, t * 1000);
+
+            console.log("Sequences scheduled and playback started.");
+            document.dispatchEvent(new CustomEvent("playbackStarted", { detail: { success: true } }));
+            g(p);
+        }
+
+        function l() {
+            if (!e.isPlaying) {
+                console.log("Playback is not in progress.");
+                return;
+            }
+            d();
+            console.log("Playback stopped.");
+            document.dispatchEvent(new CustomEvent("playbackStopped", { detail: { success: true } }));
+            p();
+        }
+
+        function d(n = {}) {
+            clearInterval(a);
+            if (!n.preserveIsPlaying) {
+                e.isPlaying = false;
+            }
+            r = {};
+            s.clear();
+            i.forEach((source) => {
+                try {
+                    source.stop();
+                    source.disconnect();
+                } catch (err) {
+                    console.error("Error stopping/disconnecting an audio source:", err);
+                }
+            });
+            i.clear();
+            if (e.currentSongId) {
+                GainNodeHelper.cleanupGainNodesForSong(e.currentSongId);
+                e.currentSongId = null;
+            }
+            if (n.callback) {
+                n.callback();
+            }
+        }
+
+        if (!e.masterGain) {
+            e.masterGain = n.createGain();
+            e.masterGain.connect(n.destination);
+        }
+
+        e.togglePlayback = () => e.isPlaying ? l() : c();
+        e.startPlayback = c;
+        e.stopPlayback = l;
+        e.resetPlayback = () => d({ callback: c });
+
+        const u = (tSong, oChannel, aTime, rReversed) => {
+            const cKey = `${tSong.id}_${oChannel.id}_${rReversed ? "reverse" : "normal"}`;
+            const buffer = rReversed ? e.reverseAudioBuffers[tSong.id]?.[oChannel.id] : e.audioBuffers[tSong.id]?.[oChannel.id];
+            if (!buffer) {
+                if (!s.has(cKey)) {
+                    s.add(cKey);
+                    console.warn(`Audio buffer missing for Song: ${tSong.id}, Channel: ${oChannel.id}${rReversed ? " (Reverse)" : ""}`);
+                }
+                return;
+            }
+            const dSource = n.createBufferSource();
+            dSource.buffer = buffer;
+            dSource.playbackRate.value = oChannel.metadata.playbackSpeed || 1;
+            const gainNode = e.gainNodes?.[tSong.id]?.[oChannel.id] || e.masterGain;
+            dSource.connect(gainNode);
+            dSource.start(aTime);
+            i.add(dSource);
+            dSource.onended = () => i.delete(dSource);
+        };
+
+        e.initializePlaybackEngine = () => {
+            if (!e.songsArray.length) {
+                console.error("No songs available for playback.");
+                return;
+            }
+            console.log("Playback Engine Initialization Complete.");
+            console.log("Playback is ready. Click the artwork to start.");
+        };
+
+        const g = (song) => {
+            const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+            if (!nowPlayingContainer) {
+                console.warn("Now Playing Container not found.");
+                return;
+            }
+            const { projectName: tName, artistName: oName } = getProjectAndArtist(song);
+            nowPlayingContainer.querySelector(".songTitle").textContent = tName;
+            nowPlayingContainer.querySelector(".artistName").textContent = oName;
+        };
+
+        const p = () => {
+            const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+            if (!nowPlayingContainer) {
+                console.warn("Now Playing Container not found.");
+                return;
+            }
+            nowPlayingContainer.querySelector(".songTitle").textContent = "No song playing";
+            nowPlayingContainer.querySelector(".artistName").textContent = "";
+        };
+
+        const y = () => {
+            document.addEventListener("DOMContentLoaded", () => {
+                const artworkCover = document.getElementById("artworkCover");
+                const artworkImage = document.getElementById("artworkImage");
+                const loadingSpinner = document.getElementById("loadingSpinner");
+                if (e.isArtworkCover && artworkUrl.length) {
+                    artworkImage.src = artworkUrl[0];
+                    artworkCover.classList.remove("hidden");
+                    loadingSpinner.style.display = "none";
+                    artworkImage.addEventListener("click", e.togglePlayback);
+                    console.log("Artwork cover is set up for playback toggle.");
+                } else {
+                    console.warn("Artwork cover is not enabled or no artwork URL provided.");
+                }
+            });
+        };
+
+        document.addEventListener("initialAudioBuffersReady", (n) => {
+            if (n.detail.success) {
+                e.initializePlaybackEngine();
+                console.log("Initial audio buffers are ready.");
+            }
+        });
+
+        ["playbackStarted", "playbackStopped"].forEach((eventName) => {
+            document.addEventListener(eventName, (n) => {
+                if (n.detail.success) {
+                    console.log(`Playback has been successfully ${eventName === "playbackStarted" ? "started" : "stopped"}.`);
+                }
+            });
+        });
+
+        y();
+
+        if (Object.keys(e.audioBuffers).length) {
+            e.initializePlaybackEngine();
+        }
+    })();
+</script>
+</body>
+</html>
+
+

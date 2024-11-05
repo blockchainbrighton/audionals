@@ -1,0 +1,2 @@
+// playerLayout.html
+document.addEventListener("DOMContentLoaded",(function(){fetch("/content/631171485c113dc0f7c12d3dd870219fc286bed3e754615cade49fe9f62e26efi0").then((e=>e.text())).then((e=>{const n=document.getElementById("mainContent");n?(n.innerHTML=e,document.dispatchEvent(new Event("playerLayoutInjected")),console.log("Player layout injected and event dispatched.")):console.error("mainContent not found in the DOM.")})).catch((e=>console.error("Error loading HTML:",e)))}));

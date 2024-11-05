@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Neon Shape Drawer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+/* Reset and basic styling */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+body {
+    font-family: Arial, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    background: #000;
+}
+#header {
+    background: #1e1e1e;
+    color: #fff;
+    padding: 10px 20px;
+    text-align: center;
+    font-size: 24px;
+}
+#main {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 10px;
+    height: calc(100vh - 60px); /* Adjust for header height */
+    padding: 10px;
+    background: #000;
+}
+.canvas-container {
+    position: relative;
+    width: 100%;
+    background: #000;
+    overflow: hidden;
+}
+.canvas-container::before {
+    content: '';
+    display: block;
+    padding-top: 100%; /* 1:1 Aspect Ratio */
+}
+.canvas-container canvas,
+.canvas-container .controls-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+/* Controls Panel Styling */
+.controls-panel {
+    background: rgba(30, 30, 30, 0.8);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    z-index: 10; /* Ensure controls are on top */
+}
+.controls-panel h2 {
+    margin-bottom: 20px;
+}
+.control-group {
+    margin-bottom: 15px;
+    width: 80%;
+}
+.control-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+}
+.control-group input[type="range"] {
+    width: 100%;
+}
+.control-group output {
+    display: block;
+    text-align: right;
+    font-size: 12px;
+    margin-top: 5px;
+}
+</style>
+</head>
+<body>
+    <div id="header">
+        Neon Shape Drawer
+    </div>
+    <div id="main">
+        <!-- Nine shape canvases -->
+        <div class="canvas-container"><canvas id="drawing-canvas-1"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-2"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-3"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-4"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-5"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-6"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-7"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-8"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-9"></canvas></div>
+        <!-- Controls in the 10th space -->
+        <div class="canvas-container" id="controls-container">
+            <canvas id="drawing-canvas-10"></canvas>
+            <div class="controls-panel" id="controls-panel">
+                <h2>Controls</h2>
+                <div class="control-group">
+                    <label for="speed-control">Speed: <span id="speed-value">0.1</span></label>
+                    <input type="range" id="speed-control" min="0.1" max="5.0" step="0.1" value="0.1">
+                </div>
+                <div class="control-group">
+                    <label for="offset-control">Offset: <span id="offset-value">0</span></label>
+                    <input type="range" id="offset-control" min="0" max="50" step="5" value="0">
+                </div>
+                <div class="control-group">
+                    <label for="frequency-control">Frequency: <span id="frequency-value">0.1</span></label>
+                    <input type="range" id="frequency-control" min="0.1" max="5.0" step="0.1" value="0.1">
+                </div>
+                <div class="control-group">
+                    <label for="tailLength-control">Tail Length: <span id="tailLength-value">1</span></label>
+                    <input type="range" id="tailLength-control" min="1" max="1000" step="10" value="1">
+                </div>
+                <div class="control-group">
+                    <label for="noiseLevel-control">Noise Level: <span id="noiseLevel-value">0</span></label>
+                    <input type="range" id="noiseLevel-control" min="0" max="10" step="1" value="0">
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    // Settings variables initialized to minimum values
+    let speed = 0.1,
+        offset = 0,
+        frequency = 0.1,
+        tailLength = 1,
+        noiseLevel = 0;
+
+    // Shape Class Definition
+    class Shape {
+        constructor(canvasId, shapeName) {
+            this.canvas = document.getElementById(canvasId);
+            this.ctx = this.canvas.getContext('2d');
+            this.shapeName = shapeName;
+            this.speed = speed;
+            this.offset = offset;
+            this.frequency = frequency;
+            this.tailLength = tailLength;
+            this.noiseLevel = noiseLevel;
+            this.animationIndex = 0;
+            this.oscillationOffset = 0;
+            this.center = { x: 0, y: 0 };
+            this.shapePoints = [];
+
+            this.resizeCanvas();
+            window.addEventListener('resize', () => this.resizeCanvas());
+
+            this.shapePoints = getShapePoints(this.shapeName, this.center);
+
+            this.animate();
+        }
+
+        resizeCanvas() {
+            const container = this.canvas.parentElement;
+            const size = container.clientWidth;
+            this.canvas.width = size;
+            this.canvas.height = size;
+            this.center = { x: size / 2, y: size / 2 };
+            this.shapePoints = getShapePoints(this.shapeName, this.center);
+        }
+
+        setSettings(settings) {
+            Object.assign(this, settings);
+        }
+
+        animate() {
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            if (this.shapePoints.length > 0) {
+                this.animationIndex = (this.animationIndex + this.speed / 10) % this.shapePoints.length;
+                this.oscillationOffset += this.frequency * 0.05;
+                for (let i = 0; i < this.tailLength; i++) {
+                    let idx = Math.floor((this.animationIndex - i * (this.speed / 10)) % this.shapePoints.length);
+                    if (idx < 0) idx += this.shapePoints.length;
+                    const idxNext = (idx + 1) % this.shapePoints.length;
+                    const pCurrent = this.shapePoints[idx], pNext = this.shapePoints[idxNext];
+                    const dx = pNext.x - pCurrent.x, dy = pNext.y - pCurrent.y;
+                    const length = Math.hypot(dx, dy) || 1;
+                    const perp = { x: -dy / length, y: dx / length };
+                    const osc = Math.sin(this.oscillationOffset + i * 0.3) * this.offset * (1 - i / this.tailLength);
+                    const noise = () => (Math.random() - 0.5) * 2 * this.noiseLevel;
+                    const nx = pCurrent.x + perp.x * osc + noise(), ny = pCurrent.y + perp.y * osc + noise();
+                    const nnx = pNext.x + perp.x * osc + noise(), nny = pNext.y + perp.y * osc + noise();
+                    const fade = Math.max(0, 255 - Math.floor((i / this.tailLength) * 255));
+                    this.ctx.strokeStyle = `rgba(57,255,${Math.min(20, fade)},1)`;
+                    this.ctx.lineWidth = 2;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(nx, ny);
+                    this.ctx.lineTo(nnx, nny);
+                    this.ctx.stroke();
+                }
+            }
+            requestAnimationFrame(() => this.animate());
+        }
+    }
+
+    // Shape names
+    const shapeNames = [
+        "Capsule",
+        "Star",
+        "Pentagon",
+        "Oval",
+        "Diamond",
+        "Circle",
+        "Hexagon",
+        "ReuleauxTriangle",
+        "Rectangle"
+    ];
+
+    // Initialize Shape Instances
+    const shapeInstances = [];
+    for(let i = 1; i <= 9; i++) {
+        shapeInstances.push(new Shape(`drawing-canvas-${i}`, shapeNames[i - 1]));
+    }
+
+    // Controls Elements
+    const controls = {
+        speed: document.getElementById('speed-control'),
+        offset: document.getElementById('offset-control'),
+        frequency: document.getElementById('frequency-control'),
+        tailLength: document.getElementById('tailLength-control'),
+        noiseLevel: document.getElementById('noiseLevel-control'),
+    };
+
+    const controlValues = {
+        speed: document.getElementById('speed-value'),
+        offset: document.getElementById('offset-value'),
+        frequency: document.getElementById('frequency-value'),
+        tailLength: document.getElementById('tailLength-value'),
+        noiseLevel: document.getElementById('noiseLevel-value'),
+    };
+
+    // Function to update control displays
+    function updateControls() {
+        controlValues.speed.textContent = speed.toFixed(1);
+        controlValues.offset.textContent = offset;
+        controlValues.frequency.textContent = frequency.toFixed(1);
+        controlValues.tailLength.textContent = tailLength;
+        controlValues.noiseLevel.textContent = noiseLevel;
+        
+        // Update slider positions if they differ
+        if (parseFloat(controls.speed.value) !== speed) controls.speed.value = speed;
+        if (parseInt(controls.offset.value) !== offset) controls.offset.value = offset;
+        if (parseFloat(controls.frequency.value) !== frequency) controls.frequency.value = frequency;
+        if (parseInt(controls.tailLength.value) !== tailLength) controls.tailLength.value = tailLength;
+        if (parseInt(controls.noiseLevel.value) !== noiseLevel) controls.noiseLevel.value = noiseLevel;
+    }
+
+    // Initial control update
+    updateControls();
+
+    // Event Listeners for Controls
+    controls.speed.addEventListener('input', (e) => {
+        speed = parseFloat(e.target.value);
+        controlValues.speed.textContent = speed.toFixed(1);
+        applySettings();
+    });
+
+    controls.offset.addEventListener('input', (e) => {
+        offset = parseInt(e.target.value);
+        controlValues.offset.textContent = offset;
+        applySettings();
+    });
+
+    controls.frequency.addEventListener('input', (e) => {
+        frequency = parseFloat(e.target.value);
+        controlValues.frequency.textContent = frequency.toFixed(1);
+        applySettings();
+    });
+
+    controls.tailLength.addEventListener('input', (e) => {
+        tailLength = parseInt(e.target.value);
+        controlValues.tailLength.textContent = tailLength;
+        applySettings();
+    });
+
+    controls.noiseLevel.addEventListener('input', (e) => {
+        noiseLevel = parseInt(e.target.value);
+        controlValues.noiseLevel.textContent = noiseLevel;
+        applySettings();
+    });
+
+    // Function to apply settings to all shapes
+    function applySettings() {
+        // Apply settings to all Shape instances
+        const settings = {
+            speed,
+            offset,
+            frequency,
+            tailLength,
+            noiseLevel
+        };
+        shapeInstances.forEach(shape => {
+            shape.setSettings(settings);
+        });
+    }
+
+    // Shape Generation Functions
+    function getOvalPoints(c, w, h, numPoints = 360) {
+        const pts = [];
+        for (let a = 0; a < numPoints; a++) {
+            const rad = a * Math.PI / 180;
+            pts.push({ x: c.x + (w / 2) * Math.cos(rad), y: c.y + (h / 2) * Math.sin(rad) });
+        }
+        return pts;
+    }
+
+    function getCapsulePoints(c, width, height, numPoints = 360) {
+        const pts = [];
+        const radius = height / 2;
+        let halfWidth = width / 2 - radius;
+
+        if (halfWidth < 0) {
+            halfWidth = 0;
+        }
+
+        for (let i = 0; i < numPoints; i++) {
+            const p = i / numPoints;
+
+            if (p < 0.25) {
+                const angle = (Math.PI / 2) + (p / 0.25) * Math.PI;
+                const x = c.x - halfWidth + radius * Math.cos(angle);
+                const y = c.y + radius * Math.sin(angle);
+                pts.push({ x, y });
+            } else if (p < 0.5) {
+                const t = (p - 0.25) / 0.25;
+                const x = (c.x - halfWidth) + (2 * halfWidth) * t;
+                const y = c.y - radius;
+                pts.push({ x, y });
+            } else if (p < 0.75) {
+                const angle = (3 * Math.PI / 2) + ((p - 0.5) / 0.25) * Math.PI;
+                const x = c.x + halfWidth + radius * Math.cos(angle);
+                const y = c.y + radius * Math.sin(angle);
+                pts.push({ x, y });
+            } else {
+                const t = (p - 0.75) / 0.25;
+                const x = (c.x + halfWidth) - (2 * halfWidth) * t;
+                const y = c.y + radius;
+                pts.push({ x, y });
+            }
+        }
+
+        return pts;
+    }
+
+    function getReuleauxTrianglePoints(c, size, numPoints = 360) {
+        const pts = [];
+        const radius = size / Math.sqrt(3);
+        const angleOffset = -Math.PI / 2;
+
+        for (let i = 0; i < numPoints; i++) {
+            const angle = (i / numPoints) * 2 * Math.PI + angleOffset;
+            const sector = Math.floor((i / numPoints) * 3);
+            const theta = angle - sector * (2 * Math.PI / 3);
+            const x = c.x + radius * Math.cos(theta + sector * (2 * Math.PI / 3));
+            const y = c.y + radius * Math.sin(theta + sector * (2 * Math.PI / 3));
+            pts.push({ x, y });
+        }
+
+        return pts;
+    }
+
+    function getRectanglePoints(c, width, height) {
+        const verts = [
+            { x: c.x - width / 2, y: c.y - height / 2 },
+            { x: c.x + width / 2, y: c.y - height / 2 },
+            { x: c.x + width / 2, y: c.y + height / 2 },
+            { x: c.x - width / 2, y: c.y + height / 2 }
+        ];
+        return interpolateShape(verts, 50);
+    }
+
+    function generateVertices(c, r, sides, angleOffset = 0) {
+        const verts = [];
+        for (let i = 0; i < sides; i++) {
+            const angle = angleOffset + 2 * Math.PI * i / sides;
+            verts.push({ x: c.x + r * Math.cos(angle), y: c.y + r * Math.sin(angle) });
+        }
+        return verts;
+    }
+
+    function generateStarVertices(c, outerR, innerR, points, angleOffset = 0) {
+        const verts = [];
+        for (let i = 0; i < points * 2; i++) {
+            const angle = angleOffset + i * Math.PI / points;
+            const r = (i % 2 === 0) ? outerR : innerR;
+            verts.push({ x: c.x + r * Math.cos(angle), y: c.y + r * Math.sin(angle) });
+        }
+        return verts;
+    }
+
+    function interpolateShape(verts, pointsPerSide) {
+        const pts = [];
+        const numVerts = verts.length;
+        for (let i = 0; i < numVerts; i++) {
+            const p0 = verts[i], p1 = verts[(i + 1) % numVerts];
+            for (let t = 0; t < pointsPerSide; t++) {
+                const ratio = t / pointsPerSide;
+                pts.push({
+                    x: p0.x + (p1.x - p0.x) * ratio,
+                    y: p0.y + (p1.y - p0.y) * ratio
+                });
+            }
+        }
+        return pts;
+    }
+
+    function getShapePoints(name, c) {
+        switch (name) {
+            case "Capsule":
+                return getCapsulePoints(c, 120, 60);
+            case "Oval":
+                return getOvalPoints(c, 100, 150);
+            case "Circle":
+                return getOvalPoints(c, 120, 120);
+            case "Diamond":
+                return interpolateShape([
+                    { x: c.x, y: c.y - 80 },
+                    { x: c.x + 50, y: c.y },
+                    { x: c.x, y: c.y + 80 },
+                    { x: c.x - 50, y: c.y }
+                ], 50);
+            case "Pentagon":
+                return interpolateShape(generateVertices(c, 70, 5, -Math.PI / 2), 50);
+            case "Hexagon":
+                return interpolateShape(generateVertices(c, 70, 6, -Math.PI / 2), 50);
+            case "Star":
+                return interpolateShape(generateStarVertices(c, 70, 35, 5, -Math.PI / 2), 50);
+            case "ReuleauxTriangle":
+                return getReuleauxTrianglePoints(c, 100);
+            case "Rectangle":
+                return getRectanglePoints(c, 80, 120);
+            default:
+                return [];
+        }
+    }
+
+    // Initialization function to set up the step sequence and interval
+    function init() {
+        // Create a temporary copy of settings to generate stepSequence sequentially
+        let tempSettings = {
+            speed,
+            offset,
+            frequency,
+            tailLength,
+            noiseLevel
+        };
+
+        // Define Phases for Step Sequence
+        const phases = [
+            { property: 'offset', type: 'set', value: 50 },
+            { property: 'speed', type: 'increment', step: 0.1, target: 1.0 },
+            { property: 'tailLength', type: 'increment', step: 1, target: 10 },
+            { property: 'noiseLevel', type: 'increment', step: 1, target: 5 },
+            { property: 'tailLength', type: 'increment', step: 1, target: 20 },
+            { property: 'speed', type: 'increment', step: 0.1, target: 2.0 },
+            { property: 'tailLength', type: 'increment', step: 10, target: 100 },
+            { property: 'noiseLevel', type: 'increment', step: 1, target: 10 },
+            { property: 'tailLength', type: 'increment', step: 10, target: 200 },
+            { property: 'noiseLevel', type: 'decrement', step: 1, target: 5 },
+            { property: 'offset', type: 'decrement', step: 5, target: 25 },
+            { property: 'tailLength', type: 'increment', step: 50, target: 400 },
+            { property: 'offset', type: 'increment', step: 5, target: 50 },
+            { property: 'noiseLevel', type: 'decrement', step: 1, target: 0 },
+            { property: 'offset', type: 'decrement', step: 5, target: 25 },
+            { property: 'tailLength', type: 'increment', step: 50, target: 750 },
+            { property: 'offset', type: 'decrement', step: 5, target: 10 },
+            { property: 'noiseLevel', type: 'increment', step: 1, target: 10 },
+            { property: 'tailLength', type: 'increment', step: 50, target: 1000 },
+            { property: 'speed', type: 'increment', step: 1, target: 5.0 },
+        ];
+
+        // Generate Steps from Phases
+        const stepSequence = [];
+        phases.forEach(phase => {
+            const { property, type, step, target, value } = phase;
+
+            if (type === 'set') {
+                stepSequence.push({ property, value });
+                tempSettings[property] = value;
+            } else {
+                let currentValue = tempSettings[property];
+                const operator = type === 'increment' ? 1 : -1;
+                const condition = () => operator === 1 ? currentValue < target : currentValue > target;
+                while (condition()) {
+                    currentValue = parseFloat((currentValue + operator * step).toFixed(getDecimalPlaces(step)));
+                    stepSequence.push({ property, value: currentValue });
+                    tempSettings[property] = currentValue;
+                }
+                // Ensure the final target is included
+                if (tempSettings[property] !== target) {
+                    stepSequence.push({ property, value: target });
+                    tempSettings[property] = target;
+                }
+            }
+        });
+
+        // Current step index
+        let currentStepIndex = 0;
+
+        // Start automated steps every second
+        const stepInterval = setInterval(() => {
+            if (currentStepIndex >= stepSequence.length) {
+                clearInterval(stepInterval);
+                return;
+            }
+            const step = stepSequence[currentStepIndex];
+            Object.assign(window, { [step.property]: step.value });
+            applySettings();
+            updateControls();
+            currentStepIndex++;
+        }, 1000);
+    }
+
+    function getDecimalPlaces(step) {
+        const stepStr = step.toString();
+        if (stepStr.includes('.')) {
+            return stepStr.split('.')[1].length;
+        }
+        return 0;
+    }
+
+    init(); // Call the initialization function once
+
+    </script>
+</body>
+</html>

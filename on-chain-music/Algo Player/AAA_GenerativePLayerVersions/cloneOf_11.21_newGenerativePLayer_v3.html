@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Streamlined Seed-Driven Playback Engine</title>
+    <style>
+        /* Basic styling for layout and controls */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #000;
+            color: #fff;
+            margin: 0;
+            height: 100vh;
+            justify-content: center;
+        }
+        #artwork {
+            width: 300px;
+            height: 300px;
+            object-fit: cover;
+            margin-bottom: 20px;
+        }
+        #controls {
+            display: flex;
+            gap: 10px;
+        }
+        #info-panel {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #previous-seeds {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <img id="artwork" src="/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0" alt="Artwork">
+    <div id="controls">
+        <button id="play-button">Play</button>
+        <input type="text" id="seed-input" placeholder="Enter Seed">
+        <button id="load-seed-button">Load Seed</button>
+        <button id="clear-seeds-button">Clear Seeds</button>
+    </div>
+    <div id="info-panel">
+        <canvas id="info-canvas" width="300" height="50"></canvas>
+        <div id="previous-seeds">
+            <h3>Previous Seeds:</h3>
+            <ul id="previous-seeds-list"></ul>
+        </div>
+    </div>
+
+    <script>
+        // Initialize global variables
+        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let isPlaying = false;
+        let globalAudioBuffers = [];
+        let activeSources = [];
+        let globalSeed = generateSeed();
+        let bpm = mapSeedToBpm(globalSeed);
+        let previousSeeds = JSON.parse(localStorage.getItem("previousSeeds")) || [];
+
+        // Load and cache all audio buffers at the start
+        const songDataUrls = [
+            "/content/119a3ccd1dfd7e987cca139f86d16717d845a22dd6afc59ad492527b95ae9a91i0",
+            "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0",
+            // Add more song URLs as needed
+        ];
+
+        const loadAllAudioBuffers = async () => {
+            const promises = songDataUrls.map(url => fetchAndDecodeAudio(url));
+            globalAudioBuffers = await Promise.all(promises);
+        };
+
+        const fetchAndDecodeAudio = async (url) => {
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            return await audioCtx.decodeAudioData(arrayBuffer);
+        };
+
+        // Generate a random seed
+        function generateSeed() {
+            return Math.floor(Math.random() * 1e16).toString();
+        }
+
+        // Map seed to BPM
+        function mapSeedToBpm(seed) {
+            const bpmOptions = [80, 100, 120, 140, 160, 180];
+            const hash = seed.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+            return bpmOptions[hash % bpmOptions.length];
+        }
+
+        // Display Seed and BPM on the canvas
+        function displaySeedAndBPM(seed, bpm) {
+            const canvas = document.getElementById('info-canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Seed: ${seed} | BPM: ${bpm}`, canvas.width / 2, canvas.height / 2 + 7);
+        }
+
+        // Save seed to local storage and update previous seeds list
+        function saveSeed(seed) {
+            if (!previousSeeds.includes(seed)) {
+                previousSeeds.push(seed);
+                localStorage.setItem("previousSeeds", JSON.stringify(previousSeeds));
+                updatePreviousSeedsList();
+            }
+        }
+
+        // Update the list of previous seeds
+        function updatePreviousSeedsList() {
+            const list = document.getElementById('previous-seeds-list');
+            list.innerHTML = '';
+            previousSeeds.forEach(seed => {
+                const li = document.createElement('li');
+                li.textContent = seed;
+                list.appendChild(li);
+            });
+        }
+
+        // Create a new song mix based on the seed
+        function createSongMix(seed) {
+            // Use the seed to shuffle or select different audio buffers
+            const shuffledBuffers = shuffleArray([...globalAudioBuffers], seed);
+            return shuffledBuffers.slice(0, 5); // Select the first 5 buffers for the mix
+        }
+
+        // Shuffle an array based on a seed
+        function shuffleArray(array, seed) {
+            let m = array.length, t, i;
+            const random = mulberry32(hashStringToInt(seed));
+            while (m) {
+                i = Math.floor(random() * m--);
+                t = array[m];
+                array[m] = array[i];
+                array[i] = t;
+            }
+            return array;
+        }
+
+        // Convert a string seed to an integer
+        function hashStringToInt(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0; // Convert to 32bit integer
+            }
+            return hash;
+        }
+
+        // Seeded random number generator
+        function mulberry32(a) {
+            return function() {
+                var t = a += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+
+        // Play the song mix
+        function playSongMix(buffers) {
+            stopPlayback();
+            const now = audioCtx.currentTime;
+            buffers.forEach((buffer, index) => {
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtx.destination);
+                source.start(now + index * (60 / bpm)); // Start each buffer with a delay based on BPM
+                activeSources.push(source);
+            });
+            isPlaying = true;
+        }
+
+        // Stop playback
+        function stopPlayback() {
+            activeSources.forEach(source => source.stop());
+            activeSources = [];
+            isPlaying = false;
+        }
+
+        // Event listeners
+        document.getElementById('play-button').addEventListener('click', () => {
+            if (isPlaying) {
+                stopPlayback();
+                document.getElementById('play-button').textContent = 'Play';
+            } else {
+                const songMix = createSongMix(globalSeed);
+                playSongMix(songMix);
+                document.getElementById('play-button').textContent = 'Stop';
+                displaySeedAndBPM(globalSeed, bpm);
+                saveSeed(globalSeed);
+            }
+        });
+
+        document.getElementById('load-seed-button').addEventListener('click', () => {
+            const seedInput = document.getElementById('seed-input').value.trim();
+            if (seedInput) {
+                globalSeed = seedInput;
+                bpm = mapSeedToBpm(globalSeed);
+                if (isPlaying) {
+                    const songMix = createSongMix(globalSeed);
+                    playSongMix(songMix);
+                    displaySeedAndBPM(globalSeed, bpm);
+                    saveSeed(globalSeed);
+                }
+            }
+        });
+
+        document.getElementById('clear-seeds-button').addEventListener('click', () => {
+            if (confirm('Clear all previous seeds?')) {
+                previousSeeds = [];
+                localStorage.removeItem("previousSeeds");
+                updatePreviousSeedsList();
+            }
+        });
+
+        // Initialize
+        (async () => {
+            await loadAllAudioBuffers();
+            updatePreviousSeedsList();
+            displaySeedAndBPM(globalSeed, bpm);
+        })();
+    </script>
+</body>
+</html>

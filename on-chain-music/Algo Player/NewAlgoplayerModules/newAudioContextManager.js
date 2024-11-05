@@ -1,0 +1,2 @@
+// newAudioContextManager.js
+document.addEventListener("DOMContentLoaded",(()=>{let e=null;const t=document.getElementById("playButton");t&&t.addEventListener("click",(async()=>{await(async()=>{e||(e=new(window.AudioContext||window.webkitAudioContext)),"suspended"===e.state&&await e.resume()})();const t=e.createOscillator();t.type="sine",t.frequency.setValueAtTime(440,e.currentTime),t.connect(e.destination),t.start(),setTimeout((()=>t.stop()),2e3)}))}));

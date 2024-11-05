@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Audionals - Web3 Music Player</title>
+<script src="/content/616ef4c1bef02cb6c0f785ef76b98df4e379e8f01e2b31e2ae9e68449485f2bci0"></script>
+<link rel="stylesheet" href="/content/7a309a161e838ba93740684338b3d97f3c1226c046d8b1137afc2353b4bf16e1i0">
+</head>
+<body>
+    <h1>Audionals</h1>
+    <div id="loadingSpinner"></div>
+    <div id="artworkCover">
+      <img id="artworkImage" src="" alt="Artwork Cover">
+    </div>
+    <div id="trackListingPanel">
+      <h2>Track Listings:</h2>
+      <div id="metadataContent"></div>
+    </div>
+    <div id="nowPlayingContainer">
+      <div id="nowPlayingText">
+        <span class="songTitle">No song playing</span>
+        <span class="artistName"></span>
+      </div>
+    </div>
+    <div id="buttonContainer">
+      <button id="playButton" onclick="globalData.togglePlayback()">Play / Stop</button>
+      <button id="prevButton" onclick="globalData.previousSong()">Previous</button>
+      <button id="nextButton" onclick="globalData.nextSong()">Next</button>
+      <button id="toggleInstruction" onclick="globalData.toggleInfo()">Info</button>
+    </div>
+    <div id="infoPanel" class="hidden">
+      <h2>Audional Player Info</h2>
+      <ul>
+        <li>Press <strong>T</strong> to view the Track List.</li>
+        <li>Use <strong>Left</strong> and <strong>Right</strong> arrows to navigate the Track List.</li>
+      </ul>
+    </div>
+    
+
+<!-- Audio Context Created Here in Global Data-->
+<script src="/content/e8496fa0bcb3cad6bc173cd1ef2564b9548b43b306634bdafce47083efd7619ai0"></script> 
+
+<!-- Pako loading, deserialization, and dynamic song file creation -->
+<script>
+    // loadAndPrepareSongDataOriginalPakoHack.js
+    (async () => {
+        // Log script start
+        console.log("[Initialization] Script started.");
+
+        // Define the keys used in the song data
+        const keyNames = [
+            "projectName",
+            "artistName",
+            "projectBPM",
+            "currentSequence",
+            "channelURLs",
+            "channelVolume",
+            "channelPlaybackSpeed",
+            "trimSettings",
+            "projectChannelNames",
+            "startSliderValue",
+            "endSliderValue",
+            "totalSampleDuration",
+            "start",
+            "end",
+            "projectSequences",
+            "steps"
+        ];
+        console.log("[Initialization] Defined song data keys:", keyNames);
+
+        // Create a mapping from key names to their indices
+        const keyMap = keyNames.reduce((accumulator, key, index) => {
+            accumulator[key] = index;
+            return accumulator;
+        }, {});
+        console.log("[Initialization] Created key map:", keyMap);
+
+        // Generate channel IDs from 'A' to 'P' (16 channels)
+        const channelIds = Array.from({ length: 16 }, (_, index) => String.fromCharCode(65 + index));
+        console.log("[Initialization] Channel IDs:", channelIds);
+
+        // Create a mapping from channel IDs to their indices
+        const channelIdMap = channelIds.reduce((accumulator, id, index) => {
+            accumulator[id] = index;
+            return accumulator;
+        }, {});
+        console.log("[Initialization] Channel ID map:", channelIdMap);
+
+        /**
+         * Fetches, decompresses, and processes song data from a given URL.
+         * @param {string} url - The URL to fetch the song data from.
+         * @returns {object} - The processed song data.
+         */
+        const fetchAndProcessSongData = async (url) => {
+            console.log(`[Initialization] [Data Fetch] Starting to fetch data from URL: ${url}`);
+
+            try {
+                const response = await fetch(url);
+                console.log(`[Initialization] [Data Fetch] Fetch response status for ${url}:`, response.status);
+
+                if (!response.ok) throw new Error(`Network error for ${url}`);
+
+                // Read the response as an ArrayBuffer and decompress using pako
+                const compressedData = new Uint8Array(await response.arrayBuffer());
+                const inflatedData = window.pako.inflate(compressedData);
+                console.log(`[Initialization] [Data Fetch] Decompression complete for ${url}`);
+
+                // Deserialize the JSON data
+                const jsonString = new TextDecoder("utf-8").decode(inflatedData);
+                const parsedData = JSON.parse(jsonString);
+                console.log(`[Initialization] [Data Fetch] JSON deserialization complete for ${url}`);
+
+                // Process the parsed data
+                const processParsedData = (data) => {
+                    const recurse = (obj) => {
+                        if (Array.isArray(obj)) {
+                            return obj.map(recurse);
+                        } else if (obj && typeof obj === "object") {
+                            return Object.entries(obj).reduce((acc, [key, value]) => {
+                                const mappedKey = keyNames[key] || key;
+                                acc[mappedKey] = mappedKey === "projectSequences"
+                                    ? Object.fromEntries(
+                                        Object.entries(value).map(([seqKey, seqValue]) => {
+                                            const sequenceName = `Sequence${seqKey.replace(/^s/, "")}`;
+                                            const channels = Object.fromEntries(
+                                                Object.entries(seqValue).map(([channelKey, channelValue]) => {
+                                                    const steps = channelValue[keyMap.steps] || [];
+                                                    const processedSteps = steps.flatMap((step) => {
+                                                        if (typeof step === "number") {
+                                                            return step;
+                                                        } else if (step?.r) {
+                                                            const [start, end] = step.r;
+                                                            return Array.from({ length: end - start + 1 }, (_, idx) => start + idx);
+                                                        } else if (typeof step === "string" && step.endsWith("r")) {
+                                                            return { index: parseInt(step.slice(0, -1), 10), reverse: true };
+                                                        } else {
+                                                            return [];
+                                                        }
+                                                    });
+                                                    return [`ch${channelIdMap[channelKey]}`, { steps: processedSteps }];
+                                                })
+                                            );
+                                            return [sequenceName, channels];
+                                        })
+                                    )
+                                    : recurse(value);
+                                return acc;
+                            }, {});
+                        } else {
+                            return obj;
+                        }
+                    };
+                    return recurse(data);
+                };
+
+                const processedData = processParsedData(parsedData);
+                console.log(`[Initialization] [Data Fetch] Data processing complete for ${url}`);
+                return processedData;
+
+            } catch (error) {
+                console.error(`Error fetching/deserializing ${url}:`, error);
+                throw error;
+            }
+        };
+
+        /**
+         * Prepares the initial sample order for the song.
+         * @param {object} songData - The song data object.
+         * @returns {Array} - The initial sample order array.
+         */
+        const prepareInitialSampleOrder = (songData) => {
+            console.log(`[Initialization] [Sample Order] Preparing initial sample order for song: ${songData.projectName || "Unknown"}`);
+
+            const { projectSequences } = songData;
+            const sampleOrder = [];
+
+            // Iterate over the first two sequences (sorted)
+            Object.keys(projectSequences)
+                .sort()
+                .slice(0, 2)
+                .forEach((sequenceKey) => {
+                    const sequence = projectSequences[sequenceKey];
+
+                    // Iterate over the first 16 channels in the sequence
+                    Object.values(sequence)
+                        .slice(0, 16)
+                        .forEach(({ steps }, channelIndex) => {
+                            // Iterate over the first 16 steps in the channel
+                            steps.slice(0, 16).forEach((step) => {
+                                if (typeof step === "number" || (typeof step === "object" && step.index !== undefined)) {
+                                    const identifier = `${channelIndex}_${step.reverse ? "r" : "f"}`;
+                                    if (!sampleOrder.some((item) => `${item.channelId}_${item.reverse ? "r" : "f"}` === identifier)) {
+                                        sampleOrder.push({
+                                            channelId: `ch${channelIndex}`,
+                                            reverse: step.reverse || false
+                                        });
+                                    }
+                                }
+                            });
+                        });
+                });
+
+            console.log(`[Initialization] [Sample Order] Initial sample order prepared:`, sampleOrder);
+            return sampleOrder;
+        };
+
+        /**
+         * Sets the artwork image on the page.
+         * @param {string} url - The URL of the artwork image.
+         */
+        const setArtworkImage = (url) => {
+            console.log(`[Initialization] Setting artwork image to URL: ${url}`);
+            const artworkElement = document.getElementById("artworkImage");
+            if (artworkElement) {
+                artworkElement.src = url;
+                artworkElement.parentElement.style.display = "flex";
+                console.log("[Initialization] Artwork image set and displayed.");
+            } else {
+                console.warn("Artwork cover elements not found.");
+            }
+        };
+
+        try {
+            // Filter out invalid or commented song data URLs
+            console.log("[Initialization] Filtering valid song data URLs.");
+            const validSongDataUrls = songDataUrls.filter((url) => url.trim() && !url.trim().startsWith("//"));
+            console.log(`[Initialization] Valid song data URLs count: ${validSongDataUrls.length}`, validSongDataUrls);
+
+            if (validSongDataUrls.length) {
+                console.log("[Initialization] Starting Pako library loading.");
+
+                // Load the Pako library dynamically
+                await (async function loadPako() {
+                    try {
+                        const response = await fetch("/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0");
+                        const textContent = await response.text();
+                        const scriptElement = new DOMParser().parseFromString(textContent, "text/html").querySelector("script");
+
+                        if (!scriptElement || !scriptElement.textContent.includes("pako")) {
+                            throw new Error("Pako library not found.");
+                        }
+
+                        console.log("[Pako Loading] Appending Pako script to the document.");
+                        document.head.append(
+                            Object.assign(document.createElement("script"), { textContent: scriptElement.textContent })
+                        );
+                        console.log("[Initialization] [Pako Loading] Pako script appended.");
+                    } catch (error) {
+                        console.error("Error loading Pako:", error);
+                    }
+                })();
+
+                // Fetch and process song data from all URLs
+                const songDataArray = await (async (urls) => {
+                    const dataArray = await Promise.all(
+                        urls.map((url, index) =>
+                            fetchAndProcessSongData(url)
+                                .then((data) => ({ data, index }))
+                                .catch((error) => {
+                                    console.error(`Failed ${url}:`, error);
+                                    return null;
+                                })
+                        )
+                    );
+                    const validDataArray = dataArray.filter(Boolean);
+                    if (!validDataArray.length) throw new Error("No valid data.");
+                    return validDataArray;
+                })(validSongDataUrls);
+
+                /**
+                 * Processes the array of song data and updates the global data.
+                 * @param {Array} songDataArray - The array of song data objects.
+                 */
+                ((songDataArray) => {
+                    console.log(`[Initialization] Total Songs: ${songDataArray.length}`);
+
+                    // Process each song data object
+                    const songs = songDataArray
+                        .sort((a, b) => a.index - b.index)
+                        .map(({ data, index }) => {
+                            const {
+                                projectName = `Song_${index + 1}`,
+                                artistName = "Unknown Artist",
+                                projectBPM = 120,
+                                projectSequences = {},
+                                channelURLs = [],
+                                channelVolume = [],
+                                channelPlaybackSpeed = [],
+                                trimSettings = {}
+                            } = data;
+
+                            // Prepare channel data
+                            const channels = channelIds.map((id, idx) => {
+                                const metadata = {
+                                    volume: channelVolume[idx] ?? 1,
+                                    playbackSpeed: channelPlaybackSpeed[idx] ?? 1,
+                                    trimStartTime_Percentage: trimSettings[idx]?.start || 0,
+                                    trimEndTime_Percentage: trimSettings[idx]?.end || 100,
+                                    requiresReversal: Object.values(projectSequences).some((sequence) =>
+                                        Object.values(sequence).some((channel) =>
+                                            channel.steps.some((step) => typeof step === "object" && step.reverse)
+                                        )
+                                    )
+                                };
+                                return {
+                                    id,
+                                    url: channelURLs[idx] || "URL_not_found",
+                                    metadata
+                                };
+                            });
+
+                            // Log song details
+                            console.log(`\n${projectName} by ${artistName} - BPM: ${projectBPM} - Total Sequences: ${Object.keys(projectSequences).length}`);
+                            channels.forEach((channel, idx) => {
+                                const { volume, playbackSpeed, trimStartTime_Percentage, trimEndTime_Percentage, requiresReversal } = channel.metadata;
+                                console.log(`[Initialization] \tChannel ${idx + 1} - ${channel.id}, Volume: ${volume}, Speed: ${playbackSpeed}, Trim: ${trimStartTime_Percentage}% - ${trimEndTime_Percentage}%, Reversal: ${requiresReversal}`);
+                            });
+                            console.log(`[Initialization] \tProject Sequences:\n${JSON.stringify(projectSequences, null, 2)}`);
+
+                            return {
+                                id: `Song ${index + 1}: ${projectName}`,
+                                artist: artistName,
+                                bpm: projectBPM,
+                                totalSequences: Object.keys(projectSequences).length,
+                                channels,
+                                projectSequences
+                            };
+                        });
+
+                    // Update global data
+                    globalData.songsArray = songs;
+                    if (songs.length) {
+                        globalData.initialSampleOrder = prepareInitialSampleOrder(songs[0]);
+                    }
+
+                    // Log initial sample order if available
+                    if (globalData.initialSampleOrder && globalData.initialSampleOrder.length) {
+                        console.log(`\nInitial Sample Order for ${songs[0].id}:`);
+                        globalData.initialSampleOrder.forEach(({ channelId, reverse }, idx) => {
+                            console.log(`[Initialization] \t${idx + 1}. Channel: ${channelId}, Reverse: ${reverse}`);
+                        });
+                    }
+
+                    // Set artwork image if applicable
+                    if (globalData.isArtworkCover && artworkUrl.length) {
+                        console.log("\nArtwork URL(s):", artworkUrl);
+                        setArtworkImage(artworkUrl[0]);
+                    }
+
+                    // Update flags
+                    globalData.isSingleSong = songs.length === 1;
+                    globalData.isMultipleSongs = songs.length > 1;
+                    console.log(`[Initialization] \nFlags - Single Song: ${globalData.isSingleSong}, Multiple Songs: ${globalData.isMultipleSongs}`);
+
+                    // Dispatch event indicating data loading is complete
+                    document.dispatchEvent(
+                        new CustomEvent("dataLoadingComplete", {
+                            detail: {
+                                success: true,
+                                totalSongs: songs.length,
+                                songs: songs.map(({ id, totalSequences }) => ({ id, totalSequences }))
+                            }
+                        })
+                    );
+                })(songDataArray);
+
+            } else {
+                console.log("No valid song data URLs to process.");
+            }
+        } catch (error) {
+            console.error("Initialization error:", error);
+        }
+        console.log("[Initialization] Data loading complete event dispatched.");
+    })();
+</script>
+    
+<!-- Load Player Scripts -->
+<!-- <script src="/content/544e5a75293a511e4823a47a92a5f33510474c96e61ab6f0aeeec550db6a9e29i0"></script> -->
+<!-- Load the first script separately -->
+<!-- Load remaining scripts -->
+     <!-- Load Player Scripts AFTER data loading is complete -->
+<script>
+    // Listen for the 'dataLoadingComplete' event before loading player scripts
+    document.addEventListener("dataLoadingComplete", (event) => {
+            console.log("[Script Loader] dataLoadingComplete event received. Loading player scripts...");
+
+            const remainingScriptUrls = [
+                "/content/5c03e882ab5a531271b2e93a80d8a9d72cb533c580bec1567020f5cd61595560i0", // projectArtistMapping
+                "/content/016f153f011f6a23b8fccd0efcc7945913ee97f241c7a2df7c71c4fa7c9a5fb3i0", // unifiedMetadataManagement
+                "/content/ef622be8aeeac45fdbdc291dd0db739d24c2c667c5c3ce7662f2b8c7f2c3de58i0", // GainNodeHelpers
+                "/content/f4cc99813b43f71b3e781d3c99f24a6a7a5b1004ea0efce3b225011e347b8df0i0", // audioProcessingAndManagement
+                "/content/7b305327f2951d219532ef0cb46b2039b23f2cfd0d8d0e827f3fe1b2b754b5a9i0", // DynamicGainBalancing
+                "/content/7f1e3b45f22f943ddfb90a0b9811671185f720bb303f002215b9e0fd932f299ci0", // playbackEngine
+                "/content/8b5b09cfedbc0c6a187816181f8d33f90c5bbd15fc10af47008176effb866a47i0"  // keyboardControlsAndEventListeners
+            ];
+
+            // Load scripts sequentially
+            const loadScriptsSequentially = (urls) => {
+                if (urls.length === 0) {
+                    console.log("[Script Loader] All player scripts loaded.");
+                    return;
+                }
+                const src = urls.shift();
+                const script = document.createElement("script");
+                script.src = src;
+                script.async = false; // Ensure scripts are executed in order
+                script.onload = () => {
+                    console.log(`[Script Loader] Loaded script: ${src}`);
+                    loadScriptsSequentially(urls);
+                };
+                script.onerror = (e) => {
+                    console.error(`[Script Loader] Error loading script: ${src}`, e);
+                    loadScriptsSequentially(urls);
+                };
+                document.body.appendChild(script);
+            };
+
+            loadScriptsSequentially([...remainingScriptUrls]);
+        });
+    </script>
+
+</body>
+</html>

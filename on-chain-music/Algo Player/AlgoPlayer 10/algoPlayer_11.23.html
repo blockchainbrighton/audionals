@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Web3 Audio Sequencer Playback Engine Optimized</title>
+  
+    <script>
+        const artworkUrl = ["/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
+        const songDataUrls = [
+            "/content/8aec0a99a5617b9da98a5b63a11a5143f0cac3cfa662d9515c2285de03ef95d4i0", // CHEESE ** MIGHT BE THIS ONE THAT IS OUT OF SYNC??
+
+            "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0", // TRUTH
+
+            "/content/6d288c0c82653001bb32497889dd1486e8afec9b0671a95fa9e10f99c20737bbi0", // KORA
+
+            "/content/119a3ccd1dfd7e987cca139f86d16717d845a22dd6afc59ad492527b95ae9a91i0", // MLK I HAVE A DREAM
+
+            "/content/db9131cfe8e933e8e639f007dcd2b582a80bfd2be42b0eafa4d2e206332d6785i0", // ModernProgress
+
+            "/content/07ff7bdc47e5272a3ff55cc46d2b189d510562a057a2c24112f3d0376950484di0", // CHOPPIN' IT UP
+
+            "/content/fb0d2abcd1fa5bf2622579f0990435b48d41291f71626fc2e36a93e6ea6b3b85i0", // HUMANITY // Turn Down Channels 1 + 2 (Apollo 13) Turn down Channel 5 - Hindenburg /  Turn channel 8 up - Hi hats
+
+            "/content/a4fb0b49181975450a6710f20128eb0b3acc51f4aa1ce87ebdbc9607562013a2i0", // MintyFresh Vibes
+
+            "/content/633100d631767ddb9a309f5a2a66f5a66d5abd839f3b1c55642690d484189971i0", // ON DAY ONE
+
+            "/content/85436950f53c57aa0c510071d2d5f1c187e1d21e4e57210fcae152c4c7b6a768i0", // Rhythm and Bass 240
+
+            "/content/e3ca12dd7516b4e486af4e3fa7f4ebc535d825034ff3c9da4954f354572dcf61i0", // Crazy Ass Bitch
+
+            "/content/d0496a8e1657ce470807c8d47dcb5f1018a32d8ec8e50d490ad49411ffee1457i0", // Rhythm and Bass 60
+
+            "/content/b22f1c85371b58a9cdac19b2baa50b1f9025a28d44cdfaad539d0527aa7d894ei0", // ON-CHAIN IN THE MEMBRANE
+        ];
+        const globalData = window.globalData = {
+            isSingleSong: false,
+            isMultipleSongs: true,
+            isNormalPlayer: true,
+            isLoopedPlayback: false,
+            isSequentialPlayback: true,
+            isRemixPlayer: false,
+            songsArray: [],
+            audioBuffers: {},
+            reverseAudioBuffers: {},
+            audioFetchCache: new Map(),
+            isArtworkCover: true,
+            isVisualiserCover: false,
+            initialSampleOrder: [],
+            isPlaying: false,
+            audioContext: new (window.AudioContext || window.webkitAudioContext)(),
+        };
+        function startPlayback() {
+            document.dispatchEvent(new CustomEvent("startPlaybackRequested"));
+        }
+        function stopPlayback() {
+            document.dispatchEvent(new CustomEvent("stopPlaybackRequested"));
+        }
+        document.addEventListener("playbackStarted", () => {
+            globalData.isPlaying = true;
+            console.log("Playback has started.");
+        });
+        document.addEventListener("playbackStopped", () => {
+            globalData.isPlaying = false;
+            console.log("Playback has stopped.");
+        });
+    </script>
+      <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0; padding: 0;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            height: 100vh; background-color: #000;
+        }
+        #artworkCover {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1000; cursor: pointer; transition: opacity 0.3s ease;
+        }
+        #artworkCover.hidden { opacity: 0; pointer-events: none; }
+        #artworkImage {
+            max-width: 80%; max-height: 80%; object-fit: contain;
+            border: 4px solid #fff; border-radius: 10px;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+        }
+        #loadingSpinner {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            border: 8px solid #f3f3f3; border-top: 8px solid #3498db;
+            border-radius: 50%; width: 60px; height: 60px;
+            animation: spin 2s linear infinite; z-index: 1001; display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg) translate(-50%, -50%); }
+            100% { transform: rotate(360deg) translate(-50%, -50%); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Audionals</h1>
+    <div id="loadingSpinner"></div>
+    <div id="artworkCover">
+        <img id="artworkImage" src="" alt="Artwork Cover">
+    </div>
+
+
+<section1Minified>
+    <script>
+    (async()=>{const e=["projectName","artistName","projectBPM","currentSequence","channelURLs","channelVolume","channelPlaybackSpeed","trimSettings","projectChannelNames","startSliderValue","endSliderValue","totalSampleDuration","start","end","projectSequences","steps"],t=e.reduce(((e,t,r)=>({...e,[t]:r})),{}),r=Array.from({length:16},((e,t)=>String.fromCharCode(65+t))),a=r.reduce(((e,t,r)=>({...e,[t]:r})),{}),o=async r=>{try{const o=await fetch(r);if(!o.ok)throw new Error(`Network response was not ok for URL: ${r}`);const n=window.pako.inflate(new Uint8Array(await o.arrayBuffer()));return(r=>{const o=r=>Array.isArray(r)?r.map(o):r&&"object"==typeof r?Object.entries(r).reduce(((r,[n,s])=>{const l=e[n]||n;return r[l]="projectSequences"===l?Object.fromEntries(Object.entries(s).map((([e,r])=>[`Sequence${e.replace(/^s/,"")}`,Object.fromEntries(Object.entries(r).map((([e,r])=>{return[`ch${a[e]}`,{steps:(o=r[t.steps]||[],o.flatMap((e=>"number"==typeof e?e:e?.r?Array.from({length:e.r[1]-e.r[0]+1},((t,r)=>e.r[0]+r)):"string"==typeof e&&e.endsWith("r")?{index:parseInt(e.slice(0,-1),10),reverse:!0}:[])))}];var o})))]))):o(s),r}),{}):r;return o(r)})(JSON.parse(new TextDecoder("utf-8").decode(n)))}catch(e){throw console.error(`Error fetching/deserializing URL ${r}:`,e),e}},n=e=>{const{projectSequences:t}=e,r=[];return Object.keys(t).sort().slice(0,2).forEach((e=>{const a=t[e];Object.values(a).slice(0,16).forEach((({steps:e},t)=>{e.slice(0,16).forEach((e=>{if("number"==typeof e||"object"==typeof e&&void 0!==e.index){const a=`${t}_${e.reverse?"r":"f"}`;r.some((e=>`${e.channelId}_${e.reverse?"r":"f"}`===a))||r.push({channelId:`ch${t}`,reverse:e.reverse||!1})}}))}))})),r},s=e=>{const t=document.getElementById("artworkImage");t?(t.src=e,t.parentElement.style.display="flex"):console.warn("Artwork cover elements not found.")};try{const e=songDataUrls.filter((e=>e.trim()&&!e.trim().startsWith("//")));if(e.length){await(async()=>{try{const{default:e}=await import("/content/fba6f95fb1152db43304a27dce8cb8c65509eba6ab0b6958cedeb33e5f443077i0");window.pako=e}catch(e){throw console.error("Error loading Pako library:",e),e}})();const t=await(async e=>{const t=(await Promise.all(e.map(((e,t)=>o(e).then((e=>({data:e,idx:t}))).catch((t=>(console.error(`Failed to process URL ${e}:`,t),null))))))).filter(Boolean);if(!t.length)throw new Error("No valid data was processed.");return t})(e);(e=>{console.log(`Total Songs: ${e.length}`),e.forEach((({id:e,artist:t,bpm:r,totalSequences:a,channels:o,projectSequences:n},s)=>{console.log(`\n${e} by ${t} - BPM: ${r} - Total Sequences: ${a}`),o.forEach((({id:e,metadata:t},r)=>{const{volume:a,playbackSpeed:o,trimStartTime_Percentage:n,trimEndTime_Percentage:s,requiresReversal:l}=t;console.log(`\tChannel ${r+1} - ${e}, Volume: ${a}, Speed: ${o}, Trim: ${n}% - ${s}%, Reversal: ${l}`)})),console.log(`\tProject Sequences:\n${JSON.stringify(n,null,2)}`)})),globalData.initialSampleOrder.length&&(console.log(`\nInitial Sample Order for ${e[0].id}:`),globalData.initialSampleOrder.forEach((({channelId:e,reverse:t},r)=>{console.log(`\t${r+1}. Channel: ${e}, Reverse: ${t}`)}))),globalData.isArtworkCover&&artworkUrl.length&&(console.log("\nArtwork URL(s):",artworkUrl),s(artworkUrl[0])),globalData.isSingleSong=1===e.length,globalData.isMultipleSongs=e.length>1,console.log(`\nFlags - Single Song: ${globalData.isSingleSong}, Multiple Songs: ${globalData.isMultipleSongs}`),document.dispatchEvent(new CustomEvent("dataLoadingComplete",{detail:{success:!0,totalSongs:e.length,songs:e.map((({id:e,totalSequences:t})=>({id:e,totalSequences:t})))}}))})((e=>{const t=e.sort(((e,t)=>e.idx-t.idx)).map((({data:e,idx:t})=>{const{projectName:a=`Song_${t+1}`,artistName:o="Unknown Artist",projectBPM:n=120,projectSequences:s={},channelURLs:l=[],channelVolume:c=[],channelPlaybackSpeed:i=[],trimSettings:d={}}=e,g=r.map(((e,t)=>({id:e,url:l[t]||"URL_not_found",metadata:{volume:c[t]??1,playbackSpeed:i[t]??1,trimStartTime_Percentage:d[t]?.start||0,trimEndTime_Percentage:d[t]?.end||100,requiresReversal:Object.values(s).some((e=>Object.values(e).some((e=>e.steps.some((e=>"object"==typeof e&&e.reverse))))))}})));return{id:`Song ${t+1}: ${a}`,artist:o,bpm:n,totalSequences:Object.keys(s).length,channels:g,projectSequences:s}}));return globalData.songsArray=t,t.length&&(globalData.initialSampleOrder=n(t[0])),t})(t))}else console.log("No valid song data URLs to process.")}catch(e){console.error("Initialization error:",e)}})();
+</script>
+</section1Minified>
+
+ <!-- // audioProcessingAndManagement.js -->
+<!-- <section2Minified>
+<script>
+(async()=>{const e=window.globalData||(window.globalData={}),n=e.audioContext||(e.audioContext=new(window.AudioContext||window.webkitAudioContext)),o=e=>Uint8Array.from(atob(e),(e=>e.charCodeAt(0))).buffer,a=(e,n)=>{if("json"===n&&e.audioData){const n=e.audioData.match(/base64,([A-Za-z0-9+/=]+)/);return n?n[1]:null}if("html"===n){const n=e.match(/<audio[^>]*data-audionalSampleName[^>]*>\s*<source[^>]*src="data:audio\/[^;]+;base64,([^"]+)"/i);return n?n[1]:null}return null},t=e=>{const n=e.replace(/\s+/g,"");return n.length%4==0&&/^[A-Za-z0-9+/]+={0,2}$/.test(n)},r=(e,n=.5)=>{let o=0;for(let n=0;n<e.numberOfChannels;n++){const a=e.getChannelData(n);for(let e of a){const n=Math.abs(e);n>o&&(o=n)}}const a=o>0?n/o:1;if(1!==a){for(let n=0;n<e.numberOfChannels;n++){const o=e.getChannelData(n);for(let e=0;e<o.length;e++)o[e]*=a}console.log(`Normalized AudioBuffer to ${n} with factor ${a.toFixed(4)}`)}return e},s=e=>{const n=new Float32Array(e.length);for(let o=0,a=e.length;o<a;o++)n[o]=e[a-o-1];return n},i=e=>e.split("/").pop()||"Unknown",l=async(l,d,c)=>{const{id:u,channels:f}=l,{id:g,url:h,metadata:{trimStartTime_Percentage:m,trimEndTime_Percentage:p,requiresReversal:w}}=d;try{const l=await fetch(h);if(!l.ok)return void console.warn(`Fetch failed for ${h}. Skipping ${g}.`);const d=l.headers.get("Content-Type")||"",f=await(async(r,s,i)=>{const l=e.audioFetchCache||(e.audioFetchCache=new Map);if(l.has(i))return l.get(i);try{let e;if(/audio\/(wav|mpeg|mp4)|video\/mp4/.test(s))e=await n.decodeAudioData(await r.arrayBuffer()),console.log(`Decoded audio from ${i}`);else if(/application\/json/.test(s)){const s=JSON.parse(await r.text()),l=a(s,"json");if(!l||!t(l))return console.warn(`Invalid/missing base64 in JSON for ${i}`),null;e=await n.decodeAudioData(o(l)),console.log(`Decoded JSON audio from ${i}`)}else if(/text\/html/.test(s)){const s=await r.text(),l=a(s,"html");if(!l||!t(l))return console.warn(`Invalid/missing base64 in HTML for ${i}`),null;e=await n.decodeAudioData(o(l)),console.log(`Decoded HTML audio from ${i}`)}else{if(!/audio\//.test(s))return console.warn(`Unsupported content type (${s}) for ${i}`),null;e=await n.decodeAudioData(await r.arrayBuffer()),console.log(`Decoded audio from ${i}`)}return l.set(i,e),e}catch(e){return console.warn(`Decoding error for ${i}: ${e.message}`),null}})(l,d,h);if(!f)return void console.warn(`Decoding failed for ${u}, ${g}. Skipping.`);if(p<=m)return void console.warn(`Invalid trim percentages for ${u}, ${g}. Skipping.`);const $=Math.floor(m/100*f.duration*f.sampleRate),v=Math.floor(p/100*f.duration*f.sampleRate),y=v-$;if(y<=0)return void console.warn(`Non-positive trimmed length for ${u}, ${g}. Skipping.`);const A=n.createBuffer(f.numberOfChannels,y,f.sampleRate);for(let e=0;e<f.numberOfChannels;e++)A.getChannelData(e).set(f.getChannelData(e).subarray($,v));const C=r(A,.5);if(e.audioBuffers=e.audioBuffers||{},e.reverseAudioBuffers=e.reverseAudioBuffers||{},e.audioBuffers[u]=e.audioBuffers[u]||{},e.reverseAudioBuffers[u]=e.reverseAudioBuffers[u]||{},e.audioBuffers[u][g]=C,w){const o=(e=>{const o=n.createBuffer(e.numberOfChannels,e.length,e.sampleRate);for(let n=0;n<e.numberOfChannels;n++)o.getChannelData(n).set(s(e.getChannelData(n)));return o})(C);e.reverseAudioBuffers[u][g]=r(o,.5)}c.push({"Song ID":u,"Channel ID":g,"Audio File":i(h),"Full Duration (s)":f.duration.toFixed(2),"Trimmed Duration (s)":C.duration.toFixed(2),"Requires Reversal":w}),console.log(`Processed ${u}, ${g}${w?" (Reversed)":""}`)}catch(e){console.warn(`Error processing ${u}, ${g}: ${e.message}`)}},d=e=>{e.length?console.table(e):console.warn("No audio samples processed.")},c=async()=>{const{songsArray:o,initialSampleOrder:a}=e;if(!o.length)return void console.error("No songs to process.");const t=[],r=a.map((e=>{const n=o.find((n=>n.id===e.songId));return n&&n.channels.find((n=>n.id===e.channelId))?l(n,n.channels.find((n=>n.id===e.channelId)),t):null})).filter((e=>e));await Promise.all(r),d(t),console.log("Initial audio buffers ready."),(()=>{const o=n.createGain();o.gain.value=.7,o.connect(n.destination),e.masterGain=o,console.log("Master Gain initialized with gain:",o.gain.value)})(),document.dispatchEvent(new CustomEvent("initialAudioBuffersReady",{detail:{success:!0}}))},u=async()=>{try{await(async()=>{"suspended"===n.state&&await n.resume()})(),await c(),(async()=>{const{songsArray:n,initialSampleOrder:o}=e;if(!n.length)return void console.error("No songs to process.");const a=[],t=n.flatMap((e=>e.channels.map((n=>({song:e,channel:n}))))),r=new Set(o.map((e=>`${e.songId}-${e.channelId}`))),s=t.filter((({song:e,channel:n})=>!r.has(`${e.id}-${n.id}`))),i=[];for(;s.length;)i.push(s.splice(0,4));for(const e of i)await Promise.all(e.map((({song:e,channel:n})=>l(e,n,a))));d(a),console.log("All background audio buffers processed."),document.dispatchEvent(new CustomEvent("allAudioBuffersReady",{detail:{success:!0}}))})().catch((e=>console.error("Background processing error:",e)))}catch(e){console.error("Audio processing initialization error:",e)}};document.addEventListener("dataLoadingComplete",u),e.songsArray?.length&&u(),document.addEventListener("initialAudioBuffersReady",(()=>{console.log("Initial buffers ready. Press 'P' to play.")}))})();
+</script>
+</section2Minified> -->
+
+<!-- Section 2 - Audio Processing and Management -->
+ <!-- audioProdcessingAndManagement.js -->
+ <script src="/content/f4cc99813b43f71b3e781d3c99f24a6a7a5b1004ea0efce3b225011e347b8df0i0"></script>
+
+
+
+<!-- Section 3 - Playback Engine (Updated for Lazy Loading Integration) MINIFIED 5kb -->
+<!-- // playback,js -->
+<script>
+// (()=>{const e=window.globalData||(window.globalData={}),o=e.audioContext;e.isPlaying=!1;let n=null,t={},s=0;const a=new Set,l=()=>{e.isPlaying?i():c()},c=()=>{if(e.isPlaying)return void console.log("Playback is already in progress.");const{songsArray:l,audioBuffers:c,reverseAudioBuffers:i}=e;if(!l.length)return void console.error("No songs available for playback.");const d=l.length;s>=d&&(s=0);const g=l[s],u=g.projectSequences||{};console.log(`Starting playback for Song: ${g.id} (${s+1}/${d}) with ${Object.keys(u).length} sequences.`),console.log(`Song BPM: ${g.bpm}`);const p=60/g.bpm/4,y=64*p;t={},a.clear();let f=0;for(const[e,n]of Object.entries(u)){const n=o.currentTime+f;t[e]={nextStepIndex:0,nextStepTime:n,stepDuration:p,startTime:n,endTime:n+y,completed:!1},console.log(`Initialized scheduler for sequence: ${e} starting at +${f.toFixed(2)}s`),f+=y}e.isPlaying=!0,n=setInterval((()=>r(g,c,i)),25),console.log("Playback started."),document.dispatchEvent(new CustomEvent("playbackStarted",{detail:{success:!0}}))},i=()=>{e.isPlaying?(n&&clearInterval(n),e.isPlaying=!1,t={},a.clear(),console.log("Playback stopped and sequence states reset."),document.dispatchEvent(new CustomEvent("playbackStopped",{detail:{success:!0}}))):console.log("Playback is not in progress.")};document.addEventListener("keydown",(o=>{const n=e.songsArray.length;e.isPlaying&&i(),"ArrowRight"===o.key?(s=(s+1)%n,console.log(`Skipping to next song: ${e.songsArray[s].id}`)):"ArrowLeft"===o.key&&(s=(s-1+n)%n,console.log(`Skipping to previous song: ${e.songsArray[s].id}`)),g(),c()}));const r=(n,a,l)=>{const r=o.currentTime;let u=!0;for(const[o,s]of Object.entries(n.projectSequences||{})){const c=t[o];if(c&&!c.completed)if(r>=c.endTime)c.completed=!0,console.log(`Sequence ${o} has completed.`);else for(u=!1;c.nextStepTime<r+.1&&e.isPlaying;){const e=c.nextStepIndex,t=c.nextStepTime;for(const[o,i]of Object.entries(s)){const s=parseInt(o.replace("ch",""),10),r=n.channels[s];if(!r){console.warn(`Channel index ${s} not found in song ${n.id}.`);continue}const g=(i.steps||[]).find((o=>"number"==typeof o&&o===e||o.index===e));if(void 0!==g){const e="object"==typeof g&&g.reverse;d(n,r,t,e,a,l,c.stepDuration)}}if(c.nextStepIndex+=1,c.nextStepIndex>=64){c.completed=!0,console.log(`Sequence ${o} has completed all steps.`);break}c.nextStepTime+=c.stepDuration}}if(u){console.log("All sequences have completed.");const o=e.songsArray.length;e.isLoopedPlayback?e.isMultipleSongs&&e.isSequentialPlayback?(s+=1,s>=o?(s=0,console.log("Reached the end of the playlist. Looping back to the first song.")):console.log(`Moving to next song: ${e.songsArray[s].id} (${s+1}/${o})`),g(),c()):(console.log(`Looping the current song: ${n.id}`),g(),c()):e.isMultipleSongs&&e.isSequentialPlayback?(s+=1,s<o?(console.log(`Moving to next song: ${e.songsArray[s].id} (${s+1}/${o})`),g(),c()):(console.log("Reached the end of the playlist. Stopping playback."),i())):(console.log("Playback has completed the single song."),i())}},d=(n,t,s,l,c,i,r)=>{const d=`${n.id}_${t.id}_${l?"reverse":"normal"}`,g=l?i[n.id]?.[t.id]:c[n.id]?.[t.id];if(!g)return void(a.has(d)||(a.add(d),console.warn(`Audio buffer missing for Song: ${n.id}, Channel: ${t.id}${l?" (Reverse)":""}`)));const u=o.createBufferSource();u.buffer=g,u.playbackRate.value=t.metadata.playbackSpeed||1,u.connect(e.masterGain||o.destination),u.start(s)},g=()=>{n&&clearInterval(n),t={},a.clear(),console.log("Playback reset for the next song.")},u=()=>{const{songsArray:o}=e;o.length?(console.log("Playback Engine Initialization Complete."),console.log("Playback is ready. Click the artwork to start.")):console.error("No songs available for playback.")},p=()=>{document.addEventListener("DOMContentLoaded",(()=>{const o=document.getElementById("artworkCover"),n=document.getElementById("artworkImage");e.isArtworkCover&&artworkUrl.length>0&&(n.src=artworkUrl[0],o.classList.remove("hidden"),loadingSpinner.style.display="none",n.addEventListener("click",l))}))};document.addEventListener("initialAudioBuffersReady",(e=>{e.detail.success&&(u(),console.log("Initial audio buffers are ready."))})),document.addEventListener("allAudioBuffersReady",(e=>{e.detail.success&&console.log("All audio buffers have been loaded and are ready.")})),document.addEventListener("playbackStarted",(e=>{e.detail.success&&console.log("Playback has been successfully started.")})),document.addEventListener("playbackStopped",(e=>{e.detail.success&&console.log("Playback has been successfully stopped.")})),p(),Object.keys(e.audioBuffers||{}).length&&u()})();
+</script> 
+
+
+ <!-- Section 3 - Playback Engine (Updated for Robust Stopping and Preventing Unintended Resumption) -->
+<script>
+(function () {
+  const globalData = window.globalData || (window.globalData = {});
+  const audioContext = globalData.audioContext;
+  globalData.isPlaying = false;
+  
+  let playbackInterval = null;
+  let scheduler = {};
+  let currentSongIndex = 0;
+  const missingAudioBuffers = new Set();
+  let activeBufferSources = [];
+
+  // Toggles playback
+  const togglePlayback = () => {
+    globalData.isPlaying ? stopPlayback() : startPlayback();
+  };
+
+  // Starts playback
+  const startPlayback = () => {
+    if (globalData.isPlaying) {
+      console.log("Playback is already in progress.");
+      return;
+    }
+
+    const { songsArray, audioBuffers, reverseAudioBuffers } = globalData;
+    if (!songsArray.length) {
+      console.error("No songs available for playback.");
+      return;
+    }
+
+    const totalSongs = songsArray.length;
+    if (currentSongIndex >= totalSongs) {
+      currentSongIndex = 0;
+    }
+
+    const song = songsArray[currentSongIndex];
+    const projectSequences = song.projectSequences || {};
+    console.log(`Starting playback for Song: ${song.id} (${currentSongIndex + 1}/${totalSongs}) with ${Object.keys(projectSequences).length} sequences.`);
+    console.log(`Song BPM: ${song.bpm}`);
+
+    const stepDuration = 60 / song.bpm / 4;
+    const sequenceLength = 64 * stepDuration;
+
+    scheduler = {};
+    missingAudioBuffers.clear();
+    let startOffset = 0;
+
+    for (const [sequenceId, sequence] of Object.entries(projectSequences)) {
+      const startTime = audioContext.currentTime + startOffset;
+      scheduler[sequenceId] = {
+        nextStepIndex: 0,
+        nextStepTime: startTime,
+        stepDuration: stepDuration,
+        startTime: startTime,
+        endTime: startTime + sequenceLength,
+        completed: false
+      };
+      console.log(`Initialized scheduler for sequence: ${sequenceId} starting at +${startOffset.toFixed(2)}s`);
+      startOffset += sequenceLength;
+    }
+
+    globalData.isPlaying = true;
+    playbackInterval = setInterval(() => scheduleSteps(song, audioBuffers, reverseAudioBuffers), 25);
+    console.log("Playback started.");
+    document.dispatchEvent(new CustomEvent("playbackStarted", { detail: { success: true } }));
+  };
+
+  // Stops playback
+  const stopPlayback = () => {
+    if (!globalData.isPlaying) {
+      console.log("Playback is not in progress.");
+      return;
+    }
+
+    if (playbackInterval) clearInterval(playbackInterval);
+    globalData.isPlaying = false;
+    scheduler = {};
+    missingAudioBuffers.clear();
+
+    // Stop all active buffer sources immediately
+    activeBufferSources.forEach(bufferSource => {
+      bufferSource.stop();
+      bufferSource.disconnect();
+    });
+    activeBufferSources = [];
+
+    console.log("Playback stopped and sequence states reset.");
+    document.dispatchEvent(new CustomEvent("playbackStopped", { detail: { success: true } }));
+  };
+
+  // Handles keypress events for controlling playback
+  document.addEventListener("keydown", (event) => {
+    const totalSongs = globalData.songsArray.length;
+
+    if (event.key === "ArrowRight") {
+      currentSongIndex = (currentSongIndex + 1) % totalSongs;
+      console.log(`Skipping to next song: ${globalData.songsArray[currentSongIndex].id}`);
+    } else if (event.key === "ArrowLeft") {
+      currentSongIndex = (currentSongIndex - 1 + totalSongs) % totalSongs;
+      console.log(`Skipping to previous song: ${globalData.songsArray[currentSongIndex].id}`);
+    }
+
+    if (globalData.isPlaying) {
+      stopPlayback();
+      resetPlaybackState();
+      startPlayback();
+    } else {
+      resetPlaybackState();
+    }
+  });
+
+  // Schedules steps for playback
+  const scheduleSteps = (song, audioBuffers, reverseAudioBuffers) => {
+    const currentTime = audioContext.currentTime;
+    let allSequencesCompleted = true;
+
+    for (const [sequenceId, sequence] of Object.entries(song.projectSequences || {})) {
+      const sequenceScheduler = scheduler[sequenceId];
+      if (!sequenceScheduler || sequenceScheduler.completed) continue;
+
+      if (currentTime >= sequenceScheduler.endTime) {
+        sequenceScheduler.completed = true;
+        console.log(`Sequence ${sequenceId} has completed.`);
+      } else {
+        allSequencesCompleted = false;
+        while (sequenceScheduler.nextStepTime < currentTime + 0.1 && globalData.isPlaying) {
+          const stepIndex = sequenceScheduler.nextStepIndex;
+          const stepTime = sequenceScheduler.nextStepTime;
+
+          for (const [channelId, channelSequence] of Object.entries(sequence)) {
+            const channelIndex = parseInt(channelId.replace("ch", ""), 10);
+            const channel = song.channels[channelIndex];
+            if (!channel) {
+              console.warn(`Channel index ${channelIndex} not found in song ${song.id}.`);
+              continue;
+            }
+
+            const step = (channelSequence.steps || []).find(step => typeof step === "number" && step === stepIndex || step.index === stepIndex);
+            if (step !== undefined) {
+              const isReversed = typeof step === "object" && step.reverse;
+              playAudioBuffer(song, channel, stepTime, isReversed, audioBuffers, reverseAudioBuffers, sequenceScheduler.stepDuration);
+            }
+          }
+
+          sequenceScheduler.nextStepIndex += 1;
+          if (sequenceScheduler.nextStepIndex >= 64) {
+            sequenceScheduler.completed = true;
+            console.log(`Sequence ${sequenceId} has completed all steps.`);
+            break;
+          }
+
+          sequenceScheduler.nextStepTime += sequenceScheduler.stepDuration;
+        }
+      }
+    }
+
+    if (allSequencesCompleted) {
+      console.log("All sequences have completed.");
+      handlePlaybackCompletion(song);
+    }
+  };
+
+  // Plays the audio buffer for a given step
+  const playAudioBuffer = (song, channel, startTime, isReversed, audioBuffers, reverseAudioBuffers, stepDuration) => {
+    const bufferKey = `${song.id}_${channel.id}_${isReversed ? "reverse" : "normal"}`;
+    const buffer = isReversed ? reverseAudioBuffers[song.id]?.[channel.id] : audioBuffers[song.id]?.[channel.id];
+
+    if (!buffer) {
+      if (!missingAudioBuffers.has(bufferKey)) {
+        missingAudioBuffers.add(bufferKey);
+        console.warn(`Audio buffer missing for Song: ${song.id}, Channel: ${channel.id}${isReversed ? " (Reverse)" : ""}`);
+      }
+      return;
+    }
+
+    const bufferSource = audioContext.createBufferSource();
+    bufferSource.buffer = buffer;
+    bufferSource.playbackRate.value = channel.metadata.playbackSpeed || 1;
+    bufferSource.connect(globalData.masterGain || audioContext.destination);
+    bufferSource.start(startTime);
+    activeBufferSources.push(bufferSource);
+  };
+
+  // Resets playback state for the next song
+  const resetPlaybackState = () => {
+    if (playbackInterval) clearInterval(playbackInterval);
+    scheduler = {};
+    missingAudioBuffers.clear();
+    console.log("Playback reset for the next song.");
+  };
+
+  // Handles playback completion logic
+  const handlePlaybackCompletion = (song) => {
+    const totalSongs = globalData.songsArray.length;
+
+    if (globalData.isLoopedPlayback) {
+      if (globalData.isMultipleSongs && globalData.isSequentialPlayback) {
+        currentSongIndex += 1;
+        if (currentSongIndex >= totalSongs) {
+          currentSongIndex = 0;
+          console.log("Reached the end of the playlist. Looping back to the first song.");
+        } else {
+          console.log(`Moving to next song: ${globalData.songsArray[currentSongIndex].id} (${currentSongIndex + 1}/${totalSongs})`);
+        }
+        resetPlaybackState();
+        startPlayback();
+      } else {
+        console.log(`Looping the current song: ${song.id}`);
+        resetPlaybackState();
+        startPlayback();
+      }
+    } else if (globalData.isMultipleSongs && globalData.isSequentialPlayback) {
+      currentSongIndex += 1;
+      if (currentSongIndex < totalSongs) {
+        console.log(`Moving to next song: ${globalData.songsArray[currentSongIndex].id} (${currentSongIndex + 1}/${totalSongs})`);
+        resetPlaybackState();
+        startPlayback();
+      } else {
+        console.log("Reached the end of the playlist. Stopping playback.");
+        stopPlayback();
+      }
+    } else {
+      console.log("Playback has completed the single song.");
+      stopPlayback();
+    }
+  };
+
+  // Initializes playback engine
+  const initializePlaybackEngine = () => {
+    const { songsArray } = globalData;
+    if (songsArray.length) {
+      console.log("Playback Engine Initialization Complete.");
+      console.log("Playback is ready. Click the artwork to start.");
+    } else {
+      console.error("No songs available for playback.");
+    }
+  };
+
+  // Sets up artwork click listener for playback toggle
+  const setupArtworkClickListener = () => {
+    document.addEventListener("DOMContentLoaded", () => {
+      const artworkCover = document.getElementById("artworkCover");
+      const artworkImage = document.getElementById("artworkImage");
+      if (globalData.isArtworkCover && artworkUrl.length > 0) {
+        artworkImage.src = artworkUrl[0];
+        artworkCover.classList.remove("hidden");
+        loadingSpinner.style.display = "none";
+        artworkImage.addEventListener("click", togglePlayback);
+      }
+    });
+  };
+
+  // Event listeners for audio buffer readiness and playback events
+  document.addEventListener("initialAudioBuffersReady", (event) => {
+    if (event.detail.success) {
+      initializePlaybackEngine();
+      console.log("Initial audio buffers are ready.");
+    }
+  });
+
+  document.addEventListener("allAudioBuffersReady", (event) => {
+    if (event.detail.success) {
+      console.log("All audio buffers have been loaded and are ready.");
+    }
+  });
+
+  document.addEventListener("playbackStarted", (event) => {
+    if (event.detail.success) {
+      console.log("Playback has been successfully started.");
+    }
+  });
+
+  document.addEventListener("playbackStopped", (event) => {
+    if (event.detail.success) {
+      console.log("Playback has been successfully stopped.");
+    }
+  });
+
+  // Start the setup
+  setupArtworkClickListener();
+  if (Object.keys(globalData.audioBuffers || {}).length) {
+    initializePlaybackEngine();
+  }
+})();
+</script>
+
+
+
+<!-- Section 3 - Playback Engine (Updated for Lazy Loading Integration) MINIFIED 5kb -->
+<!-- // playback.js -->
+<!-- <script src="/content/7e598776ae7ce4d2d1a4014ce49df45fc6cf5ecd23945fb850d8b967d9155117i0"></script> 
+ -->
+
+
+
+</body>
+</html>

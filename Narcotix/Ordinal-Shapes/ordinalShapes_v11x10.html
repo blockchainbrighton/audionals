@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Neon Shape Drawer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* CSS Variables for Consistency */
+        :root {
+            --background-color: #000;
+            --header-bg: #1e1e1e;
+            --header-color: #fff;
+            --control-bg: rgba(30, 30, 30, 0.8);
+            --control-color: #fff;
+            --stroke-color: rgba(57,255,20,1);
+            --font-family: Arial, sans-serif;
+        }
+
+        /* Reset and Basic Styling */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: var(--font-family);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            background: var(--background-color);
+            color: var(--control-color);
+        }
+        #header {
+            background: var(--header-bg);
+            color: var(--header-color);
+            padding: 10px 20px;
+            text-align: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+        #main {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 10px;
+            flex-grow: 1;
+            padding: 10px;
+            background: var(--background-color);
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            padding-top: 100%; /* 1:1 Aspect Ratio */
+            background: var(--background-color);
+        }
+        .canvas-container canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        /* Controls Panel Styling */
+        .controls-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--control-bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .controls-panel h2 {
+            margin-bottom: 20px;
+        }
+        .control-group {
+            margin-bottom: 15px;
+            width: 80%;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+        .control-group output {
+            display: block;
+            text-align: right;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">Neon Shape Drawer</div>
+    <div id="main">
+        <!-- Canvas Containers will be dynamically generated -->
+    </div>
+    <script>
+      // Configuration Constants
+      const SHAPE_NAMES = ["Capsule", "Star", "Pentagon", "Oval", "Diamond", "Circle", "Hexagon", "ReuleauxTriangle", "Rectangle"];
+      const TOTAL_CANVASES = SHAPE_NAMES.length + 1; // +1 for controls
+
+      // Abbreviations for Settings
+      const SETTING_ABBREVIATIONS = {
+          speed: 'sp',
+          offset: 'of',
+          frequency: 'fr',
+          tailLength: 'tl',
+          noiseLevel: 'nl',
+          timeSpeed: 'ts'
+      };
+
+      const ABBREV_TO_SETTING = Object.fromEntries(
+          Object.entries(SETTING_ABBREVIATIONS).map(([k, v]) => [v, k])
+      );
+
+      // Initial Settings
+      let settings = {
+          speed: 0.1,
+          offset: 0,
+          frequency: 1,
+          tailLength: 1,
+          noiseLevel: 0,
+          timeSpeed: 1.0
+      };
+
+      let stepIntervalID = null;
+      let stepSequence = [];
+      let currentStepIndex = 0;
+
+      // Serialized Phases using Abbreviations
+      const serializedPhases = [
+          { a: 'of', t: 'set', v: 50 },
+          { a: 'sp', t: 'inc', s: 0.1, tgt: 10 },
+          { a: 'tl', t: 'inc', s: 1, tgt: 10 },
+          { a: 'sp', t: 'dec', s: 0.1, tgt: 1 },
+          { a: 'nl', t: 'inc', s: 0.1, tgt: 5 },
+          { a: 'tl', t: 'inc', s: 1, tgt: 20 },
+          { a: 'sp', t: 'inc', s: 0.1, tgt: 2.0 },
+          { a: 'tl', t: 'inc', s: 2, tgt: 100 },
+          { a: 'nl', t: 'inc', s: 1, tgt: 10 },
+          { a: 'tl', t: 'inc', s: 2, tgt: 200 },
+          { a: 'nl', t: 'dec', s: 0.1, tgt: 5 },
+          { a: 'of', t: 'dec', s: 5, tgt: 10 },
+          { a: 'nl', t: 'inc', s: 1, tgt: 5 },
+          { a: 'tl', t: 'inc', s: 5, tgt: 400 },
+          { a: 'of', t: 'inc', s: 2, tgt: 50 },
+          { a: 'nl', t: 'dec', s: 0.1, tgt: 0 },
+          { a: 'of', t: 'dec', s: 1, tgt: 5 },
+          { a: 'nl', t: 'inc', s: 0.1, tgt: 2.5 },
+          { a: 'tl', t: 'inc', s: 5, tgt: 750 },
+          { a: 'nl', t: 'inc', s: 0.1, tgt: 10 },
+          { a: 'of', t: 'dec', s: 0.1, tgt: 0 },
+          { a: 'tl', t: 'inc', s: 5, tgt: 1000 },
+          { a: 'of', t: 'dec', s: 0.1, tgt: 0 },
+          { a: 'sp', t: 'inc', s: 0.1, tgt: 5.0 },
+      ];
+
+      // Shape Class Definition
+      class Shape {
+          constructor(canvas, shapeName) {
+              this.canvas = canvas;
+              this.ctx = canvas.getContext('2d');
+              this.shapeName = shapeName;
+              this.animationIndex = 0;
+              this.oscillationOffset = 0;
+              this.center = { x: 0, y: 0 };
+              this.shapePoints = [];
+
+              this.resizeCanvas();
+              window.addEventListener('resize', () => this.resizeCanvas());
+
+              this.shapePoints = getShapePoints(this.shapeName, this.center);
+              this.animate();
+          }
+
+          resizeCanvas() {
+              const parent = this.canvas.parentElement;
+              this.canvas.width = parent.clientWidth;
+              this.canvas.height = parent.clientHeight;
+              this.center = { x: this.canvas.width / 2, y: this.canvas.height / 2 };
+              this.shapePoints = getShapePoints(this.shapeName, this.center);
+          }
+
+          setSettings(newSettings) {
+              Object.assign(settings, newSettings);
+          }
+
+          animate() {
+              const { speed, offset, frequency, tailLength, noiseLevel } = settings;
+              this.ctx.fillStyle = '#000';
+              this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+              if (this.shapePoints.length > 0) {
+                  this.animationIndex = (this.animationIndex + speed / 10) % this.shapePoints.length;
+                  this.oscillationOffset += frequency * 0.05;
+                  for (let i = 0; i < tailLength; i++) {
+                      let idx = Math.floor((this.animationIndex - i * (speed / 10)) % this.shapePoints.length);
+                      if (idx < 0) idx += this.shapePoints.length;
+                      const idxNext = (idx + 1) % this.shapePoints.length;
+                      const pCurrent = this.shapePoints[idx], pNext = this.shapePoints[idxNext];
+                      const dx = pNext.x - pCurrent.x, dy = pNext.y - pCurrent.y;
+                      const length = Math.hypot(dx, dy) || 1;
+                      const perp = { x: -dy / length, y: dx / length };
+                      const osc = Math.sin(this.oscillationOffset + i * 0.3) * offset * (1 - i / tailLength);
+                      const noise = () => (Math.random() - 0.5) * 2 * noiseLevel;
+                      const nx = pCurrent.x + perp.x * osc + noise(), ny = pCurrent.y + perp.y * osc + noise();
+                      const nnx = pNext.x + perp.x * osc + noise(), nny = pNext.y + perp.y * osc + noise();
+                      const fade = Math.max(0, 255 - Math.floor((i / tailLength) * 255));
+                      this.ctx.strokeStyle = `rgba(57,255,${Math.min(20, fade)},1)`;
+                      this.ctx.lineWidth = 2;
+                      this.ctx.beginPath();
+                      this.ctx.moveTo(nx, ny);
+                      this.ctx.lineTo(nnx, nny);
+                      this.ctx.stroke();
+                  }
+              }
+              requestAnimationFrame(() => this.animate());
+          }
+      }
+
+      // Utility Functions for Shape Points
+      const getShapePoints = (name, c) => {
+          const shapeFunctions = {
+              "Capsule": () => getCapsulePoints(c, 400, 200),
+              "Oval": () => getOvalPoints(c, 400, 200),
+              "Circle": () => getOvalPoints(c, 250, 250),
+              "Diamond": () => interpolateShape([
+                  { x: c.x, y: c.y - 100 },
+                  { x: c.x + 150, y: c.y },
+                  { x: c.x, y: c.y + 100 },
+                  { x: c.x - 150, y: c.y }
+              ], 50),
+              "Pentagon": () => interpolateShape(generateVertices(c, 150, 5, -Math.PI / 2), 50),
+              "Hexagon": () => interpolateShape(generateVertices(c, 150, 6, -Math.PI / 2), 50),
+              "Star": () => interpolateShape(generateStarVertices(c, 150, 75, 5, -Math.PI / 2), 50),
+              "Rectangle": () => getRectanglePoints(c, 300, 200, 50),
+              "ReuleauxTriangle": () => getReuleauxTrianglePoints(c, 150, 300)
+          };
+          return shapeFunctions[name] ? shapeFunctions[name]() : [];
+      };
+
+      function getOvalPoints(c, w, h, numPoints = 360) {
+          return Array.from({ length: numPoints }, (_, a) => {
+              const rad = a * Math.PI / 180;
+              return { x: c.x + (w / 2) * Math.cos(rad), y: c.y + (h / 2) * Math.sin(rad) };
+          });
+      }
+
+      function getCapsulePoints(c, width, height, numPoints = 360) {
+          const pts = [];
+          const radius = height / 2;
+          let halfWidth = Math.max(width / 2 - radius, 0);
+          for (let i = 0; i < numPoints; i++) {
+              const p = i / numPoints;
+              let x, y;
+              if (p < 0.25) {
+                  const angle = (Math.PI / 2) + (p / 0.25) * Math.PI;
+                  x = c.x - halfWidth + radius * Math.cos(angle);
+                  y = c.y + radius * Math.sin(angle);
+              } else if (p < 0.5) {
+                  const t = (p - 0.25) / 0.25;
+                  x = (c.x - halfWidth) + (2 * halfWidth) * t;
+                  y = c.y - radius;
+              } else if (p < 0.75) {
+                  const angle = (3 * Math.PI / 2) + ((p - 0.5) / 0.25) * Math.PI;
+                  x = c.x + halfWidth + radius * Math.cos(angle);
+                  y = c.y + radius * Math.sin(angle);
+              } else {
+                  const t = (p - 0.75) / 0.25;
+                  x = (c.x + halfWidth) - (2 * halfWidth) * t;
+                  y = c.y + radius;
+              }
+              pts.push({ x, y });
+          }
+          return pts;
+      }
+
+      const generateVertices = (c, r, sides, angleOffset = 0) =>
+          Array.from({ length: sides }, (_, i) => ({
+              x: c.x + r * Math.cos(angleOffset + 2 * Math.PI * i / sides),
+              y: c.y + r * Math.sin(angleOffset + 2 * Math.PI * i / sides)
+          }));
+
+      const generateStarVertices = (c, outerR, innerR, points, angleOffset = 0) => {
+          const verts = [];
+          for (let i = 0; i < points * 2; i++) {
+              const angle = angleOffset + i * Math.PI / points;
+              const r = (i % 2 === 0) ? outerR : innerR;
+              verts.push({ x: c.x + r * Math.cos(angle), y: c.y + r * Math.sin(angle) });
+          }
+          return verts;
+      };
+
+      const interpolateShape = (verts, pointsPerSide) => {
+          const pts = [];
+          verts.forEach((p0, i) => {
+              const p1 = verts[(i + 1) % verts.length];
+              for (let t = 0; t < pointsPerSide; t++) {
+                  pts.push({
+                      x: p0.x + (p1.x - p0.x) * t / pointsPerSide,
+                      y: p0.y + (p1.y - p0.y) * t / pointsPerSide
+                  });
+              }
+          });
+          return pts;
+      };
+
+      const getRectanglePoints = (c, width, height, pointsPerSide = 50) => {
+          const halfW = width / 2, halfH = height / 2;
+          const corners = [
+              { x: c.x - halfW, y: c.y - halfH },
+              { x: c.x + halfW, y: c.y - halfH },
+              { x: c.x + halfW, y: c.y + halfH },
+              { x: c.x - halfW, y: c.y + halfH }
+          ];
+          return interpolateShape(corners, pointsPerSide);
+      };
+
+      function getReuleauxTrianglePoints(c, radius, numPoints = 300) {
+          const points = [];
+          const numPointsPerArc = Math.floor(numPoints / 3);
+          const angleOffset = -Math.PI / 2; // Start pointing upwards
+
+          // Calculate the correct arc radius (side length of the equilateral triangle)
+          const arcRadius = radius * Math.sqrt(3);
+
+          // Calculate the three vertices of the equilateral triangle
+          const vertices = [];
+          for (let i = 0; i < 3; i++) {
+              const angle = angleOffset + (2 * Math.PI * i) / 3;
+              vertices.push({
+                  x: c.x + radius * Math.cos(angle),
+                  y: c.y + radius * Math.sin(angle)
+              });
+          }
+
+          // For each arc, draw from one vertex to the next, centered at the opposite vertex
+          for (let i = 0; i < 3; i++) {
+              const startVertex = vertices[i];
+              const endVertex = vertices[(i + 1) % 3];
+              const centerVertex = vertices[(i + 2) % 3];
+
+              // Compute the angle from the centerVertex to startVertex and endVertex
+              let startAngle = Math.atan2(startVertex.y - centerVertex.y, startVertex.x - centerVertex.x);
+              let endAngle = Math.atan2(endVertex.y - centerVertex.y, endVertex.x - centerVertex.x);
+
+              // Adjust angles for proper drawing direction
+              if (endAngle < startAngle) {
+                  endAngle += 2 * Math.PI;
+              }
+
+              const angleStep = (endAngle - startAngle) / numPointsPerArc;
+
+              for (let j = 0; j < numPointsPerArc; j++) {
+                  const angle = startAngle + j * angleStep;
+                  points.push({
+                      x: centerVertex.x + arcRadius * Math.cos(angle),
+                      y: centerVertex.y + arcRadius * Math.sin(angle)
+                  });
+              }
+          }
+          return points;
+      }
+
+      // Generate Canvas Containers Dynamically
+      const mainContainer = document.getElementById('main');
+      SHAPE_NAMES.forEach((name, index) => {
+          const container = document.createElement('div');
+          container.classList.add('canvas-container');
+          const canvas = document.createElement('canvas');
+          canvas.id = `drawing-canvas-${index + 1}`;
+          container.appendChild(canvas);
+          mainContainer.appendChild(container);
+      });
+
+      // Create Controls Panel with Abbreviations
+      const controlsContainer = document.createElement('div');
+      controlsContainer.classList.add('canvas-container');
+      const controlsPanel = document.createElement('div');
+      controlsPanel.classList.add('controls-panel');
+      controlsPanel.id = 'controls-panel';
+      controlsPanel.innerHTML = `
+          <h2>Controls</h2>
+          ${[
+              { id: 'speed', label: `Speed [${SETTING_ABBREVIATIONS.speed}]`, min: 0.1, max: 5.0, step: 0.1, value: settings.speed },
+              { id: 'offset', label: `Offset [${SETTING_ABBREVIATIONS.offset}]`, min: 0, max: 50, step: 5, value: settings.offset },
+              { id: 'frequency', label: `Frequency [${SETTING_ABBREVIATIONS.frequency}]`, min: 0.1, max: 5.0, step: 0.1, value: settings.frequency },
+              { id: 'tailLength', label: `Tail Length [${SETTING_ABBREVIATIONS.tailLength}]`, min: 1, max: 1000, step: 10, value: settings.tailLength },
+              { id: 'noiseLevel', label: `Noise Level [${SETTING_ABBREVIATIONS.noiseLevel}]`, min: 0, max: 10, step: 1, value: settings.noiseLevel },
+              { id: 'timeSpeed', label: `Time Speed [${SETTING_ABBREVIATIONS.timeSpeed}]`, min: 0.1, max: 10.0, step: 0.1, value: settings.timeSpeed }
+          ].map(ctrl => `
+              <div class="control-group">
+                  <label for="${ctrl.id}-control">${ctrl.label}: <span id="${ctrl.id}-value">${ctrl.value}</span></label>
+                  <input type="range" id="${ctrl.id}-control" min="${ctrl.min}" max="${ctrl.max}" step="${ctrl.step}" value="${ctrl.value}">
+              </div>
+          `).join('')
+          }
+      `;
+      controlsContainer.appendChild(controlsPanel);
+      mainContainer.appendChild(controlsContainer);
+
+      // Initialize Shapes
+      const shapeInstances = Array.from({ length: SHAPE_NAMES.length }, (_, i) => {
+          const canvas = document.getElementById(`drawing-canvas-${i + 1}`);
+          return new Shape(canvas, SHAPE_NAMES[i]);
+      });
+
+      // Control Elements
+      const controls = {
+          speed: document.getElementById('speed-control'),
+          offset: document.getElementById('offset-control'),
+          frequency: document.getElementById('frequency-control'),
+          tailLength: document.getElementById('tailLength-control'),
+          noiseLevel: document.getElementById('noiseLevel-control'),
+          timeSpeed: document.getElementById('timeSpeed-control')
+      };
+
+      const controlValues = {
+          speed: document.getElementById('speed-value'),
+          offset: document.getElementById('offset-value'),
+          frequency: document.getElementById('frequency-value'),
+          tailLength: document.getElementById('tailLength-value'),
+          noiseLevel: document.getElementById('noiseLevel-value'),
+          timeSpeed: document.getElementById('timeSpeed-value')
+      };
+
+      // Mapping from Abbreviation to Full Setting Name
+      const abbreviationMap = SETTING_ABBREVIATIONS;
+
+      // Update Control Displays
+      const updateControls = () => {
+          Object.keys(controlValues).forEach(key => {
+              controlValues[key].textContent = settings[key].toFixed ? settings[key].toFixed(1) : settings[key];
+              if (parseFloat(controls[key].value) !== settings[key]) {
+                  controls[key].value = settings[key];
+              }
+          });
+      };
+
+      // Apply Settings to All Shapes
+      const applySettings = () => {
+          shapeInstances.forEach(shape => shape.setSettings(settings));
+      };
+
+      // Generate Step Sequence from Serialized Instructions
+      const generateStepSequence = () => {
+          stepSequence = [];
+          const tempSettings = { ...settings };
+
+          serializedPhases.forEach(phase => {
+              const { a, t, s, tgt, v } = phase; // a: abbreviation, t: type, s: step, tgt: target, v: value (for set)
+              const property = ABBREV_TO_SETTING[a];
+              if (!property) {
+                  console.warn(`Unknown abbreviation: ${a}`);
+                  return;
+              }
+
+              if (t === 'set') {
+                  stepSequence.push({ property, value: v });
+                  tempSettings[property] = v;
+              } else {
+                  const direction = t === 'inc' ? 1 : -1;
+                  let nextValue = tempSettings[property] + direction * s;
+                  const compare = t === 'inc' ? (val => val <= tgt) : (val => val >= tgt);
+                  const decimalPlaces = s.toString().split('.')[1]?.length || 0;
+
+                  while (compare(nextValue)) {
+                      const roundedValue = parseFloat(nextValue.toFixed(decimalPlaces));
+                      stepSequence.push({ property, value: roundedValue });
+                      tempSettings[property] = roundedValue;
+                      nextValue += direction * s;
+                  }
+                  // Ensure target is included
+                  if ((direction === 1 && tempSettings[property] < tgt) ||
+                      (direction === -1 && tempSettings[property] > tgt)) {
+                      stepSequence.push({ property, value: tgt });
+                      tempSettings[property] = tgt;
+                  }
+              }
+          });
+
+          console.log(`Total steps to be executed: ${stepSequence.length}`);
+      };
+
+      // Apply a Single Step
+      const applyStep = ({ property, value }) => {
+          settings[property] = value;
+          applySettings();
+          updateControls();
+          console.log(`Set ${property} to ${value}`);
+      };
+
+      // Start Step Interval
+      const startStepInterval = () => {
+          clearInterval(stepIntervalID);
+          const intervalDuration = 1000 / settings.timeSpeed;
+          stepIntervalID = setInterval(() => {
+              if (currentStepIndex >= stepSequence.length) {
+                  console.log("All steps completed.");
+                  clearInterval(stepIntervalID);
+                  return;
+              }
+              applyStep(stepSequence[currentStepIndex++]);
+          }, intervalDuration);
+      };
+
+      // Restart Interval when Time Speed Changes
+      const restartStepInterval = () => {
+          startStepInterval();
+      };
+
+      // Initialize the Application
+      const init = () => {
+          generateStepSequence();
+          startStepInterval();
+          updateControls();
+      };
+
+      // Event Listeners for Controls
+      Object.keys(controls).forEach(key => {
+          controls[key].addEventListener('input', (e) => {
+              const value = parseFloat(e.target.value);
+              settings[key] = isNaN(value) ? e.target.value : value;
+              controlValues[key].textContent = settings[key].toFixed ? settings[key].toFixed(1) : settings[key];
+              applySettings();
+              if (key === 'timeSpeed') restartStepInterval();
+          });
+      });
+
+      init(); // Start the application
+
+      // Future: Function to Load External Serialized Instructions
+      const loadExternalInstructions = (serializedInstructions) => {
+          // Reset current step sequence
+          stepSequence = [];
+          currentStepIndex = 0;
+
+          // Update serializedPhases or replace with new instructions
+          // For example, replace serializedPhases with serializedInstructions
+          // serializedPhases = serializedInstructions;
+
+          // For demonstration, let's assume serializedInstructions is passed correctly
+          // This part needs to be implemented based on how external files are provided
+      };
+  </script>
+</body>
+</html>

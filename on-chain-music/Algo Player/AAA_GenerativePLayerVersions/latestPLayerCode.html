@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Audionals - Web3 Music Player</title>
+<!-- <script src="/content/616ef4c1bef02cb6c0f785ef76b98df4e379e8f01e2b31e2ae9e68449485f2bci0"></script> -->
+ <script>
+    // songsAndArtwork.js
+    const artworkUrl = [
+    "/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"
+];
+
+const songDataUrls = [
+    "/content/6d288c0c82653001bb32497889dd1486e8afec9b0671a95fa9e10f99c20737bbi0",
+    "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0",
+    "/content/b22f1c85371b58a9cdac19b2baa50b1f9025a28d44cdfaad539d0527aa7d894ei0",
+    
+];
+
+window.projectArtistMap = {
+    "I Love Cheese 2024 FINAL": "Rex Speedway and The Denim Avengers + jim.btc",
+    "TRUTH": "melophonic",
+    "Kora Algo New": "melophonic",
+
+};
+ </script>
+<link rel="stylesheet" href="/content/7a309a161e838ba93740684338b3d97f3c1226c046d8b1137afc2353b4bf16e1i0">
+</head>
+<body>
+    <h1>Audionals</h1>
+    <div id="loadingSpinner"></div>
+    <div id="artworkCover">
+      <img id="artworkImage" src="" alt="Artwork Cover">
+    </div>
+    <div id="trackListingPanel">
+      <h2>Track Listings:</h2>
+      <div id="metadataContent"></div>
+    </div>
+    <div id="nowPlayingContainer">
+      <div id="nowPlayingText">
+        <span class="songTitle">No song playing</span>
+        <span class="artistName"></span>
+      </div>
+    </div>
+    <div id="buttonContainer">
+      <button id="playButton" onclick="globalData.togglePlayback()">Play / Stop</button>
+      <button id="prevButton" onclick="globalData.previousSong()">Previous</button>
+      <button id="nextButton" onclick="globalData.nextSong()">Next</button>
+      <button id="toggleInstruction" onclick="globalData.toggleInfo()">Info</button>
+    </div>
+    <div id="infoPanel" class="hidden">
+      <h2>Audional Player Info</h2>
+      <ul>
+        <li>Press <strong>T</strong> to view the Track List.</li>
+        <li>Use <strong>Left</strong> and <strong>Right</strong> arrows to navigate the Track List.</li>
+      </ul>
+    </div>
+    
+    <!-- globalData.js -->
+    <script>
+    const globalData = window.globalData = {
+        isPlaying: false,
+        currentSongIndex: 0,
+        songsArray: [],
+        audioBuffers: {},
+        reverseAudioBuffers: {},
+        audioContext: null, // Initialize as null
+        masterGain: null,
+        gainNodes: {},
+        startPlayback: null,
+        stopPlayback: null,
+        togglePlayback: null,
+        resetPlayback: null,
+        isArtworkCover: true,
+        isVisualiserCover: false,
+        audioComponentsInitialized: false // Add this flag
+    };
+    </script>
+<!-- Load initial scripts with embedded RemixProcessor -->
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const scriptUrls = [
+            "/content/44088e23250de51c70149b344a11ba29fe39850ac9b3bf2aa99e73f5d29c4825i0", // loadAndPrepareSongDataOriginalPakoHack
+            "/content/5c03e882ab5a531271b2e93a80d8a9d72cb533c580bec1567020f5cd61595560i0", // projectArtistMapping
+            "/content/016f153f011f6a23b8fccd0efcc7945913ee97f241c7a2df7c71c4fa7c9a5fb3i0", // unifiedMetadataManagement
+            "/content/8b5b09cfedbc0c6a187816181f8d33f90c5bbd15fc10af47008176effb866a47i0"  // keyboardControlsAndEventListeners
+        ];
+    
+        const loadScript = (src) => {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement("script");
+                script.src = src;
+                script.async = false; // Ensure scripts are executed in order
+                script.onload = () => {
+                    console.log(`Loaded script: ${src}`);
+                    resolve();
+                };
+                script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+                document.body.appendChild(script);
+            });
+        };
+    
+        const embedRemixProcessor = () => {
+            const remixProcessorCode = `
+                document.addEventListener("dataLoadingComplete", async (event) => {
+                    const globalData = window.globalData;
+                    if (!globalData || !globalData.songsArray) {
+                        console.error("No song data available.");
+                        return;
+                    }
+
+                    const { songsArray } = globalData;
+
+                    // Step 1: Aggregate all channels from all songs
+                    const allChannels = [];
+                    songsArray.forEach(song => {
+                        song.channels.forEach(channel => {
+                            // Keep track of which song the channel belongs to
+                            allChannels.push({
+                                songId: song.id,
+                                song: song,
+                                channel: { ...channel } // Clone to prevent mutation
+                            });
+                        });
+                    });
+
+                    // Step 2: Randomly select 16 channels
+                    const selectedChannels = [];
+                    const shuffledChannels = allChannels.sort(() => Math.random() - 0.5);
+
+                    for (const item of shuffledChannels) {
+                        if (selectedChannels.length >= 16) break;
+                        selectedChannels.push(item);
+                    }
+
+                    // Step 3: Ensure unique channel IDs and adjust IDs
+                    selectedChannels.forEach((item, index) => {
+                        // Adjust the channel id to be unique
+                        item.channel.originalId = item.channel.id; // Store original id
+                        item.channel.id = \`RemixCh\${index}\`;
+                    });
+
+                    // Step 4: Determine total number of sequences
+                    let totalSequences = 0;
+                    selectedChannels.forEach(item => {
+                        const songSequences = Object.keys(item.song.projectSequences).length;
+                        if (songSequences > totalSequences) {
+                            totalSequences = songSequences;
+                        }
+                    });
+
+                    // Step 5: Build projectSequences for the new song
+                    const remixProjectSequences = {};
+
+                    for (let seqIndex = 0; seqIndex < totalSequences; seqIndex++) {
+                        const seqId = \`Sequence\${seqIndex}\`;
+                        remixProjectSequences[seqId] = {};
+
+                        selectedChannels.forEach(item => {
+                            const originalSeqId = \`Sequence\${seqIndex}\`;
+                            const originalSeqData = item.song.projectSequences[originalSeqId];
+                            if (originalSeqData && originalSeqData[item.channel.originalId]) {
+                                remixProjectSequences[seqId][item.channel.id] = {
+                                    steps: originalSeqData[item.channel.originalId].steps
+                                };
+                            } else {
+                                // If the sequence doesn't exist in the original song, use empty steps
+                                remixProjectSequences[seqId][item.channel.id] = {
+                                    steps: []
+                                };
+                            }
+                        });
+                    }
+
+                    // Step 6: Create the new song object
+                    const remixSong = {
+                        id: \`Remix_Song_\${Date.now()}\`,
+                        name: 'Random Remix',
+                        artist: 'Random Artist',
+                        bpm: 120, // Or set to a random bpm
+                        totalSequences: totalSequences,
+                        channels: selectedChannels.map(item => item.channel),
+                        projectSequences: remixProjectSequences
+                    };
+
+                    // Step 7: Add the new song to the songsArray
+                    globalData.songsArray.push(remixSong);
+
+                    console.log('Remix song created and added to songsArray');
+                });
+            `;
+            const script = document.createElement("script");
+            script.textContent = remixProcessorCode;
+            document.body.appendChild(script);
+            console.log("RemixProcessor: Embedded and executed.");
+        };
+    
+        const loadScriptsSequentially = async () => {
+            try {
+                // Load the first script: loadAndPrepareSongDataOriginalPakoHack.js
+                await loadScript(scriptUrls[0]);
+
+                // Embed and execute the RemixProcessor code after the first script is loaded
+                embedRemixProcessor();
+
+                // Load the remaining scripts in order
+                const remainingScripts = scriptUrls.slice(1);
+                for (const src of remainingScripts) {
+                    await loadScript(src);
+                }
+
+                console.log("All initial scripts loaded successfully.");
+            } catch (error) {
+                console.error("Error loading scripts:", error);
+            }
+        };
+
+        // Initiate the script loading process
+        loadScriptsSequentially();
+    });
+</script>
+
+
+    <!-- initializeAudioComponents and togglePlayback functions -->
+    <script>
+    function initializeAudioComponents() {
+        return new Promise((resolve, reject) => {
+            const scriptUrls = [
+                "/content/ef622be8aeeac45fdbdc291dd0db739d24c2c667c5c3ce7662f2b8c7f2c3de58i0", // GainNodeHelpers
+                "/content/f4cc99813b43f71b3e781d3c99f24a6a7a5b1004ea0efce3b225011e347b8df0i0", // audioProcessingAndManagement
+                "/content/7b305327f2951d219532ef0cb46b2039b23f2cfd0d8d0e827f3fe1b2b754b5a9i0", // DynamicGainBalancing
+                "/content/7f1e3b45f22f943ddfb90a0b9811671185f720bb303f002215b9e0fd932f299ci0"  // playbackEngine
+            ];
+    
+            let loadedScripts = 0;
+    
+            scriptUrls.forEach((src) => {
+                const script = document.createElement("script");
+                script.src = src;
+                script.async = false; // Ensure scripts are executed in order
+                script.onload = () => {
+                    loadedScripts++;
+                    if (loadedScripts === scriptUrls.length) {
+                        globalData.audioComponentsInitialized = true;
+                        resolve();
+                    }
+                };
+                script.onerror = () => {
+                    reject(new Error(`Failed to load script: ${src}`));
+                };
+                document.body.appendChild(script);
+            });
+        });
+    }
+    
+    globalData.togglePlayback = function() {
+        if (!globalData.audioContext) {
+            // Initialize AudioContext upon user interaction
+            globalData.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            globalData.masterGain = globalData.audioContext.createGain();
+            globalData.masterGain.connect(globalData.audioContext.destination);
+    
+            // Initialize audio components and wait for scripts to load
+            initializeAudioComponents().then(() => {
+                proceedWithPlayback();
+            }).catch((error) => {
+                console.error('Error initializing audio components:', error);
+            });
+        } else {
+            if (globalData.audioContext.state === 'suspended') {
+                globalData.audioContext.resume().then(() => {
+                    proceedWithPlayback();
+                });
+            } else {
+                proceedWithPlayback();
+            }
+        }
+    };
+    
+    function proceedWithPlayback() {
+        if (globalData.isPlaying) {
+            globalData.stopPlayback();
+        } else {
+            globalData.startPlayback();
+        }
+    }
+    </script>
+    
+    <!-- togglePlayButtonStyles -->
+    <script>
+    function togglePlayButton(){
+        const playButton = document.getElementById("playButton");
+        if(playButton){
+            playButton.addEventListener("click", ()=>{
+                playButton.classList.toggle("playing");
+                console.log("'playing' class toggled.");
+            });
+            console.log("Play button event listener attached.");
+        } else {
+            console.error("playButton not found.");
+        }
+    }
+    document.addEventListener("DOMContentLoaded", ()=>{
+        setTimeout(togglePlayButton,1000);
+    });
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,2 @@
+//projectArtistMapping.js
+function getProjectAndArtist(t){let n="Unknown Project Name",e="Unknown Artist Name";if(t.id){const e=t.id.match(/Song\s+\d+:\s+(.+)/);e&&e[1]&&(n=e[1].trim())}return window.projectArtistMap&&window.projectArtistMap[n]?e=window.projectArtistMap[n]:t.artist&&(e=t.artist),{projectName:n,artistName:e}}globalData.toggleInfo=function(){document.getElementById("infoPanel").classList.toggle("visible")};

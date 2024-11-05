@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Neon Shape Drawer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+/* Reset and basic styling */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    background: #000;
+}
+#header {
+    background: #1e1e1e;
+    color: #fff;
+    padding: 10px 20px;
+    text-align: center;
+    font-size: 24px;
+    flex-shrink: 0;
+}
+#main {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 10px;
+    flex-grow: 1;
+    padding: 10px;
+    background: #000;
+}
+.canvas-container {
+    position: relative;
+    width: 100%;
+    padding-top: 100%; /* 1:1 Aspect Ratio */
+    background: #000;
+}
+.canvas-container canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+/* Controls Panel Styling */
+.controls-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(30, 30, 30, 0.8);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    overflow-y: auto; /* Added for better accessibility on smaller screens */
+}
+.controls-panel h2 {
+    margin-bottom: 20px;
+}
+.control-group {
+    margin-bottom: 15px;
+    width: 80%;
+}
+.control-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+}
+.control-group input[type="range"] {
+    width: 100%;
+}
+.control-group output {
+    display: block;
+    text-align: right;
+    font-size: 12px;
+    margin-top: 5px;
+}
+</style>
+</head>
+<body>
+    <div id="header">
+        Neon Shape Drawer
+    </div>
+    <div id="main">
+        <!-- Shape Canvases -->
+        <div class="canvas-container"><canvas id="drawing-canvas-1"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-2"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-3"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-4"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-5"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-6"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-7"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-8"></canvas></div>
+        <div class="canvas-container"><canvas id="drawing-canvas-9"></canvas></div>
+        <!-- 10th Section with Controls -->
+        <div class="canvas-container" id="controls-container">
+            <div class="controls-panel" id="controls-panel">
+                <h2>Controls</h2>
+                <div class="control-group">
+                    <label for="speed-control">Speed: <span id="speed-value">0.1</span></label>
+                    <input type="range" id="speed-control" min="0.1" max="5.0" step="0.1" value="0.1">
+                </div>
+                <div class="control-group">
+                    <label for="offset-control">Offset: <span id="offset-value">0</span></label>
+                    <input type="range" id="offset-control" min="0" max="50" step="5" value="0">
+                </div>
+                <div class="control-group">
+                    <label for="frequency-control">Frequency: <span id="frequency-value">50</span></label>
+                    <input type="range" id="frequency-control" min="0.1" max="5.0" step="0.1" value="2.5">
+                </div>
+                <div class="control-group">
+                    <label for="tailLength-control">Tail Length: <span id="tailLength-value">1</span></label>
+                    <input type="range" id="tailLength-control" min="1" max="1000" step="10" value="1">
+                </div>
+                <div class="control-group">
+                    <label for="noiseLevel-control">Noise Level: <span id="noiseLevel-value">0</span></label>
+                    <input type="range" id="noiseLevel-control" min="0" max="10" step="1" value="0">
+                </div>
+                <!-- New Control for Time Speed -->
+                <div class="control-group">
+                    <label for="timeSpeed-control">Time Speed: <span id="timeSpeed-value">1.0</span></label>
+                    <input type="range" id="timeSpeed-control" min="0.1" max="5.0" step="0.1" value="1.0">
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    // Settings variables initialized to minimum values
+    let speed = 0.1,          // Initially 0.1
+        offset = 0,           // Initially 0
+        frequency = 1,      // Initially 0.1
+        tailLength = 1,       // Initially 1
+        noiseLevel = 0;       // Initially 0
+
+    // Time Speed Control
+    let timeSpeed = 1.0; // Initially 1.0 (Normal speed)
+    let stepIntervalID = null; // To store the interval ID
+
+    // Shape Class Definition
+    class Shape {
+        constructor(canvasId, shapeName) {
+            this.canvas = document.getElementById(canvasId);
+            this.ctx = this.canvas.getContext('2d');
+            this.shapeName = shapeName;
+            this.speed = speed;
+            this.offset = offset;
+            this.frequency = frequency;
+            this.tailLength = tailLength;
+            this.noiseLevel = noiseLevel;
+            this.animationIndex = 0;
+            this.oscillationOffset = 0;
+            this.center = { x: 0, y: 0 };
+            this.shapePoints = [];
+
+            this.resizeCanvas();
+            window.addEventListener('resize', () => this.resizeCanvas());
+
+            this.shapePoints = getShapePoints(this.shapeName, this.center);
+
+            this.animate();
+        }
+
+        resizeCanvas() {
+            this.canvas.width = this.canvas.parentElement.clientWidth;
+            this.canvas.height = this.canvas.parentElement.clientHeight;
+            this.center = { x: this.canvas.width / 2, y: this.canvas.height / 2 };
+            this.shapePoints = getShapePoints(this.shapeName, this.center);
+        }
+
+        setSettings({speed, offset, frequency, tailLength, noiseLevel}) {
+            if(speed !== undefined) this.speed = speed;
+            if(offset !== undefined) this.offset = offset;
+            if(frequency !== undefined) this.frequency = frequency;
+            if(tailLength !== undefined) this.tailLength = tailLength;
+            if(noiseLevel !== undefined) this.noiseLevel = noiseLevel;
+        }
+
+        animate() {
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            if (this.shapePoints.length > 0) {
+                this.animationIndex = (this.animationIndex + this.speed / 10) % this.shapePoints.length;
+                this.oscillationOffset += this.frequency * 0.05;
+                for (let i = 0; i < this.tailLength; i++) {
+                    let idx = Math.floor((this.animationIndex - i * (this.speed / 10)) % this.shapePoints.length);
+                    if (idx < 0) idx += this.shapePoints.length;
+                    const idxNext = (idx + 1) % this.shapePoints.length;
+                    const pCurrent = this.shapePoints[idx], pNext = this.shapePoints[idxNext];
+                    const dx = pNext.x - pCurrent.x, dy = pNext.y - pCurrent.y;
+                    const length = Math.hypot(dx, dy) || 1;
+                    const perp = { x: -dy / length, y: dx / length };
+                    const osc = Math.sin(this.oscillationOffset + i * 0.3) * this.offset * (1 - i / this.tailLength);
+                    const noise = () => (Math.random() - 0.5) * 2 * this.noiseLevel;
+                    const nx = pCurrent.x + perp.x * osc + noise(), ny = pCurrent.y + perp.y * osc + noise();
+                    const nnx = pNext.x + perp.x * osc + noise(), nny = pNext.y + perp.y * osc + noise();
+                    const fade = Math.max(0, 255 - Math.floor((i / this.tailLength) * 255));
+                    this.ctx.strokeStyle = `rgba(57,255,${Math.min(20, fade)},1)`;
+                    this.ctx.lineWidth = 2;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(nx, ny);
+                    this.ctx.lineTo(nnx, nny);
+                    this.ctx.stroke();
+                }
+            }
+            requestAnimationFrame(() => this.animate());
+        }
+    }
+
+    // Shape names
+    const shapeNames = ["Capsule", "Star", "Pentagon", "Oval", "Diamond", "Circle", "Hexagon", "ReuleauxTriangle", "Rectangle"];
+
+    // Initialize Shape Instances
+    const shapeInstances = [];
+    for(let i=1; i<=9; i++) {
+        shapeInstances.push(new Shape(`drawing-canvas-${i}`, shapeNames[i-1]));
+    }
+
+    // Define Phases for Step Sequence
+    const phases = [
+        // 1. Offset set to full (50)
+        { property: 'offset', type: 'set', value: 50 },
+
+        // 2. Speed: +0.1 up to 10
+        { property: 'speed', type: 'increment', step: 0.1, target: 10 },
+
+        // 3. TailLength: +1 up to10
+        { property: 'tailLength', type: 'increment', step: 1, target: 10 },
+
+           // 3.5 Speed: -0.1 down to 1
+           { property: 'speed', type: 'decrement', step: 0.1, target: 1 },
+
+        // 4. NoiseLevel: +1 up to5
+        { property: 'noiseLevel', type: 'increment', step: 0.1, target: 5 },
+
+        // 5. TailLength: +1 up to20
+        { property: 'tailLength', type: 'increment', step: 1, target: 20 },
+
+        // 6. Speed: +0.1 up to2.0
+        { property: 'speed', type: 'increment', step: 0.1, target: 2.0 },
+
+        // 7. TailLength: +10 up to100
+        { property: 'tailLength', type: 'increment', step: 2, target: 100 },
+
+        // 8. NoiseLevel: +1 up to10
+        { property: 'noiseLevel', type: 'increment', step: 1, target: 10 },
+
+        // 9. TailLength: +10 up to200
+        { property: 'tailLength', type: 'increment', step: 2, target: 200 },
+
+        // 10. NoiseLevel: -1 down to5
+        { property: 'noiseLevel', type: 'decrement', step: 0.1, target: 5 },
+
+        // 11. Offset: -5 down to25
+        { property: 'offset', type: 'decrement', step: 5, target: 25 },
+
+        // 12. TailLength: +50 up to400
+        { property: 'tailLength', type: 'increment', step: 5, target: 400 },
+
+        // 13. Offset: +5 up to50
+        { property: 'offset', type: 'increment', step: 2, target: 50 },
+
+        // 14. NoiseLevel: -1 down to0
+        { property: 'noiseLevel', type: 'decrement', step: 0.1, target: 0 },
+
+        // 15. Offset: -5 down to25
+        { property: 'offset', type: 'decrement', step: 1, target: 25 },
+
+        // 16. TailLength: +50 up to750
+        { property: 'tailLength', type: 'increment', step: 10, target: 750 },
+
+        // 17. Offset: -5 down to10
+        { property: 'offset', type: 'decrement', step: 1, target: 10 },
+
+
+        // 19. TailLength: +50 up to1000
+        { property: 'tailLength', type: 'increment', step: 10, target: 1000 },
+
+        // 20. Speed: +1 up to5.0
+        { property: 'speed', type: 'increment', step: 0.1, target: 5.0 },
+
+        // 18. NoiseLevel: +1 up to10
+        { property: 'noiseLevel', type: 'increment', step: 0.1, target: 10 },
+
+        { property: 'offset', type: 'decrement', step: 0.1, target: 0 },
+
+
+    ];
+
+    // Helper function to get current value of a property
+    function getCurrentValue(property) {
+        switch(property) {
+            case 'speed':
+                return speed;
+            case 'offset':
+                return offset;
+            case 'frequency':
+                return frequency;
+            case 'tailLength':
+                return tailLength;
+            case 'noiseLevel':
+                return noiseLevel;
+            default:
+                return 0;
+        }
+    }
+
+    // Helper function to determine decimal places based on step size
+    function getDecimalPlaces(step) {
+        const stepStr = step.toString();
+        if (stepStr.includes('.')) {
+            return stepStr.split('.')[1].length;
+        }
+        return 0;
+    }
+
+    // Step Sequence and Current Step Index
+    let stepSequence = [];
+    let currentStepIndex = 0;
+
+    // Function to apply a single step
+    function applyStep(step) {
+        // Update global settings variables
+        switch(step.property) {
+            case 'speed':
+                speed = step.value;
+                break;
+            case 'offset':
+                offset = step.value;
+                break;
+            case 'frequency':
+                frequency = step.value;
+                break;
+            case 'tailLength':
+                tailLength = step.value;
+                break;
+            case 'noiseLevel':
+                noiseLevel = step.value;
+                break;
+            default:
+                console.warn(`Unknown property: ${step.property}`);
+        }
+
+        // Apply settings to all Shape instances
+        shapeInstances.forEach(shape => {
+            shape.setSettings({
+                speed: speed,
+                offset: offset,
+                frequency: frequency,
+                tailLength: tailLength,
+                noiseLevel: noiseLevel
+            });
+        });
+
+        // Update the controls to reflect the new settings
+        updateControls();
+    }
+
+    // Function to generate step sequence from phases
+    function generateStepSequence() {
+        stepSequence = [];
+        let tempSettings = {
+            speed,
+            offset,
+            frequency,
+            tailLength,
+            noiseLevel
+        };
+
+        phases.forEach(phase => {
+            const property = phase.property;
+            const type = phase.type;
+            const step = phase.step;
+            const target = phase.target;
+
+            if (type === 'set') {
+                stepSequence.push({ property, type: 'set', value: phase.value });
+                tempSettings[property] = phase.value;
+            } else if (type === 'increment') {
+                let nextValue = tempSettings[property] + step;
+                while (nextValue <= target + 1e-6) { // Adding a small epsilon to handle floating point precision
+                    // Round to avoid floating point issues
+                    const roundedValue = parseFloat(nextValue.toFixed(getDecimalPlaces(step)));
+                    stepSequence.push({ property, type: 'set', value: roundedValue });
+                    tempSettings[property] = roundedValue;
+                    nextValue += step;
+                }
+                // Ensure the final target is included
+                if (tempSettings[property] < target) {
+                    stepSequence.push({ property, type: 'set', value: target });
+                    tempSettings[property] = target;
+                }
+            } else if (type === 'decrement') {
+                let nextValue = tempSettings[property] - step;
+                while (nextValue >= target - 1e-6) { // Adding a small epsilon to handle floating point precision
+                    const roundedValue = parseFloat(nextValue.toFixed(getDecimalPlaces(step)));
+                    stepSequence.push({ property, type: 'set', value: roundedValue });
+                    tempSettings[property] = roundedValue;
+                    nextValue -= step;
+                }
+                // Ensure the final target is included
+                if (tempSettings[property] > target) {
+                    stepSequence.push({ property, type: 'set', value: target });
+                    tempSettings[property] = target;
+                }
+            }
+        });
+
+        console.log(`Total steps to be executed: ${stepSequence.length}`);
+        console.log(stepSequence);
+    }
+
+    // Function to start the step interval based on current timeSpeed
+    function startStepInterval() {
+        // Clear any existing interval
+        if (stepIntervalID !== null) {
+            clearInterval(stepIntervalID);
+        }
+
+        // Calculate interval duration in milliseconds
+        // Base interval is 1000 ms; adjust based on timeSpeed
+        const intervalDuration = 1000 / timeSpeed;
+
+        stepIntervalID = setInterval(() => {
+            if (currentStepIndex >= stepSequence.length) {
+                console.log("All steps completed.");
+                clearInterval(stepIntervalID); // Stop the interval when done
+                return;
+            }
+            const step = stepSequence[currentStepIndex];
+            applyStep(step);
+            console.log(`Step ${currentStepIndex + 1}: Set ${step.property} to ${step.value}`);
+            currentStepIndex++;
+        }, intervalDuration);
+    }
+
+    // Initialization function to set up the step sequence and interval
+    function init() {
+        generateStepSequence();
+        startStepInterval();
+    }
+
+    // Shape Generation Functions
+    function getOvalPoints(c, w, h, numPoints = 360) {
+        const pts = [];
+        for (let a = 0; a < numPoints; a++) {
+            const rad = a * Math.PI / 180;
+            pts.push({ x: c.x + (w / 2) * Math.cos(rad), y: c.y + (h / 2) * Math.sin(rad) });
+        }
+        return pts;
+    }
+
+    // Corrected Capsule Point Generation
+    function getCapsulePoints(c, width, height, numPoints = 360) {
+        const pts = [];
+        const radius = height / 2;
+        let halfWidth = width / 2 - radius; // The straight part of the capsule
+
+        // Ensure that halfWidth is non-negative
+        if (halfWidth < 0) {
+            console.warn("Width is too small for the given height. Adjusting halfWidth to 0.");
+            halfWidth = 0;
+        }
+
+        for (let i = 0; i < numPoints; i++) {
+            const p = i / numPoints; // Normalized position [0, 1)
+
+            if (p < 0.25) {
+                // Left Semicircle: 90° to 270°
+                const angle = (Math.PI / 2) + (p / 0.25) * Math.PI; // PI/2 to 3PI/2
+                const x = c.x - halfWidth + radius * Math.cos(angle);
+                const y = c.y + radius * Math.sin(angle);
+                pts.push({ x, y });
+            } else if (p < 0.5) {
+                // Top Straight Line: Left to Right
+                const t = (p - 0.25) / 0.25; // 0 to 1
+                const x = (c.x - halfWidth) + (2 * halfWidth) * t;
+                const y = c.y - radius;
+                pts.push({ x, y });
+            } else if (p < 0.75) {
+                // Right Semicircle: 270° to 450° (equivalent to 90°)
+                const angle = (3 * Math.PI / 2) + ((p - 0.5) / 0.25) * Math.PI; // 3PI/2 to 5PI/2
+                const x = c.x + halfWidth + radius * Math.cos(angle);
+                const y = c.y + radius * Math.sin(angle);
+                pts.push({ x, y });
+            } else {
+                // Bottom Straight Line: Right to Left
+                const t = (p - 0.75) / 0.25; // 0 to 1
+                const x = (c.x + halfWidth) - (2 * halfWidth) * t;
+                const y = c.y + radius;
+                pts.push({ x, y });
+            }
+        }
+
+        return pts;
+    }
+
+    function generateVertices(c, r, sides, angleOffset = 0) {
+        const verts = [];
+        for (let i = 0; i < sides; i++) {
+            const angle = angleOffset + 2 * Math.PI * i / sides;
+            verts.push({ x: c.x + r * Math.cos(angle), y: c.y + r * Math.sin(angle) });
+        }
+        return verts;
+    }
+
+    function generateStarVertices(c, outerR, innerR, points, angleOffset = 0) {
+        const verts = [];
+        for (let i = 0; i < points * 2; i++) {
+            const angle = angleOffset + i * Math.PI / points;
+            const r = (i % 2 === 0) ? outerR : innerR;
+            verts.push({ x: c.x + r * Math.cos(angle), y: c.y + r * Math.sin(angle) });
+        }
+        return verts;
+    }
+
+    function interpolateShape(verts, pointsPerSide) {
+        const pts = [];
+        const numVerts = verts.length;
+        for (let i = 0; i < numVerts; i++) {
+            const p0 = verts[i], p1 = verts[(i + 1) % numVerts];
+            for (let t = 0; t < pointsPerSide; t++) {
+                pts.push({ x: p0.x + (p1.x - p0.x) * t / pointsPerSide, y: p0.y + (p1.y - p0.y) * t / pointsPerSide });
+            }
+        }
+        return pts;
+    }
+
+    function getRectanglePoints(c, width, height, pointsPerSide = 50) {
+        const halfWidth = width / 2;
+        const halfHeight = height / 2;
+        const corners = [
+            { x: c.x - halfWidth, y: c.y - halfHeight }, // Top-left
+            { x: c.x + halfWidth, y: c.y - halfHeight }, // Top-right
+            { x: c.x + halfWidth, y: c.y + halfHeight }, // Bottom-right
+            { x: c.x - halfWidth, y: c.y + halfHeight }  // Bottom-left
+        ];
+        return interpolateShape(corners, pointsPerSide);
+    }
+
+    function getReuleauxTrianglePoints(c, radius, numPoints = 300) {
+        const points = [];
+        const numPointsPerArc = Math.floor(numPoints / 3);
+        const angleOffset = -Math.PI / 2; // Start pointing upwards
+
+        // Calculate the correct arc radius (side length of the equilateral triangle)
+        const arcRadius = radius * Math.sqrt(3);
+
+        // Calculate the three vertices of the equilateral triangle
+        const vertices = [];
+        for (let i = 0; i < 3; i++) {
+            const angle = angleOffset + (2 * Math.PI * i) / 3;
+            vertices.push({
+                x: c.x + radius * Math.cos(angle),
+                y: c.y + radius * Math.sin(angle)
+            });
+        }
+
+        // For each arc, draw from one vertex to the next, centered at the opposite vertex
+        for (let i = 0; i < 3; i++) {
+            const startVertex = vertices[i];
+            const endVertex = vertices[(i + 1) % 3];
+            const centerVertex = vertices[(i + 2) % 3];
+
+            // Compute the angle from the centerVertex to startVertex and endVertex
+            let startAngle = Math.atan2(startVertex.y - centerVertex.y, startVertex.x - centerVertex.x);
+            let endAngle = Math.atan2(endVertex.y - centerVertex.y, endVertex.x - centerVertex.x);
+
+            // Adjust angles for proper drawing direction
+            if (endAngle < startAngle) {
+                endAngle += 2 * Math.PI;
+            }
+
+            const angleStep = (endAngle - startAngle) / numPointsPerArc;
+
+            for (let j = 0; j < numPointsPerArc; j++) {
+                const angle = startAngle + j * angleStep;
+                points.push({
+                    x: centerVertex.x + arcRadius * Math.cos(angle),
+                    y: centerVertex.y + arcRadius * Math.sin(angle)
+                });
+            }
+        }
+        return points;
+    }
+
+
+    function getShapePoints(name, c) {
+        switch (name) {
+            case "Capsule":
+                return getCapsulePoints(c, 400, 200);
+            case "Oval":
+                return getOvalPoints(c, 400, 200);
+            case "Circle":
+                return getOvalPoints(c, 250, 250);
+            case "Diamond":
+                // Diamond with equal sides and unequal diagonals
+                return interpolateShape([
+                    { x: c.x, y: c.y - 100 },  // Top
+                    { x: c.x + 150, y: c.y },  // Right
+                    { x: c.x, y: c.y + 100 },  // Bottom
+                    { x: c.x - 150, y: c.y }   // Left
+                ], 50);
+            case "Pentagon":
+                return interpolateShape(generateVertices(c, 150, 5, -Math.PI / 2), 50);
+            case "Hexagon":
+                return interpolateShape(generateVertices(c, 150, 6, -Math.PI / 2), 50);
+            case "Star":
+                return interpolateShape(generateStarVertices(c, 150, 75, 5, -Math.PI / 2), 50);
+            case "Rectangle":
+                return getRectanglePoints(c, 300, 200, 50);
+            case "ReuleauxTriangle":
+                return getReuleauxTrianglePoints(c, 150, 300);
+            default:
+                return [];
+        }
+    }
+
+    // Controls Elements
+    const controls = {
+        speed: document.getElementById('speed-control'),
+        offset: document.getElementById('offset-control'),
+        frequency: document.getElementById('frequency-control'),
+        tailLength: document.getElementById('tailLength-control'),
+        noiseLevel: document.getElementById('noiseLevel-control'),
+        timeSpeed: document.getElementById('timeSpeed-control'), // New Control
+    };
+
+    const controlValues = {
+        speed: document.getElementById('speed-value'),
+        offset: document.getElementById('offset-value'),
+        frequency: document.getElementById('frequency-value'),
+        tailLength: document.getElementById('tailLength-value'),
+        noiseLevel: document.getElementById('noiseLevel-value'),
+        timeSpeed: document.getElementById('timeSpeed-value'), // New Control Value
+    };
+
+    // Function to update control displays
+    function updateControls() {
+        controlValues.speed.textContent = speed.toFixed(1);
+        controlValues.offset.textContent = offset;
+        controlValues.frequency.textContent = frequency.toFixed(1);
+        controlValues.tailLength.textContent = tailLength;
+        controlValues.noiseLevel.textContent = noiseLevel;
+        controlValues.timeSpeed.textContent = timeSpeed.toFixed(1); // Update Time Speed Display
+        
+        // Update slider positions if they differ
+        if (parseFloat(controls.speed.value) !== speed) controls.speed.value = speed;
+        if (parseFloat(controls.offset.value) !== offset) controls.offset.value = offset;
+        if (parseFloat(controls.frequency.value) !== frequency) controls.frequency.value = frequency;
+        if (parseInt(controls.tailLength.value) !== tailLength) controls.tailLength.value = tailLength;
+        if (parseInt(controls.noiseLevel.value) !== noiseLevel) controls.noiseLevel.value = noiseLevel;
+        if (parseFloat(controls.timeSpeed.value) !== timeSpeed) controls.timeSpeed.value = timeSpeed;
+    }
+
+    // Initial control update
+    updateControls();
+
+    // Event Listeners for Controls
+    controls.speed.addEventListener('input', (e) => {
+        speed = parseFloat(e.target.value);
+        controlValues.speed.textContent = speed.toFixed(1);
+        applySettings();
+    });
+
+    controls.offset.addEventListener('input', (e) => {
+        offset = parseInt(e.target.value);
+        controlValues.offset.textContent = offset;
+        applySettings();
+    });
+
+    controls.frequency.addEventListener('input', (e) => {
+        frequency = parseFloat(e.target.value);
+        controlValues.frequency.textContent = frequency.toFixed(1);
+        applySettings();
+    });
+
+    controls.tailLength.addEventListener('input', (e) => {
+        tailLength = parseInt(e.target.value);
+        controlValues.tailLength.textContent = tailLength;
+        applySettings();
+    });
+
+    controls.noiseLevel.addEventListener('input', (e) => {
+        noiseLevel = parseInt(e.target.value);
+        controlValues.noiseLevel.textContent = noiseLevel;
+        applySettings();
+    });
+
+    // Event Listener for Time Speed Control
+    controls.timeSpeed.addEventListener('input', (e) => {
+        timeSpeed = parseFloat(e.target.value);
+        controlValues.timeSpeed.textContent = timeSpeed.toFixed(1);
+        restartStepInterval();
+    });
+
+    // Function to apply settings to all shapes
+    function applySettings() {
+        // Apply settings to all Shape instances
+        shapeInstances.forEach(shape => {
+            shape.setSettings({
+                speed: speed,
+                offset: offset,
+                frequency: frequency,
+                tailLength: tailLength,
+                noiseLevel: noiseLevel
+            });
+        });
+    }
+
+    // Function to restart the step interval when timeSpeed changes
+    function restartStepInterval() {
+        startStepInterval();
+    }
+
+    // Function to generate step sequence from phases
+    function generateStepSequence() {
+        stepSequence = [];
+        let tempSettings = {
+            speed,
+            offset,
+            frequency,
+            tailLength,
+            noiseLevel
+        };
+
+        phases.forEach(phase => {
+            const property = phase.property;
+            const type = phase.type;
+            const step = phase.step;
+            const target = phase.target;
+
+            if (type === 'set') {
+                stepSequence.push({ property, type: 'set', value: phase.value });
+                tempSettings[property] = phase.value;
+            } else if (type === 'increment') {
+                let nextValue = tempSettings[property] + step;
+                while (nextValue <= target + 1e-6) { // Adding a small epsilon to handle floating point precision
+                    // Round to avoid floating point issues
+                    const roundedValue = parseFloat(nextValue.toFixed(getDecimalPlaces(step)));
+                    stepSequence.push({ property, type: 'set', value: roundedValue });
+                    tempSettings[property] = roundedValue;
+                    nextValue += step;
+                }
+                // Ensure the final target is included
+                if (tempSettings[property] < target) {
+                    stepSequence.push({ property, type: 'set', value: target });
+                    tempSettings[property] = target;
+                }
+            } else if (type === 'decrement') {
+                let nextValue = tempSettings[property] - step;
+                while (nextValue >= target - 1e-6) { // Adding a small epsilon to handle floating point precision
+                    const roundedValue = parseFloat(nextValue.toFixed(getDecimalPlaces(step)));
+                    stepSequence.push({ property, type: 'set', value: roundedValue });
+                    tempSettings[property] = roundedValue;
+                    nextValue -= step;
+                }
+                // Ensure the final target is included
+                if (tempSettings[property] > target) {
+                    stepSequence.push({ property, type: 'set', value: target });
+                    tempSettings[property] = target;
+                }
+            }
+        });
+
+        console.log(`Total steps to be executed: ${stepSequence.length}`);
+        console.log(stepSequence);
+    }
+
+    // Function to apply a single step
+    function applyStep(step) {
+        // Update global settings variables
+        switch(step.property) {
+            case 'speed':
+                speed = step.value;
+                break;
+            case 'offset':
+                offset = step.value;
+                break;
+            case 'frequency':
+                frequency = step.value;
+                break;
+            case 'tailLength':
+                tailLength = step.value;
+                break;
+            case 'noiseLevel':
+                noiseLevel = step.value;
+                break;
+            default:
+                console.warn(`Unknown property: ${step.property}`);
+        }
+
+        // Apply settings to all Shape instances
+        shapeInstances.forEach(shape => {
+            shape.setSettings({
+                speed: speed,
+                offset: offset,
+                frequency: frequency,
+                tailLength: tailLength,
+                noiseLevel: noiseLevel
+            });
+        });
+
+        // Update the controls to reflect the new settings
+        updateControls();
+    }
+
+    // Function to start the step interval based on current timeSpeed
+    function startStepInterval() {
+        // Clear any existing interval
+        if (stepIntervalID !== null) {
+            clearInterval(stepIntervalID);
+        }
+
+        // Calculate interval duration in milliseconds
+        // Base interval is 1000 ms; adjust based on timeSpeed
+        const intervalDuration = 1000 / timeSpeed;
+
+        stepIntervalID = setInterval(() => {
+            if (currentStepIndex >= stepSequence.length) {
+                console.log("All steps completed.");
+                clearInterval(stepIntervalID); // Stop the interval when done
+                return;
+            }
+            const step = stepSequence[currentStepIndex];
+            applyStep(step);
+            console.log(`Step ${currentStepIndex + 1}: Set ${step.property} to ${step.value}`);
+            currentStepIndex++;
+        }, intervalDuration);
+    }
+
+    // Initialization function to set up the step sequence and interval
+    function init() {
+        generateStepSequence();
+        startStepInterval();
+    }
+
+    init(); // Call the initialization function once
+
+    </script>
+</body>
+</html>

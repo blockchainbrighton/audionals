@@ -1,0 +1,3849 @@
+<!--Tracks are not progressing through seeds during normal playback -->
+<!-- Could do with some more balances to help with repetitive loops -->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audionals - Web3 Music Player</title>
+    <link rel="stylesheet" href="/content/7a309a161e838ba93740684338b3d97f3c1226c046d8b1137afc2353b4bf16e1i0">
+
+    <style>
+        :root {
+            --panel-bg-color: #333;
+            --panel-text-color: #fff;
+            --track-list-panel-bg-color: #444;
+            --button-bg-color: #444;
+            --button-hover-bg-color: #555;
+            --button-active-bg-color: #777;
+            --input-bg-color: #555;
+            --border-radius: 8px;
+            --padding: 10px;
+            --box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            --transition-duration: 0.3s;
+            --text-color: #fff;
+            --bpm-bg-color: orange;
+            --seed-bg-color: green;
+            --font-size: 16px;
+        }
+        /* Common Panel Styles */
+        #seed-management-panel,
+        #track-list-panel {
+            position: fixed;
+            background-color: var(--panel-bg-color);
+            color: var(--panel-text-color);
+            padding: var(--padding);
+            border-radius: var(--border-radius);
+            z-index: 10000;
+            box-shadow: var(--box-shadow);
+            transition: all var(--transition-duration) ease;
+        }
+        /* Specific Panel Positions and Sizes */
+        #seed-management-panel {
+            top: 10px;
+            right: 10px;
+            width: 320px;
+        }
+        #track-list-panel {
+            bottom: 10px;
+            left: 10px;
+            width: 300px;
+            background-color: var(--track-list-panel-bg-color);
+        }
+        .hidden {
+            display: none;
+        }
+        @media (max-width: 600px) {
+            #seed-management-panel,
+            #track-list-panel {
+                width: 90%;
+                left: 5%;
+                right: 5%;
+            }
+        }
+        /* Canvas Styling */
+        #seed-mgmt-canvas {
+            width: 100%;
+            height: 100px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #222;
+        }
+        /* Previous Seeds Container */
+        #previous-seeds-container {
+            margin-top: 15px;
+        }
+        #previous-seeds-container h3,
+        #seed-input-section h3 {
+            margin-bottom: 5px;
+        }
+        #previous-seeds-container ul {
+            list-style: none;
+            padding: 0;
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #444;
+        }
+        #previous-seeds-container li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 10px;
+            border-bottom: 1px solid #555;
+        }
+        #previous-seeds-container li:last-child {
+            border-bottom: none;
+        }
+        #previous-seeds-container button {
+            background-color: #666;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 2px 6px;
+            cursor: pointer;
+            transition: background-color var(--transition-duration) ease;
+            margin-left: 10px;
+        }
+        #previous-seeds-container button:hover {
+            background-color: #888;
+        }
+        /* Seed Input Section */
+        #seed-input-section {
+            margin-top: 15px;
+        }
+        #seed-input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 5px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: var(--input-bg-color);
+            color: var(--panel-text-color);
+            transition: border 0.2s ease;
+        }
+        #seed-input:focus {
+            border: 2px solid #00f;
+            outline: none;
+        }
+        /* Clear Seeds Section */
+        #clear-seeds-section {
+            margin-top: 15px;
+            text-align: center;
+        }
+        #clear-seeds-button {
+            width: 100%;
+            padding: 8px;
+            background-color: #b22222;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color var(--transition-duration) ease;
+            margin-top: 5px;
+        }
+        #clear-seeds-button:hover {
+            background-color: #ff6347;
+        }
+        /* Button Styles */
+        button {
+            background-color: var(--button-bg-color);
+            color: var(--panel-text-color);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color var(--transition-duration) ease;
+            padding: 10px 15px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: var(--button-hover-bg-color);
+        }
+        button:active {
+            background-color: var(--button-active-bg-color);
+        }
+        button:focus {
+            outline: 2px solid #00f;
+        }
+        /* Canvas and Now Playing */
+        #loadingSpinner {
+            z-index: 1000;
+        }
+        #artworkCover img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+        #nowPlayingContainer {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(20, 20, 20, 0.95);
+            color: #fff;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            text-align: center;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            transition: background-color 0.3s ease;
+        }
+        #nowPlayingContainer:hover {
+            background-color: rgba(20, 20, 20, 1);
+        }
+        #nowPlayingText {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 5px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+        #nowPlayingContainer .current-seed {
+            display: block;
+            font-size: 0.9em;
+            color: #ccc;
+            margin-bottom: 5px;
+        }
+        #nowPlayingContainer .title {
+            display: block;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <HTMLsection>
+        <span class="songTitle">The Infinite Ordinal Remix</span>
+        <h1>Audionals</h1>
+        
+        <!-- Seed Management Panel -->
+        <div id="seed-management-panel" class="hidden" role="dialog" aria-labelledby="seed-panel-title" aria-hidden="true">
+            <h2 id="seed-panel-title">Seed Management</h2>
+            
+            <!-- Seed and BPM Display -->
+            <canvas id="seed-mgmt-canvas" width="300" height="100" aria-label="Seed and BPM Information"></canvas>
+            
+            <!-- Previous Seeds List -->
+            <div id="previous-seeds-container">
+                <h3>Previous Seeds</h3>
+                <ul></ul>
+            </div>
+            
+            <!-- Seed Input Section -->
+            <div id="seed-input-section">
+                <h3>Load a Specific Seed</h3>
+                <input type="text" id="seed-input" placeholder="Enter 16-digit Seed" aria-label="Enter Seed">
+                <button id="load-seed-button" aria-label="Load Seed">Load Seed</button>
+            </div>
+            
+            <!-- BPM Selection Section -->
+            <div class="bpm-selection">
+                <h3>Select BPM(s) to Filter</h3>
+                <div class="bpm-options, hidden">
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-60" value="60" checked>
+                        <label for="bpm-60">60 BPM</label>
+                    </div>
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-120" value="120" checked>
+                        <label for="bpm-120">120 BPM</label>
+                    </div>
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-140" value="140" checked>
+                        <label for="bpm-140">140 BPM</label>
+                    </div>
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-160" value="160" checked>
+                        <label for="bpm-160">160 BPM</label>
+                    </div>
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-180" value="180" checked>
+                        <label for="bpm-180">180 BPM</label>
+                    </div>
+                    <div class="bpm-option">
+                        <input type="checkbox" id="bpm-240" value="240" checked>
+                        <label for="bpm-240">240 BPM</label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Clear Seeds Button -->
+            <div id="clear-seeds-section">
+                <button id="clear-seeds-button" aria-label="Clear Previous Seeds">Clear Previous Seeds</button>
+            </div>
+            
+            <!-- Generate Mixes Button -->
+            <div id="generate-mixes-section" style="margin-top: 15px; text-align: center;">
+                <button id="generate-mixes-button" aria-label="Generate Mixes">Generate Mixes</button>
+            </div>
+        </div>
+        
+        <div id="loadingSpinner"></div>
+        <div id="artworkCover"><img id="artworkImage" src="" alt="Artwork Cover"></div>
+        <div id="trackListingPanel">
+            <h2>Track Listings:</h2>
+            <div id="metadataContent"></div>
+        </div>
+        
+       <!-- Updated Now Playing Container -->
+        <div id="nowPlayingContainer">
+            <span class="current-seed">Seed: N/A</span>
+            <span class="title">The Infinite Ordinal Remix</span>
+            <span class="artistName">melophonic</span>
+            <span class="songBPM">BPM: N/A</span> <!-- BPM Display -->
+            <span class="timeLeft">Time Left: N/A</span> <!-- Countdown Display -->
+            <!-- Hidden Elements for Playback Engine -->
+            <span class="songTitle" style="display: none;"></span>
+        </div>
+        
+        <div id="buttonContainer">
+            <button id="playButton" onclick="globalData.togglePlayback()" aria-label="Play or Stop Music">Play / Stop</button>
+            <button id="prevButton" onclick="handlePreviousSong()" aria-label="Previous Song">Previous</button>
+            <button id="nextButton" onclick="handleNextSong()" aria-label="Next Song">Next</button>
+            <button id="toggle-track-panel-button" onclick="toggleTrackListAndPopulate()" class = "hidden" aria-label="Toggle Track List Panel">Track List</button>
+            <button id="toggle-seed-panel-button" onclick="togglePanel('seed-management-panel')" aria-label="Toggle Seed Management Panel">Seed Panel</button>
+        </div>
+        
+        <!-- Track List Panel -->
+        <div id="track-list-panel" class="hidden" role="dialog" aria-labelledby="track-list-title" aria-hidden="true">
+            <h2 id="track-list-title" class="hidden">Track List</h2>
+            <div id="track-list-container"></div>
+        </div>
+    </HTMLsection>
+
+    <!-- Songs and Artwork -->
+    <script src="/content/616ef4c1bef02cb6c0f785ef76b98df4e379e8f01e2b31e2ae9e68449485f2bci0"></script> 
+    <!-- Global Data -->
+    <script src="/content/e8496fa0bcb3cad6bc173cd1ef2564b9548b43b306634bdafce47083efd7619ai0"></script> 
+
+    
+
+<!-- Seed Management -->
+<script>
+    // Notes //
+    /* 
+#region Seed Management
+**Purpose:**
+Handles the generation, validation, storage, and display of unique seeds used within the application. Manages seed-related UI interactions and ensures seeds are persistently stored for user reference.
+
+**Key Functionalities:**
+- **Seed Generation & Validation:**
+  - Generates a 16-digit numeric seed ensuring it doesn't exceed `Number.MAX_SAFE_INTEGER`.
+  - Validates incoming seeds from URL parameters, generating a new one if invalid.
+  
+- **BPM Mapping:**
+  - Converts the seed into a Beats Per Minute (BPM) value using a hashing mechanism to select from predefined BPM options.
+  
+- **UI Management:**
+  - Toggles visibility of UI panels (e.g., track list).
+  - Populates track lists dynamically based on global data.
+  
+- **Seed Persistence:**
+  - Saves unique seeds to `localStorage` to maintain a history of previously used seeds.
+  - Displays saved seeds with options to copy them to the clipboard.
+  - Provides functionality to clear the seed history upon user confirmation.
+  
+- **Canvas Display:**
+  - Visually represents the current seed and BPM on a canvas element for enhanced user clarity.
+  
+- **Event Listeners:**
+  - Initializes seed display on DOM content loaded.
+  - Handles user interactions such as loading a new seed or clearing seed history.
+  - Ensures seamless user experience by managing input events and updating the UI accordingly.
+  
+**Overall Functionality:**
+This script ensures robust management of seeds within the application, providing users with the ability to generate, view, and manage seeds effectively. It enhances user experience by maintaining a history of interactions and offering intuitive UI controls for seed-related operations.
+#endregion
+*/
+        (() => {
+            const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
+            const toggleClass = 'hidden';
+
+            window.togglePanel = (panelId) => {
+                const panel = document.getElementById(panelId);
+                if (panel) {
+                    panel.classList.toggle(toggleClass);
+                    const isHidden = panel.classList.contains(toggleClass);
+                    panel.setAttribute('aria-hidden', isHidden);
+                } else {
+                    console.error(`${panelId.replace(/-/g, ' ')} not found.`);
+                }
+            };
+
+            window.populateTrackList = () => {
+                const container = document.getElementById('track-list-container');
+                container.innerHTML = '';
+                const songs = globalData?.songsArray;
+                if (songs?.length) {
+                    songs.forEach(({ id, artist }) => {
+                        const trackItem = document.createElement('div');
+                        trackItem.className = 'track-item';
+                        trackItem.innerHTML = `<div class="track-name">${id}</div><div class="track-artist">${artist}</div>`;
+                        container.appendChild(trackItem);
+                    });
+                } else {
+                    container.textContent = "No tracks available.";
+                }
+            };
+
+            window.toggleTrackListAndPopulate = () => {
+                togglePanel('track-list-panel');
+                const panel = document.getElementById('track-list-panel');
+                if (panel && !panel.classList.contains(toggleClass)) populateTrackList();
+            };
+
+            const generateSeed = () => {
+                let seed = '';
+                while (true) {
+                    seed = Array.from({ length: 16 }, () => Math.floor(Math.random() * 10)).join('');
+                    if (BigInt(seed) <= BigInt(Number.MAX_SAFE_INTEGER)) break;
+                }
+                return seed;
+            };
+
+            const mapSeedToBpm = (seed) => {
+                const hash = seed.split("").reduce((acc, char) => {
+                    const digit = parseInt(char, 10);
+                    return (10 * acc + (isNaN(digit) ? 0 : digit)) % 1000000007;
+                }, 0);
+                const bpm = bpmOptions[hash % bpmOptions.length];
+                log(`Seed: ${seed}, Hash: ${hash}, Selected BPM: ${bpm}`);
+                return bpm;
+            };
+
+            const getQueryParam = (param) => new URLSearchParams(window.location.search).get(param);
+            const fixedProductionSeed = "";
+            let initialSeed = getQueryParam('seed') || generateSeed();
+                if (!/^\d{16}$/.test(initialSeed) || BigInt(initialSeed) > BigInt(Number.MAX_SAFE_INTEGER)) {
+                    log(`Invalid seed provided: "${initialSeed}". Generating a new seed.`);
+                    initialSeed = generateSeed();
+                }
+                window.seed = initialSeed;
+                log(`Using seed: ${window.seed}`);
+
+                // Remove the seed parameter from the URL to prevent reuse on reloads
+                if (getQueryParam('seed')) {
+                    const url = new URL(window.location);
+                    url.searchParams.delete('seed');
+                    history.replaceState(null, '', url.toString());
+                }
+
+            const prngSeedNumber = BigInt(window.seed);
+            log(`Converted seed to BigInt: ${prngSeedNumber}`);
+
+            const bpmOptions = [80, 100, 120, 140, 160, 180, 240];
+            const bpm = mapSeedToBpm(window.seed);
+
+            const loadPreviousSeeds = () => {
+                const seeds = JSON.parse(localStorage.getItem("previousSeeds")) || [];
+                displayPreviousSeeds(seeds);
+                return seeds;
+            };
+
+            const saveSeed = (seed) => {
+                const seeds = loadPreviousSeeds();
+                if (!seeds.includes(seed)) {
+                    seeds.push(seed);
+                    localStorage.setItem("previousSeeds", JSON.stringify(seeds));
+                    displayPreviousSeeds(seeds);
+                    log(`Seed saved: ${seed}`);
+                }
+            };
+
+            const displayPreviousSeeds = (seeds) => {
+                const container = document.getElementById("previous-seeds-container");
+                if (!container) return;
+                const ul = container.querySelector('ul');
+                if (!ul) return;
+                ul.innerHTML = seeds.length ? seeds.map(seed => `
+                    <li>
+                        <span>${seed}</span>
+                        <button onclick="copyToClipboard('${seed}')">Copy</button>
+                    </li>`).join('') : "<li>No previous seeds.</li>";
+            };
+
+            window.copyToClipboard = (seed) => {
+                navigator.clipboard.writeText(seed)
+                    .then(() => alert(`Seed copied to clipboard: ${seed}`))
+                    .catch(err => console.error("Could not copy text:", err));
+            };
+
+            const clearPreviousSeeds = () => {
+                if (confirm("Are you sure you want to clear all previous seeds?")) {
+                    localStorage.removeItem("previousSeeds");
+                    displayPreviousSeeds([]);
+                    log("All previous seeds have been cleared.");
+                }
+            };
+
+            const displaySeedAndBPM = (seed, bpm, title = "The Infinite Ordinal Remix") => {
+                const canvas = document.getElementById("seed-mgmt-canvas");
+                if (!canvas) return;
+                const ctx = canvas.getContext("2d");
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--seed-bg-color') || 'green';
+                ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bpm-bg-color') || 'orange';
+                ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-color') || 'white';
+                ctx.font = `${getComputedStyle(document.documentElement).getPropertyValue('--font-size') || '16px'} Arial`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(`Seed: ${seed}`, canvas.width / 2, canvas.height / 4);
+                ctx.fillText(`BPM: ${bpm}`, canvas.width / 2, (3 * canvas.height) / 4);
+                saveSeed(seed);
+                const seedDisplay = document.querySelector('#nowPlayingContainer .current-seed');
+                if (seedDisplay) {
+                    seedDisplay.textContent = `Seed: ${seed}`;
+                    log(`Updated current seed display: ${seed}`);
+                }
+                const titleDisplay = document.querySelector('#nowPlayingContainer .title');
+                if (titleDisplay && title) {
+                    titleDisplay.textContent = title;
+                    log(`Updated current song title: ${title}`);
+                }
+            };
+
+            window.displaySeedAndBPM = displaySeedAndBPM;
+
+            const validateSeedInput = (seed) => {
+                if (!/^\d{16}$/.test(seed)) {
+                    alert("Seed must be a 16-digit numeric string.");
+                    return false;
+                }
+                if (BigInt(seed) > BigInt(Number.MAX_SAFE_INTEGER)) {
+                    alert(`Seed must be a number up to ${Number.MAX_SAFE_INTEGER}.`);
+                    return false;
+                }
+                return true;
+            };
+
+            const setupEventListeners = () => {
+                document.addEventListener("DOMContentLoaded", () => {
+                    // Ensure that songsArray has at least one song
+                    if (globalData.songsArray.length > 0) {
+                        const firstSong = globalData.songsArray[0];
+                        displaySeedAndBPM(firstSong.seed, firstSong.bpm, firstSong.id);
+                        // Set currentSongIndex to 0 to point to the first song
+                        globalData.currentSongIndex = 0;
+                    } else {
+                        console.warn("No song mixes generated.");
+                    }
+                    loadPreviousSeeds();
+                });
+                document.getElementById("clear-seeds-button")?.addEventListener("click", clearPreviousSeeds);
+
+                document.getElementById("load-seed-button")?.addEventListener("click", () => {
+                    const seedInput = document.getElementById("seed-input").value.trim();
+                    if (!seedInput) {
+                        alert("Please enter a seed.");
+                        return;
+                    }
+                    if (!validateSeedInput(seedInput)) return;
+                    const url = new URL(window.location);
+                    url.searchParams.set('seed', seedInput);
+                    window.location.href = url.toString();
+                });
+
+                const seedInputField = document.getElementById("seed-input");
+                if (seedInputField) {
+                    seedInputField.addEventListener("keypress", (e) => {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            document.getElementById("load-seed-button").click();
+                        }
+                    });
+                }
+            };
+
+
+
+
+            setupEventListeners();
+        })();
+</script>
+
+<!-- Effects Configuration Script (effects.js) -->
+<script>
+// Notes //
+    /* 
+#region Effects Configuration Script (effects.js)
+**Purpose:**
+Establishes a comprehensive framework for managing and configuring various audio effects within the application. Enables dynamic and randomized application of audio effects based on predefined configurations and probabilities.
+
+**Key Functionalities:**
+- **Effects Module Initialization:**
+  - Initializes or utilizes an existing `EffectsModule` within the global `window` object to store and manage effects configurations.
+
+- **Effects Configuration:**
+  - Defines a variety of audio effects (e.g., pitchShift, harmonize, delay, chorus, leslie, synthBass, synth) with specific properties:
+    - **enabled:** Boolean flag to activate or deactivate the effect.
+    - **defaultProbability:** Determines the likelihood of the effect being applied.
+    - **Parameter Ranges:** Specifies ranges or options for effect-specific parameters (e.g., rate, depth, feedback).
+
+- **Parameter Generation (`getEffectParams`):**
+  - Generates random parameters for each effect based on their configurations and a pseudo-random number generator (`prng`).
+  - Ensures that effects are applied with varied and dynamic settings each time they are triggered.
+  - Handles different parameter requirements for each effect type, allowing for extensibility and customization.
+
+- **Event Dispatching:**
+  - Emits an `effectsLoaded` event once the effects configurations are fully set up, signaling other parts of the application that the effects system is ready for use.
+
+- **Extensibility:**
+  - Designed to easily incorporate additional effects by adding new configurations and corresponding parameter generation logic.
+  - Facilitates scalability, allowing the effects system to grow with application requirements.
+
+**Overall Functionality:**
+This script provides a flexible and scalable approach to audio effect management, enabling rich and randomized audio experiences tailored to user interactions or predefined conditions. By centralizing effect configurations and parameter generation, it ensures consistency and ease of maintenance across the application's audio processing components.
+#endregion
+*/
+     (() => {
+        window.EffectsModule = window.EffectsModule || {};
+        window.EffectsModule.effectsConfig = { 
+            pitchShift: { 
+                enabled: true, 
+                defaultProbability: 1, 
+                shifts: [0.25, 0.5, 1, 2, 4]
+            },
+            harmonize: { 
+                enabled: false, 
+                defaultProbability: 0.01,           // Lower probability of harmonization being applied
+                intervals: [0.3, 0.5],              // More subtle interval choices, such as thirds (1.5) or octaves (0.5)
+                maxHarmonyChannels: 1               // Limits to only one harmony channel
+            },
+            delay: {
+                enabled: true, 
+                defaultProbability: 1, 
+                noteValue: 'sixteenth',
+                maxDelayRepeats: 16
+            },
+            reverse: {
+                enabled: true, 
+                defaultProbability: 1
+            },
+            pan: {
+                enabled: true,
+                defaultProbability: 1,
+                positions: [-1, 1]
+            },
+            reverb: {
+                enabled: true, 
+                defaultProbability: 1, 
+                decayTimeRange: [2, 7], 
+                mixRange: [0.3, 0.9]
+            },
+            filter: {
+                enabled: true, 
+                defaultProbability: 0.7, 
+                types: ['lowpass', 'highpass', 'bandpass'], 
+                frequencyRange: [300, 8000], 
+                QRange: [1, 10]
+            },
+            tremolo: {
+                enabled: true, 
+                defaultProbability: 0.6, 
+                rateRange: [4, 12],   
+                depthRange: [0.6, 1]
+            },
+            distortion: {
+                enabled: true, 
+                defaultProbability: 0.5, 
+                amountRange: [1, 15]
+            },
+            bitcrusher: {
+                enabled: true, 
+                defaultProbability: 0.3, 
+                bitDepthRange: [2, 6],    
+                sampleRateRange: [8000, 22050]
+            },
+            // **Chorus Effect**
+            chorus: {
+                enabled: true,
+                defaultProbability: 0.5, // 50% chance to apply chorus
+                rateRange: [0.1, 5],       // Hz
+                depthRange: [0.1, 1],      // 0 to 1
+                feedbackRange: [0, 0.5],   // 0 to 0.5
+                mixRange: [0, 1]            // 0 (dry) to 1 (wet)
+            },
+            // **New Leslie Effect**
+            leslie: {
+                enabled: true,
+                defaultProbability: 0.3, // 30% chance to apply Leslie effect
+                speedRange: [0.5, 1.5],    // Rotation speed multiplier based on BPM
+                depthRange: [0.5, 1],      // Depth of the effect
+                mixRange: [0, 1]            // Wet/Dry mix
+            },
+            // **New BPM-Linked Delay Effect**
+            delayBpmLinked: {
+                enabled: true,
+                defaultProbability: 0.4, // 40% chance to apply BPM-linked delay
+                delayTimes: ['quarter', 'eighth', 'sixteenth'], // Note values
+                feedbackRange: [0.3, 0.7],
+                mixRange: [0, 1]
+            },
+         
+                     };
+
+        window.EffectsModule.getEffectParams = function(effectName, currentSequence, bpm, prng) {
+            const effect = this.effectsConfig[effectName];
+            if (!effect || !effect.enabled) return null;
+            if (prng() < effect.defaultProbability) {
+                // Generate random parameters within the specified ranges
+                const params = {};
+                switch(effectName) {
+                    case 'pitchShift':
+                        params.shifts = effect.shifts;
+                        break;
+                    case 'harmonize':
+                        params.intervals = effect.intervals;
+                        params.maxHarmonyChannels = effect.maxHarmonyChannels;
+                        break;
+                    case 'delay':
+                        params.noteValue = effect.noteValue;
+                        params.maxDelayRepeats = effect.maxDelayRepeats;
+                        break;
+                    case 'chorus':
+                        params.rate = prng() * (effect.rateRange[1] - effect.rateRange[0]) + effect.rateRange[0];
+                        params.depth = prng() * (effect.depthRange[1] - effect.depthRange[0]) + effect.depthRange[0];
+                        params.feedback = prng() * (effect.feedbackRange[1] - effect.feedbackRange[0]) + effect.feedbackRange[0];
+                        params.mix = prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0];
+                        break;
+                    case 'leslie':
+                        params.speed = prng() * (effect.speedRange[1] - effect.speedRange[0]) + effect.speedRange[0];
+                        params.depth = prng() * (effect.depthRange[1] - effect.depthRange[0]) + effect.depthRange[0];
+                        params.mix = prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0];
+                        break;
+                    case 'delayBpmLinked':
+                        params.delayTime = effect.delayTimes[Math.floor(prng() * effect.delayTimes.length)];
+                        params.feedback = prng() * (effect.feedbackRange[1] - effect.feedbackRange[0]) + effect.feedbackRange[0];
+                        params.mix = prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0];
+                        break;
+    
+                    // Add cases for other effects as needed
+                    default:
+                        // For effects without additional parameters
+                        break;
+                }
+                return { ...effect, ...params };
+            }
+            return null;
+        };
+
+        document.dispatchEvent(new Event('effectsLoaded'));
+    })();
+</script>
+
+
+
+<!-- Main Script (main.js) -->
+<script>
+    (async () => {
+        function waitForEffects() {
+            return new Promise((resolve) => {
+                if (window.EffectsModule && window.EffectsModule.effectsConfig) {
+                    resolve();
+                } else {
+                    document.addEventListener('effectsLoaded', resolve, { once: true });
+                }
+            });
+        }
+        await waitForEffects();
+
+     
+
+
+        function applyEffects(channel, index, newSong, currentSequence, bpm, effectsContext, prng) {
+            const effectsMap = [
+                { name: 'pitchShift', applyFn: (ch, params) => applyRandomPitchShift(ch, params, prng) },
+                { name: 'harmonize', applyFn: (ch, params) => addHarmony(ch, index, newSong, params, effectsContext, prng) },
+                { name: 'delay', applyFn: (ch, params) => applyIntermittentDelay(ch, params, bpm) },
+                { name: 'reverse', applyFn: (ch, params) => applyReverseEffect(ch) },
+                { name: 'filter', applyFn: (ch, params) => applyFilterEffect(ch, params, prng) },
+                { name: 'tremolo', applyFn: (ch, params) => applyTremoloEffect(ch, params, prng) },
+                { name: 'distortion', applyFn: (ch, params) => applyDistortionEffect(ch, params, prng) },
+                { name: 'bitcrusher', applyFn: (ch, params) => applyBitcrusherEffect(ch, params, prng) },
+                { name: 'pan', applyFn: (ch, params) => applyPanEffect(ch, params, prng) },
+                { name: 'reverb', applyFn: (ch, params) => applyReverbEffect(ch, params, prng) },
+                { name: 'volumeChange', applyFn: (ch, params) => applyVolumeChange(ch, params, prng) },
+                { name: 'chorus', applyFn: (ch, params) => applyChorusEffect(ch, params, prng) },
+                // **New Leslie Effect**
+                { name: 'leslie', applyFn: (ch, params) => applyLeslieEffect(ch, params, bpm) },
+                // **New BPM-Linked Delay Effect**
+                { name: 'delayBpmLinked', applyFn: (ch, params) => applyBpmLinkedDelay(ch, params, bpm) },
+                // **New Synth Bass Line Effect**
+            ];
+
+            effectsMap.forEach(effect => {
+                const effectParams = window.EffectsModule.getEffectParams(effect.name, currentSequence, bpm, prng);
+                if (effectParams) effect.applyFn(channel, effectParams);
+            });
+
+            // After applying effects, load and process the sample
+            const sampleParams = {
+                reversed: channel.metadata.requiresReversal,
+                playbackSpeed: channel.metadata.playbackSpeed,
+                // Include other processing parameters as needed
+            };
+
+            if (effectsContext.totalGain > effectsContext.maxTotalGain) {
+                const reductionFactor = effectsContext.maxTotalGain / effectsContext.totalGain;
+                channel.metadata.volume = (channel.metadata.volume || 1) * reductionFactor;
+            }
+            effectsContext.totalGain += channel.metadata.volume || 1;
+        }
+
+        // **Chorus Effect Applied**
+        const applyChorusEffect = (channel, { rate, depth, feedback, mix }, prng) => {
+            channel.metadata.chorus = {
+                rate,       // Modulation rate in Hz
+                depth,      // Modulation depth (0 to 1)
+                feedback,   // Feedback amount (0 to 0.5)
+                mix         // Wet/Dry mix (0 to 1)
+            };
+        };
+
+        // Reintroduce the applyRandomPitchShift function
+        const applyRandomPitchShift = (channel, { shifts }, prng) => {
+            const shift = shifts[Math.floor(prng() * shifts.length)];
+            channel.metadata.playbackSpeed *= shift;
+        };
+
+        const addHarmony = (originalChannel, index, newSong, { intervals, maxHarmonyChannels }, context, prng) => {
+            if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
+            intervals.forEach(interval => {
+                if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
+                const harmony = JSON.parse(JSON.stringify(originalChannel));
+                harmony.id = `${originalChannel.id}_harmony_${index}_${interval}`;
+                harmony.metadata.playbackSpeed *= interval;
+                harmony.metadata.volume = (harmony.metadata.volume || 1) * 0.8;
+                newSong.channels.push(harmony);
+                context.harmonyChannelsAdded++;
+            });
+        };
+
+        const applyIntermittentDelay = (channel, { noteValue, maxDelayRepeats }, bpm) => {
+            const beatDuration = 60000 / bpm;
+            const delayMap = { 'quarter': beatDuration, 'eighth': beatDuration / 2, 'sixteenth': beatDuration / 4 };
+            channel.metadata.delay = { time: delayMap[noteValue] || beatDuration, repeats: maxDelayRepeats };
+        };
+
+        const applyReverseEffect = channel => {
+            channel.metadata.requiresReversal = true;
+        };
+
+        const applyVolumeChange = (channel, { range }, prng) => {
+            const [min, max] = range;
+            channel.metadata.volume = (channel.metadata.volume || 1) * (prng() * (max - min) + min);
+        };
+
+        const applyPanEffect = (channel, { positions }, prng) => {
+            channel.metadata.pan = positions[Math.floor(prng() * positions.length)];
+        };
+
+        const applyReverbEffect = (channel, { decayTimeRange, mixRange }, prng) => {
+            channel.metadata.reverb = {
+                decayTime: prng() * (decayTimeRange[1] - decayTimeRange[0]) + decayTimeRange[0],
+                mix: prng() * (mixRange[1] - mixRange[0]) + mixRange[0]
+            };
+        };
+
+        const applyFilterEffect = (channel, { types, frequencyRange, QRange }, prng) => {
+            channel.metadata.filter = {
+                type: types[Math.floor(prng() * types.length)],
+                frequency: prng() * (frequencyRange[1] - frequencyRange[0]) + frequencyRange[0],
+                Q: prng() * (QRange[1] - QRange[0]) + QRange[0]
+            };
+        };
+
+        const applyTremoloEffect = (channel, { rateRange, depthRange }, prng) => {
+            channel.metadata.tremolo = {
+                rate: prng() * (rateRange[1] - rateRange[0]) + rateRange[0],
+                depth: prng() * (depthRange[1] - depthRange[0]) + depthRange[0]
+            };
+        };
+
+        const applyDistortionEffect = (channel, { amountRange }, prng) => {
+            channel.metadata.distortion = {
+                amount: prng() * (amountRange[1] - amountRange[0]) + amountRange[0]
+            };
+        };
+
+        const applyBitcrusherEffect = (channel, { bitDepthRange, sampleRateRange }, prng) => {
+            channel.metadata.bitcrusher = {
+                bitDepth: Math.floor(prng() * (bitDepthRange[1] - bitDepthRange[0] + 1)) + bitDepthRange[0],
+                sampleRate: prng() * (sampleRateRange[1] - sampleRateRange[0]) + sampleRateRange[0]
+            };
+        };
+
+   
+
+        // **Leslie Effect Function**
+        const applyLeslieEffect = (channel, { rotationSpeed, depth, mix }, bpm) => {
+            channel.metadata.leslie = {
+                rotationSpeed, // Rotation speed in Hz
+                depth,         // Depth of the effect
+                mix            // Wet/Dry mix
+            };
+        };
+
+        // **BPM-Linked Delay Function**
+        const applyBpmLinkedDelay = (channel, { time, feedback, mix }, bpm) => {
+            channel.metadata.delayBpmLinked = {
+                time,       // Delay time in ms
+                feedback,   // Feedback amount (0 to 1)
+                mix         // Wet/Dry mix (0 to 1)
+            };
+        };
+
+
+
+        const loopSampleIds = new Set([
+            "7c42769c1763cc8f045aada7914e8158223e45e7a4f197b49f918b1c005d36fci0",
+            "3364803cb3032ce95f4138a214c15a9b36dcb70f574a477f27615d448e1cdeb8i0",
+        ]);
+
+        const keyNames = [
+            "projectName",
+            "artistName",
+            "projectBPM",
+            "currentSequence",
+            "channelURLs",
+            "channelVolume",
+            "channelPlaybackSpeed",
+            "trimSettings",
+            "projectChannelNames",
+            "startSliderValue",
+            "endSliderValue",
+            "totalSampleDuration",
+            "start",
+            "end",
+            "projectSequences",
+            "steps"
+        ];
+
+        const keyMap = keyNames.reduce((map, key, index) => {
+            map[key] = index;
+            return map;
+        }, {});
+
+        const channelIds = Array.from({ length: 16 }, (_, index) => String.fromCharCode(65 + index)); // 'A' to 'P'
+        const channelIdMap = channelIds.reduce((map, id, index) => {
+            map[id] = index;
+            return map;
+        }, {});
+
+        const fetchAndProcessSongData = async (url) => {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Network error for ${url}`);
+                const compressedData = new Uint8Array(await response.arrayBuffer());
+                const inflatedData = window.pako.inflate(compressedData);
+                const jsonString = new TextDecoder("utf-8").decode(inflatedData);
+                const parsedData = JSON.parse(jsonString);
+                const processParsedData = (data) => {
+                    const recurse = (obj) => {
+                        if (Array.isArray(obj)) {
+                            return obj.map(recurse);
+                        } else if (obj && typeof obj === "object") {
+                            return Object.entries(obj).reduce((accumulator, [key, value]) => {
+                                const mappedKey = keyNames[key] || key;
+                                accumulator[mappedKey] = mappedKey === "projectSequences"
+                                    ? Object.fromEntries(
+                                        Object.entries(value).map(([seqKey, seqValue]) => {
+                                            const sequenceName = `Sequence${seqKey.replace(/^s/, "")}`;
+                                            const channels = Object.fromEntries(
+                                                Object.entries(seqValue).map(([channelKey, channelValue]) => {
+                                                    const steps = channelValue[keyMap.steps] || [];
+                                                    const processedSteps = steps.flatMap((step) => {
+                                                        if (typeof step === "number") {
+                                                            return step;
+                                                        } else if (step?.r) {
+                                                            const [start, end] = step.r;
+                                                            return Array.from({ length: end - start + 1 }, (_, idx) => start + idx);
+                                                        } else if (typeof step === "string" && step.endsWith("r")) {
+                                                            return { index: parseInt(step.slice(0, -1), 10), reverse: true };
+                                                        } else {
+                                                            return [];
+                                                        }
+                                                    });
+                                                    return [`ch${channelIdMap[channelKey]}`, { steps: processedSteps }];
+                                                })
+                                            );
+                                            return [sequenceName, channels];
+                                        })
+                                    )
+                                    : recurse(value);
+                                return accumulator;
+                            }, {});
+                        } else {
+                            return obj;
+                        }
+                    };
+                    return recurse(data);
+                };
+                return processParsedData(parsedData);
+            } catch (error) {
+                console.error(`[Initialization] Error fetching/deserializing ${url}:`, error);
+                throw error;
+            }
+        };
+
+        const prepareInitialSampleOrder = ({ projectSequences }) => {
+            const sampleSet = new Set();
+            const sampleOrder = [];
+            Object.keys(projectSequences)
+                .sort((a, b) => +a.slice(9) - +b.slice(9))
+                .forEach(seqK => {
+                    Object.entries(projectSequences[seqK]).forEach(([chId, { steps }]) => {
+                        steps.forEach(step => {
+                            if (typeof step === "number" || step?.index !== undefined) {
+                                const id = `${chId}_${step.reverse ? 'r' : 'f'}`;
+                                if (!sampleSet.has(id)) {
+                                    sampleSet.add(id);
+                                    sampleOrder.push({ channelId: chId, reverse: step.reverse || false });
+                                }
+                            }
+                        });
+                    });
+                });
+            return sampleOrder;
+        };
+
+        const setArtworkImage = url => {
+            const el = document.getElementById("artworkImage");
+            if (el) {
+                el.src = url;
+                el.parentElement.style.display = "flex";
+            }
+        };
+
+        // Global Sample Cache
+         const sampleCache = {};
+
+        // Function to generate a unique key for each sample based on URL and processing parameters
+        const generateSampleKey = (url, params = {}) => {
+            let key = url;
+            if (params.reversed) key += '_reversed';
+            if (params.playbackSpeed && params.playbackSpeed !== 1) key += `_speed_${params.playbackSpeed}`;
+            // Include other parameters as needed
+            return key;
+        };
+
+
+        const normalizeAudioBuffer = (audioBuffer) => {
+            const numChannels = audioBuffer.numberOfChannels;
+            let maxAmplitude = 0;
+
+            // Find the maximum amplitude across all channels
+            for (let i = 0; i < numChannels; i++) {
+                const channelData = audioBuffer.getChannelData(i);
+                for (let sample of channelData) {
+                    const absSample = Math.abs(sample);
+                    if (absSample > maxAmplitude) {
+                        maxAmplitude = absSample;
+                    }
+                }
+            }
+
+            // Calculate normalization factor
+            const normalizationFactor = maxAmplitude > 0 ? 1 / maxAmplitude : 1;
+
+            // Apply normalization
+            for (let i = 0; i < numChannels; i++) {
+                const channelData = audioBuffer.getChannelData(i);
+                for (let j = 0; j < channelData.length; j++) {
+                    channelData[j] *= normalizationFactor;
+                }
+            }
+
+            return audioBuffer;
+        };
+       
+       
+       // Modify loadAndProcessSample to include normalization
+    const loadAndProcessSample = async (url, params = {}) => {
+        const key = generateSampleKey(url, params);
+
+        if (sampleCache[key]) {
+            console.log(`Reusing cached sample: ${key}`);
+            return sampleCache[key];
+        }
+
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        // Normalize the audio buffer
+        audioBuffer = normalizeAudioBuffer(audioBuffer);
+
+        // Apply processing if needed
+        if (params.reversed) {
+            for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
+                Array.prototype.reverse.call(audioBuffer.getChannelData(i));
+            }
+        }
+
+        if (params.playbackSpeed && params.playbackSpeed !== 1) {
+            // Implement time-stretching or pitch-shifting as needed
+        }
+
+        sampleCache[key] = audioBuffer;
+        console.log(`Processed and cached sample: ${key}`);
+
+        return audioBuffer;
+    };
+            // **New Function: generateMuteSchedule**
+            const generateMuteSchedule = (prng, totalSequences) => {
+                const muteSchedule = [];
+                const evenSequences = [];
+                for (let seq = 2; seq <= totalSequences; seq += 2) {
+                    evenSequences.push(seq);
+                }
+
+                evenSequences.forEach(seq => {
+                    // Decide whether to mute or unmute at this sequence
+                    const action = prng() < 0.5 ? 'mute' : 'unmute';
+                    // Decide number of channels to affect (1 to 4)
+                    const numChannels = Math.floor(prng() * 4) + 1;
+                    // Placeholder: actual channel selection will be handled during mix generation
+                    muteSchedule.push({ sequence: seq, action, numChannels });
+                });
+
+                return muteSchedule;
+            };
+
+            const validSongDataUrls = songDataUrls.filter((url) => url.trim() && !url.trim().startsWith("//"));
+
+        if (validSongDataUrls.length) {
+            if (!window.pako) {
+                await (async function loadPako() {
+                    try {
+                        const response = await fetch("/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0");
+                        const textContent = await response.text();
+                        const scriptElement = new DOMParser().parseFromString(textContent, "text/html").querySelector("script");
+                        if (!scriptElement || !scriptElement.textContent.includes("pako")) {
+                            throw new Error("Pako library not found.");
+                        }
+                        document.head.append(
+                            Object.assign(document.createElement("script"), { textContent: scriptElement.textContent })
+                        );
+                    } catch (error) {
+                        console.error("[Initialization] Error loading Pako:", error);
+                    }
+                })();
+            }
+            const songDataArray = await Promise.all(
+                validSongDataUrls.map(async (url, index) => {
+                    try {
+                        const data = await fetchAndProcessSongData(url);
+                        return { data, index };
+                    } catch (error) {
+                        console.error(`[Initialization] Failed ${url}:`, error);
+                        return null;
+                    }
+                })
+            ).then(dataArray => {
+                const validDataArray = dataArray.filter(Boolean);
+                if (!validDataArray.length) throw new Error("[Initialization] No valid data.");
+                return validDataArray;
+            });
+
+            const originalSongs = songDataArray
+                .sort((a, b) => a.index - b.index)
+                .map(({ data, index }) => {
+                    const {
+                        projectName = "The Infinite Ordinal",
+                        artistName = "melophonic",
+                        projectBPM = 120,
+                        projectSequences = {},
+                        channelURLs = [],
+                        channelVolume = [],
+                        channelPlaybackSpeed = [],
+                        trimSettings = {}
+                    } = data;
+
+                    const channels = channelIds.map((id, idx) => {
+                        const channelSequence = Object.entries(projectSequences).reduce((acc, [sequenceName, sequenceData]) => {
+                            const channelData = sequenceData[`ch${idx}`];
+                            if (channelData) acc.push({ sequenceName, steps: channelData.steps });
+                            return acc;
+                        }, []);
+                        const metadata = {
+                            volume: channelVolume[idx] ?? 1,
+                            playbackSpeed: channelPlaybackSpeed[idx] ?? 1,
+                            trimStartTime_Percentage: trimSettings[idx]?.start || 0,
+                            trimEndTime_Percentage: trimSettings[idx]?.end || 100,
+                            requiresReversal: channelSequence.some(seq => seq.steps.some(step => typeof step === "object" && step.reverse)),
+                            channelSequence,
+                            originalBPM: projectBPM
+                        };
+                        const sampleId = channelURLs[idx];
+                        if (loopSampleIds.has(sampleId)) {
+                            metadata.isLoop = true;
+                        }
+                        return { id, url: sampleId || "URL_not_found", metadata };
+                    });
+                    return {
+                        id: `Song ${index + 1}: ${projectName}`,
+                        artist: artistName,
+                        bpm: projectBPM,
+                        totalSequences: Object.keys(projectSequences).length,
+                        totalChannels: channels.length,
+                        channels,
+                        projectSequences
+                    };
+                });
+
+            const allChannels = originalSongs.flatMap(song => song.channels);
+
+            function lcg64(seed) {
+                let state = seed;
+                const a = 6364136223846793005n;
+                const c = 1442695040888963407n;
+                const m = 18446744073709551616n; // 2^64
+                return function() {
+                    state = (a * state + c) % m;
+                    return Number(state) / Number(m);
+                }
+            }
+
+            const getRandomChannels = (channelsArray, num, prng) => {
+                const shuffled = [...channelsArray];
+                for (let i = shuffled.length - 1; i > 0; i--) {
+                    const j = Math.floor(prng() * (i + 1));
+                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                }
+                return shuffled.slice(0, num);
+            };
+
+            // **New Function: selectChannelsForMuting**
+            const selectChannelsForMuting = (channels, num, prng) => {
+                const availableChannels = channels.filter(ch => !ch.isMuted); // Assuming channel object has 'isMuted' flag
+                const shuffled = [...availableChannels];
+                for (let i = shuffled.length - 1; i > 0; i--) {
+                    const j = Math.floor(prng() * (i + 1));
+                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                }
+                return shuffled.slice(0, num).map(ch => ch.id);
+            };
+
+            // **New Function: selectChannelsForUnmuting**
+            const selectChannelsForUnmuting = (channels, num, prng) => {
+                const mutedChannels = channels.filter(ch => ch.isMuted);
+                const shuffled = [...mutedChannels];
+                for (let i = shuffled.length - 1; i > 0; i--) {
+                    const j = Math.floor(prng() * (i + 1));
+                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                }
+                return shuffled.slice(0, num).map(ch => ch.id);
+            };
+
+            // Generate song mixes asynchronously and map them by BPM
+            async function generateMixesBySeed(seedString, numMixes = 100, filteredBPMs = null) {
+                const bpmOptions = [60, 120, 140, 160, 180, 240];
+                const newSongs = [];
+                const songsByBPM = {}; // Object to store songs categorized by BPM
+
+                // Initialize base seed with error handling
+                let baseSeed;
+                try {
+                    baseSeed = BigInt(seedString);
+                } catch (error) {
+                    console.error(`[seedDebug] Invalid seed string: "${seedString}". Using base seed 0.`);
+                    baseSeed = 0n;
+                }
+
+                let currentSeed = baseSeed || 1n;
+
+                // Function to derive BPM from a seed using PRNG
+                const getBPMFromSeed = (seed) => {
+                    const prng = lcg64(seed);
+                    return bpmOptions[Math.floor(prng() * bpmOptions.length)];
+                };
+
+                // Function to find the next valid seed that matches the target BPM
+                const findNextValidSeed = (startingSeed, targetBPM, maxAttempts = 1e6) => {
+                    for (let seed = startingSeed, attempt = 0; attempt < maxAttempts; attempt++, seed += 1n) {
+                        if (getBPMFromSeed(seed) === targetBPM) return seed;
+                    }
+                    throw new Error(`[seedDebug] Could not find seed producing BPM ${targetBPM} within ${maxAttempts} attempts.`);
+                };
+
+                // Main loop to generate each mix
+                for (let mixIndex = 0; mixIndex < numMixes; mixIndex++) {
+                    // If filtering by BPM, find the next seed that matches the desired BPM
+                    if (filteredBPMs !== null) {
+                        try {
+                            currentSeed = findNextValidSeed(currentSeed, filteredBPMs);
+                        } catch (error) {
+                            console.error(error.message);
+                            break; // Exit the loop if unable to find a valid seed
+                        }
+                    }
+
+                    const prng = lcg64(currentSeed);
+                    const selectedBPM = filteredBPMs !== null ? filteredBPMs : getBPMFromSeed(currentSeed);
+
+                    // Select random channels for the mix
+                    const randomChannels = getRandomChannels(allChannels, 16, prng);
+                    const activationPoints = [
+                        { startSeq: 1, count: 16 },
+                        { startSeq: 5, count: 4 },
+                        { startSeq: 17, count: 4 },
+                        { startSeq: 25, count: 4 }
+                    ];
+
+                    // Assign activation sequences to channels
+                    const channelsWithActivation = activationPoints.flatMap(({ startSeq, count }) =>
+                        Array.from({ length: count }, (_, i) => {
+                            const channel = randomChannels[i];
+                            return channel ? { channel: JSON.parse(JSON.stringify(channel)), activationSeq: startSeq } : null;
+                        }).filter(Boolean)
+                    );
+
+                    // Collect unique sequence names from channels
+                    const sequenceSet = new Set(
+                        channelsWithActivation.flatMap(({ channel }) => 
+                            channel.metadata.channelSequence?.map(seq => seq.sequenceName) || []
+                        )
+                    );
+
+                    // Sort sequences numerically based on their suffix
+                    let sequences = [...sequenceSet].sort((a, b) =>
+                        (parseInt(a.replace('Sequence', '')) || 0) - (parseInt(b.replace('Sequence', '')) || 0)
+                    );
+
+                    // Limit the number of sequences to 28
+                    sequences = sequences.slice(0, 28);
+
+
+                    // Initialize the new song object
+                    const newSong = {
+                        id: `The Infinite Ordinal Remix #${mixIndex + 1}`,
+                        projectName: `The Infinite Ordinal`,
+                        artist: `melophonic`,
+                        bpm: selectedBPM,
+                        totalSequences: sequences.length,
+                        totalChannels: channelsWithActivation.length,
+                        channels: [],
+                        projectSequences: Object.fromEntries(sequences.map(seq => [seq, {}])),
+                        seed: currentSeed.toString(),
+                        // **New Property: muteSchedule**
+                        muteSchedule: [] // To be populated
+                    };
+
+                    // Initialize effects context for the song
+                    const effectsContext = {
+                        harmonyChannelsAdded: 0,
+                        maxHarmonyChannels: window.EffectsModule?.effectsConfig?.harmonize?.maxHarmonyChannels || 2,
+                        totalGain: 0,
+                        maxTotalGain: 10
+                    };
+
+                    // **Generate Mute Schedule for the Song**
+                    const totalSequences = sequences.length;
+                    const muteSchedule = generateMuteSchedule(prng, totalSequences);
+                    newSong.muteSchedule = muteSchedule;
+
+                    // Process each channel asynchronously and apply effects
+                    await Promise.all(channelsWithActivation.map(async ({ channel, activationSeq }, index) => {
+                        const chId = `ch${index}`;
+                        const newChannel = {
+                            id: chId,
+                            url: channel.url,
+                            metadata: { ...channel.metadata, originalBPM: newSong.bpm, activationSeq, isMuted: false } // Initialize isMuted flag
+                        };
+                        await applyEffects(newChannel, index, newSong, activationSeq, newSong.bpm, effectsContext, prng);
+                        newSong.channels.push(newChannel);
+
+                        // Map sequences to the new channel
+                        channel.metadata.channelSequence?.forEach(seqData => {
+                            if (newSong.projectSequences[seqData.sequenceName]) {
+                                newSong.projectSequences[seqData.sequenceName] = {
+                                    ...newSong.projectSequences[seqData.sequenceName],
+                                    [chId]: { steps: seqData.steps }
+                                };
+                            }
+                        });
+                    }));
+
+                    // **Assign Channels to Mute Schedule**
+                    muteSchedule.forEach(actionItem => {
+                        const { sequence, action, numChannels } = actionItem;
+                        if (action === 'mute') {
+                            const channelsToMute = selectChannelsForMuting(newSong.channels, numChannels, prng);
+                            actionItem.channels = channelsToMute;
+                            // Update channel metadata
+                            channelsToMute.forEach(chId => {
+                                const ch = newSong.channels.find(c => c.id === chId);
+                                if (ch) ch.metadata.isMuted = true;
+                            });
+                        } else if (action === 'unmute') {
+                            const channelsToUnmute = selectChannelsForUnmuting(newSong.channels, numChannels, prng);
+                            actionItem.channels = channelsToUnmute;
+                            // Update channel metadata
+                            channelsToUnmute.forEach(chId => {
+                                const ch = newSong.channels.find(c => c.id === chId);
+                                if (ch) ch.metadata.isMuted = false;
+                            });
+                        }
+                    });
+
+                    // Log the generated song's seed and BPM
+                    console.log(`[seedDebug] Generated Song with Seed: ${currentSeed} | BPM: ${selectedBPM}`);
+
+                    // Add the new song to the songs list
+                    newSongs.push(newSong);
+
+                    // Add the new song to the songsByBPM map
+                    if (!songsByBPM[selectedBPM]) {
+                        songsByBPM[selectedBPM] = [];
+                    }
+                    songsByBPM[selectedBPM].push(newSong);
+
+                    // Increment the seed for the next mix
+                    currentSeed += 1n;
+                }
+
+                // Log the total number of generated mixes and the BPM map for debugging
+                console.log(`[seedDebug] Generated ${newSongs.length} song mixes.`);
+                console.log(`[seedDebug] Songs by BPM:`, songsByBPM);
+
+                // Assign songsByBPM to globalData for access by other functions
+                globalData.songsByBPM = songsByBPM;
+
+                // Return the list of songs
+                return newSongs;
+            }
+
+            // **New Function: applyChorusEffect** (Already defined above)
+
+            // **New Functions for Channel Mute Scheduling**
+            // selectChannelsForMuting and selectChannelsForUnmuting are defined above
+
+            // **After generating the songs, ensure that samples are processed and cached**
+            const generatedSongs = await generateMixesBySeed(window.seed);
+
+
+            if (typeof globalData.initialized === 'undefined') {
+                Object.assign(globalData, {
+                    songsArray: generatedSongs,
+                    currentSongIndex: 0,
+                    currentSequenceIndex: 0,
+                    initialSampleOrder: generatedSongs.length ? prepareInitialSampleOrder(generatedSongs[0]) : null,
+                    isSingleSong: generatedSongs.length === 1,
+                    isMultipleSongs: generatedSongs.length > 1,
+                    initialized: true
+                });
+            }
+            if (globalData.isArtworkCover && artworkUrl.length) setArtworkImage(artworkUrl[0]);
+            document.dispatchEvent(new CustomEvent("dataLoadingComplete", {
+                detail: {
+                    success: true,
+                    totalSongs: globalData.songsArray.length,
+                    songs: globalData.songsArray.map(({ id, totalSequences }) => ({ id, totalSequences }))
+                }
+            }));
+            window.generateMixesBySeed = generateMixesBySeed;
+        } else {
+            console.log("[Initialization] No valid song data URLs to process.");
+        }
+    })();
+</script>
+
+
+
+
+<!-- Load Player Scripts AFTER data loading is complete -->
+<script>
+         window.updateSeedDisplay = function() {
+                const currentSong = globalData.songsArray[globalData.currentSongIndex];
+                if (currentSong) {
+                    const seed = currentSong.seed;
+                    const bpm = currentSong.bpm;
+                    const title = currentSong.id;
+                    displaySeedAndBPM(seed, bpm, title);
+                    globalData.currentSeed = seed; // Set the current seed
+                } else {
+                    console.warn("Current song index is out of bounds.");
+                }
+            };
+        window.updateSeedDisplay = updateSeedDisplay;
+
+        /**
+         * Handles transitioning to the next song in the playlist.
+         */
+        window.handleNextSong = function() {
+            globalData.nextSong();
+            updateSeedDisplay();
+        };
+
+        /**
+         * Handles transitioning to the previous song in the playlist.
+         */
+        window.handlePreviousSong = function() {
+            globalData.previousSong();
+            updateSeedDisplay();
+        };
+
+        document.addEventListener("dataLoadingComplete", (event) => {
+            const remainingScriptUrls = [
+                "/content/5c03e882ab5a531271b2e93a80d8a9d72cb533c580bec1567020f5cd61595560i0", // projectArtistMapping
+                "/content/016f153f011f6a23b8fccd0efcc7945913ee97f241c7a2df7c71c4fa7c9a5fb3i0", // unifiedMetadataManagement
+                "/content/ef622be8aeeac45fdbdc291dd0db739d24c2c667c5c3ce7662f2b8c7f2c3de58i0", // GainNodeHelpers
+                "/content/f4cc99813b43f71b3e781d3c99f24a6a7a5b1004ea0efce3b225011e347b8df0i0", // audioProcessingAndManagement
+                "/content/7b305327f2951d219532ef0cb46b2039b23f2cfd0d8d0e827f3fe1b2b754b5a9i0", // DynamicGainBalancing
+                "/content/8b5b09cfedbc0c6a187816181f8d33f90c5bbd15fc10af47008176effb866a47i0", // keyboardControlsAndEventListeners
+
+                ];
+
+            const loadScriptsSequentially = (urls) => {
+                if (urls.length === 0) return;
+                const src = urls.shift();
+                const script = document.createElement("script");
+                script.src = src;
+                script.async = false;
+                script.onload = () => loadScriptsSequentially(urls);
+                script.onerror = (e) => {
+                    console.error(`[Script Loader] Error loading script: ${src}`, e);
+                    loadScriptsSequentially(urls);
+                };
+                document.body.appendChild(script);
+            };
+
+            loadScriptsSequentially([...remainingScriptUrls]);
+            updateSeedDisplay(); // Update seed display after loading is complete
+        });
+</script>
+
+
+
+
+
+
+
+<!-- Playback -->
+<script>
+    // playbackEngine.js
+    (() => {
+        // Initialize global data or use existing globalData
+        const globalData = window.globalData || (window.globalData = {
+            isPlaying: false,
+            currentSongIndex: 0,
+            songsArray: [],
+            audioBuffers: {},
+            reverseAudioBuffers: {},
+            audioContext: new (window.AudioContext || window.webkitAudioContext)(),
+            masterGain: null,
+            gainNodes: {},
+            isArtworkCover: true,
+            isVisualiserCover: false
+        });
+
+        // Initialize the current sequence counter
+        globalData.currentSequence = 0;
+
+    
+        const { audioContext } = globalData;
+        const scheduleAheadTime = 0.1; // Time in seconds to schedule ahead
+        const schedulerInterval = 25;   // Interval in milliseconds for the scheduler
+    
+        let playbackInterval = null;
+        let sequenceStates = {};
+    
+        const missingAudioBuffers = new Set();
+        const activeAudioSources = new Set();
+    
+        let countdownInterval = null;
+
+        function initializeCountdown(song) {
+            // Clear any existing interval
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+
+            const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+            if (!nowPlayingContainer) return;
+
+            const timeLeftElement = nowPlayingContainer.querySelector(".timeLeft");
+            if (!timeLeftElement) return;
+
+            // Calculate total duration in seconds
+            const stepDuration = 60 / song.bpm / 4;
+            const stepsPerSequence = 64;
+            const totalSequences = Object.keys(song.projectSequences).length;
+            const totalDuration = stepDuration * stepsPerSequence * totalSequences;
+
+            let timeLeft = totalDuration;
+
+            // Update the display immediately
+            updateTimeLeftDisplay(timeLeftElement, timeLeft);
+
+            // Update every second
+            countdownInterval = setInterval(() => {
+                if (globalData.isPlaying) {
+                    timeLeft -= 1;
+                    if (timeLeft <= 0) {
+                        timeLeft = 0;
+                        clearInterval(countdownInterval);
+                    }
+                    updateTimeLeftDisplay(timeLeftElement, timeLeft);
+                } else {
+                    clearInterval(countdownInterval);
+                }
+            }, 1000);
+        }
+
+        function updateTimeLeftDisplay(element, timeLeftInSeconds) {
+            const minutes = Math.floor(timeLeftInSeconds / 60);
+            const seconds = Math.floor(timeLeftInSeconds % 60);
+            element.textContent = `Time Left: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+
+
+    // Function to start playback
+        function startPlayback() {
+            const { songsArray, currentSongIndex } = globalData;
+
+            if (!songsArray.length) {
+                console.error("No songs available for playback.");
+                return;
+            }
+
+            // Get the current song and its sequences
+            const song = songsArray[currentSongIndex % songsArray.length];
+            const projectSequences = song.projectSequences || {};
+
+            const stepDuration = 60 / song.bpm / 4;       // Duration of a single step
+            const sequenceDuration = 64 * stepDuration;   // Total duration of a sequence
+
+            // Reset states and logs
+            globalData.currentSongIndex %= songsArray.length;
+            sequenceStates = {};
+            missingAudioBuffers.clear();
+
+            console.log(`Starting playback for Song: ${song.id} (${globalData.currentSongIndex + 1}/${songsArray.length}) with ${Object.keys(projectSequences).length} sequences.`);
+            console.log(`Song BPM: ${song.bpm}`);
+
+            // **Update Synth's BPM Here**
+            if (window.synth && typeof window.synth.updateBPM === 'function') {
+                window.synth.updateBPM(song.bpm);
+                console.log(`Synth BPM updated to ${song.bpm} BPM.`);
+            } else {
+                console.warn("Synth instance not found or updateBPM method unavailable.");
+            }
+
+            let sequenceStartTimeOffset = 0;
+            let orderedSequenceNumber = 1; // Start from 1
+
+            // Initialize sequence states with ordered sequence numbers
+            for (const [sequenceId, sequenceData] of Object.entries(projectSequences)) {
+                sequenceStates[sequenceId] = {
+                    sequenceNumber: orderedSequenceNumber, // Assign ordered number
+                    nextStepIndex: 0,
+                    nextStepTime: audioContext.currentTime + sequenceStartTimeOffset,
+                    stepDuration: stepDuration,
+                    endTime: audioContext.currentTime + sequenceStartTimeOffset + sequenceDuration,
+                    completed: false,
+                    loggedStart: false // Initialize the loggedStart flag
+                };
+                sequenceStartTimeOffset += sequenceDuration;
+                orderedSequenceNumber++;
+            }
+
+            globalData.currentSongId = song.id;
+
+            // Prepare gain nodes for the song
+            GainNodeHelper.createGainNodesForSong(song);
+            GainNodeHelper.prepareNextSong(songsArray[(globalData.currentSongIndex + 1) % songsArray.length]);
+            globalData.isPlaying = true;
+
+            // Reset currentSequence to 1 for the new song
+            globalData.currentSequence = 1;
+
+            // Start the playback scheduler
+            playbackInterval = setInterval(() => scheduleSequences(song), schedulerInterval);
+
+            console.log("Sequences scheduled and playback started.");
+            document.dispatchEvent(new CustomEvent("playbackStarted", { detail: { success: true } }));
+
+            // Update Now Playing information
+            updateNowPlaying(song);
+        }
+        // Function to stop playback
+        function stopPlayback() {
+            if (!globalData.isPlaying) {
+                console.log("Playback is not in progress.");
+                return;
+            }
+
+            resetPlayback();
+            console.log("Playback stopped.");
+            document.dispatchEvent(new CustomEvent("playbackStopped", { detail: { success: true } }));
+
+            // Clear Now Playing information
+            clearNowPlaying();
+
+            // Clear countdown timer
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+        }
+
+        // Function to reset playback
+        function resetPlayback(options = {}) {
+            clearInterval(playbackInterval);
+            if (!options.preserveIsPlaying) {
+                globalData.isPlaying = false;
+            }
+
+            sequenceStates = {};
+            missingAudioBuffers.clear();
+
+            // Stop and disconnect all active audio sources
+            activeAudioSources.forEach(source => {
+                try {
+                    source.stop();
+                    source.disconnect();
+                } catch (error) {
+                    console.error("Error stopping/disconnecting an audio source:", error);
+                }
+            });
+            activeAudioSources.clear();
+
+            // Clean up gain nodes
+            if (globalData.currentSongId) {
+                GainNodeHelper.cleanupGainNodesForSong(globalData.currentSongId);
+                globalData.currentSongId = null;
+            }
+
+            // Clear countdown timer
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+
+            // Execute callback if provided
+            if (options.callback) {
+                options.callback();
+            }
+        }
+        // Initialize master gain node if it doesn't exist
+        if (!globalData.masterGain) {
+            globalData.masterGain = audioContext.createGain();
+            globalData.masterGain.connect(audioContext.destination);
+        }
+    
+        // Toggle playback function
+        globalData.togglePlayback = () => globalData.isPlaying ? stopPlayback() : startPlayback();
+        globalData.startPlayback = startPlayback;
+        globalData.stopPlayback = stopPlayback;
+        globalData.resetPlayback = () => resetPlayback({ callback: startPlayback });
+
+        
+    // Updated Function to schedule sequences
+function scheduleSequences(song) {
+    const currentTime = audioContext.currentTime;
+    let allSequencesCompleted = true;
+    const totalSequences = Object.keys(song.projectSequences || {}).length;
+
+    for (const [sequenceId, sequenceData] of Object.entries(song.projectSequences || {})) {
+        const sequenceState = sequenceStates[sequenceId];
+
+        if (sequenceState && !sequenceState.completed) {
+            if (currentTime >= sequenceState.endTime) {
+                sequenceState.completed = true;
+                console.log(`Sequence ${sequenceState.sequenceNumber} has completed.`);
+            } else {
+                allSequencesCompleted = false;
+
+                // Check if a new sequence is starting
+                if (currentTime >= sequenceState.nextStepTime && !sequenceState.loggedStart) {
+                    globalData.currentSequence = sequenceState.sequenceNumber;
+                    console.log(`Updating current sequence display: Sequence ${globalData.currentSequence} out of ${totalSequences}`);
+                    sequenceState.loggedStart = true; // Prevent logging again
+                }
+
+                // Schedule steps ahead of time
+                while (sequenceState.nextStepTime < currentTime + scheduleAheadTime && globalData.isPlaying) {
+                    const { nextStepIndex, nextStepTime, stepDuration } = sequenceState;
+
+                    // **Log when a new sequence starts**
+                    if (nextStepIndex === 0 && !sequenceState.loggedStart) {
+                        console.log(`Starting Sequence ${sequenceState.sequenceNumber} at step ${nextStepIndex}.`);
+                        sequenceState.loggedStart = true;
+                    }
+
+                    for (const [channelKey, noteData] of Object.entries(sequenceData)) {
+                        const channelIndex = parseInt(channelKey.slice(2), 10);
+                        const channel = song.channels[channelIndex];
+
+                        if (!channel) {
+                            console.warn(`Channel index ${channelIndex} not found in song ${song.id}.`);
+                            continue;
+                        }
+
+                        const step = noteData.steps?.find(step => 
+                            typeof step === 'number' ? step === nextStepIndex : step.index === nextStepIndex
+                        );
+
+                        if (step !== undefined) {
+                            const reverse = typeof step === 'object' && step.reverse;
+                            playNote(song, channel, nextStepTime, reverse);
+                        }
+                    }
+
+                    // Move to the next step
+                    sequenceState.nextStepIndex++;
+                    if (sequenceState.nextStepIndex >= 64) {
+                        sequenceState.completed = true;
+                        console.log(`Sequence ${sequenceState.sequenceNumber} has completed all steps.`);
+                        break;
+                    }
+                    sequenceState.nextStepTime += stepDuration;
+                }
+            }
+        }
+    }
+
+    if (allSequencesCompleted) {
+        console.log("All sequences have completed.");
+        proceedToNextSong();
+    }
+
+    applyMuteSchedule(song, globalData.currentSequence);
+}
+
+
+
+// Updated Function to update Now Playing information
+const updateNowPlaying = (song) => {
+    const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+    if (!nowPlayingContainer) {
+        console.warn("Now Playing Container not found.");
+        return;
+    }
+
+    const { projectName, artistName } = getProjectAndArtist(song);
+    nowPlayingContainer.querySelector(".songTitle").textContent = projectName;
+    nowPlayingContainer.querySelector(".artistName").textContent = artistName;
+    nowPlayingContainer.querySelector(".songBPM").textContent = `BPM: ${song.bpm}`;
+
+    initializeCountdown(song);
+};
+
+// Function to clear Now Playing information
+const clearNowPlaying = () => {
+    const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+    if (!nowPlayingContainer) {
+        console.warn("Now Playing Container not found.");
+        return;
+    }
+    nowPlayingContainer.querySelector(".songTitle").textContent = "No song playing";
+    nowPlayingContainer.querySelector(".artistName").textContent = "";
+    nowPlayingContainer.querySelector(".songBPM").textContent = "BPM: N/A";
+    nowPlayingContainer.querySelector(".timeLeft").textContent = "Time Left: N/A";
+};
+
+
+
+        // In playbackEngine.js
+
+        // Function to apply mute/unmute actions based on the current sequence
+        function applyMuteSchedule(song, currentSequence) {
+            const { muteSchedule } = song;
+            if (!muteSchedule || !Array.isArray(muteSchedule)) return;
+
+            // Find actions scheduled for the current sequence
+            const actions = muteSchedule.filter(actionItem => actionItem.sequence === currentSequence);
+
+            actions.forEach(actionItem => {
+                const { action, channels } = actionItem;
+                channels.forEach(channelId => {
+                    const channel = song.channels.find(ch => ch.id === channelId);
+                    if (channel) {
+                        if (action === 'mute') {
+                            muteChannel(channel);
+                        } else if (action === 'unmute') {
+                            unmuteChannel(channel);
+                        }
+                    }
+                });
+            });
+        }
+
+        function muteChannel(channel) {
+            if (!channel.metadata.isMuted) {
+                channel.metadata.isMuted = true;
+                const gainNode = globalData.gainNodes[song.id]?.[channel.id];
+                if (gainNode) {
+                    gainNode.gain.cancelScheduledValues(audioContext.currentTime);
+                    gainNode.gain.setValueAtTime(gainNode.gain.value, audioContext.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.5); // 0.5 second fade-out
+                    console.log(`Channel ${channel.id} muted with fade-out.`);
+                }
+            }
+        }
+
+        function unmuteChannel(channel) {
+            if (channel.metadata.isMuted) {
+                channel.metadata.isMuted = false;
+                const gainNode = globalData.gainNodes[song.id]?.[channel.id];
+                if (gainNode) {
+                    gainNode.gain.cancelScheduledValues(audioContext.currentTime);
+                    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.5); // 0.5 second fade-in
+                    console.log(`Channel ${channel.id} unmuted with fade-in.`);
+                }
+            }
+        }
+
+
+    
+       // Function to proceed to the next song
+        function proceedToNextSong() {
+            if (!globalData.isPlaying) return;
+
+            // Increment the seed here
+            globalData.currentSeed = (globalData.currentSeed !== undefined ? BigInt(globalData.currentSeed) : 1n) + 1n;
+            console.log(`Seed progressed to: ${globalData.currentSeed}`);
+
+            // Update the song index
+            globalData.currentSongIndex = (globalData.currentSongIndex + 1) % globalData.songsArray.length;
+
+            setTimeout(() => {
+                if (globalData.isPlaying) {
+                    resetPlayback({ preserveIsPlaying: true, callback: startPlayback });
+                }
+            }, 200);
+        }
+
+    
+        // Function to play a note
+        const playNote = (song, channel, time, reverse) => {
+            const bufferKey = `${song.id}_${channel.id}_${reverse ? "reverse" : "normal"}`;
+            const buffer = reverse
+                ? globalData.reverseAudioBuffers[song.id]?.[channel.id]
+                : globalData.audioBuffers[song.id]?.[channel.id];
+    
+            if (!buffer) {
+                if (!missingAudioBuffers.has(bufferKey)) {
+                    missingAudioBuffers.add(bufferKey);
+                    console.warn(`Audio buffer missing for Song: ${song.id}, Channel: ${channel.id}${reverse ? " (Reverse)" : ""}`);
+                }
+                return;
+            }
+    
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.playbackRate.value = channel.metadata.playbackSpeed || 1;
+    
+            const gainNode = globalData.gainNodes?.[song.id]?.[channel.id] || globalData.masterGain;
+            source.connect(gainNode);
+            source.start(time);
+            activeAudioSources.add(source);
+            source.onended = () => activeAudioSources.delete(source);
+        };
+    
+        // Function to initialize playback engine
+        globalData.initializePlaybackEngine = () => {
+            if (!globalData.songsArray.length) {
+                console.error("No songs available for playback.");
+                return;
+            }
+            console.log("Playback Engine Initialization Complete.");
+            console.log("Playback is ready. Click the artwork to start.");
+        };
+    
+        // Function to get project name and artist name from song object
+        function getProjectAndArtist(song) {
+            return {
+                projectName: song.projectName || song.id || "Unknown Project",
+                artistName: song.artist || "Unknown Artist"
+            };
+        }
+
+
+        // Set up artwork cover for playback toggle
+        const setupArtworkCover = () => {
+            document.addEventListener("DOMContentLoaded", () => {
+                const artworkCover = document.getElementById("artworkCover");
+                const artworkImage = document.getElementById("artworkImage");
+                const loadingSpinner = document.getElementById("loadingSpinner");
+    
+                if (globalData.isArtworkCover && artworkUrl.length) {
+                    artworkImage.src = artworkUrl[0];
+                    artworkCover.classList.remove("hidden");
+                    loadingSpinner.style.display = "none";
+                    artworkImage.addEventListener("click", globalData.togglePlayback);
+                    console.log("Artwork cover is set up for playback toggle.");
+                } else {
+                    console.warn("Artwork cover is not enabled or no artwork URL provided.");
+                }
+            });
+        };
+    
+        // Event listener for initial audio buffers ready
+        document.addEventListener("initialAudioBuffersReady", (event) => {
+            if (event.detail.success) {
+                globalData.initializePlaybackEngine();
+                console.log("Initial audio buffers are ready.");
+            }
+        });
+    
+        // Event listeners for playback started and stopped
+        ["playbackStarted", "playbackStopped"].forEach((eventType) => {
+            document.addEventListener(eventType, (event) => {
+                if (event.detail.success) {
+                    console.log(`Playback has been successfully ${eventType === "playbackStarted" ? "started" : "stopped"}.`);
+                }
+            });
+        });
+    
+        // Initialize artwork cover setup
+        setupArtworkCover();
+    
+        // Initialize playback engine if audio buffers are already loaded
+        if (Object.keys(globalData.audioBuffers).length) {
+            globalData.initializePlaybackEngine();
+        }
+    })();
+</script>
+
+
+<!-- Synth Script -->
+<script>
+    /**
+     * PRNG: Pseudo-Random Number Generator using Linear Congruential Generator (LCG).
+     * Provides deterministic random numbers based on an internal seed.
+     */
+    class PRNG {
+        constructor(seed) {
+            // Ensure the seed is a BigInt
+            if (typeof seed === 'bigint') {
+                this.seed = seed % 2147483647n; // Use BigInt literal
+                if (this.seed <= 0n) this.seed += 2147483646n;
+            } else if (typeof seed === 'number') {
+                this.seed = BigInt(seed) % 2147483647n;
+                if (this.seed <= 0n) this.seed += 2147483646n;
+            } else {
+                throw new TypeError('Seed must be a Number or BigInt');
+            }
+        }
+
+        /**
+         * Generates the next random number in the sequence.
+         * @returns {number} Next integer in the sequence as a Number.
+         */
+        next() {
+            this.seed = (this.seed * 16807n) % 2147483647n;
+            return Number(this.seed);
+        }
+
+        /**
+         * Returns a floating-point number between 0 (inclusive) and 1 (exclusive).
+         * @returns {number} Pseudo-random number.
+         */
+        random() {
+            return (this.next() - 1) / 2147483646;
+        }
+    }
+
+/**
+ * NoteModule: Handles note generation based on a natural minor scale.
+ */
+ class NoteModule {
+    constructor(rootFrequency = 46.25, getRandom = Math.random) { // F♯1 as the default root note
+        this.rootFrequency = rootFrequency;
+        this.scale = NoteModule.generateMinorScale(rootFrequency);
+        this.enableRandomNotes = true;
+        this.getRandom = getRandom;
+    }
+
+    /**
+     * Generates a natural minor scale based on the root frequency.
+     * @param {number} rootFrequency 
+     * @returns {number[]} Array of frequencies for the minor scale.
+     */
+    static generateMinorScale(rootFrequency) {
+        const semitoneRatio = 2 ** (1 / 12);
+        const minorScaleIntervals = [0, 2, 3, 5, 7, 8, 10, 12]; // Semitones for natural minor scale
+        return minorScaleIntervals.map(interval => rootFrequency * (semitoneRatio ** interval));
+    }
+
+    getRandomNote() {
+        const { scale, getRandom } = this;
+        return scale[Math.floor(getRandom() * scale.length)];
+    }
+
+    getRootNote() {
+        return this.scale[0];
+    }
+
+    setRandomNotesEnabled(isEnabled) {
+        this.enableRandomNotes = Boolean(isEnabled);
+        console.log(`Random notes enabled: ${this.enableRandomNotes}`);
+    }
+
+    getRandomNotes() {
+        const probabilityThresholds = [
+            { threshold: 0.5, count: 2 },      // 50% chance for 2 notes
+            { threshold: 0.75, count: 3 },     // 25% chance for 3 notes
+            { threshold: 0.875, count: 4 },    // 12.5% chance for 4 notes
+            { threshold: 0.9375, count: 5 },   // 6.25% chance for 5 notes
+            { threshold: 0.96875, count: 6 },  // 3.125% chance for 6 notes
+            { threshold: 0.984375, count: 7 }, // 1.5625% chance for 7 notes
+            { threshold: 1.0, count: 8 }       // 1.5625% chance for 8 notes
+        ];
+
+        const randomValue = this.getRandom();
+        const { count: noteCount } = probabilityThresholds.find(({ threshold }) => randomValue < threshold) || { count: 2 };
+
+        return Array.from({ length: noteCount }, () => this.getRandomNote());
+    }
+}
+
+/**
+ * RhythmModule: Manages rhythm and scheduling of notes.
+ */
+class RhythmModule {
+    constructor(BPM = 60, getRandom = Math.random) {
+        this.BPM = BPM;
+        this.enableRandomRhythms = true;
+        this.noteDurations = [0.125, 0.25, 0.5, 0.75, 1, 1.5, 2, 4];
+        this.getRandom = getRandom;
+        this.rhythmSpread = 1;
+        this.offsetRange = 0.25;
+        this.fillPatterns = this.generateFillPatterns();
+    }
+
+    setRhythmSpread(bars) {
+        this.rhythmSpread = Number.isInteger(bars) && bars >= 1 ? bars : 1;
+        if (this.rhythmSpread !== bars) {
+            console.warn(`Invalid spread length. Setting to default of 1 bar.`);
+        }
+        console.log(`Rhythm spread set to ${this.rhythmSpread} bar${this.rhythmSpread !== 1 ? 's' : ''}.`);
+    }
+
+    setOffsetRange(range) {
+        this.offsetRange = Math.max(0, range);
+        console.log(`Offset range set to ${this.offsetRange} beat${this.offsetRange !== 1 ? 's' : ''}.`);
+    }
+
+    getRandomNoteDuration() {
+        const { noteDurations, getRandom } = this;
+        return noteDurations[Math.floor(getRandom() * noteDurations.length)];
+    }
+
+    getDefaultNoteDuration() {
+        return 1;
+    }
+
+    setRandomRhythmsEnabled(isEnabled) {
+        this.enableRandomRhythms = Boolean(isEnabled);
+        console.log(`Random rhythms enabled: ${this.enableRandomRhythms}`);
+    }
+
+    updateBPM(newBPM) {
+        if (typeof newBPM === 'number' && newBPM > 0) {
+            this.BPM = newBPM;
+            console.log(`RhythmModule BPM updated to ${this.BPM}`);
+        } else {
+            console.warn(`Invalid BPM value: ${newBPM}. BPM must be a positive number.`);
+        }
+    }
+
+    generateFillPatterns() {
+        return [
+            [1, 1, 1, 1],
+           
+            [0.25, 0.25, 0.5],
+          
+        ];
+    }
+
+    getRandomFillPattern() {
+        const { fillPatterns, getRandom } = this;
+        const pattern = fillPatterns[Math.floor(getRandom() * fillPatterns.length)];
+        console.log(`Selected fill pattern: [${pattern.join(', ')}]`);
+        return pattern;
+    }
+
+    generateRhythm() {
+        return this.enableRandomRhythms ? this.getRandomFillPattern() : [this.getDefaultNoteDuration()];
+    }
+}
+
+
+/**
+ * Synth: Main class for synthesizing audio with various settings and randomizations.
+ */
+class Synth {
+    constructor(audioContext, seed = 123456) {
+        if (!(audioContext instanceof (window.AudioContext || window.webkitAudioContext))) {
+            throw new TypeError('audioContext must be an instance of AudioContext');
+        }
+
+        this.context = audioContext;
+        this.gainNode = this.context.createGain();
+        this.connectGainNode();
+
+        // Initialize internal seed and PRNG
+        this.internalSynthSeed = seed;
+        this.prng = new PRNG(this.internalSynthSeed);
+
+        // Initialize modules with PRNG's random
+        this.noteModule = new NoteModule(92.50, this.prng.random.bind(this.prng)); // F♯2 as root note
+        this.rhythmModule = new RhythmModule(60, this.prng.random.bind(this.prng)); // Default BPM is 60
+
+        // Initialize synth parameters
+        this.initSynthParameters();
+
+        // Playback control flags and trackers
+        this.isPlaying = false;
+        this.currentOscillators = new Set(); // Track active oscillators for polyphony
+
+        // Section management
+        this.sectionLengthInBars = 1; // Single bar repetition
+        this.currentSectionNoteList = []; // Holds notes and timings for the current section
+        this.sectionNoteIndex = 0; // Tracks the current note in the section
+        this.isFirstSectionPrepared = false; // Tracks if the first section has been prepared
+
+        // Scheduler settings
+        this.schedulerInterval = 25; // Scheduler runs every 25ms
+        this.scheduleAheadTime = 0.1; // Schedule notes 100ms ahead
+        this.nextNoteTime = 0.0; // Time for the next note
+        this.schedulerTimerID = null; // Reference to the scheduler timer
+
+        // Synth settings
+        this.maxNotes = 16; // Maximum number of notes per bar
+        this.maxScheduledPlays = 4; // Maximum number of times the bar is scheduled ahead
+        this.sequenceNumber = 2; // Start playing at the 5th bar
+        this.currentBar = 0; // Current bar count
+
+        // Start monitoring
+        this.startMonitoring();
+    }
+
+    /**
+     * Connects the gain node to the appropriate destination.
+     */
+    connectGainNode() {
+        const masterGain = window.globalData?.masterGain || this.context.destination;
+        this.gainNode.connect(masterGain);
+    }
+
+    /**
+     * Initializes Synth Parameters with default values tailored for EDM.
+     */
+    initSynthParameters() {
+        // Default Oscillator and Effects Parameters
+        this.setWaveform('sawtooth');
+        this.setDistortion(150, 'soft'); // Increased for heavier distortion
+        this.setFilter({ cutoff: 800, resonance: 2 }); // Emphasize low-end frequencies with richer filter effect
+
+        // Envelope Settings for EDM (short attack and release)
+        this.setEnvelope({
+            attack: 0.01,    // Quick attack for punchiness
+            decay: 0.1,      // Short decay time
+            sustain: 0.3,    // Sustain level to keep some energy
+            release: 0.1     // Quick release
+        });
+
+        // General Settings
+        this.setVolume(0.1);             // Prominent sound
+        this.setOctaveShift(-2);         // Shift down by two octaves for deeper bass
+        this.setPolyphony(true);         // Allow polyphonic play
+
+        // Initialize randomization flags
+        this.setRandomization({
+            waveform: true,
+            envelope: true,
+            filter: true,
+            distortion: true,
+            scheduling: true,
+            notes: true
+        });
+
+        // Initial waveform selection if randomization enabled
+        if (this.enableRandomWaveform) {
+            this.randomizeWaveform();
+        }
+    }
+
+    /**
+     * Updates the gain level.
+     * @param {number} level - Gain level between 0.0 and 1.0
+     */
+    updateGain(level) {
+        if (typeof level !== 'number' || level < 0 || level > 1) {
+            console.warn('Gain level must be a number between 0.0 and 1.0');
+            return;
+        }
+        this.gainNode.gain.setValueAtTime(level, this.context.currentTime);
+        console.log(`Gain updated to ${level}`);
+    }
+
+    /**
+     * Updates the BPM.
+     * @param {number} newBPM
+     */
+    updateTestBPM(newBPM) {
+        if (typeof newBPM !== 'number' || newBPM <= 0) {
+            console.warn('BPM must be a positive number');
+            return;
+        }
+        this.rhythmModule.updateBPM(newBPM);
+        console.log(`Test BPM updated to ${newBPM}`);
+    }
+
+    /**
+     * Updates the section length.
+     * @param {number} bars - Number of bars for section length.
+     */
+    updateSectionLength(bars) {
+        if (!Number.isInteger(bars) || bars <= 0) {
+            console.warn('Section length must be a positive integer');
+            return;
+        }
+        this.sectionLengthInBars = bars;
+        console.log(`Section length updated to ${bars} bar${bars !== 1 ? 's' : ''}`);
+        this.resetSection();
+    }
+
+    /**
+     * Updates note duration options.
+     * @param {Array<number>} durations - Array of note durations in beats.
+     */
+    updateNoteDurations(durations) {
+        if (!Array.isArray(durations) || durations.some(d => typeof d !== 'number' || d <= 0)) {
+            console.warn('Note durations must be an array of positive numbers');
+            return;
+        }
+        this.rhythmModule.noteDurations = durations;
+        console.log(`Note durations updated to [${durations.join(', ')}] beats`);
+    }
+
+    /**
+     * Starts the scheduler and monitoring.
+     */
+    startMonitoring() {
+        if (this.schedulerTimerID) {
+            console.warn('Scheduler is already running.');
+            return; // Prevent multiple schedulers from running
+        }
+        this.schedulerTimerID = setInterval(() => this.scheduler(), this.schedulerInterval);
+        console.log('Monitoring and scheduler started');
+    }
+
+    /**
+     * Stops the scheduler and monitoring.
+     */
+    stopMonitoring() {
+        if (this.schedulerTimerID) {
+            clearInterval(this.schedulerTimerID);
+            this.schedulerTimerID = null;
+            console.log('Monitoring and scheduler stopped');
+        }
+    }
+
+    /**
+     * Resets the current section when parameters change.
+     */
+    resetSection() {
+        this.sectionNoteIndex = 0;
+        this.currentSectionNoteList = [];
+        this.isFirstSectionPrepared = false;
+        if (this.isPlaying) {
+            this.prepareSection();
+        }
+    }
+
+    /**
+     * Updates the internal seed and reinitializes the PRNG and modules.
+     * @param {number|BigInt} newSeed - The new seed value.
+     */
+    updateSeed(newSeed) {
+        if (typeof newSeed !== 'number' && typeof newSeed !== 'bigint') {
+            console.warn('Seed must be a number or BigInt');
+            return;
+        }
+
+        this.internalSynthSeed = newSeed;
+        this.prng = new PRNG(this.internalSynthSeed);
+
+        // Update modules with the new PRNG
+        const random = this.prng.random.bind(this.prng);
+        this.noteModule.getRandom = random;
+        this.rhythmModule.getRandom = random;
+
+        // Reset section preparation
+        this.isFirstSectionPrepared = false;
+        this.sectionNoteIndex = 0;
+        this.currentSectionNoteList = [];
+
+        // Stop current playback and restart if it was playing
+        const wasPlaying = this.isPlaying;
+        this.stopPlaying();
+
+        if (wasPlaying) {
+            // Allow some time for nodes to stop before restarting
+            setTimeout(() => this.startPlaying(), 100);
+        }
+
+        console.log(`Synth seed updated to ${newSeed}.`);
+    }
+
+    /**
+     * Sets randomization flags for various parameters.
+     * @param {object} options - Flags for enabling/disabling randomization.
+     */
+     setRandomization(options) {
+            console.log('Received randomization options:', options); // Debugging line
+            const validOptions = ['waveform', 'envelope', 'filter', 'distortion', 'scheduling', 'notes'];
+            for (const key in options) {
+                console.log(`Checking option: ${key}`); // Debugging line
+                if (validOptions.includes(key)) {
+                    this[`enableRandom${key.charAt(0).toUpperCase() + key.slice(1)}`] = Boolean(options[key]);
+                    console.log(`Randomization for ${key} set to ${options[key]}`); // Confirm successful setting
+                } else {
+                    console.warn(`Invalid randomization option: ${key}`);
+                }
+            }
+            console.log(`Randomization settings updated:`, options);
+        }
+
+    
+
+    /**
+     * Sets the waveform type, including extended options.
+     * @param {string} waveform - Waveform type ('sine', 'square', 'triangle', 'sawtooth', 'pulse', 'noise', 'harmonics')
+     */
+    setWaveform(waveform) {
+        const validWaveforms = ['sine', 'square', 'triangle', 'sawtooth', 'pulse', 'noise', 'harmonics'];
+        if (!validWaveforms.includes(waveform)) {
+            console.warn(`Invalid waveform type. Setting to default 'sawtooth'.`);
+            this.waveform = 'sawtooth';
+        } else {
+            this.waveform = waveform;
+        }
+        console.log(`Waveform set to ${this.waveform}`);
+
+        // Additional configurations for complex waveforms
+        if (this.waveform === 'pulse') {
+            this.pulseWidth = 0.5; // Default pulse width, adjustable for PWM effect
+        } else if (this.waveform === 'harmonics') {
+            this.harmonicRatios = [1, 0.5, 0.25]; // Example harmonic blend, adjustable
+        }
+    }
+
+    /**
+     * Randomly selects and sets a waveform based on the PRNG.
+     */
+    randomizeWaveform() {
+        if (!this.enableRandomWaveform) {
+            console.log('Random waveform selection is disabled.');
+            return;
+        }
+
+        const validWaveforms = ['sine', 'square', 'triangle', 'sawtooth'];
+        const randomIndex = Math.floor(this.prng.random() * validWaveforms.length);
+        const selectedWaveform = validWaveforms[randomIndex];
+        this.setWaveform(selectedWaveform);
+        console.log(`Waveform randomized to ${selectedWaveform}`);
+    }
+
+    /**
+     * Sets the distortion amount and type, allowing for more complex effects.
+     * @param {number} amount - Distortion intensity.
+     * @param {string} type - Distortion type ('soft', 'hard', 'wave-shaping', 'bit-crush')
+     */
+    setDistortion(amount, type = 'soft') {
+        const validTypes = ['soft', 'hard', 'wave-shaping', 'bit-crush'];
+        if (typeof amount !== 'number' || amount <= 0) {
+            console.warn('Distortion amount must be a positive number');
+            return;
+        }
+        if (!validTypes.includes(type)) {
+            console.warn(`Invalid distortion type. Setting to default 'soft'.`);
+            type = 'soft';
+        }
+
+        this.distortionAmount = amount;
+        this.distortionType = type;
+
+        const distortionCurve = this.createDistortionCurve(amount, type);
+        if (!this.distortionNode) {
+            this.distortionNode = this.context.createWaveShaper();
+            this.distortionNode.curve = distortionCurve;
+            this.distortionNode.oversample = '4x';
+            this.gainNode.disconnect();
+            this.gainNode.connect(this.distortionNode).connect(this.context.destination);
+        } else {
+            this.distortionNode.curve = distortionCurve;
+        }
+        console.log(`Distortion set to ${this.distortionType} with amount ${this.distortionAmount}`);
+    }
+
+    /**
+     * Generates a distortion curve based on the specified amount and type.
+     * @param {number} amount - Distortion intensity.
+     * @param {string} type - Distortion type.
+     * @returns {Float32Array} - Distortion curve array.
+     */
+    createDistortionCurve(amount, type) {
+        const curve = new Float32Array(44100);
+        const k = amount * 100;
+        const deg = Math.PI / 180;
+
+        for (let i = 0; i < 44100; ++i) {
+            const x = (i * 2) / 44100 - 1;
+            switch (type) {
+                case 'hard':
+                    curve[i] = Math.sign(x) * (1 - Math.exp(-Math.abs(x * k)));
+                    break;
+                case 'wave-shaping':
+                    curve[i] = (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
+                    break;
+                case 'bit-crush':
+                    const bitDepth = Math.max(1, Math.floor(amount));
+                    curve[i] = Math.round(x * bitDepth) / bitDepth;
+                    break;
+                case 'soft':
+                default:
+                    curve[i] = x / (1 + k * Math.abs(x)); // Default soft clipping
+                    break;
+            }
+        }
+        return curve;
+    }
+
+    /**
+     * Sets the filter parameters.
+     * @param {object} filterParams - { cutoff, resonance }
+     */
+    setFilter({ cutoff, resonance }) {
+        if (cutoff !== undefined) {
+            if (typeof cutoff !== 'number' || cutoff <= 0) {
+                console.warn('Cutoff frequency must be a positive number');
+            } else {
+                this.cutoff = cutoff;
+                console.log(`Filter cutoff set to ${this.cutoff} Hz`);
+            }
+        }
+
+        if (resonance !== undefined) {
+            if (typeof resonance !== 'number' || resonance <= 0) {
+                console.warn('Resonance must be a positive number');
+            } else {
+                this.resonance = resonance;
+                console.log(`Filter resonance set to ${this.resonance}`);
+            }
+        }
+
+        // Update filter node if it exists
+        if (this.filterNode) {
+            this.filterNode.frequency.setValueAtTime(this.cutoff, this.context.currentTime);
+            this.filterNode.Q.setValueAtTime(this.resonance, this.context.currentTime);
+        } else {
+            // Create filter node if it doesn't exist
+            this.filterNode = this.context.createBiquadFilter();
+            this.filterNode.type = 'lowpass';
+            this.filterNode.frequency.setValueAtTime(this.cutoff, this.context.currentTime);
+            this.filterNode.Q.setValueAtTime(this.resonance, this.context.currentTime);
+            this.gainNode.disconnect();
+            this.gainNode.connect(this.filterNode).connect(this.context.destination);
+        }
+    }
+
+    /**
+     * Sets the master volume.
+     * @param {number} volume - Volume level (0.0 to 2.0).
+     */
+    setVolume(volume) {
+        if (typeof volume !== 'number' || volume < 0 || volume > 2) {
+            console.warn('Volume must be a number between 0.0 and 2.0');
+            return;
+        }
+        this.volume = volume;
+        this.gainNode.gain.setValueAtTime(this.volume, this.context.currentTime);
+        console.log(`Volume set to ${this.volume}`);
+    }
+
+    /**
+     * Sets the octave shift.
+     * @param {number} shift - Octave shift amount (-2, -1, 0, 1, 2).
+     */
+    setOctaveShift(shift) {
+        const validShifts = [-2, -1, 0, 1, 2];
+        if (!validShifts.includes(shift)) {
+            console.warn(`Invalid octave shift: ${shift}. Valid options are ${validShifts.join(', ')}.`);
+            return;
+        }
+        this.octaveShift = shift;
+        console.log(`Octave shift set to ${shift} (${shift >= 0 ? '+' : ''}${shift} octaves).`);
+    }
+
+    /**
+     * Sets polyphony mode.
+     * @param {boolean} isPolyphonic - True for polyphonic, false for monophonic.
+     */
+    setPolyphony(isPolyphonic) {
+        this.isPolyphonic = Boolean(isPolyphonic);
+        console.log(`Polyphony set to ${this.isPolyphonic ? 'enabled' : 'disabled'}`);
+    }
+
+    /**
+     * Validates and sets envelope parameters.
+     * Ensures parameters stay within defined bounds.
+     * @param {object} envelope - { attack, decay, sustain, release }
+     */
+    setEnvelope({ attack, decay, sustain, release }) {
+        const minAttack = 0.001;  // 1 ms
+        const maxAttack = 1.0;    // 1 second
+        const minDecay = 0.05;    // 50 ms
+        const maxDecay = 1.0;     // 1 second
+        const minSustain = 0.1;   // 10%
+        const maxSustain = 1.0;   // 100%
+        const minRelease = 0.05;  // 50 ms
+        const maxRelease = 1.0;   // 1 second
+
+        if (attack !== undefined) {
+            if (typeof attack !== 'number' || attack < minAttack || attack > maxAttack) {
+                console.warn(`Attack must be between ${minAttack} and ${maxAttack} seconds.`);
+            } else {
+                this.attack = attack;
+            }
+        }
+
+        if (decay !== undefined) {
+            if (typeof decay !== 'number' || decay < minDecay || decay > maxDecay) {
+                console.warn(`Decay must be between ${minDecay} and ${maxDecay} seconds.`);
+            } else {
+                this.decay = decay;
+            }
+        }
+
+        if (sustain !== undefined) {
+            if (typeof sustain !== 'number' || sustain < minSustain || sustain > maxSustain) {
+                console.warn(`Sustain must be between ${minSustain} and ${maxSustain}.`);
+            } else {
+                this.sustain = sustain;
+            }
+        }
+
+        if (release !== undefined) {
+            if (typeof release !== 'number' || release < minRelease || release > maxRelease) {
+                console.warn(`Release must be between ${minRelease} and ${maxRelease} seconds.`);
+            } else {
+                this.release = release;
+            }
+        }
+
+        console.log(`Envelope updated: Attack=${this.attack}s, Decay=${this.decay}s, Sustain=${this.sustain}, Release=${this.release}s.`);
+    }
+
+    /**
+     * Prepares a new section by generating notes and applying settings.
+     * Ensures notes have short attack and release times and are one octave lower.
+     * Implements pattern-based generation favoring simple baselines.
+     */
+    prepareSection() {
+        // Ensure that the section is prepared only once
+        if (this.isFirstSectionPrepared) {
+            console.log('Reusing existing section pattern for repetition.');
+            return;
+        }
+
+        console.log('Preparing a new section of notes and settings.');
+
+        // Apply fixed settings for EDM
+        this.applyRandomSettings();
+        this.randomizeWaveform();
+
+        const totalBeats = this.sectionLengthInBars * 4; // 4/4 time per bar
+        let currentBeat = 0;
+        this.currentSectionNoteList = [];
+
+        // Define patterns with associated probabilities
+        const patterns = [
+            {
+                name: 'Single Note',
+                probability: 0.6, // 60% chance
+                notes: [1], // 1 note per beat (quarter note)
+            },
+            {
+                name: 'Double Note',
+                probability: 0.3, // 30% chance
+                notes: [0.5, 0.5], // 2 notes per beat (eighth notes)
+            },
+            {
+                name: 'Fast Notes',
+                probability: 0.09, // 9% chance
+                notes: [0.25, 0.25, 0.25, 0.25], // 4 notes per beat (sixteenth notes)
+            },
+            {
+                name: 'All Sixteenth Notes',
+                probability: 0.01, // 1% chance
+                notes: Array(16).fill(0.25), // 16 notes, each sixteenth note (0.25 beat)
+            },
+        ];
+
+        while (currentBeat < totalBeats) {
+            // Select a pattern based on probabilities
+            const pattern = this.selectPattern(patterns);
+
+            // Calculate total duration of the pattern
+            const patternDuration = pattern.notes.reduce((sum, dur) => sum + dur, 0);
+
+            // Check if the pattern fits in the remaining beats
+            if (currentBeat + patternDuration > totalBeats) {
+                // Adjust the pattern to fit
+                const remainingBeats = totalBeats - currentBeat;
+                const feasibleDurations = pattern.notes.filter(dur => dur <= remainingBeats);
+                if (feasibleDurations.length === 0) {
+                    break; // No feasible durations left
+                }
+                pattern.notes = feasibleDurations;
+            }
+
+            // Generate notes based on the selected pattern
+            pattern.notes.forEach(noteDuration => {
+                const durationInSeconds = (60 / this.rhythmModule.BPM) * noteDuration;
+                const startTimeInSeconds = (60 / this.rhythmModule.BPM) * currentBeat;
+
+                // Select frequency based on randomization
+                const frequency = (this.noteModule.enableRandomNotes && this.enableRandomNotes)
+                    ? this.noteModule.getRandomNote() * Math.pow(2, this.octaveShift)
+                    : this.noteModule.getRootNote() * Math.pow(2, this.octaveShift);
+
+                // Add note to the list
+                this.currentSectionNoteList.push({ frequency, startTime: startTimeInSeconds, duration: durationInSeconds });
+
+                currentBeat += noteDuration;
+            });
+        }
+
+        // Set section timing
+        this.sectionStartTime = this.context.currentTime;
+        this.sectionTotalDuration = totalBeats * (60 / this.rhythmModule.BPM);
+
+        console.log(`Section prepared with ${this.currentSectionNoteList.length} notes.`);
+        // Optionally, limit the log to avoid clutter
+        if (this.currentSectionNoteList.length <= 10) {
+            console.log(`Current Section Notes:`, this.currentSectionNoteList);
+        } else {
+            console.log(`Current Section Notes: [Too many to display]`);
+        }
+
+        // Mark the first section as prepared to reuse it for repetition
+        if (this.sectionLengthInBars === 1) {
+            this.isFirstSectionPrepared = true;
+        }
+    }
+
+    /**
+     * Selects a pattern based on defined probabilities.
+     * @param {Array} patterns 
+     * @returns {Object} Selected pattern
+     */
+    selectPattern(patterns) {
+        const rand = this.prng.random();
+        let cumulative = 0;
+
+        for (let pattern of patterns) {
+            cumulative += pattern.probability;
+            if (rand < cumulative) {
+                return pattern;
+            }
+        }
+
+        // Fallback to the last pattern
+        return patterns[patterns.length - 1];
+    }
+
+    /**
+     * Applies random settings to synth parameters using the deterministic PRNG.
+     * For EDM, envelope settings remain fixed to ensure consistent short attack and release.
+     */
+    applyRandomSettings() {
+        // Randomize waveform if enabled
+        if (this.enableRandomWaveform) {
+            const waveforms = ['sine', 'square', 'triangle', 'sawtooth'];
+            const waveform = waveforms[Math.floor(this.prng.random() * waveforms.length)];
+            this.setWaveform(waveform);
+        }
+
+        // Randomize filter settings if enabled
+        if (this.enableRandomFilter) {
+            const cutoff = 500 + this.prng.random() * 4500;       // 500 to 5000 Hz
+            const resonance = 0.5 + this.prng.random() * 9.5;     // 0.5 to 10
+            this.setFilter({ cutoff, resonance });
+        }
+
+        // Randomize distortion if enabled
+        if (this.enableRandomDistortion) {
+            const amount = 100 + this.prng.random() * 100;    // 100 to 200
+            const types = ['soft', 'hard', 'wave-shaping', 'bit-crush'];
+            const type = types[Math.floor(this.prng.random() * types.length)];
+            this.setDistortion(amount, type);
+        }
+
+        // Envelope settings remain fixed for EDM to ensure short attack and release
+        // No randomization applied
+
+        console.log(`Random settings applied: Waveform=${this.waveform}, Cutoff=${this.cutoff.toFixed(0)}Hz, Resonance=${this.resonance.toFixed(2)}, Distortion=${this.distortionAmount.toFixed(2)}, Type=${this.distortionType}`);
+    }
+
+    /**
+     * Sets up the oscillator and connects audio nodes.
+     * @param {number} frequency 
+     * @param {number} startTimeAbsolute - Absolute time in AudioContext to start the note
+     * @returns {OscillatorNode}
+     */
+    setupOscillator(frequency, startTimeAbsolute) {
+        try {
+            const oscillator = this.context.createOscillator();
+            const gainNode = this.context.createGain();
+            const filter = this.context.createBiquadFilter();
+            const distortion = this.context.createWaveShaper();
+
+            // Configure oscillator
+            oscillator.type = this.waveform;
+            oscillator.frequency.setValueAtTime(frequency, startTimeAbsolute);
+
+            // Configure filter
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(this.cutoff, startTimeAbsolute);
+            filter.Q.setValueAtTime(this.resonance, startTimeAbsolute);
+
+            // Configure distortion
+            distortion.curve = this.distortionNode ? this.distortionNode.curve : this.createDistortionCurve(this.distortionAmount, this.distortionType);
+            distortion.oversample = '4x';
+
+            // Configure gain envelope
+            gainNode.gain.setValueAtTime(0, startTimeAbsolute);
+            gainNode.gain.linearRampToValueAtTime(this.volume, startTimeAbsolute + this.attack); // Attack
+            gainNode.gain.linearRampToValueAtTime(this.volume * this.sustain, startTimeAbsolute + this.attack + this.decay); // Decay
+            gainNode.gain.linearRampToValueAtTime(0, startTimeAbsolute + this.attack + this.decay + this.release); // Release
+
+            // Connect audio nodes: oscillator -> filter -> distortion -> gain -> destination
+            oscillator.connect(filter).connect(distortion).connect(gainNode).connect(this.gainNode);
+
+            // Handle oscillator end
+            oscillator.onended = () => {
+                this.cleanupOscillator(oscillator, filter, distortion, gainNode);
+            };
+
+            oscillator.start(startTimeAbsolute);
+            oscillator.stop(startTimeAbsolute + this.attack + this.decay + this.release);
+
+            // Track oscillator for polyphony
+            this.currentOscillators.add(oscillator);
+
+            return oscillator;
+        } catch (error) {
+            console.error('Error setting up oscillator:', error);
+        }
+    }
+
+    /**
+     * Cleans up after the oscillator ends by disconnecting all nodes and removing it from active oscillators.
+     * @param {OscillatorNode} oscillator 
+     * @param {BiquadFilterNode} filter 
+     * @param {WaveShaperNode} distortion 
+     * @param {GainNode} gainNode 
+     */
+    cleanupOscillator(oscillator, filter, distortion, gainNode) {
+        try {
+            gainNode.disconnect();
+            filter.disconnect();
+            distortion.disconnect();
+            oscillator.disconnect();
+        } catch (e) {
+            console.warn('Error during oscillator cleanup:', e);
+        }
+
+        this.currentOscillators.delete(oscillator);
+    }
+
+    /**
+     * Resumes the AudioContext if it is suspended.
+     */
+    resumeAudioContext() {
+        if (this.context.state === 'suspended') {
+            this.context.resume().then(() => {
+                console.log("AudioContext resumed successfully");
+            }).catch(e => console.error("Error resuming AudioContext:", e));
+        }
+    }
+
+    /**
+     * Stops and disconnects all active oscillators.
+     */
+    stopAllOscillators() {
+        this.currentOscillators.forEach(oscillator => {
+            this.stopOscillator(oscillator);
+        });
+        this.currentOscillators.clear();
+    }
+
+    /**
+     * Stops and disconnects a specific oscillator.
+     * @param {OscillatorNode} oscillator 
+     */
+    stopOscillator(oscillator) {
+        try {
+            oscillator.stop();
+            oscillator.disconnect();
+        } catch (e) {
+            console.warn('Error stopping oscillator:', e);
+        }
+        this.currentOscillators.delete(oscillator);
+    }
+
+    /**
+     * Starts the Synth's playback loop with advanced scheduling.
+     */
+    startPlaying() {
+        if (this.isPlaying) {
+            console.warn('Synth is already playing.');
+            return;
+        }
+        this.isPlaying = true;
+
+        // Resume AudioContext if suspended
+        this.resumeAudioContext();
+
+        // Initialize scheduler
+        this.nextNoteTime = this.context.currentTime;
+        this.sectionNoteIndex = 0;
+        this.prepareSection();
+
+        // Start the scheduler
+        if (!this.schedulerTimerID) {
+            this.schedulerTimerID = setInterval(() => this.scheduler(), this.schedulerInterval);
+            console.log(`Synth started playing with advanced scheduling.`);
+        }
+    }
+
+    /**
+     * Stops the Synth's playback loop and all active notes.
+     */
+    stopPlaying() {
+        if (!this.isPlaying) {
+            console.warn('Synth is not playing.');
+            return;
+        }
+        this.isPlaying = false;
+
+        // Stop the scheduler
+        if (this.schedulerTimerID) {
+            clearInterval(this.schedulerTimerID);
+            this.schedulerTimerID = null;
+        }
+
+        // Stop all active oscillators
+        this.stopAllOscillators();
+
+        console.log('Synth stopped playing.');
+    }
+
+    /**
+     * Scheduler function that schedules notes ahead of time.
+     */
+    scheduler() {
+        try {
+            while (this.nextNoteTime < this.context.currentTime + this.scheduleAheadTime) {
+                this.scheduleNote(this.sectionNoteIndex, this.nextNoteTime);
+                this.nextNoteTime += this.getNoteDuration(this.sectionNoteIndex);
+                this.sectionNoteIndex++;
+
+                if (this.sectionNoteIndex >= this.currentSectionNoteList.length) {
+                    // Reset for the next section (which is the same single bar)
+                    this.sectionNoteIndex = 0;
+                    this.prepareSection(); // This will reuse the existing pattern
+                }
+            }
+        } catch (error) {
+            console.error('Error in scheduler:', error);
+            this.stopPlaying(); // Stop playing to prevent runaway
+        }
+    }
+
+    /**
+     * Schedules a single note at a specific time.
+     * @param {number} noteIndex 
+     * @param {number} time - Absolute time in AudioContext to schedule the note
+     */
+    scheduleNote(noteIndex, time) {
+        if (noteIndex >= this.currentSectionNoteList.length) {
+            console.warn('Attempted to schedule a note beyond the current section.');
+            return;
+        }
+
+        const note = this.currentSectionNoteList[noteIndex];
+        if (!note) {
+            console.warn(`Note at index ${noteIndex} is undefined.`);
+            return;
+        }
+
+        this.setupOscillator(note.frequency, time);
+        // Optional: Remove or limit console logs to prevent clutter
+        // console.log(`Scheduled note ${noteIndex + 1}/${this.currentSectionNoteList.length} at ${time.toFixed(2)}s with frequency ${note.frequency}Hz.`);
+    }
+
+    /**
+     * Retrieves the duration of a note in seconds.
+     * @param {number} noteIndex 
+     * @returns {number} Duration of the note in seconds.
+     */
+    getNoteDuration(noteIndex) {
+        if (noteIndex >= this.currentSectionNoteList.length) {
+            console.warn(`Note index ${noteIndex} out of bounds.`);
+            return 0.5; // Default duration
+        }
+
+        return this.currentSectionNoteList[noteIndex].duration;
+    }
+
+    /**
+     * Sets the filter parameters.
+     * @param {object} filterParams - { cutoff, resonance }
+     */
+    setFilter({ cutoff, resonance }) {
+        if (cutoff !== undefined) {
+            if (typeof cutoff !== 'number' || cutoff <= 0) {
+                console.warn('Cutoff frequency must be a positive number');
+            } else {
+                this.cutoff = cutoff;
+                console.log(`Filter cutoff set to ${this.cutoff} Hz`);
+            }
+        }
+
+        if (resonance !== undefined) {
+            if (typeof resonance !== 'number' || resonance <= 0) {
+                console.warn('Resonance must be a positive number');
+            } else {
+                this.resonance = resonance;
+                console.log(`Filter resonance set to ${this.resonance}`);
+            }
+        }
+
+        // Update filter node if it exists
+        if (this.filterNode) {
+            this.filterNode.frequency.setValueAtTime(this.cutoff, this.context.currentTime);
+            this.filterNode.Q.setValueAtTime(this.resonance, this.context.currentTime);
+        } else {
+            // Create filter node if it doesn't exist
+            this.filterNode = this.context.createBiquadFilter();
+            this.filterNode.type = 'lowpass';
+            this.filterNode.frequency.setValueAtTime(this.cutoff, this.context.currentTime);
+            this.filterNode.Q.setValueAtTime(this.resonance, this.context.currentTime);
+            this.gainNode.disconnect();
+            this.gainNode.connect(this.filterNode).connect(this.context.destination);
+        }
+    }
+
+    /**
+     * Sets the filter parameters.
+     * @param {object} filterParams - { cutoff, resonance }
+     */
+    setFilter({ cutoff, resonance }) {
+        // Consolidated into one method to avoid duplication
+        if (cutoff !== undefined) {
+            if (typeof cutoff !== 'number' || cutoff <= 0) {
+                console.warn('Cutoff frequency must be a positive number');
+            } else {
+                this.cutoff = cutoff;
+                if (this.filterNode) {
+                    this.filterNode.frequency.setValueAtTime(this.cutoff, this.context.currentTime);
+                }
+                console.log(`Filter cutoff set to ${this.cutoff} Hz`);
+            }
+        }
+
+        if (resonance !== undefined) {
+            if (typeof resonance !== 'number' || resonance <= 0) {
+                console.warn('Resonance must be a positive number');
+            } else {
+                this.resonance = resonance;
+                if (this.filterNode) {
+                    this.filterNode.Q.setValueAtTime(this.resonance, this.context.currentTime);
+                }
+                console.log(`Filter resonance set to ${this.resonance}`);
+            }
+        }
+    }
+
+    /**
+     * Sets the distortion amount.
+     * @param {number} amount - 100 to 200
+     */
+    setDistortionAmount(amount) {
+        if (typeof amount !== 'number' || amount < 100 || amount > 200) {
+            console.warn(`Invalid distortion amount: ${amount}. Must be between 100 and 200 for heavy distortion.`);
+            return;
+        }
+        this.distortionAmount = amount;
+        this.setDistortion(this.distortionAmount, this.distortionType);
+    }
+
+    /**
+     * Sets randomization options for various parameters.
+     * @param {object} options - Flags for enabling/disabling randomization.
+     */
+    setRandomization(options) {
+        const validOptions = ['waveform', 'envelope', 'filter', 'distortion', 'scheduling', 'notes'];
+        for (const key in options) {
+            if (validOptions.includes(key)) {
+                this[`enableRandom${key.charAt(0).toUpperCase() + key.slice(1)}`] = Boolean(options[key]);
+            } else {
+                console.warn(`Invalid randomization option: ${key}`);
+            }
+        }
+        console.log(`Randomization settings updated:`, options);
+    }
+
+    /**
+     * Sets the polyphony mode.
+     * @param {boolean} isPolyphonic 
+     */
+    setPolyphony(isPolyphonic) {
+        this.isPolyphonic = Boolean(isPolyphonic);
+        console.log(`Polyphony set to ${this.isPolyphonic ? 'enabled' : 'disabled'}`);
+    }
+
+    /**
+     * Starts the Synth's playback loop with advanced scheduling.
+     */
+    startPlaying() {
+        if (this.isPlaying) {
+            console.warn('Synth is already playing.');
+            return;
+        }
+        this.isPlaying = true;
+
+        // Resume AudioContext if suspended
+        this.resumeAudioContext();
+
+        // Initialize scheduler
+        this.nextNoteTime = this.context.currentTime;
+        this.sectionNoteIndex = 0;
+        this.prepareSection();
+
+        // Start the scheduler if not already running
+        if (!this.schedulerTimerID) {
+            this.schedulerTimerID = setInterval(() => this.scheduler(), this.schedulerInterval);
+            console.log(`Synth started playing with advanced scheduling.`);
+        }
+    }
+
+    /**
+     * Stops the Synth's playback loop and all active notes.
+     */
+    stopPlaying() {
+        if (!this.isPlaying) {
+            console.warn('Synth is not playing.');
+            return;
+        }
+        this.isPlaying = false;
+
+        // Stop the scheduler
+        if (this.schedulerTimerID) {
+            clearInterval(this.schedulerTimerID);
+            this.schedulerTimerID = null;
+        }
+
+        // Stop all active oscillators
+        this.stopAllOscillators();
+
+        console.log('Synth stopped playing.');
+    }
+
+    /**
+     * Scheduler function that schedules notes ahead of time.
+     */
+    scheduler() {
+        try {
+            while (this.nextNoteTime < this.context.currentTime + this.scheduleAheadTime) {
+                this.scheduleNote(this.sectionNoteIndex, this.nextNoteTime);
+                this.nextNoteTime += this.getNoteDuration(this.sectionNoteIndex);
+                this.sectionNoteIndex++;
+
+                if (this.sectionNoteIndex >= this.currentSectionNoteList.length) {
+                    // Reset for the next section (which is the same single bar)
+                    this.sectionNoteIndex = 0;
+                    this.prepareSection(); // This will reuse the existing pattern
+                }
+            }
+        } catch (error) {
+            console.error('Error in scheduler:', error);
+            this.stopPlaying(); // Stop playing to prevent runaway
+        }
+    }
+
+    /**
+     * Schedules a single note at a specific time.
+     * @param {number} noteIndex 
+     * @param {number} time - Absolute time in AudioContext to schedule the note
+     */
+    scheduleNote(noteIndex, time) {
+        if (noteIndex >= this.currentSectionNoteList.length) {
+            console.warn('Attempted to schedule a note beyond the current section.');
+            return;
+        }
+
+        const note = this.currentSectionNoteList[noteIndex];
+        if (!note) {
+            console.warn(`Note at index ${noteIndex} is undefined.`);
+            return;
+        }
+
+        this.setupOscillator(note.frequency, time);
+        // Optional: Remove or limit console logs to prevent clutter
+        // console.log(`Scheduled note ${noteIndex + 1}/${this.currentSectionNoteList.length} at ${time.toFixed(2)}s with frequency ${note.frequency}Hz.`);
+    }
+
+    /**
+     * Retrieves the duration of a note in seconds.
+     * @param {number} noteIndex 
+     * @returns {number} Duration of the note in seconds.
+     */
+    getNoteDuration(noteIndex) {
+        if (noteIndex >= this.currentSectionNoteList.length) {
+            console.warn(`Note index ${noteIndex} out of bounds.`);
+            return 0.5; // Default duration
+        }
+
+        return this.currentSectionNoteList[noteIndex].duration;
+    }
+
+    /**
+     * Prepares a new section by generating notes and applying settings.
+     * Ensures notes have short attack and release times and are one octave lower.
+     * Implements pattern-based generation favoring simple baselines.
+     */
+    prepareSection() {
+        // Ensure that the section is prepared only once
+        if (this.isFirstSectionPrepared) {
+            console.log('Reusing existing section pattern for repetition.');
+            return;
+        }
+
+        console.log('Preparing a new section of notes and settings.');
+
+        // Apply fixed settings for EDM
+        this.applyRandomSettings();
+        this.randomizeWaveform();
+
+        const totalBeats = this.sectionLengthInBars * 4; // 4/4 time per bar
+        let currentBeat = 0;
+        this.currentSectionNoteList = [];
+
+        // Define patterns with associated probabilities
+        const patterns = [
+            {
+                name: 'Single Note',
+                probability: 0.6, // 60% chance
+                notes: [1], // 1 note per beat (quarter note)
+            },
+            {
+                name: 'Double Note',
+                probability: 0.3, // 30% chance
+                notes: [0.5, 0.5], // 2 notes per beat (eighth notes)
+            },
+            {
+                name: 'Fast Notes',
+                probability: 0.09, // 9% chance
+                notes: [0.25, 0.25, 0.25, 0.25], // 4 notes per beat (sixteenth notes)
+            },
+            {
+                name: 'All Sixteenth Notes',
+                probability: 0.01, // 1% chance
+                notes: Array(16).fill(0.25), // 16 notes, each sixteenth note (0.25 beat)
+            },
+        ];
+
+        while (currentBeat < totalBeats) {
+            // Select a pattern based on probabilities
+            const pattern = this.selectPattern(patterns);
+
+            // Calculate total duration of the pattern
+            const patternDuration = pattern.notes.reduce((sum, dur) => sum + dur, 0);
+
+            // Check if the pattern fits in the remaining beats
+            if (currentBeat + patternDuration > totalBeats) {
+                // Adjust the pattern to fit
+                const remainingBeats = totalBeats - currentBeat;
+                const feasibleDurations = pattern.notes.filter(dur => dur <= remainingBeats);
+                if (feasibleDurations.length === 0) {
+                    break; // No feasible durations left
+                }
+                pattern.notes = feasibleDurations;
+            }
+
+            // Generate notes based on the selected pattern
+            pattern.notes.forEach(noteDuration => {
+                const durationInSeconds = (60 / this.rhythmModule.BPM) * noteDuration;
+                const startTimeInSeconds = (60 / this.rhythmModule.BPM) * currentBeat;
+
+                // Select frequency based on randomization
+                const frequency = (this.noteModule.enableRandomNotes && this.enableRandomNotes)
+                    ? this.noteModule.getRandomNote() * Math.pow(2, this.octaveShift)
+                    : this.noteModule.getRootNote() * Math.pow(2, this.octaveShift);
+
+                // Validate frequency to prevent extremely low or high frequencies
+                if (frequency < 20 || frequency > 20000) {
+                    console.warn(`Frequency ${frequency}Hz is out of audible range. Skipping this note.`);
+                } else {
+                    // Add note to the list
+                    this.currentSectionNoteList.push({ frequency, startTime: startTimeInSeconds, duration: durationInSeconds });
+                }
+
+                currentBeat += noteDuration;
+            });
+        }
+
+        // Set section timing
+        this.sectionStartTime = this.context.currentTime;
+        this.sectionTotalDuration = totalBeats * (60 / this.rhythmModule.BPM);
+
+        console.log(`Section prepared with ${this.currentSectionNoteList.length} notes.`);
+        // Optionally, limit the log to avoid clutter
+        if (this.currentSectionNoteList.length <= 10) {
+            console.log(`Current Section Notes:`, this.currentSectionNoteList);
+        } else {
+            console.log(`Current Section Notes: [Too many to display]`);
+        }
+
+        // Mark the first section as prepared to reuse it for repetition
+        if (this.sectionLengthInBars === 1) {
+            this.isFirstSectionPrepared = true;
+        }
+    }
+
+    /**
+     * Selects a pattern based on defined probabilities.
+     * @param {Array} patterns 
+     * @returns {Object} Selected pattern
+     */
+    selectPattern(patterns) {
+        const rand = this.prng.random();
+        let cumulative = 0;
+
+        for (let pattern of patterns) {
+            cumulative += pattern.probability;
+            if (rand < cumulative) {
+                return pattern;
+            }
+        }
+
+        // Fallback to the last pattern
+        return patterns[patterns.length - 1];
+    }
+
+    /**
+     * Applies random settings to synth parameters using the deterministic PRNG.
+     * For EDM, envelope settings remain fixed to ensure consistent short attack and release.
+     */
+    applyRandomSettings() {
+        // Randomize waveform if enabled
+        if (this.enableRandomWaveform) {
+            const waveforms = ['sine', 'square', 'triangle', 'sawtooth'];
+            const waveform = waveforms[Math.floor(this.prng.random() * waveforms.length)];
+            this.setWaveform(waveform);
+        }
+
+        // Randomize filter settings if enabled
+        if (this.enableRandomFilter) {
+            const cutoff = 500 + this.prng.random() * 4500;       // 500 to 5000 Hz
+            const resonance = 0.5 + this.prng.random() * 9.5;     // 0.5 to 10
+            this.setFilter({ cutoff, resonance });
+        }
+
+        // Randomize distortion if enabled
+        if (this.enableRandomDistortion) {
+            const amount = 100 + this.prng.random() * 100;    // 100 to 200
+            const types = ['soft', 'hard', 'wave-shaping', 'bit-crush'];
+            const type = types[Math.floor(this.prng.random() * types.length)];
+            this.setDistortion(amount, type);
+        }
+
+        // Envelope settings remain fixed for EDM to ensure short attack and release
+        // No randomization applied
+
+        console.log(`Random settings applied: Waveform=${this.waveform}, Cutoff=${this.cutoff.toFixed(0)}Hz, Resonance=${this.resonance.toFixed(2)}, Distortion=${this.distortionAmount.toFixed(2)}, Type=${this.distortionType}`);
+    }
+
+    /**
+     * Sets up the oscillator and connects audio nodes.
+     * @param {number} frequency 
+     * @param {number} startTimeAbsolute - Absolute time in AudioContext to start the note
+     * @returns {OscillatorNode}
+     */
+    setupOscillator(frequency, startTimeAbsolute) {
+        try {
+            const oscillator = this.context.createOscillator();
+            const gainNode = this.context.createGain();
+            const filter = this.context.createBiquadFilter();
+            const distortion = this.context.createWaveShaper();
+
+            // Configure oscillator
+            oscillator.type = this.waveform;
+            oscillator.frequency.setValueAtTime(frequency, startTimeAbsolute);
+
+            // Configure filter
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(this.cutoff, startTimeAbsolute);
+            filter.Q.setValueAtTime(this.resonance, startTimeAbsolute);
+
+            // Configure distortion
+            distortion.curve = this.distortionNode ? this.distortionNode.curve : this.createDistortionCurve(this.distortionAmount, this.distortionType);
+            distortion.oversample = '4x';
+
+            // Configure gain envelope
+            gainNode.gain.setValueAtTime(0, startTimeAbsolute);
+            gainNode.gain.linearRampToValueAtTime(this.volume, startTimeAbsolute + this.attack); // Attack
+            gainNode.gain.linearRampToValueAtTime(this.volume * this.sustain, startTimeAbsolute + this.attack + this.decay); // Decay
+            gainNode.gain.linearRampToValueAtTime(0, startTimeAbsolute + this.attack + this.decay + this.release); // Release
+
+            // Connect audio nodes: oscillator -> filter -> distortion -> gain -> destination
+            oscillator.connect(filter).connect(distortion).connect(gainNode).connect(this.gainNode);
+
+            // Handle oscillator end
+            oscillator.onended = () => {
+                this.cleanupOscillator(oscillator, filter, distortion, gainNode);
+            };
+
+            oscillator.start(startTimeAbsolute);
+            oscillator.stop(startTimeAbsolute + this.attack + this.decay + this.release);
+
+            // Track oscillator for polyphony
+            this.currentOscillators.add(oscillator);
+
+            return oscillator;
+        } catch (error) {
+            console.error('Error setting up oscillator:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Cleans up after the oscillator ends by disconnecting all nodes and removing it from active oscillators.
+     * @param {OscillatorNode} oscillator 
+     * @param {BiquadFilterNode} filter 
+     * @param {WaveShaperNode} distortion 
+     * @param {GainNode} gainNode 
+     */
+    cleanupOscillator(oscillator, filter, distortion, gainNode) {
+        try {
+            gainNode.disconnect();
+            filter.disconnect();
+            distortion.disconnect();
+            oscillator.disconnect();
+        } catch (e) {
+            console.warn('Error during oscillator cleanup:', e);
+        }
+
+        this.currentOscillators.delete(oscillator);
+    }
+
+    /**
+     * Resumes the AudioContext if it is suspended.
+     */
+    resumeAudioContext() {
+        if (this.context.state === 'suspended') {
+            this.context.resume().then(() => {
+                console.log("AudioContext resumed successfully");
+            }).catch(e => console.error("Error resuming AudioContext:", e));
+        }
+    }
+
+    /**
+     * Stops and disconnects all active oscillators.
+     */
+    stopAllOscillators() {
+        this.currentOscillators.forEach(oscillator => {
+            this.stopOscillator(oscillator);
+        });
+        this.currentOscillators.clear();
+    }
+
+    /**
+     * Stops and disconnects a specific oscillator.
+     * @param {OscillatorNode} oscillator 
+     */
+    stopOscillator(oscillator) {
+        try {
+            oscillator.stop();
+            oscillator.disconnect();
+        } catch (e) {
+            console.warn('Error stopping oscillator:', e);
+        }
+        this.currentOscillators.delete(oscillator);
+    }
+
+    /**
+     * Starts the Synth's playback loop with advanced scheduling.
+     */
+    startPlaying() {
+        if (this.isPlaying) {
+            console.warn('Synth is already playing.');
+            return;
+        }
+        this.isPlaying = true;
+
+        // Resume AudioContext if suspended
+        this.resumeAudioContext();
+
+        // Initialize scheduler
+        this.nextNoteTime = this.context.currentTime;
+        this.sectionNoteIndex = 0;
+        this.prepareSection();
+
+        // Start the scheduler if not already running
+        if (!this.schedulerTimerID) {
+            this.schedulerTimerID = setInterval(() => this.scheduler(), this.schedulerInterval);
+            console.log(`Synth started playing with advanced scheduling.`);
+        }
+    }
+
+    /**
+     * Stops the Synth's playback loop and all active notes.
+     */
+    stopPlaying() {
+        if (!this.isPlaying) {
+            console.warn('Synth is not playing.');
+            return;
+        }
+        this.isPlaying = false;
+
+        // Stop the scheduler
+        if (this.schedulerTimerID) {
+            clearInterval(this.schedulerTimerID);
+            this.schedulerTimerID = null;
+        }
+
+        // Stop all active oscillators
+        this.stopAllOscillators();
+
+        console.log('Synth stopped playing.');
+    }
+
+    /**
+     * Scheduler function that schedules notes ahead of time.
+     */
+    scheduler() {
+        try {
+            while (this.nextNoteTime < this.context.currentTime + this.scheduleAheadTime) {
+                this.scheduleNote(this.sectionNoteIndex, this.nextNoteTime);
+                this.nextNoteTime += this.getNoteDuration(this.sectionNoteIndex);
+                this.sectionNoteIndex++;
+
+                if (this.sectionNoteIndex >= this.currentSectionNoteList.length) {
+                    // Reset for the next section (which is the same single bar)
+                    this.sectionNoteIndex = 0;
+                    this.prepareSection(); // This will reuse the existing pattern
+                }
+            }
+        } catch (error) {
+            console.error('Error in scheduler:', error);
+            this.stopPlaying(); // Stop playing to prevent runaway
+        }
+    }
+
+    /**
+     * Schedules a single note at a specific time.
+     * @param {number} noteIndex 
+     * @param {number} time - Absolute time in AudioContext to schedule the note
+     */
+    scheduleNote(noteIndex, time) {
+        if (noteIndex >= this.currentSectionNoteList.length) {
+            console.warn('Attempted to schedule a note beyond the current section.');
+            return;
+        }
+
+        const note = this.currentSectionNoteList[noteIndex];
+        if (!note) {
+            console.warn(`Note at index ${noteIndex} is undefined.`);
+            return;
+        }
+
+        const oscillator = this.setupOscillator(note.frequency, time);
+        if (!oscillator) {
+            console.warn(`Failed to schedule note at index ${noteIndex}`);
+            return;
+        }
+
+        // Optional: Limit console logs to prevent clutter
+        // console.log(`Scheduled note ${noteIndex + 1}/${this.currentSectionNoteList.length} at ${time.toFixed(2)}s with frequency ${note.frequency}Hz.`);
+    }
+
+    /**
+     * Retrieves the duration of a note in seconds.
+     * @param {number} noteIndex 
+     * @returns {number} Duration of the note in seconds.
+     */
+    getNoteDuration(noteIndex) {
+        if (noteIndex >= this.currentSectionNoteList.length) {
+            console.warn(`Note index ${noteIndex} out of bounds.`);
+            return 0.5; // Default duration
+        }
+
+        return this.currentSectionNoteList[noteIndex].duration;
+    }
+
+    /**
+     * Sets the distortion amount.
+     * @param {number} amount - 100 to 200
+     */
+    setDistortionAmount(amount) {
+        if (typeof amount !== 'number' || amount < 100 || amount > 200) {
+            console.warn(`Invalid distortion amount: ${amount}. Must be between 100 and 200 for heavy distortion.`);
+            return;
+        }
+        this.distortionAmount = amount;
+        this.setDistortion(this.distortionAmount, this.distortionType);
+    }
+
+    /**
+     * Enables or disables randomization of synth parameters.
+     * @param {string} type - 'waveform', 'envelope', 'filter', 'distortion', 'scheduling', 'notes'
+     * @param {boolean} isEnabled 
+     */
+    setRandomization(type, isEnabled) {
+        const validTypes = ['waveform', 'envelope', 'filter', 'distortion', 'scheduling', 'notes'];
+        if (!validTypes.includes(type)) {
+            console.warn(`Invalid randomization type: ${type}`);
+            return;
+        }
+
+        this[`enableRandom${type.charAt(0).toUpperCase() + type.slice(1)}`] = Boolean(isEnabled);
+
+        // Update dependent modules if necessary
+        if (type === 'notes') {
+            this.noteModule.setRandomNotesEnabled(isEnabled);
+        }
+
+        console.log(`Randomization for ${type} set to ${isEnabled}`);
+    }
+
+    /**
+     * Updates the BPM in the RhythmModule.
+     * @param {number} newBPM 
+     */
+    updateBPM(newBPM) {
+        if (typeof newBPM !== 'number' || newBPM <= 0) {
+            console.warn('BPM must be a positive number');
+            return;
+        }
+        this.rhythmModule.updateBPM(newBPM);
+        this.resetSection(); // Reset section to adapt to new BPM
+        console.log(`BPM updated to ${newBPM}`);
+    }
+
+    /**
+     * Sets random rhythms enabled or disabled.
+     * @param {boolean} isEnabled 
+     */
+    setRandomRhythms(isEnabled) {
+        this.rhythmModule.setRandomRhythmsEnabled(isEnabled);
+        console.log(`Random rhythms ${isEnabled ? 'enabled' : 'disabled'}`);
+    }
+
+    /**
+     * Starts monitoring the synth's status and logs it periodically.
+     * Logs every 5 seconds.
+     */
+    startMonitoring() {
+        if (this.monitorInterval) {
+            console.warn('Monitoring is already active.');
+            return; // Prevent multiple intervals
+        }
+
+        this.monitorInterval = setInterval(() => {
+            console.log(`--- Synth Status ---`);
+            console.log(`Is Playing: ${this.isPlaying}`);
+            console.log(`Active Oscillators: ${this.currentOscillators.size}`);
+            console.log(`Envelope Settings: Attack=${this.attack}s, Decay=${this.decay}s, Sustain=${this.sustain}, Release=${this.release}s`);
+            console.log(`Current Section Index: ${this.sectionNoteIndex}/${this.currentSectionNoteList.length}`);
+            console.log(`Filter: Cutoff=${this.cutoff}Hz, Resonance=${this.resonance}`);
+            console.log(`Waveform: ${this.waveform}`);
+            console.log(`Distortion: Type=${this.distortionType}, Amount=${this.distortionAmount}`);
+            console.log(`---------------------`);
+
+            // Additional Checks
+            if (this.isPlaying) {
+                // Ensure that the scheduler is active
+                if (!this.schedulerTimerID) {
+                    console.warn('Scheduler is not running while Synth is playing. Restarting scheduler.');
+                    this.schedulerTimerID = setInterval(() => this.scheduler(), this.schedulerInterval);
+                }
+
+                // Ensure at least one oscillator is active
+                if (this.currentOscillators.size === 0 && this.sectionNoteIndex < this.currentSectionNoteList.length) {
+                    console.warn('No active oscillators detected. Attempting to reschedule the current note.');
+                    this.scheduleNote(this.sectionNoteIndex, this.nextNoteTime);
+                    this.sectionNoteIndex++;
+                }
+
+                // Verify AudioContext state
+                if (this.context.state === 'suspended') {
+                    console.warn('AudioContext is suspended. Attempting to resume.');
+                    this.resumeAudioContext();
+                }
+            }
+        }, 5000); // Every 5 seconds
+    }
+
+    /**
+     * Stops monitoring the synth's status.
+     */
+    stopMonitoring() {
+        if (this.monitorInterval) {
+            clearInterval(this.monitorInterval);
+            this.monitorInterval = null;
+            console.log('Monitoring stopped.');
+        }
+    }
+}
+
+// Reference to the Synth instance
+let synth;
+
+
+
+
+
+    // Ensure globalData.audioContext is defined before this script runs
+
+    document.addEventListener("dataLoadingComplete", () => {
+        if (globalData.songsArray && globalData.songsArray.length > 0) {
+            const firstSong = globalData.songsArray[0];
+            try {
+                synth = new Synth(globalData.audioContext, BigInt(firstSong.seed));
+                window.synth = synth; // Make Synth globally accessible
+
+                // Set initial parameters (if any)
+                synth.setWaveform('sawtooth');        // Changed to 'sawtooth' for richer harmonics
+                synth.setVolume(0.1);                  // Increased volume for a more prominent sound
+                synth.setEnvelope({
+                    attack: 0.01,   // Short attack time in seconds
+                    decay: 0.1,     // Decay time in seconds
+                    sustain: 1.0,   // Sustain level (0.0 to 1.0)
+                    release: 0.1    // Release time in seconds
+                });
+                synth.setFilter({
+                    cutoff: 800,      // Lower cutoff frequency to emphasize bass
+                    resonance: 2      // Increased resonance for a richer filter effect
+                });
+                synth.setDistortionAmount(150);        // Set to 150 for heavier distortion
+                synth.setOctaveShift(-2);               // Shift down by two octaves for deeper bass
+                synth.setPolyphony(true);               // Set to polyphonic mode
+
+                // Enable selected randomization algorithms
+                synth.setRandomization('waveform', true);
+                synth.setRandomization('filter', true);
+                synth.setRandomization('distortion', true);
+                synth.setRandomization('scheduling', true);
+                synth.setRandomization('notes', true);
+                // Envelope randomization remains disabled to maintain consistent attack and release
+
+                // Initial Log
+                console.log(`Synth initialized with seed ${firstSong.seed} at ${synth.rhythmModule.BPM} BPM with updated EDM settings.`);
+            } catch (error) {
+                console.error('Error initializing Synth:', error);
+            }
+        } else {
+            console.error('No songs available to initialize Synth.');
+        }
+    });
+
+    /**
+     * Event Listener: Playback Started
+     * Triggers Synth to start playing.
+     */
+    document.addEventListener("playbackStarted", () => {
+        if (synth) {
+            synth.startPlaying();
+        }
+    });
+
+    /**
+     * Event Listener: Playback Stopped
+     * Triggers Synth to stop playing.
+     */
+    document.addEventListener("playbackStopped", () => {
+        if (synth) {
+            synth.stopPlaying();
+        }
+    });
+
+    /**
+     * Update Synth seed when the song changes.
+     * This should be called in handleNextSong and handlePreviousSong.
+     */
+    window.updateSynthSeed = function() {
+        if (synth && globalData.currentSeed !== undefined) {
+            synth.updateSeed(BigInt(globalData.currentSeed));
+        } else {
+            console.error('Cannot update Synth seed. Synth or globalData.currentSeed is undefined.');
+        }
+    };
+
+    /**
+     * Modifications to handleNextSong and handlePreviousSong to update the Synth seed.
+     */
+    window.handleNextSong = function() {
+        globalData.nextSong();
+        updateSeedDisplay();
+        updateSynthSeed(); // Update the Synth with the new seed
+    };
+
+    window.handlePreviousSong = function() {
+        globalData.previousSong();
+        updateSeedDisplay();
+        updateSynthSeed(); // Update the Synth with the new seed
+    };
+
+    /**
+     * Optional: Add Keyboard Controls for Playback
+     * Pressing the spacebar toggles playback.
+     */
+    document.addEventListener('keydown', (event) => {
+        if (event.code === 'Space') {
+            event.preventDefault();
+            if (synth) {
+                if (synth.isPlaying) {
+                    synth.stopPlaying();
+                } else {
+                    synth.startPlaying();
+                }
+            }
+        }
+    });
+</script>
+
+
+
+
+</body>
+</html>
+
+

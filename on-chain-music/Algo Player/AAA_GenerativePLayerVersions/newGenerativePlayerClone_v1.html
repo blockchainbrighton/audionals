@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Web3 Audio Sequencer Playback Engine Test</title>
+</head>
+<body>
+    <h1>Web3 Audio Sequencer Playback Engine Test</h1>
+    <p>Check the console for the 2D array of songs and channels with metadata.</p>
+
+    <script>
+        // ---------------------- Logging Utility ---------------------- //
+        class Logger {
+            constructor(flushInterval = 1000) {
+                this.infoQueue = [];
+                this.flushInterval = flushInterval;
+                this.isFlushing = false;
+                this.startFlushing();
+            }
+
+            info(message) {
+                this.infoQueue.push(message);
+            }
+
+            warn(message) {
+                console.warn(message);
+            }
+
+            error(message) {
+                console.error(message);
+            }
+
+            startFlushing() {
+                setInterval(() => {
+                    if (this.infoQueue.length > 0) {
+                        console.log(this.infoQueue.join('\n'));
+                        this.infoQueue = [];
+                    }
+                }, this.flushInterval);
+            }
+        }
+
+        const logger = new Logger(1000); // Flush every 1000ms
+
+        // ---------------------- Global Data Initialization ---------------------- //
+        window.globalData = window.globalData || {
+            isSingleSong: false,
+            isMultipleSongs: false,
+            songsArray: [],
+            audioBuffers: {},
+            reverseAudioBuffers: {},
+            audioContext: new (window.AudioContext || window.webkitAudioContext)()
+        };
+
+        // ---------------------- Configuration ---------------------- //
+        const keyMap = {
+            0: "projectName",
+            1: "artistName",
+            2: "projectBPM",
+            3: "currentSequence",
+            4: "channelURLs",
+            5: "channelVolume",
+            6: "channelPlaybackSpeed",
+            7: "trimSettings",
+            8: "projectChannelNames",
+            9: "startSliderValue",
+            10: "endSliderValue",
+            11: "totalSampleDuration",
+            12: "start",
+            13: "end",
+            14: "projectSequences",
+            15: "steps"
+        };
+        const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([k, v]) => [v, +k]));
+        const channelMap = Array.from({ length: 16 }, (_, i) => `ch${i}`);
+        const reverseChannelMap = Object.fromEntries(channelMap.map((ch, i) => [ch, i]));
+
+        // ---------------------- Utility Functions ---------------------- //
+        const loadPako = async () => {
+            try {
+                const pakoModule = await import('/content/fba6f95fb1152db43304a27dce8cb8c65509eba6ab0b6958cedeb33e5f443077i0');
+                window.pako = pakoModule.default || pakoModule;
+            } catch (error) {
+                logger.error("Error loading Pako library: " + error);
+                throw error;
+            }
+        };
+
+        const decompressSteps = steps => steps.flatMap(step => {
+            if (typeof step === "number") return step;
+            if (step?.r) {
+                const [start, end] = step.r;
+                return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+            }
+            if (typeof step === "object" && step.index !== undefined) {
+                return { index: step.index, reverse: step.reverse || false };
+            }
+            return [];
+        });
+
+        const deserialize = data => {
+            const recursive = obj => Array.isArray(obj) ? obj.map(recursive) :
+                obj && typeof obj === "object" ? Object.fromEntries(
+                    Object.entries(obj).map(([k, v]) => {
+                        const mappedKey = keyMap[k] || k;
+                        if (mappedKey === "projectSequences") {
+                            const sequences = {};
+                            for (const [sKey, sVal] of Object.entries(v)) {
+                                const seqName = `Sequence${sKey.replace(/^s/, "")}`;
+                                sequences[seqName] = Object.fromEntries(
+                                    Object.entries(sVal).map(([tKey, tVal]) => {
+                                        const chName = `ch${reverseChannelMap[tKey]}`;
+                                        return [chName, { steps: decompressSteps(tVal[reverseKeyMap.steps] || []) }];
+                                    })
+                                );
+                            }
+                            return [mappedKey, sequences];
+                        }
+                        return [mappedKey, recursive(v)];
+                    })
+                ) : obj;
+            return recursive(data);
+        };
+
+        const fetchAndDeserialize = async url => {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Network response was not ok for URL: ${url}`);
+                const arrayBuffer = await response.arrayBuffer();
+                const inflated = window.pako.inflate(new Uint8Array(arrayBuffer));
+                const json = JSON.parse(new TextDecoder("utf-8").decode(inflated));
+                return deserialize(json);
+            } catch (error) {
+                logger.error(`Error fetching/deserializing URL ${url}: ${error}`);
+                throw error;
+            }
+        };
+
+        const fetchAndProcessData = async urls => {
+            const results = await Promise.all(urls.map(url => fetchAndDeserialize(url).catch(() => null)));
+            return results.filter(Boolean);
+        };
+
+        const processSongsAndChannels = data => {
+            const songs = data.map((songData, idx) => {
+                const {
+                    projectName = `Song_${idx + 1}`,
+                    artistName = "Unknown Artist",
+                    projectBPM = 120,
+                    currentSequence = 0,
+                    channelURLs = [],
+                    channelVolume = [],
+                    channelPlaybackSpeed = [],
+                    trimSettings = {},
+                    projectChannelNames = [],
+                    startSliderValue = 0,
+                    endSliderValue = 100,
+                    totalSampleDuration = 0,
+                    start = 0,
+                    end = 100,
+                    projectSequences = {}
+                } = songData;
+
+                const channels = Array.from({ length: 16 }, (_, i) => ({
+                    id: channelMap[i],
+                    name: projectChannelNames[i] || `Channel_${i}`,
+                    url: channelURLs[i] || `URL_not_found`,
+                    metadata: {
+                        volume: channelVolume[i] ?? 1.0,
+                        playbackSpeed: channelPlaybackSpeed[i] ?? 1.0,
+                        trimStartTime_Percentage: trimSettings[i]?.start || 0,
+                        trimEndTime_Percentage: trimSettings[i]?.end || 100,
+                        startSliderValue,
+                        endSliderValue,
+                        totalSampleDuration,
+                        start,
+                        end
+                    }
+                }));
+
+                return {
+                    id: projectName,
+                    artist: artistName,
+                    bpm: projectBPM,
+                    currentSequence,
+                    totalSequences: Object.keys(projectSequences).length,
+                    channels,
+                    projectSequences
+                };
+            });
+            window.globalData.songsArray = songs;
+            return songs;
+        };
+
+        const logSongsArray = songs => {
+            logger.info(`Total Songs: ${songs.length}`);
+            songs.forEach((song, idx) => {
+                logger.info(`\nSong #${idx + 1}: ${song.id} by ${song.artist} - BPM: ${song.bpm} - Total Sequences: ${song.totalSequences}`);
+                // Summarize channel metadata instead of detailed logs
+                const channelSummaries = song.channels.map((ch, cIdx) => {
+                    const { volume, playbackSpeed, trimStartTime_Percentage, trimEndTime_Percentage, startSliderValue, endSliderValue, totalSampleDuration, start, end } = ch.metadata;
+                    return `\tChannel ${cIdx + 1} - ${ch.id} (${ch.name}): Volume=${volume}, PlaybackSpeed=${playbackSpeed}, Trim=${trimStartTime_Percentage}%-${trimEndTime_Percentage}%, Slider=${startSliderValue}-${endSliderValue}, Duration=${totalSampleDuration}s, Start=${start}%, End=${end}%`;
+                }).join('\n');
+                logger.info(channelSummaries);
+                logger.info(`\tProject Sequences for ${song.id}:\n${JSON.stringify(song.projectSequences, null, 2)}`);
+            });
+
+            window.globalData.isSingleSong = songs.length === 1;
+            window.globalData.isMultipleSongs = songs.length > 1;
+            logger.info(`\nFlags set - isSingleSong: ${window.globalData.isSingleSong}, isMultipleSongs: ${window.globalData.isMultipleSongs}`);
+
+            document.dispatchEvent(new CustomEvent("dataLoadingComplete", {
+                detail: {
+                    success: true,
+                    totalSongs: songs.length,
+                    songs: songs.map(({ id, totalSequences }) => ({ id, totalSequences }))
+                }
+            }));
+        };
+
+        const base64ToArrayBuffer = base64 => Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
+
+        const extractBase64FromHTML = html => {
+            const src = new DOMParser().parseFromString(html, "text/html")
+                .querySelector("audio[data-audionalSampleName] source")?.src;
+            return src && src.includes("base64") ? src.split(",")[1] : null;
+        };
+
+        const fetchAndDecodeAudio = async (url, audioContext) => {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Failed to fetch audio from ${url}`);
+            const contentType = response.headers.get("Content-Type");
+            let arrayBuffer;
+
+            if (/audio\/(wav|mpeg|mp4)|video\/mp4/.test(contentType)) {
+                arrayBuffer = await response.arrayBuffer();
+            } else if (/application\/json/.test(contentType)) {
+                const json = await response.json();
+                arrayBuffer = base64ToArrayBuffer(json.audioData.split(",")[1]);
+            } else if (/text\/html/.test(contentType)) {
+                const text = await response.text();
+                const base64 = extractBase64FromHTML(text);
+                arrayBuffer = base64 ? base64ToArrayBuffer(base64) : null;
+            } else {
+                throw new Error("Unsupported content type");
+            }
+
+            if (!arrayBuffer) throw new Error("No audio data found");
+
+            return audioContext.decodeAudioData(arrayBuffer);
+        };
+
+        const reverseArray = array => {
+            const reversed = new Float32Array(array.length);
+            for (let i = 0, len = array.length; i < len; i++) reversed[i] = array[len - i - 1];
+            return reversed;
+        };
+
+        const createReverseAudioBuffer = (audioBuffer, audioContext) => {
+            const reversedBuffer = audioContext.createBuffer(audioBuffer.numberOfChannels, audioBuffer.length, audioBuffer.sampleRate);
+            for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+                reversedBuffer.copyToChannel(reverseArray(audioBuffer.getChannelData(ch)), ch);
+            }
+            return reversedBuffer;
+        };
+
+        const processAllAudioChannels = async () => {
+            const { songsArray, audioBuffers, reverseAudioBuffers, audioContext } = window.globalData;
+            if (!songsArray.length) {
+                logger.error("No songs available to process.");
+                return;
+            }
+
+            const logEntries = [];
+
+            for (const song of songsArray) {
+                audioBuffers[song.id] = {};
+                reverseAudioBuffers[song.id] = {};
+
+                for (const channel of song.channels) {
+                    try {
+                        const audioBuffer = await fetchAndDecodeAudio(channel.url, audioContext);
+                        const { trimStartTime_Percentage, trimEndTime_Percentage, playbackSpeed } = channel.metadata;
+
+                        if (trimEndTime_Percentage <= trimStartTime_Percentage) {
+                            logger.warn(`Invalid trim percentages for ${song.id} - ${channel.id}`);
+                            continue;
+                        }
+
+                        const startSample = Math.floor((trimStartTime_Percentage / 100) * audioBuffer.length);
+                        const endSample = Math.floor((trimEndTime_Percentage / 100) * audioBuffer.length);
+                        if (endSample <= startSample) {
+                            logger.warn(`Non-positive trimmed length for ${song.id} - ${channel.id}`);
+                            continue;
+                        }
+
+                        const trimmedBuffer = audioContext.createBuffer(audioBuffer.numberOfChannels, endSample - startSample, audioBuffer.sampleRate);
+                        for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+                            trimmedBuffer.copyToChannel(audioBuffer.getChannelData(ch).subarray(startSample, endSample), ch);
+                        }
+
+                        const reversedTrimmedBuffer = createReverseAudioBuffer(trimmedBuffer, audioContext);
+                        audioBuffers[song.id][channel.id] = trimmedBuffer;
+                        reverseAudioBuffers[song.id][channel.id] = reversedTrimmedBuffer;
+
+                        const audioFileName = channel.url.split('/').pop() || "Unknown";
+                        logEntries.push({
+                            songId: song.id,
+                            channelId: channel.id,
+                            audioFileName,
+                            fullDuration: audioBuffer.duration.toFixed(2),
+                            durationAfterTrimming: trimmedBuffer.duration.toFixed(2)
+                        });
+
+                        logger.info(`Processed ${song.id} - ${channel.id}`);
+                    } catch (error) {
+                        logger.error(`Failed to process ${song.id} - ${channel.id}: ${error}`);
+                    }
+                }
+            }
+
+            if (logEntries.length) {
+                const summary = logEntries.map(({ songId, channelId, audioFileName, fullDuration, durationAfterTrimming }) => 
+                    `Song: ${songId}, Channel: ${channelId}, File: ${audioFileName}, Full Duration: ${fullDuration}s, Trimmed Duration: ${durationAfterTrimming}s`
+                ).join('\n');
+                logger.info("----- Audio Samples Duration Information -----\n" + summary + "\n----- End of Audio Samples Duration Information -----");
+            } else {
+                logger.warn("No audio samples were successfully processed.");
+            }
+
+            logger.info("All audio buffers and reverse buffers are mapped.");
+            document.dispatchEvent(new CustomEvent("audioBuffersReady", { detail: { success: true } }));
+        };
+
+        const initAudioProcessing = async () => {
+            await processAllAudioChannels();
+        };
+
+        const startPlayback = () => {
+            const { songsArray, audioBuffers, reverseAudioBuffers, audioContext } = window.globalData;
+            if (!songsArray.length) {
+                logger.error("No songs available for playback.");
+                return;
+            }
+
+            const song = songsArray[0];
+            const sequences = song.projectSequences;
+            const BPM = song.bpm || 120;
+            const stepDuration = (60 / BPM) / 4;
+            let currentTime = audioContext.currentTime;
+
+            for (const sequence of Object.values(sequences)) {
+                for (let stepIndex = 0; stepIndex < 64; stepIndex++) {
+                    const stepTime = currentTime + stepIndex * stepDuration;
+                    for (const [trackName, trackData] of Object.entries(sequence)) {
+                        const channel = song.channels[parseInt(trackName.slice(2))];
+                        if (!channel) {
+                            logger.warn(`Channel ${trackName} not found in song ${song.id}.`);
+                            continue;
+                        }
+
+                        const step = trackData.steps.find(s => (typeof s === "number" ? s === stepIndex : s.index === stepIndex));
+                        if (step !== undefined) {
+                            const reverse = typeof step === "object" && step.reverse;
+                            const buffer = reverse ? reverseAudioBuffers[song.id][channel.id] : audioBuffers[song.id][channel.id];
+                            if (buffer) {
+                                const source = audioContext.createBufferSource();
+                                source.buffer = buffer;
+                                source.playbackRate.value = channel.metadata.playbackSpeed;
+                                source.connect(audioContext.destination);
+                                source.start(stepTime);
+                                logger.info(`Scheduled ${reverse ? 'reverse ' : ''}playback for ${channel.id} at ${stepTime.toFixed(2)}s.`);
+                            } else {
+                                logger.warn(`Audio buffer for ${song.id} - ${channel.id} not found.`);
+                            }
+                        }
+                    }
+                }
+                currentTime += 64 * stepDuration;
+            }
+
+            if (audioContext.state === 'suspended') audioContext.resume();
+            logger.info('Playback started.');
+        };
+
+        const initPlaybackEngine = () => {
+            logger.info("Playback Engine Initialized. Press 'p' to start.");
+        };
+
+        const initializePlayback = () => {
+            initPlaybackEngine();
+            document.addEventListener('keydown', event => {
+                if (event.key.toLowerCase() === 'p') {
+                    startPlayback();
+                    logger.info('Playback started by user.');
+                }
+            });
+        };
+
+        // ---------------------- Initialization Workflow ---------------------- //
+        (async () => {
+            const songDataUrls = [
+                "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0", // TRUTH
+                "/content/6d288c0c82653001bb32497889dd1486e8afec9b0671a95fa9e10f99c20737bbi0", // KORA
+            ].filter(url => url.trim() && !url.trim().startsWith('//'));
+
+            if (songDataUrls.length) {
+                try {
+                    await loadPako();
+                    const deserializedData = await fetchAndProcessData(songDataUrls);
+                    const songsArray = processSongsAndChannels(deserializedData);
+                    logSongsArray(songsArray);
+                } catch (error) {
+                    logger.error('Initialization Error: ' + error);
+                }
+            } else {
+                logger.warn('No valid song data URLs to process.');
+            }
+        })();
+
+        document.addEventListener("dataLoadingComplete", initAudioProcessing);
+        document.addEventListener("audioBuffersReady", initializePlayback);
+        if (window.globalData.songsArray.length) initAudioProcessing();
+    </script>
+</body>
+</html>

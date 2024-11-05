@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audionals - Web3 Music Player</title>
+    <custommetadata>
+        <script>
+            const artworkUrl = ["/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
+            const songDataUrls = [
+                "/content/8aec0a99a5617b9da98a5b63a11a5143f0cac3cfa662d9515c2285de03ef95d4i0", // CHEESE 
+                "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0", // TRUTH
+                "/content/6d288c0c82653001bb32497889dd1486e8afec9b0671a95fa9e10f99c20737bbi0", // KORA
+                "/content/119a3ccd1dfd7e987cca139f86d16717d845a22dd6afc59ad492527b95ae9a91i0", // MLK I HAVE A DREAM
+                "/content/db9131cfe8e933e8e639f007dcd2b582a80bfd2be42b0eafa4d2e206332d6785i0", // ModernProgress
+                "/content/07ff7bdc47e5272a3ff55cc46d2b189d510562a057a2c24112f3d0376950484di0", // CHOPPIN' IT UP
+                "/content/fb0d2abcd1fa5bf2622579f0990435b48d41291f71626fc2e36a93e6ea6b3b85i0", // HUMANITY // Turn Down Channels 1 + 2 (Apollo 13) Turn down Channel 5 - Hindenburg /  Turn channel 8 up - Hi hats
+                "/content/a4fb0b49181975450a6710f20128eb0b3acc51f4aa1ce87ebdbc9607562013a2i0", // MintyFresh Vibes
+                "/content/633100d631767ddb9a309f5a2a66f5a66d5abd839f3b1c55642690d484189971i0", // ON DAY ONE
+                "/content/85436950f53c57aa0c510071d2d5f1c187e1d21e4e57210fcae152c4c7b6a768i0", // Rhythm and Bass 240
+                "/content/e3ca12dd7516b4e486af4e3fa7f4ebc535d825034ff3c9da4954f354572dcf61i0", // Crazy Ass Bitch
+                "/content/d0496a8e1657ce470807c8d47dcb5f1018a32d8ec8e50d490ad49411ffee1457i0", // Rhythm and Bass 60
+                "/content/b22f1c85371b58a9cdac19b2baa50b1f9025a28d44cdfaad539d0527aa7d894ei0", // ON-CHAIN IN THE MEMBRANE
+                "/content/5ee46b8f645a65b0ec8ae749a28f88e364347f89137bb79986355bf5fb94cbebi0", // Fiat Money by Solemn
+                "/content/c41de57f1e062a440a9fc96d54baaccd7ec40049f48e9f3880559afc60b1b09ai0", // When You Know
+                "/content/9dfa1812b211a7ac8b2f9e77119828ec8fbf2e9016b3d37a8efd70052eb4aa3ci0", // Based New Song
+                "/content/4653bcc45671abdbc024b03ebbaaadb30e0cad83b80898894ab22426bbccdaaei0", // Freedom to Transact
+
+            ];
+        </script>
+    </custommetadata>
+    <globaldefinitions>
+        <script>
+            const globalData = window.globalData = {
+                isPlaying: false,                  // Indicates if playback is active
+                currentSongIndex: 0,               // Index of the currently playing song
+                songsArray: [],                     // Array holding the list of songs
+                audioBuffers: {},                   // Loaded audio buffers for normal playback
+                reverseAudioBuffers: {},            // Loaded audio buffers for reverse playback
+                audioContext: new (window.AudioContext || window.webkitAudioContext)(), // Web Audio API context
+                masterGain: null,                   // Master gain node (initialized below)
+                gainNodes: {},                      // Gain nodes per song and channel
+                startPlayback: null,                // Function to start playback
+                stopPlayback: null,                 // Function to stop playback
+                togglePlayback: null,               // Function to toggle playback
+                resetPlayback: null,                // Function to reset playback
+                isArtworkCover: true,
+                isVisualiserCover: false,
+            };
+        
+            // Initialize master gain node
+            globalData.masterGain = globalData.audioContext.createGain();
+            globalData.masterGain.connect(globalData.audioContext.destination);
+        </script>
+    </globaldefinitions>
+    
+ <!-- Existing Styles -->
+ <link rel="stylesheet" href="/content/d2d6df9b0c5eedacbf7005e4c0a8bdb0dce76ee278b23dbb7507213608349ecei0">
+
+
+<!-- New Styles for Metadata Panels and Buttons-->
+<style>
+    /* Metadata Panel Container */
+    #metadataPanel {
+        position: fixed;
+        top: 0;
+        left: -400px;
+        width: 400px;
+        height: 100%;
+        background: rgba(20,20,20,0.95);
+        color: #fff;
+        padding: 10px 15px;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.5);
+        overflow-y: auto;
+        transition: left 0.3s ease;
+        z-index: 999;
+    }
+    #metadataPanel.visible {left: 0;}
+
+    /* Metadata Items: Numbered listing with closer spacing */
+    .metadataItem {
+        margin-bottom: 5px;
+        display: flex;
+        justify-content: space-between;
+    }
+    .metadataItem h2 {
+        margin: 0;
+        font-size: 1em;
+        font-weight: normal;
+    }
+    .metadataItem p {
+        margin: 0;
+        font-size: 0.9em;
+        color: #ffaa00;
+    }
+
+    /* Song Title and Artist Styling */
+    .songTitle { color: #ffffff; }
+    .artistName { color: #ffaa00; }
+
+    /* Scrollable if content exceeds the panel height */
+    #metadataContent {
+        max-height: 90%;
+        overflow-y: auto;
+    }
+
+    /* Toggle instruction styles */
+    #toggleInstruction {
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,0.7);
+        color: #fff;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 0.9em;
+        z-index: 1002;
+        display: none;
+    }
+
+    
+
+ /* <!-- New Styles for Now Playing Container --> */
+
+    /* Now Playing Container */
+    #nowPlayingContainer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: rgba(20, 20, 20, 0.95);
+        color: #fff;
+        padding: 10px 20px;
+        box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        z-index: 1000; /* Ensure it sits above other elements */
+    }
+
+    /* Now Playing Text */
+    #nowPlayingText {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Song Title Styling */
+    #nowPlayingText .songTitle {
+        font-size: 1.2em;
+        font-weight: bold;
+    }
+
+    /* Artist Name Styling */
+    #nowPlayingText .artistName {
+        font-size: 1em;
+        margin-top: 5px;
+    }
+
+
+
+/* <!-- Styles for Button Container --> */
+
+    /* Button Container Styles */
+    #buttonContainer {
+        position: fixed;
+        top: 0;
+        left: 50%; /* Position container at the center horizontally */
+        transform: translateX(-50%); /* Adjust to truly center it */
+        background-color: rgba(0, 0, 0, 0.9);
+        padding: 10px;
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        z-index: 1002;
+        width: auto; /* Width will fit the buttons */
+    }
+
+    #buttonContainer button {
+        background-color: #3498db;
+        color: #fff;
+        border: none;
+        padding: 10px 20px;
+        font-size: 1em;
+        cursor: pointer;
+        border-radius: 5px;
+        transition: background-color 0.3s ease;
+    }
+
+    #buttonContainer button:hover {
+        background-color: #2980b9;
+    }
+</style>
+</head>
+<htmlElements>
+        <body>
+        <h1>Audionals</h1>
+        <div id="loadingSpinner"></div>
+        <div id="artworkCover">
+            <img id="artworkImage" src="" alt="Artwork Cover">
+        </div>
+
+        <!-- New Metadata Panel -->
+        <div id="metadataPanel">
+            <h2>Track Listings:</h2>
+            <div id="metadataContent">
+                <!-- Metadata items will be dynamically inserted here -->
+            </div>
+        </div>
+
+        <!-- New Now Playing Container -->
+        <div id="nowPlayingContainer">
+            <div id="nowPlayingText">
+                <!-- Now Playing info will be dynamically inserted here -->
+                <span class="songTitle">No song playing</span>
+                <span class="artistName"></span>
+            </div>
+        </div>
+
+<!-- Button Container -->
+<div id="buttonContainer">
+    <button id="playButton" onclick="globalData.togglePlayback()">Play / Pause</button>
+    <button id="stopButton" onclick="globalData.stopPlayback()">Stop</button>
+    <!-- Updated Previous and Next Buttons -->
+    <button id="prevButton" onclick="globalData.previousSong()">Previous</button>
+    <button id="nextButton" onclick="globalData.nextSong()">Next</button>
+</div>
+
+
+
+        <!-- Optional: Toggle Instruction -->
+        <!--
+        <div id="toggleInstruction">
+            Press "M" to toggle Metadata Panel
+        </div>
+        -->
+</htmlElements>   
+
+
+
+<!-- Global Project-Artist Mapping and Helper Function -->
+<script>
+    // Define the projectArtistMap globally
+    window.projectArtistMap = {
+        "I Love Cheese 2024 FINAL": "melophonic + Rex Speedway and The Denim Avengers",
+        "TRUTH": "melophonic",
+        "Kora Algo New": "melophonic",
+        "MLK 120": "melophonic",
+        "Modern Progress Vocal": "jim.btc",
+        "Choppin' It Up": "Jim.btc",
+        "HUMANITY": "Jim.btc",
+        "Minty Fresh v2": "melophonic + Rare Scrilla",
+        "How We Be - Based": "Based.btc",
+        "Rhythm and Bass": "Jim.btc",
+        "CrazyAssBitch": "Jim.btc + French Montana",
+        "Rhythm and Bass @60": "Jim.btc",
+        "On-Chain in the Membrane": "melophonic",
+        "FIAT MONEY": "Solemn",
+        "didd you know 1": "Solemn",
+        "Bear Market Disco": "Based.btc",
+        "FREEDOM TO TRANSACT REMIX": "melophonic",
+
+        // Add more mappings here as needed
+    };
+
+    /**
+     * Extracts the project name and artist name from a song object.
+     * @param {Object} song - The song object.
+     * @returns {Object} - An object containing projectName and artistName.
+     */
+    function getProjectAndArtist(song) {
+        let projectName = 'Unknown Project Name';
+        let artistName = 'Unknown Artist Name';
+
+        // Extract projectName from the 'id' field using regex
+        if (song.id) {
+            const match = song.id.match(/Song\s+\d+:\s+(.+)/);
+            if (match && match[1]) {
+                projectName = match[1].trim();
+            }
+        }
+
+        // Retrieve artistName from the mapping
+        if (window.projectArtistMap && window.projectArtistMap[projectName]) {
+            artistName = window.projectArtistMap[projectName];
+        } else if (song.artist) {
+            // Fallback to the existing 'artist' field if available
+            artistName = song.artist;
+        }
+
+        return { projectName, artistName };
+    }
+</script>
+
+
+<!-- Unified Metadata Management and Logging Script -->
+<script>
+    (function() {
+        /**
+         * Extracts the project name from a song ID using regex.
+         * @param {string} id - The ID string of the song.
+         * @returns {string} - The extracted project name or 'UNKNOWN PROJECT NAME' if not found.
+         */
+        function extractProjectName(id) {
+            const match = id?.match(/Song\s+\d+:\s+(.+)/);
+            return match && match[1] ? match[1].trim() : 'UNKNOWN PROJECT NAME';
+        }
+    
+        /**
+         * Returns the artist name from the projectArtistMap or the song's artist field.
+         * @param {string} projectName - The name of the project.
+         * @param {object} projectArtistMap - Mapping of project names to artist names.
+         * @param {string} fallbackArtist - Fallback artist name from the song object.
+         * @returns {string} - The resolved artist name.
+         */
+        function getArtistName(projectName, projectArtistMap, fallbackArtist) {
+            return projectArtistMap?.[projectName] || fallbackArtist || 'Unknown Artist Name';
+        }
+    
+        /**
+         * Processes the songs array to extract project and artist names.
+         * @param {Array} songs - Array of song objects.
+         * @returns {Array} - Array of processed song metadata objects.
+         */
+        function processSongs(songs) {
+            const projectArtistMap = window.globalData?.projectArtistMap || window.projectArtistMap || {};
+            return songs.map((song, index) => ({
+                projectName: extractProjectName(song.id),
+                artistName: getArtistName(extractProjectName(song.id), projectArtistMap, song.artist),
+                trackNumber: index + 1
+            }));
+        }
+    
+        /**
+         * Creates a metadata item DOM element with track number, project, and artist name.
+         * @param {number} trackNumber - The track number.
+         * @param {string} projectName - The name of the project.
+         * @param {string} artistName - The name of the artist.
+         * @returns {HTMLElement} - The created metadata item element.
+         */
+        function createMetadataItem(trackNumber, projectName, artistName) {
+            const item = document.createElement('div');
+            item.className = 'metadataItem';
+    
+            const title = document.createElement('h2');
+            title.textContent = `${trackNumber}. ${projectName}`;
+            item.appendChild(title);
+    
+            const artist = document.createElement('p');
+            artist.innerHTML = `${artistName}`;
+            item.appendChild(artist);
+    
+            return item;
+        }
+    
+        /**
+         * Populates the metadata panel with processed song data.
+         * @param {Array} processedSongs - Array of processed song metadata objects.
+         */
+        function populateMetadataPanel(processedSongs) {
+            const metadataContent = document.getElementById('metadataContent');
+            if (!metadataContent) return console.warn('Metadata content container (#metadataContent) not found.');
+            metadataContent.innerHTML = ''; // Clear existing content
+    
+            processedSongs.forEach(({ trackNumber, projectName, artistName }) => {
+                const metadataItem = createMetadataItem(trackNumber, projectName, artistName);
+                metadataContent.appendChild(metadataItem);
+            });
+        }
+    
+        /**
+         * Logs the project and artist names to the console.
+         * @param {Array} processedSongs - Array of processed song metadata objects.
+         */
+        function logProjectAndArtist(processedSongs) {
+            processedSongs.forEach(({ projectName, artistName }) => {
+                console.log(`Project Name: ${projectName}, Artist Name: ${artistName}`);
+            });
+        }
+    
+        /**
+         * Toggles the visibility of the metadata panel.
+         */
+        function toggleMetadataPanel() {
+            const panel = document.getElementById('metadataPanel');
+            if (panel) {
+                panel.classList.toggle('visible');
+            } else {
+                console.warn('Metadata panel container (#metadataPanel) not found.');
+            }
+        }
+    
+        /**
+         * Handles the display and logging of metadata when song data is available.
+         * @param {Array} songs - Array of song objects.
+         */
+        function handleData(songs) {
+            if (!Array.isArray(songs) || songs.length === 0) return console.warn('No songs data available to process.');
+            const processedSongs = processSongs(songs);
+            populateMetadataPanel(processedSongs);
+            logProjectAndArtist(processedSongs);
+        }
+    
+        /**
+         * Initializes the metadata management and logging functionalities.
+         */
+        function init() {
+            const globalDataLoaded = window.globalData && Array.isArray(window.globalData.songsArray) && window.globalData.songsArray.length > 0;
+    
+            if (globalDataLoaded) {
+                handleData(window.globalData.songsArray);
+            } else {
+                document.addEventListener('dataLoadingComplete', function(event) {
+                    const songs = event.detail?.songs;
+                    handleData(songs);
+                });
+            }
+    
+            // Event listener for keypress (M key) to toggle metadata panel
+            document.addEventListener('keydown', function(event) {
+                if (event.key.toLowerCase() === 'm') {
+                    toggleMetadataPanel();
+                }
+            });
+        }
+    
+        // Initialize the script
+        try {
+            init();
+        } catch (error) {
+            console.error('Error initializing Metadata Management and Logging:', error);
+        }
+    })();
+</script>
+
+
+
+
+<!-- Section 1 - Loading and Preparing Song Data  -->
+<script src="/content/44088e23250de51c70149b344a11ba29fe39850ac9b3bf2aa99e73f5d29c4825i0"></script>
+
+
+
+
+
+
+<!-- Section 1.5 - Gain Nodes and Helpers -->
+<script>
+    // gainNodeHelper.js
+    window.GainNodeHelper = (() => {
+        const e = window.globalData || (window.globalData = {});
+
+        // Initialize gainNodes if not already present
+        e.gainNodes = e.gainNodes || {};
+
+        // Variables to track current and next song IDs
+        let currentSongId = null;
+        let nextSongId = null;
+        let hasLogged = false;
+
+        // Function to log gain nodes map for current and next songs
+        const logGainNodesMap = () => {
+            if (currentSongId && nextSongId && !hasLogged) {
+                const logMap = {
+                    currentSong: e.gainNodes[currentSongId] || {},
+                    nextSong: e.gainNodes[nextSongId] || {}
+                };
+                console.log('Gain Nodes Map:', logMap);
+                hasLogged = true;
+            }
+        };
+
+        // Create gain nodes for each channel of a song
+        const createGainNodesForSong = (song) => {
+            const { id: songId, channels } = song;
+            currentSongId = songId; // Set current song ID
+            if (!channels.length) {
+                console.warn(`No channels found for song ${songId}.`);
+                return;
+            }
+
+            e.gainNodes[songId] = e.gainNodes[songId] || {};
+
+            channels.forEach(channel => {
+                if (!e.gainNodes[songId][channel.id]) { // Prevent duplicate creation
+                    const gainNode = e.audioContext.createGain();
+                    gainNode.gain.value = 1;  // Default gain value (can be adjusted later)
+                    gainNode.connect(e.masterGain || (e.masterGain = e.audioContext.createGain()));
+                    // Removed individual log
+                    e.gainNodes[songId][channel.id] = gainNode;
+                }
+            });
+
+            // After creating gain nodes, attempt to log
+            logGainNodesMap();
+        };
+
+        // Pre-process the next song and create gain nodes in advance
+        const prepareNextSong = (nextSong) => {
+            const { id: nextSongIdLocal, channels } = nextSong;
+            nextSongId = nextSongIdLocal; // Set next song ID
+            if (!channels.length) {
+                console.warn(`No channels found for next song ${nextSongIdLocal}.`);
+                return;
+            }
+
+            e.gainNodes[nextSongIdLocal] = e.gainNodes[nextSongIdLocal] || {};
+
+            channels.forEach(channel => {
+                if (!e.gainNodes[nextSongIdLocal][channel.id]) {
+                    const gainNode = e.audioContext.createGain();
+                    gainNode.gain.value = 1;  // Default gain value
+                    gainNode.connect(e.masterGain || (e.masterGain = e.audioContext.createGain()));
+                    // Removed individual log
+                    e.gainNodes[nextSongIdLocal][channel.id] = gainNode;
+                }
+            });
+
+            // After preparing gain nodes, attempt to log
+            logGainNodesMap();
+        };
+
+        // Cleanup gain nodes after a song ends
+        const cleanupGainNodesForSong = (songId) => {
+            if (e.gainNodes[songId]) {
+                Object.keys(e.gainNodes[songId]).forEach(channelId => {
+                    const gainNode = e.gainNodes[songId][channelId];
+                    if (gainNode) {
+                        gainNode.disconnect();
+                        console.log(`Cleaned up gain node for Song ID: ${songId}, Channel ID: ${channelId}`);
+                    }
+                });
+                delete e.gainNodes[songId];
+
+                // Reset tracking variables if necessary
+                if (songId === currentSongId) {
+                    currentSongId = null;
+                    hasLogged = false;
+                }
+                if (songId === nextSongId) {
+                    nextSongId = null;
+                    hasLogged = false;
+                }
+            } else {
+                console.warn(`No gain nodes found to clean up for song ${songId}.`);
+            }
+        };
+
+        // API for integrating the helper with the main program
+        return {
+            createGainNodesForSong,
+            prepareNextSong,
+            cleanupGainNodesForSong
+        };
+    })();
+
+  
+</script>
+
+
+
+
+
+<!-- Section 2 - audioProcessingAndManagement.js -->
+<script src="/content/f4cc99813b43f71b3e781d3c99f24a6a7a5b1004ea0efce3b225011e347b8df0i0"></script>
+
+
+<!-- Section 2.5 - Rebalancing channel volumes after normalisation -->
+<script>
+    // dynamicGainBalancer.js
+const DynamicGainBalancer = (() => {
+        const e = window.globalData || (window.globalData = {});
+
+        // Store normalization factors for each song and channel
+        e.normalizationFactors = {};
+
+        // Store gain nodes separately to counterbalance normalization later
+        e.balancerGainNodes = {};
+
+        // Function to store the normalization factor for each channel
+        const storeNormalizationFactor = (songId, channelId, factor) => {
+            e.normalizationFactors[songId] = e.normalizationFactors[songId] || {};
+            e.normalizationFactors[songId][channelId] = factor;
+            console.log(`Stored normalization factor for Song ID: ${songId}, Channel ID: ${channelId}: ${factor}`);
+        };
+
+        // Function to apply inverse gain to counterbalance the normalization
+        const applyInverseGain = (songId, channelId) => {
+            const factor = e.normalizationFactors[songId]?.[channelId];
+            if (factor && factor !== 1) {
+                const inverseGain = 1 / factor;  // Inverse of the normalization factor
+                const gainNode = e.audioContext.createGain();
+                gainNode.gain.value = inverseGain;  // Apply inverse gain
+                gainNode.connect(e.masterGain);  // Connect to the master gain node
+
+                e.balancerGainNodes[songId] = e.balancerGainNodes[songId] || {};
+                e.balancerGainNodes[songId][channelId] = gainNode;
+
+                console.log(`Applied inverse gain for Song ID: ${songId}, Channel ID: ${channelId}, Gain: ${inverseGain}`);
+            }
+        };
+
+        // Function to create and apply balancer gain nodes for each song's channels
+        const createBalancerGainNodesForSong = (song) => {
+            const { id: songId, channels } = song;
+            if (!channels.length) {
+                console.warn(`No channels found for song ${songId}.`);
+                return;
+            }
+
+            channels.forEach(channel => {
+                applyInverseGain(songId, channel.id);
+            });
+        };
+
+        // Cleanup balancer gain nodes after a song ends
+        const cleanupBalancerGainNodesForSong = (songId) => {
+            if (e.balancerGainNodes[songId]) {
+                Object.keys(e.balancerGainNodes[songId]).forEach(channelId => {
+                    const gainNode = e.balancerGainNodes[songId][channelId];
+                    if (gainNode) {
+                        gainNode.disconnect();
+                        console.log(`Cleaned up balancer gain node for Song ID: ${songId}, Channel ID: ${channelId}`);
+                    }
+                });
+                delete e.balancerGainNodes[songId];
+            } else {
+                console.warn(`No balancer gain nodes found to clean up for song ${songId}.`);
+            }
+        };
+
+        // API to integrate the dynamic gain balancer with the main program
+        return {
+            storeNormalizationFactor,
+            createBalancerGainNodesForSong,
+            cleanupBalancerGainNodesForSong
+        };
+    })();
+
+    // Hooking into the existing audio processing workflow
+    document.addEventListener("audioBufferNormalized", (event) => {
+        const { songId, channelId, normalizationFactor } = event.detail;
+        DynamicGainBalancer.storeNormalizationFactor(songId, channelId, normalizationFactor);
+    });
+
+    document.addEventListener("songPlaybackStarted", (event) => {
+        const { currentSong } = event.detail;
+        DynamicGainBalancer.createBalancerGainNodesForSong(currentSong);
+    });
+
+    document.addEventListener("songPlaybackEnded", (event) => {
+        const { songId } = event.detail;
+        DynamicGainBalancer.cleanupBalancerGainNodesForSong(songId);
+    });
+</script>
+
+<!-- Section 3 - Playback Engine (Updated for Enhanced Reliability) -->
+
+<!-- Playback Engine Script -->
+<script>
+    (() => {
+        const gd = window.globalData || (window.globalData = {});
+        const audioCtx = gd.audioContext;
+        const lookahead = 0.1;
+        const schedulerInterval = 25;
+        let schedulerTimerID = null;
+        let sequenceStates = {};
+        gd.currentSongIndex = gd.currentSongIndex || 0;
+        const missingBuffers = new Set();
+        const activeSources = new Set();
+
+        gd.togglePlayback = () => gd.isPlaying ? stopPlayback() : startPlayback();
+
+        const startPlayback = () => {
+            if (gd.isPlaying) {
+                console.log('Playback is already in progress.');
+                return;
+            }
+
+            const { songsArray, audioBuffers, reverseAudioBuffers, currentSongIndex } = gd;
+            if (!songsArray.length) {
+                console.error("No songs available for playback.");
+                return;
+            }
+
+            if (currentSongIndex >= songsArray.length) gd.currentSongIndex = 0;
+            const song = songsArray[gd.currentSongIndex];
+            const sequences = song.projectSequences || {};
+            console.log(`Starting playback for Song: ${song.id} (${gd.currentSongIndex + 1}/${songsArray.length}) with ${Object.keys(sequences).length} sequences.`);
+            console.log(`Song BPM: ${song.bpm}`);
+
+            const stepDur = 60 / song.bpm / 4;
+            const seqDur = 64 * stepDur;
+            sequenceStates = {};
+            missingBuffers.clear();
+
+            let offset = 0;
+            for (const [name, seq] of Object.entries(sequences)) {
+                sequenceStates[name] = {
+                    nextStepIndex: 0,
+                    nextStepTime: audioCtx.currentTime + offset,
+                    stepDuration: stepDur,
+                    startTime: audioCtx.currentTime + offset,
+                    endTime: audioCtx.currentTime + offset + seqDur,
+                    completed: false
+                };
+                offset += seqDur;
+            }
+
+            gd.currentSongId = song.id;
+            GainNodeHelper.createGainNodesForSong(song);
+            const nextIndex = (gd.currentSongIndex + 1) % songsArray.length;
+            GainNodeHelper.prepareNextSong(songsArray[nextIndex]);
+
+            gd.isPlaying = true;
+            schedulerTimerID = setInterval(() => schedulerLoop(song, audioBuffers, reverseAudioBuffers), schedulerInterval);
+            console.log('Sequences scheduled and playback started.');
+            document.dispatchEvent(new CustomEvent("playbackStarted", { detail: { success: true } }));
+
+            // **Update Now Playing Container**
+            updateNowPlayingDisplay(song);
+        };
+        gd.startPlayback = startPlayback;
+
+        const stopPlayback = () => {
+            if (!gd.isPlaying) {
+                console.log('Playback is not in progress.');
+                return;
+            }
+
+            clearInterval(schedulerTimerID);
+            gd.isPlaying = false;
+            sequenceStates = {};
+            missingBuffers.clear();
+
+            activeSources.forEach(source => {
+                try {
+                    source.stop();
+                    source.disconnect();
+                } catch (e) {
+                    console.error('Error stopping/disconnecting an audio source:', e);
+                }
+            });
+            activeSources.clear();
+
+            if (gd.currentSongId) {
+                GainNodeHelper.cleanupGainNodesForSong(gd.currentSongId);
+                gd.currentSongId = null;
+            }
+
+            console.log('Playback stopped and sequence states reset.');
+            document.dispatchEvent(new CustomEvent("playbackStopped", { detail: { success: true } }));
+
+            // **Reset Now Playing Container**
+            resetNowPlayingDisplay();
+        };
+        gd.stopPlayback = stopPlayback;
+
+        const schedulerLoop = (song, audioBuffers, reverseAudioBuffers) => {
+            const now = audioCtx.currentTime;
+            let allDone = true;
+
+            for (const [name, seq] of Object.entries(song.projectSequences || {})) {
+                const state = sequenceStates[name];
+                if (!state || state.completed) continue;
+
+                if (now >= state.endTime) {
+                    state.completed = true;
+                    console.log(`Sequence ${name} has completed.`);
+                    continue;
+                }
+
+                allDone = false;
+
+                while (state.nextStepTime < now + lookahead && gd.isPlaying) {
+                    const stepIdx = state.nextStepIndex;
+                    const stepTime = state.nextStepTime;
+
+                    for (const [track, data] of Object.entries(seq)) {
+                        const chIdx = parseInt(track.slice(2), 10);
+                        const channel = song.channels[chIdx];
+                        if (!channel) {
+                            console.warn(`Channel index ${chIdx} not found in song ${song.id}.`);
+                            continue;
+                        }
+
+                        const step = data.steps?.find(s => (typeof s === "number" ? s === stepIdx : s.index === stepIdx));
+                        if (step !== undefined) {
+                            const reverse = typeof step === "object" && step.reverse;
+                            schedulePlayback(song, channel, stepTime, reverse, audioBuffers, reverseAudioBuffers, state.stepDuration);
+                        }
+                    }
+
+                    state.nextStepIndex++;
+                    if (state.nextStepIndex >= 64) {
+                        state.completed = true;
+                        console.log(`Sequence ${name} has completed all steps.`);
+                        break;
+                    }
+                    state.nextStepTime += state.stepDuration;
+                }
+            }
+
+            if (allDone) {
+                console.log("All sequences have completed.");
+                if (gd.isLoopedPlayback) {
+                    console.log(`Looping the current song: ${song.id}`);
+                    resetPlayback();
+                    startPlayback();
+                } else {
+                    console.log("Playback has completed the song.");
+                    stopPlayback();
+                }
+            }
+        };
+
+        const schedulePlayback = (song, channel, time, reverse, audioBuffers, reverseAudioBuffers, stepDur) => {
+            const key = `${song.id}_${channel.id}_${reverse ? 'reverse' : 'normal'}`;
+            const buffer = reverse ? reverseAudioBuffers[song.id]?.[channel.id] : audioBuffers[song.id]?.[channel.id];
+
+            if (!buffer) {
+                if (!missingBuffers.has(key)) {
+                    missingBuffers.add(key);
+                    console.warn(`Audio buffer missing for Song: ${song.id}, Channel: ${channel.id}${reverse ? " (Reverse)" : ""}`);
+                }
+                return;
+            }
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.playbackRate.value = channel.metadata.playbackSpeed || 1;
+
+            const gainNode = gd.gainNodes?.[song.id]?.[channel.id];
+            source.connect(gainNode || gd.masterGain || audioCtx.destination);
+            source.start(time);
+            activeSources.add(source);
+
+            source.onended = () => activeSources.delete(source);
+        };
+
+        const resetPlayback = () => {
+            clearInterval(schedulerTimerID);
+            sequenceStates = {};
+            missingBuffers.clear();
+
+            activeSources.forEach(source => {
+                try {
+                    source.stop();
+                    source.disconnect();
+                } catch (e) {
+                    console.error('Error stopping/disconnecting an audio source:', e);
+                }
+            });
+            activeSources.clear();
+
+            if (gd.currentSongId) {
+                GainNodeHelper.cleanupGainNodesForSong(gd.currentSongId);
+                gd.currentSongId = null;
+            }
+
+            console.log('Playback reset for the next song.');
+
+            // **Reset Now Playing Container**
+            resetNowPlayingDisplay();
+        };
+        gd.resetPlayback = resetPlayback;
+
+        const initializePlaybackEngine = () => {
+            if (!gd.songsArray.length) {
+                console.error("No songs available for playback.");
+                return;
+            }
+            console.log("Playback Engine Initialization Complete.");
+            console.log("Playback is ready. Click the artwork to start.");
+        };
+        gd.initializePlaybackEngine = initializePlaybackEngine;
+
+        const setupEventListeners = () => {
+            document.addEventListener("initialAudioBuffersReady", e => {
+                if (e.detail.success) {
+                    initializePlaybackEngine();
+                    console.log("Initial audio buffers are ready.");
+                }
+            });
+
+            ["playbackStarted", "playbackStopped"].forEach(eventName => {
+                document.addEventListener(eventName, e => {
+                    if (e.detail.success) {
+                        console.log(`Playback has been successfully ${eventName === "playbackStarted" ? "started" : "stopped"}.`);
+                    }
+                });
+            });
+        };
+
+        const setupArtworkClickListener = () => {
+            document.addEventListener('DOMContentLoaded', () => {
+                const cover = document.getElementById('artworkCover');
+                const img = document.getElementById('artworkImage');
+                const spinner = document.getElementById('loadingSpinner');
+                const showCover = () => {
+                    cover.classList.remove('hidden');
+                    spinner.style.display = 'none';
+                };
+                if (gd.isArtworkCover && artworkUrl.length > 0) {
+                    img.src = artworkUrl[0];
+                    showCover();
+                    img.addEventListener('click', gd.togglePlayback);
+                    console.log("Artwork cover is set up for playback toggle.");
+                } else {
+                    console.warn("Artwork cover is not enabled or no artwork URL provided.");
+                }
+            });
+        };
+
+         /**
+         * Updates the Now Playing Container with the current song and artist information.
+         * @param {Object} song - The currently playing song object.
+         */
+         function updateNowPlayingDisplay(song) {
+            const nowPlayingContainer = document.getElementById('nowPlayingContainer');
+            if (!nowPlayingContainer) {
+                console.warn("Now Playing Container not found.");
+                return;
+            }
+
+            const songTitleElement = nowPlayingContainer.querySelector('.songTitle');
+            const artistNameElement = nowPlayingContainer.querySelector('.artistName');
+
+            const { projectName, artistName } = getProjectAndArtist(song);
+
+            // Update the Now Playing Container elements
+            songTitleElement.textContent = projectName;
+            artistNameElement.textContent = artistName;
+        }
+
+        /**
+         * Resets the Now Playing Display to its default state.
+         */
+        function resetNowPlayingDisplay() {
+            const nowPlayingContainer = document.getElementById('nowPlayingContainer');
+            if (!nowPlayingContainer) {
+                console.warn("Now Playing Container not found.");
+                return;
+            }
+
+            const songTitleElement = nowPlayingContainer.querySelector('.songTitle');
+            const artistNameElement = nowPlayingContainer.querySelector('.artistName');
+
+            songTitleElement.textContent = 'No song playing';
+            artistNameElement.textContent = '';
+        }
+
+        const startSetup = () => {
+            setupEventListeners();
+            setupArtworkClickListener();
+            if (Object.keys(gd.audioBuffers || {}).length) initializePlaybackEngine();
+        };
+
+        startSetup();
+    })();
+</script>
+
+
+    
+
+<!-- Keyboard Controls and Event Listeners Script -->
+<script>
+    (() => {
+        const globalData = window.globalData || (window.globalData = {});
+        const audioContext = globalData.audioContext;
+
+        // Ensure currentSongIndex is in globalData
+        globalData.currentSongIndex = globalData.currentSongIndex || 0;
+
+        // Debounce timer to prevent rapid skips (optional)
+        let debounceTimer = null;
+        const DEBOUNCE_DELAY = 300; // milliseconds
+
+        /**
+         * Handles the skipping logic based on the pressed key.
+         * @param {string} key - The key that was pressed ('ArrowRight' or 'ArrowLeft').
+         */
+        const handleSkip = (key) => {
+            const totalSongs = globalData.songsArray.length;
+            if (totalSongs === 0) {
+                console.error("No songs available to skip.");
+                return;
+            }
+
+            if (key === 'ArrowRight') {
+                // Move to the next song
+                globalData.currentSongIndex = (globalData.currentSongIndex + 1) % totalSongs; // Loop back to the first song if at the end
+                console.log(`Skipped to next song: ${globalData.songsArray[globalData.currentSongIndex].id}`);
+            } else if (key === 'ArrowLeft') {
+                // Move to the previous song
+                globalData.currentSongIndex = (globalData.currentSongIndex - 1 + totalSongs) % totalSongs; // Loop back to the last song if at the beginning
+                console.log(`Skipped to previous song: ${globalData.songsArray[globalData.currentSongIndex].id}`);
+            }
+
+            // If playback is active, stop current playback and start the new song
+            if (globalData.isPlaying) {
+                globalData.stopPlayback(); // Ensure all current playback is halted
+                globalData.startPlayback(); // Start playback for the new song
+            } else {
+                console.log("Playback is not active. Next song is cued and ready to play.");
+                // Optionally, update UI elements to reflect the change
+                updateUIForNewTrack(globalData.currentSongIndex);
+            }
+        };
+
+        // Define nextSong and previousSong functions in globalData
+        globalData.nextSong = () => handleSkip('ArrowRight');
+        globalData.previousSong = () => handleSkip('ArrowLeft');
+
+        // Keydown event listener for arrow key navigation
+        document.addEventListener('keydown', (event) => {
+            // Only respond to left and right arrow keys
+            if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
+                return; // Ignore other keys
+            }
+
+            // Debounce to prevent rapid consecutive skips
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+            }
+            debounceTimer = setTimeout(() => {
+                handleSkip(event.key);
+            }, DEBOUNCE_DELAY);
+        });
+
+        /**
+         * Updates the UI to reflect the new track selection.
+         * Implement this function based on your application's UI requirements.
+         * @param {number} songIndex - The index of the newly selected song.
+         */
+        const updateUIForNewTrack = (songIndex) => {
+            // Example: Update artwork, song title, etc.
+            const song = globalData.songsArray[songIndex];
+            const artworkImage = document.getElementById('artworkImage');
+            const songTitleElement = document.getElementById('songTitle'); // Ensure this element exists
+            if (artworkImage && song.title && song.title.length > 0) {
+                artworkImage.src = song.artworkUrl || 'default-artwork.png'; // Fallback to a default image if artworkUrl is not available
+                console.log(`UI updated for Song: ${song.id}`);
+            }
+            if (songTitleElement) {
+                songTitleElement.textContent = song.title || 'Unknown Title';
+            }
+            // Add more UI updates as needed
+        };
+
+        // Debugging: Log songsArray when audio buffers are ready
+        (function() {
+            document.addEventListener('initialAudioBuffersReady', function(e) {
+                if (e.detail.success) {
+                    console.log("Debugging Script: Audio buffers are ready.");
+                    // console.log("Debugging Script: songsArray Contents:", globalData.songsArray);
+                }
+            });
+        })();
+
+        // Debugging: Monitor AudioContext state changes
+        (function() {
+            if (audioContext) {
+                audioContext.onstatechange = function() {
+                    console.log(`Debugging Script: AudioContext state changed to: ${audioContext.state}`);
+                };
+                console.log("Debugging Script: AudioContext state change listener added.");
+            } else {
+                console.warn("Debugging Script: AudioContext not found.");
+            }
+        })();
+
+        // Debugging: Verify playbackStarted and playbackStopped events
+        (function() {
+            document.addEventListener('playbackStarted', function() {
+                console.log("Debugging Script: 'playbackStarted' event dispatched.");
+            });
+
+            document.addEventListener('playbackStopped', function() {
+                console.log("Debugging Script: 'playbackStopped' event dispatched.");
+            });
+
+            console.log("Debugging Script: Event dispatch verification listeners added.");
+        })();
+
+        // Additional module to fix resuming audio context with any click or gestures
+        (function () {
+            document.addEventListener('DOMContentLoaded', function () {
+                if (audioContext) {
+                    const resumeContext = async () => {
+                        if (audioContext.state === 'suspended') {
+                            try {
+                                await audioContext.resume();
+                                console.log("AudioContext resumed successfully.");
+                            } catch (error) {
+                                console.error("Failed to resume AudioContext:", error);
+                            }
+                        }
+                    };
+
+                    // Add event listeners for user interaction to resume the AudioContext
+                    document.addEventListener('click', resumeContext);
+                    document.addEventListener('keydown', resumeContext);
+
+                    console.log("AudioContext resumption listeners added.");
+                } else {
+                    console.warn("AudioContext not found.");
+                }
+            });
+        })();
+    })();
+</script>
+
+    
+    
+    
+
+</html>

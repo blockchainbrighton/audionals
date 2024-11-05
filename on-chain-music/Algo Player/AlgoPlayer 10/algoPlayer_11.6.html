@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Web3 Audio Sequencer Playback Engine Test</title>
+</head>
+<body>
+    <h1>Web3 Audio Sequencer Playback Engine Test</h1>
+    <p>Check the console for the 2D array of songs and channels with metadata.</p>
+
+    
+    <!-- Section 1 - Load Song Files and Create 2D Channel Array with All Metadata -->
+    <SectionOne>
+
+        <script>
+            // ---------------------- Global Data ---------------------- //
+            window.globalData = window.globalData || {
+                isSingleSong: false,
+                isMultipleSongs: false,
+                songsArray: [],
+                audioBuffers: {},
+                reverseAudioBuffers: {}
+            };
+
+            // ---------------------- Configuration ---------------------- //
+
+            // Key mapping for deserialization process
+            const keyMap = {
+                0: "projectName",
+                1: "artistName",
+                2: "projectBPM",
+                3: "currentSequence",
+                4: "channelURLs",
+                5: "channelVolume",
+                6: "channelPlaybackSpeed",
+                7: "trimSettings",
+                8: "projectChannelNames",
+                9: "startSliderValue",
+                10: "endSliderValue",
+                11: "totalSampleDuration",
+                12: "start",
+                13: "end",
+                14: "projectSequences",
+                15: "steps"
+            };
+
+            // Reverse keyMap for reverse lookup
+            const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([k, v]) => [v, +k]));
+
+            // Map of letters 'A' to 'Z' representing channels and their reverse
+            const channelMap = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+            const reverseChannelMap = Object.fromEntries(channelMap.map((letter, i) => [letter, i]));
+
+            // ---------------------- Utility Functions ---------------------- //
+
+            /** Dynamically import the Pako library from the new Web3 address. */
+            const loadPako = async () => {
+                try {
+                    const pakoModule = await import('/content/fba6f95fb1152db43304a27dce8cb8c65509eba6ab0b6958cedeb33e5f443077i0');
+                    window.pako = pakoModule.default || pakoModule;
+                } catch (error) {
+                    console.error("Error loading Pako library:", error);
+                    throw error;
+                }
+            };
+
+            /** Decompress the steps data. */
+            const decompressSteps = (steps) => steps.flatMap(step => {
+                if (typeof step === "number") return step;
+                if (step?.r) {
+                    const [start, end] = step.r;
+                    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+                }
+                if (typeof step === "string" && step.endsWith("r")) {
+                    return { index: parseInt(step.slice(0, -1), 10), reverse: true };
+                }
+                return [];
+            });
+
+            /** Deserialize the fetched JSON data using the provided keyMap. */
+            const deserialize = (data) => {
+                const recursiveDeserialize = (obj) => {
+                    if (Array.isArray(obj)) return obj.map(recursiveDeserialize);
+                    if (obj && typeof obj === "object") {
+                        return Object.entries(obj).reduce((acc, [key, value]) => {
+                            const mappedKey = keyMap[key] || key;
+                            if (mappedKey === "projectSequences") {
+                                acc[mappedKey] = Object.entries(value).reduce((seqAcc, [seqKey, seqValue]) => {
+                                    const sequenceName = `Sequence${seqKey.replace(/^s/, "")}`;
+                                    seqAcc[sequenceName] = Object.entries(seqValue).reduce((trackAcc, [trackKey, trackValue]) => {
+                                        const channelName = `ch${reverseChannelMap[trackKey]}`;
+                                        const steps = trackValue[reverseKeyMap.steps] || [];
+                                        trackAcc[channelName] = { steps: decompressSteps(steps) };
+                                        return trackAcc;
+                                    }, {});
+                                    return seqAcc;
+                                }, {});
+                            } else {
+                                acc[mappedKey] = recursiveDeserialize(value);
+                            }
+                            return acc;
+                        }, {});
+                    }
+                    return obj;
+                };
+                return recursiveDeserialize(data);
+            };
+
+            /** Fetch and deserialize data from a given URL. */
+            const fetchAndDeserialize = async (url) => {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`Network response was not ok for URL: ${url}`);
+                    const arrayBuffer = await response.arrayBuffer();
+                    const inflatedData = window.pako.inflate(new Uint8Array(arrayBuffer));
+                    const jsonString = new TextDecoder("utf-8").decode(inflatedData);
+                    return deserialize(JSON.parse(jsonString));
+                } catch (error) {
+                    console.error(`Error fetching/deserializing URL ${url}:`, error);
+                    throw error;
+                }
+            };
+
+            /** Fetch and process multiple URLs concurrently. */
+            const fetchAndProcessData = async (urls) => {
+                const fetchPromises = urls.map(url => fetchAndDeserialize(url).catch(error => {
+                    console.error(`Failed to process URL ${url}:`, error);
+                    return null;
+                }));
+                const results = (await Promise.all(fetchPromises)).filter(Boolean);
+                if (!results.length) throw new Error("No valid data was processed.");
+                return results;
+            };
+
+            /** Process the deserialized data to extract songs and their channels with metadata. */
+            const processSongsAndChannels = (deserializedData) => {
+                const songsArray = deserializedData.map((songData, songIndex) => {
+                    const {
+                        projectName = `Song_${songIndex + 1}`,
+                        projectSequences = {},
+                        channelURLs = [],
+                        channelVolume = [],
+                        channelPlaybackSpeed = [],
+                        trimSettings = {}
+                    } = songData;
+
+                    const channels = Array.from({ length: 16 }, (_, i) => ({
+                        id: channelMap[i] || `Channel_${i + 1}`,
+                        url: channelURLs[i] || `URL_not_found`,
+                        metadata: {
+                            volume: channelVolume[i] ?? 1.0,
+                            playbackSpeed: channelPlaybackSpeed[i] ?? 1.0,
+                            trimStartTime_Percentage: trimSettings[i]?.start || 0,
+                            trimEndTime_Percentage: trimSettings[i]?.end || 100
+                        }
+                    }));
+
+                    return {
+                        id: projectName,
+                        totalSequences: Object.keys(projectSequences).length,
+                        channels,
+                        projectSequences
+                    };
+                });
+
+                window.globalData.songsArray = songsArray;
+                return songsArray;
+            };
+
+            /** Log the structured 2D array of songs and channels with metadata. */
+            const logSongsArray = (songsArray) => {
+                console.log(`Total Songs: ${songsArray.length}`);
+                songsArray.forEach((song, songIndex) => {
+                    console.log(`\nSong #${songIndex + 1}: ${song.id} - Total Sequences: ${song.totalSequences}`);
+                    song.channels.forEach((channel, channelIndex) => {
+                        const { volume, playbackSpeed, trimStartTime_Percentage, trimEndTime_Percentage } = channel.metadata;
+                        console.log(
+                            `\tChannel ${channelIndex + 1} - ${channel.id}, ` +
+                            `Volume: ${volume}, Playback Speed: ${playbackSpeed}, ` +
+                            `Trim Start Time: ${trimStartTime_Percentage}, Trim End Time: ${trimEndTime_Percentage}`
+                        );
+                    });
+                    const projectSequencesJSON = JSON.stringify(song.projectSequences, null, 2);
+                    console.log(`\tProject Sequences for ${song.id}:\n${projectSequencesJSON}`);
+                });
+
+                window.globalData.isSingleSong = songsArray.length === 1;
+                window.globalData.isMultipleSongs = songsArray.length > 1;
+                console.log(`\nFlags set - isSingleSong: ${window.globalData.isSingleSong}, isMultipleSongs: ${window.globalData.isMultipleSongs}`);
+
+                // Dispatch a custom event to notify that data loading is complete
+                document.dispatchEvent(new CustomEvent("dataLoadingComplete", {
+                    detail: {
+                        success: true,
+                        totalSongs: songsArray.length,
+                        songs: songsArray.map(({ id, totalSequences }) => ({ id, totalSequences }))
+                    }
+                }));
+            };
+
+            // ---------------------- Initialization ---------------------- //
+
+            /** Initialize the data processing workflow. */
+            (async () => {
+                const songDataUrls = [
+                    "/content/5527d0cc95ce5ce6eedf4e275234da8b1fe087512d0db618b6de1aaad437c96bi0", // TRUTH
+                    "/content/6d288c0c82653001bb32497889dd1486e8afec9b0671a95fa9e10f99c20737bbi0", // KORA
+                ];
+
+                const validSongUrls = songDataUrls.filter(url => url.trim() && !url.trim().startsWith('//'));
+                if (validSongUrls.length) {
+                    try {
+                        await loadPako();
+                        const deserializedData = await fetchAndProcessData(validSongUrls);
+                        const songsArray = processSongsAndChannels(deserializedData);
+                        logSongsArray(songsArray);
+                    } catch (error) {
+                        console.error('Error during initialization:', error);
+                    }
+                } else {
+                    console.log('No valid song data URLs to process.');
+                }
+            })();
+        </script>
+
+        <!-- By the end of Section 1, all song data is arranged in a 2D array of channels along with their metadata -->
+    </SectionOne>
+
+
+<!-- Section 2 - Audio Buffering and Mapping -->
+<sectionTwo>
+
+    <script>
+        // ---------------------- Audio Buffering and Mapping ---------------------- //
+
+        // Ensure that globalData exists
+        window.globalData = window.globalData || {
+            songsArray: [],
+            audioBuffers: {},
+            reverseAudioBuffers: {}
+        };
+
+        const audioContext = window.globalData.audioContext || new (window.AudioContext || window.webkitAudioContext)();
+        window.globalData.audioContext = audioContext;
+
+        /** Convert base64 encoded data to an ArrayBuffer. */
+        const base64ToArrayBuffer = (base64) => {
+            const binaryString = atob(base64);
+            const bytes = Uint8Array.from(binaryString, char => char.charCodeAt(0));
+            return bytes.buffer;
+        };
+
+        /** Extract base64 encoded audio data from an HTML response. */
+        const extractBase64FromHTML = (html) => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, "text/html");
+            const audioSrc = doc.querySelector("audio[data-audionalSampleName] source")?.getAttribute("src");
+            return audioSrc && audioSrc.includes("base64") ? audioSrc : null;
+        };
+
+        /** Fetch and decode the audio data based on the content type. */
+        const fetchAndDecodeAudio = async (response, contentType) => {
+            if (/audio\/(wav|mpeg|mp4)|video\/mp4/.test(contentType)) {
+                const arrayBuffer = await response.arrayBuffer();
+                return audioContext.decodeAudioData(arrayBuffer);
+            }
+
+            const textData = await response.text();
+            let base64Data = null;
+
+            if (/application\/json/.test(contentType)) {
+                base64Data = JSON.parse(textData).audioData;
+            } else if (/text\/html/.test(contentType)) {
+                base64Data = extractBase64FromHTML(textData);
+            }
+
+            if (base64Data) {
+                const audioBuffer = base64ToArrayBuffer(base64Data.split(",")[1]);
+                return audioContext.decodeAudioData(audioBuffer);
+            }
+
+            if (/audio\//.test(contentType)) {
+                const arrayBuffer = await response.arrayBuffer();
+                return audioContext.decodeAudioData(arrayBuffer);
+            }
+
+            throw new Error("Unsupported content type");
+        };
+
+        /**
+         * Safely reverse a Float32Array.
+         * @param {Float32Array} array - The array to reverse.
+         * @returns {Float32Array} - The reversed array.
+         */
+        const reverseArray = (array) => {
+            const len = array.length;
+            const reversed = new Float32Array(len);
+            for (let i = 0; i < len; i++) {
+                reversed[i] = array[len - i - 1];
+            }
+            return reversed;
+        };
+
+        /** Create a reverse audio buffer from the provided audio buffer. */
+        const createReverseAudioBuffer = (audioBuffer) => {
+            const reverseBuffer = audioContext.createBuffer(
+                audioBuffer.numberOfChannels,
+                audioBuffer.length,
+                audioBuffer.sampleRate
+            );
+
+            for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+                const originalData = audioBuffer.getChannelData(channel);
+                const reversedData = reverseBuffer.getChannelData(channel);
+
+                // Reverse the original data safely
+                const reversedArray = reverseArray(originalData);
+
+                // Set the reversed data into the reverse buffer
+                reversedData.set(reversedArray);
+            }
+
+            return reverseBuffer;
+        };
+
+
+        /**
+         * Process all audio channels to create audio buffers and reverse buffers.
+         * Logs full and trimmed durations for each audio sample.
+         */
+        /** Process all audio channels to create trimmed audio buffers and reverse buffers. */
+const processAllAudioChannels = async () => {
+    const { songsArray, audioBuffers, reverseAudioBuffers } = window.globalData;
+    if (!songsArray.length) return console.error("No songs available to process.");
+
+    // Array to hold logging information
+    const logEntries = [];
+
+    for (const song of songsArray) {
+        audioBuffers[song.id] = {};
+        reverseAudioBuffers[song.id] = {};
+
+        for (const channel of song.channels) {
+            try {
+                const response = await fetch(channel.url);
+                if (!response.ok) throw new Error(`Network response was not ok for URL: ${channel.url}`);
+                const audioBuffer = await fetchAndDecodeAudio(response, response.headers.get("Content-Type"));
+
+                // Get trimming information
+                const { trimStartTime_Percentage, trimEndTime_Percentage } = channel.metadata;
+
+                // Ensure that trimEndTime_Percentage is greater than trimStartTime_Percentage
+                if (trimEndTime_Percentage <= trimStartTime_Percentage) {
+                    console.warn(`Trim end percentage is less than or equal to start percentage for Song: ${song.id}, Channel: ${channel.id}`);
+                    continue; // Skip processing this channel
+                }
+
+                // Compute trimming times in seconds
+                const trimStartTime = (trimStartTime_Percentage / 100) * audioBuffer.duration;
+                const trimEndTime = (trimEndTime_Percentage / 100) * audioBuffer.duration;
+
+                // Compute start and end sample indices
+                const startSample = Math.floor(trimStartTime * audioBuffer.sampleRate);
+                const endSample = Math.floor(trimEndTime * audioBuffer.sampleRate);
+
+                // Ensure startSample and endSample are within bounds
+                const totalSamples = audioBuffer.length;
+                const clampedStartSample = Math.min(Math.max(startSample, 0), totalSamples - 1);
+                const clampedEndSample = Math.min(Math.max(endSample, 0), totalSamples);
+
+                // Compute the number of samples in the trimmed buffer
+                const trimmedLength = clampedEndSample - clampedStartSample;
+
+                // Ensure that the trimmed length is positive
+                if (trimmedLength <= 0) {
+                    console.warn(`Trimmed length is non-positive for Song: ${song.id}, Channel: ${channel.id}`);
+                    continue; // Skip processing this channel
+                }
+
+                // Create new audio buffer for trimmed data
+                const trimmedAudioBuffer = audioContext.createBuffer(
+                    audioBuffer.numberOfChannels,
+                    trimmedLength,
+                    audioBuffer.sampleRate
+                );
+
+                // Copy data from original buffer to trimmed buffer
+                for (let channelIndex = 0; channelIndex < audioBuffer.numberOfChannels; channelIndex++) {
+                    const originalChannelData = audioBuffer.getChannelData(channelIndex);
+                    const trimmedChannelData = trimmedAudioBuffer.getChannelData(channelIndex);
+                    trimmedChannelData.set(
+                        originalChannelData.subarray(clampedStartSample, clampedEndSample)
+                    );
+                }
+
+                // Create reversed trimmed buffer
+                const reversedTrimmedAudioBuffer = audioContext.createBuffer(
+                    audioBuffer.numberOfChannels,
+                    trimmedLength,
+                    audioBuffer.sampleRate
+                );
+
+                // Copy and reverse data
+                for (let channelIndex = 0; channelIndex < audioBuffer.numberOfChannels; channelIndex++) {
+                    const trimmedChannelData = trimmedAudioBuffer.getChannelData(channelIndex);
+                    const reversedChannelData = reversedTrimmedAudioBuffer.getChannelData(channelIndex);
+                    reversedChannelData.set(reverseArray(trimmedChannelData));
+                }
+
+                // Store trimmed audio buffers
+                audioBuffers[song.id][channel.id] = trimmedAudioBuffer;
+                reverseAudioBuffers[song.id][channel.id] = reversedTrimmedAudioBuffer;
+
+                // Extract audio file name from URL
+                let audioFileName = "Unknown";
+                try {
+                    const urlParts = channel.url.split('/');
+                    audioFileName = urlParts[urlParts.length - 1] || "Unknown";
+                } catch (e) {
+                    console.warn(`Could not extract file name from URL: ${channel.url}`);
+                }
+
+                // Log durations
+                const durationAfterTrimming = trimmedAudioBuffer.duration.toFixed(2); // Rounded to 2 decimal places
+
+                // Add entry to logEntries
+                logEntries.push({
+                    songId: song.id,
+                    channelId: channel.id,
+                    audioFileName: audioFileName,
+                    fullDuration: audioBuffer.duration.toFixed(2), // Full duration before trimming
+                    durationAfterTrimming: durationAfterTrimming
+                });
+
+                console.log(`Processed audio for Song: ${song.id}, Channel: ${channel.id}`);
+            } catch (error) {
+                console.error(`Failed to process audio for Song: ${song.id}, Channel: ${channel.id}`, error);
+            }
+        }
+    }
+
+    // After processing all channels, log the collected information
+    if (logEntries.length > 0) {
+        console.log("----- Audio Samples Duration Information -----");
+        console.table(logEntries.map(entry => ({
+            "Song ID": entry.songId,
+            "Channel ID": entry.channelId,
+            "Audio File Name": entry.audioFileName,
+            "Full Duration (s)": entry.fullDuration,
+            "Duration After Trimming (s)": entry.durationAfterTrimming
+        })));
+        console.log("----- End of Audio Samples Duration Information -----");
+    } else {
+        console.warn("No audio samples were processed successfully.");
+    }
+
+    console.log("All trimmed audio buffers and reverse audio buffers have been created and mapped.");
+    document.dispatchEvent(new CustomEvent("audioBuffersReady", { detail: { success: true } }));
+};
+
+
+        // ---------------------- Initialization for Section Two ---------------------- //
+
+        /** Initialize the audio processing workflow. */
+        const initAudioProcessing = async () => {
+            await processAllAudioChannels();
+        };
+
+        // Listen for the completion of data loading and processing from Section One
+        document.addEventListener("dataLoadingComplete", initAudioProcessing);
+
+        // If Section One already processed data, initiate audio processing
+        if (window.globalData.songsArray.length) initAudioProcessing();
+    </script>
+
+    <!-- By the end of Section 2, all audio buffers and reverse audio buffers are created and mapped -->
+</sectionTwo>
+
+
+<!-- Section 3 - Playback Engine -->
+<!-- This section handles playback of the sequenced audio based on sequences, channels, and steps -->
+    <sectionThree>
+ 
+        <script>
+            // ---------------------- Playback Engine ---------------------- //
+    
+            const selectedBPM = 120;
+    
+            /**
+             * Initialize the playback engine.
+             * This function is called after audio buffers are ready and sets up necessary variables.
+             */
+            const initPlaybackEngine = () => {
+                const { songsArray } = window.globalData;
+                if (!songsArray.length) {
+                    console.error("No songs available for playback.");
+                    return;
+                }
+    
+                console.log("Playback Engine Initialization Complete.");
+                console.log("Playback is ready. Press 'p' to start.");
+            };
+    
+            /**
+             * Start the playback engine.
+             * This function schedules all playback steps and starts the audio context.
+             */
+            const startPlayback = () => {
+                const { songsArray, audioBuffers, reverseAudioBuffers, audioContext } = window.globalData;
+                if (!songsArray.length) {
+                    console.error("No songs available for playback.");
+                    return;
+                }
+    
+                const song = songsArray[0];
+                const sequences = song.projectSequences || {};
+                console.log(`Starting playback for Song: ${song.id} with ${Object.keys(sequences).length} sequences.`);
+    
+                // Calculate step duration based on BPM
+                // Since there are 4 steps per beat, stepDuration = (60 / BPM) / 4
+                const stepsPerBeat = 4;
+                const stepDuration = (60 / selectedBPM) / stepsPerBeat;
+    
+                // Start time for playback
+                let currentTime = audioContext.currentTime;
+    
+                // Iterate through each sequence
+                for (const [sequenceName, sequence] of Object.entries(sequences)) {
+                    console.log(`Scheduling ${sequenceName} for Song: ${song.id}`);
+    
+                    // Iterate over each of the 64 steps in the sequence
+                    for (let stepIndex = 0; stepIndex < 64; stepIndex++) {
+                        const stepTime = currentTime + stepIndex * stepDuration;
+    
+                        // Iterate over each channel (track) in the sequence
+                        for (const [trackName, trackData] of Object.entries(sequence)) {
+                            const channelIndex = parseInt(trackName.replace('ch', ''), 10);
+                            const channel = song.channels[channelIndex];
+    
+                            if (!channel) {
+                                console.warn(`Channel ${trackName} not found in song ${song.id}.`);
+                                continue;
+                            }
+    
+                            const steps = trackData.steps || [];
+    
+                            // Check if this stepIndex is in the steps array
+                            const step = steps.find(s => {
+                                if (typeof s === "number") {
+                                    return s === stepIndex;
+                                } else if (typeof s === "object" && s.index !== undefined) {
+                                    return s.index === stepIndex;
+                                }
+                                return false;
+                            });
+    
+                            if (step !== undefined) {
+                                const reverse = (typeof step === "object" && step.reverse) || false;
+                                schedulePlayback(song, channel, stepTime, reverse);
+                            }
+                        }
+                    }
+    
+                    // Update currentTime to account for the sequence duration
+                    currentTime += 64 * stepDuration;
+                }
+    
+                // Resume AudioContext if suspended (required in some browsers)
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+    
+                console.log('Playback started.');
+            };
+    
+            /**
+             * Schedule playback for a channel at a specific time.
+             * @param {Object} song - The song object.
+             * @param {Object} channel - The channel object.
+             * @param {number} time - The time at which to play the step.
+             * @param {boolean} reverse - Whether to play in reverse.
+             */
+            const schedulePlayback = (song, channel, time, reverse = false) => {
+                const { audioBuffers, reverseAudioBuffers, audioContext } = window.globalData;
+                const buffer = reverse ? reverseAudioBuffers[song.id][channel.id] : audioBuffers[song.id][channel.id];
+    
+                if (!buffer) {
+                    console.error(`Audio buffer for Song: ${song.id}, Channel: ${channel.id} not found.`);
+                    return;
+                }
+    
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.playbackRate.value = channel.metadata.playbackSpeed;
+                source.connect(audioContext.destination);
+                source.start(time);
+                console.log(`    Scheduled ${reverse ? 'reverse ' : ''}playback for Channel: ${channel.id} at time ${time.toFixed(2)}s.`);
+            };
+    
+            // ---------------------- Initialization for Section Three ---------------------- //
+    
+            /** Initialize the playback engine after audio buffers are ready. */
+            const initializePlayback = () => {
+                console.log("Audio buffers are ready. Playback can begin.");
+                initPlaybackEngine();
+            };
+    
+            /** Listener function for 'p' key to start playback */
+            const onKeyPress = (event) => {
+                if (event.key.toLowerCase() === 'p') {
+                    startPlayback();
+                    console.log('Playback started by user.');
+                    document.removeEventListener('keydown', onKeyPress);
+                }
+            };
+    
+            // Listen for the completion of audio buffering and mapping from Section Two
+            document.addEventListener("audioBuffersReady", () => {
+                initializePlayback();
+                console.log('Press "p" to start playback.');
+                document.addEventListener('keydown', onKeyPress);
+            });
+    
+            // If Section Two already processed audio buffers, initiate playback setup
+            if (Object.keys(window.globalData.audioBuffers).length) {
+                initializePlayback();
+                console.log('Press "p" to start playback.');
+                document.addEventListener('keydown', onKeyPress);
+            };
+    
+            /**
+             * Structure Explanation:
+             * - A Sequence contains 64 steps.
+             * - Each Sequence can contain any number of channels.
+             * - Each channel in a sequence has steps where audio is played.
+             * - Steps can be either:
+             *   - A number representing the step index (0 to 63).
+             *   - An object with 'index' and 'reverse' properties for reverse playback.
+             * - There are 16 steps per bar, 4 steps per beat.
+             * - Time per step is calculated based on BPM: stepDuration = (60 / BPM) / 4.
+             * - Playback is scheduled step by step, ensuring synchronization with the step sequencer.
+             * - Playback direction (normal or reverse) is determined by the 'reverse' property.
+             */
+        </script>
+    
+        <!-- By the end of Section 3, playback should be initialized and ready -->
+    </sectionThree>
+    
+    
+
+</body>
+</html>

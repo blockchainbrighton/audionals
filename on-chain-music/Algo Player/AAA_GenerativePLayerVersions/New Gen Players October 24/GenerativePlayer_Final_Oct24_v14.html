@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audionals - Web3 Music Player</title>
+    <link rel="stylesheet" href="/content/7a309a161e838ba93740684338b3d97f3c1226c046d8b1137afc2353b4bf16e1i0">
+
+    <style>
+        :root {
+            --panel-bg-color: #333;
+            --panel-text-color: #fff;
+            --track-list-panel-bg-color: #444;
+            --button-bg-color: #444;
+            --button-hover-bg-color: #555;
+            --button-active-bg-color: #777;
+            --input-bg-color: #555;
+            --border-radius: 8px;
+            --padding: 10px;
+            --box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            --transition-duration: 0.3s;
+            --text-color: #fff;
+            --bpm-bg-color: orange;
+            --seed-bg-color: green;
+            --font-size: 16px;
+        }
+
+        /* Common Panel Styles */
+        #seed-management-panel,
+        #track-list-panel {
+            position: fixed;
+            background-color: var(--panel-bg-color);
+            color: var(--panel-text-color);
+            padding: var(--padding);
+            border-radius: var(--border-radius);
+            z-index: 10000;
+            box-shadow: var(--box-shadow);
+            transition: all var(--transition-duration) ease;
+        }
+
+        /* Specific Panel Positions and Sizes */
+        #seed-management-panel {
+            top: 10px;
+            right: 10px;
+            width: 320px;
+        }
+
+        #track-list-panel {
+            bottom: 10px;
+            left: 10px;
+            width: 300px;
+            background-color: var(--track-list-panel-bg-color);
+        }
+
+        /* Hide Elements */
+        .hidden {
+            display: none;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 600px) {
+            #seed-management-panel,
+            #track-list-panel {
+                width: 90%;
+                left: 5%;
+                right: 5%;
+            }
+
+
+        }
+
+        /* Canvas Styling */
+        #seed-mgmt-canvas {
+            width: 100%;
+            height: 100px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #222;
+        }
+
+        /* Previous Seeds Container */
+        #previous-seeds-container ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        #previous-seeds-container li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        /* Button Styles */
+        button {
+            background-color: var(--button-bg-color);
+            color: var(--panel-text-color);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color var(--transition-duration) ease;
+        }
+
+        /* Specific Button Spacing */
+        #previous-seeds-container button {
+            margin-left: 10px;
+            padding: 3px 6px;
+        }
+
+        #load-seed-button,
+        #clear-seeds-button {
+            margin-top: 5px;
+            padding: 5px 10px;
+        }
+
+        #buttonContainer button {
+            padding: 10px 15px;
+            margin: 5px;
+        }
+
+        /* Button States */
+        button:hover {
+            background-color: var(--button-hover-bg-color);
+        }
+
+        button:active {
+            background-color: var(--button-active-bg-color);
+        }
+
+        button:focus {
+            outline: 2px solid #00f;
+        }
+
+        /* Seed Input */
+        #seed-input {
+            width: calc(100% - 20px);
+            padding: 5px;
+            margin-top: 10px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: var(--input-bg-color);
+            color: var(--panel-text-color);
+            transition: border 0.2s ease;
+        }
+
+        #seed-input:focus {
+            border: 2px solid #00f;
+            outline: none;
+        }
+
+        /* Additional Elements */
+        #loadingSpinner {
+            z-index: 1000;   
+        }
+
+        #artworkCover img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+
+        #nowPlayingContainer {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(20, 20, 20, 0.95);
+    color: #fff;
+    padding: 10px;
+    display: flex;
+    flex-direction: column; /* Ensures that items stack vertically */
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    text-align: center;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    transition: background-color 0.3s ease;
+}
+
+#nowPlayingContainer:hover {
+    background-color: rgba(20, 20, 20, 1);
+}
+
+#nowPlayingText {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0;
+    padding: 5px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+#nowPlayingContainer .current-seed {
+    display: block;
+    font-size: 0.9em;
+    color: #ccc;
+    margin-bottom: 5px;
+}
+
+#nowPlayingContainer .title {
+    display: block;
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #fff;
+}
+
+
+    </style>
+
+    <script>
+        const toggleClass = 'hidden';
+
+        const togglePanel = (panelId) => {
+            const panel = document.getElementById(panelId);
+            panel ? panel.classList.toggle(toggleClass) : console.error(`${panelId.replace(/-/g, ' ')} not found.`);
+        };
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 's') togglePanel('seed-management-panel');
+        });
+
+        const populateTrackList = () => {
+            const container = document.getElementById('track-list-container');
+            container.innerHTML = '';
+            const songs = globalData?.songsArray;
+
+            if (songs?.length) {
+                songs.forEach(({ id, artist }) => {
+                    const trackItem = document.createElement('div');
+                    trackItem.className = 'track-item';
+                    trackItem.innerHTML = `<div class="track-name">${id}</div><div class="track-artist">${artist}</div>`;
+                    container.appendChild(trackItem);
+                });
+            } else {
+                container.textContent = "No tracks available.";
+            }
+        };
+
+        const toggleTrackListAndPopulate = () => {
+            togglePanel('track-list-panel');
+            const panel = document.getElementById('track-list-panel');
+            if (panel && !panel.classList.contains(toggleClass)) populateTrackList();
+        };
+
+
+
+        // Define the mulberry32 PRNG function
+        function mulberry32(a) {
+            return function() {
+                var t = a += 0x6D2B79F5;
+                t = Math.imul(t ^ (t >>> 15), t | 1);
+                t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            }
+        }
+
+      // Seed and BPM Manager
+(() => {
+    const seedsArray = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]; // Or generate programmatically
+
+    const getQueryParam = (param) => new URLSearchParams(window.location.search).get(param);
+    
+    /**
+     * Generates a random 16-digit seed within Number.MAX_SAFE_INTEGER.
+     * @returns {string} - A 16-digit numeric string.
+     */
+    const generateSeed = () => {
+        if (window.fixedSeed?.length) {
+            return window.fixedSeed;
+        }
+        // Generate a random 16-digit seed within Number.MAX_SAFE_INTEGER (9007199254740991)
+        let seed = '';
+        while (true) {
+            seed = Array.from({ length: 16 }, () => Math.floor(Math.random() * 10)).join('');
+            if (BigInt(seed) <= BigInt(Number.MAX_SAFE_INTEGER)) break;
+        }
+        return seed;
+    };
+    
+    const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
+
+    window.fixedSeed = getQueryParam('seed') || "";
+    log("Generating new seed...");
+    let newSeed = generateSeed();
+    log(`New seed generated: ${newSeed}`);
+    window.seed = newSeed;
+    log(`window.seed is set to: ${window.seed}`);
+
+    // Convert seed string to BigInt safely (within safe integer range)
+    const prngSeedNumber = BigInt(newSeed);
+    log(`Initializing PRNG with seed number: ${prngSeedNumber}`);
+    // Note: We will initialize PRNGs per mix later
+
+    const bpmOptions = [80, 100, 120, 140, 160, 180, 240];
+    
+    /**
+     * Maps the seed string to a BPM value.
+     * @param {string} seed - The seed string.
+     * @returns {number} - Selected BPM.
+     */
+    const mapSeedToBpm = (seed) => {
+        const hash = seed.split("").reduce((acc, char) => {
+            const digit = parseInt(char, 10);
+            return (10 * acc + (isNaN(digit) ? 0 : digit)) % 1000000007;
+        }, 0);
+        const bpm = bpmOptions[hash % bpmOptions.length];
+        log(`Seed: ${seed}, Hash: ${hash}, Selected BPM: ${bpm}`);
+        return bpm;
+    };
+    
+    const bpm = mapSeedToBpm(newSeed);
+
+    /**
+     * Loads previous seeds from localStorage.
+     * @returns {Array} - Array of previous seeds.
+     */
+    const loadPreviousSeeds = () => {
+        const seeds = JSON.parse(localStorage.getItem("previousSeeds")) || [];
+        displayPreviousSeeds(seeds);
+        return seeds;
+    };
+
+    /**
+     * Saves a new seed to localStorage.
+     * @param {string} seed - The seed to save.
+     */
+    const saveSeed = (seed) => {
+        const seeds = loadPreviousSeeds();
+        if (!seeds.includes(seed)) {
+            seeds.push(seed);
+            localStorage.setItem("previousSeeds", JSON.stringify(seeds));
+            displayPreviousSeeds(seeds);
+            log(`Seed saved: ${seed}`);
+        }
+    };
+
+    /**
+     * Displays previous seeds in the UI.
+     * @param {Array} seeds - Array of seed strings.
+     */
+    const displayPreviousSeeds = (seeds) => {
+        const container = document.getElementById("previous-seeds-container");
+        if (!container) {
+            log("Previous seeds container element not found.");
+            return;
+        }
+        container.innerHTML = seeds.length ? seeds.map(seed => `
+            <li>
+                ${seed}
+                <button onclick="copyToClipboard('${seed}')">Copy</button>
+            </li>`).join('') : "";
+    };
+
+    /**
+     * Copies a seed to the clipboard.
+     * @param {string} seed - The seed to copy.
+     */
+    window.copyToClipboard = (seed) => {
+        navigator.clipboard.writeText(seed)
+            .then(() => alert(`Seed copied to clipboard: ${seed}`))
+            .catch(err => console.error("Could not copy text:", err));
+    };
+
+    /**
+     * Clears all previous seeds from localStorage.
+     */
+    const clearPreviousSeeds = () => {
+        if (confirm("Are you sure you want to clear all previous seeds?")) {
+            localStorage.removeItem("previousSeeds");
+            displayPreviousSeeds([]);
+            log("All previous seeds have been cleared.");
+        }
+    };
+
+    /**
+     * Displays the current seed and BPM on a canvas.
+     * @param {string} seed - The current seed.
+     * @param {number} bpm - The selected BPM.
+     */
+    const displaySeedAndBPM = (seed, bpm) => {
+        const canvas = document.getElementById("seed-mgmt-canvas");
+        if (!canvas) { log("Info canvas element not found."); return; }
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--seed-bg-color') || 'green';
+        ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bpm-bg-color') || 'orange';
+        ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-color') || 'white';
+        ctx.font = `${getComputedStyle(document.documentElement).getPropertyValue('--font-size') || '16px'} Arial`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`Seed: ${seed}`, canvas.width / 2, canvas.height / 4);
+        ctx.fillText(`BPM: ${bpm}`, canvas.width / 2, (3 * canvas.height) / 4);
+
+        saveSeed(seed);
+
+        const seedDisplay = document.querySelector('#nowPlayingContainer .current-seed');
+        if (seedDisplay) {
+            seedDisplay.textContent = `Seed: ${seed}`;
+            log(`Updated current seed display: ${seed}`);
+        } else {
+            log("Seed display element not found.");
+        }
+    };
+
+    /**
+     * Sets up event listeners for DOMContentLoaded and button clicks.
+     */
+    const setupEventListeners = () => {
+        document.addEventListener("DOMContentLoaded", () => {
+            displaySeedAndBPM(newSeed, bpm);
+            loadPreviousSeeds();
+
+            // Generate mixes after the DOM is loaded
+            const mixes = generateRandomMixes(window.seed, 10);
+            console.log("Generated Mixes:", mixes);
+        });
+
+        document.getElementById("clear-seeds-button")?.addEventListener("click", clearPreviousSeeds);
+
+        document.getElementById("load-seed-button")?.addEventListener("click", () => {
+            const seedInput = document.getElementById("seed-input").value.trim();
+            if (!seedInput) return alert("Please enter a seed.");
+            if (!/^\d+$/.test(seedInput)) return alert("Seed must be numeric.");
+            // Ensure the seed is within the safe integer range
+            if (BigInt(seedInput) > BigInt(Number.MAX_SAFE_INTEGER)) {
+                return alert(`Seed must be a number up to ${Number.MAX_SAFE_INTEGER}.`);
+            }
+            const url = new URL(window.location);
+            url.searchParams.set('seed', seedInput);
+            window.location.href = url.toString();
+        });
+    };
+
+    window.SeedAndBpmManager = {
+        seed: newSeed,
+        bpm: bpm,
+        generateAdditionalSeed: () => {
+            let additionalSeed = generateSeed();
+            // Ensure the additional seed is within the safe integer range
+            while (BigInt(additionalSeed) > BigInt(Number.MAX_SAFE_INTEGER)) {
+                log(`Additional seed ${additionalSeed} exceeds Number.MAX_SAFE_INTEGER. Regenerating...`);
+                additionalSeed = generateSeed();
+            }
+            log(`Generating additional seed: ${additionalSeed}`);
+            return additionalSeed;
+        }
+    };
+
+    setupEventListeners();
+})();
+    </script>
+</head>
+<body>
+
+    <section>
+        <span class="songTitle">The Infinite Ordinal Remix</span>
+        <h1>Audionals</h1>
+        
+        <!-- Seed Management Panel -->
+        <div id="seed-management-panel" class="hidden" role="dialog" aria-labelledby="seed-panel-title" aria-hidden="true">
+            <h2 id="seed-panel-title">Seed Management</h2>
+            <canvas id="seed-mgmt-canvas" width="300" height="100" aria-label="Seed and BPM Information"></canvas>
+            <div id="previous-seeds-container"><ul></ul></div>
+            <input type="text" id="seed-input" placeholder="Enter Seed" aria-label="Enter Seed">
+            <button id="load-seed-button" aria-label="Load Seed">Load Seed</button>
+            <button id="clear-seeds-button" aria-label="Clear Previous Seeds">Clear Previous Seeds</button>
+        </div>
+        
+        <div id="loadingSpinner"></div>
+        <div id="artworkCover"><img id="artworkImage" src="" alt="Artwork Cover"></div>
+        <div id="trackListingPanel">
+            <h2>Track Listings:</h2>
+            <div id="metadataContent"></div>
+        </div>
+        
+        <div id="nowPlayingContainer">
+            <span class="current-seed">Seed: N/A</span>
+            <span class="title">The Infinite Ordinal Remix</span>
+        </div>
+        
+        <div id="buttonContainer">
+            <button id="playButton" onclick="globalData.togglePlayback()" aria-label="Play or Stop Music">Play / Stop</button>
+            <button id="prevButton" onclick="globalData.previousSong()" aria-label="Previous Song">Previous</button>
+            <button id="nextButton" onclick="globalData.nextSong()" aria-label="Next Song">Next</button>
+            <button id="toggle-track-panel-button" onclick="toggleTrackListAndPopulate()" aria-label="Toggle Track List Panel">Track List</button>
+            <button id="toggle-seed-panel-button" onclick="togglePanel('seed-management-panel')" aria-label="Toggle Seed Management Panel">Seed Panel</button>
+        </div>
+        
+        <!-- Track List Panel -->
+        <div id="track-list-panel" class="hidden" role="dialog" aria-labelledby="track-list-title" aria-hidden="true">
+            <h2 id="track-list-title">Track List</h2>
+            <div id="track-list-container"></div>
+        </div>
+
+    </section>
+    <!-- Songs and Artwork -->
+    <script src="/content/616ef4c1bef02cb6c0f785ef76b98df4e379e8f01e2b31e2ae9e68449485f2bci0"></script> 
+   <!-- Global Data -->
+    <script src="/content/e8496fa0bcb3cad6bc173cd1ef2564b9548b43b306634bdafce47083efd7619ai0"></script> 
+
+
+
+
+
+ <!-- Effects Configuration Script (effects.js) -->
+ <script>
+    (() => {
+        console.log("[EffectsModule] Script started.");
+        window.EffectsModule = window.EffectsModule || {};
+        window.EffectsModule.effectsConfig = { 
+            pitchShift: { 
+                enabled: true, 
+                defaultProbability: 1, 
+                shifts: [0.25, 0.5, 1, 2, 4]
+            },
+            harmonize: { 
+                enabled: true, 
+                defaultProbability: 0.02, 
+                intervals: [1.2599, 1.4983],
+                maxHarmonyChannels: 2
+            },
+            delay: {
+                enabled: true, 
+                defaultProbability: 1, 
+                noteValue: 'quarter',
+                maxDelayRepeats: 16
+            },
+            reverse: {
+                enabled: true, 
+                defaultProbability: 1
+            },
+            pan: {
+                enabled: true,
+                defaultProbability: 1,
+                positions: [-1, 1]
+            },
+            reverb: {
+                enabled: true, 
+                defaultProbability: 1, 
+                decayTimeRange: [2, 7], 
+                mixRange: [0.3, 0.9]
+            },
+            filter: {
+                enabled: true, 
+                defaultProbability: 0.7, 
+                types: ['lowpass', 'highpass', 'bandpass'], 
+                frequencyRange: [300, 8000], 
+                QRange: [1, 10]
+            },
+            tremolo: {
+                enabled: true, 
+                defaultProbability: 0.6, 
+                rateRange: [4, 12],   
+                depthRange: [0.6, 1]
+            },
+            distortion: {
+                enabled: true, 
+                defaultProbability: 0.5, 
+                amountRange: [1, 15]
+            },
+            bitcrusher: {
+                enabled: true, 
+                defaultProbability: 0.3, 
+                bitDepthRange: [2, 6],    
+                sampleRateRange: [8000, 22050]
+            }
+        };
+
+        window.EffectsModule.getEffectParams = function(effectName, currentSequence) {
+            const effect = window.EffectsModule.effectsConfig[effectName];
+            if (!effect || !effect.enabled) return null;
+            let probability = effect.defaultProbability;
+            if (Math.random() < probability) {
+                return effect;
+            }
+            return null;
+        };
+
+        console.log("[EffectsModule] Effects configuration loaded.");
+        document.dispatchEvent(new Event('effectsLoaded'));
+    })();
+</script>
+
+<!-- Main Script (main.js) -->
+<script>
+    (async () => {
+        console.log("[MainScript] Script started.");
+
+        /**
+         * Waits for the 'effectsLoaded' event if the EffectsModule is not yet available.
+         */
+        function waitForEffects() {
+            return new Promise((resolve) => {
+                if (window.EffectsModule && window.EffectsModule.effectsConfig) {
+                    resolve();
+                } else {
+                    document.addEventListener('effectsLoaded', resolve, { once: true });
+                }
+            });
+        }
+
+        // Wait for the effects configuration to be loaded
+        await waitForEffects();
+        // console.log("[MainScript] Effects configuration is available.");
+
+        // Now you can safely use EffectsModule.effectsConfig and EffectsModule.getEffectParams
+
+        // Define the list of loop sample IDs
+        const loopSampleIds = new Set([
+            "7c42769c1763cc8f045aada7914e8158223e45e7a4f197b49f918b1c005d36fci0", // Minty Fresh - Channel F
+            "3364803cb3032ce95f4138a214c15a9b36dcb70f574a477f27615d448e1cdeb8i0", // I love cheese - Channel 4/E
+        ]);
+
+        const keyNames = [
+            "projectName",
+            "artistName",
+            "projectBPM",
+            "currentSequence",
+            "channelURLs",
+            "channelVolume",
+            "channelPlaybackSpeed",
+            "trimSettings",
+            "projectChannelNames",
+            "startSliderValue",
+            "endSliderValue",
+            "totalSampleDuration",
+            "start",
+            "end",
+            "projectSequences",
+            "steps"
+        ];
+
+        const keyMap = keyNames.reduce((map, key, index) => {
+            map[key] = index;
+            return map;
+        }, {});
+
+        const channelIds = Array.from({ length: 16 }, (_, index) => String.fromCharCode(65 + index));
+        const channelIdMap = channelIds.reduce((map, id, index) => {
+            map[id] = index;
+            return map;
+        }, {});
+
+        /**
+         * Fetches, decompresses, and processes song data from a given URL.
+         * @param {string} url - The URL to fetch the song data from.
+         * @returns {object} - The processed song data.
+         */
+        const fetchAndProcessSongData = async (url) => {
+            // console.log(`[Initialization] Fetching and processing data from URL: ${url}`);
+
+            try {
+                const response = await fetch(url);
+
+                if (!response.ok) throw new Error(`Network error for ${url}`);
+
+                const compressedData = new Uint8Array(await response.arrayBuffer());
+                const inflatedData = window.pako.inflate(compressedData);
+
+                const jsonString = new TextDecoder("utf-8").decode(inflatedData);
+                const parsedData = JSON.parse(jsonString);
+
+                const processParsedData = (data) => {
+                    const recurse = (obj) => {
+                        if (Array.isArray(obj)) {
+                            return obj.map(recurse);
+                        } else if (obj && typeof obj === "object") {
+                            return Object.entries(obj).reduce((accumulator, [key, value]) => {
+                                const mappedKey = keyNames[key] || key;
+                                accumulator[mappedKey] = mappedKey === "projectSequences"
+                                    ? Object.fromEntries(
+                                        Object.entries(value).map(([seqKey, seqValue]) => {
+                                            const sequenceName = `Sequence${seqKey.replace(/^s/, "")}`;
+                                            const channels = Object.fromEntries(
+                                                Object.entries(seqValue).map(([channelKey, channelValue]) => {
+                                                    const steps = channelValue[keyMap.steps] || [];
+                                                    const processedSteps = steps.flatMap((step) => {
+                                                        if (typeof step === "number") {
+                                                            return step;
+                                                        } else if (step?.r) {
+                                                            const [start, end] = step.r;
+                                                            return Array.from({ length: end - start + 1 }, (_, idx) => start + idx);
+                                                        } else if (typeof step === "string" && step.endsWith("r")) {
+                                                            return { index: parseInt(step.slice(0, -1), 10), reverse: true };
+                                                        } else {
+                                                            return [];
+                                                        }
+                                                    });
+                                                    return [`ch${channelIdMap[channelKey]}`, { steps: processedSteps }];
+                                                })
+                                            );
+                                            return [sequenceName, channels];
+                                        })
+                                    )
+                                    : recurse(value);
+                                return accumulator;
+                            }, {});
+                        } else {
+                            return obj;
+                        }
+                    };
+                    return recurse(data);
+                };
+
+                const processedData = processParsedData(parsedData);
+
+                return processedData;
+
+            } catch (error) {
+                console.error(`[Initialization] Error fetching/deserializing ${url}:`, error);
+                throw error;
+            }
+        };
+
+        /**
+         * Prepares the initial sample order for the song.
+         * @param {object} songData - The song data object.
+         * @returns {Array} - The initial sample order array.
+         */
+         const prepareInitialSampleOrder = ({ projectSequences }) => {
+            const sampleSet = new Set();
+            const sampleOrder = [];
+            Object.keys(projectSequences)
+                .sort((a, b) => +a.slice(9) - +b.slice(9))
+                .forEach(seqK => {
+                    Object.entries(projectSequences[seqK]).forEach(([chId, { steps }]) => {
+                        steps.forEach(step => {
+                            if (typeof step === "number" || step?.index !== undefined) {
+                                const id = `${chId}_${step.reverse ? 'r' : 'f'}`;
+                                if (!sampleSet.has(id)) {
+                                    sampleSet.add(id);
+                                    sampleOrder.push({ channelId: chId, reverse: step.reverse || false });
+                                }
+                            }
+                        });
+                    });
+                });
+            return sampleOrder;
+        };
+
+        /**
+         * Sets the artwork image on the page.
+         * @param {string} url - The URL of the artwork image.
+         */
+        const setArtworkImage = url => {
+            const el = document.getElementById("artworkImage");
+            if (el) {
+                el.src = url;
+                el.parentElement.style.display = "flex";
+                console.log("[Initialization] Artwork image set and displayed.");
+            } else {
+                console.warn("[Initialization] Artwork cover elements not found.");
+            }
+        };
+
+
+// --- Effect Application Functions ---
+
+/**
+ * Applies a random pitch shift to the channel based on the effect parameters.
+ */
+const applyRandomPitchShift = (channel, { shifts }, prng) => {
+    const shift = shifts[Math.floor(prng() * shifts.length)];
+    channel.metadata.playbackSpeed *= shift;
+};
+
+/* Adds harmony channels by duplicating the original channel and applying pitch shifts.
+ */
+const addHarmony = (originalChannel, index, newSong, { intervals, maxHarmonyChannels }, context, prng) => {
+    if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
+    intervals.forEach(interval => {
+        if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
+        const harmony = JSON.parse(JSON.stringify(originalChannel));
+        harmony.id = `${originalChannel.id}_harmony_${index}_${interval}`;
+        harmony.metadata.playbackSpeed *= interval;
+        harmony.metadata.volume = (harmony.metadata.volume || 1) * 0.8;
+        newSong.channels.push(harmony);
+        context.harmonyChannelsAdded++;
+    });
+};
+
+const applyIntermittentDelay = (channel, { noteValue, maxDelayRepeats }, bpm) => {
+    const beatDuration = 60000 / bpm;
+    const delayMap = { 'quarter': beatDuration, 'eighth': beatDuration / 2, 'sixteenth': beatDuration / 4 };
+    channel.metadata.delay = { time: delayMap[noteValue] || beatDuration, repeats: maxDelayRepeats };
+};
+
+/**
+ * Calculates delay time based on BPM and note value.
+ */
+function calculateDelayTime(bpm, noteValue = 'quarter') {
+    const beatDuration = 60000 / bpm; // Duration of one beat in ms
+    const delayMap = {
+        'quarter': beatDuration,
+        'eighth': beatDuration / 2,
+        'sixteenth': beatDuration / 4
+    };
+    return delayMap[noteValue] || beatDuration;
+}
+
+const applyReverseEffect = channel => {
+    channel.metadata.requiresReversal = true;
+};
+
+const applyVolumeChange = (channel, { range }, prng) => {
+    const [min, max] = range;
+    channel.metadata.volume = (channel.metadata.volume || 1) * (prng() * (max - min) + min);
+};
+
+const applyPanEffect = (channel, { positions }, prng) => {
+    channel.metadata.pan = positions[Math.floor(prng() * positions.length)];
+};
+
+const applyReverbEffect = (channel, { decayTimeRange, mixRange }, prng) => {
+    channel.metadata.reverb = {
+        decayTime: prng() * (decayTimeRange[1] - decayTimeRange[0]) + decayTimeRange[0],
+        mix: prng() * (mixRange[1] - mixRange[0]) + mixRange[0]
+    };
+};
+
+const applyFilterEffect = (channel, { types, frequencyRange, QRange }, prng) => {
+    channel.metadata.filter = {
+        type: types[Math.floor(prng() * types.length)],
+        frequency: prng() * (frequencyRange[1] - frequencyRange[0]) + frequencyRange[0],
+        Q: prng() * (QRange[1] - QRange[0]) + QRange[0]
+    };
+};
+
+const applyTremoloEffect = (channel, { rateRange, depthRange }, prng) => {
+    channel.metadata.tremolo = {
+        rate: prng() * (rateRange[1] - rateRange[0]) + rateRange[0],
+        depth: prng() * (depthRange[1] - depthRange[0]) + depthRange[0]
+    };
+};
+
+const applyDistortionEffect = (channel, { amountRange }, prng) => {
+    channel.metadata.distortion = {
+        amount: prng() * (amountRange[1] - amountRange[0]) + amountRange[0]
+    };
+};
+
+const applyBitcrusherEffect = (channel, { bitDepthRange, sampleRateRange }, prng) => {
+    channel.metadata.bitcrusher = {
+        bitDepth: Math.floor(prng() * (bitDepthRange[1] - bitDepthRange[0] + 1)) + bitDepthRange[0],
+        sampleRate: prng() * (sampleRateRange[1] - sampleRateRange[0]) + sampleRateRange[0]
+    };
+};
+
+/**
+ * Applies enabled effects to the channel based on current sequence and BPM.
+ * Includes checks to prevent overdriving and infinite loops.
+ */
+function applyEffects(channel, index, newSong, currentSequence, bpm, effectsContext, prng) {
+    const effectsMap = [
+        { name: 'pitchShift', applyFn: (ch, params) => applyRandomPitchShift(ch, params, prng) },
+        { name: 'harmonize', applyFn: (ch, params) => addHarmony(ch, index, newSong, params, effectsContext, prng) },
+        { name: 'delay', applyFn: (ch, params) => applyIntermittentDelay(ch, params, bpm) },
+        { name: 'reverse', applyFn: (ch, params) => applyReverseEffect(ch) },
+        { name: 'volumeChange', applyFn: (ch, params) => applyVolumeChange(ch, params, prng) },
+        { name: 'pan', applyFn: (ch, params) => applyPanEffect(ch, params, prng) },
+        { name: 'reverb', applyFn: (ch, params) => applyReverbEffect(ch, params, prng) },
+        { name: 'filter', applyFn: (ch, params) => applyFilterEffect(ch, params, prng) },
+        { name: 'tremolo', applyFn: (ch, params) => applyTremoloEffect(ch, params, prng) },
+        { name: 'distortion', applyFn: (ch, params) => applyDistortionEffect(ch, params, prng) },
+        { name: 'bitcrusher', applyFn: (ch, params) => applyBitcrusherEffect(ch, params, prng) }
+    ];
+
+    effectsMap.forEach(effect => {
+        const effectParams = window.EffectsModule.getEffectParams(effect.name, currentSequence, prng);
+        if (effectParams) effect.applyFn(channel, effectParams);
+    });
+
+    // Adjust overall volume if cumulative gain exceeds threshold
+    if (effectsContext.totalGain > effectsContext.maxTotalGain) {
+        const reductionFactor = effectsContext.maxTotalGain / effectsContext.totalGain;
+        channel.metadata.volume = (channel.metadata.volume || 1) * reductionFactor;
+    }
+
+    // Update total gain
+    effectsContext.totalGain += channel.metadata.volume || 1;
+}
+
+try {
+    const validSongDataUrls = songDataUrls.filter((url) => url.trim() && !url.trim().startsWith("//"));
+    console.log(`[Initialization] Valid song data URLs count: ${validSongDataUrls.length}`);
+
+    if (validSongDataUrls.length) {
+        // Load Pako library if not already loaded
+        if (!window.pako) {
+            await (async function loadPako() {
+                try {
+                    const response = await fetch("/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0");
+                    const textContent = await response.text();
+                    const scriptElement = new DOMParser().parseFromString(textContent, "text/html").querySelector("script");
+
+                    if (!scriptElement || !scriptElement.textContent.includes("pako")) {
+                        throw new Error("Pako library not found.");
+                    }
+
+                    document.head.append(
+                        Object.assign(document.createElement("script"), { textContent: scriptElement.textContent })
+                    );
+                    console.log("[Initialization] Pako library loaded successfully.");
+                } catch (error) {
+                    console.error("[Initialization] Error loading Pako:", error);
+                }
+            })();
+        }
+        // Fetch and process song data from all URLs
+        const songDataArray = await Promise.all(
+            validSongDataUrls.map(async (url, index) => {
+                try {
+                    const data = await fetchAndProcessSongData(url);
+                    return { data, index };
+                } catch (error) {
+                    console.error(`[Initialization] Failed ${url}:`, error);
+                    return null;
+                }
+            })
+        ).then(dataArray => {
+            const validDataArray = dataArray.filter(Boolean);
+            if (!validDataArray.length) throw new Error("[Initialization] No valid data.");
+            return validDataArray;
+        });
+
+        // Process the song data into 'originalSongs'
+        const originalSongs = songDataArray
+            .sort((a, b) => a.index - b.index)
+            .map(({ data, index }) => {
+                const {
+                    projectName = "The Infinite Ordinal",
+                    artistName = "melophonic",
+                    projectBPM = 120,
+                    projectSequences = {},
+                    channelURLs = [],
+                    channelVolume = [],
+                    channelPlaybackSpeed = [],
+                    trimSettings = {}
+                } = data;
+
+                const channels = channelIds.map((id, idx) => {
+                    const channelSequence = Object.entries(projectSequences).reduce((acc, [sequenceName, sequenceData]) => {
+                        const channelData = sequenceData[`ch${idx}`];
+                        if (channelData) acc.push({ sequenceName, steps: channelData.steps });
+                        return acc;
+                    }, []);
+
+                    const metadata = {
+                        volume: channelVolume[idx] ?? 1,
+                        playbackSpeed: channelPlaybackSpeed[idx] ?? 1,
+                        trimStartTime_Percentage: trimSettings[idx]?.start || 0,
+                        trimEndTime_Percentage: trimSettings[idx]?.end || 100,
+                        requiresReversal: channelSequence.some(seq => seq.steps.some(step => typeof step === "object" && step.reverse)),
+                        channelSequence,
+                        originalBPM: projectBPM
+                    };
+
+                    const sampleId = channelURLs[idx];
+                    if (loopSampleIds.has(sampleId)) {
+                        metadata.isLoop = true;
+                        console.log(`[effectsDebug] ID ${sampleId} is identified as a loop and included in Song ${index + 1}: ${projectName}`);
+                    }
+
+                    return { id, url: sampleId || "URL_not_found", metadata };
+                });
+
+                return {
+                    id: `Song ${index + 1}: ${projectName}`,
+                    artist: artistName,
+                    bpm: projectBPM,
+                    totalSequences: Object.keys(projectSequences).length,
+                    totalChannels: channels.length,
+                    channels,
+                    projectSequences
+                };
+            });
+
+        // Collect all channels from original songs
+        const allChannels = originalSongs.flatMap(song => song.channels);
+
+        // Function to get random channels
+        const getRandomChannels = (channelsArray, num, prng) => channelsArray.slice().sort(() => prng() - 0.5).slice(0, num);
+       
+       
+      /**
+         * Generates random mixes with dynamic BPM selection and custom rules for specific songs.
+         * @param {number | string} initialSeed - The starting seed value (window.seed can now be a large number or string).
+         * @param {number} numMixes - The number of mixes to generate (default is 10).
+         * @returns {Array} - The array of generated song objects.
+         */
+        function generateRandomMixes(initialSeed, numMixes = 10) {
+            console.log("[generateRandomMixes] Function called with initialSeed:", initialSeed);
+            const newSongs = [];
+            const bpmOptions = [60, 120, 140, 160, 180, 240];
+
+            // Convert the initial seed to BigInt for handling large numbers
+            let baseSeedNum = BigInt(initialSeed);
+            console.log(`Starting mix generation with base seed number: ${baseSeedNum}`);
+
+            for (let mixIndex = 0; mixIndex < numMixes; mixIndex++) {
+                // Increment the seed for each mix to ensure uniqueness
+                const uniqueSeedNum = baseSeedNum + BigInt(mixIndex);
+
+                // Custom PRNG to handle BigInt-based seeds (replace this if needed)
+                const prng = mulberry32(Number(uniqueSeedNum % BigInt(4294967296))); // Ensure seed fits PRNG
+                console.log(`[Mix ${mixIndex + 1}] Using Seed: ${uniqueSeedNum}`);
+
+                // Select a random BPM from the options
+                const selectedBPM = bpmOptions[Math.floor(prng() * bpmOptions.length)];
+                console.log(`[Mix ${mixIndex + 1}] Selected BPM: ${selectedBPM}`);
+
+                // Randomly select channels
+                const randomChannels = getRandomChannels(allChannels, 28, prng);
+                console.log(`[Mix ${mixIndex + 1}] Selected Channels:`, randomChannels.map(ch => ch.id));
+
+                // Define activation points
+                const activationPoints = [
+                    { startSeq: 1, count: 16 }, { startSeq: 5, count: 4 },
+                    { startSeq: 17, count: 4 }, { startSeq: 25, count: 4 }
+                ];
+
+                const channelsWithActivation = [];
+                let channelOffset = 0;
+                activationPoints.forEach(point => {
+                    for (let i = 0; i < point.count; i++) {
+                        if (channelOffset < randomChannels.length) {
+                            channelsWithActivation.push({
+                                channel: JSON.parse(JSON.stringify(randomChannels[channelOffset])),
+                                activationSeq: point.startSeq
+                            });
+                            channelOffset++;
+                        }
+                    }
+                });
+
+                const sequenceSet = new Set();
+                channelsWithActivation.forEach(({ channel }) =>
+                    channel.metadata.channelSequence?.forEach(seq => sequenceSet.add(seq.sequenceName))
+                );
+
+                const sequences = Array.from(sequenceSet).sort((a, b) => parseInt(a.replace('Sequence', '')) - parseInt(b.replace('Sequence', '')));
+
+                // Construct the new song object
+                const newSong = {
+                    id: `The Infinite Ordinal Remix #${mixIndex + 1}`,
+                    projectName: `The Infinite Ordinal`,
+                    artist: `melophonic`,
+                    bpm: selectedBPM,
+                    totalSequences: sequences.length,
+                    totalChannels: channelsWithActivation.length,
+                    channels: [],
+                    projectSequences: sequences.reduce((acc, seq) => ({ ...acc, [seq]: {} }), {})
+                };
+
+                const effectsContext = { 
+                    harmonyChannelsAdded: 0, 
+                    maxHarmonyChannels: window.EffectsModule?.effectsConfig?.harmonize?.maxHarmonyChannels || 2, 
+                    totalGain: 0, 
+                    maxTotalGain: 10 
+                };
+
+                // Add channels to the song and apply effects
+                channelsWithActivation.forEach(({ channel, activationSeq }, index) => {
+                    const chId = `ch${index}`;
+                    const newChannel = {
+                        id: chId,
+                        url: channel.url,
+                        metadata: { 
+                            ...channel.metadata, 
+                            originalBPM: newSong.bpm, 
+                            activationSeq 
+                        }
+                    };
+
+                    applyEffects(newChannel, index, newSong, activationSeq, newSong.bpm, effectsContext, prng);
+                    newSong.channels.push(newChannel);
+
+                    channel.metadata.channelSequence?.forEach(seqData => {
+                        if (!newSong.projectSequences[seqData.sequenceName]) {
+                            newSong.projectSequences[seqData.sequenceName] = {};
+                        }
+                        newSong.projectSequences[seqData.sequenceName][chId] = { steps: seqData.steps };
+                    });
+                });
+
+                // Log the remix name and the seed used to generate it
+                console.log(`[Mix ${mixIndex + 1}] Remix Name: "${newSong.id}", Seed Used: ${uniqueSeedNum}`);
+                
+                newSongs.push(newSong);
+            }
+
+            console.log(`Generated ${newSongs.length} mixes successfully.`);
+            return newSongs;
+        }
+
+
+
+
+        // Helper function to determine if a channel is from "Fiat Money" or "Did You Know"
+        const isChannelFromSpecialSong = channel => [
+            "/content/5ee46b8f645a65b0ec8ae749a28f88e364347f89137bb79986355bf5fb94cbebi0",
+            "/content/c41de57f1e062a440a9fc96d54baaccd7ec40049f48e9f3880559afc60b1b09ai0"
+        ].includes(channel.url);
+
+        // Helper function to randomly select one of the four activation rules
+        const getRandomActivationRule = prng => [1, 2, 3, 4][Math.floor(prng() * 4)];
+
+        // Helper function to generate activation events based on the selected rule
+        const generateActivationEvents = (rule, totalSequences, prng) => {
+            const events = [];
+            switch (rule) {
+                case 1:
+                    events.push({ type: 'activate', seq: 1 }, { type: 'deactivate', seq: 3 });
+                    break;
+                case 2:
+                    for (let seq = 1; seq <= totalSequences; seq += 4) {
+                        events.push({ type: 'activate', seq }, { type: 'deactivate', seq: seq + 2 });
+                    }
+                    break;
+                case 3:
+                    events.push({ type: 'activate', seq: 9 });
+                    for (let seq = 9; seq <= 20; seq += 4) {
+                        events.push({ type: 'activate', seq }, { type: 'deactivate', seq: seq + 2 });
+                    }
+                    events.push({ type: 'activate', seq: 41 });
+                    break;
+                case 4:
+                    getRandomSubset([1, 5, 9, 16, 21, 25, 29, 33, 37, 41, 45], Math.floor(prng() * 3) + 1, prng)
+                        .forEach(startSeq => {
+                            events.push({ type: 'activate', seq: startSeq });
+                            if (startSeq + 2 <= totalSequences) events.push({ type: 'deactivate', seq: startSeq + 2 });
+                        });
+                    break;
+                default:
+                    events.push({ type: 'activate', seq: 1 }, { type: 'deactivate', seq: 3 });
+            }
+            return events;
+        };
+
+        // Helper function to get a random subset from an array
+        const getRandomSubset = (array, size, prng) => array.slice().sort(() => prng() - 0.5).slice(0, size);
+
+        // **Generate initial mix**
+        const generatedSongs = generateRandomMixes(window.seed);
+
+        // Set globalData.songsArray to generated songs only
+        Object.assign(globalData, {
+            songsArray: generatedSongs,
+            currentSongIndex: 0,
+            currentSequenceIndex: 0,
+            initialSampleOrder: generatedSongs.length ? prepareInitialSampleOrder(generatedSongs[0]) : null,
+            isSingleSong: generatedSongs.length === 1,
+            isMultipleSongs: generatedSongs.length > 1
+        });
+
+        // Set artwork image if applicable
+        if (globalData.isArtworkCover && artworkUrl.length) setArtworkImage(artworkUrl[0]);
+
+        // Dispatch event indicating data loading is complete
+        document.dispatchEvent(new CustomEvent("dataLoadingComplete", {
+            detail: {
+                success: true,
+                totalSongs: globalData.songsArray.length,
+                songs: globalData.songsArray.map(({ id, totalSequences }) => ({ id, totalSequences }))
+            }
+        }));
+        console.log("[Initialization] Data loading complete event dispatched.");
+
+        // **Log the Original Songs Array with Names and BPMs**
+        console.log("Original Songs Data:");
+        originalSongs.forEach(song => {
+            console.log(`ID: ${song.id}\nArtist: ${song.artist}\nBPM: ${song.bpm}\nTotal Sequences: ${song.totalSequences}\nTotal Channels: ${song.totalChannels}\nChannels and Metadata:`);
+            song.channels.forEach(({ id, url, metadata }) => {
+                console.log(`  Channel ID: ${id}\n    URL: ${url}\n    Metadata:`, metadata);
+            });
+            console.log("---------------------------------------------------");
+        });
+
+    } else {
+        console.log("[Initialization] No valid song data URLs to process.");
+    }
+} catch (error) {
+    console.error("[Initialization] Initialization error:", error);
+}
+
+    })();
+</script>
+
+
+
+<!-- Load Player Scripts AFTER data loading is complete -->
+<script>
+    // Listen for the 'dataLoadingComplete' event before loading player scripts
+    document.addEventListener("dataLoadingComplete", (event) => {
+        console.log("[Script Loader] dataLoadingComplete event received. Loading player scripts...");
+
+        const remainingScriptUrls = [
+            "/content/5c03e882ab5a531271b2e93a80d8a9d72cb533c580bec1567020f5cd61595560i0", // projectArtistMapping
+            "/content/016f153f011f6a23b8fccd0efcc7945913ee97f241c7a2df7c71c4fa7c9a5fb3i0", // unifiedMetadataManagement
+            "/content/ef622be8aeeac45fdbdc291dd0db739d24c2c667c5c3ce7662f2b8c7f2c3de58i0", // GainNodeHelpers
+            "/content/f4cc99813b43f71b3e781d3c99f24a6a7a5b1004ea0efce3b225011e347b8df0i0", // audioProcessingAndManagement
+            "/content/7b305327f2951d219532ef0cb46b2039b23f2cfd0d8d0e827f3fe1b2b754b5a9i0", // DynamicGainBalancing
+            "/content/7f1e3b45f22f943ddfb90a0b9811671185f720bb303f002215b9e0fd932f299ci0", // playbackEngine
+            "/content/8b5b09cfedbc0c6a187816181f8d33f90c5bbd15fc10af47008176effb866a47i0"  // keyboardControlsAndEventListeners
+            ];
+
+        // Load scripts sequentially
+        const loadScriptsSequentially = (urls) => {
+            if (urls.length === 0) {
+                console.log("[Script Loader] All player scripts loaded.");
+                return;
+            }
+            const src = urls.shift();
+            const script = document.createElement("script");
+            script.src = src;
+            script.async = false; // Ensure scripts are executed in order
+            script.onload = () => {
+                console.log(`[Script Loader] Loaded script: ${src}`);
+                loadScriptsSequentially(urls);
+            };
+            script.onerror = (e) => {
+                console.error(`[Script Loader] Error loading script: ${src}`, e);
+                loadScriptsSequentially(urls);
+            };
+            document.body.appendChild(script);
+        };
+
+        loadScriptsSequentially([...remainingScriptUrls]);
+    });
+</script>
+
+
+
+</body>
+</html>
+
+
+
