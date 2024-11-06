@@ -222,6 +222,12 @@
     <section>
         <span class="songTitle">The Infinite Ordinal Remix</span>
         <h1>Audionals</h1>
+            <!-- Songs and Artwork -->
+    <script src="/content/616ef4c1bef02cb6c0f785ef76b98df4e379e8f01e2b31e2ae9e68449485f2bci0"></script> 
+    <!-- Global Data -->
+    <script src="/content/e8496fa0bcb3cad6bc173cd1ef2564b9548b43b306634bdafce47083efd7619ai0"></script> 
+
+
 
         <!-- Seed Management Panel -->
         <div id="seed-management-panel" class="hidden" role="dialog" aria-labelledby="seed-panel-title" aria-hidden="true">
@@ -1115,7 +1121,324 @@
                 globalData.currentSongId = currentSong.id;
                 // GainNodeHelper.createGainNodesForSong(currentSong); // Assuming GainNodeHelper is defined elsewhere
 
+               
+
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
                 globalData.isPlaying = true;
-                totalSequences = Object.keys(projectSequences).length;
-                const totalDuration = totalSequences * sequenceDuration;
-                songEndTime
+            totalSequences = Object.keys(projectSequences).length;
+            const totalDuration = totalSequences * sequenceDuration;
+            songEndTime = audioContext.currentTime + totalDuration;
+            completedSequences = 0;
+
+            initializeTimerAndSequenceCount(totalDuration, totalSequences);
+
+            playbackTimer = setInterval(() => {
+                processPlaybackStep(currentSong);
+                updateTimerAndSequenceCount();
+            }, PLAYBACK_INTERVAL * 1000);
+
+            document.dispatchEvent(new CustomEvent("playbackStarted", { detail: { success: true } }));
+
+            console.log(`[PlaybackEngine] Now Playing: "${currentSong.id}", BPM: ${currentSong.bpm}. Total Duration: ${formatTime(totalDuration)}. Total Sequences: ${totalSequences}.`);
+
+            updateNowPlayingUI(currentSong);
+        }
+
+        function stopPlayback() {
+            if (!globalData.isPlaying) return;
+
+            resetPlayback();
+            document.dispatchEvent(new CustomEvent("playbackStopped", { detail: { success: true } }));
+            clearNowPlayingUI();
+            console.log("[PlaybackEngine] Playback stopped.");
+        }
+
+        function resetPlayback(options = {}) {
+            clearInterval(playbackTimer);
+            if (!options.preserveIsPlaying) globalData.isPlaying = false;
+            sequenceStates = {};
+            missingBuffers.clear();
+
+            activeAudioSources.forEach((source) => {
+                try {
+                    source.stop();
+                    source.disconnect();
+                } catch (err) {
+                    console.error("Error stopping/disconnecting an audio source:", err);
+                }
+            });
+            activeAudioSources.clear();
+
+            if (globalData.currentSongId) {
+                GainNodeHelper.cleanupGainNodesForSong(globalData.currentSongId);
+                globalData.currentSongId = null;
+            }
+
+            removeTimerAndSequenceCount();
+            if (options.callback) options.callback();
+        }
+
+        globalData.togglePlayback = () => {
+            globalData.isPlaying ? stopPlayback() : startPlayback();
+        };
+
+        globalData.startPlayback = startPlayback;
+        globalData.stopPlayback = stopPlayback;
+        globalData.resetPlayback = resetPlayback;
+
+        function playSample(song, channel, scheduledTime, isReversed) {
+            const cacheKey = `${song.id}_${channel.id}_${isReversed ? "reverse" : "normal"}`;
+            const buffer = isReversed ? globalData.reverseAudioBuffers[song.id]?.[channel.id] : globalData.audioBuffers[song.id]?.[channel.id];
+
+            if (!buffer) {
+                if (!missingBuffers.has(cacheKey)) {
+                    missingBuffers.add(cacheKey);
+                    console.warn(`[PlaybackEngine] Audio buffer missing for Song: ${song.id}, Channel: ${channel.id}${isReversed ? " (Reverse)" : ""}`);
+                }
+                return;
+            }
+
+            const bufferSource = audioContext.createBufferSource();
+            bufferSource.buffer = buffer;
+            bufferSource.playbackRate.value = channel.metadata.playbackSpeed || 1;
+            const gainNode = globalData.gainNodes?.[song.id]?.[channel.id] || globalData.masterGain;
+            bufferSource.connect(gainNode);
+            bufferSource.start(scheduledTime);
+            activeAudioSources.add(bufferSource);
+
+            bufferSource.onended = () => {
+                activeAudioSources.delete(bufferSource);
+            };
+        }
+
+        function processPlaybackStep(currentSong) {
+            const currentTime = audioContext.currentTime;
+            let allSequencesCompleted = true;
+
+            for (const sequenceName in currentSong.projectSequences || {}) {
+                const sequenceState = sequenceStates[sequenceName];
+                if (sequenceState && !sequenceState.completed) {
+                    if (currentTime >= sequenceState.endTime) {
+                        sequenceState.completed = true;
+                        completedSequences++;
+                        continue;
+                    }
+
+                    allSequencesCompleted = false;
+
+                    while (sequenceState.nextStepTime <= currentTime + PLAYBACK_INTERVAL && globalData.isPlaying) {
+                        const { nextStepIndex, nextStepTime } = sequenceState;
+
+                        for (const channelKey in currentSong.projectSequences[sequenceName]) {
+                            const channelIndex = parseInt(channelKey.slice(2), 10);
+                            const channel = currentSong.channels[channelIndex];
+                            if (!channel) continue;
+
+                            const steps = currentSong.projectSequences[sequenceName][channelKey].steps || [];
+                            const step = steps.find(stepItem =>
+                                typeof stepItem === "number" ? stepItem === nextStepIndex : stepItem.index === nextStepIndex
+                            );
+
+                            if (step !== undefined) {
+                                const isReversed = typeof step === "object" && step.reverse;
+                                playSample(currentSong, channel, sequenceState.nextStepTime, isReversed);
+                            }
+                        }
+
+                        sequenceState.nextStepIndex++;
+
+                        if (sequenceState.nextStepIndex >= 64) {
+                            sequenceState.completed = true;
+                            completedSequences++;
+                            break;
+                        }
+
+                        sequenceState.nextStepTime += sequenceState.stepDuration;
+                    }
+                }
+            }
+
+            if (allSequencesCompleted) handleEndOfSong();
+        }
+
+        function handleEndOfSong() {
+            if (!globalData.isPlaying) return;
+
+            globalData.currentSongIndex = (globalData.currentSongIndex + 1) % globalData.songsArray.length;
+
+            setTimeout(() => {
+                if (globalData.isPlaying) startPlayback();
+            }, 200);
+        }
+
+        function initializeTimerAndSequenceCount(totalDuration, totalSeqs) {
+            const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+            if (!nowPlayingContainer) return;
+
+            let songTimerElement = nowPlayingContainer.querySelector(".songTimer");
+            if (!songTimerElement) {
+                songTimerElement = document.createElement("div");
+                songTimerElement.className = "songTimer";
+                nowPlayingContainer.appendChild(songTimerElement);
+            }
+
+            let sequenceCountElement = nowPlayingContainer.querySelector(".sequenceCount");
+            if (!sequenceCountElement) {
+                sequenceCountElement = document.createElement("div");
+                sequenceCountElement.className = "sequenceCount";
+                nowPlayingContainer.appendChild(sequenceCountElement);
+            }
+
+            let bpmElement = nowPlayingContainer.querySelector(".bpmDisplay");
+            if (!bpmElement) {
+                bpmElement = document.createElement("div");
+                bpmElement.className = "bpmDisplay";
+                nowPlayingContainer.appendChild(bpmElement);
+            }
+
+            songTimerElement.textContent = `Time Remaining: ${formatTime(totalDuration)}`;
+            sequenceCountElement.textContent = `Sequences: 0 / ${totalSeqs}`;
+
+            const currentSong = globalData.songsArray[globalData.currentSongIndex];
+            if (currentSong) {
+                bpmElement.textContent = `BPM: ${currentSong.bpm}`;
+                console.log(`[PlaybackEngine] Now Playing: "${currentSong.id}", BPM: ${currentSong.bpm}. Time Remaining: ${formatTime(totalDuration)}, Sequences: 0 / ${totalSeqs}.`);
+            }
+        }
+
+        function updateTimerAndSequenceCount() {
+            const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+            if (!nowPlayingContainer) return;
+
+            const songTimerElement = nowPlayingContainer.querySelector(".songTimer");
+            const sequenceCountElement = nowPlayingContainer.querySelector(".sequenceCount");
+
+            if (songTimerElement) {
+                const remainingTime = songEndTime - audioContext.currentTime;
+                songTimerElement.textContent = `Time Remaining: ${formatTime(Math.max(0, remainingTime))}`;
+            }
+
+            if (sequenceCountElement) {
+                sequenceCountElement.textContent = `Sequences: ${completedSequences} / ${totalSequences}`;
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+
+        function removeTimerAndSequenceCount() {
+            const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+            if (!nowPlayingContainer) return;
+
+            const songTimerElement = nowPlayingContainer.querySelector(".songTimer");
+            const sequenceCountElement = nowPlayingContainer.querySelector(".sequenceCount");
+
+            if (songTimerElement) songTimerElement.remove();
+            if (sequenceCountElement) sequenceCountElement.remove();
+        }
+
+        function updateNowPlayingUI(song) {
+            const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+            if (!nowPlayingContainer) return;
+
+            const { projectName, artistName } = getProjectAndArtist(song);
+            const songTitleElement = nowPlayingContainer.querySelector(".songTitle");
+            const artistNameElement = nowPlayingContainer.querySelector(".artistName");
+
+            if (songTitleElement && artistNameElement) {
+                songTitleElement.textContent = projectName;
+                artistNameElement.textContent = artistName;
+            }
+        }
+
+        function clearNowPlayingUI() {
+            const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+            if (!nowPlayingContainer) return;
+
+            const songTitleElement = nowPlayingContainer.querySelector(".songTitle");
+            const artistNameElement = nowPlayingContainer.querySelector(".artistName");
+
+            if (songTitleElement && artistNameElement) {
+                songTitleElement.textContent = "No song playing";
+                artistNameElement.textContent = "";
+            }
+
+            const songTimerElement = nowPlayingContainer.querySelector(".songTimer");
+            const sequenceCountElement = nowPlayingContainer.querySelector(".sequenceCount");
+
+            if (songTimerElement) songTimerElement.textContent = "";
+            if (sequenceCountElement) sequenceCountElement.textContent = "";
+        }
+
+        function setupArtworkToggle() {
+            document.addEventListener("DOMContentLoaded", () => {
+                const artworkCover = document.getElementById("artworkCover");
+                const artworkImage = document.getElementById("artworkImage");
+                const loadingSpinner = document.getElementById("loadingSpinner");
+
+                if (globalData.isArtworkCover && artworkUrl.length) {
+                    artworkImage.src = artworkUrl[0];
+                    artworkCover.classList.remove("hidden");
+                    loadingSpinner.style.display = "none";
+
+                    artworkImage.addEventListener("click", () => {
+                        globalData.togglePlayback();
+                    });
+                }
+            });
+        }
+
+        document.addEventListener("initialAudioBuffersReady", (event) => {
+            if (event.detail.success) {
+                globalData.initializePlaybackEngine();
+            } else {
+                console.error("[PlaybackEngine] 'initialAudioBuffersReady' event received with failure.");
+            }
+        });
+
+        ["playbackStarted", "playbackStopped"].forEach((eventName) => {
+            document.addEventListener(eventName, (event) => {
+                if (event.detail.success) {
+                    console.log(`[PlaybackEngine] Playback has been successfully ${eventName === "playbackStarted" ? "started" : "stopped"}.`);
+                } else {
+                    console.error(`[PlaybackEngine] Playback ${eventName === "playbackStarted" ? "start" : "stop"} failed.`);
+                }
+            });
+        });
+
+        setupArtworkToggle();
+
+        if (Object.keys(globalData.audioBuffers).length) {
+            globalData.initializePlaybackEngine();
+        }
+
+        globalData.initializePlaybackEngine = () => {
+            if (!globalData.songsArray.length) {
+                console.error("No songs available for playback.");
+                return;
+            }
+            console.log("Playback Engine Initialization Complete.");
+            console.log("Playback is ready. Click the artwork to start.");
+        };
+    })();
+</script>
+
+
+
+</body>
+</html>
+

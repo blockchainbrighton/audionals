@@ -610,45 +610,47 @@ This script provides a flexible and scalable approach to audio effect management
 */
      (() => {
         window.EffectsModule = window.EffectsModule || {};
-        window.EffectsModule.effectsConfig = { 
+
+
+       window.EffectsModule.effectsConfig = { 
             pitchShift: { 
                 enabled: true, 
-                defaultProbability: 1, 
+                defaultProbability: 0.5, // Reduced from 1
                 shifts: [0.25, 0.5, 1, 2, 4]
             },
             harmonize: { 
-                enabled: false, 
-                defaultProbability: 0.01,           // Lower probability of harmonization being applied
-                intervals: [0.3, 0.5],              // More subtle interval choices, such as thirds (1.5) or octaves (0.5)
-                maxHarmonyChannels: 1               // Limits to only one harmony channel
+                enabled: true, 
+                defaultProbability: 0.01, 
+                intervals: [0.3, 0.5],
+                maxHarmonyChannels: 1 
             },
             delay: {
                 enabled: true, 
-                defaultProbability: 1, 
+                defaultProbability: 0.5, // Reduced from 1
                 noteValue: 'sixteenth',
-                maxDelayRepeats: 16
+                maxDelayRepeats: 8 // Reduced from 16
             },
             reverse: {
                 enabled: true, 
-                defaultProbability: 1
+                defaultProbability: 0.3 // Reduced from 1
             },
             pan: {
                 enabled: true,
-                defaultProbability: 1,
+                defaultProbability: 1, // Safe to keep at 1
                 positions: [-1, 1]
             },
             reverb: {
                 enabled: true, 
-                defaultProbability: 1, 
-                decayTimeRange: [2, 7], 
-                mixRange: [0.3, 0.9]
+                defaultProbability: 0.5, // Reduced from 1
+                decayTimeRange: [1, 5], // Narrowed range
+                mixRange: [0.2, 0.7] // Narrowed range
             },
             filter: {
                 enabled: true, 
                 defaultProbability: 0.7, 
                 types: ['lowpass', 'highpass', 'bandpass'], 
                 frequencyRange: [300, 8000], 
-                QRange: [1, 10]
+                QRange: [1, 8] // Narrowed range
             },
             tremolo: {
                 enabled: true, 
@@ -658,8 +660,8 @@ This script provides a flexible and scalable approach to audio effect management
             },
             distortion: {
                 enabled: false, 
-                defaultProbability: 0.5, 
-                amountRange: [1, 15]
+                defaultProbability: 0.3, // Reduced and kept disabled
+                amountRange: [1, 10] // Adjusted range
             },
             bitcrusher: {
                 enabled: true, 
@@ -667,33 +669,29 @@ This script provides a flexible and scalable approach to audio effect management
                 bitDepthRange: [2, 6],    
                 sampleRateRange: [8000, 22050]
             },
-            // **Chorus Effect**
             chorus: {
                 enabled: true,
-                defaultProbability: 0.5, // 50% chance to apply chorus
-                rateRange: [0.1, 5],       // Hz
-                depthRange: [0.1, 1],      // 0 to 1
-                feedbackRange: [0, 0.5],   // 0 to 0.5
-                mixRange: [0, 1]            // 0 (dry) to 1 (wet)
+                defaultProbability: 0.3, // Reduced from 0.5
+                rateRange: [0.1, 5],       
+                depthRange: [0.1, 1],      
+                feedbackRange: [0, 0.3],   
+                mixRange: [0, 0.8]         
             },
-            // **New Leslie Effect**
             leslie: {
                 enabled: true,
-                defaultProbability: 0.3, // 30% chance to apply Leslie effect
-                speedRange: [0.5, 1.5],    // Rotation speed multiplier based on BPM
-                depthRange: [0.5, 1],      // Depth of the effect
-                mixRange: [0, 1]            // Wet/Dry mix
+                defaultProbability: 0.2, // Reduced from 0.3
+                speedRange: [0.5, 1.5],    
+                depthRange: [0.5, 1],      
+                mixRange: [0, 1]            
             },
-            // **New BPM-Linked Delay Effect**
             delayBpmLinked: {
                 enabled: true,
-                defaultProbability: 0.4, // 40% chance to apply BPM-linked delay
-                delayTimes: ['quarter', 'eighth', 'sixteenth'], // Note values
-                feedbackRange: [0.3, 0.7],
-                mixRange: [0, 1]
+                defaultProbability: 0.3, // Reduced from 0.4
+                delayTimes: ['quarter', 'eighth', 'sixteenth'], 
+                feedbackRange: [0.3, 0.6], // Narrowed range
+                mixRange: [0, 0.7]        // Narrowed range
             },
-         
-                     };
+        };
 
         window.EffectsModule.getEffectParams = function(effectName, currentSequence, bpm, prng) {
             const effect = this.effectsConfig[effectName];
@@ -747,7 +745,6 @@ This script provides a flexible and scalable approach to audio effect management
 
 
 <!-- Main Script (main.js) -->
- 
 <script>
     /* 
 #region Main Script
@@ -835,45 +832,107 @@ The `main.js` script serves as the core module for audio processing within the a
      
 
 
-        function applyEffects(channel, index, newSong, currentSequence, bpm, effectsContext, prng) {
-            const effectsMap = [
-                { name: 'pitchShift', applyFn: (ch, params) => applyRandomPitchShift(ch, params, prng) },
-                { name: 'harmonize', applyFn: (ch, params) => addHarmony(ch, index, newSong, params, effectsContext, prng) },
-                { name: 'delay', applyFn: (ch, params) => applyIntermittentDelay(ch, params, bpm) },
-                { name: 'reverse', applyFn: (ch, params) => applyReverseEffect(ch) },
-                { name: 'filter', applyFn: (ch, params) => applyFilterEffect(ch, params, prng) },
-                { name: 'tremolo', applyFn: (ch, params) => applyTremoloEffect(ch, params, prng) },
-                { name: 'distortion', applyFn: (ch, params) => applyDistortionEffect(ch, params, prng) },
-                { name: 'bitcrusher', applyFn: (ch, params) => applyBitcrusherEffect(ch, params, prng) },
-                { name: 'pan', applyFn: (ch, params) => applyPanEffect(ch, params, prng) },
-                { name: 'reverb', applyFn: (ch, params) => applyReverbEffect(ch, params, prng) },
-                { name: 'volumeChange', applyFn: (ch, params) => applyVolumeChange(ch, params, prng) },
-                { name: 'chorus', applyFn: (ch, params) => applyChorusEffect(ch, params, prng) },
-                // **New Leslie Effect**
-                { name: 'leslie', applyFn: (ch, params) => applyLeslieEffect(ch, params, bpm) },
-                // **New BPM-Linked Delay Effect**
-                { name: 'delayBpmLinked', applyFn: (ch, params) => applyBpmLinkedDelay(ch, params, bpm) },
-                // **New Synth Bass Line Effect**
-            ];
+      /**
+     * Applies a series of audio effects to a given channel, ensuring volume consistency and balance.
+     *
+     * @param {Object} channel - The audio channel to apply effects to.
+     * @param {number} index - The index of the channel.
+     * @param {Object} newSong - The song object containing channel and sequence information.
+     * @param {number} currentSequence - The current sequence number.
+     * @param {number} bpm - Beats per minute of the song.
+     * @param {Object} effectsContext - Context object to manage total gain and harmony channels.
+     * @param {Function} prng - Pseudo-random number generator function.
+     */
+     function applyEffects(channel, index, newSong, currentSequence, bpm, effectsContext, prng) {
+        const MAX_EFFECTS_PER_CHANNEL = 4; // Define a reasonable limit
 
-            effectsMap.forEach(effect => {
-                const effectParams = window.EffectsModule.getEffectParams(effect.name, currentSequence, bpm, prng);
-                if (effectParams) effect.applyFn(channel, effectParams);
-            });
+        const effectsMap = [
+            { name: 'pitchShift', applyFn: (ch, params) => applyRandomPitchShift(ch, params, prng) },
+            { name: 'harmonize', applyFn: (ch, params) => addHarmony(ch, index, newSong, params, effectsContext, prng) },
+            { name: 'delay', applyFn: (ch, params) => applyIntermittentDelay(ch, params, bpm) },
+            { name: 'reverse', applyFn: (ch, params) => applyReverseEffect(ch) },
+            { name: 'filter', applyFn: (ch, params) => applyFilterEffect(ch, params, prng) },
+            { name: 'tremolo', applyFn: (ch, params) => applyTremoloEffect(ch, params, prng) },
+            { name: 'distortion', applyFn: (ch, params) => applyDistortionEffect(ch, params, prng) },
+            { name: 'bitcrusher', applyFn: (ch, params) => applyBitcrusherEffect(ch, params, prng) },
+            { name: 'pan', applyFn: (ch, params) => applyPanEffect(ch, params, prng) },
+            { name: 'reverb', applyFn: (ch, params) => applyReverbEffect(ch, params, prng) },
+            { name: 'volumeChange', applyFn: (ch, params) => applyVolumeChange(ch, params, prng) },
+            { name: 'chorus', applyFn: (ch, params) => applyChorusEffect(ch, params, prng) },
+            { name: 'leslie', applyFn: (ch, params) => applyLeslieEffect(ch, params, bpm, prng) },
+            { name: 'delayBpmLinked', applyFn: (ch, params) => applyBpmLinkedDelay(ch, params, bpm, prng) },
+            { name: 'synthBassLine', applyFn: (ch, params) => applySynthBassLineEffect(ch, params, prng) },
+        ];
 
-            // After applying effects, load and process the sample
-            const sampleParams = {
-                reversed: channel.metadata.requiresReversal,
-                playbackSpeed: channel.metadata.playbackSpeed,
-                // Include other processing parameters as needed
-            };
+        // Shuffle the effectsMap to randomize effect application order
+        const shuffledEffects = effectsMap.sort(() => 0.5 - Math.random());
 
-            if (effectsContext.totalGain > effectsContext.maxTotalGain) {
-                const reductionFactor = effectsContext.maxTotalGain / effectsContext.totalGain;
-                channel.metadata.volume = (channel.metadata.volume || 1) * reductionFactor;
+        let appliedEffectsCount = 0;
+
+        // Iterate through each effect in the shuffledEffectsMap
+        for (const effect of shuffledEffects) {
+            if (appliedEffectsCount >= MAX_EFFECTS_PER_CHANNEL) break; // Stop if max effects reached
+
+            const effectParams = window.EffectsModule.getEffectParams(effect.name, currentSequence, bpm, prng);
+            if (effectParams) {
+                // Apply the effect to the channel
+                effect.applyFn(channel, effectParams);
+                appliedEffectsCount++;
+
+                // Logging the application of the effect
+                console.log(`[Effects] Applied effect "${effect.name}" to Channel "${channel.id}" with parameters:`, effectParams);
             }
-            effectsContext.totalGain += channel.metadata.volume || 1;
         }
+
+        // Define volume clamping constants
+        const MIN_CHANNEL_VOLUME = 0.5; // Minimum volume factor to prevent channels from being too quiet
+        const MAX_CHANNEL_VOLUME = 1.5; // Maximum volume factor to prevent channels from being too loud
+        const MAX_TOTAL_GAIN = 2;       // Maximum total gain across all channels to prevent overall mix from being too loud
+
+        // Iterate through each effect in the effectsMap
+        effectsMap.forEach(effect => {
+            const effectParams = window.EffectsModule.getEffectParams(effect.name, currentSequence, bpm, prng);
+            if (effectParams) {
+                // Apply the effect to the channel
+                effect.applyFn(channel, effectParams);
+
+                // Logging the application of the effect
+                console.log(`[Effects] Applied effect "${effect.name}" to Channel "${channel.id}" with parameters:`, effectParams);
+            }
+        });
+
+        // After applying all effects, perform volume normalization and clamping
+
+        // Ensure the total gain across all channels does not exceed MAX_TOTAL_GAIN
+        if (effectsContext.totalGain > MAX_TOTAL_GAIN) {
+            const reductionFactor = MAX_TOTAL_GAIN / effectsContext.totalGain;
+            channel.metadata.volume = (channel.metadata.volume || 1) * reductionFactor;
+
+            // Log the normalization action
+            console.log(`[Normalization] Normalized Channel "${channel.id}" volume by factor ${reductionFactor.toFixed(2)} to maintain total gain within ${MAX_TOTAL_GAIN}.`);
+        }
+
+        // Update the total gain in the effects context
+        effectsContext.totalGain += channel.metadata.volume || 1;
+
+        // Clamp the channel's volume within defined bounds to maintain balance
+        if (channel.metadata.volume < MIN_CHANNEL_VOLUME) {
+            channel.metadata.volume = MIN_CHANNEL_VOLUME;
+            console.log(`[Clamping] Clamped Channel "${channel.id}" volume to minimum ${MIN_CHANNEL_VOLUME}.`);
+        } else if (channel.metadata.volume > MAX_CHANNEL_VOLUME) {
+            channel.metadata.volume = MAX_CHANNEL_VOLUME;
+            console.log(`[Clamping] Clamped Channel "${channel.id}" volume to maximum ${MAX_CHANNEL_VOLUME}.`);
+        }
+
+        // Optionally, adjust the GainNode's gain value if a GainNode is associated with the channel
+        const gainNode = globalData.gainNodes?.[newSong.id]?.[channel.id];
+        if (gainNode) {
+            gainNode.gain.setValueAtTime(channel.metadata.volume, audioContext.currentTime);
+            console.log(`[GainNode] Set gain for Channel "${channel.id}" to ${channel.metadata.volume.toFixed(2)}.`);
+        } else {
+            console.warn(`[GainNode] No GainNode found for Channel "${channel.id}".`);
+        }
+    }
 
         // **Chorus Effect Applied**
         const applyChorusEffect = (channel, { rate, depth, feedback, mix }, prng) => {
@@ -901,8 +960,10 @@ The `main.js` script serves as the core module for audio processing within the a
                 harmony.metadata.volume = (harmony.metadata.volume || 1) * 0.8;
                 newSong.channels.push(harmony);
                 context.harmonyChannelsAdded++;
+                context.totalGain += harmony.metadata.volume || 1; // Update totalGain
             });
         };
+
 
         const applyIntermittentDelay = (channel, { noteValue, maxDelayRepeats }, bpm) => {
             const beatDuration = 60000 / bpm;
@@ -916,46 +977,230 @@ The `main.js` script serves as the core module for audio processing within the a
 
         const applyVolumeChange = (channel, { range }, prng) => {
             const [min, max] = range;
-            channel.metadata.volume = (channel.metadata.volume || 1) * (prng() * (max - min) + min);
+            const randomFactor = prng() * (max - min) + min;
+            const newVolume = (channel.metadata.volume || 1) * randomFactor;
+            
+            // Define acceptable volume bounds
+            const MIN_VOLUME = 0.5; // Prevent channels from being too quiet
+            const MAX_VOLUME = 1.5; // Prevent channels from being too loud
+            
+            // Clamp the new volume within the defined bounds
+            channel.metadata.volume = Math.min(Math.max(newVolume, MIN_VOLUME), MAX_VOLUME);
+            
+            console.log(`[VolumeChange] Channel ${channel.id} volume set to ${channel.metadata.volume.toFixed(2)}`);
         };
 
+        /**
+         * Applies a pan effect to the channel, ensuring the pan value is within [-1, 1].
+         *
+         * @param {Object} channel - The audio channel to apply the pan effect to.
+         * @param {Object} params - Parameters containing the 'positions' array.
+         * @param {Function} prng - Pseudo-random number generator function.
+         */
         const applyPanEffect = (channel, { positions }, prng) => {
-            channel.metadata.pan = positions[Math.floor(prng() * positions.length)];
+            if (!positions || !Array.isArray(positions) || positions.length === 0) {
+                console.warn(`[PanEffect] Invalid or empty 'positions' array for Channel "${channel.id}". Assigning default pan value 0.`);
+                channel.metadata.pan = 0; // Default center pan
+                return;
+            }
+
+            const selectedPan = positions[Math.floor(prng() * positions.length)];
+
+            // Clamp the pan value between -1 and 1
+            channel.metadata.pan = Math.max(-1, Math.min(1, selectedPan));
+
+            console.log(`[PanEffect] Channel "${channel.id}" pan set to ${channel.metadata.pan}`);
         };
 
-        const applyReverbEffect = (channel, { decayTimeRange, mixRange }, prng) => {
-            channel.metadata.reverb = {
-                decayTime: prng() * (decayTimeRange[1] - decayTimeRange[0]) + decayTimeRange[0],
-                mix: prng() * (mixRange[1] - mixRange[0]) + mixRange[0]
-            };
+
+    /**
+     * Applies a reverb effect to the channel with controlled decay time and mix.
+     *
+     * @param {Object} channel - The audio channel to apply the reverb effect to.
+     * @param {Object} params - Parameters containing 'decayTimeRange' and 'mixRange'.
+     * @param {Function} prng - Pseudo-random number generator function.
+     */
+    const applyReverbEffect = (channel, { decayTimeRange, mixRange }, prng) => {
+        // Define sensible default ranges if not provided
+        const DEFAULT_DECAY_TIME_RANGE = [0.5, 3]; // in seconds
+        const DEFAULT_MIX_RANGE = [0.2, 0.8];      // 0 to 1
+
+        // Validate and assign ranges
+        const validDecayTimeRange = Array.isArray(decayTimeRange) && decayTimeRange.length === 2
+            ? decayTimeRange
+            : DEFAULT_DECAY_TIME_RANGE;
+        const validMixRange = Array.isArray(mixRange) && mixRange.length === 2
+            ? mixRange
+            : DEFAULT_MIX_RANGE;
+
+        // Generate random decay time within range
+        let decayTime = prng() * (validDecayTimeRange[1] - validDecayTimeRange[0]) + validDecayTimeRange[0];
+        decayTime = Math.max(DEFAULT_DECAY_TIME_RANGE[0], Math.min(decayTime, DEFAULT_DECAY_TIME_RANGE[1]));
+
+        // Generate random mix within range
+        let mix = prng() * (validMixRange[1] - validMixRange[0]) + validMixRange[0];
+        mix = Math.max(DEFAULT_MIX_RANGE[0], Math.min(mix, DEFAULT_MIX_RANGE[1]));
+
+        channel.metadata.reverb = {
+            decayTime: parseFloat(decayTime.toFixed(2)), // Rounded for consistency
+            mix: parseFloat(mix.toFixed(2))
         };
 
+        console.log(`[ReverbEffect] Channel "${channel.id}" reverb set with decayTime: ${channel.metadata.reverb.decayTime}s, mix: ${channel.metadata.reverb.mix}`);
+    };
+
+
+
+        /**
+         * Applies a filter effect to the channel with controlled type, frequency, and Q factor.
+         *
+         * @param {Object} channel - The audio channel to apply the filter effect to.
+         * @param {Object} params - Parameters containing 'types', 'frequencyRange', and 'QRange'.
+         * @param {Function} prng - Pseudo-random number generator function.
+         */
         const applyFilterEffect = (channel, { types, frequencyRange, QRange }, prng) => {
+            // Define sensible default parameters if not provided
+            const DEFAULT_TYPES = ['lowpass', 'highpass', 'bandpass', 'lowshelf', 'highshelf', 'peaking'];
+            const DEFAULT_FREQUENCY_RANGE = [20, 20000]; // in Hz
+            const DEFAULT_Q_RANGE = [0.1, 10];          // Q factor
+
+            // Validate and assign types
+            const validTypes = Array.isArray(types) && types.length > 0
+                ? types
+                : DEFAULT_TYPES;
+
+            // Validate and assign frequency range
+            const validFrequencyRange = Array.isArray(frequencyRange) && frequencyRange.length === 2
+                ? frequencyRange
+                : DEFAULT_FREQUENCY_RANGE;
+
+            // Validate and assign Q range
+            const validQRange = Array.isArray(QRange) && QRange.length === 2
+                ? QRange
+                : DEFAULT_Q_RANGE;
+
+            // Select a random filter type
+            const selectedType = validTypes[Math.floor(prng() * validTypes.length)];
+
+            // Generate random frequency within range
+            let frequency = prng() * (validFrequencyRange[1] - validFrequencyRange[0]) + validFrequencyRange[0];
+            frequency = Math.max(DEFAULT_FREQUENCY_RANGE[0], Math.min(frequency, DEFAULT_FREQUENCY_RANGE[1]));
+
+            // Generate random Q within range
+            let Q = prng() * (validQRange[1] - validQRange[0]) + validQRange[0];
+            Q = Math.max(DEFAULT_Q_RANGE[0], Math.min(Q, DEFAULT_Q_RANGE[1]));
+
             channel.metadata.filter = {
-                type: types[Math.floor(prng() * types.length)],
-                frequency: prng() * (frequencyRange[1] - frequencyRange[0]) + frequencyRange[0],
-                Q: prng() * (QRange[1] - QRange[0]) + QRange[0]
+                type: selectedType,
+                frequency: parseFloat(frequency.toFixed(2)),
+                Q: parseFloat(Q.toFixed(2))
             };
+
+            console.log(`[FilterEffect] Channel "${channel.id}" filter set to type: ${channel.metadata.filter.type}, frequency: ${channel.metadata.filter.frequency}Hz, Q: ${channel.metadata.filter.Q}`);
         };
 
+        /**
+         * Applies a tremolo effect to the channel with controlled rate and depth.
+         *
+         * @param {Object} channel - The audio channel to apply the tremolo effect to.
+         * @param {Object} params - Parameters containing 'rateRange' and 'depthRange'.
+         * @param {Function} prng - Pseudo-random number generator function.
+         */
         const applyTremoloEffect = (channel, { rateRange, depthRange }, prng) => {
+            // Define sensible default ranges if not provided
+            const DEFAULT_RATE_RANGE = [0.1, 10];   // in Hz
+            const DEFAULT_DEPTH_RANGE = [0.1, 0.9]; // 0 to 1
+
+            // Validate and assign rate range
+            const validRateRange = Array.isArray(rateRange) && rateRange.length === 2
+                ? rateRange
+                : DEFAULT_RATE_RANGE;
+
+            // Validate and assign depth range
+            const validDepthRange = Array.isArray(depthRange) && depthRange.length === 2
+                ? depthRange
+                : DEFAULT_DEPTH_RANGE;
+
+            // Generate random rate within range
+            let rate = prng() * (validRateRange[1] - validRateRange[0]) + validRateRange[0];
+            rate = Math.max(DEFAULT_RATE_RANGE[0], Math.min(rate, DEFAULT_RATE_RANGE[1]));
+
+            // Generate random depth within range
+            let depth = prng() * (validDepthRange[1] - validDepthRange[0]) + validDepthRange[0];
+            depth = Math.max(DEFAULT_DEPTH_RANGE[0], Math.min(depth, DEFAULT_DEPTH_RANGE[1]));
+
             channel.metadata.tremolo = {
-                rate: prng() * (rateRange[1] - rateRange[0]) + rateRange[0],
-                depth: prng() * (depthRange[1] - depthRange[0]) + depthRange[0]
+                rate: parseFloat(rate.toFixed(2)),   // Rounded for consistency
+                depth: parseFloat(depth.toFixed(2))
             };
+
+            console.log(`[TremoloEffect] Channel "${channel.id}" tremolo set to rate: ${channel.metadata.tremolo.rate}Hz, depth: ${channel.metadata.tremolo.depth}`);
         };
 
+        /**
+         * Applies a distortion effect to the channel with controlled amount.
+         *
+         * @param {Object} channel - The audio channel to apply the distortion effect to.
+         * @param {Object} params - Parameters containing 'amountRange'.
+         * @param {Function} prng - Pseudo-random number generator function.
+         */
         const applyDistortionEffect = (channel, { amountRange }, prng) => {
+            // Define sensible default range if not provided
+            const DEFAULT_AMOUNT_RANGE = [0.1, 0.7]; // 0.1 to 0.7
+
+            // Validate and assign amount range
+            const validAmountRange = Array.isArray(amountRange) && amountRange.length === 2
+                ? amountRange
+                : DEFAULT_AMOUNT_RANGE;
+
+            // Generate random amount within range
+            let amount = prng() * (validAmountRange[1] - validAmountRange[0]) + validAmountRange[0];
+            amount = Math.max(DEFAULT_AMOUNT_RANGE[0], Math.min(amount, DEFAULT_AMOUNT_RANGE[1]));
+
             channel.metadata.distortion = {
-                amount: prng() * (amountRange[1] - amountRange[0]) + amountRange[0]
+                amount: parseFloat(amount.toFixed(2)) // Rounded for consistency
             };
+
+            console.log(`[DistortionEffect] Channel "${channel.id}" distortion set to amount: ${channel.metadata.distortion.amount}`);
         };
 
+        /**
+         * Applies a bitcrusher effect to the channel with controlled bit depth and sample rate.
+         *
+         * @param {Object} channel - The audio channel to apply the bitcrusher effect to.
+         * @param {Object} params - Parameters containing 'bitDepthRange' and 'sampleRateRange'.
+         * @param {Function} prng - Pseudo-random number generator function.
+         */
         const applyBitcrusherEffect = (channel, { bitDepthRange, sampleRateRange }, prng) => {
+            // Define sensible default ranges if not provided
+            const DEFAULT_BIT_DEPTH_RANGE = [8, 16];       // 8 to 16 bits
+            const DEFAULT_SAMPLE_RATE_RANGE = [8000, 44100]; // 8000Hz to 44100Hz
+
+            // Validate and assign bit depth range
+            const validBitDepthRange = Array.isArray(bitDepthRange) && bitDepthRange.length === 2
+                ? bitDepthRange
+                : DEFAULT_BIT_DEPTH_RANGE;
+
+            // Validate and assign sample rate range
+            const validSampleRateRange = Array.isArray(sampleRateRange) && sampleRateRange.length === 2
+                ? sampleRateRange
+                : DEFAULT_SAMPLE_RATE_RANGE;
+
+            // Generate random bit depth within range
+            let bitDepth = Math.floor(prng() * (validBitDepthRange[1] - validBitDepthRange[0] + 1)) + validBitDepthRange[0];
+            bitDepth = Math.max(DEFAULT_BIT_DEPTH_RANGE[0], Math.min(bitDepth, DEFAULT_BIT_DEPTH_RANGE[1]));
+
+            // Generate random sample rate within range
+            let sampleRate = prng() * (validSampleRateRange[1] - validSampleRateRange[0]) + validSampleRateRange[0];
+            sampleRate = Math.max(DEFAULT_SAMPLE_RATE_RANGE[0], Math.min(sampleRate, DEFAULT_SAMPLE_RATE_RANGE[1]));
+            sampleRate = parseFloat(sampleRate.toFixed(0)); // Rounded to nearest integer
+
             channel.metadata.bitcrusher = {
-                bitDepth: Math.floor(prng() * (bitDepthRange[1] - bitDepthRange[0] + 1)) + bitDepthRange[0],
-                sampleRate: prng() * (sampleRateRange[1] - sampleRateRange[0]) + sampleRateRange[0]
+                bitDepth: bitDepth,
+                sampleRate: sampleRate
             };
+
+            console.log(`[BitcrusherEffect] Channel "${channel.id}" bitcrusher set to bitDepth: ${channel.metadata.bitcrusher.bitDepth}, sampleRate: ${channel.metadata.bitcrusher.sampleRate}Hz`);
         };
 
    
@@ -1100,36 +1345,24 @@ The `main.js` script serves as the core module for audio processing within the a
             }
         };
 
-        // Global Sample Cache
-         const sampleCache = {};
-
-        // Function to generate a unique key for each sample based on URL and processing parameters
-        const generateSampleKey = (url, params = {}) => {
-            let key = url;
-            if (params.reversed) key += '_reversed';
-            if (params.playbackSpeed && params.playbackSpeed !== 1) key += `_speed_${params.playbackSpeed}`;
-            // Include other parameters as needed
-            return key;
-        };
-
-
         const normalizeAudioBuffer = (audioBuffer) => {
             const numChannels = audioBuffer.numberOfChannels;
-            let maxAmplitude = 0;
+            let globalMaxAmplitude = 0;
 
-            // Find the maximum amplitude across all channels
+            // First pass: Find the global maximum amplitude across all channels
             for (let i = 0; i < numChannels; i++) {
                 const channelData = audioBuffer.getChannelData(i);
-                for (let sample of channelData) {
-                    const absSample = Math.abs(sample);
-                    if (absSample > maxAmplitude) {
-                        maxAmplitude = absSample;
-                    }
+                const channelMax = Math.max(...channelData.map(sample => Math.abs(sample)));
+                if (channelMax > globalMaxAmplitude) {
+                    globalMaxAmplitude = channelMax;
                 }
             }
 
+            // Define target peak amplitude to prevent clipping
+            const TARGET_PEAK = 0.95; // 0.95 to leave some headroom
+
             // Calculate normalization factor
-            const normalizationFactor = maxAmplitude > 0 ? 1 / maxAmplitude : 1;
+            const normalizationFactor = globalMaxAmplitude > 0 ? TARGET_PEAK / globalMaxAmplitude : 1;
 
             // Apply normalization
             for (let i = 0; i < numChannels; i++) {
@@ -1139,20 +1372,44 @@ The `main.js` script serves as the core module for audio processing within the a
                 }
             }
 
+            console.log(`[Normalization] Applied normalization factor: ${normalizationFactor.toFixed(4)} to audio buffer.`);
             return audioBuffer;
         };
        
        
-       // Modify loadAndProcessSample to include normalization
-    const loadAndProcessSample = async (url, params = {}) => {
-        const key = generateSampleKey(url, params);
+      // Define maximum cache size
+const MAX_CACHE_SIZE = 100; // Adjust based on available memory and application needs
 
-        if (sampleCache[key]) {
-            console.log(`Reusing cached sample: ${key}`);
-            return sampleCache[key];
+// Use a Map for sampleCache to maintain insertion order for LRU eviction
+const sampleCache = new Map();
+
+// Function to generate a unique key for each sample based on URL and processing parameters
+const generateSampleKey = (url, params = {}) => {
+    let key = url;
+    if (params.reversed) key += '_reversed';
+    if (params.playbackSpeed && params.playbackSpeed !== 1) key += `_speed_${params.playbackSpeed}`;
+    // Include other parameters as needed
+    return key;
+};
+
+const loadAndProcessSample = async (url, params = {}) => {
+    const key = generateSampleKey(url, params);
+
+    if (sampleCache.has(key)) {
+        // Move the used sample to the end to mark it as recently used
+        const value = sampleCache.get(key);
+        sampleCache.delete(key);
+        sampleCache.set(key, value);
+        console.log(`[Cache] Reusing cached sample: ${key}`);
+        return value;
+    }
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch sample from ${url}: ${response.statusText}`);
         }
 
-        const response = await fetch(url);
         const arrayBuffer = await response.arrayBuffer();
 
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -1166,17 +1423,33 @@ The `main.js` script serves as the core module for audio processing within the a
             for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
                 Array.prototype.reverse.call(audioBuffer.getChannelData(i));
             }
+            console.log(`[Processing] Reversed audio buffer for key: ${key}`);
         }
 
         if (params.playbackSpeed && params.playbackSpeed !== 1) {
             // Implement time-stretching or pitch-shifting as needed
+            // Placeholder: Log that playbackSpeed is being applied
+            console.log(`[Processing] Applying playback speed ${params.playbackSpeed} for key: ${key}`);
+            // Actual implementation would require more complex audio processing
         }
 
-        sampleCache[key] = audioBuffer;
-        console.log(`Processed and cached sample: ${key}`);
+        // Add to cache
+        sampleCache.set(key, audioBuffer);
+        console.log(`[Cache] Added sample to cache: ${key}`);
+
+        // Evict least recently used samples if cache size exceeds limit
+        if (sampleCache.size > MAX_CACHE_SIZE) {
+            const oldestKey = sampleCache.keys().next().value;
+            sampleCache.delete(oldestKey);
+            console.log(`[Cache] Evicted oldest sample from cache: ${oldestKey}`);
+        }
 
         return audioBuffer;
-    };
+    } catch (error) {
+        console.error(`[LoadAndProcessSample] Error processing sample from ${url}:`, error);
+        throw error; // Re-throw to allow higher-level handling
+    }
+};
             // **New Function: generateMuteSchedule**
             const generateMuteSchedule = (prng, totalSequences) => {
                 const muteSchedule = [];
@@ -1796,6 +2069,7 @@ window.globalData.startPlayback();
             // Update Now Playing information
             updateNowPlaying(song);
         }
+        
 
         // Function to stop playback
         function stopPlayback() {
@@ -1973,7 +2247,8 @@ window.globalData.startPlayback();
 
         // In playbackEngine.js
 
-        // Function to apply mute/unmute actions based on the current sequence
+        const MAX_ACTIVE_CHANNELS = 8; // Set a reasonable limit
+
         function applyMuteSchedule(song, currentSequence) {
             const { muteSchedule } = song;
             if (!muteSchedule || !Array.isArray(muteSchedule)) return;
@@ -1989,12 +2264,19 @@ window.globalData.startPlayback();
                         if (action === 'mute') {
                             muteChannel(channel);
                         } else if (action === 'unmute') {
-                            unmuteChannel(channel);
+                            if (getActiveChannelCount(song) < MAX_ACTIVE_CHANNELS) {
+                                unmuteChannel(channel);
+                            }
                         }
                     }
                 });
             });
         }
+
+        function getActiveChannelCount(song) {
+            return song.channels.filter(ch => !ch.metadata.isMuted).length;
+        }
+
 
         function muteChannel(channel) {
             if (!channel.metadata.isMuted) {

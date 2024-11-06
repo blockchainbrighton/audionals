@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ToneJS Bridge</title>
+    <style>
+        /* Minimal styling */
+        body {
+            display: none; /* Hide the body as this is a bridging module */
+        }
+    </style>
+</head>
+<body>
+    <!-- ToneJS Bridge Module Inclusion -->
+    <script>
+        /**
+         * ToneJS Bridge Module
+         * 
+         * This module fetches the ToneJS library from an on-chain inscribed HTML file,
+         * decodes and decompresses the embedded Base64-encoded GZIP data, and injects
+         * the library into the current document, making ToneJS available for use.
+         */
+
+        // --- Begin of tonejs-bridge.js content ---
+
+        const ToneJSBridge = (() => {
+            let isLoaded = false;
+            let loadPromise = null;
+
+            /**
+             * Fetches the external HTML file containing the Base64-encoded GZIP ToneJS library.
+             * @param {string} url - The URL of the external HTML file.
+             * @returns {Promise<string>} - The Base64-encoded GZIP data.
+             */
+            async function fetchExternalLibrary(url) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch external library: ${response.status} ${response.statusText}`);
+                    }
+                    const htmlText = await response.text();
+
+                    // Parse the fetched HTML
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(htmlText, 'text/html');
+
+                    // Extract the <textarea id="base64Input"> content
+                    const textarea = doc.querySelector('#base64Input');
+                    if (!textarea) {
+                        throw new Error('No <textarea id="base64Input"> found in the external HTML.');
+                    }
+
+                    let base64EncodedGzip = textarea.value.trim();
+
+                    // Remove whitespace and data URI prefix if present
+                    base64EncodedGzip = base64EncodedGzip.replace(/\n/g, '').replace(/^data:application\/octet-stream;base64,/, '');
+
+                    if (!base64EncodedGzip) {
+                        throw new Error('Base64 encoded content is empty.');
+                    }
+
+                    return base64EncodedGzip;
+                } catch (error) {
+                    console.error('Error fetching or parsing the external library:', error);
+                    throw error;
+                }
+            }
+
+            /**
+             * Decompresses the Base64-encoded GZIP data and returns the decompressed text.
+             * @param {string} base64EncodedGzip - The Base64-encoded GZIP string.
+             * @returns {Promise<string>} - The decompressed ToneJS library as text.
+             */
+            async function decompressLibrary(base64EncodedGzip) {
+                try {
+                    // Decode Base64 to binary string
+                    const binaryString = atob(base64EncodedGzip);
+                    // Convert binary string to Uint8Array
+                    const uintArray = new Uint8Array([...binaryString].map(char => char.charCodeAt(0)));
+                    // Decompress the GZIP data
+                    const decompressedText = await decompressData(uintArray);
+                    return decompressedText;
+                } catch (error) {
+                    console.error('Error decompressing library:', error);
+                    throw error;
+                }
+            }
+
+            /**
+             * Decompresses GZIP data using the DecompressionStream API or pako as a fallback.
+             * @param {Uint8Array} data - The GZIP-compressed data.
+             * @returns {Promise<string>} - The decompressed text.
+             */
+            async function decompressData(data) {
+                if ('DecompressionStream' in window) {
+                    try {
+                        const ds = new DecompressionStream('gzip');
+                        const decompressedStream = new Response(data).body.pipeThrough(ds);
+                        const blob = await new Response(decompressedStream).blob();
+                        const text = await blob.text();
+                        return text;
+                    } catch (error) {
+                        console.error('Error during decompression with DecompressionStream:', error);
+                        throw error;
+                    }
+                } else {
+                    // Fallback to pako (ensure pako is loaded if you uncomment the pako script)
+                    if (typeof pako === 'undefined') {
+                        throw new Error('DecompressionStream is not supported and pako is not loaded.');
+                    }
+                    try {
+                        const decompressed = pako.ungzip(data, { to: 'string' });
+                        return decompressed;
+                    } catch (error) {
+                        console.error('Error during decompression with pako:', error);
+                        throw error;
+                    }
+                }
+            }
+
+            /**
+             * Injects the decompressed ToneJS library into the document.
+             * @param {string} libraryText - The decompressed ToneJS library as text.
+             */
+            function injectLibrary(libraryText) {
+                const script = document.createElement('script');
+                script.textContent = libraryText;
+                document.body.appendChild(script);
+            }
+
+            /**
+             * Loads the ToneJS library from the specified external HTML file.
+             * @param {string} externalHtmlUrl - The URL of the external HTML file containing the library.
+             * @returns {Promise<void>}
+             */
+            async function load(externalHtmlUrl) {
+                if (isLoaded) {
+                    console.log('ToneJS is already loaded.');
+                    return Promise.resolve();
+                }
+                if (loadPromise) {
+                    return loadPromise;
+                }
+
+                loadPromise = (async () => {
+                    try {
+                        const base64Gzip = await fetchExternalLibrary(externalHtmlUrl);
+                        const libraryText = await decompressLibrary(base64Gzip);
+                        injectLibrary(libraryText);
+                        isLoaded = true;
+                        console.log('ToneJS library loaded successfully.');
+                        // Dispatch a custom event to signal that ToneJS is loaded
+                        document.dispatchEvent(new Event('tonejsLoaded'));
+                    } catch (error) {
+                        console.error('Error loading ToneJS library:', error);
+                        // Dispatch an event or provide a callback for error handling
+                        document.dispatchEvent(new CustomEvent('tonejsLoadError', { detail: error }));
+                        throw error;
+                    }
+                })();
+
+                return loadPromise;
+            }
+
+            return {
+                load,
+            };
+        })();
+
+        // --- End of tonejs-bridge.js content ---
+    </script>
+
+    <!-- Invocation of the Bridge Module -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Hard-coded URL to the external HTML file containing the ToneJS library
+            const externalLibraryURL = '/content/1bda678460ef08fb64435b57c9b69fd78fd4556822ccd8e9839b4eb71b3621edi0';
+
+            // Load the ToneJS library using the bridge
+            ToneJSBridge.load(externalLibraryURL)
+                .then(() => {
+                    console.log('ToneJS has been loaded and is ready to use.');
+                    // Optionally, dispatch an event or call a callback here
+                })
+                .catch(error => {
+                    console.error('Failed to load ToneJS:', error);
+                    // Optionally, dispatch an error event or handle the error accordingly
+                });
+        });
+    </script>
+</body>
+</html>
