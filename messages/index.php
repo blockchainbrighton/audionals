@@ -1,8 +1,12 @@
 <?php
-// messages/index.php
+// messages/log.php
 
 // Path to the log file
 $log_file = 'messages.log';
+
+// Set appropriate headers to prevent caching
+header('Cache-Control: no-cache, must-revalidate');
+header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
 
 // Get the query parameters
 $message = isset($_GET['message']) ? $_GET['message'] : '';
@@ -17,40 +21,14 @@ if (!empty($message)) {
     $sanitized_message = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
     $sanitized_user = htmlspecialchars($user, ENT_QUOTES, 'UTF-8');
 
+    // Format the log entry
     $log_entry = "[$timestamp] User: $sanitized_user, Message: $sanitized_message\n";
+
+    // Append the log entry to the log file
     file_put_contents($log_file, $log_entry, FILE_APPEND | LOCK_EX);
 }
 
-// Read all logged messages
-$logs = '';
-if (file_exists($log_file)) {
-    $logs = nl2br(htmlspecialchars(file_get_contents($log_file), ENT_QUOTES, 'UTF-8'));
-}
+// Respond with a 204 No Content status
+http_response_code(204);
+exit;
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Messages Log</title>
-    <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            margin: 20px; 
-            background-color: #f9f9f9;
-        }
-        h1 { color: #333; }
-        pre { 
-            background-color: #fff; 
-            padding: 15px; 
-            border: 1px solid #ddd; 
-            border-radius: 5px; 
-            max-height: 500px; 
-            overflow-y: auto;
-        }
-    </style>
-</head>
-<body>
-    <h1>Messages Log</h1>
-    <pre><?php echo $logs; ?></pre>
-</body>
-</html>
