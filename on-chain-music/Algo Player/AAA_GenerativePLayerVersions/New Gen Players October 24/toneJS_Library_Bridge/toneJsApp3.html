@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple Tone.js Keyboard</title>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --key-color: #333333;
+            --key-active-color: #ff8c00;
+            --text-color: #ffffff;
+            --button-size: 60px;
+            --button-margin: 10px;
+            --border-radius: 5px;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: Arial, sans-serif;
+        }
+        .keyboard {
+            display: flex;
+        }
+        .key {
+            width: var(--button-size);
+            height: var(--button-size);
+            margin: var(--button-margin);
+            background-color: var(--key-color);
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+            font-size: 16px;
+            user-select: none;
+        }
+        .key:active {
+            background-color: var(--key-active-color);
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Simple Tone.js Keyboard</h1>
+    <div class="keyboard">
+        <button class="key" data-note="C4">C</button>
+        <button class="key" data-note="D4">D</button>
+        <button class="key" data-note="E4">E</button>
+        <button class="key" data-note="F4">F</button>
+        <button class="key" data-note="G4">G</button>
+        <button class="key" data-note="A4">A</button>
+        <button class="key" data-note="B4">B</button>
+        <button class="key" data-note="C5">C</button>
+    </div>
+    <div id="status">Status: Loading Tone.js...</div>
+
+    <!-- ToneJS Bridge Module Inclusion -->
+    <script>
+    const ToneJSBridge = (function() {
+        let loaded = false;
+        let loadingPromise = null;
+
+        async function fetchBridge(url) {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+            const text = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, 'text/html');
+            const textarea = doc.querySelector('#base64Input');
+            if (!textarea) throw new Error('Missing <textarea id="base64Input">');
+            return textarea.value.trim()
+                .replace(/\s/g, '')
+                .replace(/^data:application\/octet-stream;base64,/, '');
+        }
+
+        async function decodeBase64(data) {
+            try {
+                const binary = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+                return binary;
+            } catch {
+                throw new Error('Base64 decoding failed.');
+            }
+        }
+
+        async function decompressData(data) {
+            if (!('DecompressionStream' in window)) {
+                throw new Error('No DecompressionStream support.');
+            }
+            const decompressedStream = new Response(data).body
+                .pipeThrough(new DecompressionStream('gzip'));
+            const decompressedText = await new Response(decompressedStream).text();
+            return decompressedText;
+        }
+
+        function injectScript(scriptContent) {
+            const script = document.createElement('script');
+            script.textContent = scriptContent;
+            document.body.appendChild(script);
+        }
+
+        async function load(url) {
+            if (loaded) return;
+            if (loadingPromise) return loadingPromise;
+            loadingPromise = (async () => {
+                try {
+                    const base64Data = await fetchBridge(url);
+                    const binaryData = await decodeBase64(base64Data);
+                    const decompressedText = await decompressData(binaryData);
+                    injectScript(decompressedText);
+                    loaded = true;
+                    document.dispatchEvent(new Event('tonejsLoaded'));
+                } catch (error) {
+                    document.dispatchEvent(new CustomEvent('tonejsLoadError', { detail: error }));
+                    throw error;
+                }
+            })();
+            return loadingPromise;
+        }
+
+        return { load };
+    })();
+    </script>
+
+    <!-- Keyboard Functionality Script -->
+    <script>
+    document.addEventListener('tonejsLoaded', () => {
+        document.getElementById('status').textContent = `Status: Tone.js ${Tone.version} loaded. Click the keys to play notes.`;
+
+        // Initialize Synth
+        const synth = new Tone.Synth().toDestination();
+
+        // Enable key buttons
+        document.querySelectorAll('.key').forEach(button => {
+            button.disabled = false;
+            button.addEventListener('click', () => {
+                const note = button.getAttribute('data-note');
+                synth.triggerAttackRelease(note, '8n');
+            });
+        });
+    });
+
+    document.addEventListener('tonejsLoadError', (event) => {
+        document.getElementById('status').textContent = `Status: Failed to load Tone.js`;
+        console.error('Tone.js Load Error:', event.detail);
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Disable keys initially
+        document.querySelectorAll('.key').forEach(button => button.disabled = true);
+
+        // Load Tone.js via bridge
+        ToneJSBridge.load('https://ordinals.com/content/7f0c16a7520f590653bc020d41fe017aaecc73aaa5b1ad60705ce591dff5f846i0')
+            .then(() => {
+                console.log('Tone.js loaded successfully.');
+            })
+            .catch(error => {
+                console.error('Failed to load Tone.js:', error);
+            });
+    });
+    </script>
+
+</body>
+</html>

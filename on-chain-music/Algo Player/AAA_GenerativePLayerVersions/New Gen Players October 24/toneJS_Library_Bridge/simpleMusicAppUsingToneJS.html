@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple ToneJS Music App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+
+        #playButton {
+            padding: 15px 30px;
+            font-size: 18px;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #playButton:hover {
+            background-color: #45a049;
+        }
+
+        #status {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #333;
+        }
+
+        #header {
+            margin-bottom: 40px;
+            font-size: 24px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div id="header">Simple ToneJS Music App</div>
+
+    <!-- Play Button -->
+    <button id="playButton" disabled>Play a Note</button>
+
+    <!-- Status Message -->
+    <div id="status">Status: Loading ToneJS...</div>
+
+    <!-- Include the ToneJS Bridge Script -->
+    <script src="toneJsLibraryBridge_v7.js"></script>
+
+    <!-- Application Script -->
+    <script>
+        /**
+         * Updates the status message on the page.
+         * @param {string} message - The status message to display.
+         * @param {string} type - The type of message ('loading', 'success', 'error').
+         */
+        function updateStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = `Status: ${message}`;
+            statusDiv.style.color = {
+                'loading': '#333',
+                'success': '#155724',
+                'error': '#721c24'
+            }[type] || '#333';
+        }
+
+        /**
+         * Initializes the application by setting up event listeners and loading ToneJS.
+         */
+        function initializeApp() {
+            const playButton = document.getElementById('playButton');
+
+            playButton.addEventListener('click', () => {
+                if (typeof Tone === 'undefined') {
+                    updateStatus('ToneJS is not loaded.', 'error');
+                    console.error('ToneJS is not loaded.');
+                    return;
+                }
+
+                try {
+                    updateStatus('Playing note...', 'loading');
+                    // Create a synth and connect it to the main output (your speakers)
+                    const synth = new Tone.Synth().toDestination();
+
+                    // Play a middle 'C' for the duration of an 8th note
+                    synth.triggerAttackRelease('C4', '8n');
+                    updateStatus('Note played successfully!', 'success');
+                } catch (error) {
+                    updateStatus('Error playing note.', 'error');
+                    console.error('Error playing note:', error);
+                }
+            });
+
+            // Listen for the custom event indicating that ToneJS has been loaded
+            document.addEventListener('tonejsLoaded', () => {
+                updateStatus('ToneJS loaded. Ready to play!', 'success');
+                console.log('ToneJS has been loaded and is ready to use.');
+
+                // Enable the play button
+                playButton.disabled = false;
+            });
+
+            document.addEventListener('tonejsLoadError', (event) => {
+                updateStatus(`Failed to load ToneJS: ${event.detail.message}`, 'error');
+                console.error('ToneJS Load Error:', event.detail);
+            });
+
+            // Load the ToneJS library using the bridge
+            const externalLibraryURL = 'toneJsLibraryBridge_v7.html'; // Adjust the path if necessary
+
+            ToneJSBridge.load(externalLibraryURL)
+                .then(() => {
+                    console.log('ToneJS has been loaded and is ready to use.');
+                })
+                .catch(error => {
+                    console.error('Failed to load ToneJS:', error);
+                });
+        }
+
+        // Initialize the application once the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', initializeApp);
+    </script>
+</body>
+</html>

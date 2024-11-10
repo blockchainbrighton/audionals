@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple Analog Synth Simulator</title>
+    <!-- Style Section -->
+    <style>
+        /* Base Styles */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        /* Container for Columns */
+        .container {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 40px; /* Space between columns */
+            width: 100%;
+            max-width: 1200px; /* Maximum width for large screens */
+        }
+
+        /* Column Styles */
+        .column {
+            flex: 1; /* Columns take equal space */
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Buttons Section */
+        .buttons {
+            display: flex;
+            justify-content: flex-start;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .buttons button {
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            transition: background-color 0.3s;
+            font-size: 16px;
+            padding: 10px 20px;
+            margin: 5px; /* Consistent margin around buttons */
+            background: #007BFF;
+        }
+        .buttons button.latched {
+            background: #28a745;
+        }
+
+        /* Synth Controls Section */
+        #synthControls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px; /* Space between controls */
+        }
+
+        /* Controls Container */
+        #controlsContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 10px; /* Space between controls */
+        }
+
+        /* Individual Control Styles */
+        .control {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            margin: 10px 0;
+        }
+        .control label {
+            width: 120px;
+            font-size: 14px;
+        }
+        .control input,
+        .control select {
+            flex: 1;
+            cursor: pointer;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        .control span {
+            margin-left: 10px;
+            width: 60px;
+            text-align: right;
+            font-size: 14px;
+        }
+
+        /* Arpeggiator Controls Section */
+        .arp-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+        .arp-controls button {
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            background: #17a2b8;
+            transition: background-color 0.3s;
+            font-size: 16px;
+            padding: 10px 20px;
+            margin-bottom: 10px;
+        }
+        .arp-controls button.active {
+            background: #138496;
+        }
+
+        /* Tempo Control Styles */
+        .tempo-control {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .tempo-control button {
+            background: #6c757d;
+            padding: 5px 10px;
+            margin: 0 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            border: none;
+            color: #fff;
+            transition: background-color 0.3s;
+        }
+        .tempo-control button:hover {
+            background: #5a6268;
+        }
+        .tempo-display {
+            font-size: 16px;
+            width: 80px;
+            text-align: center;
+        }
+
+        /* ARP Speed Controls */
+        .arp-speed-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+        .arp-speed-controls button {
+            background: #ffc107;
+            padding: 5px 10px;
+            font-size: 14px;
+            border-radius: 3px;
+            cursor: pointer;
+            border: none;
+            transition: background-color 0.3s;
+        }
+        .arp-speed-controls button.active {
+            background: #e0a800;
+        }
+        .arp-speed-controls button:hover {
+            background: #d39e00;
+        }
+
+        /* Enhanced Arpeggiator Controls */
+        #enhancedArpControls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #enhancedArpControls .control {
+            flex-wrap: wrap;
+        }
+        #enhancedArpControls button {
+            margin-left: 10px;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            background: #007BFF;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-size: 14px;
+        }
+        #enhancedArpControls button:hover {
+            background: #0056b3;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 800px) {
+            .container {
+                flex-direction: column; /* Stacks columns vertically on small screens */
+            }
+        }
+        @media (max-width: 600px) {
+            .control label {
+                width: 80px;
+                font-size: 12px;
+            }
+            .buttons button {
+                padding: 8px 16px;
+                font-size: 14px;
+                margin: 5px 5px;
+            }
+            .tempo-display {
+                width: 60px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Simple Analog Synth Simulator</h1>
+    <div class="container">
+        <!-- Left Column: Synth Controls -->
+        <div class="column">
+            <!-- Buttons -->
+            <div class="buttons">
+                <button id="playButton">Play Note</button>
+                <button id="latchButton">Latch Note</button>
+            </div>
+
+            <!-- Synth Controls -->
+            <div id="synthControls">
+                <!-- Controls Container -->
+                <div id="controlsContainer">
+                    <!-- Note Selection -->
+                    <div class="control" data-control="noteSelect">
+                        <label for="noteSelect">Note:</label>
+                        <select id="noteSelect">
+                            <option value="A4" selected>A</option>
+                            <option value="A#4">A#</option>
+                            <option value="B4">B</option>
+                            <option value="C5">C</option>
+                            <option value="C#5">C#</option>
+                            <option value="D5">D</option>
+                            <option value="D#5">D#</option>
+                            <option value="E5">E</option>
+                            <option value="F5">F</option>
+                            <option value="F#5">F#</option>
+                            <option value="G5">G</option>
+                            <option value="G#5">G#</option>
+                            <option value="A5">A</option>
+                            <option value="A#5">A#</option>
+                            <option value="B5">B</option>
+                            <option value="C6">C</option>
+                        </select>
+                    </div>
+
+                    <!-- Octave Shift Dropdown -->
+                    <div class="control" data-control="octaveShift">
+                        <label for="octaveShift">Octave:</label>
+                        <select id="octaveShift">
+                            <option value="4">+4</option>
+                            <option value="3">+3</option>
+                            <option value="2">+2</option>
+                            <option value="1">+1</option>
+                            <option value="0">0</option>
+                            <option value="-1">-1</option>
+                            <option value="-2">-2</option>
+                            <option value="-3" selected>-3</option>
+                            <option value="-4">-4</option>
+                        </select>
+                    </div>
+
+                    <!-- Waveform Selection Dropdown -->
+                    <div class="control" data-control="waveformSelect">
+                        <label for="waveformSelect">Waveform:</label>
+                        <select id="waveformSelect">
+                            <option value="sine">Sine</option>
+                            <option value="square" selected>Square</option>
+                            <option value="sawtooth">Sawtooth</option>
+                            <option value="triangle">Triangle</option>
+                        </select>
+                    </div>
+
+                    <!-- ADSR Envelope Controls -->
+                    <div class="control" data-control="attackSlider">
+                        <label for="attackSlider">Attack:</label>
+                        <input type="range" id="attackSlider" min="0" max="2" step="0.01" value="0.1">
+                        <span id="attackValue">0.1</span>s
+                    </div>
+
+                    <div class="control" data-control="decaySlider">
+                        <label for="decaySlider">Decay:</label>
+                        <input type="range" id="decaySlider" min="0" max="2" step="0.01" value="0.1">
+                        <span id="decayValue">0.1</span>s
+                    </div>
+
+                    <div class="control" data-control="sustainSlider">
+                        <label for="sustainSlider">Sustain:</label>
+                        <input type="range" id="sustainSlider" min="0" max="1" step="0.01" value="0.5">
+                        <span id="sustainValue">0.5</span>
+                    </div>
+
+                    <div class="control" data-control="releaseSlider">
+                        <label for="releaseSlider">Release:</label>
+                        <input type="range" id="releaseSlider" min="0" max="2" step="0.01" value="0.1">
+                        <span id="releaseValue">0.1</span>s
+                    </div>
+
+                    <!-- Volume Control -->
+                    <div class="control" data-control="volumeSlider">
+                        <label for="volumeSlider">Volume:</label>
+                        <input type="range" id="volumeSlider" min="-60" max="0" step="1" value="-12">
+                        <span id="volumeValue">-12 dB</span>
+                    </div>
+
+                    <!-- Filter Controls -->
+                    <div class="control" data-control="lowCutoffSlider">
+                        <label for="lowCutoffSlider">Low Cutoff:</label>
+                        <input type="range" id="lowCutoffSlider" min="20" max="20000" step="1" value="20">
+                        <span id="lowCutoffValue">20 Hz</span>
+                    </div>
+
+                    <div class="control" data-control="highCutoffSlider">
+                        <label for="highCutoffSlider">High Cutoff:</label>
+                        <input type="range" id="highCutoffSlider" min="20" max="20000" step="1" value="20000">
+                        <span id="highCutoffValue">20000 Hz</span>
+                    </div>
+
+                    <div class="control" data-control="resonanceSlider">
+                        <label for="resonanceSlider">Resonance:</label>
+                        <input type="range" id="resonanceSlider" min="0.1" max="20" step="0.1" value="0.1">
+                        <span id="resonanceValue">0.1</span>
+                    </div>
+
+                    <!-- Modulation Controls -->
+                    <div class="control" data-control="modFreqSlider">
+                        <label for="modFreqSlider">Mod Freq:</label>
+                        <input type="range" id="modFreqSlider" min="0.0" max="20" step="0.1" value="6">
+                        <span id="modFreqValue">6 Hz</span>
+                    </div>
+
+                    <div class="control" data-control="modDepthSlider">
+                        <label for="modDepthSlider">Mod Depth:</label>
+                        <input type="range" id="modDepthSlider" min="0" max="100" step="1" value="50">
+                        <span id="modDepthValue">50%</span>
+                    </div>
+
+                    <!-- Phase Shift Control -->
+                    <div class="control" data-control="phaseShiftSlider">
+                        <label for="phaseShiftSlider">Phase Shift:</label>
+                        <input type="range" id="phaseShiftSlider" min="0" max="360" step="1" value="0">
+                        <span id="phaseShiftValue">0°</span>
+                    </div>
+                </div> <!-- End of controlsContainer -->
+            </div>
+        </div>
+
+        <!-- Right Column: Arpeggiator Controls -->
+<div class="column">
+    <!-- ARP Controls -->
+    <div class="arp-controls">
+        <button id="arpButton">ARP</button>
+        <div class="tempo-control">
+            <button id="tempoDown">-</button>
+            <span class="tempo-display">120 BPM</span>
+            <button id="tempoUp">+</button>
+        </div>
+    </div>
+
+    <!-- ARP Speed Controls -->
+    <div class="arp-speed-controls">
+        <button class="arp-speed-button" data-speed="4">1/4</button>
+        <button class="arp-speed-button" data-speed="2">1/2</button>
+        <button class="arp-speed-button active" data-speed="1">1x</button>
+        <button class="arp-speed-button" data-speed="0.5">2x</button>
+        <button class="arp-speed-button" data-speed="0.25">4x</button>
+    </div>
+
+    <!-- Enhanced Arpeggiator Controls -->
+    <div id="enhancedArpControls">
+        <!-- Pattern Selection -->
+        <div class="control">
+            <label for="patternSelect">Pattern:</label>
+            <select id="patternSelect">
+                <option value="up">Up</option>
+                <option value="down">Down</option>
+                <option value="up-down">Up-Down</option>
+                <option value="random">Random</option>
+                <option value="random-shift">Random Shift</option>
+                <option value="alternate">Alternate</option>
+                <option value="mirror">Mirror</option>
+            </select>
+            <button id="randomPatternButton">Random Pattern</button>
+        </div>
+
+        <!-- Key and Scale Selection -->
+        <div class="control">
+            <label for="keySelect">Key:</label>
+            <select id="keySelect">
+                <!-- Options populated via JavaScript -->
+            </select>
+        </div>
+
+        <div class="control">
+            <label for="scaleTypeSelect">Scale Type:</label>
+            <select id="scaleTypeSelect">
+                <!-- Options populated via JavaScript -->
+            </select>
+        </div>
+
+        <div class="control">
+            <label for="scaleSelect">Scale:</label>
+            <select id="scaleSelect">
+                <!-- Options populated via JavaScript -->
+            </select>
+        </div>
+
+        <!-- Number of Notes -->
+        <div class="control">
+            <label for="numNotesSelect">Number of Notes:</label>
+            <select id="numNotesSelect">
+                <!-- Options populated via JavaScript -->
+            </select>
+        </div>
+
+        <!-- Random Notes Button -->
+        <div class="control">
+            <button id="randomNotesButton">Randomize Notes</button>
+        </div>
+
+        <!-- Octave Range Control -->
+        <div class="control">
+            <label for="arpOctaveRangeSelect">Arpeggiator Range (Octaves):</label>
+            <select id="arpOctaveRangeSelect">
+                <option value="1">1 Octave</option>
+                <option value="2">2 Octaves</option>
+                <option value="3">3 Octaves</option>
+                <option value="4">4 Octaves</option>
+            </select>
+        </div>
+
+        <!-- Randomness Control -->
+        <div class="control">
+            <label for="randomnessToggle">Enable Note Jumps:</label>
+            <input type="checkbox" id="randomnessToggle">
+        </div>
+
+        <!-- Swing Control -->
+        <div class="control">
+            <label for="swingSlider">Swing:</label>
+            <input type="range" id="swingSlider" min="0" max="100" value="50">
+            <span id="swingDisplay">50%</span>
+        </div>
+    </div>
+</div>
+
+
+    <!-- textContent div inside the iframe's body -->
+    <div id="textContent" style="display: none;"></div>
+
+    <!-- Include the Audionals Script for the ToneJS Bridge -->
+    <script src="/content/a416aa550c0ec419c489c9447be6380beb10a194443b348822e8c1809e3a3945i0"></script>
+
+
+
+<!-- SynthController Class Definition -->
+<script>
+    // TODO - Add robust web audio timing mechanisms to ensure perpetualy accurate timing of the arpeggiator
+    // TODO  - Enhance sliders and processing of filters.
+
+    document.addEventListener('tonejsLoaded', () => {
+        window.SynthController = class SynthController {
+            constructor() {
+                this.controlsConfig = {
+                    attackSlider: { unit: 's', update: 'envelope' },
+                    decaySlider: { unit: 's', update: 'envelope' },
+                    sustainSlider: { unit: '', update: 'envelope' },
+                    releaseSlider: { unit: 's', update: 'envelope' },
+                    volumeSlider: { unit: 'dB', update: 'volume' },
+                    lowCutoffSlider: { unit: 'Hz', update: 'filter' },
+                    highCutoffSlider: { unit: 'Hz', update: 'filter' },
+                    resonanceSlider: { unit: '', update: 'filter' },
+                    modFreqSlider: { unit: 'Hz', update: 'modulation' },
+                    modDepthSlider: { unit: '%', update: 'modulation' },
+                    phaseShiftSlider: { unit: '°', update: 'phaseShift' }
+                };
+
+                this.initializeControls();
+                this.initializeSynth();
+                this.updateDisplay();
+                this.setupEventListeners();
+                this.setupAudioContextResuming();
+                this.initializeArpeggiatorState();
+                this.initializeScaleControls();
+                this.updateNoteSequence();
+            }
+
+            initializeControls() {
+                const controlsContainer = document.getElementById('controlsContainer');
+                this.controls = {};
+                Array.from(controlsContainer.querySelectorAll('.control')).forEach(control => {
+                    const controlId = control.getAttribute('data-control');
+                    this.controls[controlId] = {
+                        input: document.getElementById(controlId),
+                        display: control.querySelector('span')
+                    };
+                });
+
+                // List of IDs and their corresponding property names
+                const elements = [
+                    { id: 'playButton', prop: 'playButton' },
+                    { id: 'latchButton', prop: 'latchButton' },
+                    { id: 'waveformSelect', prop: 'waveformSelect' },
+                    { id: 'noteSelect', prop: 'noteSelect' },
+                    { id: 'octaveShiftSelect', prop: 'octaveShiftSelect' }, // Updated ID
+                    { id: 'arpButton', prop: 'arpButton' },
+                    { id: 'tempoDown', prop: 'tempoDown' },
+                    { id: 'tempoUp', prop: 'tempoUp' },
+                    { id: 'patternSelect', prop: 'patternSelect' },
+                    { id: 'randomPatternButton', prop: 'randomPatternButton' },
+                    { id: 'keySelect', prop: 'keySelect' },
+                    { id: 'scaleTypeSelect', prop: 'scaleTypeSelect' },
+                    { id: 'scaleSelect', prop: 'scaleSelect' },
+                    { id: 'numNotesSelect', prop: 'numNotesSelect' },
+                    { id: 'randomNotesButton', prop: 'randomNotesButton' },
+                    { id: 'arpOctaveRangeSelect', prop: 'arpOctaveRangeSelect' } // Added Octave Range Select
+                ];
+
+                elements.forEach(({ id, prop }) => {
+                    this[prop] = document.getElementById(id);
+                });
+
+                this.tempoDisplay = document.querySelector(".tempo-display");
+                this.arpSpeedButtons = document.querySelectorAll(".arp-speed-button");
+
+                // Initialize state variables
+                Object.assign(this, {
+                    currentArpSpeed: 1,
+                    arpRepeatId: null,
+                    isLatched: false,
+                    currentLatchedNote: null,
+                    // Initialize octaveShift based on the current value of octaveShiftSelect
+                    octaveShift: parseInt(this.octaveShiftSelect.value, 10) || 0,
+                    arpActive: false,
+                    currentTempo: 120,
+                    currentPattern: 'up',
+                    key: 'C',
+                    scaleType: 'major',
+                    scale: [],
+                    numNotes: 4,
+                    noteSequence: [],
+                    scaleNotes: [],
+                    // Initialize octave range for arpeggiator
+                    arpOctaveRange: parseInt(this.arpOctaveRangeSelect.value, 10) || 1
+                });
+
+                // Set up event listener for Octave Range Select
+                this.arpOctaveRangeSelect.addEventListener('change', () => {
+                    this.arpOctaveRange = parseInt(this.arpOctaveRangeSelect.value, 10) || 1;
+                    this.updateNoteSequence();
+                });
+            }
+            initializeControls() {
+                const controlsContainer = document.getElementById('controlsContainer');
+                this.controls = {};
+                Array.from(controlsContainer.querySelectorAll('.control')).forEach(control => {
+                    const controlId = control.getAttribute('data-control');
+                    this.controls[controlId] = {
+                        input: document.getElementById(controlId),
+                        display: control.querySelector('span')
+                    };
+                });
+
+                // List of IDs and their corresponding property names
+                const elements = [
+                    { id: 'playButton', prop: 'playButton' },
+                    { id: 'latchButton', prop: 'latchButton' },
+                    { id: 'waveformSelect', prop: 'waveformSelect' },
+                    { id: 'noteSelect', prop: 'noteSelect' },
+                    { id: 'octaveShift', prop: 'octaveShiftSelect' },
+                    { id: 'arpButton', prop: 'arpButton' },
+                    { id: 'tempoDown', prop: 'tempoDown' },
+                    { id: 'tempoUp', prop: 'tempoUp' },
+                    { id: 'patternSelect', prop: 'patternSelect' },
+                    { id: 'randomPatternButton', prop: 'randomPatternButton' },
+                    { id: 'keySelect', prop: 'keySelect' },
+                    { id: 'scaleTypeSelect', prop: 'scaleTypeSelect' },
+                    { id: 'scaleSelect', prop: 'scaleSelect' },
+                    { id: 'numNotesSelect', prop: 'numNotesSelect' },
+                    { id: 'randomNotesButton', prop: 'randomNotesButton' }
+                ];
+
+                elements.forEach(({ id, prop }) => {
+                    this[prop] = document.getElementById(id);
+                });
+
+                this.tempoDisplay = document.querySelector(".tempo-display");
+                this.arpSpeedButtons = document.querySelectorAll(".arp-speed-button");
+
+                // Initialize state variables
+                Object.assign(this, {
+                    currentArpSpeed: 1,
+                    arpRepeatId: null,
+                    isLatched: false,
+                    currentLatchedNote: null,
+                    // Initialize octaveShift based on the current value of octaveShiftSelect
+                    octaveShift: parseInt(this.octaveShiftSelect.value, 10) || 0,
+                    arpActive: false,
+                    currentTempo: 120,
+                    currentPattern: 'up',
+                    key: 'C',
+                    scaleType: 'major',
+                    scale: [],
+                    numNotes: 4,
+                    noteSequence: [],
+                    scaleNotes: []
+                });
+            }
+
+            initializeSynth() {
+                const { volumeSlider, lowCutoffSlider, highCutoffSlider, resonanceSlider, modFreqSlider, modDepthSlider, phaseShiftSlider } = this.controls;
+
+                this.volume = new Tone.Volume(parseInt(volumeSlider.input.value)).toDestination();
+                this.limiter = new Tone.Limiter(-1).toDestination();
+
+                this.highpassFilter = new Tone.Filter({
+                    type: "highpass",
+                    frequency: parseFloat(lowCutoffSlider.input.value),
+                    Q: parseFloat(resonanceSlider.input.value)
+                });
+
+                this.lowpassFilter = new Tone.Filter({
+                    type: "lowpass",
+                    frequency: parseFloat(highCutoffSlider.input.value),
+                    Q: parseFloat(resonanceSlider.input.value)
+                });
+
+                this.highpassFilter.chain(this.lowpassFilter, this.volume, this.limiter);
+
+                this.synth = new Tone.PolySynth(Tone.Synth, {
+                    maxPolyphony: 4,
+                    oscillator: {
+                        type: this.waveformSelect.value,
+                        phase: parseInt(phaseShiftSlider.input.value)
+                    },
+                    envelope: {
+                        attack: parseFloat(this.controls.attackSlider.input.value),
+                        decay: parseFloat(this.controls.decaySlider.input.value),
+                        sustain: parseFloat(this.controls.sustainSlider.input.value),
+                        release: parseFloat(this.controls.releaseSlider.input.value)
+                    }
+                }).connect(this.highpassFilter);
+
+                this.lfo = new Tone.LFO({
+                    frequency: parseFloat(modFreqSlider.input.value),
+                    min: 20,
+                    max: parseFloat(highCutoffSlider.input.value)
+                }).start();
+
+                this.lfo.amplitude.value = parseFloat(this.controls.modDepthSlider.input.value) / 100;
+                this.lfo.connect(this.lowpassFilter.frequency);
+            }
+
+            updateDisplay() {
+                Object.entries(this.controlsConfig).forEach(([id, config]) => {
+                    const { input, display } = this.controls[id];
+                    display.textContent = `${input.value}${config.unit}`;
+                });
+                this.tempoDisplay.textContent = `${this.currentTempo} BPM`;
+            }
+
+            smoothUpdate(param, value, rampTime = 0.05) {
+                param.linearRampTo(value, rampTime);
+            }
+
+            updateParameters(id, value) {
+                const updateType = this.controlsConfig[id].update;
+                switch (updateType) {
+                    case 'envelope':
+                        this.synth.set({
+                            envelope: {
+                                attack: parseFloat(this.controls.attackSlider.input.value),
+                                decay: parseFloat(this.controls.decaySlider.input.value),
+                                sustain: parseFloat(this.controls.sustainSlider.input.value),
+                                release: parseFloat(this.controls.releaseSlider.input.value)
+                            }
+                        });
+                        break;
+                    case 'volume':
+                        this.smoothUpdate(this.volume.volume, parseInt(value));
+                        break;
+                    case 'filter':
+                        this.updateFilterParameters(id, value);
+                        break;
+                    case 'modulation':
+                        if (id === 'modFreqSlider') {
+                            this.smoothUpdate(this.lfo.frequency, parseFloat(value));
+                        } else if (id === 'modDepthSlider') {
+                            this.smoothUpdate(this.lfo.amplitude, parseFloat(value) / 100);
+                        }
+                        break;
+                    case 'phaseShift':
+                        this.synth.set({ oscillator: { phase: parseInt(value) } });
+                        break;
+                }
+            }
+
+            updateFilterParameters(id, value) {
+                const { lowCutoffSlider, highCutoffSlider, resonanceSlider } = this.controls;
+                let lowCutoff = parseFloat(lowCutoffSlider.input.value);
+                let highCutoff = parseFloat(highCutoffSlider.input.value);
+
+                if (highCutoff <= lowCutoff + 10) {
+                    highCutoff = lowCutoff + 10;
+                    highCutoffSlider.input.value = highCutoff;
+                    highCutoffSlider.display.textContent = `${highCutoff} Hz`;
+                }
+
+                lowCutoff = Math.max(lowCutoff, 20);
+                highCutoff = Math.max(highCutoff, lowCutoff + 10);
+
+                this.smoothUpdate(this.highpassFilter.frequency, lowCutoff);
+                this.smoothUpdate(this.lowpassFilter.frequency, highCutoff);
+
+                this.lfo.max = highCutoff;
+                this.lfo.min = 20;
+
+                if (id === 'resonanceSlider') {
+                    const resonance = Math.max(parseFloat(value), 0.1);
+                    resonanceSlider.input.value = resonance.toFixed(1);
+                    resonanceSlider.display.textContent = `${resonance}`;
+                    this.highpassFilter.Q.value = resonance;
+                    this.lowpassFilter.Q.value = resonance;
+                }
+            }
+
+            setupEventListeners() {
+                Object.keys(this.controlsConfig).forEach(id => {
+                    const { input } = this.controls[id];
+                    input.addEventListener('input', (e) => {
+                        const { value } = e.target;
+                        this.controls[id].display.textContent = `${value}${this.controlsConfig[id].unit}`;
+                        this.updateParameters(id, value);
+                    });
+                });
+
+                this.waveformSelect.addEventListener("change", () => {
+                    this.synth.set({
+                        oscillator: {
+                            type: this.waveformSelect.value,
+                            phase: parseInt(this.controls.phaseShiftSlider.input.value)
+                        }
+                    });
+                });
+
+                this.octaveShiftSelect.addEventListener("change", () => {
+                    this.octaveShift = parseInt(this.octaveShiftSelect.value, 10);
+                    this.updateDisplay();
+
+                    // Notify Arpeggiator about the octave shift change
+                    if (this.arpeggiator) {
+                        this.arpeggiator.updateOctaveShift(this.octaveShift);
+                    }
+
+                    // Update the note sequence to reflect the new octave shift
+                    this.updateNoteSequence();
+
+                    if (this.isLatched && this.currentLatchedNote) {
+                        this.synth.triggerRelease(this.currentLatchedNote);
+                        const newNote = this.getSelectedNote();
+                        this.synth.triggerAttack(newNote);
+                        this.currentLatchedNote = newNote;
+                    }
+                });
+
+                this.noteSelect.addEventListener("change", () => {
+                    // Update the note sequence to reflect the new base note
+                    this.updateNoteSequence();
+
+                    if (this.isLatched && this.currentLatchedNote) {
+                        this.synth.triggerRelease(this.currentLatchedNote);
+                        const newNote = this.getSelectedNote();
+                        this.synth.triggerAttack(newNote);
+                        this.currentLatchedNote = newNote;
+                    }
+
+                    // Notify Arpeggiator about the base note change
+                    if (this.arpeggiator) {
+                        this.arpeggiator.updateNoteSequence();
+                    }
+
+                    this.updateDisplay();
+                });
+
+                this.playButton.addEventListener("click", async () => {
+                    await this.startAudioContext();
+                    this.playNote();
+                });
+
+                this.latchButton.addEventListener("click", async () => {
+                    await this.startAudioContext();
+                    this.latchNote();
+                });
+
+                this.tempoUp.addEventListener("click", () => { 
+                    this.updateTempo(5); 
+                });
+                this.tempoDown.addEventListener("click", () => { 
+                    this.updateTempo(-5); 
+                });
+
+                this.arpButton.addEventListener("click", () => { 
+                    if (this.arpeggiator) {
+                        this.arpeggiator.handleArpeggiatorToggle();
+                    }
+                });
+
+                this.arpSpeedButtons.forEach(button => {
+                    button.addEventListener("click", () => { 
+                        if (this.arpeggiator) {
+                            this.arpeggiator.handleArpSpeedChange(button);
+                        }
+                    });
+                });
+
+                this.patternSelect.addEventListener("change", (e) => {
+                    this.currentPattern = e.target.value;
+                    if (this.arpeggiator) {
+                        this.arpeggiator.setPattern(this.currentPattern);
+                    }
+                });
+
+                this.randomPatternButton.addEventListener("click", () => { 
+                    if (this.arpeggiator) {
+                        this.arpeggiator.setRandomPattern();
+                    }
+                });
+
+                this.keySelect.addEventListener("change", (e) => {
+                    this.key = e.target.value;
+                    this.updateScale();
+                    this.updateNoteSequence();
+                    if (this.arpeggiator) {
+                        this.arpeggiator.updateNoteSequence();
+                    }
+                });
+
+                this.scaleTypeSelect.addEventListener("change", (e) => {
+                    this.scaleType = e.target.value;
+                    this.updateScale();
+                    this.updateNoteSequence();
+                    if (this.arpeggiator) {
+                        this.arpeggiator.updateNoteSequence();
+                    }
+                });
+
+                this.scaleSelect.addEventListener("change", () => {
+                    if (this.arpeggiator) {
+                        this.arpeggiator.updateNoteSequence();
+                    }
+                });
+
+                this.numNotesSelect.addEventListener("change", (e) => {
+                    this.numNotes = parseInt(e.target.value);
+                    this.updateNoteSequence();
+                    if (this.arpeggiator) {
+                        this.arpeggiator.updateNoteSequence();
+                    }
+                });
+
+                this.randomNotesButton.addEventListener("click", () => { 
+                    if (this.arpeggiator) {
+                        this.arpeggiator.randomizeNotes();
+                    }
+                });
+            }
+
+            initializeArpeggiatorState() {
+                // Placeholder for Arpeggiator reference
+                this.arpeggiator = null;
+            }
+
+            initializeScaleControls() {
+                ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].forEach(key => {
+                    const option = document.createElement('option');
+                    option.value = key;
+                    option.textContent = key;
+                    this.keySelect.appendChild(option);
+                });
+
+                ['major', 'minor'].forEach(type => {
+                    const option = document.createElement('option');
+                    option.value = type;
+                    option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+                    this.scaleTypeSelect.appendChild(option);
+                });
+
+                for (let i = 2; i <= 8; i++) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = i;
+                    this.numNotesSelect.appendChild(option);
+                }
+
+                // Add Arpeggiator Range Controls
+                const arpOctaveRangeSelect = document.getElementById('arpOctaveRangeSelect');
+                for (let i = 1; i <= 4; i++) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = `${i} Octave${i > 1 ? 's' : ''}`;
+                    arpOctaveRangeSelect.appendChild(option);
+                }
+
+                this.arpeggiatorOctaveRangeSelect = arpOctaveRangeSelect; // Reference for later use
+
+                // Set default value
+                arpOctaveRangeSelect.value = '1';
+            
+
+                this.updateScale();
+            }
+            
+
+            updateTempo(newTempo) {
+                this.currentTempo = Math.max(60, Math.min(240, newTempo));
+                this.tempoDisplay.textContent = `${this.currentTempo} BPM`;
+                Tone.Transport.bpm.value = this.currentTempo;
+                if (this.arpeggiator) {
+                    this.arpeggiator.updateTempo(this.currentTempo);
+                }
+            }
+
+            updateNoteSequence() {
+                const availableNotes = this.scale.slice(0, this.numNotes);
+                this.scaleNotes = [...availableNotes];
+
+                const selectedNoteValue = this.noteSelect.value;
+                const selectedNoteOctave = parseInt(selectedNoteValue.slice(-1)) || 4;
+                const baseOctave = Math.max(0, Math.min(8, selectedNoteOctave + this.octaveShift));
+                this.scaleNotes = this.scaleNotes.map(note => `${note}${baseOctave}`);
+
+                if (this.arpeggiator) {
+                    this.arpeggiator.updateNoteSequence();
+                }
+            }
+
+            handleArpeggiatorToggle() {
+                if (this.arpeggiator) {
+                    this.arpeggiator.handleArpeggiatorToggle();
+                }
+            }
+
+            getSelectedNote() {
+                const note = this.noteSelect.value.slice(0, -1);
+                let octave = parseInt(this.noteSelect.value.slice(-1)) + this.octaveShift;
+                octave = Math.max(0, Math.min(8, octave));
+                return `${note}${octave}`;
+            }
+
+            playNote() {
+                const selectedNote = this.getSelectedNote();
+                const { attackSlider, decaySlider, releaseSlider } = this.controls;
+                const attack = parseFloat(attackSlider.input.value);
+                const decay = parseFloat(decaySlider.input.value);
+                const release = parseFloat(releaseSlider.input.value);
+                this.synth.triggerAttackRelease(selectedNote, attack + decay + 0.5 + release);
+            }
+
+            latchNote() {
+                const selectedNote = this.getSelectedNote();
+                if (!this.isLatched) {
+                    this.synth.triggerAttack(selectedNote);
+                    this.currentLatchedNote = selectedNote;
+                    this.latchButton.classList.add('latched');
+                } else {
+                    if (this.currentLatchedNote) {
+                        this.synth.triggerRelease(this.currentLatchedNote);
+                        this.currentLatchedNote = null;
+                    }
+                    this.latchButton.classList.remove('latched');
+                }
+                this.isLatched = !this.isLatched;
+            }
+
+            async startAudioContext() {
+                if (Tone.context.state !== 'running') await Tone.start();
+            }
+
+            setupAudioContextResuming() {
+                const resumeAudio = async () => {
+                    if (Tone.context.state !== 'running') await Tone.start();
+                };
+                ['mousedown', 'touchstart', 'keydown'].forEach(eventType => {
+                    document.body.addEventListener(eventType, resumeAudio, { once: true });
+                });
+            }
+
+            updateScale() {
+                this.scale = this.generateScale(this.key, this.scaleType);
+                this.populateScaleSelect();
+                if (this.arpeggiator) {
+                    this.arpeggiator.updateNoteSequence();
+                }
+            }
+
+            generateScale(key, scaleType) {
+                const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                const intervals = { major: [2, 2, 1, 2, 2, 2, 1], minor: [2, 1, 2, 2, 1, 2, 2] }[scaleType] || [2, 2, 1, 2, 2, 2, 1];
+                let scale = [], startIndex = notes.indexOf(key) >= 0 ? notes.indexOf(key) : 0;
+                scale.push(notes[startIndex]);
+                let currentIndex = startIndex;
+                intervals.forEach(interval => {
+                    currentIndex = (currentIndex + interval) % notes.length;
+                    scale.push(notes[currentIndex]);
+                });
+                return scale;
+            }
+
+            populateScaleSelect() {
+                this.scaleSelect.innerHTML = '';
+                this.scale.forEach(note => {
+                    const option = document.createElement('option');
+                    option.value = note;
+                    option.textContent = note;
+                    this.scaleSelect.appendChild(option);
+                });
+            }
+
+          
+        };
+    });
+</script>
+
+
+
+
+<!-- Arpeggiator Class Definition -->
+<script>
+    document.addEventListener('tonejsLoaded', () => {
+        window.Arpeggiator = class Arpeggiator {
+            constructor(synthController) {
+                this.synthController = synthController;
+
+                // Arpeggiator Controls
+                this.arpButton = synthController.arpButton;
+                this.tempoDown = synthController.tempoDown;
+                this.tempoUp = synthController.tempoUp;
+                this.tempoDisplay = synthController.tempoDisplay;
+                this.patternSelect = synthController.patternSelect;
+                this.randomPatternButton = synthController.randomPatternButton;
+                this.keySelect = synthController.keySelect;
+                this.scaleTypeSelect = synthController.scaleTypeSelect;
+                this.scaleSelect = synthController.scaleSelect;
+                this.numNotesSelect = synthController.numNotesSelect;
+                this.randomNotesButton = synthController.randomNotesButton;
+                this.arpSpeedButtons = synthController.arpSpeedButtons;
+
+                // State Variables
+                this.currentArpSpeed = synthController.currentArpSpeed;
+                this.arpRepeatId = null;
+                this.currentPattern = synthController.currentPattern;
+                this.currentTempo = synthController.currentTempo;
+                this.arpActive = synthController.arpActive;
+                this.noteSequence = synthController.noteSequence;
+
+                // Initialize Octave Shift
+                this.octaveShift = synthController.octaveShift || 0;
+
+                // Bind Methods
+                this.handleArpeggiatorToggle = this.handleArpeggiatorToggle.bind(this);
+                this.handleArpSpeedChange = this.handleArpSpeedChange.bind(this);
+                this.setPattern = this.setPattern.bind(this);
+                this.setRandomPattern = this.setRandomPattern.bind(this);
+                this.updateNoteSequence = this.updateNoteSequence.bind(this);
+                this.updateTempo = this.updateTempo.bind(this);
+                this.shuffleArray = this.shuffleArray.bind(this);
+                this.updateOctaveShift = this.updateOctaveShift.bind(this);
+                this.getSelectedNote = this.getSelectedNote.bind(this);
+
+                // Initialize Note Sequence
+                this.updateNoteSequence();
+
+                // Add Event Listeners for Controls
+                this.arpButton.addEventListener('click', this.handleArpeggiatorToggle);
+                this.arpSpeedButtons.forEach(button => {
+                    button.addEventListener('click', () => this.handleArpSpeedChange(button));
+                });
+                this.patternSelect.addEventListener('change', (e) => this.setPattern(e.target.value));
+                this.randomPatternButton.addEventListener('click', this.setRandomPattern);
+                this.randomNotesButton.addEventListener('click', this.randomizeNotes.bind(this));
+                // Add other event listeners as needed
+            }
+
+            /**
+             * Updates the octave shift and refreshes the note sequence.
+             * @param {number} newOctaveShift - The new octave shift value.
+             */
+            updateOctaveShift(newOctaveShift) {
+                console.log(`Arpeggiator: Updating octave shift to ${newOctaveShift}`);
+                this.octaveShift = newOctaveShift;
+                this.updateNoteSequence();
+
+                // If Arpeggiator is active, reschedule it to use the new note sequence
+                if (this.arpActive) {
+                    if (this.arpRepeatId !== null) {
+                        Tone.Transport.clear(this.arpRepeatId);
+                        this.arpRepeatId = null;
+                    }
+                    this.scheduleArpeggiator();
+                }
+            }
+
+            /**
+             * Retrieves the currently selected note with the correct octave shift.
+             * @returns {string} - The selected note with octave (e.g., "C4").
+             */
+            getSelectedNote() {
+                const selectedNoteValue = this.synthController.noteSelect.value;
+                const note = selectedNoteValue.slice(0, -1);
+                const selectedNoteOctave = parseInt(selectedNoteValue.slice(-1)) || 4;
+                const octave = Math.max(0, Math.min(8, selectedNoteOctave + this.octaveShift));
+                return `${note}${octave}`;
+            }
+
+            /**
+             * Updates the note sequence based on the current scale, number of notes, and octave shift.
+             */
+            updateNoteSequence() {
+                const { scale, numNotes } = this.synthController;
+                const availableNotes = scale.slice(0, numNotes);
+                const selectedNoteValue = this.synthController.noteSelect.value;
+                const selectedNoteOctave = parseInt(selectedNoteValue.slice(-1)) || 4;
+                const baseOctave = Math.max(0, Math.min(8, selectedNoteOctave + this.octaveShift));
+
+                // Generate the new note sequence with the updated octave
+                this.noteSequence = availableNotes.map(note => `${note}${baseOctave}`);
+                console.log('Arpeggiator: Updated note sequence:', this.noteSequence);
+                this.applyPattern();
+            }
+
+            /**
+             * Applies the selected arpeggio pattern to the note sequence.
+             */
+            applyPattern() {
+                switch (this.currentPattern) {
+                    case 'up':
+                        this.noteSequence = [...this.noteSequence];
+                        break;
+                    case 'down':
+                        this.noteSequence = [...this.noteSequence].reverse();
+                        break;
+                    case 'up-down':
+                        this.noteSequence = [...this.noteSequence, ...this.noteSequence.slice().reverse().slice(1, -1)];
+                        break;
+                    case 'random':
+                        this.noteSequence = [...this.noteSequence];
+                        this.shuffleArray(this.noteSequence);
+                        break;
+                    default:
+                        this.noteSequence = [...this.noteSequence];
+                }
+
+                console.log(`Arpeggiator: Applied pattern '${this.currentPattern}'. Note sequence:`, this.noteSequence);
+
+                // If Arpeggiator is active, reschedule it
+                if (this.arpActive) {
+                    this.scheduleArpeggiator();
+                }
+            }
+
+            /**
+             * Shuffles an array in place using the Fisher-Yates algorithm.
+             * @param {Array} array - The array to shuffle.
+             */
+            shuffleArray(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+                console.log('Arpeggiator: Shuffled note sequence:', array);
+            }
+
+            /**
+             * Sets the current arpeggio pattern.
+             * @param {string} pattern - The pattern to set (e.g., 'up', 'down').
+             */
+            setPattern(pattern) {
+                console.log(`Arpeggiator: Setting pattern to '${pattern}'`);
+                this.currentPattern = pattern;
+                this.applyPattern();
+            }
+
+            /**
+             * Sets a random arpeggio pattern.
+             */
+            setRandomPattern() {
+                const patterns = ['up', 'down', 'up-down', 'random'];
+                const randomIndex = Math.floor(Math.random() * patterns.length);
+                const randomPattern = patterns[randomIndex];
+                console.log(`Arpeggiator: Setting random pattern '${randomPattern}'`);
+                this.setPattern(randomPattern);
+                this.patternSelect.value = randomPattern;
+            }
+
+            /**
+             * Schedules the arpeggiator to play notes based on the current sequence and speed.
+             */
+            scheduleArpeggiator() {
+                const interval = this.getNoteDuration(this.currentArpSpeed);
+                console.log(`Arpeggiator: Scheduling arpeggiator with interval '${interval}'`);
+
+                if (this.arpRepeatId !== null) {
+                    Tone.Transport.clear(this.arpRepeatId);
+                    console.log('Arpeggiator: Cleared previous schedule.');
+                }
+
+                let noteIndex = 0;
+                this.arpRepeatId = Tone.Transport.scheduleRepeat((time) => {
+                    if (this.noteSequence.length === 0) return;
+                    const note = this.noteSequence[noteIndex];
+                    console.log(`Arpeggiator: Playing note '${note}' at time '${time}'`);
+                    this.synthController.synth.triggerAttackRelease(note, "8n", time);
+                    noteIndex = (noteIndex + 1) % this.noteSequence.length;
+                }, interval);
+            }
+
+            /**
+             * Converts the current arpeggio speed to a Tone.js duration string.
+             * @param {number} speed - The speed identifier (e.g., 0.25, 0.5).
+             * @returns {string} - The Tone.js duration string.
+             */
+            getNoteDuration(speed) {
+                const durations = { 0.25: "16n", 0.5: "8n", 1: "4n", 2: "2n", 4: "1n" };
+                const duration = durations[speed] || "4n";
+                console.log(`Arpeggiator: Converted speed '${speed}' to duration '${duration}'`);
+                return duration;
+            }
+
+            /**
+             * Handles toggling the arpeggiator on and off.
+             */
+            handleArpeggiatorToggle() {
+                console.log('Arpeggiator: Toggling arpeggiator');
+                this.arpActive = !this.arpActive;
+                this.arpButton.classList.toggle('active', this.arpActive);
+                this.synthController.arpActive = this.arpActive;
+
+                if (this.arpActive) {
+                    Tone.Transport.bpm.value = this.currentTempo;
+                    this.scheduleArpeggiator();
+                    Tone.Transport.start();
+                    console.log('Arpeggiator: Arpeggiator activated and Tone.Transport started.');
+                } else {
+                    Tone.Transport.stop();
+                    Tone.Transport.cancel();
+                    if (this.arpRepeatId !== null) {
+                        Tone.Transport.clear(this.arpRepeatId);
+                        this.arpRepeatId = null;
+                        console.log('Arpeggiator: Arpeggiator deactivated and Tone.Transport stopped.');
+                    }
+                }
+            }
+
+            /**
+             * Handles changes to the arpeggio speed.
+             * @param {HTMLElement} button - The button that was clicked.
+             */
+            handleArpSpeedChange(button) {
+                // Remove active class from all speed buttons
+                this.arpSpeedButtons.forEach(btn => btn.classList.remove('active'));
+                // Add active class to the clicked button
+                button.classList.add('active');
+                // Update the current ARP speed
+                this.currentArpSpeed = parseFloat(button.getAttribute('data-speed'));
+                console.log(`Arpeggiator: Changed speed to '${this.currentArpSpeed}'`);
+
+                // If ARP is active, reschedule with the new speed
+                if (this.arpActive) {
+                    this.scheduleArpeggiator();
+                    console.log('Arpeggiator: Rescheduled arpeggiator with new speed.');
+                }
+            }
+
+            /**
+             * Updates the tempo display and Tone.Transport BPM.
+             * @param {number} newTempo - The new tempo value.
+             */
+            updateTempo(newTempo) {
+                this.currentTempo = newTempo;
+                Tone.Transport.bpm.value = this.currentTempo;
+                this.tempoDisplay.textContent = `${this.currentTempo} BPM`;
+                console.log(`Arpeggiator: Updated tempo to '${this.currentTempo} BPM'`);
+            }
+
+            /**
+             * Randomizes the number of notes and updates the note sequence.
+             */
+            randomizeNotes() {
+                const { scale, numNotes, octaveShift } = this.synthController;
+                const maxNotes = Math.min(8, scale.length);
+                const randomNumNotes = Math.floor(Math.random() * (maxNotes - 1)) + 2;
+                this.synthController.numNotes = randomNumNotes;
+                this.synthController.numNotesSelect.value = randomNumNotes;
+                this.synthController.updateNoteSequence();
+
+                console.log(`Arpeggiator: Randomized number of notes to '${randomNumNotes}'`);
+                this.updateNoteSequence();
+            }
+        };
+    });
+</script>
+
+<!-- Initialization Script -->
+<script>
+    document.addEventListener('tonejsLoaded', () => {
+        if (window.SynthController && window.Arpeggiator) {
+            // Instantiate SynthController
+            const synthController = new SynthController();
+
+            // Instantiate Arpeggiator with reference to SynthController
+            const arpeggiator = new Arpeggiator(synthController);
+
+            // Link Arpeggiator to SynthController
+            synthController.arpeggiator = arpeggiator;
+        } else {
+            console.error('SynthController or Arpeggiator class is not defined.');
+        }
+    });
+</script>
+
+
+
+
+
+</body>
+</html>

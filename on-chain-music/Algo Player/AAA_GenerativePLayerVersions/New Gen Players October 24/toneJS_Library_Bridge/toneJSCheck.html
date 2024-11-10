@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tone.js Library Inspection</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #inspectButton { padding: 10px 20px; font-size: 16px; }
+        #output { margin-top: 20px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+
+    <h1>Inspect Tone.js Library for ScriptProcessorNode</h1>
+    <button id="inspectButton" disabled>Inspect Tone.js for ScriptProcessorNode</button>
+    <div id="output">Status: Loading Tone.js...</div>
+
+    <!-- Include the ToneJS Bridge Script -->
+    <script src="toneJsLibrary_v4.html"></script> <!-- Replace with actual on-chain URL or local test file -->
+
+    <script>
+        const outputDiv = document.getElementById('output');
+        const inspectButton = document.getElementById('inspectButton');
+
+        /**
+         * Updates the output message on the page.
+         * @param {string} message - The message to display.
+         */
+        function updateOutput(message) {
+            outputDiv.textContent = message;
+        }
+
+        /**
+         * Inspects the Tone.js library for any references to ScriptProcessorNode.
+         */
+        function inspectLibrary() {
+            if (typeof Tone === 'undefined') {
+                updateOutput("Tone.js library is not loaded.");
+                return;
+            }
+
+            // Check for references to ScriptProcessorNode in Tone object properties
+            const scriptProcessorReferences = [];
+            for (const key in Tone) {
+                if (typeof Tone[key] === 'function' || typeof Tone[key] === 'object') {
+                    try {
+                        const stringified = Tone[key].toString();
+                        if (stringified.includes('ScriptProcessorNode')) {
+                            scriptProcessorReferences.push(key);
+                        }
+                    } catch (e) {
+                        console.error(`Error inspecting Tone.${key}:`, e);
+                    }
+                }
+            }
+
+            if (scriptProcessorReferences.length > 0) {
+                updateOutput(`Found references to ScriptProcessorNode in: ${scriptProcessorReferences.join(', ')}`);
+            } else {
+                updateOutput("No direct references to ScriptProcessorNode were found in the Tone.js library.");
+            }
+        }
+
+        // Load Tone.js library using the bridge
+        document.addEventListener('DOMContentLoaded', () => {
+            const externalLibraryURL = 'https://ordinals.com/content/1bda678460ef08fb64435b57c9b69fd78fd4556822ccd8e9839b4eb71b3621edi0';
+
+            // Load the library and enable inspection once loaded
+            ToneJSBridge.load(externalLibraryURL)
+                .then(() => {
+                    updateOutput("Tone.js library loaded successfully. Click 'Inspect Tone.js for ScriptProcessorNode' to inspect.");
+                    inspectButton.disabled = false;
+                })
+                .catch(error => {
+                    updateOutput(`Failed to load Tone.js: ${error.message}`);
+                });
+        });
+
+        // Set up inspection on button click
+        inspectButton.addEventListener('click', inspectLibrary);
+
+        // Listen for tonejsLoaded event to confirm loading
+        document.addEventListener('tonejsLoaded', () => {
+            updateOutput("Tone.js has loaded successfully. Ready to inspect.");
+            inspectButton.disabled = false;
+        });
+
+        // Listen for the tonejsLoadError event
+        document.addEventListener('tonejsLoadError', (event) => {
+            updateOutput(`Failed to load Tone.js: ${event.detail.message}`);
+        });
+    </script>
+</body>
+</html>

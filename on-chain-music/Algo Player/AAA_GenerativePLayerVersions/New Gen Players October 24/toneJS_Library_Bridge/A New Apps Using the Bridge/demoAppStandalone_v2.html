@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Interactive Synthesizer with ToneJS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* Reset and Base Styles */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background-color: #f0f0f0; 
+            color: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            max-width: 800px;
+            width: 100%;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 150px;
+            min-width: 150px;
+        }
+
+        .control-group label {
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .control-group input[type="range"],
+        .control-group select {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        /* Waveform Visualization */
+        #waveform {
+            width: 100%;
+            max-width: 800px;
+            height: 150px;
+            background-color: #222;
+            margin: 20px 0;
+            border-radius: 10px;
+        }
+
+       /* Virtual Keyboard */
+        .keyboard {
+            position: relative;
+            display: flex;
+            width: 100%;
+            max-width: 800px;
+            height: 200px;
+            user-select: none;
+        }
+
+        .key.white {
+            width: calc(100% / 28); /* 28 white keys */
+            height: 100%;
+            background: white;
+            border: 1px solid black;
+            box-sizing: border-box;
+            position: relative;
+            z-index: 1;
+        }
+
+        .key.black {
+            width: calc(100% / 28 * 0.6); /* Adjust black key width relative to white keys */
+            height: 60%;
+            background: black;
+            position: absolute;
+            top: 0;
+            margin-left: calc((100% / 28) * -0.3); /* Center black key */
+            z-index: 2;
+            box-sizing: border-box;
+        }
+
+        /* Active Key Style */
+        .key.white.active,
+        .key.black.active {
+            background: #ff8c00;
+        }
+
+        /* Positioning black keys relative to white keys */
+        .key[data-note="C#3"],
+        .key[data-note="C#4"],
+        .key[data-note="C#5"],
+        .key[data-note="C#6"] {
+            left: calc((100% / 28) * 1); /* Positioned after C */
+        }
+
+        .key[data-note="D#3"],
+        .key[data-note="D#4"],
+        .key[data-note="D#5"],
+        .key[data-note="D#6"] {
+            left: calc((100% / 28) * 2); /* Positioned after D */
+        }
+
+        .key[data-note="F#3"],
+        .key[data-note="F#4"],
+        .key[data-note="F#5"],
+        .key[data-note="F#6"] {
+            left: calc((100% / 28) * 4); /* Positioned after F */
+        }
+
+        .key[data-note="G#3"],
+        .key[data-note="G#4"],
+        .key[data-note="G#5"],
+        .key[data-note="G#6"] {
+            left: calc((100% / 28) * 5); /* Positioned after G */
+        }
+
+        .key[data-note="A#3"],
+        .key[data-note="A#4"],
+        .key[data-note="A#5"],
+        .key[data-note="A#6"] {
+            left: calc((100% / 28) * 6); /* Positioned after A */
+        }
+
+
+        /* Responsive Adjustments */
+        @media (max-width: 600px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .keyboard {
+                height: 150px;
+            }
+            #waveform {
+                height: 100px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Interactive Synthesizer with ToneJS</h2>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="oscillatorType">Oscillator Type:</label>
+            <select id="oscillatorType">
+                <option value="sine">Sine</option>
+                <option value="square">Square</option>
+                <option value="triangle">Triangle</option>
+                <option value="sawtooth">Sawtooth</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label for="attack">Attack: <span id="attackValue">0.1</span>s</label>
+            <input type="range" id="attack" min="0" max="2" step="0.01" value="0.1">
+        </div>
+        <div class="control-group">
+            <label for="decay">Decay: <span id="decayValue">0.2</span>s</label>
+            <input type="range" id="decay" min="0" max="2" step="0.01" value="0.2">
+        </div>
+        <div class="control-group">
+            <label for="sustain">Sustain: <span id="sustainValue">0.7</span></label>
+            <input type="range" id="sustain" min="0" max="1" step="0.01" value="0.7">
+        </div>
+        <div class="control-group">
+            <label for="release">Release: <span id="releaseValue">0.5</span>s</label>
+            <input type="range" id="release" min="0" max="2" step="0.01" value="0.5">
+        </div>
+        <div class="control-group">
+            <label for="volume">Volume: <span id="volumeValue">-12</span>dB</label>
+            <input type="range" id="volume" min="-60" max="0" step="1" value="-12">
+        </div>
+    </div>
+
+    <!-- Waveform Visualization -->
+    <canvas id="waveform"></canvas>
+
+    <!-- Virtual Keyboard -->
+    <div class="keyboard">
+        <!-- Define the keys statically -->
+        <!-- Octave 3 -->
+        <div class="key white" data-note="C3"></div>
+        <div class="key black" data-note="C#3"></div>
+        <div class="key white" data-note="D3"></div>
+        <div class="key black" data-note="D#3"></div>
+        <div class="key white" data-note="E3"></div>
+        <div class="key white" data-note="F3"></div>
+        <div class="key black" data-note="F#3"></div>
+        <div class="key white" data-note="G3"></div>
+        <div class="key black" data-note="G#3"></div>
+        <div class="key white" data-note="A3"></div>
+        <div class="key black" data-note="A#3"></div>
+        <div class="key white" data-note="B3"></div>
+        <!-- Octave 4 -->
+        <div class="key white" data-note="C4"></div>
+        <div class="key black" data-note="C#4"></div>
+        <div class="key white" data-note="D4"></div>
+        <div class="key black" data-note="D#4"></div>
+        <div class="key white" data-note="E4"></div>
+        <div class="key white" data-note="F4"></div>
+        <div class="key black" data-note="F#4"></div>
+        <div class="key white" data-note="G4"></div>
+        <div class="key black" data-note="G#4"></div>
+        <div class="key white" data-note="A4"></div>
+        <div class="key black" data-note="A#4"></div>
+        <div class="key white" data-note="B4"></div>
+        <!-- Octave 5 -->
+        <div class="key white" data-note="C5"></div>
+        <div class="key black" data-note="C#5"></div>
+        <div class="key white" data-note="D5"></div>
+        <div class="key black" data-note="D#5"></div>
+        <div class="key white" data-note="E5"></div>
+        <div class="key white" data-note="F5"></div>
+        <div class="key black" data-note="F#5"></div>
+        <div class="key white" data-note="G5"></div>
+        <div class="key black" data-note="G#5"></div>
+        <div class="key white" data-note="A5"></div>
+        <div class="key black" data-note="A#5"></div>
+        <div class="key white" data-note="B5"></div>
+        <!-- Octave 6 -->
+        <div class="key white" data-note="C6"></div>
+        <div class="key black" data-note="C#6"></div>
+        <div class="key white" data-note="D6"></div>
+        <div class="key black" data-note="D#6"></div>
+        <div class="key white" data-note="E6"></div>
+        <div class="key white" data-note="F6"></div>
+        <div class="key black" data-note="F#6"></div>
+        <div class="key white" data-note="G6"></div>
+        <div class="key black" data-note="G#6"></div>
+        <div class="key white" data-note="A6"></div>
+        <div class="key black" data-note="A#6"></div>
+        <div class="key white" data-note="B6"></div>
+    </div>
+
+    <!-- Include the Audionals Script for the ToneJS Bridge (v14.7.40)  -->
+    <script src="/content/a416aa550c0ec419c489c9447be6380beb10a194443b348822e8c1809e3a3945i0"></script>
+
+    <!-- JavaScript -->
+    <script>
+        document.addEventListener('tonejsLoaded', initializeSynth);
+        document.addEventListener('tonejsLoadError', handleLoadError);
+
+        function initializeSynth() {
+            // DOM Elements
+            const oscillatorTypeSelect = document.getElementById('oscillatorType');
+            const attackSlider = document.getElementById('attack');
+            const decaySlider = document.getElementById('decay');
+            const sustainSlider = document.getElementById('sustain');
+            const releaseSlider = document.getElementById('release');
+            const volumeSlider = document.getElementById('volume');
+
+            const attackValueSpan = document.getElementById('attackValue');
+            const decayValueSpan = document.getElementById('decayValue');
+            const sustainValueSpan = document.getElementById('sustainValue');
+            const releaseValueSpan = document.getElementById('releaseValue');
+            const volumeValueSpan = document.getElementById('volumeValue');
+
+            const canvas = document.getElementById('waveform');
+            const canvasCtx = canvas.getContext('2d');
+
+            // Initialize Synth with Polyphony
+            const synth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: oscillatorTypeSelect.value },
+                envelope: {
+                    attack: parseFloat(attackSlider.value),
+                    decay: parseFloat(decaySlider.value),
+                    sustain: parseFloat(sustainSlider.value),
+                    release: parseFloat(releaseSlider.value)
+                }
+            }).toDestination();
+
+            // Initialize Volume
+            const volume = new Tone.Volume(parseFloat(volumeSlider.value)).toDestination();
+            synth.connect(volume);
+
+            // Initialize Analyser for Visualization
+            const analyser = new Tone.Analyser('waveform', 1024);
+            synth.connect(analyser);
+
+            // Update Synth Parameters Based on Controls
+            oscillatorTypeSelect.addEventListener('change', (e) => {
+                synth.set({ oscillator: { type: e.target.value } });
+            });
+
+            attackSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                attackValueSpan.textContent = value;
+                synth.set({ envelope: { attack: value } });
+            });
+
+            decaySlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                decayValueSpan.textContent = value;
+                synth.set({ envelope: { decay: value } });
+            });
+
+            sustainSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                sustainValueSpan.textContent = value;
+                synth.set({ envelope: { sustain: value } });
+            });
+
+            releaseSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                releaseValueSpan.textContent = value;
+                synth.set({ envelope: { release: value } });
+            });
+
+            volumeSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                volumeValueSpan.textContent = value;
+                volume.volume.value = value;
+            });
+
+
+            // Handle User Interaction for Audio Context (required for some browsers)
+            document.body.addEventListener('click', () => {
+                if (Tone.context.state !== 'running') {
+                    Tone.context.resume();
+                }
+            });
+
+            // Keyboard Generation
+            const keyboard = document.querySelector('.keyboard');
+            const whiteKeys = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+            const blackKeys = ['C#', 'D#', null, 'F#', 'G#', 'A#', null];
+
+            const totalOctaves = 4;
+            const startOctave = 3; // Starting from C3
+            const totalWhiteKeys = totalOctaves * whiteKeys.length;
+
+            let keyIndex = 0;
+
+            for (let octave = startOctave; octave < startOctave + totalOctaves; octave++) {
+                for (let i = 0; i < whiteKeys.length; i++) {
+                    // Create White Key
+                    const note = whiteKeys[i] + octave;
+                    const whiteKey = document.createElement('div');
+                    whiteKey.classList.add('key', 'white');
+                    whiteKey.dataset.note = note;
+                    keyboard.appendChild(whiteKey);
+
+                    // Create Black Key if applicable
+                    const blackKeyName = blackKeys[i];
+                    if (blackKeyName) {
+                        const blackNote = blackKeyName + octave;
+                        const blackKey = document.createElement('div');
+                        blackKey.classList.add('key', 'black');
+                        blackKey.dataset.note = blackNote;
+
+                        // Calculate Left Position
+                        const keyWidthPercent = 100 / totalWhiteKeys;
+                        const leftPercent = (keyIndex + 1) * keyWidthPercent - (keyWidthPercent / 2);
+                        blackKey.style.left = `calc(${leftPercent}% - (${keyWidthPercent * 0.3}%))`;
+
+                        keyboard.appendChild(blackKey);
+                    }
+
+                    keyIndex++;
+                }
+            }
+
+            // Collect all keys after they are generated
+            const keys = document.querySelectorAll('.key');
+
+            // Keyboard Interaction
+            const activeNotes = new Set();
+
+            const triggerAttack = (note) => {
+                if (!activeNotes.has(note)) {
+                    synth.triggerAttack(note);
+                    activeNotes.add(note);
+                }
+            };
+
+            const triggerRelease = (note) => {
+                if (activeNotes.has(note)) {
+                    synth.triggerRelease(note);
+                    activeNotes.delete(note);
+                }
+            };
+
+            const handleMouseDown = (e) => {
+                e.preventDefault();
+                const note = e.target.getAttribute('data-note');
+                if (note) {
+                    triggerAttack(note);
+                    e.target.classList.add('active');
+                }
+            };
+
+            const handleMouseUp = (e) => {
+                e.preventDefault();
+                const note = e.target.getAttribute('data-note');
+                if (note) {
+                    triggerRelease(note);
+                    e.target.classList.remove('active');
+                }
+            };
+
+            const handleMouseLeave = (e) => {
+                e.preventDefault();
+                const note = e.target.getAttribute('data-note');
+                if (note) {
+                    triggerRelease(note);
+                    e.target.classList.remove('active');
+                }
+            };
+
+            const handleTouchStart = (e) => {
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                const element = document.elementFromPoint(touch.clientX, touch.clientY);
+                const note = element ? element.getAttribute('data-note') : null;
+                if (note) {
+                    triggerAttack(note);
+                    element.classList.add('active');
+                }
+            };
+
+            const handleTouchEnd = (e) => {
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                const element = document.elementFromPoint(touch.clientX, touch.clientY);
+                const note = element ? element.getAttribute('data-note') : null;
+                if (note) {
+                    triggerRelease(note);
+                    element.classList.remove('active');
+                }
+            };
+
+            // Attach Event Listeners to Keys
+            keys.forEach(key => {
+                // Mouse Events
+                key.addEventListener('mousedown', handleMouseDown);
+                key.addEventListener('mouseup', handleMouseUp);
+                key.addEventListener('mouseleave', handleMouseLeave);
+
+                // Touch Events
+                key.addEventListener('touchstart', handleTouchStart, { passive: false });
+                key.addEventListener('touchend', handleTouchEnd);
+                key.addEventListener('touchcancel', handleTouchEnd);
+            });
+
+            // Visualization
+            // ... (unchanged)
+        }
+
+        function handleLoadError(event) {
+            alert('Failed to load Tone.js. Please try again later.');
+            console.error('Tone.js Load Error:', event.detail);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple Analog Synth Simulator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        .buttons {
+            margin-bottom: 20px;
+        }
+        .buttons button {
+            margin: 0 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #007BFF;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        .buttons button.latched {
+            background-color: #28a745;
+        }
+        .buttons button.active {
+            background-color: #28a745;
+        }
+        .control {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            width: 350px;
+        }
+        .control label {
+            width: 120px;
+            font-size: 14px;
+        }
+        .control input, .control select {
+            flex: 1;
+            cursor: pointer;
+        }
+        .control span {
+            margin-left: 10px;
+            width: 40px;
+            text-align: right;
+            font-size: 14px;
+        }
+        /* Responsive Design */
+        @media (max-width: 600px) {
+            .control {
+                width: 100%;
+            }
+            .control label {
+                width: 80px;
+                font-size: 12px;
+            }
+            .buttons button {
+                padding: 8px 16px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Simple Analog Synth Simulator</h1>
+    <div class="buttons">
+        <button id="playButton">Play Note</button>
+        <button id="latchButton">Latch Note</button>
+    </div>
+
+    <!-- Note Selection Dropdown -->
+    <div class="control">
+        <label for="noteSelect">Note:</label>
+        <select id="noteSelect">
+            <option value="A4" selected>A</option>
+            <option value="A#4">A#</option>
+            <option value="B4">B</option>
+            <option value="C5">C</option>
+            <option value="C#5">C#</option>
+            <option value="D5">D</option>
+            <option value="D#5">D#</option>
+            <option value="E5">E</option>
+            <option value="F5">F</option>
+            <option value="F#5">F#</option>
+            <option value="G5">G</option>
+            <option value="G#5">G#</option>
+            <option value="A5">A</option>
+            <option value="A#5">A#</option>
+            <option value="B5">B</option>
+            <option value="C6">C</option>
+        </select>
+    </div>
+
+    <!-- Octave Shift Dropdown -->
+    <div class="control">
+        <label for="octaveShift">Octave:</label>
+        <select id="octaveShift">
+            <option value="-4">-4</option>
+            <option value="-3">-3</option>
+            <option value="-2">-2</option>
+            <option value="-1">-1</option>
+            <option value="0" selected>0</option>
+            <option value="+1">+1</option>
+            <option value="+2">+2</option>
+            <option value="+3">+3</option>
+            <option value="+4">+4</option>
+        </select>
+    </div>
+
+    <!-- Waveform Selection Dropdown -->
+    <div class="control">
+        <label for="waveformSelect">Waveform:</label>
+        <select id="waveformSelect">
+            <option value="sine">Sine</option>
+            <option value="square">Square</option>
+            <option value="sawtooth">Sawtooth</option>
+            <option value="triangle">Triangle</option>
+        </select>
+    </div>
+
+    <!-- ADSR Envelope Controls -->
+    <div class="control">
+        <label for="attackSlider">Attack:</label>
+        <input type="range" id="attackSlider" min="0" max="2" step="0.01" value="0.1">
+        <span id="attackValue">0.1</span>s
+    </div>
+
+    <div class="control">
+        <label for="decaySlider">Decay:</label>
+        <input type="range" id="decaySlider" min="0" max="2" step="0.01" value="0.1">
+        <span id="decayValue">0.1</span>s
+    </div>
+
+    <div class="control">
+        <label for="sustainSlider">Sustain:</label>
+        <input type="range" id="sustainSlider" min="0" max="1" step="0.01" value="0.5">
+        <span id="sustainValue">0.5</span>
+    </div>
+
+    <div class="control">
+        <label for="releaseSlider">Release:</label>
+        <input type="range" id="releaseSlider" min="0" max="2" step="0.01" value="0.1">
+        <span id="releaseValue">0.1</span>s
+    </div>
+
+    <!-- Volume Control -->
+    <div class="control">
+        <label for="volumeSlider">Volume:</label>
+        <input type="range" id="volumeSlider" min="-60" max="0" step="1" value="-12">
+        <span id="volumeValue">-12 dB</span>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="control">
+        <label for="lowCutoffSlider">Low Cutoff:</label>
+        <input type="range" id="lowCutoffSlider" min="20" max="2000" step="1" value="200">
+        <span id="lowCutoffValue">200 Hz</span>
+    </div>
+
+    <div class="control">
+        <label for="highCutoffSlider">High Cutoff:</label>
+        <input type="range" id="highCutoffSlider" min="2000" max="20000" step="10" value="5000">
+        <span id="highCutoffValue">5000 Hz</span>
+    </div>
+
+    <div class="control">
+        <label for="resonanceSlider">Resonance:</label>
+        <input type="range" id="resonanceSlider" min="0" max="20" step="0.1" value="1">
+        <span id="resonanceValue">1.0</span>
+    </div>
+
+    <!-- Modulation Controls -->
+    <div class="control">
+        <label for="modFreqSlider">Mod Freq:</label>
+        <input type="range" id="modFreqSlider" min="0.1" max="20" step="0.1" value="5">
+        <span id="modFreqValue">5 Hz</span>
+    </div>
+
+    <div class="control">
+        <label for="modDepthSlider">Mod Depth:</label>
+        <input type="range" id="modDepthSlider" min="0" max="100" step="1" value="50">
+        <span id="modDepthValue">50%</span>
+    </div>
+
+    <!-- Phase Shift Control -->
+    <div class="control">
+        <label for="phaseShiftSlider">Phase Shift:</label>
+        <input type="range" id="phaseShiftSlider" min="0" max="360" step="1" value="0">
+        <span id="phaseShiftValue">0°</span>
+    </div>
+
+    <!-- Include the Audionals Script for the ToneJS Bridge (ensure this path is correct for your setup) -->
+    <script src="/content/a416aa550c0ec419c489c9447be6380beb10a194443b348822e8c1809e3a3945i0"></script>
+
+    <!-- Use the The Wizards of Ord: Elements Inscription Preview For testing Web3 Apps Without Domains 
+    "https://ordinals.com/content/a416aa550c0ec419c489c9447be6380beb10a194443b348822e8c1809e3a3945i0"-->
+
+    <script>
+        // State Variables
+        let isLatched = false;
+        let currentLatchedNote = null; // Currently latched note
+        let octaveShift = 0; // Current octave shift
+
+        // Event Listener for successful Tone.js load
+        document.addEventListener('tonejsLoaded', initializeSynth);
+
+        // Event Listener for Tone.js load error
+        document.addEventListener('tonejsLoadError', handleLoadError);
+
+        function initializeSynth() {
+            // DOM Elements
+            const playButton = document.getElementById("playButton");
+            const latchButton = document.getElementById("latchButton");
+            const waveformSelect = document.getElementById("waveformSelect");
+            const attackSlider = document.getElementById("attackSlider");
+            const decaySlider = document.getElementById("decaySlider");
+            const sustainSlider = document.getElementById("sustainSlider");
+            const releaseSlider = document.getElementById("releaseSlider");
+            const noteSelect = document.getElementById("noteSelect");
+            const octaveShiftSelect = document.getElementById("octaveShift");
+            const volumeSlider = document.getElementById("volumeSlider");
+            const lowCutoffSlider = document.getElementById("lowCutoffSlider");
+            const highCutoffSlider = document.getElementById("highCutoffSlider");
+            const resonanceSlider = document.getElementById("resonanceSlider");
+            const modFreqSlider = document.getElementById("modFreqSlider");
+            const modDepthSlider = document.getElementById("modDepthSlider");
+            const phaseShiftSlider = document.getElementById("phaseShiftSlider");
+
+            const attackValue = document.getElementById("attackValue");
+            const decayValue = document.getElementById("decayValue");
+            const sustainValue = document.getElementById("sustainValue");
+            const releaseValue = document.getElementById("releaseValue");
+            const volumeValue = document.getElementById("volumeValue");
+            const lowCutoffValue = document.getElementById("lowCutoffValue");
+            const highCutoffValue = document.getElementById("highCutoffValue");
+            const resonanceValue = document.getElementById("resonanceValue");
+            const modFreqValue = document.getElementById("modFreqValue");
+            const modDepthValue = document.getElementById("modDepthValue");
+            const phaseShiftValue = document.getElementById("phaseShiftValue");
+
+            /**
+             * Initialize Audio Nodes
+             */
+            // Volume Control
+            const volume = new Tone.Volume(parseInt(volumeSlider.value)).toDestination();
+
+            // Filter Control
+            const filter = new Tone.Filter({
+                type: "lowpass",
+                frequency: parseInt(lowCutoffSlider.value),
+                Q: parseFloat(resonanceSlider.value)
+            }).connect(volume);
+
+            // Synthesizer Setup
+            const synth = new Tone.PolySynth(Tone.Synth, {
+                maxPolyphony: 4,
+                oscillator: { type: waveformSelect.value, phase: parseInt(phaseShiftSlider.value) },
+                envelope: {
+                    attack: parseFloat(attackSlider.value),
+                    decay: parseFloat(decaySlider.value),
+                    sustain: parseFloat(sustainSlider.value),
+                    release: parseFloat(releaseSlider.value)
+                }
+            }).connect(filter);
+
+            // LFO for Modulation
+            const lfo = new Tone.LFO({
+                frequency: parseFloat(modFreqSlider.value),
+                min: 0,
+                max: parseInt(highCutoffSlider.value),
+                depth: parseFloat(modDepthSlider.value) / 100
+            }).connect(filter.frequency);
+
+            lfo.start();
+
+            /**
+             * Utility Functions
+             */
+
+            // Update ADSR Display Values
+            const updateDisplay = () => {
+                attackValue.textContent = attackSlider.value;
+                decayValue.textContent = decaySlider.value;
+                sustainValue.textContent = sustainSlider.value;
+                releaseValue.textContent = releaseSlider.value;
+                volumeValue.textContent = `${volumeSlider.value} dB`;
+                lowCutoffValue.textContent = `${lowCutoffSlider.value} Hz`;
+                highCutoffValue.textContent = `${highCutoffSlider.value} Hz`;
+                resonanceValue.textContent = parseFloat(resonanceSlider.value).toFixed(1);
+                modFreqValue.textContent = `${modFreqSlider.value} Hz`;
+                modDepthValue.textContent = `${modDepthSlider.value}%`;
+                phaseShiftValue.textContent = `${phaseShiftSlider.value}°`;
+            };
+
+            // Update Synth Parameters
+            const updateSynth = () => {
+                synth.set({
+                    oscillator: { 
+                        type: waveformSelect.value,
+                        phase: parseInt(phaseShiftSlider.value)
+                    },
+                    envelope: {
+                        attack: parseFloat(attackSlider.value),
+                        decay: parseFloat(decaySlider.value),
+                        sustain: parseFloat(sustainSlider.value),
+                        release: parseFloat(releaseSlider.value)
+                    }
+                });
+            };
+
+            // Update Volume
+            const updateVolume = () => {
+                volume.volume.value = parseInt(volumeSlider.value);
+            };
+
+            // Update Filter Parameters
+            const updateFilter = () => {
+                filter.frequency.value = parseInt(lowCutoffSlider.value);
+                filter.Q.value = parseFloat(resonanceSlider.value);
+            };
+
+            // Update High Cutoff and Modulation
+            const updateHighCutoff = () => {
+                filter.type = "lowpass";
+                filter.frequency.value = parseInt(highCutoffSlider.value);
+                lfo.max = parseInt(highCutoffSlider.value);
+            };
+
+            // Update Resonance
+            const updateResonance = () => {
+                filter.Q.value = parseFloat(resonanceSlider.value);
+            };
+
+            // Update Modulation Frequency
+            const updateModFreq = () => {
+                lfo.frequency.value = parseFloat(modFreqSlider.value);
+            };
+
+            // Update Modulation Depth
+            const updateModDepth = () => {
+                lfo.depth = parseFloat(modDepthSlider.value) / 100;
+            };
+
+            // Update Phase Shift
+            const updatePhaseShift = () => {
+                synth.set({
+                    oscillator: { phase: parseInt(phaseShiftSlider.value) }
+                });
+            };
+
+            // Get Current Selected Note with Octave Shift
+            const getSelectedNote = () => {
+                let note = noteSelect.value;
+                let octave = parseInt(note.slice(-1), 10) + parseInt(octaveShiftSelect.value, 10);
+                // Clamp octave between 0 and 8 to prevent invalid octaves
+                octave = Math.max(0, Math.min(8, octave));
+                return note.slice(0, -1) + octave;
+            };
+
+            /**
+             * Event Handlers
+             */
+
+            // Waveform Change
+            waveformSelect.addEventListener("change", () => {
+                updateSynth();
+            });
+
+            // ADSR Sliders Change
+            [attackSlider, decaySlider, sustainSlider, releaseSlider].forEach(slider => {
+                slider.addEventListener("input", () => {
+                    updateDisplay();
+                    updateSynth();
+                });
+            });
+
+            // Volume Slider Change
+            volumeSlider.addEventListener("input", () => {
+                updateDisplay();
+                updateVolume();
+            });
+
+            // Low Cutoff Slider Change
+            lowCutoffSlider.addEventListener("input", () => {
+                updateDisplay();
+                updateFilter();
+            });
+
+            // High Cutoff Slider Change
+            highCutoffSlider.addEventListener("input", () => {
+                updateDisplay();
+                updateHighCutoff();
+            });
+
+            // Resonance Slider Change
+            resonanceSlider.addEventListener("input", () => {
+                updateDisplay();
+                updateResonance();
+            });
+
+            // Modulation Frequency Slider Change
+            modFreqSlider.addEventListener("input", () => {
+                updateDisplay();
+                updateModFreq();
+            });
+
+            // Modulation Depth Slider Change
+            modDepthSlider.addEventListener("input", () => {
+                updateDisplay();
+                updateModDepth();
+            });
+
+            // Phase Shift Slider Change
+            phaseShiftSlider.addEventListener("input", () => {
+                updateDisplay();
+                updatePhaseShift();
+            });
+
+            // Octave Shift Change
+            octaveShiftSelect.addEventListener("change", () => {
+                octaveShift = parseInt(octaveShiftSelect.value, 10);
+                updateDisplay();
+
+                if (isLatched && currentLatchedNote) {
+                    // Release current latched note
+                    synth.triggerRelease(currentLatchedNote);
+                    console.log(`Released Note: ${currentLatchedNote}`);
+
+                    // Get new shifted note
+                    const newNote = getSelectedNote();
+
+                    // Latch new note
+                    synth.triggerAttack(newNote);
+                    console.log(`Latched New Note: ${newNote}`);
+
+                    // Update currentLatchedNote
+                    currentLatchedNote = newNote;
+                }
+            });
+
+            // Note Selection Change
+            noteSelect.addEventListener("change", () => {
+                if (isLatched && currentLatchedNote) {
+                    // Release the current latched note
+                    synth.triggerRelease(currentLatchedNote);
+                    console.log(`Released Note: ${currentLatchedNote}`);
+
+                    // Get new shifted note
+                    const newNote = getSelectedNote();
+
+                    // Latch the new selected note
+                    synth.triggerAttack(newNote);
+                    console.log(`Latched New Note: ${newNote}`);
+
+                    // Update currentLatchedNote
+                    currentLatchedNote = newNote;
+                }
+                updateDisplay();
+            });
+
+            // Play Note Button Click
+            playButton.addEventListener("click", async () => {
+                await startAudioContext();
+                const selectedNote = getSelectedNote();
+                const attack = parseFloat(attackSlider.value);
+                const decay = parseFloat(decaySlider.value);
+                const release = parseFloat(releaseSlider.value);
+                const sustainTime = 0.5; // Default sustain duration
+                const duration = attack + decay + sustainTime + release;
+
+                synth.triggerAttackRelease(selectedNote, duration);
+                console.log(`Played Note: ${selectedNote} for Duration: ${duration}s`);
+            });
+
+            // Latch Note Button Click
+            latchButton.addEventListener("click", async () => {
+                await startAudioContext();
+                const selectedNote = getSelectedNote();
+
+                if (!isLatched) {
+                    // Latch the selected note
+                    synth.triggerAttack(selectedNote);
+                    currentLatchedNote = selectedNote;
+                    latchButton.classList.add('latched');
+                    console.log(`Latched Note: ${selectedNote}`);
+                } else {
+                    // Release the latched note
+                    if (currentLatchedNote) {
+                        synth.triggerRelease(currentLatchedNote);
+                        console.log(`Unlatched Note: ${currentLatchedNote}`);
+                        currentLatchedNote = null;
+                    }
+                    latchButton.classList.remove('latched');
+                }
+
+                isLatched = !isLatched;
+            });
+
+            // Initialize Display
+            updateDisplay();
+
+            // Ensure the audio context starts on any user interaction
+            const resumeAudio = async () => {
+                if (Tone.context.state !== 'running') {
+                    await Tone.start();
+                    console.log('Audio context resumed');
+                }
+            };
+
+            ['mousedown', 'touchstart', 'keydown'].forEach(eventType => {
+                document.body.addEventListener(eventType, resumeAudio, { once: true });
+            });
+        }
+
+        // Function to start the audio context
+        const startAudioContext = async () => {
+            if (Tone && Tone.context && Tone.context.state !== 'running') {
+                await Tone.start();
+                console.log('Audio context started');
+            }
+        };
+
+        // Handle Tone.js Load Error
+        function handleLoadError(event) {
+            alert('Failed to load Tone.js. Please try again later.');
+            console.error('Tone.js Load Error:', event.detail);
+        }
+
+        // Optional: Function to copy code to clipboard
+        function copyCode() {
+            const code = document.querySelector('pre').innerText;
+            navigator.clipboard.writeText(code).then(() => {
+                alert('Code copied to clipboard!');
+            }).catch(err => {
+                alert('Failed to copy code.');
+                console.error('Copy Code Error:', err);
+            });
+        }
+    </script>
+</body>
+</html>

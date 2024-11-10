@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple Analog Synth Simulator</title>
+    <!-- Style Section -->
+    <style>
+        /* Base Styles */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        /* Container for Columns */
+        .container {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 40px; /* Space between columns */
+            width: 100%;
+            max-width: 1200px; /* Maximum width for large screens */
+        }
+
+        /* Column Styles */
+        .column {
+            flex: 1; /* Columns take equal space */
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Buttons Section */
+        .buttons {
+            display: flex;
+            justify-content: flex-start;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .buttons button {
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            transition: background-color 0.3s;
+            font-size: 16px;
+            padding: 10px 20px;
+            margin: 5px; /* Consistent margin around buttons */
+            background: #007BFF;
+        }
+        .buttons button.latched {
+            background: #28a745;
+        }
+
+        /* Synth Controls Section */
+        #synthControls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px; /* Space between controls */
+        }
+
+        /* Controls Container */
+        #controlsContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 10px; /* Space between controls */
+        }
+
+        /* Individual Control Styles */
+        .control {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            margin: 10px 0;
+        }
+        .control label {
+            width: 120px;
+            font-size: 14px;
+        }
+        .control input,
+        .control select {
+            flex: 1;
+            cursor: pointer;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        .control span {
+            margin-left: 10px;
+            width: 60px;
+            text-align: right;
+            font-size: 14px;
+        }
+
+        /* Arpeggiator Controls Section */
+        .arp-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+        .arp-controls button {
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            background: #17a2b8;
+            transition: background-color 0.3s;
+            font-size: 16px;
+            padding: 10px 20px;
+            margin-bottom: 10px;
+        }
+        .arp-controls button.active {
+            background: #138496;
+        }
+
+        /* Tempo Control Styles */
+        .tempo-control {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .tempo-control button {
+            background: #6c757d;
+            padding: 5px 10px;
+            margin: 0 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            border: none;
+            color: #fff;
+            transition: background-color 0.3s;
+        }
+        .tempo-control button:hover {
+            background: #5a6268;
+        }
+        .tempo-display {
+            font-size: 16px;
+            width: 80px;
+            text-align: center;
+        }
+
+        /* ARP Speed Controls */
+        .arp-speed-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+        .arp-speed-controls button {
+            background: #ffc107;
+            padding: 5px 10px;
+            font-size: 14px;
+            border-radius: 3px;
+            cursor: pointer;
+            border: none;
+            transition: background-color 0.3s;
+        }
+        .arp-speed-controls button.active {
+            background: #e0a800;
+        }
+        .arp-speed-controls button:hover {
+            background: #d39e00;
+        }
+
+        /* Enhanced Arpeggiator Controls */
+        #enhancedArpControls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #enhancedArpControls .control {
+            flex-wrap: wrap;
+        }
+        #enhancedArpControls button {
+            margin-left: 10px;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            background: #007BFF;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-size: 14px;
+        }
+        #enhancedArpControls button:hover {
+            background: #0056b3;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 800px) {
+            .container {
+                flex-direction: column; /* Stacks columns vertically on small screens */
+            }
+        }
+        @media (max-width: 600px) {
+            .control label {
+                width: 80px;
+                font-size: 12px;
+            }
+            .buttons button {
+                padding: 8px 16px;
+                font-size: 14px;
+                margin: 5px 5px;
+            }
+            .tempo-display {
+                width: 60px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Simple Analog Synth Simulator</h1>
+    <div class="container">
+        <!-- Left Column: Synth Controls -->
+        <div class="column">
+            <!-- Buttons -->
+            <div class="buttons">
+                <button id="playButton">Play Note</button>
+                <button id="latchButton">Latch Note</button>
+            </div>
+
+            <!-- Synth Controls -->
+            <div id="synthControls">
+                <!-- Controls Container -->
+                <div id="controlsContainer">
+                    <!-- Note Selection -->
+                    <div class="control" data-control="noteSelect">
+                        <label for="noteSelect">Note:</label>
+                        <select id="noteSelect">
+                            <option value="A4" selected>A</option>
+                            <option value="A#4">A#</option>
+                            <option value="B4">B</option>
+                            <option value="C5">C</option>
+                            <option value="C#5">C#</option>
+                            <option value="D5">D</option>
+                            <option value="D#5">D#</option>
+                            <option value="E5">E</option>
+                            <option value="F5">F</option>
+                            <option value="F#5">F#</option>
+                            <option value="G5">G</option>
+                            <option value="G#5">G#</option>
+                            <option value="A5">A</option>
+                            <option value="A#5">A#</option>
+                            <option value="B5">B</option>
+                            <option value="C6">C</option>
+                        </select>
+                    </div>
+
+                    <!-- Octave Shift Dropdown -->
+                    <div class="control" data-control="octaveShift">
+                        <label for="octaveShift">Octave:</label>
+                        <select id="octaveShift">
+                            <option value="4">+4</option>
+                            <option value="3">+3</option>
+                            <option value="2">+2</option>
+                            <option value="1">+1</option>
+                            <option value="0">0</option>
+                            <option value="-1">-1</option>
+                            <option value="-2">-2</option>
+                            <option value="-3" selected>-3</option>
+                            <option value="-4">-4</option>
+                        </select>
+                    </div>
+
+                    <!-- Waveform Selection Dropdown -->
+                    <div class="control" data-control="waveformSelect">
+                        <label for="waveformSelect">Waveform:</label>
+                        <select id="waveformSelect">
+                            <option value="sine">Sine</option>
+                            <option value="square" selected>Square</option>
+                            <option value="sawtooth">Sawtooth</option>
+                            <option value="triangle">Triangle</option>
+                        </select>
+                    </div>
+
+                    <!-- ADSR Envelope Controls -->
+                    <div class="control" data-control="attackSlider">
+                        <label for="attackSlider">Attack:</label>
+                        <input type="range" id="attackSlider" min="0" max="2" step="0.01" value="0.1">
+                        <span id="attackValue">0.1</span>s
+                    </div>
+
+                    <div class="control" data-control="decaySlider">
+                        <label for="decaySlider">Decay:</label>
+                        <input type="range" id="decaySlider" min="0" max="2" step="0.01" value="0.1">
+                        <span id="decayValue">0.1</span>s
+                    </div>
+
+                    <div class="control" data-control="sustainSlider">
+                        <label for="sustainSlider">Sustain:</label>
+                        <input type="range" id="sustainSlider" min="0" max="1" step="0.01" value="0.5">
+                        <span id="sustainValue">0.5</span>
+                    </div>
+
+                    <div class="control" data-control="releaseSlider">
+                        <label for="releaseSlider">Release:</label>
+                        <input type="range" id="releaseSlider" min="0" max="2" step="0.01" value="0.1">
+                        <span id="releaseValue">0.1</span>s
+                    </div>
+
+                    <!-- Volume Control -->
+                    <div class="control" data-control="volumeSlider">
+                        <label for="volumeSlider">Volume:</label>
+                        <input type="range" id="volumeSlider" min="-60" max="0" step="1" value="-12">
+                        <span id="volumeValue">-12 dB</span>
+                    </div>
+
+                    <!-- Filter Controls -->
+                    <div class="control" data-control="lowCutoffSlider">
+                        <label for="lowCutoffSlider">Low Cutoff:</label>
+                        <input type="range" id="lowCutoffSlider" min="20" max="20000" step="1" value="20">
+                        <span id="lowCutoffValue">20 Hz</span>
+                    </div>
+
+                    <div class="control" data-control="highCutoffSlider">
+                        <label for="highCutoffSlider">High Cutoff:</label>
+                        <input type="range" id="highCutoffSlider" min="20" max="20000" step="1" value="20000">
+                        <span id="highCutoffValue">20000 Hz</span>
+                    </div>
+
+                    <div class="control" data-control="resonanceSlider">
+                        <label for="resonanceSlider">Resonance:</label>
+                        <input type="range" id="resonanceSlider" min="0.1" max="20" step="0.1" value="0.1">
+                        <span id="resonanceValue">0.1</span>
+                    </div>
+
+                    <!-- Modulation Controls -->
+                    <div class="control" data-control="modFreqSlider">
+                        <label for="modFreqSlider">Mod Freq:</label>
+                        <input type="range" id="modFreqSlider" min="0.0" max="20" step="0.1" value="6">
+                        <span id="modFreqValue">6 Hz</span>
+                    </div>
+
+                    <div class="control" data-control="modDepthSlider">
+                        <label for="modDepthSlider">Mod Depth:</label>
+                        <input type="range" id="modDepthSlider" min="0" max="100" step="1" value="50">
+                        <span id="modDepthValue">50%</span>
+                    </div>
+
+                    <!-- Phase Shift Control -->
+                    <div class="control" data-control="phaseShiftSlider">
+                        <label for="phaseShiftSlider">Phase Shift:</label>
+                        <input type="range" id="phaseShiftSlider" min="0" max="360" step="1" value="0">
+                        <span id="phaseShiftValue">0°</span>
+                    </div>
+                </div> <!-- End of controlsContainer -->
+            </div>
+        </div>
+
+        <!-- Right Column: Arpeggiator Controls -->
+        <div class="column">
+            <!-- ARP Controls -->
+            <div class="arp-controls">
+                <button id="arpButton">ARP</button>
+                <div class="tempo-control">
+                    <button id="tempoDown">-</button>
+                    <span class="tempo-display">120 BPM</span>
+                    <button id="tempoUp">+</button>
+                </div>
+            </div>
+
+            <!-- ARP Speed Controls -->
+            <div class="arp-speed-controls">
+                <button class="arp-speed-button" data-speed="4">1/4</button>
+                <button class="arp-speed-button" data-speed="2">1/2</button>
+                <button class="arp-speed-button active" data-speed="1">1x</button>
+                <button class="arp-speed-button" data-speed="0.5">2x</button>
+                <button class="arp-speed-button" data-speed="0.25">4x</button>
+            </div>
+
+            <!-- Enhanced Arpeggiator Controls -->
+            <div id="enhancedArpControls">
+                <!-- Pattern Selection -->
+                <div class="control">
+                    <label for="patternSelect">Pattern:</label>
+                    <select id="patternSelect">
+                        <option value="up">Up</option>
+                        <option value="down">Down</option>
+                        <option value="up-down">Up-Down</option>
+                        <option value="random">Random</option>
+                        <option value="random-shift">Random Shift</option>
+                        <option value="alternate">Alternate</option>
+                        <option value="mirror">Mirror</option>
+                    </select>
+                    <button id="randomPatternButton">Random Pattern</button>
+                </div>
+
+                <!-- Key and Scale Selection -->
+                <div class="control">
+                    <label for="keySelect">Key:</label>
+                    <select id="keySelect">
+                        <!-- Options populated via JavaScript -->
+                    </select>
+                </div>
+
+                <div class="control">
+                    <label for="scaleTypeSelect">Scale Type:</label>
+                    <select id="scaleTypeSelect">
+                        <!-- Options populated via JavaScript -->
+                    </select>
+                </div>
+
+                <div class="control">
+                    <label for="scaleSelect">Scale:</label>
+                    <select id="scaleSelect">
+                        <!-- Options populated via JavaScript -->
+                    </select>
+                </div>
+
+                <!-- Number of Notes -->
+                <div class="control">
+                    <label for="numNotesSelect">Number of Notes:</label>
+                    <select id="numNotesSelect">
+                        <!-- Options populated via JavaScript -->
+                    </select>
+                </div>
+
+                <!-- Random Notes Button -->
+                <div class="control">
+                    <button id="randomNotesButton">Randomize Notes</button>
+                </div>
+
+                <!-- Octave Range Control -->
+                <div class="control">
+                    <label for="arpOctaveRangeSelect">Arpeggiator Range (Octaves):</label>
+                    <select id="arpOctaveRangeSelect">
+                        <option value="1">1 Octave</option>
+                        <option value="2">2 Octaves</option>
+                        <option value="3">3 Octaves</option>
+                        <option value="4">4 Octaves</option>
+                    </select>
+                </div>
+
+                <!-- Randomness Control -->
+                <div class="control">
+                    <label for="randomnessToggle">Enable Note Jumps:</label>
+                    <input type="checkbox" id="randomnessToggle">
+                </div>
+
+                <!-- Swing Control -->
+                <div class="control">
+                    <label for="swingSlider">Swing:</label>
+                    <input type="range" id="swingSlider" min="0" max="100" value="50">
+                    <span id="swingDisplay">50%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- textContent div to handle old call error -->
+    <div id="textContent" style="display: none;"></div>
+
+
+    <!-- Include the Audionals Script for the ToneJS Bridge -->
+    <!-- <script src="https://ordinals.com/content/a416aa550c0ec419c489c9447be6380beb10a194443b348822e8c1809e3a3945i0"></script> -->
+
+    <!-- Load Web3 Tone JS -->
+     <!-- Load Web3 Tone JS -->
+     <script>
+        const ToneJSBridge = (() => {
+            let isLoaded = false, loadPromise = null;
+
+            async function fetchExternalLibrary(url) {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+                const textarea = new DOMParser().parseFromString(await response.text(), 'text/html').querySelector('#base64Input');
+                if (!textarea) throw new Error('Missing <textarea id="base64Input">');
+                return textarea.value.trim().replace(/\s/g, '').replace(/^data:application\/octet-stream;base64,/, '');
+            }
+
+            async function decompressLibrary(base64Data) {
+                try {
+                    return decompressData(Uint8Array.from(atob(base64Data), c => c.charCodeAt(0)));
+                } catch { throw new Error('Base64 decoding failed.'); }
+            }
+
+            async function decompressData(data) {
+                if (!('DecompressionStream' in window)) throw new Error('No DecompressionStream support.');
+                const stream = new Response(data).body.pipeThrough(new DecompressionStream('gzip'));
+                return await new Response(stream).text();
+            }
+
+            function injectLibrary(libraryText) {
+                const script = document.createElement('script');
+                script.textContent = libraryText;
+                document.body.appendChild(script);
+            }
+
+            async function load(url) {
+                if (isLoaded) return Promise.resolve();
+                if (loadPromise) return loadPromise;
+
+                loadPromise = (async () => {
+                    try {
+                        injectLibrary(await decompressLibrary(await fetchExternalLibrary(url)));
+                        isLoaded = true;
+                        document.dispatchEvent(new Event('tonejsLoaded'));
+                    } catch (error) {
+                        document.dispatchEvent(new CustomEvent('tonejsLoadError', { detail: error }));
+                        throw error;
+                    }
+                })();
+
+                return loadPromise;
+            }
+
+            return { load };
+        })();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            ToneJSBridge.load('https://ordinals.com/content/1bda678460ef08fb64435b57c9b69fd78fd4556822ccd8e9839b4eb71b3621edi0')
+                .then(() => {
+                    console.log('ToneJS loaded.');
+                    const playChordButton = document.getElementById('playChordButton');
+                    playChordButton.disabled = false;
+                    playChordButton.classList.replace('button-disabled', 'button-active');
+                })
+                .catch(e => console.error('ToneJS load failed:', e));
+        });
+    </script>
+
+    <!-- Include the main.js script -->
+    <script type="module" src="main.js"></script>
+</body>
+</html>

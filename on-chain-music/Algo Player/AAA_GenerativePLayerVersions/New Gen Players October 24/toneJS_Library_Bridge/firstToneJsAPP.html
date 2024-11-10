@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Generative Music App with Tone.js</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .container { text-align: center; }
+        button, select, input[type=range] { padding: 10px 20px; margin: 10px; border: none; border-radius: 5px; cursor: pointer; }
+        button { background-color: #1db954; color: #ffffff; font-size: 16px; }
+        button:hover { background-color: #17a44a; }
+        select, input[type=range] { background-color: #282828; color: #ffffff; }
+        label { display: block; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Generative Music Loop</h1>
+        <button id="toggleButton" disabled>Loading...</button>
+        <div>
+            <label>
+                Synth Type:
+                <select id="synthSelect">
+                    <option value="sine">Sine</option>
+                    <option value="square">Square</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="sawtooth">Sawtooth</option>
+                </select>
+            </label>
+            <label>
+                Tempo: <span id="bpmDisplay">120</span> BPM
+                <input type="range" id="tempoSlider" min="60" max="180" value="120">
+            </label>
+        </div>
+    </div>
+
+    <!-- ToneJS Bridge Module Inclusion -->
+    <script>
+    const ToneJSBridge=(function(){let a=0,b=null;async function c(d){const e=await fetch(d);if(!e.ok)throw new Error(`Fetch failed: ${e.status}`);const f=new DOMParser().parseFromString(await e.text(),'text/html').querySelector('#base64Input');if(!f)throw new Error('Missing <textarea id="base64Input">');return f.value.trim().replace(/\s/g,'').replace(/^data:application\/octet-stream;base64,/,'')}async function g(d){try{return h(Uint8Array.from(atob(d),c=>c.charCodeAt(0)))}catch{throw new Error('Base64 decoding failed.')}}async function h(d){if(!('DecompressionStream'in window))throw new Error('No DecompressionStream support.');const e=new Response(d).body.pipeThrough(new DecompressionStream('gzip'));return await new Response(e).text()}function i(d){const e=document.createElement('script');e.textContent=d;document.body.appendChild(e)}async function load(d){if(a)return Promise.resolve();if(b)return b;b=(async ()=>{try{i(await g(await c(d)));a=1;document.dispatchEvent(new Event('tonejsLoaded'))}catch(e){document.dispatchEvent(new CustomEvent('tonejsLoadError',{detail:e}));throw e}})();return b}return{load}})();
+    </script>
+
+    <!-- Application Script -->
+    <script>
+    document.addEventListener('tonejsLoaded', ()=>{
+        const toggleBtn = document.getElementById('toggleButton');
+        toggleBtn.textContent = 'Start Loop';
+        toggleBtn.disabled = false;
+        initializeApp();
+    });
+
+    document.addEventListener('tonejsLoadError', (e)=>{
+        const toggleBtn = document.getElementById('toggleButton');
+        toggleBtn.textContent = 'Load Failed';
+        console.error('Load Error:', e.detail);
+    });
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+        ToneJSBridge.load('https://ordinals.com/content/7f0c16a7520f590653bc020d41fe017aaecc73aaa5b1ad60705ce591dff5f846i0');
+    });
+
+    function initializeApp(){
+        const toggleBtn = document.getElementById('toggleButton');
+        const synthSelect = document.getElementById('synthSelect');
+        const tempoSlider = document.getElementById('tempoSlider');
+        const bpmDisplay = document.getElementById('bpmDisplay');
+
+        let synth = new Tone.PolySynth(Tone.Synth, { oscillator: { type: synthSelect.value }, envelope: { attack: 0.1, release: 1 } }).toDestination();
+        let loop = null;
+        let isPlaying = false;
+        const chords = [
+            ["C4","E4","G4"], ["F4","A4","C5"], ["G4","B4","D5"],
+            ["A4","C5","E5"], ["D4","F4","A4"], ["E4","G4","B4"],
+            ["C4","Eb4","G4"], ["Bb3","D4","F4"], ["G3","Bb3","D4"], ["F3","A3","C4"]
+        ];
+
+        toggleBtn.addEventListener('click', ()=>{
+            if(isPlaying){
+                Tone.Transport.stop();
+                loop.stop();
+                toggleBtn.textContent = 'Start Loop';
+            } else {
+                Tone.Transport.start();
+                loop = new Tone.Loop(time => {
+                    const chord = chords[Math.floor(Math.random()*chords.length)];
+                    synth.triggerAttackRelease(chord, "1n", time);
+                }, "2n").start(0);
+                toggleBtn.textContent = 'Stop Loop';
+            }
+            isPlaying = !isPlaying;
+        });
+
+        synthSelect.addEventListener('change', ()=>{
+            synth.set({ oscillator: { type: synthSelect.value } });
+        });
+
+        tempoSlider.addEventListener('input', ()=>{
+            const bpm = tempoSlider.value;
+            bpmDisplay.textContent = bpm;
+            Tone.Transport.bpm.rampTo(bpm, 0.1);
+        });
+    }
+    </script>
+</body>
+</html>

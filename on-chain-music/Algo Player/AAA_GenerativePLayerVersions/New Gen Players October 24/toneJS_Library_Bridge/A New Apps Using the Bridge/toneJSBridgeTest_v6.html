@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ToneJS Bridge by Audionals (v14.7.40)</title>
+    <style>
+        /* Reset and Box Sizing */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* CSS Variables for Theming */
+        :root {
+            --bg-color: #000000;
+            --text-color: #ffffff;
+            --dark-text-color: #333333;
+            --header-bg: #1a1a1a;
+            --secondary-bg: #333333;
+            --orange: #ff8c00;
+            --light-orange: #ffaa43;
+            --light-grey: #dddddd;
+            --blue: #007bff;
+            --dark-blue: #0056b3;
+            --disabled-grey: #6c757d;
+            --border-color: #444444;
+            --shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        /* Body Styling */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        /* Header and Thanks Sections */
+        #header, #thanks {
+            text-align: center;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        #header {
+            font-size: 28px;
+        }
+
+        #thanks {
+            background-color: var(--secondary-bg);
+            color: var(--light-grey);
+            font-size: 16px;
+        }
+
+        /* Play Chord Button Styling */
+        #playDemoButton {
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: var(--orange);
+            color: var(--dark-text-color);
+            transition: background-color 0.3s;
+            width: 100%;
+            max-width: 600px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+
+        #playDemoButton:hover:not(:disabled) {
+            background-color: var(--light-orange);
+        }
+
+        #playDemoButton:disabled {
+            background-color: var(--disabled-grey);
+            cursor: not-allowed;
+        }
+
+        /* Details and Summary Styling */
+        details {
+            background-color: var(--header-bg);
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 800px;
+            border-radius: 8px;
+        }
+
+        summary {
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            color: var(--orange);
+        }
+
+        summary:before {
+            content: "▶ ";
+            display: inline-block;
+            margin-right: 10px;
+            transition: transform 0.2s;
+        }
+
+        details[open] summary:before {
+            transform: rotate(90deg);
+        }
+
+        /* Code Block Styling */
+        pre, code {
+            background-color: #2c2c2c;
+            color: #f8f8f2;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        code {
+            padding: 2px 4px;
+        }
+
+        /* Copy Button Styling */
+        .copy-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: var(--orange);
+            color: #ffffff;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .copy-button:hover {
+            background-color: var(--light-orange);
+        }
+
+       /* Demo App Container Styling */
+        #demoAppContainer {
+            display: none; /* Hide initially */
+            font-family: Arial, sans-serif;
+            text-align: center;
+            border: 1px solid var(--border-color);
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 600px;
+            aspect-ratio: 1 / 1; /* Enforce square shape */
+            background-color: var(--header-bg);
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: auto; /* Handle overflow if content exceeds */
+        }
+
+        /* Class to Show the Container */
+        .visible {
+            display: flex;
+        }
+
+        #demoAppHeader {
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+
+        #demoStatus {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #cccccc;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+            summary {
+                font-size: 16px;
+            }
+            #demoAppHeader {
+                font-size: 18px;
+            }
+            #playDemoButton {
+                font-size: 14px;
+            }
+        }
+
+        .synth-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+
+        .synth-controls label {
+            margin: 10px 0 5px;
+        }
+
+        .keyboard {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            position: relative;
+        }
+
+        .key {
+            width: 40px;
+            height: 150px;
+            margin: 1px;
+            background: white;
+            border: 1px solid #000;
+            border-radius: 0 0 5px 5px;
+            position: relative;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .key.black {
+            width: 30px;
+            height: 100px;
+            background: black;
+            position: absolute;
+            top: 0;
+            left: 28px;
+            z-index: 1;
+            border-radius: 0 0 3px 3px;
+            margin: 0;
+        }
+
+        .key.active {
+            background-color: #ff8c00;
+        }
+        .copy-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #ff8c00;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            z-index: 1;
+            transition: background-color 0.3s;
+        }
+
+        .copy-button:hover {
+            background-color: #ffa500;
+        }
+
+
+    </style>
+</head>
+<body>
+    <!-- Header Section -->
+    <div id="header"><strong>Audionals And Ordinal Based 1's Present . . .</strong></div>
+
+    <!-- Thanks Section -->
+    <div id="thanks">
+        Immutable gratitude to The Ordinal Based 1 Team, for inscribing the Tone.js library on The Blockchain.<br><br>
+        Also to Audionals and jim.btc for building this bridge to make it more accessible for everyone.
+    </div>
+
+<!-- Example Implementation Section -->
+<details>
+    <summary>View Example Implementation: Simple Analog Synth Simulator with ToneJS</summary>
+    <div style="position: relative;">
+        <button class="copy-button" onclick="copyCode()" title="Copy Code">&copy; Copy Code</button>
+        <pre>
+&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+    &lt;meta charset=&quot;UTF-8&quot;&gt;
+    &lt;title&gt;Simple Analog Synth Simulator&lt;/title&gt;
+    &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
+    &lt;!-- Style Section --&gt;
+    &lt;style&gt;
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        .buttons {
+            margin-bottom: 20px;
+        }
+        .buttons button {
+            margin: 0 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #007BFF;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        .buttons button.latched {
+            background-color: #28a745;
+        }
+        .control {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            width: 350px;
+        }
+        .control label {
+            width: 120px;
+            font-size: 14px;
+        }
+        .control input, .control select {
+            flex: 1;
+            cursor: pointer;
+        }
+        .control span {
+            margin-left: 10px;
+            width: 60px;
+            text-align: right;
+            font-size: 14px;
+        }
+        /* Responsive Design */
+        @media (max-width: 600px) {
+            .control {
+                width: 100%;
+            }
+            .control label {
+                width: 80px;
+                font-size: 12px;
+            }
+            .buttons button {
+                padding: 8px 16px;
+                font-size: 14px;
+            }
+        }
+        /* ARP and Tempo Controls */
+        .arp-controls {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+        .arp-controls button {
+            padding: 8px 16px;
+            margin-right: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #17a2b8;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        .arp-controls button.active {
+            background-color: #138496;
+        }
+        .tempo-control {
+            display: flex;
+            align-items: center;
+        }
+        .tempo-control button {
+            padding: 5px 10px;
+            margin: 0 5px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 3px;
+            background-color: #6c757d;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        .tempo-control button:hover {
+            background-color: #5a6268;
+        }
+        .tempo-display {
+            font-size: 16px;
+            width: 50px;
+            text-align: center;
+        }
+    &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;button id=&quot;playChordButton&quot; class=&quot;button-disabled&quot; disabled &lt;
+    &lt;h1&gt;Simple Analog Synth Simulator&lt;/h1&gt;
+    &lt;div class=&quot;buttons&quot;&gt;
+        &lt;button id=&quot;playButton&quot;&gt;Play Note&lt;/button&gt;
+        &lt;button id=&quot;latchButton&quot;&gt;Latch Note&lt;/button&gt;
+    &lt;/div&gt;
+
+    &lt;!-- ARP Controls --&gt;
+    &lt;div class=&quot;arp-controls&quot;&gt;
+        &lt;button id=&quot;arpButton&quot;&gt;ARP&lt;/button&gt;
+        &lt;div class=&quot;tempo-control&quot;&gt;
+            &lt;button id=&quot;tempoDown&quot;&gt;-&lt;/button&gt;
+            &lt;span class=&quot;tempo-display&quot;&gt;120 BPM&lt;/span&gt;
+            &lt;button id=&quot;tempoUp&quot;&gt;+&lt;/button&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+
+    &lt;!-- Control Elements Container --&gt;
+    &lt;div id=&quot;controlsContainer&quot;&gt;
+        &lt;!-- Note Selection Dropdown --&gt;
+        &lt;div class=&quot;control&quot; data-control=&quot;noteSelect&quot;&gt;
+            &lt;label for=&quot;noteSelect&quot;&gt;Note:&lt;/label&gt;
+            &lt;select id=&quot;noteSelect&quot;&gt;
+                &lt;option value=&quot;A4&quot; selected&gt;A&lt;/option&gt;
+                &lt;option value=&quot;A#4&quot;&gt;A#&lt;/option&gt;
+                &lt;option value=&quot;B4&quot;&gt;B&lt;/option&gt;
+                &lt;option value=&quot;C5&quot;&gt;C&lt;/option&gt;
+                &lt;option value=&quot;C#5&quot;&gt;C#&lt;/option&gt;
+                &lt;option value=&quot;D5&quot;&gt;D&lt;/option&gt;
+                &lt;option value=&quot;D#5&quot;&gt;D#&lt;/option&gt;
+                &lt;option value=&quot;E5&quot;&gt;E&lt;/option&gt;
+                &lt;option value=&quot;F5&quot;&gt;F&lt;/option&gt;
+                &lt;option value=&quot;F#5&quot;&gt;F#&lt;/option&gt;
+                &lt;option value=&quot;G5&quot;&gt;G&lt;/option&gt;
+                &lt;option value=&quot;G#5&quot;&gt;G#&lt;/option&gt;
+                &lt;option value=&quot;A5&quot;&gt;A&lt;/option&gt;
+                &lt;option value=&quot;A#5&quot;&gt;A#&lt;/option&gt;
+                &lt;option value=&quot;B5&quot;&gt;B&lt;/option&gt;
+                &lt;option value=&quot;C6&quot;&gt;C&lt;/option&gt;
+            &lt;/select&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Octave Shift Dropdown --&gt;
+        &lt;div class=&quot;control&quot; data-control=&quot;octaveShift&quot;&gt;
+            &lt;label for=&quot;octaveShift&quot;&gt;Octave:&lt;/label&gt;
+            &lt;select id=&quot;octaveShift&quot;&gt;
+                &lt;option value=&quot;4&quot;&gt;+4&lt;/option&gt;
+                &lt;option value=&quot;3&quot;&gt;+3&lt;/option&gt;
+                &lt;option value=&quot;2&quot;&gt;+2&lt;/option&gt;
+                &lt;option value=&quot;1&quot;&gt;+1&lt;/option&gt;
+                &lt;option value=&quot;0&quot;&gt;0&lt;/option&gt;
+                &lt;option value=&quot;-1&quot;&gt;-1&lt;/option&gt;
+                &lt;option value=&quot;-2&quot;&gt;-2&lt;/option&gt;
+                &lt;option value=&quot;-3&quot; selected&gt;-3&lt;/option&gt;
+                &lt;option value=&quot;-4&quot;&gt;-4&lt;/option&gt;
+            &lt;/select&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Waveform Selection Dropdown --&gt;
+        &lt;div class=&quot;control&quot; data-control=&quot;waveformSelect&quot;&gt;
+            &lt;label for=&quot;waveformSelect&quot;&gt;Waveform:&lt;/label&gt;
+            &lt;select id=&quot;waveformSelect&quot;&gt;
+                &lt;option value=&quot;sine&quot;&gt;Sine&lt;/option&gt;
+                &lt;option value=&quot;square&quot; selected&gt;Square&lt;/option&gt;
+                &lt;option value=&quot;sawtooth&quot;&gt;Sawtooth&lt;/option&gt;
+                &lt;option value=&quot;triangle&quot;&gt;Triangle&lt;/option&gt;
+            &lt;/select&gt;
+        &lt;/div&gt;
+
+        &lt;!-- ADSR Envelope Controls --&gt;
+        &lt;div class=&quot;control&quot; data-control=&quot;attackSlider&quot;&gt;
+            &lt;label for=&quot;attackSlider&quot;&gt;Attack:&lt;/label&gt;
+            &lt;input type=&quot;range&quot; id=&quot;attackSlider&quot; min=&quot;0&quot; max=&quot;2&quot; step=&quot;0.01&quot; value=&quot;0.1&quot;&gt;
+            &lt;span id=&quot;attackValue&quot;&gt;0.1&lt;/span&gt;s
+        &lt;/div&gt;
+
+        &lt;div class=&quot;control&quot; data-control=&quot;decaySlider&quot;&gt;
+            &lt;label for=&quot;decaySlider&quot;&gt;Decay:&lt;/label&gt;
+            &lt;input type=&quot;range&quot; id=&quot;decaySlider&quot; min=&quot;0&quot; max=&quot;2&quot; step=&quot;0.01&quot; value=&quot;0.1&quot;&gt;
+            &lt;span id=&quot;decayValue&quot;&gt;0.1&lt;/span&gt;s
+        &lt;/div&gt;
+
+        &lt;div class=&quot;control&quot; data-control=&quot;sustainSlider&quot;&gt;
+            &lt;label for=&quot;sustainSlider&quot;&gt;Sustain:&lt;/label&gt;
+            &lt;input type=&quot;range&quot; id=&quot;sustainSlider&quot; min=&quot;0&quot; max=&quot;1&quot; step=&quot;0.01&quot; value=&quot;0.5&quot;&gt;
+            &lt;span id=&quot;sustainValue&quot;&gt;0.5&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;div class=&quot;control&quot; data-control=&quot;releaseSlider&quot;&gt;
+            &lt;label for=&quot;releaseSlider&quot;&gt;Release:&lt;/label&gt;
+            &lt;input type=&quot;range&quot; id=&quot;releaseSlider&quot; min=&quot;0&quot; max=&quot;2&quot; step=&quot;0.01&quot; value=&quot;0.1&quot;&gt;
+            &lt;span id=&quot;releaseValue&quot;&gt;0.1&lt;/span&gt;s
+        &lt;/div&gt;
+
+        &lt;!-- Volume Control --&gt;
+        &lt;div class=&quot;control&quot; data-control=&quot;volumeSlider&quot;&gt;
+            &lt;label for=&quot;volumeSlider&quot;&gt;Volume:&lt;/label&gt;
+            &lt;input type=&quot;range&quot; id=&quot;volumeSlider&quot; min=&quot;-60&quot; max=&quot;0&quot; step=&quot;1&quot; value=&quot;-12&quot;&gt;
+            &lt;span id=&quot;volumeValue&quot;&gt;-12 dB&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Filter Controls --&gt;
+        &lt;div class=&quot;control&quot; data-control=&quot;lowCutoffSlider&quot;&gt;
+            &lt;label for=&quot;lowCutoffSlider&quot;&gt;Low Cutoff:&lt;/label&gt;
+            &lt;input type=&quot;range&quot; id=&quot;lowCutoffSlider&quot; min=&quot;20&quot; max=&quot;20000&quot; step=&quot;1&quot; value=&quot;20&quot;&gt;
+            &lt;span id=&quot;lowCutoffValue&quot;&gt;20 Hz&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;div class=&quot;control&quot; data-control=&quot;highCutoffSlider&quot;&gt;
+            &lt;label for=&quot;highCutoffSlider&quot;&gt;High Cutoff:&lt;/label&gt;
+            &lt;input type=&quot;range&quot; id=&quot;highCutoffSlider&quot; min=&quot;20&quot; max=&quot;20000&quot; step=&quot;1&quot; value=&quot;20000&quot;&gt;
+            &lt;span id=&quot;highCutoffValue&quot;&gt;20000 Hz&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;div class=&quot;control&quot; data-control=&quot;resonanceSlider&quot;&gt;
+            &lt;label for=&quot;resonanceSlider&quot;&gt;Resonance:&lt;/label&gt;
+            &lt;input type=&quot;range&quot; id=&quot;resonanceSlider&quot; min=&quot;0.1&quot; max=&quot;20&quot; step=&quot;0.1&quot; value=&quot;0.1&quot;&gt;
+            &lt;span id=&quot;resonanceValue&quot;&gt;0.1&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Modulation Controls --&gt;
+        &lt;div class=&quot;control&quot; data-control=&quot;modFreqSlider&quot;&gt;
+            &lt;label for=&quot;modFreqSlider&quot;&gt;Mod Freq:&lt;/label&gt;
+            &lt;input type=&quot;range&quot; id=&quot;modFreqSlider&quot; min=&quot;0.1&quot; max=&quot;20&quot; step=&quot;0.1&quot; value=&quot;6&quot;&gt;
+            &lt;span id=&quot;modFreqValue&quot;&gt;6 Hz&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;div class=&quot;control&quot; data-control=&quot;modDepthSlider&quot;&gt;
+            &lt;label for=&quot;modDepthSlider&quot;&gt;Mod Depth:&lt;/label&gt;
+            &lt;input type=&quot;range&quot; id=&quot;modDepthSlider&quot; min=&quot;0&quot; max=&quot;100&quot; step=&quot;1&quot; value=&quot;50&quot;&gt;
+            &lt;span id=&quot;modDepthValue&quot;&gt;50%&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Phase Shift Control --&gt;
+        &lt;div class=&quot;control&quot; data-control=&quot;phaseShiftSlider&quot;&gt;
+            &lt;label for=&quot;phaseShiftSlider&quot;&gt;Phase Shift:&lt;/label&gt;
+            &lt;input type=&quot;range&quot; id=&quot;phaseShiftSlider&quot; min=&quot;0&quot; max=&quot;360&quot; step=&quot;1&quot; value=&quot;0&quot;&gt;
+            &lt;span id=&quot;phaseShiftValue&quot;&gt;0°&lt;/span&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+
+    &lt;!-- textContent div inside the iframe's body --&gt;
+    &lt;div id=&quot;textContent&quot; style=&quot;display: none;&quot;&gt;&lt;/div&gt;
+
+    &lt;!-- Include the Audionals Script for the ToneJS Bridge --&gt;
+    &lt;script src=&quot;/content/a416aa550c0ec419c489c9447be6380beb10a194443b348822e8c1809e3a3945i0&quot;&gt;&lt;/script&gt;
+
+    &lt;script&gt;
+    document.addEventListener('tonejsLoaded', () =&gt; {
+        const controlsConfig = {
+            attackSlider: { type: 'range', unit: 's', update: 'envelope' },
+            decaySlider: { type: 'range', unit: 's', update: 'envelope' },
+            sustainSlider: { type: 'range', unit: '', update: 'envelope' },
+            releaseSlider: { type: 'range', unit: 's', update: 'envelope' },
+            volumeSlider: { type: 'range', unit: 'dB', update: 'volume' },
+            lowCutoffSlider: { type: 'range', unit: 'Hz', update: 'filter' },
+            highCutoffSlider: { type: 'range', unit: 'Hz', update: 'filter' },
+            resonanceSlider: { type: 'range', unit: '', update: 'filter' },
+            modFreqSlider: { type: 'range', unit: 'Hz', update: 'modulation' },
+            modDepthSlider: { type: 'range', unit: '%', update: 'modulation' },
+            phaseShiftSlider: { type: 'range', unit: '°', update: 'phaseShift' }
+        };
+
+        // Grab all controls
+        const controlsContainer = document.getElementById('controlsContainer');
+        const controlElements = Array.from(controlsContainer.querySelectorAll('.control'));
+
+        // Map of control IDs to their DOM elements and display spans
+        const controls = {};
+        controlElements.forEach(control => {
+            const controlId = control.getAttribute('data-control');
+            const input = document.getElementById(controlId);
+            const display = control.querySelector('span');
+            controls[controlId] = { input, display };
+        });
+
+        // DOM Elements for buttons and selects
+        const playButton = document.getElementById("playButton");
+        const latchButton = document.getElementById("latchButton");
+        const waveformSelect = document.getElementById("waveformSelect");
+        const noteSelect = document.getElementById("noteSelect");
+        const octaveShiftSelect = document.getElementById("octaveShift");
+
+        // ARP Elements
+        const arpButton = document.getElementById("arpButton");
+        const tempoDown = document.getElementById("tempoDown");
+        const tempoUp = document.getElementById("tempoUp");
+        const tempoDisplay = document.querySelector(".tempo-display");
+
+        // Initialize Tone.js Synth
+        const volume = new Tone.Volume(parseInt(controls.volumeSlider.input.value)).toDestination();
+        const limiter = new Tone.Limiter(-1).toDestination();
+
+        const highpassFilter = new Tone.Filter({
+            type: "highpass",
+            frequency: parseFloat(controls.lowCutoffSlider.input.value),
+            Q: parseFloat(controls.resonanceSlider.input.value)
+        });
+
+        const lowpassFilter = new Tone.Filter({
+            type: "lowpass",
+            frequency: parseFloat(controls.highCutoffSlider.input.value),
+            Q: parseFloat(controls.resonanceSlider.input.value)
+        });
+
+        // Chain filters and volume
+        highpassFilter.chain(lowpassFilter, volume, limiter);
+
+        const synth = new Tone.PolySynth(Tone.Synth, {
+            maxPolyphony: 4,
+            oscillator: { 
+                type: waveformSelect.value, 
+                phase: parseInt(controls.phaseShiftSlider.input.value) 
+            },
+            envelope: {
+                attack: parseFloat(controls.attackSlider.input.value),
+                decay: parseFloat(controls.decaySlider.input.value),
+                sustain: parseFloat(controls.sustainSlider.input.value),
+                release: parseFloat(controls.releaseSlider.input.value)
+            }
+        }).connect(highpassFilter);
+
+        // Initialize LFO with a safe minimum frequency
+        const lfo = new Tone.LFO({
+            frequency: parseFloat(controls.modFreqSlider.input.value),
+            min: 20, // Changed from 0 to 20 to prevent frequencies from dropping below 20Hz
+            max: parseFloat(controls.highCutoffSlider.input.value)
+        }).start();
+
+        lfo.amplitude.value = parseFloat(controls.modDepthSlider.input.value) / 100;
+        lfo.connect(lowpassFilter.frequency);
+
+        // Arpeggiator Variables
+        let arpActive = false;
+        let arpInterval = null;
+        let currentTempo = 120; // Default tempo in BPM
+
+        /**
+         * Utility Functions
+         */
+
+        // Smoothly update a parameter to prevent clicks
+        const smoothUpdate = (param, value, rampTime = 0.05, rampType = 'linear') => {
+            if (rampType === 'linear') {
+                param.linearRampToValueAtTime(value, Tone.now() + rampTime);
+            } else if (rampType === 'exponential') {
+                // To avoid ramping to 0 exponentially, set a minimum value
+                const minValue = 20; // Align with minimum frequency
+                const safeValue = Math.max(value, minValue);
+                param.exponentialRampToValueAtTime(safeValue, Tone.now() + rampTime);
+            }
+        };
+
+        // Update display values
+        const updateDisplay = () => {
+            Object.entries(controlsConfig).forEach(([id, config]) => {
+                const { input, display } = controls[id];
+                display.textContent = `${input.value}${config.unit}`;
+            });
+            tempoDisplay.textContent = `${currentTempo} BPM`;
+        };
+
+        // Update Synth Parameters based on control updates
+        const updateParameters = (id, value) => {
+            switch (controlsConfig[id].update) {
+                case 'envelope':
+                    synth.set({
+                        envelope: {
+                            attack: parseFloat(controls.attackSlider.input.value),
+                            decay: parseFloat(controls.decaySlider.input.value),
+                            sustain: parseFloat(controls.sustainSlider.input.value),
+                            release: parseFloat(controls.releaseSlider.input.value)
+                        }
+                    });
+                    break;
+                case 'volume':
+                    smoothUpdate(volume.volume, parseInt(value), 0.05, 'linear');
+                    break;
+                case 'filter':
+                    if (id === 'lowCutoffSlider' || id === 'highCutoffSlider') {
+                        let lowCutoff = parseFloat(controls.lowCutoffSlider.input.value);
+                        let highCutoff = parseFloat(controls.highCutoffSlider.input.value);
+                        
+                        console.log(`Received lowCutoff: ${lowCutoff} Hz, highCutoff: ${highCutoff} Hz`);
+
+                        // Ensure highCutoff is always greater than lowCutoff + 10Hz
+                        if (highCutoff <= lowCutoff + 10) {
+                            highCutoff = lowCutoff + 10;
+                            controls.highCutoffSlider.input.value = highCutoff;
+                            controls.highCutoffSlider.display.textContent = `${highCutoff} Hz`;
+                            console.warn(`High cutoff adjusted to ${highCutoff} Hz to maintain a 10 Hz separation from low cutoff.`);
+                        }
+
+                        // Prevent frequencies from reaching zero or below minimum threshold
+                        lowCutoff = Math.max(lowCutoff, 20);
+                        highCutoff = Math.max(highCutoff, lowCutoff + 10);
+
+                        console.log(`Clamped lowCutoff: ${lowCutoff} Hz, highCutoff: ${highCutoff} Hz`);
+
+                        // Update filter frequencies smoothly using linear ramps
+                        smoothUpdate(highpassFilter.frequency, lowCutoff, 0.05, 'linear');
+                        smoothUpdate(lowpassFilter.frequency, highCutoff, 0.05, 'linear');
+
+                        // Update LFO's max to the new high cutoff frequency
+                        lfo.max = highCutoff;
+                        lfo.min = 20; // Ensure LFO's min remains at 20Hz
+
+                        console.log(`Filters updated: Low Cutoff = ${lowCutoff} Hz, High Cutoff = ${highCutoff} Hz`);
+                    }
+                    if (id === 'resonanceSlider') {
+                        // Clamp resonance to a minimum of 0.1
+                        const resonance = Math.max(parseFloat(value), 0.1);
+                        controls.resonanceSlider.input.value = resonance.toFixed(1); // Update slider value if it was below min
+                        controls.resonanceSlider.display.textContent = `${resonance}`;
+                        highpassFilter.Q.value = resonance;
+                        lowpassFilter.Q.value = resonance;
+                        console.log(`Resonance updated to ${resonance}`);
+                    }
+                    break;
+                case 'modulation':
+                    if (id === 'modFreqSlider') {
+                        smoothUpdate(lfo.frequency, parseFloat(value), 0.05, 'linear');
+                        console.log(`Modulation Frequency updated to ${value} Hz`);
+                    }
+                    if (id === 'modDepthSlider') {
+                        smoothUpdate(lfo.amplitude, parseFloat(value) / 100, 0.05, 'linear');
+                        console.log(`Modulation Depth updated to ${value}%`);
+                    }
+                    break;
+                case 'phaseShift':
+                    synth.set({
+                        oscillator: { phase: parseInt(value) }
+                    });
+                    console.log(`Phase Shift updated to ${value}°`);
+                    break;
+                default:
+                    break;
+            }
+        };
+
+        // Handle Control Changes
+        Object.keys(controlsConfig).forEach(id => {
+            const { input } = controls[id];
+            input.addEventListener('input', (e) => {
+                const { value } = e.target;
+                controls[id].display.textContent = `${value}${controlsConfig[id].unit}`;
+                updateParameters(id, value);
+            });
+        });
+
+        // Waveform Selection Change
+        waveformSelect.addEventListener("change", () => {
+            synth.set({
+                oscillator: {
+                    type: waveformSelect.value,
+                    phase: parseInt(controls.phaseShiftSlider.input.value)
+                }
+            });
+            console.log(`Waveform type changed to ${waveformSelect.value}`);
+        });
+
+        // Tempo Control Functions
+        const updateTempo = (delta) => {
+            currentTempo += delta;
+            if (currentTempo < 60) currentTempo = 60;
+            if (currentTempo > 240) currentTempo = 240;
+            tempoDisplay.textContent = `${currentTempo} BPM`;
+            if (arpActive) {
+                Tone.Transport.bpm.value = currentTempo;
+            }
+        };
+
+        // Tempo Up Button
+        tempoUp.addEventListener("click", () => {
+            updateTempo(5);
+        });
+
+        // Tempo Down Button
+        tempoDown.addEventListener("click", () => {
+            updateTempo(-5);
+        });
+
+        // Arpeggiator Button Click
+        arpButton.addEventListener("click", () => {
+            if (!arpActive) {
+                arpActive = true;
+                arpButton.classList.add('active');
+                Tone.Transport.bpm.value = currentTempo;
+                Tone.Transport.scheduleRepeat(() => {
+                    playButton.click();
+                }, "4n"); // Every quarter note (1 beat at current BPM)
+                Tone.Transport.start();
+                console.log("Arpeggiator started");
+            } else {
+                arpActive = false;
+                arpButton.classList.remove('active');
+                Tone.Transport.stop();
+                Tone.Transport.cancel(); // Clear all scheduled events
+                console.log("Arpeggiator stopped");
+            }
+        });
+
+        // Update display initially
+        updateDisplay();
+
+        // Synth Control State Variables
+        let isLatched = false;
+        let currentLatchedNote = null;
+        let octaveShift = 0;
+
+        // Get Selected Note with Octave Shift
+        const getSelectedNote = () => {
+            const note = noteSelect.value.slice(0, -1);
+            let octave = parseInt(noteSelect.value.slice(-1)) + parseInt(octaveShiftSelect.value);
+            octave = Math.max(0, Math.min(8, octave));
+            return `${note}${octave}`;
+        };
+
+        // Play Note Button Click
+        playButton.addEventListener("click", async () => {
+            await startAudioContext();
+            const selectedNote = getSelectedNote();
+            const attack = parseFloat(controls.attackSlider.input.value);
+            const decay = parseFloat(controls.decaySlider.input.value);
+            const release = parseFloat(controls.releaseSlider.input.value);
+            const sustainTime = 0.5; // Default sustain duration
+            const duration = attack + decay + sustainTime + release;
+
+            synth.triggerAttackRelease(selectedNote, duration);
+            console.log(`Played Note: ${selectedNote} for Duration: ${duration}s`);
+        });
+
+        // Latch Note Button Click
+        latchButton.addEventListener("click", async () => {
+            await startAudioContext();
+            const selectedNote = getSelectedNote();
+
+            if (!isLatched) {
+                synth.triggerAttack(selectedNote);
+                currentLatchedNote = selectedNote;
+                latchButton.classList.add('latched');
+                console.log(`Latched Note: ${selectedNote}`);
+            } else {
+                if (currentLatchedNote) {
+                    synth.triggerRelease(currentLatchedNote);
+                    console.log(`Unlatched Note: ${currentLatchedNote}`);
+                    currentLatchedNote = null;
+                }
+                latchButton.classList.remove('latched');
+            }
+
+            isLatched = !isLatched;
+        });
+
+        // Octave Shift Change
+        octaveShiftSelect.addEventListener("change", () => {
+            octaveShift = parseInt(octaveShiftSelect.value, 10);
+            updateDisplay();
+
+            if (isLatched && currentLatchedNote) {
+                synth.triggerRelease(currentLatchedNote);
+                console.log(`Released Note: ${currentLatchedNote}`);
+
+                const newNote = getSelectedNote();
+                synth.triggerAttack(newNote);
+                console.log(`Latched New Note: ${newNote}`);
+
+                currentLatchedNote = newNote;
+            }
+        });
+
+        // Note Selection Change
+        noteSelect.addEventListener("change", () => {
+            if (isLatched && currentLatchedNote) {
+                synth.triggerRelease(currentLatchedNote);
+                console.log(`Released Note: ${currentLatchedNote}`);
+
+                const newNote = getSelectedNote();
+                synth.triggerAttack(newNote);
+                console.log(`Latched New Note: ${newNote}`);
+
+                currentLatchedNote = newNote;
+            }
+            updateDisplay();
+        });
+
+        // Resume Audio Context on Interaction
+        const resumeAudio = async () => {
+            if (Tone.context.state !== 'running') {
+                await Tone.start();
+                console.log('Audio context resumed');
+            }
+        };
+
+        ['mousedown', 'touchstart', 'keydown'].forEach(eventType => {
+            document.body.addEventListener(eventType, resumeAudio, { once: true });
+        });
+
+        // Function to start the audio context
+        async function startAudioContext() {
+            if (Tone && Tone.context && Tone.context.state !== 'running') {
+                await Tone.start();
+                console.log('Audio context started');
+            }
+        }
+
+        // Handle Tone.js Load Error
+        function handleLoadError(event) {
+            alert('Failed to load Tone.js. Please try again later.');
+            console.error('Tone.js Load Error:', event.detail);
+        }
+    });
+    &lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+        </pre>
+    </div>
+</details>
+
+
+    <button id="playChordButton" class="button-disabled" disabled>
+
+    <!-- Play Chord Progression Button -->
+    <button id="playDemoButton" disabled><strong>Click to Load a Simple Web3 Analog Synth App Using Tone.js</strong></button>
+
+
+    <div id="demoAppContainer">
+        
+
+    <!-- ToneJS Bridge Module Inclusion -->
+    <script src="/content/a416aa550c0ec419c489c9447be6380beb10a194443b348822e8c1809e3a3945i0"></script>
+
+    <!-- Invocation of the Bridge Module and Demo Initialization -->
+    <script>
+
+    // Event Listener for Tone.js Loaded
+    document.addEventListener("tonejsLoaded", () => {
+        document.getElementById("header").innerHTML = `
+            <strong>
+                <span style="font-size:60px;">Tone.js ${Tone.version}</span><br>
+                <span style="font-size:24px;">On-Chain Library for Web3 Music Apps</span>
+            </strong>`;
+        initializeDemoApp();
+    });
+
+    function initializeDemoApp() {
+        // Initialize the Synth App
+        console.log("Initializing the Synth App...");
+        // const synthApp = new SynthApp();
+        // synthApp.init();
+    }
+
+    // Event Listener for Tone.js Load Error
+    document.addEventListener("tonejsLoadError", (event) => {
+        document.getElementById("header").textContent = "Failed to load Tone.js";
+        console.error("Load Error:", event.detail);
+    });
+
+    // Load the Bridge Module on DOM Content Loaded
+    document.addEventListener("DOMContentLoaded", () => {
+        // Disable the Play Button Initially
+        document.getElementById("playDemoButton").disabled = true;
+
+        // Load Tone.js via the Bridge Module
+        ToneJSBridge.load()
+            .then(() => {
+                console.log("ToneJS loaded.");
+                // Enable the Play Button After Successful Load
+                const playButton = document.getElementById("playDemoButton");
+                playButton.disabled = false;
+                playButton.classList.replace("button-disabled", "button-active");
+            })
+            .catch(error => {
+                console.error("ToneJS load failed:", error);
+            });
+    });
+
+    /**
+ * Decodes HTML entities to plain text.
+ * @param {string} html - The HTML string with entities.
+ * @returns {string} - The decoded HTML string.
+ */
+function decodeHTMLEntities(html) {
+    const txt = document.createElement('textarea');
+    txt.innerHTML = html;
+    return txt.value;
+}
+
+/**
+ * Loads the embedded HTML code into the demo container using an iframe.
+ */
+ function loadDemo() {
+    // Get the code from the <pre> tag inside <details>
+    const preTag = document.querySelector('details pre');
+    if (!preTag) {
+        alert('No code found to load.');
+        return;
+    }
+
+    // Decode the HTML entities to get the actual HTML code
+    const encodedCode = preTag.innerHTML;
+    const decodedCode = decodeHTMLEntities(encodedCode);
+
+    // Create an iframe
+    const iframe = document.createElement('iframe');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = 'none';
+
+    // Write the decoded HTML code into the iframe
+    iframe.srcdoc = decodedCode;
+
+    // Clear any existing content in the demo container
+    const demoAppContainer = document.getElementById('demoAppContainer');
+    demoAppContainer.innerHTML = ''; // Clear previous demo if any
+
+    // Append the iframe to the demo container
+    demoAppContainer.appendChild(iframe);
+}
+
+// // Add Event Listener to the Play Demo Button
+// document.getElementById('playDemoButton').addEventListener('click', () => {
+//     // Show the demo container by adding the 'visible' class
+//     document.getElementById('demoAppContainer').classList.add('visible');
+//     loadDemo();
+// });
+
+
+// Add Event Listener to the Play Demo Button
+document.getElementById('playDemoButton').addEventListener('click', () => {
+    // Show the demo container
+    document.getElementById('demoAppContainer').style.display = "flex"; // Use 'flex' if that's the intended layout
+    loadDemo();
+});
+
+    /**
+     * Copies the code from the example implementation to the clipboard.
+     */
+    function copyCode() {
+        const code = document.querySelector('details pre').innerText;
+        navigator.clipboard.writeText(code).then(() => {
+            alert('Code copied to clipboard!');
+        }).catch(err => {
+            alert('Failed to copy code.');
+            console.error('Error copying code: ', err);
+        });
+    }
+    </script>
+</body>
+</html>

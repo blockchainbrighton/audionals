@@ -219,6 +219,21 @@
             font-weight: bold;
             color: #fff;
         }
+
+        #gainControlPopup {
+            display: none; /* Hidden by default */
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: white;
+            padding: 20px;
+            border: 1px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
@@ -247,6 +262,14 @@
                 <button id="load-seed-button" aria-label="Load Seed">Load Seed</button>
             </div>
             
+            <!-- gain control mixer pop-up -->
+            <div id="gainControlPopup" style="display: none; position: fixed; top: 20px; right: 20px; background: white; padding: 20px; border: 1px solid #ccc;">
+                <h3>Gain Controls</h3>
+                <div id="gainControlContainer"></div>
+                <button onclick="document.getElementById('gainControlPopup').style.display='none'">Close</button>
+            </div>
+
+
             <!-- BPM Selection Section -->
             <div class="bpm-selection">
                 <h3>Select BPM(s) to Filter</h3>
@@ -659,10 +682,10 @@ This script ensures robust management of seeds within the application, providing
                 shifts: [0.25, 0.5, 1, 2, 4]
             },
             harmonize: { 
-                enabled: false, 
-                defaultProbability: 0.01, 
+                enabled: true, 
+                defaultProbability: 0.0025, // needs to range from 0.0025 to 0.1 - More stable mixes in general at 0.01 but interesting mixes around 0.1
                 intervals: [0.25, 0.5, 1, 1.5, 2, 4],
-                maxHarmonyChannels: 2 
+                maxHarmonyChannels: 1 
             },
             delay: {
                 enabled: true, 
@@ -1071,38 +1094,75 @@ This script ensures robust management of seeds within the application, providing
             console.log("[GainNodeHelper] Master Gain node created and connected to AudioContext destination.");
         }
     
-        /**
+     
+         // Function to toggle the gain control pop-up visibility
+            const toggleGainControlPopup = () => {
+                const popup = document.getElementById('gainControlPopup');
+                popup.style.display = (popup.style.display === 'none' || popup.style.display === '') ? 'block' : 'none';
+            };
+
+            // Event listener for the `M` key to toggle the pop-up
+            document.addEventListener('keydown', (event) => {
+                if (event.key.toLowerCase() === 'm') {
+                    console.log('[GainNodeHelper] M Key Pressed. Toggling Gain Control Popup visibility.');
+                    toggleGainControlPopup();
+                }
+            });
+
+               /**
          * Initializes GainNodes for a given song.
          *
          * @param {Object} song - The song object containing channels.
          * @param {boolean} isNextSong - Flag indicating if the song is the next in the queue.
          */
-        const initializeGainNodes = (song, isNextSong = false) => {
-            const songId = song.id;
-            console.log(`[GainNodeHelper] Initializing GainNodes for Song ID: ${songId}`);
-    
-            if (isNextSong) {
-                console.log(`[GainNodeHelper] Preparing next song: ${songId}`);
-            } else {
-                console.log(`[GainNodeHelper] Setting current song: ${songId}`);
-            }
-    
-            if (song.channels && song.channels.length > 0) {
-                globalData.gainNodes[songId] = globalData.gainNodes[songId] || {};
-                song.channels.forEach(channel => {
-                    if (!globalData.gainNodes[songId][channel.id]) {
-                        const gainNode = globalData.audioContext.createGain();
-                        gainNode.gain.value = channel.metadata.volume || 1;
-                        gainNode.connect(globalData.masterGain);
-                        globalData.gainNodes[songId][channel.id] = gainNode;
-                        console.log(`[GainNodeHelper] GainNode created for Channel "${channel.id}" of Song "${songId}".`);
-                    }
-                });
-                console.log(`[GainNodeHelper] All GainNodes initialized for Song ID: ${songId}`);
-            } else {
-                console.warn(`[GainNodeHelper] No channels found for Song "${songId}".`);
-            }
-        };
+
+            // Modify initializeGainNodes to show pop-up when a new song loads
+            const initializeGainNodes = (song, isNextSong = false) => {
+                const songId = song.id;
+                console.log(`[GainNodeHelper] Initializing GainNodes for Song ID: ${songId}`);
+
+                // Show the pop-up automatically when loading a new song
+                if (!isNextSong) {
+                    const gainControlContainer = document.getElementById('gainControlContainer');
+                    gainControlContainer.innerHTML = ''; // Clear existing sliders
+                    document.getElementById('gainControlPopup').style.display = 'block'; // Show the pop-up
+                }
+
+                if (song.channels && song.channels.length > 0) {
+                    globalData.gainNodes[songId] = globalData.gainNodes[songId] || {};
+                    song.channels.forEach(channel => {
+                        if (!globalData.gainNodes[songId][channel.id]) {
+                            const gainNode = globalData.audioContext.createGain();
+                            gainNode.gain.value = channel.metadata.volume || 1;
+                            gainNode.connect(globalData.masterGain);
+                            globalData.gainNodes[songId][channel.id] = gainNode;
+                            console.log(`[GainNodeHelper] GainNode created for Channel "${channel.id}" of Song "${songId}".`);
+                        }
+
+                        // Add a slider to the pop-up for each channel
+                        if (!isNextSong) {
+                            const slider = document.createElement('input');
+                            slider.type = 'range';
+                            slider.min = 0;
+                            slider.max = 1;
+                            slider.step = 0.01;
+                            slider.value = globalData.gainNodes[songId][channel.id].gain.value;
+                            slider.oninput = (e) => {
+                                globalData.gainNodes[songId][channel.id].gain.value = parseFloat(e.target.value);
+                            };
+
+                            const label = document.createElement('label');
+                            label.textContent = `Channel ${channel.id}: `;
+                            gainControlContainer.appendChild(label);
+                            gainControlContainer.appendChild(slider);
+                            gainControlContainer.appendChild(document.createElement('br'));
+                        }
+                    });
+                    console.log(`[GainNodeHelper] All GainNodes initialized for Song ID: ${songId}`);
+                } else {
+                    console.warn(`[GainNodeHelper] No channels found for Song "${songId}".`);
+                }
+            };
     
         /**
          * Cleans up GainNodes for a specific song.
@@ -1127,6 +1187,7 @@ This script ensures robust management of seeds within the application, providing
              * @param {Object} song - The song object.
              */
             createGainNodesForSong: (song) => initializeGainNodes(song, false),
+            
     
             /**
              * Prepares GainNodes for the next song.
@@ -3673,31 +3734,7 @@ window.globalData.startPlayback();
         }, 1000);
     }
 
-    /**
-     * Function to clean up gain nodes for a specific song
-     */
-    // Implement or ensure that GainNodeHelper has the necessary methods
-    // For example:
-    /*
-    const GainNodeHelper = {
-        createGainNodesForSong: function(song) {
-            // Implementation here
-        },
-        prepareNextSong: function(song) {
-            // Implementation here
-        },
-        cleanupGainNodesForSong: function(songId) {
-            // Implementation here
-            // Disconnect and delete gain nodes
-        }
-    };
-    */
-
-    // Function to handle UI artwork click
-    // Already set up in setupArtworkCover
-
-    // Additional helper functions (scheduleSequences, etc.) should be defined as needed
-    // Ensure that all dependencies are properly implemented
+   
 
 })();
 </script>

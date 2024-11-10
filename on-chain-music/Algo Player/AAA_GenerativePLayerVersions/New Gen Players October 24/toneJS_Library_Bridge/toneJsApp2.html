@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Generative Music App with Tone.js</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .container { text-align: center; }
+        button, select, input[type=range] { padding: 10px 20px; margin: 10px; border: none; border-radius: 5px; cursor: pointer; }
+        button { background-color: #1db954; color: #ffffff; font-size: 16px; }
+        button:hover { background-color: #17a44a; }
+        select, input[type=range] { background-color: #282828; color: #ffffff; }
+        label { display: block; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Generative Music Loop</h1>
+        <button id="toggleButton" disabled>Loading...</button>
+        <div>
+            <label>
+                Synth Type:
+                <select id="synthSelect">
+                    <option value="sine">Sine</option>
+                    <option value="square">Square</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="sawtooth">Sawtooth</option>
+                </select>
+            </label>
+            <label>
+                Tempo: <span id="bpmDisplay">120</span> BPM
+                <input type="range" id="tempoSlider" min="60" max="180" value="120">
+            </label>
+        </div>
+    </div>
+
+    <!-- ToneJS Bridge Module Inclusion -->
+    <script>
+    const ToneJSBridge = (function() {
+        let isLoaded = false, loadPromise = null;
+        async function fetchBase64(url) {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+            const htmlText = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlText, 'text/html');
+            const base64Input = doc.querySelector('#base64Input');
+            if (!base64Input) throw new Error('Missing <textarea id="base64Input">');
+            return base64Input.value.trim().replace(/\s/g, '').replace(/^data:application\/octet-stream;base64,/, '');
+        }
+        async function decompressBase64(base64) {
+            try {
+                const binaryData = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+                return await decompressGzip(binaryData);
+            } catch {
+                throw new Error('Base64 decoding failed.');
+            }
+        }
+        async function decompressGzip(data) {
+            if (!('DecompressionStream' in window)) throw new Error('No DecompressionStream support.');
+            const ds = new DecompressionStream('gzip');
+            const decompressedStream = new Response(data).body.pipeThrough(ds);
+            return await new Response(decompressedStream).text();
+        }
+        function injectScript(jsCode) {
+            const script = document.createElement('script');
+            script.textContent = jsCode;
+            document.body.appendChild(script);
+        }
+        async function load(url) {
+            if (isLoaded) return Promise.resolve();
+            if (loadPromise) return loadPromise;
+            loadPromise = (async () => {
+                try {
+                    const base64 = await fetchBase64(url);
+                    const jsCode = await decompressBase64(base64);
+                    injectScript(jsCode);
+                    isLoaded = true;
+                    document.dispatchEvent(new Event('tonejsLoaded'));
+                } catch (e) {
+                    document.dispatchEvent(new CustomEvent('tonejsLoadError', { detail: e }));
+                    throw e;
+                }
+            })();
+            return loadPromise;
+        }
+        return { load };
+    })();
+    </script>
+
+    <!-- Application Script -->
+    <script>
+    function initializeApp() {
+        const toggleBtn = document.getElementById('toggleButton');
+        const synthSelect = document.getElementById('synthSelect');
+        const tempoSlider = document.getElementById('tempoSlider');
+        const bpmDisplay = document.getElementById('bpmDisplay');
+
+        let synth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: synthSelect.value },
+            envelope: { attack: 0.1, release: 1 }
+        }).toDestination();
+
+        let loop = null;
+        let isPlaying = false;
+        const chords = [
+            ["C4", "E4", "G4"], ["F4", "A4", "C5"], ["G4", "B4", "D5"],
+            ["A4", "C5", "E5"], ["D4", "F4", "A4"], ["E4", "G4", "B4"],
+            ["C4", "Eb4", "G4"], ["Bb3", "D4", "F4"], ["G3", "Bb3", "D4"], ["F3", "A3", "C4"]
+        ];
+
+        toggleBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                Tone.Transport.stop();
+                loop.stop();
+                toggleBtn.textContent = 'Start Loop';
+            } else {
+                loop = new Tone.Loop(time => {
+                    const chord = chords[Math.floor(Math.random() * chords.length)];
+                    synth.triggerAttackRelease(chord, "1n", time);
+                }, "2n").start(0);
+                Tone.Transport.start();
+                toggleBtn.textContent = 'Stop Loop';
+            }
+            isPlaying = !isPlaying;
+        });
+
+        synthSelect.addEventListener('change', () => {
+            synth.set({ oscillator: { type: synthSelect.value } });
+        });
+
+        tempoSlider.addEventListener('input', () => {
+            const bpm = tempoSlider.value;
+            bpmDisplay.textContent = bpm;
+            Tone.Transport.bpm.rampTo(bpm, 0.1);
+        });
+    }
+
+    document.addEventListener('tonejsLoaded', () => {
+        const toggleBtn = document.getElementById('toggleButton');
+        toggleBtn.textContent = 'Start Loop';
+        toggleBtn.disabled = false;
+        initializeApp();
+        console.log(`Tone.js ${Tone.version} loaded successfully.`);
+    });
+
+    document.addEventListener('tonejsLoadError', (e) => {
+        const toggleBtn = document.getElementById('toggleButton');
+        toggleBtn.textContent = 'Load Failed';
+        console.error('Tone.js Load Error:', e.detail);
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Use the correct URL from the bridge code
+        ToneJSBridge.load('/content/1bda678460ef08fb64435b57c9b69fd78fd4556822ccd8e9839b4eb71b3621edi0')
+            .then(() => {
+                console.log('ToneJS loaded.');
+            })
+            .catch((err) => {
+                console.error('ToneJS load failed:', err);
+            });
+    });
+    </script>
+</body>
+</html>
