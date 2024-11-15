@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Interactive Sound Synthesizer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        #controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .control-group {
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            margin: 10px;
+            padding: 15px;
+            width: 220px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .control-group h3 {
+            margin-top: 0;
+            font-size: 18px;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 10px;
+            text-align: left;
+        }
+        .control-group input[type="range"],
+        .control-group select {
+            width: 100%;
+        }
+        .control-group input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        button {
+            font-size: 18px;
+            padding: 12px 24px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #333;
+        }
+    </style>
+</head>
+<body><!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Synthesizer Controls</title>
+        <style>
+            /* Add your styles here */
+            #controls {
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
+            .control-group {
+                display: flex;
+                flex-direction: column;
+            }
+            button {
+                padding: 10px 20px;
+                font-size: 16px;
+            }
+            #status {
+                margin-top: 20px;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="controls">
+            <!-- Tempo Control -->
+            <div class="control-group">
+                <h3>Tempo</h3>
+                <label>
+                    BPM: <span id="bpm-value">120</span>
+                    <input type="range" id="bpm-control" min="60" max="240" value="120">
+                </label>
+            </div>
+    
+            <!-- Scale Control -->
+            <div class="control-group">
+                <h3>Scale Type</h3>
+                <label>
+                    <select id="scale-type">
+                        <option value="random">Random</option>
+                        <option value="major">Major</option>
+                        <option value="minor">Minor</option>
+                        <option value="pentatonic">Pentatonic</option>
+                        <option value="blues">Blues</option>
+                    </select>
+                </label>
+            </div>
+    
+            <!-- Root Note Control -->
+            <div class="control-group">
+                <h3>Root Note</h3>
+                <label>
+                    <select id="root-note">
+                        <option value="random">Random</option>
+                        <option value="130.81">C3</option>
+                        <option value="146.83">D3</option>
+                        <option value="164.81">E3</option>
+                        <option value="174.61">F3</option>
+                        <option value="196.00">G3</option>
+                        <option value="220.00">A3</option>
+                        <option value="246.94">B3</option>
+                        <option value="261.63">C4</option>
+                        <option value="293.66">D4</option>
+                        <option value="329.63">E4</option>
+                        <option value="349.23">F4</option>
+                        <option value="392.00">G4</option>
+                        <option value="440.00">A4</option>
+                        <option value="493.88">B4</option>
+                    </select>
+                </label>
+            </div>
+    
+            <!-- Effects Control -->
+            <div class="control-group">
+                <h3>Effects</h3>
+                <label>
+                    <input type="checkbox" id="delay-effect" checked>
+                    Delay
+                </label>
+                <label>
+                    <input type="checkbox" id="reverb-effect" checked>
+                    Reverb
+                </label>
+                <label>
+                    <input type="checkbox" id="chorus-effect">
+                    Chorus
+                </label>
+                <label>
+                    <input type="checkbox" id="harmonizer-effect">
+                    Harmonizer
+                </label>
+            </div>
+    
+            <!-- Volume Control -->
+            <div class="control-group">
+                <h3>Volume</h3>
+                <label>
+                    Master Gain: <span id="volume-value">0.8</span>
+                    <input type="range" id="volume-control" min="0" max="1" step="0.01" value="0.8">
+                </label>
+            </div>
+        </div>
+    
+        <button id="generate-button">Generate Sound</button>
+        <div id="status"></div>
+    
+        <script>
+            (() => {
+                'use strict';
+    
+                // -------------------------
+                // Synthesizer Object
+                // -------------------------
+                const Synthesizer = {
+                    context: null,
+                    masterGain: null,
+                    BPM: 120.0,
+                    isLoopActive: false,
+                    activeOscillators: new Set(),
+                    random: null,
+                    seed: null,
+                    currentScaleData: null,
+                    effectsSettings: {
+                        delay: true,
+                        reverb: true,
+                        chorus: false,
+                        harmonizer: false,
+                    },
+                    controls: {},
+                    loopTimeout: null, // To track the loop timeout
+    
+                    init() {
+                        this.initAudioContext();
+                        this.initRandom();
+                        this.initMasterGain();
+                        this.cacheControls();
+                        this.addEventListeners();
+                        this.updateUIValues();
+                    },
+    
+                    initAudioContext() {
+                        this.context = new (window.AudioContext || window.webkitAudioContext)();
+                        console.log('Audio Context initialized:', this.context);
+                    },
+    
+                    initRandom() {
+                        this.generateNewSeed();
+                    },
+    
+                    generateNewSeed() {
+                        this.seed = Math.floor(Math.random() * 0xFFFFFFFF);
+                        this.random = this.mulberry32(this.seed);
+                        console.log(`New Seed Generated: ${this.seed}`);
+                    },
+    
+                    initMasterGain() {
+                        this.masterGain = this.context.createGain();
+                        this.masterGain.connect(this.context.destination);
+                        console.log('Master Gain connected to destination.');
+                    },
+    
+                    cacheControls() {
+                        this.controls.generateButton = document.getElementById('generate-button');
+                        this.controls.bpmControl = document.getElementById('bpm-control');
+                        this.controls.bpmValue = document.getElementById('bpm-value');
+                        this.controls.scaleType = document.getElementById('scale-type');
+                        this.controls.rootNote = document.getElementById('root-note');
+                        this.controls.delayEffect = document.getElementById('delay-effect');
+                        this.controls.reverbEffect = document.getElementById('reverb-effect');
+                        this.controls.chorusEffect = document.getElementById('chorus-effect');
+                        this.controls.harmonizerEffect = document.getElementById('harmonizer-effect');
+                        this.controls.volumeControl = document.getElementById('volume-control');
+                        this.controls.volumeValue = document.getElementById('volume-value');
+                    },
+    
+                    addEventListeners() {
+                        if (this.controls.generateButton) {
+                            this.controls.generateButton.addEventListener('click', () => {
+                                if (this.isLoopActive) {
+                                    this.stopGeneratingLoop();
+                                } else {
+                                    this.startGeneratingLoop();
+                                }
+                            });
+                        } else {
+                            console.error('Generate Button not found in the DOM.');
+                        }
+    
+                        // BPM Control
+                        this.controls.bpmControl.addEventListener('input', () => {
+                            this.BPM = parseFloat(this.controls.bpmControl.value);
+                            this.controls.bpmValue.textContent = this.BPM;
+                            console.log(`BPM set to: ${this.BPM}`);
+                        });
+    
+                        // Volume Control
+                        this.controls.volumeControl.addEventListener('input', () => {
+                            const volume = parseFloat(this.controls.volumeControl.value);
+                            this.masterGain.gain.setValueAtTime(volume, this.context.currentTime);
+                            this.controls.volumeValue.textContent = volume;
+                            console.log(`Volume set to: ${volume}`);
+                        });
+    
+                        // Effects Control
+                        this.controls.delayEffect.addEventListener('change', () => {
+                            this.effectsSettings.delay = this.controls.delayEffect.checked;
+                            console.log(`Delay Effect: ${this.effectsSettings.delay}`);
+                        });
+                        this.controls.reverbEffect.addEventListener('change', () => {
+                            this.effectsSettings.reverb = this.controls.reverbEffect.checked;
+                            console.log(`Reverb Effect: ${this.effectsSettings.reverb}`);
+                        });
+                        this.controls.chorusEffect.addEventListener('change', () => {
+                            this.effectsSettings.chorus = this.controls.chorusEffect.checked;
+                            console.log(`Chorus Effect: ${this.effectsSettings.chorus}`);
+                        });
+                        this.controls.harmonizerEffect.addEventListener('change', () => {
+                            this.effectsSettings.harmonizer = this.controls.harmonizerEffect.checked;
+                            console.log(`Harmonizer Effect: ${this.effectsSettings.harmonizer}`);
+                        });
+    
+                        // Cleanup on page unload
+                        window.addEventListener('beforeunload', () => {
+                            console.log('Page is unloading. Cleaning up any active loops.');
+                            this.cleanupLoop();
+                        });
+    
+                        // Performance logging every 10 seconds
+                        setInterval(() => {
+                            console.log('--- 10-Second Performance Report ---');
+                            console.log(`Is Loop Active: ${this.isLoopActive}`);
+                            console.log(`Audio Context State: ${this.context.state}`);
+                            console.log(`Current BPM: ${this.isLoopActive ? this.BPM.toFixed(2) : 'N/A'}`);
+                            console.log('-------------------------------------');
+                        }, 10000);
+                    },
+    
+                    updateUIValues() {
+                        this.controls.bpmValue.textContent = this.BPM;
+                        this.controls.volumeValue.textContent = this.controls.volumeControl.value;
+                    },
+    
+                    // -------------------------
+                    // Utility Functions
+                    // -------------------------
+                    mulberry32(a) {
+                        return () => {
+                            let t = a += 0x6D2B79F5;
+                            t = Math.imul(t ^ (t >>> 15), t | 1);
+                            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+                            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+                        };
+                    },
+    
+                    clamp(v, min, max) {
+                        return isFinite(v) ? Math.min(Math.max(v, min), max) : min;
+                    },
+    
+                    setAudioParam(param, value, time) {
+                        if (isFinite(value)) {
+                            param.setValueAtTime(value, time);
+                        } else {
+                            console.warn(`Invalid value (${value}) for AudioParam. Using default value.`);
+                            param.setValueAtTime(0, time);
+                        }
+                    },
+    
+                    rampAudioParam(param, value, time) {
+                        if (isFinite(value)) {
+                            param.linearRampToValueAtTime(value, time);
+                        } else {
+                            console.warn(`Invalid ramp value (${value}) for AudioParam.`);
+                        }
+                    },
+    
+                    updateStatus(msg) {
+                        console.log(`Status Update: ${msg}`);
+                        const statusElement = document.getElementById('status');
+                        if (statusElement) {
+                            statusElement.textContent = msg;
+                        } else {
+                            console.warn('Status element not found in the DOM.');
+                        }
+                    },
+    
+                    // -------------------------
+                    // BPM and Timing Utilities
+                    // -------------------------
+                    beatsToSeconds(beats) {
+                        return parseFloat((beats * 60 / this.BPM).toFixed(2));
+                    },
+    
+                    beatsToMilliseconds(beats) {
+                        return this.beatsToSeconds(beats) * 1000;
+                    },
+    
+                    beatsPerSecond() {
+                        return this.BPM / 60;
+                    },
+    
+                    // -------------------------
+                    // Generate Random Loop
+                    // -------------------------
+                    generateRandomLoop() {
+                        try {
+                            this.isLoopActive = true;
+                            this.updateStatus('Generating sound loop...');
+                            if (this.controls.generateButton) this.controls.generateButton.disabled = true;
+    
+                            // Use BPM from control
+                            this.BPM = parseFloat(this.controls.bpmControl.value);
+                            console.log(`Selected BPM: ${this.BPM}`);
+    
+                            // Define loop duration
+                            const loopBars = 8; // 8 bars
+                            const beatsPerBar = 4;
+                            const totalBeats = loopBars * beatsPerBar;
+                            console.log(`Loop Duration: ${totalBeats} beats`);
+    
+                            const scale = this.generateRandomScale();
+                            if (!scale.length) {
+                                console.warn('Generated scale is empty. Aborting loop generation.');
+                                this.cleanupLoop();
+                                return;
+                            }
+    
+                            // Initialize master gain
+                            this.setAudioParam(this.masterGain.gain, parseFloat(this.controls.volumeControl.value), this.context.currentTime);
+    
+                            // Set up master filter
+                            const masterFilter = this.context.createBiquadFilter();
+                            masterFilter.type = 'lowpass';
+                            this.setAudioParam(masterFilter.frequency, 15000, this.context.currentTime);
+                            this.masterGain.disconnect();
+                            this.masterGain.connect(masterFilter);
+    
+                            // Apply global effects
+                            const effectsChain = this.createGlobalEffectsChain(this.beatsToSeconds(totalBeats));
+                            masterFilter.connect(effectsChain).connect(this.context.destination);
+    
+                            // Generate chord progression
+                            const chordProgression = this.generateChordProgression(scale);
+    
+                            // Schedule musical elements
+                            this.scheduleBeatsAndBars(totalBeats, scale, chordProgression);
+    
+                            this.updateStatus(`Loop active: ${loopBars} bars | BPM: ${this.BPM} | Seed: ${this.seed}`);
+                            console.log('Loop generation started successfully.');
+    
+                            // Automatically stop the loop after it finishes
+                            this.loopTimeout = setTimeout(() => {
+                                this.cleanupLoop();
+                            }, this.beatsToMilliseconds(totalBeats));
+                        } catch (error) {
+                            console.error('Error in generateRandomLoop:', error);
+                            this.cleanupLoop();
+                        }
+                    },
+
+                     // -------------------------
+                // Start Generating Loop
+                // -------------------------
+                startGeneratingLoop() {
+                    // Generate a new seed for a fresh generation
+                    this.generateNewSeed();
+
+                    // Update button text to "Stop Generating"
+                    if (this.controls.generateButton) {
+                        this.controls.generateButton.textContent = 'Stop Generating';
+                    }
+
+                    // Start generating the loop
+                    this.generateRandomLoop();
+                },
+
+                // -------------------------
+                // Stop Generating Loop
+                // -------------------------
+                stopGeneratingLoop() {
+                    this.cleanupLoop();
+                    this.updateStatus('Sound generation stopped.');
+                    console.log('Loop generation stopped by user.');
+
+                    // Update button text back to "Generate Sound"
+                    if (this.controls.generateButton) {
+                        this.controls.generateButton.textContent = 'Generate Sound';
+                    }
+                },
+
+                // -------------------------
+                // Cleanup Loop
+                // -------------------------
+                cleanupLoop() {
+                    if (this.isLoopActive) {
+                        // Stop all active oscillators
+                        this.activeOscillators.forEach(osc => {
+                            osc.stop();
+                            osc.disconnect();
+                        });
+                        this.activeOscillators.clear();
+
+                        // Disconnect master gain and reconnect to destination
+                        if (this.masterGain) {
+                            this.masterGain.disconnect();
+                            this.masterGain.connect(this.context.destination);
+                        }
+
+                        // Clear any scheduled timeouts
+                        if (this.loopTimeout) {
+                            clearTimeout(this.loopTimeout);
+                            this.loopTimeout = null;
+                        }
+
+                        this.isLoopActive = false;
+                        this.updateStatus('Loop stopped.');
+
+                        // Enable the generate button
+                        if (this.controls.generateButton) {
+                            this.controls.generateButton.disabled = false;
+                            this.controls.generateButton.textContent = 'Generate Sound';
+                        }
+                    }
+                },
+
+                // -------------------------
+                // Scale and Chord Generation
+                // -------------------------
+                generateRandomScale() {
+                    const SCALES = {
+                        major: [0, 2, 4, 5, 7, 9, 11],
+                        minor: [0, 2, 3, 5, 7, 8, 10],
+                        pentatonic: [0, 2, 4, 7, 9],
+                        blues: [0, 3, 5, 6, 7, 10],
+                    };
+                    const ROOTS = [130.81, 146.83, 164.81, 174.61, 196.00, 220.00, 246.94, 261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88];
+                    const MIN_FREQ = 20;
+                    const MAX_FREQ = 16000;
+                    const OCTAVE_RANGE = 4;
+                    const FREQUENCY_MODULATION_RANGE = 0.05;
+
+                    const scaleTypes = Object.keys(SCALES);
+                    let type = this.controls.scaleType.value;
+                    if (type === 'random') {
+                        type = scaleTypes[Math.floor(this.random() * scaleTypes.length)] || 'major';
+                    }
+                    const rootValue = this.controls.rootNote.value;
+                    let root = parseFloat(rootValue);
+                    if (rootValue === 'random' || isNaN(root)) {
+                        root = ROOTS[Math.floor(this.random() * ROOTS.length)] || 261.63;
+                    }
+                    const scaleIntervals = SCALES[type];
+
+                    let generatedScale = scaleIntervals.map(interval => {
+                        let octaveMultiplier = Math.floor(this.random() * (2 * OCTAVE_RANGE + 1)) - OCTAVE_RANGE;
+                        let freq = root * Math.pow(2, (interval + octaveMultiplier * 12) / 12);
+                        freq *= 1 + (this.random() * 2 - 1) * FREQUENCY_MODULATION_RANGE;
+                        return (freq >= MIN_FREQ && freq <= MAX_FREQ) ? freq : null;
+                    }).filter(Boolean);
+
+                    this.currentScaleData = { type, root, intervals: scaleIntervals, frequencies: generatedScale };
+                    console.log(`Generated Scale (${type}):`, generatedScale);
+                    return generatedScale;
+                },
+
+                generateChordProgression(scale) {
+                    const chordDegrees = [0, 2, 4, 5, 7];
+                    const progressionLength = Math.floor(this.random() * 4) + 2;
+                    const progression = [];
+
+                    for (let i = 0; i < progressionLength; i++) {
+                        const degreeIndex = chordDegrees[Math.floor(this.random() * chordDegrees.length)];
+                        const chord = this.buildChord(scale, degreeIndex);
+                        progression.push(chord);
+                    }
+                    console.log('Chord Progression:', progression);
+                    return progression;
+                },
+
+                buildChord(scale, rootIndex) {
+                    const chordIntervals = [0, 2, 4];
+                    return chordIntervals.map(interval => {
+                        let noteIndex = (rootIndex + interval) % scale.length;
+                        let octaveShift = Math.floor((rootIndex + interval) / scale.length);
+                        return scale[noteIndex] * Math.pow(2, octaveShift);
+                    });
+                },
+
+                // -------------------------
+                // Scheduling Functions
+                // -------------------------
+                scheduleBeatsAndBars(totalBeats, scale, chordProgression) {
+                    const startTime = this.context.currentTime;
+
+                    for (let beat = 0; beat < totalBeats; beat++) {
+                        const currentTime = startTime + this.beatsToSeconds(beat);
+                        const evolutionFactor = parseFloat(((beat + 1) / totalBeats).toFixed(2));
+
+                        this.scheduleMelodicElements(currentTime, scale, chordProgression, evolutionFactor);
+                        this.scheduleBassLines(currentTime, scale, evolutionFactor);
+                    }
+                },
+
+                scheduleMelodicElements(startTime, scale, chordProgression, evolutionFactor) {
+                    const notesPerBeat = 1 + Math.floor(this.random() * Math.min(2, evolutionFactor * 2));
+
+                    for (let i = 0; i < notesPerBeat; i++) {
+                        const time = startTime + (i * this.beatsToSeconds(1) / notesPerBeat);
+                        const chord = chordProgression[Math.floor(this.random() * chordProgression.length)];
+
+                        if (this.random() > 0.5 && chord) {
+                            if (this.random() > 0.5) {
+                                this.scheduleChord(chord, time, this.beatsToSeconds(0.9));
+                            } else {
+                                this.scheduleArpeggio(chord, time, this.beatsToSeconds(0.9));
+                            }
+                        } else {
+                            const freq = scale[Math.floor(this.random() * scale.length)];
+                            const noteDuration = this.clamp(0.8 + this.random() * 0.2, 0.5, 1.0);
+                            this.scheduleNote(freq, time, this.beatsToSeconds(noteDuration), true);
+                        }
+                    }
+                },
+
+                scheduleBassLines(startTime, scale, evolutionFactor) {
+                    const bassScale = scale.map(freq => freq / 2);
+                    const notesPerBeat = Math.ceil(evolutionFactor * 2);
+
+                    for (let i = 0; i < notesPerBeat; i++) {
+                        const time = startTime + (i * this.beatsToSeconds(1) / notesPerBeat);
+                        const freq = bassScale[Math.floor(this.random() * bassScale.length)];
+                        this.scheduleBassNote(freq, time, this.beatsToSeconds(0.9));
+                    }
+                },
+
+                scheduleChord(frequencies, start, dur) {
+                    frequencies.forEach(freq => {
+                        this.scheduleNote(freq, start, dur, false);
+                    });
+                },
+
+                scheduleArpeggio(chord, startTime, duration) {
+                    const numNotes = chord.length;
+                    const noteDuration = duration / numNotes;
+                    chord.forEach((freq, index) => {
+                        const noteTime = startTime + (index * noteDuration);
+                        this.scheduleNote(freq, noteTime, noteDuration, false);
+                    });
+                },
+
+                scheduleNote(freq, start, dur, isEvolutionary) {
+                    try {
+                        if (!isFinite(freq) || freq <= 0) return;
+
+                        start = (isFinite(start) && start >= this.context.currentTime) ? start : this.context.currentTime;
+                        dur = (isFinite(dur) && dur > 0) ? dur : this.beatsToSeconds(1);
+
+                        const osc = this.context.createOscillator();
+                        this.activeOscillators.add(osc);
+                        osc.onended = () => {
+                            this.activeOscillators.delete(osc);
+                            osc.disconnect();
+                        };
+
+                        const gain = this.context.createGain();
+                        const pan = this.context.createStereoPanner();
+
+                        osc.frequency.setValueAtTime(freq, start);
+                        const oscType = ['sine', 'square', 'sawtooth', 'triangle'][Math.floor(this.random() * 4)] || 'sine';
+                        osc.type = oscType;
+                        osc.connect(gain);
+
+                        this.setAudioParam(gain.gain, 0, start);
+                        this.rampAudioParam(gain.gain, this.clamp(this.random() * 0.3 + 0.2, 0.2, 1.0), start + this.beatsToSeconds(0.05));
+                        this.rampAudioParam(gain.gain, 0, start + dur);
+
+                        const panValue = this.clamp(this.random() * 2 - 1, -1, 1);
+                        this.setAudioParam(pan.pan, panValue, start);
+
+                        gain.connect(pan).connect(this.masterGain);
+
+                        // Apply effects based on user settings
+                        if (this.effectsSettings.delay) {
+                            this.applyDelayEffect(gain, start, dur);
+                        }
+                        if (this.effectsSettings.harmonizer && !isEvolutionary) {
+                            this.applyHarmonizer(osc, start, dur);
+                        }
+
+                        osc.start(start);
+                        osc.stop(start + dur);
+                    } catch (error) {
+                        console.error('Error in scheduleNote:', error);
+                    }
+                },
+
+                scheduleBassNote(freq, start, dur) {
+                    try {
+                        const osc = this.context.createOscillator();
+                        const gain = this.context.createGain();
+                        const filter = this.context.createBiquadFilter();
+
+                        osc.type = 'sawtooth';
+                        this.setAudioParam(osc.frequency, freq, start);
+                        this.setAudioParam(gain.gain, 0, start);
+                        this.rampAudioParam(gain.gain, 0.6, start + this.beatsToSeconds(0.05));
+                        this.rampAudioParam(gain.gain, 0, start + dur);
+                        filter.type = 'lowpass';
+                        this.setAudioParam(filter.frequency, 500, start);
+
+                        osc.connect(filter).connect(gain).connect(this.masterGain);
+                        osc.start(start);
+                        osc.stop(start + dur);
+                    } catch (error) {
+                        console.error('Error in scheduleBassNote:', error);
+                    }
+                },
+
+                // -------------------------
+                // Effect Functions
+                // -------------------------
+                applyDelayEffect(gainNode, start, dur) {
+                    if (!this.effectsSettings.delay) return;
+
+                    try {
+                        const delayNode = this.context.createDelay();
+                        const feedbackGain = this.context.createGain();
+                        const wetGain = this.context.createGain();
+                        const dryGain = this.context.createGain();
+
+                        const delayTime = this.clamp(this.beatsToSeconds(0.5), 0.1, 2.0);
+                        const feedbackGainValue = this.clamp(this.random() * 0.5 + 0.2, 0.2, 0.7);
+
+                        this.setAudioParam(delayNode.delayTime, delayTime, start);
+                        this.setAudioParam(feedbackGain.gain, feedbackGainValue, start);
+                        this.setAudioParam(wetGain.gain, 0.3, start);
+                        this.setAudioParam(dryGain.gain, 0.7, start);
+
+                        delayNode.connect(feedbackGain).connect(delayNode);
+
+                        gainNode.connect(delayNode).connect(wetGain).connect(this.masterGain);
+                        gainNode.connect(dryGain).connect(this.masterGain);
+                    } catch (error) {
+                        console.error('Error in applyDelayEffect:', error);
+                    }
+                },
+
+                applyHarmonizer(osc, start, dur) {
+                    if (!this.effectsSettings.harmonizer) return;
+
+                    try {
+                        if (!this.currentScaleData) {
+                            console.warn("No scale data available. Skipping harmonizer.");
+                            return;
+                        }
+
+                        const { type } = this.currentScaleData;
+                        let harmonizerIntervals;
+                        switch (type) {
+                            case 'major':
+                                harmonizerIntervals = [4, 7, 12];
+                                break;
+                            case 'minor':
+                                harmonizerIntervals = [3, 7, 12];
+                                break;
+                            case 'pentatonic':
+                                harmonizerIntervals = [2, 4, 7, 9, 12];
+                                break;
+                            case 'blues':
+                                harmonizerIntervals = [3, 5, 7, 10, 12];
+                                break;
+                            default:
+                                harmonizerIntervals = [4, 7, 12];
+                                break;
+                        }
+
+                        const selectedIntervals = harmonizerIntervals.slice(0, 3);
+
+                        selectedIntervals.forEach(interval => {
+                            const harmonizedOsc = this.context.createOscillator();
+                            const gain = this.context.createGain();
+
+                            harmonizedOsc.type = osc.type;
+                            const harmonicFrequency = osc.frequency.value * Math.pow(2, interval / 12);
+                            this.setAudioParam(harmonizedOsc.frequency, harmonicFrequency, start);
+
+                            const gainValue = 0.5 / selectedIntervals.length;
+                            this.setAudioParam(gain.gain, gainValue, start);
+
+                            harmonizedOsc.connect(gain).connect(this.masterGain);
+                            harmonizedOsc.start(start);
+                            harmonizedOsc.stop(start + dur);
+                        });
+                    } catch (error) {
+                        console.error('Error in applyHarmonizer:', error);
+                    }
+                },
+
+                createGlobalEffectsChain(dur) {
+                    const effects = [];
+                    const inputNode = this.context.createGain();
+                    let outputNode = inputNode;
+
+                    if (this.effectsSettings.reverb) {
+                        const reverb = this.createReverbEffect();
+                        outputNode.connect(reverb.input);
+                        outputNode = reverb.output;
+                        console.log('Global Effects Chain: Added Reverb Effect');
+                    }
+
+                    if (this.effectsSettings.chorus) {
+                        const chorus = this.createChorusEffectGlobal(dur);
+                        outputNode.connect(chorus.input);
+                        outputNode = chorus.output;
+                        console.log('Global Effects Chain: Added Chorus Effect');
+                    }
+
+                    if (outputNode === inputNode) {
+                        // No effects added
+                        return inputNode;
+                    }
+
+                    return outputNode;
+                },
+
+                createReverbEffect() {
+                    const convolver = this.context.createConvolver();
+                    const noiseBuffer = this.context.createBuffer(2, this.context.sampleRate * 3, this.context.sampleRate);
+                    for (let channel = 0; channel < noiseBuffer.numberOfChannels; channel++) {
+                        const data = noiseBuffer.getChannelData(channel);
+                        for (let i = 0; i < data.length; i++) {
+                            data[i] = this.random() * 2 - 1;
+                        }
+                    }
+                    convolver.buffer = noiseBuffer;
+                    return { input: convolver, output: convolver };
+                },
+
+                createChorusEffectGlobal(dur) {
+                    const delayNode = this.context.createDelay();
+                    const lfo = this.context.createOscillator();
+                    const lfoGain = this.context.createGain();
+                    const wetGain = this.context.createGain();
+
+                    this.setAudioParam(delayNode.delayTime, 0.02, this.context.currentTime);
+                    this.setAudioParam(lfo.frequency, this.clamp(this.random() * 0.5 + 0.1, 0.1, 5), this.context.currentTime);
+                    this.setAudioParam(lfoGain.gain, 0.01, this.context.currentTime);
+                    this.setAudioParam(wetGain.gain, 0.5, this.context.currentTime);
+
+                    lfo.connect(lfoGain).connect(delayNode.delayTime);
+                    lfo.start(this.context.currentTime);
+                    lfo.stop(this.context.currentTime + dur);
+
+                    return { input: delayNode, output: wetGain };
+                },
+
+                // -------------------------
+                // Cleanup Function
+                // -------------------------
+                cleanupLoop() {
+                    try {
+                        this.masterGain.disconnect();
+                        this.masterGain.connect(this.context.destination);
+
+                        this.setAudioParam(this.masterGain.gain, parseFloat(this.controls.volumeControl.value), this.context.currentTime);
+
+                        this.activeOscillators.forEach(osc => {
+                            osc.stop();
+                            osc.disconnect();
+                        });
+                        this.activeOscillators.clear();
+
+                        this.isLoopActive = false;
+                        if (this.controls.generateButton) this.controls.generateButton.disabled = false;
+                        this.updateStatus('Loop cleaned up.');
+                        console.log('Loop cleanup completed.');
+                    } catch (err) {
+                        console.warn('Error during loop cleanup:', err);
+                    }
+                },
+            };
+
+            Synthesizer.init();
+        })();
+    </script>
+</body>
+</html>

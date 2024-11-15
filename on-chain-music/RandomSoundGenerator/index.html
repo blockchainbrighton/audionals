@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Enhanced Random Sound Synthesizer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding-top: 50px;
+            background-color: #f0f0f0;
+        }
+        button {
+            font-size: 18px;
+            padding: 15px 30px;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <button id="generate-button">Generate Sound</button>
+    <div id="status"></div>
+
+    <script>
+        // Audio Context and Master Gain Setup
+        const context = new (window.AudioContext || window.webkitAudioContext)();
+        const masterGain = context.createGain();
+        
+        // PRNG: Mulberry32 for Deterministic Randomness
+        const mulberry32 = a => () => {
+            let t = a += 0x6D2B79F5;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+        
+        const fixedSeed = null; // Set to a number for deterministic results
+        const seed = (fixedSeed !== null && isFinite(fixedSeed)) ? fixedSeed : Math.floor(Math.random() * 0xFFFFFFFF);
+        const random = mulberry32(seed);
+        console.log(`Current Seed: ${seed}`);
+        
+        let isLoopActive = false, currentLoopTimeout;
+        
+        // Predefined Scales and Roots
+        const SCALES = { 
+            major: [0, 2, 4, 5, 7, 9, 11, 12], 
+            minor: [0, 2, 3, 5, 7, 8, 10, 12], 
+            pentatonic: [0, 2, 4, 7, 9, 12], 
+            blues: [0, 3, 5, 6, 7, 10, 12] 
+        };
+        const ROOTS = [130.81, 146.83, 164.81, 174.61, 196.00, 220.00, 246.94, 261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88];
+        const MIN_FREQ = 20;
+        const MAX_FREQ = 16000;
+        const OCTAVE_RANGE = 4; // Allows octave multipliers from -4 to +4
+        const FREQUENCY_MODULATION_RANGE = 0.05; // ±5% frequency modulation
+        
+        // Utility Functions
+        const clamp = (v, min, max) => isFinite(v) ? Math.min(Math.max(v, min), max) : min;
+        const setAudioParam = (param, value, time) => {
+            if (isFinite(value)) {
+                param.setValueAtTime(value, time);
+            } else {
+                console.warn(`Invalid value (${value}) for AudioParam. Using default value.`);
+                param.setValueAtTime(0, time);
+            }
+        };
+        const rampAudioParam = (param, value, time) => {
+            if (isFinite(value)) {
+                param.linearRampToValueAtTime(value, time);
+            } else {
+                console.warn(`Invalid ramp value (${value}) for AudioParam.`);
+            }
+        };
+        const updateStatus = msg => document.getElementById('status').textContent = msg;
+        
+        // Event Listener for Generate Button
+        document.getElementById('generate-button').addEventListener('click', () => {
+            if (isLoopActive) {
+                console.warn('A loop is already active. Please wait until it finishes.');
+                return;
+            }
+            try {
+                generateRandomLoop();
+            } catch (error) {
+                console.error('Error generating loop:', error);
+            }
+        });
+        
+        // Scale Generation Function
+        const generateRandomScale = () => {
+            const scaleTypes = Object.keys(SCALES);
+            const type = scaleTypes[Math.floor(random() * scaleTypes.length)] || 'major';
+            const root = ROOTS[Math.floor(random() * ROOTS.length)] || 261.63;
+            const scale = SCALES[type];
+        
+            let octaveShiftsApplied = 0;
+            const MAX_OCTAVE_SHIFTS = 2;
+        
+            return scale.map(interval => {
+                let octaveMultiplier = 0;
+                if (octaveShiftsApplied < MAX_OCTAVE_SHIFTS && random() > 0.5) {
+                    octaveMultiplier = Math.floor(random() * (2 * OCTAVE_RANGE + 1)) - OCTAVE_RANGE;
+                    octaveShiftsApplied++;
+                }
+                let freq = root * Math.pow(2, interval / 12 + octaveMultiplier);
+                freq *= 1 + (random() * 2 - 1) * FREQUENCY_MODULATION_RANGE;
+                return (freq >= MIN_FREQ && freq <= MAX_FREQ) ? freq : null;
+            }).filter(Boolean);
+        };
+        
+        // Loop Generation Function
+        const generateRandomLoop = () => {
+            try {
+                isLoopActive = true;
+                updateStatus('Generating sound loop...');
+                document.getElementById('generate-button').disabled = true;
+        
+                const loopDuration = 60; // seconds
+                const scale = generateRandomScale();
+                if (!scale.length) {
+                    console.warn('Generated scale is empty. Aborting loop generation.');
+                    cleanupLoop();
+                    return;
+                }
+        
+                // Initialize master gain
+                setAudioParam(masterGain.gain, 0, context.currentTime);
+                rampAudioParam(masterGain.gain, 0.8, context.currentTime + 0.1);
+        
+                // Set up master filter
+                const masterFilter = context.createBiquadFilter();
+                masterFilter.type = 'lowpass';
+                setAudioParam(masterFilter.frequency, 15000, context.currentTime);
+                masterGain.connect(masterFilter).connect(context.destination);
+        
+                // Apply global effects
+                const effectsChain = createGlobalEffectsChain();
+                masterGain.connect(effectsChain).connect(context.destination);
+        
+                // Schedule musical elements
+                scheduleRhythmicElements(loopDuration, scale, masterGain);
+                scheduleEvolutionarySequences(loopDuration, scale, masterGain);
+                scheduleBassLines(loopDuration, scale, masterGain);
+        
+                currentLoopTimeout = setTimeout(() => {
+                    cleanupLoop();
+                    updateStatus('Loop completed.');
+                }, loopDuration * 1000 + 200); // Extra 200ms for fade out
+        
+                updateStatus(`Loop active: ${loopDuration} seconds | Seed: ${seed}`);
+            } catch (error) {
+                console.error('Error in generateRandomLoop:', error);
+                cleanupLoop();
+            }
+        };
+        
+        // Cleanup Function
+        const cleanupLoop = () => {
+            try {
+                if (currentLoopTimeout) {
+                    clearTimeout(currentLoopTimeout);
+                    currentLoopTimeout = null;
+                }
+                isLoopActive = false;
+                document.getElementById('generate-button').disabled = false;
+            } catch (err) {
+                console.warn('Error during loop cleanup:', err);
+            }
+        };
+        
+        // Scheduling Rhythmic Elements
+        const scheduleRhythmicElements = (loopDuration, scale, masterGain) => {
+            const bpm = clamp(random() * 60 + 120, 120, 240); // BPM between 120 and 240
+            const beatDuration = 60 / bpm;
+            const patternLength = Math.floor(random() * 4 + 1) * beatDuration;
+        
+            for (let time = context.currentTime; time < context.currentTime + loopDuration; time += patternLength) {
+                const rhythmPattern = generateRhythmPattern();
+                rhythmPattern.forEach((hit, index) => {
+                    if (hit) {
+                        const startTime = time + index * beatDuration;
+                        scheduleDrumHit(startTime, beatDuration * 0.9, masterGain);
+                    }
+                });
+            }
+        };
+        
+        // Rhythm Pattern Generator
+        const generateRhythmPattern = () => {
+            const patterns = [
+                [1, 0, 1, 0],
+                [1, 1, 0, 1],
+                [1, 0, 0, 1],
+                [1, 1, 1, 1],
+            ];
+            return patterns[Math.floor(random() * patterns.length)] || [1, 0, 1, 0];
+        };
+        
+        // Scheduling Drum Hits
+        const scheduleDrumHit = (startTime, duration, masterGain) => {
+            const osc = context.createOscillator();
+            const gain = context.createGain();
+            osc.type = 'triangle';
+            setAudioParam(osc.frequency, 100, startTime);
+            osc.frequency.exponentialRampToValueAtTime(50, startTime + duration);
+            setAudioParam(gain.gain, 1, startTime);
+            rampAudioParam(gain.gain, 0, startTime + duration);
+            osc.connect(gain).connect(masterGain);
+            osc.start(startTime);
+            osc.stop(startTime + duration);
+        };
+        
+        // Scheduling Evolutionary Sequences
+        const scheduleEvolutionarySequences = (loopDuration, scale, masterGain) => {
+            const numSequences = clamp(Math.floor(random() * 3) + 1, 1, 3); // 1 to 3 sequences
+            const sequenceLength = loopDuration / numSequences;
+            for (let i = 0; i < numSequences; i++) {
+                const sequenceStart = context.currentTime + i * sequenceLength;
+                scheduleMelodicSequence(sequenceStart, sequenceLength, scale, masterGain);
+            }
+        };
+        
+        // Scheduling a Melodic Sequence
+        const scheduleMelodicSequence = (startTime, duration, scale, masterGain) => {
+            const MIN_INTERVAL = 0.2, MAX_INTERVAL = 1.5;
+            const MIN_NOTE_DURATION = 0.05, MAX_NOTE_DURATION = 0.8;
+            let currentTime = startTime;
+            const sequenceEnd = startTime + duration;
+            let currentIndex = Math.floor(random() * scale.length);
+        
+            while (currentTime < sequenceEnd) {
+                const interval = clamp(random() * (MAX_INTERVAL - MIN_INTERVAL) + MIN_INTERVAL, MIN_INTERVAL, MAX_INTERVAL);
+                currentTime += interval;
+                if (currentTime >= sequenceEnd) break;
+                const noteDuration = clamp(random() * (MAX_NOTE_DURATION - MIN_NOTE_DURATION) + MIN_NOTE_DURATION, MIN_NOTE_DURATION, MAX_NOTE_DURATION);
+                const freq = scale[currentIndex];
+                scheduleNote(freq, currentTime, noteDuration, masterGain, true);
+                const stepOptions = [-2, -1, 0, 1, 2];
+                currentIndex = clamp(currentIndex + stepOptions[Math.floor(random() * stepOptions.length)], 0, scale.length - 1);
+            }
+        };
+        
+        // Scheduling Bass Lines
+        const scheduleBassLines = (loopDuration, scale, masterGain) => {
+            const bassScale = scale.map(freq => freq / 2); // One octave lower
+            const numberOfBassNotes = clamp(Math.floor(random() * 10) + 5, 5, 15); // 5 to 15 bass notes
+            const intervalBetweenBassNotes = loopDuration / numberOfBassNotes;
+            for (let i = 0; i < numberOfBassNotes; i++) {
+                const bassStart = context.currentTime + i * intervalBetweenBassNotes;
+                const bassDuration = clamp(random() * (4 - 0.1) + 0.1, 0.1, 4); // 0.1 to 4 seconds
+                const bassFreq = bassScale[Math.floor(random() * bassScale.length)];
+                scheduleBassNote(bassFreq, bassStart, bassDuration, masterGain);
+            }
+        };
+        
+        // Scheduling a Bass Note
+        const scheduleBassNote = (freq, start, dur, masterGain) => {
+            const osc = context.createOscillator();
+            const gain = context.createGain();
+            const filter = context.createBiquadFilter();
+            osc.type = 'sawtooth';
+            setAudioParam(osc.frequency, freq, start);
+            setAudioParam(gain.gain, 0, start);
+            rampAudioParam(gain.gain, 0.6, start + 0.05);
+            rampAudioParam(gain.gain, 0, start + dur);
+            filter.type = 'lowpass';
+            setAudioParam(filter.frequency, 500, start);
+            osc.connect(filter).connect(gain).connect(masterGain);
+            osc.start(start);
+            osc.stop(start + dur);
+        };
+        
+        // Scheduling a Note
+        const scheduleNote = (freq, start, dur, masterGain, isEvolutionary = false) => {
+            try {
+                if (!isFinite(freq) || freq <= 0) {
+                    console.warn(`Invalid frequency (${freq}). Skipping note.`);
+                    return;
+                }
+                start = (isFinite(start) && start >= context.currentTime) ? start : context.currentTime;
+                dur = (isFinite(dur) && dur > 0) ? dur : 0.5;
+        
+                const osc = context.createOscillator();
+                const gain = context.createGain();
+                const pan = context.createStereoPanner();
+                osc.frequency.setValueAtTime(freq, start);
+                osc.type = ['sine', 'square', 'sawtooth', 'triangle'][Math.floor(random() * 4)] || 'sine';
+                osc.connect(gain);
+                setAudioParam(gain.gain, 0, start);
+                rampAudioParam(gain.gain, clamp(random() * 0.3 + 0.1, 0.1, 1.0), start + 0.05);
+                setAudioParam(gain.gain, clamp(random() * 0.3 + 0.1, 0.1, 1.0), start + dur - 0.05);
+                rampAudioParam(gain.gain, 0, start + dur);
+                setAudioParam(pan.pan, clamp(random() * 2 - 1, -1, 1), start);
+                gain.connect(pan).connect(masterGain);
+        
+                // Apply effects
+                if (random() > 0.5) applyFrequencyModulation(osc, start, dur);
+                if (random() > 0.5) applyFilterModulation(gain, start, dur);
+                if (random() > 0.5) applyChorusEffect(gain, start, dur);
+                if (random() > 0.5) applyLeslieEffect(gain, start, dur);
+                if (!isEvolutionary && random() > 0.7) applyHarmonizer(osc, start, dur, masterGain);
+                if (random() > 0.4) applyDelayEffect(gain, start, dur);
+                if (random() > 0.6) applyReverbEffect(gain, start, dur);
+        
+                osc.start(start);
+                osc.stop(start + dur);
+            } catch (error) {
+                console.error('Error in scheduleNote:', error);
+            }
+        };
+        
+        // Effect Functions
+        const applyFrequencyModulation = (osc, start, dur) => {
+            try {
+                const mod = context.createOscillator();
+                const modGain = context.createGain();
+                setAudioParam(mod.frequency, clamp(random() * 5 + 0.5, 0.1, 20), start);
+                setAudioParam(modGain.gain, clamp(random() * 50 + 25, 1, 1000), start);
+                mod.connect(modGain).connect(osc.frequency);
+                mod.start(start);
+                mod.stop(start + dur);
+            } catch (error) {
+                console.error('Error in applyFrequencyModulation:', error);
+            }
+        };
+        
+        const applyFilterModulation = (gainNode, start, dur) => {
+            try {
+                const filter = context.createBiquadFilter();
+                const mod = context.createOscillator();
+                const modGain = context.createGain();
+                filter.type = 'lowpass';
+                setAudioParam(filter.frequency, 1000, start);
+                setAudioParam(mod.frequency, clamp(random() * 3 + 0.1, 0.1, 20), start);
+                setAudioParam(modGain.gain, clamp(random() * 300 + 100, 10, 2000), start);
+                mod.connect(modGain).connect(filter.frequency);
+                gainNode.disconnect();
+                gainNode.connect(filter).connect(context.destination);
+                mod.start(start);
+                mod.stop(start + dur);
+            } catch (error) {
+                console.error('Error in applyFilterModulation:', error);
+            }
+        };
+        
+        const applyChorusEffect = (gainNode, start, dur) => {
+            try {
+                const delayNode = context.createDelay();
+                const lfo = context.createOscillator();
+                const lfoGain = context.createGain();
+                const wetGain = context.createGain();
+        
+                setAudioParam(delayNode.delayTime, 0.02, start);
+                setAudioParam(lfo.frequency, clamp(random() * 0.5 + 0.1, 0.1, 5), start);
+                setAudioParam(lfoGain.gain, 0.01, start);
+                setAudioParam(wetGain.gain, 0.5, start);
+        
+                lfo.connect(lfoGain).connect(delayNode.delayTime);
+                lfo.start(start);
+                lfo.stop(start + dur);
+        
+                gainNode.connect(delayNode).connect(wetGain).connect(masterGain);
+            } catch (error) {
+                console.error('Error in applyChorusEffect:', error);
+            }
+        };
+        
+        const applyLeslieEffect = (gainNode, start, dur) => {
+            try {
+                const panner = context.createStereoPanner();
+                const lfo = context.createOscillator();
+                setAudioParam(lfo.frequency, clamp(random() * 5 + 0.5, 0.5, 10), start);
+                lfo.connect(panner.pan);
+                gainNode.connect(panner).connect(masterGain);
+                lfo.start(start);
+                lfo.stop(start + dur);
+            } catch (error) {
+                console.error('Error in applyLeslieEffect:', error);
+            }
+        };
+        
+        const applyHarmonizer = (osc, start, dur, masterGain) => {
+            try {
+                const intervals = [0, 4, 7]; // Unison, major third, perfect fifth
+                intervals.forEach(interval => {
+                    const harmonizedOsc = context.createOscillator();
+                    const gain = context.createGain();
+                    harmonizedOsc.type = osc.type;
+                    setAudioParam(harmonizedOsc.frequency, osc.frequency.value * Math.pow(2, interval / 12), start);
+                    setAudioParam(gain.gain, 0.5, start);
+                    harmonizedOsc.connect(gain).connect(masterGain);
+                    harmonizedOsc.start(start);
+                    harmonizedOsc.stop(start + dur);
+                });
+            } catch (error) {
+                console.error('Error in applyHarmonizer:', error);
+            }
+        };
+        
+        const applyDelayEffect = (gainNode, start, dur) => {
+            try {
+                const delayNode = context.createDelay();
+                const feedbackGain = context.createGain();
+                const wetGain = context.createGain();
+        
+                setAudioParam(delayNode.delayTime, clamp(random() * 0.5 + 0.1, 0.1, 0.6), start);
+                setAudioParam(feedbackGain.gain, clamp(random() * 0.5 + 0.2, 0.2, 0.7), start);
+                setAudioParam(wetGain.gain, 0.5, start);
+        
+                delayNode.connect(feedbackGain).connect(delayNode);
+                delayNode.connect(wetGain);
+                feedbackGain.connect(delayNode);
+        
+                gainNode.connect(delayNode).connect(wetGain).connect(masterGain);
+            } catch (error) {
+                console.error('Error in applyDelayEffect:', error);
+            }
+        };
+        
+        const applyReverbEffect = (gainNode, start, dur) => {
+            try {
+                const convolver = context.createConvolver();
+                const noiseBuffer = context.createBuffer(2, context.sampleRate * 3, context.sampleRate);
+                for (let channel = 0; channel < noiseBuffer.numberOfChannels; channel++) {
+                    const data = noiseBuffer.getChannelData(channel);
+                    for (let i = 0; i < data.length; i++) {
+                        data[i] = random() * 2 - 1;
+                    }
+                }
+                convolver.buffer = noiseBuffer;
+                gainNode.connect(convolver).connect(masterGain);
+            } catch (error) {
+                console.error('Error in applyReverbEffect:', error);
+            }
+        };
+        
+        // Global Effects Chain Creation
+        const createGlobalEffectsChain = () => {
+            const effects = [];
+            if (random() > 0.5) effects.push(createReverbEffect());
+            if (random() > 0.5) effects.push(createDelayEffect());
+            if (random() > 0.5) effects.push(createChorusEffectGlobal());
+        
+            let outputNode = context.createGain();
+            effects.forEach(effect => {
+                outputNode.connect(effect.input);
+                outputNode = effect.output;
+            });
+        
+            return outputNode;
+        };
+        
+        // Reverb Effect Creation
+        const createReverbEffect = () => {
+            const convolver = context.createConvolver();
+            const noiseBuffer = context.createBuffer(2, context.sampleRate * 3, context.sampleRate);
+            for (let channel = 0; channel < noiseBuffer.numberOfChannels; channel++) {
+                const data = noiseBuffer.getChannelData(channel);
+                for (let i = 0; i < data.length; i++) {
+                    data[i] = random() * 2 - 1;
+                }
+            }
+            convolver.buffer = noiseBuffer;
+            return { input: convolver, output: convolver };
+        };
+        
+        // Delay Effect Creation
+        const createDelayEffect = () => {
+            const delayNode = context.createDelay();
+            const feedbackGain = context.createGain();
+            const wetGain = context.createGain();
+        
+            setAudioParam(delayNode.delayTime, clamp(random() * 0.5 + 0.1, 0.1, 0.6), context.currentTime);
+            setAudioParam(feedbackGain.gain, clamp(random() * 0.5 + 0.2, 0.2, 0.7), context.currentTime);
+            setAudioParam(wetGain.gain, 0.5, context.currentTime);
+        
+            delayNode.connect(feedbackGain).connect(delayNode);
+            delayNode.connect(wetGain);
+            feedbackGain.connect(delayNode);
+        
+            return { input: delayNode, output: wetGain };
+        };
+        
+        // Chorus Effect Creation for Global Effects
+        const createChorusEffectGlobal = () => {
+            const delayNode = context.createDelay();
+            const lfo = context.createOscillator();
+            const lfoGain = context.createGain();
+            const wetGain = context.createGain();
+        
+            setAudioParam(delayNode.delayTime, 0.02, context.currentTime);
+            setAudioParam(lfo.frequency, clamp(random() * 0.5 + 0.1, 0.1, 5), context.currentTime);
+            setAudioParam(lfoGain.gain, 0.01, context.currentTime);
+            setAudioParam(wetGain.gain, 0.5, context.currentTime);
+        
+            lfo.connect(lfoGain).connect(delayNode.delayTime);
+            lfo.start();
+            lfo.stop(context.currentTime + 60);
+        
+            return { input: delayNode, output: wetGain };
+        };
+        </script>
+</body>
+</html>

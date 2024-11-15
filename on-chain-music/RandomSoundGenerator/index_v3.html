@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Enhanced Random Sound Synthesizer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding-top: 50px;
+            background-color: #f0f0f0;
+        }
+        button {
+            font-size: 18px;
+            padding: 15px 30px;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <button id="generate-button">Generate Sound</button>
+    <div id="status"></div>
+
+    <script>
+        // -------------------------
+        // Audio Context and Master Gain Setup
+        // -------------------------
+        console.log('Initializing Audio Context...');
+        const context = new (window.AudioContext || window.webkitAudioContext)();
+        console.log('Audio Context initialized:', context);
+    
+        console.log('Setting up Master Gain...');
+        const masterGain = context.createGain();
+        masterGain.connect(context.destination);
+        console.log('Master Gain connected to destination.');
+    
+
+        // Constants 
+        let bpm;
+
+
+        // -------------------------
+        // PRNG: Mulberry32 for Deterministic Randomness
+        // -------------------------
+        const mulberry32 = a => () => {
+            let t = a += 0x6D2B79F5;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    
+        const fixedSeed = null; // Set to a number for deterministic results
+        const seed = (fixedSeed !== null && isFinite(fixedSeed)) ? fixedSeed : Math.floor(Math.random() * 0xFFFFFFFF);
+        const random = mulberry32(seed);
+        console.log(`Current Seed: ${seed}`);
+    
+        let isLoopActive = false, currentLoopTimeout;
+    
+        // -------------------------
+        // Predefined Scales and Roots
+        // -------------------------
+        const SCALES = { 
+            major: [0, 2, 4, 5, 7, 9, 11], 
+            minor: [0, 2, 3, 5, 7, 8, 10], 
+            pentatonic: [0, 2, 4, 7, 9], 
+            blues: [0, 3, 5, 6, 7, 10] 
+        };
+        const ROOTS = [130.81, 146.83, 164.81, 174.61, 196.00, 220.00, 246.94, 261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88];
+        const MIN_FREQ = 20;
+        const MAX_FREQ = 16000;
+        const OCTAVE_RANGE = 4; // Allows octave multipliers from -4 to +4
+        const FREQUENCY_MODULATION_RANGE = 0.05; // ±5% frequency modulation
+    
+        // -------------------------
+        // Utility Functions
+        // -------------------------
+        const clamp = (v, min, max) => isFinite(v) ? Math.min(Math.max(v, min), max) : min;
+    
+        const setAudioParam = (param, value, time) => {
+            if (isFinite(value)) {
+                param.setValueAtTime(value, time);
+            } else {
+                console.warn(`Invalid value (${value}) for AudioParam. Using default value.`);
+                param.setValueAtTime(0, time);
+            }
+        };
+    
+        const rampAudioParam = (param, value, time) => {
+            if (isFinite(value)) {
+                param.linearRampToValueAtTime(value, time);
+            } else {
+                console.warn(`Invalid ramp value (${value}) for AudioParam.`);
+            }
+        };
+    
+        const updateStatus = msg => {
+            console.log(`Status Update: ${msg}`);
+            const statusElement = document.getElementById('status');
+            if (statusElement) {
+                statusElement.textContent = msg;
+            } else {
+                console.warn('Status element not found in the DOM.');
+            }
+        };
+    
+        // -------------------------
+        // Event Listener for Generate Button
+        // -------------------------
+        const generateButton = document.getElementById('generate-button');
+        if (generateButton) {
+            console.log('Adding event listener to Generate Button...');
+            generateButton.addEventListener('click', () => {
+                console.log('Generate Button clicked.');
+                if (isLoopActive) {
+                    console.warn('A loop is already active. Please wait until it finishes.');
+                    return;
+                }
+                try {
+                    generateRandomLoop();
+                } catch (error) {
+                    console.error('Error generating loop:', error);
+                }
+            });
+        } else {
+            console.error('Generate Button not found in the DOM.');
+        }
+    
+        // -------------------------
+        // Scale Generation Function
+        // -------------------------
+        const generateRandomScale = () => {
+            const startTime = performance.now(); // Start timing
+            console.log('Generating random scale...');
+            const scaleTypes = Object.keys(SCALES);
+            const type = scaleTypes[Math.floor(random() * scaleTypes.length)] || 'major';
+            const root = ROOTS[Math.floor(random() * ROOTS.length)] || 261.63;
+            const scale = SCALES[type];
+            console.log(`Selected Scale Type: ${type}, Root Frequency: ${root} Hz`);
+    
+            let octaveShiftsApplied = 0;
+            const MAX_OCTAVE_SHIFTS = 2;
+    
+            const generatedScale = scale.map(interval => {
+                let octaveMultiplier = 0;
+                if (octaveShiftsApplied < MAX_OCTAVE_SHIFTS && random() > 0.5) {
+                    octaveMultiplier = Math.floor(random() * (2 * OCTAVE_RANGE + 1)) - OCTAVE_RANGE;
+                    octaveShiftsApplied++;
+                }
+                let freq = root * Math.pow(2, (interval + octaveMultiplier * 12) / 12);
+                freq *= 1 + (random() * 2 - 1) * FREQUENCY_MODULATION_RANGE;
+                const clampedFreq = (freq >= MIN_FREQ && freq <= MAX_FREQ) ? freq : null;
+                if (clampedFreq === null) {
+                    console.warn(`Frequency ${freq} Hz out of range (${MIN_FREQ}-${MAX_FREQ} Hz). Excluding from scale.`);
+                }
+                return clampedFreq;
+            }).filter(Boolean);
+    
+            console.log('Generated Scale Frequencies:', generatedScale);
+            const endTime = performance.now(); // End timing
+            console.log(`generateRandomScale took ${(endTime - startTime).toFixed(2)} ms`);
+            return generatedScale;
+        };
+    
+        // -------------------------
+        // Chord Progression Generator
+        // -------------------------
+        const generateChordProgression = (scale) => {
+            const startTime = performance.now(); // Start timing
+            console.log('Generating chord progression...');
+            const chordDegrees = [0, 2, 4, 5, 7]; // Common degrees for chords in the scale
+            const progressionLength = Math.floor(random() * 4) + 2; // Length between 2 and 5 chords
+            console.log(`Chord Progression Length: ${progressionLength}`);
+    
+            const progression = [];
+    
+            for(let i = 0; i < progressionLength; i++) {
+                const degreeIndex = chordDegrees[Math.floor(random() * chordDegrees.length)];
+                const chord = buildChord(scale, degreeIndex);
+                console.log(`Chord ${i + 1}: Degree ${degreeIndex}, Frequencies:`, chord);
+                progression.push(chord);
+            }
+            const endTime = performance.now(); // End timing
+            console.log(`generateChordProgression took ${(endTime - startTime).toFixed(2)} ms`);
+            return progression;
+        };
+    
+        // -------------------------
+        // Build Chord Function
+        // -------------------------
+        const buildChord = (scale, rootIndex) => {
+            const chordIntervals = [0, 2, 4]; // Root, third, fifth
+            const chord = chordIntervals.map(interval => {
+                let noteIndex = (rootIndex + interval) % scale.length;
+                let octaveShift = Math.floor((rootIndex + interval) / scale.length);
+                return scale[noteIndex] * Math.pow(2, octaveShift);
+            });
+            return chord;
+        };
+    
+       // -------------------------
+// Loop Generation Function
+// -------------------------
+const generateRandomLoop = () => {
+    try {
+        isLoopActive = true;
+        updateStatus('Generating sound loop...');
+        if (generateButton) generateButton.disabled = true;
+
+        const loopDuration = 180; // 3 minutes in seconds
+        bpm = clamp(random() * 60 + 120, 120, 240); // BPM between 120 and 240
+        console.log(`Loop Duration: ${loopDuration} seconds, BPM: ${bpm}`);
+        const beatDuration = 60 / bpm;
+        const barsPerLoop = 12; // Assuming 4/4 time
+        const totalBeats = barsPerLoop * 4;
+        const scale = generateRandomScale();
+        
+        if (!scale.length) {
+            console.warn('Generated scale is empty. Aborting loop generation.');
+            cleanupLoop();
+            return;
+        }
+
+        // Initialize master gain
+        console.log('Setting master gain to 0...');
+        setAudioParam(masterGain.gain, 0, context.currentTime);
+        console.log('Ramping master gain to 0.8...');
+        rampAudioParam(masterGain.gain, 0.8, context.currentTime + 0.1);
+
+        // Set up master filter
+        console.log('Setting up master filter...');
+        const masterFilter = context.createBiquadFilter();
+        masterFilter.type = 'lowpass';
+        setAudioParam(masterFilter.frequency, 15000, context.currentTime);
+        masterGain.disconnect();
+        masterGain.connect(masterFilter).connect(context.destination);
+        console.log('Master filter connected.');
+
+        // Apply global effects
+        console.log('Creating global effects chain...');
+        const effectsChain = createGlobalEffectsChain();
+        masterGain.connect(effectsChain).connect(context.destination);
+        console.log('Global effects chain connected.');
+
+        // Generate chord progression
+        console.log('Generating chord progression...');
+        const chordProgression = generateChordProgression(scale);
+
+        // Schedule musical elements by beats and bars
+        console.log('Scheduling musical elements by beats and bars...');
+        scheduleBeatsAndBars(totalBeats, scale, chordProgression, beatDuration, masterGain);
+
+        // Schedule loop cleanup
+        console.log(`Scheduling loop cleanup in ${loopDuration * 1000 + 200} ms`);
+        currentLoopTimeout = setTimeout(() => {
+            console.log('Loop duration completed. Cleaning up...');
+            cleanupLoop();
+            updateStatus('Loop completed.');
+        }, loopDuration * 1000 + 200); // 180,200 ms
+
+        updateStatus(`Loop active: ${loopDuration / 60} minutes | BPM: ${bpm} | Seed: ${seed}`);
+        console.log('Loop generation started successfully.');
+    } catch (error) {
+        console.error('Error in generateRandomLoop:', error);
+        cleanupLoop();
+    }
+};
+
+// -------------------------
+// Scheduling Beats and Bars
+// -------------------------
+const scheduleBeatsAndBars = (totalBeats, scale, chordProgression, beatDuration, masterGain) => {
+    console.log('Scheduling based on beats and bars started.');
+    const startTime = context.currentTime;
+
+    for (let beat = 0; beat < totalBeats; beat++) {
+        const currentTime = startTime + beat * beatDuration;
+        const evolutionFactor = (beat + 1) / totalBeats;
+
+        // Schedule melodic elements for each beat
+        scheduleMelodicElements(currentTime, beatDuration, scale, chordProgression, beatDuration, masterGain, evolutionFactor);
+
+        // Schedule bass lines with increasing presence based on beat number
+        scheduleBassLines(currentTime, beatDuration, scale, masterGain, evolutionFactor, bpm);
+        
+        console.log(`Scheduled Beat ${beat + 1}: Time=${currentTime.toFixed(2)}, Evolution Factor=${evolutionFactor.toFixed(2)}`);
+    }
+    console.log('Scheduling based on beats and bars completed.');
+};
+
+        // -------------------------
+        // Scheduling Melodic Elements
+        // -------------------------
+        const scheduleMelodicElements = (startTime, duration, scale, chordProgression, beatDuration, masterGain, evolutionFactor) => {
+            const beatsInSection = Math.floor(duration / beatDuration);
+            const notesPerBeat = 1 + Math.floor(random() * Math.min(2, evolutionFactor * 2));
+    
+            for (let beat = 0; beat < beatsInSection; beat++) {
+                const time = startTime + beat * beatDuration;
+                const chord = chordProgression[Math.floor(random() * chordProgression.length)];
+    
+                // Decide whether to play a chord or an arpeggio
+                if (random() > 0.5 && chord) {
+                    if (random() > 0.5) {
+                        scheduleChord(chord, time, beatDuration * 0.9, masterGain);
+                    } else {
+                        scheduleArpeggio(chord, time, beatDuration * 0.9, masterGain);
+                    }
+                } else {
+                    // Single note melody
+                    const freq = scale[Math.floor(random() * scale.length)];
+                    const noteDuration = clamp(beatDuration * (0.8 + random() * 0.2), 0.5, beatDuration);
+                    scheduleNote(freq, time, noteDuration, masterGain, true);
+                }
+            }
+        };
+    
+        // -------------------------
+        // Scheduling Bass Lines
+        // -------------------------
+        const scheduleBassLines = (startTime, duration, scale, masterGain, evolutionFactor, bpm) => {
+            const beatDuration = 60 / bpm; // Dynamically calculate beat duration based on loop's BPM
+            const bassScale = scale.map(freq => freq / 2); // One octave lower
+            const beatsInSection = Math.floor(duration / beatDuration);
+            const notesPerBeat = Math.ceil(evolutionFactor * 2);
+
+            for (let beat = 0; beat < beatsInSection; beat++) {
+                const time = startTime + beat * beatDuration;
+                const freq = bassScale[Math.floor(random() * bassScale.length)];
+                const bassDuration = clamp(beatDuration * 0.9, 0.5, beatDuration);
+                scheduleBassNote(freq, time, bassDuration, masterGain);
+            }
+        };
+    
+        // -------------------------
+        // Chord Scheduling Functions
+        // -------------------------
+        const scheduleChord = (frequencies, start, dur, masterGain) => {
+            frequencies.forEach(freq => {
+                scheduleNote(freq, start, dur, masterGain, false);
+            });
+        };
+    
+        const scheduleArpeggio = (chord, startTime, duration, masterGain) => {
+            const numNotes = chord.length;
+            const noteDuration = duration / numNotes;
+            chord.forEach((freq, index) => {
+                const noteTime = startTime + index * noteDuration;
+                scheduleNote(freq, noteTime, noteDuration, masterGain, false);
+            });
+        };
+    
+        // -------------------------
+        // Scheduling a Note
+        // -------------------------
+        const activeOscillators = new Set();
+
+    const scheduleNote = (freq, start, dur, masterGain, isEvolutionary = false) => {
+        try {
+            if (!isFinite(freq) || freq <= 0) {
+                console.warn(`Invalid frequency (${freq}). Skipping note.`);
+                return;
+            }
+            start = (isFinite(start) && start >= context.currentTime) ? start : context.currentTime;
+            dur = (isFinite(dur) && dur > 0) ? dur : 0.5;
+
+            const osc = context.createOscillator();
+            activeOscillators.add(osc);
+            osc.onended = () => {
+                activeOscillators.delete(osc);
+                osc.disconnect();
+                // Disconnect other nodes if necessary
+            };
+
+            const gain = context.createGain();
+            const pan = context.createStereoPanner();
+
+            osc.frequency.setValueAtTime(freq, start);
+            osc.type = ['sine', 'square', 'sawtooth', 'triangle'][Math.floor(random() * 4)] || 'sine';
+            osc.connect(gain);
+
+            // Gain envelope
+            setAudioParam(gain.gain, 0, start);
+            rampAudioParam(gain.gain, clamp(random() * 0.3 + 0.2, 0.2, 1.0), start + 0.05);
+            rampAudioParam(gain.gain, 0, start + dur);
+
+            // Stereo panning
+            setAudioParam(pan.pan, clamp(random() * 2 - 1, -1, 1), start);
+
+            // Connect nodes
+            gain.connect(pan).connect(masterGain);
+
+            // Apply effects
+            if (random() > 0.5) applyFrequencyModulation(osc, start, dur);
+            if (random() > 0.5) applyFilterModulation(gain, start, dur);
+            if (random() > 0.5) applyChorusEffect(gain, start, dur);
+            if (random() > 0.5) applyLeslieEffect(gain, start, dur);
+            if (!isEvolutionary && random() > 0.7) applyHarmonizer(osc, start, dur, masterGain);
+            if (random() > 0.4) applyDelayEffect(gain, start, dur);
+            if (random() > 0.6) applyReverbEffect(gain, start, dur);
+
+            // Start and stop oscillator
+            osc.start(start);
+            osc.stop(start + dur);
+        } catch (error) {
+            console.error('Error in scheduleNote:', error);
+        }
+    };
+        // -------------------------
+        // Scheduling a Bass Note
+        // -------------------------
+        const scheduleBassNote = (freq, start, dur, masterGain) => {
+            try {
+                const osc = context.createOscillator();
+                const gain = context.createGain();
+                const filter = context.createBiquadFilter();
+    
+                osc.type = 'sawtooth';
+                setAudioParam(osc.frequency, freq, start);
+                setAudioParam(gain.gain, 0, start);
+                rampAudioParam(gain.gain, 0.6, start + 0.05);
+                rampAudioParam(gain.gain, 0, start + dur);
+                filter.type = 'lowpass';
+                setAudioParam(filter.frequency, 500, start);
+    
+                osc.connect(filter).connect(gain).connect(masterGain);
+                osc.start(start);
+                osc.stop(start + dur);
+            } catch (error) {
+                console.error('Error in scheduleBassNote:', error);
+            }
+        };
+    
+        // -------------------------
+        // Effect Functions
+        // -------------------------
+        
+        const applyFrequencyModulation = (osc, start, dur) => {
+            try {
+                const modulator = context.createOscillator();
+                const modGain = context.createGain();
+    
+                // Advanced FM synthesis parameters
+                const modFrequency = clamp(random() * 200 + 50, 50, 400); // Modulator frequency
+                const modIndex = clamp(random() * 100 + 50, 50, 200); // Modulation index
+    
+                setAudioParam(modulator.frequency, modFrequency, start);
+                setAudioParam(modGain.gain, modIndex, start);
+                modulator.connect(modGain).connect(osc.frequency);
+                modulator.start(start);
+                modulator.stop(start + dur);
+            } catch (error) {
+                console.error('Error in applyFrequencyModulation:', error);
+            }
+        };
+    
+        const applyFilterModulation = (gainNode, start, dur) => {
+            try {
+                const filter = context.createBiquadFilter();
+                const mod = context.createOscillator();
+                const modGain = context.createGain();
+                filter.type = 'lowpass';
+                setAudioParam(filter.frequency, 1000, start);
+                setAudioParam(mod.frequency, clamp(random() * 3 + 0.1, 0.1, 20), start);
+                setAudioParam(modGain.gain, clamp(random() * 300 + 100, 10, 2000), start);
+                mod.connect(modGain).connect(filter.frequency);
+                gainNode.disconnect();
+                gainNode.connect(filter).connect(masterGain);
+                mod.start(start);
+                mod.stop(start + dur);
+            } catch (error) {
+                console.error('Error in applyFilterModulation:', error);
+            }
+        };
+    
+        const applyChorusEffect = (gainNode, start, dur) => {
+            try {
+                const delayNode = context.createDelay();
+                const lfo = context.createOscillator();
+                const lfoGain = context.createGain();
+                const wetGain = context.createGain();
+    
+                setAudioParam(delayNode.delayTime, 0.02, start);
+                setAudioParam(lfo.frequency, clamp(random() * 0.5 + 0.1, 0.1, 5), start);
+                setAudioParam(lfoGain.gain, 0.01, start);
+                setAudioParam(wetGain.gain, 0.5, start);
+    
+                lfo.connect(lfoGain).connect(delayNode.delayTime);
+                lfo.start(start);
+                lfo.stop(start + dur);
+    
+                gainNode.connect(delayNode).connect(wetGain).connect(masterGain);
+            } catch (error) {
+                console.error('Error in applyChorusEffect:', error);
+            }
+        };
+    
+        const applyLeslieEffect = (gainNode, start, dur) => {
+            try {
+                const panner = context.createStereoPanner();
+                const lfo = context.createOscillator();
+                setAudioParam(lfo.frequency, clamp(random() * 5 + 0.5, 0.5, 10), start);
+                lfo.connect(panner.pan);
+                gainNode.connect(panner).connect(masterGain);
+                lfo.start(start);
+                lfo.stop(start + dur);
+            } catch (error) {
+                console.error('Error in applyLeslieEffect:', error);
+            }
+        };
+    
+        const applyHarmonizer = (osc, start, dur, masterGain) => {
+            try {
+                const intervals = [0, 4, 7]; // Unison, major third, perfect fifth
+                intervals.forEach(interval => {
+                    const harmonizedOsc = context.createOscillator();
+                    const gain = context.createGain();
+                    harmonizedOsc.type = osc.type;
+                    setAudioParam(harmonizedOsc.frequency, osc.frequency.value * Math.pow(2, interval / 12), start);
+                    setAudioParam(gain.gain, 0.5, start);
+                    harmonizedOsc.connect(gain).connect(masterGain);
+                    harmonizedOsc.start(start);
+                    harmonizedOsc.stop(start + dur);
+                });
+            } catch (error) {
+                console.error('Error in applyHarmonizer:', error);
+            }
+        };
+    
+        const applyDelayEffect = (gainNode, start, dur) => {
+            try {
+                const delayNode = context.createDelay();
+                const feedbackGain = context.createGain();
+                const wetGain = context.createGain();
+    
+                setAudioParam(delayNode.delayTime, clamp(random() * 0.5 + 0.1, 0.1, 0.6), start);
+                setAudioParam(feedbackGain.gain, clamp(random() * 0.5 + 0.2, 0.2, 0.7), start);
+                setAudioParam(wetGain.gain, 0.5, start);
+    
+                delayNode.connect(feedbackGain).connect(delayNode);
+                delayNode.connect(wetGain);
+                feedbackGain.connect(delayNode);
+    
+                gainNode.connect(delayNode).connect(wetGain).connect(masterGain);
+            } catch (error) {
+                console.error('Error in applyDelayEffect:', error);
+            }
+        };
+    
+        const applyReverbEffect = (gainNode, start, dur) => {
+            try {
+                const convolver = context.createConvolver();
+                const noiseBuffer = context.createBuffer(2, context.sampleRate * 3, context.sampleRate);
+                for (let channel = 0; channel < noiseBuffer.numberOfChannels; channel++) {
+                    const data = noiseBuffer.getChannelData(channel);
+                    for (let i = 0; i < data.length; i++) {
+                        data[i] = random() * 2 - 1;
+                    }
+                }
+                convolver.buffer = noiseBuffer;
+                gainNode.connect(convolver).connect(masterGain);
+            } catch (error) {
+                console.error('Error in applyReverbEffect:', error);
+            }
+        };
+    
+        // -------------------------
+        // Global Effects Chain Creation
+        // -------------------------
+        const createGlobalEffectsChain = () => {
+            const effects = [];
+            if (random() > 0.5) {
+                const reverb = createReverbEffect();
+                effects.push(reverb);
+            }
+            if (random() > 0.5) {
+                const delay = createDelayEffect();
+                effects.push(delay);
+            }
+            if (random() > 0.5) {
+                const chorus = createChorusEffectGlobal();
+                effects.push(chorus);
+            }
+    
+            if (effects.length === 0) {
+                const bypass = context.createGain();
+                bypass.gain.setValueAtTime(1, context.currentTime);
+                return bypass;
+            }
+    
+            let inputNode = context.createGain();
+            let outputNode = inputNode;
+    
+            effects.forEach(effect => {
+                outputNode.connect(effect.input);
+                outputNode = effect.output;
+            });
+    
+            return outputNode;
+        };
+    
+        // -------------------------
+        // Reverb Effect Creation
+        // -------------------------
+        const createReverbEffect = () => {
+            const convolver = context.createConvolver();
+            const noiseBuffer = context.createBuffer(2, context.sampleRate * 3, context.sampleRate);
+            for (let channel = 0; channel < noiseBuffer.numberOfChannels; channel++) {
+                const data = noiseBuffer.getChannelData(channel);
+                for (let i = 0; i < data.length; i++) {
+                    data[i] = random() * 2 - 1;
+                }
+            }
+            convolver.buffer = noiseBuffer;
+            return { input: convolver, output: convolver };
+        };
+    
+        // -------------------------
+        // Delay Effect Creation
+        // -------------------------
+        const createDelayEffect = () => {
+            const delayNode = context.createDelay();
+            const feedbackGain = context.createGain();
+            const wetGain = context.createGain();
+    
+            setAudioParam(delayNode.delayTime, clamp(random() * 0.5 + 0.1, 0.1, 0.6), context.currentTime);
+            setAudioParam(feedbackGain.gain, clamp(random() * 0.5 + 0.2, 0.2, 0.7), context.currentTime);
+            setAudioParam(wetGain.gain, 0.5, context.currentTime);
+    
+            delayNode.connect(feedbackGain).connect(delayNode);
+            delayNode.connect(wetGain);
+            feedbackGain.connect(delayNode);
+    
+            return { input: delayNode, output: wetGain };
+        };
+    
+        // -------------------------
+        // Chorus Effect Creation for Global Effects
+        // -------------------------
+        const createChorusEffectGlobal = () => {
+            const delayNode = context.createDelay();
+            const lfo = context.createOscillator();
+            const lfoGain = context.createGain();
+            const wetGain = context.createGain();
+    
+            setAudioParam(delayNode.delayTime, 0.02, context.currentTime);
+            setAudioParam(lfo.frequency, clamp(random() * 0.5 + 0.1, 0.1, 5), context.currentTime);
+            setAudioParam(lfoGain.gain, 0.01, context.currentTime);
+            setAudioParam(wetGain.gain, 0.5, context.currentTime);
+    
+            lfo.connect(lfoGain).connect(delayNode.delayTime);
+            lfo.start();
+            lfo.stop(context.currentTime + 180); // Match loop duration
+    
+            return { input: delayNode, output: wetGain };
+        };
+    
+        // -------------------------
+        // Cleanup Function
+        // -------------------------
+        const cleanupLoop = () => {
+            try {
+                if (currentLoopTimeout) {
+                    clearTimeout(currentLoopTimeout);
+                    currentLoopTimeout = null;
+                }
+                isLoopActive = false;
+                if (generateButton) {
+                    generateButton.disabled = false;
+                }
+            } catch (err) {
+                console.warn('Error during loop cleanup:', err);
+            }
+        };
+    
+        // -------------------------
+        // Throttled Logging Setup
+        // -------------------------
+        // Initialize a timer to log every 10 seconds
+        setInterval(() => {
+            console.log('--- 10-Second Performance Report ---');
+            console.log(`Is Loop Active: ${isLoopActive}`);
+            console.log(`Current Loop Timeout: ${currentLoopTimeout}`);
+            console.log(`Audio Context State: ${context.state}`);
+            console.log(`Current BPM: ${isLoopActive ? 'In Progress' : 'N/A'}`);
+            // Add more relevant metrics as needed
+            console.log('-------------------------------------');
+        }, 10000); // 10,000 milliseconds = 10 seconds
+    
+        // Optionally, log when the page is unloaded to ensure cleanup
+        window.addEventListener('beforeunload', () => {
+            console.log('Page is unloading. Cleaning up any active loops.');
+            cleanupLoop();
+        });
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
