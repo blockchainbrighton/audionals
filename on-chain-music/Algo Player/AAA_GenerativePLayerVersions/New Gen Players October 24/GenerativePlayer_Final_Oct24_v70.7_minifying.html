@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Audionals - Web3 Music Player</title>
+<link rel="stylesheet" href="/content/7a309a161e838ba93740684338b3d97f3c1226c046d8b1137afc2353b4bf16e1i0">
+<style>
+:root {--panel-bg-color: #333;--panel-text-color: #fff;--track-list-panel-bg-color: #444;--button-bg-color: #444;--button-hover-bg-color: #555;--button-active-bg-color: #777;--input-bg-color: #555;--border-radius: 8px;--padding: 10px;--box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);--transition-duration: 0.3s;--text-color: #fff;--bpm-bg-color: orange;--seed-bg-color: green;--font-size: 16px;}#seed-management-panel, #track-list-panel {position: fixed;background-color: var(--panel-bg-color);color: var(--panel-text-color);padding: var(--padding);border-radius: var(--border-radius);z-index: 10000;box-shadow: var(--box-shadow);transition: all var(--transition-duration) ease;}#seed-management-panel {top: 10px;right: 10px;width: 320px;}#track-list-panel {bottom: 10px;left: 10px;width: 300px;background-color: var(--track-list-panel-bg-color);}.hidden {display: none;}@media (max-width: 600px) {#seed-management-panel, #track-list-panel {width: 90%;left: 5%;right: 5%;}}#seed-mgmt-canvas {width: 100%;height: 100px;border: 1px solid #555;border-radius: 4px;background-color: #222;}#previous-seeds-container {margin-top: 15px;}#previous-seeds-container h3, #seed-input-section h3 {margin-bottom: 5px;}#previous-seeds-container ul {list-style: none;padding: 0;max-height: 150px;overflow-y: auto;border: 1px solid #555;border-radius: 4px;background-color: #444;}#previous-seeds-container li {display: flex;justify-content: space-between;align-items: center;padding: 5px 10px;border-bottom: 1px solid #555;}#previous-seeds-container li:last-child {border-bottom: none;}#previous-seeds-container button {background-color: #666;color: #fff;border: none;border-radius: 4px;padding: 2px 6px;cursor: pointer;transition: background-color var(--transition-duration) ease;margin-left: 10px;}#previous-seeds-container button:hover {background-color: #888;}#seed-input-section {margin-top: 15px;}#seed-input {width: 100%;padding: 8px;margin-bottom: 5px;border: 1px solid #555;border-radius: 4px;background-color: var(--input-bg-color);color: var(--panel-text-color);transition: border 0.2s ease;}#seed-input:focus {border: 2px solid #00f;outline: none;}#clear-seeds-section {margin-top: 15px;text-align: center;}#clear-seeds-button {width: 100%;padding: 8px;background-color: #b22222;color: #fff;border: none;border-radius: 4px;cursor: pointer;transition: background-color var(--transition-duration) ease;margin-top: 5px;}#clear-seeds-button:hover {background-color: #ff6347;}button {background-color: var(--button-bg-color);color: var(--panel-text-color);border: none;border-radius: 4px;cursor: pointer;transition: background-color var(--transition-duration) ease;padding: 10px 15px;margin: 5px;}button:hover {background-color: var(--button-hover-bg-color);}button:active {background-color: var(--button-active-bg-color);}button:focus {outline: 2px solid #00f;}#loadingSpinner {z-index: 1000;}#artworkCover img {max-width: 100%;height: auto;border-radius: 4px;}#nowPlayingContainer {position: fixed;bottom: 0;left: 50%;transform: translateX(-50%);background-color: rgba(20, 20, 20, 0.95);color: #fff;padding: 10px;display: flex;flex-direction: column;justify-content: center;align-items: center;box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.5);z-index: 10000;text-align: center;border-radius: 8px;width: 90%;max-width: 600px;transition: background-color 0.3s ease;}#nowPlayingContainer:hover {background-color: rgba(20, 20, 20, 1);}#nowPlayingText {display: flex;flex-direction: column;align-items: center;margin: 0;padding: 5px;text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);}#nowPlayingContainer .current-seed {display: block;font-size: 0.9em;color: #ccc;margin-bottom: 5px;}#nowPlayingContainer .title {display: block;font-size: 1.2em;font-weight: bold;color: #fff;}
+</style>
+
+</head>
+<body>
+
+<HTMLsection>
+<span class="songTitle">The Infinite Ordinal Remix</span><h1>Audionals</h1><div id="seed-management-panel" class="hidden" role="dialog" aria-labelledby="seed-panel-title" aria-hidden="true"><h2 id="seed-panel-title">Seed Management</h2><canvas id="seed-mgmt-canvas" width="300" height="100" aria-label="Seed and BPM Information"></canvas><div id="previous-seeds-container"><h3>Previous Seeds</h3><ul></ul></div><div id="seed-input-section"><h3>Load a Specific Seed</h3><input type="text" id="seed-input" placeholder="Enter 16-digit Seed" aria-label="Enter Seed"><button id="load-seed-button" aria-label="Load Seed">Load Seed</button></div><div class="bpm-selection"><h3>Select BPM(s) to Filter</h3><div class="bpm-options, hidden"><div class="bpm-option"><input type="checkbox" id="bpm-60" value="60" checked="checked"><label for="bpm-60">60 BPM</label></div><div class="bpm-option"><input type="checkbox" id="bpm-120" value="120" checked="checked"><label for="bpm-120">120 BPM</label></div><div class="bpm-option"><input type="checkbox" id="bpm-140" value="140" checked="checked"><label for="bpm-140">140 BPM</label></div><div class="bpm-option"><input type="checkbox" id="bpm-160" value="160" checked="checked"><label for="bpm-160">160 BPM</label></div><div class="bpm-option"><input type="checkbox" id="bpm-180" value="180" checked="checked"><label for="bpm-180">180 BPM</label></div><div class="bpm-option"><input type="checkbox" id="bpm-240" value="240" checked="checked"><label for="bpm-240">240 BPM</label></div></div></div><div id="clear-seeds-section"><button id="clear-seeds-button" aria-label="Clear Previous Seeds">Clear Previous Seeds</button></div><div id="generate-mixes-section" style="margin-top:15px;text-align:center"><button id="generate-mixes-button" aria-label="Generate Mixes">Generate Mixes</button></div></div><div id="loadingSpinner"></div><div id="artworkCover"><img id="artworkImage" src="" alt="Artwork Cover"></div><div id="trackListingPanel"><h2>Track Listings:</h2><div id="metadataContent"></div></div><div id="nowPlayingContainer"><span class="current-seed">Seed: N/A</span><span class="title">The Infinite Ordinal Remix</span><span class="artistName">melophonic</span><span class="songBPM">BPM: N/A</span><span class="timeLeft">Time Left: N/A</span><span class="songTitle" style="display:none"></span></div><div id="buttonContainer"><button id="playButton" onclick="globalData.togglePlayback()" aria-label="Play or Stop Music">Play / Stop</button><button id="prevButton" onclick="handlePreviousSong()" aria-label="Previous Song">Previous</button><button id="nextButton" onclick="handleNextSong()" aria-label="Next Song">Next</button><button id="toggle-track-panel-button" onclick="toggleTrackListAndPopulate()" class="hidden" aria-label="Toggle Track List Panel">Track List</button><button id="toggle-seed-panel-button" onclick='togglePanel("seed-management-panel")' aria-label="Toggle Seed Management Panel">Seed Panel</button></div><div id="track-list-panel" class="hidden" role="dialog" aria-labelledby="track-list-title" aria-hidden="true"><h2 id="track-list-title" class="hidden">Track List</h2><div id="track-list-container"></div></div>
+</HTMLsection>
+
+<!-- Songs and Artwork -->
+<script src="/content/616ef4c1bef02cb6c0f785ef76b98df4e379e8f01e2b31e2ae9e68449485f2bci0"></script> 
+
+    
+<!--Global Data -->
+<script>
+const globalData=window.globalData={isPlaying:!1,currentSongIndex:0,songsArray:[],audioBuffers:{},reverseAudioBuffers:{},audioContext:new(window.AudioContext||window.webkitAudioContext),masterGain:null,gainNodes:{},startPlayback:null,stopPlayback:null,togglePlayback:null,resetPlayback:null,isArtworkCover:!0,isVisualiserCover:!1};globalData.masterGain=globalData.audioContext.createGain(),globalData.masterGain.connect(globalData.audioContext.destination),globalData.nextSong=function(){this.currentSongIndex=(this.currentSongIndex+1)%this.songsArray.length,log(`Switched to next song: Index ${this.currentSongIndex}`)},globalData.previousSong=function(){this.currentSongIndex=(this.currentSongIndex-1+this.songsArray.length)%this.songsArray.length,log(`Switched to previous song: Index ${this.currentSongIndex}`)};
+</script>
+    
+<!-- Seed Management -->
+<script>
+(()=>{const e=e=>console.log(`[${(new Date).toISOString()}] ${e}`),t="hidden";window.togglePanel=e=>{const n=document.getElementById(e);if(n){n.classList.toggle(t);const e=n.classList.contains(t);n.setAttribute("aria-hidden",e)}else console.error(`${e.replace(/-/g," ")} not found.`)},window.populateTrackList=()=>{const e=document.getElementById("track-list-container");e.innerHTML="";const t=globalData?.songsArray;t?.length?t.forEach((({id:t,artist:n})=>{const o=document.createElement("div");o.className="track-item",o.innerHTML=`<div class="track-name">${t}</div><div class="track-artist">${n}</div>`,e.appendChild(o)})):e.textContent="No tracks available."},window.toggleTrackListAndPopulate=()=>{togglePanel("track-list-panel");const e=document.getElementById("track-list-panel");e&&!e.classList.contains(t)&&populateTrackList()};const n=()=>{let e="";for(;e=Array.from({length:16},(()=>Math.floor(10*Math.random()))).join(""),!(BigInt(e)<=BigInt(Number.MAX_SAFE_INTEGER)););return e},o=e=>new URLSearchParams(window.location.search).get(e),l=o("seed");let r=[];if(l){r=l.split(/[\s,]+/).map((e=>e.trim())).filter((e=>""!==e));for(let t=0;t<r.length;t++){const o=r[t];(!/^\d{16}$/.test(o)||BigInt(o)>BigInt(Number.MAX_SAFE_INTEGER))&&(e(`Invalid seed provided: "${o}". Generating a new seed.`),r[t]=n())}}else r=[n()];if(window.seedList=r,window.seed=r[0],e(`Using seed(s): ${window.seedList.join(", ")}`),o("seed")){const e=new URL(window.location);e.searchParams.delete("seed"),history.replaceState(null,"",e.toString())}const i=[80,100,120,140,160,180,240];window.globalData||(window.globalData={}),window.globalData.songsArray=r.map(((t,n)=>{const o=(t=>{const n=t.split("").reduce(((e,t)=>{const n=parseInt(t,10);return(10*e+(isNaN(n)?0:n))%1000000007}),0),o=i[n%i.length];return e(`Seed: ${t}, Hash: ${n}, Selected BPM: ${o}`),o})(t);return{seed:t,bpm:o,id:`Song ${n+1}`,artist:"Unknown Artist"}})),void 0===window.globalData.currentSongIndex&&(window.globalData.currentSongIndex=0);const a=()=>{const e=JSON.parse(localStorage.getItem("previousSeeds"))||[];return s(e),e},s=e=>{const t=document.getElementById("previous-seeds-container");if(!t)return;const n=t.querySelector("ul");n&&(n.innerHTML=e.length?e.map((e=>`\n                <li>\n                    <span>${e}</span>\n                    <button onclick="copyToClipboard('${e}')">Copy</button>\n                </li>`)).join(""):"<li>No previous seeds.</li>")};window.copyToClipboard=e=>{navigator.clipboard.writeText(e).then((()=>alert(`Seed copied to clipboard: ${e}`))).catch((e=>console.error("Could not copy text:",e)))};const d=()=>{confirm("Are you sure you want to clear all previous seeds?")&&(localStorage.removeItem("previousSeeds"),s([]),e("All previous seeds have been cleared."))},c=(t,n,o="The Infinite Ordinal Remix")=>{const l=document.getElementById("seed-mgmt-canvas");if(!l)return;const r=l.getContext("2d");r.clearRect(0,0,l.width,l.height),r.fillStyle=getComputedStyle(document.documentElement).getPropertyValue("--seed-bg-color")||"green",r.fillRect(0,0,l.width,l.height/2),r.fillStyle=getComputedStyle(document.documentElement).getPropertyValue("--bpm-bg-color")||"orange",r.fillRect(0,l.height/2,l.width,l.height/2),r.fillStyle=getComputedStyle(document.documentElement).getPropertyValue("--text-color")||"white",r.font=`${getComputedStyle(document.documentElement).getPropertyValue("--font-size")||"16px"} Arial`,r.textAlign="center",r.textBaseline="middle",r.fillText(`Seed: ${t}`,l.width/2,l.height/4),r.fillText(`BPM: ${n}`,l.width/2,3*l.height/4),(t=>{const n=a();n.includes(t)||(n.push(t),localStorage.setItem("previousSeeds",JSON.stringify(n)),s(n),e(`Seed saved: ${t}`))})(t);const i=document.querySelector("#nowPlayingContainer .current-seed");i&&(i.textContent=`Seed: ${t}`,e(`Updated current seed display: ${t}`));const d=document.querySelector("#nowPlayingContainer .title");d&&o&&(d.textContent=o,e(`Updated current song title: ${o}`))};window.displaySeedAndBPM=c;const g=e=>/^\d{16}$/.test(e)?!(BigInt(e)>BigInt(Number.MAX_SAFE_INTEGER))||(alert(`Seed must be a number up to ${Number.MAX_SAFE_INTEGER}.`),!1):(alert("Seed must be a 16-digit numeric string."),!1);(()=>{document.addEventListener("DOMContentLoaded",(()=>{if(globalData.songsArray.length>0){const e=globalData.songsArray[globalData.currentSongIndex];c(e.seed,e.bpm,e.id),globalData.currentSongIndex=0}else console.warn("No song mixes generated.");a()})),document.getElementById("clear-seeds-button")?.addEventListener("click",d),document.getElementById("load-seed-button")?.addEventListener("click",(()=>{const e=document.getElementById("seed-input").value.trim();if(!e)return void alert("Please enter a seed or seeds.");const t=e.split(/[\s,]+/).map((e=>e.trim())).filter((e=>""!==e));for(const e of t)if(!g(e))return;const n=new URL(window.location);n.searchParams.set("seed",t.join(",")),window.location.href=n.toString()}));const e=document.getElementById("seed-input");e&&e.addEventListener("keypress",(e=>{"Enter"===e.key&&(e.preventDefault(),document.getElementById("load-seed-button").click())}))})()})();
+</script>
+
+<!-- Seed Display -->
+<script>
+window.updateSeedDisplay=function(){const a=globalData.songsArray[globalData.currentSongIndex];if(a){const e=a.seed,l=a.bpm,n=a.id;displaySeedAndBPM(e,l,n),globalData.currentSeed=e}else console.warn("Current song index is out of bounds.")},window.updateSeedDisplay=updateSeedDisplay,window.handleNextSong=function(){globalData.currentSongIndex=(globalData.currentSongIndex+1)%globalData.songsArray.length,updateSeedDisplay(),globalData.isPlaying&&globalData.resetPlayback({callback:globalData.startPlayback})},window.handlePreviousSong=function(){globalData.currentSongIndex=(globalData.currentSongIndex-1+globalData.songsArray.length)%globalData.songsArray.length,updateSeedDisplay(),globalData.isPlaying&&globalData.resetPlayback({callback:globalData.startPlayback})},document.addEventListener("DOMContentLoaded",(()=>{updateSeedDisplay()}));
+</script>
+
+
+
+
+<!-- Combined Effects Configuration, Audio Effects Module, and GainNode Management -->
+ <script>
+(()=>{window.EffectsModule=window.EffectsModule||{},window.EffectsModule.effectsConfig={pitchShift:{enabled:!0,defaultProbability:.5,shifts:[.25,.5,1,2,4]},harmonize:{enabled:!0,defaultProbability:.0025,intervals:[.25,.5,1,1.5,2,4],maxHarmonyChannels:1},delay:{enabled:!0,defaultProbability:.5,noteValue:"sixteenth",maxDelayRepeats:8},reverse:{enabled:!0,defaultProbability:.3},pan:{enabled:!0,defaultProbability:1,positions:[-1,1]},reverb:{enabled:!0,defaultProbability:.5,decayTimeRange:[1,5],mixRange:[.2,.7]},filter:{enabled:!0,defaultProbability:.7,types:["lowpass","highpass","bandpass"],frequencyRange:[300,8e3],QRange:[1,8]},tremolo:{enabled:!0,defaultProbability:.6,rateRange:[4,12],depthRange:[.6,1]},distortion:{enabled:!1,defaultProbability:.3,amountRange:[1,10]},bitcrusher:{enabled:!0,defaultProbability:.3,bitDepthRange:[2,6],sampleRateRange:[8e3,22050]},chorus:{enabled:!0,defaultProbability:.3,rateRange:[.1,5],depthRange:[.1,1],feedbackRange:[0,.3],mixRange:[0,.8]},leslie:{enabled:!0,defaultProbability:.2,speedRange:[.5,1.5],depthRange:[.5,1],mixRange:[0,1]},delayBpmLinked:{enabled:!0,defaultProbability:.3,delayTimes:["quarter","eighth","sixteenth"],feedbackRange:[.3,.6],mixRange:[0,.7]}},window.EffectsModule.getEffectParams=function(e,a,t,n){const i=this.effectsConfig[e];if(!i||!i.enabled)return null;if(n()<i.defaultProbability){const a={};switch(e){case"pitchShift":a.shifts=i.shifts;break;case"harmonize":a.intervals=i.intervals,a.maxHarmonyChannels=i.maxHarmonyChannels;break;case"delay":a.noteValue=i.noteValue,a.maxDelayRepeats=i.maxDelayRepeats;break;case"chorus":a.rate=n()*(i.rateRange[1]-i.rateRange[0])+i.rateRange[0],a.depth=n()*(i.depthRange[1]-i.depthRange[0])+i.depthRange[0],a.feedback=n()*(i.feedbackRange[1]-i.feedbackRange[0])+i.feedbackRange[0],a.mix=n()*(i.mixRange[1]-i.mixRange[0])+i.mixRange[0];break;case"leslie":a.rotationSpeed=n()*(i.speedRange[1]-i.speedRange[0])+i.speedRange[0],a.depth=n()*(i.depthRange[1]-i.depthRange[0])+i.depthRange[0],a.mix=n()*(i.mixRange[1]-i.mixRange[0])+i.mixRange[0];break;case"delayBpmLinked":a.time=i.delayTimes[Math.floor(n()*i.delayTimes.length)],a.feedback=n()*(i.feedbackRange[1]-i.feedbackRange[0])+i.feedbackRange[0],a.mix=n()*(i.mixRange[1]-i.mixRange[0])+i.mixRange[0]}return{...i,...a}}return null};const e=(e,a,t)=>Math.min(Math.max(e,a),t);window.applyChorusEffect=(e,{rate:a,depth:t,feedback:n,mix:i},o)=>{e.metadata.chorus={rate:a,depth:t,feedback:n,mix:i}},window.applyRandomPitchShift=(e,{shifts:a},t)=>{const n=a[Math.floor(t()*a.length)];e.metadata.playbackSpeed*=n},window.addHarmony=(a,t,n,{intervals:i,maxHarmonyChannels:o},d,l)=>{d.harmonyChannelsAdded>=o||i.forEach((i=>{if(d.harmonyChannelsAdded>=o)return;const l=JSON.parse(JSON.stringify(a));l.id=`${a.id}_harmony_${t}_${i}`,l.metadata.playbackSpeed*=i,l.metadata.volume=e(.5*(l.metadata.volume||1),1),n.channels.push(l),d.harmonyChannelsAdded++,d.totalGain+=l.metadata.volume||1}))},window.applyIntermittentDelay=(e,{noteValue:a,maxDelayRepeats:t},n)=>{const i=6e4/n,o={quarter:i,eighth:i/2,sixteenth:i/4};e.metadata.delay={time:o[a]||i,repeats:t}},window.applyReverseEffect=e=>{e.metadata.requiresReversal=!0},window.applyVolumeChange=(a,{range:t},n)=>{const[i,o]=t,d=n()*(o-i)+i,l=e((a.metadata.volume||1)*d,.5,1);a.metadata.volume=parseFloat(l.toFixed(2))},window.applyPanEffect=(a,{positions:t},n)=>{if(!t||!Array.isArray(t)||0===t.length)return console.warn(`[PanEffect] Invalid or empty 'positions' array for Channel "${a.id}". Assigning default pan value 0.`),void(a.metadata.pan=0);const i=e(t[Math.floor(n()*t.length)],-1,1);a.metadata.pan=parseFloat(i.toFixed(2))},window.applyReverbEffect=(a,{decayTimeRange:t,mixRange:n},i)=>{let o=i()*(t[1]-t[0])+t[0];o=e(o,t[0],t[1]);let d=i()*(n[1]-n[0])+n[0];d=e(d,n[0],n[1]),a.metadata.reverb={decayTime:parseFloat(o.toFixed(2)),mix:parseFloat(d.toFixed(2))}},window.applyFilterEffect=(a,{types:t,frequencyRange:n,QRange:i},o)=>{const d=t[Math.floor(o()*t.length)];let l=o()*(n[1]-n[0])+n[0];l=e(l,n[0],n[1]);let r=o()*(i[1]-i[0])+i[0];r=e(r,i[0],i[1]),a.metadata.filter={type:d,frequency:parseFloat(l.toFixed(2)),Q:parseFloat(r.toFixed(2))}},window.applyTremoloEffect=(a,{rateRange:t,depthRange:n},i)=>{let o=i()*(t[1]-t[0])+t[0];o=e(o,t[0],t[1]);let d=i()*(n[1]-n[0])+n[0];d=e(d,n[0],n[1]),a.metadata.tremolo={rate:parseFloat(o.toFixed(2)),depth:parseFloat(d.toFixed(2))}},window.applyDistortionEffect=(a,{amountRange:t},n)=>{let i=n()*(t[1]-t[0])+t[0];i=e(i,t[0],t[1]),a.metadata.distortion={amount:parseFloat(i.toFixed(2))}},window.applyBitcrusherEffect=(a,{bitDepthRange:t,sampleRateRange:n},i)=>{let o=Math.floor(i()*(t[1]-t[0]+1))+t[0];o=e(o,t[0],t[1]);let d=i()*(n[1]-n[0])+n[0];d=e(d,n[0],n[1]),d=parseFloat(d.toFixed(0)),a.metadata.bitcrusher={bitDepth:o,sampleRate:d}},window.applyLeslieEffect=(e,{rotationSpeed:a,depth:t,mix:n},i)=>{e.metadata.leslie={rotationSpeed:a,depth:t,mix:n}},window.applyBpmLinkedDelay=(e,{time:a,feedback:t,mix:n},i)=>{e.metadata.delayBpmLinked={time:a,feedback:t,mix:n}},window.GainNodeHelper=(()=>{const e=window.globalData||(window.globalData={gainNodes:{},audioContext:new(window.AudioContext||window.webkitAudioContext),masterGain:null});e.masterGain||(e.masterGain=e.audioContext.createGain(),e.masterGain.connect(e.audioContext.destination));const a=a=>{const t=a.id;a.channels&&0!==a.channels.length?(e.gainNodes[t]=e.gainNodes[t]||{},a.channels.forEach((a=>{if(!e.gainNodes[t][a.id]){const n=e.audioContext.createGain();n.gain.value=a.metadata.volume||1,n.connect(e.masterGain),e.gainNodes[t][a.id]=n}}))):console.warn(`[GainNodeHelper] No channels found for Song "${t}".`)};return{createGainNodesForSong:a,prepareNextSongGainNodes:e=>{a(e)},cleanupGainNodesForSong:a=>{const t=e.gainNodes[a];t?(Object.values(t).forEach((e=>e.disconnect())),delete e.gainNodes[a]):console.warn(`[GainNodeHelper] No GainNodes found to clean up for Song "${a}".`)}}})(),document.dispatchEvent(new Event("effectsLoaded"))})();
+</script>
+
+<!-- GainNode Helpers (gainNodeHelpers.js) -->
+<script>
+window.GainNodeHelper=(()=>{const n=window.globalData||(window.globalData={gainNodes:{},audioContext:new(window.AudioContext||window.webkitAudioContext),masterGain:null});n.masterGain||(n.masterGain=n.audioContext.createGain(),n.masterGain.connect(n.audioContext.destination),console.log("[GainNodeHelper] Master Gain node created and connected to AudioContext destination."));const e={targetLoudness:.8,transientThreshold:1.2,smoothingFactor:.7},o=(o,t=!1)=>{const i=o.id;console.log(`[GainNodeHelper] Initializing GainNodes for Song ID: ${i}`),t?console.log(`[GainNodeHelper] Preparing next song: ${i}`):console.log(`[GainNodeHelper] Setting current song: ${i}`),o.channels&&o.channels.length>0?(n.gainNodes[i]||(n.gainNodes[i]={}),o.channels.forEach((e=>{if(!n.gainNodes[i][e.id]){const o=n.audioContext.createGain();o.gain.value=e.metadata.volume||1,o.connect(n.masterGain),n.gainNodes[i][e.id]=o,console.log(`[GainNodeHelper] GainNode created for Channel "${e.id}" of Song "${i}".`)}})),(n=>{if(!n.channels||0===n.channels.length)return void console.warn(`[GainNodeHelper] No channels to normalize for Song "${n.id}".`);const o=n.channels.map((n=>n.metadata.volume||1)),t=Math.max(...o);n.channels.forEach((o=>{const i=(o.metadata.volume||1)/t*e.targetLoudness;a(n.id,o.id,i),console.log(`[GainNodeHelper] Normalized volume for Channel "${o.id}" to ${i.toFixed(2)}.`)}))})(o),(o=>{o.channels&&0!==o.channels.length?o.channels.forEach((a=>{const t=n.gainNodes?.[o.id]?.[a.id];if(t){const o=Math.min(t.gain.value*e.transientThreshold,e.targetLoudness);t.gain.setTargetAtTime(o,n.audioContext.currentTime,e.smoothingFactor),console.log(`[GainNodeHelper] Applied transient control for Channel "${a.id}", adjusted to ${o.toFixed(2)}.`)}})):console.warn(`[GainNodeHelper] No channels for transient control for Song "${o.id}".`)})(o),console.log(`[GainNodeHelper] All GainNodes initialized for Song ID: ${i}`)):console.warn(`[GainNodeHelper] No channels found for Song "${i}".`)},a=(e,o,a)=>{const t=n.gainNodes?.[e]?.[o];t?(t.gain.setValueAtTime(a,n.audioContext.currentTime),console.log(`[GainNodeHelper] Updated gain for Channel "${o}" of Song "${e}" to ${a.toFixed(2)}.`)):console.warn(`[GainNodeHelper] No GainNode found for Channel "${o}" of Song "${e}".`)};return{createGainNodesForSong:n=>o(n,!1),prepareNextSongGainNodes:n=>o(n,!0),cleanupGainNodesForSong:e=>(e=>{const o=n.gainNodes[e];o?(Object.values(o).forEach((n=>n.disconnect())),delete n.gainNodes[e],console.log(`[GainNodeHelper] Cleaned up GainNodes for Song ID: ${e}`)):console.warn(`[GainNodeHelper] No GainNodes found to clean up for Song ID: ${e}.`)})(e),setChannelGain:(n,e,o)=>a(n,e,o),setMasteringControls:n=>Object.assign(e,n)}})();
+</script>
+
+<!-- Main Script (main.js) -->
+<script>
+(async()=>{const e=window.globalData;e.audioContext;await new Promise((e=>{window.EffectsModule&&window.EffectsModule.effectsConfig?e():document.addEventListener("effectsLoaded",e,{once:!0})}));const n={gainReductionPerLayer:.7,maxLayers:4};const t=new Set(["7c42769c1763cc8f045aada7914e8158223e45e7a4f197b49f918b1c005d36fci0","3364803cb3032ce95f4138a214c15a9b36dcb70f574a477f27615d448e1cdeb8i0"]),a=["projectName","artistName","projectBPM","currentSequence","channelURLs","channelVolume","channelPlaybackSpeed","trimSettings","projectChannelNames","startSliderValue","endSliderValue","totalSampleDuration","start","end","projectSequences","steps"],o=a.reduce(((e,n,t)=>(e[n]=t,e)),{}),r=Array.from({length:16},((e,n)=>String.fromCharCode(65+n))),i=r.reduce(((e,n,t)=>(e[n]=t,e)),{}),s=({projectSequences:e})=>{const n=new Set,t=[];return Object.keys(e).sort(((e,n)=>+e.slice(9)-+n.slice(9))).forEach((a=>{Object.entries(e[a]).forEach((([e,{steps:a}])=>{a.forEach((a=>{if("number"==typeof a||void 0!==a?.index){const o=`${e}_${a.reverse?"r":"f"}`;n.has(o)||(n.add(o),t.push({channelId:e,reverse:a.reverse||!1}))}}))}))})),t},l=(new Map,songDataUrls.filter((e=>e.trim()&&!e.trim().startsWith("//"))));if(l.length){window.pako||await async function(){try{const e=await fetch("/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0"),n=await e.text(),t=(new DOMParser).parseFromString(n,"text/html").querySelector("script");if(!t||!t.textContent.includes("pako"))throw new Error("Pako library not found.");document.head.append(Object.assign(document.createElement("script"),{textContent:t.textContent})),console.log("[Initialization] Pako library loaded successfully.")}catch(e){console.error("[Initialization] Error loading Pako:",e)}}();const m=(await Promise.all(l.map((async(e,n)=>{try{const t=await(async e=>{try{const n=await fetch(e);if(!n.ok)throw new Error(`Network error for ${e}`);const t=new Uint8Array(await n.arrayBuffer()),r=window.pako.inflate(t),s=new TextDecoder("utf-8").decode(r);return(e=>{const n=e=>Array.isArray(e)?e.map(n):e&&"object"==typeof e?Object.entries(e).reduce(((e,[t,r])=>{const s=a[t]||t;return e[s]="projectSequences"===s?Object.fromEntries(Object.entries(r).map((([e,n])=>[`Sequence${e.replace(/^s/,"")}`,Object.fromEntries(Object.entries(n).map((([e,n])=>{const t=(n[o.steps]||[]).flatMap((e=>{if("number"==typeof e)return e;if(e?.r){const[n,t]=e.r;return Array.from({length:t-n+1},((e,t)=>n+t))}return"string"==typeof e&&e.endsWith("r")?{index:parseInt(e.slice(0,-1),10),reverse:!0}:[]}));return[`ch${i[e]}`,{steps:t}]})))]))):n(r),e}),{}):e;return n(e)})(JSON.parse(s))}catch(n){throw console.error(`[Initialization] Error fetching/deserializing ${e}:`,n),n}})(e);return{data:t,index:n}}catch(n){return console.error(`[Initialization] Failed to fetch/process ${e}:`,n),null}}))).then((e=>{const n=e.filter(Boolean);if(!n.length)throw new Error("[Initialization] No valid data.");return n}))).sort(((e,n)=>e.index-n.index)).map((({data:e,index:n})=>{const{projectName:a="The Infinite Ordinal",artistName:o="melophonic",projectBPM:i=120,projectSequences:s={},channelURLs:l=[],channelVolume:c=[],channelPlaybackSpeed:d=[],trimSettings:p={}}=e,m=r.map(((e,n)=>{const a=Object.entries(s).reduce(((e,[t,a])=>{const o=a[`ch${n}`];return o&&e.push({sequenceName:t,steps:o.steps}),e}),[]),o={volume:c[n]??1,playbackSpeed:d[n]??1,trimStartTime_Percentage:p[n]?.start||0,trimEndTime_Percentage:p[n]?.end||100,requiresReversal:a.some((e=>e.steps.some((e=>"object"==typeof e&&e.reverse)))),channelSequence:a,originalBPM:i},r=l[n];return t.has(r)&&(o.isLoop=!0),{id:e,url:r||"URL_not_found",metadata:o}}));return{id:`Song ${n+1}: ${a}`,artist:o,bpm:i,totalSequences:Object.keys(s).length,totalChannels:m.length,channels:m,projectSequences:s}})).flatMap((e=>e.channels));function c(e){let n=e;const t=6364136223846793005n,a=1442695040888963407n,o=18446744073709551616n;return function(){return n=(t*n+a)%o,Number(n)/Number(o)}}const u=(e,n,t)=>{const a=[...e];for(let e=a.length-1;e>0;e--){const n=Math.floor(t()*(e+1));[a[e],a[n]]=[a[n],a[e]]}return a.slice(0,n)};function d(e,n=100){const t=[e];let a;try{a=BigInt(e)}catch(n){console.error(`[Seed Generation] Invalid initial seed "${e}". Defaulting to 0n.`),a=0n}for(let e=1;e<n;e++){a+=1n;let e=a.toString();e.length<16?e=e.padStart(16,"0"):e.length>16&&(e=e.slice(-16)),t.push(e)}return t}async function p(e){console.log(`[debugSeed][generateMixBySeed] Generating mix with seed "${e}"`);const t=[60,120,140,160,180,240],a=[];let o;try{o=BigInt(e)}catch(n){console.error(`[seedDebug] Invalid seed string: "${e}". Using base seed 0.`),o=0n}const r=o||1n,i=c(r),s=(e=>{const n=c(e);return t[Math.floor(n()*t.length)]})(r),l=u(m,24,i),d=[{startSeq:1,count:4},{startSeq:5,count:8},{startSeq:9,count:12},{startSeq:13,count:16}].flatMap((({startSeq:e,count:n})=>Array.from({length:n},((n,t)=>{const a=l[t];return a?{channel:JSON.parse(JSON.stringify(a)),activationSeq:e}:null})).filter(Boolean)));let p=[...new Set(d.flatMap((({channel:e})=>e.metadata.channelSequence?.map((e=>e.sequenceName))||[])))].sort(((e,n)=>(parseInt(e.replace("Sequence",""))||0)-(parseInt(n.replace("Sequence",""))||0)));p=p.slice(0,44);const f={id:`The Infinite Ordinal Remix #${e}`,projectName:"The Infinite Ordinal",artist:"melophonic",bpm:s,totalSequences:p.length,totalChannels:d.length,channels:[],projectSequences:Object.fromEntries(p.map((e=>[e,{}]))),seed:e,muteSchedule:[]},h={harmonyChannelsAdded:0,maxHarmonyChannels:window.EffectsModule?.effectsConfig?.harmonize?.maxHarmonyChannels||2,totalGain:0,maxTotalGain:1,channelLayers:{}};return await Promise.all(d.map((async({channel:e,activationSeq:t},a)=>{const o=`ch${a}`,r={id:o,url:e.url,metadata:{...e.metadata,originalBPM:f.bpm,activationSeq:t,isMuted:!0}};await function(e,t,a,o,r,i,s){const l=new Set(["harmonize","delay","delayBpmLinked"]),c=[{name:"pitchShift",applyFn:(e,n)=>applyRandomPitchShift(e,n,s)},{name:"harmonize",applyFn:(e,n)=>addHarmony(e,t,a,n,i,s)},{name:"delay",applyFn:(e,n)=>applyIntermittentDelay(e,n,r)},{name:"reverse",applyFn:(e,n)=>applyReverseEffect(e)},{name:"filter",applyFn:(e,n)=>applyFilterEffect(e,n,s)},{name:"tremolo",applyFn:(e,n)=>applyTremoloEffect(e,n,s)},{name:"distortion",applyFn:(e,n)=>applyDistortionEffect(e,n,s)},{name:"bitcrusher",applyFn:(e,n)=>applyBitcrusherEffect(e,n,s)},{name:"pan",applyFn:(e,n)=>applyPanEffect(e,n,s)},{name:"reverb",applyFn:(e,n)=>applyReverbEffect(e,n,s)},{name:"volumeChange",applyFn:(e,n)=>applyVolumeChange(e,n,s)},{name:"chorus",applyFn:(e,n)=>applyChorusEffect(e,n,s)},{name:"leslie",applyFn:(e,n)=>applyLeslieEffect(e,n,r,s)},{name:"delayBpmLinked",applyFn:(e,n)=>applyBpmLinkedDelay(e,n,r,s)}].sort((()=>.5-Math.random()));let d=0;for(const t of c){if(d>=3)break;const c=window.EffectsModule.getEffectParams(t.name,o,r,s);if(c&&(t.applyFn(e,c),d++,l.has(t.name))){i.channelLayers[e.id]||(i.channelLayers[e.id]=1),i.channelLayers[e.id]<n.maxLayers&&i.channelLayers[e.id]++;const o=i.channelLayers[e.id],r=1/o*n.gainReductionPerLayer**(o-1);e.metadata.volume=r,GainNodeHelper.setChannelGain(a.id,e.id,r),console.log(`[Effects][Song: "${a.id}"] Applied duplication effect "${t.name}" to Channel "${e.id}". Layers: ${o}, New Gain: ${r.toFixed(2)}`)}}if(i.totalGain>1){const n=1/i.totalGain;e.metadata.volume=(e.metadata.volume||1)*n,console.log(`[Normalization][Song: "${a.id}"] Normalized Channel "${e.id}" volume by factor ${n.toFixed(2)} to maintain total gain within 1.`)}i.totalGain+=e.metadata.volume||1,e.metadata.volume<.5?(e.metadata.volume=.5,console.log(`[Clamping][Song: "${a.id}"] Clamped Channel "${e.id}" volume to minimum 0.5.`)):e.metadata.volume>1.5&&(e.metadata.volume=1.5),GainNodeHelper.setChannelGain(a.id,e.id,e.metadata.volume||1)}(r,a,f,t,f.bpm,h,i),f.channels.push(r),e.metadata.channelSequence?.forEach((e=>{f.projectSequences[e.sequenceName]&&(f.projectSequences[e.sequenceName]={...f.projectSequences[e.sequenceName],[o]:{steps:e.steps}})}))}))),a.push(f),a}!function(){if(window.seedList&&window.seedList.length>1)console.log(`[Seed Initialization] Using user-provided seedList with ${window.seedList.length} seeds.`);else if(window.seedList&&1===window.seedList.length){const e=window.seedList[0],n=d(e,100).slice(1);window.seedList=window.seedList.concat(n),console.log(`[Seed Initialization] Single seed provided. Generated 99 additional sequential seeds from "${e}". Total seeds: ${window.seedList.length}.`)}else{const e=function(){let e="";for(let n=0;n<16;n++)e+=Math.floor(10*Math.random()).toString();return e}();window.seedList=d(e,100),console.log(`[Seed Initialization] No user-provided seeds. Generated random seed "${e}" and created ${window.seedList.length} sequential seeds.`)}}();const f=await async function(e){const n=[];for(const t of e){const e=await p(t);n.push(...e)}return n}(window.seedList);console.log(`[Mix Generation] Generated ${f.length} songs based on seedList.`),e.initialized||Object.assign(e,{songsArray:f,songsByBPM:e.songsByBPM||{},currentSongIndex:0,currentSequenceIndex:0,initialSampleOrder:f.length?s(f[0]):null,isSingleSong:1===f.length,isMultipleSongs:f.length>1,initialized:!0}),e.songsArray.forEach((e=>{GainNodeHelper.createGainNodesForSong(e)})),e.isArtworkCover&&artworkUrl.length&&(e=>{const n=document.getElementById("artworkImage");n&&(n.src=e,n.parentElement.style.display="flex")})(artworkUrl[0]),document.dispatchEvent(new CustomEvent("dataLoadingComplete",{detail:{success:!0,totalSongs:e.songsArray.length,songs:e.songsArray.map((({id:e,totalSequences:n})=>({id:e,totalSequences:n})))}})),window.generateMixBySeed=p}})();
+</script>
+
+
+
+<!-- audioProcessingAndManagement -->
+<script>
+(async()=>{const e=window.globalData||(window.globalData={}),n=e.audioContext||(e.audioContext=new(window.AudioContext||window.webkitAudioContext)),o=e=>Uint8Array.from(atob(e),(e=>e.charCodeAt(0))).buffer,t=(e,n)=>{if("json"===n&&e.audioData){const n=e.audioData.match(/base64,([A-Za-z0-9+/=]+)/);return n?n[1]:null}if("html"===n)try{const n=new DOMParser,o=n.parseFromString(e,"text/html").querySelector('source[src^="data:audio/"]');if(o&&o.src){const e=o.src.match(/base64,([^"]+)/);return e?e[1]:null}return null}catch(e){return console.error(`[extractBase64][Error] Failed to parse HTML: ${e.message}`),null}return null},a=e=>{const n=e.replace(/\s+/g,"");return n.length%4==0&&/^[A-Za-z0-9+/]+={0,2}$/.test(n)},r=(e,n=.5)=>{let o=0;for(let n=0;n<e.numberOfChannels;n++){const t=e.getChannelData(n);for(const e of t){const n=Math.abs(e);n>o&&(o=n)}}const t=o>0?n/o:1;if(1!==t)for(let n=0;n<e.numberOfChannels;n++){const o=e.getChannelData(n);for(let e=0;e<o.length;e++)o[e]*=t}return e},s=async(o,t,a)=>{const{id:s,channels:c}=o,{id:d,url:u,metadata:{trimStartTime_Percentage:f,trimEndTime_Percentage:h,requiresReversal:g}}=t;try{const o=await fetch(u);if(!o.ok)return void console.error(`[ProcessChannel][Song: "${s}"] Fetch failed for URL: "${u}" - Status: ${o.status} ${o.statusText}. Skipping Channel ID: "${d}".`);const t=o.headers.get("Content-Type")||"",c=await i(o,t,u,s,d);if(!c)return void console.error(`[ProcessChannel][Song: "${s}"] Decoding failed for Channel ID: "${d}". Skipping.`);if(h<=f)return void console.error(`[ProcessChannel][Song: "${s}", Channel: "${d}"] Invalid trim percentages - Start: ${f}%, End: ${h}%. Skipping.`);const m=Math.floor(f/100*c.duration*c.sampleRate),$=Math.floor(h/100*c.duration*c.sampleRate),C=$-m;if(C<=0)return void console.error(`[ProcessChannel][Song: "${s}", Channel: "${d}"] Non-positive trimmed length: ${C} samples. Skipping.`);const w=n.createBuffer(c.numberOfChannels,C,c.sampleRate);for(let e=0;e<c.numberOfChannels;e++)w.getChannelData(e).set(c.getChannelData(e).subarray(m,$));const A=r(w,.5);if(e.audioBuffers=e.audioBuffers||{},e.reverseAudioBuffers=e.reverseAudioBuffers||{},e.audioBuffers[s]=e.audioBuffers[s]||{},e.reverseAudioBuffers[s]=e.reverseAudioBuffers[s]||{},e.audioBuffers[s][d]=A,g)try{const n=l(A);e.reverseAudioBuffers[s][d]=n}catch(e){console.error(`[ProcessChannel][Song: "${s}", Channel: "${d}"] Error reversing AudioBuffer: ${e.message}`)}a.push({"Song ID":s,"Channel ID":d,"Audio File":(p=u,p.split("/").pop()||"Unknown"),"Full Duration (s)":c.duration.toFixed(2),"Trimmed Duration (s)":w.duration.toFixed(2),"Requires Reversal":g})}catch(e){console.error(`[ProcessChannel][Song: "${s}", Channel: "${d}"] Unexpected error: ${e.message}`)}var p},i=async(r,s,i,l,c)=>{const d=e.audioFetchCache||(e.audioFetchCache=new Map);if(d.has(i))return d.get(i);try{let e;if(i.startsWith("data:audio/")){const t=i.split(",")[1];if(!a(t))return console.error(`[decodeAudioData][Song: "${l}", Channel: "${c}"] Invalid base64 data in data URI for URL: "${i}".`),null;const r=o(t);e=await n.decodeAudioData(r)}else if(/audio\/(wav|mpeg|mp4)|video\/mp4/.test(s)){const o=await r.arrayBuffer();e=await n.decodeAudioData(o)}else if(/application\/json/.test(s)){const s=await r.json(),i=t(s,"json");if(!i||!a(i))return null;const l=o(i);e=await n.decodeAudioData(l)}else if(/text\/html/.test(s)){const s=await r.text(),d=t(s,"html");if(!d||!a(d))return console.error(`[decodeAudioData][Song: "${l}", Channel: "${c}"] Invalid or missing base64 data in HTML for URL: "${i}".`),null;const u=o(d);e=await n.decodeAudioData(u)}else{if(!/audio\//.test(s))return console.error(`[decodeAudioData][Song: "${l}", Channel: "${c}"] Unsupported content type: "${s}" for URL: "${i}".`),null;const o=await r.arrayBuffer();e=await n.decodeAudioData(o)}return d.set(i,e),e}catch(e){return console.error(`[decodeAudioData][Song: "${l}", Channel: "${c}"] Decoding error for URL: "${i}" - ${e.message}`),null}},l=e=>{const o=n.createBuffer(e.numberOfChannels,e.length,e.sampleRate);for(let n=0;n<e.numberOfChannels;n++){const t=e.getChannelData(n),a=o.getChannelData(n);for(let e=0;e<t.length;e++)a[e]=t[t.length-e-1]}return r(o,.5)},c=e=>{e.length?console.table(e):console.warn("No audio samples processed.")},d=async()=>{try{"suspended"===n.state&&await n.resume(),await(async()=>{const{songsArray:o,initialSampleOrder:t}=e;if(!o.length)return void console.error("No songs to process.");const a=[],r=new Map;t.forEach((e=>{r.has(e.songId)||r.set(e.songId,[]),r.get(e.songId).push(e.channelId)}));for(const[e,n]of r.entries()){const t=o.find((n=>n.id===e));if(!t){console.warn(`Song with ID ${e} not found. Skipping.`);continue}const r=n.map((n=>{const o=t.channels.find((e=>e.id===n));return o?s(t,o):(console.warn(`Channel with ID ${n} not found in song ${e}. Skipping.`),null)})),i=(await Promise.all(r)).filter((e=>null!==e));a.push(...i),console.log(`Processed Song: "${t.id}" with ${i.length} channels.`)}c(a),console.log("Initial audio buffers ready.");const i=n.createGain();i.gain.value=.7,i.connect(n.destination),e.masterGain=i,console.log("Master Gain initialized with gain:",i.gain.value),document.dispatchEvent(new CustomEvent("initialAudioBuffersReady",{detail:{success:!0}}))})();try{const{songsArray:n,initialSampleOrder:o}=e;if(!n.length)return void console.error("No songs to process.");const t=[],a=n.flatMap((e=>e.channels.map((n=>({song:e,channel:n}))))),r=new Set(o.map((e=>`${e.songId}-${e.channelId}`))),i=a.filter((({song:e,channel:n})=>!r.has(`${e.id}-${n.id}`))),l=[];for(;i.length;)l.push(i.splice(0,4));for(const e of l)await Promise.all(e.map((({song:e,channel:n})=>s(e,n,t))));c(t),console.log("All background audio buffers processed."),document.dispatchEvent(new CustomEvent("allAudioBuffersReady",{detail:{success:!0}}))}catch(e){console.error("Background processing error:",e)}}catch(e){console.error("Audio processing initialization error:",e)}};document.addEventListener("dataLoadingComplete",d),e.songsArray?.length&&d(),document.addEventListener("initialAudioBuffersReady",(()=>{console.log("Initial buffers ready. Press 'P' to play.")}))})();
+</script>
+
+
+<!-- unifiedMetadataManagement -->
+<script>
+(()=>{const t=t=>{const a=t?.match(/Song\s+\d+:\s+(.+)/);return a?.[1]?.trim()||"UNKNOWN PROJECT NAME"},a=(t,a,n)=>a?.[t]||n||"Unknown Artist Name",n=t=>{if(!Array.isArray(t)||0===t.length)return void console.warn("No songs data available to process.");const a=e(t);o(a),r(a)},e=n=>{const e=window.globalData?.projectArtistMap||window.projectArtistMap||{};return n.map(((n,o)=>({trackNumber:o+1,projectName:t(n.id),artistName:a(t(n.id),e,n.artist)})))},o=t=>{const a=document.getElementById("metadataContent");if(!a)return void console.warn("Metadata content container (#metadataContent) not found.");const n=t.map((({trackNumber:t,projectName:a,artistName:n})=>`\n            <div class="metadataItem">\n                <h2>${t}. ${a}</h2>\n                <p>${n}</p>\n            </div>\n        `)).join("");a.innerHTML=n},r=t=>{t.forEach((({projectName:t,artistName:a})=>{}))},i=()=>{const t=document.getElementById("trackListingPanel");t?t.classList.toggle("visible"):console.warn("Metadata panel container (#trackListingPanel) not found.")};(()=>{try{window.globalData?.songsArray?.length?n(window.globalData.songsArray):(document.addEventListener("dataLoadingComplete",(({detail:{songs:t}={}})=>{n(t)})),document.addEventListener("keydown",(({key:t})=>{"t"===t.toLowerCase()&&i()})))}catch(t){console.error("Error initializing Metadata Management and Logging:",t)}})()})();
+</script>
+
+
+
+<!-- Load Player Scripts AFTER data loading is complete -->
+<script>
+document.addEventListener("dataLoadingComplete",(e=>{const c=e=>{if(0===e.length)return;const d=e.shift(),t=document.createElement("script");t.src=d,t.async=!1,t.onload=()=>c(e),t.onerror=t=>{console.error(`[Script Loader] Error loading script: ${d}`,t),c(e)},document.body.appendChild(t)};c(["/content/5c03e882ab5a531271b2e93a80d8a9d72cb533c580bec1567020f5cd61595560i0","/content/7b305327f2951d219532ef0cb46b2039b23f2cfd0d8d0e827f3fe1b2b754b5a9i0","/content/8b5b09cfedbc0c6a187816181f8d33f90c5bbd15fc10af47008176effb866a47i0"]),updateSeedDisplay()}));
+</script>
+
+
+
+
+
+<!-- Playback -->
+<!-- <script>
+(()=>{const e=window.globalData||(window.globalData={isPlaying:!1,currentSongIndex:0,songsArray:[],audioBuffers:{},reverseAudioBuffers:{},audioContext:new(window.AudioContext||window.webkitAudioContext),masterGain:null,gainNodes:{},isArtworkCover:!0,isVisualiserCover:!1,compressor:null,lowShelfFilter:null,analyser:null,isAudioProcessingInitialized:!1,currentSeed:1n});e.currentSequence=0;const{audioContext:n}=e,t=.1,o=25;let r=null,a={};const i=new Set,l=new Set;let s=null;function c(){e.isAudioProcessingInitialized?console.log("[PlaybackEngine] Audio processing chain already initialized."):(e.compressor||(e.compressor=n.createDynamicsCompressor(),e.compressor.threshold.setValueAtTime(-24,n.currentTime),e.compressor.knee.setValueAtTime(30,n.currentTime),e.compressor.ratio.setValueAtTime(12,n.currentTime),e.compressor.attack.setValueAtTime(.003,n.currentTime),e.compressor.release.setValueAtTime(.25,n.currentTime),console.log("[PlaybackEngine] Compressor node initialized.")),e.masterGain||(e.masterGain=n.createGain(),e.masterGain.gain.setValueAtTime(1,n.currentTime),e.masterGain.connect(e.compressor),console.log("[PlaybackEngine] Master Gain node created and connected to Compressor.")),e.lowShelfFilter||(e.lowShelfFilter=n.createBiquadFilter(),e.lowShelfFilter.type="lowshelf",e.lowShelfFilter.frequency.setValueAtTime(50,n.currentTime),e.lowShelfFilter.gain.setValueAtTime(-6,n.currentTime),e.compressor.connect(e.lowShelfFilter),console.log("[PlaybackEngine] Low-shelf filter initialized and connected to Compressor.")),e.analyser||(e.analyser=n.createAnalyser(),e.analyser.fftSize=2048,e.analyser.smoothingTimeConstant=.8,e.lowShelfFilter.connect(e.analyser),console.log("[PlaybackEngine] Analyser node initialized and connected to Low-Shelf Filter."),e.analyser.connect(n.destination),console.log("[PlaybackEngine] Analyser node connected to AudioContext destination.")),e.isAudioProcessingInitialized=!0,console.log("[PlaybackEngine] Audio processing chain fully initialized."),function(){if(!e.analyser)return void console.error("[setupBassMonitoring] AnalyserNode is not available.");function t(){!function(){if(!e.analyser)return void console.error("[monitorLowFrequencies] AnalyserNode is not initialized.");if(!e.lowShelfFilter)return void console.error("[monitorLowFrequencies] lowShelfFilter is not initialized.");const t=e.analyser.frequencyBinCount,o=new Uint8Array(t);e.analyser.getByteFrequencyData(o);const r=250,a=n.sampleRate/2,i=Math.floor(r/a*t),l=o.slice(0,i);if(0===l.length)return void console.warn("[monitorLowFrequencies] No bass levels found.");const s=l.reduce(((e,n)=>e+n),0)/l.length,c=100;if(s>c){const t=e.lowShelfFilter.gain.value-.5;e.lowShelfFilter.gain.setValueAtTime(t,n.currentTime)}else if(s<c-20){const t=e.lowShelfFilter.gain.value+.5;e.lowShelfFilter.gain.setValueAtTime(t,n.currentTime)}}(),requestAnimationFrame(t)}t(),console.log("[setupBassMonitoring] Bass monitoring loop initiated.")}())}function d(){const{songsArray:l,currentSongIndex:u}=e;if(!l.length)return void console.error("No songs available for playback.");const S=l[u%l.length],h=S.projectSequences||{},b=60/S.bpm/4,w=64*b;e.currentSongIndex%=l.length,a={},i.clear(),console.log(`Starting playback for Song: ${S.id} (${e.currentSongIndex+1}/${l.length}) with ${Object.keys(h).length} sequences.`),console.log(`Song BPM: ${S.bpm}`),window.synth&&"function"==typeof window.synth.updateBPM?(window.synth.updateBPM(S.bpm),console.log(`Synth BPM updated to ${S.bpm} BPM.`)):console.warn("Synth instance not found or updateBPM method unavailable.");let A=0,k=1;for(const[n,t]of Object.entries(h))a[n]={sequenceNumber:k,nextStepIndex:0,nextStepTime:e.audioContext.currentTime+A,stepDuration:b,endTime:e.audioContext.currentTime+A+w,completed:!1,loggedStart:!1},A+=w,k++;e.currentSongId=S.id,c(),GainNodeHelper.createGainNodesForSong(S),GainNodeHelper.prepareNextSongGainNodes(l[(e.currentSongIndex+1)%l.length]),e.isPlaying=!0,e.currentSequence=1,r=setInterval((()=>function(o){const r=n.currentTime;let i=!0;const l=Object.keys(o.projectSequences).length;for(const[n,s]of Object.entries(o.projectSequences||{})){const c=a[n];if(c&&!c.completed)if(r>=c.endTime)c.completed=!0,console.log(`Sequence ${c.sequenceNumber} has completed.`);else for(i=!1,r>=c.nextStepTime&&!c.loggedStart&&(e.currentSequence=c.sequenceNumber,console.log(`Updating current sequence display: Sequence ${e.currentSequence} out of ${l}`),c.loggedStart=!0);c.nextStepTime<r+t&&e.isPlaying;){const{nextStepIndex:e,nextStepTime:n,stepDuration:t}=c;0!==e||c.loggedStart||(console.log(`Starting Sequence ${c.sequenceNumber} at step ${e}.`),c.loggedStart=!0);for(const[t,r]of Object.entries(s)){const a=parseInt(t.slice(2),10),i=o.channels[a];if(!i){console.warn(`Channel index ${a} not found in song ${o.id}.`);continue}const l=r.steps?.find((n=>"number"==typeof n?n===e:n.index===e));if(void 0!==l){m(o,i,n,"object"==typeof l&&l.reverse)}}if(c.nextStepIndex++,c.nextStepIndex>=64){c.completed=!0,console.log(`Sequence ${c.sequenceNumber} has completed all steps.`);break}c.nextStepTime+=t}}i&&(console.log("All sequences have completed."),function(){if(!e.isPlaying)return;e.currentSeed=(void 0!==e.currentSeed?BigInt(e.currentSeed):1n)+1n,console.log(`Seed progressed to: ${e.currentSeed}`),e.currentSongIndex=(e.currentSongIndex+1)%e.songsArray.length,setTimeout((()=>{if(e.isPlaying){const n=e.songsArray[e.currentSongIndex];n?(n.seed=e.currentSeed.toString(),console.log(`Assigned new seed to song: ${n.id} -> Seed: ${n.seed}`),g({preserveIsPlaying:!0,callback:()=>{d(),document.dispatchEvent(new CustomEvent("songChanged",{detail:{song:n}}))}})):console.warn("Next song not found in songsArray.")}}),200)}());!function(e,n){const{muteSchedule:t}=e;if(!t||!Array.isArray(t))return;t.filter((e=>e.sequence===n)).forEach((n=>{const{action:t,channels:o}=n;o.forEach((n=>{const o=e.channels.find((e=>e.id===n));o&&("mute"===t?f(o):"unmute"===t&&function(e){return e.channels.filter((e=>!e.metadata.isMuted)).length}(e)<MAX_ACTIVE_CHANNELS&&y(o))}))}))}(o,e.currentSequence)}(S)),o),console.log("Sequences scheduled and playback started."),document.dispatchEvent(new CustomEvent("playbackStarted",{detail:{success:!0}})),function(n){const t=document.getElementById("nowPlayingContainer");if(!t)return void console.warn("Now Playing Container not found.");const{projectName:o,artistName:r}=function(e){return{projectName:e.projectName||e.id||"Unknown Project",artistName:e.artist||"Unknown Artist"}}(n);t.querySelector(".songTitle").textContent=o,t.querySelector(".artistName").textContent=r,t.querySelector(".songBPM").textContent=`BPM: ${n.bpm}`,function(n){s&&clearInterval(s);const t=document.getElementById("nowPlayingContainer");if(!t)return;const o=t.querySelector(".timeLeft");if(!o)return;const r=60/n.bpm/4,a=64,i=Object.keys(n.projectSequences).length,l=r*a*i;let c=l;p(o,c),s=setInterval((()=>{e.isPlaying?(c-=1,c<=0&&(c=0,clearInterval(s)),p(o,c)):clearInterval(s)}),1e3)}(n)}(S)}function u(){e.isPlaying?(g(),console.log("Playback stopped."),document.dispatchEvent(new CustomEvent("playbackStopped",{detail:{success:!0}})),function(){const e=document.getElementById("nowPlayingContainer");if(!e)return void console.warn("Now Playing Container not found.");e.querySelector(".songTitle").textContent="No song playing",e.querySelector(".artistName").textContent="",e.querySelector(".songBPM").textContent="BPM: N/A",e.querySelector(".timeLeft").textContent="Time Left: N/A"}(),s&&(clearInterval(s),s=null)):console.log("Playback is not in progress.")}function g(n={}){clearInterval(r),n.preserveIsPlaying||(e.isPlaying=!1),a={},i.clear(),l.forEach((e=>{try{e.stop(),e.disconnect()}catch(e){console.error("Error stopping/disconnecting an audio source:",e)}})),l.clear(),e.currentSongId&&(GainNodeHelper.cleanupGainNodesForSong(e.currentSongId),e.currentSongId=null),s&&(clearInterval(s),s=null),n.callback&&n.callback()}function m(t,o,r,a){const s=`${t.id}_${o.id}_${a?"reverse":"normal"}`,c=a?e.reverseAudioBuffers[t.id]?.[o.id]:e.audioBuffers[t.id]?.[o.id];if(!c)return void(i.has(s)||(i.add(s),console.warn(`Audio buffer missing for Song: ${t.id}, Channel: ${o.id}${a?" (Reverse)":""}`)));const d=n.createBufferSource();d.buffer=c,d.playbackRate.value=o.metadata.playbackSpeed||1;const u=n.createGain();u.gain.setValueAtTime(0,r),d.connect(u);const g=e.gainNodes?.[t.id]?.[o.id]||e.masterGain;u.connect(g);u.gain.linearRampToValueAtTime(o.metadata.volume||1,r+.01);const m=r+c.duration/d.playbackRate.value,f=m-.01;u.gain.setValueAtTime(o.metadata.volume||1,f),u.gain.linearRampToValueAtTime(0,m),d.start(r),d.stop(m),l.add(d),d.onended=()=>l.delete(d)}function f(t){if(!t.metadata.isMuted){t.metadata.isMuted=!0;const o=e.gainNodes[song.id]?.[t.id];o&&(o.gain.cancelScheduledValues(n.currentTime),o.gain.setValueAtTime(o.gain.value,n.currentTime),o.gain.linearRampToValueAtTime(0,n.currentTime+.5),console.log(`Channel ${t.id} muted with fade-out.`))}}function y(t){if(t.metadata.isMuted){t.metadata.isMuted=!1;const o=e.gainNodes[song.id]?.[t.id];o&&(o.gain.cancelScheduledValues(n.currentTime),o.gain.setValueAtTime(0,n.currentTime),o.gain.linearRampToValueAtTime(1,n.currentTime+.5),console.log(`Channel ${t.id} unmuted with fade-in.`))}}function p(e,n){const t=Math.floor(n/60),o=Math.floor(n%60);e.textContent=`Time Left: ${t}:${o.toString().padStart(2,"0")}`}e.togglePlayback=()=>e.isPlaying?u():d(),e.startPlayback=d,e.stopPlayback=u,e.resetPlayback=()=>g({callback:d}),e.initializePlaybackEngine=()=>{e.songsArray.length?(console.log("Playback Engine Initialization Complete."),console.log("Playback is ready. Click the artwork to start.")):console.error("No songs available for playback.")},document.addEventListener("initialAudioBuffersReady",(n=>{n.detail.success&&(e.initializePlaybackEngine(),console.log("Initial audio buffers are ready."))})),["playbackStarted","playbackStopped"].forEach((e=>{document.addEventListener(e,(n=>{n.detail.success&&console.log(`Playback has been successfully ${"playbackStarted"===e?"started":"stopped"}.`)}))})),document.addEventListener("DOMContentLoaded",(()=>{const n=document.getElementById("artworkCover"),t=document.getElementById("artworkImage"),o=document.getElementById("loadingSpinner");if(e.isArtworkCover&&e.songsArray.length){const r=e.songsArray[0].artworkUrl||[];r.length?(t.src=r[0],n.classList.remove("hidden"),o.style.display="none",t.addEventListener("click",e.togglePlayback),console.log("Artwork cover is set up for playback toggle.")):console.warn("No artwork URL provided for the first song.")}else console.warn("Artwork cover is not enabled or no songs available.")})),Object.keys(e.audioBuffers).length&&e.initializePlaybackEngine()})();
+</script> -->
+
+<!-- Playback -->
+<script>
+    /*
+    <details>
+        <summary>🔍 How to Access Global Timing Information</summary>
+        <p>The playback engine exposes global timing information through the <code>window.globalData</code> object. Other modules can access the following properties and events to monitor and interact with playback:</p>
+        <ul>
+            <li><strong>Playback Status:</strong> <code>window.globalData.isPlaying</code> - <em>Boolean</em> indicating if playback is active.</li>
+            <li><strong>Current Song Index:</strong> <code>window.globalData.currentSongIndex</code> - <em>Number</em> representing the index of the currently playing song.</li>
+            <li><strong>Current Sequence:</strong> <code>window.globalData.currentSequence</code> - <em>Number</em> indicating the currently active sequence.</li>
+            <li><strong>Playback Events:</strong>
+                <ul>
+                    <li><code>'playbackStarted'</code> - Dispatched when playback starts.</li>
+                    <li><code>'playbackStopped'</code> - Dispatched when playback stops.</li>
+                </ul>
+                <em>Use <code>document.addEventListener</code> to listen for these events.</em>
+            </li>
+            <li><strong>Audio Context Current Time:</strong> <code>window.globalData.audioContext.currentTime</code> - <em>Number</em> representing the current time of the AudioContext for precise timing.</li>
+            <li><strong>Playback Control Methods:</strong>
+                <ul>
+                    <li><code>window.globalData.startPlayback()</code> - Starts playback.</li>
+                    <li><code>window.globalData.stopPlayback()</code> - Stops playback.</li>
+                    <li><code>window.globalData.togglePlayback()</code> - Toggles playback state.</li>
+                    <li><code>window.globalData.resetPlayback()</code> - Resets and restarts playback.</li>
+                </ul>
+            </li>
+        </ul>
+        <p><strong>Example Usage:</strong></p>
+        <pre><code>
+// Check if playback is active
+if (window.globalData.isPlaying) {
+    console.log("Playback is currently active.");
+}
+
+// Listen for playback start
+document.addEventListener("playbackStarted", (event) => {
+    console.log("Playback has started.");
+});
+
+// Start playback
+window.globalData.startPlayback();
+        </code></pre>
+    </details>
+    */
+
+ // playbackEngine.js
+(() => {
+    // Initialize global data or use existing globalData
+    const globalData = window.globalData || (window.globalData = {
+        isPlaying: false,
+        currentSongIndex: 0,
+        songsArray: [],
+        audioBuffers: {},
+        reverseAudioBuffers: {},
+        audioContext: new (window.AudioContext || window.webkitAudioContext)(),
+        masterGain: null,
+        gainNodes: {},
+        isArtworkCover: true,
+        isVisualiserCover: false,
+        compressor: null,      // Compressor Node
+        lowShelfFilter: null,  // Low-Shelf Filter Node
+        analyser: null,        // AnalyserNode
+        isAudioProcessingInitialized: false, // Flag to prevent re-initialization
+        currentSeed: 1n        // Initialize seed as BigInt
+    });
+
+    // Initialize the current sequence counter
+    globalData.currentSequence = 0;
+
+    const { audioContext } = globalData;
+    const scheduleAheadTime = 0.1; // Time in seconds to schedule ahead
+    const schedulerInterval = 25;   // Interval in milliseconds for the scheduler
+
+    let playbackInterval = null;
+    let sequenceStates = {};
+
+    const missingAudioBuffers = new Set();
+    const activeAudioSources = new Set();
+
+    let countdownInterval = null;
+
+    /**
+     * Initializes the audio processing chain with Compressor, Low-Shelf Filter, and AnalyserNode.
+     */
+    function initializeAudioProcessingChain() {
+        // Prevent re-initialization if already done
+        if (globalData.isAudioProcessingInitialized) {
+            console.log("[PlaybackEngine] Audio processing chain already initialized.");
+            return;
+        }
+
+        // **Initialize Compressor**
+        if (!globalData.compressor) {
+            globalData.compressor = audioContext.createDynamicsCompressor();
+            globalData.compressor.threshold.setValueAtTime(-24, audioContext.currentTime);
+            globalData.compressor.knee.setValueAtTime(30, audioContext.currentTime);
+            globalData.compressor.ratio.setValueAtTime(12, audioContext.currentTime);
+            globalData.compressor.attack.setValueAtTime(0.003, audioContext.currentTime);
+            globalData.compressor.release.setValueAtTime(0.25, audioContext.currentTime);
+
+            console.log("[PlaybackEngine] Compressor node initialized.");
+        }
+
+        // **Initialize Master Gain**
+        if (!globalData.masterGain) {
+            globalData.masterGain = audioContext.createGain();
+            globalData.masterGain.gain.setValueAtTime(1, audioContext.currentTime); // Set default gain
+
+            // Connect masterGain to compressor
+            globalData.masterGain.connect(globalData.compressor);
+            console.log("[PlaybackEngine] Master Gain node created and connected to Compressor.");
+        }
+
+        // **Initialize Low-Shelf Filter**
+        if (!globalData.lowShelfFilter) {
+            globalData.lowShelfFilter = audioContext.createBiquadFilter();
+            globalData.lowShelfFilter.type = "lowshelf";
+            globalData.lowShelfFilter.frequency.setValueAtTime(50, audioContext.currentTime); // 50 Hz cutoff
+            globalData.lowShelfFilter.gain.setValueAtTime(-6, audioContext.currentTime); // -6 dB attenuation
+
+            // Connect compressor to lowShelfFilter
+            globalData.compressor.connect(globalData.lowShelfFilter);
+            console.log("[PlaybackEngine] Low-shelf filter initialized and connected to Compressor.");
+        }
+
+        // **Initialize AnalyserNode**
+        if (!globalData.analyser) {
+            globalData.analyser = audioContext.createAnalyser();
+            globalData.analyser.fftSize = 2048;
+            globalData.analyser.smoothingTimeConstant = 0.8;
+
+            // Connect lowShelfFilter to AnalyserNode
+            globalData.lowShelfFilter.connect(globalData.analyser);
+            console.log("[PlaybackEngine] Analyser node initialized and connected to Low-Shelf Filter.");
+
+            // Connect AnalyserNode to audio destination
+            globalData.analyser.connect(audioContext.destination);
+            console.log("[PlaybackEngine] Analyser node connected to AudioContext destination.");
+        }
+
+        // **Mark Audio Processing as Initialized**
+        globalData.isAudioProcessingInitialized = true;
+        console.log("[PlaybackEngine] Audio processing chain fully initialized.");
+
+        // **Set Up Bass Monitoring Loop**
+        setupBassMonitoring();
+    }
+
+    /**
+     * Monitors low-frequency (bass) levels in real-time and adjusts the low-shelf filter accordingly.
+     */
+     function monitorLowFrequencies() {
+         // Protective Checks
+            if (!globalData.analyser) {
+                console.error("[monitorLowFrequencies] AnalyserNode is not initialized in globalData.analyser.");
+                return;
+            }
+
+            if (!globalData.lowShelfFilter) {
+                console.error("[monitorLowFrequencies] lowShelfFilter is not initialized in globalData.lowShelfFilter.");
+                return;
+            }
+
+            const bufferLength = globalData.analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            globalData.analyser.getByteFrequencyData(dataArray);
+
+            // Calculate average bass level (e.g., frequencies below 250 Hz)
+            const bassFrequency = 250;
+            const nyquist = audioContext.sampleRate / 2;
+            const bassBin = Math.floor(bassFrequency / nyquist * bufferLength);
+            const bassLevels = dataArray.slice(0, bassBin);
+
+            // Protective Check: Ensure there are bass levels to process
+            if (bassLevels.length === 0) {
+                console.warn("[monitorLowFrequencies] No bass levels found in the current frequency data.");
+                return;
+            }
+
+            const averageBass = bassLevels.reduce((sum, value) => sum + value, 0) / bassLevels.length;
+
+            // console.log(`[Monitoring] Average Bass Level: ${averageBass.toFixed(2)}`);
+
+            // Define a threshold (e.g., 100 out of 255)
+            const bassThreshold = 100;
+
+            if (averageBass > bassThreshold) {
+                // Attenuate the low-shelf filter further
+                const currentGain = globalData.lowShelfFilter.gain.value;
+                const newGain = currentGain - 0.5;
+                globalData.lowShelfFilter.gain.setValueAtTime(newGain, audioContext.currentTime);
+                // console.log(`[Monitoring] Attenuated low-shelf filter to reduce bass. New Gain: ${newGain}`);
+            } else if (averageBass < bassThreshold - 20) {
+                // Restore the low-shelf filter gain
+                const currentGain = globalData.lowShelfFilter.gain.value;
+                const newGain = currentGain + 0.5;
+                globalData.lowShelfFilter.gain.setValueAtTime(newGain, audioContext.currentTime);
+                // console.log(`[Monitoring] Restored low-shelf filter gain. New Gain: ${newGain}`);
+            }
+        }
+
+    /**
+     * Sets up the monitoring loop using requestAnimationFrame for smoother updates.
+     */
+    function setupBassMonitoring() {
+        // Ensure AnalyserNode is initialized
+        if (!globalData.analyser) {
+            console.error("[setupBassMonitoring] AnalyserNode is not available. Cannot set up bass monitoring.");
+            return;
+        }
+
+        // Recursive function to continuously monitor bass frequencies
+        function monitoringLoop() {
+            monitorLowFrequencies();
+            requestAnimationFrame(monitoringLoop);
+        }
+
+        // Start the monitoring loop
+        monitoringLoop();
+        console.log("[setupBassMonitoring] Bass monitoring loop initiated using requestAnimationFrame.");
+    }
+
+    /**
+     * Function to start playback
+     */
+    function startPlayback() {
+        const { songsArray, currentSongIndex } = globalData;
+
+        if (!songsArray.length) {
+            console.error("No songs available for playback.");
+            return;
+        }
+
+        // Get the current song and its sequences
+        const song = songsArray[currentSongIndex % songsArray.length];
+        const projectSequences = song.projectSequences || {};
+
+        const stepDuration = 60 / song.bpm / 4;       // Duration of a single step
+        const sequenceDuration = 64 * stepDuration;   // Total duration of a sequence
+
+        // Reset states and logs
+        globalData.currentSongIndex %= songsArray.length;
+        sequenceStates = {};
+        missingAudioBuffers.clear();
+
+        console.log(`Starting playback for Song: ${song.id} (${globalData.currentSongIndex + 1}/${songsArray.length}) with ${Object.keys(projectSequences).length} sequences.`);
+        console.log(`Song BPM: ${song.bpm}`);
+
+        // **Update Synth's BPM Here**
+        if (window.synth && typeof window.synth.updateBPM === 'function') {
+            window.synth.updateBPM(song.bpm);
+            console.log(`Synth BPM updated to ${song.bpm} BPM.`);
+        } else {
+            console.warn("Synth instance not found or updateBPM method unavailable.");
+        }
+
+        let sequenceStartTimeOffset = 0;
+        let orderedSequenceNumber = 1; // Start from 1
+
+        // Initialize sequence states with ordered sequence numbers
+        for (const [sequenceId, sequenceData] of Object.entries(projectSequences)) {
+            sequenceStates[sequenceId] = {
+                sequenceNumber: orderedSequenceNumber, // Assign ordered number
+                nextStepIndex: 0,
+                nextStepTime: globalData.audioContext.currentTime + sequenceStartTimeOffset,
+                stepDuration: stepDuration,
+                endTime: globalData.audioContext.currentTime + sequenceStartTimeOffset + sequenceDuration,
+                completed: false,
+                loggedStart: false // Initialize the loggedStart flag
+            };
+            sequenceStartTimeOffset += sequenceDuration;
+            orderedSequenceNumber++;
+        }
+
+        globalData.currentSongId = song.id;
+
+        // **Initialize Compressor and Low-Shelf Filter if not already done**
+        initializeAudioProcessingChain();
+
+        // Prepare gain nodes for the song
+        GainNodeHelper.createGainNodesForSong(song);
+        GainNodeHelper.prepareNextSongGainNodes(songsArray[(globalData.currentSongIndex + 1) % songsArray.length]);
+        globalData.isPlaying = true;
+
+        // Reset currentSequence to 1 for the new song
+        globalData.currentSequence = 1;
+
+        // Start the playback scheduler
+        playbackInterval = setInterval(() => scheduleSequences(song), schedulerInterval);
+
+        console.log("Sequences scheduled and playback started.");
+        document.dispatchEvent(new CustomEvent("playbackStarted", { detail: { success: true } }));
+
+        // Update Now Playing information
+        updateNowPlaying(song);
+    }
+
+    /**
+     * Function to stop playback
+     */
+    function stopPlayback() {
+        if (!globalData.isPlaying) {
+            console.log("Playback is not in progress.");
+            return;
+        }
+
+        resetPlayback();
+        console.log("Playback stopped.");
+        document.dispatchEvent(new CustomEvent("playbackStopped", { detail: { success: true } }));
+
+        // Clear Now Playing information
+        clearNowPlaying();
+
+        // Clear countdown timer
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+    }
+
+    /**
+     * Function to reset playback
+     */
+    function resetPlayback(options = {}) {
+        clearInterval(playbackInterval);
+        if (!options.preserveIsPlaying) {
+            globalData.isPlaying = false;
+        }
+
+        sequenceStates = {};
+        missingAudioBuffers.clear();
+
+        // Stop and disconnect all active audio sources
+        activeAudioSources.forEach(source => {
+            try {
+                source.stop();
+                source.disconnect();
+            } catch (error) {
+                console.error("Error stopping/disconnecting an audio source:", error);
+            }
+        });
+        activeAudioSources.clear();
+
+        // Clean up gain nodes
+        if (globalData.currentSongId) {
+            GainNodeHelper.cleanupGainNodesForSong(globalData.currentSongId);
+            globalData.currentSongId = null;
+        }
+
+        // Clear countdown timer
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+
+        // Execute callback if provided
+        if (options.callback) {
+            options.callback();
+        }
+    }
+
+    /**
+     * Toggle playback function
+     */
+    globalData.togglePlayback = () => globalData.isPlaying ? stopPlayback() : startPlayback();
+    globalData.startPlayback = startPlayback;
+    globalData.stopPlayback = stopPlayback;
+    globalData.resetPlayback = () => resetPlayback({ callback: startPlayback });
+
+    /**
+     * Function to schedule sequences
+     */
+    function scheduleSequences(song) {
+        const currentTime = audioContext.currentTime;
+        let allSequencesCompleted = true;
+        const totalSequences = Object.keys(song.projectSequences).length;
+
+        for (const [sequenceId, sequenceData] of Object.entries(song.projectSequences || {})) {
+            const sequenceState = sequenceStates[sequenceId];
+
+            if (sequenceState && !sequenceState.completed) {
+                if (currentTime >= sequenceState.endTime) {
+                    sequenceState.completed = true;
+                    console.log(`Sequence ${sequenceState.sequenceNumber} has completed.`);
+                } else {
+                    allSequencesCompleted = false;
+
+                    // Check if a new sequence is starting
+                    if (currentTime >= sequenceState.nextStepTime && !sequenceState.loggedStart) {
+                        globalData.currentSequence = sequenceState.sequenceNumber;
+                        console.log(`Updating current sequence display: Sequence ${globalData.currentSequence} out of ${totalSequences}`);
+                        sequenceState.loggedStart = true; // Prevent logging again
+                    }
+
+                    // Schedule steps ahead of time
+                    while (sequenceState.nextStepTime < currentTime + scheduleAheadTime && globalData.isPlaying) {
+                        const { nextStepIndex, nextStepTime, stepDuration } = sequenceState;
+
+                        // **Log when a new sequence starts**
+                        if (nextStepIndex === 0 && !sequenceState.loggedStart) {
+                            console.log(`Starting Sequence ${sequenceState.sequenceNumber} at step ${nextStepIndex}.`);
+                            sequenceState.loggedStart = true; // Prevent logging again
+                        }
+
+                        for (const [channelKey, noteData] of Object.entries(sequenceData)) {
+                            const channelIndex = parseInt(channelKey.slice(2), 10);
+                            const channel = song.channels[channelIndex];
+
+                            if (!channel) {
+                                console.warn(`Channel index ${channelIndex} not found in song ${song.id}.`);
+                                continue;
+                            }
+
+                            const step = noteData.steps?.find(step => 
+                                typeof step === 'number' ? step === nextStepIndex : step.index === nextStepIndex
+                            );
+
+                            if (step !== undefined) {
+                                const reverse = typeof step === 'object' && step.reverse;
+                                playNote(song, channel, nextStepTime, reverse);
+                            }
+                        }
+
+                        // Move to the next step
+                        sequenceState.nextStepIndex++;
+                        if (sequenceState.nextStepIndex >= 64) {
+                            sequenceState.completed = true;
+                            console.log(`Sequence ${sequenceState.sequenceNumber} has completed all steps.`);
+                            break;
+                        }
+                        sequenceState.nextStepTime += stepDuration;
+                    }
+                }
+            }
+        }
+
+        if (allSequencesCompleted) {
+            console.log("All sequences have completed.");
+            proceedToNextSong();
+        }
+
+        applyMuteSchedule(song, globalData.currentSequence);
+    }
+
+    /**
+     * Function to play a note on a specific channel at a given time with fade-in and fade-out to prevent clicks.
+     *
+     * @param {Object} song - The song object.
+     * @param {Object} channel - The channel object.
+     * @param {number} time - The scheduled time to play the note.
+     * @param {boolean} reverse - Whether to play the note in reverse.
+     */
+    function playNote(song, channel, time, reverse) {
+        const bufferKey = `${song.id}_${channel.id}_${reverse ? "reverse" : "normal"}`;
+        const buffer = reverse
+            ? globalData.reverseAudioBuffers[song.id]?.[channel.id]
+            : globalData.audioBuffers[song.id]?.[channel.id];
+
+        if (!buffer) {
+            if (!missingAudioBuffers.has(bufferKey)) {
+                missingAudioBuffers.add(bufferKey);
+                console.warn(`Audio buffer missing for Song: ${song.id}, Channel: ${channel.id}${reverse ? " (Reverse)" : ""}`);
+            }
+            return;
+        }
+
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.playbackRate.value = channel.metadata.playbackSpeed || 1;
+
+        // Create a GainNode for this source to handle fade-in and fade-out
+        const sourceGain = audioContext.createGain();
+        sourceGain.gain.setValueAtTime(0, time); // Start with gain at 0 for fade-in
+
+        // Connect source -> sourceGain -> channel's GainNode
+        source.connect(sourceGain);
+        const channelGainNode = globalData.gainNodes?.[song.id]?.[channel.id] || globalData.masterGain;
+        sourceGain.connect(channelGainNode);
+
+        // Define fade durations in seconds
+        const fadeInDuration = 0.01;  // 10 ms
+        const fadeOutDuration = 0.01; // 10 ms
+
+        // Schedule fade-in
+        sourceGain.gain.linearRampToValueAtTime(channel.metadata.volume || 1, time + fadeInDuration);
+
+        // Calculate the stop time considering fade-out
+        const stopTime = time + buffer.duration / source.playbackRate.value;
+        const adjustedStopTime = stopTime - fadeOutDuration;
+
+        // Schedule fade-out
+        sourceGain.gain.setValueAtTime(channel.metadata.volume || 1, adjustedStopTime);
+        sourceGain.gain.linearRampToValueAtTime(0, stopTime);
+
+        // Start the source
+        source.start(time);
+
+        // Schedule stop
+        source.stop(stopTime);
+
+        // Track active sources for cleanup
+        activeAudioSources.add(source);
+        source.onended = () => activeAudioSources.delete(source);
+    }
+
+   
+
+    /**
+     * Function to apply mute/unmute based on muteSchedule
+     */
+    function applyMuteSchedule(song, currentSequence) {
+        const { muteSchedule } = song;
+        if (!muteSchedule || !Array.isArray(muteSchedule)) return;
+
+        // Find actions scheduled for the current sequence
+        const actions = muteSchedule.filter(actionItem => actionItem.sequence === currentSequence);
+
+        actions.forEach(actionItem => {
+            const { action, channels } = actionItem;
+            channels.forEach(channelId => {
+                const channel = song.channels.find(ch => ch.id === channelId);
+                if (channel) {
+                    if (action === 'mute') {
+                        muteChannel(channel);
+                    } else if (action === 'unmute') {
+                        if (getActiveChannelCount(song) < MAX_ACTIVE_CHANNELS) {
+                            unmuteChannel(channel);
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+
+    function getActiveChannelCount(song) {
+        return song.channels.filter(ch => !ch.metadata.isMuted).length;
+    }
+
+    function muteChannel(channel) {
+        if (!channel.metadata.isMuted) {
+            channel.metadata.isMuted = true;
+            const gainNode = globalData.gainNodes[song.id]?.[channel.id];
+            if (gainNode) {
+                gainNode.gain.cancelScheduledValues(audioContext.currentTime);
+                gainNode.gain.setValueAtTime(gainNode.gain.value, audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.5); // 0.5 second fade-out
+                console.log(`Channel ${channel.id} muted with fade-out.`);
+            }
+        }
+    }
+
+    function unmuteChannel(channel) {
+        if (channel.metadata.isMuted) {
+            channel.metadata.isMuted = false;
+            const gainNode = globalData.gainNodes[song.id]?.[channel.id];
+            if (gainNode) {
+                gainNode.gain.cancelScheduledValues(audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.5); // 0.5 second fade-in
+                console.log(`Channel ${channel.id} unmuted with fade-in.`);
+            }
+        }
+    }
+
+    /**
+     * Function to update Now Playing information
+     */
+    function updateNowPlaying(song) {
+        const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+        if (!nowPlayingContainer) {
+            console.warn("Now Playing Container not found.");
+            return;
+        }
+
+        const { projectName, artistName } = getProjectAndArtist(song);
+        nowPlayingContainer.querySelector(".songTitle").textContent = projectName;
+        nowPlayingContainer.querySelector(".artistName").textContent = artistName;
+        nowPlayingContainer.querySelector(".songBPM").textContent = `BPM: ${song.bpm}`;
+
+        initializeCountdown(song);
+    }
+
+    /**
+     * Function to clear Now Playing information
+     */
+    function clearNowPlaying() {
+        const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+        if (!nowPlayingContainer) {
+            console.warn("Now Playing Container not found.");
+            return;
+        }
+        nowPlayingContainer.querySelector(".songTitle").textContent = "No song playing";
+        nowPlayingContainer.querySelector(".artistName").textContent = "";
+        nowPlayingContainer.querySelector(".songBPM").textContent = "BPM: N/A";
+        nowPlayingContainer.querySelector(".timeLeft").textContent = "Time Left: N/A";
+    }
+
+    /**
+     * Function to initialize countdown timer
+     */
+    function initializeCountdown(song) {
+        // Clear any existing interval
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+
+        const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+        if (!nowPlayingContainer) return;
+
+        const timeLeftElement = nowPlayingContainer.querySelector(".timeLeft");
+        if (!timeLeftElement) return;
+
+        // Calculate total duration in seconds
+        const stepDuration = 60 / song.bpm / 4;
+        const stepsPerSequence = 64;
+        const totalSequences = Object.keys(song.projectSequences).length;
+        const totalDuration = stepDuration * stepsPerSequence * totalSequences;
+
+        let timeLeft = totalDuration;
+
+        // Update the display immediately
+        updateTimeLeftDisplay(timeLeftElement, timeLeft);
+
+        // Update every second
+        countdownInterval = setInterval(() => {
+            if (globalData.isPlaying) {
+                timeLeft -= 1;
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    clearInterval(countdownInterval);
+                }
+                updateTimeLeftDisplay(timeLeftElement, timeLeft);
+            } else {
+                clearInterval(countdownInterval);
+            }
+        }, 1000);
+    }
+
+    /**
+     * Function to update the Time Left display
+     */
+    function updateTimeLeftDisplay(element, timeLeftInSeconds) {
+        const minutes = Math.floor(timeLeftInSeconds / 60);
+        const seconds = Math.floor(timeLeftInSeconds % 60);
+        element.textContent = `Time Left: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    /**
+     * Function to reset playback
+     */
+    function resetPlayback(options = {}) {
+        clearInterval(playbackInterval);
+        if (!options.preserveIsPlaying) {
+            globalData.isPlaying = false;
+        }
+
+        sequenceStates = {};
+        missingAudioBuffers.clear();
+
+        // Stop and disconnect all active audio sources
+        activeAudioSources.forEach(source => {
+            try {
+                source.stop();
+                source.disconnect();
+            } catch (error) {
+                console.error("Error stopping/disconnecting an audio source:", error);
+            }
+        });
+        activeAudioSources.clear();
+
+        // Clean up gain nodes
+        if (globalData.currentSongId) {
+            GainNodeHelper.cleanupGainNodesForSong(globalData.currentSongId);
+            globalData.currentSongId = null;
+        }
+
+        // Clear countdown timer
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+
+        // Execute callback if provided
+        if (options.callback) {
+            options.callback();
+        }
+    }
+
+  /**
+ * Function to proceed to the next song
+ */
+function proceedToNextSong() {
+    if (!globalData.isPlaying) return;
+
+    // Increment the seed here
+    globalData.currentSeed = (globalData.currentSeed !== undefined ? BigInt(globalData.currentSeed) : 1n) + 1n;
+    console.log(`Seed progressed to: ${globalData.currentSeed}`);
+
+    // Update the song index
+    globalData.currentSongIndex = (globalData.currentSongIndex + 1) % globalData.songsArray.length;
+
+    setTimeout(() => {
+        if (globalData.isPlaying) {
+            // Retrieve the next song based on the updated index
+            const nextSong = globalData.songsArray[globalData.currentSongIndex];
+            if (nextSong) {
+                // Assign the updated seed to the next song
+                nextSong.seed = globalData.currentSeed.toString();
+                console.log(`Assigned new seed to song: ${nextSong.id} -> Seed: ${nextSong.seed}`);
+
+                // Reset playback with callback to start playback
+                resetPlayback({ preserveIsPlaying: true, callback: () => {
+                    startPlayback();
+
+                    // Dispatch 'songChanged' event with the new song's details
+                    document.dispatchEvent(new CustomEvent("songChanged", { detail: { song: nextSong } }));
+                }});
+            } else {
+                console.warn("Next song not found in songsArray.");
+            }
+        }
+    }, 200);
+}
+
+    /**
+     * Function to play an AudioBuffer through the audio processing chain.
+     *
+     * @param {AudioBuffer} audioBuffer - The audio buffer to play.
+     */
+    function playAudioBuffer(audioBuffer) {
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(globalData.masterGain); // Connect to Master Gain
+        source.start();
+        console.log("[PlaybackEngine] AudioBufferSourceNode started.");
+
+        // Track active sources for cleanup
+        activeAudioSources.add(source);
+        source.onended = () => activeAudioSources.delete(source);
+    }
+
+    /**
+     * Function to play a note on a specific channel at a given time with fade-in and fade-out to prevent clicks.
+     *
+     * @param {Object} song - The song object.
+     * @param {Object} channel - The channel object.
+     * @param {number} time - The scheduled time to play the note.
+     * @param {boolean} reverse - Whether to play the note in reverse.
+     */
+    function playNote(song, channel, time, reverse) {
+        const bufferKey = `${song.id}_${channel.id}_${reverse ? "reverse" : "normal"}`;
+        const buffer = reverse
+            ? globalData.reverseAudioBuffers[song.id]?.[channel.id]
+            : globalData.audioBuffers[song.id]?.[channel.id];
+
+        if (!buffer) {
+            if (!missingAudioBuffers.has(bufferKey)) {
+                missingAudioBuffers.add(bufferKey);
+                console.warn(`Audio buffer missing for Song: ${song.id}, Channel: ${channel.id}${reverse ? " (Reverse)" : ""}`);
+            }
+            return;
+        }
+
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.playbackRate.value = channel.metadata.playbackSpeed || 1;
+
+        // Create a GainNode for this source to handle fade-in and fade-out
+        const sourceGain = audioContext.createGain();
+        sourceGain.gain.setValueAtTime(0, time); // Start with gain at 0 for fade-in
+
+        // Connect source -> sourceGain -> channel's GainNode
+        source.connect(sourceGain);
+        const channelGainNode = globalData.gainNodes?.[song.id]?.[channel.id] || globalData.masterGain;
+        sourceGain.connect(channelGainNode);
+
+        // Define fade durations in seconds
+        const fadeInDuration = 0.01;  // 10 ms
+        const fadeOutDuration = 0.01; // 10 ms
+
+        // Schedule fade-in
+        sourceGain.gain.linearRampToValueAtTime(channel.metadata.volume || 1, time + fadeInDuration);
+
+        // Calculate the stop time considering fade-out
+        const stopTime = time + buffer.duration / source.playbackRate.value;
+        const adjustedStopTime = stopTime - fadeOutDuration;
+
+        // Schedule fade-out
+        sourceGain.gain.setValueAtTime(channel.metadata.volume || 1, adjustedStopTime);
+        sourceGain.gain.linearRampToValueAtTime(0, stopTime);
+
+        // Start the source
+        source.start(time);
+
+        // Schedule stop
+        source.stop(stopTime);
+
+        // Track active sources for cleanup
+        activeAudioSources.add(source);
+        source.onended = () => activeAudioSources.delete(source);
+    }
+
+    /**
+     * Function to get project name and artist name from song object
+     */
+    function getProjectAndArtist(song) {
+        return {
+            projectName: song.projectName || song.id || "Unknown Project",
+            artistName: song.artist || "Unknown Artist"
+        };
+    }
+
+   
+    function getActiveChannelCount(song) {
+        return song.channels.filter(ch => !ch.metadata.isMuted).length;
+    }
+
+    function muteChannel(channel) {
+        if (!channel.metadata.isMuted) {
+            channel.metadata.isMuted = true;
+            const gainNode = globalData.gainNodes[song.id]?.[channel.id];
+            if (gainNode) {
+                gainNode.gain.cancelScheduledValues(audioContext.currentTime);
+                gainNode.gain.setValueAtTime(gainNode.gain.value, audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.5); // 0.5 second fade-out
+                console.log(`Channel ${channel.id} muted with fade-out.`);
+            }
+        }
+    }
+
+    function unmuteChannel(channel) {
+        if (channel.metadata.isMuted) {
+            channel.metadata.isMuted = false;
+            const gainNode = globalData.gainNodes[song.id]?.[channel.id];
+            if (gainNode) {
+                gainNode.gain.cancelScheduledValues(audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.5); // 0.5 second fade-in
+                console.log(`Channel ${channel.id} unmuted with fade-in.`);
+            }
+        }
+    }
+
+    /**
+     * Function to clean up gain nodes for a specific song
+     */
+    // Assuming GainNodeHelper has a cleanup function
+    // If not, define it accordingly
+    // Example:
+    /*
+    const GainNodeHelper = {
+        createGainNodesForSong: function(song) { ... },
+        prepareNextSong: function(song) { ... },
+        cleanupGainNodesForSong: function(songId) { ... }
+    };
+    */
+
+    // Function to initialize playback engine
+    globalData.initializePlaybackEngine = () => {
+        if (!globalData.songsArray.length) {
+            console.error("No songs available for playback.");
+            return;
+        }
+        console.log("Playback Engine Initialization Complete.");
+        console.log("Playback is ready. Click the artwork to start.");
+    };
+
+    /**
+     * Set up artwork cover for playback toggle
+     */
+    function setupArtworkCover() {
+        document.addEventListener("DOMContentLoaded", () => {
+            const artworkCover = document.getElementById("artworkCover");
+            const artworkImage = document.getElementById("artworkImage");
+            const loadingSpinner = document.getElementById("loadingSpinner");
+
+            if (globalData.isArtworkCover && globalData.songsArray.length) {
+                // Assuming artworkUrl is part of the first song
+                const firstSong = globalData.songsArray[0];
+                const artworkUrl = firstSong.artworkUrl || [];
+
+                if (artworkUrl.length) {
+                    artworkImage.src = artworkUrl[0];
+                    artworkCover.classList.remove("hidden");
+                    loadingSpinner.style.display = "none";
+                    artworkImage.addEventListener("click", globalData.togglePlayback);
+                    console.log("Artwork cover is set up for playback toggle.");
+                } else {
+                    console.warn("No artwork URL provided for the first song.");
+                }
+            } else {
+                console.warn("Artwork cover is not enabled or no songs available.");
+            }
+        });
+    }
+
+    /**
+     * Event listener for initial audio buffers ready
+     */
+    document.addEventListener("initialAudioBuffersReady", (event) => {
+        if (event.detail.success) {
+            globalData.initializePlaybackEngine();
+            console.log("Initial audio buffers are ready.");
+        }
+    });
+
+    /**
+     * Event listeners for playback started and stopped
+     */
+    ["playbackStarted", "playbackStopped"].forEach((eventType) => {
+        document.addEventListener(eventType, (event) => {
+            if (event.detail.success) {
+                console.log(`Playback has been successfully ${eventType === "playbackStarted" ? "started" : "stopped"}.`);
+            }
+        });
+    });
+
+    // Initialize artwork cover setup
+    setupArtworkCover();
+
+    // Initialize playback engine if audio buffers are already loaded
+    if (Object.keys(globalData.audioBuffers).length) {
+        globalData.initializePlaybackEngine();
+    }
+
+    /**
+     * Function to initialize countdown timer
+     */
+    function initializeCountdown(song) {
+        // Clear any existing interval
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+
+        const nowPlayingContainer = document.getElementById("nowPlayingContainer");
+        if (!nowPlayingContainer) return;
+
+        const timeLeftElement = nowPlayingContainer.querySelector(".timeLeft");
+        if (!timeLeftElement) return;
+
+        // Calculate total duration in seconds
+        const stepDuration = 60 / song.bpm / 4;
+        const stepsPerSequence = 64;
+        const totalSequences = Object.keys(song.projectSequences).length;
+        const totalDuration = stepDuration * stepsPerSequence * totalSequences;
+
+        let timeLeft = totalDuration;
+
+        // Update the display immediately
+        updateTimeLeftDisplay(timeLeftElement, timeLeft);
+
+        // Update every second
+        countdownInterval = setInterval(() => {
+            if (globalData.isPlaying) {
+                timeLeft -= 1;
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    clearInterval(countdownInterval);
+                }
+                updateTimeLeftDisplay(timeLeftElement, timeLeft);
+            } else {
+                clearInterval(countdownInterval);
+            }
+        }, 1000);
+    }
+
+    /**
+     * Function to clean up gain nodes for a specific song
+     */
+    // Implement or ensure that GainNodeHelper has the necessary methods
+    // For example:
+    /*
+    const GainNodeHelper = {
+        createGainNodesForSong: function(song) {
+            // Implementation here
+        },
+        prepareNextSong: function(song) {
+            // Implementation here
+        },
+        cleanupGainNodesForSong: function(songId) {
+            // Implementation here
+            // Disconnect and delete gain nodes
+        }
+    };
+    */
+
+    // Function to handle UI artwork click
+    // Already set up in setupArtworkCover
+
+    // Additional helper functions (scheduleSequences, etc.) should be defined as needed
+    // Ensure that all dependencies are properly implemented
+
+})();
+</script>
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>
+
+
