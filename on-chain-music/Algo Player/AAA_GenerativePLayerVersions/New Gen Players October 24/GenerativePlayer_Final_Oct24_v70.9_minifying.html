@@ -943,25 +943,7 @@ window.GainNodeHelper = (() => {
             }
         };
     
-        // **New Function: generateMuteSchedule**
-        const generateMuteSchedule = (prng, totalSequences) => {
-            const muteSchedule = [];
-            const evenSequences = [];
-            for (let seq = 2; seq <= totalSequences; seq += 2) {
-                evenSequences.push(seq);
-            }
-    
-            evenSequences.forEach(seq => {
-                // Decide whether to mute or unmute at this sequence
-                const action = prng() < 0.5 ? 'mute' : 'unmute';
-                // Decide number of channels to affect (1 to 4)
-                const numChannels = Math.floor(prng() * 4) + 1;
-                // Placeholder: actual channel selection will be handled during mix generation
-                muteSchedule.push({ sequence: seq, action, numChannels });
-            });
-    
-            return muteSchedule;
-        };
+       
     
         const validSongDataUrls = songDataUrls.filter((url) => url.trim() && !url.trim().startsWith("//"));
     
@@ -1207,7 +1189,8 @@ async function generateMixBySeed(seedString, remixNumber) {
         (parseInt(a.replace('Sequence', '')) || 0) - (parseInt(b.replace('Sequence', '')) || 0)
     );
 
-    // Limit the number of sequences to 44
+    // SEQUENCE COUNT LIMIT: Limit the number of sequences here
+    
     sequences = sequences.slice(0, 4);
 
     // Initialize the new song object with remix numbering
@@ -1221,7 +1204,6 @@ async function generateMixBySeed(seedString, remixNumber) {
         channels: [],
         projectSequences: Object.fromEntries(sequences.map(seq => [seq, {}])),
         seed: seedString,
-        muteSchedule: [] // Retain for other dynamic muting purposes if needed
     };
 
     // Initialize effects context for the song
@@ -1233,7 +1215,6 @@ async function generateMixBySeed(seedString, remixNumber) {
         channelLayers: {} // Track layers per channel
     };
 
-    // Assign activationSeq to channels and set isMuted=true
     await Promise.all(channelsWithActivation.map(async ({ channel, activationSeq }, index) => {
         const chId = `ch${index}`; // Ensure unique channel IDs within the song
         const newChannel = {
@@ -1243,7 +1224,6 @@ async function generateMixBySeed(seedString, remixNumber) {
                 ...channel.metadata,
                 originalBPM: newSong.bpm,
                 activationSeq,
-                isMuted: true // Initialize as muted
             }
         };
         await applyEffects(newChannel, index, newSong, activationSeq, newSong.bpm, effectsContext, prng);
@@ -2489,36 +2469,8 @@ window.globalData.startPlayback();
         globalData.hasCompletedSequences = true;
         proceedToNextSong();
     }
-    applyMuteSchedule(song, globalData.currentSequence);
 
 }
-
-/**
-     * Function to apply mute/unmute based on muteSchedule
-     */
-     function applyMuteSchedule(song, currentSequence) {
-        const { muteSchedule } = song;
-        if (!muteSchedule || !Array.isArray(muteSchedule)) return;
-
-        // Find actions scheduled for the current sequence
-        const actions = muteSchedule.filter(actionItem => actionItem.sequence === currentSequence);
-
-        actions.forEach(actionItem => {
-            const { action, channels } = actionItem;
-            channels.forEach(channelId => {
-                const channel = song.channels.find(ch => ch.id === channelId);
-                if (channel) {
-                    if (action === 'mute') {
-                        muteChannel(channel);
-                    } else if (action === 'unmute') {
-                        if (getActiveChannelCount(song) < MAX_ACTIVE_CHANNELS) {
-                            unmuteChannel(channel);
-                        }
-                    }
-                }
-            });
-        });
-    }
 
 
     /**
@@ -2655,10 +2607,6 @@ window.globalData.startPlayback();
         source.onended = () => activeAudioSources.delete(source);
     }
 
-   
-    function getActiveChannelCount(song) {
-        return song.channels.filter(ch => !ch.metadata.isMuted).length;
-    }
 
  
 
@@ -2792,33 +2740,6 @@ if (!globalData.seedListLogged) {
     }
 
    
-
-
-    function muteChannel(channel) {
-        if (!channel.metadata.isMuted) {
-            channel.metadata.isMuted = true;
-            const gainNode = globalData.gainNodes[song.id]?.[channel.id];
-            if (gainNode) {
-                gainNode.gain.cancelScheduledValues(audioContext.currentTime);
-                gainNode.gain.setValueAtTime(gainNode.gain.value, audioContext.currentTime);
-                gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.5); // 0.5 second fade-out
-                // console.log(`Channel ${channel.id} muted with fade-out.`);
-            }
-        }
-    }
-
-    function unmuteChannel(channel) {
-        if (channel.metadata.isMuted) {
-            channel.metadata.isMuted = false;
-            const gainNode = globalData.gainNodes[song.id]?.[channel.id];
-            if (gainNode) {
-                gainNode.gain.cancelScheduledValues(audioContext.currentTime);
-                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-                gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.5); // 0.5 second fade-in
-                // console.log(`Channel ${channel.id} unmuted with fade-in.`);
-            }
-        }
-    }
 
 
     // Function to initialize playback engine
