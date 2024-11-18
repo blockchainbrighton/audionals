@@ -1612,16 +1612,7 @@ function initializeSeedList() {
 initializeSeedList();
 
 
-    // **Proceed with Mix Generation**
-/**
- * Generates a single song mix based on a seed string and assigns a remix number.
- *
- * @param {string} seedString - The seed string used for PRNG.
- * @param {number} remixNumber - The sequential number assigned to the remix.
- * @returns {Promise<Array>} - A promise that resolves to an array containing the generated song.
- */
- async function generateMixBySeed(seedString, remixNumber) {
-    
+async function generateMixBySeed(seedString, remixNumber) {
     // activationDEBUG: Starting mix generation
     console.log(`activationDEBUG: Generating mix #${remixNumber} with seed "${seedString}"`);
     
@@ -1665,18 +1656,48 @@ initializeSeedList();
 
     console.log(`activationDEBUG: Defined activation points:`, activationPoints);
 
+    // Adjust counts proportionally to sum to the number of random channels
+    const totalOriginalCounts = activationPoints.reduce((sum, { count }) => sum + count, 0);
+
+    let totalAdjustedCounts = 0;
+    const adjustedActivationPoints = activationPoints.map(({ startSeq, count }) => {
+        const adjustedCount = Math.round((count / totalOriginalCounts) * randomChannels.length);
+        totalAdjustedCounts += adjustedCount;
+        return { startSeq, count: adjustedCount };
+    });
+
+    // Adjust counts to make total counts equal to randomChannels.length
+    let difference = randomChannels.length - totalAdjustedCounts;
+    if (difference !== 0) {
+        // Adjust counts to compensate for rounding errors
+        for (let i = 0; Math.abs(difference) > 0; i = (i + 1) % adjustedActivationPoints.length) {
+            if (difference > 0) {
+                adjustedActivationPoints[i].count++;
+                difference--;
+            } else if (adjustedActivationPoints[i].count > 0) {
+                adjustedActivationPoints[i].count--;
+                difference++;
+            }
+        }
+    }
+
+    console.log(`activationDEBUG: Adjusted activation points:`, adjustedActivationPoints);
+
     // Assign activation sequences to channels
-    const channelsWithActivation = activationPoints.flatMap(({ startSeq, count }, activationIndex) => {
-        return Array.from({ length: count }, (_, i) => {
-            const channel = randomChannels[i + activationIndex * count];
+    let channelIndex = 0;
+    const channelsWithActivation = adjustedActivationPoints.flatMap(({ startSeq, count }) => {
+        const activationChannels = [];
+        for (let i = 0; i < count; i++) {
+            const channel = randomChannels[channelIndex];
+            channelIndex++;
             if (channel) {
                 const clonedChannel = JSON.parse(JSON.stringify(channel));
                 clonedChannel.activationSeq = startSeq;
                 console.log(`activationDEBUG: Channel ID ${clonedChannel.id} assigned to activation sequence starting at ${startSeq}.`);
-                return { channel: clonedChannel, activationSeq: startSeq };
+                activationChannels.push({ channel: clonedChannel, activationSeq: startSeq });
             }
-            return null;
-        }).filter(Boolean);
+        }
+        return activationChannels;
     });
 
     console.log(`activationDEBUG: Total channels with activation: ${channelsWithActivation.length}`);
@@ -1726,42 +1747,41 @@ initializeSeedList();
     };
 
     await Promise.all(channelsWithActivation.map(async ({ channel, activationSeq }, index) => {
-    const chId = `ch${index}`;
-    const newChannel = {
-        id: chId,
-        url: channel.url,
-        metadata: {
-            ...channel.metadata,
-            originalBPM: newSong.bpm,
-            activationSeq, // Track the activation sequence for this channel
-        }
-    };
+        const chId = `ch${index}`;
+        const newChannel = {
+            id: chId,
+            url: channel.url,
+            metadata: {
+                ...channel.metadata,
+                originalBPM: newSong.bpm,
+                activationSeq, // Track the activation sequence for this channel
+            }
+        };
 
-    // Apply effects and other initializations for the channel
-    await applyEffects(newChannel, index, newSong, activationSeq, newSong.bpm, effectsContext, prng);
-    newSong.channels.push(newChannel);
+        // Apply effects and other initializations for the channel
+        await applyEffects(newChannel, index, newSong, activationSeq, newSong.bpm, effectsContext, prng);
+        newSong.channels.push(newChannel);
 
-    // Adjust and map sequences based on the activation sequence
-    channel.metadata.channelSequence?.forEach(seqData => {
-        if (newSong.projectSequences[seqData.sequenceName]) {
-            // Calculate the offset to skip earlier sequences
-            const offset = (activationSeq - 1) * 63; // 63 steps per sequence
+        // Adjust and map sequences based on the activation sequence
+        channel.metadata.channelSequence?.forEach(seqData => {
+            if (newSong.projectSequences[seqData.sequenceName]) {
+                // Calculate the offset to skip earlier sequences
+                const offset = (activationSeq - 1) * 63; // 63 steps per sequence
 
-            // Filter out the steps that are earlier than the activation sequence
-            const validSteps = seqData.steps.filter(step => step >= offset);
+                // Filter out the steps that are earlier than the activation sequence
+                const validSteps = seqData.steps.filter(step => step >= offset);
 
-            // Adjust the sequence steps so that the new start is at step 1
-            const adjustedSteps = validSteps.map(step => step - offset);
+                // Adjust the sequence steps so that the new start is at step 1
+                const adjustedSteps = validSteps.map(step => step - offset);
 
-            // Map the adjusted sequence to the channel in the new song
-            newSong.projectSequences[seqData.sequenceName] = {
-                ...newSong.projectSequences[seqData.sequenceName],
-                [chId]: { steps: adjustedSteps }
-            };
-        }
-    });
-}));
-
+                // Map the adjusted sequence to the channel in the new song
+                newSong.projectSequences[seqData.sequenceName] = {
+                    ...newSong.projectSequences[seqData.sequenceName],
+                    [chId]: { steps: adjustedSteps }
+                };
+            }
+        });
+    }));
 
     // Log the final projectSequences mapping
     console.log(`activationDEBUG: Final projectSequences mapping:`, newSong.projectSequences);
@@ -1772,6 +1792,7 @@ initializeSeedList();
 
     return newSongs;
 }
+
 
 /**
  * Generates song mixes based on a list of seeds and assigns sequential remix numbers.
