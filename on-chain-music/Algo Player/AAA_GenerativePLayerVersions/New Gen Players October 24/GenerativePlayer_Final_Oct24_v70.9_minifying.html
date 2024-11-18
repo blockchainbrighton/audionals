@@ -43,10 +43,15 @@
                 playbackInterval: null,
                 seedList: [], // Added seedList here
                 currentSeed: null, // Track the current seed
-    
                 hasProceededToNextSong: false,
                 hasLoggedPlaybackNotActive: false,
-                hasCompletedSequences: false
+                hasCompletedSequences: false,
+                
+                // Define loopSampleIds in global data
+                loopSampleIds: new Set([
+                    "7c42769c1763cc8f045aada7914e8158223e45e7a4f197b49f918b1c005d36fci0",
+                    "3364803cb3032ce95f4138a214c15a9b36dcb70f574a477f27615d448e1cdeb8i0"
+                ])
             };
             console.log("[Global Data] Initialized globalData.");
     
@@ -63,7 +68,7 @@
         if (!window.globalData.nextSong) {
             window.globalData.nextSong = function() {
                 if (this.songsArray.length === 0) {
-                    console.warn("[Global Data] No songs available to navigate.");
+                    // console.warn("[Global Data] No songs available to navigate.");
                     return;
                 }
                 this.currentSongIndex = (this.currentSongIndex + 1) % this.songsArray.length;
@@ -75,7 +80,7 @@
         if (!window.globalData.previousSong) {
             window.globalData.previousSong = function() {
                 if (this.songsArray.length === 0) {
-                    console.warn("[Global Data] No songs available to navigate.");
+                    // console.warn("[Global Data] No songs available to navigate.");
                     return;
                 }
                 this.currentSongIndex = (this.currentSongIndex - 1 + this.songsArray.length) % this.songsArray.length;
@@ -84,7 +89,8 @@
             console.log("[Global Data] previousSong function defined.");
         }
     })();
-    </script>
+</script>
+
     
 <!-- Seed Management -->
 <script>
@@ -353,7 +359,7 @@
                 const currentSong = window.globalData.songsArray[window.globalData.currentSongIndex];
                 displaySeedAndBPM(currentSong.seed, currentSong.bpm, currentSong.projectName);
             } else {
-                console.warn("No song mixes generated.");
+                // console.warn("No song mixes generated.");
             }
             populatePreviousSeedsUI(JSON.parse(localStorage.getItem("previousSeeds")) || []);
         });
@@ -396,7 +402,7 @@ window.updateSeedDisplay = function() {
             // Additional logic to update the playback based on the new seed
             // For example, reload audio buffers if necessary
         } else {
-            console.warn("Current song index is out of bounds.");
+            // console.warn("Current song index is out of bounds.");
         }
     };
     //   window.updateSeedDisplay = updateSeedDisplay;
@@ -419,9 +425,516 @@ window.updateSeedDisplay = function() {
       </script>
 
 
+
 <!-- Combined Effects Configuration, Audio Effects Module, and GainNode Management -->
- <script>
-(()=>{window.EffectsModule=window.EffectsModule||{},window.EffectsModule.effectsConfig={pitchShift:{enabled:!0,defaultProbability:.5,shifts:[.25,.5,1,2,4]},harmonize:{enabled:!0,defaultProbability:.0025,intervals:[.25,.5,1,1.5,2,4],maxHarmonyChannels:1},delay:{enabled:!0,defaultProbability:.5,noteValue:"sixteenth",maxDelayRepeats:8},reverse:{enabled:!0,defaultProbability:.3},pan:{enabled:!0,defaultProbability:1,positions:[-1,1]},reverb:{enabled:!0,defaultProbability:.5,decayTimeRange:[1,5],mixRange:[.2,.7]},filter:{enabled:!0,defaultProbability:.7,types:["lowpass","highpass","bandpass"],frequencyRange:[300,8e3],QRange:[1,8]},tremolo:{enabled:!0,defaultProbability:.6,rateRange:[4,12],depthRange:[.6,1]},distortion:{enabled:!1,defaultProbability:.3,amountRange:[1,10]},bitcrusher:{enabled:!0,defaultProbability:.3,bitDepthRange:[2,6],sampleRateRange:[8e3,22050]},chorus:{enabled:!0,defaultProbability:.3,rateRange:[.1,5],depthRange:[.1,1],feedbackRange:[0,.3],mixRange:[0,.8]},leslie:{enabled:!0,defaultProbability:.2,speedRange:[.5,1.5],depthRange:[.5,1],mixRange:[0,1]},delayBpmLinked:{enabled:!0,defaultProbability:.3,delayTimes:["quarter","eighth","sixteenth"],feedbackRange:[.3,.6],mixRange:[0,.7]}},window.EffectsModule.getEffectParams=function(e,a,t,n){const i=this.effectsConfig[e];if(!i||!i.enabled)return null;if(n()<i.defaultProbability){const a={};switch(e){case"pitchShift":a.shifts=i.shifts;break;case"harmonize":a.intervals=i.intervals,a.maxHarmonyChannels=i.maxHarmonyChannels;break;case"delay":a.noteValue=i.noteValue,a.maxDelayRepeats=i.maxDelayRepeats;break;case"chorus":a.rate=n()*(i.rateRange[1]-i.rateRange[0])+i.rateRange[0],a.depth=n()*(i.depthRange[1]-i.depthRange[0])+i.depthRange[0],a.feedback=n()*(i.feedbackRange[1]-i.feedbackRange[0])+i.feedbackRange[0],a.mix=n()*(i.mixRange[1]-i.mixRange[0])+i.mixRange[0];break;case"leslie":a.rotationSpeed=n()*(i.speedRange[1]-i.speedRange[0])+i.speedRange[0],a.depth=n()*(i.depthRange[1]-i.depthRange[0])+i.depthRange[0],a.mix=n()*(i.mixRange[1]-i.mixRange[0])+i.mixRange[0];break;case"delayBpmLinked":a.time=i.delayTimes[Math.floor(n()*i.delayTimes.length)],a.feedback=n()*(i.feedbackRange[1]-i.feedbackRange[0])+i.feedbackRange[0],a.mix=n()*(i.mixRange[1]-i.mixRange[0])+i.mixRange[0]}return{...i,...a}}return null};const e=(e,a,t)=>Math.min(Math.max(e,a),t);window.applyChorusEffect=(e,{rate:a,depth:t,feedback:n,mix:i},o)=>{e.metadata.chorus={rate:a,depth:t,feedback:n,mix:i}},window.applyRandomPitchShift=(e,{shifts:a},t)=>{const n=a[Math.floor(t()*a.length)];e.metadata.playbackSpeed*=n},window.addHarmony=(a,t,n,{intervals:i,maxHarmonyChannels:o},d,l)=>{d.harmonyChannelsAdded>=o||i.forEach((i=>{if(d.harmonyChannelsAdded>=o)return;const l=JSON.parse(JSON.stringify(a));l.id=`${a.id}_harmony_${t}_${i}`,l.metadata.playbackSpeed*=i,l.metadata.volume=e(.5*(l.metadata.volume||1),1),n.channels.push(l),d.harmonyChannelsAdded++,d.totalGain+=l.metadata.volume||1}))},window.applyIntermittentDelay=(e,{noteValue:a,maxDelayRepeats:t},n)=>{const i=6e4/n,o={quarter:i,eighth:i/2,sixteenth:i/4};e.metadata.delay={time:o[a]||i,repeats:t}},window.applyReverseEffect=e=>{e.metadata.requiresReversal=!0},window.applyVolumeChange=(a,{range:t},n)=>{const[i,o]=t,d=n()*(o-i)+i,l=e((a.metadata.volume||1)*d,.5,1);a.metadata.volume=parseFloat(l.toFixed(2))},window.applyPanEffect=(a,{positions:t},n)=>{if(!t||!Array.isArray(t)||0===t.length)return console.warn(`[PanEffect] Invalid or empty 'positions' array for Channel "${a.id}". Assigning default pan value 0.`),void(a.metadata.pan=0);const i=e(t[Math.floor(n()*t.length)],-1,1);a.metadata.pan=parseFloat(i.toFixed(2))},window.applyReverbEffect=(a,{decayTimeRange:t,mixRange:n},i)=>{let o=i()*(t[1]-t[0])+t[0];o=e(o,t[0],t[1]);let d=i()*(n[1]-n[0])+n[0];d=e(d,n[0],n[1]),a.metadata.reverb={decayTime:parseFloat(o.toFixed(2)),mix:parseFloat(d.toFixed(2))}},window.applyFilterEffect=(a,{types:t,frequencyRange:n,QRange:i},o)=>{const d=t[Math.floor(o()*t.length)];let l=o()*(n[1]-n[0])+n[0];l=e(l,n[0],n[1]);let r=o()*(i[1]-i[0])+i[0];r=e(r,i[0],i[1]),a.metadata.filter={type:d,frequency:parseFloat(l.toFixed(2)),Q:parseFloat(r.toFixed(2))}},window.applyTremoloEffect=(a,{rateRange:t,depthRange:n},i)=>{let o=i()*(t[1]-t[0])+t[0];o=e(o,t[0],t[1]);let d=i()*(n[1]-n[0])+n[0];d=e(d,n[0],n[1]),a.metadata.tremolo={rate:parseFloat(o.toFixed(2)),depth:parseFloat(d.toFixed(2))}},window.applyDistortionEffect=(a,{amountRange:t},n)=>{let i=n()*(t[1]-t[0])+t[0];i=e(i,t[0],t[1]),a.metadata.distortion={amount:parseFloat(i.toFixed(2))}},window.applyBitcrusherEffect=(a,{bitDepthRange:t,sampleRateRange:n},i)=>{let o=Math.floor(i()*(t[1]-t[0]+1))+t[0];o=e(o,t[0],t[1]);let d=i()*(n[1]-n[0])+n[0];d=e(d,n[0],n[1]),d=parseFloat(d.toFixed(0)),a.metadata.bitcrusher={bitDepth:o,sampleRate:d}},window.applyLeslieEffect=(e,{rotationSpeed:a,depth:t,mix:n},i)=>{e.metadata.leslie={rotationSpeed:a,depth:t,mix:n}},window.applyBpmLinkedDelay=(e,{time:a,feedback:t,mix:n},i)=>{e.metadata.delayBpmLinked={time:a,feedback:t,mix:n}},window.GainNodeHelper=(()=>{const e=window.globalData||(window.globalData={gainNodes:{},audioContext:new(window.AudioContext||window.webkitAudioContext),masterGain:null});e.masterGain||(e.masterGain=e.audioContext.createGain(),e.masterGain.connect(e.audioContext.destination));const a=a=>{const t=a.id;a.channels&&0!==a.channels.length?(e.gainNodes[t]=e.gainNodes[t]||{},a.channels.forEach((a=>{if(!e.gainNodes[t][a.id]){const n=e.audioContext.createGain();n.gain.value=a.metadata.volume||1,n.connect(e.masterGain),e.gainNodes[t][a.id]=n}}))):console.warn(`[GainNodeHelper] No channels found for Song "${t}".`)};return{createGainNodesForSong:a,prepareNextSongGainNodes:e=>{a(e)},cleanupGainNodesForSong:a=>{const t=e.gainNodes[a];t?(Object.values(t).forEach((e=>e.disconnect())),delete e.gainNodes[a]):console.warn(`[GainNodeHelper] No GainNodes found to clean up for Song "${a}".`)}}})(),document.dispatchEvent(new Event("effectsLoaded"))})();
+<script>
+    /*
+    #region Combined Effects Configuration, Audio Effects Module, and GainNode Management
+
+    ## Purpose:
+    - **Effects Configuration:**
+      Establishes a comprehensive framework for managing and configuring various audio effects within the application. Enables dynamic and randomized application of audio effects based on predefined configurations and probabilities.
+    - **Audio Effects Module:**
+      Defines and exports various audio effect application functions used for processing audio channels within the application.
+    - **GainNode Management:**
+      Ensures that GainNodes are correctly created and mapped for each channel, allowing for volume control and audio effects management.
+
+    ## Key Functionalities:
+
+    ### Effects Configuration:
+    - **Effects Module Initialization:**
+      - Initializes or utilizes an existing `EffectsModule` within the global `window` object to store and manage effects configurations.
+    - **Effects Configuration:**
+      - Defines a variety of audio effects (e.g., pitchShift, harmonize, delay, chorus, leslie, synthBass, synth) with specific properties:
+        - **enabled:** Boolean flag to activate or deactivate the effect.
+        - **defaultProbability:** Determines the likelihood of the effect being applied.
+        - **Parameter Ranges:** Specifies ranges or options for effect-specific parameters (e.g., rate, depth, feedback).
+    - **Parameter Generation (`getEffectParams`):**
+      - Generates random parameters for each effect based on their configurations and a pseudo-random number generator (`prng`).
+      - Ensures that effects are applied with varied and dynamic settings each time they are triggered.
+      - Handles different parameter requirements for each effect type, allowing for extensibility and customization.
+    - **Event Dispatching:**
+      - Emits an `effectsLoaded` event once the effects configurations are fully set up, signaling other parts of the application that the effects system is ready for use.
+    - **Extensibility:**
+      - Designed to easily incorporate additional effects by adding new configurations and corresponding parameter generation logic.
+      - Facilitates scalability, allowing the effects system to grow with application requirements.
+
+    ### Audio Effects Module:
+    - **Effect Application Functions:**
+      - `applyChorusEffect`
+      - `applyRandomPitchShift`
+      - `addHarmony`
+      - `applyIntermittentDelay`
+      - `applyReverseEffect`
+      - `applyVolumeChange`
+      - `applyPanEffect`
+      - `applyReverbEffect`
+      - `applyFilterEffect`
+      - `applyTremoloEffect`
+      - `applyDistortionEffect`
+      - `applyBitcrusherEffect`
+      - `applyLeslieEffect`
+      - `applyBpmLinkedDelay`
+      - Each function is responsible for applying specific audio effects to audio channels based on provided parameters.
+
+    ### GainNode Management:
+    - **GainNode Creation and Mapping:**
+      - Ensures that each channel has an associated GainNode for volume control.
+      - Maps GainNodes to their corresponding channels within each song.
+    - **GainNode Initialization Functions:**
+      - `createGainNodesForSong`: Creates GainNodes for all channels in a given song.
+      - `prepareNextSong`: Prepares GainNodes for the next song (if applicable).
+      - `cleanupGainNodesForSong`: Cleans up GainNodes for a song when it's no longer needed.
+    - **Global Data Structure:**
+      - Maintains a global `gainNodes` map within `globalData` to manage GainNodes for all songs and channels.
+      - Ensures that GainNodes are correctly connected to the audio context's master gain node.
+
+    ## Overall Functionality:
+    This combined script provides a flexible and scalable approach to audio effect management and GainNode handling. By centralizing effect configurations, parameter generation, dedicated effect application functions, and GainNode management, it ensures consistency, ease of maintenance, and rich, randomized audio experiences tailored to user interactions or predefined conditions across the application's audio processing components.
+
+    #endregion
+    */
+
+    (() => {
+        // ================================
+        // Effects Configuration Section
+        // ================================
+        window.EffectsModule = window.EffectsModule || {};
+
+        window.EffectsModule.effectsConfig = { 
+            pitchShift: { 
+                enabled: true, 
+                defaultProbability: 0.5, // Reduced from 1
+                shifts: [0.25, 0.5, 1, 2, 4]
+            },
+            harmonize: { 
+                enabled: true, 
+                defaultProbability: 0.0025, // needs to range from 0.0025 to 0.1 - More stable mixes in general at 0.01 but interesting mixes around 0.1
+                intervals: [0.25, 0.5, 1, 1.5, 2, 4],
+                maxHarmonyChannels: 1 
+            },
+            delay: {
+                enabled: true, 
+                defaultProbability: 0.5, // Reduced from 1
+                noteValue: 'sixteenth',
+                maxDelayRepeats: 8 // Reduced from 16
+            },
+            reverse: {
+                enabled: true, 
+                defaultProbability: 0.3 // Reduced from 1
+            },
+            pan: {
+                enabled: true,
+                defaultProbability: 1, // Safe to keep at 1
+                positions: [-1, 1]
+            },
+            reverb: {
+                enabled: true, 
+                defaultProbability: 0.5, // Reduced from 1
+                decayTimeRange: [1, 5], // Narrowed range
+                mixRange: [0.2, 0.7] // Narrowed range
+            },
+            filter: {
+                enabled: true, 
+                defaultProbability: 0.7, 
+                types: ['lowpass', 'highpass', 'bandpass'], 
+                frequencyRange: [300, 8000], 
+                QRange: [1, 8] // Narrowed range
+            },
+            tremolo: {
+                enabled: true, 
+                defaultProbability: 0.6, 
+                rateRange: [4, 12],   
+                depthRange: [0.6, 1]
+            },
+            distortion: {
+                enabled: false, 
+                defaultProbability: 0.3, // Reduced and kept disabled
+                amountRange: [1, 10] // Adjusted range
+            },
+            bitcrusher: {
+                enabled: true, 
+                defaultProbability: 0.3, 
+                bitDepthRange: [2, 6],    
+                sampleRateRange: [8000, 22050]
+            },
+            chorus: {
+                enabled: true,
+                defaultProbability: 0.3, // Reduced from 0.5
+                rateRange: [0.1, 5],       
+                depthRange: [0.1, 1],      
+                feedbackRange: [0, 0.3],   
+                mixRange: [0, 0.8]         
+            },
+            leslie: {
+                enabled: true,
+                defaultProbability: 0.2, // Reduced from 0.3
+                speedRange: [0.5, 1.5],    
+                depthRange: [0.5, 1],      
+                mixRange: [0, 1]            
+            },
+            delayBpmLinked: {
+                enabled: true,
+                defaultProbability: 0.3, // Reduced from 0.4
+                delayTimes: ['quarter', 'eighth', 'sixteenth'], 
+                feedbackRange: [0.3, 0.6], // Narrowed range
+                mixRange: [0, 0.7]        // Narrowed range
+            },
+            // Removed 'synthBassLine' as it's undefined
+        };
+
+        window.EffectsModule.getEffectParams = function(effectName, currentSequence, bpm, prng) {
+            const effect = this.effectsConfig[effectName];
+            if (!effect || !effect.enabled) return null;
+            if (prng() < effect.defaultProbability) {
+                // Generate random parameters within the specified ranges
+                const params = {};
+                switch(effectName) {
+                    case 'pitchShift':
+                        params.shifts = effect.shifts;
+                        break;
+                    case 'harmonize':
+                        params.intervals = effect.intervals;
+                        params.maxHarmonyChannels = effect.maxHarmonyChannels;
+                        break;
+                    case 'delay':
+                        params.noteValue = effect.noteValue;
+                        params.maxDelayRepeats = effect.maxDelayRepeats;
+                        break;
+                    case 'chorus':
+                        params.rate = prng() * (effect.rateRange[1] - effect.rateRange[0]) + effect.rateRange[0];
+                        params.depth = prng() * (effect.depthRange[1] - effect.depthRange[0]) + effect.depthRange[0];
+                        params.feedback = prng() * (effect.feedbackRange[1] - effect.feedbackRange[0]) + effect.feedbackRange[0];
+                        params.mix = prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0];
+                        break;
+                    case 'leslie':
+                        params.rotationSpeed = prng() * (effect.speedRange[1] - effect.speedRange[0]) + effect.speedRange[0];
+                        params.depth = prng() * (effect.depthRange[1] - effect.depthRange[0]) + effect.depthRange[0];
+                        params.mix = prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0];
+                        break;
+                    case 'delayBpmLinked':
+                        params.time = effect.delayTimes[Math.floor(prng() * effect.delayTimes.length)];
+                        params.feedback = prng() * (effect.feedbackRange[1] - effect.feedbackRange[0]) + effect.feedbackRange[0];
+                        params.mix = prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0];
+                        break;
+
+                    // Add cases for other effects as needed
+                    default:
+                        // For effects without additional parameters
+                        break;
+                }
+                return { ...effect, ...params };
+            }
+            return null;
+        };
+
+        // ================================
+        // Audio Effects Module Section
+        // ================================
+
+
+        // Helper function to clamp values to a range
+        const clamp = (value, min, max) => {
+            if (value < min || value > max) {
+                console.warn(`Value ${value} is out of bounds. Clamping to range [${min}, ${max}]`);
+            }
+            return Math.min(Math.max(value, min), max);
+        };
+        // Apply Chorus Effect
+        window.applyChorusEffect = (channel, { rate, depth, feedback, mix }, prng) => {
+            channel.metadata.chorus = {
+                rate,       // Modulation rate in Hz
+                depth,      // Modulation depth (0 to 1)
+                feedback,   // Feedback amount (0 to 0.5)
+                mix         // Wet/Dry mix (0 to 1)
+            };
+            // console.log(`[ChorusEffect] Channel "${channel.id}" chorus set with rate: ${rate}Hz, depth: ${depth}, feedback: ${feedback}, mix: ${mix}`);
+        };
+
+        // Apply Random Pitch Shift
+        window.applyRandomPitchShift = (channel, { shifts }, prng) => {
+            const shift = shifts[Math.floor(prng() * shifts.length)];
+            channel.metadata.playbackSpeed *= shift;
+            // console.log(`[PitchShift] Channel "${channel.id}" playback speed shifted by factor ${shift}`);
+        };
+
+        // Add Harmony
+        window.addHarmony = (originalChannel, index, newSong, { intervals, maxHarmonyChannels }, context, prng) => {
+            if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
+            intervals.forEach(interval => {
+                if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
+                const harmony = JSON.parse(JSON.stringify(originalChannel));
+                harmony.id = `${originalChannel.id}_harmony_${index}_${interval}`;
+                harmony.metadata.playbackSpeed *= interval;
+                harmony.metadata.volume = clamp((harmony.metadata.volume || 1) * 0.5, 1);
+                newSong.channels.push(harmony);
+                context.harmonyChannelsAdded++;
+                context.totalGain += harmony.metadata.volume || 1; // Update totalGain
+                // console.log(`[Harmony] Added harmony channel "${harmony.id}" with interval ${interval}`);
+            });
+        };
+
+        // Apply Intermittent Delay
+        window.applyIntermittentDelay = (channel, { noteValue, maxDelayRepeats }, bpm) => {
+            const beatDuration = 60000 / bpm;
+            const delayMap = { 'quarter': beatDuration, 'eighth': beatDuration / 2, 'sixteenth': beatDuration / 4 };
+            channel.metadata.delay = { time: delayMap[noteValue] || beatDuration, repeats: maxDelayRepeats };
+            // console.log(`[IntermittentDelay] Channel "${channel.id}" delay set with time: ${channel.metadata.delay.time}ms, repeats: ${channel.metadata.delay.repeats}`);
+        };
+
+        // Apply Reverse Effect
+        window.applyReverseEffect = channel => {
+            channel.metadata.requiresReversal = true;
+            // console.log(`[ReverseEffect] Channel "${channel.id}" reversal enabled`);
+        };
+
+       
+        // Apply Volume Change
+        window.applyVolumeChange = (channel, { range }, prng) => {
+            const [min, max] = range;
+
+            // Ensure the range is within valid limits
+            if (min < 0 || max > 1) {
+                console.error(`Invalid volume range: [${min}, ${max}]. Clamping to [0.5, 1].`);
+            }
+
+            // Clamp range to valid limits
+            const clampedMin = clamp(min, 0.5, 1);
+            const clampedMax = clamp(max, 0.5, 1);
+
+            // Calculate random factor within the clamped range
+            const randomFactor = prng() * (clampedMax - clampedMin) + clampedMin;
+            const newVolume = clamp((channel.metadata.volume || 1) * randomFactor, 0.5, 1);
+
+            // Set the new volume with two decimal places
+            channel.metadata.volume = parseFloat(newVolume.toFixed(2));
+
+            // console.log(`[VolumeChange] Channel "${channel.id}" volume set to ${channel.metadata.volume}`);
+        };
+
+        // Apply Pan Effect
+        window.applyPanEffect = (channel, { positions }, prng) => {
+            if (!positions || !Array.isArray(positions) || positions.length === 0) {
+                console.warn(`[PanEffect] Invalid or empty 'positions' array for Channel "${channel.id}". Assigning default pan value 0.`);
+                channel.metadata.pan = 0; // Default center pan
+                return;
+            }
+
+            const selectedPan = clamp(positions[Math.floor(prng() * positions.length)], -1, 1);
+            channel.metadata.pan = parseFloat(selectedPan.toFixed(2));
+            // console.log(`[PanEffect] Channel "${channel.id}" pan set to ${channel.metadata.pan}`);
+        };
+
+        // Apply Reverb Effect
+        window.applyReverbEffect = (channel, { decayTimeRange, mixRange }, prng) => {
+            // Generate random decay time within range
+            let decayTime = prng() * (decayTimeRange[1] - decayTimeRange[0]) + decayTimeRange[0];
+            decayTime = clamp(decayTime, decayTimeRange[0], decayTimeRange[1]);
+
+            // Generate random mix within range
+            let mix = prng() * (mixRange[1] - mixRange[0]) + mixRange[0];
+            mix = clamp(mix, mixRange[0], mixRange[1]);
+
+            channel.metadata.reverb = {
+                decayTime: parseFloat(decayTime.toFixed(2)), // Rounded for consistency
+                mix: parseFloat(mix.toFixed(2))
+            };
+
+            // console.log(`[ReverbEffect] Channel "${channel.id}" reverb set with decayTime: ${channel.metadata.reverb.decayTime}s, mix: ${channel.metadata.reverb.mix}`);
+        };
+
+       // Apply Filter Effect
+        window.applyFilterEffect = (channel, { types, frequencyRange, QRange }, prng) => {
+            // Ensure the types array is valid
+            if (!Array.isArray(types) || types.length === 0) {
+                console.error("Invalid filter types array. Using default type 'lowpass'.");
+                types = ['lowpass']; // Default to lowpass if no types provided
+            }
+
+            // Select a random filter type from the available types
+            const selectedType = types[Math.floor(prng() * types.length)];
+
+            // Validate and clamp frequency range
+            const [minFreq, maxFreq] = frequencyRange;
+            if (minFreq < 20 || maxFreq > 22000) {
+                console.warn(`Frequency range out of bounds: [${minFreq}, ${maxFreq}]. Clamping to [20, 22000].`);
+            }
+
+            const frequency = clamp(prng() * (maxFreq - minFreq) + minFreq, 20, 22000);
+
+            // Validate and clamp Q range
+            const [minQ, maxQ] = QRange;
+            if (minQ < 0.1 || maxQ > 20) {
+                console.warn(`Q range out of bounds: [${minQ}, ${maxQ}]. Clamping to [0.1, 20].`);
+            }
+
+            const Q = clamp(prng() * (maxQ - minQ) + minQ, 0.1, 20);
+
+            // Apply filter settings to the channel metadata
+            channel.metadata.filter = {
+                type: selectedType,
+                frequency: parseFloat(frequency.toFixed(2)),
+                Q: parseFloat(Q.toFixed(2)),
+            };
+
+            // console.log(`[FilterEffect] Channel "${channel.id}" filter set to type: ${channel.metadata.filter.type}, frequency: ${channel.metadata.filter.frequency}Hz, Q: ${channel.metadata.filter.Q}`);
+        };
+
+        // Apply Tremolo Effect
+        window.applyTremoloEffect = (channel, { rateRange, depthRange }, prng) => {
+            // Generate random rate within range
+            let rate = prng() * (rateRange[1] - rateRange[0]) + rateRange[0];
+            rate = clamp(rate, rateRange[0], rateRange[1]);
+
+            // Generate random depth within range
+            let depth = prng() * (depthRange[1] - depthRange[0]) + depthRange[0];
+            depth = clamp(depth, depthRange[0], depthRange[1]);
+
+            channel.metadata.tremolo = {
+                rate: parseFloat(rate.toFixed(2)),   // Rounded for consistency
+                depth: parseFloat(depth.toFixed(2))
+            };
+
+            // console.log(`[TremoloEffect] Channel "${channel.id}" tremolo set to rate: ${channel.metadata.tremolo.rate}Hz, depth: ${channel.metadata.tremolo.depth}`);
+        };
+
+        // Apply Distortion Effect
+        window.applyDistortionEffect = (channel, { amountRange }, prng) => {
+            // Generate random amount within range
+            let amount = prng() * (amountRange[1] - amountRange[0]) + amountRange[0];
+            amount = clamp(amount, amountRange[0], amountRange[1]);
+
+            channel.metadata.distortion = {
+                amount: parseFloat(amount.toFixed(2)) // Rounded for consistency
+            };
+
+            // console.log(`[DistortionEffect] Channel "${channel.id}" distortion set to amount: ${channel.metadata.distortion.amount}`);
+        };
+
+        // Apply Bitcrusher Effect
+        window.applyBitcrusherEffect = (channel, { bitDepthRange, sampleRateRange }, prng) => {
+            // Generate random bit depth within range
+            let bitDepth = Math.floor(prng() * (bitDepthRange[1] - bitDepthRange[0] + 1)) + bitDepthRange[0];
+            bitDepth = clamp(bitDepth, bitDepthRange[0], bitDepthRange[1]);
+
+            // Generate random sample rate within range
+            let sampleRate = prng() * (sampleRateRange[1] - sampleRateRange[0]) + sampleRateRange[0];
+            sampleRate = clamp(sampleRate, sampleRateRange[0], sampleRateRange[1]);
+            sampleRate = parseFloat(sampleRate.toFixed(0)); // Rounded to nearest integer
+
+            channel.metadata.bitcrusher = {
+                bitDepth: bitDepth,
+                sampleRate: sampleRate
+            };
+
+            // console.log(`[BitcrusherEffect] Channel "${channel.id}" bitcrusher set to bitDepth: ${channel.metadata.bitcrusher.bitDepth}, sampleRate: ${channel.metadata.bitcrusher.sampleRate}Hz`);
+        };
+
+        // Apply Leslie Effect
+        window.applyLeslieEffect = (channel, { rotationSpeed, depth, mix }, bpm) => {
+            channel.metadata.leslie = {
+                rotationSpeed, // Rotation speed in Hz
+                depth,         // Depth of the effect
+                mix            // Wet/Dry mix
+            };
+            // console.log(`[LeslieEffect] Channel "${channel.id}" Leslie effect set with rotationSpeed: ${rotationSpeed}Hz, depth: ${depth}, mix: ${mix}`);
+        };
+
+        // Apply BPM-Linked Delay
+        window.applyBpmLinkedDelay = (channel, { time, feedback, mix }, bpm) => {
+            channel.metadata.delayBpmLinked = {
+                time,       // Delay time in ms
+                feedback,   // Feedback amount (0 to 1)
+                mix         // Wet/Dry mix (0 to 1)
+            };
+            // console.log(`[BpmLinkedDelay] Channel "${channel.id}" BPM-linked delay set with time: ${time}ms, feedback: ${feedback}, mix: ${mix}`);
+        };
+
+        // ================================
+        // GainNode Management Section
+        // ================================
+
+        window.GainNodeHelper = (() => {
+            // Initialize globalData if not present
+            const globalData = window.globalData || (window.globalData = { 
+                gainNodes: {}, 
+                audioContext: new (window.AudioContext || window.webkitAudioContext)(), 
+                masterGain: null 
+            });
+
+            // Initialize masterGain if not already set
+            if (!globalData.masterGain) {
+                globalData.masterGain = globalData.audioContext.createGain();
+                globalData.masterGain.connect(globalData.audioContext.destination);
+                // console.log(`[GainNodeHelper] Master GainNode initialized and connected to destination.`);
+            }
+
+            /**
+             * Initializes GainNodes for all channels in a given song.
+             *
+             * @param {Object} song - The song object containing channels.
+             */
+            const createGainNodesForSong = (song) => {
+                const songId = song.id;
+                if (!song.channels || song.channels.length === 0) {
+                    console.warn(`[GainNodeHelper] No channels found for Song "${songId}".`);
+                    return;
+                }
+
+                globalData.gainNodes[songId] = globalData.gainNodes[songId] || {};
+
+                song.channels.forEach(channel => {
+                    if (!globalData.gainNodes[songId][channel.id]) {
+                        const gainNode = globalData.audioContext.createGain();
+                        gainNode.gain.value = channel.metadata.volume || 1;
+                        gainNode.connect(globalData.masterGain);
+                        globalData.gainNodes[songId][channel.id] = gainNode;
+                        // console.log(`[GainNodeHelper] GainNode created for Channel "${channel.id}" in Song "${songId}".`);
+                    }
+                });
+            };
+
+            /**
+             * Prepares GainNodes for the next song.
+             *
+             * @param {Object} song - The next song object.
+             */
+            const prepareNextSongGainNodes = (song) => {
+                createGainNodesForSong(song);
+                // console.log(`[GainNodeHelper] Prepared GainNodes for next Song "${song.id}".`);
+            };
+
+            /**
+             * Cleans up GainNodes for a specific song.
+             *
+             * @param {string} songId - The ID of the song to clean up.
+             */
+            const cleanupGainNodesForSong = (songId) => {
+                const songGainNodes = globalData.gainNodes[songId];
+                if (songGainNodes) {
+                    Object.values(songGainNodes).forEach(gainNode => gainNode.disconnect());
+                    delete globalData.gainNodes[songId];
+                    // console.log(`[GainNodeHelper] Cleaned up GainNodes for Song "${songId}".`);
+                } else {
+                    console.warn(`[GainNodeHelper] No GainNodes found to clean up for Song "${songId}".`);
+                }
+            };
+
+            // Expose public methods
+            return {
+                createGainNodesForSong,
+                prepareNextSongGainNodes,
+                cleanupGainNodesForSong
+            };
+        })();
+
+        // ================================
+        // Finalize Configuration
+        // ================================
+
+        // Dispatch 'effectsLoaded' event to signal that the effects system is ready
+        document.dispatchEvent(new Event('effectsLoaded'));
+    })();
 </script>
 
 <!-- GainNode Helpers (gainNodeHelpers.js) -->
@@ -607,121 +1120,146 @@ window.GainNodeHelper = (() => {
             maxLayers: 4 // Maximum number of layers per channel to prevent excessive gain reduction
         };
 
-        /**
-         * Applies a series of audio effects to a given channel, ensuring volume consistency and balance.
-         *
-         * @param {Object} channel - The audio channel to apply effects to.
-         * @param {number} index - The index of the channel.
-         * @param {Object} newSong - The song object containing channel and sequence information.
-         * @param {number} currentSequence - The current sequence number.
-         * @param {number} bpm - Beats per minute of the song.
-         * @param {Object} effectsContext - Context object to manage total gain and harmony channels.
-         * @param {Function} prng - Pseudo-random number generator function.
-         */
-        function applyEffects(channel, index, newSong, currentSequence, bpm, effectsContext, prng) {
-            const MAX_EFFECTS_PER_CHANNEL = 3; // Define a reasonable limit
+     /**
+ * Applies a series of audio effects to a given channel, ensuring volume consistency and balance.
+ *
+ * @param {Object} channel - The audio channel to apply effects to.
+ * @param {number} index - The index of the channel.
+ * @param {Object} newSong - The song object containing channel and sequence information.
+ * @param {number} currentSequence - The current sequence number.
+ * @param {number} bpm - Beats per minute of the song.
+ * @param {Object} effectsContext - Context object to manage total gain and harmony channels.
+ * @param {Function} prng - Pseudo-random number generator function.
+ */
+function applyEffects(channel, index, newSong, currentSequence, bpm, effectsContext, prng) {
+    const MAX_EFFECTS_PER_CHANNEL = 3; // Define a reasonable limit
+    const duplicationEffects = new Set(['harmonize', 'delay', 'delayBpmLinked']); // Effects that duplicate layers
+    const loggedEffectInfo = new Set(); // To keep track of logged effects
 
-            const duplicationEffects = new Set(['harmonize', 'delay', 'delayBpmLinked']); // Effects that duplicate layers
+    const effectsMap = [
+        { name: 'pitchShift', applyFn: (ch, params) => applyRandomPitchShift(ch, params, prng) },
+        { name: 'harmonize', applyFn: (ch, params) => addHarmony(ch, index, newSong, params, effectsContext, prng) },
+        { name: 'delay', applyFn: (ch, params) => applyIntermittentDelay(ch, params, bpm) },
+        { name: 'reverse', applyFn: (ch, params) => applyReverseEffect(ch) },
+        { name: 'filter', applyFn: (ch, params) => applyFilterEffect(ch, params, prng) },
+        { name: 'tremolo', applyFn: (ch, params) => applyTremoloEffect(ch, params, prng) },
+        { name: 'distortion', applyFn: (ch, params) => applyDistortionEffect(ch, params, prng) },
+        { name: 'bitcrusher', applyFn: (ch, params) => applyBitcrusherEffect(ch, params, prng) },
+        { name: 'pan', applyFn: (ch, params) => applyPanEffect(ch, params, prng) },
+        { name: 'reverb', applyFn: (ch, params) => applyReverbEffect(ch, params, prng) },
+        { name: 'volumeChange', applyFn: (ch, params) => applyVolumeChange(ch, params, prng) },
+        { name: 'chorus', applyFn: (ch, params) => applyChorusEffect(ch, params, prng) },
+        { name: 'leslie', applyFn: (ch, params) => applyLeslieEffect(ch, params, bpm, prng) },
+        { name: 'delayBpmLinked', applyFn: (ch, params) => applyBpmLinkedDelay(ch, params, bpm, prng) },
+    ];
 
-            const effectsMap = [
-                { name: 'pitchShift', applyFn: (ch, params) => applyRandomPitchShift(ch, params, prng) },
-                { name: 'harmonize', applyFn: (ch, params) => addHarmony(ch, index, newSong, params, effectsContext, prng) },
-                { name: 'delay', applyFn: (ch, params) => applyIntermittentDelay(ch, params, bpm) },
-                { name: 'reverse', applyFn: (ch, params) => applyReverseEffect(ch) },
-                { name: 'filter', applyFn: (ch, params) => applyFilterEffect(ch, params, prng) },
-                { name: 'tremolo', applyFn: (ch, params) => applyTremoloEffect(ch, params, prng) },
-                { name: 'distortion', applyFn: (ch, params) => applyDistortionEffect(ch, params, prng) },
-                { name: 'bitcrusher', applyFn: (ch, params) => applyBitcrusherEffect(ch, params, prng) },
-                { name: 'pan', applyFn: (ch, params) => applyPanEffect(ch, params, prng) },
-                { name: 'reverb', applyFn: (ch, params) => applyReverbEffect(ch, params, prng) },
-                { name: 'volumeChange', applyFn: (ch, params) => applyVolumeChange(ch, params, prng) },
-                { name: 'chorus', applyFn: (ch, params) => applyChorusEffect(ch, params, prng) },
-                { name: 'leslie', applyFn: (ch, params) => applyLeslieEffect(ch, params, bpm, prng) },
-                { name: 'delayBpmLinked', applyFn: (ch, params) => applyBpmLinkedDelay(ch, params, bpm, prng) },
-            ];
+    // Shuffle the effectsMap to randomize effect application order
+    const shuffledEffects = effectsMap.sort(() => 0.5 - Math.random());
 
-            // Shuffle the effectsMap to randomize effect application order
-            const shuffledEffects = effectsMap.sort(() => 0.5 - Math.random());
+    let appliedEffectsCount = 0;
 
-            let appliedEffectsCount = 0;
+    // Iterate through each effect in the shuffledEffectsMap
+    for (const effect of shuffledEffects) {
+        if (appliedEffectsCount >= MAX_EFFECTS_PER_CHANNEL) break; // Stop if max effects reached
 
-            // Iterate through each effect in the shuffledEffectsMap
-            for (const effect of shuffledEffects) {
-                if (appliedEffectsCount >= MAX_EFFECTS_PER_CHANNEL) break; // Stop if max effects reached
+        const effectParams = window.EffectsModule.getEffectParams(effect.name, currentSequence, bpm, prng);
+        if (effectParams) {
+            // Apply the effect to the channel
+            effect.applyFn(channel, effectParams);
+            appliedEffectsCount++;
 
-                const effectParams = window.EffectsModule.getEffectParams(effect.name, currentSequence, bpm, prng);
-                if (effectParams) {
-                    // Apply the effect to the channel
-                    effect.applyFn(channel, effectParams);
-                    appliedEffectsCount++;
+            // If the effect is a duplication effect, adjust gain accordingly
+            if (duplicationEffects.has(effect.name)) {
+                // Initialize layer count if not present
+                if (!effectsContext.channelLayers[channel.id]) {
+                    effectsContext.channelLayers[channel.id] = 1; // Original layer
+                }
 
-                    // If the effect is a duplication effect, adjust gain accordingly
-                    if (duplicationEffects.has(effect.name)) {
-                        // Initialize layer count if not present
-                        if (!effectsContext.channelLayers[channel.id]) {
-                            effectsContext.channelLayers[channel.id] = 1; // Original layer
-                        }
+                // Increment layer count
+                if (effectsContext.channelLayers[channel.id] < layeringControls.maxLayers) {
+                    effectsContext.channelLayers[channel.id]++;
+                }
 
-                        // Increment layer count
-                        if (effectsContext.channelLayers[channel.id] < layeringControls.maxLayers) {
-                            effectsContext.channelLayers[channel.id]++;
-                        }
+                // Calculate the new gain based on the number of layers
+                const layers = effectsContext.channelLayers[channel.id];
+                const newGain = (1 / layers) * layeringControls.gainReductionPerLayer ** (layers - 1);
 
-                        // Calculate the new gain based on the number of layers
-                        const layers = effectsContext.channelLayers[channel.id];
-                        const newGain = (1 / layers) * layeringControls.gainReductionPerLayer ** (layers - 1);
+                // Update the channel's metadata volume
+                channel.metadata.volume = newGain;
 
-                        // Update the channel's metadata volume
-                        channel.metadata.volume = newGain;
+                // Apply the new gain using GainNodeHelper
+                GainNodeHelper.setChannelGain(newSong.id, channel.id, newGain);
 
-                        // Apply the new gain using GainNodeHelper
-                        GainNodeHelper.setChannelGain(newSong.id, channel.id, newGain);
-
-                        // console.log(`[Effects][Song: "${newSong.id}"] Applied duplication effect "${effect.name}" to Channel "${channel.id}". Layers: ${layers}, New Gain: ${newGain.toFixed(2)}`);
-                    }
-
-                    // Logging the application of the effect with song and channel information
-                    // console.log(`[Effects][Song: "${newSong.id}"] Applied effect "${effect.name}" to Channel "${channel.id}" with parameters:`, effectParams);
+                // Log the duplication effect application only once per effect
+                if (!loggedEffectInfo.has(effect.name)) {
+                    loggedEffectInfo.add(effect.name);
+                    // console.log(`[Effects][Song: "${newSong.id}"] Applied duplication effect "${effect.name}" to Channel "${channel.id}". Layers: ${layers}, New Gain: ${newGain.toFixed(2)}`);
                 }
             }
 
-            // Define volume clamping constants
-            const MIN_CHANNEL_VOLUME = 0.5; // Minimum volume factor to prevent channels from being too quiet
-            const MAX_CHANNEL_VOLUME = 1.5; // Maximum volume factor to prevent channels from being too loud
-            const MAX_TOTAL_GAIN = 1;       // Maximum total gain across all channels to prevent overall mix from being too loud
-
-            // After applying all effects, perform volume normalization and clamping
-
-            // Ensure the total gain across all channels does not exceed MAX_TOTAL_GAIN
-            if (effectsContext.totalGain > MAX_TOTAL_GAIN) {
-                const reductionFactor = MAX_TOTAL_GAIN / effectsContext.totalGain;
-                channel.metadata.volume = (channel.metadata.volume || 1) * reductionFactor;
-
-                // Log the normalization action with song and channel information
-                // console.log(`[Normalization][Song: "${newSong.id}"] Normalized Channel "${channel.id}" volume by factor ${reductionFactor.toFixed(2)} to maintain total gain within ${MAX_TOTAL_GAIN}.`);
+            // Log the application of the effect with song and channel information only once
+            if (!loggedEffectInfo.has(effect.name)) {
+                loggedEffectInfo.add(effect.name);
+                // console.log(`[Effects][Song: "${newSong.id}"] Applied effect "${effect.name}" to Channel "${channel.id}" with parameters:`, effectParams);
             }
-
-            // Update the total gain in the effects context
-            effectsContext.totalGain += channel.metadata.volume || 1;
-
-            // Clamp the channel's volume within defined bounds to maintain balance
-            if (channel.metadata.volume < MIN_CHANNEL_VOLUME) {
-                channel.metadata.volume = MIN_CHANNEL_VOLUME;
-                // console.log(`[Clamping][Song: "${newSong.id}"] Clamped Channel "${channel.id}" volume to minimum ${MIN_CHANNEL_VOLUME}.`);
-            } else if (channel.metadata.volume > MAX_CHANNEL_VOLUME) {
-                channel.metadata.volume = MAX_CHANNEL_VOLUME;
-                // console.log(`[Clamping][Song: "${newSong.id}"] Clamped Channel "${channel.id}" volume to maximum ${MAX_CHANNEL_VOLUME}.`);
-            }
-
-            // Update the GainNode's gain value using GainNodeHelper
-            GainNodeHelper.setChannelGain(newSong.id, channel.id, channel.metadata.volume || 1);
         }
-            
-                
-        const loopSampleIds = new Set([
-            "7c42769c1763cc8f045aada7914e8158223e45e7a4f197b49f918b1c005d36fci0",
-            "3364803cb3032ce95f4138a214c15a9b36dcb70f574a477f27615d448e1cdeb8i0",
-        ]);
+    }
+
+    // Define volume clamping constants
+    const MIN_CHANNEL_VOLUME = 0.5; // Minimum volume factor to prevent channels from being too quiet
+    const MAX_CHANNEL_VOLUME = 1.5; // Maximum volume factor to prevent channels from being too loud
+    const MAX_TOTAL_GAIN = 1;       // Maximum total gain across all channels to prevent overall mix from being too loud
+
+    const MAX_GAIN = 1541.27;
+    const MIN_GAIN = -3.40282e+38; // Adjust based on your filter type
+
+    function setFilterGain(filterNode, value) {
+        // Clamp the value
+        const clampedValue = Math.min(Math.max(value, MIN_GAIN), MAX_GAIN);
+        filterNode.gain.setValueAtTime(clampedValue, audioContext.currentTime);
+        if (value !== clampedValue) {
+            log(`Gain value ${value} clamped to ${clampedValue}.`);
+        }
+    }
+    // After applying all effects, perform volume normalization and clamping
+
+    // Ensure the total gain across all channels does not exceed MAX_TOTAL_GAIN
+    if (effectsContext.totalGain > MAX_TOTAL_GAIN) {
+        const reductionFactor = MAX_TOTAL_GAIN / effectsContext.totalGain;
+        channel.metadata.volume = (channel.metadata.volume || 1) * reductionFactor;
+
+        // Log the normalization action only once
+        if (!loggedEffectInfo.has('normalization')) {
+            loggedEffectInfo.add('normalization');
+            // console.log(`[Normalization][Song: "${newSong.id}"] Normalized Channel "${channel.id}" volume by factor ${reductionFactor.toFixed(2)} to maintain total gain within ${MAX_TOTAL_GAIN}.`);
+        }
+    }
+
+    // Update the total gain in the effects context
+    effectsContext.totalGain += channel.metadata.volume || 1;
+
+    // Clamp the channel's volume within defined bounds to maintain balance
+    if (channel.metadata.volume < MIN_CHANNEL_VOLUME) {
+        channel.metadata.volume = MIN_CHANNEL_VOLUME;
+        // Log clamping action only once
+        if (!loggedEffectInfo.has('clamping_min')) {
+            loggedEffectInfo.add('clamping_min');
+            // console.log(`[Clamping][Song: "${newSong.id}"] Clamped Channel "${channel.id}" volume to minimum ${MIN_CHANNEL_VOLUME}.`);
+        }
+    } else if (channel.metadata.volume > MAX_CHANNEL_VOLUME) {
+        channel.metadata.volume = MAX_CHANNEL_VOLUME;
+        // Log clamping action only once
+        if (!loggedEffectInfo.has('clamping_max')) {
+            loggedEffectInfo.add('clamping_max');
+            // console.log(`[Clamping][Song: "${newSong.id}"] Clamped Channel "${channel.id}" volume to maximum ${MAX_CHANNEL_VOLUME}.`);
+        }
+    }
+
+    // Update the GainNode's gain value using GainNodeHelper
+    GainNodeHelper.setChannelGain(newSong.id, channel.id, channel.metadata.volume || 1);
+}
+ 
+
     
         const keyNames = [
             "projectName",
@@ -884,65 +1422,8 @@ window.GainNodeHelper = (() => {
             // Include other parameters as needed
             return key;
         };
-    
-        const loadAndProcessSample = async (url, params = {}) => {
-            const key = generateSampleKey(url, params);
-    
-            if (sampleCache.has(key)) {
-                // Move the used sample to the end to mark it as recently used
-                const value = sampleCache.get(key);
-                sampleCache.delete(key);
-                sampleCache.set(key, value);
-                console.log(`[Cache] Reusing cached sample: ${key}`);
-                return value;
-            }
-    
-            try {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch sample from ${url}: ${response.statusText}`);
-                }
-    
-                const arrayBuffer = await response.arrayBuffer();
-    
-                let audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-    
-                // Normalize the audio buffer
-                audioBuffer = normalizeAudioBuffer(audioBuffer);
-    
-                // Apply processing if needed
-                if (params.reversed) {
-                    for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
-                        Array.prototype.reverse.call(audioBuffer.getChannelData(i));
-                    }
-                    // console.log(`[Processing] Reversed audio buffer for key: ${key}`);
-                }
-    
-                if (params.playbackSpeed && params.playbackSpeed !== 1) {
-                    // Implement time-stretching or pitch-shifting as needed
-                    // Placeholder: Log that playbackSpeed is being applied
-                    // console.log(`[Processing] Applying playback speed ${params.playbackSpeed} for key: ${key}`);
-                    // Actual implementation would require more complex audio processing
-                }
-    
-                // Add to cache
-                sampleCache.set(key, audioBuffer);
-                // console.log(`[Cache] Added sample to cache: ${key}`);
-    
-                // Evict least recently used samples if cache size exceeds limit
-                if (sampleCache.size > MAX_CACHE_SIZE) {
-                    const oldestKey = sampleCache.keys().next().value;
-                    sampleCache.delete(oldestKey);
-                    console.log(`[Cache] Evicted oldest sample from cache: ${oldestKey}`);
-                }
-    
-                return audioBuffer;
-            } catch (error) {
-                console.error(`[LoadAndProcessSample] Error processing sample from ${url}:`, error);
-                throw error; // Re-throw to allow higher-level handling
-            }
-        };
-    
+
+
        
     
         const validSongDataUrls = songDataUrls.filter((url) => url.trim() && !url.trim().startsWith("//"));
@@ -983,51 +1464,48 @@ window.GainNodeHelper = (() => {
             });
     
             const originalSongs = songDataArray
-                .sort((a, b) => a.index - b.index)
-                .map(({ data, index }) => {
-                    const {
-                        projectName = "The Infinite Ordinal",
-                        artistName = "melophonic",
-                        projectBPM = 120,
-                        projectSequences = {},
-                        channelURLs = [],
-                        channelVolume = [],
-                        channelPlaybackSpeed = [],
-                        trimSettings = {}
-                    } = data;
-    
-                    const channels = channelIds.map((id, idx) => {
-                        const channelSequence = Object.entries(projectSequences).reduce((acc, [sequenceName, sequenceData]) => {
-                            const channelData = sequenceData[`ch${idx}`];
-                            if (channelData) acc.push({ sequenceName, steps: channelData.steps });
-                            return acc;
-                        }, []);
-                        const metadata = {
-                            volume: channelVolume[idx] ?? 1,
-                            playbackSpeed: channelPlaybackSpeed[idx] ?? 1,
-                            trimStartTime_Percentage: trimSettings[idx]?.start || 0,
-                            trimEndTime_Percentage: trimSettings[idx]?.end || 100,
-                            requiresReversal: channelSequence.some(seq => seq.steps.some(step => typeof step === "object" && step.reverse)),
-                            channelSequence,
-                            originalBPM: projectBPM
-                        };
-                        const sampleId = channelURLs[idx];
-                        if (loopSampleIds.has(sampleId)) {
-                            metadata.isLoop = true;
-                        }
-                        return { id, url: sampleId || "URL_not_found", metadata };
-                    });
-                    return {
-                        id: `Song ${index + 1}: ${projectName}`,
-                        artist: artistName,
-                        bpm: projectBPM,
-                        totalSequences: Object.keys(projectSequences).length,
-                        totalChannels: channels.length,
-                        channels,
-                        projectSequences
+            .sort((a, b) => a.index - b.index)
+            .map(({ data, index }) => {
+                const {
+                    projectName = "The Infinite Ordinal",
+                    artistName = "melophonic",
+                    projectBPM = 120,
+                    projectSequences = {},
+                    channelURLs = [],
+                    channelVolume = [],
+                    channelPlaybackSpeed = [],
+                    trimSettings = {}
+                } = data;
+
+                const channels = channelIds.map((id, idx) => {
+                    const channelSequence = Object.entries(projectSequences).reduce((acc, [sequenceName, sequenceData]) => {
+                        const channelData = sequenceData[`ch${idx}`];
+                        if (channelData) acc.push({ sequenceName, steps: channelData.steps });
+                        return acc;
+                    }, []);
+                    const metadata = {
+                        volume: channelVolume[idx] ?? 1,
+                        playbackSpeed: channelPlaybackSpeed[idx] ?? 1,
+                        trimStartTime_Percentage: trimSettings[idx]?.start || 0,
+                        trimEndTime_Percentage: trimSettings[idx]?.end || 100,
+                        requiresReversal: channelSequence.some(seq => seq.steps.some(step => typeof step === "object" && step.reverse)),
+                        channelSequence,
+                        originalBPM: projectBPM
                     };
+                    const sampleId = channelURLs[idx];
+                    return { id, url: sampleId || "URL_not_found", metadata };
                 });
-    
+                return {
+                    id: `Song ${index + 1}: ${projectName}`,
+                    artist: artistName,
+                    bpm: projectBPM,
+                    totalSequences: Object.keys(projectSequences).length,
+                    totalChannels: channels.length,
+                    channels,
+                    projectSequences
+                };
+            });
+
             const allChannels = originalSongs.flatMap(song => song.channels);
     
             function lcg64(seed) {
@@ -1094,35 +1572,36 @@ window.GainNodeHelper = (() => {
             return seeds;
         }
 
-        /**
-         * Initializes the seedList based on user-provided seeds.
-         * - If no seeds are provided, generate a random seed and create 100 sequential seeds.
-         * - If one seed is provided, generate 99 additional sequential seeds from it.
-         * - If multiple seeds are provided, use them as-is.
-         */
-        function initializeSeedList() {
-            if (window.globalData.seedList && window.globalData.seedList.length > 1) {
-                // Multiple seeds provided; use as-is.
-                console.log(`[Seed Initialization] Using user-provided seedList with ${window.globalData.seedList.length} seeds.`);
-            } else if (window.globalData.seedList && window.globalData.seedList.length === 1) {
-                // Single seed provided; generate 99 additional sequential seeds.
-                const initialSeed = window.globalData.seedList[0];
-                const additionalSeeds = generateSequentialSeeds(initialSeed, 100).slice(1); // Exclude the initial seed
-                window.globalData.seedList = window.globalData.seedList.concat(additionalSeeds);
-                console.log(`[Seed Initialization] Single seed provided. Generated 99 additional sequential seeds from "${initialSeed}". Total seeds: ${window.globalData.seedList.length}.`);
-            } else {
-                // No seeds provided; generate a random seed and 99 additional sequential seeds.
-                const randomSeed = generateRandomSeed();
-                window.globalData.seedList = generateSequentialSeeds(randomSeed, 100);
-                // TEMPORARY: create 10 sequential seeds for testing
-                // window.globalData.seedList = generateSequentialSeeds(randomSeed, 10);
+      /**
+ * Initializes the seedList based on user-provided seeds.
+ * - If no seeds are provided, generate a random seed and create 100 sequential seeds.
+ * - If one seed is provided, generate 99 additional sequential seeds from it.
+ * - If multiple seeds are provided, use them as-is.
+ */
+function initializeSeedList() {
+    if (window.globalData.seedList && window.globalData.seedList.length > 1) {
+        // Multiple seeds provided; use as-is.
+        console.log(`[Seed Initialization] Using user-provided seedList with ${window.globalData.seedList.length} seeds.`);
+    } else if (window.globalData.seedList && window.globalData.seedList.length === 1) {
+        // Single seed provided; generate 99 additional sequential seeds.
+        const initialSeed = window.globalData.seedList[0];
+        const additionalSeeds = generateSequentialSeeds(initialSeed, 100).slice(1); // Exclude the initial seed
+        window.globalData.seedList = window.globalData.seedList.concat(additionalSeeds);
+        console.log(`[Seed Initialization] Single seed provided. Generated 99 additional sequential seeds from "${initialSeed}". Total seeds: ${window.globalData.seedList.length}.`);
+    } else {
+        // No seeds provided; generate a random seed and 99 additional sequential seeds.
+        const randomSeed = generateRandomSeed();
+        window.globalData.seedList = generateSequentialSeeds(randomSeed, 100);
+        // TEMPORARY: create 10 sequential seeds for testing
+        // window.globalData.seedList = generateSequentialSeeds(randomSeed, 10);
 
-                console.log(`[Seed Initialization] No user-provided seeds. Generated random seed "${randomSeed}" and created ${window.globalData.seedList.length} sequential seeds.`);
-            }
-        }
+        console.log(`[Seed Initialization] No user-provided seeds. Generated random seed "${randomSeed}" and created ${window.globalData.seedList.length} sequential seeds.`);
+    }
+}
 
-        // **Seed List Initialization (Moved Outside the 'if' Block)**
-        initializeSeedList();
+// **Seed List Initialization (Moved Outside the 'if' Block)**
+initializeSeedList();
+
 
     // **Proceed with Mix Generation**
 /**
@@ -1132,9 +1611,11 @@ window.GainNodeHelper = (() => {
  * @param {number} remixNumber - The sequential number assigned to the remix.
  * @returns {Promise<Array>} - A promise that resolves to an array containing the generated song.
  */
-async function generateMixBySeed(seedString, remixNumber) {
+ async function generateMixBySeed(seedString, remixNumber) {
     
-    // console.log(`[debugSeed][generateMixBySeed] Generating mix #${remixNumber} with seed "${seedString}"`);
+    // activationDEBUG: Starting mix generation
+    console.log(`activationDEBUG: Generating mix #${remixNumber} with seed "${seedString}"`);
+    
     const bpmOptions = [60, 120, 140, 160, 180, 240];
     const newSongs = [];
 
@@ -1142,8 +1623,9 @@ async function generateMixBySeed(seedString, remixNumber) {
     let baseSeed;
     try {
         baseSeed = BigInt(seedString);
+        console.log(`activationDEBUG: Parsed seed string "${seedString}" to BigInt: ${baseSeed}`);
     } catch (error) {
-        console.error(`[seedDebug] Invalid seed string: "${seedString}". Using base seed 0.`);
+        console.error(`[activationDEBUG] Invalid seed string: "${seedString}". Using base seed 0.`);
         baseSeed = 0n;
     }
 
@@ -1157,25 +1639,38 @@ async function generateMixBySeed(seedString, remixNumber) {
 
     const prng = lcg64(currentSeed);
     const selectedBPM = getBPMFromSeed(currentSeed);
+    console.log(`activationDEBUG: Selected BPM based on seed ${currentSeed}: ${selectedBPM}`);
 
     // Select random channels for the mix
     const randomChannels = getRandomChannels(allChannels, 24, prng);
+    console.log(`activationDEBUG Total available channels: ${allChannels.length}`);
+    console.log(`activationDEBUG: Selected ${randomChannels.length} random channels for the mix.`);
 
     // Activation points and sequences
     const activationPoints = [
         { startSeq: 1, count: 4 },
-        { startSeq: 5, count: 8 },
-        { startSeq: 9, count: 12 },
-        { startSeq: 13, count: 16 }
+        { startSeq: 2, count: 8 },
+        { startSeq: 4, count: 12 },
+        { startSeq: 8, count: 16 }
     ];
 
+    console.log(`activationDEBUG: Defined activation points:`, activationPoints);
+
     // Assign activation sequences to channels
-    const channelsWithActivation = activationPoints.flatMap(({ startSeq, count }) =>
-        Array.from({ length: count }, (_, i) => {
-            const channel = randomChannels[i];
-            return channel ? { channel: JSON.parse(JSON.stringify(channel)), activationSeq: startSeq } : null;
-        }).filter(Boolean)
-    );
+    const channelsWithActivation = activationPoints.flatMap(({ startSeq, count }, activationIndex) => {
+        return Array.from({ length: count }, (_, i) => {
+            const channel = randomChannels[i + activationIndex * count];
+            if (channel) {
+                const clonedChannel = JSON.parse(JSON.stringify(channel));
+                clonedChannel.activationSeq = startSeq;
+                console.log(`activationDEBUG: Channel ID ${clonedChannel.id} assigned to activation sequence starting at ${startSeq}.`);
+                return { channel: clonedChannel, activationSeq: startSeq };
+            }
+            return null;
+        }).filter(Boolean);
+    });
+
+    console.log(`activationDEBUG: Total channels with activation: ${channelsWithActivation.length}`);
 
     // Collect unique sequence names from channels
     const sequenceSet = new Set(
@@ -1184,14 +1679,18 @@ async function generateMixBySeed(seedString, remixNumber) {
         )
     );
 
+    console.log(`activationDEBUG: Unique sequence names collected from channels:`, Array.from(sequenceSet));
+
     // Sort sequences numerically based on their suffix
     let sequences = [...sequenceSet].sort((a, b) =>
         (parseInt(a.replace('Sequence', '')) || 0) - (parseInt(b.replace('Sequence', '')) || 0)
     );
 
+    console.log(`activationDEBUG: Sorted sequences:`, sequences);
+
     // SEQUENCE COUNT LIMIT: Limit the number of sequences here
-    
-    sequences = sequences.slice(0, 4);
+    sequences = sequences.slice(0, 48);
+    console.log(`activationDEBUG: Limited sequences to first 48:`, sequences);
 
     // Initialize the new song object with remix numbering
     const newSong = {
@@ -1206,6 +1705,8 @@ async function generateMixBySeed(seedString, remixNumber) {
         seed: seedString,
     };
 
+    console.log(`activationDEBUG: Initialized new song object:`, newSong);
+
     // Initialize effects context for the song
     const effectsContext = {
         harmonyChannelsAdded: 0,
@@ -1216,32 +1717,49 @@ async function generateMixBySeed(seedString, remixNumber) {
     };
 
     await Promise.all(channelsWithActivation.map(async ({ channel, activationSeq }, index) => {
-        const chId = `ch${index}`; // Ensure unique channel IDs within the song
-        const newChannel = {
-            id: chId,
-            url: channel.url,
-            metadata: {
-                ...channel.metadata,
-                originalBPM: newSong.bpm,
-                activationSeq,
-            }
-        };
-        await applyEffects(newChannel, index, newSong, activationSeq, newSong.bpm, effectsContext, prng);
-        newSong.channels.push(newChannel);
+    const chId = `ch${index}`;
+    const newChannel = {
+        id: chId,
+        url: channel.url,
+        metadata: {
+            ...channel.metadata,
+            originalBPM: newSong.bpm,
+            activationSeq, // Track the activation sequence for this channel
+        }
+    };
 
-        // Map sequences to the new channel
-        channel.metadata.channelSequence?.forEach(seqData => {
-            if (newSong.projectSequences[seqData.sequenceName]) {
-                newSong.projectSequences[seqData.sequenceName] = {
-                    ...newSong.projectSequences[seqData.sequenceName],
-                    [chId]: { steps: seqData.steps }
-                };
-            }
-        });
-    }));
+    // Apply effects and other initializations for the channel
+    await applyEffects(newChannel, index, newSong, activationSeq, newSong.bpm, effectsContext, prng);
+    newSong.channels.push(newChannel);
+
+    // Adjust and map sequences based on the activation sequence
+    channel.metadata.channelSequence?.forEach(seqData => {
+        if (newSong.projectSequences[seqData.sequenceName]) {
+            // Calculate the offset to skip earlier sequences
+            const offset = (activationSeq - 1) * 63; // 63 steps per sequence
+
+            // Filter out the steps that are earlier than the activation sequence
+            const validSteps = seqData.steps.filter(step => step >= offset);
+
+            // Adjust the sequence steps so that the new start is at step 1
+            const adjustedSteps = validSteps.map(step => step - offset);
+
+            // Map the adjusted sequence to the channel in the new song
+            newSong.projectSequences[seqData.sequenceName] = {
+                ...newSong.projectSequences[seqData.sequenceName],
+                [chId]: { steps: adjustedSteps }
+            };
+        }
+    });
+}));
+
+
+    // Log the final projectSequences mapping
+    console.log(`activationDEBUG: Final projectSequences mapping:`, newSong.projectSequences);
 
     // Add the new song to the songs list
     newSongs.push(newSong);
+    console.log(`activationDEBUG: New song added to the songs list.`);
 
     return newSongs;
 }
@@ -1318,10 +1836,10 @@ window.generateMixBySeed = generateMixBySeed;
     (async () => {
         // Initialize or retrieve the globalData object
         const globalData = window.globalData || (window.globalData = {});
-    
+
         // Initialize or retrieve the AudioContext
         const audioContext = globalData.audioContext || (globalData.audioContext = new (window.AudioContext || window.webkitAudioContext)());
-    
+
         /**
          * Converts a base64 string to an ArrayBuffer.
          *
@@ -1330,15 +1848,38 @@ window.generateMixBySeed = generateMixBySeed;
          */
         const base64ToArrayBuffer = (base64) => {
             try {
-                return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0)).buffer;
+                // Validate base64 string before conversion
+                if (!isValidBase64(base64)) {
+                    throw new Error("Invalid base64 string.");
+                }
+                // Decode base64 to binary string
+                const binaryString = atob(base64);
+                // Create a Uint8Array from the binary string
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return bytes.buffer;
             } catch (error) {
                 console.error(`[base64ToArrayBuffer] Error converting base64 to ArrayBuffer: ${error.message}`);
                 return null;
             }
         };
-    
+
         /**
-         * Extracts base64 data from JSON or HTML content.
+         * Pads a base64 string with '=' characters to make its length a multiple of 4.
+         *
+         * @param {string} str - The base64 string to pad.
+         * @returns {string} - The padded base64 string.
+         */
+        const padBase64 = (str) => {
+            const paddingNeeded = (4 - (str.length % 4)) % 4;
+            return str + '='.repeat(paddingNeeded);
+        };
+
+        /**
+         * Extracts base64 data from JSON or HTML content, including custom HTML tags.
          *
          * @param {string|Object} data - The input data (JSON object or HTML string).
          * @param {string} type - The type of data ("json" or "html").
@@ -1348,48 +1889,148 @@ window.generateMixBySeed = generateMixBySeed;
             if (type === "json" && data.audioData) {
                 const match = data.audioData.match(/base64,([A-Za-z0-9+/=]+)/);
                 if (match) {
+                    console.log(`[extractBase64] Found base64 data in JSON audioData. Length: ${match[1].length}`);
                     return match[1];
                 }
                 console.warn("[extractBase64] No base64 data found in JSON audioData.");
                 return null;
             }
-    
+
             if (type === "html") {
                 try {
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(data, "text/html");
-                    const sources = doc.querySelectorAll('source[src^="data:audio/"]');
-    
-                    if (sources.length === 0) {
-                        console.warn("[extractBase64] No <source> tags with data:audio/ found in HTML.");
-                        return null;
-                    }
-    
-                    // Iterate through all matching <source> tags to find valid base64 data
-                    for (const source of sources) {
+
+                    // 1. Extract from all <source> tags with data:audio/
+                    const sourceTags = doc.querySelectorAll('source[src^="data:audio/"]');
+                    for (const source of sourceTags) {
                         const src = source.getAttribute('src');
-                        if (!src) continue;
-    
-                        const base64Match = src.match(/base64,([A-Za-z0-9+/=]+)/);
-                        if (base64Match && isValidBase64(base64Match[1])) {
-                            return base64Match[1];
+                        if (!src || !src.includes('base64,')) continue;
+
+                        // Split at 'base64,' and take the rest
+                        let base64Str = src.split('base64,')[1];
+                        if (!base64Str) continue;
+
+                        // Remove all whitespace (including line breaks)
+                        base64Str = base64Str.replace(/\s+/g, '');
+
+                        // Pad the base64 string if necessary
+                        base64Str = padBase64(base64Str);
+
+                        console.log(`[extractBase64] Extracted base64 string from <source> tag. Length: ${base64Str.length}`);
+
+                        if (isValidBase64(base64Str)) {
+                            console.log(`[extractBase64] Valid base64 string found in <source> tag.`);
+                            return base64Str;
                         } else {
-                            console.warn("[extractBase64] Found <source> tag but base64 data is invalid.");
+                            console.warn(`[extractBase64] Invalid base64 string in <source> tag.`);
+                            console.log(`[extractBase64] Base64 Data Snippet: "${base64Str.substring(0, 30)}..."`);
                         }
                     }
-    
-                    console.warn("[extractBase64] No valid base64 data found in any <source> tags.");
+
+                    // 2. Extract from all <audio> tags with nested <source> tags
+                    const audioTags = doc.querySelectorAll('audio');
+                    for (const audio of audioTags) {
+                        const source = audio.querySelector('source[src^="data:audio/"]');
+                        if (source) {
+                            const src = source.getAttribute('src');
+                            if (!src || !src.includes('base64,')) continue;
+
+                            let base64Str = src.split('base64,')[1];
+                            if (!base64Str) continue;
+
+                            base64Str = base64Str.replace(/\s+/g, '');
+                            base64Str = padBase64(base64Str);
+
+                            console.log(`[extractBase64] Extracted base64 string from <audio> tag's <source>. Length: ${base64Str.length}`);
+
+                            if (isValidBase64(base64Str)) {
+                                console.log(`[extractBase64] Valid base64 string found in <audio> tag's <source>.`);
+                                return base64Str;
+                            } else {
+                                console.warn(`[extractBase64] Invalid base64 string in <audio> tag's <source>.`);
+                                console.log(`[extractBase64] Base64 Data Snippet: "${base64Str.substring(0, 30)}..."`);
+                            }
+                        }
+                    }
+
+                    // 3. Extract from any element with src starting with data:audio/
+                    const customAudioElements = doc.querySelectorAll('*[src^="data:audio/"]');
+                    for (const elem of customAudioElements) {
+                        const src = elem.getAttribute('src');
+                        if (!src || !src.includes('base64,')) continue;
+
+                        let base64Str = src.split('base64,')[1];
+                        if (!base64Str) continue;
+
+                        base64Str = base64Str.replace(/\s+/g, '');
+                        base64Str = padBase64(base64Str);
+
+                        console.log(`[extractBase64] Extracted base64 string from element with src. Length: ${base64Str.length}`);
+
+                        if (isValidBase64(base64Str)) {
+                            console.log(`[extractBase64] Valid base64 string found in element with src.`);
+                            return base64Str;
+                        } else {
+                            console.warn(`[extractBase64] Invalid base64 string in element with src.`);
+                            console.log(`[extractBase64] Base64 Data Snippet: "${base64Str.substring(0, 30)}..."`);
+                        }
+                    }
+
+                    // 4. Extract from custom tags like <Audional_Base64_Sample_Text>
+                    const customTags = doc.querySelectorAll('Audional_Base64_Sample_Text'); // Adjust if tag name differs
+                    for (const customTag of customTags) {
+                        const audioElements = customTag.querySelectorAll('audio, source');
+                        for (const audioElem of audioElements) {
+                            const src = audioElem.getAttribute('src');
+                            if (!src || !src.includes('base64,')) continue;
+
+                            let base64Str = src.split('base64,')[1];
+                            if (!base64Str) continue;
+
+                            base64Str = base64Str.replace(/\s+/g, '');
+                            base64Str = padBase64(base64Str);
+
+                            console.log(`[extractBase64] Extracted base64 string from audio element within custom tag. Length: ${base64Str.length}`);
+
+                            if (isValidBase64(base64Str)) {
+                                console.log(`[extractBase64] Valid base64 string found in audio element within custom tag.`);
+                                return base64Str;
+                            } else {
+                                console.warn(`[extractBase64] Invalid base64 string in audio element within custom tag.`);
+                                console.log(`[extractBase64] Base64 Data Snippet: "${base64Str.substring(0, 30)}..."`);
+                            }
+                        }
+                    }
+
+                    // 5. As a last resort, use regex to find any data:audio/ base64 strings
+                    const htmlString = data.toString();
+                    const regex = /data:audio\/[a-zA-Z0-9]+;base64,([A-Za-z0-9+/=]+)/g;
+                    let match;
+                    while ((match = regex.exec(htmlString)) !== null) {
+                        let base64Str = match[1].replace(/\s+/g, '');
+                        base64Str = padBase64(base64Str);
+
+                        console.log(`[extractBase64] Extracted base64 string using regex. Length: ${base64Str.length}`);
+
+                        if (isValidBase64(base64Str)) {
+                            console.log(`[extractBase64] Valid base64 string found using regex.`);
+                            return base64Str;
+                        } else {
+                            console.warn(`[extractBase64] Invalid base64 string found using regex.`);
+                            console.log(`[extractBase64] Base64 Data Snippet: "${base64Str.substring(0, 30)}..."`);
+                        }
+                    }
+
+                    console.warn("[extractBase64] No valid base64 data found in HTML.");
                     return null;
                 } catch (error) {
                     console.error(`[extractBase64] Failed to parse HTML: ${error.message}`);
                     return null;
                 }
             }
-    
-            console.warn("[extractBase64] Unsupported type for base64 extraction.");
-            return null;
         };
-    
+
         /**
          * Validates whether a string is a valid base64 encoded string.
          *
@@ -1398,157 +2039,19 @@ window.generateMixBySeed = generateMixBySeed;
          */
         const isValidBase64 = (str) => {
             const cleaned = str.replace(/\s+/g, "");
-            return cleaned.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(cleaned);
-        };
-    
-        /**
-         * Normalizes an AudioBuffer to a specified maximum volume.
-         *
-         * @param {AudioBuffer} audioBuffer - The AudioBuffer to normalize.
-         * @param {number} maxVolume - The target maximum volume (default is 0.5).
-         * @returns {AudioBuffer} - The normalized AudioBuffer.
-         */
-        const normalizeAudioBuffer = (audioBuffer, maxVolume = 0.5) => {
-            let maxAmplitude = 0;
-    
-            // Find the global maximum amplitude across all channels
-            for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
-                const channelData = audioBuffer.getChannelData(channel);
-                for (const sample of channelData) {
-                    const absSample = Math.abs(sample);
-                    if (absSample > maxAmplitude) {
-                        maxAmplitude = absSample;
-                    }
-                }
+            // Base64 strings should have a length that's a multiple of 4
+            if (cleaned.length % 4 !== 0) {
+                console.warn(`[isValidBase64] Base64 string length is not a multiple of 4. Length: ${cleaned.length}`);
+                return false;
             }
-    
-            // Calculate the normalization factor
-            const normalizationFactor = maxAmplitude > 0 ? maxVolume / maxAmplitude : 1;
-    
-            // Apply normalization if necessary
-            if (normalizationFactor !== 1) {
-                for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
-                    const channelData = audioBuffer.getChannelData(channel);
-                    for (let i = 0; i < channelData.length; i++) {
-                        channelData[i] *= normalizationFactor;
-                    }
-                }
-                // Removed normalization log to reduce verbosity
+            // Check for valid base64 characters
+            const isValid = /^[A-Za-z0-9+/]+={0,2}$/.test(cleaned);
+            if (!isValid) {
+                console.warn(`[isValidBase64] Base64 string contains invalid characters.`);
             }
-    
-            return audioBuffer;
+            return isValid;
         };
-    
-        /**
-         * Reverses the audio data in a Float32Array.
-         *
-         * @param {Float32Array} audioData - The audio data to reverse.
-         * @returns {Float32Array} - The reversed audio data.
-         */
-        const reverseAudioData = (audioData) => {
-            const reversedData = new Float32Array(audioData.length);
-            for (let i = 0, len = audioData.length; i < len; i++) {
-                reversedData[i] = audioData[len - i - 1];
-            }
-            return reversedData;
-        };
-    
-        /**
-         * Extracts the file name from a URL.
-         *
-         * @param {string} url - The URL string.
-         * @returns {string} - The extracted file name or "Unknown" if not found.
-         */
-        const getFileNameFromURL = (url) => {
-            return url.split("/").pop() || "Unknown";
-        };
-    
-        /**
-         * Processes an individual audio channel by fetching, decoding, trimming, and optionally reversing the audio data.
-         *
-         * @param {Object} song - The song object containing channel information.
-         * @param {Object} channel - The channel object containing metadata and URL.
-         * @param {Array} processedChannels - An array to store information about processed channels.
-         */
-        const processChannel = async (song, channel, processedChannels) => {
-            const { id: songId, channels } = song;
-            const { id: channelId, url: channelURL, metadata: { trimStartTime_Percentage, trimEndTime_Percentage, requiresReversal } } = channel;
-    
-            try {
-                // Fetch the audio data from the channel URL
-                const response = await fetch(channelURL);
-                if (!response.ok) {
-                    console.error(`[ProcessChannel][Song: "${songId}"] Fetch failed for URL: "${channelURL}" - Status: ${response.status} ${response.statusText}. Skipping Channel ID: "${channelId}".`);
-                    return;
-                }
-    
-                const contentType = response.headers.get("Content-Type") || "";
-    
-                // Decode the audio data based on the content type
-                const audioBuffer = await decodeAudioData(response, contentType, channelURL, songId, channelId);
-                if (!audioBuffer) {
-                    console.error(`[ProcessChannel][Song: "${songId}"] Decoding failed for Channel ID: "${channelId}". Skipping.`);
-                    return;
-                }
-    
-                // Validate trim percentages
-                if (trimEndTime_Percentage <= trimStartTime_Percentage) {
-                    console.error(`[ProcessChannel][Song: "${songId}", Channel: "${channelId}"] Invalid trim percentages - Start: ${trimStartTime_Percentage}%, End: ${trimEndTime_Percentage}%. Skipping.`);
-                    return;
-                }
-    
-                // Calculate sample indices for trimming
-                const startSample = Math.floor(trimStartTime_Percentage / 100 * audioBuffer.duration * audioBuffer.sampleRate);
-                const endSample = Math.floor(trimEndTime_Percentage / 100 * audioBuffer.duration * audioBuffer.sampleRate);
-                const trimmedLength = endSample - startSample;
-    
-                if (trimmedLength <= 0) {
-                    console.error(`[ProcessChannel][Song: "${songId}", Channel: "${channelId}"] Non-positive trimmed length: ${trimmedLength} samples. Skipping.`);
-                    return;
-                }
-    
-                // Create a new AudioBuffer for the trimmed audio
-                const trimmedBuffer = audioContext.createBuffer(audioBuffer.numberOfChannels, trimmedLength, audioBuffer.sampleRate);
-                for (let channelIndex = 0; channelIndex < audioBuffer.numberOfChannels; channelIndex++) {
-                    trimmedBuffer.getChannelData(channelIndex).set(audioBuffer.getChannelData(channelIndex).subarray(startSample, endSample));
-                }
-    
-                // Normalize the trimmed AudioBuffer
-                const normalizedBuffer = normalizeAudioBuffer(trimmedBuffer, 0.5);
-    
-                // Initialize audioBuffers and reverseAudioBuffers in globalData if not present
-                globalData.audioBuffers = globalData.audioBuffers || {};
-                globalData.reverseAudioBuffers = globalData.reverseAudioBuffers || {};
-                globalData.audioBuffers[songId] = globalData.audioBuffers[songId] || {};
-                globalData.reverseAudioBuffers[songId] = globalData.reverseAudioBuffers[songId] || {};
-    
-                // Store the normalized AudioBuffer
-                globalData.audioBuffers[songId][channelId] = normalizedBuffer;
-    
-                // If reversal is required, create and store the reversed AudioBuffer
-                if (requiresReversal) {
-                    try {
-                        const reversedBuffer = createReversedAudioBuffer(normalizedBuffer);
-                        globalData.reverseAudioBuffers[songId][channelId] = reversedBuffer;
-                    } catch (reverseError) {
-                        console.error(`[ProcessChannel][Song: "${songId}", Channel: "${channelId}"] Error reversing AudioBuffer: ${reverseError.message}`);
-                    }
-                }
-    
-                // Push processed channel information to the array
-                processedChannels.push({
-                    "Song ID": songId,
-                    "Channel ID": channelId,
-                    "Audio File": getFileNameFromURL(channelURL),
-                    "Full Duration (s)": audioBuffer.duration.toFixed(2),
-                    "Trimmed Duration (s)": trimmedBuffer.duration.toFixed(2),
-                    "Requires Reversal": requiresReversal
-                });
-            } catch (error) {
-                console.error(`[ProcessChannel][Song: "${songId}", Channel: "${channelId}"] Unexpected error: ${error.message}`);
-            }
-        };
-    
+
         /**
          * Decodes audio data based on content type.
          *
@@ -1561,23 +2064,37 @@ window.generateMixBySeed = generateMixBySeed;
          */
         const decodeAudioData = async (response, contentType, url, songId, channelId) => {
             const cache = globalData.audioFetchCache || (globalData.audioFetchCache = new Map());
-    
+
             // Check if the audio data is already cached
             if (cache.has(url)) {
+                console.log(`[decodeAudioData][Song: "${songId}", Channel: "${channelId}"] Using cached AudioBuffer for URL: "${url}".`);
                 return cache.get(url);
             }
-    
+
             try {
                 let decodedBuffer;
-    
+
                 // Handle data URI
                 if (url.startsWith('data:audio/')) {
                     const base64Data = url.split(',')[1];
-                    if (!isValidBase64(base64Data)) {
-                        console.error(`[decodeAudioData][Song: "${songId}", Channel: "${channelId}"] Invalid base64 data in data URI for URL: "${url}".`);
+                    if (!base64Data) {
+                        console.error(`[decodeAudioData][Song: "${songId}", Channel: "${channelId}"] No base64 data found in data URI for URL: "${url}".`);
                         return null;
                     }
-                    const arrayBuffer = base64ToArrayBuffer(base64Data);
+
+                    console.log(`[decodeAudioData] Extracted base64 data from data URI. Length: ${base64Data.length}`);
+
+                    // Remove all whitespace and pad the base64 string
+                    let cleanedBase64 = base64Data.replace(/\s+/g, '');
+                    cleanedBase64 = padBase64(cleanedBase64);
+
+                    if (!isValidBase64(cleanedBase64)) {
+                        console.error(`[decodeAudioData][Song: "${songId}", Channel: "${channelId}"] Invalid base64 data in data URI for URL: "${url}".`);
+                        console.log(`[decodeAudioData] Base64 Data Snippet: "${cleanedBase64.substring(0, 30)}..."`);
+                        return null;
+                    }
+
+                    const arrayBuffer = base64ToArrayBuffer(cleanedBase64);
                     if (!arrayBuffer) {
                         console.error(`[decodeAudioData][Song: "${songId}", Channel: "${channelId}"] Failed to convert base64 to ArrayBuffer for URL: "${url}".`);
                         return null;
@@ -1593,8 +2110,12 @@ window.generateMixBySeed = generateMixBySeed;
                     const base64Data = extractBase64(jsonData, "json");
                     if (!base64Data || !isValidBase64(base64Data)) {
                         console.error(`[decodeAudioData][Song: "${songId}", Channel: "${channelId}"] Invalid or missing base64 data in JSON for URL: "${url}".`);
+                        if (base64Data) {
+                            console.log(`[decodeAudioData] Base64 Data Snippet: "${base64Data.substring(0, 30)}..." Length: ${base64Data.length}`);
+                        }
                         return null;
                     }
+                    console.log(`[decodeAudioData] Extracted base64 data from JSON. Length: ${base64Data.length}`);
                     const arrayBuffer = base64ToArrayBuffer(base64Data);
                     if (!arrayBuffer) {
                         console.error(`[decodeAudioData][Song: "${songId}", Channel: "${channelId}"] Failed to convert base64 to ArrayBuffer for JSON URL: "${url}".`);
@@ -1607,8 +2128,12 @@ window.generateMixBySeed = generateMixBySeed;
                     const base64Data = extractBase64(htmlData, "html");
                     if (!base64Data || !isValidBase64(base64Data)) {
                         console.error(`[decodeAudioData][Song: "${songId}", Channel: "${channelId}"] Invalid or missing base64 data in HTML for URL: "${url}".`);
+                        if (base64Data) {
+                            console.log(`[decodeAudioData] Base64 Data Snippet: "${base64Data.substring(0, 30)}..." Length: ${base64Data.length}`);
+                        }
                         return null;
                     }
+                    console.log(`[decodeAudioData] Extracted base64 data from HTML. Length: ${base64Data.length}`);
                     const arrayBuffer = base64ToArrayBuffer(base64Data);
                     if (!arrayBuffer) {
                         console.error(`[decodeAudioData][Song: "${songId}", Channel: "${channelId}"] Failed to convert base64 to ArrayBuffer for HTML URL: "${url}".`);
@@ -1624,17 +2149,196 @@ window.generateMixBySeed = generateMixBySeed;
                     const arrayBuffer = await response.arrayBuffer();
                     decodedBuffer = await audioContext.decodeAudioData(arrayBuffer);
                 }
-    
+
                 // Cache the decoded audio buffer
                 cache.set(url, decodedBuffer);
-    
+                console.log(`[decodeAudioData][Song: "${songId}", Channel: "${channelId}"] AudioBuffer decoded and cached for URL: "${url}".`);
+
                 return decodedBuffer;
             } catch (error) {
                 console.error(`[decodeAudioData][Song: "${songId}", Channel: "${channelId}"] Decoding error for URL: "${url}" - ${error.message}`);
                 return null;
             }
         };
-    
+
+        /**
+         * Normalizes an AudioBuffer to a specified maximum volume.
+         *
+         * @param {AudioBuffer} audioBuffer - The AudioBuffer to normalize.
+         * @param {number} maxVolume - The target maximum volume (default is 0.5).
+         * @returns {AudioBuffer} - The normalized AudioBuffer.
+         */
+        const normalizeAudioBuffer = (audioBuffer, maxVolume = 0.5) => {
+            let maxAmplitude = 0;
+
+            // Find the global maximum amplitude across all channels
+            for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+                const channelData = audioBuffer.getChannelData(channel);
+                for (const sample of channelData) {
+                    const absSample = Math.abs(sample);
+                    if (absSample > maxAmplitude) {
+                        maxAmplitude = absSample;
+                    }
+                }
+            }
+
+            // Calculate the normalization factor
+            const normalizationFactor = maxAmplitude > 0 ? maxVolume / maxAmplitude : 1;
+
+            // Apply normalization if necessary
+            if (normalizationFactor !== 1) {
+                for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+                    const channelData = audioBuffer.getChannelData(channel);
+                    for (let i = 0; i < channelData.length; i++) {
+                        channelData[i] *= normalizationFactor;
+                    }
+                }
+                // Removed normalization log to reduce verbosity
+            }
+
+            return audioBuffer;
+        };
+
+        /**
+         * Reverses the audio data in a Float32Array.
+         *
+         * @param {Float32Array} audioData - The audio data to reverse.
+         * @returns {Float32Array} - The reversed audio data.
+         */
+        const reverseAudioData = (audioData) => {
+            const reversedData = new Float32Array(audioData.length);
+            for (let i = 0, len = audioData.length; i < len; i++) {
+                reversedData[i] = audioData[len - i - 1];
+            }
+            return reversedData;
+        };
+
+        /**
+         * Extracts the file name from a URL.
+         *
+         * @param {string} url - The URL string.
+         * @returns {string} - The extracted file name or "Unknown" if not found.
+         */
+        const getFileNameFromURL = (url) => {
+            return url.split("/").pop() || "Unknown";
+        };
+
+        /**
+         * Processes an individual audio channel by fetching, decoding, trimming, and optionally reversing the audio data.
+         *
+         * @param {Object} song - The song object containing channel information.
+         * @param {Object} channel - The channel object containing metadata and URL.
+         * @param {Array} processedChannels - An array to store information about processed channels.
+         */
+        const processChannel = async (song, channel, processedChannels) => {
+            const { id: songId } = song;
+            const { id: channelId, url: channelURL, metadata: { trimStartTime_Percentage, trimEndTime_Percentage, requiresReversal } } = channel;
+
+            try {
+                // Fetch the audio data from the channel URL
+                const response = await fetch(channelURL);
+                if (!response.ok) {
+                    console.error(`[ProcessChannel][Song: "${songId}"] Fetch failed for URL: "${channelURL}" - Status: ${response.status} ${response.statusText}. Skipping Channel ID: "${channelId}".`);
+                    return;
+                }
+
+                const contentType = response.headers.get("Content-Type") || "";
+
+                // Decode the audio data based on the content type
+                const audioBuffer = await decodeAudioData(response, contentType, channelURL, songId, channelId);
+                if (!audioBuffer) {
+                    console.error(`[ProcessChannel][Song: "${songId}"] Decoding failed for Channel ID: "${channelId}". Skipping.`);
+                    return;
+                }
+
+                // Validate trim percentages
+                if (trimEndTime_Percentage <= trimStartTime_Percentage) {
+                    console.error(`[ProcessChannel][Song: "${songId}", Channel: "${channelId}"] Invalid trim percentages - Start: ${trimStartTime_Percentage}%, End: ${trimEndTime_Percentage}%. Skipping.`);
+                    return;
+                }
+
+                // Calculate sample indices for trimming
+                const startSample = Math.floor(trimStartTime_Percentage / 100 * audioBuffer.duration * audioBuffer.sampleRate);
+                const endSample = Math.floor(trimEndTime_Percentage / 100 * audioBuffer.duration * audioBuffer.sampleRate);
+                const trimmedLength = endSample - startSample;
+
+                if (trimmedLength <= 0) {
+                    console.error(`[ProcessChannel][Song: "${songId}", Channel: "${channelId}"] Non-positive trimmed length: ${trimmedLength} samples. Skipping.`);
+                    return;
+                }
+
+                // Create a new AudioBuffer for the trimmed audio
+                const trimmedBuffer = audioContext.createBuffer(audioBuffer.numberOfChannels, trimmedLength, audioBuffer.sampleRate);
+                for (let channelIndex = 0; channelIndex < audioBuffer.numberOfChannels; channelIndex++) {
+                    trimmedBuffer.getChannelData(channelIndex).set(audioBuffer.getChannelData(channelIndex).subarray(startSample, endSample));
+                }
+
+                // Normalize the trimmed AudioBuffer
+                const normalizedBuffer = normalizeAudioBuffer(trimmedBuffer, 0.5);
+
+                // Initialize audioBuffers and reverseAudioBuffers in globalData if not present
+                globalData.audioBuffers = globalData.audioBuffers || {};
+                globalData.reverseAudioBuffers = globalData.reverseAudioBuffers || {};
+                globalData.audioBuffers[songId] = globalData.audioBuffers[songId] || {};
+                globalData.reverseAudioBuffers[songId] = globalData.reverseAudioBuffers[songId] || {};
+
+                // Store the normalized AudioBuffer
+                globalData.audioBuffers[songId][channelId] = normalizedBuffer;
+
+                // If reversal is required, create and store the reversed AudioBuffer
+                if (requiresReversal) {
+                    try {
+                        const reversedBuffer = createReversedAudioBuffer(normalizedBuffer);
+                        globalData.reverseAudioBuffers[songId][channelId] = reversedBuffer;
+                    } catch (reverseError) {
+                        console.error(`[ProcessChannel][Song: "${songId}", Channel: "${channelId}"] Error reversing AudioBuffer: ${reverseError.message}`);
+                    }
+                }
+
+                /**
+                 * Helper function to extract the sample ID from the channel URL.
+                 * Assumes that the sample ID is the last segment of the URL path.
+                 *
+                 * @param {string} url - The channel URL.
+                 * @returns {string} - The extracted sample ID.
+                 */
+                const getSampleIdFromURL = (url) => {
+                    try {
+                        const urlObj = new URL(url, window.location.origin);
+                        const pathname = urlObj.pathname;
+                        const lastSegment = pathname.split("/").pop() || "";
+                        return lastSegment;
+                    } catch (error) {
+                        console.error(`[getSampleIdFromURL] Invalid URL: "${url}" - ${error.message}`);
+                        return "";
+                    }
+                };
+
+                // Extract sample ID from the channel URL
+                const sampleId = getSampleIdFromURL(channelURL);
+
+                // Check if the sample ID exists in the global loopSampleIds set
+                const isLoopedSample = window.globalData.loopSampleIds.has(sampleId);
+
+                if (isLoopedSample) {
+                    console.log(`[LoopedSample] Processing looped audio sample ID: "${sampleId}" for Song: "${songId}", Channel: "${channelId}".`);
+                }
+
+                // Push processed channel information to the array, including looped sample status
+                processedChannels.push({
+                    "Song ID": songId,
+                    "Channel ID": channelId,
+                    "Audio File": getFileNameFromURL(channelURL),
+                    "Full Duration (s)": audioBuffer.duration.toFixed(2),
+                    "Trimmed Duration (s)": trimmedBuffer.duration.toFixed(2),
+                    "Requires Reversal": requiresReversal,
+                    "Is Looped Sample": isLoopedSample
+                });
+            } catch (error) {
+                console.error(`[ProcessChannel][Song: "${songId}", Channel: "${channelId}"] Unexpected error: ${error.message}`);
+            }
+        };
+
         /**
          * Creates a reversed AudioBuffer from a given AudioBuffer.
          *
@@ -1652,7 +2356,7 @@ window.generateMixBySeed = generateMixBySeed;
             }
             return normalizeAudioBuffer(reversedBuffer, 0.5);
         };
-    
+
         /**
          * Displays processed channel information in the console.
          *
@@ -1665,78 +2369,78 @@ window.generateMixBySeed = generateMixBySeed;
                 console.warn("No audio samples processed.");
             }
         };
-    
-       /**
- * Processes the initial sample order by fetching and decoding the necessary audio channels.
- */
-const processInitialSamples = async () => {
-    const { songsArray, initialSampleOrder } = globalData;
 
-    if (!songsArray || !songsArray.length) {
-        console.error("No songs to process.");
-        return;
-    }
+        /**
+         * Processes the initial sample order by fetching and decoding the necessary audio channels.
+         */
+        const processInitialSamples = async () => {
+            const { songsArray, initialSampleOrder } = globalData;
 
-    if (!initialSampleOrder || !Array.isArray(initialSampleOrder)) {
-        console.error("initialSampleOrder is not defined or not an array.");
-        return;
-    }
-
-    const processedChannels = [];
-
-    // Group initialSampleOrder by songId
-    const songsMap = new Map();
-    initialSampleOrder.forEach(sampleOrder => {
-        if (!songsMap.has(sampleOrder.songId)) {
-            songsMap.set(sampleOrder.songId, []);
-        }
-        songsMap.get(sampleOrder.songId).push(sampleOrder.channelId);
-    });
-
-    // Iterate over each song and process its channels
-    for (const [songId, channelIds] of songsMap.entries()) {
-        const song = songsArray.find(song => song.id === songId);
-        if (!song) {
-            console.warn(`Song with ID ${songId} not found. Skipping.`);
-            continue;
-        }
-
-        const channelProcessingPromises = channelIds.map(channelId => {
-            const channel = song.channels.find(channel => channel.id === channelId);
-            if (channel) {
-                return processChannel(song, channel, processedChannels);
-            } else {
-                console.warn(`Channel with ID ${channelId} not found in song ${songId}. Skipping.`);
-                return Promise.resolve(null);
+            if (!songsArray || !songsArray.length) {
+                console.error("No songs to process.");
+                return;
             }
-        });
 
-        // Await all channel processing for the current song
-        await Promise.all(channelProcessingPromises);
+            if (!initialSampleOrder || !Array.isArray(initialSampleOrder)) {
+                console.error("initialSampleOrder is not defined or not an array.");
+                return;
+            }
 
-        // Log once per song after all its channels have been processed
-        console.warn(`Processed Song: "${song.id}" with ${processedChannels.length} channels.`);
-    }
+            const processedChannels = [];
 
-    // Display all processed channels
-    displayProcessedChannels(processedChannels);
+            // Group initialSampleOrder by songId
+            const songsMap = new Map();
+            initialSampleOrder.forEach(sampleOrder => {
+                if (!songsMap.has(sampleOrder.songId)) {
+                    songsMap.set(sampleOrder.songId, []);
+                }
+                songsMap.get(sampleOrder.songId).push(sampleOrder.channelId);
+            });
 
-    console.warn("Initial audio buffers ready.");
+            // Iterate over each song and process its channels
+            for (const [songId, channelIds] of songsMap.entries()) {
+                const song = songsArray.find(song => song.id === songId);
+                if (!song) {
+                    console.warn(`Song with ID ${songId} not found. Skipping.`);
+                    continue;
+                }
 
-    // Initialize Master Gain
-    const masterGain = audioContext.createGain();
-    masterGain.gain.value = 0.7;
-    masterGain.connect(audioContext.destination);
-    globalData.masterGain = masterGain;
+                const channelProcessingPromises = channelIds.map(channelId => {
+                    const channel = song.channels.find(channel => channel.id === channelId);
+                    if (channel) {
+                        return processChannel(song, channel, processedChannels);
+                    } else {
+                        console.warn(`Channel with ID ${channelId} not found in song ${songId}. Skipping.`);
+                        return Promise.resolve(null);
+                    }
+                });
 
-    console.warn("Master Gain initialized with gain:", masterGain.gain.value);
+                // Await all channel processing for the current song
+                await Promise.all(channelProcessingPromises);
 
-    // Dispatch event indicating initial audio buffers are ready
-    document.dispatchEvent(new CustomEvent("initialAudioBuffersReady", {
-        detail: { success: true }
-    }));
-};
-    
+                // Log once per song after all its channels have been processed
+                console.warn(`Processed Song: "${song.id}" with ${processedChannels.length} channels.`);
+            }
+
+            // Display all processed channels
+            displayProcessedChannels(processedChannels);
+
+            console.warn("Initial audio buffers ready.");
+
+            // Initialize Master Gain
+            const masterGain = audioContext.createGain();
+            masterGain.gain.value = 0.7;
+            masterGain.connect(audioContext.destination);
+            globalData.masterGain = masterGain;
+
+            console.warn("Master Gain initialized with gain:", masterGain.gain.value);
+
+            // Dispatch event indicating initial audio buffers are ready
+            document.dispatchEvent(new CustomEvent("initialAudioBuffersReady", {
+                detail: { success: true }
+            }));
+        };
+
         /**
          * Initializes the audio processing by handling event listeners and processing sequences.
          */
@@ -1746,48 +2450,48 @@ const processInitialSamples = async () => {
                 if (audioContext.state === "suspended") {
                     await audioContext.resume();
                 }
-    
+
                 // Process initial samples
                 await processInitialSamples();
-    
+
                 // Background processing for additional audio buffers
                 try {
                     const { songsArray, initialSampleOrder } = globalData;
-    
+
                     if (!songsArray || !songsArray.length) {
                         console.error("No songs to process.");
                         return;
                     }
-    
+
                     const additionalProcessedChannels = [];
-    
+
                     // Flatten all channels from all songs
                     const allChannels = songsArray.flatMap(song => song.channels.map(channel => ({ song, channel })));
-    
+
                     // Create a set of already processed songId-channelId combinations
                     const initialProcessedSet = new Set(initialSampleOrder.map(sample => `${sample.songId}-${sample.channelId}`));
-    
+
                     // Filter out channels that have already been processed
                     const channelsToProcess = allChannels.filter(({ song, channel }) => !initialProcessedSet.has(`${song.id}-${channel.id}`));
-    
+
                     const batches = [];
-    
+
                     // Batch channels into groups of 4 for processing
                     while (channelsToProcess.length) {
                         batches.push(channelsToProcess.splice(0, 4));
                     }
-    
+
                     // Process each batch sequentially
                     for (const batch of batches) {
                         const batchPromises = batch.map(({ song, channel }) => processChannel(song, channel, additionalProcessedChannels));
                         await Promise.all(batchPromises);
                     }
-    
+
                     // Display additional processed channels
                     displayProcessedChannels(additionalProcessedChannels);
-    
+
                     console.warn("All background audio buffers processed.");
-    
+
                     // Dispatch event indicating all audio buffers are ready
                     document.dispatchEvent(new CustomEvent("allAudioBuffersReady", {
                         detail: { success: true }
@@ -1799,19 +2503,19 @@ const processInitialSamples = async () => {
                 console.error("Audio processing initialization error:", error);
             }
         };
-    
+
         /**
          * Event listener for data loading completion to start audio processing.
          */
         document.addEventListener("dataLoadingComplete", initializeAudioProcessing);
-    
+
         /**
          * Automatically initialize audio processing if songs are already loaded.
          */
         if (globalData.songsArray?.length) {
             initializeAudioProcessing();
         }
-    
+
         /**
          * Event listener for initial audio buffers ready.
          */
