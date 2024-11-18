@@ -2723,72 +2723,85 @@ window.globalData.startPlayback();
 
     let countdownInterval = null;
 
-    /**
-     * Initializes the audio processing chain with Compressor, Low-Shelf Filter, and AnalyserNode.
-     */
-    function initializeAudioProcessingChain() {
-        // Prevent re-initialization if already done
-        if (globalData.isAudioProcessingInitialized) {
-            console.log("[PlaybackEngine] Audio processing chain already initialized.");
-            return;
-        }
-
-        // **Initialize Compressor**
-        if (!globalData.compressor) {
-            globalData.compressor = audioContext.createDynamicsCompressor();
-            globalData.compressor.threshold.setValueAtTime(-24, audioContext.currentTime);
-            globalData.compressor.knee.setValueAtTime(30, audioContext.currentTime);
-            globalData.compressor.ratio.setValueAtTime(12, audioContext.currentTime);
-            globalData.compressor.attack.setValueAtTime(0.003, audioContext.currentTime);
-            globalData.compressor.release.setValueAtTime(0.25, audioContext.currentTime);
-
-            console.log("[PlaybackEngine] Compressor node initialized.");
-        }
-
-        // **Initialize Master Gain**
-        if (!globalData.masterGain) {
-            globalData.masterGain = audioContext.createGain();
-            globalData.masterGain.gain.setValueAtTime(1, audioContext.currentTime); // Set default gain
-
-            // Connect masterGain to compressor
-            globalData.masterGain.connect(globalData.compressor);
-            console.log("[PlaybackEngine] Master Gain node created and connected to Compressor.");
-        }
-
-        // **Initialize Low-Shelf Filter**
-        if (!globalData.lowShelfFilter) {
-            globalData.lowShelfFilter = audioContext.createBiquadFilter();
-            globalData.lowShelfFilter.type = "lowshelf";
-            globalData.lowShelfFilter.frequency.setValueAtTime(50, audioContext.currentTime); // 50 Hz cutoff
-            globalData.lowShelfFilter.gain.setValueAtTime(-6, audioContext.currentTime); // -6 dB attenuation
-
-            // Connect compressor to lowShelfFilter
-            globalData.compressor.connect(globalData.lowShelfFilter);
-            console.log("[PlaybackEngine] Low-shelf filter initialized and connected to Compressor.");
-        }
-
-        // **Initialize AnalyserNode**
-        if (!globalData.analyser) {
-            globalData.analyser = audioContext.createAnalyser();
-            globalData.analyser.fftSize = 2048;
-            globalData.analyser.smoothingTimeConstant = 0.8;
-
-            // Connect lowShelfFilter to AnalyserNode
-            globalData.lowShelfFilter.connect(globalData.analyser);
-            console.log("[PlaybackEngine] Analyser node initialized and connected to Low-Shelf Filter.");
-
-            // Connect AnalyserNode to audio destination
-            globalData.analyser.connect(audioContext.destination);
-            console.log("[PlaybackEngine] Analyser node connected to AudioContext destination.");
-        }
-
-        // **Mark Audio Processing as Initialized**
-        globalData.isAudioProcessingInitialized = true;
-        console.log("[PlaybackEngine] Audio processing chain fully initialized.");
-
-        // **Set Up Bass Monitoring Loop**
-        setupBassMonitoring();
+  /**
+ * Initializes the audio processing chain with Compressor, Low-Shelf Filter, and AnalyserNode.
+ */
+function initializeAudioProcessingChain() {
+    // Prevent re-initialization if already done
+    if (globalData.isAudioProcessingInitialized) {
+        console.log("[PlaybackEngine] Audio processing chain already initialized.");
+        return;
     }
+
+    // **Initialize Compressor**
+    if (!globalData.compressor) {
+        globalData.compressor = audioContext.createDynamicsCompressor();
+        globalData.compressor.threshold.setValueAtTime(-24, audioContext.currentTime);
+        globalData.compressor.knee.setValueAtTime(30, audioContext.currentTime);
+        globalData.compressor.ratio.setValueAtTime(12, audioContext.currentTime);
+        globalData.compressor.attack.setValueAtTime(0.003, audioContext.currentTime);
+        globalData.compressor.release.setValueAtTime(0.25, audioContext.currentTime);
+
+        console.log("[PlaybackEngine] Compressor node initialized.");
+    }
+
+    // **Initialize Master Gain**
+    if (!globalData.masterGain) {
+        globalData.masterGain = audioContext.createGain();
+        globalData.masterGain.gain.setValueAtTime(1, audioContext.currentTime); // Set default gain
+
+        // Connect masterGain to compressor
+        globalData.masterGain.connect(globalData.compressor);
+        console.log("[PlaybackEngine] Master Gain node created and connected to Compressor.");
+    }
+
+    // **Initialize Low-Shelf Filter**
+    if (!globalData.lowShelfFilter) {
+        globalData.lowShelfFilter = audioContext.createBiquadFilter();
+        globalData.lowShelfFilter.type = "lowshelf";
+
+        // Clamp frequency and gain values to avoid out-of-range warnings
+        const MIN_FREQUENCY = 20;      // Minimum frequency (20 Hz)
+        const MAX_FREQUENCY = 22000;   // Maximum frequency (22 kHz)
+        const MIN_GAIN = -40;          // Minimum gain in dB (-40 dB)
+        const MAX_GAIN = 40;           // Maximum gain in dB (40 dB)
+
+        // Clamp frequency and gain to valid ranges
+        const clampedFrequency = Math.min(Math.max(50, MIN_FREQUENCY), MAX_FREQUENCY); // Default 50 Hz cutoff
+        const clampedGain = Math.min(Math.max(-6, MIN_GAIN), MAX_GAIN);  // Default -6 dB attenuation
+
+        // Apply clamped values
+        globalData.lowShelfFilter.frequency.setValueAtTime(clampedFrequency, audioContext.currentTime);
+        globalData.lowShelfFilter.gain.setValueAtTime(clampedGain, audioContext.currentTime);
+
+        // Connect compressor to lowShelfFilter
+        globalData.compressor.connect(globalData.lowShelfFilter);
+        console.log("[PlaybackEngine] Low-shelf filter initialized and connected to Compressor.");
+    }
+
+    // **Initialize AnalyserNode**
+    if (!globalData.analyser) {
+        globalData.analyser = audioContext.createAnalyser();
+        globalData.analyser.fftSize = 2048;
+        globalData.analyser.smoothingTimeConstant = 0.8;
+
+        // Connect lowShelfFilter to AnalyserNode
+        globalData.lowShelfFilter.connect(globalData.analyser);
+        console.log("[PlaybackEngine] Analyser node initialized and connected to Low-Shelf Filter.");
+
+        // Connect AnalyserNode to audio destination
+        globalData.analyser.connect(audioContext.destination);
+        console.log("[PlaybackEngine] Analyser node connected to AudioContext destination.");
+    }
+
+    // **Mark Audio Processing as Initialized**
+    globalData.isAudioProcessingInitialized = true;
+    console.log("[PlaybackEngine] Audio processing chain fully initialized.");
+
+    // **Set Up Bass Monitoring Loop**
+    setupBassMonitoring();
+}
+
 
     /**
      * Monitors low-frequency (bass) levels in real-time and adjusts the low-shelf filter accordingly.
@@ -2898,13 +2911,6 @@ window.globalData.startPlayback();
         console.log(`Starting playback for Song: ${song.id} (${currentSongIndex + 1}/${songsArray.length}) with ${Object.keys(projectSequences).length} sequences.`);
         console.log(`Song BPM: ${song.bpm}`);
 
-        // **Update Synth's BPM Here**
-        if (window.synth && typeof window.synth.updateBPM === 'function') {
-            window.synth.updateBPM(song.bpm);
-            console.log(`Synth BPM updated to ${song.bpm} BPM.`);
-        } else {
-            console.warn("Synth instance not found or updateBPM method unavailable.");
-        }
 
         let sequenceStartTimeOffset = 0;
         let orderedSequenceNumber = 1; // Start from 1
