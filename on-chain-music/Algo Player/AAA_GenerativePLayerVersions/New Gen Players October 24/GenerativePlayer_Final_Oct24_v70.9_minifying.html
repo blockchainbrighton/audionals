@@ -1629,7 +1629,21 @@ function initializeSeedList() {
 initializeSeedList();
 
 
-
+/**
+ * Checks if two BPMs are harmonically related by exact multiples or divisors.
+ *
+ * @param {number} loopBPM - The BPM of the looped sample.
+ * @param {number} songBPM - The BPM of the song.
+ * @param {number} [epsilon=0.01] - Tolerance for floating-point comparisons.
+ * @returns {boolean} - True if harmonically related, else false.
+ */
+ const isHarmonic = (loopBPM, songBPM, epsilon = 0.01) => {
+    return (
+        Math.abs(loopBPM - songBPM) < epsilon ||                // Exact match
+        Math.abs(loopBPM - songBPM * 2) < epsilon ||            // Exact double
+        Math.abs(loopBPM - songBPM / 2) < epsilon               // Exact half
+    );
+};
 
 
 async function generateMixBySeed(seedString, remixNumber) {
@@ -1661,7 +1675,7 @@ async function generateMixBySeed(seedString, remixNumber) {
     const selectedBPM = getBPMFromSeed(currentSeed);
     console.log(`[loopedSamplesDebug] Selected BPM based on seed ${currentSeed}: ${selectedBPM}`);
 
-    // **Filter allChannels to exclude loops whose BPM doesn't match the selectedBPM**
+    // **Filter allChannels to exclude loops whose BPM doesn't match the selectedBPM or is not harmonic**
     const filteredChannels = allChannels.filter(channel => {
         // Extract the sample ID from the channel's URL
         const sampleId = channel.url.split('/').pop(); // Assumes URL is in the format "/content/{sampleId}"
@@ -1671,8 +1685,8 @@ async function generateMixBySeed(seedString, remixNumber) {
         
         if (loopInfo) {
             // This channel is a loop with its own BPM
-            if (loopInfo.bpm === selectedBPM) {
-                console.log(`[loopedSamplesDebug] Including loop sample with Sample ID ${sampleId} and BPM ${loopInfo.bpm}`);
+            if (isHarmonic(loopInfo.bpm, selectedBPM)) {
+                console.log(`[loopedSamplesDebug] Including loop sample with Sample ID ${sampleId} and BPM ${loopInfo.bpm} as it is harmonically related to Song BPM ${selectedBPM}`);
                 return true; // Include the loop
             } else {
                 console.log(`[loopedSamplesDebug] Excluding loop sample with Sample ID ${sampleId} due to BPM mismatch (Loop BPM: ${loopInfo.bpm}, Song BPM: ${selectedBPM})`);
