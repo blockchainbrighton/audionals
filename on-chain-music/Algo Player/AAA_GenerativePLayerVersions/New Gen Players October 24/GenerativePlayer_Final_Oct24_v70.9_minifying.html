@@ -438,11 +438,11 @@ window.updateSeedDisplay = function() {
           globalData.previousSong();
           updateSeedDisplay();
       };
-      </script>
+</script>
 
 
 
-<!-- Combined Effects Configuration, Audio Effects Module, and GainNode Management -->
+<!-- Effects Configuration Module-->
 <script>
     /*
     #region Combined Effects Configuration, Audio Effects Module, and GainNode Management
@@ -609,87 +609,14 @@ window.updateSeedDisplay = function() {
         };
 
    
-        // ================================
-        // GainNode Management Section
-        // ================================
-
-        window.GainNodeHelper = (() => {
-            // Initialize globalData if not present
-            const globalData = window.globalData || (window.globalData = { 
-                gainNodes: {}, 
-                audioContext: new (window.AudioContext || window.webkitAudioContext)(), 
-                masterGain: null 
-            });
-
-            // Initialize masterGain if not already set
-            if (!globalData.masterGain) {
-                globalData.masterGain = globalData.audioContext.createGain();
-                globalData.masterGain.connect(globalData.audioContext.destination);
-                // console.log(`[GainNodeHelper] Master GainNode initialized and connected to destination.`);
-            }
-
-            /**
-             * Initializes GainNodes for all channels in a given song.
-             *
-             * @param {Object} song - The song object containing channels.
-             */
-            const createGainNodesForSong = (song) => {
-                const songId = song.id;
-                if (!song.channels || song.channels.length === 0) {
-                    console.warn(`[GainNodeHelper] No channels found for Song "${songId}".`);
-                    return;
-                }
-
-                globalData.gainNodes[songId] = globalData.gainNodes[songId] || {};
-
-                song.channels.forEach(channel => {
-                    if (!globalData.gainNodes[songId][channel.id]) {
-                        const gainNode = globalData.audioContext.createGain();
-                        gainNode.gain.value = channel.metadata.volume || 1;
-                        gainNode.connect(globalData.masterGain);
-                        globalData.gainNodes[songId][channel.id] = gainNode;
-                        // console.log(`[GainNodeHelper] GainNode created for Channel "${channel.id}" in Song "${songId}".`);
-                    }
-                });
-            };
-
-            /**
-             * Prepares GainNodes for the next song.
-             *
-             * @param {Object} song - The next song object.
-             */
-            const prepareNextSongGainNodes = (song) => {
-                createGainNodesForSong(song);
-                // console.log(`[GainNodeHelper] Prepared GainNodes for next Song "${song.id}".`);
-            };
-
-            /**
-             * Cleans up GainNodes for a specific song.
-             *
-             * @param {string} songId - The ID of the song to clean up.
-             */
-            const cleanupGainNodesForSong = (songId) => {
-                const songGainNodes = globalData.gainNodes[songId];
-                if (songGainNodes) {
-                    Object.values(songGainNodes).forEach(gainNode => gainNode.disconnect());
-                    delete globalData.gainNodes[songId];
-                    // console.log(`[GainNodeHelper] Cleaned up GainNodes for Song "${songId}".`);
-                } else {
-                    console.warn(`[GainNodeHelper] No GainNodes found to clean up for Song "${songId}".`);
-                }
-            };
-
-            // Expose public methods
-            return {
-                createGainNodesForSong,
-                prepareNextSongGainNodes,
-                cleanupGainNodesForSong
-            };
-        })();
 
         // ================================
         // Finalize Configuration
         // ================================
+       /**
+         * Waits for the EffectsModule to be ready.
+         * @returns {Promise} - Resolves when EffectsModule.effectsConfig is available.
+         */
         window.waitForEffects = function () {
             return new Promise((resolve) => {
                 if (window.EffectsModule && window.EffectsModule.effectsConfig) {
@@ -699,7 +626,7 @@ window.updateSeedDisplay = function() {
                 }
             });
         };
-    
+
         // Dispatch 'effectsLoaded' event to signal that the effects system is ready
         document.dispatchEvent(new Event('effectsLoaded'));
     })();
@@ -710,147 +637,141 @@ window.updateSeedDisplay = function() {
 
 </script>
 
-<!-- GainNode Helpers (gainNodeHelpers.js) -->
-<script>
-window.GainNodeHelper = (() => {
-  const n =
-    window.globalData ||
-    (window.globalData = {
-      gainNodes: {},
-      audioContext: new (window.AudioContext || window.webkitAudioContext)(),
-      masterGain: null,
-    });
-
-  if (!n.masterGain) {
-    n.masterGain = n.audioContext.createGain();
-    n.masterGain.connect(n.audioContext.destination);
-  }
-
-  const e = {
-    targetLoudness: 0.8,
-    transientThreshold: 1.2,
-    smoothingFactor: 0.7,
-  };
-
-  const o = (song, isNextSong = false) => {
-    const i = song.id;
-
-    // Initialize GainNodes for the song
-    if (isNextSong) {
-      // Preparing next song: i
-    } else {
-      // Setting current song: i
-    }
-
-    if (song.channels && song.channels.length > 0) {
-      if (!n.gainNodes[i]) {
-        n.gainNodes[i] = {};
-      }
-
-      // Create GainNodes for each channel if they don't exist
-      song.channels.forEach((channel) => {
-        if (!n.gainNodes[i][channel.id]) {
-          const gainNode = n.audioContext.createGain();
-          gainNode.gain.value = channel.metadata.volume || 1;
-          gainNode.connect(n.masterGain);
-          n.gainNodes[i][channel.id] = gainNode;
+<!-- GainNodeHelper -->
+ <script>
+    window.GainNodeHelper = (() => {
+        // Initialize globalData if not present
+        const globalData = window.globalData || (window.globalData = { 
+            gainNodes: {}, 
+            audioContext: new (window.AudioContext || window.webkitAudioContext)(), 
+            masterGain: null 
+        });
+    
+        // Initialize masterGain if not already set
+        if (!globalData.masterGain) {
+            globalData.masterGain = globalData.audioContext.createGain();
+            globalData.masterGain.connect(globalData.audioContext.destination);
+            // console.log(`[GainNodeHelper] Master GainNode initialized and connected to destination.`);
         }
-      });
-
-      // Normalize volumes across all channels
-      if (!song.channels || song.channels.length === 0) {
-        return;
-      }
-
-      const volumes = song.channels.map((ch) => ch.metadata.volume || 1);
-      const maxVolume = Math.max(...volumes);
-      song.channels.forEach((ch) => {
-        const normalizedGain =
-          ((ch.metadata.volume || 1) / maxVolume) * e.targetLoudness;
-        a(song.id, ch.id, normalizedGain);
-      });
-
-      // Apply transient control to each channel
-      if (song.channels && song.channels.length !== 0) {
-        song.channels.forEach((channel) => {
-          const gainNode = n.gainNodes?.[song.id]?.[channel.id];
-          if (gainNode) {
-            const adjustedGain = Math.min(
-              gainNode.gain.value * e.transientThreshold,
-              e.targetLoudness
-            );
-            gainNode.gain.setTargetAtTime(
-              adjustedGain,
-              n.audioContext.currentTime,
-              e.smoothingFactor
-            );
-          }
-        });
-      }
-
-      // All GainNodes initialized for Song ID: i
-    } else {
-      // No channels found for Song "i"
-    }
-  };
-
-  const a = (songId, channelId, gainValue) => {
-    const t = n.gainNodes?.[songId]?.[channelId];
-    if (t) {
-      t.gain.setValueAtTime(gainValue, n.audioContext.currentTime);
-    } else {
-      // No GainNode found for Channel "channelId" of Song "songId"
-    }
-  };
-
-  return {
-    /**
-     * Creates GainNodes for a given song.
-     * @param {Object} song - The song object containing channels.
-     */
-    createGainNodesForSong: (song) => o(song, false),
-
-    /**
-     * Prepares GainNodes for the next song.
-     * @param {Object} song - The next song object containing channels.
-     */
-    prepareNextSongGainNodes: (song) => o(song, true),
-
-    /**
-     * Cleans up GainNodes for a given song.
-     * @param {string} songId - The ID of the song to clean up.
-     */
-    cleanupGainNodesForSong: (songId) => {
-      const gainNodesForSong = n.gainNodes[songId];
-      if (gainNodesForSong) {
-        Object.values(gainNodesForSong).forEach((gainNode) => {
-          gainNode.disconnect();
-        });
-        delete n.gainNodes[songId];
-      } else {
-        // No GainNodes found to clean up for Song ID: songId
-      }
-    },
-
-    /**
-     * Sets the gain value for a specific channel of a song.
-     * @param {string} songId - The ID of the song.
-     * @param {string} channelId - The ID of the channel.
-     * @param {number} gainValue - The gain value to set.
-     */
-    setChannelGain: (songId, channelId, gainValue) =>
-      a(songId, channelId, gainValue),
-
-    /**
-     * Sets mastering controls by merging new settings.
-     * @param {Object} newSettings - The new mastering settings.
-     */
-    setMasteringControls: (newSettings) =>
-      Object.assign(e, newSettings),
-  };
-})();
-</script>
-
+    
+        // Mastering settings
+        const masteringSettings = {
+            targetLoudness: 0.8,
+            transientThreshold: 1.2,
+            smoothingFactor: 0.7,
+        };
+    
+        /**
+         * Creates GainNodes for a given song.
+         * @param {Object} song - The song object containing channels.
+         * @param {boolean} isNextSong - Flag indicating if it's preparing for the next song.
+         */
+        const createGainNodesForSong = (song, isNextSong = false) => {
+            const songId = song.id;
+    
+            if (!song.channels || song.channels.length === 0) {
+                console.warn(`[GainNodeHelper] No channels found for Song "${songId}".`);
+                return;
+            }
+    
+            globalData.gainNodes[songId] = globalData.gainNodes[songId] || {};
+    
+            song.channels.forEach(channel => {
+                if (!globalData.gainNodes[songId][channel.id]) {
+                    const gainNode = globalData.audioContext.createGain();
+                    gainNode.gain.value = channel.metadata.volume || 1;
+                    gainNode.connect(globalData.masterGain);
+                    globalData.gainNodes[songId][channel.id] = gainNode;
+                    // console.log(`[GainNodeHelper] GainNode created for Channel "${channel.id}" in Song "${songId}".`);
+                }
+            });
+    
+            // Normalize volumes across all channels
+            const volumes = song.channels.map(ch => ch.metadata.volume || 1);
+            const maxVolume = Math.max(...volumes);
+            song.channels.forEach(ch => {
+                const normalizedGain = ((ch.metadata.volume || 1) / maxVolume) * masteringSettings.targetLoudness;
+                setChannelGain(songId, ch.id, normalizedGain);
+            });
+    
+            // Apply transient control to each channel
+            song.channels.forEach(channel => {
+                const gainNode = globalData.gainNodes?.[songId]?.[channel.id];
+                if (gainNode) {
+                    const adjustedGain = Math.min(
+                        gainNode.gain.value * masteringSettings.transientThreshold,
+                        masteringSettings.targetLoudness
+                    );
+                    gainNode.gain.setTargetAtTime(
+                        adjustedGain,
+                        globalData.audioContext.currentTime,
+                        masteringSettings.smoothingFactor
+                    );
+                }
+            });
+    
+            // console.log(`[GainNodeHelper] GainNodes initialized for Song "${songId}".`);
+        };
+    
+        /**
+         * Prepares GainNodes for the next song.
+         * @param {Object} song - The next song object containing channels.
+         */
+        const prepareNextSongGainNodes = (song) => {
+            createGainNodesForSong(song, true);
+            // console.log(`[GainNodeHelper] Prepared GainNodes for next Song "${song.id}".`);
+        };
+    
+        /**
+         * Cleans up GainNodes for a specific song.
+         * @param {string} songId - The ID of the song to clean up.
+         */
+        const cleanupGainNodesForSong = (songId) => {
+            const songGainNodes = globalData.gainNodes[songId];
+            if (songGainNodes) {
+                Object.values(songGainNodes).forEach(gainNode => gainNode.disconnect());
+                delete globalData.gainNodes[songId];
+                // console.log(`[GainNodeHelper] Cleaned up GainNodes for Song "${songId}".`);
+            } else {
+                console.warn(`[GainNodeHelper] No GainNodes found to clean up for Song "${songId}".`);
+            }
+        };
+    
+        /**
+         * Sets the gain value for a specific channel of a song.
+         * @param {string} songId - The ID of the song.
+         * @param {string} channelId - The ID of the channel.
+         * @param {number} gainValue - The gain value to set.
+         */
+        const setChannelGain = (songId, channelId, gainValue) => {
+            const gainNode = globalData.gainNodes?.[songId]?.[channelId];
+            if (gainNode) {
+                gainNode.gain.setValueAtTime(gainValue, globalData.audioContext.currentTime);
+            } else {
+                console.warn(`[GainNodeHelper] No GainNode found for Channel "${channelId}" of Song "${songId}".`);
+            }
+        };
+    
+        /**
+         * Sets mastering controls by merging new settings.
+         * @param {Object} newSettings - The new mastering settings.
+         */
+        const setMasteringControls = (newSettings) => {
+            Object.assign(masteringSettings, newSettings);
+            // console.log(`[GainNodeHelper] Mastering settings updated:`, masteringSettings);
+        };
+    
+        // Expose public methods
+        return {
+            createGainNodesForSong,
+            prepareNextSongGainNodes,
+            cleanupGainNodesForSong,
+            setChannelGain,
+            setMasteringControls,
+        };
+    })();
+    </script>
+    
 
 
 <!-- Main Script (main.js) -->
