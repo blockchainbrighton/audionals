@@ -111,9 +111,17 @@
 <!-- Seed Management -->
 <script>
     (function() {
+        // Initialize globalData if not already defined
+        window.globalData = window.globalData || {
+            seedList: [],
+            currentSeed: '',
+            songsArray: [],
+            currentSongIndex: 0
+        };
+
         // Utility function for logging
         const log = (message) => console.log(`[${new Date().toISOString()}] ${message}`);
-        
+
         // Utility function to generate a random 16-digit seed
         function generateRandomSeed() {
             let seed = '';
@@ -148,7 +156,10 @@
 
         // Function to handle seed validation
         function isValidSeed(seed) {
-            return /^\d{16}$/.test(seed) && BigInt(seed) <= BigInt(Number.MAX_SAFE_INTEGER);
+            // Removed the upper limit check to allow any 16-digit number
+            return /^\d{16}$/.test(seed);
+            // Optional: To ensure it doesn't exceed 9999999999999999
+            // return /^\d{16}$/.test(seed) && BigInt(seed) <= 9999999999999999n;
         }
 
         // Retrieve seeds from URL or generate if not present
@@ -277,25 +288,16 @@
             }
             for (const seed of inputSeeds) {
                 if (!isValidSeed(seed)) {
-                    alert(`Invalid seed format: "${seed}". Seeds must be 16-digit numeric strings up to ${Number.MAX_SAFE_INTEGER}.`);
+                    alert(`Invalid seed format: "${seed}". Seeds must be 16-digit numeric strings.`);
                     return;
                 }
             }
-            // Update seedList and reload page with new seeds
-            window.globalData.seedList = inputSeeds;
-            window.globalData.currentSeed = inputSeeds[0];
-            window.globalData.songsArray = inputSeeds.map((seed, index) => ({
-                id: `Remix ${index + 1}`,
-                projectName: `Remix ${index + 1}`,
-                artist: "Unknown Artist",
-                bpm: selectBPM(seed, index),
-                channels: [],
-                projectSequences: {},
-                seed: seed,
-            }));
-            log(`Loaded new seeds: ${inputSeeds.join(", ")}`);
-            // Optionally, reload the page or reinitialize playback
-            location.reload();
+            // Update the URL with the new seed(s) and reload the page
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set('seed', inputSeeds.join(','));
+            const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+            log(`Redirecting to: ${newUrl}`);
+            window.location.href = newUrl;
         };
 
         window.displaySeedAndBPM = function(seed, bpm, title) {
@@ -905,23 +907,16 @@ This module simplifies the management and application of audio effects by centra
 
         window.EffectsModule.effectsConfig = { 
             pitchShift: { 
-                enabled: false, // working well
+                enabled: true, // working well
                 defaultProbability: 0.5, // works well at 100% (1) but needs a dynamic setting from 0.1 to 1
                 shifts: [0.125, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5],
 
             },
             harmonize: { 
-                enabled: false, // working well
+                enabled: true, // working well
                 defaultProbability: 0.01, // needs to range from 0.0025 to 0.1 - More stable mixes in general at 0.01 but interesting mixes around 0.1
                 intervals: [ 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5], //  WORKS WELL AT 100% ON 15, 30 and 60 BPM songs Can we weight this?
                 maxHarmonyChannels: 4 
-            },
-            // New TempoControlledDelay Effect Configuration
-            tempoControlledDelay: {
-                enabled: true,
-                defaultProbability: 1, // Adjust probability as needed (0.0025 to 0.1)
-                delayDivisions: [1/16, 1/8, 1/4, 1/2, 1], // Sixteenths, eighths, quarters, halves, whole bars
-                maxRepetitions: 16, // Allow 1-16 repetitions
             },
          
         };
@@ -951,16 +946,6 @@ This module simplifies the management and application of audio effects by centra
             // Select a random interval from the intervals array
             params.interval = effect.intervals[Math.floor(prng() * effect.intervals.length)];
             params.maxHarmonyChannels = effect.maxHarmonyChannels;
-            break;
-
-        case 'tempoControlledDelay':
-            // Select a random delay division
-            const division = effect.delayDivisions[Math.floor(prng() * effect.delayDivisions.length)];
-            // Calculate delay time in seconds based on BPM and division
-            // Delay time = (60 / BPM) * division
-            params.delayTime = (60 / bpm) * division;
-            // Select a random number of repetitions between 1 and maxRepetitions
-            params.repetitions = Math.floor(prng() * effect.maxRepetitions) + 1; // 1 to 16
             break;
        
         
@@ -1008,59 +993,7 @@ This module simplifies the management and application of audio effects by centra
                 context.totalGain += harmony.metadata.volume || 1; // Update totalGain
                 console.log(`[effectsDebug][Harmony] Added harmony channel "${harmony.id}" with interval ${interval}`);
             });
-
-            /**
-             * Apply Tempo Controlled Delay Effect
-             * Creates delayed repetitions of notes based on BPM and delay divisions.
-             */
-        /**
-         * Apply Tempo Controlled Delay Effect
-         * Creates delayed repetitions of notes based on BPM and delay divisions.
-         */
-        window.applyTempoControlledDelay = (channel, { delayTime, repetitions }, prng) => {
-            // Implement the actual delay effect using Web Audio API's DelayNode
-            // This is a simplified example assuming access to the audioContext
-
-            if (!window.globalData.audioContext) {
-                console.error(`[effectsDebug][TempoControlledDelay] No audioContext available.`);
-                return;
-            }
-
-            const delayNode = window.globalData.audioContext.createDelay();
-            delayNode.delayTime.value = delayTime;
-
-            // Create a feedback gain node to control repetitions
-            const feedbackGain = window.globalData.audioContext.createGain();
-            feedbackGain.gain.value = 0.5; // Adjust feedback as needed
-
-            // Connect the nodes: delay -> feedback -> delay
-            delayNode.connect(feedbackGain);
-            feedbackGain.connect(delayNode);
-
-            // Connect the delay node to the channel's output
-            // Assuming channel has a reference to its source node
-            if (channel.sourceNode) {
-                channel.sourceNode.connect(delayNode);
-                delayNode.connect(window.globalData.audioContext.destination);
-            } else {
-                console.warn(`[effectsDebug][TempoControlledDelay] Channel "${channel.id}" does not have a sourceNode.`);
-            }
-
-            // Store delay node information for potential future adjustments or disconnection
-            channel.metadata.tempoControlledDelay = {
-                delayNode,
-                feedbackGain,
-                delayTime,
-                repetitions
-            };
-
-            console.log(`[effectsDebug][TempoControlledDelay] Applied delay of ${delayTime.toFixed(3)}s with ${repetitions} repetitions to channel "${channel.id}".`);
         };
-
-
-    };
-
-
 
    
 
