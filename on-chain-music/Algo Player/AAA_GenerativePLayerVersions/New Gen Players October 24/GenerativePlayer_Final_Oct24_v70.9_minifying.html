@@ -442,200 +442,7 @@ window.updateSeedDisplay = function() {
 
 
 
-<!-- Effects Configuration Module-->
-<script>
-    /*
-    #region Combined Effects Configuration, Audio Effects Module, and GainNode Management
 
-    ## Purpose:
-    - **Effects Configuration:**
-      Establishes a comprehensive framework for managing and configuring various audio effects within the application. Enables dynamic and randomized application of audio effects based on predefined configurations and probabilities.
-    - **Audio Effects Module:**
-      Defines and exports various audio effect application functions used for processing audio channels within the application.
-    - **GainNode Management:**
-      Ensures that GainNodes are correctly created and mapped for each channel, allowing for volume control and audio effects management.
-
-    ## Key Functionalities:
-
-    ### Effects Configuration:
-    - **Effects Module Initialization:**
-      - Initializes or utilizes an existing `EffectsModule` within the global `window` object to store and manage effects configurations.
-    - **Effects Configuration:**
-      - Defines a variety of audio effects (e.g., pitchShift, harmonize, delay, chorus, leslie, synthBass, synth) with specific properties:
-        - **enabled:** Boolean flag to activate or deactivate the effect.
-        - **defaultProbability:** Determines the likelihood of the effect being applied.
-        - **Parameter Ranges:** Specifies ranges or options for effect-specific parameters (e.g., rate, depth, feedback).
-    - **Parameter Generation (`getEffectParams`):**
-      - Generates random parameters for each effect based on their configurations and a pseudo-random number generator (`prng`).
-      - Ensures that effects are applied with varied and dynamic settings each time they are triggered.
-      - Handles different parameter requirements for each effect type, allowing for extensibility and customization.
-    - **Event Dispatching:**
-      - Emits an `effectsLoaded` event once the effects configurations are fully set up, signaling other parts of the application that the effects system is ready for use.
-    - **Extensibility:**
-      - Designed to easily incorporate additional effects by adding new configurations and corresponding parameter generation logic.
-      - Facilitates scalability, allowing the effects system to grow with application requirements.
-
-    ### Audio Effects Module:
-    - **Effect Application Functions:**
-      - `applyChorusEffect`
-      - `applyRandomPitchShift`
-      - `addHarmony`
-      - `applyDelay`
-      - `applyReverseEffect`
-      - `applyVolumeChange`
-      - `applyPanEffect`
-      - `applyReverbEffect`
-      - `applyFilterEffect`
-      - `applyTremoloEffect`
-      - `applyDistortionEffect`
-      - `applyBitcrusherEffect`
-      - `applyLeslieEffect`
-      - `applyBpmLinkedDelay`
-      - Each function is responsible for applying specific audio effects to audio channels based on provided parameters.
-
-    ### GainNode Management:
-    - **GainNode Creation and Mapping:**
-      - Ensures that each channel has an associated GainNode for volume control.
-      - Maps GainNodes to their corresponding channels within each song.
-    - **GainNode Initialization Functions:**
-      - `createGainNodesForSong`: Creates GainNodes for all channels in a given song.
-      - `prepareNextSong`: Prepares GainNodes for the next song (if applicable).
-      - `cleanupGainNodesForSong`: Cleans up GainNodes for a song when it's no longer needed.
-    - **Global Data Structure:**
-      - Maintains a global `gainNodes` map within `globalData` to manage GainNodes for all songs and channels.
-      - Ensures that GainNodes are correctly connected to the audio context's master gain node.
-
-    ## Overall Functionality:
-    This combined script provides a flexible and scalable approach to audio effect management and GainNode handling. By centralizing effect configurations, parameter generation, dedicated effect application functions, and GainNode management, it ensures consistency, ease of maintenance, and rich, randomized audio experiences tailored to user interactions or predefined conditions across the application's audio processing components.
-
-    #endregion
-    */
-
-    (() => {
-        // ================================
-        // Effects Configuration Section
-        // ================================
-        // I'd like to set some kind of random function for allowing effect probability values to be more dynamic
-        window.EffectsModule = window.EffectsModule || {};
-
-        window.EffectsModule.effectsConfig = { 
-            pitchShift: { 
-                enabled: false, // working well
-                defaultProbability: 0.5, // works well at 100% (1) but needs a dynamic setting from 0.1 to 1
-                shifts: [0.125, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5],
-
-            },
-            harmonize: { 
-                enabled: false, // working well
-                defaultProbability: 0.0025, // needs to range from 0.0025 to 0.1 - More stable mixes in general at 0.01 but interesting mixes around 0.1
-                intervals: [ 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5], //  WORKS WELL AT 100% ON 15, 30 and 60 BPM songs Can we weight this?
-                maxHarmonyChannels: 4 
-            },
-         
-        };
-        
-        window.EffectsModule.getEffectParams = function(effectName, currentSequence, bpm, prng) {
-    const effect = this.effectsConfig[effectName];
-    if (!effect || !effect.enabled) return null;
-    
-    // Determine if the effect should be applied based on defaultProbability
-    if (prng() >= effect.defaultProbability) return null;
-
-    // Helper function to clamp values within a specified range
-    const clamp = (value, min, max) => {
-        return Math.min(Math.max(value, min), max);
-    };
-
-    // Initialize the params object
-    const params = {};
-
-    switch(effectName) {
-        case 'pitchShift':
-            // Select a random shift value from the shifts array
-            params.shift = effect.shifts[Math.floor(prng() * effect.shifts.length)];
-            break;
-        
-        case 'harmonize':
-            // Select a random interval from the intervals array
-            params.interval = effect.intervals[Math.floor(prng() * effect.intervals.length)];
-            params.maxHarmonyChannels = effect.maxHarmonyChannels;
-            break;
-       
-        
-        default:
-            // For effects without additional parameters, return effect as is
-            break;
-    }
-
-    // Return the combined effect configuration and generated parameters
-    return { ...effect, ...params };
-};
-
-        // ================================
-        // Audio Effects Module Section
-        // ================================
-
-
-        // Helper function to clamp values to a range
-        const clamp = (value, min, max) => {
-            if (value < min || value > max) {
-                // console.warn(`Value ${value} is out of bounds. Clamping to range [${min}, ${max}]`);
-            }
-            return Math.min(Math.max(value, min), max);
-        };
-
-
-        // Apply Random Pitch Shift
-        window.applyRandomPitchShift = (channel, { shifts }, prng) => {
-            const shift = shifts[Math.floor(prng() * shifts.length)];
-            channel.metadata.playbackSpeed *= shift;
-            console.log(`[effectsDebug][PitchShift] Channel "${channel.id}" playback speed shifted by factor ${shift}`);
-        };
-
-        // Add Harmony
-        window.addHarmony = (originalChannel, index, newSong, { intervals, maxHarmonyChannels }, context, prng) => {
-            if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
-            intervals.forEach(interval => {
-                if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
-                const harmony = JSON.parse(JSON.stringify(originalChannel));
-                harmony.id = `${originalChannel.id}_harmony_${index}_${interval}`;
-                harmony.metadata.playbackSpeed *= interval;
-                harmony.metadata.volume = clamp((harmony.metadata.volume || 1) * 0.5, 1);
-                newSong.channels.push(harmony);
-                context.harmonyChannelsAdded++;
-                context.totalGain += harmony.metadata.volume || 1; // Update totalGain
-                console.log(`[effectsDebug][Harmony] Added harmony channel "${harmony.id}" with interval ${interval}`);
-            });
-        };
-
-   
-
-        // ================================
-        // Finalize Configuration
-        // ================================
-       /**
-         * Waits for the EffectsModule to be ready.
-         * @returns {Promise} - Resolves when EffectsModule.effectsConfig is available.
-         */
-        window.waitForEffects = function () {
-            return new Promise((resolve) => {
-                if (window.EffectsModule && window.EffectsModule.effectsConfig) {
-                    resolve();
-                } else {
-                    document.addEventListener('effectsLoaded', resolve, { once: true });
-                }
-            });
-        };
-
-        // Dispatch 'effectsLoaded' event to signal that the effects system is ready
-        document.dispatchEvent(new Event('effectsLoaded'));
-    })();
-
-        
-
-
-
-</script>
 
 <!-- GainNodeHelper -->
  <script>
@@ -770,93 +577,39 @@ window.updateSeedDisplay = function() {
             setMasteringControls,
         };
     })();
-    </script>
+</script>
     
 
+ <!-- DataInitializer.js
+Description: The DataInitializer.js module is responsible for setting up the foundational data required for the application to function correctly. It performs several critical tasks to ensure that all necessary data and libraries are loaded and processed before any mix generation occurs.
 
-<!-- Main Script (main.js) -->
+Key Responsibilities:
+
+Library Loading:
+Dynamically loads the Pako library, which is essential for data compression and decompression tasks.
+Data Fetching & Processing:
+Fetches song data from specified URLs.
+Decompresses and parses the fetched data into structured JSON formats.
+Processes the parsed data to map keys and prepare channel information for each song.
+Global Variable Setup:
+Initializes and exposes necessary variables and functions globally via the window object. This ensures that other scripts, such as the mix generator, can access the processed data seamlessly.
+Artwork Handling:
+Manages the setting of artwork images based on provided URLs, ensuring that the UI reflects the correct visuals for each project.
+Cache Management:
+Implements a caching mechanism using a Map to optimize data retrieval and processing. This helps in maintaining performance, especially when dealing with a large number of samples.
+Event Dispatching:
+Signals the completion of data initialization by dispatching a custom dataReady event. This ensures that dependent scripts, like MixGenerator.js, execute only after all necessary data is available and properly initialized.
+Implementation Notes:
+
+Asynchronous Operations:
+Utilizes asynchronous functions (async/await) to handle data fetching and processing, ensuring that the application remains responsive during these operations.
+Error Handling:
+Incorporates robust error handling to catch and log issues during data fetching, decompression, and processing. This aids in debugging and ensures that the application can gracefully handle unexpected scenarios.
+Data Exposure:
+By attaching variables and functions to the window object, DataInitializer.js ensures that other modules can access and utilize the initialized data without scope-related issues.
+Usage: Ensure that DataInitializer.js is loaded before MixGenerator.js in your HTML to maintain the correct execution flow. This sequencing guarantees that all necessary data is available when MixGenerator.js begins its operations. -->
 <script>
-
-    
-    (async () => {
-
-   // Wait for EffectsModule to be ready and access audioContext
-await window.waitForEffects();
-const { audioContext } = window.globalData;
-
-// Controls for gain reduction when layering
-const layeringControls = { gainReductionPerLayer: 0.7, maxLayers: 4 };
-
-/**
- * Applies audio effects to a channel, ensuring volume consistency and balance.
- *
- * @param {Object} channel
- * @param {number} index
- * @param {Object} newSong
- * @param {number} currentSequence
- * @param {number} bpm
- * @param {Object} effectsContext
- * @param {Function} prng
- */
-function applyEffects(channel, index, newSong, currentSequence, bpm, effectsContext, prng) {
-    console.log(`[effectsDebug][Song: "${newSong.id}"] Applying effects to Channel "${channel.id}"...`);
-    const MAX_EFFECTS = 3;
-    const duplicationEffects = new Set(['harmonize', 'delay', 'delayBpmLinked']);
-    const loggedEffects = new Set();
-
-    const effectsMap = [
-        { name: 'pitchShift', apply: (ch, params) => applyRandomPitchShift(ch, params, prng) },
-        { name: 'harmonize', apply: (ch, params) => addHarmony(ch, index, newSong, params, effectsContext, prng) },
-    ];
-
-    const shuffledEffects = effectsMap.sort(() => 0.5 - Math.random());
-    let applied = 0;
-
-    for (const { name, apply } of shuffledEffects) {
-        if (applied >= MAX_EFFECTS) break;
-        const params = window.EffectsModule.getEffectParams(name, currentSequence, bpm, prng);
-        if (params) {
-            apply(channel, params);
-            applied++;
-            if (duplicationEffects.has(name)) {
-                effectsContext.channelLayers[channel.id] = Math.min(
-                    (effectsContext.channelLayers[channel.id] || 1) + 1,
-                    layeringControls.maxLayers
-                );
-                const layers = effectsContext.channelLayers[channel.id];
-                const newGain = (1 / layers) * layeringControls.gainReductionPerLayer ** (layers - 1);
-                channel.metadata.volume = newGain;
-                GainNodeHelper.setChannelGain(newSong.id, channel.id, newGain);
-                loggedEffects.add(name);
-            }
-            loggedEffects.add(name);
-        }
-    }
-
-    const [MIN_VOL, MAX_VOL, MAX_GAIN_TOTAL] = [0.5, 1.5, 1];
-    const [MIN_GAIN, MAX_GAIN_VAL] = [-3.40282e+38, 1541.27];
-
-    if (effectsContext.totalGain > MAX_GAIN_TOTAL) {
-        const factor = MAX_GAIN_TOTAL / effectsContext.totalGain;
-        channel.metadata.volume = (channel.metadata.volume || 1) * factor;
-        loggedEffects.add('normalization');
-    }
-
-    effectsContext.totalGain += channel.metadata.volume || 1;
-
-    if (channel.metadata.volume < MIN_VOL) {
-        channel.metadata.volume = MIN_VOL;
-        loggedEffects.add('clamping_min');
-    } else if (channel.metadata.volume > MAX_VOL) {
-        channel.metadata.volume = MAX_VOL;
-        loggedEffects.add('clamping_max');
-    }
-
-    GainNodeHelper.setChannelGain(newSong.id, channel.id, channel.metadata.volume || 1);
-}
-
-
-    
+(async () => {
         const keyNames = [
             "projectName", "artistName", "projectBPM", "currentSequence", "channelURLs",
             "channelVolume", "channelPlaybackSpeed", "trimSettings", "projectChannelNames",
@@ -931,7 +684,6 @@ function applyEffects(channel, index, newSong, currentSequence, bpm, effectsCont
             }
         };
     
-
         const setArtworkImage = url => {
             const el = document.getElementById("artworkImage");
             if (el) {
@@ -970,158 +722,466 @@ function applyEffects(channel, index, newSong, currentSequence, bpm, effectsCont
             // console.log(`[Normalization] Applied normalization factor: ${normalizationFactor.toFixed(4)} to audio buffer.`);
             return audioBuffer;
         };
-       
-       
+    
         // Define maximum cache size
         const MAX_CACHE_SIZE = 100; // Adjust based on available memory and application needs
     
         // Use a Map for sampleCache to maintain insertion order for LRU eviction
         const sampleCache = new Map();
-    // Function to generate a unique key for each sample based on URL and processing parameters
-const generateSampleKey = (url, params = {}) => {
-    let key = url;
-    if (params.reversed) key += '_reversed';
-    if (params.playbackSpeed && params.playbackSpeed !== 1) key += `_speed_${params.playbackSpeed}`;
-    // Include other parameters as needed
-    return key;
-};
-
-// Helper function to log URL issues
-const logUrlIssue = (url, songId, channelId) => {
-    console.error(`[URL Issue] URL "${url}" not found in Song: "${songId}", Channel: "${channelId}". Check if the URL is correct or the resource is available.`);
-};
-
-// Process song data and channels
-const validSongDataUrls = songDataUrls.filter((url) => url.trim() && !url.trim().startsWith("//"));
-
-if (validSongDataUrls.length) {
-    if (!window.pako) {
-        await (async function loadPako() {
-            try {
-                const response = await fetch("/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0");
-                const textContent = await response.text();
-                const scriptElement = new DOMParser().parseFromString(textContent, "text/html").querySelector("script");
-                if (!scriptElement || !scriptElement.textContent.includes("pako")) {
-                    throw new Error("Pako library not found.");
-                }
-                document.head.append(
-                    Object.assign(document.createElement("script"), { textContent: scriptElement.textContent })
-                );
-                console.log("[Initialization] Pako library loaded successfully.");
-            } catch (error) {
-                console.error("[Initialization] Error loading Pako:", error);
+    
+        // Function to generate a unique key for each sample based on URL and processing parameters
+        const generateSampleKey = (url, params = {}) => {
+            let key = url;
+            if (params.reversed) key += '_reversed';
+            if (params.playbackSpeed && params.playbackSpeed !== 1) key += `_speed_${params.playbackSpeed}`;
+            // Include other parameters as needed
+            return key;
+        };
+    
+        // Helper function to log URL issues
+        const logUrlIssue = (url, songId, channelId) => {
+            console.error(`[URL Issue] URL "${url}" not found in Song: "${songId}", Channel: "${channelId}". Check if the URL is correct or the resource is available.`);
+        };
+    
+        // Process song data and channels
+        const validSongDataUrls = songDataUrls.filter((url) => url.trim() && !url.trim().startsWith("//"));
+    
+        if (validSongDataUrls.length) {
+            if (!window.pako) {
+                await (async function loadPako() {
+                    try {
+                        const response = await fetch("/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0");
+                        const textContent = await response.text();
+                        const scriptElement = new DOMParser().parseFromString(textContent, "text/html").querySelector("script");
+                        if (!scriptElement || !scriptElement.textContent.includes("pako")) {
+                            throw new Error("Pako library not found.");
+                        }
+                        document.head.append(
+                            Object.assign(document.createElement("script"), { textContent: scriptElement.textContent })
+                        );
+                        console.log("[Initialization] Pako library loaded successfully.");
+                    } catch (error) {
+                        console.error("[Initialization] Error loading Pako:", error);
+                    }
+                })();
             }
-        })();
+            const songDataArray = await Promise.all(
+                validSongDataUrls.map(async (url, index) => {
+                    try {
+                        const data = await fetchAndProcessSongData(url);
+                        return { data, index };
+                    } catch (error) {
+                        console.error(`[Initialization] Failed to fetch/process ${url}:`, error);
+                        return null;
+                    }
+                })
+            ).then(dataArray => {
+                const validDataArray = dataArray.filter(Boolean);
+                if (!validDataArray.length) throw new Error("[Initialization] No valid data.");
+                return validDataArray;
+            });
+    
+            const originalSongs = songDataArray
+                .sort((a, b) => a.index - b.index)
+                .map(({ data, index }) => {
+                    const {
+                        projectName = "The Infinite Ordinal",
+                        artistName = "melophonic",
+                        projectBPM = 120,
+                        projectSequences = {},
+                        channelURLs = [],
+                        channelVolume = [],
+                        channelPlaybackSpeed = [],
+                        trimSettings = {}
+                    } = data;
+    
+                    const channels = channelIds.map((id, idx) => {
+                        const channelSequence = Object.entries(projectSequences).reduce((acc, [sequenceName, sequenceData]) => {
+                            const channelData = sequenceData[`ch${idx}`];
+                            if (channelData) acc.push({ sequenceName, steps: channelData.steps });
+                            return acc;
+                        }, []);
+                        const metadata = {
+                            volume: channelVolume[idx] ?? 1,
+                            playbackSpeed: channelPlaybackSpeed[idx] ?? 1,
+                            trimStartTime_Percentage: trimSettings[idx]?.start || 0,
+                            trimEndTime_Percentage: trimSettings[idx]?.end || 100,
+                            requiresReversal: channelSequence.some(seq => seq.steps.some(step => typeof step === "object" && step.reverse)),
+                            channelSequence,
+                            originalBPM: projectBPM
+                        };
+                        const sampleId = channelURLs[idx];
+    
+                        if (!sampleId) {
+                            logUrlIssue("URL_not_found", `Song ${index + 1}: ${projectName}`, `Channel ${id}`);
+                        }
+    
+                        return { id, url: sampleId || "URL_not_found", metadata };
+                    });
+    
+                    return {
+                        id: `Song ${index + 1}: ${projectName}`,
+                        artist: artistName,
+                        bpm: projectBPM,
+                        totalSequences: Object.keys(projectSequences).length,
+                        totalChannels: channels.length,
+                        channels,
+                        projectSequences
+                    };
+                });
+    
+            const allChannels = originalSongs.flatMap(song => song.channels);
+    
+            // Expose variables/functions to window for the second script
+            window.keyNames = keyNames;
+            window.keyMap = keyMap;
+            window.channelIds = channelIds;
+            window.channelIdMap = channelIdMap;
+            window.fetchAndProcessSongData = fetchAndProcessSongData;
+            window.setArtworkImage = setArtworkImage;
+            window.normalizeAudioBuffer = normalizeAudioBuffer;
+            window.MAX_CACHE_SIZE = MAX_CACHE_SIZE;
+            window.sampleCache = sampleCache;
+            window.generateSampleKey = generateSampleKey;
+            window.logUrlIssue = logUrlIssue;
+            window.validSongDataUrls = validSongDataUrls;
+            window.originalSongs = originalSongs;
+            window.allChannels = allChannels;
+        }
+
+        // Dispatch custom event to signal that data is ready
+        document.dispatchEvent(new Event('dataReady'));
+    })();
+</script>
+
+<!-- Effects Configuration Module-->
+<script>
+/* Effects Config Notes:
+#region Effects Configuration Module and Audio Effects Management
+
+## Purpose:
+- **Effects Configuration:**
+  Provides a streamlined framework for configuring and applying a subset of audio effects dynamically, based on predefined probabilities and parameters.
+- **Audio Effects Management:**
+  Includes functions for applying specific effects to audio channels, enabling rich and varied audio experiences.
+
+## Key Functionalities:
+
+### Effects Configuration:
+- **Module Initialization:**
+  - Initializes or utilizes an existing `EffectsModule` within the global `window` object to manage effects configurations.
+- **Effects Definition:**
+  - Configures key audio effects (e.g., pitchShift, harmonize) with specific properties:
+    - **enabled:** Boolean to activate or deactivate the effect.
+    - **defaultProbability:** Likelihood of the effect being applied.
+    - **Parameter Ranges:** Defines options for effect-specific parameters (e.g., shifts, intervals).
+- **Parameter Generation (`getEffectParams`):**
+  - Dynamically generates effect parameters based on configurations and a pseudo-random number generator (`prng`).
+  - Ensures varied and dynamic effect application, tailored to each use case.
+- **Extensibility:**
+  - Designed to accommodate additional effects with minimal changes, supporting scalability as the application grows.
+
+### Audio Effects Module:
+- **Effect Application Functions:**
+  - `applyRandomPitchShift`:
+    - Dynamically adjusts playback speed by applying a random pitch shift based on pre-configured shifts.
+  - `addHarmony`:
+    - Creates harmony channels by applying intervals to the playback speed of the original channel.
+    - Limits the number of harmony channels through a configurable parameter.
+
+## Overall Functionality:
+This module simplifies the management and application of audio effects by centralizing configurations and implementation. It ensures consistency, maintainability, and the ability to create engaging and dynamic audio experiences within the application.
+
+#endregion
+*/
+
+
+    (() => {
+        // ================================
+        // Effects Configuration Section
+        // ================================
+        // I'd like to set some kind of random function for allowing effect probability values to be more dynamic
+        window.EffectsModule = window.EffectsModule || {};
+
+        window.EffectsModule.effectsConfig = { 
+            pitchShift: { 
+                enabled: false, // working well
+                defaultProbability: 0.5, // works well at 100% (1) but needs a dynamic setting from 0.1 to 1
+                shifts: [0.125, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5],
+
+            },
+            harmonize: { 
+                enabled: false, // working well
+                defaultProbability: 0.01, // needs to range from 0.0025 to 0.1 - More stable mixes in general at 0.01 but interesting mixes around 0.1
+                intervals: [ 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5], //  WORKS WELL AT 100% ON 15, 30 and 60 BPM songs Can we weight this?
+                maxHarmonyChannels: 4 
+            },
+            // New TempoControlledDelay Effect Configuration
+            tempoControlledDelay: {
+                enabled: true,
+                defaultProbability: 1, // Adjust probability as needed (0.0025 to 0.1)
+                delayDivisions: [1/16, 1/8, 1/4, 1/2, 1], // Sixteenths, eighths, quarters, halves, whole bars
+                maxRepetitions: 16, // Allow 1-16 repetitions
+            },
+         
+        };
+        
+        window.EffectsModule.getEffectParams = function(effectName, currentSequence, bpm, prng) {
+    const effect = this.effectsConfig[effectName];
+    if (!effect || !effect.enabled) return null;
+    
+    // Determine if the effect should be applied based on defaultProbability
+    if (prng() >= effect.defaultProbability) return null;
+
+    // Helper function to clamp values within a specified range
+    const clamp = (value, min, max) => {
+        return Math.min(Math.max(value, min), max);
+    };
+
+    // Initialize the params object
+    const params = {};
+
+    switch(effectName) {
+        case 'pitchShift':
+            // Select a random shift value from the shifts array
+            params.shift = effect.shifts[Math.floor(prng() * effect.shifts.length)];
+            break;
+        
+        case 'harmonize':
+            // Select a random interval from the intervals array
+            params.interval = effect.intervals[Math.floor(prng() * effect.intervals.length)];
+            params.maxHarmonyChannels = effect.maxHarmonyChannels;
+            break;
+
+        case 'tempoControlledDelay':
+            // Select a random delay division
+            const division = effect.delayDivisions[Math.floor(prng() * effect.delayDivisions.length)];
+            // Calculate delay time in seconds based on BPM and division
+            // Delay time = (60 / BPM) * division
+            params.delayTime = (60 / bpm) * division;
+            // Select a random number of repetitions between 1 and maxRepetitions
+            params.repetitions = Math.floor(prng() * effect.maxRepetitions) + 1; // 1 to 16
+            break;
+       
+        
+        default:
+            // For effects without additional parameters, return effect as is
+            break;
     }
-    const songDataArray = await Promise.all(
-        validSongDataUrls.map(async (url, index) => {
-            try {
-                const data = await fetchAndProcessSongData(url);
-                return { data, index };
-            } catch (error) {
-                console.error(`[Initialization] Failed to fetch/process ${url}:`, error);
-                return null;
+
+    // Return the combined effect configuration and generated parameters
+    return { ...effect, ...params };
+};
+
+        // ================================
+        // Audio Effects Module Section
+        // ================================
+
+
+        // Helper function to clamp values to a range
+        const clamp = (value, min, max) => {
+            if (value < min || value > max) {
+                // console.warn(`Value ${value} is out of bounds. Clamping to range [${min}, ${max}]`);
             }
-        })
-    ).then(dataArray => {
-        const validDataArray = dataArray.filter(Boolean);
-        if (!validDataArray.length) throw new Error("[Initialization] No valid data.");
-        return validDataArray;
-    });
+            return Math.min(Math.max(value, min), max);
+        };
 
-    const originalSongs = songDataArray
-        .sort((a, b) => a.index - b.index)
-        .map(({ data, index }) => {
-            const {
-                projectName = "The Infinite Ordinal",
-                artistName = "melophonic",
-                projectBPM = 120,
-                projectSequences = {},
-                channelURLs = [],
-                channelVolume = [],
-                channelPlaybackSpeed = [],
-                trimSettings = {}
-            } = data;
 
-            const channels = channelIds.map((id, idx) => {
-                const channelSequence = Object.entries(projectSequences).reduce((acc, [sequenceName, sequenceData]) => {
-                    const channelData = sequenceData[`ch${idx}`];
-                    if (channelData) acc.push({ sequenceName, steps: channelData.steps });
-                    return acc;
-                }, []);
-                const metadata = {
-                    volume: channelVolume[idx] ?? 1,
-                    playbackSpeed: channelPlaybackSpeed[idx] ?? 1,
-                    trimStartTime_Percentage: trimSettings[idx]?.start || 0,
-                    trimEndTime_Percentage: trimSettings[idx]?.end || 100,
-                    requiresReversal: channelSequence.some(seq => seq.steps.some(step => typeof step === "object" && step.reverse)),
-                    channelSequence,
-                    originalBPM: projectBPM
-                };
-                const sampleId = channelURLs[idx];
+        // Apply Random Pitch Shift
+        window.applyRandomPitchShift = (channel, { shifts }, prng) => {
+            const shift = shifts[Math.floor(prng() * shifts.length)];
+            channel.metadata.playbackSpeed *= shift;
+            console.log(`[effectsDebug][PitchShift] Channel "${channel.id}" playback speed shifted by factor ${shift}`);
+        };
 
-                if (!sampleId) {
-                    logUrlIssue("URL_not_found", `Song ${index + 1}: ${projectName}`, `Channel ${id}`);
-                }
-
-                return { id, url: sampleId || "URL_not_found", metadata };
+        // Add Harmony
+        window.addHarmony = (originalChannel, index, newSong, { intervals, maxHarmonyChannels }, context, prng) => {
+            if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
+            intervals.forEach(interval => {
+                if (context.harmonyChannelsAdded >= maxHarmonyChannels) return;
+                const harmony = JSON.parse(JSON.stringify(originalChannel));
+                harmony.id = `${originalChannel.id}_harmony_${index}_${interval}`;
+                harmony.metadata.playbackSpeed *= interval;
+                harmony.metadata.volume = clamp((harmony.metadata.volume || 1) * 0.5, 1);
+                newSong.channels.push(harmony);
+                context.harmonyChannelsAdded++;
+                context.totalGain += harmony.metadata.volume || 1; // Update totalGain
+                console.log(`[effectsDebug][Harmony] Added harmony channel "${harmony.id}" with interval ${interval}`);
             });
 
-            return {
-                id: `Song ${index + 1}: ${projectName}`,
-                artist: artistName,
-                bpm: projectBPM,
-                totalSequences: Object.keys(projectSequences).length,
-                totalChannels: channels.length,
-                channels,
-                projectSequences
-            };
-        });
-
-    const allChannels = originalSongs.flatMap(song => song.channels);
-
-    
-            function lcg64(seed) {
-                let state = seed;
-                const a = 6364136223846793005n;
-                const c = 1442695040888963407n;
-                const m = 18446744073709551616n; // 2^64
-                return function() {
-                    state = (a * state + c) % m;
-                    return Number(state) / Number(m);
-                }
-            }
-    
-            const getRandomChannels = (channelsArray, num, prng) => {
-                const shuffled = [...channelsArray];
-                for (let i = shuffled.length - 1; i > 0; i--) {
-                    const j = Math.floor(prng() * (i + 1));
-                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-                }
-                return shuffled.slice(0, num);
-            };
-    
-           
-     /**
-         * Generates a random 16-digit seed string.
-         *
-         * @returns {string} - A 16-digit random seed.
+            /**
+             * Apply Tempo Controlled Delay Effect
+             * Creates delayed repetitions of notes based on BPM and delay divisions.
+             */
+        /**
+         * Apply Tempo Controlled Delay Effect
+         * Creates delayed repetitions of notes based on BPM and delay divisions.
          */
-         function generateRandomSeed() {
+        window.applyTempoControlledDelay = (channel, { delayTime, repetitions }, prng) => {
+            // Implement the actual delay effect using Web Audio API's DelayNode
+            // This is a simplified example assuming access to the audioContext
+
+            if (!window.globalData.audioContext) {
+                console.error(`[effectsDebug][TempoControlledDelay] No audioContext available.`);
+                return;
+            }
+
+            const delayNode = window.globalData.audioContext.createDelay();
+            delayNode.delayTime.value = delayTime;
+
+            // Create a feedback gain node to control repetitions
+            const feedbackGain = window.globalData.audioContext.createGain();
+            feedbackGain.gain.value = 0.5; // Adjust feedback as needed
+
+            // Connect the nodes: delay -> feedback -> delay
+            delayNode.connect(feedbackGain);
+            feedbackGain.connect(delayNode);
+
+            // Connect the delay node to the channel's output
+            // Assuming channel has a reference to its source node
+            if (channel.sourceNode) {
+                channel.sourceNode.connect(delayNode);
+                delayNode.connect(window.globalData.audioContext.destination);
+            } else {
+                console.warn(`[effectsDebug][TempoControlledDelay] Channel "${channel.id}" does not have a sourceNode.`);
+            }
+
+            // Store delay node information for potential future adjustments or disconnection
+            channel.metadata.tempoControlledDelay = {
+                delayNode,
+                feedbackGain,
+                delayTime,
+                repetitions
+            };
+
+            console.log(`[effectsDebug][TempoControlledDelay] Applied delay of ${delayTime.toFixed(3)}s with ${repetitions} repetitions to channel "${channel.id}".`);
+        };
+
+
+    };
+
+
+
+   
+
+        // ================================
+        // Finalize Configuration
+        // ================================
+       /**
+         * Waits for the EffectsModule to be ready.
+         * @returns {Promise} - Resolves when EffectsModule.effectsConfig is available.
+         */
+        window.waitForEffects = function () {
+            return new Promise((resolve) => {
+                if (window.EffectsModule && window.EffectsModule.effectsConfig) {
+                    resolve();
+                } else {
+                    document.addEventListener('effectsLoaded', resolve, { once: true });
+                }
+            });
+        };
+
+        // Dispatch 'effectsLoaded' event to signal that the effects system is ready
+        document.dispatchEvent(new Event('effectsLoaded'));
+    })();
+
+</script>
+
+ <!-- MixGenerator.js
+Description: The MixGenerator.js module is dedicated to creating and managing audio mixes based on the initialized data provided by DataInitializer.js. It leverages seed values to generate unique and randomized mixes, applying various audio effects to enhance the quality and diversity of each mix.
+
+Key Responsibilities:
+
+Event Listening:
+Waits for the dataReady event dispatched by DataInitializer.js to ensure that all necessary data is available before commencing mix generation.
+Seed Initialization:
+Generates and manages seed values used for randomizing mix elements. This ensures variety and uniqueness in each generated mix.
+Mix Creation:
+Utilizes seed values to select random channels from the available data.
+Applies audio effects such as pitch shifting and harmonization to selected channels, enhancing the overall sound quality.
+Configures playback sequences based on the processed channel data, ensuring that mixes are both dynamic and musically coherent.
+Audio Effects Application:
+Applies various audio effects to channels to enhance the audio mix's quality and diversity.
+Manages gain nodes and other audio processing elements to maintain volume consistency and balance across different channels and mixes.
+Playback Management:
+Initializes audio contexts and manages the playback chain to ensure smooth and balanced audio output.
+Handles the scheduling and activation of sequences, ensuring that mixes play seamlessly.
+Error Handling:
+Implements robust error checking to handle scenarios where necessary data might be missing or improperly formatted, preventing runtime errors.
+Global Data Assignment:
+Assigns the generated mixes to global data structures for accessibility across the application.
+Initializes playback configurations and gain nodes to prepare the mixes for playback.
+Implementation Notes:
+
+Dependency on DataInitializer.js:
+Relies on the data prepared and exposed by DataInitializer.js. It ensures that all necessary variables and functions are available before proceeding with mix generation.
+Asynchronous Operations:
+Utilizes asynchronous functions (async/await) to handle mix generation tasks, ensuring that the application remains responsive during these operations.
+Modularity:
+Encapsulates mix generation logic within its own module, promoting modularity and ease of maintenance. This separation of concerns makes it easier to manage and debug individual components without affecting the entire system.
+Global Exposure:
+Exposes certain functions, such as generateMixBySeed, to the global scope (window object) if needed by other parts of the application.
+Usage: Ensure that MixGenerator.js is loaded after DataInitializer.js and listens for the dataReady event to guarantee that all necessary data is available before starting the mix generation process.
+
+// MixGenerator.js 
+<script src="MixGenerator.js"></script>
+Example Integration:
+
+// Data Initialization Script 
+<script src="DataInitializer.js"></script>
+
+// Mix Generation Script 
+<script src="MixGenerator.js"></script>
+Benefits of This Separation:
+
+Enhanced Maintainability:
+By separating data initialization from mix generation, each module can be developed, tested, and maintained independently.
+Improved Scalability:
+Modular design allows for easier scaling of the application. New features can be added to either module without impacting the other.
+Clear Responsibility Boundaries:
+Each module has a clear set of responsibilities, reducing complexity and making the codebase easier to understand. -->
+<script>
+            // Wait for the 'dataReady' event before executing the mix generation code
+        document.addEventListener('dataReady', async () => {
+            // Ensure all necessary variables are available
+            if (!window.allChannels || !window.globalData) {
+                console.error('Required data is not available.');
+                return;
+            }
+
+                // Wait for EffectsModule to be ready
+                await window.waitForEffects();
+        
+    (async () => {
+
+        function lcg64(seed) {
+            let state = seed;
+            const a = 6364136223846793005n;
+            const c = 1442695040888963407n;
+            const m = 18446744073709551616n; // 2^64
+            return function() {
+                state = (a * state + c) % m;
+                return Number(state) / Number(m);
+            }
+        }
+    
+        const getRandomChannels = (channelsArray, num, prng) => {
+            const shuffled = [...channelsArray];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(prng() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled.slice(0, num);
+        };
+    
+        function generateRandomSeed() {
             let seed = '';
             for (let i = 0; i < 16; i++) {
                 seed += Math.floor(Math.random() * 10).toString();
             }
             return seed;
         }
-
-        /**
-         * Generates a list of sequential seeds starting from the initial seed.
-         *
-         * @param {string} initialSeed - The starting 16-digit seed.
-         * @param {number} count - Number of sequential seeds to generate.
-         * @returns {string[]} - An array of 16-digit sequential seeds.
-         */
+    
         function generateSequentialSeeds(initialSeed, count = 100) {
             const seeds = [initialSeed];
             let seedNumber;
@@ -1131,7 +1191,7 @@ if (validSongDataUrls.length) {
                 console.error(`[Seed Generation] Invalid initial seed "${initialSeed}". Defaulting to 0n.`);
                 seedNumber = 0n;
             }
-
+    
             for (let i = 1; i < count; i++) {
                 seedNumber += 1n;
                 let newSeed = seedNumber.toString();
@@ -1144,326 +1204,361 @@ if (validSongDataUrls.length) {
             }
             return seeds;
         }
-
-      /**
- * Initializes the seedList based on user-provided seeds.
- * - If no seeds are provided, generate a random seed and create 100 sequential seeds.
- * - If one seed is provided, generate 99 additional sequential seeds from it.
- * - If multiple seeds are provided, use them as-is.
- */
-function initializeSeedList() {
-    if (window.globalData.seedList && window.globalData.seedList.length > 1) {
-        // Multiple seeds provided; use as-is.
-        console.log(`[Seed Initialization] Using user-provided seedList with ${window.globalData.seedList.length} seeds.`);
-    } else if (window.globalData.seedList && window.globalData.seedList.length === 1) {
-        // Single seed provided; generate 99 additional sequential seeds.
-        const initialSeed = window.globalData.seedList[0];
-        const additionalSeeds = generateSequentialSeeds(initialSeed, 100).slice(1); // Exclude the initial seed
-        window.globalData.seedList = window.globalData.seedList.concat(additionalSeeds);
-        console.log(`[Seed Initialization] Single seed provided. Generated 99 additional sequential seeds from "${initialSeed}". Total seeds: ${window.globalData.seedList.length}.`);
-    } else {
-        // No seeds provided; generate a random seed and 99 additional sequential seeds.
-        const randomSeed = generateRandomSeed();
-        window.globalData.seedList = generateSequentialSeeds(randomSeed, 100);
-        // TEMPORARY: create 10 sequential seeds for testing
-        // window.globalData.seedList = generateSequentialSeeds(randomSeed, 10);
-
-        console.log(`[Seed Initialization] No user-provided seeds. Generated random seed "${randomSeed}" and created ${window.globalData.seedList.length} sequential seeds.`);
-    }
-}
-
-// **Seed List Initialization (Moved Outside the 'if' Block)**
-initializeSeedList();
-
-
-/**
- * Checks if two BPMs are harmonically related by exact multiples or divisors.
- *
- * @param {number} loopBPM - The BPM of the looped sample.
- * @param {number} songBPM - The BPM of the song.
- * @param {number} [epsilon=0.01] - Tolerance for floating-point comparisons.
- * @returns {boolean} - True if harmonically related, else false.
- */
- const isHarmonic = (loopBPM, songBPM, epsilon = 0.01) => {
-    return (
-        Math.abs(loopBPM - songBPM) < epsilon ||                // Exact match
-        Math.abs(loopBPM - songBPM * 2) < epsilon ||            // Exact double
-        Math.abs(loopBPM - songBPM / 2) < epsilon               // Exact half
-    );
-};
-
-
-async function generateMixBySeed(seedString, remixNumber) {
-    // [loopedSamplesDebug] Starting mix generation
-    console.log(`[loopedSamplesDebug] Generating mix #${remixNumber} with seed "${seedString}"`);
     
-    const bpmOptions = [15, 30, 30.8333, 50, 52.5, 60, 61.6667, 70, 75, 80, 90, 92.5, 100, 105, 120, 140, 150, 160, 180, 185, 200, 210, 225, 240, 280, 300, 320];
-    const newSongs = [];
-
-    // Initialize base seed with error handling
-    let baseSeed;
-    try {
-        baseSeed = BigInt(seedString);
-        console.log(`[loopedSamplesDebug] Parsed seed string "${seedString}" to BigInt: ${baseSeed}`);
-    } catch (error) {
-        console.error(`[loopedSamplesDebug] Invalid seed string: "${seedString}". Using base seed 0.`);
-        baseSeed = 0n;
-    }
-
-    const currentSeed = baseSeed || 1n;
-
-    // Function to derive BPM from a seed using PRNG
-    const getBPMFromSeed = (seed) => {
-        const prng = lcg64(seed);
-        return bpmOptions[Math.floor(prng() * bpmOptions.length)];
-    };
-
-    const prng = lcg64(currentSeed);
-    const selectedBPM = getBPMFromSeed(currentSeed);
-    console.log(`[loopedSamplesDebug] Selected BPM based on seed ${currentSeed}: ${selectedBPM}`);
-
-    // **Filter allChannels to exclude loops whose BPM doesn't match the selectedBPM or is not harmonic**
-    const filteredChannels = allChannels.filter(channel => {
-        // Extract the sample ID from the channel's URL
-        const sampleId = channel.url.split('/').pop(); // Assumes URL is in the format "/content/{sampleId}"
-        console.log(`[loopedSamplesDebug] Processing Channel ID ${channel.id} with Sample ID ${sampleId}`);
-        
-        const loopInfo = globalData.getLoopSampleInfo(sampleId);
-        
-        if (loopInfo) {
-            // This channel is a loop with its own BPM
-            if (isHarmonic(loopInfo.bpm, selectedBPM)) {
-                console.log(`[loopedSamplesDebug] Including loop sample with Sample ID ${sampleId} and BPM ${loopInfo.bpm} as it is harmonically related to Song BPM ${selectedBPM}`);
-                return true; // Include the loop
+        function initializeSeedList() {
+            if (window.globalData.seedList && window.globalData.seedList.length > 1) {
+                // Multiple seeds provided; use as-is.
+                console.log(`[Seed Initialization] Using user-provided seedList with ${window.globalData.seedList.length} seeds.`);
+            } else if (window.globalData.seedList && window.globalData.seedList.length === 1) {
+                // Single seed provided; generate 99 additional sequential seeds.
+                const initialSeed = window.globalData.seedList[0];
+                const additionalSeeds = generateSequentialSeeds(initialSeed, 100).slice(1); // Exclude the initial seed
+                window.globalData.seedList = window.globalData.seedList.concat(additionalSeeds);
+                console.log(`[Seed Initialization] Single seed provided. Generated 99 additional sequential seeds from "${initialSeed}". Total seeds: ${window.globalData.seedList.length}.`);
             } else {
-                console.log(`[loopedSamplesDebug] Excluding loop sample with Sample ID ${sampleId} due to BPM mismatch (Loop BPM: ${loopInfo.bpm}, Song BPM: ${selectedBPM})`);
-                return false; // Exclude the loop
-            }
-        } else {
-            // Not a loop, include it
-            console.log(`[loopedSamplesDebug] Including non-loop sample from Channel ID ${channel.id}`);
-            return true;
-        }
-    });
-
-    console.log(`[loopedSamplesDebug] Total channels after loop filtering: ${filteredChannels.length}`);
-
-    // **Select random channels from filteredChannels**
-    const randomChannels = getRandomChannels(filteredChannels, 24, prng);
-    console.log(`[loopedSamplesDebug] Selected ${randomChannels.length} random channels for the mix.`);
-
-    // Activation points and sequences (Now, all channels will be activated at sequence 1)
-    const activationPoints = [
-        { startSeq: 1, count: randomChannels.length } // Assigning all selected channels to sequence 1
-    ];
-
-    console.log(`[loopedSamplesDebug] Defined activation points:`, activationPoints);
-
-    // Adjust counts proportionally to sum to the number of random channels
-    const totalOriginalCounts = activationPoints.reduce((sum, { count }) => sum + count, 0);
-
-    let totalAdjustedCounts = 0;
-    const adjustedActivationPoints = activationPoints.map(({ startSeq, count }) => {
-        const adjustedCount = Math.round((count / totalOriginalCounts) * randomChannels.length);
-        totalAdjustedCounts += adjustedCount;
-        return { startSeq, count: adjustedCount };
-    });
-
-    // Adjust counts to make total counts equal to randomChannels.length
-    let difference = randomChannels.length - totalAdjustedCounts;
-    if (difference !== 0) {
-        // Adjust counts to compensate for rounding errors
-        for (let i = 0; Math.abs(difference) > 0; i = (i + 1) % adjustedActivationPoints.length) {
-            if (difference > 0) {
-                adjustedActivationPoints[i].count++;
-                difference--;
-            } else if (adjustedActivationPoints[i].count > 0) {
-                adjustedActivationPoints[i].count--;
-                difference++;
+                // No seeds provided; generate a random seed and 99 additional sequential seeds.
+                const randomSeed = generateRandomSeed();
+                window.globalData.seedList = generateSequentialSeeds(randomSeed, 100);
+    
+                console.log(`[Seed Initialization] No user-provided seeds. Generated random seed "${randomSeed}" and created ${window.globalData.seedList.length} sequential seeds.`);
             }
         }
-    }
-
-    console.log(`[loopedSamplesDebug] Adjusted activation points:`, adjustedActivationPoints);
-
-    // Assign activation sequences to channels
-    let channelIndex = 0;
-    const channelsWithActivation = adjustedActivationPoints.flatMap(({ startSeq, count }) => {
-        const activationChannels = [];
-        for (let i = 0; i < count; i++) {
-            const channel = randomChannels[channelIndex];
-            channelIndex++;
-            if (channel) {
-                const clonedChannel = { ...channel };
-                clonedChannel.activationSeq = startSeq;
-                console.log(`[loopedSamplesDebug] Channel ID ${clonedChannel.id} assigned to activation sequence starting at ${startSeq}.`);
-                activationChannels.push({ channel: clonedChannel, activationSeq: startSeq });
-            }
-        }
-        return activationChannels;
-    });
-
-    console.log(`[loopedSamplesDebug] Total channels with activation: ${channelsWithActivation.length}`);
-
-    // Collect unique sequence names from channels
-    const sequenceSet = new Set(
-        channelsWithActivation.flatMap(({ channel }) =>
-            channel.metadata.channelSequence?.map(seq => seq.sequenceName) || []
-        )
-    );
-
-    console.log(`[loopedSamplesDebug] Unique sequence names collected from channels:`, Array.from(sequenceSet));
-
-    // Sort sequences numerically based on their suffix
-    let sequences = [...sequenceSet].sort((a, b) =>
-        (parseInt(a.replace('Sequence', '')) || 0) - (parseInt(b.replace('Sequence', '')) || 0)
-    );
-
-    console.log(`[loopedSamplesDebug] Sorted sequences:`, sequences);
-
-    // SEQUENCE COUNT LIMIT: Limit the number of sequences here
-    sequences = sequences.slice(0, 48);
-    console.log(`[loopedSamplesDebug] Limited sequences to first 48:`, sequences);
-
-    // Initialize the new song object with remix numbering
-    const newSong = {
-        id: `Remix ${remixNumber}`, // Assigning Remix number as ID
-        projectName: `Remix ${remixNumber}`, // Assigning Remix number as Project Name
-        artist: `melophonic`,
-        bpm: selectedBPM,
-        totalSequences: sequences.length,
-        totalChannels: channelsWithActivation.length,
-        channels: [],
-        projectSequences: Object.fromEntries(sequences.map(seq => [seq, {}])),
-        seed: seedString,
-    };
-
-    console.log(`[loopedSamplesDebug] Initialized new song object:`, newSong);
-
-    // Initialize effects context for the song
-    const effectsContext = {
-        harmonyChannelsAdded: 0,
-        maxHarmonyChannels: window.EffectsModule?.effectsConfig?.harmonize?.maxHarmonyChannels || 2,
-        totalGain: 0,
-        maxTotalGain: 1,
-        channelLayers: {} // Track layers per channel
-    };
-
-    await Promise.all(channelsWithActivation.map(async ({ channel, activationSeq }, index) => {
-        const chId = `ch${index}`;
-        const newChannel = {
-            id: chId,
-            url: channel.url,
-            metadata: {
-                ...channel.metadata,
-                originalBPM: newSong.bpm,
-                activationSeq, // Track the activation sequence for this channel
-            }
+    
+        const isHarmonic = (loopBPM, songBPM, epsilon = 0.01) => {
+            return (
+                Math.abs(loopBPM - songBPM) < epsilon ||                // Exact match
+                Math.abs(loopBPM - songBPM * 2) < epsilon ||            // Exact double
+                Math.abs(loopBPM - songBPM / 2) < epsilon               // Exact half
+            );
         };
-
-        // Apply effects and other initializations for the channel
-        await applyEffects(newChannel, index, newSong, activationSeq, newSong.bpm, effectsContext, prng);
-        newSong.channels.push(newChannel);
-
-        // Adjust and map sequences based on the activation sequence
-        channel.metadata.channelSequence?.forEach(seqData => {
-            if (newSong.projectSequences[seqData.sequenceName]) {
-                // Calculate the offset to skip earlier sequences
-                const offset = (activationSeq - 1) * 63; // 63 steps per sequence
-
-                // Filter out the steps that are earlier than the activation sequence
-                const validSteps = seqData.steps.filter(step => step >= offset);
-
-                // Adjust the sequence steps so that the new start is at step 1
-                const adjustedSteps = validSteps.map(step => step - offset);
-
-                // Map the adjusted sequence to the channel in the new song
-                newSong.projectSequences[seqData.sequenceName] = {
-                    ...newSong.projectSequences[seqData.sequenceName],
-                    [chId]: { steps: adjustedSteps }
-                };
+    
+        async function generateMixBySeed(seedString, remixNumber) {
+            // [loopedSamplesDebug] Starting mix generation
+            console.log(`[loopedSamplesDebug] Generating mix #${remixNumber} with seed "${seedString}"`);
+    
+            const bpmOptions = [15, 30, 30.8333, 50, 52.5, 60, 61.6667, 70, 75, 80, 90, 92.5, 100, 105, 120, 140, 150, 160, 180, 185, 200, 210, 225, 240, 280, 300, 320];
+            const newSongs = [];
+    
+            // Initialize base seed with error handling
+            let baseSeed;
+            try {
+                baseSeed = BigInt(seedString);
+                console.log(`[loopedSamplesDebug] Parsed seed string "${seedString}" to BigInt: ${baseSeed}`);
+            } catch (error) {
+                console.error(`[loopedSamplesDebug] Invalid seed string: "${seedString}". Using base seed 0.`);
+                baseSeed = 0n;
             }
-        });
-    }));
-
-    // Log the final projectSequences mapping
-    console.log(`[loopedSamplesDebug] Final projectSequences mapping:`, newSong.projectSequences);
-
-    // Add the new song to the songs list
-    newSongs.push(newSong);
-    console.log(`[loopedSamplesDebug] New song added to the songs list.`);
-
-    return newSongs;
-}
-
-
-
-
-/**
- * Generates song mixes based on a list of seeds and assigns sequential remix numbers.
- *
- * @param {string[]} seedList - The list of seed strings for PRNG.
- * @returns {Promise<Array>} - A promise that resolves to an array of generated songs.
- */
-async function generateMixesForSeedList(seedList) {
-    const newSongs = [];
-
-    for (let i = 0; i < seedList.length; i++) {
-        const seedString = seedList[i];
-        const remixNumber = i + 1; // Remix numbers start at 1
-        const songs = await generateMixBySeed(seedString, remixNumber);
-        newSongs.push(...songs);
-    }
-
-    return newSongs;
-}
-
-// **Proceed with Mix Generation**
-const generatedSongs = await generateMixesForSeedList(window.globalData.seedList);
-console.log(`[Mix Generation] Generated ${generatedSongs.length} songs based on seedList.`);
-
-// Assign songs to globalData once
-if (!globalData.initialized) {
-    Object.assign(globalData, {
-        songsArray: generatedSongs,
-        songsByBPM: globalData.songsByBPM || {},
-        currentSongIndex: 0,
-        currentSequenceIndex: 0,
-        // initialSampleOrder: generatedSongs.length ? prepareInitialSampleOrder(generatedSongs[0]) : null,
-        isSingleSong: generatedSongs.length === 1,
-        isMultipleSongs: generatedSongs.length > 1,
-        initialized: true
-    });
-}
-
-// Initialize GainNodes for all generated songs once
-globalData.songsArray.forEach(song => {
-    GainNodeHelper.createGainNodesForSong(song);
-});
-
-// Set artwork image if applicable
-if (globalData.isArtworkCover && artworkUrl.length) setArtworkImage(artworkUrl[0]);
-
-// Dispatch data loading completion event
-document.dispatchEvent(new CustomEvent("dataLoadingComplete", {
-    detail: {
-        success: true,
-        totalSongs: globalData.songsArray.length,
-        songs: globalData.songsArray.map(({ id, totalSequences }) => ({ id, totalSequences }))
-    }
-}));
-
-// Expose generateMixBySeed to the global scope if needed
-window.generateMixBySeed = generateMixBySeed;
+    
+            const currentSeed = baseSeed || 1n;
+    
+            // Function to derive BPM from a seed using PRNG
+            const getBPMFromSeed = (seed) => {
+                const prng = lcg64(seed);
+                return bpmOptions[Math.floor(prng() * bpmOptions.length)];
+            };
+    
+            const prng = lcg64(currentSeed);
+            const selectedBPM = getBPMFromSeed(currentSeed);
+            console.log(`[loopedSamplesDebug] Selected BPM based on seed ${currentSeed}: ${selectedBPM}`);
+    
+            // **Filter allChannels to exclude loops whose BPM doesn't match the selectedBPM or is not harmonic**
+            const filteredChannels = window.allChannels.filter(channel => {
+                // Extract the sample ID from the channel's URL
+                const sampleId = channel.url.split('/').pop(); // Assumes URL is in the format "/content/{sampleId}"
+                console.log(`[loopedSamplesDebug] Processing Channel ID ${channel.id} with Sample ID ${sampleId}`);
+    
+                const loopInfo = window.globalData.getLoopSampleInfo(sampleId);
+    
+                if (loopInfo) {
+                    // This channel is a loop with its own BPM
+                    if (isHarmonic(loopInfo.bpm, selectedBPM)) {
+                        console.log(`[loopedSamplesDebug] Including loop sample with Sample ID ${sampleId} and BPM ${loopInfo.bpm} as it is harmonically related to Song BPM ${selectedBPM}`);
+                        return true; // Include the loop
+                    } else {
+                        console.log(`[loopedSamplesDebug] Excluding loop sample with Sample ID ${sampleId} due to BPM mismatch (Loop BPM: ${loopInfo.bpm}, Song BPM: ${selectedBPM})`);
+                        return false; // Exclude the loop
+                    }
+                } else {
+                    // Not a loop, include it
+                    console.log(`[loopedSamplesDebug] Including non-loop sample from Channel ID ${channel.id}`);
+                    return true;
+                }
+            });
+    
+            console.log(`[loopedSamplesDebug] Total channels after loop filtering: ${filteredChannels.length}`);
+    
+            // **Select random channels from filteredChannels**
+            const randomChannels = getRandomChannels(filteredChannels, 24, prng);
+            console.log(`[loopedSamplesDebug] Selected ${randomChannels.length} random channels for the mix.`);
+    
+            // Activation points and sequences (Now, all channels will be activated at sequence 1)
+            const activationPoints = [
+                { startSeq: 1, count: randomChannels.length } // Assigning all selected channels to sequence 1
+            ];
+    
+            console.log(`[loopedSamplesDebug] Defined activation points:`, activationPoints);
+    
+            // Adjust counts proportionally to sum to the number of random channels
+            const totalOriginalCounts = activationPoints.reduce((sum, { count }) => sum + count, 0);
+    
+            let totalAdjustedCounts = 0;
+            const adjustedActivationPoints = activationPoints.map(({ startSeq, count }) => {
+                const adjustedCount = Math.round((count / totalOriginalCounts) * randomChannels.length);
+                totalAdjustedCounts += adjustedCount;
+                return { startSeq, count: adjustedCount };
+            });
+    
+            // Adjust counts to make total counts equal to randomChannels.length
+            let difference = randomChannels.length - totalAdjustedCounts;
+            if (difference !== 0) {
+                // Adjust counts to compensate for rounding errors
+                for (let i = 0; Math.abs(difference) > 0; i = (i + 1) % adjustedActivationPoints.length) {
+                    if (difference > 0) {
+                        adjustedActivationPoints[i].count++;
+                        difference--;
+                    } else if (adjustedActivationPoints[i].count > 0) {
+                        adjustedActivationPoints[i].count--;
+                        difference++;
+                    }
+                }
+            }
+    
+            console.log(`[loopedSamplesDebug] Adjusted activation points:`, adjustedActivationPoints);
+    
+            // Assign activation sequences to channels
+            let channelIndex = 0;
+            const channelsWithActivation = adjustedActivationPoints.flatMap(({ startSeq, count }) => {
+                const activationChannels = [];
+                for (let i = 0; i < count; i++) {
+                    const channel = randomChannels[channelIndex];
+                    channelIndex++;
+                    if (channel) {
+                        const clonedChannel = { ...channel };
+                        clonedChannel.activationSeq = startSeq;
+                        console.log(`[loopedSamplesDebug] Channel ID ${clonedChannel.id} assigned to activation sequence starting at ${startSeq}.`);
+                        activationChannels.push({ channel: clonedChannel, activationSeq: startSeq });
+                    }
+                }
+                return activationChannels;
+            });
+    
+            console.log(`[loopedSamplesDebug] Total channels with activation: ${channelsWithActivation.length}`);
+    
+            // Collect unique sequence names from channels
+            const sequenceSet = new Set(
+                channelsWithActivation.flatMap(({ channel }) =>
+                    channel.metadata.channelSequence?.map(seq => seq.sequenceName) || []
+                )
+            );
+    
+            console.log(`[loopedSamplesDebug] Unique sequence names collected from channels:`, Array.from(sequenceSet));
+    
+            // Sort sequences numerically based on their suffix
+            let sequences = [...sequenceSet].sort((a, b) =>
+                (parseInt(a.replace('Sequence', '')) || 0) - (parseInt(b.replace('Sequence', '')) || 0)
+            );
+    
+            console.log(`[loopedSamplesDebug] Sorted sequences:`, sequences);
+    
+            // SEQUENCE COUNT LIMIT: Limit the number of sequences here
+            sequences = sequences.slice(0, 48);
+            console.log(`[loopedSamplesDebug] Limited sequences to first 48:`, sequences);
+    
+            // Initialize the new song object with remix numbering
+            const newSong = {
+                id: `Remix ${remixNumber}`, // Assigning Remix number as ID
+                projectName: `Remix ${remixNumber}`, // Assigning Remix number as Project Name
+                artist: `melophonic`,
+                bpm: selectedBPM,
+                totalSequences: sequences.length,
+                totalChannels: channelsWithActivation.length,
+                channels: [],
+                projectSequences: Object.fromEntries(sequences.map(seq => [seq, {}])),
+                seed: seedString,
+            };
+    
+            console.log(`[loopedSamplesDebug] Initialized new song object:`, newSong);
+    
+            const { audioContext } = window.globalData;
+    
+            // Controls for gain reduction when layering
+            const layeringControls = { gainReductionPerLayer: 0.7, maxLayers: 4 };
+    
+            // Wait for EffectsModule to be ready and access audioContext
+            await window.waitForEffects();
+    
+            /**
+             * Applies audio effects to a channel, ensuring volume consistency and balance.
+             */
+            function applyEffects(channel, index, newSong, currentSequence, bpm, effectsContext, prng) {
+                console.log(`[effectsDebug][Song: "${newSong.id}"] Applying effects to Channel "${channel.id}"...`);
+                const MAX_EFFECTS = 3;
+                const duplicationEffects = new Set(['harmonize', 'delay', 'delayBpmLinked']);
+                const loggedEffects = new Set();
+    
+                const effectsMap = [
+                { name: 'pitchShift', apply: (ch, params) => window.applyRandomPitchShift(ch, params, prng) },
+                { name: 'harmonize', apply: (ch, params) => window.addHarmony(ch, index, newSong, params, effectsContext, prng) },
+        ];
+    
+                const shuffledEffects = effectsMap.sort(() => 0.5 - Math.random());
+                let applied = 0;
+    
+                for (const { name, apply } of shuffledEffects) {
+                    if (applied >= MAX_EFFECTS) break;
+                    const params = window.EffectsModule.getEffectParams(name, currentSequence, bpm, prng);
+                    if (params) {
+                        apply(channel, params);
+                        applied++;
+                        if (duplicationEffects.has(name)) {
+                            effectsContext.channelLayers[channel.id] = Math.min(
+                                (effectsContext.channelLayers[channel.id] || 1) + 1,
+                                layeringControls.maxLayers
+                            );
+                            const layers = effectsContext.channelLayers[channel.id];
+                            const newGain = (1 / layers) * layeringControls.gainReductionPerLayer ** (layers - 1);
+                            channel.metadata.volume = newGain;
+                            GainNodeHelper.setChannelGain(newSong.id, channel.id, newGain);
+                            loggedEffects.add(name);
+                        }
+                        loggedEffects.add(name);
+                    }
+                }
+    
+                const [MIN_VOL, MAX_VOL, MAX_GAIN_TOTAL] = [0.5, 1.5, 1];
+                const [MIN_GAIN, MAX_GAIN_VAL] = [-3.40282e+38, 1541.27];
+    
+                if (effectsContext.totalGain > MAX_GAIN_TOTAL) {
+                    const factor = MAX_GAIN_TOTAL / effectsContext.totalGain;
+                    channel.metadata.volume = (channel.metadata.volume || 1) * factor;
+                    loggedEffects.add('normalization');
+                }
+    
+                effectsContext.totalGain += channel.metadata.volume || 1;
+    
+                if (channel.metadata.volume < MIN_VOL) {
+                    channel.metadata.volume = MIN_VOL;
+                    loggedEffects.add('clamping_min');
+                } else if (channel.metadata.volume > MAX_VOL) {
+                    channel.metadata.volume = MAX_VOL;
+                    loggedEffects.add('clamping_max');
+                }
+    
+                GainNodeHelper.setChannelGain(newSong.id, channel.id, channel.metadata.volume || 1);
+            }
+    
+            // Initialize effects context for the song
+            const effectsContext = {
+                harmonyChannelsAdded: 0,
+                maxHarmonyChannels: window.EffectsModule?.effectsConfig?.harmonize?.maxHarmonyChannels || 2,
+                totalGain: 0,
+                maxTotalGain: 1,
+                channelLayers: {} // Track layers per channel
+            };
+    
+            await Promise.all(channelsWithActivation.map(async ({ channel, activationSeq }, index) => {
+                const chId = `ch${index}`;
+                const newChannel = {
+                    id: chId,
+                    url: channel.url,
+                    metadata: {
+                        ...channel.metadata,
+                        originalBPM: newSong.bpm,
+                        activationSeq, // Track the activation sequence for this channel
+                    }
+                };
+    
+                // Apply effects and other initializations for the channel
+                await applyEffects(newChannel, index, newSong, activationSeq, newSong.bpm, effectsContext, prng);
+                newSong.channels.push(newChannel);
+    
+                // Adjust and map sequences based on the activation sequence
+                channel.metadata.channelSequence?.forEach(seqData => {
+                    if (newSong.projectSequences[seqData.sequenceName]) {
+                        // Calculate the offset to skip earlier sequences
+                        const offset = (activationSeq - 1) * 63; // 63 steps per sequence
+    
+                        // Filter out the steps that are earlier than the activation sequence
+                        const validSteps = seqData.steps.filter(step => step >= offset);
+    
+                        // Adjust the sequence steps so that the new start is at step 1
+                        const adjustedSteps = validSteps.map(step => step - offset);
+    
+                        // Map the adjusted sequence to the channel in the new song
+                        newSong.projectSequences[seqData.sequenceName] = {
+                            ...newSong.projectSequences[seqData.sequenceName],
+                            [chId]: { steps: adjustedSteps }
+                        };
+                    }
+                });
+            }));
+    
+            // Log the final projectSequences mapping
+            console.log(`[loopedSamplesDebug] Final projectSequences mapping:`, newSong.projectSequences);
+    
+            // Add the new song to the songs list
+            newSongs.push(newSong);
+            console.log(`[loopedSamplesDebug] New song added to the songs list.`);
+    
+            return newSongs;
         }
-        
     
+        async function generateMixesForSeedList(seedList) {
+            const newSongs = [];
+    
+            for (let i = 0; i < seedList.length; i++) {
+                const seedString = seedList[i];
+                const remixNumber = i + 1; // Remix numbers start at 1
+                const songs = await generateMixBySeed(seedString, remixNumber);
+                newSongs.push(...songs);
+            }
+    
+            return newSongs;
+        }
+    
+        // Initialize the seedList
+        initializeSeedList();
+    
+        // Generate mixes
+        const generatedSongs = await generateMixesForSeedList(window.globalData.seedList);
+        console.log(`[Mix Generation] Generated ${generatedSongs.length} songs based on seedList.`);
+    
+        // Assign songs to globalData once
+        if (!window.globalData.initialized) {
+            Object.assign(window.globalData, {
+                songsArray: generatedSongs,
+                songsByBPM: window.globalData.songsByBPM || {},
+                currentSongIndex: 0,
+                currentSequenceIndex: 0,
+                isSingleSong: generatedSongs.length === 1,
+                isMultipleSongs: generatedSongs.length > 1,
+                initialized: true
+            });
+        }
+    
+        // Initialize GainNodes for all generated songs once
+        window.globalData.songsArray.forEach(song => {
+            GainNodeHelper.createGainNodesForSong(song);
+        });
+    
+        // Set artwork image if applicable
+        if (window.globalData.isArtworkCover && artworkUrl.length) setArtworkImage(artworkUrl[0]);
+    
+        // Dispatch data loading completion event
+        document.dispatchEvent(new CustomEvent("dataLoadingComplete", {
+            detail: {
+                success: true,
+                totalSongs: window.globalData.songsArray.length,
+                songs: window.globalData.songsArray.map(({ id, totalSequences }) => ({ id, totalSequences }))
+            }
+        }));
+    
+        // Expose generateMixBySeed to the global scope if needed
+        window.generateMixBySeed = generateMixBySeed;
     })();
-    
-
+});
 </script>
-
-
+    
 
 <!-- audioProcessingAndManagement -->
 <script>
