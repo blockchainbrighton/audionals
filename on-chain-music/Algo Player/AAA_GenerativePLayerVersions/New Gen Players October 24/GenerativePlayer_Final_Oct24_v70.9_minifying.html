@@ -520,65 +520,65 @@ window.updateSeedDisplay = function() {
 
         window.EffectsModule.effectsConfig = { 
             pitchShift: { 
-                enabled: true, 
-                defaultProbability: 0, // works well at 100% (1) but needs a dynamic setting from 0.1 to 1
+                enabled: true, // working well
+                defaultProbability: 0.5, // works well at 100% (1) but needs a dynamic setting from 0.1 to 1
                 shifts: [0.125, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5],
 
             },
             harmonize: { 
-                enabled: true, 
-                defaultProbability: 0, // needs to range from 0.0025 to 0.1 - More stable mixes in general at 0.01 but interesting mixes around 0.1
-                intervals: [0.125, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5], //  WORKS WELL AT 100% ON 15, 30 and 60 BPM songs Can we weight this?
+                enabled: true, // working well
+                defaultProbability: 0.0025, // needs to range from 0.0025 to 0.1 - More stable mixes in general at 0.01 but interesting mixes around 0.1
+                intervals: [ 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5], //  WORKS WELL AT 100% ON 15, 30 and 60 BPM songs Can we weight this?
                 maxHarmonyChannels: 4 
             },
             delay: {
-                enabled: false, 
+                enabled: false, // NOT WORKING - NEEDS DELAY NODES
                 defaultProbability: 0.5, // Reduced from 1
                 noteValue: 'sixteenth',
                 maxDelayRepeats: 8 // Reduced from 16
             },
-            reverse: {
-                enabled: false, 
+            reverse: { 
+                enabled: false, // Not currently working
                 defaultProbability: 0.3 // Reduced from 1
             },
-            pan: {
-                enabled: false,
+            pan: { 
+                enabled: false, // Not currently working - needs to be linked to channel nodes
                 defaultProbability: 1, // Safe to keep at 1
                 positions: [-1, 1]
             },
             reverb: {
-                enabled: false, 
+                enabled: false, // not currently working
                 defaultProbability: 0.5, // Reduced from 1
                 decayTimeRange: [1, 5], // Narrowed range
                 mixRange: [0.2, 0.7] // Narrowed range
             },
-            filter: {
-                enabled: false, 
+            filter: { 
+                enabled: false, // Not currently working
                 defaultProbability: 0.7, 
                 types: ['lowpass', 'highpass', 'bandpass'], 
                 frequencyRange: [300, 8000], 
                 QRange: [1, 8] // Narrowed range
             },
             tremolo: {
-                enabled: false, 
-                defaultProbability: 0.6, 
+                enabled: false, // not doing anything
+                defaultProbability: 1, 
                 rateRange: [4, 12],   
                 depthRange: [0.6, 1]
             },
             distortion: {
-                enabled: false, 
-                defaultProbability: 0.3, // Reduced and kept disabled
+                enabled: false, // Not currently working
+                defaultProbability: 0, // Reduced and kept disabled
                 amountRange: [1, 10] // Adjusted range
             },
             bitcrusher: {
                 enabled: false, 
-                defaultProbability: 0.3, 
+                defaultProbability: 0, 
                 bitDepthRange: [2, 6],    
                 sampleRateRange: [8000, 22050]
             },
             chorus: {
-                enabled: false,
-                defaultProbability: 0.3, // Reduced from 0.5
+                enabled: false, // Can't hear anything from this effect
+                defaultProbability: 0, // Reduced from 0.5
                 rateRange: [0.1, 5],       
                 depthRange: [0.1, 1],      
                 feedbackRange: [0, 0.3],   
@@ -586,65 +586,127 @@ window.updateSeedDisplay = function() {
             },
             leslie: {
                 enabled: false,
-                defaultProbability: 0.2, // Reduced from 0.3
+                defaultProbability: 0, // Reduced from 0.3
                 speedRange: [0.5, 1.5],    
                 depthRange: [0.5, 1],      
                 mixRange: [0, 1]            
             },
             delayBpmLinked: {
                 enabled: false,
-                defaultProbability: 0.3, // Reduced from 0.4
+                defaultProbability: 0, // Reduced from 0.4
                 delayTimes: ['quarter', 'eighth', 'sixteenth'], 
                 feedbackRange: [0.3, 0.6], // Narrowed range
                 mixRange: [0, 0.7]        // Narrowed range
             },
             // Removed 'synthBassLine' as it's undefined
-        };
+        };window.EffectsModule.getEffectParams = function(effectName, currentSequence, bpm, prng) {
+    const effect = this.effectsConfig[effectName];
+    if (!effect || !effect.enabled) return null;
+    
+    // Determine if the effect should be applied based on defaultProbability
+    if (prng() >= effect.defaultProbability) return null;
 
-        window.EffectsModule.getEffectParams = function(effectName, currentSequence, bpm, prng) {
-            const effect = this.effectsConfig[effectName];
-            if (!effect || !effect.enabled) return null;
-            if (prng() < effect.defaultProbability) {
-                // Generate random parameters within the specified ranges
-                const params = {};
-                switch(effectName) {
-                    case 'pitchShift':
-                        params.shifts = effect.shifts;
-                        break;
-                    case 'harmonize':
-                        params.intervals = effect.intervals;
-                        params.maxHarmonyChannels = effect.maxHarmonyChannels;
-                        break;
-                    case 'delay':
-                        params.noteValue = effect.noteValue;
-                        params.maxDelayRepeats = effect.maxDelayRepeats;
-                        break;
-                    case 'chorus':
-                        params.rate = prng() * (effect.rateRange[1] - effect.rateRange[0]) + effect.rateRange[0];
-                        params.depth = prng() * (effect.depthRange[1] - effect.depthRange[0]) + effect.depthRange[0];
-                        params.feedback = prng() * (effect.feedbackRange[1] - effect.feedbackRange[0]) + effect.feedbackRange[0];
-                        params.mix = prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0];
-                        break;
-                    case 'leslie':
-                        params.rotationSpeed = prng() * (effect.speedRange[1] - effect.speedRange[0]) + effect.speedRange[0];
-                        params.depth = prng() * (effect.depthRange[1] - effect.depthRange[0]) + effect.depthRange[0];
-                        params.mix = prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0];
-                        break;
-                    case 'delayBpmLinked':
-                        params.time = effect.delayTimes[Math.floor(prng() * effect.delayTimes.length)];
-                        params.feedback = prng() * (effect.feedbackRange[1] - effect.feedbackRange[0]) + effect.feedbackRange[0];
-                        params.mix = prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0];
-                        break;
+    // Helper function to clamp values within a specified range
+    const clamp = (value, min, max) => {
+        return Math.min(Math.max(value, min), max);
+    };
 
-                    // Add cases for other effects as needed
-                    default:
-                        // For effects without additional parameters
-                        break;
-                }
-                return { ...effect, ...params };
-            }
-            return null;
-        };
+    // Initialize the params object
+    const params = {};
+
+    switch(effectName) {
+        case 'pitchShift':
+            // Select a random shift value from the shifts array
+            params.shift = effect.shifts[Math.floor(prng() * effect.shifts.length)];
+            break;
+        
+        case 'harmonize':
+            // Select a random interval from the intervals array
+            params.interval = effect.intervals[Math.floor(prng() * effect.intervals.length)];
+            params.maxHarmonyChannels = effect.maxHarmonyChannels;
+            break;
+        
+        case 'delay':
+            // Assign noteValue and maxDelayRepeats directly
+            params.noteValue = effect.noteValue;
+            params.maxDelayRepeats = effect.maxDelayRepeats;
+            break;
+        
+        case 'chorus':
+            // Generate random parameters within specified ranges
+            params.rate = parseFloat((prng() * (effect.rateRange[1] - effect.rateRange[0]) + effect.rateRange[0]).toFixed(2));
+            params.depth = parseFloat((prng() * (effect.depthRange[1] - effect.depthRange[0]) + effect.depthRange[0]).toFixed(2));
+            params.feedback = parseFloat((prng() * (effect.feedbackRange[1] - effect.feedbackRange[0]) + effect.feedbackRange[0]).toFixed(2));
+            params.mix = parseFloat((prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0]).toFixed(2));
+            break;
+        
+        case 'leslie':
+            // Generate random parameters within specified ranges
+            params.rotationSpeed = parseFloat((prng() * (effect.speedRange[1] - effect.speedRange[0]) + effect.speedRange[0]).toFixed(2));
+            params.depth = parseFloat((prng() * (effect.depthRange[1] - effect.depthRange[0]) + effect.depthRange[0]).toFixed(2));
+            params.mix = parseFloat((prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0]).toFixed(2));
+            break;
+        
+        case 'delayBpmLinked':
+            // Select a random delay time from delayTimes array
+            params.time = effect.delayTimes[Math.floor(prng() * effect.delayTimes.length)];
+            params.feedback = parseFloat((prng() * (effect.feedbackRange[1] - effect.feedbackRange[0]) + effect.feedbackRange[0]).toFixed(2));
+            params.mix = parseFloat((prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0]).toFixed(2));
+            break;
+
+        case 'tremolo':
+            // Assign rateRange and depthRange for Tremolo
+            params.rateRange = effect.rateRange;
+            params.depthRange = effect.depthRange;
+            break;
+        
+        case 'reverse':
+            // Reverse effect typically doesn't require additional parameters
+            break;
+        
+        case 'pan':
+            // Select a random pan position from positions array
+            params.position = clamp(effect.positions[Math.floor(prng() * effect.positions.length)], -1, 1);
+            break;
+        
+        case 'reverb':
+            // Generate random parameters within specified ranges
+            params.decayTime = parseFloat((prng() * (effect.decayTimeRange[1] - effect.decayTimeRange[0]) + effect.decayTimeRange[0]).toFixed(2));
+            params.mix = parseFloat((prng() * (effect.mixRange[1] - effect.mixRange[0]) + effect.mixRange[0]).toFixed(2));
+            break;
+        
+        case 'filter':
+            // Select a random filter type
+            params.type = effect.types[Math.floor(prng() * effect.types.length)];
+            // Generate random frequency within range
+            params.frequency = parseFloat((prng() * (effect.frequencyRange[1] - effect.frequencyRange[0]) + effect.frequencyRange[0]).toFixed(2));
+            // Generate random Q within range
+            params.Q = parseFloat((prng() * (effect.QRange[1] - effect.QRange[0]) + effect.QRange[0]).toFixed(2));
+            break;
+        
+        case 'distortion':
+            // Generate random distortion amount within range
+            params.amount = parseFloat((prng() * (effect.amountRange[1] - effect.amountRange[0]) + effect.amountRange[0]).toFixed(2));
+            break;
+        
+        case 'bitcrusher':
+            // Generate random bit depth within range
+            params.bitDepth = Math.floor(prng() * (effect.bitDepthRange[1] - effect.bitDepthRange[0] + 1)) + effect.bitDepthRange[0];
+            // Generate random sample rate within range
+            params.sampleRate = Math.floor(prng() * (effect.sampleRateRange[1] - effect.sampleRateRange[0] + 1)) + effect.sampleRateRange[0];
+            break;
+        
+        case 'chorus': // Already handled above; this case is redundant
+            break;
+        
+        default:
+            // For effects without additional parameters, return effect as is
+            break;
+    }
+
+    // Return the combined effect configuration and generated parameters
+    return { ...effect, ...params };
+};
 
         // ================================
         // Audio Effects Module Section
