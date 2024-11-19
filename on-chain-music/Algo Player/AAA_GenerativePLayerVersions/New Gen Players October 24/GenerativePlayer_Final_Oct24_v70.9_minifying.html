@@ -1010,32 +1010,6 @@ function applyEffects(channel, index, newSong, currentSequence, bpm, effectsCont
             }
         };
     
-        const prepareInitialSampleOrder = ({ projectSequences }) => {
-            console.log("Preparing initial sample order with projectSequences:", projectSequences);
-
-            const sampleSet = new Set();
-            const sampleOrder = [];
-
-            Object.keys(projectSequences)
-                .sort((a, b) => +a.slice(9) - +b.slice(9)) // Assuming keys have a "sequence9" type format
-                .forEach(seqK => {
-                    Object.entries(projectSequences[seqK]).forEach(([chId, { steps }]) => {
-                        steps.forEach(step => {
-                            if (typeof step === "number" || step?.index !== undefined) {
-                                const id = `${chId}_${step.reverse ? 'r' : 'f'}`;
-                                if (!sampleSet.has(id)) {
-                                    sampleSet.add(id);
-                                    sampleOrder.push({ channelId: chId, reverse: step.reverse || false });
-                                }
-                            }
-                        });
-                    });
-                });
-
-            console.log("Generated sample order:", sampleOrder);
-            return sampleOrder;
-        };
-
 
         const setArtworkImage = url => {
             const el = document.getElementById("artworkImage");
@@ -1534,7 +1508,7 @@ if (!globalData.initialized) {
         songsByBPM: globalData.songsByBPM || {},
         currentSongIndex: 0,
         currentSequenceIndex: 0,
-        initialSampleOrder: generatedSongs.length ? prepareInitialSampleOrder(generatedSongs[0]) : null,
+        // initialSampleOrder: generatedSongs.length ? prepareInitialSampleOrder(generatedSongs[0]) : null,
         isSingleSong: generatedSongs.length === 1,
         isMultipleSongs: generatedSongs.length > 1,
         initialized: true
@@ -2113,28 +2087,20 @@ window.generateMixBySeed = generateMixBySeed;
          * Processes the initial sample order by fetching and decoding the necessary audio channels.
          */
         const processInitialSamples = async () => {
-            const { songsArray, initialSampleOrder } = globalData;
+            const { songsArray } = globalData;
 
             if (!songsArray || !songsArray.length) {
                 console.error("No songs to process.");
                 return;
             }
 
-            if (!initialSampleOrder || !Array.isArray(initialSampleOrder)) {
-                console.error("initialSampleOrder is not defined or not an array.");
-                return;
-            }
+ 
 
             const processedChannels = [];
 
             // Group initialSampleOrder by songId
             const songsMap = new Map();
-            initialSampleOrder.forEach(sampleOrder => {
-                if (!songsMap.has(sampleOrder.songId)) {
-                    songsMap.set(sampleOrder.songId, []);
-                }
-                songsMap.get(sampleOrder.songId).push(sampleOrder.channelId);
-            });
+          
 
             // Iterate over each song and process its channels
             for (const [songId, channelIds] of songsMap.entries()) {
@@ -2195,7 +2161,7 @@ window.generateMixBySeed = generateMixBySeed;
 
                 // Background processing for additional audio buffers
                 try {
-                    const { songsArray, initialSampleOrder } = globalData;
+                    const { songsArray } = globalData;
 
                     if (!songsArray || !songsArray.length) {
                         console.error("No songs to process.");
@@ -2204,16 +2170,14 @@ window.generateMixBySeed = generateMixBySeed;
 
                     const additionalProcessedChannels = [];
 
+
                     // Flatten all channels from all songs
                     const allChannels = songsArray.flatMap(song => song.channels.map(channel => ({ song, channel })));
 
-                    // Create a set of already processed songId-channelId combinations
-                    const initialProcessedSet = new Set(initialSampleOrder.map(sample => `${sample.songId}-${sample.channelId}`));
+                    // Process each channel without filtering
+                    const channelsToProcess = allChannels; // Directly take all channels
 
-                    // Filter out channels that have already been processed
-                    const channelsToProcess = allChannels.filter(({ song, channel }) => !initialProcessedSet.has(`${song.id}-${channel.id}`));
-
-                    const batches = [];
+                     const batches = [];
 
                     // Batch channels into groups of 4 for processing
                     while (channelsToProcess.length) {
