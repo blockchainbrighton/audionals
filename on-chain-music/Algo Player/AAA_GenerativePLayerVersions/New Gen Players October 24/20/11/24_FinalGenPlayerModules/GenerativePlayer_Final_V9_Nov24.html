@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Audionals - Web3 Music Player</title>
+<link rel="stylesheet" href="/content/7a309a161e838ba93740684338b3d97f3c1226c046d8b1137afc2353b4bf16e1i0">
+<link rel="stylesheet" href="/content/05b1c4057f6233c867b414a900e20afc7ba3de8370f0a6bdcbd03c618ed2bec3i0">
+
+</head>
+<body>
+<script src="/content/8e61138e3a480d36870b65f58743fc4b56354d47f751de2e4c35043345c87aadi0"></script>   // loadHtmlSection.js
+
+       
+<!-- <script src="/content/bd77ea1ba5125d021ea171b136fdaa281c49ee7cb1c94753fc32349c4e582e72i0"></script>  // loadAllScripts_v2.js -->
+
+<script>
+  // loadAllScripts_v2.js
+const scriptUrls = [
+    "/content/616ef4c1bef02cb6c0f785ef76b98df4e379e8f01e2b31e2ae9e68449485f2bci0", // songsAndArtwork.js
+    "/content/067a04f8437a6e3c8287c603264eccfd875221bfc2a703bb43189fa35323e13fi0", // globalDataObject.js - Updated to handle Audio Context
+    "/content/079d00cc6a48f05aed58021b7c892ff28df625a4bdb6416499772fec58b1cf81i0", // seedManagement.js
+    "/content/ea4990e9237a01afc5a4b16b8f31bc2bc58d81d19e4e570fe6b6deb325ac72cei0", // seedDisplayManager.js
+    "/content/34749a38c929b59a365575c8b72986c4a663a6fb41fed3bc8b23aa935a7df538i0", // gainNodeHelper.js
+    "/content/88e31c014497fe68531488644c8d18bf3f00be3ef052b8a5f5fc1f5fb0a9fedai0", // configureEffects.js
+    "/content/8287527ee3c6fe45bedead8b953dafd57ecd176f0fa1a4641413aef0bc5441b6i0", // initialiseSongsWithEffects.js
+    "/content/1ebdcd2b3da09ed63ca6d626d7ecf0205f04e3826683c230ff2855c93236c36ei0", // audioProcessingAndManagement.js
+    "/content/e6efeb0e068d89d62c9d3722749837fedd418fe990d41766d6974596085ae877i0", // unifiedMetadataManagement.js
+    "/content/1440175525ca0e108583fc3a2e9850bfb5165d2c72fb70546e680b09aed0f435i0", // loadPlayerScripts.js
+    "/content/9ae73af1958b5ccc3f7bf59784cf3473f18f208e6d6737044e8e514444ef90ddi0", // fetchAndPrepareOriginalAudionalSongFiles_v2.js - Updated to throw less errors for empty URLs
+    "/content/cc5c47b922f7b60a2ab24134ac79a871c94459060b150758eeb90b49f09c33e0i0"  // playback.js
+];
+
+function loadScript(url) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = url;
+        script.type = "application/javascript";
+        script.onload = () => {
+            console.log(`[LoadScripts] Loaded script: ${url}`);
+            resolve();
+        };
+        script.onerror = () => {
+            console.error(`[LoadScripts] Failed to load script: ${url}`);
+            reject(new Error(`Failed to load script ${url}`));
+        };
+        // Append to body instead of head to mimic original script placement
+        document.body.appendChild(script);
+    });
+}
+
+async function loadScriptsSequentially(urls) {
+    for (const url of urls) {
+        await loadScript(url);
+    }
+}
+
+loadScriptsSequentially(scriptUrls)
+    .then(() => {
+        console.log("[LoadScripts] All scripts loaded successfully.");
+        // Dispatch a custom event to signal that all scripts have been loaded
+        document.dispatchEvent(new Event('allScriptsLoaded'));
+    })
+    .catch((error) => {
+        console.error(`[LoadScripts] Error loading scripts:`, error);
+    });
+</script>
+
+
+<!-- Initialize UI -->
+<script>
+    (function() {
+        /**
+         * Function to initialize the UI components.
+         */
+        function initializeUI() {
+            console.log("[InitUI] Initializing UI components...");
+            
+            // Check if the required functions are available
+            if (
+                typeof populatePreviousSeedsUI === 'function' &&
+                typeof populateFavouritesListUI === 'function' &&
+                typeof displaySeedAndBPM === 'function' &&
+                typeof window.globalData !== 'undefined' &&
+                Array.isArray(window.globalData.songsArray)
+            ) {
+                try {
+                    // Initialize Previous Seeds
+                    const previousSeeds = JSON.parse(localStorage.getItem("previousSeeds")) || [];
+                    populatePreviousSeedsUI(previousSeeds);
+                    console.log("[InitUI] Populated Previous Seeds.");
+    
+                    // Initialize Favourite Seeds
+                    const favouriteSeeds = JSON.parse(localStorage.getItem("favouriteSeedsList")) || [];
+                    populateFavouritesListUI(favouriteSeeds);
+                    console.log("[InitUI] Populated Favourite Seeds.");
+    
+                    // Display Current Seed and BPM
+                    if (window.globalData.songsArray.length > 0) {
+                        const currentSong = window.globalData.songsArray[window.globalData.currentSongIndex];
+                        displaySeedAndBPM(currentSong.seed, currentSong.bpm, currentSong.projectName);
+                        console.log("[InitUI] Displayed current Seed and BPM.");
+                    }
+    
+                    // Set Up Event Listeners for Dropdown Buttons
+                    setupDropdownEventListeners();
+                    console.log("[InitUI] Dropdown event listeners set up.");
+    
+                } catch (error) {
+                    console.error("[InitUI] Error during UI initialization:", error);
+                }
+            } else {
+                console.error("[InitUI] Required functions or globalData are not available.");
+            }
+        }
+
+        /**
+         * Function to set up event listeners for dropdown buttons.
+         */
+        function setupDropdownEventListeners() {
+            // Previous Seeds Button
+            const previousSeedsButton = document.getElementById("previous-seeds-button");
+            if (previousSeedsButton && !previousSeedsButton.hasAttribute('data-listener')) {
+                previousSeedsButton.addEventListener("click", toggleDropdown);
+                previousSeedsButton.setAttribute('data-listener', 'true'); // Prevent duplicate listeners
+                console.log("[InitUI] Added event listener to Previous Seeds button.");
+            }
+
+            // Favourites Seeds Button
+            const favouritesSeedsButton = document.getElementById("favourites-seeds-button");
+            if (favouritesSeedsButton && !favouritesSeedsButton.hasAttribute('data-listener')) {
+                favouritesSeedsButton.addEventListener("click", toggleDropdown);
+                favouritesSeedsButton.setAttribute('data-listener', 'true'); // Prevent duplicate listeners
+                console.log("[InitUI] Added event listener to Favourites Seeds button.");
+            }
+
+            // Close dropdowns when clicking outside
+            if (!window.hasAddedGlobalDropdownListener) {
+                window.addEventListener("click", closeDropdown);
+                window.hasAddedGlobalDropdownListener = true;
+                console.log("[InitUI] Added global click listener to close dropdowns.");
+            }
+        }
+
+        /**
+         * Function to toggle dropdown visibility.
+         */
+        function toggleDropdown(event) {
+            const buttonId = event.currentTarget.id;
+            const dropdownId = buttonId === "previous-seeds-button" ? "previous-seeds-list" : 
+                               buttonId === "favourites-seeds-button" ? "favourites-seeds-list" : null;
+            if (!dropdownId) return;
+
+            const dropdownContent = document.getElementById(dropdownId);
+            const isShown = dropdownContent.classList.contains("show");
+            // Close all dropdowns first
+            document.querySelectorAll('.dropdown-content').forEach(dc => dc.classList.remove('show'));
+            document.querySelectorAll('.dropdown-button').forEach(btn => btn.setAttribute('aria-expanded', 'false'));
+            // Toggle the current dropdown
+            if (!isShown) {
+                dropdownContent.classList.add("show");
+                event.currentTarget.setAttribute("aria-expanded", "true");
+                console.log(`[InitUI] Opened dropdown: ${dropdownId}`);
+            } else {
+                dropdownContent.classList.remove("show");
+                event.currentTarget.setAttribute("aria-expanded", "false");
+                console.log(`[InitUI] Closed dropdown: ${dropdownId}`);
+            }
+        }
+
+        /**
+         * Function to close all dropdowns when clicking outside.
+         */
+        function closeDropdown(event) {
+            if (!event.target.matches('.dropdown-button')) {
+                document.querySelectorAll('.dropdown-content').forEach(dc => dc.classList.remove('show'));
+                document.querySelectorAll('.dropdown-button').forEach(btn => btn.setAttribute('aria-expanded', 'false'));
+                console.log("[InitUI] Closed all dropdowns due to outside click.");
+            }
+        }
+
+        // Listen for the custom 'allScriptsLoaded' event
+        document.addEventListener('allScriptsLoaded', () => {
+            console.log("[InitUI] 'allScriptsLoaded' event received.");
+            initializeUI();
+        });
+
+        // Optional: Also attempt to initialize immediately in case the event was missed
+        // This can happen if scripts loaded very quickly
+        window.addEventListener('load', () => {
+            if (typeof populatePreviousSeedsUI === 'function') {
+                console.log("[InitUI] Window 'load' event fired. Attempting to initialize UI.");
+                initializeUI();
+            }
+        });
+    })();
+</script>
+
+</body></html>

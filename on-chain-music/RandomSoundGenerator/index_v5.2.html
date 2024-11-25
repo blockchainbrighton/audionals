@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GenSynth</title>
+    <style>
+         body {
+            font-family: Arial, sans-serif;
+            background-color: #000000; /* Black background */
+            margin: 0; /* Remove default margin */
+            height: 100vh; /* Full viewport height */
+            display: flex; /* Flex layout for side-by-side design */
+        }
+
+        /* Control Panel Styling */
+        #control-panel {
+            background-color: #1a1a1a; /* Dark gray background for the control panel */
+            color: #ffffff; /* White text */
+            width: 20%; /* Set control panel width */
+            padding: 10px;
+            box-sizing: border-box; /* Include padding in width */
+            display: flex;
+            flex-direction: column; /* Stack buttons vertically */
+            align-items: flex-start; /* Align buttons to the left */
+            gap: 10px; /* Add spacing between buttons */
+        }
+
+        #control-panel button {
+            background-color: #333333; /* Darker button background */
+            color: #ffffff; /* White text color */
+            border: none; /* Remove default button borders */
+            padding: 10px; /* Add padding to buttons */
+            font-size: 14px; /* Button text size */
+            cursor: pointer;
+            width: 100%; /* Buttons take full width of control panel */
+        }
+
+        #control-panel button:hover {
+            background-color: #444444; /* Slightly lighter background on hover */
+        }
+
+        /* Main content styling */
+        .main-content {
+            flex: 1; /* Take up remaining space */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #ffffff; /* White text for the status */
+        }
+
+        button img {
+            height: 50vh; /* Image fills 50% of the viewport height */
+            width: auto; /* Maintain aspect ratio */
+            display: block;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            /* Removed padding-top to allow the image to occupy more vertical space */
+            /* padding-top: 50px; */
+            background-color: #000000; /* Changed background to black */
+            margin: 0; /* Remove default margin */
+            height: 100vh; /* Ensure body takes full viewport height */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        /* Style the button to remove default styles and display the image properly */
+        button {
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+        }
+        /* Ensure the image fills 50% of the viewport height */
+        button img {
+            height: 50vh; /* Image fills 50% of the viewport height */
+            width: auto; /* Width adjusts to maintain aspect ratio */
+            display: block;
+        }
+
+    </style>
+</head>
+<body>
+    <!-- Button replaced with an image -->
+    <button id="generate-button">
+        <img src="https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0" alt="Generate Sound Artwork" />
+    </button>
+    <div id="status"></div>
+
+    <!-- HTML Structure -->
+<div id="control-panel">
+    <button id="generate-creepy-soundscape">Creepy</button>
+    <button id="generate-haunting-pads">Haunting</button>
+    <button id="generate-uplifting-melodies">Melodic</button>
+    <button id="generate-chill-ambient">Ambient</button>
+    <button id="generate-energetic-beats">Rave</button>
+    <!-- Add more buttons as needed -->
+</div>
+<div id="status">Click a button to generate sound.</div>
+
+<script>
+(() => {
+    "use strict";
+    ({
+        context: null,
+        masterGain: null,
+        BPM: 120,
+        isLoopActive: false,
+        activeOscillators: new Set(),
+        random: null,
+        seed: null,
+        currentScaleData: null,
+        styles: {
+            'creepy-soundscape': {
+                BPMRange: [40, 80],
+                scales: ['blues', 'minor'],
+                effects: ['reverb', 'phaser'],
+                chordTypes: ['seventh', 'ninth'],
+                percussiveElements: false,
+                description: 'Creepy Soundscape'
+            },
+            'haunting-pads': {
+                BPMRange: [60, 100],
+                scales: ['minor', 'pentatonic'],
+                effects: ['reverb', 'chorus'],
+                chordTypes: ['sus2', 'sus4'],
+                percussiveElements: false,
+                description: 'Haunting Pads'
+            },
+            'uplifting-melodies': {
+                BPMRange: [120, 160],
+                scales: ['major', 'pentatonic'],
+                effects: ['chorus', 'compressor'],
+                chordTypes: ['triad', 'sixth'],
+                percussiveElements: true,
+                description: 'Uplifting Melodies'
+            },
+            'chill-ambient': {
+                BPMRange: [80, 110],
+                scales: ['major', 'pentatonic'],
+                effects: ['reverb', 'chorus'],
+                chordTypes: ['sus2', 'sixth'],
+                percussiveElements: true,
+                description: 'Chill Ambient'
+            },
+            'energetic-beats': {
+                BPMRange: [160, 180],
+                scales: ['major', 'minor'],
+                effects: ['compressor', 'distortion'],
+                chordTypes: ['triad'],
+                percussiveElements: true,
+                description: 'Energetic Beats'
+            }
+            // Add more styles as needed
+        },
+        init() {
+            this.initAudioContext();
+            this.initRandom();
+            this.initMasterGain();
+            this.addEventListeners();
+            this.updateStatus("Click a button to generate sound.");
+        },
+        initAudioContext() {
+            this.context = new (window.AudioContext || window.webkitAudioContext)();
+            console.log("Audio Context initialized:", this.context);
+        },
+        initRandom() {
+            this.seed = Math.floor(4294967295 * Math.random());
+            this.random = this.mulberry32(this.seed);
+            console.log(`Current Seed: ${this.seed}`);
+        },
+        initMasterGain() {
+            this.masterGain = this.context.createGain();
+            this.masterGain.connect(this.context.destination);
+            console.log("Master Gain connected to destination.");
+        },
+
+        generateRandomLoop(style) {
+            try {
+                if (this.isLoopActive) {
+                    console.log("Stopping the active loop before starting a new one.");
+                    this.cleanupLoop();
+                }
+
+                this.isLoopActive = true;
+                this.updateStatus(`Generating ${style.description}...`);
+
+                // Set BPM
+                const [minBPM, maxBPM] = style.BPMRange;
+                this.BPM = this.clamp(parseFloat((this.random() * (maxBPM - minBPM) + minBPM).toFixed(2)), minBPM, maxBPM);
+                console.log(`Selected BPM: ${this.BPM}`);
+
+                // Create filter
+                const filter = this.context.createBiquadFilter();
+                filter.type = "lowpass";
+                filter.frequency.setValueAtTime(15000, this.context.currentTime);
+                this.masterGain.connect(filter);
+
+                // Create effects chain
+                const effectsChain = this.createGlobalEffectsChain(style.effects);
+                filter.connect(effectsChain.input);
+                effectsChain.output.connect(this.context.destination);
+
+                // Proceed with loop generation...
+                // (Rest of your loop generation code)
+
+                this.updateStatus(`Loop active: ${bars} bars | BPM: ${this.BPM} | Style: ${style.description} | Seed: ${this.seed}`);
+                console.log("Loop generation started successfully.");
+            } catch (error) {
+                console.error("Error in generateRandomLoop:", error);
+                this.cleanupLoop();
+            }
+        },
+
+        cleanupLoop() {
+            try {
+                // Disconnect filter and effects chain
+                this.masterGain.disconnect();
+                this.masterGain.connect(this.context.destination);
+
+                // Ramp master gain
+                this.setAudioParam(this.masterGain.gain, 0, this.context.currentTime);
+                this.rampAudioParam(this.masterGain.gain, 1, this.context.currentTime + this.beatsToSeconds(0.1));
+
+                // Stop all active oscillators
+                this.activeOscillators.forEach(osc => {
+                    osc.stop();
+                    osc.disconnect();
+                });
+                this.activeOscillators.clear();
+
+                this.isLoopActive = false;
+                this.updateStatus("Loop stopped.");
+                console.log("Loop cleanup completed.");
+            } catch (error) {
+                console.warn("Error during loop cleanup:", error);
+            }
+
+
+         addEventListeners("beforeunload", () => {
+                console.log("Page is unloading. Cleaning up any active loops.");
+                this.cleanupLoop();
+            });
+
+            setInterval(() => {
+                console.log("--- 10-Second Performance Report ---");
+                console.log(`Is Loop Active: ${this.isLoopActive}`);
+                console.log(`Audio Context State: ${this.context.state}`);
+                console.log(`Current BPM: ${this.isLoopActive ? this.BPM.toFixed(2) : "N/A"}`);
+                console.log("-------------------------------------");
+            }, 10000);
+        },
+        mulberry32(a) {
+            return () => {
+                let t = a += 0x6D2B79F5;
+                t = Math.imul(t ^ (t >>> 15), t | 1);
+                t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+        },
+        clamp(value, min, max) {
+            return isFinite(value) ? Math.min(Math.max(value, min), max) : min;
+        },
+        setAudioParam(param, value, time) {
+            if (isFinite(value)) {
+                param.setValueAtTime(value, time);
+            } else {
+                console.warn(`Invalid value (${value}) for AudioParam. Using default value.`);
+                param.setValueAtTime(0, time);
+            }
+        },
+        rampAudioParam(param, value, time) {
+            if (isFinite(value)) {
+                param.linearRampToValueAtTime(value, time);
+            } else {
+                console.warn(`Invalid ramp value (${value}) for AudioParam.`);
+            }
+        },
+        updateStatus(message) {
+            console.log(`Status Update: ${message}`);
+            const statusElement = document.getElementById("status");
+            if (statusElement) {
+                statusElement.textContent = message;
+            } else {
+                console.warn("Status element not found in the DOM.");
+            }
+        },
+        beatsToSeconds(beats) {
+            return parseFloat((60 * beats / this.BPM).toFixed(2));
+        },
+        beatsToMilliseconds(beats) {
+            return 1000 * this.beatsToSeconds(beats);
+        },
+        beatsPerSecond() {
+            return this.BPM / 60;
+        },
+        generateRandomLoop(style) {
+            try {
+                this.isLoopActive = true;
+                this.updateStatus(`Generating ${style.description}...`);
+                const [minBPM, maxBPM] = style.BPMRange;
+                this.BPM = this.clamp(parseFloat((this.random() * (maxBPM - minBPM) + minBPM).toFixed(2)), minBPM, maxBPM);
+                console.log(`Selected BPM: ${this.BPM}`);
+                const bars = 64;
+                const loopDuration = bars * 4;
+                console.log(`Loop Duration: ${loopDuration} beats`);
+
+                const scale = this.generateRandomScale(style.scales);
+                if (!scale.length) {
+                    console.warn("Generated scale is empty. Aborting loop generation.");
+                    this.cleanupLoop();
+                    return;
+                }
+                this.setAudioParam(this.masterGain.gain, 0, this.context.currentTime);
+                this.rampAudioParam(this.masterGain.gain, 0.8, this.context.currentTime + this.beatsToSeconds(0.1));
+
+                const filter = this.context.createBiquadFilter();
+                filter.type = "lowpass";
+                this.setAudioParam(filter.frequency, 15000, this.context.currentTime);
+                this.masterGain.disconnect();
+                this.masterGain.connect(filter);
+
+                const effectsChain = this.createGlobalEffectsChain(this.beatsToSeconds(loopDuration), style.effects);
+                filter.connect(effectsChain.input);
+                effectsChain.output.connect(this.context.destination);
+
+                const chordProgression = this.generateChordProgression(scale, style.chordTypes);
+                this.scheduleBeatsAndBars(loopDuration, scale, chordProgression, style);
+                this.updateStatus(`Loop active: ${bars} bars | BPM: ${this.BPM} | Style: ${style.description} | Seed: ${this.seed}`);
+                console.log("Loop generation started successfully.");
+            } catch (error) {
+                console.error("Error in generateRandomLoop:", error);
+                this.cleanupLoop();
+            }
+        },
+        generateRandomScale(preferredScales) {
+            const scales = {
+                major: [0, 2, 4, 5, 7, 9, 11],
+                minor: [0, 2, 3, 5, 7, 8, 10],
+                pentatonic: [0, 2, 4, 7, 9],
+                blues: [0, 3, 5, 6, 7, 10]
+            };
+            const baseFrequencies = [130.81, 146.83, 164.81, 174.61, 196, 220, 246.94, 261.63, 293.66, 329.63, 349.23, 392, 440, 493.88];
+            const scaleTypes = preferredScales || Object.keys(scales);
+            const selectedScaleType = scaleTypes[Math.floor(this.random() * scaleTypes.length)] || "major";
+            const rootFrequency = baseFrequencies[Math.floor(this.random() * baseFrequencies.length)] || 261.63;
+            const intervals = scales[selectedScaleType];
+            let frequencies = intervals.map(interval => {
+                let octaveShift = Math.floor(9 * this.random()) - 4;
+                let freq = rootFrequency * Math.pow(2, (interval + 12 * octaveShift) / 12);
+                freq *= 1 + 0.05 * (2 * this.random() - 1);
+                return (freq >= 20 && freq <= 16000) ? freq : null;
+            }).filter(Boolean);
+
+            this.currentScaleData = {
+                type: selectedScaleType,
+                root: rootFrequency,
+                intervals: intervals,
+                frequencies: frequencies
+            };
+            console.log(`Generated Scale (${selectedScaleType}):`, frequencies);
+            return frequencies;
+        },
+        generateChordProgression(scale, preferredChordTypes) {
+            const chordTypes = [
+                { name: 'triad', degrees: [0, 2, 4] },
+                { name: 'seventh', degrees: [0, 2, 4, 6] },
+                { name: 'sus2', degrees: [0, 1, 4] },
+                { name: 'sus4', degrees: [0, 3, 4] },
+                { name: 'sixth', degrees: [0, 2, 4, 5] },
+                { name: 'ninth', degrees: [0, 2, 4, 6, 8] }
+            ];
+            const chordTypesByName = {};
+            chordTypes.forEach(ct => chordTypesByName[ct.name] = ct);
+
+            const availableChordTypes = preferredChordTypes ? preferredChordTypes.map(name => chordTypesByName[name]) : chordTypes;
+
+            const progressionPatterns = [
+                [0, 3, 4, 3],
+                [0, 5, 3, 4],
+                [1, 4, 0, 4],
+                [0, 5, 1, 4],
+                [0, 3, 5, 4],
+                [0, 2, 3, 4]
+            ];
+            const pattern = progressionPatterns[Math.floor(this.random() * progressionPatterns.length)];
+
+            const progression = pattern.map(rootDegree => {
+                const rootIndex = rootDegree % scale.length;
+                const chordType = availableChordTypes[Math.floor(this.random() * availableChordTypes.length)];
+                return this.buildChord(scale, rootIndex, chordType);
+            });
+            console.log("Chord Progression:", progression);
+            return progression;
+        },
+        buildChord(scale, rootIndex, chordType) {
+            return chordType.degrees.map(degree => {
+                let index = (rootIndex + degree) % scale.length;
+                let octaveShift = Math.floor((rootIndex + degree) / scale.length);
+                return scale[index] * Math.pow(2, octaveShift);
+            });
+        },
+        scheduleBeatsAndBars(loopDuration, scale, chordProgression, style) {
+            const startTime = this.context.currentTime;
+            const beatsPerBar = 4;
+            const totalBars = loopDuration / beatsPerBar;
+            for (let bar = 0; bar < totalBars; bar++) {
+                for (let beat = 0; beat < beatsPerBar; beat++) {
+                    const currentTime = startTime + this.beatsToSeconds(bar * beatsPerBar + beat);
+                    const progress = parseFloat(((bar * beatsPerBar + beat + 1) / (totalBars * beatsPerBar)).toFixed(2));
+                    this.scheduleMelodicElements(currentTime, scale, chordProgression, progress);
+                    this.scheduleBassLines(currentTime, scale, progress);
+                    this.schedulePercussiveElements(currentTime, progress, style);
+                }
+            }
+        },
+        scheduleMelodicElements(time, scale, chordProgression, progress) {
+            const numElements = 1 + Math.floor(this.random() * Math.min(2, 2 * progress));
+            for (let i = 0; i < numElements; i++) {
+                const elementTime = time + i * this.beatsToSeconds(1) / numElements;
+                const chord = chordProgression[Math.floor(this.random() * chordProgression.length)];
+                if (this.random() > 0.5 && chord) {
+                    if (this.random() > 0.5) {
+                        this.scheduleChord(chord, elementTime, this.beatsToSeconds(0.9));
+                    } else {
+                        this.scheduleArpeggio(chord, elementTime, this.beatsToSeconds(0.9));
+                    }
+                } else {
+                    const freq = scale[Math.floor(this.random() * scale.length)];
+                    const gain = this.clamp(0.8 + 0.2 * this.random(), 0.5, 1);
+                    this.scheduleNote(freq, elementTime, this.beatsToSeconds(gain), true);
+                }
+            }
+        },
+        scheduleBassLines(time, scale, progress) {
+            const bassScale = scale.map(freq => freq / 2);
+            const numNotes = Math.ceil(2 * progress);
+            for (let i = 0; i < numNotes; i++) {
+                const noteTime = time + i * this.beatsToSeconds(1) / numNotes;
+                const bassFreq = bassScale[Math.floor(this.random() * bassScale.length)];
+                this.scheduleBassNote(bassFreq, noteTime, this.beatsToSeconds(0.9));
+            }
+        },
+        schedulePercussiveElements(time, progress, style) {
+            if (!style.percussiveElements) return;
+            const beatsPerBar = 4;
+            const pattern = this.generatePercussionPattern(beatsPerBar);
+            for (let beat = 0; beat < beatsPerBar; beat++) {
+                const beatTime = time + this.beatsToSeconds(beat);
+                if (pattern.kick[beat]) {
+                    this.scheduleKickDrum(beatTime);
+                }
+                if (pattern.snare[beat]) {
+                    this.scheduleSnareDrum(beatTime);
+                }
+                if (pattern.hihat[beat]) {
+                    this.scheduleHiHat(beatTime);
+                }
+            }
+        },
+        generatePercussionPattern(beatsPerBar) {
+            const pattern = {
+                kick: [],
+                snare: [],
+                hihat: []
+            };
+            for (let beat = 0; beat < beatsPerBar; beat++) {
+                pattern.kick[beat] = this.random() > 0.7;
+                pattern.snare[beat] = beat === 2 ? true : this.random() > 0.8;
+                pattern.hihat[beat] = this.random() > 0.5;
+            }
+            return pattern;
+        },
+        scheduleKickDrum(time) {
+            const oscillator = this.context.createOscillator();
+            const gainNode = this.context.createGain();
+
+            oscillator.frequency.setValueAtTime(150, time);
+            oscillator.frequency.exponentialRampToValueAtTime(50, time + 0.1);
+
+            gainNode.gain.setValueAtTime(1, time);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+
+            oscillator.connect(gainNode).connect(this.masterGain);
+            oscillator.start(time);
+            oscillator.stop(time + 0.5);
+        },
+        scheduleSnareDrum(time) {
+            const bufferSize = this.context.sampleRate;
+            const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+            const data = buffer.getChannelData(0);
+
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = this.context.createBufferSource();
+            noise.buffer = buffer;
+
+            const noiseGain = this.context.createGain();
+            noiseGain.gain.setValueAtTime(1, time);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+
+            const filter = this.context.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.setValueAtTime(1000, time);
+
+            noise.connect(filter).connect(noiseGain).connect(this.masterGain);
+            noise.start(time);
+            noise.stop(time + 0.2);
+        },
+        scheduleHiHat(time) {
+            const bufferSize = this.context.sampleRate;
+            const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+            const data = buffer.getChannelData(0);
+
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = this.context.createBufferSource();
+            noise.buffer = buffer;
+
+            const noiseGain = this.context.createGain();
+            noiseGain.gain.setValueAtTime(0.3, time);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+
+            const filter = this.context.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.setValueAtTime(5000, time);
+
+            noise.connect(filter).connect(noiseGain).connect(this.masterGain);
+            noise.start(time);
+            noise.stop(time + 0.05);
+        },
+        scheduleChord(chord, time, duration) {
+            chord.forEach(freq => {
+                this.scheduleNote(freq, time, duration, false);
+            });
+        },
+        scheduleArpeggio(chord, time, duration) {
+            const stepDuration = duration / chord.length;
+            chord.forEach((freq, index) => {
+                const noteTime = time + index * stepDuration;
+                this.scheduleNote(freq, noteTime, stepDuration, false);
+            });
+        },
+        scheduleNote(freq, time, duration, isMelody) {
+            try {
+                if (!isFinite(freq) || freq <= 0) return;
+                time = (isFinite(time) && time >= this.context.currentTime) ? time : this.context.currentTime;
+                duration = (isFinite(duration) && duration > 0) ? duration : this.beatsToSeconds(1);
+
+                const oscillator = this.context.createOscillator();
+                this.activeOscillators.add(oscillator);
+                oscillator.onended = () => {
+                    this.activeOscillators.delete(oscillator);
+                    oscillator.disconnect();
+                };
+
+                const gainNode = this.context.createGain();
+                const panner = this.context.createStereoPanner();
+
+                oscillator.frequency.setValueAtTime(freq, time);
+                const waveTypes = ["sine", "square", "sawtooth", "triangle"];
+                const waveType = waveTypes[Math.floor(4 * this.random())] || "sine";
+                oscillator.type = waveType;
+
+                oscillator.connect(gainNode);
+                this.setAudioParam(gainNode.gain, 0, time);
+                this.rampAudioParam(gainNode.gain, this.clamp(0.3 * this.random() + 0.2, 0.2, 1), time + this.beatsToSeconds(0.05));
+                this.rampAudioParam(gainNode.gain, 0, time + duration);
+
+                const panValue = this.clamp(2 * this.random() - 1, -1, 1);
+                this.setAudioParam(panner.pan, panValue, time);
+
+                gainNode.connect(panner).connect(this.masterGain);
+
+                if (this.random() > 0.4) {
+                    this.applyDelayEffect(gainNode, time, duration);
+                }
+
+                oscillator.start(time);
+                oscillator.stop(time + duration);
+            } catch (error) {
+                console.error("Error in scheduleNote:", error);
+            }
+        },
+        scheduleBassNote(freq, time, duration) {
+            try {
+                const oscillator = this.context.createOscillator();
+                const gainNode = this.context.createGain();
+                const filter = this.context.createBiquadFilter();
+
+                oscillator.type = "sawtooth";
+                this.setAudioParam(oscillator.frequency, freq, time);
+                this.setAudioParam(gainNode.gain, 0, time);
+                this.rampAudioParam(gainNode.gain, 0.6, time + this.beatsToSeconds(0.05));
+                this.rampAudioParam(gainNode.gain, 0, time + duration);
+
+                filter.type = "lowpass";
+                this.setAudioParam(filter.frequency, 500, time);
+
+                oscillator.connect(filter).connect(gainNode).connect(this.masterGain);
+                oscillator.start(time);
+                oscillator.stop(time + duration);
+            } catch (error) {
+                console.error("Error in scheduleBassNote:", error);
+            }
+        },
+        applyDelayEffect(sourceNode, time, duration) {
+            try {
+                const delay = this.context.createDelay();
+                const feedbackGain = this.context.createGain();
+                const mixGain = this.context.createGain();
+                const wetGain = this.context.createGain();
+
+                const delayTime = this.clamp(this.beatsToSeconds(0.5), 0.1, 2);
+                const feedbackLevel = this.clamp(0.5 * this.random() + 0.2, 0.2, 0.7);
+
+                this.setAudioParam(delay.delayTime, delayTime, time);
+                this.setAudioParam(feedbackGain.gain, feedbackLevel, time);
+                this.setAudioParam(mixGain.gain, 0.3, time);
+                this.setAudioParam(wetGain.gain, 0.7, time);
+
+                delay.connect(feedbackGain).connect(delay);
+                sourceNode.connect(delay).connect(mixGain).connect(this.masterGain);
+                sourceNode.connect(wetGain).connect(this.masterGain);
+            } catch (error) {
+                console.error("Error in applyDelayEffect:", error);
+            }
+        },
+        createGlobalEffectsChain(duration, preferredEffects) {
+            const effects = [];
+            const effectFunctions = {
+                'reverb': this.createReverbEffect.bind(this),
+                'distortion': this.createDistortionEffect.bind(this),
+                'chorus': this.createChorusEffect.bind(this),
+                'phaser': this.createPhaserEffect.bind(this),
+                'compressor': this.createCompressorEffect.bind(this)
+            };
+
+            preferredEffects.forEach(effectName => {
+                if (effectFunctions[effectName]) {
+                    const effect = effectFunctions[effectName]();
+                    effects.push(effect);
+                    console.log(`Global Effects Chain: Added ${effectName.charAt(0).toUpperCase() + effectName.slice(1)} Effect`);
+                }
+            });
+
+            let inputNode = this.context.createGain();
+            let outputNode = inputNode;
+
+            effects.forEach(effect => {
+                outputNode.connect(effect.input);
+                outputNode = effect.output;
+            });
+
+            return { input: inputNode, output: outputNode };
+        },
+        createReverbEffect() {
+            const convolver = this.context.createConvolver();
+            const buffer = this.context.createBuffer(2, 3 * this.context.sampleRate, this.context.sampleRate);
+            for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+                const data = buffer.getChannelData(channel);
+                for (let i = 0; i < data.length; i++) {
+                    data[i] = 2 * this.random() - 1;
+                }
+            }
+            convolver.buffer = buffer;
+            return { input: convolver, output: convolver };
+        },
+        createDistortionEffect() {
+            const distortion = this.context.createWaveShaper();
+            const curve = new Float32Array(44100);
+            const amount = this.clamp(400 * this.random(), 0, 1000);
+            const deg = Math.PI / 180;
+            for (let i = 0; i < 44100; ++i) {
+                const x = i * 2 / 44100 - 1;
+                curve[i] = (3 + amount) * x * 20 * deg / (Math.PI + amount * Math.abs(x));
+            }
+            distortion.curve = curve;
+            distortion.oversample = '4x';
+            return { input: distortion, output: distortion };
+        },
+        createChorusEffect() {
+            const delayNode = this.context.createDelay();
+            delayNode.delayTime.value = this.clamp(0.005 + 0.02 * this.random(), 0.005, 0.03);
+            const lfo = this.context.createOscillator();
+            lfo.frequency.value = this.clamp(0.1 + 0.4 * this.random(), 0.1, 0.5);
+            const lfoGain = this.context.createGain();
+            lfoGain.gain.value = this.clamp(0.005 + 0.005 * this.random(), 0.005, 0.01);
+            lfo.connect(lfoGain).connect(delayNode.delayTime);
+            lfo.start();
+            return { input: delayNode, output: delayNode };
+        },
+        createPhaserEffect() {
+            const phaserStages = 4;
+            let inputNode = this.context.createGain();
+            let lastNode = inputNode;
+            const lfo = this.context.createOscillator();
+            lfo.frequency.value = this.clamp(0.05 + 0.2 * this.random(), 0.05, 0.25);
+            const lfoGain = this.context.createGain();
+            lfoGain.gain.value = this.clamp(500 + 500 * this.random(), 500, 1000);
+
+            for (let i = 0; i < phaserStages; i++) {
+                const allpass = this.context.createBiquadFilter();
+                allpass.type = 'allpass';
+                allpass.frequency.value = 1000 * (i + 1);
+                lfo.connect(lfoGain).connect(allpass.frequency);
+                lastNode.connect(allpass);
+                lastNode = allpass;
+            }
+
+            lfo.start();
+            return { input: inputNode, output: lastNode };
+        },
+        createCompressorEffect() {
+            const compressor = this.context.createDynamicsCompressor();
+            compressor.threshold.value = this.clamp(-50 + -20 * this.random(), -90, 0);
+            compressor.knee.value = this.clamp(10 + 30 * this.random(), 0, 40);
+            compressor.ratio.value = this.clamp(4 + 8 * this.random(), 1, 20);
+            compressor.attack.value = this.clamp(0.005 + 0.05 * this.random(), 0, 1);
+            compressor.release.value = this.clamp(0.05 + 0.3 * this.random(), 0, 1);
+            return { input: compressor, output: compressor };
+        },
+        cleanupLoop() {
+            try {
+                this.masterGain.disconnect();
+                this.masterGain.connect(this.context.destination);
+                this.setAudioParam(this.masterGain.gain, 0, this.context.currentTime);
+                this.rampAudioParam(this.masterGain.gain, 1, this.context.currentTime + this.beatsToSeconds(0.1));
+                this.activeOscillators.forEach(osc => {
+                    osc.stop();
+                    osc.disconnect();
+                });
+                this.activeOscillators.clear();
+                this.isLoopActive = false;
+                this.updateStatus("Loop stopped.");
+                console.log("Loop cleanup completed.");
+            } catch (error) {
+                console.warn("Error during loop cleanup:", error);
+            }
+        }
+    }).init();
+})();
+</script>
+
+    
+</body>
+</html>

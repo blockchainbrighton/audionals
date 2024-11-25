@@ -1,0 +1,2 @@
+// loadPlayerScripts.js
+document.addEventListener("dataLoadingComplete",(e=>{const c=e=>{if(0===e.length)return;const d=e.shift(),t=document.createElement("script");t.src=d,t.async=!1,t.onload=()=>c(e),t.onerror=t=>{console.error(`[Script Loader] Error loading script: ${d}`,t),c(e)},document.body.appendChild(t)};c(["/content/5c03e882ab5a531271b2e93a80d8a9d72cb533c580bec1567020f5cd61595560i0","/content/7b305327f2951d219532ef0cb46b2039b23f2cfd0d8d0e827f3fe1b2b754b5a9i0","/content/8b5b09cfedbc0c6a187816181f8d33f90c5bbd15fc10af47008176effb866a47i0"]),updateSeedDisplay()}));

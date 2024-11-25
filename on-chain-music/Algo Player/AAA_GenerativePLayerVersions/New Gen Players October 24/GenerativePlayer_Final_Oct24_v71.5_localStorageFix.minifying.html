@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Audionals - Web3 Music Player</title>
+<link rel="stylesheet" href="/content/7a309a161e838ba93740684338b3d97f3c1226c046d8b1137afc2353b4bf16e1i0">
+<style>
+:root {--panel-bg-color: #333;--panel-text-color: #fff;--track-list-panel-bg-color: #444;--button-bg-color: #444;--button-hover-bg-color: #555;--button-active-bg-color: #777;--input-bg-color: #555;--border-radius: 8px;--padding: 10px;--box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);--transition-duration: 0.3s;--text-color: #fff;--bpm-bg-color: orange;--seed-bg-color: green;--font-size: 16px;--play-button-green: #00ff00;--play-button-red: #ff0000;}#seed-management-panel, #track-list-panel {position: fixed;background-color: var(--panel-bg-color);color: var(--panel-text-color);padding: var(--padding);border-radius: var(--border-radius);z-index: 10000;box-shadow: var(--box-shadow);transition: all var(--transition-duration) ease;}#seed-management-panel {top: 10px;right: 10px;width: 400px;}#track-list-panel {bottom: 10px;left: 10px;width: 300px;background-color: var(--track-list-panel-bg-color);}.hidden {display: none;}@media (max-width: 600px) {#seed-management-panel, #track-list-panel {width: 90%;left: 5%;right: 5%;}}#seed-mgmt-canvas {width: 100%;height: 100px;border: 1px solid #555;border-radius: 4px;background-color: #222;}.dropdown-container {position: relative;margin-top: 15px;width: 100%;}.dropdown-button {background-color: #444;color: #fff;padding: 8px 12px;font-size: 16px;border: none;border-radius: 4px;cursor: pointer;width: 100%;text-align: left;display: flex;justify-content: space-between;align-items: center;transition: background-color var(--transition-duration) ease;}.dropdown-button:hover {background-color: #555;}.dropdown-content {display: none;position: absolute;background-color: #444;min-width: 100%;max-height: 200px;overflow-y: auto;border: 1px solid #555;border-radius: 4px;z-index: 1;margin-top: 5px;}.dropdown-content li {list-style: none;display: flex;justify-content: space-between;align-items: center;padding: 5px 10px;border-bottom: 1px solid #555;}.dropdown-content li:last-child {border-bottom: none;}.dropdown-content li .seed-text {flex: 1;margin-right: 10px;word-break: break-all;}.dropdown-content li button.copy-button, .dropdown-content li button.clear-button {background-color: #666;color: #fff;border: none;border-radius: 4px;padding: 4px 8px;cursor: pointer;transition: background-color var(--transition-duration) ease;margin-left: 5px;font-size: 14px;}.dropdown-content li button.copy-button:hover, .dropdown-content li button.clear-button:hover {background-color: #888;}.dropdown-content.show {display: block;}.dropdown-content {transition: max-height 0.3s ease;}#seed-input-section {margin-top: 15px;}#seed-input {width: 100%;padding: 8px;margin-bottom: 5px;border: 1px solid #555;border-radius: 4px;background-color: var(--input-bg-color);color: var(--panel-text-color);transition: border 0.2s ease;}#seed-input:focus {border: 2px solid #00f;outline: none;}#clear-buttons {margin-top: 15px;text-align: center;}#clear-seeds-button, #clear-favourites-button {width: 100%;padding: 8px;background-color: #b22222;color: #fff;border: none;border-radius: 4px;cursor: pointer;transition: background-color var(--transition-duration) ease;margin-top: 5px;}#clear-seeds-button:hover, #clear-favourites-button:hover {background-color: #ff6347;}button {background-color: var(--button-bg-color);color: var(--panel-text-color);border: none;border-radius: 4px;cursor: pointer;transition: background-color var(--transition-duration) ease;padding: 10px 15px;margin: 5px;}button:hover {background-color: var(--button-hover-bg-color);}button:active {background-color: var(--button-active-bg-color);}button:focus {outline: 2px solid #00f;}#loadingSpinner {z-index: 1000;}#artworkCover img {max-width: 100%;height: auto;border-radius: 4px;}#nowPlayingContainer {position: fixed;bottom: 0;left: 50%;transform: translateX(-50%);background-color: rgba(20, 20, 20, 0.95);color: #fff;padding: 10px;display: flex;flex-direction: column;justify-content: center;align-items: center;box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.5);z-index: 10000;text-align: center;border-radius: 8px;width: 90%;max-width: 600px;transition: background-color 0.3s ease;}#nowPlayingContainer:hover {background-color: rgba(20, 20, 20, 1);}#nowPlayingText {display: flex;flex-direction: column;align-items: center;margin: 0;padding: 5px;text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);}#nowPlayingContainer .current-seed {display: block;font-size: 0.9em;color: #ccc;margin-bottom: 5px;}#nowPlayingContainer .title {display: block;font-size: 1.2em;font-weight: bold;color: #fff;}.tooltip {position: relative;display: inline-block;cursor: pointer;}.tooltip .tooltiptext {visibility: hidden;width: 140px;background-color: #555;color: #fff;text-align: center;border-radius: 6px;padding: 5px 0;position: absolute;z-index: 1;bottom: -60%;left: 50%;margin-left: -70px;opacity: 0;transition: opacity 0.3s;}.tooltip .tooltiptext::after {content: "";position: absolute;top: 100%;left: 50%;margin-left: -5px;border-width: 5px;border-style: solid;border-color: #555 transparent transparent transparent;}.tooltip:hover .tooltiptext {visibility: visible;opacity: 1;background-color: orange;}#clear-buttons, #copy-buttons {margin-top: 10px;}#clear-buttons button, #copy-buttons button {margin-right: 10px;padding: 5px 10px;cursor: pointer;}
+#toggle-seed-panel-button, #nextButton, #prevButton {background-color: #777 !important;color: #000 !important;}#playButton {background-color: var(--play-button-green)!important;color: #000;}#playButton.paused {background-color: var(--play-button-green);color: #000;}#playButton.playing {background-color: var(--play-button-red);color: #fff;}
+#addToFavourites {background-color: #ff0000 !important;color: #fff !important;position: relative;display: inline-block;border: none;padding: 10px;cursor: pointer;font-size: 16px;border-radius: 5px;}.tooltip {position: relative;}.tooltip .tooltiptext {visibility: hidden;width: 150px;background-color: #555;color: #fff;text-align: center;border-radius: 6px;padding: 5px;position: absolute;bottom: -75%;left: 50%;margin-left: -75px;opacity: 0;transition: opacity 0.3s;z-index: 1;}.tooltip:hover .tooltiptext {visibility: visible;opacity: 1;}
+</style>
+</head>
+<body>
+<HTMLsection>
+<span class="songTitle">The Infinite Ordinal Remix</span><h1>Audionals</h1><div id="seed-management-panel" class="hidden" role="dialog" aria-labelledby="seed-panel-title" aria-hidden="true"><h2 id="seed-panel-title">Seed Management</h2><canvas id="seed-mgmt-canvas" class="hidden" width="300" height="100" aria-label="Seed and BPM Information"></canvas><div id="seed-input-section"><h3>Load a Specific Seed</h3><label for="seed-input">Enter a 16-digit Seed or List of Seeds</label><input type="text" id="seed-input" placeholder="Enter 16-digit Seed" aria-label="Enter Seed"><button id="load-seed-button" onclick="loadSeedsFromInput()" aria-label="Load Seed">Load Seed</button></div><div id="seed-actions"><h3>Seed Actions</h3></div><div id="previous-seeds-container" class="dropdown-container"><button id="previous-seeds-button" class="dropdown-button" aria-haspopup="true" aria-expanded="false">Previous Seeds ▼</button><ul id="previous-seeds-list" class="dropdown-content" role="listbox" aria-labelledby="previous-seeds-button"><p id="seed-list-desc" class="visually-hidden">List of previously used seeds. Click on a seed to load it.</p></ul><button id="copy-previous-seeds-button" onclick="copyPreviousSeeds()" aria-label="Copy Previous Seeds">Copy Previous Seeds</button></div><div id="favourites-seeds-container" class="dropdown-container"><button id="favourites-seeds-button" class="dropdown-button" aria-haspopup="true" aria-expanded="false">Favorites Seeds ▼</button><ul id="favourites-seeds-list" class="dropdown-content" role="listbox" aria-labelledby="favourites-seeds-button"><p id="favourites-seed-list-desc" class="visually-hidden">List of favorite seeds. Click on a seed to load it.</p></ul><button id="copy-favourites-seeds-button" onclick="copyFavouritesSeeds()" aria-label="Copy Favorites Seeds">Copy Favorites Seeds</button></div><div id="clear-buttons"><button id="clear-seeds-button" onclick="clearPreviousSeeds()" aria-label="Clear Previous Seeds">Clear Previous Seeds</button><button id="clear-favourites-button" onclick="clearFavouritesSeeds()" aria-label="Clear Favourites Seeds">Clear Favorites List</button></div><div id="seed-loading-indicator" class="hidden" aria-live="polite"><p>Loading seed information...</p></div><div class="bpm-selection"><div class="bpm-options hidden"></div></div></div><div id="loadingSpinner"></div><div id="artworkCover"><img id="artworkImage" src="" alt="Artwork Cover"></div><div id="trackListingPanel"><h2>Track Listings:</h2><div id="metadataContent"></div></div><div id="nowPlayingContainer"><span class="current-seed">Seed: N/A</span><span class="title">The Infinite Ordinal Remix</span><span class="artistName">AUDIONALS</span><span class="songBPM">BPM: N/A</span><span class="timeLeft">Time Left: N/A</span><span class="songTitle" style="display:none"></span></div><div id="buttonContainer"><button id="playButton" onclick="globalData.togglePlayback()" aria-label="Play or Stop Music">Play</button><button id="prevButton" onclick="handlePreviousSong()" aria-label="Previous Song">Previous</button><button id="nextButton" onclick="handleNextSong()" aria-label="Next Song">Next</button>
+<button id="addToFavourites" onclick="addCurrentSeedToFavourites()" aria-label="Add to Favourite List" class="tooltip">
+❤️
+<span class="tooltiptext">Add to Favourites</span>
+</button>
+<button id="toggle-seed-panel-button" onclick='togglePanel("seed-management-panel")' aria-label="Toggle Seed Management Panel" class="tooltip">Seed Management</button></div>
+</HTMLsection>
+<!-- Songs and Artwork -->
+<script src="/content/616ef4c1bef02cb6c0f785ef76b98df4e379e8f01e2b31e2ae9e68449485f2bci0"></script>    
+<!-- Updated Global Data Initialization -->
+<script>
+    window.globalData
+      ? console.log("[Global Data] globalData already exists. Skipping initialization.")
+      : (
+        window.globalData = {
+          isPlaying: false,
+          currentSongIndex: 0,
+          songsArray: [],
+          audioBuffers: {},
+          reverseAudioBuffers: {},
+          audioContext: new (window.AudioContext || window.webkitAudioContext)(), // Initialized in suspended state
+          masterGain: null,
+          gainNodes: {},
+          startPlayback: null,
+          stopPlayback: null,
+          togglePlayback: null,
+          resetPlayback: null,
+          isArtworkCover: true,
+          isVisualiserCover: false,
+          isMasterGainInitialized: false,
+          isAudioContextInitialized: false, // Updated to false
+          isPlaybackStarting: false,
+          isProceedingToNextSong: false,
+          playbackInterval: null,
+          seedList: [],
+          currentSeed: null,
+          hasProceededToNextSong: false,
+          hasLoggedPlaybackNotActive: false,
+          hasCompletedSequences: false,
+          loopSampleData: [
+            {
+              id: "7c42769c1763cc8f045aada7914e8158223e45e7a4f197b49f918b1c005d36fci0",
+              bpm: 92.5,
+              trimStart: 0,
+              trimEnd: 0
+            },
+            {
+              id: "3364803cb3032ce95f4138a214c15a9b36dcb70f574a477f27615d448e1cdeb8i0",
+              bpm: 105,
+              trimStart: 0.009,
+              trimEnd: 0
+            }
+          ],
+          getLoopSampleInfo: function(a) {
+            return this.loopSampleData.find((n) => n.id === a);
+          },
+          initializeAudio: function() {
+            if (this.isAudioContextInitialized) return;
+    
+            this.audioContext.resume().then(() => {
+              console.log("[Global Data] AudioContext resumed.");
+              
+              // Create and connect the masterGain node
+              this.masterGain = this.audioContext.createGain();
+              this.masterGain.connect(this.audioContext.destination);
+              this.isMasterGainInitialized = true;
+    
+              this.isAudioContextInitialized = true;
+    
+              // Optionally, remove event listeners after initialization
+              this.removeInitEventListeners();
+            }).catch((error) => {
+              console.error("[Global Data] Error resuming AudioContext:", error);
+            });
+          },
+          addInitEventListeners: function() {
+            // List of events that can trigger audio initialization
+            const events = ['click', 'touchstart', 'keydown'];
+    
+            // Bind the initializeAudio method to preserve context
+            this.boundInitializeAudio = this.initializeAudio.bind(this);
+    
+            events.forEach(event => {
+              document.addEventListener(event, this.boundInitializeAudio, { once: true });
+            });
+          },
+          removeInitEventListeners: function() {
+            const events = ['click', 'touchstart', 'keydown'];
+            events.forEach(event => {
+              document.removeEventListener(event, this.boundInitializeAudio);
+            });
+          }
+        },
+        console.log("[Global Data] Initialized globalData.")
+      );
+    
+    // Define nextSong function if not already defined
+    window.globalData.nextSong ||
+      (window.globalData.nextSong = function() {
+        if (this.songsArray.length !== 0) {
+          this.currentSongIndex = (this.currentSongIndex + 1) % this.songsArray.length;
+          console.log(`Switched to next song: Index ${this.currentSongIndex}`);
+        }
+      },
+      console.log("[Global Data] nextSong function defined."));
+    
+    // Define previousSong function if not already defined
+    window.globalData.previousSong ||
+      (window.globalData.previousSong = function() {
+        if (this.songsArray.length !== 0) {
+          this.currentSongIndex = (this.currentSongIndex - 1 + this.songsArray.length) % this.songsArray.length;
+          console.log(`Switched to previous song: Index ${this.currentSongIndex}`);
+        }
+      },
+      console.log("[Global Data] previousSong function defined."));
+    
+    // Initialize audio context on user gesture
+    window.globalData.addInitEventListeners();
+    </script>
+    
+<!-- Updated Seed Management Script -->
+<script>
+    (function(){
+        window.globalData = window.globalData || {
+            seedList: [],
+            currentSeed: "",
+            songsArray: [],
+            currentSongIndex: 0,
+            isPlaying: false,
+            togglePlayback: function(){
+                this.isPlaying = !this.isPlaying;
+                console.log(`Playback is now ${this.isPlaying ? "playing" : "paused"}.`);
+            }
+        };
+    
+        // Initialize in-memory storage for seeds
+        window.globalData.previousSeeds = window.globalData.previousSeeds || [];
+        window.globalData.favouriteSeedsList = window.globalData.favouriteSeedsList || [];
+    
+        const logMessage = message => console.log(`[${(new Date).toISOString()}] ${message}`);
+    
+        function generateRandomSeed(){
+            let seed = "";
+            for(let i = 0; i < 16; i++) seed += Math.floor(10 * Math.random());
+            return seed;
+        }
+    
+        function validateSeed(seed){
+            return /^\d{16}$/.test(seed);
+        }
+    
+        function generateBPM(seed, index){
+            const bpmOptions = [60, 120, 140, 160, 180, 240];
+            const prng = (function(seedValue){
+                let modulus = 0x10000000000000n,
+                    multiplier = 6364136223846793005n,
+                    increment = 1n,
+                    state = BigInt(seedValue) || 0n;
+                return function(){
+                    state = (multiplier * state + increment) % modulus;
+                    return Number(state) / Number(modulus);
+                };
+            })(seed + index);
+            return bpmOptions[Math.floor(prng() * bpmOptions.length)];
+        }
+    
+        function updatePreviousSeedsDisplay(){
+            const container = document.getElementById("previous-seeds-container");
+            if (!container){
+                console.warn("Previous seeds container not found.");
+                return;
+            }
+            const list = container.querySelector("#previous-seeds-list");
+            if (list){
+                list.innerHTML = window.globalData.previousSeeds.length
+                    ? window.globalData.previousSeeds.map(seed => `
+                        <li>
+                            <span class="seed-text">${seed}</span>
+                            <div>
+                                <button class="copy-button" onclick="copyToClipboard('${seed}')" aria-label="Copy seed ${seed}">Copy</button>
+                                <button class="clear-button" onclick="removeSeedFromPrevious('${seed}')" aria-label="Remove seed ${seed}">Clear</button>
+                            </div>
+                        </li>
+                    `).join("")
+                    : "<li>No previous seeds.</li>";
+            } else {
+                console.warn("Previous seeds list not found.");
+            }
+        }
+    
+        function updateFavouriteSeedsDisplay(){
+            const container = document.getElementById("favourites-seeds-container");
+            if (!container){
+                console.warn("Favourites seeds container not found.");
+                return;
+            }
+            const list = container.querySelector("#favourites-seeds-list");
+            if (list){
+                list.innerHTML = window.globalData.favouriteSeedsList.length
+                    ? window.globalData.favouriteSeedsList.map(seed => `
+                        <li>
+                            <span class="seed-text">${seed}</span>
+                            <div>
+                                <button class="copy-button" onclick="copyToClipboard('${seed}')" aria-label="Copy seed ${seed}">Copy</button>
+                                <button class="clear-button" onclick="removeSeedFromFavourites('${seed}')" aria-label="Remove seed ${seed}">Clear</button>
+                            </div>
+                        </li>
+                    `).join("")
+                    : "<li>No favourite seeds.</li>";
+            } else {
+                console.warn("Favourites seeds list not found.");
+            }
+        }
+    
+        function toggleDropdown(e){
+            const buttonId = e.currentTarget.id;
+            const listId = buttonId === "previous-seeds-button" ? "previous-seeds-list"
+                          : buttonId === "favourites-seeds-button" ? "favourites-seeds-list"
+                          : null;
+            if (!listId) return;
+            const list = document.getElementById(listId);
+            const isShown = list.classList.contains("show");
+            document.querySelectorAll(".dropdown-content").forEach(el => el.classList.remove("show"));
+            document.querySelectorAll(".dropdown-button").forEach(el => el.setAttribute("aria-expanded", "false"));
+            if (isShown){
+                list.classList.remove("show");
+                e.currentTarget.setAttribute("aria-expanded", "false");
+            } else {
+                list.classList.add("show");
+                e.currentTarget.setAttribute("aria-expanded", "true");
+            }
+        }
+    
+        function handleClickOutsideDropdown(e){
+            if (!e.target.matches(".dropdown-button")){
+                document.querySelectorAll(".dropdown-content").forEach(el => el.classList.remove("show"));
+                document.querySelectorAll(".dropdown-button").forEach(el => el.setAttribute("aria-expanded", "false"));
+            }
+        }
+    
+        (function initializeSeedList(){
+            const urlParams = new URLSearchParams(window.location.search);
+            let seedList = [];
+            if (urlParams.has("seed")){
+                seedList = urlParams.get("seed").split(/[\s,]+/).map(s => s.trim()).filter(s => s !== "");
+                seedList = seedList.map(seed => validateSeed(seed) ? seed.padStart(16, "0") : (logMessage(`Invalid seed provided: "${seed}". Generating a new seed.`), generateRandomSeed()));
+                logMessage(`Using user-provided seed(s): ${seedList.join(", ")}`);
+                urlParams.delete("seed");
+                history.replaceState(null, "", `${window.location.pathname}?${urlParams.toString()}`);
+            } else {
+                const randomSeed = generateRandomSeed();
+                seedList = (function generateSequentialSeeds(initialSeed, count){
+                    const seeds = [initialSeed];
+                    let seedNumber = BigInt(initialSeed);
+                    for (let i = 1; i < count; i++){
+                        seedNumber += 1n;
+                        seeds.push(seedNumber.toString().padStart(16, "0"));
+                    }
+                    return seeds;
+                })(randomSeed, 100);
+                logMessage(`No user-provided seeds. Generated random seed "${randomSeed}" and created 100 sequential seeds.`);
+            }
+            window.globalData.seedList = seedList;
+            window.globalData.currentSeed = seedList[0];
+            window.globalData.songsArray = seedList.map((seed, index) => ({
+                id: "The Infinite Ordinal",
+                projectName: "The Infinite Ordinal",
+                artist: "Unknown Artist",
+                bpm: generateBPM(seed, index),
+                channels: [],
+                projectSequences: {},
+                seed: seed
+            }));
+            logMessage(`Initialized seedList with ${window.globalData.seedList.length} seeds.`);
+        })();
+    
+        window.togglePanel = function(panelId){
+            const panel = document.getElementById(panelId);
+            if (panel){
+                panel.classList.toggle("hidden");
+                const isHidden = panel.classList.contains("hidden");
+                panel.setAttribute("aria-hidden", isHidden);
+                if (!isHidden && panelId === "seed-management-panel"){
+                    updatePreviousSeedsDisplay();
+                    updateFavouriteSeedsDisplay();
+                }
+            } else {
+                console.error(`${panelId.replace(/-/g, " ")} not found.`);
+            }
+        };
+    
+        window.copyToClipboard = function(text){
+            navigator.clipboard.writeText(text).then(() => {
+                alert(`Seed copied to clipboard: ${text}`);
+            }).catch(err => {
+                console.error("Could not copy text:", err);
+            });
+        };
+    
+        window.clearPreviousSeeds = function(){
+            if (confirm("Are you sure you want to clear all previous seeds?")){
+                window.globalData.previousSeeds = [];
+                updatePreviousSeedsDisplay();
+                logMessage("All previous seeds have been cleared.");
+                alert("Previous seeds have been cleared.");
+            }
+        };
+    
+        window.clearFavouritesSeeds = function(){
+            if (confirm("Are you sure you want to clear all favorite seeds?")){
+                window.globalData.favouriteSeedsList = [];
+                updateFavouriteSeedsDisplay();
+                logMessage("All favorite seeds have been cleared.");
+                alert("Favorites seeds have been cleared.");
+            }
+        };
+    
+        window.loadSeedsFromInput = function(){
+            const inputField = document.getElementById("seed-input");
+            if (!inputField){
+                alert("Seed input field not found.");
+                return;
+            }
+            const seeds = inputField.value.trim().split(/[\s,]+/).map(s => s.trim()).filter(s => s !== "");
+            if (seeds.length === 0){
+                alert("Please enter at least one seed.");
+                return;
+            }
+            const validSeeds = seeds.map(seed => {
+                if (!/^\d+$/.test(seed)){
+                    alert(`Invalid seed format: "${seed}". Seeds must contain only numeric characters.`);
+                    throw new Error(`Invalid seed: "${seed}"`);
+                }
+                return seed.padStart(16, "0");
+            });
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set("seed", validSeeds.join(","));
+            const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+            console.log(`Redirecting to: ${newUrl}`);
+            window.location.href = newUrl;
+        };
+    
+        window.displaySeedAndBPM = function(seed, bpm, songTitle){
+            const canvas = document.getElementById("seed-mgmt-canvas");
+            if (!canvas){
+                console.warn("Seed management canvas not found.");
+                return;
+            }
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--seed-bg-color") || "green";
+            ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--bpm-bg-color") || "orange";
+            ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--text-color") || "white";
+            ctx.font = `${getComputedStyle(document.documentElement).getPropertyValue("--font-size") || "16px"} Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(`Seed: ${seed}`, canvas.width / 2, canvas.height / 4);
+            ctx.fillText(`BPM: ${bpm}`, canvas.width / 2, 3 * canvas.height / 4);
+    
+            // Add seed to previousSeeds if not already present
+            if (!window.globalData.previousSeeds.includes(seed)){
+                window.globalData.previousSeeds.push(seed);
+                updatePreviousSeedsDisplay();
+                logMessage(`Seed saved: ${seed}`);
+            }
+    
+            // Update current seed display
+            const seedDisplay = document.querySelector("#nowPlayingContainer .current-seed");
+            if (seedDisplay){
+                seedDisplay.textContent = `Seed: ${seed}`;
+                logMessage(`Updated current seed display: ${seed}`);
+            }
+    
+            // Update song title if provided
+            const titleDisplay = document.querySelector("#nowPlayingContainer .title");
+            if (titleDisplay && songTitle){
+                titleDisplay.textContent = songTitle;
+                logMessage(`Updated current song title: ${songTitle}`);
+            }
+        };
+    
+        window.addCurrentSeedToFavourites = function(){
+            const seed = window.globalData.currentSeed;
+            if (!seed || !validateSeed(seed)){
+                alert("No valid current seed available to add to favourites.");
+                return;
+            }
+            if (window.globalData.favouriteSeedsList.includes(seed)){
+                alert("This seed is already in your favourites.");
+                return;
+            }
+            window.globalData.favouriteSeedsList.push(seed);
+            updateFavouriteSeedsDisplay();
+            alert("Seed added to favourites successfully!");
+            logMessage(`Seed added to favourites: ${seed}`);
+        };
+    
+        window.loadSpecificSeed = function(seed){
+            if (!validateSeed(seed)){
+                alert(`Invalid seed format: "${seed}". Seeds must be 16-digit numeric strings.`);
+                return;
+            }
+            window.globalData.seedList = [seed];
+            window.globalData.currentSeed = seed;
+            window.globalData.songsArray = [{
+                id: "Remix",
+                projectName: "The Infinite Ordinal Remix",
+                artist: "Unknown Artist",
+                bpm: generateBPM(seed, 0),
+                channels: [],
+                projectSequences: {},
+                seed: seed
+            }];
+            logMessage(`Loaded seed: ${seed}`);
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set("seed", seed);
+            const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+            logMessage(`Redirecting to: ${newUrl}`);
+            window.location.href = newUrl;
+        };
+    
+        window.removeSeedFromPrevious = function(seed){
+            if (confirm(`Are you sure you want to remove the seed ${seed} from Previous Seeds?`)){
+                window.globalData.previousSeeds = window.globalData.previousSeeds.filter(s => s !== seed);
+                updatePreviousSeedsDisplay();
+                logMessage(`Seed removed from Previous Seeds: ${seed}`);
+                alert(`Seed ${seed} has been removed from Previous Seeds.`);
+            }
+        };
+    
+        window.removeSeedFromFavourites = function(seed){
+            if (confirm(`Are you sure you want to remove the seed ${seed} from Favourites?`)){
+                window.globalData.favouriteSeedsList = window.globalData.favouriteSeedsList.filter(s => s !== seed);
+                updateFavouriteSeedsDisplay();
+                logMessage(`Seed removed from Favourites: ${seed}`);
+                alert(`Seed ${seed} has been removed from Favourites.`);
+            }
+        };
+    
+        window.copyPreviousSeeds = function(){
+            const seeds = window.globalData.previousSeeds;
+            if (seeds.length === 0){
+                alert("There are no previous seeds to copy.");
+                return;
+            }
+            const seedsText = seeds.join(", ");
+            navigator.clipboard.writeText(seedsText).then(() => {
+                alert("Previous seeds copied to clipboard!");
+                logMessage("Previous seeds copied to clipboard.");
+            }).catch(err => {
+                console.error("Could not copy previous seeds:", err);
+                alert("Failed to copy previous seeds.");
+            });
+        };
+    
+        window.copyFavouritesSeeds = function(){
+            const seeds = window.globalData.favouriteSeedsList;
+            if (seeds.length === 0){
+                alert("There are no favourite seeds to copy.");
+                return;
+            }
+            const seedsText = seeds.join(", ");
+            navigator.clipboard.writeText(seedsText).then(() => {
+                alert("Favourite seeds copied to clipboard!");
+                logMessage("Favourite seeds copied to clipboard.");
+            }).catch(err => {
+                console.error("Could not copy favourite seeds:", err);
+                alert("Failed to copy favourite seeds.");
+            });
+        };
+    
+        document.addEventListener("DOMContentLoaded", () => {
+            if (window.globalData.songsArray.length > 0){
+                const currentSong = window.globalData.songsArray[window.globalData.currentSongIndex];
+                displaySeedAndBPM(currentSong.seed, currentSong.bpm, currentSong.projectName);
+            }
+            updatePreviousSeedsDisplay();
+            updateFavouriteSeedsDisplay();
+    
+            const previousSeedsButton = document.getElementById("previous-seeds-button");
+            const favouritesSeedsButton = document.getElementById("favourites-seeds-button");
+            if (previousSeedsButton) previousSeedsButton.addEventListener("click", toggleDropdown);
+            if (favouritesSeedsButton) favouritesSeedsButton.addEventListener("click", toggleDropdown);
+    
+            window.addEventListener("click", handleClickOutsideDropdown);
+    
+            const previousSeedsList = document.getElementById("previous-seeds-list");
+            if (previousSeedsList){
+                previousSeedsList.addEventListener("click", function(e){
+                    if (e.target && e.target.matches("button.seed-item")){
+                        const seed = e.target.getAttribute("data-seed");
+                        if (seed){
+                            loadSpecificSeed(seed);
+                            togglePanel("seed-management-panel");
+                        }
+                    }
+                });
+            }
+    
+            const favouritesSeedsList = document.getElementById("favourites-seeds-list");
+            if (favouritesSeedsList){
+                favouritesSeedsList.addEventListener("click", function(e){
+                    if (e.target && e.target.matches("button.favourite-seed-item")){
+                        const seed = e.target.getAttribute("data-seed");
+                        if (seed){
+                            loadSpecificSeed(seed);
+                            togglePanel("seed-management-panel");
+                        }
+                    }
+                });
+            }
+    
+            const toggleSeedPanelButton = document.getElementById("toggle-seed-panel-button");
+            if (toggleSeedPanelButton){
+                toggleSeedPanelButton.addEventListener("mouseover", () => {});
+            }
+    
+            const favouritesSeedsContainer = document.getElementById("favourites-seeds-container");
+            if (favouritesSeedsContainer && !favouritesSeedsContainer.classList.contains("hidden")){
+                updateFavouriteSeedsDisplay();
+            }
+        });
+    
+        window.handlePreviousSong = function(){
+            if (window.globalData.currentSongIndex > 0){
+                window.globalData.currentSongIndex--;
+                const song = window.globalData.songsArray[window.globalData.currentSongIndex];
+                displaySeedAndBPM(song.seed, song.bpm, song.projectName);
+            } else {
+                alert("This is the first song.");
+            }
+        };
+    
+        window.handleNextSong = function(){
+            if (window.globalData.currentSongIndex < window.globalData.songsArray.length - 1){
+                window.globalData.currentSongIndex++;
+                const song = window.globalData.songsArray[window.globalData.currentSongIndex];
+                displaySeedAndBPM(song.seed, song.bpm, song.projectName);
+            } else {
+                alert("This is the last song.");
+            }
+        };
+    })();
+</script>
+
+<!-- Seed Display -->
+<script>
+window.updateSeedDisplay=function(){const a=globalData.songsArray[globalData.currentSongIndex];if(a){const e=a.seed,n=a.bpm,o=a.id;displaySeedAndBPM(e,n,o),globalData.currentSeed=e}},window.handleNextSong=function(){globalData.nextSong(),updateSeedDisplay()},window.handlePreviousSong=function(){globalData.previousSong(),updateSeedDisplay()};
+</script>
+<!-- GainNodeHelper -->
+ <script>
+window.GainNodeHelper=(()=>{const n=window.globalData||(window.globalData={gainNodes:{},audioContext:new(window.AudioContext||window.webkitAudioContext),masterGain:null});n.masterGain||(n.masterGain=n.audioContext.createGain(),n.masterGain.connect(n.audioContext.destination));const e={targetLoudness:.9,transientThreshold:1.2,smoothingFactor:.7},o=(o,t=!1)=>{const i=o.id;if(!o.channels||0===o.channels.length)return void console.warn(`[GainNodeHelper] No channels found for Song "${i}".`);n.gainNodes[i]=n.gainNodes[i]||{},o.channels.forEach((e=>{if(!n.gainNodes[i][e.id]){const o=n.audioContext.createGain();o.gain.value=e.metadata.volume||1,o.connect(n.masterGain),n.gainNodes[i][e.id]=o}}));const s=o.channels.map((n=>n.metadata.volume||1)),d=Math.max(...s);o.channels.forEach((n=>{const o=(n.metadata.volume||1)/d*e.targetLoudness;a(i,n.id,o)})),o.channels.forEach((o=>{const a=n.gainNodes?.[i]?.[o.id];if(a){const o=Math.min(a.gain.value*e.transientThreshold,e.targetLoudness);a.gain.setTargetAtTime(o,n.audioContext.currentTime,e.smoothingFactor)}}))},a=(e,o,a)=>{const t=n.gainNodes?.[e]?.[o];t?t.gain.setValueAtTime(a,n.audioContext.currentTime):console.warn(`[GainNodeHelper] No GainNode found for Channel "${o}" of Song "${e}".`)};return{createGainNodesForSong:o,prepareNextSongGainNodes:n=>{o(n,!0)},cleanupGainNodesForSong:e=>{const o=n.gainNodes[e];o?(Object.values(o).forEach((n=>n.disconnect())),delete n.gainNodes[e]):console.warn(`[GainNodeHelper] No GainNodes found to clean up for Song "${e}".`)},setChannelGain:a,setMasteringControls:n=>{Object.assign(e,n)}}})();
+</script>    
+<script>
+(async()=>{const e=["projectName","artistName","projectBPM","currentSequence","channelURLs","channelVolume","channelPlaybackSpeed","trimSettings","projectChannelNames","startSliderValue","endSliderValue","totalSampleDuration","start","end","projectSequences","steps"],t=e.reduce(((e,t,n)=>(e[t]=n,e)),{}),n=Array.from({length:16},((e,t)=>String.fromCharCode(65+t))),r=n.reduce(((e,t,n)=>(e[t]=n,e)),{}),a=async n=>{try{const a=await fetch(n);if(!a.ok)throw new Error(`Network error for ${n}`);const o=new Uint8Array(await a.arrayBuffer()),c=window.pako.inflate(o),i=new TextDecoder("utf-8").decode(c),s=JSON.parse(i);return(n=>{const a=n=>Array.isArray(n)?n.map(a):n&&"object"==typeof n?Object.entries(n).reduce(((n,[o,c])=>{const i=e[o]||o;return n[i]="projectSequences"===i?Object.fromEntries(Object.entries(c).map((([e,n])=>[`Sequence${e.replace(/^s/,"")}`,Object.fromEntries(Object.entries(n).map((([e,n])=>{const a=(n[t.steps]||[]).flatMap((e=>{if("number"==typeof e)return e;if(e?.r){const[t,n]=e.r;return Array.from({length:n-t+1},((e,n)=>t+n))}return"string"==typeof e&&e.endsWith("r")?{index:parseInt(e.slice(0,-1),10),reverse:!0}:[]}));return[`ch${r[e]}`,{steps:a}]})))]))):a(c),n}),{}):n;return a(n)})(s)}catch(e){throw console.error(`[Initialization] Error fetching/deserializing ${n}:`,e),e}},o=e=>{const t=document.getElementById("artworkImage");t&&(t.src=e,t.parentElement.style.display="flex")},c=e=>{const t=e.numberOfChannels;let n=0;for(let r=0;r<t;r++){const t=e.getChannelData(r),a=Math.max(...t.map((e=>Math.abs(e))));a>n&&(n=a)}const r=n>0?.95/n:1;for(let n=0;n<t;n++){const t=e.getChannelData(n);for(let e=0;e<t.length;e++)t[e]*=r}return e},i=new Map,s=(e,t={})=>{let n=e;return t.reversed&&(n+="_reversed"),t.playbackSpeed&&1!==t.playbackSpeed&&(n+=`_speed_${t.playbackSpeed}`),n},l=(e,t,n)=>{console.error(`[URL Issue] URL "${e}" not found in Song: "${t}", Channel: "${n}". Check if the URL is correct or the resource is available.`)},d=songDataUrls.filter((e=>e.trim()&&!e.trim().startsWith("//")));if(d.length){window.pako||await async function(){try{const e=await fetch("/content/2109694f44c973892fb8152cf5c68607fb19288c045af1abc1716c1c3b4d69e6i0"),t=await e.text(),n=(new DOMParser).parseFromString(t,"text/html").querySelector("script");if(!n||!n.textContent.includes("pako"))throw new Error("Pako library not found.");document.head.append(Object.assign(document.createElement("script"),{textContent:n.textContent})),console.log("[Initialization] Pako library loaded successfully.")}catch(e){console.error("[Initialization] Error loading Pako:",e)}}();const p=(await Promise.all(d.map((async(e,t)=>{try{return{data:await a(e),index:t}}catch(t){return console.error(`[Initialization] Failed to fetch/process ${e}:`,t),null}}))).then((e=>{const t=e.filter(Boolean);if(!t.length)throw new Error("[Initialization] No valid data.");return t}))).sort(((e,t)=>e.index-t.index)).map((({data:e,index:t})=>{const{projectName:r="The Infinite Ordinal",artistName:a="melophonic",projectBPM:o=120,projectSequences:c={},channelURLs:i=[],channelVolume:s=[],channelPlaybackSpeed:d=[],trimSettings:p={}}=e,u=n.map(((e,n)=>{const a=Object.entries(c).reduce(((e,[t,r])=>{const a=r[`ch${n}`];return a&&e.push({sequenceName:t,steps:a.steps}),e}),[]),u={volume:s[n]??1,playbackSpeed:d[n]??1,trimStartTime_Percentage:p[n]?.start||0,trimEndTime_Percentage:p[n]?.end||100,requiresReversal:a.some((e=>e.steps.some((e=>"object"==typeof e&&e.reverse)))),channelSequence:a,originalBPM:o},h=i[n];return h||l("URL_not_found",`Song ${t+1}: ${r}`,`Channel ${e}`),{id:e,url:h||"URL_not_found",metadata:u}}));return{id:`Song ${t+1}: ${r}`,artist:a,bpm:o,totalSequences:Object.keys(c).length,totalChannels:u.length,channels:u,projectSequences:c}})),u=p.flatMap((e=>e.channels));window.keyNames=e,window.keyMap=t,window.channelIds=n,window.channelIdMap=r,window.fetchAndProcessSongData=a,window.setArtworkImage=o,window.normalizeAudioBuffer=c,window.MAX_CACHE_SIZE=100,window.sampleCache=i,window.generateSampleKey=s,window.logUrlIssue=l,window.validSongDataUrls=d,window.originalSongs=p,window.allChannels=u}document.dispatchEvent(new Event("dataReady"))})();
+</script>
+<!-- Effects Configuration Module-->
+<script>
+(()=>{window.EffectsModule=window.EffectsModule||{},window.EffectsModule.effectsConfig={pitchShift:{enabled:!0,defaultProbability:.5,shifts:[.125,.25,.5,.75,1,1.25,1.5,2,2.5,3,4,5]},harmonize:{enabled:!0,defaultProbability:.01,intervals:[.25,.5,.75,1,1.25,1.5,2,2.5,3,4,5],maxHarmonyChannels:4}},window.EffectsModule.getEffectParams=function(e,a,n,t){const o=this.effectsConfig[e];if(!o||!o.enabled)return null;if(t()>=o.defaultProbability)return null;const i={};switch(e){case"pitchShift":i.shift=o.shifts[Math.floor(t()*o.shifts.length)];break;case"harmonize":i.interval=o.intervals[Math.floor(t()*o.intervals.length)],i.maxHarmonyChannels=o.maxHarmonyChannels}return{...o,...i}};window.applyRandomPitchShift=(e,{shifts:a},n)=>{const t=a[Math.floor(n()*a.length)];e.metadata.playbackSpeed*=t,console.log(`[effectsDebug][PitchShift] Channel "${e.id}" playback speed shifted by factor ${t}`)},window.addHarmony=(e,a,n,{intervals:t,maxHarmonyChannels:o},i,d)=>{i.harmonyChannelsAdded>=o||t.forEach((t=>{if(i.harmonyChannelsAdded>=o)return;const d=JSON.parse(JSON.stringify(e));var f,s,l;d.id=`${e.id}_harmony_${a}_${t}`,d.metadata.playbackSpeed*=t,d.metadata.volume=(f=.5*(d.metadata.volume||1),s=1,Math.min(Math.max(f,s),l)),n.channels.push(d),i.harmonyChannelsAdded++,i.totalGain+=d.metadata.volume||1,console.log(`[effectsDebug][Harmony] Added harmony channel "${d.id}" with interval ${t}`)}))},window.waitForEffects=function(){return new Promise((e=>{window.EffectsModule&&window.EffectsModule.effectsConfig?e():document.addEventListener("effectsLoaded",e,{once:!0})}))},document.dispatchEvent(new Event("effectsLoaded"))})();
+</script>
+<!-- applyEffectsAndInitialiseSongs -->
+<script>
+document.addEventListener("dataReady",(async()=>{window.allChannels&&window.globalData?(await window.waitForEffects(),(async()=>{function e(e){let n=e;const o=6364136223846793005n,a=1442695040888963407n,t=18446744073709551616n;return function(){return n=(o*n+a)%t,Number(n)/Number(t)}}const n=(e,n,o)=>{const a=[...e];for(let e=a.length-1;e>0;e--){const n=Math.floor(o()*(e+1));[a[e],a[n]]=[a[n],a[e]]}return a.slice(0,n)};function o(e,n=100){const o=[e];let a;try{a=BigInt(e)}catch(n){console.error(`[Seed Generation] Invalid initial seed "${e}". Defaulting to 0n.`),a=0n}for(let e=1;e<n;e++){a+=1n;let e=a.toString();e.length<16?e=e.padStart(16,"0"):e.length>16&&(e=e.slice(-16)),o.push(e)}return o}const a=(e,n,o=.01)=>Math.abs(e-n)<o||Math.abs(e-2*n)<o||Math.abs(e-n/2)<o;async function t(o,t){console.log(`[loopedSamplesDebug] Generating mix #${t} with seed "${o}"`);const l=[15,30,30.8333,50,52.5,60,61.6667,70,75,80,90,92.5,100,105,120,140,150,160,180,185,200,210,225,240,280,300,320],s=[];let i;try{i=BigInt(o),console.log(`[loopedSamplesDebug] Parsed seed string "${o}" to BigInt: ${i}`)}catch(e){console.error(`[loopedSamplesDebug] Invalid seed string: "${o}". Using base seed 0.`),i=0n}const d=i||1n,c=e(d),r=(n=>{const o=e(n);return l[Math.floor(o()*l.length)]})(d);console.log(`[loopedSamplesDebug] Selected BPM based on seed ${d}: ${r}`);const g=window.allChannels.filter((e=>{const n=e.url.split("/").pop();console.log(`[loopedSamplesDebug] Processing Channel ID ${e.id} with Sample ID ${n}`);const o=window.globalData.getLoopSampleInfo(n);return o?a(o.bpm,r)?(console.log(`[loopedSamplesDebug] Including loop sample with Sample ID ${n} and BPM ${o.bpm} as it is harmonically related to Song BPM ${r}`),!0):(console.log(`[loopedSamplesDebug] Excluding loop sample with Sample ID ${n} due to BPM mismatch (Loop BPM: ${o.bpm}, Song BPM: ${r})`),!1):(console.log(`[loopedSamplesDebug] Including non-loop sample from Channel ID ${e.id}`),!0)}));console.log(`[loopedSamplesDebug] Total channels after loop filtering: ${g.length}`);const p=n(g,24,c);console.log(`[loopedSamplesDebug] Selected ${p.length} random channels for the mix.`);const m=[{startSeq:1,count:p.length}];console.log("[loopedSamplesDebug] Defined activation points:",m);const u=m.reduce(((e,{count:n})=>e+n),0);let h=0;const w=m.map((({startSeq:e,count:n})=>{const o=Math.round(n/u*p.length);return h+=o,{startSeq:e,count:o}}));let S=p.length-h;if(0!==S)for(let e=0;Math.abs(S)>0;e=(e+1)%w.length)S>0?(w[e].count++,S--):w[e].count>0&&(w[e].count--,S++);console.log("[loopedSamplesDebug] Adjusted activation points:",w);let f=0;const b=w.flatMap((({startSeq:e,count:n})=>{const o=[];for(let a=0;a<n;a++){const n=p[f];if(f++,n){const a={...n};a.activationSeq=e,console.log(`[loopedSamplesDebug] Channel ID ${a.id} assigned to activation sequence starting at ${e}.`),o.push({channel:a,activationSeq:e})}}return o}));console.log(`[loopedSamplesDebug] Total channels with activation: ${b.length}`);const D=new Set(b.flatMap((({channel:e})=>e.metadata.channelSequence?.map((e=>e.sequenceName))||[])));console.log("[loopedSamplesDebug] Unique sequence names collected from channels:",Array.from(D));let q=[...D].sort(((e,n)=>(parseInt(e.replace("Sequence",""))||0)-(parseInt(n.replace("Sequence",""))||0)));console.log("[loopedSamplesDebug] Sorted sequences:",q),q=q.slice(0,48),console.log("[loopedSamplesDebug] Limited sequences to first 48:",q);const y={id:`The Infinite Ordinal Remix ${t}`,projectName:`The Infinite Ordinal Remix ${t}`,artist:"By melophonic And Whoever Mines This Mix",bpm:r,totalSequences:q.length,totalChannels:b.length,channels:[],projectSequences:Object.fromEntries(q.map((e=>[e,{}]))),seed:o};console.log("[loopedSamplesDebug] Initialized new song object:",y);const{audioContext:$}=window.globalData,v=.7,M=4;await window.waitForEffects();const I={harmonyChannelsAdded:0,maxHarmonyChannels:window.EffectsModule?.effectsConfig?.harmonize?.maxHarmonyChannels||2,totalGain:0,maxTotalGain:1,channelLayers:{}};return await Promise.all(b.map((async({channel:e,activationSeq:n},o)=>{const a=`ch${o}`,t={id:a,url:e.url,metadata:{...e.metadata,originalBPM:y.bpm,activationSeq:n}};await function(e,n,o,a,t,l,s){console.log(`[effectsDebug][Song: "${o.id}"] Applying effects to Channel "${e.id}"...`);const i=new Set(["harmonize","delay","delayBpmLinked"]),d=new Set,c=[{name:"pitchShift",apply:(e,n)=>window.applyRandomPitchShift(e,n,s)},{name:"harmonize",apply:(e,a)=>window.addHarmony(e,n,o,a,l,s)}].sort((()=>.5-Math.random()));let r=0;for(const{name:n,apply:g}of c){if(r>=3)break;const c=window.EffectsModule.getEffectParams(n,a,t,s);if(c){if(g(e,c),r++,i.has(n)){l.channelLayers[e.id]=Math.min((l.channelLayers[e.id]||1)+1,M);const a=l.channelLayers[e.id],t=1/a*v**(a-1);e.metadata.volume=t,GainNodeHelper.setChannelGain(o.id,e.id,t),d.add(n)}d.add(n)}}const[g,p,m]=[.5,1.5,2],[u,h]=[-340282e33,1541.27];if(l.totalGain>m){const n=m/l.totalGain;e.metadata.volume=(e.metadata.volume||1)*n,d.add("normalization")}l.totalGain+=e.metadata.volume||1,e.metadata.volume<g?(e.metadata.volume=g,d.add("clamping_min")):e.metadata.volume>p&&(e.metadata.volume=p,d.add("clamping_max")),GainNodeHelper.setChannelGain(o.id,e.id,e.metadata.volume||1)}(t,o,y,n,y.bpm,I,c),y.channels.push(t),e.metadata.channelSequence?.forEach((e=>{if(y.projectSequences[e.sequenceName]){const o=63*(n-1),t=e.steps.filter((e=>e>=o)).map((e=>e-o));y.projectSequences[e.sequenceName]={...y.projectSequences[e.sequenceName],[a]:{steps:t}}}}))}))),console.log("[loopedSamplesDebug] Final projectSequences mapping:",y.projectSequences),s.push(y),console.log("[loopedSamplesDebug] New song added to the songs list."),s}!function(){if(window.globalData.seedList&&window.globalData.seedList.length>1)console.log(`[Seed Initialization] Using user-provided seedList with ${window.globalData.seedList.length} seeds.`);else if(window.globalData.seedList&&1===window.globalData.seedList.length){const e=window.globalData.seedList[0],n=o(e,100).slice(1);window.globalData.seedList=window.globalData.seedList.concat(n),console.log(`[Seed Initialization] Single seed provided. Generated 99 additional sequential seeds from "${e}". Total seeds: ${window.globalData.seedList.length}.`)}else{const e=function(){let e="";for(let n=0;n<16;n++)e+=Math.floor(10*Math.random()).toString();return e}();window.globalData.seedList=o(e,100),console.log(`[Seed Initialization] No user-provided seeds. Generated random seed "${e}" and created ${window.globalData.seedList.length} sequential seeds.`)}}();const l=await async function(e){const n=[];for(let o=0;o<e.length;o++){const a=e[o],l=o+1,s=await t(a,l);n.push(...s)}return n}(window.globalData.seedList);console.log(`[Mix Generation] Generated ${l.length} songs based on seedList.`),window.globalData.initialized||Object.assign(window.globalData,{songsArray:l,songsByBPM:window.globalData.songsByBPM||{},currentSongIndex:0,currentSequenceIndex:0,isSingleSong:1===l.length,isMultipleSongs:l.length>1,initialized:!0}),window.globalData.songsArray.forEach((e=>{GainNodeHelper.createGainNodesForSong(e)})),window.globalData.isArtworkCover&&artworkUrl.length&&setArtworkImage(artworkUrl[0]),document.dispatchEvent(new CustomEvent("dataLoadingComplete",{detail:{success:!0,totalSongs:window.globalData.songsArray.length,songs:window.globalData.songsArray.map((({id:e,totalSequences:n})=>({id:e,totalSequences:n})))}})),window.generateMixBySeed=t})()):console.error("Required data is not available.")}));
+</script>
+<!-- audioProcessingAndManagement -->
+<script>
+(async()=>{const e=window.globalData||(window.globalData={}),t=e.audioContext||(e.audioContext=new(window.AudioContext||window.webkitAudioContext)),n=e=>{try{if(!r(e))throw new Error("Invalid base64 string.");const t=atob(e),n=t.length,a=new Uint8Array(n);for(let e=0;e<n;e++)a[e]=t.charCodeAt(e);return a.buffer}catch(e){return console.error(`[base64ToArrayBuffer] Error converting base64 to ArrayBuffer: ${e.message}`),null}},a=e=>{const t=(4-e.length%4)%4;return e+"=".repeat(t)},o=(e,t)=>{if("json"===t&&e.audioData){const t=e.audioData.match(/base64,([A-Za-z0-9+/=]+)/);return t?(console.log(`[extractBase64] Found base64 data in JSON audioData. Length: ${t[1].length}`),t[1]):(console.warn("[extractBase64] No base64 data found in JSON audioData."),null)}if("html"===t)try{const t=(new DOMParser).parseFromString(e,"text/html"),n=t.querySelectorAll('source[src^="data:audio/"]');for(const e of n){const t=e.getAttribute("src");if(!t||!t.includes("base64,"))continue;let n=t.split("base64,")[1];if(n){if(n=n.replace(/\s+/g,""),n=a(n),console.log(`[extractBase64] Extracted base64 string from <source> tag. Length: ${n.length}`),r(n))return console.log("[extractBase64] Valid base64 string found in <source> tag."),n;console.warn("[extractBase64] Invalid base64 string in <source> tag."),console.log(`[extractBase64] Base64 Data Snippet: "${n.substring(0,30)}..."`)}}const o=t.querySelectorAll("audio");for(const e of o){const t=e.querySelector('source[src^="data:audio/"]');if(t){const e=t.getAttribute("src");if(!e||!e.includes("base64,"))continue;let n=e.split("base64,")[1];if(!n)continue;if(n=n.replace(/\s+/g,""),n=a(n),console.log(`[extractBase64] Extracted base64 string from <audio> tag's <source>. Length: ${n.length}`),r(n))return console.log("[extractBase64] Valid base64 string found in <audio> tag's <source>."),n;console.warn("[extractBase64] Invalid base64 string in <audio> tag's <source>."),console.log(`[extractBase64] Base64 Data Snippet: "${n.substring(0,30)}..."`)}}const s=t.querySelectorAll('*[src^="data:audio/"]');for(const e of s){const t=e.getAttribute("src");if(!t||!t.includes("base64,"))continue;let n=t.split("base64,")[1];if(n){if(n=n.replace(/\s+/g,""),n=a(n),console.log(`[extractBase64] Extracted base64 string from element with src. Length: ${n.length}`),r(n))return console.log("[extractBase64] Valid base64 string found in element with src."),n;console.warn("[extractBase64] Invalid base64 string in element with src."),console.log(`[extractBase64] Base64 Data Snippet: "${n.substring(0,30)}..."`)}}const i=t.querySelectorAll("Audional_Base64_Sample_Text");for(const e of i){const t=e.querySelectorAll("audio, source");for(const e of t){const t=e.getAttribute("src");if(!t||!t.includes("base64,"))continue;let n=t.split("base64,")[1];if(n){if(n=n.replace(/\s+/g,""),n=a(n),console.log(`[extractBase64] Extracted base64 string from audio element within custom tag. Length: ${n.length}`),r(n))return console.log("[extractBase64] Valid base64 string found in audio element within custom tag."),n;console.warn("[extractBase64] Invalid base64 string in audio element within custom tag."),console.log(`[extractBase64] Base64 Data Snippet: "${n.substring(0,30)}..."`)}}}const l=e.toString(),c=/data:audio\/[a-zA-Z0-9]+;base64,([A-Za-z0-9+/=]+)/g;let u;for(;null!==(u=c.exec(l));){let e=u[1].replace(/\s+/g,"");if(e=a(e),console.log(`[extractBase64] Extracted base64 string using regex. Length: ${e.length}`),r(e))return console.log("[extractBase64] Valid base64 string found using regex."),e;console.log(`[extractBase64] Base64 Data Snippet: "${e.substring(0,30)}..."`)}return null}catch(e){return null}},r=e=>{const t=e.replace(/\s+/g,"");if(t.length%4!=0)return!1;const n=/^[A-Za-z0-9+/]+={0,2}$/.test(t);return n},s=(e,t=.75)=>{let n=0;for(let t=0;t<e.numberOfChannels;t++){const a=e.getChannelData(t);for(const e of a){const t=Math.abs(e);t>n&&(n=t)}}const a=n>0?t/n:1;if(1!==a)for(let t=0;t<e.numberOfChannels;t++){const n=e.getChannelData(t);for(let e=0;e<n.length;e++)n[e]*=a}return e},i=async(i,c,u)=>{const{id:d}=i,{id:g,url:f,metadata:{trimStartTime_Percentage:h,trimEndTime_Percentage:p,requiresReversal:m}}=c;try{const i=await fetch(f);if(!i.ok)return void console.error(`[ProcessChannel][Song: "${d}"] Fetch failed for URL: "${f}" - Status: ${i.status} ${i.statusText}. Skipping Channel ID: "${g}".`);const c=i.headers.get("Content-Type")||"",w=await(async(s,i,l,c,u)=>{const d=e.audioFetchCache||(e.audioFetchCache=new Map);if(d.has(l))return d.get(l);try{let e;if(l.startsWith("data:audio/")){const o=l.split(",")[1];if(!o)return null;let s=o.replace(/\s+/g,"");if(s=a(s),!r(s))return null;const i=n(s);if(!i)return null;e=await t.decodeAudioData(i)}else if(/audio\/(wav|mpeg|mp4)|video\/mp4/.test(i)){const n=await s.arrayBuffer();e=await t.decodeAudioData(n)}else if(/application\/json/.test(i)){const a=await s.json(),i=o(a,"json");if(!i||!r(i))return null;const l=n(i);if(!l)return null;e=await t.decodeAudioData(l)}else if(/text\/html/.test(i)){const a=await s.text(),i=o(a,"html");if(!i||!r(i))return null;const l=n(i);if(!l)return null;e=await t.decodeAudioData(l)}else{if(!/audio\//.test(i))return null;const n=await s.arrayBuffer();e=await t.decodeAudioData(n)}return d.set(l,e),e}catch(e){return null}})(i,c,f);if(!w)return void console.error(`[ProcessChannel][Song: "${d}"] Decoding failed for Channel ID: "${g}". Skipping.`);if(p<=h)return void console.error(`[ProcessChannel][Song: "${d}", Channel: "${g}"] Invalid trim percentages - Start: ${h}%, End: ${p}%. Skipping.`);const B=Math.floor(h/100*w.duration*w.sampleRate),x=Math.floor(p/100*w.duration*w.sampleRate),A=x-B;if(A<=0)return void console.error(`[ProcessChannel][Song: "${d}", Channel: "${g}"] Non-positive trimmed length: ${A} samples. Skipping.`);const $=t.createBuffer(w.numberOfChannels,A,w.sampleRate);for(let e=0;e<w.numberOfChannels;e++)$.getChannelData(e).set(w.getChannelData(e).subarray(B,x));const C=s($,.5);if(e.audioBuffers=e.audioBuffers||{},e.reverseAudioBuffers=e.reverseAudioBuffers||{},e.audioBuffers[d]=e.audioBuffers[d]||{},e.reverseAudioBuffers[d]=e.reverseAudioBuffers[d]||{},e.audioBuffers[d][g]=C,m)try{const t=l(C);e.reverseAudioBuffers[d][g]=t}catch(e){console.error(`[ProcessChannel][Song: "${d}", Channel: "${g}"] Error reversing AudioBuffer: ${e.message}`)}const S=e=>{try{const t=new URL(e,window.location.origin).pathname;return t.split("/").pop()||""}catch(t){return console.error(`[getSampleIdFromURL] Invalid URL: "${e}" - ${t.message}`),""}},v=S(f),D=window.globalData.loopSampleData.some((e=>e.id===v));D&&console.log(`[LoopedSample] Processing looped audio sample ID: "${v}" for Song: "${d}", Channel: "${g}".`),u.push({"Song ID":d,"Channel ID":g,"Audio File":(b=f,b.split("/").pop()||"Unknown"),"Full Duration (s)":w.duration.toFixed(2),"Trimmed Duration (s)":$.duration.toFixed(2),"Requires Reversal":m,"Is Looped Sample":D})}catch(e){console.error(`[ProcessChannel][Song: "${d}", Channel: "${g}"] Unexpected error: ${e.message}`)}var b},l=e=>{const n=t.createBuffer(e.numberOfChannels,e.length,e.sampleRate);for(let t=0;t<e.numberOfChannels;t++){const a=e.getChannelData(t),o=n.getChannelData(t);for(let e=0;e<a.length;e++)o[e]=a[a.length-e-1]}return s(n,.5)},c=e=>{e.length&&console.table(e)},u=async()=>{try{"suspended"===t.state&&await t.resume(),await(async()=>{const{songsArray:n}=e;if(!n||!n.length)return void console.error("No songs to process.");const a=[],o=new Map;for(const[e,t]of o.entries()){const o=n.find((t=>t.id===e));if(!o)continue;const r=t.map((e=>{const t=o.channels.find((t=>t.id===e));return t?i(o,t,a):Promise.resolve(null)}));await Promise.all(r)}c(a);const r=t.createGain();r.gain.value=.7,r.connect(t.destination),e.masterGain=r,document.dispatchEvent(new CustomEvent("initialAudioBuffersReady",{detail:{success:!0}}))})();try{const{songsArray:t}=e;if(!t||!t.length)return void console.error("No songs to process.");const n=[],a=t.flatMap((e=>e.channels.map((t=>({song:e,channel:t}))))),o=[];for(;a.length;)o.push(a.splice(0,4));for(const e of o){const t=e.map((({song:e,channel:t})=>i(e,t,n)));await Promise.all(t)}c(n),document.dispatchEvent(new CustomEvent("allAudioBuffersReady",{detail:{success:!0}}))}catch(e){console.error("Background processing error:",e)}}catch(e){console.error("Audio processing initialization error:",e)}};document.addEventListener("dataLoadingComplete",u),e.songsArray?.length&&u(),document.addEventListener("initialAudioBuffersReady",(()=>{}))})();
+</script>
+<!-- unifiedMetadataManagement -->
+<script>
+// unifiedMetadataManagement.js
+(() => {
+const extractProjectName=t=>{const e=t?.match(/Song\s+\d+:\s+(.+)/);return e?.[1]?.trim()||"UNKNOWN PROJECT NAME"},getArtistName=(t,e,a)=>e?.[t]||a||"Unknown Artist Name",processSongs=t=>{if(!Array.isArray(t)||0===t.length)return;const e=extractSongMetadata(t);updateMetadataContent(e),logProcessedSongs(e)},extractSongMetadata=t=>{const e=window.globalData?.projectArtistMap||window.projectArtistMap||{};return t.map(((t,a)=>({trackNumber:a+1,projectName:extractProjectName(t.id),artistName:getArtistName(extractProjectName(t.id),e,t.artist)})))},updateMetadataContent=t=>{const e=document.getElementById("metadataContent");if(!e)return;const a=t.map((({trackNumber:t,projectName:e,artistName:a})=>`\n            <div class="metadataItem">\n                <h2>${t}. ${e}</h2>\n                <p>${a}</p>\n            </div>\n        `)).join("");e.innerHTML=a},logProcessedSongs=t=>{t.forEach((({projectName:t,artistName:e})=>{}))};
+})();
+</script>
+<!-- Load Player Scripts AFTER data loading is complete -->
+<script>    
+document.addEventListener("dataLoadingComplete",(e=>{const c=e=>{if(0===e.length)return;const d=e.shift(),t=document.createElement("script");t.src=d,t.async=!1,t.onload=()=>c(e),t.onerror=t=>{console.error(`[Script Loader] Error loading script: ${d}`,t),c(e)},document.body.appendChild(t)};c(["/content/5c03e882ab5a531271b2e93a80d8a9d72cb533c580bec1567020f5cd61595560i0","/content/7b305327f2951d219532ef0cb46b2039b23f2cfd0d8d0e827f3fe1b2b754b5a9i0","/content/8b5b09cfedbc0c6a187816181f8d33f90c5bbd15fc10af47008176effb866a47i0"]),updateSeedDisplay()}));
+</script>
+<!-- Playback -->
+<script>
+(()=>{const e=window.globalData||(window.globalData={isPlaying:!1,currentSongIndex:0,songsArray:[],audioBuffers:{},reverseAudioBuffers:{},audioContext:new(window.AudioContext||window.webkitAudioContext),masterGain:null,gainNodes:{},isArtworkCover:!0,isVisualiserCover:!1,compressor:null,lowShelfFilter:null,analyser:null,isAudioProcessingInitialized:!1,currentSeed:1n});e.currentSequence=0;const{audioContext:n}=e,o=.1,t=25;let a={};const l=new Set,i=new Set;let r=null;function s(){const{songsArray:i,currentSongIndex:r}=window.globalData;if(window.globalData.isPlaybackStarting)console.warn("startPlayback called while playback is already starting. Ignoring duplicate call.");else{window.globalData.isPlaybackStarting=!0;try{if(!i.length)return console.error("No songs available for playback."),alert("No songs available for playback."),void(window.globalData.isPlaybackStarting=!1);const s=i[r%i.length],c=s.projectSequences||{},d=60/s.bpm/4,m=64*d;a={},l.clear(),console.log(`Starting playback for Song: ${s.id} (${r+1}/${i.length}) with ${Object.keys(c).length} sequences.`),console.log(`Song BPM: ${s.bpm}`);let y=0,p=1;for(const[e,n]of Object.entries(c))a[e]={sequenceNumber:p,nextStepIndex:0,nextStepTime:window.globalData.audioContext.currentTime+y,stepDuration:d,endTime:window.globalData.audioContext.currentTime+y+m,completed:!1,loggedStart:!1},y+=m,p++;window.globalData.currentSongId=s.id,function(){if(e.isAudioProcessingInitialized)return void console.log("[PlaybackEngine] Audio processing chain already initialized.");e.compressor||(e.compressor=n.createDynamicsCompressor(),e.compressor.threshold.setValueAtTime(-24,n.currentTime),e.compressor.knee.setValueAtTime(30,n.currentTime),e.compressor.ratio.setValueAtTime(12,n.currentTime),e.compressor.attack.setValueAtTime(.003,n.currentTime),e.compressor.release.setValueAtTime(.25,n.currentTime),console.log("[PlaybackEngine] Compressor node initialized."));e.masterGain||(e.masterGain=n.createGain(),e.masterGain.gain.setValueAtTime(1,n.currentTime),e.masterGain.connect(e.compressor),console.log("[PlaybackEngine] Master Gain node created and connected to Compressor."));if(!e.lowShelfFilter){e.lowShelfFilter=n.createBiquadFilter(),e.lowShelfFilter.type="lowshelf";const o=20,t=22e3,a=-40,l=40,i=Math.min(Math.max(50,o),t),r=Math.min(Math.max(-6,a),l);e.lowShelfFilter.frequency.setValueAtTime(i,n.currentTime),e.lowShelfFilter.gain.setValueAtTime(r,n.currentTime),e.compressor.connect(e.lowShelfFilter),console.log("[PlaybackEngine] Low-shelf filter initialized and connected to Compressor.")}e.analyser||(e.analyser=n.createAnalyser(),e.analyser.fftSize=2048,e.analyser.smoothingTimeConstant=.8,e.lowShelfFilter.connect(e.analyser),console.log("[PlaybackEngine] Analyser node initialized and connected to Low-Shelf Filter."),e.analyser.connect(n.destination),console.log("[PlaybackEngine] Analyser node connected to AudioContext destination."));e.isAudioProcessingInitialized=!0,console.log("[PlaybackEngine] Audio processing chain fully initialized."),function(){if(!e.analyser)return void console.error("[setupBassMonitoring] AnalyserNode is not available. Cannot set up bass monitoring.");function o(){!function(){if(!e.analyser)return void console.error("[monitorLowFrequencies] AnalyserNode is not initialized in globalData.analyser.");if(!e.lowShelfFilter)return void console.error("[monitorLowFrequencies] lowShelfFilter is not initialized in globalData.lowShelfFilter.");const o=e.analyser.frequencyBinCount,t=new Uint8Array(o);e.analyser.getByteFrequencyData(t);const a=250,l=n.sampleRate/2,i=Math.floor(a/l*o),r=t.slice(0,i);if(0===r.length)return;const s=r.reduce(((e,n)=>e+n),0)/r.length,c=100;if(s>c){const o=e.lowShelfFilter.gain.value-.5;e.lowShelfFilter.gain.setValueAtTime(o,n.currentTime)}else if(s<c-20){const o=e.lowShelfFilter.gain.value+.5;e.lowShelfFilter.gain.setValueAtTime(o,n.currentTime)}}(),requestAnimationFrame(o)}o(),console.log("[setupBassMonitoring] Bass monitoring loop initiated using requestAnimationFrame.")}()}(),GainNodeHelper.createGainNodesForSong(s),GainNodeHelper.prepareNextSongGainNodes(i[(r+1)%i.length]),window.globalData.isPlaying=!0,window.globalData.currentSequence=1,window.globalData.playbackInterval&&(clearInterval(window.globalData.playbackInterval),window.globalData.playbackInterval=null,console.log("Existing playbackInterval cleared.")),window.globalData.hasCompletedSequences=!1,window.globalData.hasProceededToNextSong=!1,window.globalData.playbackInterval=setInterval((()=>function(t){if(!e.isPlaying)return;if(e.hasCompletedSequences)return;const l=n.currentTime;let i=!0;const r=Object.keys(t.projectSequences).length;if(0===r)return e.hasCompletedSequences=!0,void u();for(const[n,r]of Object.entries(t.projectSequences||{})){const s=a[n];if(s&&!s.completed)if(l>=s.endTime)s.completed=!0,console.log(`Sequence ${s.sequenceNumber} has completed.`);else for(i=!1,l>=s.nextStepTime&&!s.loggedStart&&(e.currentSequence=s.sequenceNumber,s.loggedStart=!0);s.nextStepTime<l+o&&e.isPlaying;){const{nextStepIndex:e,nextStepTime:n,stepDuration:o}=s;0!==e||s.loggedStart||(console.log(`Starting Sequence ${s.sequenceNumber} at step ${e}.`),s.loggedStart=!0);for(const[o,a]of Object.entries(r)){const l=parseInt(o.slice(2),10),i=t.channels[l];if(!i)continue;const r=a.steps?.find((n=>"number"==typeof n?n===e:n.index===e));if(void 0!==r){g(t,i,n,"object"==typeof r&&r.reverse)}}if(s.nextStepIndex++,s.nextStepIndex>=64){s.completed=!0,console.log(`Sequence ${s.sequenceNumber} has completed all steps.`);break}s.nextStepTime+=o}}i&&(console.log("All sequences have completed."),e.hasCompletedSequences=!0,u())}(s)),t),console.log("Sequences scheduled and playback started."),document.dispatchEvent(new CustomEvent("playbackStarted",{detail:{success:!0}})),w(s);const b=document.getElementById("playButton");b?(b.classList.remove("paused"),b.classList.add("playing"),b.textContent="Stop"):console.warn("Play button not found.")}catch(e){console.error("Error during startPlayback:",e),alert("An error occurred while starting playback.")}finally{window.globalData.isPlaybackStarting=!1}}}function c(){if(!window.globalData.isPlaying)return void console.log("Playback is not in progress.");d(),console.log("Playback stopped.");const e=document.getElementById("playButton");e?(e.classList.remove("playing"),e.classList.add("paused"),e.textContent="Play"):console.warn("Play button not found."),document.dispatchEvent(new CustomEvent("playbackStopped",{detail:{success:!0}})),function(){const e=document.getElementById("nowPlayingContainer");if(!e)return;e.querySelector(".songTitle").textContent="No song playing",e.querySelector(".artistName").textContent="",e.querySelector(".songBPM").textContent="BPM: N/A",e.querySelector(".timeLeft").textContent="Time Left: N/A"}(),window.countdownInterval&&(clearInterval(window.countdownInterval),window.countdownInterval=null,console.log("Countdown timer cleared.")),window.globalData.lowShelfFilter&&(window.globalData.compressor.disconnect(window.globalData.lowShelfFilter),window.globalData.lowShelfFilter.disconnect(window.globalData.analyser),window.globalData.analyser.disconnect(window.audioContext.destination),console.log("[PlaybackEngine] Disconnected audio nodes."))}function d(e={}){window.globalData.playbackInterval&&(clearInterval(window.globalData.playbackInterval),window.globalData.playbackInterval=null,console.log("Playback interval cleared in resetPlayback.")),window.globalData.isPlaying=!1,a={},l.clear(),window.activeAudioSources&&window.activeAudioSources.size>0&&(window.activeAudioSources.forEach((e=>{try{e.stop(),e.disconnect(),console.log(`[PlaybackEngine] Stopped and disconnected audio source: ${e.id||"unknown"}`)}catch(e){console.error("[PlaybackEngine] Error stopping and disconnecting audio source:",e)}})),window.activeAudioSources.clear()),window.globalData.currentSongId&&(GainNodeHelper.cleanupGainNodesForSong(window.globalData.currentSongId),console.log("[PlaybackEngine] Cleaned up gain nodes for current song."),window.globalData.currentSongId=null),window.countdownInterval&&(clearInterval(window.countdownInterval),window.countdownInterval=null,console.log("Countdown timer cleared in resetPlayback.")),e.callback&&e.callback()}function g(o,t,a,r){const s=e.getLoopSampleInfo(t.id);if(s&&s.bpm!==o.bpm)return void console.log(`Skipping loop sample with ID ${t.id} due to BPM mismatch (Loop BPM: ${s.bpm}, Song BPM: ${o.bpm})`);const c=`${o.id}_${t.id}_${r?"reverse":"normal"}`,d=r?e.reverseAudioBuffers[o.id]?.[t.id]:e.audioBuffers[o.id]?.[t.id];if(!d)return void(l.has(c)||l.add(c));const g=n.createBufferSource();g.buffer=d,g.playbackRate.value=t.metadata.playbackSpeed||1;const u=n.createGain();u.gain.setValueAtTime(0,a),g.connect(u);const w=e.gainNodes?.[o.id]?.[t.id]||e.masterGain;u.connect(w);u.gain.linearRampToValueAtTime(t.metadata.volume||1,a+.01);const m=a+d.duration/g.playbackRate.value,y=m-.01;u.gain.setValueAtTime(t.metadata.volume||1,y),u.gain.linearRampToValueAtTime(0,m),g.start(a),g.stop(m),i.add(g),g.onended=()=>i.delete(g)}function u(){if(e.isPlaying)if(e.hasProceededToNextSong)console.log("Already proceeded to the next song. Exiting proceedToNextSong.");else{e.hasProceededToNextSong=!0,console.log("Initiating proceedToNextSong.");try{const n=e.currentSeed;e.currentSeed=(void 0!==e.currentSeed?BigInt(e.currentSeed):1n)+1n,console.log(`Seed incremented from ${n} to ${e.currentSeed}.`);const o=e.currentSongIndex;e.currentSongIndex=(e.currentSongIndex+1)%e.songsArray.length,console.log(`Song index updated from ${o} to ${e.currentSongIndex}.`),setTimeout((()=>{if(console.log("Timeout reached. Attempting to proceed to the next song."),e.isPlaying){const n=e.songsArray[e.currentSongIndex];if(n){const o=n.seed;n.seed=e.currentSeed.toString(),console.log(`Seed for next song updated from ${o} to ${n.seed}.`),d({callback:()=>{console.log("Resetting playback and starting next song."),s(),document.dispatchEvent(new CustomEvent("songChanged",{detail:{song:n}})),console.log(`'songChanged' event dispatched for song: ${n.id}.`)}})}else console.error(`Next song not found at index ${e.currentSongIndex}.`)}}),200)}catch(e){console.error(`Error in proceedToNextSong - ${e}`)}finally{console.log("Finished processing next song.")}}else e.hasLoggedPlaybackNotActive||(console.log("Playback is not active. Cannot proceed to next song."),e.hasLoggedPlaybackNotActive=!0)}function w(n){const o=document.getElementById("nowPlayingContainer");if(!o)return;const{projectName:t,artistName:a}=function(e){return{projectName:e.projectName||e.id||"Unknown Project",artistName:e.artist||"Unknown Artist"}}(n);o.querySelector(".songTitle").textContent=t,o.querySelector(".artistName").textContent=a,o.querySelector(".songBPM").textContent=`BPM: ${n.bpm}`,displaySeedAndBPM(n.seed,n.bpm,n.id),function(n){r&&clearInterval(r);const o=document.getElementById("nowPlayingContainer");if(!o)return;const t=o.querySelector(".timeLeft");if(!t)return;const a=60/n.bpm/4,l=64,i=Object.keys(n.projectSequences).length;let s=a*l*i;m(t,s),r=setInterval((()=>{e.isPlaying?(s-=1,s<=0&&(s=0,clearInterval(r)),m(t,s)):clearInterval(r)}),1e3)}(n)}function m(e,n){const o=Math.floor(n/60),t=Math.floor(n%60);e.textContent=`Time Left: ${o}:${t.toString().padStart(2,"0")}`}window.globalData.togglePlayback=()=>{window.globalData.isPlaying?c():s()},window.globalData.startPlayback=s,window.globalData.stopPlayback=c,window.globalData.resetPlayback=()=>d({callback:s}),e.seedListLogged||(console.log("[DEBUGplayback] The initial seedList is: ",e.seedList),e.seedListLogged=!0),e.initializePlaybackEngine=()=>{e.songsArray.length},document.addEventListener("initialAudioBuffersReady",(n=>{n.detail.success&&(e.initializePlaybackEngine(),console.log("Initial audio buffers are ready."))})),["playbackStarted","playbackStopped"].forEach((e=>{document.addEventListener(e,(n=>{n.detail.success&&console.log(`Playback has been successfully ${"playbackStarted"===e?"started":"stopped"}.`)}))})),document.addEventListener("DOMContentLoaded",(()=>{const n=document.getElementById("artworkCover"),o=document.getElementById("artworkImage"),t=document.getElementById("loadingSpinner");if(e.isArtworkCover&&e.songsArray.length){const a=e.songsArray[0].artworkUrl||[];a.length&&(o.src=a[0],n.classList.remove("hidden"),t.style.display="none",o.addEventListener("click",e.togglePlayback))}})),Object.keys(e.audioBuffers).length&&e.initializePlaybackEngine(),document.addEventListener("songChanged",(e=>{const{song:n}=e.detail;n&&(w(n),console.log(`Now Playing: ${n.projectName} by ${n.artistName}`))})),document.addEventListener("DOMContentLoaded",(()=>{if(window.globalData.isPlaying&&window.globalData.songsArray.length){w(window.globalData.songsArray[window.globalData.currentSongIndex])}}))})();
+</script>
+</body>
+</html>

@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GenSynth</title>
+    <style>
+        /* Same as before, with the addition of the 'active' button styling */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #000000; /* Black background */
+            margin: 0; /* Remove default margin */
+            height: 100vh; /* Full viewport height */
+            display: flex; /* Flex layout for side-by-side design */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        /* Control Panel Styling */
+        #control-panel {
+            background-color: #1a1a1a; /* Dark gray background for the control panel */
+            color: #ffffff; /* White text */
+            width: 20%; /* Set control panel width */
+            padding: 10px;
+            box-sizing: border-box; /* Include padding in width */
+            display: flex;
+            flex-direction: column; /* Stack buttons vertically */
+            align-items: flex-start; /* Align buttons to the left */
+            gap: 10px; /* Add spacing between buttons */
+        }
+
+        #control-panel button {
+            background-color: #333333; /* Darker button background */
+            color: #ffffff; /* White text color */
+            border: none; /* Remove default button borders */
+            padding: 10px; /* Add padding to buttons */
+            font-size: 14px; /* Button text size */
+            cursor: pointer;
+            width: 100%; /* Buttons take full width of control panel */
+        }
+
+        #control-panel button:hover {
+            background-color: #444444; /* Slightly lighter background on hover */
+        }
+
+        #control-panel button.active {
+            background-color: #555555; /* Even lighter background */
+            color: #ffffff;
+        }
+
+        /* Main content styling */
+        .main-content {
+            flex: 1; /* Take up remaining space */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #ffffff; /* White text for the status */
+        }
+
+        /* Style the button to remove default styles and display the image properly */
+        button {
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+        }
+
+        /* Ensure the image fills 50% of the viewport height */
+        button img {
+            height: 50vh; /* Image fills 50% of the viewport height */
+            width: auto; /* Width adjusts to maintain aspect ratio */
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Button replaced with an image -->
+    <button id="generate-button">
+        <img src="https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0" alt="Generate Sound Artwork" />
+    </button>
+    <div id="status">Click a button to generate sound.</div>
+
+    <!-- Control Panel -->
+    <div id="control-panel">
+        <button id="generate-creepy-soundscape">Creepy</button>
+        <button id="generate-haunting-pads">Haunting</button>
+        <button id="generate-uplifting-melodies">Melodic</button>
+        <button id="generate-chill-ambient">Ambient</button>
+        <button id="generate-energetic-beats">Rave</button>
+        <!-- Add more buttons as needed -->
+    </div>
+
+    <!-- Include the updated JavaScript code -->
+    <script>
+(() => {
+    "use strict";
+    const Synth = {
+        context: null,
+        masterGain: null,
+        BPM: 120,
+        isLoopActive: false,
+        random: null,
+        seed: null,
+        currentScaleData: null,
+        currentFilter: null,
+        currentEffectsChain: null,
+        chainGain: null,
+        activeStyleKey: null,
+        activeOscillators: new Set(),
+        activeNodes: new Set(),
+        styles: {
+            'creepy-soundscape': {
+                BPMRange: [40, 60],
+                scales: ['minor'],
+                effects: ['reverb', 'phaser'],
+                chordTypes: ['dissonant'],
+                percussiveElements: false,
+                description: 'Creepy Soundscape',
+                padDuration: [4, 8],
+                frequencyBend: false,
+                allowBending: false
+            },
+            'haunting-pads': {
+                BPMRange: [50, 70],
+                scales: ['minor', 'pentatonic'],
+                effects: ['reverb', 'chorus'],
+                chordTypes: ['sustained'],
+                percussiveElements: false,
+                description: 'Haunting Pads',
+                padDuration: [8, 16],
+                frequencyBend: true,
+                allowBending: true
+            },
+            'uplifting-melodies': {
+                BPMRange: [90, 120],
+                scales: ['major', 'minor'],
+                effects: ['chorus', 'compressor'],
+                chordTypes: ['single'],
+                percussiveElements: false,
+                description: 'Melodic',
+                padDuration: [0.5, 1],
+                frequencyBend: false,
+                allowBending: false
+            },
+            'chill-ambient': {
+                BPMRange: [60, 80],
+                scales: ['major', 'pentatonic'],
+                effects: ['reverb', 'chorus'],
+                chordTypes: ['sustained'],
+                percussiveElements: false,
+                description: 'Chill Ambient',
+                padDuration: [4, 8],
+                frequencyBend: false,
+                allowBending: false
+            },
+            'energetic-beats': {
+                BPMRange: [130, 150],
+                scales: ['minor', 'pentatonic'],
+                effects: ['compressor', 'distortion'],
+                chordTypes: ['single'],
+                percussiveElements: true,
+                description: 'Rave',
+                padDuration: [0.25, 0.5],
+                frequencyBend: false,
+                allowBending: false
+            }
+            // Add more styles as needed
+        },
+        init() {
+            this.initAudioContext();
+            this.initRandom();
+            this.initMasterGain();
+            this.addEventListeners();
+            this.updateStatus("Click a button to generate sound.");
+        },
+        initAudioContext() {
+            this.context = new (window.AudioContext || window.webkitAudioContext)();
+            console.log("Audio Context initialized:", this.context);
+        },
+        initRandom() {
+            this.seed = Math.floor(4294967295 * Math.random());
+            this.random = this.mulberry32(this.seed);
+            console.log(`Current Seed: ${this.seed}`);
+        },
+        initMasterGain() {
+            this.masterGain = this.context.createGain();
+            this.masterGain.gain.value = 0.8; // Set a reasonable default volume
+            this.masterGain.connect(this.context.destination);
+            console.log("Master Gain connected to destination.");
+        },
+        addEventListeners() {
+            // Add click event listeners to control panel buttons
+            Object.keys(this.styles).forEach(styleKey => {
+                const button = document.getElementById(`generate-${styleKey}`);
+                if (button) {
+                    button.addEventListener('click', () => {
+                        if (this.activeStyleKey === styleKey) {
+                            // Toggle off if the same style is active
+                            this.cleanupLoop();
+                        } else {
+                            // Switch to new style
+                            this.cleanupLoop();
+                            try {
+                                this.generateRandomLoop(styleKey, this.styles[styleKey]);
+                            } catch (error) {
+                                console.error("Error generating loop:", error);
+                            }
+                        }
+                    });
+                } else {
+                    console.error(`Button for style ${styleKey} not found in the DOM.`);
+                }
+            });
+
+            // Add beforeunload event to clean up when the page is closed or refreshed
+            window.addEventListener("beforeunload", () => {
+                console.log("Page is unloading. Cleaning up any active loops.");
+                this.cleanupLoop();
+            });
+
+            // Performance reporting every 10 seconds
+            setInterval(() => {
+                console.log("--- 10-Second Performance Report ---");
+                console.log(`Is Loop Active: ${this.isLoopActive}`);
+                console.log(`Audio Context State: ${this.context.state}`);
+                console.log(`Current BPM: ${this.isLoopActive ? this.BPM.toFixed(2) : "N/A"}`);
+                console.log("-------------------------------------");
+            }, 10000);
+        },
+        mulberry32(a) {
+            return () => {
+                let t = a += 0x6D2B79F5;
+                t = Math.imul(t ^ (t >>> 15), t | 1);
+                t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+        },
+        clamp(value, min, max) {
+            return isFinite(value) ? Math.min(Math.max(value, min), max) : min;
+        },
+        setAudioParam(param, value, time) {
+            if (isFinite(value)) {
+                param.setValueAtTime(value, time);
+            } else {
+                console.warn(`Invalid value (${value}) for AudioParam. Using default value.`);
+                param.setValueAtTime(0, time);
+            }
+        },
+        rampAudioParam(param, value, time) {
+            if (isFinite(value)) {
+                param.linearRampToValueAtTime(value, time);
+            } else {
+                console.warn(`Invalid ramp value (${value}) for AudioParam.`);
+            }
+        },
+        updateStatus(message) {
+            console.log(`Status Update: ${message}`);
+            const statusElement = document.getElementById("status");
+            if (statusElement) {
+                statusElement.textContent = message;
+            } else {
+                console.warn("Status element not found in the DOM.");
+            }
+        },
+        updateActiveButton() {
+            // Remove 'active' class from all buttons
+            Object.keys(this.styles).forEach(key => {
+                const button = document.getElementById(`generate-${key}`);
+                if (button) {
+                    button.classList.remove('active');
+                }
+            });
+            // Add 'active' class to the active button
+            if (this.activeStyleKey) {
+                const activeButton = document.getElementById(`generate-${this.activeStyleKey}`);
+                if (activeButton) {
+                    activeButton.classList.add('active');
+                }
+            }
+        },
+        beatsToSeconds(beats) {
+            return parseFloat((60 * beats / this.BPM).toFixed(2));
+        },
+        generateRandomLoop(styleKey, style) {
+            try {
+                this.isLoopActive = true;
+                this.activeStyleKey = styleKey;
+                this.updateActiveButton();
+                this.updateStatus(`Generating ${style.description}...`);
+
+                // Set BPM and maintain it throughout the loop
+                const [minBPM, maxBPM] = style.BPMRange;
+                this.BPM = this.clamp(parseFloat((this.random() * (maxBPM - minBPM) + minBPM).toFixed(2)), minBPM, maxBPM);
+                console.log(`Selected BPM: ${this.BPM}`);
+
+                // Create chainGain
+                this.chainGain = this.context.createGain();
+                this.chainGain.gain.value = 0.8; // Prevent initial loudness
+                this.activeNodes.add(this.chainGain);
+
+                // Create filter
+                this.currentFilter = this.context.createBiquadFilter();
+                this.currentFilter.type = "lowpass";
+                this.setAudioParam(this.currentFilter.frequency, 15000, this.context.currentTime);
+                this.activeNodes.add(this.currentFilter);
+
+                // Create effects chain
+                this.currentEffectsChain = this.createGlobalEffectsChain(style.effects);
+
+                // Connect the chain
+                this.chainGain.connect(this.currentFilter);
+                this.currentFilter.connect(this.currentEffectsChain.input);
+                this.currentEffectsChain.output.connect(this.masterGain);
+
+                // Set initial gain
+                this.setAudioParam(this.masterGain.gain, 0.8, this.context.currentTime);
+
+                // Generate scale and chord progression
+                const scale = this.generateRandomScale(style.scales);
+                if (!scale.length) {
+                    console.warn("Generated scale is empty. Aborting loop generation.");
+                    this.cleanupLoop();
+                    return;
+                }
+                const chordProgression = this.generateChordProgression(scale, style.chordTypes);
+
+                // Start the loop
+                this.startLoop(scale, chordProgression, style);
+
+                this.updateStatus(`Loop active: BPM: ${this.BPM} | Style: ${style.description} | Seed: ${this.seed}`);
+                console.log("Loop generation started successfully.");
+            } catch (error) {
+                console.error("Error in generateRandomLoop:", error);
+                this.cleanupLoop();
+            }
+        },
+        startLoop(scale, chordProgression, style) {
+            const scheduleNextLoop = () => {
+                if (!this.isLoopActive) return;
+
+                const loopDuration = 8 * 4; // 8 bars per loop iteration
+                this.scheduleBeatsAndBars(this.context.currentTime, loopDuration, scale, chordProgression, style);
+
+                // Schedule the next loop iteration
+                const nextLoopTime = this.context.currentTime + this.beatsToSeconds(loopDuration);
+                setTimeout(scheduleNextLoop, (nextLoopTime - this.context.currentTime) * 1000);
+            };
+
+            scheduleNextLoop();
+        },
+        generateRandomScale(preferredScales) {
+            const scales = {
+                major: [0, 2, 4, 5, 7, 9, 11],
+                minor: [0, 2, 3, 5, 7, 8, 10],
+                pentatonic: [0, 2, 4, 7, 9],
+                blues: [0, 3, 5, 6, 7, 10]
+            };
+            const baseFrequencies = [130.81, 146.83, 164.81, 174.61, 196, 220, 246.94, 261.63];
+            const scaleTypes = preferredScales || Object.keys(scales);
+            const selectedScaleType = scaleTypes[Math.floor(this.random() * scaleTypes.length)] || "major";
+            const rootFrequency = baseFrequencies[Math.floor(this.random() * baseFrequencies.length)] || 261.63;
+            const intervals = scales[selectedScaleType];
+            const frequencies = intervals.map(interval => {
+                let freq = rootFrequency * Math.pow(2, interval / 12);
+                return (freq >= 20 && freq <= 16000) ? freq : null;
+            }).filter(Boolean);
+
+            this.currentScaleData = {
+                type: selectedScaleType,
+                root: rootFrequency,
+                intervals: intervals,
+                frequencies: frequencies
+            };
+            console.log(`Generated Scale (${selectedScaleType}):`, frequencies);
+            return frequencies;
+        },
+        generateChordProgression(scale, preferredChordTypes) {
+            // For this implementation, chords are just collections of notes based on the style
+            // For 'Creepy', we might introduce dissonant intervals
+            // For 'Haunting', sustained chords
+            // For 'Melodic' and 'Rave', focus on single notes
+
+            // For consistency, return the same progression throughout the loop
+            const progression = [scale];
+            return progression;
+        },
+        scheduleBeatsAndBars(startTime, loopDuration, scale, chordProgression, style) {
+            const beatsPerBar = 4;
+            const totalBars = loopDuration / beatsPerBar;
+            for (let bar = 0; bar < totalBars; bar++) {
+                for (let beat = 0; beat < beatsPerBar; beat++) {
+                    const currentTime = startTime + this.beatsToSeconds(bar * beatsPerBar + beat);
+                    this.scheduleElements(currentTime, scale, chordProgression, style);
+                }
+            }
+        },
+        scheduleElements(time, scale, chordProgression, style) {
+            // Limit the number of simultaneous notes to prevent overload
+            const maxSimultaneousNotes = 3;
+
+            if (style.percussiveElements) {
+                this.schedulePercussiveElements(time, style);
+            }
+
+            if (this.activeOscillators.size < maxSimultaneousNotes) {
+                if (style.allowBending) {
+                    this.scheduleBendingNoteInStyle(time, scale, style);
+                } else if (style.chordTypes.includes('dissonant')) {
+                    this.scheduleDissonantChord(time, scale);
+                } else if (style.chordTypes.includes('sustained')) {
+                    this.scheduleSustainedChord(time, scale, style);
+                } else if (style.chordTypes.includes('single')) {
+                    this.scheduleSingleNoteMelody(time, scale, style);
+                }
+            }
+        },
+        schedulePercussiveElements(time, style) {
+            const beatsPerBar = 4;
+            const pattern = this.generatePercussionPattern(beatsPerBar);
+            for (let beat = 0; beat < beatsPerBar; beat++) {
+                const beatTime = time + this.beatsToSeconds(beat);
+                if (pattern.kick[beat]) {
+                    this.scheduleKickDrum(beatTime);
+                }
+                if (pattern.snare[beat]) {
+                    this.scheduleSnareDrum(beatTime);
+                }
+                if (pattern.hihat[beat]) {
+                    this.scheduleHiHat(beatTime);
+                }
+            }
+        },
+        generatePercussionPattern(beatsPerBar) {
+            const pattern = {
+                kick: [],
+                snare: [],
+                hihat: []
+            };
+            for (let beat = 0; beat < beatsPerBar; beat++) {
+                pattern.kick[beat] = beat % 4 === 0;
+                pattern.snare[beat] = beat % 4 === 2;
+                pattern.hihat[beat] = true;
+            }
+            return pattern;
+        },
+        scheduleKickDrum(time) {
+            const oscillator = this.context.createOscillator();
+            const gainNode = this.context.createGain();
+
+            this.activeNodes.add(oscillator);
+            this.activeNodes.add(gainNode);
+
+            oscillator.frequency.setValueAtTime(100, time);
+            oscillator.frequency.exponentialRampToValueAtTime(50, time + 0.1);
+
+            gainNode.gain.setValueAtTime(1, time);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+
+            oscillator.connect(gainNode).connect(this.chainGain);
+            oscillator.start(time);
+            oscillator.stop(time + 0.5);
+        },
+        scheduleSnareDrum(time) {
+            const bufferSize = this.context.sampleRate;
+            const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+            const data = buffer.getChannelData(0);
+
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = this.context.createBufferSource();
+            noise.buffer = buffer;
+
+            const noiseGain = this.context.createGain();
+            this.activeNodes.add(noise);
+            this.activeNodes.add(noiseGain);
+
+            noiseGain.gain.setValueAtTime(1, time);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+
+            const filter = this.context.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.setValueAtTime(1000, time);
+            this.activeNodes.add(filter);
+
+            noise.connect(filter).connect(noiseGain).connect(this.chainGain);
+            noise.start(time);
+            noise.stop(time + 0.2);
+        },
+        scheduleHiHat(time) {
+            const bufferSize = this.context.sampleRate;
+            const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+            const data = buffer.getChannelData(0);
+
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = this.context.createBufferSource();
+            noise.buffer = buffer;
+
+            const noiseGain = this.context.createGain();
+            this.activeNodes.add(noise);
+            this.activeNodes.add(noiseGain);
+
+            noiseGain.gain.setValueAtTime(0.3, time);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+
+            const filter = this.context.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.setValueAtTime(5000, time);
+            this.activeNodes.add(filter);
+
+            noise.connect(filter).connect(noiseGain).connect(this.chainGain);
+            noise.start(time);
+            noise.stop(time + 0.05);
+        },
+        scheduleDissonantChord(time, scale) {
+            const dissonantIntervals = [1, 2, 6]; // Minor second, major second, tritone
+            const rootFreq = scale[Math.floor(this.random() * scale.length)];
+            const chord = dissonantIntervals.map(interval => rootFreq * Math.pow(2, interval / 12));
+            this.scheduleChord(chord, time, this.beatsToSeconds(4));
+        },
+        scheduleSustainedChord(time, scale, style) {
+            const chord = scale.slice(0, 3);
+            const duration = this.beatsToSeconds(this.randomRange(style.padDuration));
+            this.scheduleChord(chord, time, duration);
+        },
+        scheduleSingleNoteMelody(time, scale, style) {
+            const noteFreq = scale[Math.floor(this.random() * scale.length)];
+            const duration = this.beatsToSeconds(this.randomRange(style.padDuration));
+            this.scheduleNote(noteFreq, time, duration);
+        },
+        scheduleBendingNoteInStyle(time, scale, style) {
+            const noteFreq = scale[Math.floor(this.random() * scale.length)];
+            const duration = this.beatsToSeconds(this.randomRange(style.padDuration));
+            this.scheduleBendingNote(noteFreq, time, duration);
+        },
+        randomRange(range) {
+            return this.random() * (range[1] - range[0]) + range[0];
+        },
+        scheduleChord(chord, time, duration) {
+            chord.forEach(freq => {
+                this.scheduleNote(freq, time, duration);
+            });
+        },
+        scheduleNote(freq, time, duration) {
+            // Similar to previous implementation
+            try {
+                if (!isFinite(freq) || freq <= 0) return;
+                time = Math.max(time, this.context.currentTime);
+                duration = Math.min(duration, this.beatsToSeconds(8)); // Limit duration to 8 beats
+
+                const oscillator = this.context.createOscillator();
+                this.activeOscillators.add(oscillator);
+                this.activeNodes.add(oscillator);
+                oscillator.onended = () => {
+                    this.activeOscillators.delete(oscillator);
+                    oscillator.disconnect();
+                };
+
+                const gainNode = this.context.createGain();
+                this.activeNodes.add(gainNode);
+
+                oscillator.frequency.setValueAtTime(freq, time);
+                oscillator.type = "sine";
+
+                oscillator.connect(gainNode);
+                gainNode.gain.setValueAtTime(0, time);
+                gainNode.gain.linearRampToValueAtTime(0.5, time + this.beatsToSeconds(0.1));
+                gainNode.gain.linearRampToValueAtTime(0, time + duration);
+
+                gainNode.connect(this.chainGain);
+
+                oscillator.start(time);
+                oscillator.stop(time + duration);
+            } catch (error) {
+                console.error("Error in scheduleNote:", error);
+            }
+        },
+        scheduleBendingNote(freq, time, duration) {
+            try {
+                if (!isFinite(freq) || freq <= 0) return;
+                time = Math.max(time, this.context.currentTime);
+                duration = Math.min(duration, this.beatsToSeconds(16)); // Limit duration to 16 beats
+
+                const oscillator = this.context.createOscillator();
+                this.activeOscillators.add(oscillator);
+                this.activeNodes.add(oscillator);
+                oscillator.onended = () => {
+                    this.activeOscillators.delete(oscillator);
+                    oscillator.disconnect();
+                };
+
+                const gainNode = this.context.createGain();
+                this.activeNodes.add(gainNode);
+
+                oscillator.frequency.setValueAtTime(freq, time);
+                const bendAmount = freq * (0.05 + 0.1 * this.random());
+                const bendDirection = this.random() > 0.5 ? 1 : -1;
+                oscillator.frequency.linearRampToValueAtTime(freq + bendDirection * bendAmount, time + duration);
+
+                oscillator.type = "sine";
+
+                oscillator.connect(gainNode);
+                gainNode.gain.setValueAtTime(0, time);
+                gainNode.gain.linearRampToValueAtTime(0.5, time + this.beatsToSeconds(0.5));
+                gainNode.gain.linearRampToValueAtTime(0, time + duration);
+
+                gainNode.connect(this.chainGain);
+
+                oscillator.start(time);
+                oscillator.stop(time + duration);
+            } catch (error) {
+                console.error("Error in scheduleBendingNote:", error);
+            }
+        },
+        createGlobalEffectsChain(preferredEffects) {
+            const effects = [];
+            const effectFunctions = {
+                'reverb': this.createReverbEffect.bind(this),
+                'distortion': this.createDistortionEffect.bind(this),
+                'chorus': this.createChorusEffect.bind(this),
+                'phaser': this.createPhaserEffect.bind(this),
+                'compressor': this.createCompressorEffect.bind(this)
+            };
+
+            const effectNodes = []; // To keep track of nodes for cleanup
+
+            preferredEffects.forEach(effectName => {
+                if (effectFunctions[effectName]) {
+                    const effect = effectFunctions[effectName](effectNodes);
+                    effects.push(effect);
+                    console.log(`Global Effects Chain: Added ${effectName.charAt(0).toUpperCase() + effectName.slice(1)} Effect`);
+                }
+            });
+
+            let inputNode = this.context.createGain();
+            let outputNode = inputNode;
+            this.activeNodes.add(inputNode);
+
+            effects.forEach(effect => {
+                outputNode.connect(effect.input);
+                outputNode = effect.output;
+            });
+
+            return { input: inputNode, output: outputNode, nodes: effectNodes };
+        },
+        createReverbEffect(effectNodes) {
+            const convolver = this.context.createConvolver();
+            this.activeNodes.add(convolver);
+            effectNodes.push(convolver);
+
+            const buffer = this.context.createBuffer(2, 3 * this.context.sampleRate, this.context.sampleRate);
+            for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+                const data = buffer.getChannelData(channel);
+                for (let i = 0; i < data.length; i++) {
+                    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / buffer.length, 2);
+                }
+            }
+            convolver.buffer = buffer;
+            return { input: convolver, output: convolver };
+        },
+        createDistortionEffect(effectNodes) {
+            const distortion = this.context.createWaveShaper();
+            this.activeNodes.add(distortion);
+            effectNodes.push(distortion);
+
+            const curve = new Float32Array(44100);
+            const amount = this.clamp(400 * this.random(), 0, 1000);
+            const deg = Math.PI / 180;
+            for (let i = 0; i < 44100; ++i) {
+                const x = i * 2 / 44100 - 1;
+                curve[i] = (3 + amount) * x * 20 * deg / (Math.PI + amount * Math.abs(x));
+            }
+            distortion.curve = curve;
+            distortion.oversample = '4x';
+            return { input: distortion, output: distortion };
+        },
+        createChorusEffect(effectNodes) {
+            const delayNode = this.context.createDelay();
+            const lfo = this.context.createOscillator();
+            const lfoGain = this.context.createGain();
+
+            this.activeNodes.add(delayNode);
+            this.activeNodes.add(lfo);
+            this.activeNodes.add(lfoGain);
+            effectNodes.push(delayNode, lfo, lfoGain);
+
+            delayNode.delayTime.value = this.clamp(0.005 + 0.02 * this.random(), 0.005, 0.03);
+            lfo.frequency.value = this.clamp(0.1 + 0.4 * this.random(), 0.1, 0.5);
+            lfoGain.gain.value = this.clamp(0.005 + 0.005 * this.random(), 0.005, 0.01);
+
+            lfo.connect(lfoGain).connect(delayNode.delayTime);
+            lfo.start();
+
+            return { input: delayNode, output: delayNode };
+        },
+        createPhaserEffect(effectNodes) {
+            const phaserStages = 4;
+            let inputNode = this.context.createGain();
+            let lastNode = inputNode;
+            this.activeNodes.add(inputNode);
+            effectNodes.push(inputNode);
+
+            const lfo = this.context.createOscillator();
+            const lfoGain = this.context.createGain();
+
+            this.activeNodes.add(lfo);
+            this.activeNodes.add(lfoGain);
+            effectNodes.push(lfo, lfoGain);
+
+            lfo.frequency.value = this.clamp(0.05 + 0.2 * this.random(), 0.05, 0.25);
+            lfoGain.gain.value = this.clamp(500 + 500 * this.random(), 500, 1000);
+
+            for (let i = 0; i < phaserStages; i++) {
+                const allpass = this.context.createBiquadFilter();
+                allpass.type = 'allpass';
+                allpass.frequency.value = 1000 * (i + 1);
+
+                this.activeNodes.add(allpass);
+                effectNodes.push(allpass);
+
+                lfo.connect(lfoGain).connect(allpass.frequency);
+                lastNode.connect(allpass);
+                lastNode = allpass;
+            }
+
+            lfo.start();
+            return { input: inputNode, output: lastNode };
+        },
+        createCompressorEffect(effectNodes) {
+            const compressor = this.context.createDynamicsCompressor();
+            this.activeNodes.add(compressor);
+            effectNodes.push(compressor);
+
+            compressor.threshold.value = this.clamp(-50 + -20 * this.random(), -90, 0);
+            compressor.knee.value = this.clamp(10 + 30 * this.random(), 0, 40);
+            compressor.ratio.value = this.clamp(4 + 8 * this.random(), 1, 20);
+            compressor.attack.value = this.clamp(0.005 + 0.05 * this.random(), 0, 1);
+            compressor.release.value = this.clamp(0.05 + 0.3 * this.random(), 0, 1);
+
+            return { input: compressor, output: compressor };
+        },
+        cleanupEffectsChain(effectsChain) {
+            if (effectsChain && effectsChain.nodes) {
+                effectsChain.nodes.forEach(node => {
+                    try {
+                        if (node instanceof OscillatorNode) {
+                            node.stop();
+                        }
+                        node.disconnect();
+                    } catch (e) {
+                        console.warn("Error cleaning up effect node:", e);
+                    }
+                });
+            }
+        },
+        cleanupLoop() {
+            try {
+                // Stop and disconnect all active oscillators
+                this.activeOscillators.forEach(osc => {
+                    try {
+                        osc.stop();
+                    } catch (e) {
+                        console.warn("Oscillator already stopped:", e);
+                    }
+                    osc.disconnect();
+                });
+                this.activeOscillators.clear();
+
+                // Disconnect and stop all active nodes
+                this.activeNodes.forEach(node => {
+                    try {
+                        if (node instanceof OscillatorNode || node instanceof AudioBufferSourceNode) {
+                            node.stop();
+                        }
+                        node.disconnect();
+                    } catch (e) {
+                        console.warn("Error disconnecting node:", e);
+                    }
+                });
+                this.activeNodes.clear();
+
+                // Reset master gain
+                this.setAudioParam(this.masterGain.gain, 0.8, this.context.currentTime);
+
+                this.isLoopActive = false;
+                this.activeStyleKey = null;
+                this.updateActiveButton();
+                this.updateStatus("Loop stopped.");
+                console.log("Loop cleanup completed.");
+            } catch (error) {
+                console.warn("Error during loop cleanup:", error);
+            }
+        }
+    };
+
+    // Initialize the synthesizer
+    Synth.init();
+})();
+</script>
+</body>
+</html>
