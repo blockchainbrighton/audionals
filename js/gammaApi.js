@@ -53,40 +53,29 @@ function calculateInscriptionRequestFee() {
   });
 }
 
-/**
- * Sends a request to the /preview endpoint of the Worker to get inscription preview data.
- *
- * @param {Object} audionalJsonObject - The JSON object to be inscribed.
- * @returns {Promise<Object>} - The inscription preview data.
- */
-async function getInscriptionPreview(audionalJsonObject) {
-  try {
-    console.log('Sending request to /preview endpoint with:', audionalJsonObject);
-    const formData = new FormData();
-    formData.append('json', JSON.stringify(audionalJsonObject));
-    formData.append('keep_high_res', 'true');
+async function getInscriptionPreview(jsonObject) {
+  const binaryString = JSON.stringify(jsonObject);
+  const file = new Blob([binaryString], { type: "application/json" });
+  //   const file = await fetch("/tiny.png").then((r) => r.blob());
 
-    const response = await fetch('https://audionals-api.jim-2ac.workers.dev/preview', {
-      method: 'POST',
-      body: formData,
-      // No custom headers needed; 'Content-Type' is automatically set for FormData
-    });
+  const keep_high_res = true;
 
-    console.log('Received response from /preview:', response);
+  const formData = new FormData();
+  formData.append("json", binaryString);
+  formData.append("keep_high_res", keep_high_res);
 
-    const data = await response.json();
-    console.log('Parsed JSON from /preview response:', data);
+  const requestUrl = `${BASE_URL}/preview`;
 
-    if (!response.ok) {
-      console.error('Error response from /preview:', data);
-      throw new Error(data.error || 'Unknown error from /preview');
-    }
-
+  var data = await makeRequest(
+    "POST",
+    requestUrl,
+    { "x-api-key": apiKey },
+    formData
+  ).then((data) => {
     return data;
-  } catch (error) {
-    console.error('Error in getInscriptionPreview:', error);
-    throw error; // Propagate the error to be handled by the caller
-  }
+    //   displayResponse(data);
+  });
+  return data;
 }
 
 async function requestInscription(inscriptionObject) {
