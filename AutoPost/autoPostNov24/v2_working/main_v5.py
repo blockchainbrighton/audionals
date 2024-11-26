@@ -5,6 +5,7 @@ import sys
 import random
 from pathlib import Path
 import fcntl
+import uuid
 
 # Configure logging
 logging.basicConfig(
@@ -21,9 +22,14 @@ CHROME_APP_PATH = "/Applications/Google Chrome.app"
 PROMPTS_FILE_PATH = Path("/Users/jim.btc/Documents/GitHub/audionals/AutoPost/autoPostNov24/v2_working/prompts.txt")
 LOCK_FILE_PATH = Path("/Users/jim.btc/Documents/GitHub/audionals/AutoPost/autoPostNov24/v2_working/script.lock")
 TARGET_PROFILE_DIRECTORY = "Profile 1"
-TARGET_URL = "https://chatgpt.com/"
+TARGET_URL = ""  # Will be set uniquely each cycle
 SEND_CONFIRMATION_KEYWORD = "Message sent successfully."
 EXECUTION_INTERVAL_SECONDS = 3600  # 1 hour
+WAIT_BEFORE_CLOSE_SECONDS = 300    # 5 minutes
+
+def generate_unique_url():
+    unique_id = uuid.uuid4()
+    return f"https://chatgpt.com/?uid={unique_id}"
 
 def human_pause(min_seconds=1, max_seconds=3):
     """
@@ -58,11 +64,10 @@ def release_lock(lock_file):
 
 def launch_chrome():
     """
-    Launches Chrome with the specified profile and navigates to the target URL.
-    Returns the process ID of the launched Chrome window.
+    Launches Chrome with the specified profile and navigates to the unique target URL.
     """
     try:
-        # Open a new Chrome window with the specified profile and URL
+        # Open a new Chrome window with the specified profile and unique URL
         subprocess.run([
             "open",
             "-na",
@@ -78,20 +83,28 @@ def launch_chrome():
 
 def close_chrome_window():
     """
-    Closes the frontmost Chrome window using AppleScript.
+    Closes the Chrome window that contains the TARGET_URL using AppleScript.
     """
     try:
-        applescript_commands = '''
+        applescript_commands = f'''
         tell application "Google Chrome"
-            if (count of windows) > 0 then
-                close front window
-            end if
+            set target_url to "{TARGET_URL}"
+            set window_list to every window
+            repeat with the_window in window_list
+                set tab_list to every tab of the_window
+                repeat with the_tab in tab_list
+                    if URL of the_tab starts with target_url then
+                        close the_window
+                        return
+                    end if
+                end repeat
+            end repeat
         end tell
         '''
         subprocess.run(["osascript", "-e", applescript_commands], check=True)
-        logging.info("Chrome window closed successfully.")
+        logging.info("Specific Chrome window closed successfully.")
     except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to close Chrome window: {e}")
+        logging.error(f"Failed to close the specific Chrome window: {e}")
 
 def read_first_block(file_path):
     """
@@ -181,6 +194,7 @@ def execute_once():
     """
     Executes the main automation steps once.
     """
+    global TARGET_URL  # Declare as global to modify the constant
     logging.info("=== Starting a new automation cycle ===")
     
     # Step 0: Acquire lock to prevent concurrent executions
@@ -189,18 +203,21 @@ def execute_once():
         return  # Another instance is running; skip this cycle
     
     try:
-        # Step 1: Launch Chrome
+        # Step 1: Generate a unique URL
+        TARGET_URL = generate_unique_url()
+        
+        # Step 2: Launch Chrome
         launch_chrome()
         
-        # Step 2: Wait for Chrome to load the page
+        # Step 3: Wait for Chrome to load the page
         logging.info("Waiting for Chrome to launch and load the page.")
         human_pause(5, 7)  # Adjust based on your system's performance
         
-        # Step 3: Focus on the input field
+        # Step 4: Focus on the input field
         logging.info("Attempting to focus on the input field via Tab navigation.")
         focus_input_field_via_tab(tabs_to_press=10)  # Adjust based on your interface
         
-        # Step 4: Read the first block of prompts
+        # Step 5: Read the first block of prompts
         first_block, remaining_content = read_first_block(PROMPTS_FILE_PATH)
         if not first_block:
             logging.info("No prompts to send. Skipping this cycle.")
@@ -208,22 +225,27 @@ def execute_once():
         
         logging.debug(f"First block to send:\n{first_block}")
         
-        # Step 5: Send the first block via GUI scripting
+        # Step 6: Send the first block via GUI scripting
         send_message_via_gui(first_block)
         
-        # Step 6: Confirm the message was sent
+        # Step 7: Confirm the message was sent
         confirm_message_sent()
         
-        # Step 7: Remove the sent block from the file
+        # Step 8: Remove the sent block from the file
         write_remaining_content(PROMPTS_FILE_PATH, remaining_content)
+        
+        # Step 9: Wait for 5 minutes before closing the Chrome window
+        logging.info(f"Waiting for {WAIT_BEFORE_CLOSE_SECONDS / 60} minutes before closing the Chrome window.")
+        time.sleep(WAIT_BEFORE_CLOSE_SECONDS)
+        logging.info("Resuming to close the Chrome window.")
         
     except Exception as e:
         logging.error(f"An error occurred during automation cycle: {e}")
     finally:
-        # Step 8: Close the Chrome window
+        # Step 10: Close the specific Chrome window
         close_chrome_window()
         
-        # Step 9: Release the lock
+        # Step 11: Release the lock
         release_lock(lock_file)
         
         logging.info("=== Automation cycle completed ===")
