@@ -76,22 +76,22 @@ def launch_chrome():
         logging.error(f"Failed to launch Chrome: {e}")
         sys.exit(1)
 
-def close_chrome_window():
-    """
-    Closes the frontmost Chrome window using AppleScript.
-    """
-    try:
-        applescript_commands = '''
-        tell application "Google Chrome"
-            if (count of windows) > 0 then
-                close front window
-            end if
-        end tell
-        '''
-        subprocess.run(["osascript", "-e", applescript_commands], check=True)
-        logging.info("Chrome window closed successfully.")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to close Chrome window: {e}")
+# def close_chrome_window():
+#     """
+#     Closes the frontmost Chrome window using AppleScript.
+#     """
+#     try:
+#         applescript_commands = '''
+#         tell application "Google Chrome"
+#             if (count of windows) > 0 then
+#                 close front window
+#             end if
+#         end tell
+#         '''
+#         subprocess.run(["osascript", "-e", applescript_commands], check=True)
+#         logging.info("Chrome window closed successfully.")
+#     except subprocess.CalledProcessError as e:
+#         logging.error(f"Failed to close Chrome window: {e}")
 
 def read_first_block(file_path):
     """
@@ -221,7 +221,7 @@ def execute_once():
         logging.error(f"An error occurred during automation cycle: {e}")
     finally:
         # Step 8: Close the Chrome window
-        close_chrome_window()
+        # close_chrome_window()
         
         # Step 9: Release the lock
         release_lock(lock_file)

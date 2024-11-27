@@ -5,11 +5,10 @@ import sys
 import random
 from pathlib import Path
 import fcntl
-import uuid
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,  # Change to INFO for less verbosity in production
+    level=logging.DEBUG,  # Change to INFO for less verbosity
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler("manage_chrome_profile.log"),
@@ -22,54 +21,33 @@ CHROME_APP_PATH = "/Applications/Google Chrome.app"
 PROMPTS_FILE_PATH = Path("/Users/jim.btc/Documents/GitHub/audionals/AutoPost/autoPostNov24/v2_working/prompts.txt")
 LOCK_FILE_PATH = Path("/Users/jim.btc/Documents/GitHub/audionals/AutoPost/autoPostNov24/v2_working/script.lock")
 TARGET_PROFILE_DIRECTORY = "Profile 1"
-TARGET_URL = ""  # Will be set uniquely each cycle
+TARGET_URL = "https://chatgpt.com/"
 SEND_CONFIRMATION_KEYWORD = "Message sent successfully."
-EXECUTION_INTERVAL_SECONDS = 3000  # 50 minutes
-WAIT_BEFORE_CLOSE_SECONDS = 300    # 5 minutes
+EXECUTION_INTERVAL_SECONDS = 3600  # 1 hour delay between each execution to create 10 images
 
-def generate_unique_url():
-    unique_id = uuid.uuid4()
-    return f"https://chatgpt.com/?uid={unique_id}"
+# Daily Limit on Images imposed by ChatGPT is around 120
+# This would equate to roughly 10 images every 2 hours
+# Have set to 1 hour for now and will adjust as needed
+
 
 def human_pause(min_seconds=1, max_seconds=3):
     """
     Simulates a human-like pause by sleeping for a random duration between min_seconds and max_seconds.
     """
     pause_duration = random.uniform(min_seconds, max_seconds)
-    logging.debug(f"Pausing for {pause_duration:.2f} seconds to simulate human behavior.")
     time.sleep(pause_duration)
-
-def ensure_directory_exists(directory_path):
-    """
-    Ensures that the specified directory exists. Creates it if it does not.
-    """
-    if not directory_path.exists():
-        try:
-            directory_path.mkdir(parents=True, exist_ok=True)
-            logging.info(f"Created directory: {directory_path}")
-        except Exception as e:
-            logging.error(f"Failed to create directory {directory_path}: {e}")
-            sys.exit(1)
-    else:
-        logging.debug(f"Directory already exists: {directory_path}")
 
 def acquire_lock(lock_file_path):
     """
     Acquires an exclusive lock on the specified file.
     """
-    try:
-        lock_file = open(lock_file_path, 'w')
-    except Exception as e:
-        logging.error(f"Failed to open lock file: {e}")
-        return None
-
+    lock_file = open(lock_file_path, 'w')
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         logging.debug("Lock acquired successfully.")
         return lock_file
     except IOError:
         logging.error("Another instance of the script is already running.")
-        lock_file.close()
         return None
 
 def release_lock(lock_file):
@@ -85,10 +63,11 @@ def release_lock(lock_file):
 
 def launch_chrome():
     """
-    Launches Chrome with the specified profile and navigates to the unique target URL.
+    Launches Chrome with the specified profile and navigates to the target URL.
+    Returns the process ID of the launched Chrome window.
     """
     try:
-        # Open a new Chrome window with the specified profile and unique URL
+        # Open a new Chrome window with the specified profile and URL
         subprocess.run([
             "open",
             "-na",
@@ -102,30 +81,22 @@ def launch_chrome():
         logging.error(f"Failed to launch Chrome: {e}")
         sys.exit(1)
 
-def close_chrome_window():
-    """
-    Closes the Chrome window that contains the TARGET_URL using AppleScript.
-    """
-    try:
-        applescript_commands = f'''
-        tell application "Google Chrome"
-            set target_url to "{TARGET_URL}"
-            set window_list to every window
-            repeat with the_window in window_list
-                set tab_list to every tab of the_window
-                repeat with the_tab in tab_list
-                    if URL of the_tab starts with target_url then
-                        close the_window
-                        return
-                    end if
-                end repeat
-            end repeat
-        end tell
-        '''
-        subprocess.run(["osascript", "-e", applescript_commands], check=True)
-        logging.info("Specific Chrome window closed successfully.")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to close the specific Chrome window: {e}")
+# def close_chrome_window():
+#     """
+#     Closes the frontmost Chrome window using AppleScript.
+#     """
+#     try:
+#         applescript_commands = '''
+#         tell application "Google Chrome"
+#             if (count of windows) > 0 then
+#                 close front window
+#             end if
+#         end tell
+#         '''
+#         subprocess.run(["osascript", "-e", applescript_commands], check=True)
+#         logging.info("Chrome window closed successfully.")
+#     except subprocess.CalledProcessError as e:
+#         logging.error(f"Failed to close Chrome window: {e}")
 
 def read_first_block(file_path):
     """
@@ -139,7 +110,7 @@ def read_first_block(file_path):
         # Split blocks by two consecutive newline characters
         blocks = content.strip().split("\n\n")
         
-        if not blocks or blocks == ['']:
+        if not blocks:
             logging.info("No prompts found in the file.")
             return None, None
         
@@ -215,34 +186,26 @@ def execute_once():
     """
     Executes the main automation steps once.
     """
-    global TARGET_URL  # Declare as global to modify the constant
     logging.info("=== Starting a new automation cycle ===")
     
-    # Step 0: Ensure the lock file directory exists
-    ensure_directory_exists(LOCK_FILE_PATH.parent)
-    
-    # Step 1: Acquire lock to prevent concurrent executions
+    # Step 0: Acquire lock to prevent concurrent executions
     lock_file = acquire_lock(LOCK_FILE_PATH)
     if not lock_file:
-        logging.debug("Skipping this cycle as another instance is running.")
         return  # Another instance is running; skip this cycle
     
     try:
-        # Step 2: Generate a unique URL
-        TARGET_URL = generate_unique_url()
-        
-        # Step 3: Launch Chrome
+        # Step 1: Launch Chrome
         launch_chrome()
         
-        # Step 4: Wait for Chrome to load the page
+        # Step 2: Wait for Chrome to load the page
         logging.info("Waiting for Chrome to launch and load the page.")
         human_pause(5, 7)  # Adjust based on your system's performance
         
-        # Step 5: Focus on the input field
+        # Step 3: Focus on the input field
         logging.info("Attempting to focus on the input field via Tab navigation.")
         focus_input_field_via_tab(tabs_to_press=10)  # Adjust based on your interface
         
-        # Step 6: Read the first block of prompts
+        # Step 4: Read the first block of prompts
         first_block, remaining_content = read_first_block(PROMPTS_FILE_PATH)
         if not first_block:
             logging.info("No prompts to send. Skipping this cycle.")
@@ -250,27 +213,22 @@ def execute_once():
         
         logging.debug(f"First block to send:\n{first_block}")
         
-        # Step 7: Send the first block via GUI scripting
+        # Step 5: Send the first block via GUI scripting
         send_message_via_gui(first_block)
         
-        # Step 8: Confirm the message was sent
+        # Step 6: Confirm the message was sent
         confirm_message_sent()
         
-        # Step 9: Remove the sent block from the file
+        # Step 7: Remove the sent block from the file
         write_remaining_content(PROMPTS_FILE_PATH, remaining_content)
-        
-        # Step 10: Wait for 5 minutes before closing the Chrome window
-        logging.info(f"Waiting for {WAIT_BEFORE_CLOSE_SECONDS / 60} minutes before closing the Chrome window.")
-        time.sleep(WAIT_BEFORE_CLOSE_SECONDS)
-        logging.info("Resuming to close the Chrome window.")
         
     except Exception as e:
         logging.error(f"An error occurred during automation cycle: {e}")
     finally:
-        # Step 11: Close the specific Chrome window
-        close_chrome_window()
+        # Step 8: Close the Chrome window
+        # close_chrome_window()
         
-        # Step 12: Release the lock
+        # Step 9: Release the lock
         release_lock(lock_file)
         
         logging.info("=== Automation cycle completed ===")
