@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Module Testing</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    #response {
+      margin-top: 20px;
+      white-space: pre-wrap;
+      background-color: #f4f4f4;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    input, button {
+      margin: 5px 0;
+      padding: 10px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Module Testing Interface</h1>
+  
+  <!-- Section for Fetching API Key -->
+  <section>
+    <h2>Fetch API Key</h2>
+    <button onclick="getApiKey()">Get API Key</button>
+  </section>
+
+  <!-- Section for Fetching Recommended Fee Rates -->
+  <section>
+    <h2>Fetch Recommended Network Fee Rates</h2>
+    <button onclick="fetchFeeRates()">Get Fee Rates</button>
+  </section>
+
+  <!-- Section for Calculating Inscription Fee -->
+  <section>
+    <h2>Calculate Inscription Request Fee</h2>
+    <input type="file" id="fileInput">
+    <button onclick="calculateFee()">Calculate Fee</button>
+    <p>Expected Fee (sats): <span id="expectedFee"></span></p>
+  </section>
+
+  <!-- Section for Inscription Preview -->
+  <section>
+    <h2>Get Inscription Preview</h2>
+    <textarea id="jsonInput" rows="5" cols="50" placeholder="Enter JSON object..."></textarea>
+    <button onclick="generatePreview()">Generate Preview</button>
+  </section>
+
+  <!-- Section for Submitting Inscription Request -->
+  <section>
+    <h2>Request Inscription</h2>
+    <textarea id="inscriptionInput" rows="5" cols="50" placeholder="Enter Inscription Object..."></textarea>
+    <button onclick="submitInscription()">Submit Request</button>
+  </section>
+
+  <!-- Response Display -->
+  <h2>Response</h2>
+  <div id="response"></div>
+
+  <script>
+    const BASE_URL = "https://audionals-api.jim-2ac.workers.dev";
+    let apiKey = "honey-pot";
+    let feeRates = {};
+    let calculatedFee = {};
+    let inscriptionPreviewData = {};
+
+    async function getApiKey() {
+      try {
+        const response = await fetch("/api-key");
+        const data = await response.json();
+        apiKey = data.apiKey;
+        displayResponse({ message: "API Key fetched successfully.", apiKey });
+      } catch (error) {
+        displayResponse("Error fetching API key.");
+      }
+    }
+
+    // getApiKey(); // Fetch API key initially
+
+
+    async function makeRequest(method, url, headers, body) {
+      try {
+        const response = await fetch(url, { method, headers, body });
+        return await response.json();
+      } catch (error) {
+        displayResponse("An error occurred.");
+      }
+    }
+
+    async function fetchFeeRates() {
+      const requestUrl = `${BASE_URL}/network_fee_rates`;
+      var data = await makeRequest("GET", requestUrl, { "x-api-key": apiKey });
+      if (data) {
+        feeRates = data;
+        displayResponse({ message: "Fee rates fetched.", feeRates });
+      }
+    }
+
+    function calculateFee() {
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) {
+        displayResponse("Please select a file.");
+        return;
+      }
+      const file_size_bytes = file.size;
+      const network_fee_rate = feeRates.normal_fee_rate || 1;
+
+      const requestUrl = `${BASE_URL}/calculate_fee?network_fee_rate=${network_fee_rate}&file_size_bytes=${file_size_bytes}`;
+
+      makeRequest("GET", requestUrl, { "x-api-key": apiKey }).then((data) => {
+        if (data) {
+          calculatedFee = data.summary;
+          document.getElementById("expectedFee").textContent =
+            calculatedFee.total_fee_sats || "N/A";
+          displayResponse({ message: "Fee calculated.", calculatedFee });
+        }
+      });
+    }
+
+    async function generatePreview() {
+      const jsonInput = document.getElementById("jsonInput").value;
+      if (!jsonInput) {
+        displayResponse("Please enter a JSON object.");
+        return;
+      }
+      const binaryString = JSON.stringify(JSON.parse(jsonInput));
+
+      const formData = new FormData();
+      formData.append("json", binaryString);
+      formData.append("keep_high_res", true);
+
+      const requestUrl = `${BASE_URL}/preview`;
+
+      const data = await makeRequest(
+        "POST",
+        requestUrl,
+        { "x-api-key": apiKey },
+        formData
+      );
+      if (data) {
+        displayResponse({ message: "Preview generated.", data });
+      }
+    }
+
+    async function submitInscription() {
+      const inscriptionInput = document.getElementById("inscriptionInput").value;
+      if (!inscriptionInput) {
+        displayResponse("Please enter an inscription object.");
+        return;
+      }
+      const inscriptionObject = JSON.parse(inscriptionInput);
+      const formData = new FormData();
+      formData.append(
+        "btc_ordinal_recipient_address",
+        inscriptionObject.btc_ordinal_recipient_address
+      );
+      formData.append(
+        "btc_refund_recipient_address",
+        inscriptionObject.btc_ordinal_recipient_address
+      );
+      formData.append(
+        "expected_total_fee_sats",
+        inscriptionObject.expected_total_fee_sats
+      );
+      formData.append("json", JSON.stringify(inscriptionObject.file));
+      formData.append("keep_high_res", true);
+      formData.append("network_fee_rate", inscriptionObject.network_fee_rate);
+      formData.append("submitter_email_address", "jim@jim.com");
+
+      const requestUrl = `${BASE_URL}/requests`;
+
+      const data = await makeRequest(
+        "POST",
+        requestUrl,
+        { "x-api-key": apiKey },
+        formData
+      );
+      if (data) {
+        displayResponse({ message: "Inscription request submitted.", data });
+      }
+    }
+
+    function displayResponse(response) {
+      const responseContainer = document.getElementById("response");
+      responseContainer.innerHTML = JSON.stringify(response, null, 2);
+    }
+  </script>
+</body>
+</html>
