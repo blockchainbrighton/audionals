@@ -23,7 +23,7 @@ LOCK_FILE_PATH = Path("/Users/jim.btc/Documents/GitHub/audionals/AutoPost/autoPo
 TARGET_PROFILE_DIRECTORY = "Profile 1"
 TARGET_URL = "https://chatgpt.com/"
 SEND_CONFIRMATION_KEYWORD = "Message sent successfully."
-EXECUTION_INTERVAL_SECONDS = 3600  # 1 hour delay between each execution to create 10 images
+EXECUTION_INTERVAL_SECONDS = 7200  # 2 hour delay between each execution to create 10 images
 
 # Daily Limit on Images imposed by ChatGPT is around 120
 # This would equate to roughly 10 images every 2 hours
