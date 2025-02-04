@@ -295,7 +295,7 @@ function openLoadSampleModal(index, loadSampleButton) {
     const actionButtons = createActionButtons([
         { text: 'Load', action: () => handleLoad(index, null, loadSampleButton), className: 'green-button' },
         { text: 'Cancel', action: () => closeModal(modalOverlay), className: 'red-button' },
-        { text: 'Find More Samples', action: () => window.open('https://ordinals.hiro.so/inscriptions?f=audio', '_blank'), tooltip: 'Find any onchain audio you like. Simply copy the ordinal ID and paste it into the form above to load it into the sequencer for remixing.', className: 'yellow-button' },
+        { text: 'Find More Samples', action: () => window.open('https://www.ord.io/?content-type=audio', '_blank'), tooltip: 'Find any onchain audio you like. Simply copy the ordinal ID and paste it into the form above to load it into the sequencer for remixing.', className: 'yellow-button' },
     ]);
 
     modalContent.appendChild(inputFields);
