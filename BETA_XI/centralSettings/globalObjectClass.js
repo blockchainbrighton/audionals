@@ -829,6 +829,16 @@ class UnifiedSequencerSettings {
         });
       }
     }
+
+    setChannelName(channelIndex, name) {
+        // Update the internal settings
+        this.settings.masterSettings.projectChannelNames[channelIndex] = name;
+        // Optionally update the UI for this channel name.
+        // This assumes updateProjectChannelNamesUI can take the channel index and name.
+        this.updateProjectChannelNamesUI(channelIndex, name);
+        // If you need to notify observers or do any additional work, you can do that here.
+        console.log(`Channel ${channelIndex} name set to: ${name}`);
+      }
   
     getChannelName(channelIndex) {
       console.log("getChannelName entered");

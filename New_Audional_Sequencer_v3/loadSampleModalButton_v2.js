@@ -97,7 +97,7 @@ function openModal(index, loadSampleButton) {
 const ogAudionalDropdown = createOGDropdown('Load any OB1 or OG Audional Inscription:', ogSampleUrls);
 ogAudionalDropdown.querySelector('select').id = `og-audional-dropdown-${index}`;
 
-// Inject CSS for pulsing effect into the head of the document
+// Inject CSS for pulsing effect
 const style = document.createElement('style');
 style.type = 'text/css';
 style.innerHTML = `
@@ -115,13 +115,12 @@ document.head.appendChild(style);
 // Add the 'pulse-green' class to the dropdown
 ogAudionalDropdown.classList.add('pulse-green');
 
+// Append the dropdown and attach the event listener just once
 modalContent.appendChild(ogAudionalDropdown);
-ogAudionalDropdown.querySelector('select').addEventListener('change', (event) => handleDropdownChange(event, index, modal, loadSampleButton));
+ogAudionalDropdown.querySelector('select').addEventListener('change', (event) =>
+    handleDropdownChange(event, index, modal, loadSampleButton)
+);
 
-    ogAudionalDropdown.querySelector('select').id = `og-audional-dropdown-${index}`;
-    modalContent.appendChild(ogAudionalDropdown);
-    ogAudionalDropdown.querySelector('select').addEventListener('change', (event) => handleDropdownChange(event, index, modal, loadSampleButton));
-    
     const actions = [
         { text: 'Load Audio', action: () => handleAction(index, modal, loadSampleButton) },
         { text: 'Cancel', action: () => closeModal(modal) },
