@@ -120,7 +120,7 @@ function createQuickPlayButton(index) {
 quickPlayButtons.forEach(button => button.classList.add('inactive'));
 
 // Create channels dynamically and log details
-const numChannels = window.unifiedSequencerSettings.numChannels;
+const numChannels = window.NUM_CHANNELS;
 console.log(`[quickplayButtons] Cloning channels using numChannels = ${numChannels}`);
 for (let i = 0; i < numChannels; i++) {
     let clonedChannel = channelTemplate.cloneNode(true);

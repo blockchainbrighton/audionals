@@ -16,7 +16,7 @@ const allSequencesLength = 4096;
 
 
 const collectedURLs = Array(32).fill(''); 
-let soloedChannels = Array(32).fill(false); // Assuming you have 16 channels
+let soloedChannels = Array(32).fill(false); // Assuming you have 32 channels
 let activeChannels = 32;// new Set();
 let gainNodes = Array(32).fill(null);
 let channelMutes = []; // Declare the channelMutes array as a global variable

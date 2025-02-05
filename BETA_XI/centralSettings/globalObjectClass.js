@@ -913,7 +913,7 @@ class UnifiedSequencerSettings {
     }
   
     updateProjectSequencesUI() {
-      console.log("updateProjectSequencesUI entered");
+    //   console.log("updateProjectSequencesUI entered");
       const projectSequences = this.getSettings('projectSequences');
       Object.values(projectSequences).forEach((sequence, index) => {
         updateSequenceUI(index, sequence); // Assumes updateSequenceUI is defined elsewhere
@@ -1032,4 +1032,5 @@ class UnifiedSequencerSettings {
     }
   }
   
-  window.unifiedSequencerSettings = new UnifiedSequencerSettings(null, 64, 32);  
+  window.unifiedSequencerSettings = new UnifiedSequencerSettings(null, 64, 64);
+  window.NUM_CHANNELS = window.unifiedSequencerSettings.numChannels;
