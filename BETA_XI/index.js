@@ -186,7 +186,7 @@ if (playButton && stopButton) {
 
         stopButton.addEventListener('click', () => {
             console.log('Stop button clicked');
-            stopAllAudio(); // Stop all audio playback
+            window.AudioUtilsPart2.stopAllAudio(); // Stop all audio playback
         
             if (isPlaying) {
                 stopScheduler(); // Custom function - ensure it's defined

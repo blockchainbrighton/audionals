@@ -106,7 +106,8 @@
             if (url) {
               console.log(`[UnifiedLoad] Processing URL ${i}: ${url}`);
               const loadSampleButtonElement = document.getElementById(`load-sample-button-${i}`);
-              await fetchAudio(url, i, loadSampleButtonElement);
+              // Use the namespaced fetchAudio
+              await window.AudioUtilsPart1.fetchAudio(url, i, loadSampleButtonElement);
             }
           }
         }

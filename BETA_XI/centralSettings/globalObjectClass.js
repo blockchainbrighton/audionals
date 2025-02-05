@@ -159,15 +159,16 @@ class UnifiedSequencerSettings {
     }
   
     async formatAndFetchAudio(url, index) {
-      const baseDomain = "https://ordinals.com";
-      if (url.startsWith("/")) {
-        url = `${baseDomain}${url}`;
+        const baseDomain = "https://ordinals.com";
+        if (url.startsWith("/")) {
+          url = `${baseDomain}${url}`;
+        }
+        return this.formatURL(url).then((formattedUrl) => {
+          this.settings.masterSettings.channelURLs[index] = formattedUrl;
+          // Use the namespaced fetchAudio
+          return window.AudioUtilsPart1.fetchAudio(formattedUrl, index);
+        });
       }
-      return this.formatURL(url).then((formattedUrl) => {
-        this.settings.masterSettings.channelURLs[index] = formattedUrl;
-        return fetchAudio(formattedUrl, index); // Assumes fetchAudio is defined elsewhere
-      });
-    }
   
     updateUIWithLoadedSettings() {
       this.updateProjectNameUI(this.settings.masterSettings.projectName);

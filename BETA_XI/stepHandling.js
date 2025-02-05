@@ -69,7 +69,7 @@ function playStep() {
         const isMuted = handleStep(channel, channelData, totalStepCount);
         // console.log(`[playStep] Channel ${channel.dataset.id} mute state: ${isMuted}`);
   
-        playSound(currentSequence, channel, currentStep);
+        window.AudioUtilsPart2.playSound(currentSequence, channel, currentStep);
         // console.log(`[playStep] playSound called for sequence ${currentSequence}, channel ${channel.dataset.id}, step ${currentStep}`);
     }
   

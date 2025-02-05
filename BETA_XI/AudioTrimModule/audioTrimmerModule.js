@@ -290,37 +290,42 @@ class AudioTrimmer {
     updatePlaybackCanvas() {
         if (!this.audioBuffer) return;
       
-        // Use the same trim calculation used for playback.
-        // (Assuming calculateTrimValues is the same function used in playTrimmedAudio.)
+        // Use the shared calculation from calculateTrimValues.
         const { trimStart, duration } = calculateTrimValues(this.channelIndex, this.audioBuffer, false);
-        const trimmedDuration = duration; // the duration of the clear (playable) area
+        const trimmedDuration = duration; // duration of the playable (clear) area
       
-        // Compute the elapsed time relative to the start of playback.
+        // Compute the elapsed time since playback started.
         const elapsed = this.audioContext.currentTime - this.startTime;
         const relativePosition = elapsed % trimmedDuration;
       
-        // Calculate boundaries for the clear area:
-        // Our getSliderLeft() returns a value that places the slider’s center at (sliderValue)% of the track.
-        // The actual right edge of the start slider is then:
+        // Determine the boundaries for the clear area:
         const trackWidth = this.sliderTrack.offsetWidth;
         const sliderWidth = this.startSlider.offsetWidth; // assume both sliders are the same size
       
-        // Compute the left positions based on the slider values:
-        // (These positions were computed using getSliderLeft(), which positions the slider's center minus half the width.)
-        const computedStartLeft = this.getSliderLeft(this.startSliderValue); // positions the start slider's left edge at (center - sliderWidth/2)
-        const computedEndLeft = this.getSliderLeft(this.endSliderValue);
-      
-        // Determine the clear area boundaries:
-        // The right edge of the start slider (clear area's left boundary):
-        const clearAreaLeftBoundary = computedStartLeft + sliderWidth;
-        // The left edge of the end slider (clear area's right boundary):
-        const clearAreaRightBoundary = computedEndLeft;
-      
-        // Calculate the clear area width.
+        // Use the percentage values directly to compute the edges.
+        // Right edge of the start slider:
+        const clearAreaLeftBoundary = (this.startSliderValue / 100) * trackWidth + sliderWidth / 2;
+        // Left edge of the end slider:
+        const clearAreaRightBoundary = (this.endSliderValue / 100) * trackWidth - sliderWidth / 2;
         const clearWidth = clearAreaRightBoundary - clearAreaLeftBoundary;
-        
+      
         // Interpolate the x-position for the transport indicator within the clear area.
         const xPosition = clearAreaLeftBoundary + (relativePosition / trimmedDuration) * clearWidth;
+      
+        // DEBUG: Log the computed boundaries and positions.
+        console.log('--- Transport Debug ---');
+        console.log('Track width:', trackWidth);
+        console.log('Slider width:', sliderWidth);
+        console.log('Start slider value (%):', this.startSliderValue);
+        console.log('End slider value (%):', this.endSliderValue);
+        console.log('Clear left boundary (px):', clearAreaLeftBoundary);
+        console.log('Clear right boundary (px):', clearAreaRightBoundary);
+        console.log('Clear area width (px):', clearWidth);
+        console.log('Elapsed time:', elapsed);
+        console.log('Trimmed duration (s):', trimmedDuration);
+        console.log('Relative position (s):', relativePosition);
+        console.log('Computed xPosition (px):', xPosition);
+        console.log('-----------------------');
       
         // Draw the transport indicator.
         const canvasWidth = this.playbackCanvas.width;
