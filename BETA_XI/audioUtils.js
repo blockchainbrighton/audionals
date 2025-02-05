@@ -1,478 +1,422 @@
 // audioUtils.js
 
+// Global buffer and active source storage
 const audioBuffers = new Map();
 const activeAudioSources = new Set();
 
-// Using sample URLs as keys in the audioBuffers map instead of channel numbers 
-// for greater flexibility, scalability, and reusability of audio data. 
+// Debug flag (set to true to enable detailed logging)
+const DEBUG = false;
 
+// Helper logging function (only logs when DEBUG is true)
+const log = (msg, ...args) => { if (DEBUG) console.log(msg, ...args); };
 
-// Function to get the ID from a URL
-function getIDFromURL(url) {
-  // console.log('[HTML Debugging] getIDFromURL entered');
-  const parts = url.split('/');
-  return parts[parts.length - 1];
-}
+/**
+ * Returns the last part of a URL.
+ * @param {string} url
+ * @returns {string}
+ */
+const getIDFromURL = url => url.split('/').pop();
 
-// Logging function to reduce redundancy
-function logConversion(conversionType, details, length) {
-  // console.log(`[HTML Debugging] [${conversionType}] Entered function. ${details} length: ${length}`);
-}
-
-// Function to convert base64 to an array buffer
-function base64ToArrayBuffer(base64) {
-  logConversion('base64ToArrayBuffer', 'Base64 sample', base64.substring(0, 100).length);
+/**
+ * Converts a base64 string to an ArrayBuffer.
+ * @param {string} base64
+ * @returns {ArrayBuffer}
+ */
+const base64ToArrayBuffer = base64 => {
+  log('[base64ToArrayBuffer]', 'Converting base64. Length:', base64.substring(0, 100).length);
+  // Use Uint8Array.from for brevity
   const binaryString = window.atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  logConversion('base64ToArrayBuffer', 'Generated Uint8Array', bytes.length);
-  return bytes.buffer;
-}
+  const buffer = Uint8Array.from(binaryString, char => char.charCodeAt(0)).buffer;
+  log('[base64ToArrayBuffer]', 'Converted buffer length:', buffer.byteLength);
+  return buffer;
+};
 
-// Helper function to convert an ArrayBuffer to a Base64 string
-function bufferToBase64(buffer) {
-  logConversion('bufferToBase64', 'Buffer', buffer.byteLength);
-  const bytes = new Uint8Array(buffer);
-  let binary = String.fromCharCode.apply(null, bytes);
+/**
+ * Converts an ArrayBuffer to a base64 string.
+ * @param {ArrayBuffer} buffer
+ * @returns {string}
+ */
+const bufferToBase64 = buffer => {
+  log('[bufferToBase64]', 'Buffer byteLength:', buffer.byteLength);
+  const binary = String.fromCharCode(...new Uint8Array(buffer));
   const base64 = window.btoa(binary);
-  logConversion('bufferToBase64', 'Converted to base64', base64.length);
+  log('[bufferToBase64]', 'Converted base64 length:', base64.length);
   return base64;
-}
+};
 
-
-
-async function processJSONResponse(response, channelIndex) {
-  console.log("[processJSONResponse] Processing JSON response");
+/**
+ * Processes a JSON response containing audio data.
+ * @param {Response} response
+ * @returns {Promise<{audioData: ArrayBuffer|null, sampleName: string}>}
+ */
+async function processJSONResponse(response) {
+  log('[processJSONResponse]', 'Parsing JSON response');
   const jsonResponse = await response.json();
-  console.log("[processJSONResponse] JSON response parsed");
-
   const sampleName = jsonResponse.filename || '';
-  console.log(`[processJSONResponse] sampleName determined from JSON: ${sampleName}`);
-
-  const audioData = jsonResponse.audioData ? base64ToArrayBuffer(jsonResponse.audioData.split(',')[1]) : null;
-  console.log("[processJSONResponse] audioData set from JSON");
-
+  const audioData = jsonResponse.audioData
+    ? base64ToArrayBuffer(jsonResponse.audioData.split(',')[1])
+    : null;
+  log('[processJSONResponse]', 'Sample name:', sampleName);
   return { audioData, sampleName };
 }
 
-
-
+/**
+ * Processes an HTML response to extract audio data.
+ * @param {string} htmlText
+ * @returns {Promise<{audioData: ArrayBuffer|null, sampleName: string|null}>}
+ */
 async function processHTMLResponse(htmlText) {
-  console.log("[processHTMLResponse] Processing HTML content");
+  log('[processHTMLResponse]', 'Parsing HTML response');
   const doc = new DOMParser().parseFromString(htmlText, 'text/html');
-  const audioSourceElement = doc.querySelector('audio[data-audionalSampleName] source');
-  const sampleNameElement = doc.getElementById('sampleName');
-
-  let sampleName = sampleNameElement ? sampleNameElement.textContent.trim() : null;
-  console.log(`[processHTMLResponse] Sample name determined from HTML: ${sampleName}`);
+  const audioSource = doc.querySelector('audio[data-audionalSampleName] source');
+  const sampleName = doc.getElementById('sampleName')?.textContent.trim() || null;
+  log('[processHTMLResponse]', 'Sample name:', sampleName);
 
   let audioData = null;
-  if (audioSourceElement) {
-      const base64AudioData = audioSourceElement.getAttribute('src');
-      console.log("[processHTMLResponse] Audio source element found");
-
-      if (/^data:audio\/(wav|mp3|flac);base64,/.test(base64AudioData.toLowerCase())) {
-          audioData = base64ToArrayBuffer(base64AudioData.split(',')[1]);
-          console.log("[processHTMLResponse] Audio data set from HTML");
-      } else {
-          console.error("[processHTMLResponse] Audio data does not have expected base64 prefix.");
-      }
+  if (audioSource) {
+    const src = audioSource.getAttribute('src');
+    if (/^data:audio\/(wav|mp3|flac);base64,/.test(src.toLowerCase())) {
+      audioData = base64ToArrayBuffer(src.split(',')[1]);
+      log('[processHTMLResponse]', 'Audio data extracted from HTML.');
+    } else {
+      console.error('[processHTMLResponse] Unexpected data format.');
+    }
   } else {
-      console.error("[processHTMLResponse] No audio source element found.");
+    console.error('[processHTMLResponse] No audio source element found.');
   }
-
   return { audioData, sampleName };
 }
 
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Import Audio buffers from jiMS10 Synthesizer
-
-// Message handler for receiving ArrayBuffer formatted audio data from synth
-window.addEventListener('message', async (event) => {
+// Listen for messages carrying ArrayBuffer audio data (e.g. from the jiMS10 Synthesizer)
+window.addEventListener('message', async event => {
   if (event.data.type === 'audioData') {
-      const channelIndex = event.data.channelIndex;
-      console.log(`Received audio data message with channel index: ${channelIndex}`);
-      if (event.data.data instanceof ArrayBuffer) {
-          console.log(`Processing ArrayBuffer audio data for channel ${channelIndex}`);
-          
-          // Create a persistent URL for the blob, including the channel index in the URL
-          const blob = new Blob([event.data.data], {type: event.data.mimeType});
-          const persistentUrl = URL.createObjectURL(blob);
-          const uniquePersistentUrl = `${persistentUrl}?channel=${channelIndex}`;
-          console.log(`Persistent URL created for logging and use: ${uniquePersistentUrl}`);
-
-          // Pass this unique URL to decodeAndStoreAudio for processing and storage
-          try {
-              await decodeAndStoreAudio(event.data.data, event.data.filename, uniquePersistentUrl, channelIndex);
-              console.log(`Audio data processed and stored for channel ${channelIndex}`);
-
-              // Store the unique URL for later access by other modules such as audio trimming
-              window.unifiedSequencerSettings.settings.masterSettings.channelURLs[channelIndex] = uniquePersistentUrl;
-          } catch (error) {
-              console.error('Error processing audio data:', error);
-          }
-      } else {
-          console.error('Received data is not an ArrayBuffer as expected');
+    const { channelIndex, data, mimeType, filename } = event.data;
+    log(`[Message] Received audio data for channel ${channelIndex}`);
+    if (data instanceof ArrayBuffer) {
+      const blob = new Blob([data], { type: mimeType });
+      const persistentUrl = URL.createObjectURL(blob) + `?channel=${channelIndex}`;
+      try {
+        await decodeAndStoreAudio(data, filename, persistentUrl, channelIndex);
+        log(`[Message] Audio stored for channel ${channelIndex}`);
+        window.unifiedSequencerSettings.settings.masterSettings.channelURLs[channelIndex] = persistentUrl;
+      } catch (error) {
+        console.error('Error processing audio data:', error);
       }
+    } else {
+      console.error('Expected ArrayBuffer but received:', typeof data);
+    }
   }
 });
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Function to decode audio data
-const decodeAudioData = (audioData) => {
+/**
+ * Decodes audio data using the AudioContext.
+ * @param {ArrayBuffer} audioData
+ * @returns {Promise<AudioBuffer>}
+ */
+const decodeAudioData = audioData => {
   const audioContext = window.unifiedSequencerSettings.audioContext;
   return new Promise((resolve, reject) => {
-      audioContext.decodeAudioData(audioData, decodedData => {
-          console.log('[HTML Debugging] [decodeAudioData] Audio data decoded successfully.');
-          resolve(decodedData);
-      }, error => {
-          console.error('[HTML Debugging] [decodeAudioData] Detailed Error:', { message: error.message, code: error.code });
-          reject(error);
-      });
+    audioContext.decodeAudioData(
+      audioData,
+      decoded => { log('[decodeAudioData]', 'Decoded successfully.'); resolve(decoded); },
+      error => {
+        console.error('[decodeAudioData] Error:', error);
+        reject(error);
+      }
+    );
   });
 };
 
+/**
+ * Decodes and stores audio (and its reverse) in global buffers,
+ * and assigns the audio buffer to the corresponding source node.
+ * @param {ArrayBuffer} audioData
+ * @param {string} sampleName
+ * @param {string} fullUrl
+ * @param {number} channelIndex
+ */
 async function decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex) {
-  console.log("[decodeAndStoreAudio] Attempting to decode audio data");
+  log('[decodeAndStoreAudio]', 'Decoding audio for channel', channelIndex);
   try {
-      const audioBuffer = await decodeAudioData(audioData);
-      console.log("[decodeAndStoreAudio] Audio data decoded");
+    const audioBuffer = await decodeAudioData(audioData);
+    const reverseBuffer = await createReverseBuffer(audioBuffer);
+    const forwardKey = `channel_${channelIndex}_forward`;
+    const reverseKey = `channel_${channelIndex}_reverse`;
+    audioBuffers.set(forwardKey, audioBuffer);
+    audioBuffers.set(reverseKey, reverseBuffer);
+    audioBuffers.set(fullUrl, audioBuffer);
+    audioBuffers.set(fullUrl + '_reverse', reverseBuffer);
+    log('[decodeAndStoreAudio]', `Stored buffers for channel ${channelIndex}, URL: ${fullUrl}`);
 
-      // Create a reverse buffer by copying and reversing the audioBuffer
-      const reverseBuffer = await createReverseBuffer(audioBuffer);
-
-      // Store buffers using both channel-specific keys and URL-based keys
-      const forwardKey = `channel_${channelIndex}_forward`;
-      const reverseKey = `channel_${channelIndex}_reverse`;
-
-      // Use a global buffer storage
-      audioBuffers.set(forwardKey, audioBuffer);
-      audioBuffers.set(reverseKey, reverseBuffer);
-
-      // Associate URLs with the buffers
-      audioBuffers.set(`${fullUrl}`, audioBuffer);
-      audioBuffers.set(`${fullUrl}_reverse`, reverseBuffer);
-
-      console.log(`[decodeAndStoreAudio] Forward and reverse audio buffers stored for channel ${channelIndex} and URL ${fullUrl}: ${sampleName}`);
-      
-
-
-      // Disconnect existing connections if the source node is already created
-      if (window.unifiedSequencerSettings.sourceNodes[channelIndex]) {
-          window.unifiedSequencerSettings.sourceNodes[channelIndex].disconnect();
-          window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;  // Clear the existing source node if needed
-      }
-
-      // Check if the source node already exists and reassign the buffer
-      if (!window.unifiedSequencerSettings.sourceNodes[channelIndex]) {
-          window.unifiedSequencerSettings.sourceNodes[channelIndex] = window.unifiedSequencerSettings.audioContext.createBufferSource();
-      }
-
-      if (!window.unifiedSequencerSettings.sourceNodes[channelIndex].buffer) {
-          window.unifiedSequencerSettings.sourceNodes[channelIndex].buffer = audioBuffer;
-          console.log(`[decodeAndStoreAudio] Buffer assigned to source node for channel ${channelIndex}`);
-      }
-
-      // Update UI or other components that depend on these buffers
-      window.unifiedSequencerSettings.updateProjectChannelNamesUI(channelIndex, sampleName);
-      console.log(`[decodeAndStoreAudio] UI updated with new sample name for channel ${channelIndex}`);
-
-      // Optionally, trigger any UI updates or callbacks that need these buffers
-      if (typeof updateWaveformDisplay === "function") {
-          updateWaveformDisplay(channelIndex, audioBuffer);
-          console.log("[decodeAndStoreAudio] Waveform display updated.");
-      }
-
+    // Reset and (re)create the source node if needed
+    const settings = window.unifiedSequencerSettings;
+    if (settings.sourceNodes[channelIndex]) {
+      settings.sourceNodes[channelIndex].disconnect();
+      settings.sourceNodes[channelIndex] = null;
+    }
+    if (!settings.sourceNodes[channelIndex]) {
+      settings.sourceNodes[channelIndex] = settings.audioContext.createBufferSource();
+    }
+    if (!settings.sourceNodes[channelIndex].buffer) {
+      settings.sourceNodes[channelIndex].buffer = audioBuffer;
+      log('[decodeAndStoreAudio]', `Assigned buffer to source node for channel ${channelIndex}`);
+    }
+    settings.updateProjectChannelNamesUI(channelIndex, sampleName);
+    if (typeof updateWaveformDisplay === 'function') {
+      updateWaveformDisplay(channelIndex, audioBuffer);
+      log('[decodeAndStoreAudio]', 'Waveform display updated.');
+    }
   } catch (error) {
-      console.error('[decodeAndStoreAudio] Error decoding and storing audio:', error);
+    console.error('[decodeAndStoreAudio] Error:', error);
   }
 }
 
-// Function to create a reverse buffer from an existing AudioBuffer
-// Accessibility: Both buffers can be accessed using their keys. 
-// For example, if you need the reverse buffer for https://example.com/audio.mp3, 
-// you would look for https://example.com/audio.mp3_reverse in the audioBuffers map.
+/**
+ * Creates a reversed copy of the provided AudioBuffer.
+ * @param {AudioBuffer} audioBuffer
+ * @returns {Promise<AudioBuffer>}
+ */
 async function createReverseBuffer(audioBuffer) {
-  const audioContext = window.unifiedSequencerSettings.audioContext;
-  const numberOfChannels = audioBuffer.numberOfChannels;
-  const length = audioBuffer.length;
-  const sampleRate = audioBuffer.sampleRate;
-
-  const reverseBuffer = audioContext.createBuffer(numberOfChannels, length, sampleRate);
-  for (let channel = 0; channel < numberOfChannels; channel++) {
-      const forwardData = audioBuffer.getChannelData(channel);
-      const reverseData = reverseBuffer.getChannelData(channel);
-      for (let i = 0; i < length; i++) {
-          reverseData[i] = forwardData[length - 1 - i];
-      }
+  const ctx = window.unifiedSequencerSettings.audioContext;
+  const { numberOfChannels, length, sampleRate } = audioBuffer;
+  const reverseBuffer = ctx.createBuffer(numberOfChannels, length, sampleRate);
+  for (let ch = 0; ch < numberOfChannels; ch++) {
+    const forwardData = audioBuffer.getChannelData(ch);
+    const reverseData = reverseBuffer.getChannelData(ch);
+    for (let i = 0; i < length; i++) {
+      reverseData[i] = forwardData[length - 1 - i];
+    }
   }
   return reverseBuffer;
 }
 
+/**
+ * Fetches audio from a URL and processes it based on its content type.
+ * @param {string} url
+ * @param {number} channelIndex
+ * @param {string|null} sampleNameGiven
+ * @param {Function|null} callback
+ */
 async function fetchAudio(url, channelIndex, sampleNameGiven = null, callback = null) {
   try {
-      const fullUrl = formatURL(url);
-      const response = await fetch(fullUrl);
+    const fullUrl = formatURL(url);
+    const response = await fetch(fullUrl);
+    if (!response.ok) {
+      console.error(`[fetchAudio] Failed to fetch ${fullUrl} (Status: ${response.status})`);
+      return;
+    }
 
-      if (!response.ok) {
-          console.error(`[fetchAndProcessAudio] Fetch request failed for URL: ${fullUrl}, Status: ${response.status}`);
-          return;
+    const contentType = response.headers.get('Content-Type') || '';
+    let audioData, sampleName = window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex];
+
+    if (contentType.includes('application/json')) {
+      ({ audioData, sampleName } = await processJSONResponse(response));
+      sampleName = sampleName || sampleNameGiven || fullUrl.split('/').pop();
+    } else if (contentType.includes('text/html')) {
+      const htmlText = await response.text();
+      ({ audioData, sampleName } = await processHTMLResponse(htmlText));
+      sampleName = sampleName || sampleNameGiven || fullUrl.split('/').pop();
+    } else {
+      audioData = await response.arrayBuffer();
+      sampleName = sampleName || sampleNameGiven || fullUrl.split('/').pop().split(/[?#]/)[0] || 'Unnamed Sample';
+    }
+
+    if (audioData) {
+      await decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex);
+      const settings = window.unifiedSequencerSettings;
+      if (!settings.settings.masterSettings.projectChannelNames[channelIndex]) {
+        settings.updateProjectChannelNamesUI(channelIndex, sampleName);
+        settings.settings.masterSettings.projectChannelNames[channelIndex] = sampleName;
       }
-
-      const contentType = response.headers.get('Content-Type');
-      let audioData;
-      // Initially, do not change the sample name if it already exists.
-      let sampleName = window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex];
-
-      // Determine the content type and process accordingly
-      if (contentType.includes('application/json')) {
-          const { audioData: processedAudioData, sampleName: processedSampleName } = await processJSONResponse(response, channelIndex);
-          audioData = processedAudioData;
-          // Only update the sampleName if it hasn't been set by the user.
-          if (!sampleName) {
-              sampleName = processedSampleName || sampleNameGiven || fullUrl.split('/').pop();
-          }
-      } else if (contentType.includes('text/html')) {
-          const htmlText = await response.text();
-          const { audioData: processedAudioData, sampleName: processedSampleName } = await processHTMLResponse(htmlText);
-          audioData = processedAudioData;
-          // Only update the sampleName if it hasn't been set by the user.
-          if (!sampleName) {
-              sampleName = processedSampleName || sampleNameGiven || fullUrl.split('/').pop();
-          }
-      } else if (contentType.includes('audio/flac')) { // Recognize FLAC content type
-          audioData = await response.arrayBuffer();
-          // Only update the sampleName if it hasn't been set by the user.
-          if (!sampleName) {
-              sampleName = sampleNameGiven || fullUrl.split('/').pop().split('#')[0].split('?')[0] || 'Unnamed Sample';
-          }
-      } else {
-          audioData = await response.arrayBuffer();
-          // Only update the sampleName if it hasn't been set by the user.
-          if (!sampleName) {
-              // Use the filename from the URL as a fallback if the sampleName is empty or undefined
-              sampleName = sampleNameGiven || fullUrl.split('/').pop().split('#')[0].split('?')[0] || 'Unnamed Sample';
-          }
-      }
-
-      if (audioData) {
-          await decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex);
-
-          // The name will only be updated in the UI and settings if it wasn't previously set by the user
-          if (!window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex]) {
-              window.unifiedSequencerSettings.updateProjectChannelNamesUI(channelIndex, sampleName);
-              window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex] = sampleName;
-          }
-          window.unifiedSequencerSettings.settings.masterSettings.channelURLs[channelIndex] = fullUrl;
-
-          if (callback) callback(channelIndex, sampleName);
-      } else {
-          console.error("[fetchAndProcessAudio] No audio data to process.");
-      }
+      settings.settings.masterSettings.channelURLs[channelIndex] = fullUrl;
+      if (callback) callback(channelIndex, sampleName);
+    } else {
+      console.error('[fetchAudio] No audio data received.');
+    }
   } catch (error) {
-      console.error(`[fetchAndProcessAudio] Error fetching audio from URL: ${url}`, error);
+    console.error(`[fetchAudio] Error fetching audio from ${url}:`, error);
   }
 }
 
-function getIframeIdByChannelIndex(channelIndex) {
-  const mappings = JSON.parse(localStorage.getItem('channelIframeMappings')) || {};
-  return mappings[channelIndex];
-}
+/**
+ * Returns an iframe ID mapped to a given channel index.
+ * @param {number} channelIndex
+ * @returns {string|undefined}
+ */
+const getIframeIdByChannelIndex = channelIndex =>
+  (JSON.parse(localStorage.getItem('channelIframeMappings')) || {})[channelIndex];
 
-// List of channels where fades should be applied
+/** Constant: channels where fade effects are applied */
 const fadeChannels = [6, 7, 11, 12, 13, 15];
 
+/**
+ * Plays sound for a given channel and step.
+ * @param {number} currentSequence
+ * @param {HTMLElement} channel
+ * @param {number} currentStep
+ */
 function playSound(currentSequence, channel, currentStep) {
   const channelIndex = getChannelIndex(channel);
   const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
-
-  const sequencerChannel = new BroadcastChannel(`synth_channel_${channelIndex}`);
+  const channelLabel = `synth_channel_${channelIndex}`;
+  const bc = new BroadcastChannel(channelLabel);
   const iframeId = getIframeIdByChannelIndex(channelIndex);
-  let iframeSequencerChannel = null;
-
-  if (iframeId) {
-      iframeSequencerChannel = new BroadcastChannel(`synth_channel_${iframeId}`);
-  }
+  const iframeBC = iframeId ? new BroadcastChannel(`synth_channel_${iframeId}`) : null;
 
   if (isActive) {
-      sequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
-      if (iframeSequencerChannel) {
-          iframeSequencerChannel.postMessage({ type: 'startArpeggiator', channelIndex: channelIndex });
-      }
+    bc.postMessage({ type: 'startArpeggiator', channelIndex });
+    iframeBC?.postMessage({ type: 'startArpeggiator', channelIndex });
   } else if (isReverse) {
-      sequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
-      if (iframeSequencerChannel) {
-          iframeSequencerChannel.postMessage({ type: 'stopArpeggiator', channelIndex: channelIndex });
-      }
+    bc.postMessage({ type: 'stopArpeggiator', channelIndex });
+    iframeBC?.postMessage({ type: 'stopArpeggiator', channelIndex });
   }
-  sequencerChannel.close();
-  if (iframeSequencerChannel) {
-      iframeSequencerChannel.close();
-  }
+  bc.close();
+  iframeBC?.close();
 
-  if (!isActive && !isReverse) {
-      return;
-  }
+  if (!isActive && !isReverse) return;
 
   const bufferKey = `channel_${channelIndex}_${isReverse ? 'reverse' : 'forward'}`;
   const audioBuffer = audioBuffers.get(bufferKey);
   if (!audioBuffer) {
-      console.error(`[playSound] No audio buffer found for ${bufferKey}`);
-      return;
+    console.error(`[playSound] No audio buffer found for key: ${bufferKey}`);
+    return;
   }
 
-  const audioContext = window.unifiedSequencerSettings.audioContext;
-  const source = audioContext.createBufferSource();
+  const audioCtx = window.unifiedSequencerSettings.audioContext;
+  const source = audioCtx.createBufferSource();
   source.buffer = audioBuffer;
-
   const userGainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
   if (!userGainNode) {
-      console.error("No gain node found for channel", channelIndex);
-      return;
+    console.error("No gain node found for channel", channelIndex);
+    return;
   }
-
   const playbackSpeed = window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex];
-  source.playbackRate.setValueAtTime(playbackSpeed, audioContext.currentTime);
+  source.playbackRate.setValueAtTime(playbackSpeed, audioCtx.currentTime);
 
-  // Create a new gain node for fades to avoid interfering with user volume control
-  const fadeGainNode = audioContext.createGain();
-  fadeGainNode.connect(userGainNode);
-  source.connect(fadeGainNode);
+  // Create a dedicated gain node for fades
+  const fadeGain = audioCtx.createGain();
+  fadeGain.connect(userGainNode);
+  source.connect(fadeGain);
 
   const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
-
-  const fadeDuration = 0.0025; // 20 milliseconds in seconds
-  const actualFadeDuration = fadeDuration / playbackSpeed; // Adjust fade duration based on playback speed
-  const adjustedDuration = duration / playbackSpeed; // Adjusted duration for playback speed
-  const userVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex]; // Get the user-defined volume
-
+  const fadeDuration = 0.0025 / playbackSpeed;
+  const adjustedDuration = duration / playbackSpeed;
+  const userVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex];
   const trimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
   const isTrimmed = trimSettings.startSliderValue !== 0 || trimSettings.endSliderValue !== 100;
-
-  // Check if fades should be applied for this channel
   const applyFades = fadeChannels.includes(channelIndex) && isTrimmed;
 
-  // Track active source for stopping
   activeAudioSources.add(source);
-
   if (applyFades) {
-      // Apply fade-in
-      fadeGainNode.gain.setValueAtTime(0, audioContext.currentTime);
-      fadeGainNode.gain.linearRampToValueAtTime(userVolume, audioContext.currentTime + actualFadeDuration);
-
-      // Start playback
-      source.start(0, trimStart, duration);
-
-      // Apply fade-out
-      fadeGainNode.gain.setValueAtTime(userVolume, audioContext.currentTime + adjustedDuration - actualFadeDuration);
-      fadeGainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + adjustedDuration);
+    fadeGain.gain.setValueAtTime(0, audioCtx.currentTime);
+    fadeGain.gain.linearRampToValueAtTime(userVolume, audioCtx.currentTime + fadeDuration);
+    source.start(0, trimStart, duration);
+    fadeGain.gain.setValueAtTime(userVolume, audioCtx.currentTime + adjustedDuration - fadeDuration);
+    fadeGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + adjustedDuration);
   } else {
-      // Start playback without fades
-      source.start(0, trimStart, duration);
+    source.start(0, trimStart, duration);
   }
-
-  fadeGainNode.gain.setValueAtTime(userVolume, audioContext.currentTime); // Ensure volume is set
-
-
+  fadeGain.gain.setValueAtTime(userVolume, audioCtx.currentTime);
 
   source.onended = () => {
-      fadeGainNode.disconnect();
-      source.disconnect();
-      activeAudioSources.delete(source); // Remove source from active set when it ends
-      window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
+    fadeGain.disconnect();
+    source.disconnect();
+    activeAudioSources.delete(source);
+    window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
   };
 
   window.unifiedSequencerSettings.sourceNodes[channelIndex] = source;
 }
 
-function createOfflineAudioBuffer(originalBuffer, playbackRate) {
-    const offlineContext = new OfflineAudioContext(
-        originalBuffer.numberOfChannels,
-        originalBuffer.length / playbackRate,
-        originalBuffer.sampleRate
-    );
+/**
+ * Creates an offline audio buffer rendered at a given playback rate.
+ * @param {AudioBuffer} originalBuffer
+ * @param {number} playbackRate
+ * @returns {Promise<AudioBuffer>}
+ */
+const createOfflineAudioBuffer = (originalBuffer, playbackRate) => {
+  const offlineCtx = new OfflineAudioContext(
+    originalBuffer.numberOfChannels,
+    originalBuffer.length / playbackRate,
+    originalBuffer.sampleRate
+  );
+  const source = offlineCtx.createBufferSource();
+  source.buffer = originalBuffer;
+  source.playbackRate.value = playbackRate;
+  source.connect(offlineCtx.destination);
+  source.start();
+  return offlineCtx.startRendering();
+};
 
-    const source = offlineContext.createBufferSource();
-    source.buffer = originalBuffer;
-    source.playbackRate.value = playbackRate;
-    source.connect(offlineContext.destination);
-    source.start();
-
-    return offlineContext.startRendering().then(renderedBuffer => renderedBuffer);
-}
-
+/**
+ * Stops all currently active audio sources.
+ */
 function stopAllAudio() {
-  console.log("[stopAllAudio] Stopping all audio buffers");
+  log('[stopAllAudio]', 'Stopping all audio');
   activeAudioSources.forEach(source => {
-      try {
-          source.stop(0); // Use 0 as the argument to stop immediately
-          source.disconnect();
-      } catch (error) {
-          console.error('[stopAllAudio] Error stopping audio source:', error);
-      }
+    try {
+      source.stop(0);
+      source.disconnect();
+    } catch (error) {
+      console.error('[stopAllAudio] Error stopping source:', error);
+    }
   });
-  activeAudioSources.clear(); // Clear the set after stopping all sources
+  activeAudioSources.clear();
 }
 
-
+/**
+ * Calculates trim start and duration based on channel settings.
+ * @param {number} channelIndex
+ * @param {AudioBuffer} audioBuffer
+ * @param {boolean} isReversePlayback
+ * @returns {{trimStart: number, duration: number, trimEnd: number}}
+ */
 function calculateTrimValues(channelIndex, audioBuffer, isReversePlayback) {
-  const trimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
-  let trimStartPercentage = trimSettings.startSliderValue !== undefined ? trimSettings.startSliderValue : 0;
-  let trimEndPercentage = trimSettings.endSliderValue !== undefined ? trimSettings.endSliderValue : 100;
-
-  let trimStart = (trimStartPercentage / 100) * audioBuffer.duration;
-  let trimEnd = (trimEndPercentage / 100) * audioBuffer.duration;
-
+  const { startSliderValue = 0, endSliderValue = 100 } = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
+  let trimStart = (startSliderValue / 100) * audioBuffer.duration;
+  let trimEnd = (endSliderValue / 100) * audioBuffer.duration;
   if (isReversePlayback) {
-      let totalDuration = audioBuffer.duration;
-      trimStart = totalDuration - ((trimEndPercentage / 100) * totalDuration);
-      trimEnd = totalDuration - ((trimStartPercentage / 100) * totalDuration);
+    const total = audioBuffer.duration;
+    trimStart = total - (endSliderValue / 100) * total;
+    trimEnd = total - (startSliderValue / 100) * total;
   }
-
   trimStart = Math.max(0, Math.min(trimStart, audioBuffer.duration));
   trimEnd = Math.max(trimStart, Math.min(trimEnd, audioBuffer.duration));
-
-  const trimDuration = trimEnd - trimStart;
-  
-  return {
-      trimStart: trimStart,
-      duration: trimDuration,
-      trimEnd: trimEnd
-  };
+  return { trimStart, duration: trimEnd - trimStart, trimEnd };
 }
 
+/**
+ * Returns a channel index parsed from the channel element's dataset ID.
+ * @param {HTMLElement} channel
+ * @returns {number}
+ */
+const getChannelIndex = channel => parseInt(channel.dataset.id.split('-')[1]);
 
-
-
-
-
-
-function getChannelIndex(channel) {
-  return parseInt(channel.dataset.id.split('-')[1]);
-}
-
+/**
+ * Retrieves an audio URL for a channel from unified settings.
+ * @param {number} channelIndex
+ * @returns {string}
+ */
 function getAudioUrl(channelIndex) {
-  // Example check to ensure URL exists for the given channel index
-  if (typeof window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex) === 'undefined') {
-    // console.error(`[getAudioUrl] [ playSound ] URL not found for channel index: ${channelIndex}`);
-    return 'defaultURL'; // Provide a default URL or handle the error appropriately
-  }
-  return window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex);
+  const url = window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex);
+  return typeof url === 'undefined' ? 'defaultURL' : url;
 }
 
-function getAudioBuffer(url) {
-  return audioBuffers.get(url);
-}
+/**
+ * Retrieves an audio buffer from the global map.
+ * @param {string} url
+ * @returns {AudioBuffer|undefined}
+ */
+const getAudioBuffer = url => audioBuffers.get(url);
 
-
-// Function to toggle the play state
+/**
+ * Toggles play state for UI buttons.
+ * @param {boolean} isPlaying
+ * @param {Function} startStopFunction
+ * @param {HTMLElement} firstButton
+ * @param {HTMLElement} secondButton
+ */
 function togglePlayState(isPlaying, startStopFunction, firstButton, secondButton) {
-  // console.log('togglePlayState entered');
   if (!isPlaying) {
     isPlaying = true;
     startStopFunction();
@@ -481,31 +425,35 @@ function togglePlayState(isPlaying, startStopFunction, firstButton, secondButton
   }
 }
 
-// Function to update the mute state with volume memory
+/**
+ * Updates the mute state of a channel and stores/restores its volume.
+ * @param {HTMLElement} channel
+ * @param {boolean} isMuted
+ */
 function updateMuteState(channel, isMuted) {
   const channelIndex = parseInt(channel.dataset.id.split('-')[1]);
   channel.dataset.muted = isMuted ? 'true' : 'false';
   const muteButton = channel.querySelector('.mute-button');
   muteButton.classList.toggle('selected', isMuted);
-
   const gainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
   if (gainNode) {
     if (isMuted) {
-      // Store the current volume before muting
       window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex] = gainNode.gain.value;
-      gainNode.gain.value = 0; // Mute the channel
+      gainNode.gain.value = 0;
     } else {
-      // Restore the volume to the previously stored state
-      const previousVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex];
-      gainNode.gain.value = previousVolume;
+      gainNode.gain.value = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex];
     }
   } else {
-    console.error("GainNode not found for channel:", channelIndex);
+    console.error("No gain node found for channel:", channelIndex);
   }
 }
 
-// Function to handle manual toggle of the mute button
+/**
+ * Manually toggles mute on a channel element.
+ * @param {HTMLElement} channelElement
+ */
 function toggleMute(channelElement) {
   const isMuted = channelElement.dataset.muted === 'true';
   updateMuteState(channelElement, !isMuted);
 }
+

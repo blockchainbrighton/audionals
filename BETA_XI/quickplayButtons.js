@@ -128,12 +128,12 @@ function createQuickPlayButton(index) {
 
 quickPlayButtons.forEach(button => button.classList.add('inactive'));
 
-for (let i = 0; i <= 15; i++) {
-    let clonedChannel = channelTemplate.cloneNode(true);
-    clonedChannel.id = `channel-${i}`;
-    mainContainer.appendChild(clonedChannel);
-    // console.log(`Created Channel Name: ${clonedChannel.id}, Index: ${i}`);
-}
+const numChannels = window.unifiedSequencerSettings.numChannels;
+    for (let i = 0; i < numChannels; i++) {
+        let clonedChannel = channelTemplate.cloneNode(true);
+        clonedChannel.id = `channel-${i}`;
+        mainContainer.appendChild(clonedChannel);
+    }
 
 channelTemplateContainer.remove();
 

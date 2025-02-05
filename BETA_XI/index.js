@@ -13,11 +13,14 @@ let currentSequence = 0;
 const sequenceLength = 64;
 const maxSequenceCount = 64; // sequences
 const allSequencesLength = 4096;
-const collectedURLs = Array(16).fill(''); 
-let soloedChannels = Array(16).fill(false); // Assuming you have 16 channels
-let activeChannels = 16;// new Set();
-let gainNodes = Array(16).fill(null);
+
+
+const collectedURLs = Array(32).fill(''); 
+let soloedChannels = Array(32).fill(false); // Assuming you have 16 channels
+let activeChannels = 32;// new Set();
+let gainNodes = Array(32).fill(null);
 let channelMutes = []; // Declare the channelMutes array as a global variable
+let channels = document.querySelectorAll('.channel[id^="channel-"]');
 
 
 let timeoutId;
@@ -34,12 +37,9 @@ let nextStepTime;
 let stepDuration;
 let isMuted = false;
 let muteState = false
-// let volumeStates = Array(16).fill(1); // Start with 25% volume for all channels
-let channels = document.querySelectorAll('.channel[id^="channel-"]');
 let clearClickedOnce = Array(channels.length).fill(false);
 let clearConfirmTimeout = Array(channels.length).fill(null);
 
-let channelIsSynth = Array(16).fill(false); // Adjust the number based on your actual channel count
 
 
 if (!audioContext) {
@@ -51,61 +51,61 @@ if (!audioContext) {
 }
 
 
-let slaveWindow;
+// let slaveWindow;
 
-// Function to open slave sequencer window
-function openSlaveSequencer() {
-    slaveWindow = window.open('SlaveSequencer/slaveSequencer.html', 'Slave Sequencer');
-    if (slaveWindow) {
-        syncSettingsWithSlave();
-        syncContinuousPlayWithSlave();
-    }
-}
+// // Function to open slave sequencer window
+// function openSlaveSequencer() {
+//     slaveWindow = window.open('SlaveSequencer/slaveSequencer.html', 'Slave Sequencer');
+//     if (slaveWindow) {
+//         syncSettingsWithSlave();
+//         syncContinuousPlayWithSlave();
+//     }
+// }
 
-// Function to send play message
-function sendPlayMessage(startTime) {
-    if (slaveWindow) {
-        const bpm = window.unifiedSequencerSettings.getBPM();
-        slaveWindow.postMessage({ type: 'PLAY', startTime, bpm }, '*');
-        console.log(`[master] Sent PLAY message at ${new Date().toISOString()} with startTime: ${startTime} and BPM: ${bpm}`);
-    }
-}
+// // Function to send play message
+// function sendPlayMessage(startTime) {
+//     if (slaveWindow) {
+//         const bpm = window.unifiedSequencerSettings.getBPM();
+//         slaveWindow.postMessage({ type: 'PLAY', startTime, bpm }, '*');
+//         console.log(`[master] Sent PLAY message at ${new Date().toISOString()} with startTime: ${startTime} and BPM: ${bpm}`);
+//     }
+// // }
 
-// Function to send stop message
-function sendStopMessage() {
-    if (slaveWindow) {
-        slaveWindow.postMessage({ type: 'STOP' }, '*');
-        console.log(`[master] Sent STOP message at ${new Date().toISOString()}`);
-    }
-}
+// // Function to send stop message
+// function sendStopMessage() {
+//     if (slaveWindow) {
+//         slaveWindow.postMessage({ type: 'STOP' }, '*');
+//         console.log(`[master] Sent STOP message at ${new Date().toISOString()}`);
+//     }
+// }
 
-// Function to sync settings with slave
-function syncSettingsWithSlave() {
-    if (slaveWindow) {
-        const settings = window.unifiedSequencerSettings.exportSettings();
-        const bpm = window.unifiedSequencerSettings.getBPM();
-        slaveWindow.postMessage({ type: 'SYNC_SETTINGS', settings, bpm }, '*');
-        console.log(`[master] Sent SYNC_SETTINGS message at ${new Date().toISOString()} with BPM: ${bpm}`);
-    }
-}
+// // Function to sync settings with slave
+// function syncSettingsWithSlave() {
+//     if (slaveWindow) {
+//         const settings = window.unifiedSequencerSettings.exportSettings();
+//         const bpm = window.unifiedSequencerSettings.getBPM();
+//         slaveWindow.postMessage({ type: 'SYNC_SETTINGS', settings, bpm }, '*');
+//         console.log(`[master] Sent SYNC_SETTINGS message at ${new Date().toISOString()} with BPM: ${bpm}`);
+//     }
+// }
 
-// Function to sync continuous play with slave
-function syncContinuousPlayWithSlave() {
-    if (slaveWindow) {
-        const continuousPlayCheckbox = document.getElementById('continuous-play');
-        let isContinuousPlay = continuousPlayCheckbox.checked;
-        slaveWindow.postMessage({ type: 'SYNC_CONTINUOUS_PLAY', isContinuousPlay }, '*');
-        console.log(`[master] Sent SYNC_CONTINUOUS_PLAY message at ${new Date().toISOString()} with isContinuousPlay: ${isContinuousPlay}`);
-    }
-}
+// // Function to sync continuous play with slave
+// function syncContinuousPlayWithSlave() {
+//     if (slaveWindow) {
+//         const continuousPlayCheckbox = document.getElementById('continuous-play');
+//         let isContinuousPlay = continuousPlayCheckbox.checked;
+//         slaveWindow.postMessage({ type: 'SYNC_CONTINUOUS_PLAY', isContinuousPlay }, '*');
+//         console.log(`[master] Sent SYNC_CONTINUOUS_PLAY message at ${new Date().toISOString()} with isContinuousPlay: ${isContinuousPlay}`);
+//     }
+// }
 
-// Function to sync current sequence with slave
-function syncCurrentSequenceWithSlave(sequence) {
-    if (slaveWindow) {
-        slaveWindow.postMessage({ type: 'SYNC_CURRENT_SEQUENCE', sequence }, '*');
-        console.log(`[master] Sent SYNC_CURRENT_SEQUENCE message at ${new Date().toISOString()} with sequence: ${sequence}`);
-    }
-}
+// // Function to sync current sequence with slave
+// function syncCurrentSequenceWithSlave(sequence) {
+//     if (slaveWindow) {
+//         slaveWindow.postMessage({ type: 'SYNC_CURRENT_SEQUENCE', sequence }, '*');
+//         console.log(`[master] Sent SYNC_CURRENT_SEQUENCE message at ${new Date().toISOString()} with sequence: ${sequence}`);
+//     }
+// }
     
 
 if (playButton && stopButton) {
@@ -145,7 +145,6 @@ if (playButton && stopButton) {
             if (!isPlaying) {
                 // Capture the start time before starting playback
                 startTime = audioContext.currentTime;
-                sendPlayMessage(startTime);
                 startScheduler();
                 emitPlay(); 
                 playButton.classList.add('selected');
@@ -191,7 +190,6 @@ if (playButton && stopButton) {
         
             if (isPlaying) {
                 stopScheduler(); // Custom function - ensure it's defined
-                sendStopMessage(); // Custom function - ensure it's defined
                 emitStop(); // Custom function - ensure it's defined
         
                 stopButton.classList.add('selected');
@@ -213,19 +211,17 @@ if (playButton && stopButton) {
 
 
         document.addEventListener('DOMContentLoaded', () => {
-            const openSlaveButton = document.getElementById('open-slave');
-            openSlaveButton.addEventListener('click', () => {
-                openSlaveSequencer();
-                syncSettingsWithSlave();
-                syncContinuousPlayWithSlave();
-            });
+            // const openSlaveButton = document.getElementById('open-slave');
+            // openSlaveButton.addEventListener('click', () => {
+            //     openSlaveSequencer();
+            //     syncSettingsWithSlave();
+            //     syncContinuousPlayWithSlave();
+            // });
         
             const continuousPlayCheckbox = document.getElementById('continuous-play');
             continuousPlayCheckbox.addEventListener('change', () => {
-                syncContinuousPlayWithSlave();
             });
         
-            window.unifiedSequencerSettings.observers.push(syncSettingsWithSlave);
         });
         
 

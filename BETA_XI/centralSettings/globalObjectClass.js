@@ -1,5 +1,7 @@
+// globalObjectClass.js
+
 class UnifiedSequencerSettings {
-    constructor(audioContext, numSequences = 64, numChannels = 16) {
+    constructor(audioContext, numSequences = 64, numChannels = 32) {
       this.audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
       this.numSequences = numSequences;
       this.numChannels = numChannels;
@@ -203,8 +205,10 @@ class UnifiedSequencerSettings {
         15: 'steps'
       };
       const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([k, v]) => [v, +k]));
-      const channelMap = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
-      const decompressSteps = steps => steps.flatMap(step => {
+      const channelMap = Array.from({ length: this.numChannels }, (_, i) => 
+        i < 26 ? String.fromCharCode(65 + i) : i.toString()
+      );
+        const decompressSteps = steps => steps.flatMap(step => {
         if (typeof step === 'number') return step;
         if (step.r) return Array.from({ length: step.r[1] - step.r[0] + 1 }, (_, i) => step.r[0] + i);
         if (typeof step === 'string' && step.endsWith('r')) return { index: parseInt(step.slice(0, -1), 10), reverse: true };
@@ -393,8 +397,10 @@ class UnifiedSequencerSettings {
         projectSequences: 14,
         steps: 15
       };
-      const reverseChannelMap = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
-      const roundToFourDecimals = num => Math.round(num * 10000) / 10000;
+      const reverseChannelMap = Array.from({ length: this.numChannels }, (_, i) => 
+        i < 26 ? String.fromCharCode(65 + i) : i.toString()
+      );
+    const roundToFourDecimals = num => Math.round(num * 10000) / 10000;
       const compressSteps = steps => {
         if (!steps.length) return [];
         const compressed = [];
