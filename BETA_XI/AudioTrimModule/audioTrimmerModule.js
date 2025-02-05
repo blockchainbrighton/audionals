@@ -289,21 +289,40 @@ class AudioTrimmer {
   
     updatePlaybackCanvas() {
         if (!this.audioBuffer) return;
-        const actualCurrentPosition = this.audioContext.currentTime - this.startTime;
-        const startOffset = this.sliderValueToTimecode(this.startSliderValue, this.audioBuffer.duration);
-        const endOffset = this.sliderValueToTimecode(this.endSliderValue, this.audioBuffer.duration);
-        const trimmedDuration = endOffset - startOffset;
-        const relativePosition = (actualCurrentPosition - startOffset) % trimmedDuration;
-        if (relativePosition < 0 || relativePosition > trimmedDuration) return;
-        
-        // Calculate the slider centers:
+      
+        // Use the same trim calculation used for playback.
+        // (Assuming calculateTrimValues is the same function used in playTrimmedAudio.)
+        const { trimStart, duration } = calculateTrimValues(this.channelIndex, this.audioBuffer, false);
+        const trimmedDuration = duration; // the duration of the clear (playable) area
+      
+        // Compute the elapsed time relative to the start of playback.
+        const elapsed = this.audioContext.currentTime - this.startTime;
+        const relativePosition = elapsed % trimmedDuration;
+      
+        // Calculate boundaries for the clear area:
+        // Our getSliderLeft() returns a value that places the slider’s center at (sliderValue)% of the track.
+        // The actual right edge of the start slider is then:
         const trackWidth = this.sliderTrack.offsetWidth;
-        const sliderWidth = this.startSlider.offsetWidth;
-        const startCenter = this.getSliderLeft(this.startSliderValue) + sliderWidth / 2;
-        const endCenter = this.getSliderLeft(this.endSliderValue) + sliderWidth / 2;
+        const sliderWidth = this.startSlider.offsetWidth; // assume both sliders are the same size
+      
+        // Compute the left positions based on the slider values:
+        // (These positions were computed using getSliderLeft(), which positions the slider's center minus half the width.)
+        const computedStartLeft = this.getSliderLeft(this.startSliderValue); // positions the start slider's left edge at (center - sliderWidth/2)
+        const computedEndLeft = this.getSliderLeft(this.endSliderValue);
+      
+        // Determine the clear area boundaries:
+        // The right edge of the start slider (clear area's left boundary):
+        const clearAreaLeftBoundary = computedStartLeft + sliderWidth;
+        // The left edge of the end slider (clear area's right boundary):
+        const clearAreaRightBoundary = computedEndLeft;
+      
+        // Calculate the clear area width.
+        const clearWidth = clearAreaRightBoundary - clearAreaLeftBoundary;
         
-        // xPosition proportionally between the slider centers:
-        const xPosition = startCenter + (relativePosition / trimmedDuration) * (endCenter - startCenter);
+        // Interpolate the x-position for the transport indicator within the clear area.
+        const xPosition = clearAreaLeftBoundary + (relativePosition / trimmedDuration) * clearWidth;
+      
+        // Draw the transport indicator.
         const canvasWidth = this.playbackCanvas.width;
         this.playbackCtx.clearRect(0, 0, canvasWidth, this.playbackCanvas.height);
         this.playbackCtx.beginPath();
