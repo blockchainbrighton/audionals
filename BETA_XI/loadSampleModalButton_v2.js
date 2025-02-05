@@ -1,3 +1,5 @@
+// loadSampleModalButton_v2.js
+
 // New Dropdown for Og Audional sample inscriptions
 const ogSampleUrls = [
     { value: 'https://ordinals.com/content/e7d344ef3098d0889856978c4d2e81ccf2358f7f8b66feecc71e03036c59ad48i0#', text:'OB1 #1 - 808 Kick' },
