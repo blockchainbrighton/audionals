@@ -3,113 +3,99 @@
 import { setupLoadSampleButton } from './loadSampleModalButton_v2.js';
 
 console.log("channelsForeach.js entered");
-    channels.forEach((channel, index) => {
-        channel.dataset.id = `Channel-${index}`;
-        setupLoadSampleButton(channel, index);
 
-
-        // Directly use the gainNode from UnifiedSequencerSettings
-        const gainNode = window.unifiedSequencerSettings.gainNodes[index];
-        if (!gainNode) {
-            console.error("GainNode not found for channel:", index);
-            return;
+channels.forEach((channel, index) => {
+    channel.dataset.id = `Channel-${index}`;
+    setupLoadSampleButton(channel, index);
+  
+    // Example: Group button & dropdown logic
+    const groupButton = channel.querySelector('.group-button'); // Use class instead of id for repeated elements
+    const groupDropdown = channel.querySelector('.group-dropdown');
+    if (groupButton && groupDropdown) {
+      groupButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        // Toggle display
+        if (groupDropdown.style.display === "none" || groupDropdown.style.display === "") {
+          groupDropdown.style.display = "block";
+        } else {
+          groupDropdown.style.display = "none";
         }
-
-        // const volumeButton = channel.querySelector('.volume-button');
-        // if (volumeButton) {
-        //     volumeButton.addEventListener('click', () => {
-        //         openVolumeModal(volumeButton, index);
-        //     });
-        // }
-
-
-
-
-        const muteButton = channel.querySelector('.mute-button');
-        muteButton.addEventListener('click', () => {
-            console.log(`Mute button clicked for Channel-${index}`);
-            const isMuted = muteButton.classList.toggle('selected');
-            updateMuteState(channel, isMuted);
-        });
-    
-        const soloButton = channel.querySelector('.solo-button');
-            soloButton.addEventListener('click', () => {
-                soloedChannels[index] = !soloedChannels[index];
-                soloButton.classList.toggle('selected', soloedChannels[index]);
-
-                // Update mute state for all channels based on solo state
-                channels.forEach((otherChannel, otherIndex) => {
-                    if (index === otherIndex) {
-                        // If this is the soloed channel, ensure it's not muted
-                        updateMuteState(otherChannel, false);
-                    } else {
-                        // Mute all other channels if this channel is soloed
-                        updateMuteState(otherChannel, soloedChannels[index]);
-                    }
-                });
-            });
-
-
-            const clearButton = channel.querySelector('.clear-button');
-            let clearConfirmTimeout;
-            
-            clearButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-            
-                if (!clearButton.classList.contains('flashing')) {
-                    // Start the flashing effect
-                    clearButton.classList.add('flashing');
-            
-                    // Set a timer to reset the button after 2 seconds
-                    clearConfirmTimeout = setTimeout(() => {
-                        clearButton.classList.remove('flashing');
-                    }, 2000);
-                } else {
-                    // Clear the steps if the button is clicked again while flashing
-                    clearSteps(channel, index);
-                }
-            });
-            
-            // Handle clicks outside the clear button
-            document.addEventListener('click', (e) => {
-                if (!clearButton.contains(e.target) && clearButton.classList.contains('flashing')) {
-                    // Reset the button if clicked outside while flashing
-                    clearTimeout(clearConfirmTimeout);
-                    clearButton.classList.remove('flashing');
-                }
-            });
-            
-            // Function to clear steps and update UI
-            function clearSteps(channel, channelIndex) {
-                const currentSequence = window.unifiedSequencerSettings.getCurrentSequence();
-                const numSteps = window.unifiedSequencerSettings.settings.masterSettings.projectSequences[`Sequence${currentSequence}`][`ch${channelIndex}`].steps.length;
-            
-                const newStepStates = Array(numSteps).fill(false); // Reset all steps to false
-            
-                // Update steps with the new states, ensuring wrapping without affecting other sequences
-                for (let i = 0; i < numSteps; i++) {
-                    window.unifiedSequencerSettings.updateStepStateAndReverse(currentSequence, channelIndex, i, newStepStates[i], false);
-                }
-            
-                // Update the UI for all step buttons in the current channel
-                const stepButtons = channel.querySelectorAll('.step-button');
-                stepButtons.forEach((button, stepIndex) => {
-                    updateButtonState(button, currentSequence, channelIndex, stepIndex);
-                });
-            
-                // Immediately stop the flashing effect and reset the button
-                clearTimeout(clearConfirmTimeout);
-                clearButton.classList.remove('flashing');
-            }
-            
-            function updateButtonState(button, sequence, channelIndex, stepIndex) {
-                const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(sequence, channelIndex, stepIndex);
-                button.classList.toggle('selected', isActive);
-                button.classList.toggle('reverse-playback', isReverse);
-                button.style.backgroundColor = ''; // Reset background color
-                if (isActive) button.style.backgroundColor = 'red';
-                if (isReverse) button.style.backgroundColor = 'green';
-            }
+      });
+      groupDropdown.addEventListener('change', (event) => {
+        const selectedGroup = event.target.value;
+        console.log(`Channel ${index} assigned to group: ${selectedGroup}`);
+        // Update the channel's group here as needed
+        groupDropdown.style.display = "none";
+      });
+    }
+  
+    // Mute button event
+    const muteButton = channel.querySelector('.mute-button');
+    muteButton.addEventListener('click', () => {
+      console.log(`Mute button clicked for Channel-${index}`);
+      const isMuted = muteButton.classList.toggle('selected');
+      updateMuteState(channel, isMuted);
+    });
+  
+    // Solo button event
+    const soloButton = channel.querySelector('.solo-button');
+    soloButton.addEventListener('click', () => {
+      soloedChannels[index] = !soloedChannels[index];
+      soloButton.classList.toggle('selected', soloedChannels[index]);
+      channels.forEach((otherChannel, otherIndex) => {
+        if (index === otherIndex) {
+          updateMuteState(otherChannel, false);
+        } else {
+          updateMuteState(otherChannel, soloedChannels[index]);
+        }
+      });
+    });
+  
+    // Clear button event
+    const clearButton = channel.querySelector('.clear-button');
+    let clearConfirmTimeout;
+    clearButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!clearButton.classList.contains('flashing')) {
+        clearButton.classList.add('flashing');
+        clearConfirmTimeout = setTimeout(() => {
+          clearButton.classList.remove('flashing');
+        }, 2000);
+      } else {
+        clearSteps(channel, index);
+      }
+    });
+  
+    document.addEventListener('click', (e) => {
+      if (!clearButton.contains(e.target) && clearButton.classList.contains('flashing')) {
+        clearTimeout(clearConfirmTimeout);
+        clearButton.classList.remove('flashing');
+      }
+    });
+  
+    function clearSteps(channel, channelIndex) {
+      const currentSequence = window.unifiedSequencerSettings.getCurrentSequence();
+      const numSteps = window.unifiedSequencerSettings.settings.masterSettings.projectSequences[`Sequence${currentSequence}`][`ch${channelIndex}`].steps.length;
+      const newStepStates = Array(numSteps).fill(false);
+      for (let i = 0; i < numSteps; i++) {
+        window.unifiedSequencerSettings.updateStepStateAndReverse(currentSequence, channelIndex, i, newStepStates[i], false);
+      }
+      const stepButtons = channel.querySelectorAll('.step-button');
+      stepButtons.forEach((button, stepIndex) => {
+        updateButtonState(button, currentSequence, channelIndex, stepIndex);
+      });
+      clearTimeout(clearConfirmTimeout);
+      clearButton.classList.remove('flashing');
+    }
+  
+    function updateButtonState(button, sequence, channelIndex, stepIndex) {
+      const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(sequence, channelIndex, stepIndex);
+      button.classList.toggle('selected', isActive);
+      button.classList.toggle('reverse-playback', isReverse);
+      button.style.backgroundColor = '';
+      if (isActive) button.style.backgroundColor = 'red';
+      if (isReverse) button.style.backgroundColor = 'green';
+    }
             
             // Global document click listener for clear buttons
             document.addEventListener('click', () => {

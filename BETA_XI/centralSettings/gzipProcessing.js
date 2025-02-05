@@ -1,5 +1,7 @@
 // gzipProcessing.js
 
+let audioBuffers = new Map();
+
 // Load the Pako library dynamically
 const loadPako = async () => {
     if (typeof pako === 'undefined') {
