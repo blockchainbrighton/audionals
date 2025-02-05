@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     controlChannelDropdown.appendChild(allChannelsOption);
 
     // Create options for the 16 channels
-    for (let i = 1; i <= 16; i++) {
+    for (let i = 1; i <= 32; i++) {
         let option = document.createElement('option');
         option.value = i;
         option.text = 'Channel ' + i;

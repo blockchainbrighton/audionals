@@ -14,58 +14,49 @@ quickPlayContainer.style.display = 'flex';
 quickPlayContainer.style.justifyContent = 'center';
 quickPlayContainer.style.marginBottom = '20px';  // Add some margin for spacing
 
+console.log("[quickplayButtons] Quickplay container created and ready.");
 
+// Set the active sequence and log details
 function setActiveSequence(index) {
-    // console.log(`Setting active sequence for index: ${index}`);
-
-    // If there's a previously active sequence that's different from the current one, set it to inactive
     if (currentActiveIndex !== null && currentActiveIndex !== index) {
-        console.log(`Deactivating previously active sequence ${currentActiveIndex}`);
+        console.log(`[quickplayButtons] Deactivating previously active sequence ${currentActiveIndex}`);
         quickPlayButtons[currentActiveIndex].classList.add('inactive');
     }
-
-    // Light up the button for this index
     quickPlayButtons[index].classList.remove('inactive');
-    // console.log(`Sequence ${index} activated.`);
-
+    console.log(`[quickplayButtons] Activating sequence ${index}.`);
+    
     // Darken other buttons  
-    quickPlayButtons.forEach(button => {
-        if(button !== quickPlayButtons[index]) {
-            button.classList.add('inactive'); 
+    quickPlayButtons.forEach((button, btnIndex) => {
+        if (btnIndex !== index) {
+            button.classList.add('inactive');
         }
     });
-   //  console.log(`${quickPlayButtons.length} quickplay buttons made inactive.`);
-   //  console.log("All quickplay button indexes: ", quickPlayButtons.map(btn => btn.dataset.sequenceIndex));
-
+    console.log("[quickplayButtons] Current quickplay button states:", quickPlayButtons.map((btn, i) => ({
+        index: i,
+        inactive: btn.classList.contains('inactive')
+    })));
     currentActiveIndex = index;
 }
 
 function updateActiveQuickPlayButton() {
-    // Remove 'active' class from all buttons
-    quickPlayButtons.forEach(btn => {
-        btn.classList.remove('active');
-    });
-
-    // Add 'active' class to current sequence button
+    quickPlayButtons.forEach(btn => btn.classList.remove('active'));
     const activeBtn = quickPlayButtons[currentSequence];
     activeBtn.classList.add('active');
+    console.log(`[quickplayButtons] Updated active quickplay button to sequence ${currentSequence}.`);
 }
 
 function insertQuickPlayButtons() {
-   // console.log("insertQuickPlayButtons called!");
-
     const checkBox = document.getElementById('continuous-play');
     const quickPlayButton = document.getElementById('quick-play-button');
 
     if (checkBox && quickPlayButton) {
-        for (let j = 0; j < 16; j++) {
+        console.log(`[quickplayButtons] Inserting quickplay buttons using numChannels = ${window.unifiedSequencerSettings.numChannels}`);
+        for (let j = 0; j < 32; j++) {
             const quickBtn = createQuickPlayButton(j);
-           // console.log(`Created Quick Play Button for Sequence_${j+1}`);
             checkBox.parentNode.insertBefore(quickBtn, quickPlayButton);
-           // console.log(`Added Quick Play Button for Sequence_${j+1} to DOM`);
+            console.log(`[quickplayButtons] Inserted Quick Play Button for Sequence_${j + 1}`);
         }
-       // console.log(`${quickPlayButtons.length} quickplay buttons inserted.`);
-
+        console.log(`[quickplayButtons] Total quickplay buttons inserted: ${quickPlayButtons.length}`);
     } else {
         console.log("QUICKPLAY BUTTONS TEMPORARILY REMOVED UNTIL THEY CAN BE FIXED");
     }
@@ -77,67 +68,71 @@ insertQuickPlayButtons();
 quickPlayButtons.forEach((button) => {
     button.addEventListener('click', () => {
         const sequenceIndex = parseInt(button.dataset.sequenceIndex, 10);
+        console.log(`[quickplayButtons] Quickplay button clicked: sequence index ${sequenceIndex}`);
         loadAndDisplaySequence(sequenceIndex);
     });
 });
 
-
 function loadAndDisplaySequence(sequenceIndex) {
     currentSequence = sequenceIndex;
-    console.log(`[loadAndDisplaySequence] currentSequence updated to:  ${sequenceIndex}`);
+    console.log(`[loadAndDisplaySequence] currentSequence updated to: ${sequenceIndex}`);
     loadSequence(sequenceIndex);
 
-    // Update the display and highlight the active button
-    document.getElementById('current-sequence-display').textContent = `Sequence ${currentSequence}`;
+    const currentSequenceDisplay = document.getElementById('current-sequence-display');
+    if (currentSequenceDisplay) {
+        currentSequenceDisplay.textContent = `Sequence ${currentSequence}`;
+    }
     updateActiveQuickPlayButton();
 }
 
-
-// Function to create the quick-play-button
+// Function to create the quick-play-button with detailed logging
 function createQuickPlayButton(index) {
     const button = document.createElement('div');
-    button.classList.add('quick-play-button', 'tooltip'); // Added 'quickplay-button' class
-    button.dataset.sequenceIndex = index; // Store the sequence index as a data attribute
-
-    // Removed inline styles that are now handled by CSS
+    button.classList.add('quick-play-button', 'tooltip');
+    button.dataset.sequenceIndex = index;
     button.innerHTML = index; // Add the number inside the button
 
-    const tooltipText = document.createElement('span'); // Create the tooltip text element
+    const tooltipText = document.createElement('span');
     tooltipText.classList.add('tooltiptext');
     tooltipText.innerHTML = `Quick Load Sequence ${index}<br><br>Right click to change button colour.`;
-    button.appendChild(tooltipText); // Append the tooltip to the button
+    button.appendChild(tooltipText);
 
-    quickPlayButtons.push(button); // Add the button to the array
+    quickPlayButtons.push(button);
+    console.log(`[quickplayButtons] Created quickplay button for sequence ${index}`);
 
-    // Add a click event to set the sequence as active when clicked
+    // Add click event for setting the active sequence
     button.addEventListener('click', function() {
+        console.log(`[quickplayButtons] Button for sequence ${index} clicked (via createQuickPlayButton event).`);
         setActiveSequence(index);
     });
 
     // Add right-click event listener
     button.addEventListener('contextmenu', function(event) {
-        event.preventDefault(); // Prevent default context menu
-        showColorPicker(event, button); // Show custom color picker
+        event.preventDefault();
+        console.log(`[quickplayButtons] Right-click on quickplay button for sequence ${index}`);
+        showColorPicker(event, button);
     });
 
     return button;
 }
 
-
-
-
+// Mark all quickplay buttons as inactive initially
 quickPlayButtons.forEach(button => button.classList.add('inactive'));
 
+// Create channels dynamically and log details
 const numChannels = window.unifiedSequencerSettings.numChannels;
-    for (let i = 0; i < numChannels; i++) {
-        let clonedChannel = channelTemplate.cloneNode(true);
-        clonedChannel.id = `channel-${i}`;
-        mainContainer.appendChild(clonedChannel);
-    }
+console.log(`[quickplayButtons] Cloning channels using numChannels = ${numChannels}`);
+for (let i = 0; i < numChannels; i++) {
+    let clonedChannel = channelTemplate.cloneNode(true);
+    clonedChannel.id = `channel-${i}`;
+    mainContainer.appendChild(clonedChannel);
+    console.log(`[quickplayButtons] Created channel element with id: channel-${i}`);
+}
 
 channelTemplateContainer.remove();
+console.log("[quickplayButtons] Removed the channel template container from DOM.");
 
 // Dispatch a custom event indicating that the setup is complete
 const setupCompleteEvent = new Event('setupComplete');
 window.dispatchEvent(setupCompleteEvent);
-
+console.log("[quickplayButtons] Setup complete event dispatched.");

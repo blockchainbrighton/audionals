@@ -256,7 +256,10 @@ const fadeChannels = [6, 7, 11, 12, 13, 15];
  * @param {number} currentStep
  */
 function playSound(currentSequence, channel, currentStep) {
+  // Immediately determine the channel index
   const channelIndex = getChannelIndex(channel);
+  console.log(`[playSound] For channel ${channelIndex}: currentSequence=${currentSequence}, currentStep=${currentStep}`);
+  
   const { isActive, isReverse } = window.unifiedSequencerSettings.getStepStateAndReverse(currentSequence, channelIndex, currentStep);
   const channelLabel = `synth_channel_${channelIndex}`;
   const bc = new BroadcastChannel(channelLabel);
@@ -265,15 +268,24 @@ function playSound(currentSequence, channel, currentStep) {
 
   if (isActive) {
     bc.postMessage({ type: 'startArpeggiator', channelIndex });
-    iframeBC?.postMessage({ type: 'startArpeggiator', channelIndex });
+    if (iframeBC) {
+      iframeBC.postMessage({ type: 'startArpeggiator', channelIndex });
+    }
   } else if (isReverse) {
     bc.postMessage({ type: 'stopArpeggiator', channelIndex });
-    iframeBC?.postMessage({ type: 'stopArpeggiator', channelIndex });
+    if (iframeBC) {
+      iframeBC.postMessage({ type: 'stopArpeggiator', channelIndex });
+    }
   }
   bc.close();
-  iframeBC?.close();
+  if (iframeBC) {
+    iframeBC.close();
+  }
 
-  if (!isActive && !isReverse) return;
+  if (!isActive && !isReverse) {
+    console.log(`[playSound] Channel ${channelIndex} is neither active nor reverse. Exiting playSound.`);
+    return;
+  }
 
   const bufferKey = `channel_${channelIndex}_${isReverse ? 'reverse' : 'forward'}`;
   const audioBuffer = audioBuffers.get(bufferKey);
@@ -283,25 +295,36 @@ function playSound(currentSequence, channel, currentStep) {
   }
 
   const audioCtx = window.unifiedSequencerSettings.audioContext;
+  // Always create a new source node for each playback
   const source = audioCtx.createBufferSource();
   source.buffer = audioBuffer;
+
   const userGainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
   if (!userGainNode) {
-    console.error("No gain node found for channel", channelIndex);
+    console.error(`[playSound] No gain node found for channel ${channelIndex}`);
     return;
   }
-  const playbackSpeed = window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex];
+  
+  // Retrieve and verify playback speed
+  let playbackSpeed = window.unifiedSequencerSettings.channelPlaybackSpeed[channelIndex];
+  if (!isFinite(playbackSpeed)) {
+    console.error(`[playSound] Non-finite playbackSpeed for channel ${channelIndex}:`, playbackSpeed);
+    playbackSpeed = 1; // Default to 1 if necessary
+  }
   source.playbackRate.setValueAtTime(playbackSpeed, audioCtx.currentTime);
-
+  
   // Create a dedicated gain node for fades
   const fadeGain = audioCtx.createGain();
   fadeGain.connect(userGainNode);
   source.connect(fadeGain);
-
+  
   const { trimStart, duration } = calculateTrimValues(channelIndex, audioBuffer, isReverse);
   const fadeDuration = 0.0025 / playbackSpeed;
   const adjustedDuration = duration / playbackSpeed;
   const userVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex];
+  
+  console.log(`[playSound] Channel ${channelIndex}: trimStart=${trimStart}, duration=${duration}, fadeDuration=${fadeDuration}, adjustedDuration=${adjustedDuration}, userVolume=${userVolume}`);
+  
   const trimSettings = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
   const isTrimmed = trimSettings.startSliderValue !== 0 || trimSettings.endSliderValue !== 100;
   const applyFades = fadeChannels.includes(channelIndex) && isTrimmed;
@@ -323,9 +346,11 @@ function playSound(currentSequence, channel, currentStep) {
     source.disconnect();
     activeAudioSources.delete(source);
     window.unifiedSequencerSettings.sourceNodes[channelIndex] = null;
+    console.log(`[playSound] Source for channel ${channelIndex} ended and cleaned up.`);
   };
 
   window.unifiedSequencerSettings.sourceNodes[channelIndex] = source;
+  console.log(`[playSound] New source node created and started for channel ${channelIndex}.`);
 }
 
 /**
@@ -373,16 +398,22 @@ function stopAllAudio() {
  */
 function calculateTrimValues(channelIndex, audioBuffer, isReversePlayback) {
   const { startSliderValue = 0, endSliderValue = 100 } = window.unifiedSequencerSettings.getTrimSettings(channelIndex);
+  console.log(`[calculateTrimValues] Channel ${channelIndex}: startSliderValue = ${startSliderValue}, endSliderValue = ${endSliderValue}, audioBuffer.duration = ${audioBuffer.duration}`);
+  
   let trimStart = (startSliderValue / 100) * audioBuffer.duration;
   let trimEnd = (endSliderValue / 100) * audioBuffer.duration;
   if (isReversePlayback) {
     const total = audioBuffer.duration;
     trimStart = total - (endSliderValue / 100) * total;
     trimEnd = total - (startSliderValue / 100) * total;
+    console.log(`[calculateTrimValues] Channel ${channelIndex} (Reverse): trimStart recalculated = ${trimStart}, trimEnd recalculated = ${trimEnd}`);
   }
   trimStart = Math.max(0, Math.min(trimStart, audioBuffer.duration));
   trimEnd = Math.max(trimStart, Math.min(trimEnd, audioBuffer.duration));
-  return { trimStart, duration: trimEnd - trimStart, trimEnd };
+  
+  const duration = trimEnd - trimStart;
+  console.log(`[calculateTrimValues] Channel ${channelIndex}: final trimStart = ${trimStart}, trimEnd = ${trimEnd}, duration = ${duration}`);
+  return { trimStart, duration, trimEnd };
 }
 
 /**
@@ -390,7 +421,12 @@ function calculateTrimValues(channelIndex, audioBuffer, isReversePlayback) {
  * @param {HTMLElement} channel
  * @returns {number}
  */
-const getChannelIndex = channel => parseInt(channel.dataset.id.split('-')[1]);
+const getChannelIndex = channel => {
+  const parts = channel.dataset.id.split('-');
+  const index = parseInt(parts[1]);
+  console.log(`[getChannelIndex] Parsed channel index ${index} from dataset.id: ${channel.dataset.id}`);
+  return index;
+};
 
 /**
  * Retrieves an audio URL for a channel from unified settings.
@@ -399,6 +435,7 @@ const getChannelIndex = channel => parseInt(channel.dataset.id.split('-')[1]);
  */
 function getAudioUrl(channelIndex) {
   const url = window.unifiedSequencerSettings.getprojectUrlforChannel(channelIndex);
+  console.log(`[getAudioUrl] Channel ${channelIndex}: Retrieved URL: ${url}`);
   return typeof url === 'undefined' ? 'defaultURL' : url;
 }
 
@@ -407,7 +444,11 @@ function getAudioUrl(channelIndex) {
  * @param {string} url
  * @returns {AudioBuffer|undefined}
  */
-const getAudioBuffer = url => audioBuffers.get(url);
+const getAudioBuffer = url => {
+  const buffer = audioBuffers.get(url);
+  console.log(`[getAudioBuffer] Retrieved buffer for URL ${url}:`, buffer);
+  return buffer;
+};
 
 /**
  * Toggles play state for UI buttons.
@@ -417,11 +458,13 @@ const getAudioBuffer = url => audioBuffers.get(url);
  * @param {HTMLElement} secondButton
  */
 function togglePlayState(isPlaying, startStopFunction, firstButton, secondButton) {
+  console.log(`[togglePlayState] isPlaying: ${isPlaying}`);
   if (!isPlaying) {
     isPlaying = true;
     startStopFunction();
     firstButton.classList.add('selected');
     secondButton.classList.remove('selected');
+    console.log(`[togglePlayState] Toggled play state: firstButton selected, secondButton deselected.`);
   }
 }
 
@@ -432,19 +475,29 @@ function togglePlayState(isPlaying, startStopFunction, firstButton, secondButton
  */
 function updateMuteState(channel, isMuted) {
   const channelIndex = parseInt(channel.dataset.id.split('-')[1]);
+  console.log(`[updateMuteState] Channel ${channelIndex}: isMuted set to ${isMuted}`);
   channel.dataset.muted = isMuted ? 'true' : 'false';
   const muteButton = channel.querySelector('.mute-button');
-  muteButton.classList.toggle('selected', isMuted);
+  if (muteButton) {
+    muteButton.classList.toggle('selected', isMuted);
+    console.log(`[updateMuteState] Mute button for channel ${channelIndex} updated to ${isMuted ? 'selected' : 'deselected'}`);
+  } else {
+    console.warn(`[updateMuteState] No mute button found on channel ${channelIndex}`);
+  }
   const gainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
   if (gainNode) {
     if (isMuted) {
+      // Store current volume before muting
       window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex] = gainNode.gain.value;
       gainNode.gain.value = 0;
+      console.log(`[updateMuteState] Channel ${channelIndex}: Gain set to 0.`);
     } else {
-      gainNode.gain.value = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex];
+      const storedVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex];
+      gainNode.gain.value = storedVolume;
+      console.log(`[updateMuteState] Channel ${channelIndex}: Gain restored to stored volume: ${storedVolume}`);
     }
   } else {
-    console.error("No gain node found for channel:", channelIndex);
+    console.error(`[updateMuteState] No gain node found for channel ${channelIndex}`);
   }
 }
 
@@ -454,6 +507,7 @@ function updateMuteState(channel, isMuted) {
  */
 function toggleMute(channelElement) {
   const isMuted = channelElement.dataset.muted === 'true';
+  console.log(`[toggleMute] Channel ${channelElement.dataset.id}: Current mute state: ${isMuted}`);
   updateMuteState(channelElement, !isMuted);
+  console.log(`[toggleMute] Channel ${channelElement.dataset.id}: Toggled mute state to: ${!isMuted}`);
 }
-

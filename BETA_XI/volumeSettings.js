@@ -191,7 +191,7 @@ function setChannelVolume(channelIndex, volume) {
     gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
 
     if (!window.unifiedSequencerSettings.settings.masterSettings.channelVolume) {
-        window.unifiedSequencerSettings.settings.masterSettings.channelVolume = new Array(16).fill(1);
+        window.unifiedSequencerSettings.settings.masterSettings.channelVolume = new Array(32).fill(1);
     }
 
     window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex] = volume;
