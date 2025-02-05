@@ -62,14 +62,10 @@
           const targetSequence = (currentSequence + offset + totalSequences) % totalSequences;
           window.unifiedSequencerSettings.setCurrentSequence(targetSequence);
           log(`[master] [${buttonId}] Transitioning to sequence ${targetSequence}`);
-          // currentStep, handleSequenceTransition, and syncCurrentSequenceWithSlave are assumed global
+          // currentStep and handleSequenceTransition are assumed global
           handleSequenceTransition(targetSequence, currentStep);
-          syncCurrentSequenceWithSlave(targetSequence);
           const message = { type: "SEQUENCE_TRANSITION", targetSequence, startStep: currentStep };
-          log(`[master] [${buttonId}] Sending message to slave: ${JSON.stringify(message)}`);
-          if (slaveWindow) {
-            slaveWindow.postMessage(message, "*");
-          }
+
         });
       };
   
