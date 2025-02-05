@@ -10,6 +10,9 @@ class UnifiedSequencerSettings {
       this.observers = [];
       this.gainNodes = new Array(this.numChannels);
       this.sourceNodes = new Array(this.numChannels);
+
+      // Set the global debug flag here:
+      this.DEBUG = false;
   
       this.settings = {
         masterSettings: {

@@ -6,12 +6,12 @@
     const audioBuffers = new Map();
     const activeAudioSources = new Set();
   
-    // Debug flag (set to true to enable detailed logging)
-    const DEBUG = false;
   
     // Helper logging function (only logs when DEBUG is true)
     const log = (msg, ...args) => {
-      if (DEBUG) console.log(msg, ...args);
+      if (window.unifiedSequencerSettings.DEBUG) {
+        console.log(msg, ...args);
+      }
     };
   
     /**
@@ -76,7 +76,7 @@
       const audioSource = doc.querySelector("audio[data-audionalSampleName] source");
       const sampleName = doc.getElementById("sampleName")?.textContent.trim() || null;
       log("[processHTMLResponse]", "Sample name:", sampleName);
-  
+
       let audioData = null;
       if (audioSource) {
         const src = audioSource.getAttribute("src");
@@ -87,7 +87,8 @@
           console.error("[processHTMLResponse] Unexpected data format.");
         }
       } else {
-        console.error("[processHTMLResponse] No audio source element found.");
+        // Instead of erroring, treat this as an empty channel
+        log("[processHTMLResponse]", "No audio source element found; treating channel as empty.");
       }
       return { audioData, sampleName };
     }
@@ -214,11 +215,11 @@
           console.error(`[fetchAudio] Failed to fetch ${fullUrl} (Status: ${response.status})`);
           return;
         }
-  
+
         const contentType = response.headers.get("Content-Type") || "";
         let audioData,
           sampleName = window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex];
-  
+
         if (contentType.includes("application/json")) {
           ({ audioData, sampleName } = await processJSONResponse(response));
           sampleName = sampleName || sampleNameGiven || fullUrl.split("/").pop();
@@ -230,7 +231,7 @@
           audioData = await response.arrayBuffer();
           sampleName = sampleName || sampleNameGiven || fullUrl.split("/").pop().split(/[?#]/)[0] || "Unnamed Sample";
         }
-  
+
         if (audioData) {
           await decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex);
           const settings = window.unifiedSequencerSettings;
@@ -241,7 +242,15 @@
           settings.settings.masterSettings.channelURLs[channelIndex] = fullUrl;
           if (callback) callback(channelIndex, sampleName);
         } else {
-          console.error("[fetchAudio] No audio data received.");
+          // Handle empty channel gracefully:
+          log("[fetchAudio]", `No audio data received for channel ${channelIndex}. Treating as empty channel.`);
+          // Optionally, update the channel URL and name to indicate that no audio was loaded.
+          const settings = window.unifiedSequencerSettings;
+          settings.settings.masterSettings.channelURLs[channelIndex] = fullUrl; // Store URL even if empty
+          // You could also call updateProjectChannelNamesUI with a default name:
+          const defaultName = sampleNameGiven || "Empty Channel";
+          settings.updateProjectChannelNamesUI(channelIndex, defaultName);
+          settings.settings.masterSettings.projectChannelNames[channelIndex] = defaultName;
         }
       } catch (error) {
         console.error(`[fetchAudio] Error fetching audio from ${url}:`, error);
