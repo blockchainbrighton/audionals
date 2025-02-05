@@ -355,7 +355,7 @@ const ogSampleUrls = [
   async function processLoad(url, sampleName, index, loadSampleButton, modal) {
     try {
       console.log(`[Load] Fetching audio from ${url} as ${sampleName}`);
-      await fetchAudio(url, index, sampleName); // Assumes fetchAudio is defined elsewhere
+      await window.AudioUtilsPart1.fetchAudio(url, index, sampleName); // Assumes fetchAudio is defined elsewhere
       window.unifiedSequencerSettings.setChannelName(index, sampleName);
       setButtonText(index, loadSampleButton);
       showVisualMessage(`Loaded: ${sampleName}`);

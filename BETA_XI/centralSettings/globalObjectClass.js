@@ -134,6 +134,12 @@ class UnifiedSequencerSettings {
         this.settings.masterSettings.artistName = settingsToLoad.artistName || "";
         this.globalPlaybackSpeed = settingsToLoad.globalPlaybackSpeed || 1;
         this.channelPlaybackSpeed = settingsToLoad.channelPlaybackSpeed || new Array(this.numChannels).fill(1);
+        if (this.channelPlaybackSpeed.length < this.numChannels) {
+          this.channelPlaybackSpeed = [
+            ...this.channelPlaybackSpeed,
+            ...new Array(this.numChannels - this.channelPlaybackSpeed.length).fill(1)
+          ];
+        }
         this.initializeGainNodes();
         if (settingsToLoad.channelURLs) {
           const urlPromises = settingsToLoad.channelURLs.map((url, index) =>
@@ -859,23 +865,25 @@ class UnifiedSequencerSettings {
     }
   
     clearMasterSettings() {
-      console.log("[clearMasterSettings] Current masterSettings before clearing:", this.settings.masterSettings);
-      this.settings.masterSettings.projectName = 'New Audx Project';
-      this.settings.masterSettings.artistName = '';
-      this.settings.masterSettings.projectBPM = 120;
-      this.settings.masterSettings.currentSequence = 0;
-      this.settings.masterSettings.channelURLs = new Array(this.numChannels).fill('');
-      this.settings.masterSettings.projectChannelNames = new Array(this.numChannels).fill('Load Sample');
-      this.settings.masterSettings.channelVolume = new Array(this.numChannels).fill(1);
-      this.settings.masterSettings.trimSettings = Array.from({ length: this.numChannels }, () => ({
-        start: 0.01, 
-        end: 100.00, 
-        length: 0
-      }));
-      this.settings.masterSettings.channelPlaybackSpeed = new Array(this.numChannels).fill(1);
-      this.settings.masterSettings.projectSequences = this.initializeSequences(64, this.numChannels, 64);
-      console.log("[clearMasterSettings] Master settings cleared.");
-    }
+        console.log("[clearMasterSettings] Current masterSettings before clearing:", this.settings.masterSettings);
+        this.settings.masterSettings.projectName = 'New Audx Project';
+        this.settings.masterSettings.artistName = '';
+        this.settings.masterSettings.projectBPM = 120;
+        this.settings.masterSettings.currentSequence = 0;
+        this.settings.masterSettings.channelURLs = new Array(this.numChannels).fill('');
+        this.settings.masterSettings.projectChannelNames = new Array(this.numChannels).fill('Load Sample');
+        this.settings.masterSettings.channelVolume = new Array(this.numChannels).fill(1);
+        this.settings.masterSettings.trimSettings = Array.from({ length: this.numChannels }, () => ({
+          start: 0.01, 
+          end: 100.00, 
+          length: 0
+        }));
+        this.settings.masterSettings.channelPlaybackSpeed = new Array(this.numChannels).fill(1);
+        // Also update the global channelPlaybackSpeed property:
+        this.channelPlaybackSpeed = new Array(this.numChannels).fill(1);
+        this.settings.masterSettings.projectSequences = this.initializeSequences(64, this.numChannels, 64);
+        console.log("[clearMasterSettings] Master settings cleared.");
+      }
   
     setCurrentSequence(currentSequence) {
       if (this.settings.masterSettings.currentSequence !== currentSequence) {
