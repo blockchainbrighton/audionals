@@ -160,9 +160,6 @@ async function decodeAndStoreAudio(audioData, sampleName, fullUrl, channelIndex)
 
       console.log(`[decodeAndStoreAudio] Forward and reverse audio buffers stored for channel ${channelIndex} and URL ${fullUrl}: ${sampleName}`);
       
-      // Mark this channel as an audio channel
-      channelIsSynth[channelIndex] = false;
-      console.log(`Channel ${channelIndex} is set as an audio channel`);
 
 
       // Disconnect existing connections if the source node is already created
