@@ -396,97 +396,131 @@ class UnifiedSequencerSettings {
     }
   
     serialize(data) {
-      const keyMap = {
-        projectName: 0,
-        artistName: 1,
-        projectBPM: 2,
-        currentSequence: 3,
-        channelURLs: 4,
-        channelVolume: 5,
-        channelPlaybackSpeed: 6,
-        trimSettings: 7,
-        projectChannelNames: 8,
-        startSliderValue: 9,
-        endSliderValue: 10,
-        totalSampleDuration: 11,
-        start: 12,
-        end: 13,
-        projectSequences: 14,
-        steps: 15
-      };
-      const reverseChannelMap = Array.from({ length: this.numChannels }, (_, i) =>
-        i < 26 ? String.fromCharCode(65 + i) : i.toString()
-      );
-      const roundToFourDecimals = num => Math.round(num * 10000) / 10000;
-      const compressSteps = steps => {
-        if (!steps.length) return [];
-        const compressed = [];
-        let start = null, end = null, inRange = false;
-        steps.forEach(step => {
-          if (typeof step === "number") {
-            if (start === null) {
-              start = end = step;
-            } else if (step === end + 1) {
-              end = step;
-              inRange = true;
+        const keyMap = {
+          projectName: 0,
+          artistName: 1,
+          projectBPM: 2,
+          currentSequence: 3,
+          channelURLs: 4,
+          channelVolume: 5,
+          channelPlaybackSpeed: 6,
+          trimSettings: 7,
+          projectChannelNames: 8,
+          startSliderValue: 9,
+          endSliderValue: 10,
+          totalSampleDuration: 11,
+          start: 12,
+          end: 13,
+          projectSequences: 14,
+          steps: 15
+        };
+      
+        const reverseChannelMap = Array.from({ length: this.numChannels }, (_, i) =>
+          i < 26 ? String.fromCharCode(65 + i) : i.toString()
+        );
+      
+        const roundToFourDecimals = num => Math.round(num * 10000) / 10000;
+      
+        const compressSteps = steps => {
+          if (!steps.length) return [];
+          const compressed = [];
+          let start = null, end = null, inRange = false;
+          steps.forEach(step => {
+            if (typeof step === "number") {
+              if (start === null) {
+                start = end = step;
+              } else if (step === end + 1) {
+                end = step;
+                inRange = true;
+              } else {
+                compressed.push(inRange ? { r: [start, end] } : start);
+                start = end = step;
+                inRange = false;
+              }
+            } else if (step.index !== undefined && step.reverse) {
+              if (start !== null) {
+                compressed.push(inRange ? { r: [start, end] } : start);
+                start = end = null;
+                inRange = false;
+              }
+              compressed.push(`${step.index}r`);
+            }
+          });
+          if (start !== null) compressed.push(inRange ? { r: [start, end] } : start);
+          return compressed;
+        };
+      
+        const stripDomainFromUrl = url => {
+          if (!url) return "";
+          try {
+            const parsedUrl = new URL(url);
+            return parsedUrl.pathname + parsedUrl.search;
+          } catch (e) {
+            return url;
+          }
+        };
+      
+        function serializeData(data) {
+          // If data is null or not an object, just return it.
+          if (data === null || typeof data !== "object") return data;
+          const serializedData = {};
+          for (const [key, value] of Object.entries(data)) {
+            // If the value is null or undefined, skip this key.
+            if (value === null || value === undefined) continue;
+      
+            const shortKey = keyMap[key] ?? key;
+      
+            if (key === "channelURLs") {
+              // Ensure value is an array and filter/map valid entries.
+              serializedData[shortKey] = Array.isArray(value)
+                ? value.filter(v => v).map(stripDomainFromUrl)
+                : [];
+            } else if (Array.isArray(value)) {
+              serializedData[shortKey] =
+                key === "projectChannelNames"
+                  ? value.map((v, i) => reverseChannelMap[i] ?? v)
+                  : value.map(v =>
+                      typeof v === "number"
+                        ? roundToFourDecimals(v)
+                        : serializeData(v)
+                    );
+            } else if (typeof value === "object") {
+              // Special handling for projectSequences.
+              if (key === "projectSequences") {
+                serializedData[shortKey] = Object.entries(value).reduce(
+                  (acc, [seqKey, channels]) => {
+                    const shortSeqKey = seqKey.replace("Sequence", "s");
+                    const filteredChannels = Object.entries(channels).reduce(
+                      (chAcc, [chKey, chValue]) => {
+                        const letter =
+                          reverseChannelMap[parseInt(chKey.replace("ch", ""), 10)] ?? chKey;
+                        if (chValue.steps && chValue.steps.length) {
+                          chAcc[letter] = { [keyMap["steps"]]: compressSteps(chValue.steps) };
+                        }
+                        return chAcc;
+                      },
+                      {}
+                    );
+                    if (Object.keys(filteredChannels).length)
+                      acc[shortSeqKey] = filteredChannels;
+                    return acc;
+                  },
+                  {}
+                );
+              } else {
+                serializedData[shortKey] = serializeData(value);
+              }
             } else {
-              compressed.push(inRange ? { r: [start, end] } : start);
-              start = end = step;
-              inRange = false;
+              serializedData[shortKey] =
+                typeof value === "number" ? roundToFourDecimals(value) : value;
             }
-          } else if (step.index !== undefined && step.reverse) {
-            if (start !== null) {
-              compressed.push(inRange ? { r: [start, end] } : start);
-              start = end = null;
-              inRange = false;
-            }
-            compressed.push(`${step.index}r`);
           }
-        });
-        if (start !== null) compressed.push(inRange ? { r: [start, end] } : start);
-        return compressed;
-      };
-      const stripDomainFromUrl = url => {
-        try {
-          const parsedUrl = new URL(url);
-          return parsedUrl.pathname + parsedUrl.search;
-        } catch (e) {
-          return url;
+          return serializedData;
         }
-      };
-      const serializeData = data => {
-        const serializedData = {};
-        for (const [key, value] of Object.entries(data)) {
-          const shortKey = keyMap[key] ?? key;
-          if (key === "channelURLs") {
-            serializedData[shortKey] = value.map(stripDomainFromUrl);
-          } else if (Array.isArray(value)) {
-            serializedData[shortKey] = (key === "projectChannelNames")
-              ? value.map((v, i) => reverseChannelMap[i] ?? v)
-              : value.map(v => typeof v === "number" ? roundToFourDecimals(v) : serializeData(v));
-          } else if (typeof value === "object" && value !== null) {
-            serializedData[shortKey] = key === "projectSequences"
-              ? Object.entries(value).reduce((acc, [seqKey, channels]) => {
-                  const shortSeqKey = seqKey.replace("Sequence", "s");
-                  const filteredChannels = Object.entries(channels).reduce((chAcc, [chKey, chValue]) => {
-                    const letter = reverseChannelMap[parseInt(chKey.replace("ch", ""), 10)] ?? chKey;
-                    if (chValue.steps?.length) {
-                      chAcc[letter] = { [keyMap["steps"]]: compressSteps(chValue.steps) };
-                    }
-                    return chAcc;
-                  }, {});
-                  if (Object.keys(filteredChannels).length) acc[shortSeqKey] = filteredChannels;
-                  return acc;
-                }, {})
-              : serializeData(value);
-          } else {
-            serializedData[shortKey] = typeof value === "number" ? roundToFourDecimals(value) : value;
-          }
-        }
-        return serializedData;
-      };
-      return serializeData(data);
-    }
+      
+        return serializeData(data);
+      }
+      
   
     downloadJSON(content, fileNameBase) {
       try {

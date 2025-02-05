@@ -1,4 +1,5 @@
-// -- Global state --
+// -------------------------------
+// Global state --
 let currentTrimmerInstance = null;
 let currentTrimmerChannelIndex = null;
 let cachedAudioTrimModuleHTML = null; // NEW: cache for the remote HTML
@@ -34,12 +35,16 @@ function updateAudioTrimmerWithBuffer(audioBuffer) {
   }
 }
 
+// -------------------------------
+// Updated helper that uses the blob URL keys.
+// It retrieves the audio buffer from AudioUtilsPart1 using the blob URL.
 function updateAudioTrimmerWithBufferHelper(url, channelIndex) {
-  const audioBuffer = audioBuffers.get(url);
+  // Use the shared AudioUtilsPart1 state to retrieve the buffer via the blob URL.
+  const audioBuffer = window.AudioUtilsPart1._audioBuffers.get(url);
   if (audioBuffer) {
     updateAudioTrimmerWithBuffer(audioBuffer);
   } else {
-    console.error(`Audio buffer not found for URL: ${url}`);
+    console.error(`Audio buffer not found for blob URL: ${url}`);
   }
 }
 
@@ -118,6 +123,8 @@ function applyTrimSettings(channelIndex) {
   }
 }
 
+// -------------------------------
+// Retrieves the blob URL for a channel from unified settings.
 function getChannelUrl(channelIndex) {
   return window.unifiedSequencerSettings.settings.masterSettings.channelURLs[channelIndex];
 }
@@ -132,6 +139,7 @@ document.addEventListener('DOMContentLoaded', function () {
         console.error(`No URL found for channel index: ${channelIndex}`);
         return;
       }
+      // Update the trimmer with the audio buffer using the blob URL.
       updateAudioTrimmerWithBufferHelper(url, channelIndex);
       initializeAudioTrimmer(channelIndex);
     });

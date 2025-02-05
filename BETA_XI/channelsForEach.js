@@ -5,29 +5,43 @@ import { setupLoadSampleButton } from './loadSampleModalButton_v2.js';
 console.log("channelsForeach.js entered");
 
 channels.forEach((channel, index) => {
+    // Assign a unique id to each channel and perform any setup work
     channel.dataset.id = `Channel-${index}`;
     setupLoadSampleButton(channel, index);
   
-    // Example: Group button & dropdown logic
-    const groupButton = channel.querySelector('.group-button'); // Use class instead of id for repeated elements
+    // Group button & dropdown logic
+    const groupButton = channel.querySelector('.group-button');
     const groupDropdown = channel.querySelector('.group-dropdown');
+  
+    // Ensure the dropdown is hidden initially
+    groupDropdown.style.display = "none";
+  
     if (groupButton && groupDropdown) {
+      // Toggle the dropdown when the group button is clicked
       groupButton.addEventListener('click', (event) => {
         event.stopPropagation();
-        // Toggle display
-        if (groupDropdown.style.display === "none" || groupDropdown.style.display === "") {
-          groupDropdown.style.display = "block";
-        } else {
-          groupDropdown.style.display = "none";
-        }
+        groupDropdown.style.display = (groupDropdown.style.display === "none" ? "block" : "none");
       });
+  
+      // When a group is selected from the dropdown, log the selection and hide the dropdown
       groupDropdown.addEventListener('change', (event) => {
         const selectedGroup = event.target.value;
         console.log(`Channel ${index} assigned to group: ${selectedGroup}`);
-        // Update the channel's group here as needed
+        // Optionally, update the channel’s state or a data attribute:
+        channel.dataset.group = selectedGroup;
+        // Hide the dropdown after selection
         groupDropdown.style.display = "none";
       });
+  
+      // Hide the dropdown if the user clicks anywhere outside of the current channel element
+      document.addEventListener('click', (event) => {
+        if (!channel.contains(event.target)) {
+          groupDropdown.style.display = "none";
+        }
+      });
     }
+
+  
   
     // Mute button event
     const muteButton = channel.querySelector('.mute-button');
