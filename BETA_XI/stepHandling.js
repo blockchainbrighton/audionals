@@ -130,5 +130,4 @@ function resetCountersForNewSequence(startStep = 0) {
 }
 
 
-// displayUpdatedValues();
 

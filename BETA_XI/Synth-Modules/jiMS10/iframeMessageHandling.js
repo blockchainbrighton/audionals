@@ -25,15 +25,7 @@ const initializeSynthesizer = () => {
     loadArpNotesFromLocalStorage();
 };
 
-// Dedicated channel for stopping all synths
-const stopChannel = new BroadcastChannel('stopAllSynthsChannel');
-stopChannel.onmessage = (event) => {
-    console.log('[Iframe] Stop all synths received');
-    if (event.data.type === 'stopAll') {
-        console.log('[Iframe] Stop all synths received');
-        stopArpeggiator();  // Your function to stop synths
-    }
-};
+
 
 sequencerChannel.addEventListener("message", (event) => {
     console.log(`[PARENT MESSAGE] ms10 messageEventListener] Received message: ${JSON.stringify(event.data)}`);

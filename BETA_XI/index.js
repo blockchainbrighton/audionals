@@ -187,7 +187,6 @@ if (playButton && stopButton) {
 
         stopButton.addEventListener('click', () => {
             console.log('Stop button clicked');
-            stopAllSynths(); // Custom function - ensure it's defined
             stopAllAudio(); // Stop all audio playback
         
             if (isPlaying) {
