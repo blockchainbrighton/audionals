@@ -10,9 +10,16 @@ class UnifiedSequencerSettings {
       this.observers = [];
       this.gainNodes = new Array(this.numChannels);
       this.sourceNodes = new Array(this.numChannels);
-
-      // Set the global debug flag here:
+  
+      // Global debug flag – set to true to enable debug logging
       this.DEBUG = false;
+  
+      // Define a shared log method
+      this.log = (msg, ...args) => {
+        if (this.DEBUG) {
+          console.log(msg, ...args);
+        }
+      };
   
       this.settings = {
         masterSettings: {
@@ -46,14 +53,14 @@ class UnifiedSequencerSettings {
     /*–––––– Audio Node Initialization ––––––*/
   
     initializeGainNodes() {
-      console.log("Initializing gain nodes");
+      this.log("Initializing gain nodes");
       for (let i = 0; i < this.numChannels; i++) {
         if (!this.gainNodes[i]) {
           const gainNode = this.audioContext.createGain();
           gainNode.gain.setValueAtTime(this.settings.masterSettings.channelVolume[i], this.audioContext.currentTime);
           gainNode.connect(this.audioContext.destination);
           this.gainNodes[i] = gainNode;
-          console.log(`Gain node ${i} initialized with volume ${this.settings.masterSettings.channelVolume[i]}`);
+          this.log(`Gain node ${i} initialized with volume ${this.settings.masterSettings.channelVolume[i]}`);
         }
       }
     }
@@ -81,12 +88,12 @@ class UnifiedSequencerSettings {
         gainNode.gain.setValueAtTime(volume, this.audioContext.currentTime);
         gainNode.connect(this.audioContext.destination);
         this.gainNodes[channelIndex] = gainNode;
-        console.log(`Gain node ${channelIndex} initialized with volume ${volume}`);
+        this.log(`Gain node ${channelIndex} initialized with volume ${volume}`);
       }
     }
   
     setChannelVolume(channelIndex, volume) {
-      console.log(`Setting volume for channel ${channelIndex} to ${volume}`);
+      this.log(`Setting volume for channel ${channelIndex} to ${volume}`);
       if (!this.gainNodes[channelIndex]) {
         console.warn(`No gain node found for channel ${channelIndex}. Creating new gain node.`);
         this.createGainNodeForChannel(channelIndex);
@@ -98,7 +105,7 @@ class UnifiedSequencerSettings {
       }
       gainNode.gain.setValueAtTime(volume, this.audioContext.currentTime);
       this.settings.masterSettings.channelVolume[channelIndex] = volume;
-      console.log(`Volume for channel ${channelIndex} set to ${volume}`);
+      this.log(`Volume for channel ${channelIndex} set to ${volume}`);
       localStorage.setItem(`channelVolume_${channelIndex}`, volume.toString());
     }
   
@@ -115,20 +122,20 @@ class UnifiedSequencerSettings {
     /*–––––– Settings Loading & Serialization ––––––*/
   
     async loadSettings(inputData) {
-      console.log("[internalPresetDebug] loadSettings entered");
+      this.log("[internalPresetDebug] loadSettings entered");
       try {
         this.clearMasterSettings();
         let jsonSettings;
         if (inputData instanceof Uint8Array || inputData instanceof ArrayBuffer) {
-          console.log("[internalPresetDebug] Received Gzip data, decompressing...");
+          this.log("[internalPresetDebug] Received Gzip data, decompressing...");
           const decompressedData = await decompressGzipFile(inputData);
           jsonSettings = JSON.parse(decompressedData);
-        } else if (typeof inputData === 'string') {
+        } else if (typeof inputData === "string") {
           jsonSettings = JSON.parse(inputData);
         } else {
           jsonSettings = inputData;
         }
-        console.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
+        this.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
         const settingsToLoad = this.isHighlySerialized(jsonSettings)
           ? await this.decompressSerializedData(jsonSettings)
           : jsonSettings;
@@ -157,27 +164,27 @@ class UnifiedSequencerSettings {
         }
         this.settings.masterSettings.trimSettings = settingsToLoad.trimSettings;
         this.settings.masterSettings.projectChannelNames = settingsToLoad.projectChannelNames;
-        if (!settingsToLoad || typeof settingsToLoad !== 'object') {
+        if (!settingsToLoad || typeof settingsToLoad !== "object") {
           throw new Error("Invalid or undefined settingsToLoad");
         }
         this.sortAndApplyProjectSequences(settingsToLoad.projectSequences);
         this.updateUIWithLoadedSettings();
       } catch (error) {
-        console.error('[internalPresetDebug] Error loading settings:', error);
+        console.error("[internalPresetDebug] Error loading settings:", error);
       }
     }
   
     async formatAndFetchAudio(url, index) {
-        const baseDomain = "https://ordinals.com";
-        if (url.startsWith("/")) {
-          url = `${baseDomain}${url}`;
-        }
-        return this.formatURL(url).then((formattedUrl) => {
-          this.settings.masterSettings.channelURLs[index] = formattedUrl;
-          // Use the namespaced fetchAudio
-          return window.AudioUtilsPart1.fetchAudio(formattedUrl, index);
-        });
+      const baseDomain = "https://ordinals.com";
+      if (url.startsWith("/")) {
+        url = `${baseDomain}${url}`;
       }
+      return this.formatURL(url).then((formattedUrl) => {
+        this.settings.masterSettings.channelURLs[index] = formattedUrl;
+        // Use the namespaced fetchAudio
+        return window.AudioUtilsPart1.fetchAudio(formattedUrl, index);
+      });
+    }
   
     updateUIWithLoadedSettings() {
       this.updateProjectNameUI(this.settings.masterSettings.projectName);
@@ -215,10 +222,10 @@ class UnifiedSequencerSettings {
         15: 'steps'
       };
       const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([k, v]) => [v, +k]));
-      const channelMap = Array.from({ length: this.numChannels }, (_, i) => 
+      const channelMap = Array.from({ length: this.numChannels }, (_, i) =>
         i < 26 ? String.fromCharCode(65 + i) : i.toString()
       );
-        const decompressSteps = steps => steps.flatMap(step => {
+      const decompressSteps = steps => steps.flatMap(step => {
         if (typeof step === 'number') return step;
         if (step.r) return Array.from({ length: step.r[1] - step.r[0] + 1 }, (_, i) => step.r[0] + i);
         if (typeof step === 'string' && step.endsWith('r')) return { index: parseInt(step.slice(0, -1), 10), reverse: true };
@@ -259,19 +266,19 @@ class UnifiedSequencerSettings {
     }
   
     sortAndApplyProjectSequences(projectSequences) {
-      console.log("[sortAndApplyProjectSequences] Sorting and applying project sequences.");
-      if (!projectSequences || typeof projectSequences !== 'object') {
+      this.log("[sortAndApplyProjectSequences] Sorting and applying project sequences.");
+      if (!projectSequences || typeof projectSequences !== "object") {
         throw new Error("[sortAndApplyProjectSequences] Invalid project sequences data.");
       }
       Object.keys(projectSequences).forEach(sequenceKey => {
         const sequenceData = projectSequences[sequenceKey];
-        if (!sequenceData || typeof sequenceData !== 'object') return;
+        if (!sequenceData || typeof sequenceData !== "object") return;
         if (!this.settings.masterSettings.projectSequences[sequenceKey]) {
           this.settings.masterSettings.projectSequences[sequenceKey] = {};
         }
         Object.keys(sequenceData).forEach(channelKey => {
           const channelData = sequenceData[channelKey];
-          const channelIndex = parseInt(channelKey.replace('ch', ''), 10);
+          const channelIndex = parseInt(channelKey.replace("ch", ""), 10);
           if (channelIndex < this.numChannels) {
             const newSteps = Array.from({ length: 64 }, () => ({
               isActive: false,
@@ -282,10 +289,10 @@ class UnifiedSequencerSettings {
             if (channelData && Array.isArray(channelData.steps)) {
               channelData.steps.forEach(step => {
                 let index, isReverse = false;
-                if (typeof step === 'object' && step.index !== undefined) {
+                if (typeof step === "object" && step.index !== undefined) {
                   index = step.index - 1;
                   isReverse = step.reverse || false;
-                } else if (typeof step === 'number') {
+                } else if (typeof step === "number") {
                   index = step - 1;
                 }
                 if (index >= 0 && index < 64) {
@@ -306,7 +313,7 @@ class UnifiedSequencerSettings {
           }
         });
       });
-      console.log("[sortAndApplyProjectSequences] Project sequences sorted and applied.");
+      this.log("[sortAndApplyProjectSequences] Project sequences sorted and applied.");
     }
   
     exportSettings(pretty = true, includeGzip = true) {
@@ -347,42 +354,42 @@ class UnifiedSequencerSettings {
         }
       }
       const exportedSettings = JSON.stringify(settingsClone, null, pretty ? 2 : 0);
-      console.log("[exportSettings] Exported Settings:", exportedSettings);
+      this.log("[exportSettings] Exported Settings:", exportedSettings);
       const serializedSettings = this.serialize(settingsClone);
       const serializedExportedSettings = JSON.stringify(serializedSettings);
-      console.log("[exportSettings] Serialized Exported Settings:", serializedExportedSettings);
-      const projectName = this.settings.masterSettings.projectName || 'Project';
+      this.log("[exportSettings] Serialized Exported Settings:", serializedExportedSettings);
+      const projectName = this.settings.masterSettings.projectName || "Project";
       const downloadFullFormat = true;
       const downloadSerializedFormat = false;
       if (downloadFullFormat && exportedSettings && exportedSettings.length > 2) {
         this.downloadJSON(exportedSettings, `${projectName}_ff_`);
       } else if (!downloadFullFormat) {
-        console.log("Full format JSON download is disabled.");
+        this.log("Full format JSON download is disabled.");
       } else {
         console.error("Failed to generate full format JSON for download or content is empty.");
       }
       if (downloadSerializedFormat && serializedExportedSettings && serializedExportedSettings.length > 2) {
         this.downloadJSON(serializedExportedSettings, `${projectName}_sf_`);
       } else if (!downloadSerializedFormat) {
-        console.log("Serialized format JSON download is disabled.");
+        this.log("Serialized format JSON download is disabled.");
       } else {
         console.error("Failed to generate serialized format JSON for download or content is empty.");
       }
       if (includeGzip && serializedExportedSettings && serializedExportedSettings.length > 2) {
         createGzipFile(serializedExportedSettings)
-          .then(blob => {   
+          .then(blob => {
             const url = URL.createObjectURL(blob);
-            const downloadLink = document.createElement('a');
+            const downloadLink = document.createElement("a");
             downloadLink.href = url;
             downloadLink.download = `${projectName}_sf.gz`;
             downloadLink.click();
-            console.log("Gzip file created and downloaded successfully.");
+            this.log("Gzip file created and downloaded successfully.");
           })
           .catch(error => {
             console.error("Error during Gzip creation:", error);
           });
       } else if (!includeGzip) {
-        console.log("Gzip file creation is disabled.");
+        this.log("Gzip file creation is disabled.");
       } else {
         console.error("Failed to generate serialized format JSON for Gzip compression or content is empty.");
       }
@@ -407,16 +414,16 @@ class UnifiedSequencerSettings {
         projectSequences: 14,
         steps: 15
       };
-      const reverseChannelMap = Array.from({ length: this.numChannels }, (_, i) => 
+      const reverseChannelMap = Array.from({ length: this.numChannels }, (_, i) =>
         i < 26 ? String.fromCharCode(65 + i) : i.toString()
       );
-    const roundToFourDecimals = num => Math.round(num * 10000) / 10000;
+      const roundToFourDecimals = num => Math.round(num * 10000) / 10000;
       const compressSteps = steps => {
         if (!steps.length) return [];
         const compressed = [];
         let start = null, end = null, inRange = false;
         steps.forEach(step => {
-          if (typeof step === 'number') {
+          if (typeof step === "number") {
             if (start === null) {
               start = end = step;
             } else if (step === end + 1) {
@@ -451,20 +458,20 @@ class UnifiedSequencerSettings {
         const serializedData = {};
         for (const [key, value] of Object.entries(data)) {
           const shortKey = keyMap[key] ?? key;
-          if (key === 'channelURLs') {
+          if (key === "channelURLs") {
             serializedData[shortKey] = value.map(stripDomainFromUrl);
           } else if (Array.isArray(value)) {
-            serializedData[shortKey] = (key === 'projectChannelNames')
+            serializedData[shortKey] = (key === "projectChannelNames")
               ? value.map((v, i) => reverseChannelMap[i] ?? v)
-              : value.map(v => typeof v === 'number' ? roundToFourDecimals(v) : serializeData(v));
-          } else if (typeof value === 'object' && value !== null) {
-            serializedData[shortKey] = key === 'projectSequences'
+              : value.map(v => typeof v === "number" ? roundToFourDecimals(v) : serializeData(v));
+          } else if (typeof value === "object" && value !== null) {
+            serializedData[shortKey] = key === "projectSequences"
               ? Object.entries(value).reduce((acc, [seqKey, channels]) => {
-                  const shortSeqKey = seqKey.replace('Sequence', 's');
+                  const shortSeqKey = seqKey.replace("Sequence", "s");
                   const filteredChannels = Object.entries(channels).reduce((chAcc, [chKey, chValue]) => {
-                    const letter = reverseChannelMap[parseInt(chKey.replace('ch', ''), 10)] ?? chKey;
+                    const letter = reverseChannelMap[parseInt(chKey.replace("ch", ""), 10)] ?? chKey;
                     if (chValue.steps?.length) {
-                      chAcc[letter] = { [keyMap['steps']]: compressSteps(chValue.steps) };
+                      chAcc[letter] = { [keyMap["steps"]]: compressSteps(chValue.steps) };
                     }
                     return chAcc;
                   }, {});
@@ -473,7 +480,7 @@ class UnifiedSequencerSettings {
                 }, {})
               : serializeData(value);
           } else {
-            serializedData[shortKey] = typeof value === 'number' ? roundToFourDecimals(value) : value;
+            serializedData[shortKey] = typeof value === "number" ? roundToFourDecimals(value) : value;
           }
         }
         return serializedData;
@@ -483,19 +490,19 @@ class UnifiedSequencerSettings {
   
     downloadJSON(content, fileNameBase) {
       try {
-        console.log(`[downloadJSON] Attempting to download file with base name: ${fileNameBase}`);
+        this.log(`[downloadJSON] Attempting to download file with base name: ${fileNameBase}`);
         if (!content) throw new Error("Content is undefined or null");
         const fileName = `${fileNameBase}_AUDX.json`;
-        console.log(`[downloadJSON] Generated file name: ${fileName}`);
-        console.log(`[downloadJSON] Content length: ${content.length}`);
-        console.log(`[downloadJSON] Content preview: ${content.slice(0, 100)}`);
-        const blob = new Blob([content], { type: 'application/json' });
-        const link = document.createElement('a');
+        this.log(`[downloadJSON] Generated file name: ${fileName}`);
+        this.log(`[downloadJSON] Content length: ${content.length}`);
+        this.log(`[downloadJSON] Content preview: ${content.slice(0, 100)}`);
+        const blob = new Blob([content], { type: "application/json" });
+        const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = fileName;
-        console.log(`[downloadJSON] Initiating download for file: ${fileName}`);
+        this.log(`[downloadJSON] Initiating download for file: ${fileName}`);
         link.click();
-        console.log(`[downloadJSON] Download initiated successfully for file: ${fileName}`);
+        this.log(`[downloadJSON] Download initiated successfully for file: ${fileName}`);
       } catch (error) {
         console.error("Failed to download JSON:", error);
       }
@@ -515,7 +522,7 @@ class UnifiedSequencerSettings {
           sourceNode.playbackRate.setValueAtTime(speed, this.audioContext.currentTime);
         }
       });
-      console.log(`Global playback speed set to ${speed}x`);
+      this.log(`Global playback speed set to ${speed}x`);
     }
   
     setChannelPlaybackSpeed(channelIndex, speed) {
@@ -527,9 +534,9 @@ class UnifiedSequencerSettings {
       const sourceNode = this.sourceNodes[channelIndex];
       if (sourceNode && sourceNode.buffer) {
         sourceNode.playbackRate.setValueAtTime(speed, this.audioContext.currentTime);
-        console.log(`Playback speed for channel ${channelIndex} set to ${speed}x`);
+        this.log(`Playback speed for channel ${channelIndex} set to ${speed}x`);
       } else {
-        console.log(`Source node for channel ${channelIndex} is not initialized or lacks a buffer.`);
+        this.log(`Source node for channel ${channelIndex} is not initialized or lacks a buffer.`);
       }
     }
   
@@ -537,9 +544,9 @@ class UnifiedSequencerSettings {
       const sourceNode = this.sourceNodes[channelIndex];
       if (sourceNode && sourceNode.buffer) {
         sourceNode.playbackRate.setValueAtTime(this.channelPlaybackSpeed[channelIndex], this.audioContext.currentTime);
-        console.log(`Playback speed for channel ${channelIndex} updated to ${this.channelPlaybackSpeed[channelIndex]}x`);
+        this.log(`Playback speed for channel ${channelIndex} updated to ${this.channelPlaybackSpeed[channelIndex]}x`);
       } else {
-        console.log(`Source node for channel ${channelIndex} is not initialized or lacks a buffer.`);
+        this.log(`Source node for channel ${channelIndex} is not initialized or lacks a buffer.`);
       }
     }
   
@@ -559,11 +566,11 @@ class UnifiedSequencerSettings {
         }
       }
       this.numSequences = lastActiveSequence + 1;
-      console.log(`Total sequences updated to ${this.numSequences}`);
+      this.log(`Total sequences updated to ${this.numSequences}`);
     }
   
     checkSettings() {
-      console.log("Current Global Settings:", this.settings);
+      this.log("Current Global Settings:", this.settings);
       return this.settings.masterSettings;
     }
   
@@ -594,7 +601,7 @@ class UnifiedSequencerSettings {
             pitch: 1,
           })),
           mute: false,
-          url: ''
+          url: ""
         };
       }
       return channels;
@@ -607,7 +614,7 @@ class UnifiedSequencerSettings {
       if (step) {
         return { isActive: step.isActive, isReverse: step.isReverse, volume: step.volume, pitch: step.pitch };
       } else {
-        console.error('Invalid sequence, channel, or step index in getStepSettings');
+        console.error("Invalid sequence, channel, or step index in getStepSettings");
         return { isActive: false, isReverse: false, volume: 1, pitch: 1 };
       }
     }
@@ -619,19 +626,19 @@ class UnifiedSequencerSettings {
         const step = channel.steps[stepIndex];
         return { isActive: step.isActive, isReverse: step.isReverse };
       } else {
-        console.error('Invalid sequence, channel, or step index in getStepStateAndReverse');
+        console.error("Invalid sequence, channel, or step index in getStepStateAndReverse");
         return { isActive: false, isReverse: false };
       }
     }
   
     updateStepState(currentSequence, channelIndex, stepIndex, state) {
-      console.log("updateStepState entered");
+      this.log("updateStepState entered");
       const existingStepState = this.getStepStateAndReverse(currentSequence, channelIndex, stepIndex);
-      if (typeof state === 'boolean') {
+      if (typeof state === "boolean") {
         this.updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, state, existingStepState.isReverse);
         this.updateTotalSequences();
       } else {
-        console.error('Invalid state type in updateStepState');
+        console.error("Invalid state type in updateStepState");
       }
     }
   
@@ -641,7 +648,7 @@ class UnifiedSequencerSettings {
       if (channel && stepIndex < channel.steps.length) {
         return channel.steps[stepIndex].isActive;
       } else {
-        console.error('Invalid sequence, channel, or step index in getStepState');
+        console.error("Invalid sequence, channel, or step index in getStepState");
         return false;
       }
     }
@@ -661,17 +668,23 @@ class UnifiedSequencerSettings {
     }
   
     updateStepStateAndReverse(currentSequence, channelIndex, stepIndex, isActive, isReverse) {
-      if (typeof currentSequence !== 'number' || typeof channelIndex !== 'number' || typeof stepIndex !== 'number' ||
-          typeof isActive !== 'boolean' || typeof isReverse !== 'boolean') {
-        throw new Error('Invalid input types');
+      if (
+        typeof currentSequence !== "number" ||
+        typeof channelIndex !== "number" ||
+        typeof stepIndex !== "number" ||
+        typeof isActive !== "boolean" ||
+        typeof isReverse !== "boolean"
+      ) {
+        throw new Error("Invalid input types");
       }
-      const step = this.settings?.masterSettings?.projectSequences?.[`Sequence${currentSequence}`]?.[`ch${channelIndex}`]?.steps?.[stepIndex];
+      const step =
+        this.settings?.masterSettings?.projectSequences?.[`Sequence${currentSequence}`]?.[`ch${channelIndex}`]?.steps?.[stepIndex];
       if (step) {
         step.isActive = isActive;
         step.isReverse = isReverse;
         this.updateTotalSequences();
       } else {
-        throw new Error('Invalid sequence, channel, or step index in updateStepStateAndReverse');
+        throw new Error("Invalid sequence, channel, or step index in updateStepStateAndReverse");
       }
     }
   
@@ -684,7 +697,7 @@ class UnifiedSequencerSettings {
     getStepVolume(sequenceIndex, channelIndex, stepIndex) {
       return this.getStepSettings(sequenceIndex, channelIndex, stepIndex).volume;
     }
-    
+  
     getStepPitch(sequenceIndex, channelIndex, stepIndex) {
       return this.getStepSettings(sequenceIndex, channelIndex, stepIndex).pitch;
     }
@@ -707,7 +720,7 @@ class UnifiedSequencerSettings {
       if (step) {
         step.volume = volume;
       } else {
-        console.error('Invalid sequence, channel, or step index in setStepVolume');
+        console.error("Invalid sequence, channel, or step index in setStepVolume");
       }
       this.notifyObservers();
     }
@@ -719,7 +732,7 @@ class UnifiedSequencerSettings {
       if (step) {
         step.pitch = pitch;
       } else {
-        console.error('Invalid sequence, channel, or step index in setStepPitch');
+        console.error("Invalid sequence, channel, or step index in setStepPitch");
       }
       this.notifyObservers();
     }
@@ -727,7 +740,7 @@ class UnifiedSequencerSettings {
     /*–––––– Trim Settings & UI Updates ––––––*/
   
     initializeTrimSettings(numSettings) {
-      console.log("initializeTrimSettings entered with numSettings:", numSettings);
+      this.log("initializeTrimSettings entered with numSettings:", numSettings);
       return Array.from({ length: numSettings }, () => ({
         start: 0,
         end: 100,
@@ -736,7 +749,7 @@ class UnifiedSequencerSettings {
     }
   
     updateTrimSettingsUI(trimSettings) {
-      console.log("updateTrimSettingsUI entered", trimSettings);
+      this.log("updateTrimSettingsUI entered", trimSettings);
       trimSettings.forEach((setting, index) => {
         const startSlider = document.getElementById(`start-slider-${index}`);
         const endSlider = document.getElementById(`end-slider-${index}`);
@@ -750,17 +763,17 @@ class UnifiedSequencerSettings {
     /*–––––– Observer & UI Helpers ––––––*/
   
     addObserver(observerFunction) {
-      console.log("addObserver", observerFunction);
+      this.log("addObserver", observerFunction);
       this.observers.push(observerFunction);
     }
   
     notifyObservers() {
-      console.log('[SequenceChangeDebug] Notifying observers of changes.');
+      this.log("[SequenceChangeDebug] Notifying observers of changes.");
       this.observers.forEach(observerFunction => observerFunction(this.settings));
     }
   
     setTrimSettings(channelIndex, start, end) {
-      console.log("setTrimSettings entered");
+      this.log("setTrimSettings entered");
       if (this.isValidIndex(channelIndex)) {
         const currentSettings = this.settings.masterSettings.trimSettings[channelIndex];
         if (currentSettings) {
@@ -772,25 +785,25 @@ class UnifiedSequencerSettings {
         console.error(`Invalid channel index: ${channelIndex}`);
       }
     }
-    
+  
     getTrimSettings(channelIndex) {
       const trimSettings = this.settings.masterSettings.trimSettings[channelIndex];
       return trimSettings || { start: 0, end: 1 };
     }
   
     isValidIndex(index) {
-      console.log("isValidIndex entered");
+      this.log("isValidIndex entered");
       return index >= 0 && index < this.numChannels;
     }
   
     updateUIForSequence(currentSequenceIndex) {
-      const channels = document.querySelectorAll('.channel');
+      const channels = document.querySelectorAll(".channel");
       channels.forEach((channel, channelIndex) => {
-        const stepButtons = channel.querySelectorAll('.step-button');
+        const stepButtons = channel.querySelectorAll(".step-button");
         stepButtons.forEach((button, stepIndex) => {
           const { isActive, isReverse } = this.getStepStateAndReverse(currentSequenceIndex, channelIndex, stepIndex);
-          button.classList.toggle('selected', isActive);
-          button.classList.toggle('reverse', isReverse);
+          button.classList.toggle("selected", isActive);
+          button.classList.toggle("reverse", isReverse);
         });
       });
       if (!this._scheduledUpdate) {
@@ -804,7 +817,7 @@ class UnifiedSequencerSettings {
   
     addChannelURL(index, url) {
       if (index >= 0 && index < this.settings.masterSettings.channelURLs.length) {
-        console.log(`[addChannelURL] Adding URL to channel ${index}: ${url}`);
+        this.log(`[addChannelURL] Adding URL to channel ${index}: ${url}`);
         this.settings.masterSettings.channelURLs[index] = url;
         this.notifyObservers();
       } else {
@@ -814,7 +827,7 @@ class UnifiedSequencerSettings {
   
     getChannelURL(index) {
       if (index >= 0 && index < this.settings.masterSettings.channelURLs.length) {
-        console.log(`[getChannelURL] Retrieving URL from channel ${index}: ${this.settings.masterSettings.channelURLs[index]}`);
+        this.log(`[getChannelURL] Retrieving URL from channel ${index}: ${this.settings.masterSettings.channelURLs[index]}`);
         return this.settings.masterSettings.channelURLs[index];
       } else {
         console.error(`[getChannelURL] Invalid channel index: ${index}`);
@@ -823,16 +836,16 @@ class UnifiedSequencerSettings {
     }
   
     updateProjectChannelNamesUI(channelIndexOrNames, name) {
-      if (typeof channelIndexOrNames === 'number') {
+      if (typeof channelIndexOrNames === "number") {
         const channelIndex = channelIndexOrNames;
-        const defaultName = 'Load Sample';
+        const defaultName = "Load Sample";
         let effectiveName = name;
         const channelUrl = this.settings.masterSettings.channelURLs[channelIndex];
-        const urlName = channelUrl ? channelUrl.split('/').pop().split('#')[0] : defaultName;
+        const urlName = channelUrl ? channelUrl.split("/").pop().split("#")[0] : defaultName;
         if (!effectiveName) {
           effectiveName = urlName;
         }
-        console.log("[updateProjectChannelNamesUI] Updating with name:", effectiveName);
+        this.log("[updateProjectChannelNamesUI] Updating with name:", effectiveName);
         const nameDisplay = document.getElementById(`channel-name-${channelIndex}`);
         if (nameDisplay) {
           nameDisplay.textContent = effectiveName;
@@ -845,48 +858,46 @@ class UnifiedSequencerSettings {
         });
       }
     }
-
+  
     setChannelName(channelIndex, name) {
-        // Update the internal settings
-        this.settings.masterSettings.projectChannelNames[channelIndex] = name;
-        // Optionally update the UI for this channel name.
-        // This assumes updateProjectChannelNamesUI can take the channel index and name.
-        this.updateProjectChannelNamesUI(channelIndex, name);
-        // If you need to notify observers or do any additional work, you can do that here.
-        console.log(`Channel ${channelIndex} name set to: ${name}`);
-      }
+      // Update the internal settings
+      this.settings.masterSettings.projectChannelNames[channelIndex] = name;
+      // Optionally update the UI for this channel name.
+      this.updateProjectChannelNamesUI(channelIndex, name);
+      this.log(`Channel ${channelIndex} name set to: ${name}`);
+    }
   
     getChannelName(channelIndex) {
-      console.log("getChannelName entered");
+      this.log("getChannelName entered");
       return this.settings.masterSettings.projectChannelNames[channelIndex];
     }
   
     setProjectName(name) {
-      console.log("setProjectName entered");
+      this.log("setProjectName entered");
       this.settings.masterSettings.projectName = name;
       this.notifyObservers();
     }
   
     clearMasterSettings() {
-        console.log("[clearMasterSettings] Current masterSettings before clearing:", this.settings.masterSettings);
-        this.settings.masterSettings.projectName = 'New Audx Project';
-        this.settings.masterSettings.artistName = '';
-        this.settings.masterSettings.projectBPM = 120;
-        this.settings.masterSettings.currentSequence = 0;
-        this.settings.masterSettings.channelURLs = new Array(this.numChannels).fill('');
-        this.settings.masterSettings.projectChannelNames = new Array(this.numChannels).fill('Load Sample');
-        this.settings.masterSettings.channelVolume = new Array(this.numChannels).fill(1);
-        this.settings.masterSettings.trimSettings = Array.from({ length: this.numChannels }, () => ({
-          start: 0.01, 
-          end: 100.00, 
-          length: 0
-        }));
-        this.settings.masterSettings.channelPlaybackSpeed = new Array(this.numChannels).fill(1);
-        // Also update the global channelPlaybackSpeed property:
-        this.channelPlaybackSpeed = new Array(this.numChannels).fill(1);
-        this.settings.masterSettings.projectSequences = this.initializeSequences(64, this.numChannels, 64);
-        console.log("[clearMasterSettings] Master settings cleared.");
-      }
+      this.log("[clearMasterSettings] Current masterSettings before clearing:", this.settings.masterSettings);
+      this.settings.masterSettings.projectName = "New Audx Project";
+      this.settings.masterSettings.artistName = "";
+      this.settings.masterSettings.projectBPM = 120;
+      this.settings.masterSettings.currentSequence = 0;
+      this.settings.masterSettings.channelURLs = new Array(this.numChannels).fill("");
+      this.settings.masterSettings.projectChannelNames = new Array(this.numChannels).fill("Load Sample");
+      this.settings.masterSettings.channelVolume = new Array(this.numChannels).fill(1);
+      this.settings.masterSettings.trimSettings = Array.from({ length: this.numChannels }, () => ({
+        start: 0.01,
+        end: 100.0,
+        length: 0
+      }));
+      this.settings.masterSettings.channelPlaybackSpeed = new Array(this.numChannels).fill(1);
+      // Also update the global channelPlaybackSpeed property:
+      this.channelPlaybackSpeed = new Array(this.numChannels).fill(1);
+      this.settings.masterSettings.projectSequences = this.initializeSequences(64, this.numChannels, 64);
+      this.log("[clearMasterSettings] Master settings cleared.");
+    }
   
     setCurrentSequence(currentSequence) {
       if (this.settings.masterSettings.currentSequence !== currentSequence) {
@@ -900,40 +911,39 @@ class UnifiedSequencerSettings {
     }
   
     getSequenceSettings(sequenceIndex) {
-      console.log("getSequenceSettings entered");
+      this.log("getSequenceSettings entered");
       return this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`];
     }
   
     setSequenceSettings(sequenceIndex, sequenceSettings) {
-      console.log("setSequenceSettings entered");
+      this.log("setSequenceSettings entered");
       this.settings.masterSettings.projectSequences[`Sequence${sequenceIndex}`] = sequenceSettings;
     }
   
     getSettings(key) {
-      console.log("getSettings entered", key);
-      if (key === 'masterSettings') {
-        console.log("[getSettings] Retrieved all masterSettings:", this.settings.masterSettings);
+      this.log("getSettings entered", key);
+      if (key === "masterSettings") {
+        this.log("[getSettings] Retrieved all masterSettings:", this.settings.masterSettings);
         return this.settings.masterSettings;
       } else if (key) {
         const settingValue = this.settings.masterSettings[key];
-        console.log(`[getSettings] Retrieved setting for key '${key}':`, settingValue);
+        this.log(`[getSettings] Retrieved setting for key '${key}':`, settingValue);
         return settingValue;
       } else {
-        console.log("[getSettings] Retrieved all settings:", this.settings);
+        this.log("[getSettings] Retrieved all settings:", this.settings);
         return this.settings;
       }
     }
   
     updateProjectSequencesUI() {
-    //   console.log("updateProjectSequencesUI entered");
-      const projectSequences = this.getSettings('projectSequences');
+      const projectSequences = this.getSettings("projectSequences");
       Object.values(projectSequences).forEach((sequence, index) => {
         updateSequenceUI(index, sequence); // Assumes updateSequenceUI is defined elsewhere
       });
     }
   
     updateSetting(key, value, channelIndex = null) {
-      console.log("updateSetting entered");
+      this.log("updateSetting entered");
       if (channelIndex !== null && Array.isArray(this.settings.masterSettings[key])) {
         this.settings.masterSettings[key][channelIndex] = value;
       } else if (key in this.settings.masterSettings) {
@@ -944,7 +954,7 @@ class UnifiedSequencerSettings {
     }
   
     updateSampleDuration(duration, channelIndex) {
-      console.log("updateSampleDuration entered");
+      this.log("updateSampleDuration entered");
       if (this.isValidIndex(channelIndex)) {
         this.settings.masterSettings.trimSettings[channelIndex].length = duration;
       } else {
@@ -961,10 +971,10 @@ class UnifiedSequencerSettings {
     }
   
     updateAllLoadSampleButtonTexts() {
-      console.log("updateAllLoadSampleButtonTexts entered");
-      const channels = document.querySelectorAll('.channel');
+      this.log("updateAllLoadSampleButtonTexts entered");
+      const channels = document.querySelectorAll(".channel");
       channels.forEach((channel, index) => {
-        const loadSampleButton = channel.querySelector('.load-sample-button');
+        const loadSampleButton = channel.querySelector(".load-sample-button");
         if (loadSampleButton) {
           this.updateLoadSampleButtonText(index, loadSampleButton);
         }
@@ -972,59 +982,59 @@ class UnifiedSequencerSettings {
     }
   
     updateLoadSampleButtonText(channelIndex, button) {
-      console.log("updateLoadSampleButtonText entered");
+      this.log("updateLoadSampleButtonText entered");
       if (!button) {
         console.error(`updateLoadSampleButtonText: Button not found for channelIndex ${channelIndex}`);
         return;
       }
-      let buttonText = 'Load New Audional';
-      console.log(`[updateLoadSampleButtonText] Default text: ${buttonText}`);
+      let buttonText = "Load New Audional";
+      this.log(`[updateLoadSampleButtonText] Default text: ${buttonText}`);
       if (!this.settings || !this.settings.masterSettings) {
-        console.error('updateLoadSampleButtonText: masterSettings not properly initialized');
+        console.error("updateLoadSampleButtonText: masterSettings not properly initialized");
         button.textContent = buttonText;
         return;
       }
       const { projectChannelNames, channelURLs } = this.settings.masterSettings;
       if (!Array.isArray(projectChannelNames) || !Array.isArray(channelURLs)) {
-        console.error('updateLoadSampleButtonText: projectChannelNames or channelURLs is not an array');
+        console.error("updateLoadSampleButtonText: projectChannelNames or channelURLs is not an array");
         button.textContent = buttonText;
         return;
       }
       const channelName = projectChannelNames[channelIndex];
       const loadedUrl = channelURLs[channelIndex];
-      console.log(`[updateLoadSampleButtonText] Channel Name: ${channelName}, Loaded URL: ${loadedUrl}`);
+      this.log(`[updateLoadSampleButtonText] Channel Name: ${channelName}, Loaded URL: ${loadedUrl}`);
       if (channelName) {
         buttonText = channelName;
       } else if (loadedUrl) {
-        const urlParts = loadedUrl.split('/');
+        const urlParts = loadedUrl.split("/");
         const lastPart = urlParts[urlParts.length - 1];
         buttonText = lastPart;
       }
-      console.log(`[updateLoadSampleButtonText] Final button text: ${buttonText}`);
+      this.log(`[updateLoadSampleButtonText] Final button text: ${buttonText}`);
       button.textContent = buttonText;
     }
   
     updateProjectNameUI(projectName) {
-      console.log("Project name UI entered and updated:", projectName);
-      const projectNameInput = document.getElementById('project-name');
+      this.log("Project name UI entered and updated:", projectName);
+      const projectNameInput = document.getElementById("project-name");
       if (projectNameInput) {
         projectNameInput.value = projectName || "AUDX Project";
-        console.log("Project name UI updated:", projectName);
+        this.log("Project name UI updated:", projectName);
       }
     }
   
     updateBPMUI(bpm) {
-      const bpmSlider = document.getElementById('bpm-slider');
-      const bpmDisplay = document.getElementById('bpm-display');
+      const bpmSlider = document.getElementById("bpm-slider");
+      const bpmDisplay = document.getElementById("bpm-display");
       if (bpmSlider && bpmDisplay) {
         bpmSlider.value = bpm;
         bpmDisplay.textContent = bpm;
-        console.log("BPM UI updated:", bpm);
+        this.log("BPM UI updated:", bpm);
       }
     }
   
     updateChannelURLsUI(urls) {
-      console.log("Project URLs UI entered and updated:", urls);
+      this.log("Project URLs UI entered and updated:", urls);
       urls.forEach((url, index) => {
         const urlInput = document.getElementById(`url-input-${index}`);
         if (urlInput) {
@@ -1038,9 +1048,9 @@ class UnifiedSequencerSettings {
         array.push(this.getDefaultArrayElement());
       }
     }
-    
+  
     getDefaultArrayElement() {
-      return { start: 0.01, end: 100.00, length: 0 };
+      return { start: 0.01, end: 100.0, length: 0 };
     }
   }
   
