@@ -1026,5 +1026,4 @@ class UnifiedSequencerSettings {
     }
   }
   
-  window.unifiedSequencerSettings = new UnifiedSequencerSettings();
-  
+  window.unifiedSequencerSettings = new UnifiedSequencerSettings(null, 64, 32);  
