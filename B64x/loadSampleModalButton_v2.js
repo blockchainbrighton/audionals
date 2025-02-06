@@ -279,10 +279,34 @@ const ogSampleUrls = [
     selectEl.addEventListener('change', (e) => handleLoad(index, e, loadSampleButton));
   
     const actions = createActionButtons([
-      { text: 'Load', action: () => handleLoad(index, null, loadSampleButton), className: 'green-button' },
-      { text: 'Cancel', action: () => closeModal(modalOverlay), className: 'red-button' },
-      { text: 'Find More Samples', action: () => window.open('https://www.ord.io/?content-type=audio', '_blank'),
-        tooltip: 'Find any onchain audio you like. Simply copy the ordinal ID and paste it into the form above to load it into the sequencer for remixing.',
+      { 
+        text: 'Load', 
+        action: () => handleLoad(index, null, loadSampleButton), 
+        className: 'green-button' 
+      },
+      { 
+        text: 'Cancel', 
+        action: () => closeModal(modalOverlay), 
+        className: 'red-button' 
+      },
+      { 
+        text: 'Find More Samples', 
+        action: () => {
+          // Open the audio sample library modal.
+          // The callback receives the selected ORD ID.
+          openAudioSampleLibraryModal((selectedId) => {
+            // Attempt to find the ORD ID input (assumed to have class "audional-input")
+            const audInput = modalOverlay.querySelector('.audional-input');
+            if (audInput) {
+              audInput.value = selectedId;
+              // Optionally trigger loading immediately:
+              // handleLoad(index, null, loadSampleButton);
+            } else {
+              console.warn('ORD ID input field not found.');
+            }
+          });
+        },
+        tooltip: 'Find any onchain audio you like. Simply click the "Use" button in the popup to copy the ordinal ID and load it into the sequencer for remixing.',
         className: 'yellow-button'
       }
     ]);
