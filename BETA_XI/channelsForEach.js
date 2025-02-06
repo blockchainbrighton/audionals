@@ -10,6 +10,7 @@ channels.forEach((channel, index) => {
     setupLoadSampleButton(channel, index);
   
     // Group button & dropdown logic
+    // Use class selectors so that each channel’s elements are targeted
     const groupButton = channel.querySelector('.group-button');
     const groupDropdown = channel.querySelector('.group-dropdown');
   
@@ -17,23 +18,22 @@ channels.forEach((channel, index) => {
     groupDropdown.style.display = "none";
   
     if (groupButton && groupDropdown) {
-      // Toggle the dropdown when the group button is clicked
+      // When the group button is clicked, always show the dropdown immediately.
       groupButton.addEventListener('click', (event) => {
         event.stopPropagation();
-        groupDropdown.style.display = (groupDropdown.style.display === "none" ? "block" : "none");
+        groupDropdown.style.display = "block";
       });
   
-      // When a group is selected from the dropdown, log the selection and hide the dropdown
+      // When a group is selected, log the selection, update state, and hide the dropdown.
       groupDropdown.addEventListener('change', (event) => {
         const selectedGroup = event.target.value;
         console.log(`Channel ${index} assigned to group: ${selectedGroup}`);
-        // Optionally, update the channel’s state or a data attribute:
+        // Optionally, update the channel’s state (e.g., via a data attribute):
         channel.dataset.group = selectedGroup;
-        // Hide the dropdown after selection
         groupDropdown.style.display = "none";
       });
   
-      // Hide the dropdown if the user clicks anywhere outside of the current channel element
+      // Hide the dropdown if the user clicks anywhere outside of the current channel element.
       document.addEventListener('click', (event) => {
         if (!channel.contains(event.target)) {
           groupDropdown.style.display = "none";
