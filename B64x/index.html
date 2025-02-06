@@ -7,13 +7,13 @@
     <link rel="stylesheet" type="text/css" href="styles/consolidatedStyles.css">
     <link rel="stylesheet" type="text/css" href="AudioTrimModule/audioTrimModuleEnhanced.css">
 
-    <!-- The main style will be loaded dynamically via JavaScript -->
     <script>
-      // Array of available main style files
+      // Reference to the dynamically loaded main style link element
+      let linkEl;
+
+      // Array of available main style files (gray is the fallback)
       const mainStyles = [
-        "styles/mainStyleIce.css",
-        "styles/mainStyleSpace.css",
-        "styles/consolidatedStyles_P3.css",
+        "styles/mainStyleGrey.css",
         "styles/mainStyleCandy.css",
         "styles/mainStyleClassic.css",
         "styles/mainStyleDarkBlue.css",
@@ -22,7 +22,6 @@
         "styles/mainStyleFire.css",
         "styles/mainStyleForest.css",
         "styles/mainStyleFuturistic.css",
-        "styles/mainStyleGrey.css",
         "styles/mainStyleHighContrast.css",
         "styles/mainStyleMidnight.css",
         "styles/mainStyleMinimal.css",
@@ -34,46 +33,103 @@
         "styles/mainStyleNeon.css"
       ];
 
-      // Choose a random style from the array
-      const randomIndex = Math.floor(Math.random() * mainStyles.length);
-      const chosenStyle = mainStyles[randomIndex];
+      // Loads the main style depending on whether random styles are enabled
+      function loadMainStyle() {
+        // Remove any previously loaded main style, if present
+        if (linkEl) {
+          linkEl.remove();
+        }
+        
+        // Check localStorage for user preference
+        // Default is "true" (random styles enabled) if nothing is set.
+        const randomStylesEnabled = localStorage.getItem('randomStylesEnabled');
+        const useRandom = randomStylesEnabled === null ? true : (randomStylesEnabled === 'true');
 
-      // Create the link element for the chosen style
-      const linkEl = document.createElement('link');
-      linkEl.rel = 'stylesheet';
-      linkEl.type = 'text/css';
-      linkEl.href = chosenStyle;
+        let styleToLoad;
+        if (useRandom) {
+          // Choose a random style from the array
+          const randomIndex = Math.floor(Math.random() * mainStyles.length);
+          styleToLoad = mainStyles[randomIndex];
+        } else {
+          // Force gray style when random styles are off
+          styleToLoad = "styles/mainStyleGrey.css";
+        }
 
-      // Append the link to the head (or insert it at a specific position if needed)
-      document.head.appendChild(linkEl);
+        // Create and append the link element for the chosen style
+        linkEl = document.createElement('link');
+        linkEl.rel = 'stylesheet';
+        linkEl.type = 'text/css';
+        linkEl.href = styleToLoad;
+        document.head.appendChild(linkEl);
+      }
+
+      // Toggle the mode and update localStorage then reload the main style
+      function toggleRandomStyles() {
+        const toggle = document.getElementById('toggleRandomStyles');
+        const newValue = toggle.checked;
+        localStorage.setItem('randomStylesEnabled', newValue.toString());
+        loadMainStyle();
+        updateToggleLabel();
+      }
+
+      // Update the toggle label based on the current state
+      function updateToggleLabel() {
+        const randomStylesEnabled = localStorage.getItem('randomStylesEnabled');
+        const useRandom = randomStylesEnabled === null ? true : (randomStylesEnabled === 'true');
+        const label = document.getElementById('toggleLabel');
+        label.textContent = useRandom ? "Random Styles: ON" : "Random Styles: OFF (Fixed Gray)";
+      }
+
+      // When the DOM is loaded, initialize the main style and toggle state
+      document.addEventListener("DOMContentLoaded", function() {
+        // Initialize localStorage flag if not set
+        if (localStorage.getItem('randomStylesEnabled') === null) {
+          localStorage.setItem('randomStylesEnabled', 'true');
+        }
+        // Set the toggle switch state according to saved preference
+        const randomStylesEnabled = localStorage.getItem('randomStylesEnabled') === 'true';
+        document.getElementById('toggleRandomStyles').checked = randomStylesEnabled;
+        updateToggleLabel();
+
+        // Load the main style based on the saved preference
+        loadMainStyle();
+      });
     </script>
   </head>
   <body>
+
+
+    <!-- Rest of your page content -->
     <div class="drum-machine-container">
-        <div id="drum-machine">
-            <h1>
-                <div class="button button-round tooltip">
-                    <div class="button play-button" id="play"></div>
-                    <span class="tooltiptext">Start the sequence.</span>
-                  </div>
-                  
-                  <div class="button button-round tooltip">
-                    <div class="button stop-button" id="stop"></div>
-                    <span class="tooltiptext">Stop the sequence.</span>
-                  </div>
-                <div class="bpm-container tooltip">
-                    BPM: <input type="range" min="1" max="1000" value="105" step="1" id="bpm-slider"
-                        title="Adjust the Beats Per Minute">
-                    <div class="bpm-display" id="bpm-display">105</div>
-                    <span class="tooltiptext">Drag to adjust the BPM (Beats Per Minute) of the sequence.</span>
-                </div>
-                <span class="title">
-                    Audional Sequencer 
-                    <br>
-                    <span class="bright-orange">&#x20bf;</span>itcoin<span class="bright-orange">&#x20bf;</span>eats<span
-                        class="small-text, bright-orange">&#x20bf;</span><span class="small-text">eta</span>
-                </span>
-            </h1>
+      <div id="drum-machine">
+            <!-- Toggle switch for random styles -->
+            <div class="toggle-container">
+                <input type="checkbox" id="toggleRandomStyles" onchange="toggleRandomStyles()">
+                <label id="toggleLabel" for="toggleRandomStyles">Random Styles: ON</label>
+            </div>
+  
+        <h1>
+          <div class="button button-round tooltip">
+            <div class="button play-button" id="play"></div>
+            <span class="tooltiptext">Start the sequence.</span>
+          </div>
+          <div class="button button-round tooltip">
+            <div class="button stop-button" id="stop"></div>
+            <span class="tooltiptext">Stop the sequence.</span>
+          </div>
+          <div class="bpm-container tooltip">
+            BPM: <input type="range" min="1" max="1000" value="105" step="1" id="bpm-slider"
+              title="Adjust the Beats Per Minute">
+            <div class="bpm-display" id="bpm-display">105</div>
+            <span class="tooltiptext">Drag to adjust the BPM (Beats Per Minute) of the sequence.</span>
+          </div>
+          <span class="title">
+            Audional Sequencer 
+            <br>
+            <span class="bright-orange">&#x20bf;</span>itcoin<span class="bright-orange">&#x20bf;</span>eats<span
+              class="small-text bright-orange">&#x20bf;</span><span class="small-text">eta</span>
+          </span>
+        </h1>
             <!-- Utility Buttons Container -->
             <div class="utility-buttons">
                 <!-- Save Button -->
