@@ -123,7 +123,22 @@ channels.forEach((channel, index) => {
                 });
             });
             
-    
+            document.getElementById('group-filter').addEventListener('change', function(event) {
+                const selectedGroup = event.target.value; // "all" or a specific group value
+              
+                // Assume channels is a NodeList or array containing all the channel elements.
+                channels.forEach((channel) => {
+                  // Get the group from the data attribute (if not set, assume an empty string)
+                  const channelGroup = channel.dataset.group || "";
+                  if (selectedGroup === "all" || channelGroup === selectedGroup) {
+                    // Show the channel (you can also remove a 'hidden' class if you prefer)
+                    channel.style.display = ""; // or "flex" if that's your default
+                  } else {
+                    // Hide the channel
+                    channel.style.display = "none";
+                  }
+                });
+              });
 
 
     // Function to copy the full URL instead of just the Ordinal ID
