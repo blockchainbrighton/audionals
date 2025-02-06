@@ -238,39 +238,42 @@
   }
 
   /**
-   * Updates the mute state of a channel and stores/restores its volume.
-   * @param {HTMLElement} channel
-   * @param {boolean} isMuted
-   */
-  function updateMuteState(channel, isMuted) {
-    const channelIndex = parseInt(channel.dataset.id.split("-")[1]);
-    log(`[updateMuteState] Channel ${channelIndex}: isMuted set to ${isMuted}`);
-    channel.dataset.muted = isMuted ? "true" : "false";
-    const muteButton = channel.querySelector(".mute-button");
-    if (muteButton) {
-      muteButton.classList.toggle("selected", isMuted);
-      log(
-        `[updateMuteState] Mute button for channel ${channelIndex} updated to ${isMuted ? "selected" : "deselected"}`
-      );
-    } else {
-      console.warn(`[updateMuteState] No mute button found on channel ${channelIndex}`);
-    }
-    const gainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
-    if (gainNode) {
-      if (isMuted) {
-        // Store current volume before muting
-        window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex] = gainNode.gain.value;
-        gainNode.gain.value = 0;
-        log(`[updateMuteState] Channel ${channelIndex}: Gain set to 0.`);
-      } else {
-        const storedVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex];
-        gainNode.gain.value = storedVolume;
-        log(`[updateMuteState] Channel ${channelIndex}: Gain restored to stored volume: ${storedVolume}`);
-      }
-    } else {
-      console.error(`[updateMuteState] No gain node found for channel ${channelIndex}`);
-    }
+ * Updates the mute state of a channel.
+ * @param {HTMLElement} channel - The channel element.
+ * @param {boolean} isMuted - True if the channel should be muted.
+ * @param {boolean} [storeVolume=true] - Whether to store the current gain before muting.
+ */
+function updateMuteState(channel, isMuted, storeVolume = true) {
+  const channelIndex = parseInt(channel.dataset.id.split("-")[1]);
+  log(`[updateMuteState] Channel ${channelIndex}: isMuted set to ${isMuted}`);
+  channel.dataset.muted = isMuted ? "true" : "false";
+  const muteButton = channel.querySelector(".mute-button");
+  if (muteButton) {
+    muteButton.classList.toggle("selected", isMuted);
+    log(
+      `[updateMuteState] Mute button for channel ${channelIndex} updated to ${isMuted ? "selected" : "deselected"}`
+    );
+  } else {
+    console.warn(`[updateMuteState] No mute button found on channel ${channelIndex}`);
   }
+  const gainNode = window.unifiedSequencerSettings.gainNodes[channelIndex];
+  if (gainNode) {
+    if (isMuted) {
+      // Only store the volume if we want to (manual mute)
+      if (storeVolume && gainNode.gain.value > 0) {
+        window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex] = gainNode.gain.value;
+      }
+      gainNode.gain.value = 0;
+      log(`[updateMuteState] Channel ${channelIndex}: Gain set to 0.`);
+    } else {
+      const storedVolume = window.unifiedSequencerSettings.settings.masterSettings.channelVolume[channelIndex];
+      gainNode.gain.value = storedVolume;
+      log(`[updateMuteState] Channel ${channelIndex}: Gain restored to stored volume: ${storedVolume}`);
+    }
+  } else {
+    console.error(`[updateMuteState] No gain node found for channel ${channelIndex}`);
+  }
+}
 
   /**
    * Manually toggles mute on a channel element.

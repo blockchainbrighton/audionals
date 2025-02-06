@@ -4,48 +4,44 @@ import { setupLoadSampleButton } from './loadSampleModalButton_v2.js';
 
 console.log("channelsForEach.js entered");
 
+// Initialize state arrays for each channel (assuming channels is a NodeList or array)
+let soloedChannels = [];
+let mutedChannels = [];
+channels.forEach((channel, index) => {
+  soloedChannels[index] = false;
+  mutedChannels[index] = false;
+});
+
 channels.forEach((channel, index) => {
   // Assign a unique id to each channel and perform any setup work
   channel.dataset.id = `Channel-${index}`;
   setupLoadSampleButton(channel, index);
 
   // Group button & dropdown logic
-  // Use class selectors so that each channel’s elements are targeted
   const groupButton = channel.querySelector('.group-button');
   const groupDropdown = channel.querySelector('.group-dropdown');
-
-  // Ensure the dropdown is hidden initially
   groupDropdown.style.display = "none";
 
   if (groupButton && groupDropdown) {
-    // When the group button is clicked, always show the dropdown immediately.
     groupButton.addEventListener('click', (event) => {
       event.stopPropagation();
       groupDropdown.style.display = "block";
     });
 
-    // When a group is selected (via left-click), log the selection, update state, and hide the dropdown.
     groupDropdown.addEventListener('change', (event) => {
       const selectedGroup = event.target.value;
       console.log(`Channel ${index} assigned to group: ${selectedGroup}`);
-      // Optionally, update the channel’s state (e.g., via a data attribute):
       channel.dataset.group = selectedGroup;
       groupDropdown.style.display = "none";
     });
 
-    // Right-click (contextmenu) on the group dropdown to show a list of preset generic names.
     groupDropdown.addEventListener('contextmenu', (event) => {
       event.preventDefault();
-      // Only show the context menu if a valid group option is selected.
       const selectedIndex = groupDropdown.selectedIndex;
-      if (selectedIndex <= 0) {
-        // If nothing or the placeholder is selected, do nothing.
-        return;
-      }
+      if (selectedIndex <= 0) return;
       showPresetContextMenu(event, groupDropdown, index);
     });
 
-    // Hide the dropdown if the user clicks anywhere outside of the current channel element.
     document.addEventListener('click', (event) => {
       if (!channel.contains(event.target)) {
         groupDropdown.style.display = "none";
@@ -54,28 +50,29 @@ channels.forEach((channel, index) => {
   }
 
   // --- Mute button event ---
-  const muteButton = channel.querySelector('.mute-button');
+// --- Mute button event ---
+const muteButton = channel.querySelector('.mute-button');
   muteButton.addEventListener('click', () => {
     console.log(`Mute button clicked for Channel-${index}`);
-    const isMuted = muteButton.classList.toggle('selected');
-    updateMuteState(channel, isMuted);
+    // Toggle the manual mute state in our array
+    mutedChannels[index] = !mutedChannels[index];
+    // Update the visual state of the mute button
+    muteButton.classList.toggle('selected', mutedChannels[index]);
+    // Recalculate the effective mute state for all channels using manual storage
+    updateAllChannelMuteStates();
   });
 
-  // --- Solo button event ---
-  const soloButton = channel.querySelector('.solo-button');
+// --- Solo button event ---
+const soloButton = channel.querySelector('.solo-button');
   soloButton.addEventListener('click', () => {
+    // Toggle the solo flag for this channel
     soloedChannels[index] = !soloedChannels[index];
     soloButton.classList.toggle('selected', soloedChannels[index]);
-    channels.forEach((otherChannel, otherIndex) => {
-      if (index === otherIndex) {
-        updateMuteState(otherChannel, false);
-      } else {
-        updateMuteState(otherChannel, soloedChannels[index]);
-      }
-    });
+    // Recalculate the effective mute state for all channels (using storeVolume = false for solo override)
+    updateAllChannelMuteStates();
   });
 
-  // --- Clear button event ---
+  // --- Clear button event (unchanged) ---
   const clearButton = channel.querySelector('.clear-button');
   let clearConfirmTimeout;
   clearButton.addEventListener('click', (e) => {
@@ -134,7 +131,7 @@ document.addEventListener('click', () => {
   });
 });
 
-// (If you still need group filtering using a separate <select id="group-filter">, keep or update that code.)
+// Group filtering code remains unchanged
 document.getElementById('group-filter')?.addEventListener('change', function (event) {
   const selectedGroup = event.target.value; // "all" or a specific group value
   channels.forEach((channel) => {
@@ -153,7 +150,6 @@ document.getElementById('group-filter')?.addEventListener('contextmenu', functio
   // ... (existing code for the filter select if needed)
 });
 
-
 /**
  * Creates and shows a custom context menu with hardcoded preset group names.
  * When an option is chosen, it updates the text of the currently selected option
@@ -164,13 +160,11 @@ document.getElementById('group-filter')?.addEventListener('contextmenu', functio
  * @param {number} channelIndex - The index of the channel (for logging).
  */
 function showPresetContextMenu(event, dropdown, channelIndex) {
-  // Remove any existing custom context menu
   const existingMenu = document.getElementById('custom-context-menu');
   if (existingMenu) {
     existingMenu.parentNode.removeChild(existingMenu);
   }
 
-  // Create a new menu container
   const menu = document.createElement('div');
   menu.id = 'custom-context-menu';
   menu.style.position = 'absolute';
@@ -182,7 +176,6 @@ function showPresetContextMenu(event, dropdown, channelIndex) {
   menu.style.padding = '5px';
   menu.style.boxShadow = '2px 2px 6px rgba(0,0,0,0.2)';
 
-  // Hardcoded preset names
   const presetGroupNames = ["Drums", "Vocals", "Soundtrack", "Bass", "Guitar", "Synth", "Percussion"];
 
   presetGroupNames.forEach((presetName) => {
@@ -197,7 +190,6 @@ function showPresetContextMenu(event, dropdown, channelIndex) {
       item.style.backgroundColor = '#fff';
     });
     item.addEventListener('click', () => {
-      // Update the text of the currently selected option in the dropdown.
       const selectedIndex = dropdown.selectedIndex;
       if (selectedIndex > 0) {
         const currentOption = dropdown.options[selectedIndex];
@@ -205,7 +197,6 @@ function showPresetContextMenu(event, dropdown, channelIndex) {
         currentOption.text = presetName;
         console.log(`Channel ${channelIndex} group updated: ${oldText} -> ${presetName}`);
       }
-      // Remove the context menu after selection.
       if (menu.parentNode) {
         menu.parentNode.removeChild(menu);
       }
@@ -215,7 +206,6 @@ function showPresetContextMenu(event, dropdown, channelIndex) {
 
   document.body.appendChild(menu);
 
-  // Remove the context menu if the user clicks outside of it.
   const removeMenu = (e) => {
     if (!menu.contains(e.target)) {
       if (menu.parentNode) menu.parentNode.removeChild(menu);
@@ -223,4 +213,25 @@ function showPresetContextMenu(event, dropdown, channelIndex) {
     }
   };
   document.addEventListener('click', removeMenu);
+}
+
+/**
+ * Updates the effective mute state for all channels based on both solo and manual mute toggles.
+ */
+function updateAllChannelMuteStates() {
+  // Check if any channel is soloed.
+  const anySoloed = soloedChannels.some(val => val);
+  channels.forEach((channel, i) => {
+    let effectiveMute;
+    if (anySoloed) {
+      // In solo mode, a channel is unmuted only if it is soloed.
+      effectiveMute = !soloedChannels[i];
+    } else {
+      // If no channel is soloed, use the manual mute state.
+      effectiveMute = mutedChannels[i];
+    }
+    // When in solo mode, we do NOT store the volume (storeVolume = false).
+    const storeVolume = anySoloed ? false : true;
+    window.AudioUtilsPart2.updateMuteState(channel, effectiveMute, storeVolume);
+  });
 }
