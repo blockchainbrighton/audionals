@@ -1,6 +1,6 @@
 // globalObjectHelperFunctions_v2.js
 
-// 
+
 
 let isModalOpen = false;
 
@@ -16,15 +16,16 @@ function closeModal() {
 
 
 
-   function updateBPMUI(bpm) {
+function updateBPMUI(bpm) {
     console.log("debugGlobalObjectToUI - entered");
     const bpmSlider = document.getElementById('bpm-slider');
     const bpmDisplay = document.getElementById('bpm-display');
     if (bpmSlider && bpmDisplay) {
-        bpmSlider.value = bpm;
-        bpmDisplay.textContent = bpm;
+      const formattedBPM = parseFloat(bpm).toFixed(1);
+      bpmSlider.value = formattedBPM;
+      bpmDisplay.value = formattedBPM;
     }
-}
+  }
 
 function updateProjectNameUI(projectName) {
     console.log("debugGlobalObjectToUI - entered");

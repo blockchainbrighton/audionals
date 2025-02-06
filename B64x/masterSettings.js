@@ -1,32 +1,36 @@
+// masterSettings.js
+
 const bpmSlider = document.getElementById('bpm-slider');
 const bpmDisplay = document.getElementById('bpm-display');
 
-// Initialize BPM from global settings
-const initialBPM = window.unifiedSequencerSettings.getBPM();
-console.log(`Initial BPM from global settings: ${initialBPM}`);
+// Initialize BPM from global settings (parsing as float for decimals)
+const initialBPM = parseFloat(window.unifiedSequencerSettings.getBPM());
 bpmSlider.value = initialBPM;
-bpmDisplay.textContent = initialBPM;
+bpmDisplay.value = initialBPM.toFixed(1);
 
-bpmSlider.addEventListener('input', () => {
-    const newBPM = bpmSlider.value;
-    bpmDisplay.textContent = newBPM;
-
-    // Update the global settings object
-    updateGlobalBPM(parseInt(newBPM));
-
-    // Log the new BPM value
-    console.log(`Updated BPM: ${newBPM}`);
-
-    // Send BPM to external modules if necessary
-    emitMessage('BPMUpdate', newBPM);
-
-    // Additional logging to verify the updated value in global settings
-    const updatedBPM = window.unifiedSequencerSettings.getBPM();
-    console.log(`BPM in global settings after update: ${updatedBPM}`);
-});
-
+/**
+ * Updates the global BPM and logs the update.
+ * @param {number|string} bpm - The new BPM value.
+ */
 function updateGlobalBPM(bpm) {
-    // Assuming there's a method in your global settings object to update BPM
-    window.unifiedSequencerSettings.setBPM(bpm);
-    console.log(`Global BPM updated to: ${bpm}`);
+    const newBPM = parseFloat(bpm).toFixed(1);
+    window.unifiedSequencerSettings.setBPM(newBPM);
+    console.log(`Global BPM updated to: ${newBPM}`);
+    return newBPM;
 }
+
+// When the slider is moved
+bpmSlider.addEventListener('input', () => {
+    const newBPM = parseFloat(bpmSlider.value).toFixed(1);
+    bpmDisplay.value = newBPM;
+    updateGlobalBPM(newBPM);
+    emitMessage('BPMUpdate', newBPM);
+  });
+  
+  // When the number input is changed (user edits directly)
+  bpmDisplay.addEventListener('change', () => {
+    const newBPM = parseFloat(bpmDisplay.value).toFixed(1);
+    bpmSlider.value = newBPM;
+    updateGlobalBPM(newBPM);
+    emitMessage('BPMUpdate', newBPM);
+  });

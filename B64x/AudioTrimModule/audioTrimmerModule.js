@@ -288,59 +288,69 @@ class AudioTrimmer {
     }
   
     updatePlaybackCanvas() {
-        if (!this.audioBuffer) return;
+      if (!this.audioBuffer) return;
+    
+      // Use the shared calculation from calculateTrimValues.
+      const { trimStart, duration } = window.AudioUtilsPart2.calculateTrimValues(this.channelIndex, this.audioBuffer, false);
+      const trimmedDuration = duration; // Duration (in seconds) of the trimmed audio section
+    
+      // Retrieve the playback speed for this channel (default to 1 if not set)
+      const playbackSpeed = window.unifiedSequencerSettings.channelPlaybackSpeed[this.channelIndex] || 1;
+    
+      // Calculate the effective duration that matches playback (adjusted for speed)
+      const effectiveDuration = trimmedDuration / playbackSpeed;
+    
+      // Compute the elapsed time since playback started.
+      const elapsed = this.audioContext.currentTime - this.startTime;
+      const relativePosition = elapsed % effectiveDuration;
+    
+      // Get dynamic dimensions of the slider track.
+      const trackRect = this.sliderTrack.getBoundingClientRect();
+      const trackWidth = trackRect.width;
+    
+      // Compute clear boundaries based solely on the slider percentage.
+      // (Assuming that slider positions are centered, the slider's center falls at (value/100)*trackWidth.)
+      const clearAreaLeftBoundary = (this.startSliderValue / 100) * trackWidth;
+      const clearAreaRightBoundary = (this.endSliderValue / 100) * trackWidth;
+      const clearWidth = clearAreaRightBoundary - clearAreaLeftBoundary;
+    
+      // Compute the x-position for the transport indicator.
+      const xPosition = clearAreaLeftBoundary + (relativePosition / effectiveDuration) * clearWidth;
+    
+      // DEBUG: Log computed boundaries and positions.
+      console.log('--- Transport Debug ---');
+      console.log('Track width:', trackWidth);
+      console.log('Start slider value (%):', this.startSliderValue);
+      console.log('End slider value (%):', this.endSliderValue);
+      console.log('Clear left boundary (px):', clearAreaLeftBoundary);
+      console.log('Clear right boundary (px):', clearAreaRightBoundary);
+      console.log('Clear area width (px):', clearWidth);
+      console.log('Elapsed time:', elapsed);
+      console.log('Original trimmed duration (s):', trimmedDuration);
+      console.log('Playback speed:', playbackSpeed);
+      console.log('Effective trimmed duration (s):', effectiveDuration);
+      console.log('Relative position (s):', relativePosition);
+      console.log('Computed xPosition (px):', xPosition);
+      console.log('-----------------------');
+    
+      // Get the current canvas width from its bounding rect.
+      const canvasRect = this.playbackCanvas.getBoundingClientRect();
+      const canvasWidth = canvasRect.width;
       
-        // Use the shared calculation from calculateTrimValues.
-        const { trimStart, duration } = calculateTrimValues(this.channelIndex, this.audioBuffer, false);
-        const trimmedDuration = duration; // duration of the playable (clear) area
-      
-        // Compute the elapsed time since playback started.
-        const elapsed = this.audioContext.currentTime - this.startTime;
-        const relativePosition = elapsed % trimmedDuration;
-      
-        // Determine the boundaries for the clear area:
-        const trackWidth = this.sliderTrack.offsetWidth;
-        const sliderWidth = this.startSlider.offsetWidth; // assume both sliders are the same size
-      
-        // Use the percentage values directly to compute the edges.
-        // Right edge of the start slider:
-        const clearAreaLeftBoundary = (this.startSliderValue / 100) * trackWidth + sliderWidth / 2;
-        // Left edge of the end slider:
-        const clearAreaRightBoundary = (this.endSliderValue / 100) * trackWidth - sliderWidth / 2;
-        const clearWidth = clearAreaRightBoundary - clearAreaLeftBoundary;
-      
-        // Interpolate the x-position for the transport indicator within the clear area.
-        const xPosition = clearAreaLeftBoundary + (relativePosition / trimmedDuration) * clearWidth;
-      
-        // DEBUG: Log the computed boundaries and positions.
-        console.log('--- Transport Debug ---');
-        console.log('Track width:', trackWidth);
-        console.log('Slider width:', sliderWidth);
-        console.log('Start slider value (%):', this.startSliderValue);
-        console.log('End slider value (%):', this.endSliderValue);
-        console.log('Clear left boundary (px):', clearAreaLeftBoundary);
-        console.log('Clear right boundary (px):', clearAreaRightBoundary);
-        console.log('Clear area width (px):', clearWidth);
-        console.log('Elapsed time:', elapsed);
-        console.log('Trimmed duration (s):', trimmedDuration);
-        console.log('Relative position (s):', relativePosition);
-        console.log('Computed xPosition (px):', xPosition);
-        console.log('-----------------------');
-      
-        // Draw the transport indicator.
-        const canvasWidth = this.playbackCanvas.width;
-        this.playbackCtx.clearRect(0, 0, canvasWidth, this.playbackCanvas.height);
-        this.playbackCtx.beginPath();
-        this.playbackCtx.moveTo(xPosition, 0);
-        this.playbackCtx.lineTo(xPosition, this.playbackCanvas.height);
-        this.playbackCtx.strokeStyle = '#FF0000';
-        this.playbackCtx.lineWidth = 2;
-        this.playbackCtx.stroke();
-      }
-  
+      // Clear and draw the transport indicator.
+      this.playbackCtx.clearRect(0, 0, canvasWidth, this.playbackCanvas.height);
+      this.playbackCtx.beginPath();
+      this.playbackCtx.moveTo(xPosition, 0);
+      this.playbackCtx.lineTo(xPosition, this.playbackCanvas.height);
+      this.playbackCtx.strokeStyle = '#FF0000';
+      this.playbackCtx.lineWidth = 2;
+      this.playbackCtx.stroke();
+    }
+
     animatePlayback() {
       if (this.isPlaying) {
-        this.updatePlaybackCanvas();
+    // Comment out the transport update:
+    // this.updatePlaybackCanvas();
         this.animationFrameRequest = requestAnimationFrame(() => this.animatePlayback());
       }
     }

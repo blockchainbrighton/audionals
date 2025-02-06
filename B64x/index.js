@@ -20,6 +20,9 @@ let soloedChannels = Array(32).fill(false); // Assuming you have 32 channels
 let activeChannels = 32;// new Set();
 let gainNodes = Array(32).fill(null);
 let channelMutes = []; // Declare the channelMutes array as a global variable
+let isMuted = false;
+let muteState = false
+
 let channels = document.querySelectorAll('.channel[id^="channel-"]');
 
 
@@ -35,8 +38,7 @@ let currentStepTime;
 let startTime;
 let nextStepTime;
 let stepDuration;
-let isMuted = false;
-let muteState = false
+
 let clearClickedOnce = Array(channels.length).fill(false);
 let clearConfirmTimeout = Array(channels.length).fill(null);
 

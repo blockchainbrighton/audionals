@@ -1061,9 +1061,11 @@ class UnifiedSequencerSettings {
       const bpmSlider = document.getElementById("bpm-slider");
       const bpmDisplay = document.getElementById("bpm-display");
       if (bpmSlider && bpmDisplay) {
-        bpmSlider.value = bpm;
-        bpmDisplay.textContent = bpm;
-        this.log("BPM UI updated:", bpm);
+        // Ensure that bpm is a number with one decimal place
+        const formattedBPM = parseFloat(bpm).toFixed(1);
+        bpmSlider.value = formattedBPM;
+        bpmDisplay.value = formattedBPM;
+        this.log("BPM UI updated:", formattedBPM);
       }
     }
   
