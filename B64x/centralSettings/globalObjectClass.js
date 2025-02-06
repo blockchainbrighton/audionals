@@ -119,202 +119,310 @@ class UnifiedSequencerSettings {
       return this.settings.masterSettings.channelSettings[`ch${channelIndex}`]?.volume || 1;
     }
   
-    /*–––––– Settings Loading & Serialization ––––––*/
-  
-    async loadSettings(inputData) {
-      this.log("[internalPresetDebug] loadSettings entered");
-      try {
-        this.clearMasterSettings();
-        let jsonSettings;
-        if (inputData instanceof Uint8Array || inputData instanceof ArrayBuffer) {
-          this.log("[internalPresetDebug] Received Gzip data, decompressing...");
-          const decompressedData = await decompressGzipFile(inputData);
-          jsonSettings = JSON.parse(decompressedData);
-        } else if (typeof inputData === "string") {
-          jsonSettings = JSON.parse(inputData);
-        } else {
-          jsonSettings = inputData;
-        }
-        this.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
-        const settingsToLoad = this.isHighlySerialized(jsonSettings)
-          ? await this.decompressSerializedData(jsonSettings)
-          : jsonSettings;
-        this.settings.masterSettings.projectName = settingsToLoad.projectName;
-        this.settings.masterSettings.projectBPM = settingsToLoad.projectBPM;
-        this.settings.masterSettings.artistName = settingsToLoad.artistName || "";
-        this.globalPlaybackSpeed = settingsToLoad.globalPlaybackSpeed || 1;
-        this.channelPlaybackSpeed = settingsToLoad.channelPlaybackSpeed || new Array(this.numChannels).fill(1);
-        if (this.channelPlaybackSpeed.length < this.numChannels) {
-          this.channelPlaybackSpeed = [
-            ...this.channelPlaybackSpeed,
-            ...new Array(this.numChannels - this.channelPlaybackSpeed.length).fill(1)
-          ];
-        }
-        this.initializeGainNodes();
-        if (settingsToLoad.channelURLs) {
-          const urlPromises = settingsToLoad.channelURLs.map((url, index) =>
-            this.formatAndFetchAudio(url, index)
-          );
-          await Promise.all(urlPromises);
-        }
-        if (settingsToLoad.channelVolume) {
-          settingsToLoad.channelVolume.forEach((volume, index) => {
-            this.setChannelVolume(index, volume);
+   /*–––––– Settings Loading & Serialization ––––––*/
+async loadSettings(inputData) {
+  this.log("[internalPresetDebug] loadSettings entered");
+  try {
+    this.clearMasterSettings();
+    let jsonSettings;
+    if (inputData instanceof Uint8Array || inputData instanceof ArrayBuffer) {
+      this.log("[internalPresetDebug] Received Gzip data, decompressing...");
+      const decompressedData = await decompressGzipFile(inputData);
+      jsonSettings = JSON.parse(decompressedData);
+    } else if (typeof inputData === "string") {
+      jsonSettings = JSON.parse(inputData);
+    } else {
+      jsonSettings = inputData;
+    }
+    this.log("[internalPresetDebug] Received JSON Settings:", jsonSettings);
+    const settingsToLoad = this.isHighlySerialized(jsonSettings)
+      ? await this.decompressSerializedData(jsonSettings)
+      : jsonSettings;
+    this.settings.masterSettings.projectName = settingsToLoad.projectName;
+    this.settings.masterSettings.projectBPM = settingsToLoad.projectBPM;
+    this.settings.masterSettings.artistName = settingsToLoad.artistName || "";
+    this.globalPlaybackSpeed = settingsToLoad.globalPlaybackSpeed || 1;
+    this.channelPlaybackSpeed = settingsToLoad.channelPlaybackSpeed || new Array(this.numChannels).fill(1);
+    if (this.channelPlaybackSpeed.length < this.numChannels) {
+      this.channelPlaybackSpeed = [
+        ...this.channelPlaybackSpeed,
+        ...new Array(this.numChannels - this.channelPlaybackSpeed.length).fill(1)
+      ];
+    }
+    this.initializeGainNodes();
+    if (settingsToLoad.channelURLs) {
+      const urlPromises = settingsToLoad.channelURLs.map((url, index) =>
+        this.formatAndFetchAudio(url, index)
+      );
+      await Promise.all(urlPromises);
+    }
+    if (settingsToLoad.channelVolume) {
+      settingsToLoad.channelVolume.forEach((volume, index) => {
+        this.setChannelVolume(index, volume);
+      });
+    }
+    this.settings.masterSettings.trimSettings = settingsToLoad.trimSettings;
+    this.settings.masterSettings.projectChannelNames = settingsToLoad.projectChannelNames;
+    if (!settingsToLoad || typeof settingsToLoad !== "object") {
+      throw new Error("Invalid or undefined settingsToLoad");
+    }
+    this.sortAndApplyProjectSequences(settingsToLoad.projectSequences);
+    this.updateUIWithLoadedSettings();
+
+
+
+
+
+
+
+    function audioBufferToWav(buffer, opt) {
+      opt = opt || {};
+      var numChannels = buffer.numberOfChannels;
+      var sampleRate = buffer.sampleRate;
+      var format = opt.float32 ? 3 : 1;
+      var bitDepth = format === 3 ? 32 : 16;
+      var result;
+      if (numChannels === 2) {
+        result = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
+      } else {
+        result = buffer.getChannelData(0);
+      }
+      return encodeWAV(result, numChannels, sampleRate, bitDepth);
+    }
+    
+    function interleave(inputL, inputR) {
+      var length = inputL.length + inputR.length;
+      var result = new Float32Array(length);
+      var index = 0, inputIndex = 0;
+      while (index < length) {
+        result[index++] = inputL[inputIndex];
+        result[index++] = inputR[inputIndex];
+        inputIndex++;
+      }
+      return result;
+    }
+    
+    function encodeWAV(samples, numChannels, sampleRate, bitDepth) {
+      var bytesPerSample = bitDepth / 8;
+      var blockAlign = numChannels * bytesPerSample;
+      var buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+      var view = new DataView(buffer);
+      writeString(view, 0, 'RIFF');
+      view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+      writeString(view, 8, 'WAVE');
+      writeString(view, 12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * blockAlign, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, bitDepth, true);
+      writeString(view, 36, 'data');
+      view.setUint32(40, samples.length * bytesPerSample, true);
+      if (bitDepth === 16) {
+        floatTo16BitPCM(view, 44, samples);
+      } else {
+        writeFloat32(view, 44, samples);
+      }
+      return buffer;
+    }
+    
+    function writeFloat32(view, offset, input) {
+      for (var i = 0; i < input.length; i++, offset += 4) {
+        view.setFloat32(offset, input[i], true);
+      }
+    }
+    
+    function floatTo16BitPCM(view, offset, input) {
+      for (var i = 0; i < input.length; i++, offset += 2) {
+        var s = Math.max(-1, Math.min(1, input[i]));
+        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      }
+    }
+    
+    function writeString(view, offset, string) {
+      for (var i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    }
+
+    
+    // ---------------------------------------------------------
+    // Offline Bounce Integration
+    // After the settings are applied, we want to render the current sequence offline,
+    // convert it to a WAV file, and download it automatically.
+    // A short delay is added to ensure that all audio buffers are loaded.
+    setTimeout(() => {
+      // Instantiate the offline bounce module (assumes OfflineBounce is globally available)
+      const bounceModule = new OfflineBounce(window.unifiedSequencerSettings);
+      bounceModule.bounceCurrentSequence().then(renderedBuffer => {
+        // Convert the rendered AudioBuffer to a WAV ArrayBuffer.
+        // (audioBufferToWav is assumed to be defined; see note below.)
+        const wavArrayBuffer = audioBufferToWav(renderedBuffer);
+        const blob = new Blob([wavArrayBuffer], { type: "audio/wav" });
+        const projectName = this.settings.masterSettings.projectName || "Project";
+        const fileName = `${projectName}_bounce.wav`;
+        const url = URL.createObjectURL(blob);
+        const downloadLink = document.createElement("a");
+        downloadLink.href = url;
+        downloadLink.download = fileName;
+        // Append link to DOM (required for Firefox), click it, and remove it.
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(url);
+      }).catch(error => {
+        console.error("Offline bounce error:", error);
+      });
+    }, 500); // delay (in ms) to ensure that all audio data is ready
+    // ---------------------------------------------------------
+  } catch (error) {
+    console.error("[internalPresetDebug] Error loading settings:", error);
+  }
+}
+
+async formatAndFetchAudio(url, index) {
+  const baseDomain = "https://ordinals.com";
+  if (url.startsWith("/")) {
+    url = `${baseDomain}${url}`;
+  }
+  return this.formatURL(url).then((formattedUrl) => {
+    this.settings.masterSettings.channelURLs[index] = formattedUrl;
+    // Use the namespaced fetchAudio
+    return window.AudioUtilsPart1.fetchAudio(formattedUrl, index);
+  });
+}
+
+updateUIWithLoadedSettings() {
+  this.updateProjectNameUI(this.settings.masterSettings.projectName);
+  this.updateBPMUI(this.settings.masterSettings.projectBPM);
+  this.updateAllLoadSampleButtonTexts();
+  this.updateProjectChannelNamesUI(this.settings.masterSettings.projectChannelNames);
+  this.setCurrentSequence(0);
+  this.updateUIForSequence(this.settings.masterSettings.currentSequence);
+  handleSequenceTransition(0); // Assumes handleSequenceTransition is defined elsewhere
+}
+
+isHighlySerialized(parsedSettings) {
+  const keys = Object.keys(parsedSettings);
+  const numericKeyCount = keys.filter(key => /^\d+$/.test(key)).length;
+  return numericKeyCount / keys.length > 0.5;
+}
+
+async decompressSerializedData(serializedData) {
+  const keyMap = {
+    0: 'projectName',
+    1: 'artistName',
+    2: 'projectBPM',
+    3: 'currentSequence',
+    4: 'channelURLs',
+    5: 'channelVolume',
+    6: 'channelPlaybackSpeed',
+    7: 'trimSettings',
+    8: 'projectChannelNames',
+    9: 'startSliderValue',
+    10: 'endSliderValue',
+    11: 'totalSampleDuration',
+    12: 'start',
+    13: 'end',
+    14: 'projectSequences',
+    15: 'steps'
+  };
+  const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([k, v]) => [v, +k]));
+  const channelMap = Array.from({ length: this.numChannels }, (_, i) =>
+    i < 26 ? String.fromCharCode(65 + i) : i.toString()
+  );
+  const decompressSteps = steps => steps.flatMap(step => {
+    if (typeof step === 'number') return step;
+    if (step.r) return Array.from({ length: step.r[1] - step.r[0] + 1 }, (_, i) => step.r[0] + i);
+    if (typeof step === 'string' && step.endsWith('r')) return { index: parseInt(step.slice(0, -1), 10), reverse: true };
+  });
+  const deserialize = (data) => {
+    const deserializedData = {};
+    Object.entries(data).forEach(([key, value]) => {
+      const originalKey = keyMap[key] || key;
+      if (originalKey === 'projectSequences') {
+        deserializedData[originalKey] = Object.entries(value).reduce((acc, [seqKey, channels]) => {
+          const originalSeqKey = seqKey.replace('s', 'Sequence');
+          const restoredChannels = Object.entries(channels).reduce((chAcc, [chKey, chValue]) => {
+            const channelIndex = channelMap.indexOf(chKey);
+            const originalChKey = `ch${channelIndex !== -1 ? channelIndex : chKey}`;
+            if (chValue[reverseKeyMap['steps']]) {
+              chAcc[originalChKey] = { steps: decompressSteps(chValue[reverseKeyMap['steps']]) };
+            }
+            return chAcc;
+          }, {});
+          acc[originalSeqKey] = restoredChannels;
+          return acc;
+        }, {});
+      } else if (originalKey === 'trimSettings') {
+        deserializedData[originalKey] = value.map(trimSetting => ({
+          startSliderValue: trimSetting[9],
+          endSliderValue: trimSetting[10],
+          totalSampleDuration: trimSetting[11],
+          ...(trimSetting[12] !== undefined && { start: trimSetting[12] }),
+          ...(trimSetting[13] !== undefined && { end: trimSetting[13] })
+        }));
+      } else {
+        deserializedData[originalKey] = value;
+      }
+    });
+    return deserializedData;
+  };
+  return deserialize(serializedData);
+}
+
+sortAndApplyProjectSequences(projectSequences) {
+  this.log("[sortAndApplyProjectSequences] Sorting and applying project sequences.");
+  if (!projectSequences || typeof projectSequences !== "object") {
+    throw new Error("[sortAndApplyProjectSequences] Invalid project sequences data.");
+  }
+  Object.keys(projectSequences).forEach(sequenceKey => {
+    const sequenceData = projectSequences[sequenceKey];
+    if (!sequenceData || typeof sequenceData !== "object") return;
+    if (!this.settings.masterSettings.projectSequences[sequenceKey]) {
+      this.settings.masterSettings.projectSequences[sequenceKey] = {};
+    }
+    Object.keys(sequenceData).forEach(channelKey => {
+      const channelData = sequenceData[channelKey];
+      const channelIndex = parseInt(channelKey.replace("ch", ""), 10);
+      if (channelIndex < this.numChannels) {
+        const newSteps = Array.from({ length: 64 }, () => ({
+          isActive: false,
+          isReverse: false,
+          volume: 1,
+          pitch: 1
+        }));
+        if (channelData && Array.isArray(channelData.steps)) {
+          channelData.steps.forEach(step => {
+            let index, isReverse = false;
+            if (typeof step === "object" && step.index !== undefined) {
+              index = step.index - 1;
+              isReverse = step.reverse || false;
+            } else if (typeof step === "number") {
+              index = step - 1;
+            }
+            if (index >= 0 && index < 64) {
+              newSteps[index] = {
+                isActive: true,
+                isReverse: isReverse,
+                volume: 1,
+                pitch: 1
+              };
+            }
           });
         }
-        this.settings.masterSettings.trimSettings = settingsToLoad.trimSettings;
-        this.settings.masterSettings.projectChannelNames = settingsToLoad.projectChannelNames;
-        if (!settingsToLoad || typeof settingsToLoad !== "object") {
-          throw new Error("Invalid or undefined settingsToLoad");
-        }
-        this.sortAndApplyProjectSequences(settingsToLoad.projectSequences);
-        this.updateUIWithLoadedSettings();
-      } catch (error) {
-        console.error("[internalPresetDebug] Error loading settings:", error);
+        this.settings.masterSettings.projectSequences[sequenceKey][channelKey] = {
+          steps: newSteps,
+          mute: false,
+          url: this.settings.masterSettings.channelURLs[channelIndex] || ""
+        };
       }
-    }
-  
-    async formatAndFetchAudio(url, index) {
-      const baseDomain = "https://ordinals.com";
-      if (url.startsWith("/")) {
-        url = `${baseDomain}${url}`;
-      }
-      return this.formatURL(url).then((formattedUrl) => {
-        this.settings.masterSettings.channelURLs[index] = formattedUrl;
-        // Use the namespaced fetchAudio
-        return window.AudioUtilsPart1.fetchAudio(formattedUrl, index);
-      });
-    }
-  
-    updateUIWithLoadedSettings() {
-      this.updateProjectNameUI(this.settings.masterSettings.projectName);
-      this.updateBPMUI(this.settings.masterSettings.projectBPM);
-      this.updateAllLoadSampleButtonTexts();
-      this.updateProjectChannelNamesUI(this.settings.masterSettings.projectChannelNames);
-      this.setCurrentSequence(0);
-      this.updateUIForSequence(this.settings.masterSettings.currentSequence);
-      handleSequenceTransition(0); // Assumes handleSequenceTransition is defined elsewhere
-    }
-  
-    isHighlySerialized(parsedSettings) {
-      const keys = Object.keys(parsedSettings);
-      const numericKeyCount = keys.filter(key => /^\d+$/.test(key)).length;
-      return numericKeyCount / keys.length > 0.5;
-    }
-  
-    async decompressSerializedData(serializedData) {
-      const keyMap = {
-        0: 'projectName',
-        1: 'artistName',
-        2: 'projectBPM',
-        3: 'currentSequence',
-        4: 'channelURLs',
-        5: 'channelVolume',
-        6: 'channelPlaybackSpeed',
-        7: 'trimSettings',
-        8: 'projectChannelNames',
-        9: 'startSliderValue',
-        10: 'endSliderValue',
-        11: 'totalSampleDuration',
-        12: 'start',
-        13: 'end',
-        14: 'projectSequences',
-        15: 'steps'
-      };
-      const reverseKeyMap = Object.fromEntries(Object.entries(keyMap).map(([k, v]) => [v, +k]));
-      const channelMap = Array.from({ length: this.numChannels }, (_, i) =>
-        i < 26 ? String.fromCharCode(65 + i) : i.toString()
-      );
-      const decompressSteps = steps => steps.flatMap(step => {
-        if (typeof step === 'number') return step;
-        if (step.r) return Array.from({ length: step.r[1] - step.r[0] + 1 }, (_, i) => step.r[0] + i);
-        if (typeof step === 'string' && step.endsWith('r')) return { index: parseInt(step.slice(0, -1), 10), reverse: true };
-      });
-      const deserialize = (data) => {
-        const deserializedData = {};
-        Object.entries(data).forEach(([key, value]) => {
-          const originalKey = keyMap[key] || key;
-          if (originalKey === 'projectSequences') {
-            deserializedData[originalKey] = Object.entries(value).reduce((acc, [seqKey, channels]) => {
-              const originalSeqKey = seqKey.replace('s', 'Sequence');
-              const restoredChannels = Object.entries(channels).reduce((chAcc, [chKey, chValue]) => {
-                const channelIndex = channelMap.indexOf(chKey);
-                const originalChKey = `ch${channelIndex !== -1 ? channelIndex : chKey}`;
-                if (chValue[reverseKeyMap['steps']]) {
-                  chAcc[originalChKey] = { steps: decompressSteps(chValue[reverseKeyMap['steps']]) };
-                }
-                return chAcc;
-              }, {});
-              acc[originalSeqKey] = restoredChannels;
-              return acc;
-            }, {});
-          } else if (originalKey === 'trimSettings') {
-            deserializedData[originalKey] = value.map(trimSetting => ({
-              startSliderValue: trimSetting[9],
-              endSliderValue: trimSetting[10],
-              totalSampleDuration: trimSetting[11],
-              ...(trimSetting[12] !== undefined && { start: trimSetting[12] }),
-              ...(trimSetting[13] !== undefined && { end: trimSetting[13] })
-            }));
-          } else {
-            deserializedData[originalKey] = value;
-          }
-        });
-        return deserializedData;
-      };
-      return deserialize(serializedData);
-    }
-  
-    sortAndApplyProjectSequences(projectSequences) {
-      this.log("[sortAndApplyProjectSequences] Sorting and applying project sequences.");
-      if (!projectSequences || typeof projectSequences !== "object") {
-        throw new Error("[sortAndApplyProjectSequences] Invalid project sequences data.");
-      }
-      Object.keys(projectSequences).forEach(sequenceKey => {
-        const sequenceData = projectSequences[sequenceKey];
-        if (!sequenceData || typeof sequenceData !== "object") return;
-        if (!this.settings.masterSettings.projectSequences[sequenceKey]) {
-          this.settings.masterSettings.projectSequences[sequenceKey] = {};
-        }
-        Object.keys(sequenceData).forEach(channelKey => {
-          const channelData = sequenceData[channelKey];
-          const channelIndex = parseInt(channelKey.replace("ch", ""), 10);
-          if (channelIndex < this.numChannels) {
-            const newSteps = Array.from({ length: 64 }, () => ({
-              isActive: false,
-              isReverse: false,
-              volume: 1,
-              pitch: 1
-            }));
-            if (channelData && Array.isArray(channelData.steps)) {
-              channelData.steps.forEach(step => {
-                let index, isReverse = false;
-                if (typeof step === "object" && step.index !== undefined) {
-                  index = step.index - 1;
-                  isReverse = step.reverse || false;
-                } else if (typeof step === "number") {
-                  index = step - 1;
-                }
-                if (index >= 0 && index < 64) {
-                  newSteps[index] = {
-                    isActive: true,
-                    isReverse: isReverse,
-                    volume: 1,
-                    pitch: 1
-                  };
-                }
-              });
-            }
-            this.settings.masterSettings.projectSequences[sequenceKey][channelKey] = {
-              steps: newSteps,
-              mute: false,
-              url: this.settings.masterSettings.channelURLs[channelIndex] || ""
-            };
-          }
-        });
-      });
-      this.log("[sortAndApplyProjectSequences] Project sequences sorted and applied.");
-    }
+    });
+  });
+  this.log("[sortAndApplyProjectSequences] Project sequences sorted and applied.");
+}
   
     exportSettings(pretty = true, includeGzip = true) {
       const settingsClone = JSON.parse(JSON.stringify(this.settings.masterSettings));

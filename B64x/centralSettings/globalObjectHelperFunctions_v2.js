@@ -203,3 +203,76 @@ function updateProjectSequencesUI(sequenceData) {
         });
     });
 }
+
+
+function audioBufferToWav(buffer, opt) {
+    opt = opt || {};
+    var numChannels = buffer.numberOfChannels;
+    var sampleRate = buffer.sampleRate;
+    var format = opt.float32 ? 3 : 1;
+    var bitDepth = format === 3 ? 32 : 16;
+    var result;
+    if (numChannels === 2) {
+      result = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
+    } else {
+      result = buffer.getChannelData(0);
+    }
+    return encodeWAV(result, numChannels, sampleRate, bitDepth);
+  }
+  
+  function interleave(inputL, inputR) {
+    var length = inputL.length + inputR.length;
+    var result = new Float32Array(length);
+    var index = 0, inputIndex = 0;
+    while (index < length) {
+      result[index++] = inputL[inputIndex];
+      result[index++] = inputR[inputIndex];
+      inputIndex++;
+    }
+    return result;
+  }
+  
+  function encodeWAV(samples, numChannels, sampleRate, bitDepth) {
+    var bytesPerSample = bitDepth / 8;
+    var blockAlign = numChannels * bytesPerSample;
+    var buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+    var view = new DataView(buffer);
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, samples.length * bytesPerSample, true);
+    if (bitDepth === 16) {
+      floatTo16BitPCM(view, 44, samples);
+    } else {
+      writeFloat32(view, 44, samples);
+    }
+    return buffer;
+  }
+  
+  function writeFloat32(view, offset, input) {
+    for (var i = 0; i < input.length; i++, offset += 4) {
+      view.setFloat32(offset, input[i], true);
+    }
+  }
+  
+  function floatTo16BitPCM(view, offset, input) {
+    for (var i = 0; i < input.length; i++, offset += 2) {
+      var s = Math.max(-1, Math.min(1, input[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+  }
+  
+  function writeString(view, offset, string) {
+    for (var i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  }
