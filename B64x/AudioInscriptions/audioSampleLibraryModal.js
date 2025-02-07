@@ -83,7 +83,7 @@ function openAudioSampleLibraryModal(onSampleSelected) {
       "audio/opus": "opus",
       "audio/flac": "flac"
     };
-    const getFileType = ct => ct ? (CONTENT_TYPE_MAP[ct.toLowerCase()] || "") : "";
+    const getFileType = ct => (ct ? CONTENT_TYPE_MAP[ct.toLowerCase()] || "" : "");
   
     // === Shared Domain for Audio Files ===
     const domain = "https://ordinals.com/content/";
@@ -135,7 +135,7 @@ function openAudioSampleLibraryModal(onSampleSelected) {
     sortLabel.textContent = "Sort: ";
     const sortSelect = document.createElement("select");
     [
-      { value: "newest", text: "Newest to Oldest" },
+      { value: "newest", text: "Newest to Oldest" },  
       { value: "oldest", text: "Oldest to Newest" },
       { value: "durationAsc", text: "Duration: Shortest to Longest" },
       { value: "durationDesc", text: "Duration: Longest to Shortest" }
@@ -157,7 +157,7 @@ function openAudioSampleLibraryModal(onSampleSelected) {
       { value: "mp3", text: "MP3" },
       { value: "wav", text: "WAV" },
       { value: "ogg", text: "OGG" }
-      // Uncomment if needed:
+      // Uncomment additional types if needed:
       // { value: "opus", text: "OPUS" },
       // { value: "flac", text: "FLAC" }
     ].forEach(opt => {
@@ -339,18 +339,30 @@ function openAudioSampleLibraryModal(onSampleSelected) {
       // --- Set up the Play button ---
       sample.playButton.addEventListener("click", () => togglePlay(sample));
   
-      // --- Set up the Use button to copy the sample ID ---
+      // --- Set up the Use button ---
       sample.useButton.addEventListener("click", async () => {
         try {
-          await navigator.clipboard.writeText(sample.id);
-          console.log(`Ordinal ID copied: ${sample.id}`);
-          if (typeof onSampleSelected === "function") {
-            onSampleSelected(sample.id);
+          // Instead of copying to clipboard, find the already-open Load Sample Modal.
+          // We assume the modal contains an input with class "audional-input" and a Load button with class "green-button".
+          const loadModal = Array.from(document.querySelectorAll('.modal-content'))
+            .find(modal => modal.querySelector('.audional-input'));
+          if (loadModal) {
+            const ordInput = loadModal.querySelector('.audional-input');
+            const loadBtn = loadModal.querySelector('button.green-button');
+            if (ordInput && loadBtn) {
+              ordInput.value = sample.id;
+              loadBtn.click();
+              console.log(`Loaded ORD ID ${sample.id} into load sample modal.`);
+              // Optionally close the audio sample library modal after use:
+              document.body.contains(modalOverlay) && document.body.removeChild(modalOverlay);
+            } else {
+              console.warn('Load sample modal input or load button not found.');
+            }
+          } else {
+            console.warn('Load sample modal not found.');
           }
-          // Optionally, close the modal here:
-          // document.body.removeChild(modalOverlay);
         } catch (err) {
-          console.error("Failed to copy Ordinal ID:", err);
+          console.error("Failed to load sample via Use button:", err);
         }
       });
   
@@ -414,7 +426,7 @@ function openAudioSampleLibraryModal(onSampleSelected) {
     // === Load JSON Data and Initialize Samples ===
     (async () => {
       try {
-        // Adjust the JSON file path as needed.
+        // IMPORTANT: Adjust the JSON file path to your needs.
         const res = await fetch("AudioInscriptions/all_audio_inscriptions.json");
         if (!res.ok) throw new Error(res.statusText);
         const data = await res.json();
