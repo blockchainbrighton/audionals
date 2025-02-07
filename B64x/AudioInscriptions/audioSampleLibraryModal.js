@@ -97,7 +97,7 @@ function openAudioSampleLibraryModal(onSampleSelected) {
       left: "0",
       width: "100vw",
       height: "100vh",
-      backgroundColor: "rgba(0,0,0,0.5)",
+      backgroundColor: "rgba(0,0,0,0.6)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -107,35 +107,54 @@ function openAudioSampleLibraryModal(onSampleSelected) {
     const modalContent = document.createElement("div");
     modalContent.classList.add("modal-content");
     Object.assign(modalContent.style, {
-      background: "#fff",
-      padding: "20px",
-      borderRadius: "5px",
-      width: "800px",
+      background: "#f9f9f9",
+      padding: "30px",
+      borderRadius: "8px",
+      width: "80%",
+      maxWidth: "600px",
       maxHeight: "80vh",
       overflowY: "auto",
       display: "flex",
       flexDirection: "column",
-      gap: "10px"
+      gap: "15px",
+      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)"
     });
   
     // --- Header ---
     const header = document.createElement("h2");
-    header.textContent = "Select a Sample";
+    header.textContent = "Select an Audio Inscription";
+    Object.assign(header.style, {
+      marginBottom: "20px",
+      fontFamily: "Arial, sans-serif",
+      color: "#333"
+    });
     modalContent.appendChild(header);
   
     // --- Sorting and Filtering Controls ---
     const controlsContainer = document.createElement("div");
-    controlsContainer.style.display = "flex";
-    controlsContainer.style.justifyContent = "space-between";
-    controlsContainer.style.alignItems = "center";
-    controlsContainer.style.marginBottom = "10px";
+    Object.assign(controlsContainer.style, {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: "20px"
+    });
   
     // Sort dropdown
     const sortLabel = document.createElement("label");
     sortLabel.textContent = "Sort: ";
+    Object.assign(sortLabel.style, {
+      fontFamily: "Arial, sans-serif",
+      color: "#333"
+    });
     const sortSelect = document.createElement("select");
+    Object.assign(sortSelect.style, {
+      padding: "5px",
+      borderRadius: "4px",
+      border: "1px solid #ccc",
+      fontSize: "14px"
+    });
     [
-      { value: "newest", text: "Newest to Oldest" },  
+      { value: "newest", text: "Newest to Oldest" },
       { value: "oldest", text: "Oldest to Newest" },
       { value: "durationAsc", text: "Duration: Shortest to Longest" },
       { value: "durationDesc", text: "Duration: Longest to Shortest" }
@@ -151,7 +170,17 @@ function openAudioSampleLibraryModal(onSampleSelected) {
     // File type filter dropdown
     const typeLabel = document.createElement("label");
     typeLabel.textContent = "File Type: ";
+    Object.assign(typeLabel.style, {
+      fontFamily: "Arial, sans-serif",
+      color: "#333"
+    });
     const typeSelect = document.createElement("select");
+    Object.assign(typeSelect.style, {
+      padding: "5px",
+      borderRadius: "4px",
+      border: "1px solid #ccc",
+      fontSize: "14px"
+    });
     [
       { value: "all", text: "All" },
       { value: "mp3", text: "MP3" },
@@ -180,7 +209,16 @@ function openAudioSampleLibraryModal(onSampleSelected) {
     // --- Close Button ---
     const closeButton = document.createElement("button");
     closeButton.textContent = "Close";
-    closeButton.style.marginTop = "10px";
+    Object.assign(closeButton.style, {
+      marginTop: "10px",
+      padding: "10px 20px",
+      backgroundColor: "#dc3545",
+      color: "#fff",
+      border: "none",
+      borderRadius: "4px",
+      cursor: "pointer",
+      fontSize: "14px"
+    });
     closeButton.addEventListener("click", () => {
       document.body.removeChild(modalOverlay);
     });
@@ -204,6 +242,11 @@ function openAudioSampleLibraryModal(onSampleSelected) {
         `${duration ? `Duration: ${duration.toFixed(2)}s ` : ""}` +
         `${fileSize ? `Size: ${(fileSize / 1024).toFixed(1)} KB ` : ""}` +
         `${fileType ? `Type: ${fileType.toUpperCase()}` : ""}`;
+      Object.assign(sample.metadataDiv.style, {
+        fontSize: "0.9em",
+        color: "#555",
+        marginLeft: "10px"
+      });
     }
   
     // === Toggle Play/Pause (using WaveSurfer) ===
@@ -251,23 +294,52 @@ function openAudioSampleLibraryModal(onSampleSelected) {
       Object.assign(sample.container.style, {
         display: "flex",
         alignItems: "center",
-        borderBottom: "1px solid #ccc",
-        padding: "5px 0"
+        borderBottom: "1px solid #ddd",
+        padding: "10px 0"
       });
   
       sample.waveformDiv = createEl("div", "waveform");
       sample.waveformDiv.id = `waveform-${index}`;
       Object.assign(sample.waveformDiv.style, {
         width: "200px",
-        height: "20px",
+        height: "40px",
         marginRight: "10px",
-        border: "1px solid #ccc",
-        background: "#f9f9f9"
+        border: "1px solid #ddd",
+        background: "#fff",
+        borderRadius: "10px"
       });
   
       sample.playButton = createEl("button", "play-button", "Play");
-      sample.useButton = createEl("button", "use-button", "Use");
+      Object.assign(sample.playButton.style, {
+        padding: "4px 8px",
+        backgroundColor: "#28a745", // Green color for Play button
+        color: "#fff",
+        border: "none",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontSize: "14px",
+        marginRight: "10px"
+      });
+      sample.playButton.setAttribute("title", "Click to play or pause the sample");
+      
+      sample.useButton = createEl("button", "use-button", "Remix This Sample");
+      Object.assign(sample.useButton.style, {
+        padding: "8px 16px",
+        backgroundColor: "#F7931A", // Bitcoin-orange for Remix button
+        color: "#fff",
+        border: "none",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontSize: "14px"
+      });
+      sample.useButton.setAttribute("title", "Click this button to instantly import the sample into your project with a single click");
+      
       sample.metadataDiv = createEl("div", "metadata");
+      Object.assign(sample.metadataDiv.style, {
+        fontSize: "0.9em",
+        color: "#555",
+        marginLeft: "10px"
+      });
   
       sample.container.append(
         sample.waveformDiv,
@@ -354,7 +426,9 @@ function openAudioSampleLibraryModal(onSampleSelected) {
               loadBtn.click();
               console.log(`Loaded ORD ID ${sample.id} into load sample modal.`);
               // Optionally close the audio sample library modal after use:
-              document.body.contains(modalOverlay) && document.body.removeChild(modalOverlay);
+              if (document.body.contains(modalOverlay)) {
+                document.body.removeChild(modalOverlay);
+              }
             } else {
               console.warn('Load sample modal input or load button not found.');
             }
