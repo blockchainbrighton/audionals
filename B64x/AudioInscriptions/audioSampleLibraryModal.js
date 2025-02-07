@@ -104,6 +104,13 @@ function openAudioSampleLibraryModal(onSampleSelected) {
       zIndex: "1000"
     });
   
+    // Close modal if clicking outside modalContent
+    modalOverlay.addEventListener("click", (e) => {
+      if (e.target === modalOverlay) {
+        document.body.removeChild(modalOverlay);
+      }
+    });
+  
     const modalContent = document.createElement("div");
     modalContent.classList.add("modal-content");
     Object.assign(modalContent.style, {
@@ -117,8 +124,28 @@ function openAudioSampleLibraryModal(onSampleSelected) {
       display: "flex",
       flexDirection: "column",
       gap: "15px",
-      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)"
+      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+      position: "relative" // To position the close (X) button
     });
+  
+    // --- Add a Close (X) Button at Top-Right ---
+    const closeX = document.createElement("span");
+    closeX.textContent = "×";
+    Object.assign(closeX.style, {
+      position: "absolute",
+      top: "10px",
+      right: "15px",
+      fontSize: "24px",
+      fontWeight: "bold",
+      color: "#333",
+      cursor: "pointer"
+    });
+    closeX.addEventListener("click", () => {
+      if (document.body.contains(modalOverlay)) {
+        document.body.removeChild(modalOverlay);
+      }
+    });
+    modalContent.appendChild(closeX);
   
     // --- Header ---
     const header = document.createElement("h2");
@@ -186,9 +213,6 @@ function openAudioSampleLibraryModal(onSampleSelected) {
       { value: "mp3", text: "MP3" },
       { value: "wav", text: "WAV" },
       { value: "ogg", text: "OGG" }
-      // Uncomment additional types if needed:
-      // { value: "opus", text: "OPUS" },
-      // { value: "flac", text: "FLAC" }
     ].forEach(opt => {
       const optionEl = document.createElement("option");
       optionEl.value = opt.value;
@@ -206,7 +230,7 @@ function openAudioSampleLibraryModal(onSampleSelected) {
     sampleListContainer.style.flex = "1";
     modalContent.appendChild(sampleListContainer);
   
-    // --- Close Button ---
+    // --- Close Button (Alternate, below the list) ---
     const closeButton = document.createElement("button");
     closeButton.textContent = "Close";
     Object.assign(closeButton.style, {
@@ -311,7 +335,7 @@ function openAudioSampleLibraryModal(onSampleSelected) {
   
       sample.playButton = createEl("button", "play-button", "Play");
       Object.assign(sample.playButton.style, {
-        padding: "4px 8px",
+        padding: "8px 16px",
         backgroundColor: "#28a745", // Green color for Play button
         color: "#fff",
         border: "none",
@@ -321,19 +345,23 @@ function openAudioSampleLibraryModal(onSampleSelected) {
         marginRight: "10px"
       });
       sample.playButton.setAttribute("title", "Click to play or pause the sample");
-      
-      sample.useButton = createEl("button", "use-button", "Remix This Sample");
+  
+      // Updated Use Button: Bigger, square, and with new text and color.
+      sample.useButton = createEl("button", "use-button", "Use This Sample");
       Object.assign(sample.useButton.style, {
-        padding: "8px 16px",
-        backgroundColor: "#F7931A", // Bitcoin-orange for Remix button
+        padding: "12px 24px",
+        backgroundColor: "#F7931A", // Bitcoin-orange color
         color: "#fff",
         border: "none",
-        borderRadius: "4px",
+        borderRadius: "0px", // Square corners
         cursor: "pointer",
-        fontSize: "14px"
+        fontSize: "16px"
       });
-      sample.useButton.setAttribute("title", "Click this button to instantly import the sample into your project with a single click");
-      
+      sample.useButton.setAttribute(
+        "title",
+        "Click this button to instantly import the sample into your project with a single click"
+      );
+  
       sample.metadataDiv = createEl("div", "metadata");
       Object.assign(sample.metadataDiv.style, {
         fontSize: "0.9em",
@@ -352,7 +380,7 @@ function openAudioSampleLibraryModal(onSampleSelected) {
       sample.container.sample = sample;
       observer.observe(sample.container);
   
-      // --- WaveSurfer Initialization (exactly as in the original HTML file) ---
+      // --- WaveSurfer Initialization (as in the original HTML file) ---
       sample.loadWaveSurfer = () => {
         if (sample.wavesurfer) return;
         sample.wavesurfer = WaveSurfer.create({
@@ -374,7 +402,6 @@ function openAudioSampleLibraryModal(onSampleSelected) {
           checkAllSamplesProcessed();
         });
         sample.wavesurfer.on("error", err => {
-          // Ignore abort errors.
           if (
             err &&
             (err.name === "AbortError" ||
@@ -415,7 +442,6 @@ function openAudioSampleLibraryModal(onSampleSelected) {
       sample.useButton.addEventListener("click", async () => {
         try {
           // Instead of copying to clipboard, find the already-open Load Sample Modal.
-          // We assume the modal contains an input with class "audional-input" and a Load button with class "green-button".
           const loadModal = Array.from(document.querySelectorAll('.modal-content'))
             .find(modal => modal.querySelector('.audional-input'));
           if (loadModal) {
@@ -425,7 +451,6 @@ function openAudioSampleLibraryModal(onSampleSelected) {
               ordInput.value = sample.id;
               loadBtn.click();
               console.log(`Loaded ORD ID ${sample.id} into load sample modal.`);
-              // Optionally close the audio sample library modal after use:
               if (document.body.contains(modalOverlay)) {
                 document.body.removeChild(modalOverlay);
               }
