@@ -157,12 +157,10 @@ class AudioTrimmer {
             // For the start slider, do not allow it to cross the end slider.
             if (isStartSlider) {
                 const endLeft = parseFloat(this.endSlider.style.left) || this.getSliderLeft(this.endSliderValue);
-                newLeft = Math.min(newLeft, endLeft - sliderWidth);
-            } else {
+                newLeft = Math.min(newLeft, endLeft);            } else {
                 // For the end slider, do not allow it to cross the start slider.
                 const startLeft = parseFloat(this.startSlider.style.left) || this.getSliderLeft(this.startSliderValue);
-                newLeft = Math.max(newLeft, startLeft + sliderWidth);
-            }
+                newLeft = Math.max(newLeft, startLeft);            }
         
             slider.style.left = `${newLeft}px`;
             // Convert the pixel value back to a percentage based on the slider’s center.
