@@ -70,11 +70,27 @@ function openModal(button, type, channelIndex) {
     modal.style.left = `${button.offsetLeft + button.offsetWidth + 10}px`;
     modal.style.top = `${button.offsetTop}px`;
     modal.style.zIndex = 1000;
+    modal.style.backgroundColor = '#fff';
+    modal.style.border = '1px solid #ccc';
+    modal.style.padding = '10px';
+    modal.style.borderRadius = '5px';
 
-    // Create and append modal components.
+    // Create a header for the modal with channel and control type information
+    const modalHeader = document.createElement('div');
+    modalHeader.classList.add('modal-header');
+    // Retrieve the channel name, or default to "Channel {n}" if not set.
+    const channelName = window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex] || `Channel ${channelIndex + 1}`;
+    // Capitalize the control type (e.g., "Volume" or "Speed")
+    modalHeader.textContent = `${channelName} - ${capitalize(type)} Settings`;
+    modalHeader.style.fontWeight = 'bold';
+    modalHeader.style.marginBottom = '10px';
+    modal.appendChild(modalHeader);
+
+    // Create and append the close button.
     const closeButton = createCloseButton(() => closeModal(type));
     modal.appendChild(closeButton);
 
+    // Create and append the slider and text input.
     const slider = createSlider(type, channelIndex);
     const textInput = createTextInput(type, channelIndex, slider);
     modal.appendChild(slider);
@@ -83,7 +99,7 @@ function openModal(button, type, channelIndex) {
     addModalEventListeners(modal, type);
 
     document.body.appendChild(modal);
-    // resetModalTimeout(type);
+    // Auto-close timers removed so modal persists until manually closed.
 }
 
 /**
