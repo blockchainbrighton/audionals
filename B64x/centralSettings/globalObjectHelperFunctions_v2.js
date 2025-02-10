@@ -18,7 +18,7 @@ function closeModal() {
 
 function updateBPMUI(bpm) {
     console.log("debugGlobalObjectToUI - entered");
-    const bpmSlider = document.getElementById('bpm-slider');
+    const bpmSlider = document.getElementById('nice-slider');
     const bpmDisplay = document.getElementById('bpm-display');
     if (bpmSlider && bpmDisplay) {
       const formattedBPM = parseFloat(bpm).toFixed(1);

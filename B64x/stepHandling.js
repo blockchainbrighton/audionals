@@ -132,8 +132,8 @@
   
       const currentSequenceDisplay = document.getElementById('current-sequence-display');
       if (currentSequenceDisplay) {
-        currentSequenceDisplay.innerHTML = `Sequence: ${targetSequence}`;
-        log(`[handleSequenceTransition] Updated sequence display to: Sequence ${targetSequence}`);
+        currentSequenceDisplay.innerHTML = `Sequence: ${targetSequence + 1}`;
+        log(`[handleSequenceTransition] Updated sequence display to: Sequence ${targetSequence + 1}`);
       }
     
       if (startStep === undefined) {

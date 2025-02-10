@@ -1059,7 +1059,7 @@ updateProjectNameUI(projectName) {
 }
 
 updateBPMUI(bpm) {
-  const slider = document.getElementById("bpm-slider"),
+  const slider = document.getElementById("nice-slider"),
         display = document.getElementById("bpm-display");
   if (slider && display) {
     const formatted = parseFloat(bpm).toFixed(1);

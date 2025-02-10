@@ -80,8 +80,7 @@ function loadAndDisplaySequence(sequenceIndex) {
 
     const currentSequenceDisplay = document.getElementById('current-sequence-display');
     if (currentSequenceDisplay) {
-        currentSequenceDisplay.textContent = `Sequence ${currentSequence}`;
-    }
+        currentSequenceDisplay.textContent = `Sequence ${currentSequence + 1}`;    }
     updateActiveQuickPlayButton();
 }
 

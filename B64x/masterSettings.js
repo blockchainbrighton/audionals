@@ -1,6 +1,6 @@
 // masterSettings.js
 
-const bpmSlider = document.getElementById('bpm-slider');
+const bpmSlider = document.getElementById('nice-slider');
 const bpmDisplay = document.getElementById('bpm-display');
 
 // Initialize BPM from global settings (parsing as float for decimals)
