@@ -81,7 +81,12 @@ function openModal(button, type, channelIndex) {
     // Retrieve the channel name, or default to "Channel {n}" if not set.
     const channelName = window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex] || `Channel ${channelIndex + 1}`;
     // Capitalize the control type (e.g., "Volume" or "Speed")
-    modalHeader.textContent = `${channelName} - ${capitalize(type)} Settings`;
+    if (type === 'speed') {
+        // Change this line to your desired text
+        modalHeader.textContent = `${channelName} - Pitch Control`;
+    } else {
+        modalHeader.textContent = `${channelName} - ${capitalize(type)} Control`;
+    }
     modalHeader.style.fontWeight = 'bold';
     modalHeader.style.marginBottom = '10px';
     modal.appendChild(modalHeader);
