@@ -75,9 +75,16 @@ function initializeAudioTrimmer(channelIndex) {
       const container = document.getElementById('audio-trimmer-container');
       if (!container) throw new Error('Audio trimmer container not found in the DOM.');
 
-      // It’s a good idea to clear out any previous instance.
-      container.innerHTML = '';
+      // Clear any previous content and set the new HTML.
       container.innerHTML = html;
+
+      // Update the new header with project and channel information.
+      const projectName = window.unifiedSequencerSettings.settings.masterSettings.projectName || "Project";
+      const channelName = window.unifiedSequencerSettings.settings.masterSettings.projectChannelNames[channelIndex] || `Channel ${channelIndex + 1}`;
+      const headerEl = document.getElementById("audio-trimmer-header");
+      if (headerEl) {
+        headerEl.textContent = `${projectName} - ${channelName} Audio Trim`;
+      }
 
       // Use requestAnimationFrame so that the DOM is updated.
       requestAnimationFrame(() => {
