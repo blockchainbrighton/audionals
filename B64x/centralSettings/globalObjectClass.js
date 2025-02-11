@@ -1,56 +1,271 @@
 // globalObjectClass.js
 
 class UnifiedSequencerSettings {
-    constructor(audioContext, numSequences = 64, numChannels = 32) {
-      this.audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
-      this.numSequences = numSequences;
-      this.numChannels = numChannels;
-      this.globalPlaybackSpeed = 1;
-      this.channelPlaybackSpeed = new Array(this.numChannels).fill(1); // Default (1x)
-      this.observers = [];
-      this.gainNodes = new Array(this.numChannels);
-      this.sourceNodes = new Array(this.numChannels);
-  
-      // Global debug flag – set to true to enable debug logging
-      this.DEBUG = true;
-  
-      // Define a shared log method
-      this.log = (msg, ...args) => {
-        if (this.DEBUG) {
-          console.log(msg, ...args);
-        }
-      };
-  
-      this.settings = {
-        masterSettings: {
-          projectName: 'New Audx Project',
-          artistName: '',
-          projectBPM: 120,
-          currentSequence: 0,
-          channelURLs: new Array(this.numChannels).fill(''),
-          channelVolume: new Array(this.numChannels).fill(0.5),
-          channelPlaybackSpeed: new Array(this.numChannels).fill(1),
-          trimSettings: Array.from({ length: this.numChannels }, () => ({ start: 0.01, end: 100.00, length: 0 })),
-          projectChannelNames: new Array(this.numChannels).fill('Load Sample'),
-          channelSettings: this.initializeChannelSettings(this.numChannels),
-          projectSequences: this.initializeSequences(this.numSequences, this.numChannels, 64)
-        }
-      };
-  
-      this.initializeGainNodes();
-      this.initializeSourceNodes();
-  
-      // Bind methods as needed
-      this.checkSettings = this.checkSettings.bind(this);
-      this.clearMasterSettings = this.clearMasterSettings.bind(this);
-      this.loadSettings = this.loadSettings.bind(this);
-      this.formatURL = this.formatURL.bind(this);
-      this.setChannelVolume = this.setChannelVolume.bind(this);
-      this.setChannelPlaybackSpeed = this.setChannelPlaybackSpeed.bind(this);
-      this.updateTotalSequences = this.updateTotalSequences.bind(this);
+  constructor(audioContext, numSequences = 64, numChannels = 32) {
+    this.audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+    this.numSequences = numSequences;
+    this.numChannels = numChannels;
+    this.globalPlaybackSpeed = 1;
+    this.channelPlaybackSpeed = new Array(this.numChannels).fill(1); // Default (1x)
+    this.observers = [];
+    this.gainNodes = new Array(this.numChannels);
+    this.sourceNodes = new Array(this.numChannels);
+
+    // Global debug flag – set to true to enable debug logging
+    this.DEBUG = true;
+
+    // Define a shared log method
+    this.log = (msg, ...args) => {
+      if (this.DEBUG) {
+        console.log(msg, ...args);
+      }
+    };
+
+    // Add a new field: channelGroups, initialized to "all" for every channel.
+    this.settings = {
+      masterSettings: {
+        projectName: 'New Audx Project',
+        artistName: '',
+        projectBPM: 120,
+        currentSequence: 0,
+        channelURLs: new Array(this.numChannels).fill(''),
+        channelVolume: new Array(this.numChannels).fill(0.5),
+        channelPlaybackSpeed: new Array(this.numChannels).fill(1),
+        trimSettings: Array.from({ length: this.numChannels }, () => ({ start: 0.01, end: 100.00, length: 0 })),
+        projectChannelNames: new Array(this.numChannels).fill('Load Sample'),
+        channelSettings: this.initializeChannelSettings(this.numChannels),
+        channelGroups: new Array(this.numChannels).fill('all'), // <-- NEW: initialize groups to "all"
+        projectSequences: this.initializeSequences(this.numSequences, this.numChannels, 64)
+      }
+    };
+
+    this.initializeGainNodes();
+    this.initializeSourceNodes();
+
+    // Bind methods as needed
+    this.checkSettings = this.checkSettings.bind(this);
+    this.clearMasterSettings = this.clearMasterSettings.bind(this);
+    this.loadSettings = this.loadSettings.bind(this);
+    this.formatURL = this.formatURL.bind(this);
+    this.setChannelVolume = this.setChannelVolume.bind(this);
+    this.setChannelPlaybackSpeed = this.setChannelPlaybackSpeed.bind(this);
+    this.updateTotalSequences = this.updateTotalSequences.bind(this);
+  }
+
+  exportSettings(pretty = true, includeGzip = true) {
+    // Clone and augment settings
+    const clone = JSON.parse(JSON.stringify(this.settings.masterSettings));
+    Object.assign(clone, {
+      currentSequence: 0,
+      globalPlaybackSpeed: this.globalPlaybackSpeed,
+      channelPlaybackSpeed: Array.isArray(this.channelPlaybackSpeed)
+        ? [...this.channelPlaybackSpeed]
+        : new Array(this.numChannels).fill(1),
+      channelVolume: Array.isArray(this.settings.masterSettings.channelVolume)
+        ? [...this.settings.masterSettings.channelVolume]
+        : new Array(this.numChannels).fill(1)
+    });
+    if (this.settings.masterSettings.artistName) {
+      clone.artistName = this.settings.masterSettings.artistName;
     }
   
+    // Process project sequences and compress step data
+    Object.values(clone.projectSequences || {}).forEach(sequence => {
+      Object.values(sequence).forEach(channel => {
+        channel.steps = channel.steps.reduce((activeSteps, step, idx) => {
+          if (step.isActive || step.isReverse) {
+            const data = { index: idx + 1 };
+            if (step.isReverse) data.reverse = true;
+            const vol = step.volume !== undefined ? step.volume : 1;
+            if (vol !== 1) data.volume = vol;
+            if (step.pitch !== 1) data.pitch = step.pitch;
+            activeSteps.push(Object.keys(data).length > 1 ? data : idx + 1);
+          }
+          return activeSteps;
+        }, []);
+        delete channel.mute;
+        delete channel.url;
+      });
+    });
   
+    // Create exported JSON strings
+    const exportedSettings = JSON.stringify(clone, null, pretty ? 2 : 0);
+    this.log("[exportSettings] Exported Settings:", exportedSettings);
+    const serializedExportedSettings = JSON.stringify(this.serialize(clone));
+    this.log("[exportSettings] Serialized Exported Settings:", serializedExportedSettings);
+    const projectName = this.settings.masterSettings.projectName || "Project";
+    const downloadFullFormat = true;
+    const downloadSerializedFormat = false;
+  
+    // Download full JSON if enabled
+    if (downloadFullFormat && exportedSettings?.length > 2) {
+      this.downloadJSON(exportedSettings, `${projectName}_ff_`);
+    } else if (!downloadFullFormat) {
+      this.log("Full format JSON download is disabled.");
+    } else {
+      console.error("Failed to generate full format JSON for download or content is empty.");
+    }
+  
+    // Download serialized JSON if enabled
+    if (downloadSerializedFormat && serializedExportedSettings?.length > 2) {
+      this.downloadJSON(serializedExportedSettings, `${projectName}_sf_`);
+    } else if (!downloadSerializedFormat) {
+      this.log("Serialized format JSON download is disabled.");
+    } else {
+      console.error("Failed to generate serialized format JSON for download or content is empty.");
+    }
+  
+    // Optionally create and download a Gzip file
+    if (includeGzip && serializedExportedSettings?.length > 2) {
+      createGzipFile(serializedExportedSettings)
+        .then(blob => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `${projectName}_sf.gz`;
+          link.click();
+          this.log("Gzip file created and downloaded successfully.");
+        })
+        .catch(error => console.error("Error during Gzip creation:", error));
+    } else if (!includeGzip) {
+      this.log("Gzip file creation is disabled.");
+    } else {
+      console.error("Failed to generate serialized format JSON for Gzip compression or content is empty.");
+    }
+  }
+
+  serialize(data) {
+    const keyMap = {
+      projectName: 0,
+      artistName: 1,
+      projectBPM: 2,
+      currentSequence: 3,
+      channelURLs: 4,
+      channelVolume: 5,
+      channelPlaybackSpeed: 6,
+      trimSettings: 7,
+      projectChannelNames: 8,
+      startSliderValue: 9,
+      endSliderValue: 10,
+      totalSampleDuration: 11,
+      start: 12,
+      end: 13,
+      projectSequences: 14,
+      steps: 15,
+      channelGroups: 16 // <-- NEW: include channel groups in the serialized output
+    };
+
+    const reverseChannelMap = Array.from({ length: this.numChannels }, (_, i) =>
+      i < 26 ? String.fromCharCode(65 + i) : i.toString()
+    );
+    const roundToFour = num => Math.round(num * 10000) / 10000;
+
+    const compressSteps = steps => {
+      if (!steps.length) return [];
+      const compressed = [];
+      let start = null,
+        end = null,
+        inRange = false;
+      steps.forEach(step => {
+        if (typeof step === "number") {
+          if (start === null) {
+            start = end = step;
+          } else if (step === end + 1) {
+            end = step;
+            inRange = true;
+          } else {
+            compressed.push(inRange ? { r: [start, end] } : start);
+            start = end = step;
+            inRange = false;
+          }
+        } else if (step.index !== undefined && step.reverse) {
+          if (start !== null) {
+            compressed.push(inRange ? { r: [start, end] } : start);
+            start = end = null;
+            inRange = false;
+          }
+          compressed.push(`${step.index}r`);
+        }
+      });
+      if (start !== null) compressed.push(inRange ? { r: [start, end] } : start);
+      return compressed;
+    };
+
+    const stripDomain = url => {
+      if (!url) return "";
+      try {
+        const parsed = new URL(url);
+        return parsed.pathname + parsed.search;
+      } catch (e) {
+        return url;
+      }
+    };
+
+    const serializeData = data => {
+      if (data === null || typeof data !== "object") return data;
+      const result = {};
+      for (const [key, value] of Object.entries(data)) {
+        if (value === null || value === undefined) continue;
+        const shortKey = keyMap[key] ?? key;
+        if (key === "channelURLs") {
+          result[shortKey] = Array.isArray(value)
+            ? value.filter(v => v).map(stripDomain)
+            : [];
+        } else if (Array.isArray(value)) {
+          result[shortKey] = key === "projectChannelNames"
+            ? value.map((v, i) => reverseChannelMap[i] ?? v)
+            : value.map(v => (typeof v === "number" ? roundToFour(v) : serializeData(v)));
+        } else if (typeof value === "object") {
+          result[shortKey] = key === "projectSequences"
+            ? Object.entries(value).reduce((acc, [seqKey, channels]) => {
+                const shortSeqKey = seqKey.replace("Sequence", "s");
+                const filtered = Object.entries(channels).reduce((chAcc, [chKey, chValue]) => {
+                  const letter = reverseChannelMap[parseInt(chKey.replace("ch", ""), 10)] ?? chKey;
+                  if (chValue.steps?.length) {
+                    chAcc[letter] = { [keyMap["steps"]]: compressSteps(chValue.steps) };
+                  }
+                  return chAcc;
+                }, {});
+                if (Object.keys(filtered).length) acc[shortSeqKey] = filtered;
+                return acc;
+              }, {})
+            : serializeData(value);
+        } else {
+          result[shortKey] = typeof value === "number" ? roundToFour(value) : value;
+        }
+      }
+      return result;
+    };
+
+    return serializeData(data);
+  }
+
+  downloadJSON(content, fileNameBase) {
+    try {
+      this.log(`[downloadJSON] Attempting to download file with base name: ${fileNameBase}`);
+      if (!content) throw new Error("Content is undefined or null");
+      const fileName = `${fileNameBase}_AUDX.json`;
+      this.log(`[downloadJSON] Generated file name: ${fileName}`);
+      this.log(`[downloadJSON] Content length: ${content.length}`);
+      this.log(`[downloadJSON] Content preview: ${content.slice(0, 100)}`);
+      const blob = new Blob([content], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      this.log(`[downloadJSON] Initiating download for file: ${fileName}`);
+      link.click();
+      this.log(`[downloadJSON] Download initiated successfully for file: ${fileName}`);
+    } catch (error) {
+      console.error("Failed to download JSON:", error);
+    }
+  }
+
+  async formatURL(url) {
+    // Simulate asynchronous URL processing
+    return new Promise(resolve => setTimeout(() => resolve(url), 100));
+  }
+
+
   
  /*–––––– Settings Loading & Serialization ––––––*/
 async loadSettings(inputData) {
@@ -76,6 +291,7 @@ async loadSettings(inputData) {
     }
 
     // Destructure settings with defaults
+    // After settingsToLoad is defined and destructured:
     const {
       projectName,
       projectBPM,
@@ -87,15 +303,26 @@ async loadSettings(inputData) {
       trimSettings,
       projectChannelNames,
       projectSequences
+      // Note: channelGroups is not destructured here yet.
     } = settingsToLoad;
+
+    // **NEW CODE FOR STAGE 1: Log the channelGroups**
+    if (settingsToLoad.channelGroups) {
+      this.log("[ChannelGroups] Loaded from settings:", settingsToLoad.channelGroups);
+    } else {
+      this.log("[ChannelGroups] Not found in settings; using default value.");
+    }
 
     Object.assign(this.settings.masterSettings, {
       projectName,
       projectBPM,
       artistName,
       trimSettings,
-      projectChannelNames
+      projectChannelNames,
+      // **NEW: merge channelGroups from the loaded settings**
+      channelGroups: settingsToLoad.channelGroups || new Array(this.numChannels).fill('all')
     });
+    this.log("[ChannelGroups] Global settings channelGroups now:", this.settings.masterSettings.channelGroups);
     this.globalPlaybackSpeed = globalPlaybackSpeed;
     this.channelPlaybackSpeed = Array.from(
       { length: this.numChannels },
@@ -112,6 +339,24 @@ async loadSettings(inputData) {
     }
 
     this.sortAndApplyProjectSequences(projectSequences);
+    // **NEW CODE FOR STAGE 3: Update each channel’s dataset.group based on loaded settings**
+    if (this.settings.masterSettings.channelGroups && window.channelsStore) {
+      window.channelsStore.forEach((channel, index) => {
+        const loadedGroup = this.settings.masterSettings.channelGroups[index];
+        // Update the channel's data attribute
+        channel.dataset.group = loadedGroup;
+        
+        // Find the dropdown element in the channel
+        const groupDropdown = channel.querySelector('.group-dropdown');
+        if (groupDropdown) {
+          // Set the dropdown's value to the loaded group value.
+          // This will ensure that the native select shows the correct option as selected.
+          groupDropdown.value = loadedGroup;
+        }
+        
+        this.log(`[UI Update] Channel ${index} group set to: ${loadedGroup}`);
+      });
+    }
     this.updateUIWithLoadedSettings();
 
     // ---------------------------------------------------------
@@ -341,217 +586,7 @@ sortAndApplyProjectSequences(projectSequences) {
   this.log("[sortAndApplyProjectSequences] Project sequences sorted and applied.");
 }
   
-exportSettings(pretty = true, includeGzip = true) {
-  // Clone and augment settings
-  const clone = JSON.parse(JSON.stringify(this.settings.masterSettings));
-  Object.assign(clone, {
-    currentSequence: 0,
-    globalPlaybackSpeed: this.globalPlaybackSpeed,
-    channelPlaybackSpeed: Array.isArray(this.channelPlaybackSpeed)
-      ? [...this.channelPlaybackSpeed]
-      : new Array(this.numChannels).fill(1),
-    channelVolume: Array.isArray(this.settings.masterSettings.channelVolume)
-      ? [...this.settings.masterSettings.channelVolume]
-      : new Array(this.numChannels).fill(1)
-  });
-  if (this.settings.masterSettings.artistName) {
-    clone.artistName = this.settings.masterSettings.artistName;
-  }
 
-  // Process project sequences and compress step data
-  Object.values(clone.projectSequences || {}).forEach(sequence => {
-    Object.values(sequence).forEach(channel => {
-      channel.steps = channel.steps.reduce((activeSteps, step, idx) => {
-        if (step.isActive || step.isReverse) {
-          const data = { index: idx + 1 };
-          if (step.isReverse) data.reverse = true;
-          const vol = step.volume !== undefined ? step.volume : 1;
-          if (vol !== 1) data.volume = vol;
-          if (step.pitch !== 1) data.pitch = step.pitch;
-          activeSteps.push(Object.keys(data).length > 1 ? data : idx + 1);
-        }
-        return activeSteps;
-      }, []);
-      delete channel.mute;
-      delete channel.url;
-    });
-  });
-
-  // Create exported JSON strings
-  const exportedSettings = JSON.stringify(clone, null, pretty ? 2 : 0);
-  this.log("[exportSettings] Exported Settings:", exportedSettings);
-  const serializedExportedSettings = JSON.stringify(this.serialize(clone));
-  this.log("[exportSettings] Serialized Exported Settings:", serializedExportedSettings);
-  const projectName = this.settings.masterSettings.projectName || "Project";
-  const downloadFullFormat = true;
-  const downloadSerializedFormat = false;
-
-  // Download full JSON if enabled
-  if (downloadFullFormat && exportedSettings?.length > 2) {
-    this.downloadJSON(exportedSettings, `${projectName}_ff_`);
-  } else if (!downloadFullFormat) {
-    this.log("Full format JSON download is disabled.");
-  } else {
-    console.error("Failed to generate full format JSON for download or content is empty.");
-  }
-
-  // Download serialized JSON if enabled
-  if (downloadSerializedFormat && serializedExportedSettings?.length > 2) {
-    this.downloadJSON(serializedExportedSettings, `${projectName}_sf_`);
-  } else if (!downloadSerializedFormat) {
-    this.log("Serialized format JSON download is disabled.");
-  } else {
-    console.error("Failed to generate serialized format JSON for download or content is empty.");
-  }
-
-  // Optionally create and download a Gzip file
-  if (includeGzip && serializedExportedSettings?.length > 2) {
-    createGzipFile(serializedExportedSettings)
-      .then(blob => {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${projectName}_sf.gz`;
-        link.click();
-        this.log("Gzip file created and downloaded successfully.");
-      })
-      .catch(error => console.error("Error during Gzip creation:", error));
-  } else if (!includeGzip) {
-    this.log("Gzip file creation is disabled.");
-  } else {
-    console.error("Failed to generate serialized format JSON for Gzip compression or content is empty.");
-  }
-}
-
-serialize(data) {
-  const keyMap = {
-    projectName: 0,
-    artistName: 1,
-    projectBPM: 2,
-    currentSequence: 3,
-    channelURLs: 4,
-    channelVolume: 5,
-    channelPlaybackSpeed: 6,
-    trimSettings: 7,
-    projectChannelNames: 8,
-    startSliderValue: 9,
-    endSliderValue: 10,
-    totalSampleDuration: 11,
-    start: 12,
-    end: 13,
-    projectSequences: 14,
-    steps: 15
-  };
-
-  const reverseChannelMap = Array.from({ length: this.numChannels }, (_, i) =>
-    i < 26 ? String.fromCharCode(65 + i) : i.toString()
-  );
-  const roundToFour = num => Math.round(num * 10000) / 10000;
-
-  const compressSteps = steps => {
-    if (!steps.length) return [];
-    const compressed = [];
-    let start = null,
-      end = null,
-      inRange = false;
-    steps.forEach(step => {
-      if (typeof step === "number") {
-        if (start === null) {
-          start = end = step;
-        } else if (step === end + 1) {
-          end = step;
-          inRange = true;
-        } else {
-          compressed.push(inRange ? { r: [start, end] } : start);
-          start = end = step;
-          inRange = false;
-        }
-      } else if (step.index !== undefined && step.reverse) {
-        if (start !== null) {
-          compressed.push(inRange ? { r: [start, end] } : start);
-          start = end = null;
-          inRange = false;
-        }
-        compressed.push(`${step.index}r`);
-      }
-    });
-    if (start !== null) compressed.push(inRange ? { r: [start, end] } : start);
-    return compressed;
-  };
-
-  const stripDomain = url => {
-    if (!url) return "";
-    try {
-      const parsed = new URL(url);
-      return parsed.pathname + parsed.search;
-    } catch (e) {
-      return url;
-    }
-  };
-
-  const serializeData = data => {
-    if (data === null || typeof data !== "object") return data;
-    const result = {};
-    for (const [key, value] of Object.entries(data)) {
-      if (value === null || value === undefined) continue;
-      const shortKey = keyMap[key] ?? key;
-      if (key === "channelURLs") {
-        result[shortKey] = Array.isArray(value)
-          ? value.filter(v => v).map(stripDomain)
-          : [];
-      } else if (Array.isArray(value)) {
-        result[shortKey] = key === "projectChannelNames"
-          ? value.map((v, i) => reverseChannelMap[i] ?? v)
-          : value.map(v => (typeof v === "number" ? roundToFour(v) : serializeData(v)));
-      } else if (typeof value === "object") {
-        result[shortKey] = key === "projectSequences"
-          ? Object.entries(value).reduce((acc, [seqKey, channels]) => {
-              const shortSeqKey = seqKey.replace("Sequence", "s");
-              const filtered = Object.entries(channels).reduce((chAcc, [chKey, chValue]) => {
-                const letter = reverseChannelMap[parseInt(chKey.replace("ch", ""), 10)] ?? chKey;
-                if (chValue.steps?.length) {
-                  chAcc[letter] = { [keyMap["steps"]]: compressSteps(chValue.steps) };
-                }
-                return chAcc;
-              }, {});
-              if (Object.keys(filtered).length) acc[shortSeqKey] = filtered;
-              return acc;
-            }, {})
-          : serializeData(value);
-      } else {
-        result[shortKey] = typeof value === "number" ? roundToFour(value) : value;
-      }
-    }
-    return result;
-  };
-
-  return serializeData(data);
-}
-
-downloadJSON(content, fileNameBase) {
-  try {
-    this.log(`[downloadJSON] Attempting to download file with base name: ${fileNameBase}`);
-    if (!content) throw new Error("Content is undefined or null");
-    const fileName = `${fileNameBase}_AUDX.json`;
-    this.log(`[downloadJSON] Generated file name: ${fileName}`);
-    this.log(`[downloadJSON] Content length: ${content.length}`);
-    this.log(`[downloadJSON] Content preview: ${content.slice(0, 100)}`);
-    const blob = new Blob([content], { type: "application/json" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = fileName;
-    this.log(`[downloadJSON] Initiating download for file: ${fileName}`);
-    link.click();
-    this.log(`[downloadJSON] Download initiated successfully for file: ${fileName}`);
-  } catch (error) {
-    console.error("Failed to download JSON:", error);
-  }
-}
-
-async formatURL(url) {
-  // Simulate asynchronous URL processing
-  return new Promise(resolve => setTimeout(() => resolve(url), 100));
-}
 
   /*–––––– Audio Node Initialization ––––––*/
   
