@@ -37,11 +37,14 @@ const ChannelModule = (function () {
       initSoloControl(channel, index);
       initClearControl(channel, index);
     });
-
     // Set up global group filtering
     initGroupFilter();
+
+    // Make the channel elements accessible globally
+    window.channelsStore = channelsStore;
   }
 
+    // Set up global group filtering
   /**
    * Sets up group button and dropdown events for assigning a channel to a group.
    */
@@ -49,28 +52,42 @@ const ChannelModule = (function () {
     const groupButton = channel.querySelector('.group-button');
     const groupDropdown = channel.querySelector('.group-dropdown');
     if (!groupButton || !groupDropdown) return;
-
+  
     // Hide dropdown by default
     groupDropdown.style.display = "none";
-
+  
     groupButton.addEventListener('click', (event) => {
       event.stopPropagation();
       groupDropdown.style.display = "block";
     });
-
+  
     groupDropdown.addEventListener('change', (event) => {
       const selectedGroup = event.target.value;
       console.log(`Channel ${index} assigned to group: ${selectedGroup}`);
+  
+      // Update the channel's UI
       channel.dataset.group = selectedGroup;
       groupDropdown.style.display = "none";
+  
+      // Update the global settings with the selected group.
+      // Ensure that the global settings object and its channelGroups array exist.
+      if (
+        window.unifiedSequencerSettings &&
+        window.unifiedSequencerSettings.settings &&
+        window.unifiedSequencerSettings.settings.masterSettings &&
+        Array.isArray(window.unifiedSequencerSettings.settings.masterSettings.channelGroups)
+      ) {
+        window.unifiedSequencerSettings.settings.masterSettings.channelGroups[index] = selectedGroup;
+      }
+      
     });
-
+  
     groupDropdown.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       if (groupDropdown.selectedIndex <= 0) return;
       showPresetContextMenu(event, groupDropdown, index);
     });
-
+  
     // Hide the dropdown if clicking outside the channel element.
     document.addEventListener('click', (event) => {
       if (!channel.contains(event.target)) {
