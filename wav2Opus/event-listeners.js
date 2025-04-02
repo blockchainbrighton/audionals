@@ -4,6 +4,8 @@
  * Sets up all event listeners for the application.
  */
 const setupEventListeners = () => {
+    console.log("Setting up event listeners..."); // Debug log
+
     // File Input
     if (fileInput) {
         fileInput.addEventListener('change', handleFileChange);
@@ -52,10 +54,29 @@ const setupEventListeners = () => {
         console.error("Convert button not found.");
     }
 
-    // Base64 Buttons (Listeners are set up dynamically in base64-handler.js when content is generated)
-    // We don't need static listeners here for copy/download base64.
+    // --- NEW LISTENERS for Audio Format Info ---
 
-    console.log("Event listeners set up.");
+    // Show Info Button
+    if (showInfoBtn) {
+        showInfoBtn.addEventListener('click', () => {
+            console.log("Show Info button clicked");
+            displayAudioFormatInfo(); // Calls function in ui-helpers.js
+        });
+    } else {
+        console.error("Show Info button not found.");
+    }
+
+    // Close Info Button
+    if (closeInfoBtn) {
+        closeInfoBtn.addEventListener('click', () => {
+            console.log("Close Info button clicked");
+            hideAudioFormatInfo(); // Calls function in ui-helpers.js
+        });
+    } else {
+        console.error("Close Info button not found.");
+    }
+
+    console.log("Event listeners setup complete.");
 };
 
 /**
@@ -63,12 +84,12 @@ const setupEventListeners = () => {
  */
 const initializeUIState = () => {
     if (mp3QualitySlider && mp3QualityValueSpan) {
-        mp3QualitySlider.value = initialMp3Quality;
-        mp3QualityValueSpan.textContent = initialMp3Quality;
+        // Use the default value set in HTML
+        mp3QualityValueSpan.textContent = mp3QualitySlider.value;
     }
     if (opusBitrateSlider && opusBitrateValueSpan) {
-        opusBitrateSlider.value = initialOpusBitrate;
-        opusBitrateValueSpan.textContent = `${initialOpusBitrate} kbps`;
+         // Use the default value set in HTML
+        opusBitrateValueSpan.textContent = `${opusBitrateSlider.value} kbps`;
     }
     if (formatRadios) {
         // Ensure one format is checked by default if not set in HTML
@@ -79,4 +100,6 @@ const initializeUIState = () => {
     }
     updateQualityDisplays(); // Show the correct settings group based on the default checked format
     enableConvertButtonIfNeeded(); // Set initial button states (should be disabled)
+    if (audioInfoContainer) audioInfoContainer.style.display = 'none'; // Hide info initially
+    if (progressEl) progressEl.style.display = 'none'; // Hide progress initially
 }
