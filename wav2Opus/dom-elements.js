@@ -22,3 +22,11 @@ const copyBase64Btn = document.getElementById('copyBase64Btn');
 const downloadBase64Btn = document.getElementById('downloadBase64Btn');
 const playSampleBtn = document.getElementById('playSampleBtn');
 const originalAudioContainer = document.getElementById('originalAudioContainer');
+
+
+
+// --- Elements for Audio Format Info ---
+const showInfoBtn = document.getElementById('showInfoBtn');
+const audioInfoContainer = document.getElementById('audioInfoContainer');
+const audioInfoContent = document.getElementById('audioInfoContent');
+const closeInfoBtn = document.querySelector('#audioInfoContainer .close-info-btn');
