@@ -111,3 +111,31 @@ const convertBlobToBase64 = blob => new Promise((resolve, reject) => {
       downloadBase64Btn.disabled = true;
     }
   };
+
+  // Add this code at the end of your base64-handler.js file
+
+/**
+ * Updates the OB1 generator with the audio base64 data
+ * This function is called after base64 conversion is complete
+ * @param {string} base64Data - The base64 audio data
+ */
+function updateOB1WithAudioBase64(base64Data) {
+  // Store the base64 data for OB1 generator
+  if (typeof window.updateAudioBase64 === 'function') {
+    window.updateAudioBase64(base64Data);
+  }
+}
+
+// Modify the setupBase64DisplayAndActions function to add OB1 integration
+// Add this line after base64String is set
+
+// Original code:
+// base64String = await convertBlobToBase64(audioBlob); // Update state
+
+// Modified code:
+// base64String = await convertBlobToBase64(audioBlob); // Update state
+// updateOB1WithAudioBase64(base64String); // Update OB1 generator
+
+// To integrate this with your existing function, find the line where
+// base64String is assigned in setupBase64DisplayAndActions and add
+// the updateOB1WithAudioBase64(base64String) call right after it.
