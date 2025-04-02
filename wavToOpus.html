@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>WAV to MP3/Opus Converter</title>
+  <style>
+    body{font-family:sans-serif;max-width:600px;margin:20px auto;padding:15px;border:1px solid #ccc;border-radius:8px}
+    h1{text-align:center}
+    label,input,button,select{display:block;margin-bottom:10px;font-size:1em}
+    input[type="file"]{border:1px solid #ccc;padding:5px;width:calc(100% - 12px)}
+    button{padding:10px 15px;cursor:pointer;background:#007bff;color:#fff;border:none;border-radius:4px}
+    button:disabled{background:#ccc;cursor:not-allowed}
+    #status{margin:15px 0;padding:10px;background:#f0f0f0;border-left:4px solid #ccc}
+    #progress{width:100%;margin-bottom:10px;display:none}
+    #result a{display:block;padding:10px;background:#28a745;color:#fff;text-align:center;text-decoration:none;border-radius:4px;margin-top:10px}
+    .error{color:red;border-left-color:red}
+    fieldset{border:1px solid #ccc;margin-bottom:10px;padding:10px}
+    legend{font-weight:bold}
+    fieldset#formatOptions label,
+    .settings-group label{display:inline-block;margin-right:15px}
+    fieldset#formatOptions input[type="radio"]{width:auto;margin-right:5px;vertical-align:middle}
+    .settings-group{padding:10px;border:1px dashed #ddd;margin-top:5px}
+    .settings-group label{display:block;margin-bottom:5px}
+    .settings-group input[type="range"]{width:60%;vertical-align:middle}
+    .settings-group span{margin-left:10px;font-size:0.9em;color:#555}
+    .estimate{font-style:italic;color:#333}
+    .play-button{background:#28a745;margin-top:10px;margin-right:10px;display:inline-block}
+    .copy-button{background:#6c757d;margin-top:10px;display:inline-block}
+    .download-button{background:#28a745;margin-top:10px;display:inline-block}
+    .base64-container{margin-top:15px;border-top:1px dashed #ccc;padding-top:15px}
+    .base64-output{max-height:150px;overflow-y:auto;border:1px solid #ddd;padding:10px;margin:10px 0;font-family:monospace;font-size:0.8em;background:#f9f9f9;white-space:pre-wrap;word-break:break-all}
+    .base64-size{padding:10px;background:#28a745;color:#fff;text-align:center;text-decoration:none;border-radius:4px;margin-top:10px;display:inline-block;font-weight:bold}
+    .button-group{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+    details{margin-top:10px;border:1px solid #eee;padding:5px;border-radius:4px}
+    summary{font-weight:bold;cursor:pointer}
+    .button-container{display:flex;gap:10px}
+    #playSampleBtn{background:#28a745}
+    #originalAudioContainer{margin-top:15px;padding:10px;border:1px solid #ddd;border-radius:4px;display:none}
+  </style>
+</head>
+<body>
+  <h1>WAV to MP3/Opus Converter</h1>
+  <label for="fileInput">1. Select WAV File:</label>
+  <input type="file" id="fileInput" accept=".wav">
+  <fieldset id="formatOptions">
+    <legend>2. Choose Output Format & Quality:</legend>
+    <div>
+      <label><input type="radio" name="format" value="mp3" checked> MP3</label>
+      <label><input type="radio" name="format" value="opus"> Opus</label>
+    </div>
+    <div id="mp3Settings" class="settings-group">
+      <label for="mp3Quality">MP3 Quality (VBR -q:a, 0=Smallest, 9=Best):</label>
+      <input type="range" id="mp3Quality" min="0" max="9" value="7" step="1">
+      <span id="mp3QualityValue">7</span>
+      <span id="estSizeMp3" class="estimate"></span>
+    </div>
+    <div id="opusSettings" class="settings-group" style="display:none">
+      <label for="opusBitrate">Opus Bitrate (kbps):</label>
+      <input type="range" id="opusBitrate" min="16" max="256" value="96" step="8">
+      <span id="opusBitrateValue">96 kbps</span>
+      <span id="estSizeOpus" class="estimate"></span>
+    </div>
+  </fieldset>
+  <div class="button-container">
+    <button id="playSampleBtn" disabled>Play Original</button>
+    <button id="convertBtn" disabled>3. Convert</button>
+  </div>
+  <div id="originalAudioContainer"></div>
+  <div id="status">Status: Initializing FFmpeg...</div>
+  <progress id="progress" value="0" max="100"></progress>
+  <div id="result"></div>
+  <div id="base64Container" class="base64-container" style="display:none;">
+    <fieldset>
+      <legend>4. Base64 Conversion:</legend>
+      <div id="base64Result"></div>
+      <details>
+        <summary>Show Base64 Output</summary>
+        <div id="base64Output" class="base64-output"></div>
+      </details>
+      <div class="button-group">
+        <button id="copyBase64Btn" class="copy-button">Copy Base64</button>
+        <button id="downloadBase64Btn" class="download-button">Download as TXT</button>
+      </div>
+    </fieldset>
+  </div>
+
+  <!-- Load FFmpeg from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+  <script>
+    const { createFFmpeg, fetchFile } = FFmpeg,
+      statusEl = document.getElementById('status'),
+      progressEl = document.getElementById('progress'),
+      convertBtn = document.getElementById('convertBtn'),
+      fileInput = document.getElementById('fileInput'),
+      resultEl = document.getElementById('result'),
+      formatRadios = document.querySelectorAll('input[name="format"]'),
+      mp3SettingsDiv = document.getElementById('mp3Settings'),
+      opusSettingsDiv = document.getElementById('opusSettings'),
+      mp3QualitySlider = document.getElementById('mp3Quality'),
+      mp3QualityValueSpan = document.getElementById('mp3QualityValue'),
+      opusBitrateSlider = document.getElementById('opusBitrate'),
+      opusBitrateValueSpan = document.getElementById('opusBitrateValue'),
+      estSizeMp3Span = document.getElementById('estSizeMp3'),
+      estSizeOpusSpan = document.getElementById('estSizeOpus'),
+      base64Container = document.getElementById('base64Container'),
+      base64Result = document.getElementById('base64Result'),
+      base64Output = document.getElementById('base64Output'),
+      copyBase64Btn = document.getElementById('copyBase64Btn'),
+      downloadBase64Btn = document.getElementById('downloadBase64Btn'),
+      playSampleBtn = document.getElementById('playSampleBtn'),
+      originalAudioContainer = document.getElementById('originalAudioContainer');
+
+    let ffmpeg = null, selectedFile = null, fileDuration = null, convertedAudioBlob = null, base64String = null;
+    let originalAudioUrl = null, originalAudioElement = null;
+
+    const formatBytes = (bytes, dec = 2) =>
+      bytes <= 0 ? '0 Bytes' : (bytes / Math.pow(1024, Math.floor(Math.log(bytes) / Math.log(1024)))).toFixed(dec) +
+      ' ' + ['Bytes','KB','MB','GB','TB'][Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), 4)];
+
+    const updateStatus = (msg, err = false) => {
+      console.log(msg);
+      statusEl.textContent = `Status: ${msg}`;
+      statusEl.className = err ? 'error' : '';
+      progressEl.style.display = 'none';
+      if(err) {
+        convertBtn.disabled = !(ffmpeg && selectedFile);
+        playSampleBtn.disabled = !selectedFile;
+      }
+    };
+
+    const enableConvertButtonIfNeeded = () => {
+      const enabled = ffmpeg && selectedFile;
+      convertBtn.disabled = !enabled;
+      playSampleBtn.disabled = !selectedFile;
+      return !enabled;
+    };
+
+    const loadFFmpeg = async () => {
+      try {
+        if(!ffmpeg){
+          updateStatus('Loading FFmpeg core...');
+          ffmpeg = createFFmpeg({ log:true, corePath:'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js' });
+          await ffmpeg.load();
+          ffmpeg.setProgress(({ ratio }) => {
+            progressEl.style.display = 'block';
+            const percent = Math.max(0, Math.min(100, Math.round(ratio * 100)));
+            progressEl.value = percent;
+            updateStatus(`Converting... (${percent}%)`);
+          });
+        }
+        updateStatus('FFmpeg ready. Select a file.');
+        enableConvertButtonIfNeeded();
+      } catch(e){
+        updateStatus(`Failed to load FFmpeg: ${e.message}`, true);
+        console.error(e);
+      }
+    };
+
+    const getWavDuration = file => new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          ctx.decodeAudioData(e.target.result)
+            .then(buffer => res(buffer.duration))
+            .catch(err => { console.error("Decode error:", err); rej("Could not decode audio."); })
+            .finally(() => ctx.close());
+        } catch(err) {
+          console.error("AudioContext error:", err);
+          rej("Web Audio API not supported.");
+        }
+      };
+      reader.onerror = () => rej("File reading error.");
+      reader.readAsArrayBuffer(file);
+    });
+
+    const updateEstimatedSize = () => {
+      if(!fileDuration || !selectedFile){ estSizeMp3Span.textContent = estSizeOpusSpan.textContent = ''; return; }
+      const selectedFormat = document.querySelector('input[name="format"]:checked').value;
+      let bitrateKbps = 0, estimatedSizeBytes = 0;
+      if(selectedFormat==='mp3'){
+        const visualQuality = parseInt(mp3QualitySlider.value,10),
+          ffmpegQuality = 9 - visualQuality,
+          approxBitrates = [245,225,190,175,165,130,115,100,85,65];
+        bitrateKbps = approxBitrates[ffmpegQuality] || 128;
+        estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 16;
+        estSizeMp3Span.textContent = `~ ${formatBytes(estimatedSizeBytes)}`;
+        estSizeOpusSpan.textContent = '';
+      } else {
+        bitrateKbps = parseInt(opusBitrateSlider.value,10);
+        estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8;
+        estSizeOpusSpan.textContent = `~ ${formatBytes(estimatedSizeBytes)}`;
+        estSizeMp3Span.textContent = '';
+      }
+    };
+
+    const updateQualityDisplays = () => {
+      const fmt = document.querySelector('input[name="format"]:checked').value;
+      mp3SettingsDiv.style.display = fmt==='mp3'?'block':'none';
+      opusSettingsDiv.style.display = fmt==='opus'?'block':'none';
+      updateEstimatedSize();
+    };
+
+    const convertToBase64 = blob => new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = () => res(reader.result.split(',')[1]);
+      reader.onerror = () => rej(new Error('Error reading file as base64'));
+      reader.readAsDataURL(blob);
+    });
+
+    const createAudioPlayer = (blob, mime, label) => {
+      const url = URL.createObjectURL(blob),
+        container = document.createElement('div'),
+        audio = Object.assign(document.createElement('audio'), { controls:true, style:'width:100%;margin-top:10px', src:url }),
+        playButton = Object.assign(document.createElement('button'), { className:'play-button', textContent:`Play ${label}` });
+      playButton.onclick = () => { audio.paused ? (audio.play(), playButton.textContent = `Pause ${label}`) : (audio.pause(), playButton.textContent = `Play ${label}`); };
+      audio.onended = () => playButton.textContent = `Play ${label}`;
+      container.append(playButton, audio);
+      return container;
+    };
+
+    const setupOriginalAudioPlayer = () => {
+      if (originalAudioUrl) {
+        URL.revokeObjectURL(originalAudioUrl);
+      }
+      originalAudioContainer.innerHTML = '';
+      originalAudioContainer.style.display = 'none';
+      
+      if (!selectedFile) return;
+      
+      originalAudioUrl = URL.createObjectURL(selectedFile);
+      originalAudioElement = Object.assign(document.createElement('audio'), { 
+        controls: true, 
+        style: 'width:100%;', 
+        src: originalAudioUrl 
+      });
+      
+      const audioTitle = document.createElement('h3');
+      audioTitle.textContent = 'Original WAV File';
+      audioTitle.style.margin = '0 0 10px 0';
+      
+      originalAudioContainer.appendChild(audioTitle);
+      originalAudioContainer.appendChild(originalAudioElement);
+      originalAudioContainer.style.display = 'block';
+    };
+
+    const setupBase64Conversion = async (blob, outputFormat, originalName) => {
+      try {
+        updateStatus('Converting audio to Base64...');
+        base64String = await convertToBase64(blob);
+        base64Container.style.display = 'block';
+        base64Output.textContent = base64String;
+        const base64Blob = new Blob([Uint8Array.from(atob(base64String), c => c.charCodeAt(0))], { type: outputFormat==='mp3'?'audio/mpeg':'audio/opus' });
+        base64Result.innerHTML = '';
+        base64Result.appendChild(createAudioPlayer(base64Blob, outputFormat==='mp3'?'audio/mpeg':'audio/opus','Base64 Audio'));
+        copyBase64Btn.onclick = () => {
+          navigator.clipboard.writeText(base64String)
+            .then(() => { const orig = copyBase64Btn.textContent; copyBase64Btn.textContent = 'Copied!'; setTimeout(() => copyBase64Btn.textContent = orig,2000); })
+            .catch(err => { console.error('Failed to copy base64:', err); alert('Failed to copy to clipboard'); });
+        };
+        downloadBase64Btn.onclick = () => {
+          const txtBlob = new Blob([base64String], { type:'text/plain' }),
+            url = URL.createObjectURL(txtBlob),
+            a = Object.assign(document.createElement('a'), { href:url, download:`${originalName}.base64.txt` });
+          document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        };
+        const base64TextSizeBytes = base64String.length;
+        downloadBase64Btn.textContent = `Download as TXT (${formatBytes(base64TextSizeBytes)})`;
+        updateStatus('Base64 conversion complete!');
+      } catch(e){
+        updateStatus(`Base64 conversion failed: ${e.message||'Unknown error'}`, true);
+        console.error("Base64 Conversion Error:", e);
+      }
+    };
+
+    fileInput.addEventListener('change', async e => {
+      selectedFile = e.target.files[0];
+      resultEl.innerHTML = '';
+      base64Container.style.display = 'none';
+      base64Result.innerHTML = '';
+      downloadBase64Btn.textContent = 'Download as TXT';
+      originalAudioContainer.style.display = 'none';
+      originalAudioContainer.innerHTML = '';
+      if (originalAudioUrl) {
+        URL.revokeObjectURL(originalAudioUrl);
+        originalAudioUrl = null;
+      }
+      fileDuration = null;
+      estSizeMp3Span.textContent = estSizeOpusSpan.textContent = '';
+      if(selectedFile){
+        updateStatus(`File selected: ${selectedFile.name}. Reading duration...`);
+        enableConvertButtonIfNeeded();
+        try {
+          fileDuration = await getWavDuration(selectedFile);
+          updateStatus(`File selected: ${selectedFile.name} (${fileDuration.toFixed(1)}s)`);
+          updateEstimatedSize();
+        } catch(err){
+          updateStatus(`Error getting file duration: ${err}`, true);
+          fileDuration = null;
+        }
+      } else {
+        updateStatus('No file selected.');
+        fileDuration = null;
+      }
+      enableConvertButtonIfNeeded();
+    });
+
+    playSampleBtn.addEventListener('click', () => {
+      if (!selectedFile) {
+        updateStatus('No file selected!', true);
+        return;
+      }
+      
+      if (originalAudioContainer.style.display === 'none' || originalAudioContainer.innerHTML === '') {
+        setupOriginalAudioPlayer();
+      } else {
+        // Toggle display
+        if (originalAudioElement) {
+          if (originalAudioElement.paused) {
+            originalAudioElement.play();
+            playSampleBtn.textContent = 'Pause Original';
+          } else {
+            originalAudioElement.pause();
+            playSampleBtn.textContent = 'Play Original';
+          }
+        }
+      }
+    });
+
+    formatRadios.forEach(r => r.addEventListener('change', updateQualityDisplays));
+    mp3QualitySlider.addEventListener('input', e => { mp3QualityValueSpan.textContent = e.target.value; updateEstimatedSize(); });
+    opusBitrateSlider.addEventListener('input', e => { opusBitrateValueSpan.textContent = `${e.target.value} kbps`; updateEstimatedSize(); });
+
+    convertBtn.addEventListener('click', async () => {
+      if(!ffmpeg || !selectedFile) return updateStatus('Error: FFmpeg not loaded or no file selected.', true);
+      convertBtn.disabled = true;
+      playSampleBtn.disabled = true;
+      resultEl.innerHTML = '';
+      base64Container.style.display = 'none';
+      base64Result.innerHTML = '';
+      updateStatus('Loading file into memory...');
+      progressEl.style.display = 'none';
+      const inputFilename = "input.wav",
+            outputFormat = document.querySelector('input[name="format"]:checked').value,
+            outputFilename = `output.${outputFormat}`;
+      try {
+        [inputFilename, outputFilename].forEach(f => { try { if(ffmpeg.FS('readdir','/').includes(f)) ffmpeg.FS('unlink',f); } catch(e){} });
+        ffmpeg.FS('writeFile', inputFilename, await fetchFile(selectedFile));
+        updateStatus(`Starting conversion to ${outputFormat.toUpperCase()}...`);
+        progressEl.style.display = 'block';
+        progressEl.value = 0;
+        let cmd = ['-i', inputFilename];
+        if(outputFormat==='opus'){
+          cmd.push('-c:a','libopus','-b:a',`${opusBitrateSlider.value}k`,outputFilename);
+        } else {
+          const ffmpegQuality = 9 - parseInt(mp3QualitySlider.value,10);
+          cmd.push('-c:a','libmp3lame','-q:a',ffmpegQuality.toString(),outputFilename);
+        }
+        await ffmpeg.run(...cmd);
+        updateStatus('Conversion complete! Preparing download...');
+        progressEl.style.display = 'none';
+        const data = ffmpeg.FS('readFile', outputFilename),
+              mimeType = outputFormat==='mp3'?'audio/mpeg':'audio/opus',
+              blob = new Blob([data.buffer], { type: mimeType }),
+              url = URL.createObjectURL(blob),
+              originalName = (selectedFile.name.split('.').slice(0,-1).join('')) || 'converted';
+        const dlLink = document.createElement('a');
+        dlLink.href = url;
+        dlLink.download = `${originalName}.${outputFormat}`;
+        dlLink.textContent = `Download ${dlLink.download} (${formatBytes(blob.size)})`;
+        const audioPlayer = createAudioPlayer(blob, mimeType, 'Converted Audio');
+        resultEl.append(dlLink, audioPlayer);
+        updateStatus('Conversion successful! Click link to download.');
+        await setupBase64Conversion(blob, outputFormat, originalName);
+        [inputFilename, outputFilename].forEach(f => { try { ffmpeg.FS('unlink',f); } catch(e){ console.warn(`Cleanup failed for ${f}:`,e); } });
+        convertedAudioBlob = blob;
+      } catch(e){
+        updateStatus(`Conversion failed: ${e.message||'Unknown error'}`, true);
+        console.error("Conversion Error:", e);
+        [inputFilename, outputFilename].forEach(f => { try { if(ffmpeg.FS('readdir','/').includes(f)) ffmpeg.FS('unlink',f); } catch(e){} });
+      } finally { 
+        enableConvertButtonIfNeeded(); 
+        playSampleBtn.disabled = !selectedFile;
+      }
+    });
+
+    window.addEventListener('load', () => {
+      loadFFmpeg();
+      mp3QualityValueSpan.textContent = mp3QualitySlider.value;
+      opusBitrateValueSpan.textContent = `${opusBitrateSlider.value} kbps`;
+      updateQualityDisplays();
+    });
+  </script>
+</body>
+</html>
