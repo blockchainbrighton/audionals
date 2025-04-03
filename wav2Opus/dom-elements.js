@@ -30,3 +30,30 @@ const showInfoBtn = document.getElementById('showInfoBtn');
 const audioInfoContainer = document.getElementById('audioInfoContainer');
 const audioInfoContent = document.getElementById('audioInfoContent');
 const closeInfoBtn = document.querySelector('#audioInfoContainer .close-info-btn');
+
+
+
+/*
+<!-- collapsible_note -->
+<!--
+<details>
+<summary>File Summary: dom-elements.js</summary>
+
+**Purpose:** Centralizes the selection of frequently used DOM elements by their IDs or selectors.
+
+**Key Contents:**
+*   A series of `const` declarations, each holding a reference to a specific HTML element (e.g., `statusEl`, `convertBtn`, `fileInput`, `mp3QualitySlider`, `base64Output`, etc.).
+
+**Dependencies:**
+*   The HTML structure of the page. Assumes elements with the specified IDs exist.
+
+**Global Variables:**
+*   All the `const` variables declared here are implicitly global (available to other scripts loaded afterwards) because no module system (like ES Modules) is used for encapsulation.
+
+**Notes:**
+*   This approach simplifies element access in other modules but relies heavily on the global scope and specific HTML IDs.
+*   Any changes to the HTML IDs require updating this file.
+*   Acts as a single source of truth for DOM element references.
+</details>
+-->
+*/

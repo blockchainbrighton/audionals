@@ -326,3 +326,33 @@ function generateHtml(imageBase64Data, audioBase64Data) {
          console.log("Generated example_output.html");
      }
   }
+
+
+  /*
+<!-- collapsible_note -->
+<!--
+<details>
+<summary>File Summary: OB1_Template.js</summary>
+
+**Purpose:** Defines a function (`generateHtml`) that dynamically creates the complete HTML source code for a standalone "Audional OB1" file. This generated HTML file embeds Base64 encoded image and audio data and includes JavaScript logic to make the image playable (clicking it plays the embedded audio).
+
+**Key Functions:**
+*   `generateHtml(imageBase64Data, audioBase64Data)`: Takes *pure* Base64 strings (no data URI prefixes) for an image (JPEG) and audio (Opus) as input and returns a single string containing the full HTML document.
+*   **(Internal to generated HTML):** The generated HTML includes JavaScript with functions like `base64ToArrayBuffer` for decoding, event listeners for the click-to-play functionality, audio loading/playback logic using Blobs and Object URLs, error handling, and cleanup (`revokeObjectURL`).
+
+**Dependencies:**
+*   None external for the `generateHtml` function itself.
+*   The *output* HTML relies on standard browser APIs (DOM, Audio, Blob, URL, atob).
+
+**Global Variables:**
+*   Exports `generateHtml` using Node.js `module.exports` pattern (and likely intended for ES Module import). Contains example/test code runnable via Node.js.
+
+**Notes:**
+*   This is the core template generator for the final output file.
+*   It strictly requires *pure* Base64 data as input.
+*   The generated HTML is self-contained and includes inline CSS and JavaScript.
+*   The internal JavaScript within the template is quite robust, handling Base64 decoding, Blob creation, audio playback promises, error reporting (via `alert` and `console`), and Object URL management.
+*   Assumes the image format is JPEG (`image/jpeg`) and audio format is Opus (`audio/opus`) when creating data URIs/Blobs in the generated code.
+</details>
+-->
+*/

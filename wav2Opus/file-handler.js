@@ -100,3 +100,34 @@ const getWavDuration = file => new Promise((resolve, reject) => {
     // Final check on button states after processing
     enableConvertButtonIfNeeded();
   };
+
+
+  /*
+<!-- collapsible_note -->
+<!--
+<details>
+<summary>File Summary: file-handler.js</summary>
+
+**Purpose:** Handles user file selection, validates the file type (ensuring it's WAV), and extracts the audio duration using the Web Audio API. Manages state related to the selected file.
+
+**Key Functions:**
+*   `getWavDuration(file)`: Asynchronously reads a WAV file and uses the Web Audio API (`AudioContext`, `decodeAudioData`) to determine its duration in seconds. Returns a Promise. Includes error handling for decoding issues.
+*   `handleFileChange(e)`: The event handler for the file input's 'change' event. It retrieves the selected file, validates its type, calls `getWavDuration`, updates the UI status, resets relevant state/UI for a new file, and prepares the original audio player.
+
+**Dependencies:**
+*   **DOM Elements (implicitly global):** `fileInput`, `originalAudioContainer` (used indirectly via `setupOriginalAudioPlayer`).
+*   **Utility Functions (implicitly global):** `updateStatus`, `enableConvertButtonIfNeeded`, `resetUIForNewFile`, `updateEstimatedSize`.
+*   **Audio Player Function (implicitly global):** `setupOriginalAudioPlayer`.
+*   **Web Platform APIs:** `FileReader`, `AudioContext`/`webkitAudioContext`, `URL.createObjectURL`.
+
+**Global Variables:**
+*   Manages `selectedFile` and `fileDuration`. Also clears/resets `convertedAudioBlob`, `base64String`, `originalAudioElement`.
+
+**Notes:**
+*   Crucially uses the Web Audio API for duration calculation, which might fail for malformed files or unsupported WAV encodings within the browser's `decodeAudioData`.
+*   Performs essential input validation (WAV file type check).
+*   Responsible for resetting the application state when a new file is selected or the selection is cleared.
+*   Manages the core `selectedFile` and `fileDuration` state variables, essential for conversion and estimations.
+</details>
+-->
+*/

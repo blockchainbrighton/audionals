@@ -44,3 +44,31 @@ if (typeof FFmpeg === 'undefined' || typeof FFmpeg.createFFmpeg === 'undefined')
     // If using DOMContentLoaded, ensure all required DOM elements exist at that point.
 
 } // End of FFmpeg check block
+
+
+/*
+<!-- collapsible_note -->
+<!--
+<details>
+<summary>File Summary: main.js</summary>
+
+**Purpose:** Acts as the main entry point for the JavaScript application. It checks for the presence of the core FFmpeg library and then orchestrates the initialization sequence.
+
+**Key Functions:**
+*   `initializeApp()`: Coordinates the application startup process by calling initialization functions from other modules (`initializeUIState`, `loadFFmpeg`, `setupEventListeners`).
+
+**Dependencies:**
+*   **External Library:** Checks for the global `FFmpeg` object (expected to be loaded from `ffmpeg.js` via CDN/script tag).
+*   **DOM Elements (implicitly global):** `statusEl`, `main` (or equivalent top-level container).
+*   **Initialization/Setup Functions (implicitly global):** `initializeUIState`, `loadFFmpeg`, `setupEventListeners`, `updateStatus`.
+
+**Global Variables:**
+*   None created directly, but initiates processes that manage global state (like the `ffmpeg` instance).
+
+**Notes:**
+*   Performs a critical check to ensure the external `ffmpeg.js` library is loaded before proceeding. Displays an error and potentially disables the UI if the library is missing.
+*   Uses a `window.load` event listener to ensure all resources (including potentially the FFmpeg script) are loaded before initialization begins.
+*   Orchestrates the startup sequence, ensuring UI is set up, FFmpeg starts loading, and event listeners are attached.
+</details>
+-->
+*/

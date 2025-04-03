@@ -131,3 +131,32 @@ const audioFormatInfo = {
 
 // Note: No 'export' statement is used here, assuming standard script loading in the browser.
 // The 'audioFormatInfo' object will be available globally after this script runs.
+
+
+/*
+<!-- collapsible_note -->
+<!--
+<details>
+<summary>File Summary: audio-formats-explained.js</summary>
+
+**Purpose:** Provides static, structured informational text content (as HTML strings) used for display within the application's UI.
+
+**Key Contents:**
+*   `audioFormatInfo`: A single global JavaScript object.
+    *   `usageInstructions`: Step-by-step guide on using the app's features (audio conversion, image conversion, OB1 generation).
+    *   `conceptsTitle`, `losslessVsLossy`, `bitrate`: Explanations of core audio concepts.
+    *   `formatsTitle`, `wav`, `mp3`, `opus`: Detailed descriptions of each audio format, including pros, cons, quality, and file size characteristics.
+    *   `opusRecommendationsTitle`, `opusDetails`: Specific guidance on choosing Opus bitrates based on use cases (speech, music, quality vs. size).
+
+**Dependencies:**
+*   None (it *provides* data for other modules). Relied upon by `event-listeners.js` to populate the info modal.
+
+**Global Variables:**
+*   `audioFormatInfo` (implicitly global as it's not exported/scoped within a module).
+
+**Notes:**
+*   Contains pre-formatted HTML content ready for injection into the DOM.
+*   Serves as a central repository for help text and format explanations.
+</details>
+-->
+*/

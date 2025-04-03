@@ -161,3 +161,33 @@ const createAudioPlayer = (blob, mimeType, label) => {
           updateStatus('Could not create audio player for original file.', true);
       }
   };
+
+
+  /*
+<!-- collapsible_note -->
+<!--
+<details>
+<summary>File Summary: audio-player.js</summary>
+
+**Purpose:** Handles the creation and management of HTML5 audio player elements within the UI, both for the original WAV and the converted audio.
+
+**Key Functions:**
+*   `createAudioPlayer(blob, mimeType, label)`: Creates a self-contained audio player component (div with button and `<audio>` tag) for a given Blob. Includes logic to revoke the Blob URL when the element is removed (though relies on manual cleanup/parent observation).
+*   `setupOriginalAudioPlayer()`: Creates/replaces the audio player specifically for the originally selected WAV file. Reads from the global `selectedFile`.
+*   `handlePlayOriginalClick()`: Toggles play/pause for the original audio player instance.
+
+**Dependencies:**
+*   **DOM Elements (implicitly global):** `selectedFile`, `originalAudioContainer`, `playSampleBtn`.
+*   **Global State Variables:** `selectedFile`, `originalAudioElement`, `originalAudioUrl`. (These are managed/updated by this module and `file-handler.js`).
+*   **Utility Functions (implicitly global):** `updateStatus`.
+
+**Global Variables:**
+*   Manages `originalAudioElement` and `originalAudioUrl`.
+
+**Notes:**
+*   Uses `URL.createObjectURL()` to create playable URLs from Blobs.
+*   Includes logic for Blob URL cleanup (`revokeObjectURL`) to prevent memory leaks. The primary mechanism relies on clearing the parent container's `innerHTML`, but observer code is present (commented out) as an alternative.
+*   Provides a reusable function (`createAudioPlayer`) for generating players on demand.
+</details>
+-->
+*/

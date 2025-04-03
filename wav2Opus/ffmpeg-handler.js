@@ -96,3 +96,35 @@ const cleanupFFmpegFS = (filenames) => {
         }
     });
 };
+
+
+/*
+<!-- collapsible_note -->
+<!--
+<details>
+<summary>File Summary: ffmpeg-handler.js</summary>
+
+**Purpose:** Manages the interaction with the `ffmpeg.js` library, including loading the core, running conversion commands, and handling the virtual filesystem.
+
+**Key Functions:**
+*   `loadFFmpeg()`: Asynchronously loads the `ffmpeg-core.js` library using `createFFmpeg`. Sets up logging and progress callbacks. Manages the global `ffmpeg` instance state.
+*   `runFFmpegConversion(inputFilename, outputFilename, outputFormat)`: Constructs and executes the FFmpeg command based on selected format and quality/bitrate settings. Reads the output file data from the virtual FS.
+*   `cleanupFFmpegFS(filenames)`: Removes specified files from FFmpeg's virtual filesystem to free up memory.
+
+**Dependencies:**
+*   **External Library:** The global `FFmpeg` object provided by `ffmpeg.js` (assumed loaded via CDN/script tag).
+*   **DOM Elements (implicitly global):** `progressEl`, `opusBitrateSlider`, `mp3QualitySlider`. (Used directly or indirectly via utility functions).
+*   **Utility Functions (implicitly global):** `updateStatus`, `updateProgress`, `enableConvertButtonIfNeeded`.
+
+**Global Variables:**
+*   `ffmpeg`: Holds the created FFmpeg instance (managed by `loadFFmpeg`).
+
+**Notes:**
+*   Relies on the external `ffmpeg.js` library being available globally.
+*   Handles the asynchronous nature of loading and running FFmpeg.
+*   Interacts with FFmpeg's virtual filesystem (FS) for input and output.
+*   Builds command-line arguments for FFmpeg based on user selections.
+*   Includes progress reporting integration.
+</details>
+-->
+*/

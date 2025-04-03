@@ -1,102 +1,153 @@
 // conversion-process.js
 
+// Dependencies assumed available globally:
+// State: ffmpeg, selectedFile, fileDuration, convertedAudioBlob, base64String
+// DOM: convertBtn, playSampleBtn, resultEl, formatRadios
+// Ffmpeg: fetchFile, runFFmpegConversion, cleanupFFmpegFS
+// Base64: setupBase64DisplayAndActions
+// Audio: createAudioPlayer
+// UI: updateStatus, resetConversionOutputUI, enableConvertButtonIfNeeded
+// Utils: getBaseFilename, window.formatBytes
+
 /**
  * Handles the main audio conversion workflow.
  */
 const runConversion = async () => {
-    if (!ffmpeg || !selectedFile) {
-      return updateStatus('Error: FFmpeg not loaded or no file selected.', true);
-    }
-    if (!fileDuration) {
-        return updateStatus('Error: File duration not available. Cannot estimate or convert.', true);
-    }
-  
-    // Disable buttons during conversion
-    if (convertBtn) convertBtn.disabled = true;
-    if (playSampleBtn) playSampleBtn.disabled = true; // Disable original play during conversion
-  
-    // Reset previous results UI
-    resetConversionOutputUI();
-    convertedAudioBlob = null; // Clear state
-    base64String = null; // Clear state
-  
-    updateStatus('Preparing file for FFmpeg...');
-    const inputFilename = "input.wav"; // Consistent input name in virtual FS
-    const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
-    const outputFormat = selectedFormatRadio ? selectedFormatRadio.value : 'mp3'; // Default to mp3 if somehow none checked
-    const outputFilename = `output.${outputFormat}`;
-    const originalNameBase = getBaseFilename(selectedFile.name);
-  
-    // Ensure potential old files are cleaned from virtual FS first
-    cleanupFFmpegFS([inputFilename, outputFilename]);
-  
-    try {
+  // Prerequisite checks
+  const ffmpegIsReady = typeof ffmpeg === 'object' && ffmpeg !== null && typeof ffmpeg.run === 'function';
+  if (!ffmpegIsReady) {
+      return updateStatus('Error: FFmpeg is not ready.', true);
+  }
+  if (!selectedFile) {
+      return updateStatus('Error: No file selected.', true);
+  }
+  if (typeof fileDuration !== 'number' || fileDuration <= 0) {
+      return updateStatus('Error: File duration not available or invalid. Cannot convert.', true);
+  }
+
+  // --- Start Conversion ---
+  updateStatus('Starting conversion process...');
+  if (convertBtn) convertBtn.disabled = true;
+  if (playSampleBtn) playSampleBtn.disabled = true;
+
+  // Reset previous output UI before starting
+  resetConversionOutputUI();
+  convertedAudioBlob = null; // Clear previous blob state
+  // base64String is likely managed internally by base64-handler now, relying on events.
+
+  // Determine formats and names
+  const inputFilename = "input.wav"; // FFmpeg virtual FS input name
+  const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
+  const outputFormat = selectedFormatRadio ? selectedFormatRadio.value : 'mp3'; // Default to mp3
+  const outputFilename = `output.${outputFormat}`; // FFmpeg virtual FS output name
+  const downloadFilenameBase = getBaseFilename(selectedFile.name);
+  const downloadFilename = `${downloadFilenameBase}.${outputFormat}`; // Final download name
+  const mimeType = outputFormat === 'mp3' ? 'audio/mpeg' : 'audio/opus';
+
+  // Ensure FFmpeg FS is clean before writing
+  cleanupFFmpegFS([inputFilename, outputFilename]);
+
+  try {
       // Write input file to FFmpeg's virtual filesystem
       updateStatus('Loading file into FFmpeg memory...');
-      const fileData = await fetchFile(selectedFile); // Use FFmpeg's fetchFile helper
+      // fetchFile is part of ffmpeg.js/util
+      const fileData = await FFmpeg.fetchFile(selectedFile);
       ffmpeg.FS('writeFile', inputFilename, fileData);
-  
+
       // Run the conversion command
+      // runFFmpegConversion handles status updates during conversion via progress callback
       const outputData = await runFFmpegConversion(inputFilename, outputFilename, outputFormat); // Returns Uint8Array
-  
+
       updateStatus('Conversion complete! Processing output...');
-  
+
       // Create Blob from output data
-      const mimeType = outputFormat === 'mp3' ? 'audio/mpeg' : 'audio/opus';
       convertedAudioBlob = new Blob([outputData.buffer], { type: mimeType }); // Update state
-  
+
       // --- Display Results ---
-  
-      // Create download link
-      const downloadUrl = URL.createObjectURL(convertedAudioBlob);
-      const dlLink = Object.assign(document.createElement('a'), {
-          href: downloadUrl,
-          download: `${originalNameBase}.${outputFormat}`, // e.g., myaudio.mp3
-          textContent: `Download ${originalNameBase}.${outputFormat} (${formatBytes(convertedAudioBlob.size)})`,
-          style: 'display: block; margin-bottom: 10px;' // Basic styling
-      });
-  
-      // Create audio player for converted file
-      const audioPlayerContainer = createAudioPlayer(convertedAudioBlob, mimeType, 'Converted Audio');
-  
-      // Append results to the DOM
       if (resultEl) {
-          resultEl.innerHTML = ''; // Clear previous before appending new
+          resultEl.innerHTML = ''; // Clear previous just in case reset failed
+
           const resultTitle = document.createElement('h3');
           resultTitle.textContent = 'Conversion Result';
           resultTitle.style.margin = '15px 0 10px 0';
+
+          // Create download link (Visible Link - not using triggerDownload utility here)
+          const downloadUrl = URL.createObjectURL(convertedAudioBlob);
+          const dlLink = document.createElement('a');
+          dlLink.href = downloadUrl;
+          dlLink.download = downloadFilename;
+          dlLink.textContent = `Download ${downloadFilename} (${window.formatBytes(convertedAudioBlob.size)})`;
+          dlLink.style.display = 'block';
+          dlLink.style.marginBottom = '10px';
+          // Note: We are NOT automatically revoking downloadUrl here, relying on browser or later cleanup.
+
+          // Create audio player for converted file
+          const audioPlayerContainer = createAudioPlayer(convertedAudioBlob, mimeType, 'Converted Audio');
+
+          // Append results to the DOM
           resultEl.append(resultTitle, dlLink, audioPlayerContainer);
-          // If using observer in createAudioPlayer: audioPlayerContainer.startObserving(resultEl);
-  
-          // Add manual cleanup for download link URL when results are replaced/cleared
-          dlLink.addEventListener('click', () => {
-              // Optional: Revoke URL after a short delay to allow download to start
-              // setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-          });
-           // We rely on resetUIForNewFile or resetConversionOutputUI clearing innerHTML,
-           // which should trigger the player's observer if used, or we manually revoke here if needed.
-           // For simplicity, let's assume clearing innerHTML is enough, or rely on browser GC for blob URLs eventually.
+      } else {
+          console.warn("Result element not found, cannot display conversion output.");
       }
-  
+
       updateStatus('Conversion successful! Output ready.');
-  
+
       // Start Base64 conversion and display process (runs asynchronously)
-      // Use await here if subsequent steps depend on base64 completing, otherwise let it run.
-      await setupBase64DisplayAndActions(convertedAudioBlob, outputFormat, originalNameBase);
-  
-    } catch (e) {
+      // Let it run without await unless strictly necessary for subsequent steps here.
+      setupBase64DisplayAndActions(convertedAudioBlob, outputFormat, downloadFilenameBase)
+          .catch(base64Error => {
+              console.error("Base64 processing failed after successful conversion:", base64Error);
+              updateStatus("Conversion succeeded, but Base64 processing failed.", true); // Update status about the specific failure
+          });
+
+  } catch (e) {
       updateStatus(`Conversion failed: ${e.message || 'Unknown error'}`, true);
       console.error("Conversion Error:", e);
-      // convertedAudioBlob might be null or invalid here
       convertedAudioBlob = null; // Ensure state is cleared on error
-      // UI should already be reset or show error status
-    } finally {
+      // UI should show error status via updateStatus
+  } finally {
       // Always try to clean up files from virtual FS
       cleanupFFmpegFS([inputFilename, outputFilename]);
-  
-      // Re-enable buttons based on the current state AFTER conversion attempt
+
+      // Re-enable buttons based on the final state
       enableConvertButtonIfNeeded();
-      // Play original button should be enabled if a file is still selected
-      if (playSampleBtn) playSampleBtn.disabled = !selectedFile;
-    }
-  };
+      // Note: playSampleBtn state is handled by enableConvertButtonIfNeeded based on selectedFile
+  }
+};
+
+
+/*
+<!-- collapsible_note -->
+<!--
+<details>
+<summary>File Summary: conversion-process.js (Refactored)</summary>
+
+**Purpose:** Contains the core logic for handling the audio conversion process initiated by the user.
+
+**Key Functions:**
+*   `runConversion()`: Orchestrates the conversion: checks prerequisites, disables UI, resets output, cleans FS, loads file, runs FFmpeg, processes Blob output, displays results (visible download link + player), initiates Base64 process, handles errors, cleans up FS, re-enables UI.
+
+**Dependencies:** (Unchanged)
+*   Global State Variables
+*   DOM Elements
+*   FFmpeg Handler Functions
+*   Base64 Handler Function
+*   Audio Player Function
+*   Utility Functions (`getBaseFilename`, `window.formatBytes`)
+*   UI Helper Functions (`updateStatus`, `resetConversionOutputUI`, `enableConvertButtonIfNeeded`)
+
+**Global Variables:**
+*   Manages `convertedAudioBlob` state.
+
+**Notes:**
+*   Core workflow remains the same.
+*   Added slightly more robust prerequisite checks.
+*   Clarified filenames (FS vs download).
+*   Uses `window.formatBytes` consistently.
+*   Error handling for the subsequent Base64 step added.
+*   Maintains the creation of a visible download link, thus *not* using the `triggerDownload` utility in this specific case to preserve UI.
+*   Relies on `resetConversionOutputUI` for cleaning up before start.
+*   Relies on the `finally` block for FS cleanup and button state restoration.
+</details>
+-->
+*/

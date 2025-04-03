@@ -94,3 +94,34 @@ const initializeUIState = () => {
     if (audioInfoContainer) audioInfoContainer.style.display = 'none';
     if (progressEl) progressEl.style.display = 'none';
 };
+
+
+/*
+<!-- collapsible_note -->
+<!--
+<details>
+<summary>File Summary: event-listeners.js</summary>
+
+**Purpose:** Sets up all the necessary event listeners for user interactions with the UI elements and initializes the default UI state.
+
+**Key Functions:**
+*   `safeAddListener(element, event, callback, errorMsg)`: A helper function to add event listeners robustly, checking if the element exists first.
+*   `setupEventListeners()`: Attaches event listeners to various DOM elements (file input, buttons, sliders, radio buttons, info button) and maps them to handler functions defined in other modules.
+*   `initializeUIState()`: Sets the initial state of UI elements on page load (e.g., slider values, default format selection, visibility of sections).
+
+**Dependencies:**
+*   **DOM Elements (implicitly global):** Many elements accessed via variables defined in `dom-elements.js` (e.g., `fileInput`, `playSampleBtn`, `formatRadios`, `mp3QualitySlider`, `opusBitrateSlider`, `convertBtn`, `showInfoBtn`, `closeInfoBtn`).
+*   **Handler Functions (implicitly global):** `handleFileChange`, `handlePlayOriginalClick`, `updateQualityDisplays`, `updateEstimatedSize`, `runConversion`, `displayAudioFormatInfo`, `hideAudioFormatInfo`. (These functions are defined in other files like `file-handler.js`, `ui-helpers.js`, `conversion-process.js`, etc.).
+*   **Static Data (implicitly global):** `audioFormatInfo` (from `audio-formats-explained.js`).
+
+**Global Variables:**
+*   None created, but attaches functions (potentially global) to DOM events.
+
+**Notes:**
+*   Acts as the central hub connecting user interface actions to the application's logic.
+*   Includes initialization logic to ensure the UI starts in a predictable state.
+*   Uses the `safeAddListener` helper to prevent errors if DOM elements are missing.
+*   Handles the logic for displaying/hiding the audio format information modal.
+</details>
+-->
+*/
