@@ -14,11 +14,15 @@ export function imageToBase64(imageFile) {
       reader.onload = (event) => {
         const base64String = event.target.result;
         
+        // Extract just the base64 data without the prefix
+        const base64Data = base64String.split(',')[1];
+        
         // Update OB1 generator with the base64 image data
         if (typeof window.updateImageBase64 === 'function') {
-          // Extract just the base64 data without the prefix
-          const base64Data = base64String.split(',')[1];
           window.updateImageBase64(base64Data);
+          console.log('Image base64 data sent to OB1 generator');
+        } else {
+          console.warn('updateImageBase64 function not found on window object');
         }
         
         resolve(base64String);
@@ -73,7 +77,9 @@ export function imageToBase64(imageFile) {
         if (selectedFile) {
           // Display file info
           if (fileSizeInfo) {
-            fileSizeInfo.textContent = `File: ${selectedFile.name} (${formatFileSize(selectedFile.size)})`;
+            // Use the window.formatBytes function instead of formatFileSize
+            // This accesses the utility function that's attached to the window object
+            fileSizeInfo.textContent = `File: ${selectedFile.name} (${window.formatBytes(selectedFile.size)})`;
           }
           
           // Preview image
@@ -112,6 +118,13 @@ export function imageToBase64(imageFile) {
               downloadButton.disabled = false;
             }
             
+            // Make sure to explicitly call updateImageBase64 again with the extracted data
+            // This ensures it gets called even if the implementation changes
+            if (typeof window.updateImageBase64 === 'function') {
+              window.updateImageBase64(base64Data);
+              console.log('Image base64 data sent to OB1 generator after conversion');
+            }
+            
           } catch (error) {
             console.error('Error converting image:', error);
             alert('Failed to convert image to base64.');
@@ -133,5 +146,10 @@ export function imageToBase64(imageFile) {
           URL.revokeObjectURL(downloadInfo.url);
         }
       });
+    }
+    
+    // Check if OB1 generator is initialized on the window
+    if (typeof window.checkGenerateButton !== 'function') {
+      console.warn('OB1 generator functions not found. Make sure ob1-generator.js is loaded.');
     }
   }

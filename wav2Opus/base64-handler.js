@@ -112,30 +112,40 @@ const convertBlobToBase64 = blob => new Promise((resolve, reject) => {
     }
   };
 
-  // Add this code at the end of your base64-handler.js file
+ // Add this to the end of your base64-handler.js file
 
 /**
- * Updates the OB1 generator with the audio base64 data
- * This function is called after base64 conversion is complete
- * @param {string} base64Data - The base64 audio data
+ * Add this to your existing setupBase64DisplayAndActions function
+ * Right after the line where base64String is set from convertBlobToBase64
+ * For example:
+ * 
+ * base64String = await convertBlobToBase64(audioBlob); // Update state
+ * 
+ * // Add this code right below that line:
+ * // Update OB1 generator with the audio base64 data
+ * if (typeof window.updateAudioBase64 === 'function') {
+ *   window.updateAudioBase64(base64String);
+ * }
  */
-function updateOB1WithAudioBase64(base64Data) {
-  // Store the base64 data for OB1 generator
-  if (typeof window.updateAudioBase64 === 'function') {
-    window.updateAudioBase64(base64Data);
-  }
-}
 
-// Modify the setupBase64DisplayAndActions function to add OB1 integration
-// Add this line after base64String is set
+// Specifically, modify the setupBase64DisplayAndActions function as follows:
 
-// Original code:
-// base64String = await convertBlobToBase64(audioBlob); // Update state
+// Original:
+// try {
+//   updateStatus('Converting audio to Base64...');
+//   base64String = await convertBlobToBase64(audioBlob); // Update state
+//   base64Container.style.display = 'block';
+//   ...
 
-// Modified code:
-// base64String = await convertBlobToBase64(audioBlob); // Update state
-// updateOB1WithAudioBase64(base64String); // Update OB1 generator
-
-// To integrate this with your existing function, find the line where
-// base64String is assigned in setupBase64DisplayAndActions and add
-// the updateOB1WithAudioBase64(base64String) call right after it.
+// Modified:
+// try {
+//   updateStatus('Converting audio to Base64...');
+//   base64String = await convertBlobToBase64(audioBlob); // Update state
+//   
+//   // Update OB1 generator with the audio base64 data
+//   if (typeof window.updateAudioBase64 === 'function') {
+//     window.updateAudioBase64(base64String);
+//   }
+//   
+//   base64Container.style.display = 'block';
+//   ...
