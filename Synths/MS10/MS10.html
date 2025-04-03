@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Korg MS-10 Synthesizer Emulator</title>
+  <style>
+    :root {
+      --main-bg-color: #222;
+      --panel-bg-color: #333;
+      --knob-color: #ddd;
+      --knob-active: #ff5500;
+      --text-color: #eee;
+      --label-color: #aaa;
+      --slider-bg: #555;
+      --slider-fill: #ff5500;
+      --key-white: #f5f5f5;
+      --key-black: #222;
+      --key-active: #ff5500;
+      --white-key-width: 40px; /* Adjusted width */
+      --black-key-width: 24px; /* Adjusted width */
+      --keyboard-height: 150px; /* Adjusted height */
+      --black-key-height: 90px; /* Adjusted height */
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+    
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: var(--main-bg-color);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .synth-container {
+      width: 100%;
+      max-width: 900px;
+      background-color: var(--panel-bg-color);
+      border-radius: 10px;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+    }
+    
+    .synth-header {
+      background-color: #000;
+      color: var(--text-color);
+      padding: 15px;
+      text-align: center;
+      border-bottom: 2px solid #444;
+    }
+    
+    .synth-header h1 {
+      font-size: 24px;
+      margin: 0;
+    }
+    
+    .synth-panel {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      padding: 20px;
+    }
+    
+    .module {
+      background-color: rgba(0, 0, 0, 0.2);
+      border-radius: 5px;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .module-title {
+      font-size: 14px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      color: var(--knob-active);
+      border-bottom: 1px solid #444;
+      padding-bottom: 5px;
+    }
+    
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+    }
+    
+    .control {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .knob {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: conic-gradient(var(--knob-active) 0%, var(--knob-active) 50%, var(--knob-color) 50%, var(--knob-color) 100%);
+      position: relative;
+      margin-bottom: 5px;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    }
+    
+    .knob::after {
+      content: '';
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background-color: #000;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    
+    .knob-label {
+      font-size: 12px;
+      color: var(--label-color);
+      text-align: center;
+    }
+    
+    .slider-container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .slider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: var(--slider-bg);
+      border-radius: 3px;
+      outline: none;
+      margin: 10px 0;
+    }
+    
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--slider-fill);
+      cursor: pointer;
+    }
+    
+    .slider::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--slider-fill);
+      cursor: pointer;
+      border: none;
+    }
+    
+    .switch-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 24px;
+      margin: 10px 0;
+    }
+    
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .switch-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--slider-bg);
+      transition: .4s;
+      border-radius: 24px;
+    }
+    
+    .switch-slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    
+    input:checked + .switch-slider {
+      background-color: var(--slider-fill);
+    }
+    
+    input:checked + .switch-slider:before {
+      transform: translateX(26px);
+    }
+    
+    .keyboard {
+      display: flex; /* Use flex primarily for alignment if needed, but positioning is absolute/relative */
+      justify-content: flex-start; /* Align keys to the start */
+      margin-top: 20px;
+      height: var(--keyboard-height);
+      position: relative; /* Crucial for absolute positioning of black keys */
+      /* Remove overflow-x for now, set explicit width later */
+      /* overflow-x: auto; */
+      padding: 0; /* Remove padding if positioning relative to container */
+      border: 1px solid #555; /* Add a border for clarity */
+      background-color: #111; /* Darker background for contrast */
+      border-radius: 5px;
+      /* Width will be set dynamically by JS */
+  }
+
+  .key {
+      height: 100%; /* White keys take full height */
+      background-color: var(--key-white);
+      border: 1px solid #999;
+      border-top: none; /* Remove top border for cleaner look */
+      border-radius: 0 0 5px 5px;
+      position: absolute; /* Change white keys to absolute positioning too */
+      z-index: 1;
+      cursor: pointer;
+      width: var(--white-key-width);
+      box-shadow: inset 0 -3px 5px rgba(0,0,0,0.1);
+  }
+
+  .key.black {
+      width: var(--black-key-width);
+      height: var(--black-key-height);
+      background-color: var(--key-black);
+      position: absolute; /* Already absolute */
+      z-index: 2; /* Ensure black keys are on top */
+      border: 1px solid #111;
+      border-radius: 0 0 4px 4px;
+      box-shadow: inset 0 -3px 3px rgba(255,255,255,0.1), 0 2px 3px rgba(0,0,0,0.4);
+      /* Left position will be set by JS */
+  }
+
+  .key.active {
+      background-color: var(--key-active);
+      box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
+  }
+
+  .key.black.active {
+      background: linear-gradient(to bottom, var(--key-active) 90%, darken(var(--key-active), 15%));
+      box-shadow: inset 0 -2px 2px rgba(255,255,255,0.2), 0 1px 1px rgba(0,0,0,0.3);
+  }
+    
+    .status {
+      margin-top: 20px;
+      font-size: 14px;
+      color: var(--label-color);
+      text-align: center;
+      padding: 10px;
+    }
+    
+    .dropdown {
+      width: 100%;
+      padding: 8px;
+      background-color: var(--panel-bg-color);
+      color: var(--text-color);
+      border: 1px solid #444;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .dropdown option {
+      background-color: var(--panel-bg-color);
+      color: var(--text-color);
+    }
+
+    /* Add this new style block */
+    .control-button {
+      padding: 8px 15px;
+      margin: 5px;
+      background-color: var(--slider-bg);
+      color: var(--text-color);
+      border: 1px solid #444;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s, box-shadow 0.2s;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    .control-button:hover {
+      background-color: #666;
+    }
+    .control-button.active {
+      background-color: var(--key-active); /* Use key active color */
+      color: var(--panel-bg-color); /* Darker text when active */
+      box-shadow: inset 0 1px 4px rgba(0,0,0,0.4);
+      border-color: #ff7733; /* Slightly brighter border */
+    }
+
+    /* Optional: Adjust master module layout if needed */
+    .module .slider-container + div { /* Target the div holding the button */
+        margin-bottom: 5px; /* Add some space below the button if needed */
+    }
+    
+    @media (max-width: 768px) {
+      .synth-panel {
+        grid-template-columns: 1fr;
+      }
+      
+      .controls {
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+      }
+      
+      .knob {
+        width: 50px;
+        height: 50px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="synth-container">
+    <div class="synth-header">
+      <h1>KORG MS-10 Synthesizer Emulator</h1>
+    </div>
+    
+    <div class="synth-panel">
+      <div class="module">
+        <div class="module-title">Oscillator</div>
+        <div class="controls">
+          <div class="control">
+            <div class="knob" id="knob-footage" data-param="footage" data-min="0" data-max="3" data-value="1"></div>
+            <div class="knob-label">Footage</div>
+          </div>
+          <div class="control">
+            <select class="dropdown" id="waveform">
+              <option value="triangle">Triangle</option>
+              <option value="sawtooth" selected>Sawtooth</option>
+              <option value="square">Square</option>
+              <option value="custom">Custom</option>
+            </select>
+            <div class="knob-label">Waveform</div>
+          </div>
+          <div class="control">
+            <div class="knob" id="knob-pulsewidth" data-param="pulseWidth" data-min="0.1" data-max="0.9" data-value="0.5"></div>
+            <div class="knob-label">Pulse Width</div>
+          </div>
+          <div class="control">
+            <div class="knob" id="knob-noise" data-param="noiseLevel" data-min="0" data-max="1" data-value="0"></div>
+            <div class="knob-label">Noise Level</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="module">
+        <div class="module-title">Filter</div>
+        <div class="controls">
+          <div class="control">
+            <div class="knob" id="knob-cutoff" data-param="filterCutoff" data-min="20" data-max="20000" data-value="1000" data-log="true"></div>
+            <div class="knob-label">Cutoff</div>
+          </div>
+          <div class="control">
+            <div class="knob" id="knob-resonance" data-param="filterResonance" data-min="0.1" data-max="30" data-value="1"></div>
+            <div class="knob-label">Resonance</div>
+          </div>
+          <div class="control">
+            <div class="knob" id="knob-filter-mod" data-param="filterModAmount" data-min="0" data-max="1" data-value="0"></div>
+            <div class="knob-label">Mod Amount</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="module">
+        <div class="module-title">Envelope</div>
+        <div class="controls">
+          <div class="control">
+            <div class="knob" id="knob-attack" data-param="attack" data-min="0.001" data-max="2" data-value="0.01" data-log="true"></div>
+            <div class="knob-label">Attack</div>
+          </div>
+          <div class="control">
+            <div class="knob" id="knob-decay" data-param="decay" data-min="0.001" data-max="2" data-value="0.1" data-log="true"></div>
+            <div class="knob-label">Decay</div>
+          </div>
+          <div class="control">
+            <div class="knob" id="knob-sustain" data-param="sustain" data-min="0" data-max="1" data-value="0.7"></div>
+            <div class="knob-label">Sustain</div>
+          </div>
+          <div class="control">
+            <div class="knob" id="knob-release" data-param="release" data-min="0.001" data-max="5" data-value="0.3" data-log="true"></div>
+            <div class="knob-label">Release</div>
+          </div>
+          <div class="control">
+            <div class="knob" id="knob-hold" data-param="hold" data-min="0" data-max="2" data-value="0"></div>
+            <div class="knob-label">Hold</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="module">
+        <div class="module-title">Modulation</div>
+        <div class="controls">
+          <div class="control">
+            <div class="knob" id="knob-lfo-rate" data-param="lfoRate" data-min="0.1" data-max="20" data-value="5" data-log="true"></div>
+            <div class="knob-label">LFO Rate</div>
+          </div>
+          <div class="control">
+            <select class="dropdown" id="lfo-type">
+              <option value="triangle" selected>Triangle</option>
+              <option value="square">Square</option>
+              <option value="sawtooth">Sawtooth</option>
+              <option value="sawtoothSteep">Saw Steep</option>
+              <option value="sawtoothShallow">Saw Shallow</option>
+            </select>
+            <div class="knob-label">LFO Type</div>
+          </div>
+          <div class="control">
+            <div class="knob" id="knob-pitch-mod" data-param="pitchModAmount" data-min="0" data-max="1" data-value="0"></div>
+            <div class="knob-label">Pitch Mod</div>
+          </div>
+          <div class="control">
+            <div class="knob" id="knob-pwm" data-param="pwmAmount" data-min="0" data-max="1" data-value="0"></div>
+            <div class="knob-label">PWM</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="module" style="margin: 0 20px;">
+      <div class="module-title">Master</div>
+      <div class="slider-container">
+        <input type="range" min="0" max="1" step="0.01" value="0.5" class="slider" id="volume">
+        <div class="knob-label">Volume</div>
+      </div>
+      <!-- Add Latch Button Here -->
+      <div style="text-align: center; margin-top: 10px;">
+          <button id="latch-button" class="control-button">Latch</button>
+      </div>
+    </div>
+
+    <div class="keyboard" id="keyboard"></div>
+    
+    <div class="status" id="midi-status">MIDI: Waiting for controller...</div>
+  </div>
+
+  <script>
+    // Minified Synth Code (Keep As Is)
+    class MS10Synth {
+  constructor() {
+    this.audioContext = new (window.AudioContext || window.webkitAudioContext);
+    this.masterGain = this.audioContext.createGain();
+    this.masterGain.gain.value = 0.5;
+    this.masterGain.connect(this.audioContext.destination);
+    this._initComponents();
+    this.activeNotes = new Map();
+    this.currentOctave = 3;
+    this.midiController = new MS10MIDIController(this);
+  }
+
+  _initComponents() {
+    this._initOscillator();
+    this._initFilter();
+    this.envelope = new MS10Envelope(this.audioContext);
+    this.modulation = new MS10Modulation(this.audioContext);
+  }
+
+  _initOscillator() {
+    this.oscillatorType = "sawtooth";
+    this.pulseWidth = 0.5;
+    this.footage = 1;
+    this.detune = 0;
+    this.noiseNode = this.audioContext.createBufferSource();
+    this.noiseGain = this.audioContext.createGain();
+    this.noiseGain.gain.value = 0;
+    const sampleRate = this.audioContext.sampleRate;
+    const buffer = this.audioContext.createBuffer(1, sampleRate, this.audioContext.sampleRate);
+    const channelData = buffer.getChannelData(0);
+    for (let i = 0; i < sampleRate; i += 4) {
+      const randomValue = 2 * Math.random() - 1;
+      channelData[i] = randomValue;
+      if (i + 1 < sampleRate) {
+        channelData[i + 1] = 0.9 * randomValue;
+      }
+      if (i + 2 < sampleRate) {
+        channelData[i + 2] = 0.8 * randomValue;
+      }
+      if (i + 3 < sampleRate) {
+        channelData[i + 3] = 0.7 * randomValue;
+      }
+    }
+    this.noiseNode.buffer = buffer;
+    this.noiseNode.loop = true;
+    this.noiseNode.connect(this.noiseGain);
+    this.noiseNode.start();
+    this._precomputeCustomWaves();
+  }
+
+  _precomputeCustomWaves() {
+    this.customWaves = {};
+    const realSaw = new Float32Array(32);
+    const imagSaw = new Float32Array(32);
+    for (let i = 1; i < 32; i++) {
+      realSaw[i] = 0;
+      imagSaw[i] = 1 / i;
+    }
+    this.customWaves.sawtooth = this.audioContext.createPeriodicWave(realSaw, imagSaw);
+
+    const realSquare = new Float32Array(32);
+    const imagSquare = new Float32Array(32);
+    for (let i = 1; i < 32; i += 2) {
+      realSquare[i] = 0;
+      imagSquare[i] = 1 / i;
+    }
+    this.customWaves.square = this.audioContext.createPeriodicWave(realSquare, imagSquare);
+
+    const realTriangle = new Float32Array(32);
+    const imagTriangle = new Float32Array(32);
+    for (let i = 1; i < 32; i += 2) {
+      realTriangle[i] = 0;
+      imagTriangle[i] = 1 / (i * i) * (i % 4 == 1 ? 1 : -1);
+    }
+    this.customWaves.triangle = this.audioContext.createPeriodicWave(realTriangle, imagTriangle);
+  }
+
+  _initFilter() {
+    this.filter = this.audioContext.createBiquadFilter();
+    this.filter.type = "lowpass";
+    this.filter.frequency.value = 1000;
+    this.filter.Q.value = 1;
+    this.filter.connect(this.masterGain);
+    this.noiseGain.connect(this.filter);
+  }
+
+  // Modify noteOn to apply initial detune
+  noteOn(note, velocity = 0.7) {
+    if (this.audioContext.state === "suspended") {
+      this.audioContext.resume();
+    }
+    const oscillator = this.audioContext.createOscillator();
+    if (this.oscillatorType === "custom") {
+      oscillator.setPeriodicWave(this.customWaves.sawtooth);
+    } else if (this.customWaves[this.oscillatorType]) {
+      oscillator.setPeriodicWave(this.customWaves[this.oscillatorType]);
+    } else {
+      // Check if the type is valid before setting
+      const validTypes = ["sine", "square", "sawtooth", "triangle"];
+      if (validTypes.includes(this.oscillatorType)) {
+          oscillator.type = this.oscillatorType;
+      } else {
+          console.warn(`Invalid oscillator type: ${this.oscillatorType}. Defaulting to sawtooth.`);
+          oscillator.type = "sawtooth"; // Default fallback
+      }
+    }
+    oscillator.frequency.value = this._noteToFrequency(note);
+    // Apply the base detune value immediately
+    oscillator.detune.value = this.detune; // Use the current base detune
+
+    const gainNode = this.audioContext.createGain();
+    gainNode.gain.value = 0;
+    oscillator.connect(gainNode);
+    gainNode.connect(this.filter);
+    const modConnections = this.modulation.connectToOscillator(oscillator); // Pass the actual oscillator
+    const filterModConnection = this.modulation.connectToFilter(this.filter); // Connect mod to shared filter
+
+    oscillator.start();
+    const envelopeControl = this.envelope.apply(gainNode, velocity);
+    this.activeNotes.set(note, {
+      oscillator: oscillator,
+      gainNode: gainNode,
+      velocity: velocity,
+      modConnections: modConnections, // Store any modulation nodes specific to this note if needed later
+      envelopeControl: envelopeControl,
+      // currentBend: 0 // Add if tracking bend per note
+    });
+  }
+
+// Ensure Modulation connects correctly
+// Modify MS10Modulation.connectToOscillator
+ connectToOscillator(oscillatorNode) { // Accept the oscillator node
+    const connections = {};
+    if (this.modTargets.pitch) {
+      // The pitchModGain affects detune. Detune is measured in cents.
+      // A gain of 1 driving detune changes it by 1 cent.
+      // Let's scale the LFO output appropriately. Max LFO is +/- 1.
+      // If pitchModAmount is 1, maybe we want +/- 100 cents (1 semitone)?
+      // The current setPitchModAmount uses value * 200, so max mod is +/- 200 cents.
+      this.pitchModGain.connect(oscillatorNode.detune); // Connect shared mod gain directly
+      connections.pitch = true; // Indicate connection was made
+    }
+    // PWM Connection would go here if implemented
+    // e.g., if using a custom wave and a way to modulate its shape via an AudioParam
+    return connections;
+ }
+
+// Modify MS10Modulation.connectToFilter
+ connectToFilter(filterNode) { // Accept the filter node
+    if (this.modTargets.filterCutoff) {
+       // Filter frequency is logarithmic. LFO is linear +/- 1.
+       // A common approach is exponential scaling, but direct connection is simpler.
+       // The current setFilterModAmount uses value * 2000.
+       // So max modulation is +/- 2000 Hz added to the cutoff.
+       this.filterModGain.connect(filterNode.frequency);
+       return true;
+    }
+    return false;
+ }
+
+  noteOff(t) {
+    const noteData = this.activeNotes.get(t);
+    if (!noteData) {
+        console.warn(`noteOff called for note ${t}, but not found in activeNotes.`);
+        return;
+    }
+
+    const { oscillator: oscToStop, gainNode: gainToRelease, envelopeControl: envCtrl } = noteData;
+    const releaseEndTime = envCtrl.release(); // Schedule envelope release
+
+    // Schedule oscillator stop slightly after envelope finishes
+    oscToStop.stop(releaseEndTime + 0.01);
+
+    // Calculate delay robustly
+    const delayMs = Math.max(0, (releaseEndTime - this.audioContext.currentTime + 0.02)) * 1000;
+
+    setTimeout(() => {
+        // Check if the note still exists AND if it's the *same* oscillator we intended to stop.
+        // This prevents deleting a new note instance if the same note was re-triggered quickly.
+        const currentNoteData = this.activeNotes.get(t);
+        if (currentNoteData && currentNoteData.oscillator === oscToStop) {
+            this.activeNotes.delete(t);
+             // Optional: Disconnect nodes here if not automatically garbage collected
+             // gainToRelease.disconnect();
+             // oscToStop.disconnect(); // Might already be disconnected by stop()
+        } else {
+            // console.log(`Note ${t} was likely retriggered before cleanup timeout.`);
+        }
+    }, delayMs);
+}
+
+  _noteToFrequency(note) {
+    return 440 * Math.pow(2, (note - 69) / 12) * this.footage;
+  }
+
+  setOscillatorType(type) {
+    this.oscillatorType = type;
+    this.activeNotes.forEach((noteData, note) => {
+      if (type === "custom" || this.customWaves[type]) {
+        noteData.oscillator.setPeriodicWave(
+          type === "custom" ? this.customWaves.sawtooth : this.customWaves[type]
+        );
+      } else {
+        noteData.oscillator.type = type;
+      }
+    });
+  }
+
+  setFilterCutoff(value) {
+    this.filter.frequency.value = value;
+  }
+
+  setFilterResonance(value) {
+    this.filter.Q.value = value;
+  }
+
+  setAttack(value) {
+    this.envelope.setAttack(value);
+  }
+
+  setDecay(value) {
+    this.envelope.setDecay(value);
+  }
+
+  setSustain(value) {
+    this.envelope.setSustain(value);
+  }
+
+  setRelease(value) {
+    this.envelope.setRelease(value);
+  }
+
+  setHold(value) {
+    this.envelope.setHold(value);
+  }
+
+  setLFORate(value) {
+    this.modulation.setLFORate(value);
+  }
+
+  setLFOAmount(value) {
+    if (this.modulation.modTargets.pitch) {
+      this.modulation.setPitchModAmount(value);
+    }
+    if (this.modulation.modTargets.filterCutoff) {
+      this.modulation.setFilterModAmount(value);
+    }
+    if (this.modulation.modTargets.pulseWidth) {
+      this.modulation.setPWMAmount(value);
+    }
+  }
+
+  setLFOType(value) {
+    this.modulation.setLFOType(value);
+  }
+
+  setPitchModAmount(value) {
+    this.modulation.setPitchModAmount(value);
+  }
+
+  setFilterModAmount(value) {
+    this.modulation.setFilterModAmount(value);
+  }
+
+  setPWMAmount(value) {
+    this.modulation.setPWMAmount(value);
+  }
+
+  setMasterVolume(value) {
+    this.masterGain.gain.value = value;
+  }
+
+  setFootage(value) {
+    const footageMapping = { 4: 2, 8: 1, 16: 0.5, 32: 0.25 };
+    this.footage = footageMapping[value] || 1;
+    this.activeNotes.forEach((noteData, note) => {
+      noteData.oscillator.frequency.value = this._noteToFrequency(note);
+    });
+  }
+
+  setPulseWidth(value) {
+    this.pulseWidth = value;
+  }
+
+  setNoiseLevel(value) {
+    this.noiseGain.gain.value = value;
+  }
+
+
+
+  // Add this method to MS10Synth class
+  setDetune(cents) {
+    this.detune = cents;
+    // We need to know the current pitch bend to apply it correctly on top of the new base detune.
+    // Let's assume pitch bend is handled separately and just sets the base detune here.
+    // A more robust system might store the last pitch bend value per note or globally.
+    this.activeNotes.forEach(noteData => {
+        // Simple approach: Just set the base detune. Pitch bend will add to this.
+        // If pitch bend is active, its effect might momentarily reset until the next bend message.
+        // Or, assume pitchBend method *adds* to this.detune:
+        // noteData.oscillator.detune.setValueAtTime(this.detune + current_bend_value, this.audioContext.currentTime);
+        // Let's stick to the pattern in pitchBend: update the value directly.
+        // We need the *last applied* pitch bend amount to do this perfectly.
+        // Simplification: Set the base detune, pitchBend will handle the offset later.
+         noteData.oscillator.detune.setValueAtTime(this.detune, this.audioContext.currentTime);
+        // If you add a pitch bend knob/value storage:
+        // const currentBendOffset = noteData.currentBend || 0; // You'd need to store this
+        // noteData.oscillator.detune.setValueAtTime(this.detune + currentBendOffset, this.audioContext.currentTime);
+    });
+  }
+
+// Modify pitchBend to work additively with this.detune
+  pitchBend(amount) { // amount is typically -1 to 1
+    const bendRangeCents = 200; // +/- 2 semitones (200 cents)
+    const bendOffset = bendRangeCents * amount;
+    this.activeNotes.forEach((noteData, note) => {
+      // Use setValueAtTime for smoother transitions if possible, though direct value setting is common
+      noteData.oscillator.detune.setValueAtTime(this.detune + bendOffset, this.audioContext.currentTime);
+       // If storing bend per note: noteData.currentBend = bendOffset;
+    });
+  }
+
+
+}
+
+    class MS10Envelope {
+        constructor(audioContext) {
+            this.audioContext = audioContext;
+            this.attack = 0.01;
+            this.decay = 0.1;
+            this.sustain = 0.7;
+            this.release = 0.3;
+            this.hold = 0;
+        }
+
+        apply(gainNode, velocity = 0.7, startTime = null) {
+            const envelopeInstance = this; // Capture the envelope 'this' context
+            const now = startTime || this.audioContext.currentTime;
+
+            gainNode.gain.cancelScheduledValues(now);
+            gainNode.gain.setValueAtTime(0, now); // Start at 0
+             // Use a tiny offset ramp to avoid issues starting exp ramp at 0
+            gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.001);
+            // Attack phase
+            gainNode.gain.exponentialRampToValueAtTime(velocity, now + 0.001 + envelopeInstance.attack);
+            // Decay phase to sustain level
+            gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, velocity * envelopeInstance.sustain), now + 0.001 + envelopeInstance.attack + envelopeInstance.decay);
+
+            // Return an object containing the release function specific to this note/gainNode
+            return {
+                // This function now correctly captures 'gainNode' and 'envelopeInstance'
+                release: (releaseTime = null) => {
+                    const releaseStart = releaseTime || envelopeInstance.audioContext.currentTime;
+                    // Determine when the release ramp should actually begin (after hold, if any)
+                    const holdEndTime = envelopeInstance.hold > 0 ? releaseStart + envelopeInstance.hold : releaseStart;
+
+                    // It's safer to get the gain value scheduled *at* holdEndTime
+                    // This requires a bit more setup or approximation. A simpler approach
+                    // is to use the current value, but it might be slightly off if release is called during attack/decay.
+                    // Let's approximate using the current value for simplicity here.
+                    const currentGainValue = gainNode.gain.value;
+                    const actualGainAtRelease = Math.max(0.0001, currentGainValue); // Ensure > 0 for exp ramp
+
+                    gainNode.gain.cancelScheduledValues(holdEndTime);
+                    // Set the value at the precise start of the release ramp (after hold)
+                    gainNode.gain.setValueAtTime(actualGainAtRelease, holdEndTime);
+                    // Exponential ramp down to (near) zero
+                    gainNode.gain.exponentialRampToValueAtTime(0.0001, holdEndTime + envelopeInstance.release);
+                     // Optional: guarantee silence shortly after with a linear ramp to 0
+                     // gainNode.gain.linearRampToValueAtTime(0, holdEndTime + envelopeInstance.release + 0.005);
+
+
+                    // Return the time when the release phase is scheduled to finish
+                    return holdEndTime + envelopeInstance.release + 0.005; // Add small buffer if using linear ramp end
+                }
+            };
+        }
+
+        // Setter methods remain the same
+        setAttack(t) { this.attack = Math.max(0.001, t); }
+        setDecay(t) { this.decay = Math.max(0.001, t); }
+        setSustain(t) { this.sustain = Math.max(0, Math.min(1, t)); }
+        setRelease(t) { this.release = Math.max(0.001, t); }
+        setHold(t) { this.hold = Math.max(0, t); }
+    }    
+    class MS10Modulation{constructor(t){this.audioContext=t,this.lfo=t.createOscillator(),this.lfo.type="triangle",this.lfo.frequency.value=5,this.pitchModGain=t.createGain(),this.filterModGain=t.createGain(),this.pwmModGain=t.createGain(),this.pitchModGain.gain.value=0,this.filterModGain.gain.value=0,this.pwmModGain.gain.value=0,this.lfo.connect(this.pitchModGain),this.lfo.connect(this.filterModGain),this.lfo.connect(this.pwmModGain),this.lfo.start(),this.modTargets={pitch:!1,filterCutoff:!1,pulseWidth:!1},this._precomputeCustomLFOWaves()}_precomputeCustomLFOWaves(){const t=new Float32Array(16),e=new Float32Array(16);for(let i=1;i<16;i++)t[i]=0,e[i]=1/(i*.8);this.steepSawtoothWave=this.audioContext.createPeriodicWave(t,e);const i=new Float32Array(16),s=new Float32Array(16);for(let t=1;t<16;t++)i[t]=0,s[t]=1/(1.2*t);this.shallowSawtoothWave=this.audioContext.createPeriodicWave(i,s)}connectToOscillator(t){const e={};if(this.modTargets.pitch){const i=this.audioContext.createGain();i.gain.value=100,this.pitchModGain.connect(i),i.connect(t.detune),e.pitch=i}return e}connectToFilter(t){return!!this.modTargets.filterCutoff&&(this.filterModGain.connect(t.frequency),!0)}setLFORate(t){this.lfo.frequency.value=t}setLFOType(t){switch(t){case"triangle":case"square":case"sawtooth":this.lfo.type=t;break;case"sawtoothSteep":this.lfo.setPeriodicWave(this.steepSawtoothWave);break;case"sawtoothShallow":this.lfo.setPeriodicWave(this.shallowSawtoothWave);break;default:this.lfo.type="triangle"}}setPitchModAmount(t){this.pitchModGain.gain.value=t*200,this.modTargets.pitch=t>0}setFilterModAmount(t){this.filterModGain.gain.value=t*2000,this.modTargets.filterCutoff=t>0}setPWMAmount(t){this.pwmModGain.gain.value=t,this.modTargets.pulseWidth=t>0}}class MS10MIDIController{constructor(t){this.synth=t,this.midiAccess=null,this.midiInputs=[],this.activeNotes=new Map,this._initCCMappings(),this._initMIDI()}_initCCMappings(){this.ccMappings=new Map([[1,{handler:t=>this.synth.setLFOAmount(t/127)}],[7,{handler:t=>this.synth.setMasterVolume(t/127)}],[16,{handler:t=>{const e=["triangle","sawtooth","square","custom"];this.synth.setOscillatorType(e[Math.floor(t*e.length/127)])}}],[17,{handler:t=>{const e=[32,16,8,4];this.synth.setFootage(e[Math.floor(t*e.length/127)])}}],[18,{handler:t=>this.synth.setPulseWidth(.1+.8*t/127)}],[19,{handler:t=>this.synth.setNoiseLevel(t/127)}],[74,{handler:t=>{this.synth.setFilterCutoff(20*Math.pow(1e3,t/127))}}],[71,{handler:t=>this.synth.setFilterResonance(.1+29.9*t/127)}],[73,{handler:t=>this.synth.setAttack(.001*Math.pow(2e3,t/127))}],[75,{handler:t=>this.synth.setDecay(.001*Math.pow(2e3,t/127))}],[76,{handler:t=>this.synth.setSustain(t/127)}],[72,{handler:t=>this.synth.setRelease(.001*Math.pow(5e3,t/127))}],[77,{handler:t=>this.synth.setHold(2*t/127)}],[20,{handler:t=>this.synth.setLFORate(.1*Math.pow(200,t/127))}],[21,{handler:t=>{const e=["triangle","square","sawtooth","sawtoothSteep","sawtoothShallow"];this.synth.setLFOType(e[Math.floor(t*e.length/127)])}}],[22,{handler:t=>this.synth.setPitchModAmount(t/127)}],[23,{handler:t=>this.synth.setFilterModAmount(t/127)}],[24,{handler:t=>this.synth.setPWMAmount(t/127)}]])}_initMIDI(){navigator.requestMIDIAccess&&navigator.requestMIDIAccess({sysex:!1}).then(this._onMIDISuccess.bind(this),t=>{console.error("Failed to access MIDI devices:",t),updateMIDIStatus("Error: " + t.message, true)})}_onMIDISuccess(t){this.midiAccess=t,this._setupMIDIDevices(),this.midiAccess.onstatechange=this._handleStateChange.bind(this),updateMIDIStatus()}_setupMIDIDevices(){this.midiInputs=[];const t=this.midiAccess.inputs.values();for(let e=t.next();e&&!e.done;e=t.next())this.midiInputs.push(e.value),e.value.onmidimessage=this._handleMIDIMessage.bind(this);updateMIDIStatus()}_handleStateChange(t){console.log("MIDI state change:",t.port.name,t.port.state);const e=t.port;"input"===e.type&&("connected"===e.state?this.midiInputs.includes(e)||(console.log("MIDI Input connected:",e.name),this.midiInputs.push(e),e.onmidimessage=this._handleMIDIMessage.bind(this)):this.midiInputs.indexOf(e)!==-1&&(console.log("MIDI Input disconnected:",e.name),this.midiInputs.splice(this.midiInputs.indexOf(e),1)));updateMIDIStatus()}_handleMIDIMessage(t){const e=t.data,i=e[0]&240,s=e[1],a=e.length>2?e[2]:0;switch(i){case 144:0===a?this.synth.noteOff(s):this.synth.noteOn(s,a/127);break;case 128:this.synth.noteOff(s);break;case 176:this._controlChange(s,a);break;case 224:const t=((a<<7)+s-8192)/8192;this.synth.pitchBend(t)}}_controlChange(t,e){const i=this.ccMappings.get(t);i?i.handler(e):console.log(`Unhandled MIDI CC: ${t}, Value: ${e}`)}}
+
+    // --- UI Controller ---
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize synth
+      const synth = new MS10Synth();
+
+      // --- Latch State ---
+      let isLatchActive = false; // Tracks if latch mode is ON
+      const latchButton = document.getElementById('latch-button');
+
+      // --- Keyboard Setup ---
+      const keyboard = document.getElementById('keyboard');
+      const keyboardStartNote = 48; // C3
+      const keyboardNotes = 25; // C3 to C5
+
+      const rootStyle = getComputedStyle(document.documentElement);
+      const whiteKeyWidth = parseInt(rootStyle.getPropertyValue('--white-key-width') || '40', 10);
+      const blackKeyWidth = parseInt(rootStyle.getPropertyValue('--black-key-width') || '24', 10);
+      const blackKeyHeight = parseInt(rootStyle.getPropertyValue('--black-key-height') || '90', 10);
+      const keyboardHeight = parseInt(rootStyle.getPropertyValue('--keyboard-height') || '150', 10);
+      const blackKeyIndexes = [1, 3, 6, 8, 10];
+
+      let whiteKeyCounter = 0;
+
+      // --- Create Keyboard ---
+      for (let i = 0; i < keyboardNotes; i++) {
+        const note = keyboardStartNote + i;
+        const noteInOctave = note % 12;
+        const isBlack = blackKeyIndexes.includes(noteInOctave);
+        const key = document.createElement('div');
+        key.className = `key ${isBlack ? 'black' : 'white'}`;
+        key.dataset.note = note;
+        key.style.height = `${isBlack ? blackKeyHeight : keyboardHeight}px`;
+
+        if (isBlack) {
+          const leftPosition = (whiteKeyCounter * whiteKeyWidth) - (blackKeyWidth / 2);
+          key.style.left = `${leftPosition}px`;
+          key.style.width = `${blackKeyWidth}px`;
+          key.style.zIndex = '2';
+        } else {
+          key.style.left = `${whiteKeyCounter * whiteKeyWidth}px`;
+          key.style.width = `${whiteKeyWidth}px`;
+          key.style.zIndex = '1';
+          whiteKeyCounter++;
+        }
+        keyboard.appendChild(key);
+
+        // --- Revised Event Handlers for Mouse/Touch ---
+        const startNoteHandler = function(e) {
+          e.preventDefault();
+          if (synth.audioContext.state === 'suspended') {
+              synth.audioContext.resume();
+          }
+
+          const currentKey = this; // The key element being interacted with
+          const note = parseInt(currentKey.dataset.note);
+          const isKeyCurrentlyActive = currentKey.classList.contains('active');
+
+          if (isLatchActive) {
+              // LATCH MODE: Toggle note on/off
+              if (isKeyCurrentlyActive) {
+                  synth.noteOff(note);
+                  currentKey.classList.remove('active');
+                  delete currentKey.dataset.latched; // Remove latch marker
+              } else {
+                  synth.noteOn(note, 0.7);
+                  currentKey.classList.add('active');
+                  currentKey.dataset.latched = 'true'; // Mark as latched
+              }
+          } else {
+              // MOMENTARY MODE: Start note, mark as playing for this interaction
+              if (!isKeyCurrentlyActive) { // Avoid re-triggering visual if already active
+                  synth.noteOn(note, 0.7);
+                  currentKey.classList.add('active');
+              }
+              // Flag that this interaction started the note (for mouseup/touchend)
+              currentKey.dataset.notePlaying = 'true';
+          }
+        };
+
+        const endNoteHandler = function(e) {
+          e.preventDefault();
+          const currentKey = this;
+          const note = parseInt(currentKey.dataset.note);
+
+          if (!isLatchActive) {
+              // MOMENTARY MODE: Only stop if this interaction started it
+              if (currentKey.dataset.notePlaying === 'true') {
+                  synth.noteOff(note);
+                  // Check if note is still active from another source (e.g., MIDI, computer key)
+                  // before removing the visual active class. This is complex to track perfectly across sources.
+                  // Simple approach: just remove the class. More complex would need a central active note tracker.
+                  currentKey.classList.remove('active');
+                  delete currentKey.dataset.notePlaying; // Remove interaction flag
+              }
+          }
+          // In LATCH MODE, do nothing on mouseup/touchend
+        };
+
+        // Mouse events
+        key.addEventListener('mousedown', startNoteHandler);
+        key.addEventListener('mouseup', endNoteHandler);
+        key.addEventListener('mouseleave', (e) => {
+            const currentKey = key; // Use the key from the outer scope
+            // MOMENTARY MODE: Only stop if mouse leaves WHILE button is pressed AND this interaction started it
+            if (!isLatchActive && e.buttons === 1 && currentKey.dataset.notePlaying === 'true') {
+                endNoteHandler.call(currentKey, e); // Call endNoteHandler in the context of the key
+            }
+            // In LATCH MODE, do nothing on mouseleave
+        });
+
+        // Touch events
+        key.addEventListener('touchstart', startNoteHandler, { passive: false });
+        key.addEventListener('touchend', endNoteHandler);
+        key.addEventListener('touchcancel', endNoteHandler); // Treat cancel like touchend
+      }
+
+      // Set the total width of the keyboard container
+      const totalKeyboardWidth = whiteKeyCounter * whiteKeyWidth;
+      keyboard.style.width = `${totalKeyboardWidth}px`;
+
+      // --- Latch Button Logic ---
+      latchButton.addEventListener('click', function() {
+          isLatchActive = !isLatchActive; // Toggle the state
+          this.classList.toggle('active', isLatchActive); // Update button visual
+
+          // Inside the latchButton 'click' event listener, when !isLatchActive:
+
+          if (!isLatchActive) {
+          // --- LATCH TURNED OFF: Stop ALL sounding notes managed by the synth ---
+
+          // Get all currently active note numbers from the synth itself
+          const notesToStop = Array.from(synth.activeNotes.keys());
+
+          notesToStop.forEach(note => {
+              synth.noteOff(note); // Tell the synth to stop the note
+
+              // Also update UI if the key exists
+              const keyElement = keyboard.querySelector(`.key[data-note="${note}"]`);
+              if (keyElement) {
+                  keyElement.classList.remove('active');
+                  delete keyElement.dataset.notePlaying;
+                  delete keyElement.dataset.latched;
+              }
+          });
+
+          // Also clear computer key tracking (already present, which is good)
+          activeComputerKeys.clear();
+      }
+          // When latch is turned ON, no immediate action needed for notes
+      });
+
+
+      // --- Computer keyboard mapping ---
+      const keyMap = { /* ... same keyMap as before ... */
+        'a': 48, 'w': 49, 's': 50, 'e': 51, 'd': 52, 'f': 53, 't': 54,
+        'g': 55, 'y': 56, 'h': 57, 'u': 58, 'j': 59, 'k': 60, 'o': 61,
+        'l': 62, 'p': 63, ';': 64, "'": 65, '[': 66, ']': 67, '\\': 68
+      };
+      const activeComputerKeys = new Set(); // Track active notes by NOTE NUMBER
+
+      window.addEventListener('keydown', function(e) {
+        if (e.repeat) return; // Prevent auto-repeat
+        const keyChar = e.key.toLowerCase();
+        const note = keyMap[keyChar];
+        if (!note) return; // Not a mapped key
+
+        if (synth.audioContext.state === 'suspended') {
+           synth.audioContext.resume();
+        }
+
+        const keyElement = keyboard.querySelector(`.key[data-note="${note}"]`);
+        const isNoteCurrentlyActive = activeComputerKeys.has(note);
+
+        if (isLatchActive) {
+            // LATCH MODE: Toggle
+            if (isNoteCurrentlyActive) {
+                synth.noteOff(note);
+                activeComputerKeys.delete(note);
+                if (keyElement) keyElement.classList.remove('active');
+            } else {
+                synth.noteOn(note, 0.7);
+                activeComputerKeys.add(note);
+                if (keyElement) keyElement.classList.add('active');
+            }
+        } else {
+            // MOMENTARY MODE: Start if not already active
+            if (!isNoteCurrentlyActive) {
+                synth.noteOn(note, 0.7);
+                activeComputerKeys.add(note);
+                if (keyElement) keyElement.classList.add('active');
+            }
+        }
+      });
+
+      window.addEventListener('keyup', function(e) {
+        const keyChar = e.key.toLowerCase();
+        const note = keyMap[keyChar];
+        if (!note) return;
+
+        if (!isLatchActive) {
+            // MOMENTARY MODE: Stop the note
+            if (activeComputerKeys.has(note)) {
+                synth.noteOff(note);
+                activeComputerKeys.delete(note);
+                const keyElement = keyboard.querySelector(`.key[data-note="${note}"]`);
+                if (keyElement) keyElement.classList.remove('active');
+            }
+        }
+        // In LATCH MODE, do nothing on keyup
+      });
+
+      // --- Knob Controls (Keep As Is) ---
+      const knobs = document.querySelectorAll('.knob');
+      knobs.forEach(knob => {
+        const param = knob.dataset.param;
+        const min = parseFloat(knob.dataset.min);
+        const max = parseFloat(knob.dataset.max);
+        const isLog = knob.dataset.log === 'true';
+        let value = parseFloat(knob.dataset.value);
+        updateSynthParam(synth, param, value);
+        updateKnobRotation(knob, value, min, max, isLog);
+        let isDragging = false;
+        let startY;
+        let startValue;
+        knob.addEventListener('mousedown', function(e) { /* ... mousedown logic ... */
+          isDragging = true; startY = e.clientY; startValue = value;
+          document.body.style.cursor = 'ns-resize'; knob.style.position = 'relative'; knob.style.zIndex = '1000'; e.preventDefault();
+        });
+        document.addEventListener('mousemove', function(e) { /* ... mousemove logic ... */
+           if (!isDragging) return;
+           const deltaY = startY - e.clientY; const sensitivity = 200; let newValue;
+           if (isLog) { const logMin = Math.log(min || 0.0001); const logMax = Math.log(max); const logRange = logMax - logMin; const safeStartValue = Math.max(min || 0.0001, startValue); const logStartValue = Math.log(safeStartValue); const normalizedDelta = deltaY / sensitivity; const logValue = logStartValue + normalizedDelta * logRange; newValue = Math.exp(logValue); }
+           else { const range = max - min; const normalizedDelta = deltaY / sensitivity; newValue = startValue + normalizedDelta * range; }
+           newValue = Math.max(min, Math.min(max, newValue));
+           if (value !== newValue) { value = newValue; updateKnobRotation(knob, value, min, max, isLog); updateSynthParam(synth, param, value); }
+        });
+        document.addEventListener('mouseup', function() { /* ... mouseup logic ... */
+          if (isDragging) { isDragging = false; document.body.style.cursor = 'default'; knob.style.position = ''; knob.style.zIndex = ''; }
+        });
+        knob.addEventListener('dblclick', function() { /* ... dblclick logic ... */
+          const defaultValue = parseFloat(knob.dataset.value); value = defaultValue; updateKnobRotation(knob, value, min, max, isLog); updateSynthParam(synth, param, value);
+        });
+      });
+
+      // --- Slider & Dropdown Controls (Keep As Is) ---
+      const volumeSlider = document.getElementById('volume'); /* ... volume logic ... */
+      synth.setMasterVolume(parseFloat(volumeSlider.value)); volumeSlider.addEventListener('input', function() { synth.setMasterVolume(parseFloat(this.value)); });
+      const waveformSelect = document.getElementById('waveform'); /* ... waveform logic ... */
+      synth.setOscillatorType(waveformSelect.value); waveformSelect.addEventListener('change', function() { synth.setOscillatorType(this.value); });
+      const lfoTypeSelect = document.getElementById('lfo-type'); /* ... lfo logic ... */
+      synth.setLFOType(lfoTypeSelect.value); lfoTypeSelect.addEventListener('change', function() { synth.setLFOType(this.value); });
+
+       // --- MIDI status update ---
+       const midiStatusEl = document.getElementById('midi-status');
+       function updateMIDIStatus(message = null, isError = false) {
+           if (message) {
+               midiStatusEl.textContent = "MIDI: " + message;
+               midiStatusEl.style.color = isError ? '#f55' : 'var(--label-color)';
+               return;
+           }
+           if (!synth.midiController || !synth.midiController.midiAccess) {
+               midiStatusEl.textContent = 'MIDI: Initializing...';
+               midiStatusEl.style.color = 'var(--label-color)';
+               return; // Wait for MIDI init
+           }
+           if (synth.midiController.midiInputs.length > 0) {
+               const inputNames = synth.midiController.midiInputs.map(input => input.name).join(', ');
+               midiStatusEl.textContent = `MIDI: Connected to ${inputNames}`;
+               midiStatusEl.style.color = '#5f5';
+           } else {
+               midiStatusEl.textContent = 'MIDI: Waiting for controller...';
+               midiStatusEl.style.color = 'var(--label-color)';
+           }
+       }
+       updateMIDIStatus(); // Initial call
+       const midiCheckInterval = setInterval(updateMIDIStatus, 3000); // Check less frequently
+
+
+      // --- Helper Functions (Keep As Is) ---
+      function updateKnobRotation(knob, value, min, max, isLog) { /* ... rotation logic ... */
+        let normalizedValue = 0;
+        if (max > min) { if (isLog) { const logMin = Math.log(min || 0.0001); const logMax = Math.log(max); const logRange = logMax - logMin; if (logRange > 0 && value >= min) { normalizedValue = (Math.log(value) - logMin) / logRange; } } else { normalizedValue = (value - min) / (max - min); } }
+        normalizedValue = Math.max(0, Math.min(1, normalizedValue)); const degrees = normalizedValue * 270; knob.style.background = `conic-gradient(var(--knob-active) 0%, var(--knob-active) ${degrees}deg, var(--knob-color) ${degrees}deg, var(--knob-color) 100%)`;
+      }
+      function updateSynthParam(synth, param, value) { /* ... param setting logic ... */
+        const paramSetters = { 'footage': (val) => { const footages = [32, 16, 8, 4]; const index = Math.round(val); synth.setFootage(footages[index] || 8); }, 'pulseWidth': (val) => synth.setPulseWidth(val), 'noiseLevel': (val) => synth.setNoiseLevel(val), 'filterCutoff': (val) => synth.setFilterCutoff(val), 'filterResonance': (val) => synth.setFilterResonance(val), 'attack': (val) => synth.setAttack(val), 'decay': (val) => synth.setDecay(val), 'sustain': (val) => synth.setSustain(val), 'release': (val) => synth.setRelease(val), 'hold': (val) => synth.setHold(val), 'lfoRate': (val) => synth.setLFORate(val), 'pitchModAmount': (val) => synth.setPitchModAmount(val), 'filterModAmount': (val) => synth.setFilterModAmount(val), 'pwmAmount': (val) => synth.setPWMAmount(val), };
+        if (paramSetters[param]) { paramSetters[param](value); } else { console.warn(`Unknown synth parameter: ${param}`); }
+      }
+
+      // --- AudioContext Resume Logic (Keep As Is) ---
+      const resumeAudio = () => { /* ... resume logic ... */
+          if (synth && synth.audioContext && synth.audioContext.state === 'suspended') { synth.audioContext.resume().then(() => { console.log('AudioContext resumed.'); document.removeEventListener('click', resumeAudio); document.removeEventListener('touchstart', resumeAudio); document.removeEventListener('keydown', resumeAudio); }).catch(e => console.error('Error resuming AudioContext:', e)); }
+           else { document.removeEventListener('click', resumeAudio); document.removeEventListener('touchstart', resumeAudio); document.removeEventListener('keydown', resumeAudio); }
+       };
+       document.addEventListener('click', resumeAudio); document.addEventListener('touchstart', resumeAudio); document.addEventListener('keydown', resumeAudio);
+
+    }); // End DOMContentLoaded
+  </script>
+</body>
+</html>
