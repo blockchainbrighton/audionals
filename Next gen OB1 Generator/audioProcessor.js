@@ -3,12 +3,14 @@
 import { base64ToArrayBuffer } from './utils.js';
 import { showError } from './uiUpdater.js';
 import { triggerAnimation as triggerImageAnimation } from './imageAnimation.js';
+// --- NEW: Import the timing manager ---
+import * as timingManager from './timingManagement.js';
 
 // --- Constants ---
-const SCHEDULE_AHEAD_TIME = 0.1;   // (seconds) How far ahead to schedule audio events for loops
-const SCHEDULER_INTERVAL_MS = 25; // (milliseconds) How often the loop scheduler checks
+// REMOVED: SCHEDULE_AHEAD_TIME
+// REMOVED: SCHEDULER_INTERVAL_MS
 const SMOOTH_PARAM_TIME = 0.01;  // (seconds) Time constant for smooth parameter changes (e.g., volume)
-const LOOP_START_DELAY = 0.05;   // (seconds) Small delay before starting loop scheduler after context resume/toggle
+// REMOVED: LOOP_START_DELAY (Timing manager has its own)
 
 // --- Module State ---
 let audioContext = null;        // The main Web Audio API interface
@@ -17,14 +19,14 @@ let mainGainNode = null;        // Primary gain node for master volume control
 let decodedBuffer = null;       // Holds the original decoded audio data
 let reversedBuffer = null;      // Holds the reversed audio data (if successfully created)
 
-let isLooping = false;          // Flag indicating if the loop is currently active
+// REMOVED: isLooping (Now managed by timingManager)
 let isReversed = false;         // Flag indicating if playback should use the reversed buffer
-let currentTempo = 76;          // Current tempo in Beats Per Minute (BPM)
-let currentPitch = 1.0;         // Current playback rate (1.0 = normal speed)
+let currentTempo;          // Current tempo in Beats Per Minute (BPM) - Still useful for init
+let currentPitch;         // Current playback rate (1.0 = normal speed) - Still useful for init
 let currentVolume = 1.0;        // Current volume level (0.0 to 1.0+)
 
-let loopTimeoutId = null;       // Stores the ID from setTimeout for the loop scheduler
-let nextNoteTime = 0.0;         // Web Audio timestamp for the next scheduled loop event
+// REMOVED: loopTimeoutId
+// REMOVED: nextNoteTime
 
 // --- Private Helper Functions ---
 
@@ -35,15 +37,15 @@ let nextNoteTime = 0.0;         // Web Audio timestamp for the next scheduled lo
  */
 async function _ensureContextResumed() {
     if (audioContext && audioContext.state === 'suspended') {
-        console.log("AudioContext is suspended, attempting to resume...");
+        console.log("AudioProcessor: AudioContext is suspended, attempting to resume...");
         try {
             await audioContext.resume();
-            console.log("AudioContext resumed successfully.");
+            console.log("AudioProcessor: AudioContext resumed successfully.");
         } catch (err) {
-            console.error("Error resuming AudioContext:", err);
+            console.error("AudioProcessor: Error resuming AudioContext:", err);
             showError("Could not resume audio context. Interaction might be needed.");
-            // Optional: Rethrow if you want calling functions to handle it more strictly
-            // throw err;
+            // Re-throw to allow callers (like startLoop) to handle failure
+            throw err;
         }
     }
     // If not suspended or no context, promise resolves immediately
@@ -56,7 +58,7 @@ async function _ensureContextResumed() {
 function _getCurrentBuffer() {
     const buffer = isReversed ? reversedBuffer : decodedBuffer;
     if (!buffer) {
-        console.error(`Required buffer is missing: ${isReversed ? 'Reversed' : 'Original'}`);
+        console.error(`AudioProcessor: Required buffer is missing: ${isReversed ? 'Reversed' : 'Original'}`);
         showError(`Cannot play: ${isReversed ? 'Reversed' : 'Original'} audio buffer is unavailable.`);
     }
     return buffer;
@@ -64,91 +66,44 @@ function _getCurrentBuffer() {
 
 /**
  * Creates and schedules a single AudioBufferSourceNode for playback.
- * Handles implicit context resume attempt and triggers image animation.
+ * This is called by playOnce and the timingManager's callback.
  * @param {AudioBuffer} buffer The audio buffer to play.
  * @param {number} time The audioContext.currentTime-based time to start playback.
  * @param {number} rate The playback rate (pitch/speed).
  * @returns {AudioBufferSourceNode | null} The created source node, or null on failure.
  */
 function _playBuffer(buffer, time, rate) {
+    // No context resume check needed here, should be handled before calling
     if (!audioContext || !mainGainNode || !buffer) {
-        console.error("Cannot play buffer: Missing context, gain node, or buffer.");
+        console.error("AudioProcessor: Cannot play buffer: Missing context, gain node, or buffer.");
         return null;
     }
-
-    // Ensure context is running *before* creating the node
-    // Note: _ensureContextResumed is async, but we don't strictly need to wait
-    // for it here. The source.start() call later will likely work even if
-    // the resume is slightly delayed. If strict synchronization is needed,
-    // this could be awaited, potentially delaying playback slightly.
-     _ensureContextResumed(); // Attempt resume if needed
 
     try {
         const source = audioContext.createBufferSource();
         source.buffer = buffer;
-        source.playbackRate.value = rate;
+        source.playbackRate.value = rate; // Use the provided rate (currentPitch)
         source.connect(mainGainNode);
 
         // Trigger visual feedback
         triggerImageAnimation();
 
-        source.start(time);
-        // console.log(`Scheduled play at ${time} with rate ${rate}`);
+        source.start(time); // Use the precise time provided
+        // console.log(`AudioProcessor: Scheduled play at ${time.toFixed(4)} with rate ${rate}`);
         return source;
 
     } catch (error) {
-        console.error("Error creating or starting buffer source:", error);
+        console.error("AudioProcessor: Error creating or starting buffer source:", error);
         showError("Failed to play audio sample.");
         return null;
     }
 }
 
-/**
- * The core loop scheduling function. Runs periodically via setTimeout.
- * Schedules buffer playback based on tempo, ahead of the current time.
- */
-function _scheduleLoop() {
-    // Stop recursive calls if looping is disabled externally
-    if (!isLooping || !audioContext) {
-        _stopLoopInternal(); // Ensure timer is cleared if stopped externally
-        return;
-    }
-
-    // Calculate how far ahead we need to schedule
-    const scheduleUntil = audioContext.currentTime + SCHEDULE_AHEAD_TIME;
-
-    while (nextNoteTime < scheduleUntil) {
-        const bufferToPlay = _getCurrentBuffer();
-        if (!bufferToPlay) {
-            console.error("Stopping loop: Required buffer unavailable.");
-            stopLoop(); // Use the public stop function to update state and UI correctly
-            return; // Exit scheduler
-        }
-
-        // Schedule the next note
-        _playBuffer(bufferToPlay, nextNoteTime, currentPitch);
-
-        // Advance the next note time based on the current tempo
-        const secondsPerBeat = 60.0 / currentTempo;
-        nextNoteTime += secondsPerBeat;
-    }
-
-    // Re-schedule the next check
-    loopTimeoutId = setTimeout(_scheduleLoop, SCHEDULER_INTERVAL_MS);
-}
+// --- REMOVED: _scheduleLoop ---
+// --- REMOVED: _stopLoopInternal ---
 
 /**
- * Internal function to clear the loop timeout. Avoids redundant logging.
- */
-function _stopLoopInternal() {
-     if (loopTimeoutId) {
-        clearTimeout(loopTimeoutId);
-        loopTimeoutId = null;
-    }
-}
-
-/**
- * Creates a reversed copy of an AudioBuffer.
+ * Creates a reversed copy of an AudioBuffer. (Unchanged)
  * @param {AudioBuffer} originalBuffer The buffer to reverse.
  * @returns {AudioBuffer | null} The reversed buffer, or null on failure.
  */
@@ -161,26 +116,22 @@ function _createReversedBuffer(originalBuffer) {
 
         for (let channel = 0; channel < numberOfChannels; channel++) {
             const originalData = originalBuffer.getChannelData(channel);
-            const reversedData = reversed.getChannelData(channel); // Get destination array directly
-
-            // Efficiently reverse the data in place (or into new array)
+            const reversedData = reversed.getChannelData(channel);
             for (let i = 0; i < length; i++) {
                 reversedData[i] = originalData[length - 1 - i];
             }
-            // Note: copyToChannel is unnecessary if getChannelData provides a reference we fill
-            // reversed.copyToChannel(reversedData, channel); // Not needed if filling directly
         }
-        console.log("Reversed audio buffer created successfully.");
+        console.log("AudioProcessor: Reversed audio buffer created successfully.");
         return reversed;
     } catch (error) {
-        console.error("Error creating reversed audio buffer:", error);
+        console.error("AudioProcessor: Error creating reversed audio buffer:", error);
         showError("Failed to create reversed audio version.");
         return null;
     }
 }
 
 /**
- * Initializes the Web Audio API AudioContext and main GainNode.
+ * Initializes the Web Audio API AudioContext and main GainNode. (Unchanged)
  * @throws {Error} If Web Audio API is not supported or context creation fails.
  */
 function _setupAudioContext() {
@@ -190,53 +141,42 @@ function _setupAudioContext() {
             throw new Error("Web Audio API is not supported in this browser.");
         }
         audioContext = new AudioContext();
-
-        // Create main gain node for volume control
         mainGainNode = audioContext.createGain();
-        // Set initial volume smoothly (though likely instant at startup)
         mainGainNode.gain.setValueAtTime(currentVolume, audioContext.currentTime);
         mainGainNode.connect(audioContext.destination);
-
-        console.log(`AudioContext created. State: ${audioContext.state}`);
+        console.log(`AudioProcessor: AudioContext created. State: ${audioContext.state}`);
     } catch (error) {
-        console.error("Error setting up AudioContext:", error);
+        console.error("AudioProcessor: Error setting up AudioContext:", error);
         showError(`Audio Setup Error: ${error.message}`);
-        // Re-throw to prevent further initialization in init()
         throw error;
     }
 }
 
 /**
- * Decodes the Base64 audio data into an AudioBuffer and creates its reversed version.
+ * Decodes the Base64 audio data into an AudioBuffer and creates its reversed version. (Unchanged)
  * @param {string} audioBase64 The Base64 encoded audio data (Opus format expected).
  * @throws {Error} If decoding fails or input data is invalid.
  */
 async function _decodeAudio(audioBase64) {
     if (!audioContext) {
-        throw new Error("AudioContext not initialized before decoding.");
+        throw new Error("AudioProcessor: AudioContext not initialized before decoding.");
     }
     if (!audioBase64 || typeof audioBase64 !== 'string' || audioBase64.startsWith("/*")) {
-         throw new Error("Invalid or missing Opus audio Base64 data provided.");
+         throw new Error("AudioProcessor: Invalid or missing Opus audio Base64 data provided.");
     }
 
     try {
         const arrayBuffer = base64ToArrayBuffer(audioBase64);
-        console.log(`Decoding ${arrayBuffer.byteLength} bytes of audio data...`);
-
-        // Perform the decoding
+        console.log(`AudioProcessor: Decoding ${arrayBuffer.byteLength} bytes of audio data...`);
         decodedBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        console.log("Audio decoded successfully.");
+        console.log("AudioProcessor: Audio decoded successfully.");
 
-        // Attempt to create the reversed buffer immediately
         reversedBuffer = _createReversedBuffer(decodedBuffer);
         if (!reversedBuffer) {
-             console.warn("Could not create reversed buffer. Reverse playback will be unavailable.");
-             // Note: UI feedback about unavailability happens in toggleReverse if needed
+             console.warn("AudioProcessor: Could not create reversed buffer. Reverse playback will be unavailable.");
         }
-
     } catch (error) {
-        console.error("Error decoding audio data:", error);
-        // Provide specific error message if available
+        console.error("AudioProcessor: Error decoding audio data:", error);
         const message = error instanceof DOMException ? `DOMException: ${error.message}` : error.message;
         showError(`Audio Decoding Error: ${message || 'Unknown decoding error'}`);
         throw new Error(`Failed to decode audio data: ${message}`);
@@ -247,180 +187,218 @@ async function _decodeAudio(audioBase64) {
 // --- Public API ---
 
 /**
- * Initializes the audio processor: sets up context and decodes audio.
- * Must be called before any playback functions.
- * @param {string} audioBase64 The Base64 encoded audio data.
- * @returns {Promise<boolean>} True if initialization succeeded, false otherwise.
- */
-export async function init(audioBase64) {
+  * Initializes the audio processor: sets up context, decodes audio, and initializes timing manager.
+  * Assumes initialTempo and initialPitch passed in are valid numbers.
+  * @param {string} audioBase64 The Base64 encoded audio data.
+  * @param {number} initialTempo - The starting tempo (BPM).
+  * @param {number} initialPitch - The starting pitch (playback rate).
+  * @returns {Promise<boolean>} True if initialization succeeded, false otherwise.
+  */
+export async function init(audioBase64, initialTempo, initialPitch) {
     try {
-        _setupAudioContext();
-        await _decodeAudio(audioBase64);
+        // Directly assign the values passed from main.js
+        // No need for redundant validation or fallbacks here
+        currentTempo = initialTempo;
+        currentPitch = initialPitch; // Assuming main.js also validates/defaults pitch
+
+        console.log(`AudioProcessor Init: Setting Tempo ${currentTempo}, Pitch ${currentPitch}`);
+
+        _setupAudioContext(); // Setup context and gain node
+        await _decodeAudio(audioBase64); // Decode audio
+
+        // --- Initialize the timing manager ---
+        // Pass the received values directly
+        timingManager.init(audioContext, currentTempo, currentPitch);
+
         return true; // Indicate success
+
     } catch (error) {
-        // Errors should have been logged and shown by the helper functions
         console.error("Audio Processor initialization failed.", error);
-        // Ensure controls are disabled externally if init fails
         return false; // Indicate failure
     }
 }
 
 /**
- * Plays the current audio sample (forward or reversed) once.
+ * Plays the current audio sample (forward or reversed) once. (Largely Unchanged)
  */
-export function playOnce() {
+export async function playOnce() {
+    // Ensure context is active before playing
+    try {
+        await _ensureContextResumed();
+    } catch (err) {
+        // Error already shown by _ensureContextResumed
+        return; // Don't proceed if context couldn't resume
+    }
+
     if (!audioContext) {
         showError("Audio system not initialized.");
         return;
     }
     const bufferToPlay = _getCurrentBuffer();
     if (!bufferToPlay) {
-        // Error message handled by _getCurrentBuffer
-        return;
+        return; // Error handled by _getCurrentBuffer
     }
-    // Play immediately
+    // Play immediately using the current time
     _playBuffer(bufferToPlay, audioContext.currentTime, currentPitch);
 }
 
 /**
- * Starts the tempo-synchronized loop playback.
- * Resumes context if necessary.
+ * --- UPDATED: Starts the tempo-synchronized loop playback using the timing manager. ---
  */
 export async function startLoop() {
-    if (isLooping || !audioContext) {
-        console.warn("Loop already active or audio context unavailable.");
-        return; // Already looping or not ready
+    // Check if already looping via timing manager
+    if (timingManager.getLoopingState()) {
+        console.warn("AudioProcessor: Loop already active (requested via timing manager).");
+        return;
+    }
+    // Ensure context exists (should always if init succeeded)
+    if (!audioContext) {
+         console.error("AudioProcessor: Cannot start loop, AudioContext not available.");
+         return;
     }
 
-    // Check if the buffer needed for the *current* direction is available
-    const bufferToCheck = isReversed ? reversedBuffer : decodedBuffer;
+    // Ensure buffer for the *current* direction is available before starting
+    const bufferToCheck = _getCurrentBuffer();
     if (!bufferToCheck) {
          showError(`Cannot start loop: ${isReversed ? 'Reversed' : 'Original'} audio buffer missing.`);
          return;
     }
 
+    // Ensure context is running before handing off to timing manager
     try {
-        // Ensure context is running before starting scheduler
         await _ensureContextResumed();
 
-        console.log("Starting loop.");
-        isLooping = true;
-        // Schedule the first note slightly ahead to allow for processing
-        nextNoteTime = audioContext.currentTime + LOOP_START_DELAY;
-        _scheduleLoop(); // Start the scheduler
+        // Define the callback for the timing manager
+        const soundPlaybackCallback = (scheduledTime) => {
+            const bufferToPlay = _getCurrentBuffer();
+            if (bufferToPlay && audioContext && mainGainNode) {
+                // Use _playBuffer to handle node creation and connection
+                _playBuffer(bufferToPlay, scheduledTime, currentPitch);
+            } else {
+                console.error("AudioProcessor: Buffer/Context/Gain unavailable when playCallback was called by TimingManager. Stopping loop.");
+                showError("Loop stopped: audio resources unavailable.");
+                timingManager.stopLoop(); // Tell timing manager to stop
+                // Update UI externally if needed (main.js handles button state)
+            }
+        };
+
+        // Start the loop via the timing manager
+        console.log("AudioProcessor: Starting loop via timingManager.");
+        timingManager.startLoop(soundPlaybackCallback);
 
     } catch (err) {
-        // Error resuming context would likely be caught here if _ensureContextResumed re-throws
-        console.error("Failed to start loop due to context resume error:", err);
-        showError("Could not start audio loop. Interaction might be needed.");
-        isLooping = false; // Ensure state is correct
+        // Error resuming context
+        console.error("AudioProcessor: Failed to start loop (context resume failed?).", err);
+        // No need to set local isLooping flag
+        // Error message handled by _ensureContextResumed
     }
 }
 
 /**
- * Stops the loop playback.
- * Allows currently playing sounds triggered by the loop to finish naturally.
+ * --- UPDATED: Stops the loop playback via the timing manager. ---
  */
 export function stopLoop() {
-    if (!isLooping) return; // Not looping, nothing to stop
-
-    console.log("Stopping loop.");
-    isLooping = false;
-    _stopLoopInternal(); // Clear the scheduler timeout
+    // Delegate stopping entirely to the timing manager
+    if (timingManager.getLoopingState()) {
+        console.log("AudioProcessor: Stopping loop via timingManager.");
+        timingManager.stopLoop();
+    } else {
+         // console.log("AudioProcessor: Stop requested but loop not active.");
+    }
 }
 
 /**
- * Sets the playback tempo (BPM) for the loop.
- * Takes effect on the next scheduled note in the loop.
+ * --- UPDATED: Sets the playback tempo (BPM). ---
+ * Updates local state and informs the timing manager, which handles loop restart if needed.
  * @param {number} bpm The desired tempo in Beats Per Minute.
  */
 export function setTempo(bpm) {
-    // Basic validation, although clamping happens in main.js
+    // Basic validation
     if (typeof bpm === 'number' && bpm > 0) {
-        currentTempo = bpm;
-        // console.log(`Tempo set to ${currentTempo} BPM`);
-        // No need to restart loop; scheduler uses currentTempo on next iteration.
+        console.log(`AudioProcessor: Setting tempo to ${bpm} BPM`);
+        currentTempo = bpm; // Update local state (might be useful elsewhere)
+        timingManager.setTempo(bpm); // Delegate to timing manager
     } else {
-         console.warn(`Invalid tempo value received: ${bpm}`);
+         console.warn(`AudioProcessor: Invalid tempo value received: ${bpm}`);
     }
 }
 
 /**
- * Sets the playback rate (pitch/speed).
- * Affects both loop playback and playOnce calls immediately.
- * @param {number} rate Playback rate (1.0 = normal, 0.5 = half speed, 2.0 = double speed).
+ * --- UPDATED: Sets the playback rate (pitch/speed). ---
+ * Updates local state and informs the timing manager.
+ * @param {number} rate Playback rate (1.0 = normal).
  */
 export function setPitch(rate) {
-     // Basic validation, although clamping happens in main.js
+    // Basic validation
     if (typeof rate === 'number' && rate > 0) {
-        currentPitch = rate;
-        // console.log(`Pitch (playback rate) set to ${currentPitch}`);
-        // Affects next scheduled notes and subsequent playOnce calls.
-        // Does NOT affect sounds already playing.
+        // console.log(`AudioProcessor: Setting pitch to ${rate}`);
+        currentPitch = rate; // Update local state
+        timingManager.setPitch(rate); // Inform timing manager
     } else {
-         console.warn(`Invalid pitch value received: ${rate}`);
+         console.warn(`AudioProcessor: Invalid pitch value received: ${rate}`);
     }
 }
 
 /**
- * Sets the master volume level smoothly.
+ * Sets the master volume level smoothly. (Unchanged)
  * @param {number} level Volume level (0.0 = silent, 1.0 = normal). Values > 1.0 amplify.
  */
 export function setVolume(level) {
-     // Basic validation, although clamping happens in main.js
     if (typeof level === 'number' && level >= 0) {
         currentVolume = level;
         if (mainGainNode && audioContext) {
-            // Use setTargetAtTime for smooth volume transitions
             mainGainNode.gain.setTargetAtTime(level, audioContext.currentTime, SMOOTH_PARAM_TIME);
             // console.log(`Volume set to ${currentVolume}`);
         }
     } else {
-         console.warn(`Invalid volume value received: ${level}`);
+         console.warn(`AudioProcessor: Invalid volume value received: ${level}`);
     }
 }
 
 /**
- * Toggles between forward and reversed playback.
- * Restarts the loop immediately if it was active, using the new direction.
+ * --- UPDATED: Toggles between forward and reversed playback. ---
+ * Restarts the loop via timing manager if it was active.
  * @returns {boolean} The new state of isReversed.
  */
 export function toggleReverse() {
     const intendedNewState = !isReversed;
 
-    // Crucial check: If trying to switch TO reversed, ensure the buffer exists.
+    // Check buffer availability
     if (intendedNewState === true && !reversedBuffer) {
         showError("Reversed audio is unavailable.");
-        console.warn("Attempted to switch to reverse playback, but reversed buffer is missing.");
-        return isReversed; // Return the current state (false) without changing
+        console.warn("AudioProcessor: Attempted to switch to reverse playback, but reversed buffer is missing.");
+        return isReversed; // Return current state unchanged
     }
 
-    // Proceed with the toggle
+    // Proceed with state change
     isReversed = intendedNewState;
-    console.log(`Reverse playback toggled: ${isReversed ? 'On' : 'Off'}`);
+    console.log(`AudioProcessor: Reverse playback toggled: ${isReversed ? 'On' : 'Off'}`);
 
-    // If the loop is running, restart the scheduler immediately
-    // to use the correct buffer for subsequent notes.
-    if (isLooping) {
-        console.log("Restarting loop scheduler due to reverse toggle.");
-        _stopLoopInternal(); // Stop the current timer
-        // Re-sync nextNoteTime slightly ahead to avoid immediate re-trigger
-        nextNoteTime = audioContext.currentTime + LOOP_START_DELAY;
-        _scheduleLoop(); // Reschedule immediately
+    // If the loop is running (check via timing manager), restart it
+    if (timingManager.getLoopingState()) {
+        console.log("AudioProcessor: Restarting loop scheduler due to reverse toggle.");
+        // Simply stopping and starting again handles buffer switching via the callback
+        timingManager.stopLoop();
+        // Re-call the public startLoop function to ensure context checks and callback setup happen correctly
+        startLoop().catch(err => {
+            console.error("AudioProcessor: Error restarting loop after reverse toggle:", err);
+            // Ensure loop is definitively stopped if restart fails
+             if (timingManager.getLoopingState()) { timingManager.stopLoop(); }
+        });
     }
     return isReversed; // Return the new state
 }
 
 /**
- * Gets the current looping state.
+ * --- UPDATED: Gets the current looping state from the timing manager. ---
  * @returns {boolean} True if the loop is active, false otherwise.
  */
 export function getLoopingState() {
-    return isLooping;
+    return timingManager.getLoopingState();
 }
 
 /**
- * Gets the current reverse playback state.
+ * Gets the current reverse playback state. (Unchanged logic, uses local state)
  * @returns {boolean} True if reversed playback is active, false otherwise.
  */
 export function getReverseState() {
@@ -428,7 +406,7 @@ export function getReverseState() {
 }
 
 /**
- * Gets the current state of the underlying AudioContext.
+ * Gets the current state of the underlying AudioContext. (Unchanged)
  * @returns {'suspended' | 'running' | 'closed' | 'unavailable'} The context state string.
  */
 export function getAudioContextState() {
@@ -436,7 +414,7 @@ export function getAudioContextState() {
 }
 
 /**
- * Public method to explicitly request resuming the AudioContext.
+ * Public method to explicitly request resuming the AudioContext. (Unchanged)
  * Useful for handling browser autoplay restrictions on user interaction.
  * @returns {Promise<void>} A promise resolving when the context resumes, or rejecting on error.
  */

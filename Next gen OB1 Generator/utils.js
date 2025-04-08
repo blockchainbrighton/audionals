@@ -1,3 +1,5 @@
+// --- START OF FILE utils.js ---
+
 /**
  * Converts a Base64 string (potentially with data URI prefix) to an ArrayBuffer.
  * @param {string} base64 The Base64 string.
@@ -41,3 +43,5 @@ export function _isInputFocused(target) {
     const tagName = target.tagName.toLowerCase();
     return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
 }
+
+// --- END OF FILE utils.js ---

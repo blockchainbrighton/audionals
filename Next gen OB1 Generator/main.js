@@ -6,7 +6,8 @@ import * as ui from './uiUpdater.js';
 // Import clamp for slider logic and _isInputFocused for keydown checks
 import { clamp, _isInputFocused } from './utils.js';
 import * as keyboardShortcuts from './keyboardShortcuts.js';
-import { initReferencePanel, toggleReferencePanel } from './referenceDisplay.js';
+// Assuming initReferencePanel doesn't need toggleReferencePanel directly here
+import { initReferencePanel } from './referenceDisplay.js';
 
 // --- DOM Element References ---
 const mainImage = document.getElementById('main-image');
@@ -24,7 +25,7 @@ const tempoValueSpan = document.getElementById('tempo-value');
 const pitchValueSpan = document.getElementById('pitch-value');
 const volumeValueSpan = document.getElementById('volume-value');
 const errorMessageDiv = document.getElementById('error-message');
-// --- NEW: Column References ---
+// --- Column References ---
 const controlsColumn = document.querySelector('.controls-column');
 const referenceColumn = document.querySelector('.reference-column');
 
@@ -35,14 +36,7 @@ if (!referenceColumn) console.warn("Reference column element missing.");
 
 
 // --- Helper Function for Data Validation/Formatting ---
-/**
- * Validates base64 data and ensures it's a proper data URL.
- * @param {string | undefined} base64Data - The input base64 data or data URL.
- * @param {string} dataUrlPrefix - The expected data URL prefix (e.g., 'data:image/jpeg;base64,').
- * @param {string} variableName - The name of the data source for error messages (e.g., 'Image').
- * @returns {string} The validated and formatted data URL.
- * @throws {Error} If the data is missing or invalid.
- */
+/** (Unchanged) */
 function validateAndFormatDataSource(base64Data, dataUrlPrefix, variableName) {
     if (typeof base64Data === 'undefined' || !base64Data || (typeof base64Data === 'string' && base64Data.startsWith("/*"))) {
         throw new Error(`${variableName} data is missing or invalid.`);
@@ -53,14 +47,7 @@ function validateAndFormatDataSource(base64Data, dataUrlPrefix, variableName) {
 }
 
 // --- Helper Function for Slider Input ---
-/**
- * Generic handler for slider input events.
- * Reads the slider value, clamps it, calls the audio setter, and updates the UI display.
- * @param {Event} event - The input event object.
- * @param {Function} audioSetter - The function from audioProcessor.js to call (e.g., audio.setTempo).
- * @param {Function} uiUpdater - The function from uiUpdater.js to call (e.g., ui.updateTempoDisplay).
- * @param {Function} [parser=parseFloat] - The function to parse the slider value (parseInt or parseFloat).
- */
+/** (Unchanged) */
 function handleSliderInput(event, audioSetter, uiUpdater, parser = parseFloat) {
     const slider = event.target;
     if (!slider || typeof slider.value === 'undefined' || typeof slider.min === 'undefined' || typeof slider.max === 'undefined') {
@@ -70,7 +57,7 @@ function handleSliderInput(event, audioSetter, uiUpdater, parser = parseFloat) {
     const rawValue = parser(slider.value);
     const min = parser(slider.min);
     const max = parser(slider.max);
-    const clampedValue = clamp(rawValue, min, max); // Use imported clamp
+    const clampedValue = clamp(rawValue, min, max);
 
     if (typeof audioSetter === 'function') {
         audioSetter(clampedValue);
@@ -83,98 +70,72 @@ function handleSliderInput(event, audioSetter, uiUpdater, parser = parseFloat) {
     } else {
         console.error(`Invalid uiUpdater provided for ${slider.id}`);
     }
-    // console.log(`${slider.id} updated to: ${clampedValue}`); // Keep logs minimal unless debugging
 }
 
 // --- Shared Async Helper for Loop Toggle ---
-/**
- * Handles the logic for toggling the audio loop on/off.
- */
+/** (Unchanged - Relies on updated audioProcessor API) */
 async function handleLoopToggle() {
-    // console.groupCollapsed("handleLoopToggle Action"); // Keep logs minimal unless debugging
     const wasLooping = audio.getLoopingState();
-    // console.log(`Loop state BEFORE toggle: ${wasLooping}`);
     let newState = wasLooping;
-
+    console.log(`Main: Toggling loop. Was looping: ${wasLooping}`);
     try {
-        await audio.resumeContext();
+        // No need to explicitly resume here if start/stop handle it
+        // await audio.resumeContext(); // audioProcessor methods now handle resume
 
         if (wasLooping) {
-            // console.log("Calling audio.stopLoop()");
             audio.stopLoop();
-            newState = false;
+            // No need to await stopLoop, it's synchronous now
+            newState = audio.getLoopingState(); // Should be false
         } else {
-            // console.log("Calling audio.startLoop()");
-            await audio.startLoop();
-            newState = audio.getLoopingState();
+            await audio.startLoop(); // startLoop remains async due to potential resume
+            newState = audio.getLoopingState(); // Should be true if successful
         }
-        // console.log(`Loop state AFTER toggle action: ${newState}`);
+         console.log(`Main: Loop toggle complete. Now looping: ${newState}`);
 
     } catch (err) {
         ui.showError(`Could not toggle loop: ${err.message}`);
-        console.error("Error toggling loop:", err);
-        newState = audio.getLoopingState();
+        console.error("Main: Error toggling loop:", err);
+        newState = audio.getLoopingState(); // Re-check state after error
     } finally {
          ui.updateLoopButton(newState);
-         // console.groupEnd(); // Keep logs minimal unless debugging
     }
 }
 
-// --- NEW: Toggle Function for Side Columns ---
-/**
- * Toggles the visibility of the control and reference columns.
- */
+// --- Toggle Function for Side Columns (Using Simplified CSS Approach) ---
+/** (Unchanged) */
 function toggleSideColumns() {
     if (!controlsColumn || !referenceColumn) {
         console.error("Cannot toggle columns: one or both column elements missing.");
         return;
     }
-    const wereHidden = controlsColumn.classList.contains('hidden');
-
+    // Toggle the 'hidden' class on BOTH columns
     controlsColumn.classList.toggle('hidden');
     referenceColumn.classList.toggle('hidden');
 
-    console.log(`Side columns toggled. Now hidden: ${!wereHidden}`);
-
-    // If we just hid the reference column, also ensure the internal panel loses its 'show' class
-    // This prevents it from immediately showing next time the columns are revealed by 'i'
-    if (!wereHidden && referencePanel && referencePanel.classList.contains('show')) {
-        referencePanel.classList.remove('show');
-        console.log("Reference panel explicitly hidden because column was hidden.");
-    }
+    const areNowHidden = controlsColumn.classList.contains('hidden');
+    console.log(`Side columns toggled via function. Now hidden: ${areNowHidden}`);
+    // No need to manage .show on referencePanel anymore
 }
-
 
 
 // --- Initialization ---
 async function initializeApp() {
     console.log("Initializing application...");
 
-     // Find referencePanel earlier if needed
-     const referencePanel = document.getElementById('reference-panel'); // Moved up or ensure it's available here
+     const referencePanel = document.getElementById('reference-panel');
 
-    // Pass collected DOM elements to uiUpdater (if refactored - currently uses internal lookups)
-    // If uiUpdater.js is updated later to accept elements via init:
-    /*
-    ui.init({
-        controlsContainer, errorMessageDiv, playOnceBtn, loopToggleBtn,
-        reverseToggleBtn, tempoSlider, tempoValueSpan, pitchSlider,
-        pitchValueSpan, volumeSlider, volumeValueSpan, mainImage
-    });
-    */
-    // For now, stick to the compatible setControlsContainer if it exists
+    // Pass controls container ref (unchanged)
     if (ui.setControlsContainer) {
         ui.setControlsContainer(controlsContainer);
     } else {
-        // This warning is valid if uiUpdater hasn't been updated yet
-        console.warn("ui.setControlsContainer function not found in uiUpdater.js (may indicate uiUpdater hasn't been refactored yet).");
+        console.warn("ui.setControlsContainer function not found...");
     }
 
     ui.clearError();
-    // Add checks for new column elements (optional but good practice)
     if (!controlsColumn) console.warn("Controls column element not found.");
     if (!referenceColumn) console.warn("Reference column element not found.");
-    // 1. Validate Input Data
+
+    // 1. Validate Input Data (Unchanged)
     let imageSrc;
     let audioSource;
     try {
@@ -182,11 +143,11 @@ async function initializeApp() {
             typeof imageBase64 !== 'undefined' ? imageBase64 : undefined,
             'data:image/jpeg;base64,', 'Image'
         );
-        ui.setImageSource(imageSrc); // uiUpdater needs mainImage reference internally
+        ui.setImageSource(imageSrc);
     } catch (e) {
         ui.showError(`Failed to load image: ${e.message}`);
         console.error("Image loading error:", e);
-        if(controlsContainer) ui.disableControls(); // Disable only if container exists
+        if(controlsContainer) ui.disableControls();
         return;
     }
     try {
@@ -201,57 +162,89 @@ async function initializeApp() {
          return;
      }
 
-    // 2. Initialize Audio Processor
-    console.log("Initializing audio...");
-    const audioReady = await audio.init(audioSource);
+   // Define the single default tempo constant
+   const DEFAULT_TEMPO = 78;
+
+   // 2. Get Initial Tempo/Pitch and Initialize Audio Processor
+   console.log("Reading initial slider values for audio init...");
+   let initialTempo = DEFAULT_TEMPO; // Use the constant as the initial fallback
+   let initialPitch = 1.0; // Default fallback for pitch
+
+   if (tempoSlider) {
+       const sliderValue = parseInt(tempoSlider.value, 10);
+       // Validate the value read from the slider
+       if (!isNaN(sliderValue) && sliderValue > 0 && sliderValue <= 400) { // Added upper bound check matching HTML
+           initialTempo = sliderValue; // Use the valid slider value
+           console.log(`Using initial tempo from slider: ${initialTempo}`);
+       } else {
+           console.warn(`Invalid initial tempo value on slider (${tempoSlider.value}), using default ${DEFAULT_TEMPO}.`);
+           initialTempo = DEFAULT_TEMPO; // Fallback to default if slider value is bad
+           // Optional: Update the slider's value attribute and display if it was invalid
+           // tempoSlider.value = DEFAULT_TEMPO;
+           // ui.updateTempoDisplay(DEFAULT_TEMPO);
+       }
+   } else {
+       console.warn(`Tempo slider not found, using default initial tempo ${DEFAULT_TEMPO}.`);
+       initialTempo = DEFAULT_TEMPO; // Fallback to default if slider missing
+   }
+
+   // initialPitch handling remains the same...
+   if (pitchSlider) {
+       initialPitch = parseFloat(pitchSlider.value);
+        if (isNaN(initialPitch) || initialPitch <= 0) {
+           console.warn(`Invalid initial pitch value (${pitchSlider.value}), using default 1.0.`);
+           initialPitch = 1.0;
+       }
+   } else {
+       console.warn("Pitch slider not found, using default initial pitch 1.0.");
+   }
+
+
+   console.log(`Initializing audio with Tempo: ${initialTempo}, Pitch: ${initialPitch}`);
+   // --- Pass the *validated* initial values to audio.init ---
+   // audio.init now trusts that these values are reasonable numbers
+   const audioReady = await audio.init(audioSource, initialTempo, initialPitch);
+
     if (!audioReady) {
         console.error("Audio initialization failed. Controls remain disabled.");
+        // uiUpdater should handle disabling controls if needed, or do it here
         if(controlsContainer) ui.disableControls();
         return;
     }
 
-    // 3. Setup Post-Audio Initialization
+    // 3. Setup Post-Audio Initialization (Unchanged)
     console.log("Audio ready. Setting up UI and listeners.");
     ui.enableControls();
-    setupEventListeners(); // setupEventListeners might need referencePanel now
+    setupEventListeners();
 
-    // Initialize Reference Panel Content EARLY
+    // Initialize Reference Panel Content EARLY (Unchanged)
     if (referencePanel) {
-        initReferencePanel(referencePanel); // Call this ONCE during init
+        initReferencePanel(referencePanel);
         console.log("Reference panel content initialized.");
     } else {
         console.warn("Reference panel element not found during init, content may be missing.");
     }
 
-    // 4. Initialize Keyboard Shortcuts
+    // 4. Initialize Keyboard Shortcuts (Unchanged)
     keyboardShortcuts.init({
         tempoSlider: tempoSlider,
         pitchSlider: pitchSlider,
         volumeSlider: volumeSlider,
-        // No longer need to pass audio/ui modules if keyboardShortcuts imports them directly
     });
 
-    // 5. Set Initial UI Values
+    // 5. Set Initial UI Values (Unchanged - reads current audio state)
     console.groupCollapsed("Setting Initial UI Values");
     try {
-        const sliderConfigs = [
-            { slider: tempoSlider, updater: ui.updateTempoDisplay, label: 'Tempo', parser: parseInt },
-            { slider: pitchSlider, updater: ui.updatePitchDisplay, label: 'Pitch' },
-            { slider: volumeSlider, updater: ui.updateVolumeDisplay, label: 'Volume' }
-        ];
-        sliderConfigs.forEach(config => {
-            if (config.slider) {
-                const parser = config.parser || parseFloat;
-                const value = parser(config.slider.value);
-                // console.log(`Initial ${config.label}: ${value}`); // Minimal logging
-                if (typeof config.updater === 'function') {
-                    config.updater(value);
-                } else { console.warn(`${config.label} UI updater function not found.`); }
-            } else { console.warn(`${config.label} slider not found for initial setup.`); }
-        });
+        // Update displays based on the initial values used by audioProcessor/timingManager
+        ui.updateTempoDisplay(initialTempo); // Use the value we just determined
+        ui.updatePitchDisplay(initialPitch); // Use the value we just determined
+        if (volumeSlider) { // Update volume display too
+             ui.updateVolumeDisplay(parseFloat(volumeSlider.value));
+        }
 
-        ui.updateLoopButton(audio.getLoopingState());
-        ui.updateReverseButton(audio.getReverseState());
+        // Update button states based on the now initialized audio module state
+        ui.updateLoopButton(audio.getLoopingState()); // Should be false initially
+        ui.updateReverseButton(audio.getReverseState()); // Should be false initially
 
     } catch (error) {
          console.error("Error setting initial UI values:", error);
@@ -262,60 +255,54 @@ async function initializeApp() {
     console.log("Application initialized successfully.");
 }
 
-// --- REMOVED Local Definition of isTextInputFocused ---
-// The function is now imported from utils.js as _isInputFocused
-
 // --- Helper for Adding Event Listeners ---
-/**
- * Attaches an event listener if the element exists, warns if not.
- * @param {Element | null} element - The DOM element to attach the listener to.
- * @param {string} eventName - The name of the event (e.g., 'click', 'input').
- * @param {EventListenerOrEventListenerObject} handler - The event handler function.
- * @param {string} elementNameForWarn - A descriptive name for the element for warning messages.
- */
+/** (Unchanged) */
 function addListener(element, eventName, handler, elementNameForWarn) {
     if (element) {
         element.addEventListener(eventName, handler);
     } else {
-        // Only warn if the element is generally expected
-        const optionalElements = ['infoToggleBtn', 'referencePanel']; // Add other non-critical elements here
+        const optionalElements = ['infoToggleBtn', 'referencePanel'];
         if (!optionalElements.includes(elementNameForWarn)) {
             console.warn(`[setupEventListeners] Element "${elementNameForWarn}" not found. Listener not attached.`);
-        } else {
-             // console.log(`[setupEventListeners] Optional element "${elementNameForWarn}" not found. Listener not attached.`); // Less severe log for optional
         }
     }
 }
 
-// --- Event Listener Setup (UPDATED INFO BUTTON LOGIC) ---
+// --- Event Listener Setup (SIMPLIFIED INFO BUTTON) ---
 function setupEventListeners() {
     console.log("Setting up event listeners...");
 
-    // --- Control Listeners ---
+    // --- Control Listeners (Unchanged - rely on audioProcessor API) ---
     addListener(mainImage, 'click', handleLoopToggle, 'mainImage');
     addListener(playOnceBtn, 'click', () => audio.playOnce(), 'playOnceBtn');
     addListener(loopToggleBtn, 'click', handleLoopToggle, 'loopToggleBtn');
     addListener(reverseToggleBtn, 'click', () => {
+        // resumeContext might not be strictly necessary here if toggleReverse handles it,
+        // but it doesn't hurt if audioProcessor's resumeContext is idempotent.
         audio.resumeContext()
-             .then(() => ui.updateReverseButton(audio.toggleReverse()))
+             .then(() => {
+                 // toggleReverse now directly returns the new state
+                 const newState = audio.toggleReverse();
+                 ui.updateReverseButton(newState);
+             })
              .catch(err => {
-                console.error("Error toggling reverse:", err);
+                console.error("Main: Error toggling reverse:", err);
                 ui.showError(`Could not toggle reverse: ${err.message}`);
              });
     }, 'reverseToggleBtn');
 
-    // --- Slider Listeners ---
+    // --- Slider Listeners (Unchanged - rely on audioProcessor API) ---
     addListener(tempoSlider, 'input', (e) => handleSliderInput(e, audio.setTempo, ui.updateTempoDisplay, parseInt), 'tempoSlider');
     addListener(pitchSlider, 'input', (e) => handleSliderInput(e, audio.setPitch, ui.updatePitchDisplay), 'pitchSlider');
     addListener(volumeSlider, 'input', (e) => handleSliderInput(e, audio.setVolume, ui.updateVolumeDisplay), 'volumeSlider');
 
-    // --- Global Keydown Listener ---
+    // --- Global Keydown Listener (Using simplified column toggle) ---
     window.addEventListener('keydown', (e) => {
         const isInputFocused = typeof _isInputFocused === 'function' ? _isInputFocused(e.target) : false;
         const isButtonFocused = e.target?.tagName?.toLowerCase() === 'button';
         const blockKeyboardControls = isInputFocused || isButtonFocused;
 
-        // Spacebar for Play Once
+        // Spacebar for Play Once (Unchanged)
         if (e.code === 'Space' && !blockKeyboardControls && !e.repeat) {
             if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
                 e.preventDefault();
@@ -323,49 +310,26 @@ function setupEventListeners() {
             }
         }
 
-        // --- Toggle BOTH Columns with 'i' key (SIMPLIFIED) ---
+        // Toggle BOTH Columns with 'i' key (Using simplified CSS approach)
         if (e.key.toLowerCase() === 'i' && !blockKeyboardControls && !e.repeat) {
             e.preventDefault();
-
-            // Check if BOTH column references exist
-            if (controlsColumn && referenceColumn) {
-                // Toggle the 'hidden' class on BOTH columns
-                controlsColumn.classList.toggle('hidden');
-                referenceColumn.classList.toggle('hidden');
-
-                // Log the new state
-                const areNowHidden = controlsColumn.classList.contains('hidden');
-                console.log(`Controls and Reference columns visibility toggled via 'i' key. Now hidden: ${areNowHidden}`);
-
-                // NO NEED TO MANAGE .show on referencePanel anymore
-
-            } else {
-                 // Error message if columns are missing
-                 let missingElements = [];
-                 if (!controlsColumn) missingElements.push('.controls-column');
-                 if (!referenceColumn) missingElements.push('.reference-column');
-                 console.error(`Cannot toggle columns via 'i' key: Element reference(s) missing for: ${missingElements.join(' and ')}!`);
-            }
+            toggleSideColumns(); // Use the dedicated toggle function
         }
 
-        // --- Integrate other keyboard shortcuts (Keep this as is) ---
+        // Integrate other keyboard shortcuts (Unchanged)
         if (keyboardShortcuts && typeof keyboardShortcuts.handleKeydown === 'function') {
              keyboardShortcuts.handleKeydown(e, blockKeyboardControls);
          }
     });
-    // --- Info Button Listener (SIMPLIFIED) ---
+    // --- Info Button Listener (SIMPLIFIED - relies on CSS for panel content visibility) ---
     addListener(infoToggleBtn, 'click', () => {
         console.log("Info button clicked.");
         // Only need the reference COLUMN now
         if (referenceColumn) {
-            // 1. Toggle the visibility of the entire reference column
-            referenceColumn.classList.toggle('hidden');
+            referenceColumn.classList.toggle('hidden'); // Just toggle column visibility
             const willBeHidden = referenceColumn.classList.contains('hidden');
             console.log(`Reference column toggled via button. Now hidden: ${willBeHidden}`);
-
-            // NO NEED TO MANAGE .show on referencePanel anymore
-            // initReferencePanel was called during initializeApp
-
+            // CSS handles hiding/showing the panel content inside
         } else {
             console.warn("Info button clicked, but reference column element is missing.");
         }
@@ -374,7 +338,7 @@ function setupEventListeners() {
     console.log("Event listeners setup complete.");
 }
 
-// --- Start the Application ---
+// --- Start the Application --- (Unchanged)
 if (document.readyState === 'loading') {
    document.addEventListener('DOMContentLoaded', initializeApp);
 } else {
