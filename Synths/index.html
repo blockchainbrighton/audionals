@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Programmable Analog Synthesizer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            overflow-x: hidden;
+        }
+        
+        .synth-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #2d2d2d;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .control-panel {
+            background-color: #333;
+            border-radius: 8px;
+        }
+        
+        .knob {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            margin: 0 auto;
+        }
+        
+        .knob-outer {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #2c2c2c, #3a3a3a);
+            box-shadow: 4px 4px 8px #1f1f1f, -4px -4px 8px #474747;
+        }
+        
+        .knob-inner {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #333333, #2a2a2a);
+            box-shadow: inset 2px 2px 3px #1a1a1a, inset -2px -2px 3px #444444;
+        }
+        
+        .knob-indicator {
+            position: absolute;
+            top: 24px;
+            left: 25px;
+            width: 25px;
+            height: 3px;
+            background-color: #0f0;
+            transform-origin: 0 50%;
+            box-shadow: 0 0 5px #0f0;
+        }
+
+        .led {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            background-color: #222;
+            box-shadow: inset 0 0 2px #000;
+            display: inline-block;
+        }
+        
+        .led.active {
+            background-color: #0f0;
+            box-shadow: 0 0 5px #0f0, 0 0 10px #0f0;
+        }
+        
+        .piano-key {
+            position: relative;
+            float: left;
+            transition: background-color 0.1s;
+        }
+        
+        .white-key {
+            width: calc(100% / 21);
+            height: 150px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            z-index: 1;
+            border-radius: 0 0 4px 4px;
+        }
+        
+        .black-key {
+            width: calc(100% / 42);
+            height: 90px;
+            background-color: #000;
+            margin-left: calc(-100% / 84);
+            margin-right: calc(-100% / 84);
+            z-index: 2;
+            border-radius: 0 0 4px 4px;
+        }
+        
+        .white-key.active {
+            background-color: #e0e0f0;
+            box-shadow: inset 0 0 10px #0000ff50;
+        }
+        
+        .black-key.active {
+            background-color: #333;
+            box-shadow: inset 0 0 10px #6666ff50;
+        }
+        
+        .slider-container {
+            position: relative;
+            height: 150px;
+            width: 40px;
+            margin: 0 auto;
+        }
+        
+        .slider-track {
+            position: absolute;
+            width: 8px;
+            height: 120px;
+            background: linear-gradient(180deg, #1a1a1a, #3a3a3a);
+            border-radius: 4px;
+            left: 16px;
+            top: 15px;
+        }
+        
+        .slider-thumb {
+            position: absolute;
+            width: 24px;
+            height: 12px;
+            background: linear-gradient(145deg, #4a4a4a, #3a3a3a);
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+            border-radius: 6px;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+        }
+        
+        .slider-value {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10px;
+        }
+        
+        .oscilloscope {
+            width: 100%;
+            height: 100px;
+            background-color: #111;
+            border-radius: 4px;
+            border: 1px solid #444;
+        }
+        
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            background-color: #444;
+            border-radius: 4px 4px 0 0;
+        }
+        
+        .tab.active {
+            background-color: #555;
+        }
+        
+        .tab-content {
+            display: none;
+            background-color: #555;
+            padding: 16px;
+            border-radius: 0 4px 4px 4px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .recording-item {
+            background-color: #333;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        
+        .recording-item:hover {
+            background-color: #444;
+        }
+        
+        @media (max-width: 768px) {
+            .white-key {
+                height: 120px;
+            }
+            
+            .black-key {
+                height: 70px;
+            }
+            
+            .slider-container {
+                height: 120px;
+            }
+            
+            .slider-track {
+                height: 90px;
+            }
+            
+            .knob {
+                width: 50px;
+                height: 50px;
+            }
+            
+            .knob-outer {
+                width: 50px;
+                height: 50px;
+            }
+            
+            .knob-inner {
+                width: 40px;
+                height: 40px;
+                top: 5px;
+                left: 5px;
+            }
+            
+            .knob-indicator {
+                top: 20px;
+                left: 20px;
+                width: 20px;
+            }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="synth-container p-4 mt-4">
+        <h1 class="text-center text-3xl font-bold mb-4 text-blue-400">JS Analog Synthesizer</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <!-- Oscilloscope Display -->
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h2 class="text-center text-xl mb-2">Visualizer</h2>
+                <canvas id="oscilloscope" class="oscilloscope w-full"></canvas>
+            </div>
+            
+            <!-- Master Controls -->
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h2 class="text-center text-xl mb-2">Master</h2>
+                <div class="flex justify-center items-center mb-4">
+                    <div class="text-center mx-2">
+                        <div class="slider-container">
+                            <div class="slider-track"></div>
+                            <div id="volume-slider" class="slider-thumb" data-param="volume" data-min="0" data-max="1" data-value="0.5"></div>
+                            <div class="slider-value">Volume</div>
+                        </div>
+                    </div>
+                    <div class="text-center mx-2">
+                        <div class="slider-container">
+                            <div class="slider-track"></div>
+                            <div id="pan-slider" class="slider-thumb" data-param="pan" data-min="-1" data-max="1" data-value="0"></div>
+                            <div class="slider-value">Pan</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap justify-center">
+                    <button id="record-button" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg m-1">
+                        <i class="fas fa-circle mr-1"></i> Record
+                    </button>
+                    <button id="stop-button" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg m-1" disabled>
+                        <i class="fas fa-stop mr-1"></i> Stop
+                    </button>
+                    <button id="play-button" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg m-1" disabled>
+                        <i class="fas fa-play mr-1"></i> Play
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Recording Management -->
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h2 class="text-center text-xl mb-2">Recordings</h2>
+                <div class="flex mb-2">
+                    <input id="recording-name" type="text" placeholder="Recording name" class="flex-grow p-2 rounded-l-lg bg-gray-700 text-white border-none">
+                    <button id="save-button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r-lg">
+                        <i class="fas fa-save mr-1"></i> Save
+                    </button>
+                </div>
+                <div class="flex mb-2">
+                    <button id="export-button" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-l-lg flex-grow">
+                        <i class="fas fa-file-export mr-1"></i> Export JSON
+                    </button>
+                    <label for="import-input" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-r-lg cursor-pointer flex-grow text-center">
+                        <i class="fas fa-file-import mr-1"></i> Import JSON
+                    </label>
+                    <input id="import-input" type="file" accept=".json" class="hidden">
+                </div>
+                <div id="recordings-list" class="h-24 overflow-y-auto bg-gray-700 rounded-lg p-2">
+                    <div class="text-center text-gray-400">No recordings yet</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Synth Controls Tabs -->
+        <div class="mb-4">
+            <div class="flex flex-wrap border-b border-gray-700">
+                <div id="tab-oscillator" class="tab active">Oscillator</div>
+                <div id="tab-envelope" class="tab">Envelope</div>
+                <div id="tab-filter" class="tab">Filter</div>
+                <div id="tab-lfo" class="tab">LFO</div>
+                <div id="tab-effects" class="tab">Effects</div>
+            </div>
+            
+            <!-- Oscillator Controls -->
+            <div id="content-oscillator" class="tab-content active">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <h3 class="mb-2">Type</h3>
+                        <select id="osc-type" class="bg-gray-700 text-white p-2 rounded-lg w-full">
+                            <option value="sine">Sine</option>
+                            <option value="square">Square</option>
+                            <option value="sawtooth" selected>Sawtooth</option>
+                            <option value="triangle">Triangle</option>
+                        </select>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Octave</h3>
+                        <div class="flex justify-center">
+                            <button id="octave-down" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded-l-lg">-</button>
+                            <div id="octave-display" class="bg-gray-700 text-white px-4 py-1">4</div>
+                            <button id="octave-up" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded-r-lg">+</button>
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Detune</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="detune-knob" class="knob-indicator" data-param="detune" data-min="-100" data-max="100" data-value="0"></div>
+                        </div>
+                        <div id="detune-value" class="mt-1">0 cents</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Mix</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="mix-knob" class="knob-indicator" data-param="mix" data-min="0" data-max="1" data-value="1"></div>
+                        </div>
+                        <div id="mix-value" class="mt-1">100%</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Envelope Controls -->
+            <div id="content-envelope" class="tab-content">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <h3 class="mb-2">Attack</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="attack-knob" class="knob-indicator" data-param="attack" data-min="0.001" data-max="2" data-value="0.1"></div>
+                        </div>
+                        <div id="attack-value" class="mt-1">0.1s</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Decay</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="decay-knob" class="knob-indicator" data-param="decay" data-min="0.001" data-max="2" data-value="0.2"></div>
+                        </div>
+                        <div id="decay-value" class="mt-1">0.2s</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Sustain</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="sustain-knob" class="knob-indicator" data-param="sustain" data-min="0" data-max="1" data-value="0.7"></div>
+                        </div>
+                        <div id="sustain-value" class="mt-1">70%</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Release</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="release-knob" class="knob-indicator" data-param="release" data-min="0.001" data-max="5" data-value="0.5"></div>
+                        </div>
+                        <div id="release-value" class="mt-1">0.5s</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Filter Controls -->
+            <div id="content-filter" class="tab-content">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <h3 class="mb-2">Type</h3>
+                        <select id="filter-type" class="bg-gray-700 text-white p-2 rounded-lg w-full">
+                            <option value="lowpass" selected>Low Pass</option>
+                            <option value="highpass">High Pass</option>
+                            <option value="bandpass">Band Pass</option>
+                            <option value="notch">Notch</option>
+                        </select>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Cutoff</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="cutoff-knob" class="knob-indicator" data-param="cutoff" data-min="20" data-max="20000" data-value="2000" data-log="true"></div>
+                        </div>
+                        <div id="cutoff-value" class="mt-1">2000 Hz</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Resonance</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="resonance-knob" class="knob-indicator" data-param="resonance" data-min="0.1" data-max="20" data-value="1"></div>
+                        </div>
+                        <div id="resonance-value" class="mt-1">1.0</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Filter Env</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="filter-env-knob" class="knob-indicator" data-param="filterEnv" data-min="0" data-max="1" data-value="0.3"></div>
+                        </div>
+                        <div id="filter-env-value" class="mt-1">30%</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- LFO Controls -->
+            <div id="content-lfo" class="tab-content">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <h3 class="mb-2">Wave</h3>
+                        <select id="lfo-type" class="bg-gray-700 text-white p-2 rounded-lg w-full">
+                            <option value="sine" selected>Sine</option>
+                            <option value="square">Square</option>
+                            <option value="sawtooth">Sawtooth</option>
+                            <option value="triangle">Triangle</option>
+                        </select>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Rate</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="lfo-rate-knob" class="knob-indicator" data-param="lfoRate" data-min="0.1" data-max="20" data-value="2"></div>
+                        </div>
+                        <div id="lfo-rate-value" class="mt-1">2.0 Hz</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">To Pitch</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="lfo-to-pitch-knob" class="knob-indicator" data-param="lfoToPitch" data-min="0" data-max="100" data-value="0"></div>
+                        </div>
+                        <div id="lfo-to-pitch-value" class="mt-1">0%</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">To Filter</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="lfo-to-filter-knob" class="knob-indicator" data-param="lfoToFilter" data-min="0" data-max="5000" data-value="0"></div>
+                        </div>
+                        <div id="lfo-to-filter-value" class="mt-1">0 Hz</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Effects Controls -->
+            <div id="content-effects" class="tab-content">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <h3 class="mb-2">Delay Time</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="delay-time-knob" class="knob-indicator" data-param="delayTime" data-min="0" data-max="1" data-value="0.3"></div>
+                        </div>
+                        <div id="delay-time-value" class="mt-1">0.3s</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Delay Feedback</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="delay-feedback-knob" class="knob-indicator" data-param="delayFeedback" data-min="0" data-max="0.9" data-value="0.4"></div>
+                        </div>
+                        <div id="delay-feedback-value" class="mt-1">40%</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Reverb Size</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="reverb-size-knob" class="knob-indicator" data-param="reverbSize" data-min="0.1" data-max="0.9" data-value="0.5"></div>
+                        </div>
+                        <div id="reverb-size-value" class="mt-1">50%</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Reverb Mix</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="reverb-mix-knob" class="knob-indicator" data-param="reverbMix" data-min="0" data-max="0.7" data-value="0.2"></div>
+                        </div>
+                        <div id="reverb-mix-value" class="mt-1">20%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Keyboard -->
+        <div class="p-2 bg-gray-800 rounded-lg mb-4">
+            <h2 class="text-center text-xl mb-2">Keyboard</h2>
+            <div id="keyboard" class="relative h-40 md:h-48 overflow-hidden"></div>
+            <div class="flex justify-center mt-2 text-sm">
+                <div class="text-gray-400">Use your computer keyboard (Z-M for white keys, S-J for black keys) or click/touch the keys above</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Audio Context and Main Audio Nodes
+        let audioCtx;
+        let masterGain;
+        let analyser;
+        let stereoNode;
+        
+        // Synth Parameters
+        const synthParams = {
+            // Oscillator
+            oscType: 'sawtooth',
+            detune: 0,
+            mix: 1,
+            octave: 4,
+            
+            // Envelope
+            attack: 0.1,
+            decay: 0.2,
+            sustain: 0.7,
+            release: 0.5,
+            
+            // Filter
+            filterType: 'lowpass',
+            cutoff: 2000,
+            resonance: 1,
+            filterEnv: 0.3,
+            
+            // LFO
+            lfoType: 'sine',
+            lfoRate: 2,
+            lfoToPitch: 0,
+            lfoToFilter: 0,
+            
+            // Effects
+            delayTime: 0.3,
+            delayFeedback: 0.4,
+            reverbSize: 0.5,
+            reverbMix: 0.2,
+            
+            // Master
+            volume: 0.5,
+            pan: 0
+        };
+        
+        // Recording State
+        let isRecording = false;
+        let isPlaying = false;
+        let recordedEvents = [];
+        let recordStartTime = 0;
+        let playStartTime = 0;
+        let savedRecordings = [];
+        let selectedRecording = null;
+        
+        // Active Notes
+        const activeNotes = {};
+        
+        // Keyboard Layout
+        const keyboardMapping = {
+            'z': 60, // C4
+            's': 61, // C#4
+            'x': 62, // D4
+            'd': 63, // D#4
+            'c': 64, // E4
+            'v': 65, // F4
+            'g': 66, // F#4
+            'b': 67, // G4
+            'h': 68, // G#4
+            'n': 69, // A4
+            'j': 70, // A#4
+            'm': 71, // B4
+            ',': 72, // C5
+            'q': 72, // C5
+            '2': 73, // C#5
+            'w': 74, // D5
+            '3': 75, // D#5
+            'e': 76, // E5
+            'r': 77, // F5
+            '5': 78, // F#5
+            't': 79, // G5
+            '6': 80, // G#5
+            'y': 81, // A5
+            '7': 82, // A#5
+            'u': 83  // B5
+        };
+        
+        // Initialize Audio Context
+        function initAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Create Master Gain
+            masterGain = audioCtx.createGain();
+            masterGain.gain.value = synthParams.volume;
+            
+            // Create Analyser
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 2048;
+            analyser.smoothingTimeConstant = 0.85;
+            
+            // Create Stereo Panner
+            stereoNode = audioCtx.createStereoPanner();
+            stereoNode.pan.value = synthParams.pan;
+            
+            // Set up node connections
+            masterGain.connect(stereoNode);
+            stereoNode.connect(analyser);
+            analyser.connect(audioCtx.destination);
+            
+            // Set up visualizer
+            setupVisualizer();
+        }
+
+        // ConvolverNode and Buffer for Reverb
+        let convolverNode;
+        let delayNode;
+
+        // Create and connect effects nodes
+        function setupEffectsChain() {
+            // Create delay node
+            delayNode = audioCtx.createDelay(2.0);
+            delayNode.delayTime.value = synthParams.delayTime;
+            
+            const delayFeedback = audioCtx.createGain();
+            delayFeedback.gain.value = synthParams.delayFeedback;
+            
+            const delayMix = audioCtx.createGain();
+            delayMix.gain.value = 0.3;
+            
+            // Create reverb using convolver
+            convolverNode = audioCtx.createConvolver();
+            
+            // Generate impulse response for reverb
+            generateImpulseResponse();
+            
+            const reverbMix = audioCtx.createGain();
+            reverbMix.gain.value = synthParams.reverbMix;
+            
+            const dryMix = audioCtx.createGain();
+            dryMix.gain.value = 1 - synthParams.reverbMix;
+            
+            // Connect delay nodes
+            delayNode.connect(delayFeedback);
+            delayFeedback.connect(delayNode);
+            delayNode.connect(delayMix);
+            
+            // Connect reverb nodes
+            convolverNode.connect(reverbMix);
+            
+            // Connect to master chain
+            delayMix.connect(masterGain);
+            reverbMix.connect(masterGain);
+            dryMix.connect(masterGain);
+            
+            // Return nodes to connect oscillator to
+            return {
+                delay: delayNode,
+                reverb: convolverNode,
+                dry: dryMix
+            };
+        }
+        
+        // Generate impulse response for reverb
+        function generateImpulseResponse() {
+            const length = audioCtx.sampleRate * synthParams.reverbSize;
+            const decay = synthParams.reverbSize * 2;
+            const impulse = audioCtx.createBuffer(2, length, audioCtx.sampleRate);
+            
+            for (let channel = 0; channel < 2; channel++) {
+                const channelData = impulse.getChannelData(channel);
+                for (let i = 0; i < length; i++) {
+                    const n = (channel === 0) ? Math.random() * 2 - 1 : channelData[0][i];
+                    channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+                }
+            }
+            
+            convolverNode.buffer = impulse;
+        }
+        
+        // Set up oscilloscope visualizer
+        function setupVisualizer() {
+            const canvas = document.getElementById('oscilloscope');
+            const canvasCtx = canvas.getContext('2d');
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+            
+            function draw() {
+                requestAnimationFrame(draw);
+                
+                analyser.getByteTimeDomainData(dataArray);
+                
+                canvasCtx.fillStyle = 'rgb(17, 17, 17)';
+                canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                canvasCtx.lineWidth = 2;
+                canvasCtx.strokeStyle = 'rgb(0, 255, 0)';
+                canvasCtx.beginPath();
+                
+                const sliceWidth = (canvas.width * 1.0) / bufferLength;
+                let x = 0;
+                
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = v * canvas.height / 2;
+                    
+                    if (i === 0) {
+                        canvasCtx.moveTo(x, y);
+                    } else {
+                        canvasCtx.lineTo(x, y);
+                    }
+                    
+                    x += sliceWidth;
+                }
+                
+                canvasCtx.lineTo(canvas.width, canvas.height / 2);
+                canvasCtx.stroke();
+            }
+            
+            draw();
+        }
+        
+        // Create an LFO
+        function createLFO() {
+            const lfo = audioCtx.createOscillator();
+            lfo.type = synthParams.lfoType;
+            lfo.frequency.value = synthParams.lfoRate;
+            
+            const lfoGain = audioCtx.createGain();
+            lfoGain.gain.value = 0; // Will be set later depending on destination
+            
+            lfo.connect(lfoGain);
+            lfo.start();
+            
+            return { oscillator: lfo, gain: lfoGain };
+        }
+        
+        // Create and play a note
+        function playNote(midiNote) {
+            if (activeNotes[midiNote]) return;
+            
+            if (!audioCtx) {
+                initAudio();
+                setupEffectsChain();
+            }
+            
+            // Calculate frequency from MIDI note
+            const frequency = 440 * Math.pow(2, (midiNote - 69) / 12);
+            
+            // Create oscillator
+            const oscillator = audioCtx.createOscillator();
+            oscillator.type = synthParams.oscType;
+            oscillator.frequency.value = frequency;
+            oscillator.detune.value = synthParams.detune;
+            
+            // Create filter
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = synthParams.filterType;
+            filter.frequency.value = synthParams.cutoff;
+            filter.Q.value = synthParams.resonance;
+            
+            // Create amplitude envelope
+            const amplitudeGain = audioCtx.createGain();
+            amplitudeGain.gain.value = 0;
+            
+            // Create LFO
+            const lfo = createLFO();
+            
+            // Apply LFO to pitch if enabled
+            if (synthParams.lfoToPitch > 0) {
+                lfo.gain.gain.value = synthParams.lfoToPitch / 10; // Scale down for subtle effect
+                lfo.gain.connect(oscillator.detune);
+            }
+            
+            // Apply LFO to filter if enabled
+            if (synthParams.lfoToFilter > 0) {
+                const lfoFilterGain = audioCtx.createGain();
+                lfoFilterGain.gain.value = synthParams.lfoToFilter;
+                lfo.oscillator.connect(lfoFilterGain);
+                lfoFilterGain.connect(filter.frequency);
+            }
+            
+            // Connect nodes
+            oscillator.connect(filter);
+            filter.connect(amplitudeGain);
+            
+            // Get effects chain
+            const effectsChain = window.effectsChain || setupEffectsChain();
+            window.effectsChain = effectsChain;
+            
+            // Connect to effects
+            amplitudeGain.connect(effectsChain.delay);
+            amplitudeGain.connect(effectsChain.reverb);
+            amplitudeGain.connect(effectsChain.dry);
+            
+            // Apply amplitude envelope
+            const now = audioCtx.currentTime;
+            amplitudeGain.gain.setValueAtTime(0, now);
+            amplitudeGain.gain.linearRampToValueAtTime(synthParams.mix, now + synthParams.attack);
+            amplitudeGain.gain.linearRampToValueAtTime(synthParams.mix * synthParams.sustain, now + synthParams.attack + synthParams.decay);
+            
+            // Apply filter envelope
+            const filterEnvAmount = synthParams.filterEnv * 10000; // Scale for bigger effect
+            filter.frequency.setValueAtTime(synthParams.cutoff, now);
+            filter.frequency.linearRampToValueAtTime(synthParams.cutoff + filterEnvAmount, now + synthParams.attack * 0.5);
+            filter.frequency.linearRampToValueAtTime(synthParams.cutoff, now + synthParams.attack + synthParams.decay * 2);
+            
+            // Start oscillator
+            oscillator.start();
+            
+            // Store active note
+            activeNotes[midiNote] = {
+                oscillator,
+                gain: amplitudeGain,
+                filter,
+                lfo: lfo.oscillator,
+                startTime: now
+            };
+            
+            // Record note on event if recording
+            if (isRecording) {
+                recordEvent('noteOn', { midiNote, velocity: 1 });
+            }
+        }
+        
+        // Stop a playing note
+        function stopNote(midiNote) {
+            if (!activeNotes[midiNote]) return;
+            
+            const note = activeNotes[midiNote];
+            const now = audioCtx.currentTime;
+            
+            // Apply release envelope
+            note.gain.gain.cancelScheduledValues(now);
+            note.gain.gain.setValueAtTime(note.gain.gain.value, now);
+            note.gain.gain.linearRampToValueAtTime(0, now + synthParams.release);
+            
+            // Schedule oscillator stop
+            note.oscillator.stop(now + synthParams.release + 0.1);
+            note.lfo.stop(now + synthParams.release + 0.1);
+            
+            // Clean up after release
+            setTimeout(() => {
+                delete activeNotes[midiNote];
+            }, (synthParams.release + 0.2) * 1000);
+            
+            // Record note off event if recording
+            if (isRecording) {
+                recordEvent('noteOff', { midiNote });
+            }
+        }
+        
+        // Record an event during recording mode
+        function recordEvent(type, data) {
+            if (!isRecording) return;
+            
+            const time = audioCtx.currentTime - recordStartTime;
+            recordedEvents.push({
+                type,
+                time,
+                data
+            });
+            
+            // If it's a parameter change, also record the current value
+            if (type === 'paramChange') {
+                recordedEvents[recordedEvents.length - 1].data.value = synthParams[data.param];
+            }
+        }
+        
+        // Start recording
+        function startRecording() {
+            recordedEvents = [];
+            recordStartTime = audioCtx.currentTime;
+            isRecording = true;
+            
+            // Record initial parameter state
+            for (const param in synthParams) {
+                recordEvent('paramChange', { param, value: synthParams[param] });
+            }
+            
+            document.getElementById('record-button').disabled = true;
+            document.getElementById('stop-button').disabled = false;
+            document.getElementById('play-button').disabled = true;
+        }
+        
+        // Stop recording
+        function stopRecording() {
+            isRecording = false;
+            document.getElementById('record-button').disabled = false;
+            document.getElementById('stop-button').disabled = true;
+            document.getElementById('play-button').disabled = false;
+            
+            // Sort events by time
+            recordedEvents.sort((a, b) => a.time - b.time);
+        }
+        
+        // Play recorded events
+        function playRecording() {
+            if (!recordedEvents.length || isPlaying) return;
+            
+            // Make sure audio context is running
+            if (!audioCtx) {
+                initAudio();
+                setupEffectsChain();
+            } else if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            
+            isPlaying = true;
+            playStartTime = audioCtx.currentTime;
+            
+            // Stop any currently playing notes
+            Object.keys(activeNotes).forEach(midiNote => {
+                stopNote(midiNote);
+            });
+            
+            // Create a copy of events to avoid issues during playback
+            const events = [...recordedEvents];
+            
+            // Schedule all events
+            events.forEach(event => {
+                const scheduleTime = playStartTime + event.time;
+                
+                setTimeout(() => {
+                    if (!isPlaying) return;
+                    
+                    switch (event.type) {
+                        case 'noteOn':
+                            playNote(event.data.midiNote);
+                            break;
+                        case 'noteOff':
+                            stopNote(event.data.midiNote);
+                            break;
+                        case 'paramChange':
+                            updateParameter(event.data.param, event.data.value, true);
+                            break;
+                    }
+                }, (scheduleTime - audioCtx.currentTime) * 1000);
+            });
+            
+            // Calculate duration and schedule stop
+            if (events.length) {
+                const lastEventTime = events[events.length - 1].time;
+                setTimeout(() => {
+                    stopPlayback();
+                }, (lastEventTime + 0.5) * 1000);
+            }
+            
+            document.getElementById('record-button').disabled = true;
+            document.getElementById('stop-button').disabled = false;
+            document.getElementById('play-button').disabled = true;
+        }
+        
+        // Stop playback
+        function stopPlayback() {
+            isPlaying = false;
+            
+            // Stop any currently playing notes
+            Object.keys(activeNotes).forEach(midiNote => {
+                stopNote(midiNote);
+            });
+            
+            document.getElementById('record-button').disabled = false;
+            document.getElementById('stop-button').disabled = true;
+            document.getElementById('play-button').disabled = false;
+        }
+        
+        // Save current recording
+        function saveRecording() {
+            if (!recordedEvents.length) return;
+            
+            const name = document.getElementById('recording-name').value || `Recording ${savedRecordings.length + 1}`;
+            
+            const recording = {
+                name,
+                events: [...recordedEvents],
+                date: new Date().toISOString()
+            };
+            
+            savedRecordings.push(recording);
+            document.getElementById('recording-name').value = '';
+            
+            updateRecordingsList();
+        }
+        
+        // Export recording to JSON file
+        function exportRecording() {
+            if (!recordedEvents.length) return;
+            
+            const recording = {
+                name: document.getElementById('recording-name').value || `Recording ${savedRecordings.length + 1}`,
+                events: recordedEvents,
+                date: new Date().toISOString()
+            };
+            
+            const json = JSON.stringify(recording);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${recording.name.replace(/\s+/g, '_')}.json`;
+            a.click();
+            
+            URL.revokeObjectURL(url);
+        }
+        
+        // Import recording from JSON file
+        function importRecording(file) {
+            const reader = new FileReader();
+            
+            reader.onload = e => {
+                try {
+                    const recording = JSON.parse(e.target.result);
+                    
+                    if (recording.events && Array.isArray(recording.events)) {
+                        savedRecordings.push(recording);
+                        recordedEvents = recording.events;
+                        updateRecordingsList();
+                        document.getElementById('play-button').disabled = false;
+                        
+                        // Select the imported recording
+                        selectRecording(savedRecordings.length - 1);
+                    }
+                } catch (error) {
+                    console.error('Error importing recording:', error);
+                    alert('Invalid recording file');
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        // Update the recordings list in the UI
+        function updateRecordingsList() {
+            const list = document.getElementById('recordings-list');
+            
+            if (savedRecordings.length === 0) {
+                list.innerHTML = '<div class="text-center text-gray-400">No recordings yet</div>';
+                return;
+            }
+            
+            list.innerHTML = '';
+            
+            savedRecordings.forEach((recording, index) => {
+                const item = document.createElement('div');
+                item.className = `recording-item p-2 mb-1 rounded flex justify-between items-center ${selectedRecording === index ? 'bg-blue-800' : ''}`;
+                item.innerHTML = `
+                    <span>${recording.name}</span>
+                    <div>
+                        <button class="text-blue-400 mr-1 play-btn" data-index="${index}"><i class="fas fa-play"></i></button>
+                        <button class="text-red-400 delete-btn" data-index="${index}"><i class="fas fa-trash"></i></button>
+                    </div>
+                `;
+                
+                list.appendChild(item);
+                
+                // Add event listeners
+                item.querySelector('.play-btn').addEventListener('click', () => {
+                    selectRecording(index);
+                    recordedEvents = savedRecordings[index].events;
+                    document.getElementById('play-button').disabled = false;
+                    playRecording();
+                });
+                
+                item.querySelector('.delete-btn').addEventListener('click', () => {
+                    savedRecordings.splice(index, 1);
+                    updateRecordingsList();
+                    
+                    if (selectedRecording === index) {
+                        selectedRecording = null;
+                        recordedEvents = [];
+                        document.getElementById('play-button').disabled = true;
+                    }
+                });
+            });
+        }
+        
+        // Select a recording
+        function selectRecording(index) {
+            selectedRecording = index;
+            recordedEvents = savedRecordings[index].events;
+            updateRecordingsList();
+        }
+        
+        // Update a parameter value
+        function updateParameter(param, value, noRecord = false) {
+            synthParams[param] = value;
+            
+            // Apply the parameter change to the synth
+            switch (param) {
+                case 'volume':
+                    if (masterGain) masterGain.gain.value = value;
+                    break;
+                case 'pan':
+                    if (stereoNode) stereoNode.pan.value = value;
+                    break;
+                case 'delayTime':
+                    if (delayNode) delayNode.delayTime.value = value;
+                    break;
+                case 'reverbSize':
+                case 'reverbMix':
+                    if (convolverNode) generateImpulseResponse();
+                    break;
+                // Other parameters are applied when playing notes
+            }
+            
+            // Update UI
+            const element = document.getElementById(`${param.replace(/([A-Z])/g, '-$1').toLowerCase()}-value`);
+            if (element) {
+                let displayValue = value;
+                
+                // Format specific parameters
+                if (param === 'attack' || param === 'decay' || param === 'release' || param === 'delayTime') {
+                    displayValue = `${value.toFixed(2)}s`;
+                } else if (param === 'sustain' || param === 'mix' || param === 'filterEnv' || param === 'delayFeedback' || param === 'reverbSize' || param === 'reverbMix') {
+                    displayValue = `${Math.round(value * 100)}%`;
+                } else if (param === 'cutoff' || param === 'lfoToFilter') {
+                    displayValue = `${Math.round(value)} Hz`;
+                } else if (param === 'detune' || param === 'lfoToPitch') {
+                    displayValue = `${Math.round(value)} cents`;
+                } else if (param === 'lfoRate') {
+                    displayValue = `${value.toFixed(1)} Hz`;
+                }
+                
+                element.textContent = displayValue;
+            }
+            
+            // Record parameter change if recording and not from playback
+            if (isRecording && !noRecord) {
+                recordEvent('paramChange', { param });
+            }
+        }
+        
+        // Generate piano keyboard in the UI
+        function createKeyboard() {
+            const keyboard = document.getElementById('keyboard');
+            keyboard.innerHTML = '';
+            
+            // Create 21 white keys (3 octaves C to B)
+            for (let i = 0; i < 21; i++) {
+                const note = (i % 7);
+                const octave = Math.floor(i / 7) + 3;
+                let midiNote;
+                
+                // Calculate MIDI note based on white key position
+                switch (note) {
+                    case 0: midiNote = octave * 12; break;      // C
+                    case 1: midiNote = octave * 12 + 2; break;  // D
+                    case 2: midiNote = octave * 12 + 4; break;  // E
+                    case 3: midiNote = octave * 12 + 5; break;  // F
+                    case 4: midiNote = octave * 12 + 7; break;  // G
+                    case 5: midiNote = octave * 12 + 9; break;  // A
+                    case 6: midiNote = octave * 12 + 11; break; // B
+                }
+                
+                const key = document.createElement('div');
+                key.className = 'piano-key white-key';
+                key.dataset.note = midiNote;
+                
+                // Add note labels to middle octave
+                if (octave === 4) {
+                    const label = document.createElement('div');
+                    label.className = 'text-center text-black text-xs absolute bottom-2 left-0 right-0';
+                    label.textContent = ['C', 'D', 'E', 'F', 'G', 'A', 'B'][note];
+                    key.appendChild(label);
+                }
+                
+                keyboard.appendChild(key);
+            }
+            
+            // Create black keys
+            const blackKeyPositions = [0, 1, 3, 4, 5]; // C#, D#, F#, G#, A#
+            for (let i = 0; i < 21; i++) {
+                const note = i % 7;
+                const octave = Math.floor(i / 7) + 3;
+                
+                // Skip positions that don't have black keys
+                if (note === 2 || note === 6) continue;
+                
+                const blackKeyNote = blackKeyPositions.indexOf(note);
+                if (blackKeyNote !== -1) {
+                    let midiNote;
+                    
+                    // Calculate MIDI note for black key
+                    switch (note) {
+                        case 0: midiNote = octave * 12 + 1; break;  // C#
+                        case 1: midiNote = octave * 12 + 3; break;  // D#
+                        case 3: midiNote = octave * 12 + 6; break;  // F#
+                        case 4: midiNote = octave * 12 + 8; break;  // G#
+                        case 5: midiNote = octave * 12 + 10; break; // A#
+                    }
+                    
+                    const key = document.createElement('div');
+                    key.className = 'piano-key black-key';
+                    key.dataset.note = midiNote;
+                    
+                    keyboard.appendChild(key);
+                }
+            }
+            
+            // Add event listeners to piano keys
+            document.querySelectorAll('.piano-key').forEach(key => {
+                // Mouse events
+                key.addEventListener('mousedown', () => {
+                    const midiNote = parseInt(key.dataset.note) + (synthParams.octave - 4) * 12;
+                    playNote(midiNote);
+                    key.classList.add('active');
+                });
+                
+                key.addEventListener('mouseup', () => {
+                    const midiNote = parseInt(key.dataset.note) + (synthParams.octave - 4) * 12;
+                    stopNote(midiNote);
+                    key.classList.remove('active');
+                });
+                
+                key.addEventListener('mouseout', () => {
+                    const midiNote = parseInt(key.dataset.note) + (synthParams.octave - 4) * 12;
+                    if (activeNotes[midiNote]) {
+                        stopNote(midiNote);
+                        key.classList.remove('active');
+                    }
+                });
+                
+                // Touch events for mobile
+                key.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    const midiNote = parseInt(key.dataset.note) + (synthParams.octave - 4) * 12;
+                    playNote(midiNote);
+                    key.classList.add('active');
+                });
+                
+                key.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    const midiNote = parseInt(key.dataset.note) + (synthParams.octave - 4) * 12;
+                    stopNote(midiNote);
+                    key.classList.remove('active');
+                });
+            });
+        }
+        
+        // Initialize UI event listeners
+        function initUI() {
+            // Create the keyboard
+            createKeyboard();
+            
+            // Tab switching
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    
+                    tab.classList.add('active');
+                    document.getElementById(`content-${tab.id.split('-')[1]}`).classList.add('active');
+                });
+            });
+            
+            // Recording controls
+            document.getElementById('record-button').addEventListener('click', () => {
+                if (!audioCtx) {
+                    initAudio();
+                    setupEffectsChain();
+                } else if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                startRecording();
+            });
+            
+            document.getElementById('stop-button').addEventListener('click', () => {
+                if (isRecording) {
+                    stopRecording();
+                } else if (isPlaying) {
+                    stopPlayback();
+                }
+            });
+            
+            document.getElementById('play-button').addEventListener('click', playRecording);
+            document.getElementById('save-button').addEventListener('click', saveRecording);
+            document.getElementById('export-button').addEventListener('click', exportRecording);
+            
+            document.getElementById('import-input').addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    importRecording(e.target.files[0]);
+                }
+            });
+            
+            // Oscillator type
+            document.getElementById('osc-type').addEventListener('change', (e) => {
+                updateParameter('oscType', e.target.value);
+            });
+            
+            // Filter type
+            document.getElementById('filter-type').addEventListener('change', (e) => {
+                updateParameter('filterType', e.target.value);
+            });
+            
+            // LFO type
+            document.getElementById('lfo-type').addEventListener('change', (e) => {
+                updateParameter('lfoType', e.target.value);
+            });
+            
+            // Octave controls
+            document.getElementById('octave-up').addEventListener('click', () => {
+                if (synthParams.octave < 8) {
+                    synthParams.octave++;
+                    document.getElementById('octave-display').textContent = synthParams.octave;
+                    
+                    // Record parameter change
+                    if (isRecording) {
+                        recordEvent('paramChange', { param: 'octave' });
+                    }
+                }
+            });
+            
+            document.getElementById('octave-down').addEventListener('click', () => {
+                if (synthParams.octave > 1) {
+                    synthParams.octave--;
+                    document.getElementById('octave-display').textContent = synthParams.octave;
+                    
+                    // Record parameter change
+                    if (isRecording) {
+                        recordEvent('paramChange', { param: 'octave' });
+                    }
+                }
+            });
+            
+            // Init knobs
+            initKnobs();
+            initSliders();
+            
+            // Keyboard events
+            window.addEventListener('keydown', (e) => {
+                // Prevent default for keys mapped to notes
+                if (keyboardMapping[e.key.toLowerCase()]) {
+                    e.preventDefault();
+                }
+                
+                // Only trigger if key is not already down
+                if (!e.repeat && keyboardMapping[e.key.toLowerCase()]) {
+                    const midiNote = keyboardMapping[e.key.toLowerCase()] + (synthParams.octave - 4) * 12;
+                    playNote(midiNote);
+                    
+                    // Highlight the key on screen
+                    const keyElement = document.querySelector(`.piano-key[data-note="${keyboardMapping[e.key.toLowerCase()]}"]`);
+                    if (keyElement) {
+                        keyElement.classList.add('active');
+                    }
+                }
+            });
+            
+            window.addEventListener('keyup', (e) => {
+                if (keyboardMapping[e.key.toLowerCase()]) {
+                    const midiNote = keyboardMapping[e.key.toLowerCase()] + (synthParams.octave - 4) * 12;
+                    stopNote(midiNote);
+                    
+                    // Remove highlight
+                    const keyElement = document.querySelector(`.piano-key[data-note="${keyboardMapping[e.key.toLowerCase()]}"]`);
+                    if (keyElement) {
+                        keyElement.classList.remove('active');
+                    }
+                }
+            });
+            
+            // Make sure audio starts on user interaction
+            document.addEventListener('click', () => {
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            });
+        }
+        
+        // Initialize knob controls
+        function initKnobs() {
+            let activeKnob = null;
+            let startY = 0;
+            let startValue = 0;
+            
+            document.querySelectorAll('[id$="-knob"]').forEach(knob => {
+                const param = knob.dataset.param;
+                const min = parseFloat(knob.dataset.min);
+                const max = parseFloat(knob.dataset.max);
+                const value = parseFloat(knob.dataset.value);
+                const isLog = knob.dataset.log === 'true';
+                
+                // Set initial value
+                synthParams[param] = value;
+                updateParameter(param, value);
+                
+                // Set initial rotation
+                const normalizedValue = isLog
+                    ? (Math.log(value) - Math.log(min)) / (Math.log(max) - Math.log(min))
+                    : (value - min) / (max - min);
+                knob.style.transform = `rotate(${normalizedValue * 270 - 135}deg)`;
+                
+                // Mouse events for knob
+                knob.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    activeKnob = knob;
+                    startY = e.clientY;
+                    startValue = synthParams[param];
+                    document.addEventListener('mousemove', handleKnobMove);
+                    document.addEventListener('mouseup', handleKnobRelease);
+                });
+                
+                // Touch events for mobile
+                knob.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    activeKnob = knob;
+                    startY = e.touches[0].clientY;
+                    startValue = synthParams[param];
+                    document.addEventListener('touchmove', handleKnobTouchMove);
+                    document.addEventListener('touchend', handleKnobTouchRelease);
+                });
+            });
+            
+            function handleKnobMove(e) {
+                if (!activeKnob) return;
+                
+                const param = activeKnob.dataset.param;
+                const min = parseFloat(activeKnob.dataset.min);
+                const max = parseFloat(activeKnob.dataset.max);
+                const isLog = activeKnob.dataset.log === 'true';
+                
+                // Calculate value based on vertical drag
+                const delta = startY - e.clientY;
+                const sensitivity = 2; // Higher = more sensitive
+                let normalizedValue = (delta * sensitivity / 200) + (startValue - min) / (max - min);
+                normalizedValue = Math.max(0, Math.min(1, normalizedValue));
+                
+                // Apply logarithmic scaling if needed
+                let value;
+                if (isLog) {
+                    value = Math.exp(normalizedValue * (Math.log(max) - Math.log(min)) + Math.log(min));
+                } else {
+                    value = normalizedValue * (max - min) + min;
+                }
+                
+                // Update rotation and value
+                activeKnob.style.transform = `rotate(${normalizedValue * 270 - 135}deg)`;
+                updateParameter(param, value);
+            }
+            
+            function handleKnobTouchMove(e) {
+                if (!activeKnob) return;
+                
+                const param = activeKnob.dataset.param;
+                const min = parseFloat(activeKnob.dataset.min);
+                const max = parseFloat(activeKnob.dataset.max);
+                const isLog = activeKnob.dataset.log === 'true';
+                
+                // Calculate value based on vertical drag
+                const delta = startY - e.touches[0].clientY;
+                const sensitivity = 2;
+                let normalizedValue = (delta * sensitivity / 200) + (startValue - min) / (max - min);
+                normalizedValue = Math.max(0, Math.min(1, normalizedValue));
+                
+                // Apply logarithmic scaling if needed
+                let value;
+                if (isLog) {
+                    value = Math.exp(normalizedValue * (Math.log(max) - Math.log(min)) + Math.log(min));
+                } else {
+                    value = normalizedValue * (max - min) + min;
+                }
+                
+                // Update rotation and value
+                activeKnob.style.transform = `rotate(${normalizedValue * 270 - 135}deg)`;
+                updateParameter(param, value);
+            }
+            
+            function handleKnobRelease() {
+                activeKnob = null;
+                document.removeEventListener('mousemove', handleKnobMove);
+                document.removeEventListener('mouseup', handleKnobRelease);
+            }
+            
+            function handleKnobTouchRelease() {
+                activeKnob = null;
+                document.removeEventListener('touchmove', handleKnobTouchMove);
+                document.removeEventListener('touchend', handleKnobTouchRelease);
+            }
+        }
+        
+        // Initialize slider controls
+        function initSliders() {
+            let activeSlider = null;
+            let startY = 0;
+            let startValue = 0;
+            
+            document.querySelectorAll('[id$="-slider"]').forEach(slider => {
+                const param = slider.dataset.param;
+                const min = parseFloat(slider.dataset.min);
+                const max = parseFloat(slider.dataset.max);
+                const value = parseFloat(slider.dataset.value);
+                
+                // Set initial value
+                synthParams[param] = value;
+                updateParameter(param, value);
+                
+                // Set initial position
+                const normalizedValue = (value - min) / (max - min);
+                slider.style.top = `${(1 - normalizedValue) * 75 + 15}px`;
+                
+                // Mouse events for slider
+                slider.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    activeSlider = slider;
+                    startY = e.clientY;
+                    startValue = synthParams[param];
+                    document.addEventListener('mousemove', handleSliderMove);
+                    document.addEventListener('mouseup', handleSliderRelease);
+                });
+                
+                // Touch events for mobile
+                slider.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    activeSlider = slider;
+                    startY = e.touches[0].clientY;
+                    startValue = synthParams[param];
+                    document.addEventListener('touchmove', handleSliderTouchMove);
+                    document.addEventListener('touchend', handleSliderTouchRelease);
+                });
+            });
+            
+            function handleSliderMove(e) {
+                if (!activeSlider) return;
+                
+                const param = activeSlider.dataset.param;
+                const min = parseFloat(activeSlider.dataset.min);
+                const max = parseFloat(activeSlider.dataset.max);
+                
+                // Get parent container for correct relative position
+                const container = activeSlider.closest('.slider-container');
+                const containerRect = container.getBoundingClientRect();
+                
+                // Calculate normalized value based on vertical position
+                let relativeY = e.clientY - containerRect.top;
+                relativeY = Math.max(15, Math.min(relativeY, containerRect.height - 15));
+                
+                const normalizedValue = 1 - (relativeY - 15) / (containerRect.height - 30);
+                const value = normalizedValue * (max - min) + min;
+                
+                // Update position and value
+                activeSlider.style.top = `${relativeY}px`;
+                updateParameter(param, value);
+            }
+            
+            function handleSliderTouchMove(e) {
+                if (!activeSlider) return;
+                
+                const param = activeSlider.dataset.param;
+                const min = parseFloat(activeSlider.dataset.min);
+                const max = parseFloat(activeSlider.dataset.max);
+                
+                // Get parent container for correct relative position
+                const container = activeSlider.closest('.slider-container');
+                const containerRect = container.getBoundingClientRect();
+                
+                // Calculate normalized value based on vertical position
+                let relativeY = e.touches[0].clientY - containerRect.top;
+                relativeY = Math.max(15, Math.min(relativeY, containerRect.height - 15));
+                
+                const normalizedValue = 1 - (relativeY - 15) / (containerRect.height - 30);
+                const value = normalizedValue * (max - min) + min;
+                
+                // Update position and value
+                activeSlider.style.top = `${relativeY}px`;
+                updateParameter(param, value);
+            }
+            
+            function handleSliderRelease() {
+                activeSlider = null;
+                document.removeEventListener('mousemove', handleSliderMove);
+                document.removeEventListener('mouseup', handleSliderRelease);
+            }
+            
+            function handleSliderTouchRelease() {
+                activeSlider = null;
+                document.removeEventListener('touchmove', handleSliderTouchMove);
+                document.removeEventListener('touchend', handleSliderTouchRelease);
+            }
+        }
+        
+        // Initialize everything once DOM is loaded
+        document.addEventListener('DOMContentLoaded', initUI);
+    </script>
+</body>
+</html>

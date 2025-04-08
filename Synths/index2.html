@@ -1,0 +1,1844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analog Synthesizer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --knob-color: #0f0;
+            --knob-glow: rgba(0, 255, 0, 0.5);
+            --bg-dark: #1a1a1a;
+            --bg-panel: #2d2d2d;
+            --bg-control: #333;
+        }
+        
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background-color: var(--bg-dark);
+            color: #f0f0f0;
+            overflow-x: hidden;
+        }
+        
+        .synth-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: var(--bg-panel);
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .control-panel {
+            background-color: var(--bg-control);
+            border-radius: 8px;
+        }
+        
+        .knob {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            margin: 0 auto;
+            touch-action: none;
+        }
+        
+        .knob-outer {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #2c2c2c, #3a3a3a);
+            box-shadow: 4px 4px 8px #1f1f1f, -4px -4px 8px #474747;
+        }
+        
+        .knob-inner {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #333333, #2a2a2a);
+            box-shadow: inset 2px 2px 3px #1a1a1a, inset -2px -2px 3px #444444;
+            overflow: hidden;
+        }
+        
+        .knob-indicator {
+            position: absolute;
+            top: 24px;
+            left: 25px;
+            width: 25px;
+            height: 3px;
+            background-color: var(--knob-color);
+            transform-origin: 0 50%;
+            box-shadow: 0 0 5px var(--knob-color);
+            transition: box-shadow 0.1s;
+        }
+        
+        .knob-indicator:hover, .knob-indicator.active {
+            box-shadow: 0 0 10px var(--knob-color);
+        }
+        
+        .knob-scale {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+        }
+        
+        .knob-scale-mark {
+            position: absolute;
+            width: 2px;
+            height: 6px;
+            background-color: rgba(255,255,255,0.3);
+        }
+        
+        .led {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            background-color: #222;
+            box-shadow: inset 0 0 2px #000;
+            display: inline-block;
+        }
+        
+        .led.active {
+            background-color: var(--knob-color);
+            box-shadow: 0 0 5px var(--knob-color), 0 0 10px var(--knob-color);
+        }
+        
+        .piano-key {
+            position: relative;
+            float: left;
+            transition: all 0.1s ease-out;
+            user-select: none;
+        }
+        
+        .white-key {
+            width: calc(100% / 21);
+            height: 150px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            z-index: 1;
+            border-radius: 0 0 4px 4px;
+        }
+        
+        .black-key {
+            width: calc(100% / 42);
+            height: 90px;
+            background-color: #000;
+            margin-left: calc(-100% / 84);
+            margin-right: calc(-100% / 84);
+            z-index: 2;
+            border-radius: 0 0 4px 4px;
+        }
+        
+        .white-key.active {
+            background-color: #e0e0f0;
+            box-shadow: inset 0 0 15px rgba(0, 0, 255, 0.4);
+        }
+        
+        .black-key.active {
+            background-color: #333;
+            box-shadow: inset 0 0 15px rgba(102, 102, 255, 0.5);
+        }
+        
+        .slider-container {
+            position: relative;
+            height: 150px;
+            width: 40px;
+            margin: 0 auto;
+        }
+        
+        .slider-track {
+            position: absolute;
+            width: 8px;
+            height: 120px;
+            background: linear-gradient(180deg, #1a1a1a, #3a3a3a);
+            border-radius: 4px;
+            left: 16px;
+            top: 15px;
+        }
+        
+        .slider-thumb {
+            position: absolute;
+            width: 24px;
+            height: 12px;
+            background: linear-gradient(145deg, #4a4a4a, #3a3a3a);
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+            border-radius: 6px;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            touch-action: none;
+        }
+        
+        .slider-thumb:hover, .slider-thumb.active {
+            background: linear-gradient(145deg, #5a5a5a, #4a4a4a);
+            box-shadow: 0 0 8px rgba(0, 255, 0, 0.4);
+        }
+        
+        .slider-value {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10px;
+        }
+        
+        .oscilloscope {
+            width: 100%;
+            height: 100px;
+            background-color: #111;
+            border-radius: 4px;
+            border: 1px solid #444;
+        }
+        
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            background-color: #444;
+            border-radius: 4px 4px 0 0;
+            transition: background-color 0.2s;
+        }
+        
+        .tab.active {
+            background-color: #555;
+        }
+        
+        .tab-content {
+            display: none;
+            background-color: #555;
+            padding: 16px;
+            border-radius: 0 4px 4px 4px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .recording-item {
+            background-color: #333;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        
+        .recording-item:hover {
+            background-color: #444;
+        }
+        
+        .parameter-value {
+            transition: all 0.2s ease;
+        }
+        
+        .parameter-value.changing {
+            color: #0f0;
+            font-weight: bold;
+        }
+        
+        @media (max-width: 768px) {
+            .white-key {
+                height: 120px;
+            }
+            
+            .black-key {
+                height: 70px;
+            }
+            
+            .slider-container {
+                height: 120px;
+            }
+            
+            .slider-track {
+                height: 90px;
+            }
+            
+            .knob {
+                width: 50px;
+                height: 50px;
+            }
+            
+            .knob-outer {
+                width: 50px;
+                height: 50px;
+            }
+            
+            .knob-inner {
+                width: 40px;
+                height: 40px;
+                top: 5px;
+                left: 5px;
+            }
+            
+            .knob-indicator {
+                top: 20px;
+                left: 20px;
+                width: 20px;
+            }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="synth-container p-4 mt-4">
+        <h1 class="text-center text-3xl font-bold mb-4 text-blue-400">Analog Synthesizer</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <!-- Visualizer Display -->
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h2 class="text-center text-xl mb-2">Visualizer</h2>
+                <canvas id="oscilloscope" class="oscilloscope w-full"></canvas>
+            </div>
+            
+            <!-- Master Controls -->
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h2 class="text-center text-xl mb-2">Master</h2>
+                <div class="flex justify-center items-center mb-4">
+                    <div class="text-center mx-2">
+                        <div class="slider-container">
+                            <div class="slider-track"></div>
+                            <div id="volume-slider" class="slider-thumb" data-param="volume" data-min="0" data-max="1" data-value="0.5"></div>
+                            <div class="slider-value">Volume</div>
+                        </div>
+                    </div>
+                    <div class="text-center mx-2">
+                        <div class="slider-container">
+                            <div class="slider-track"></div>
+                            <div id="pan-slider" class="slider-thumb" data-param="pan" data-min="-1" data-max="1" data-value="0"></div>
+                            <div class="slider-value">Pan</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap justify-center">
+                    <button id="record-button" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg m-1 transition duration-200">
+                        <i class="fas fa-circle mr-1"></i> Record
+                    </button>
+                    <button id="stop-button" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg m-1 transition duration-200" disabled>
+                        <i class="fas fa-stop mr-1"></i> Stop
+                    </button>
+                    <button id="play-button" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg m-1 transition duration-200" disabled>
+                        <i class="fas fa-play mr-1"></i> Play
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Recording Management -->
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h2 class="text-center text-xl mb-2">Recordings</h2>
+                <div class="flex mb-2">
+                    <input id="recording-name" type="text" placeholder="Recording name" class="flex-grow p-2 rounded-l-lg bg-gray-700 text-white border-none">
+                    <button id="save-button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r-lg transition duration-200">
+                        <i class="fas fa-save mr-1"></i> Save
+                    </button>
+                </div>
+                <div class="flex mb-2">
+                    <button id="export-button" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-l-lg flex-grow transition duration-200">
+                        <i class="fas fa-file-export mr-1"></i> Export JSON
+                    </button>
+                    <label for="import-input" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-r-lg cursor-pointer flex-grow text-center transition duration-200">
+                        <i class="fas fa-file-import mr-1"></i> Import JSON
+                    </label>
+                    <input id="import-input" type="file" accept=".json" class="hidden">
+                </div>
+                <div id="recordings-list" class="h-24 overflow-y-auto bg-gray-700 rounded-lg p-2">
+                    <div class="text-center text-gray-400">No recordings yet</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Synth Controls Tabs -->
+        <div class="mb-4">
+            <div class="flex flex-wrap border-b border-gray-700">
+                <div id="tab-oscillator" class="tab active">Oscillator</div>
+                <div id="tab-envelope" class="tab">Envelope</div>
+                <div id="tab-filter" class="tab">Filter</div>
+                <div id="tab-lfo" class="tab">LFO</div>
+                <div id="tab-effects" class="tab">Effects</div>
+            </div>
+            
+            <!-- Oscillator Controls -->
+            <div id="content-oscillator" class="tab-content active">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <h3 class="mb-2">Type</h3>
+                        <select id="osc-type" class="bg-gray-700 text-white p-2 rounded-lg w-full transition duration-200 hover:bg-gray-600 focus:ring focus:ring-blue-400">
+                            <option value="sine">Sine</option>
+                            <option value="square">Square</option>
+                            <option value="sawtooth" selected>Sawtooth</option>
+                            <option value="triangle">Triangle</option>
+                        </select>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Octave</h3>
+                        <div class="flex justify-center">
+                            <button id="octave-down" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded-l-lg transition duration-200">-</button>
+                            <div id="octave-display" class="bg-gray-700 text-white px-4 py-1">4</div>
+                            <button id="octave-up" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded-r-lg transition duration-200">+</button>
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Detune</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="detune-knob" class="knob-indicator" data-param="detune" data-min="-100" data-max="100" data-value="0"></div>
+                        </div>
+                        <div id="detune-value" class="mt-1 parameter-value">0 cents</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Mix</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="mix-knob" class="knob-indicator" data-param="mix" data-min="0" data-max="1" data-value="1"></div>
+                        </div>
+                        <div id="mix-value" class="mt-1 parameter-value">100%</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Envelope Controls -->
+            <div id="content-envelope" class="tab-content">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <h3 class="mb-2">Attack</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="attack-knob" class="knob-indicator" data-param="attack" data-min="0.001" data-max="2" data-value="0.1"></div>
+                        </div>
+                        <div id="attack-value" class="mt-1 parameter-value">0.1s</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Decay</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="decay-knob" class="knob-indicator" data-param="decay" data-min="0.001" data-max="2" data-value="0.2"></div>
+                        </div>
+                        <div id="decay-value" class="mt-1 parameter-value">0.2s</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Sustain</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="sustain-knob" class="knob-indicator" data-param="sustain" data-min="0" data-max="1" data-value="0.7"></div>
+                        </div>
+                        <div id="sustain-value" class="mt-1 parameter-value">70%</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Release</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="release-knob" class="knob-indicator" data-param="release" data-min="0.001" data-max="5" data-value="0.5"></div>
+                        </div>
+                        <div id="release-value" class="mt-1 parameter-value">0.5s</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Filter Controls -->
+            <div id="content-filter" class="tab-content">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <h3 class="mb-2">Type</h3>
+                        <select id="filter-type" class="bg-gray-700 text-white p-2 rounded-lg w-full transition duration-200 hover:bg-gray-600 focus:ring focus:ring-blue-400">
+                            <option value="lowpass" selected>Low Pass</option>
+                            <option value="highpass">High Pass</option>
+                            <option value="bandpass">Band Pass</option>
+                            <option value="notch">Notch</option>
+                        </select>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Cutoff</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="cutoff-knob" class="knob-indicator" data-param="cutoff" data-min="20" data-max="20000" data-value="2000" data-log="true"></div>
+                        </div>
+                        <div id="cutoff-value" class="mt-1 parameter-value">2000 Hz</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Resonance</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="resonance-knob" class="knob-indicator" data-param="resonance" data-min="0.1" data-max="20" data-value="1"></div>
+                        </div>
+                        <div id="resonance-value" class="mt-1 parameter-value">1.0</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Filter Env</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="filter-env-knob" class="knob-indicator" data-param="filterEnv" data-min="0" data-max="1" data-value="0.3"></div>
+                        </div>
+                        <div id="filter-env-value" class="mt-1 parameter-value">30%</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- LFO Controls -->
+            <div id="content-lfo" class="tab-content">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <h3 class="mb-2">Wave</h3>
+                        <select id="lfo-type" class="bg-gray-700 text-white p-2 rounded-lg w-full transition duration-200 hover:bg-gray-600 focus:ring focus:ring-blue-400">
+                            <option value="sine" selected>Sine</option>
+                            <option value="square">Square</option>
+                            <option value="sawtooth">Sawtooth</option>
+                            <option value="triangle">Triangle</option>
+                        </select>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Rate</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="lfo-rate-knob" class="knob-indicator" data-param="lfoRate" data-min="0.1" data-max="20" data-value="2"></div>
+                        </div>
+                        <div id="lfo-rate-value" class="mt-1 parameter-value">2.0 Hz</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">To Pitch</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="lfo-to-pitch-knob" class="knob-indicator" data-param="lfoToPitch" data-min="0" data-max="100" data-value="0"></div>
+                        </div>
+                        <div id="lfo-to-pitch-value" class="mt-1 parameter-value">0%</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">To Filter</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="lfo-to-filter-knob" class="knob-indicator" data-param="lfoToFilter" data-min="0" data-max="5000" data-value="0"></div>
+                        </div>
+                        <div id="lfo-to-filter-value" class="mt-1 parameter-value">0 Hz</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Effects Controls -->
+            <div id="content-effects" class="tab-content">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <h3 class="mb-2">Delay Time</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="delay-time-knob" class="knob-indicator" data-param="delayTime" data-min="0" data-max="1" data-value="0.3"></div>
+                        </div>
+                        <div id="delay-time-value" class="mt-1 parameter-value">0.3s</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Delay Feedback</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="delay-feedback-knob" class="knob-indicator" data-param="delayFeedback" data-min="0" data-max="0.9" data-value="0.4"></div>
+                        </div>
+                        <div id="delay-feedback-value" class="mt-1 parameter-value">40%</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Reverb Size</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="reverb-size-knob" class="knob-indicator" data-param="reverbSize" data-min="0.1" data-max="0.9" data-value="0.5"></div>
+                        </div>
+                        <div id="reverb-size-value" class="mt-1 parameter-value">50%</div>
+                    </div>
+                    <div class="text-center">
+                        <h3 class="mb-2">Reverb Mix</h3>
+                        <div class="knob">
+                            <div class="knob-outer"></div>
+                            <div class="knob-inner"></div>
+                            <div id="reverb-mix-knob" class="knob-indicator" data-param="reverbMix" data-min="0" data-max="0.7" data-value="0.2"></div>
+                        </div>
+                        <div id="reverb-mix-value" class="mt-1 parameter-value">20%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Keyboard -->
+        <div class="p-2 bg-gray-800 rounded-lg mb-4">
+            <h2 class="text-center text-xl mb-2">Keyboard</h2>
+            <div id="keyboard" class="relative h-40 md:h-48 overflow-hidden"></div>
+            <div class="flex justify-center mt-2 text-sm">
+                <div class="text-gray-400">Use your computer keyboard (Z-M for white keys, S-J for black keys) or click/touch the keys above</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // AudioSynth - Main application module
+        const AudioSynth = (() => {
+            // Private state
+            let audioCtx, masterGain, analyser, stereoNode;
+            let convolverNode, delayNode, effectsChain;
+            let isInitialized = false;
+            
+            // Active notes and synth params
+            const activeNotes = {};
+            const synthParams = {
+                oscType: 'sawtooth',
+                detune: 0,
+                mix: 1,
+                octave: 4,
+                attack: 0.1,
+                decay: 0.2,
+                sustain: 0.7,
+                release: 0.5,
+                filterType: 'lowpass',
+                cutoff: 2000,
+                resonance: 1,
+                filterEnv: 0.3,
+                lfoType: 'sine',
+                lfoRate: 2,
+                lfoToPitch: 0,
+                lfoToFilter: 0,
+                delayTime: 0.3,
+                delayFeedback: 0.4,
+                reverbSize: 0.5,
+                reverbMix: 0.2,
+                volume: 0.5,
+                pan: 0
+            };
+            
+            // Recording state
+            let isRecording = false;
+            let isPlaying = false;
+            let recordedEvents = [];
+            let recordStartTime = 0;
+            let playStartTime = 0;
+            let savedRecordings = [];
+            let selectedRecording = null;
+            
+            // Worklet node for more efficient audio processing
+            let workletInitialized = false;
+            
+            // Initialize AudioContext and main audio graph
+            const init = async () => {
+                if (isInitialized) return;
+                
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Create master gain
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = synthParams.volume;
+                
+                // Create analyzer for visualization
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 2048;
+                
+                // Create stereo panner
+                stereoNode = audioCtx.createStereoPanner();
+                stereoNode.pan.value = synthParams.pan;
+                
+                // Connect main audio path
+                masterGain.connect(stereoNode);
+                stereoNode.connect(analyser);
+                analyser.connect(audioCtx.destination);
+                
+                // Set up effects chain
+                effectsChain = setupEffectsChain();
+                
+                // Start visualization
+                setupVisualizer();
+                
+                isInitialized = true;
+            };
+            
+            // Create and connect effects chain
+            const setupEffectsChain = () => {
+                // Create delay node
+                delayNode = audioCtx.createDelay(2.0);
+                delayNode.delayTime.value = synthParams.delayTime;
+                
+                const delayFeedback = audioCtx.createGain();
+                delayFeedback.gain.value = synthParams.delayFeedback;
+                
+                const delayMix = audioCtx.createGain();
+                delayMix.gain.value = 0.3;
+                
+                // Create reverb using convolver
+                convolverNode = audioCtx.createConvolver();
+                
+                // Generate impulse response for reverb
+                generateImpulseResponse();
+                
+                const reverbMix = audioCtx.createGain();
+                reverbMix.gain.value = synthParams.reverbMix;
+                
+                const dryMix = audioCtx.createGain();
+                dryMix.gain.value = 1 - synthParams.reverbMix;
+                
+                // Connect delay nodes
+                delayNode.connect(delayFeedback);
+                delayFeedback.connect(delayNode);
+                delayNode.connect(delayMix);
+                
+                // Connect reverb
+                convolverNode.connect(reverbMix);
+                
+                // Connect effects to main output
+                delayMix.connect(masterGain);
+                reverbMix.connect(masterGain);
+                dryMix.connect(masterGain);
+                
+                return { delay: delayNode, reverb: convolverNode, dry: dryMix };
+            };
+            
+            // Generate impulse response for reverb
+            const generateImpulseResponse = () => {
+                const duration = synthParams.reverbSize;
+                const decay = synthParams.reverbSize * 2;
+                const sampleRate = audioCtx.sampleRate;
+                const length = sampleRate * duration;
+                
+                const impulse = audioCtx.createBuffer(2, length, sampleRate);
+                
+                for (let channel = 0; channel < 2; channel++) {
+                    const channelData = impulse.getChannelData(channel);
+                    for (let i = 0; i < length; i++) {
+                        const n = (channel === 0) ? Math.random() * 2 - 1 : channelData[0][i];
+                        channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+                    }
+                }
+                
+                convolverNode.buffer = impulse;
+            };
+            
+            // Set up oscilloscope visualization
+            const setupVisualizer = () => {
+                const canvas = document.getElementById('oscilloscope');
+                const ctx = canvas.getContext('2d');
+                const width = canvas.clientWidth;
+                const height = canvas.clientHeight;
+                
+                canvas.width = width;
+                canvas.height = height;
+                
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                
+                const draw = () => {
+                    requestAnimationFrame(draw);
+                    
+                    analyser.getByteTimeDomainData(dataArray);
+                    
+                    ctx.fillStyle = 'rgb(17, 17, 17)';
+                    ctx.fillRect(0, 0, width, height);
+                    
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = 'rgb(0, 255, 0)';
+                    ctx.beginPath();
+                    
+                    const sliceWidth = width / bufferLength;
+                    let x = 0;
+                    
+                    for (let i = 0; i < bufferLength; i++) {
+                        const v = dataArray[i] / 128.0;
+                        const y = v * height / 2;
+                        
+                        if (i === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                        
+                        x += sliceWidth;
+                    }
+                    
+                    ctx.lineTo(width, height / 2);
+                    ctx.stroke();
+                };
+                
+                draw();
+            };
+            
+            // Create an LFO for modulation
+            const createLFO = () => {
+                const lfo = audioCtx.createOscillator();
+                lfo.type = synthParams.lfoType;
+                lfo.frequency.value = synthParams.lfoRate;
+                
+                const lfoGain = audioCtx.createGain();
+                lfoGain.gain.value = 0; // Set later based on destination
+                
+                lfo.connect(lfoGain);
+                lfo.start();
+                
+                return { oscillator: lfo, gain: lfoGain };
+            };
+            
+            // Play a note with the given MIDI note number
+            const playNote = (midiNote) => {
+                if (activeNotes[midiNote]) return;
+                
+                if (!isInitialized) {
+                    init();
+                } else if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                
+                // Calculate frequency from MIDI note number
+                const frequency = 440 * Math.pow(2, (midiNote - 69) / 12);
+                
+                // Create main oscillator
+                const oscillator = audioCtx.createOscillator();
+                oscillator.type = synthParams.oscType;
+                oscillator.frequency.value = frequency;
+                oscillator.detune.value = synthParams.detune;
+                
+                // Create filter
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = synthParams.filterType;
+                filter.frequency.value = synthParams.cutoff;
+                filter.Q.value = synthParams.resonance;
+                
+                // Create amplitude envelope
+                const amplitudeGain = audioCtx.createGain();
+                amplitudeGain.gain.value = 0;
+                
+                // Create LFO
+                const lfo = createLFO();
+                
+                // Apply LFO to pitch if enabled
+                if (synthParams.lfoToPitch > 0) {
+                    lfo.gain.gain.value = synthParams.lfoToPitch / 10;
+                    lfo.gain.connect(oscillator.detune);
+                }
+                
+                // Apply LFO to filter if enabled
+                if (synthParams.lfoToFilter > 0) {
+                    const lfoFilterGain = audioCtx.createGain();
+                    lfoFilterGain.gain.value = synthParams.lfoToFilter;
+                    lfo.oscillator.connect(lfoFilterGain);
+                    lfoFilterGain.connect(filter.frequency);
+                }
+                
+                // Connect nodes
+                oscillator.connect(filter);
+                filter.connect(amplitudeGain);
+                
+                // Connect to effects
+                amplitudeGain.connect(effectsChain.delay);
+                amplitudeGain.connect(effectsChain.reverb);
+                amplitudeGain.connect(effectsChain.dry);
+                
+                // Apply amplitude envelope
+                const now = audioCtx.currentTime;
+                const attackTime = Math.max(0.001, synthParams.attack);
+                const decayTime = Math.max(0.001, synthParams.decay);
+                
+                amplitudeGain.gain.setValueAtTime(0, now);
+                amplitudeGain.gain.linearRampToValueAtTime(synthParams.mix, now + attackTime);
+                amplitudeGain.gain.linearRampToValueAtTime(
+                    synthParams.mix * synthParams.sustain, 
+                    now + attackTime + decayTime
+                );
+                
+                // Apply filter envelope
+                const filterEnvAmount = synthParams.filterEnv * 10000;
+                filter.frequency.setValueAtTime(synthParams.cutoff, now);
+                filter.frequency.linearRampToValueAtTime(
+                    synthParams.cutoff + filterEnvAmount,
+                    now + attackTime * 0.5
+                );
+                filter.frequency.linearRampToValueAtTime(
+                    synthParams.cutoff,
+                    now + attackTime + decayTime * 2
+                );
+                
+                // Start oscillator
+                oscillator.start();
+                
+                // Store active note info
+                activeNotes[midiNote] = {
+                    oscillator,
+                    gain: amplitudeGain,
+                    filter,
+                    lfo: lfo.oscillator,
+                    startTime: now
+                };
+                
+                // Record note on event if recording
+                if (isRecording) {
+                    recordEvent('noteOn', { midiNote, velocity: 1 });
+                }
+            };
+            
+            // Stop a playing note
+            const stopNote = (midiNote) => {
+                if (!activeNotes[midiNote]) return;
+                
+                const note = activeNotes[midiNote];
+                const now = audioCtx.currentTime;
+                const releaseTime = Math.max(0.001, synthParams.release);
+                
+                // Apply release envelope
+                note.gain.gain.cancelScheduledValues(now);
+                note.gain.gain.setValueAtTime(note.gain.gain.value, now);
+                note.gain.gain.linearRampToValueAtTime(0, now + releaseTime);
+                
+                // Stop oscillators after release
+                note.oscillator.stop(now + releaseTime + 0.1);
+                note.lfo.stop(now + releaseTime + 0.1);
+                
+                // Clean up references
+                setTimeout(() => {
+                    delete activeNotes[midiNote];
+                }, (releaseTime + 0.2) * 1000);
+                
+                // Record note off event if recording
+                if (isRecording) {
+                    recordEvent('noteOff', { midiNote });
+                }
+            };
+            
+            // Record an event during recording
+            const recordEvent = (type, data) => {
+                if (!isRecording) return;
+                
+                const time = audioCtx.currentTime - recordStartTime;
+                const event = { type, time, data };
+                
+                // For parameter changes, include current value
+                if (type === 'paramChange') {
+                    event.data.value = synthParams[data.param];
+                }
+                
+                recordedEvents.push(event);
+            };
+            
+            // Start recording
+            const startRecording = () => {
+                if (!isInitialized) init();
+                
+                recordedEvents = [];
+                recordStartTime = audioCtx.currentTime;
+                isRecording = true;
+                
+                // Record initial parameter state
+                for (const param in synthParams) {
+                    recordEvent('paramChange', { param, value: synthParams[param] });
+                }
+                
+                UI.updateRecordingState(true);
+            };
+            
+            // Stop recording
+            const stopRecording = () => {
+                isRecording = false;
+                
+                // Sort events by time
+                recordedEvents.sort((a, b) => a.time - b.time);
+                
+                UI.updateRecordingState(false);
+            };
+            
+            // Play recorded events
+            const playRecording = () => {
+                if (!recordedEvents.length || isPlaying) return;
+                
+                if (!isInitialized) {
+                    init();
+                } else if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                
+                isPlaying = true;
+                playStartTime = audioCtx.currentTime;
+                
+                // Stop any currently playing notes
+                Object.keys(activeNotes).forEach(stopNote);
+                
+                // Schedule all recorded events
+                const events = [...recordedEvents];
+                
+                events.forEach(event => {
+                    const scheduleTime = playStartTime + event.time;
+                    
+                    setTimeout(() => {
+                        if (!isPlaying) return;
+                        
+                        switch (event.type) {
+                            case 'noteOn':
+                                playNote(event.data.midiNote);
+                                break;
+                            case 'noteOff':
+                                stopNote(event.data.midiNote);
+                                break;
+                            case 'paramChange':
+                                updateParameter(event.data.param, event.data.value, true);
+                                break;
+                        }
+                    }, (scheduleTime - audioCtx.currentTime) * 1000);
+                });
+                
+                // Schedule playback end
+                if (events.length) {
+                    const lastEventTime = events[events.length - 1].time;
+                    setTimeout(() => {
+                        stopPlayback();
+                    }, (lastEventTime + 0.5) * 1000);
+                }
+                
+                UI.updatePlaybackState(true);
+            };
+            
+            // Stop playback
+            const stopPlayback = () => {
+                isPlaying = false;
+                
+                // Stop all playing notes
+                Object.keys(activeNotes).forEach(stopNote);
+                
+                UI.updatePlaybackState(false);
+            };
+            
+            // Save current recording
+            const saveRecording = () => {
+                if (!recordedEvents.length) return;
+                
+                const name = document.getElementById('recording-name').value || `Recording ${savedRecordings.length + 1}`;
+                
+                const recording = {
+                    name,
+                    events: [...recordedEvents],
+                    date: new Date().toISOString()
+                };
+                
+                savedRecordings.push(recording);
+                document.getElementById('recording-name').value = '';
+                
+                UI.updateRecordingsList();
+            };
+            
+            // Export recording to JSON file
+            const exportRecording = () => {
+                if (!recordedEvents.length) return;
+                
+                const name = document.getElementById('recording-name').value || `Recording ${savedRecordings.length + 1}`;
+                const recording = {
+                    name,
+                    events: recordedEvents,
+                    date: new Date().toISOString()
+                };
+                
+                const json = JSON.stringify(recording);
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${name.replace(/\s+/g, '_')}.json`;
+                a.click();
+                
+                URL.revokeObjectURL(url);
+            };
+            
+            // Import recording from JSON file
+            const importRecording = (file) => {
+                const reader = new FileReader();
+                
+                reader.onload = e => {
+                    try {
+                        const recording = JSON.parse(e.target.result);
+                        
+                        if (recording.events && Array.isArray(recording.events)) {
+                            savedRecordings.push(recording);
+                            recordedEvents = recording.events;
+                            UI.updateRecordingsList();
+                            document.getElementById('play-button').disabled = false;
+                            
+                            // Select the imported recording
+                            selectRecording(savedRecordings.length - 1);
+                        }
+                    } catch (error) {
+                        console.error('Error importing recording:', error);
+                        alert('Invalid recording file format');
+                    }
+                };
+                
+                reader.readAsText(file);
+            };
+            
+            // Select a recording
+            const selectRecording = (index) => {
+                selectedRecording = index;
+                recordedEvents = savedRecordings[index].events;
+                UI.updateRecordingsList();
+            };
+            
+            // Update a synth parameter
+            const updateParameter = (param, value, noRecord = false) => {
+                synthParams[param] = value;
+                
+                // Apply the parameter change to the synth
+                if (isInitialized) {
+                    switch (param) {
+                        case 'volume':
+                            masterGain.gain.value = value;
+                            break;
+                        case 'pan':
+                            stereoNode.pan.value = value;
+                            break;
+                        case 'delayTime':
+                            delayNode.delayTime.setValueAtTime(value, audioCtx.currentTime);
+                            break;
+                        case 'delayFeedback':
+                            // Update delay feedback connections
+                            if (effectsChain) {
+                                const delayFeedback = audioCtx.createGain();
+                                delayFeedback.gain.value = value;
+                                delayNode.connect(delayFeedback);
+                                delayFeedback.connect(delayNode);
+                            }
+                            break;
+                        case 'reverbSize':
+                        case 'reverbMix':
+                            // Regenerate impulse response
+                            if (convolverNode) generateImpulseResponse();
+                            break;
+                    }
+                }
+                
+                // Update UI
+                UI.updateParameterDisplay(param, value);
+                
+                // Record parameter change if recording and not from playback
+                if (isRecording && !noRecord) {
+                    recordEvent('paramChange', { param });
+                }
+            };
+            
+            return {
+                init,
+                playNote,
+                stopNote,
+                updateParameter,
+                startRecording,
+                stopRecording,
+                stopPlayback,
+                playRecording,
+                saveRecording,
+                exportRecording,
+                importRecording,
+                selectRecording,
+                getActiveNotes: () => activeNotes,
+                getSynthParams: () => ({ ...synthParams }), // Return copy
+                getRecordedEvents: () => recordedEvents,
+                getSavedRecordings: () => savedRecordings,
+                isRecording: () => isRecording,
+                isPlaying: () => isPlaying
+            };
+        })();
+        
+        // UI Manager - Handle all UI interactions
+        const UI = (() => {
+            // Keyboard mapping
+            const keyboardMapping = {
+                'z': 60, // C4
+                's': 61, // C#4
+                'x': 62, // D4
+                'd': 63, // D#4
+                'c': 64, // E4
+                'v': 65, // F4
+                'g': 66, // F#4
+                'b': 67, // G4
+                'h': 68, // G#4
+                'n': 69, // A4
+                'j': 70, // A#4
+                'm': 71, // B4
+                ',': 72, // C5
+                'q': 72, // C5
+                '2': 73, // C#5
+                'w': 74, // D5
+                '3': 75, // D#5
+                'e': 76, // E5
+                'r': 77, // F5
+                '5': 78, // F#5
+                't': 79, // G5
+                '6': 80, // G#5
+                'y': 81, // A5
+                '7': 82, // A#5
+                'u': 83  // B5
+            };
+            
+            // Create piano keyboard
+            const createKeyboard = () => {
+                const keyboard = document.getElementById('keyboard');
+                keyboard.innerHTML = '';
+                
+                // Create white keys (3 octaves C to B)
+                for (let i = 0; i < 21; i++) {
+                    const note = (i % 7);
+                    const octave = Math.floor(i / 7) + 3;
+                    let midiNote;
+                    
+                    // Calculate MIDI note
+                    switch (note) {
+                        case 0: midiNote = octave * 12; break;      // C
+                        case 1: midiNote = octave * 12 + 2; break;  // D
+                        case 2: midiNote = octave * 12 + 4; break;  // E
+                        case 3: midiNote = octave * 12 + 5; break;  // F
+                        case 4: midiNote = octave * 12 + 7; break;  // G
+                        case 5: midiNote = octave * 12 + 9; break;  // A
+                        case 6: midiNote = octave * 12 + 11; break; // B
+                    }
+                    
+                    const key = document.createElement('div');
+                    key.className = 'piano-key white-key';
+                    key.dataset.note = midiNote;
+                    
+                    // Add note label for middle octave
+                    if (octave === 4) {
+                        const label = document.createElement('div');
+                        label.className = 'text-center text-black text-xs absolute bottom-2 left-0 right-0';
+                        label.textContent = ['C', 'D', 'E', 'F', 'G', 'A', 'B'][note];
+                        key.appendChild(label);
+                    }
+                    
+                    keyboard.appendChild(key);
+                }
+                
+                // Create black keys
+                const blackKeyPositions = [0, 1, 3, 4, 5]; // C#, D#, F#, G#, A#
+                for (let i = 0; i < 21; i++) {
+                    const note = i % 7;
+                    const octave = Math.floor(i / 7) + 3;
+                    
+                    // Skip positions that don't have black keys
+                    if (note === 2 || note === 6) continue;
+                    
+                    if (blackKeyPositions.includes(note)) {
+                        let midiNote;
+                        
+                        // Calculate MIDI note
+                        switch (note) {
+                            case 0: midiNote = octave * 12 + 1; break;  // C#
+                            case 1: midiNote = octave * 12 + 3; break;  // D#
+                            case 3: midiNote = octave * 12 + 6; break;  // F#
+                            case 4: midiNote = octave * 12 + 8; break;  // G#
+                            case 5: midiNote = octave * 12 + 10; break; // A#
+                        }
+                        
+                        const key = document.createElement('div');
+                        key.className = 'piano-key black-key';
+                        key.dataset.note = midiNote;
+                        
+                        keyboard.appendChild(key);
+                    }
+                }
+                
+                // Add mouse and touch event listeners to piano keys
+                initKeyboardEvents();
+            };
+            
+            // Initialize keyboard event handlers
+            const initKeyboardEvents = () => {
+                // Piano key interactions
+                document.querySelectorAll('.piano-key').forEach(key => {
+                    // Mouse events
+                    key.addEventListener('mousedown', e => {
+                        e.preventDefault();
+                        const synthParams = AudioSynth.getSynthParams();
+                        const midiNote = parseInt(key.dataset.note) + (synthParams.octave - 4) * 12;
+                        AudioSynth.playNote(midiNote);
+                        key.classList.add('active');
+                    });
+                    
+                    key.addEventListener('mouseup', e => {
+                        e.preventDefault();
+                        const synthParams = AudioSynth.getSynthParams();
+                        const midiNote = parseInt(key.dataset.note) + (synthParams.octave - 4) * 12;
+                        AudioSynth.stopNote(midiNote);
+                        key.classList.remove('active');
+                    });
+                    
+                    key.addEventListener('mouseout', e => {
+                        e.preventDefault();
+                        const synthParams = AudioSynth.getSynthParams();
+                        const midiNote = parseInt(key.dataset.note) + (synthParams.octave - 4) * 12;
+                        const activeNotes = AudioSynth.getActiveNotes();
+                        if (activeNotes[midiNote]) {
+                            AudioSynth.stopNote(midiNote);
+                            key.classList.remove('active');
+                        }
+                    });
+                    
+                    // Touch events
+                    key.addEventListener('touchstart', e => {
+                        e.preventDefault();
+                        const synthParams = AudioSynth.getSynthParams();
+                        const midiNote = parseInt(key.dataset.note) + (synthParams.octave - 4) * 12;
+                        AudioSynth.playNote(midiNote);
+                        key.classList.add('active');
+                    });
+                    
+                    key.addEventListener('touchend', e => {
+                        e.preventDefault();
+                        const synthParams = AudioSynth.getSynthParams();
+                        const midiNote = parseInt(key.dataset.note) + (synthParams.octave - 4) * 12;
+                        AudioSynth.stopNote(midiNote);
+                        key.classList.remove('active');
+                    });
+                });
+                
+                // Computer keyboard events
+                window.addEventListener('keydown', e => {
+                    // Only handle mapped keys and prevent repeats
+                    if (!e.repeat && keyboardMapping[e.key.toLowerCase()]) {
+                        e.preventDefault();
+                        const synthParams = AudioSynth.getSynthParams();
+                        const midiNote = keyboardMapping[e.key.toLowerCase()] + (synthParams.octave - 4) * 12;
+                        AudioSynth.playNote(midiNote);
+                        
+                        // Highlight key visually
+                        const keyElement = document.querySelector(`.piano-key[data-note="${keyboardMapping[e.key.toLowerCase()]}"]`);
+                        if (keyElement) keyElement.classList.add('active');
+                    }
+                });
+                
+                window.addEventListener('keyup', e => {
+                    if (keyboardMapping[e.key.toLowerCase()]) {
+                        e.preventDefault();
+                        const synthParams = AudioSynth.getSynthParams();
+                        const midiNote = keyboardMapping[e.key.toLowerCase()] + (synthParams.octave - 4) * 12;
+                        AudioSynth.stopNote(midiNote);
+                        
+                        // Remove highlight
+                        const keyElement = document.querySelector(`.piano-key[data-note="${keyboardMapping[e.key.toLowerCase()]}"]`);
+                        if (keyElement) keyElement.classList.remove('active');
+                    }
+                });
+            };
+            
+            // Initialize tab controls
+            const initTabs = () => {
+                document.querySelectorAll('.tab').forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                        
+                        tab.classList.add('active');
+                        document.getElementById(`content-${tab.id.split('-')[1]}`).classList.add('active');
+                    });
+                });
+            };
+            
+            // Initialize recording controls
+            const initRecordingControls = () => {
+                document.getElementById('record-button').addEventListener('click', () => {
+                    AudioSynth.init();
+                    AudioSynth.startRecording();
+                });
+                
+                document.getElementById('stop-button').addEventListener('click', () => {
+                    if (AudioSynth.isRecording()) {
+                        AudioSynth.stopRecording();
+                    } else if (AudioSynth.isPlaying()) {
+                        AudioSynth.stopPlayback();
+                    }
+                });
+                
+                document.getElementById('play-button').addEventListener('click', () => {
+                    AudioSynth.playRecording();
+                });
+                
+                document.getElementById('save-button').addEventListener('click', () => {
+                    AudioSynth.saveRecording();
+                });
+                
+                document.getElementById('export-button').addEventListener('click', () => {
+                    AudioSynth.exportRecording();
+                });
+                
+                document.getElementById('import-input').addEventListener('change', e => {
+                    if (e.target.files.length > 0) {
+                        AudioSynth.importRecording(e.target.files[0]);
+                        e.target.value = ''; // Reset for future imports
+                    }
+                });
+            };
+            
+            // Initialize select controls
+            const initSelectControls = () => {
+                // Oscillator type
+                document.getElementById('osc-type').addEventListener('change', e => {
+                    AudioSynth.updateParameter('oscType', e.target.value);
+                });
+                
+                // Filter type
+                document.getElementById('filter-type').addEventListener('change', e => {
+                    AudioSynth.updateParameter('filterType', e.target.value);
+                });
+                
+                // LFO type
+                document.getElementById('lfo-type').addEventListener('change', e => {
+                    AudioSynth.updateParameter('lfoType', e.target.value);
+                });
+                
+                // Octave controls
+                document.getElementById('octave-up').addEventListener('click', () => {
+                    const synthParams = AudioSynth.getSynthParams();
+                    if (synthParams.octave < 8) {
+                        AudioSynth.updateParameter('octave', synthParams.octave + 1);
+                        document.getElementById('octave-display').textContent = synthParams.octave + 1;
+                    }
+                });
+                
+                document.getElementById('octave-down').addEventListener('click', () => {
+                    const synthParams = AudioSynth.getSynthParams();
+                    if (synthParams.octave > 1) {
+                        AudioSynth.updateParameter('octave', synthParams.octave - 1);
+                        document.getElementById('octave-display').textContent = synthParams.octave - 1;
+                    }
+                });
+            };
+            
+            // Initialize knob controls with improved handling
+            const initKnobs = () => {
+                let activeKnob = null;
+                let startX, startY, startAngle, startValue;
+                let pointerCache = new Map();
+                
+                // Process all knob elements
+                document.querySelectorAll('[id$="-knob"]').forEach(knob => {
+                    const param = knob.dataset.param;
+                    const min = parseFloat(knob.dataset.min);
+                    const max = parseFloat(knob.dataset.max);
+                    const value = parseFloat(knob.dataset.value);
+                    const isLog = knob.dataset.log === 'true';
+                    
+                    // Set initial value and rotation
+                    AudioSynth.updateParameter(param, value);
+                    setKnobRotation(knob, value, min, max, isLog);
+                    
+                    // Mouse events
+                    knob.addEventListener('mousedown', e => {
+                        e.preventDefault();
+                        activateKnob(knob, e.clientX, e.clientY);
+                        document.addEventListener('mousemove', handleKnobMouseMove);
+                        document.addEventListener('mouseup', handleKnobMouseRelease);
+                    });
+                    
+                    // Touch events
+                    knob.addEventListener('touchstart', e => {
+                        e.preventDefault();
+                        const touch = e.touches[0];
+                        activateKnob(knob, touch.clientX, touch.clientY);
+                        knob.addEventListener('touchmove', handleKnobTouchMove);
+                        knob.addEventListener('touchend', handleKnobTouchRelease);
+                        knob.addEventListener('touchcancel', handleKnobTouchRelease);
+                    });
+                });
+                
+                // Activate a knob for interaction
+                function activateKnob(knob, clientX, clientY) {
+                    // Set as active knob
+                    activeKnob = knob;
+                    activeKnob.classList.add('active');
+                    
+                    // Get knob center for angle calculation
+                    const rect = knob.parentElement.getBoundingClientRect();
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
+                    
+                    // Calculate starting angle from center
+                    startX = clientX - centerX;
+                    startY = centerY - clientY;
+                    startAngle = Math.atan2(startY, startX);
+                    
+                    // Get current parameter value
+                    const param = knob.dataset.param;
+                    startValue = AudioSynth.getSynthParams()[param];
+                    
+                    document.body.style.cursor = 'grabbing';
+                }
+                
+                // Handle mouse movement for knob rotation
+                function handleKnobMouseMove(e) {
+                    if (!activeKnob) return;
+                    
+                    const rect = activeKnob.parentElement.getBoundingClientRect();
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
+                    
+                    // Get current mouse position relative to center
+                    const x = e.clientX - centerX;
+                    const y = centerY - e.clientY;
+                    
+                    // Calculate angle difference in radians
+                    let currentAngle = Math.atan2(y, x);
+                    let deltaAngle = currentAngle - startAngle;
+                    
+                    // Adjust for angle wrapping
+                    if (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+                    if (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
+                    
+                    updateKnobFromAngle(deltaAngle, e.shiftKey);
+                }
+                
+                // Handle touch movement for knob rotation
+                function handleKnobTouchMove(e) {
+                    if (!activeKnob) return;
+                    e.preventDefault();
+                    
+                    const touch = e.touches[0];
+                    const rect = activeKnob.parentElement.getBoundingClientRect();
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
+                    
+                    // Get current touch position relative to center
+                    const x = touch.clientX - centerX;
+                    const y = centerY - touch.clientY;
+                    
+                    // Calculate angle difference
+                    let currentAngle = Math.atan2(y, x);
+                    let deltaAngle = currentAngle - startAngle;
+                    
+                    // Adjust for angle wrapping
+                    if (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+                    if (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
+                    
+                    updateKnobFromAngle(deltaAngle, false);
+                }
+                
+                // Update knob based on angle change
+                function updateKnobFromAngle(deltaAngle, preciseMode) {
+                    const param = activeKnob.dataset.param;
+                    const min = parseFloat(activeKnob.dataset.min);
+                    const max = parseFloat(activeKnob.dataset.max);
+                    const isLog = activeKnob.dataset.log === 'true';
+                    
+                    // Convert angle to normalized value change (0 to 1)
+                    // Full rotation is 2π radians but we use 270° (3π/2) for knob range
+                    const sensitivityFactor = preciseMode ? 0.25 : 1; // Shift reduces sensitivity for precise control
+                    const normalizedDelta = (deltaAngle / (Math.PI * 1.5)) * sensitivityFactor;
+                    
+                    // Get current normalized value
+                    let normalizedValue;
+                    if (isLog) {
+                        normalizedValue = (Math.log(startValue) - Math.log(min)) / (Math.log(max) - Math.log(min));
+                    } else {
+                        normalizedValue = (startValue - min) / (max - min);
+                    }
+                    
+                    // Apply delta and clamp between 0 and 1
+                    normalizedValue = Math.max(0, Math.min(1, normalizedValue + normalizedDelta));
+                    
+                    // Convert normalized value back to actual value
+                    let value;
+                    if (isLog) {
+                        value = Math.exp(normalizedValue * (Math.log(max) - Math.log(min)) + Math.log(min));
+                    } else {
+                        value = normalizedValue * (max - min) + min;
+                    }
+                    
+                    // Set rotation display
+                    setKnobRotation(activeKnob, value, min, max, isLog);
+                    
+                    // Update synth parameter
+                    AudioSynth.updateParameter(param, value);
+                }
+                
+                // Clean up event listeners after knob release
+                function handleKnobMouseRelease() {
+                    if (activeKnob) {
+                        activeKnob.classList.remove('active');
+                        activeKnob = null;
+                        document.body.style.cursor = 'default';
+                    }
+                    document.removeEventListener('mousemove', handleKnobMouseMove);
+                    document.removeEventListener('mouseup', handleKnobMouseRelease);
+                }
+                
+                function handleKnobTouchRelease() {
+                    if (!activeKnob) return;
+                    
+                    activeKnob.classList.remove('active');
+                    activeKnob.removeEventListener('touchmove', handleKnobTouchMove);
+                    activeKnob.removeEventListener('touchend', handleKnobTouchRelease);
+                    activeKnob.removeEventListener('touchcancel', handleKnobTouchRelease);
+                    activeKnob = null;
+                }
+                
+                // Set knob rotation based on value
+                function setKnobRotation(knob, value, min, max, isLog) {
+                    // Calculate normalized value (0-1)
+                    let normalizedValue;
+                    if (isLog) {
+                        normalizedValue = (Math.log(value) - Math.log(min)) / (Math.log(max) - Math.log(min));
+                    } else {
+                        normalizedValue = (value - min) / (max - min);
+                    }
+                    
+                    // Angle range: -135° to +135° (270° total)
+                    const angle = normalizedValue * 270 - 135;
+                    knob.style.transform = `rotate(${angle}deg)`;
+                }
+            };
+            
+            // Initialize slider controls
+            const initSliders = () => {
+                let activeSlider = null;
+                
+                document.querySelectorAll('[id$="-slider"]').forEach(slider => {
+                    const param = slider.dataset.param;
+                    const min = parseFloat(slider.dataset.min);
+                    const max = parseFloat(slider.dataset.max);
+                    const value = parseFloat(slider.dataset.value);
+                    
+                    // Set initial value
+                    AudioSynth.updateParameter(param, value);
+                    
+                    // Set initial position
+                    setSliderPosition(slider, value, min, max);
+                    
+                    // Mouse events
+                    slider.addEventListener('mousedown', e => {
+                        e.preventDefault();
+                        slider.classList.add('active');
+                        activeSlider = slider;
+                        updateSliderFromPosition(e.clientY);
+                        document.addEventListener('mousemove', handleSliderMouseMove);
+                        document.addEventListener('mouseup', handleSliderMouseRelease);
+                    });
+                    
+                    // Touch events
+                    slider.addEventListener('touchstart', e => {
+                        e.preventDefault();
+                        slider.classList.add('active');
+                        activeSlider = slider;
+                        updateSliderFromPosition(e.touches[0].clientY);
+                        document.addEventListener('touchmove', handleSliderTouchMove, { passive: false });
+                        document.addEventListener('touchend', handleSliderTouchRelease);
+                    });
+                });
+                
+                // Handle mouse movement
+                function handleSliderMouseMove(e) {
+                    if (!activeSlider) return;
+                    e.preventDefault();
+                    updateSliderFromPosition(e.clientY);
+                }
+                
+                // Handle touch movement
+                function handleSliderTouchMove(e) {
+                    if (!activeSlider) return;
+                    e.preventDefault();
+                    updateSliderFromPosition(e.touches[0].clientY);
+                }
+                
+                // Update slider based on pointer position
+                function updateSliderFromPosition(clientY) {
+                    const param = activeSlider.dataset.param;
+                    const min = parseFloat(activeSlider.dataset.min);
+                    const max = parseFloat(activeSlider.dataset.max);
+                    
+                    const container = activeSlider.closest('.slider-container');
+                    const rect = container.getBoundingClientRect();
+                    
+                    // Calculate position (15px padding at top and bottom)
+                    let relativeY = clientY - rect.top;
+                    relativeY = Math.max(15, Math.min(relativeY, rect.height - 15));
+                    
+                    // Convert to normalized value (0-1, inverted for vertical)
+                    const normalizedValue = 1 - (relativeY - 15) / (rect.height - 30);
+                    const value = normalizedValue * (max - min) + min;
+                    
+                    // Set position
+                    activeSlider.style.top = `${relativeY}px`;
+                    
+                    // Update parameter
+                    AudioSynth.updateParameter(param, value);
+                }
+                
+                // Clean up after slider release
+                function handleSliderMouseRelease() {
+                    if (activeSlider) {
+                        activeSlider.classList.remove('active');
+                        activeSlider = null;
+                    }
+                    document.removeEventListener('mousemove', handleSliderMouseMove);
+                    document.removeEventListener('mouseup', handleSliderMouseRelease);
+                }
+                
+                function handleSliderTouchRelease() {
+                    if (activeSlider) {
+                        activeSlider.classList.remove('active');
+                        activeSlider = null;
+                    }
+                    document.removeEventListener('touchmove', handleSliderTouchMove);
+                    document.removeEventListener('touchend', handleSliderTouchRelease);
+                }
+                
+                // Set slider position based on value
+                function setSliderPosition(slider, value, min, max) {
+                    const normalizedValue = (value - min) / (max - min);
+                    const container = slider.closest('.slider-container');
+                    const height = container.clientHeight;
+                    const position = 15 + (1 - normalizedValue) * (height - 30);
+                    slider.style.top = `${position}px`;
+                }
+            };
+            
+            // Update recordings list in UI
+            const updateRecordingsList = () => {
+                const list = document.getElementById('recordings-list');
+                const recordings = AudioSynth.getSavedRecordings();
+                
+                if (recordings.length === 0) {
+                    list.innerHTML = '<div class="text-center text-gray-400">No recordings yet</div>';
+                    return;
+                }
+                
+                list.innerHTML = '';
+                
+                recordings.forEach((recording, index) => {
+                    const item = document.createElement('div');
+                    item.className = `recording-item p-2 mb-1 rounded flex justify-between items-center ${index === AudioSynth.selectedRecording ? 'bg-blue-800' : ''}`;
+                    
+                    // Format date if available
+                    let dateString = '';
+                    if (recording.date) {
+                        try {
+                            const date = new Date(recording.date);
+                            dateString = date.toLocaleDateString();
+                        } catch (e) {
+                            // Ignore date formatting errors
+                        }
+                    }
+                    
+                    item.innerHTML = `
+                        <span>${recording.name || `Recording ${index + 1}`}</span>
+                        <div>
+                            <button class="text-blue-400 mr-1 play-btn" data-index="${index}"><i class="fas fa-play"></i></button>
+                            <button class="text-red-400 delete-btn" data-index="${index}"><i class="fas fa-trash"></i></button>
+                        </div>
+                    `;
+                    
+                    list.appendChild(item);
+                    
+                    // Add event listeners
+                    item.querySelector('.play-btn').addEventListener('click', () => {
+                        AudioSynth.selectRecording(index);
+                        AudioSynth.playRecording();
+                    });
+                    
+                    item.querySelector('.delete-btn').addEventListener('click', () => {
+                        const recordings = AudioSynth.getSavedRecordings();
+                        recordings.splice(index, 1);
+                        updateRecordingsList();
+                    });
+                });
+            };
+            
+            // Update UI state during recording
+            const updateRecordingState = (isRecording) => {
+                document.getElementById('record-button').disabled = isRecording;
+                document.getElementById('stop-button').disabled = !isRecording;
+                document.getElementById('play-button').disabled = isRecording;
+                
+                // Add visual cue for recording
+                if (isRecording) {
+                    document.getElementById('record-button').classList.add('bg-red-800');
+                    document.getElementById('record-button').classList.remove('bg-red-600');
+                } else {
+                    document.getElementById('record-button').classList.remove('bg-red-800');
+                    document.getElementById('record-button').classList.add('bg-red-600');
+                }
+            };
+            
+            // Update UI state during playback
+            const updatePlaybackState = (isPlaying) => {
+                document.getElementById('record-button').disabled = isPlaying;
+                document.getElementById('stop-button').disabled = !isPlaying;
+                document.getElementById('play-button').disabled = isPlaying;
+                
+                // Add visual cue for playback
+                if (isPlaying) {
+                    document.getElementById('play-button').classList.add('bg-green-800');
+                    document.getElementById('play-button').classList.remove('bg-green-600');
+                } else {
+                    document.getElementById('play-button').classList.remove('bg-green-800');
+                    document.getElementById('play-button').classList.add('bg-green-600');
+                }
+            };
+            
+            // Format parameter values for display
+            const formatParameterValue = (param, value) => {
+                if (param === 'attack' || param === 'decay' || param === 'release' || param === 'delayTime') {
+                    return `${value.toFixed(2)}s`;
+                } else if (param === 'sustain' || param === 'mix' || param === 'filterEnv' || 
+                           param === 'delayFeedback' || param === 'reverbSize' || param === 'reverbMix' ||
+                           param === 'lfoToPitch') {
+                    return `${Math.round(value * 100)}%`;
+                } else if (param === 'cutoff' || param === 'lfoToFilter') {
+                    return `${Math.round(value)} Hz`;
+                } else if (param === 'detune') {
+                    return `${Math.round(value)} cents`;
+                } else if (param === 'lfoRate') {
+                    return `${value.toFixed(1)} Hz`;
+                } else if (param === 'resonance') {
+                    return value.toFixed(1);
+                }
+                return value.toString();
+            };
+            
+            // Update parameter display in UI
+            const updateParameterDisplay = (param, value) => {
+                const element = document.getElementById(`${param.replace(/([A-Z])/g, '-$1').toLowerCase()}-value`);
+                if (!element) return;
+                
+                const formattedValue = formatParameterValue(param, value);
+                element.textContent = formattedValue;
+                
+                // Visual feedback for parameter change
+                element.classList.add('changing');
+                setTimeout(() => element.classList.remove('changing'), 300);
+            };
+            
+            // Initialize all UI elements
+            const init = () => {
+                createKeyboard();
+                initTabs();
+                initRecordingControls();
+                initSelectControls();
+                initKnobs();
+                initSliders();
+                
+                // Ensure audio starts on user interaction
+                document.addEventListener('click', () => {
+                    if (AudioSynth.isInitialized && AudioSynth.audioCtx && AudioSynth.audioCtx.state === 'suspended') {
+                        AudioSynth.audioCtx.resume();
+                    }
+                });
+            };
+            
+            return {
+                init,
+                updateRecordingsList,
+                updateRecordingState,
+                updatePlaybackState,
+                updateParameterDisplay
+            };
+        })();
+        
+        // Initialize everything when DOM is ready
+        document.addEventListener('DOMContentLoaded', UI.init);
+    </script>
+</body>
+</html>
