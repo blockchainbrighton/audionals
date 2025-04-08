@@ -1,7 +1,6 @@
 // --- START OF FILE referenceDisplay.js ---
 
 // --- Reference Content (Formatted as HTML) ---
-// Storing the HTML structure directly in a template literal.
 const referenceContentHTML = `
     <h2>Keyboard Shortcuts</h2>
 
@@ -40,25 +39,28 @@ const referenceContentHTML = `
 `;
 
 /**
- * Injects the reference HTML content into the panel if it's empty.
- * This should be called before toggling visibility for the first time.
+ * Injects the reference HTML content into the panel ONCE.
+ * Uses a data attribute to prevent re-injection.
  * @param {HTMLElement} panelElement - The container element (e.g., #reference-panel).
  */
 function initReferencePanel(panelElement) {
     if (!panelElement) {
-        console.error("Reference panel element not provided.");
+        console.error("Reference panel element not provided for init.");
         return;
     }
-    // Check if the panel is currently empty (trimming whitespace)
-    if (!panelElement.innerHTML.trim()) {
-        console.log("Injecting reference HTML content...");
+    // Check if the panel has already been initialized using a data attribute
+    if (!panelElement.dataset.initialized) {
+        console.log("Initializing and injecting reference HTML content...");
         panelElement.innerHTML = referenceContentHTML;
+        panelElement.dataset.initialized = 'true'; // Mark as initialized
+    } else {
+        // console.log("Reference panel already initialized."); // Optional log
     }
 }
 
 /**
  * Toggles the visibility of the reference panel by adding/removing the 'show' class.
- * Assumes the content has been initialized by initReferencePanel.
+ * NOTE: This function might become redundant if visibility is solely controlled by the parent column.
  * @param {HTMLElement} panelElement - The container element (e.g., #reference-panel).
  */
 function toggleReferencePanel(panelElement) {
@@ -67,10 +69,10 @@ function toggleReferencePanel(panelElement) {
         return;
     }
     panelElement.classList.toggle('show');
-    console.log(`Reference panel visibility toggled. Now visible: ${panelElement.classList.contains('show')}`);
+    console.log(`Reference panel '.show' class toggled. Has show: ${panelElement.classList.contains('show')}`);
 }
 
 // --- Export the functions needed by main.js ---
-export { initReferencePanel, toggleReferencePanel };
+export { initReferencePanel, toggleReferencePanel }; // Keep toggle export for now
 
 // --- END OF FILE referenceDisplay.js ---

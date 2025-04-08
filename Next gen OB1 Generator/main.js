@@ -24,6 +24,14 @@ const tempoValueSpan = document.getElementById('tempo-value');
 const pitchValueSpan = document.getElementById('pitch-value');
 const volumeValueSpan = document.getElementById('volume-value');
 const errorMessageDiv = document.getElementById('error-message');
+// --- NEW: Column References ---
+const controlsColumn = document.querySelector('.controls-column');
+const referenceColumn = document.querySelector('.reference-column');
+
+
+// --- Early Check for Column Elements ---
+if (!controlsColumn) console.error("CRITICAL: Controls column element missing!");
+if (!referenceColumn) console.warn("Reference column element missing.");
 
 
 // --- Helper Function for Data Validation/Formatting ---
@@ -112,9 +120,38 @@ async function handleLoopToggle() {
     }
 }
 
+// --- NEW: Toggle Function for Side Columns ---
+/**
+ * Toggles the visibility of the control and reference columns.
+ */
+function toggleSideColumns() {
+    if (!controlsColumn || !referenceColumn) {
+        console.error("Cannot toggle columns: one or both column elements missing.");
+        return;
+    }
+    const wereHidden = controlsColumn.classList.contains('hidden');
+
+    controlsColumn.classList.toggle('hidden');
+    referenceColumn.classList.toggle('hidden');
+
+    console.log(`Side columns toggled. Now hidden: ${!wereHidden}`);
+
+    // If we just hid the reference column, also ensure the internal panel loses its 'show' class
+    // This prevents it from immediately showing next time the columns are revealed by 'i'
+    if (!wereHidden && referencePanel && referencePanel.classList.contains('show')) {
+        referencePanel.classList.remove('show');
+        console.log("Reference panel explicitly hidden because column was hidden.");
+    }
+}
+
+
+
 // --- Initialization ---
 async function initializeApp() {
     console.log("Initializing application...");
+
+     // Find referencePanel earlier if needed
+     const referencePanel = document.getElementById('reference-panel'); // Moved up or ensure it's available here
 
     // Pass collected DOM elements to uiUpdater (if refactored - currently uses internal lookups)
     // If uiUpdater.js is updated later to accept elements via init:
@@ -134,7 +171,9 @@ async function initializeApp() {
     }
 
     ui.clearError();
-
+    // Add checks for new column elements (optional but good practice)
+    if (!controlsColumn) console.warn("Controls column element not found.");
+    if (!referenceColumn) console.warn("Reference column element not found.");
     // 1. Validate Input Data
     let imageSrc;
     let audioSource;
@@ -174,7 +213,15 @@ async function initializeApp() {
     // 3. Setup Post-Audio Initialization
     console.log("Audio ready. Setting up UI and listeners.");
     ui.enableControls();
-    setupEventListeners();
+    setupEventListeners(); // setupEventListeners might need referencePanel now
+
+    // Initialize Reference Panel Content EARLY
+    if (referencePanel) {
+        initReferencePanel(referencePanel); // Call this ONCE during init
+        console.log("Reference panel content initialized.");
+    } else {
+        console.warn("Reference panel element not found during init, content may be missing.");
+    }
 
     // 4. Initialize Keyboard Shortcuts
     keyboardShortcuts.init({
@@ -240,7 +287,7 @@ function addListener(element, eventName, handler, elementNameForWarn) {
     }
 }
 
-// --- Event Listener Setup (Refactored with addListener helper) ---
+// --- Event Listener Setup (UPDATED INFO BUTTON LOGIC) ---
 function setupEventListeners() {
     console.log("Setting up event listeners...");
 
@@ -257,52 +304,81 @@ function setupEventListeners() {
              });
     }, 'reverseToggleBtn');
 
-    // --- Slider Listeners (Using helper within helper) ---
+    // --- Slider Listeners ---
     addListener(tempoSlider, 'input', (e) => handleSliderInput(e, audio.setTempo, ui.updateTempoDisplay, parseInt), 'tempoSlider');
     addListener(pitchSlider, 'input', (e) => handleSliderInput(e, audio.setPitch, ui.updatePitchDisplay), 'pitchSlider');
     addListener(volumeSlider, 'input', (e) => handleSliderInput(e, audio.setVolume, ui.updateVolumeDisplay), 'volumeSlider');
 
-    // --- Global Keydown Listener (Using imported _isInputFocused and optional chaining) ---
+    // --- Global Keydown Listener ---
     window.addEventListener('keydown', (e) => {
-        // Use imported function to check focus state
-        const blockSpace = _isInputFocused(e.target) || e.target?.tagName?.toLowerCase() === 'button'; // Also block if focused on *any* button
+        const isInputFocused = typeof _isInputFocused === 'function' ? _isInputFocused(e.target) : false;
+        const isButtonFocused = e.target?.tagName?.toLowerCase() === 'button';
+        const blockKeyboardControls = isInputFocused || isButtonFocused;
 
-        if (e.code === 'Space' && !blockSpace && !e.repeat) {
-            // Ensure no modifier keys are pressed for this specific action
+        // Spacebar for Play Once
+        if (e.code === 'Space' && !blockKeyboardControls && !e.repeat) {
             if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-                e.preventDefault(); // Prevent default space action (scroll, button click)
-                // console.log("Spacebar pressed for playOnce"); // Minimal logging
-                audio.playOnce(); // Assumes playOnce handles context internally
+                e.preventDefault();
+                audio.playOnce();
             }
         }
-        // Other global keydowns (if any needed outside keyboardShortcuts.js) would go here
-    });
 
-    // --- Info Button Listener (Optional Elements) ---
-     addListener(infoToggleBtn, 'click', () => {
-        console.log("Info button clicked."); // <-- ADD THIS
+        // --- Toggle BOTH Columns with 'i' key (SIMPLIFIED) ---
+        if (e.key.toLowerCase() === 'i' && !blockKeyboardControls && !e.repeat) {
+            e.preventDefault();
 
-         if (referencePanel) { // Need to check panel existence here too
-            console.log("Reference panel element found:", referencePanel); // <-- ADD THIS
-            console.log("Panel innerHTML BEFORE init:", `"${referencePanel.innerHTML.trim()}"`); // <-- ADD THIS
+            // Check if BOTH column references exist
+            if (controlsColumn && referenceColumn) {
+                // Toggle the 'hidden' class on BOTH columns
+                controlsColumn.classList.toggle('hidden');
+                referenceColumn.classList.toggle('hidden');
 
-            initReferencePanel(referencePanel);
-            console.log("Panel innerHTML AFTER init:", `"${referencePanel.innerHTML.trim()}"`); // <-- ADD THIS
+                // Log the new state
+                const areNowHidden = controlsColumn.classList.contains('hidden');
+                console.log(`Controls and Reference columns visibility toggled via 'i' key. Now hidden: ${areNowHidden}`);
 
-            toggleReferencePanel(referencePanel);
-         } else {
-             console.warn("Info button clicked, but reference panel element is missing.");
+                // NO NEED TO MANAGE .show on referencePanel anymore
+
+            } else {
+                 // Error message if columns are missing
+                 let missingElements = [];
+                 if (!controlsColumn) missingElements.push('.controls-column');
+                 if (!referenceColumn) missingElements.push('.reference-column');
+                 console.error(`Cannot toggle columns via 'i' key: Element reference(s) missing for: ${missingElements.join(' and ')}!`);
+            }
+        }
+
+        // --- Integrate other keyboard shortcuts (Keep this as is) ---
+        if (keyboardShortcuts && typeof keyboardShortcuts.handleKeydown === 'function') {
+             keyboardShortcuts.handleKeydown(e, blockKeyboardControls);
          }
-     }, 'infoToggleBtn'); // Reference panel check is inside handler
+    });
+    // --- Info Button Listener (SIMPLIFIED) ---
+    addListener(infoToggleBtn, 'click', () => {
+        console.log("Info button clicked.");
+        // Only need the reference COLUMN now
+        if (referenceColumn) {
+            // 1. Toggle the visibility of the entire reference column
+            referenceColumn.classList.toggle('hidden');
+            const willBeHidden = referenceColumn.classList.contains('hidden');
+            console.log(`Reference column toggled via button. Now hidden: ${willBeHidden}`);
 
-     console.log("Event listeners setup complete.");
+            // NO NEED TO MANAGE .show on referencePanel anymore
+            // initReferencePanel was called during initializeApp
+
+        } else {
+            console.warn("Info button clicked, but reference column element is missing.");
+        }
+    }, 'infoToggleBtn');
+
+    console.log("Event listeners setup complete.");
 }
 
 // --- Start the Application ---
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeApp);
+   document.addEventListener('DOMContentLoaded', initializeApp);
 } else {
-    initializeApp();
+   initializeApp();
 }
 
 // --- END OF FILE main.js ---
