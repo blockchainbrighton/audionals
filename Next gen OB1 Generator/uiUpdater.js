@@ -152,7 +152,12 @@ export function clearError() {
 
 export function setImageSource(src) {
     if (mainImage) { // Check if element exists
-        mainImage.src = src;
+        mainImage.src = src; // Set the actual image source
+
+        // --- ADD THIS LINE ---
+        // Now that the src is set, make the image element visible
+        mainImage.style.visibility = 'visible';
+
     } else {
         console.error("setImageSource: Main image element not found");
     }

@@ -35,8 +35,11 @@ const referenceContentHTML = `
      <ul>
          <li><code>Spacebar</code>: Play sample once</li>
          <li><code>Click Image</code>: Toggle Loop</li>
+         <!-- >>> NEW LINE ADDED HERE <<< -->
+         <li><code>R</code>: Toggle Reverse Playback</li>
     </ul>
 `;
+
 
 /**
  * Injects the reference HTML content into the panel ONCE.
