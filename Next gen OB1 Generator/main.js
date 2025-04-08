@@ -99,11 +99,38 @@ async function initializeApp() {
 
     // Set initial display values based on default slider values and audio state
     // Ensure sliders exist before accessing their value property
-    if (tempoSlider) ui.updateTempoDisplay(tempoSlider.value);
-    if (pitchSlider) ui.updatePitchDisplay(pitchSlider.value);
-    if (volumeSlider) ui.updateVolumeDisplay(volumeSlider.value);
-    ui.updateLoopButton(audio.getLoopingState());
-    ui.updateReverseButton(audio.getReverseState());
+    console.groupCollapsed("Setting Initial UI Values"); // Group initial logs
+    try {
+        if (tempoSlider) {
+            const initialTempo = tempoSlider.value;
+            console.log(`Initial Tempo: ${initialTempo} BPM`);
+            ui.updateTempoDisplay(initialTempo);
+        } else { console.warn("Tempo slider not found for initial setup."); }
+
+        if (pitchSlider) {
+            const initialPitch = pitchSlider.value;
+            console.log(`Initial Pitch: ${initialPitch}x`);
+            ui.updatePitchDisplay(initialPitch);
+        } else { console.warn("Pitch slider not found for initial setup."); }
+
+        if (volumeSlider) {
+            const initialVolume = volumeSlider.value;
+            console.log(`Initial Volume: ${initialVolume}`);
+            ui.updateVolumeDisplay(initialVolume);
+        } else { console.warn("Volume slider not found for initial setup."); }
+
+        const initialLoopState = audio.getLoopingState();
+        console.log(`Initial Loop State: ${initialLoopState}`);
+        ui.updateLoopButton(initialLoopState);
+
+        const initialReverseState = audio.getReverseState();
+        console.log(`Initial Reverse State: ${initialReverseState}`);
+        ui.updateReverseButton(initialReverseState);
+    } catch (error) {
+         console.error("Error setting initial UI values:", error);
+         ui.showError("Problem setting initial control values.");
+    }
+    console.groupEnd(); // End group
 
     // appInitialized = true; // Set flag if needed
     console.log("Application initialized successfully.");
@@ -119,6 +146,7 @@ async function initializeApp() {
 function isTextInputFocused(target) {
     if (!target) return false;
     const tagName = target.tagName.toLowerCase();
+    // Exclude buttons from preventing most shortcuts, but keep for specific keys like Spacebar if needed elsewhere.
     return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
 }
 
@@ -128,45 +156,87 @@ function setupEventListeners() {
 
     // Image Click -> Toggle Loop Playback
     if (mainImage) {
-        mainImage.addEventListener('click', () => {
+        // Make the listener async
+        mainImage.addEventListener('click', async () => { // <--- ADD async
+            console.groupCollapsed("Image Click Handler");
             console.log("Main image clicked");
-            audio.resumeContext() // Ensure context is running
-                 .then(() => {
-                     if (audio.getLoopingState()) {
-                         audio.stopLoop();
-                     } else {
-                         audio.startLoop();
-                     }
-                     ui.updateLoopButton(audio.getLoopingState()); // Update button text/state
-                 })
-                 .catch(err => ui.showError(`Could not toggle loop: ${err.message}`));
-        });
-    } else { console.warn("Main image element not found."); }
+            const wasLooping = audio.getLoopingState(); // Get state BEFORE action
+            console.log(`Loop state BEFORE toggle: ${wasLooping}`);
+            let newState = wasLooping; // Default to current state in case of error
 
+            try {
+                // It's often good practice to ensure context is running before any action
+                await audio.resumeContext(); // <--- Ensure context is awake
+
+                if (wasLooping) {
+                    console.log("Calling audio.stopLoop()");
+                    audio.stopLoop(); // stopLoop is synchronous
+                    newState = false; // State is definitively false now
+                } else {
+                    console.log("Calling audio.startLoop()");
+                    await audio.startLoop(); // <--- ADD await
+                    // If startLoop completes without error, get the state *after* it finishes
+                    newState = audio.getLoopingState();
+                }
+                console.log(`Loop state AFTER toggle action: ${newState} (Type: ${typeof newState})`);
+                ui.updateLoopButton(newState); // Update button text/state AFTER action completes
+
+            } catch (err) {
+               ui.showError(`Could not toggle loop: ${err.message}`);
+               console.error("Error toggling loop via image:", err);
+               // Update UI based on the state after error (likely unchanged)
+               ui.updateLoopButton(audio.getLoopingState());
+            } finally {
+                console.groupEnd();
+            }
+        });
+    } else { console.warn("[setupEventListeners] Main image element not found."); }
 
     // Play Once Button
     if (playOnceBtn) {
         playOnceBtn.addEventListener('click', () => {
-            console.log("Play Once button clicked");
+            console.log("Play Once button clicked - Calling audio.playOnce()");
             // playOnce should handle resumeContext internally if needed
             audio.playOnce();
         });
-    } else { console.warn("Play Once button not found."); }
+    } else { console.warn("[setupEventListeners] Play Once button not found."); }
 
     // Loop Toggle Button
     if (loopToggleBtn) {
-        loopToggleBtn.addEventListener('click', () => {
+        // Make the listener async
+        loopToggleBtn.addEventListener('click', async () => { // <--- ADD async
+            console.groupCollapsed("Loop Toggle Button Handler");
             console.log("Loop Toggle button clicked");
-             // Loop control functions should handle resumeContext internally
-            if (audio.getLoopingState()) {
-                audio.stopLoop();
-            } else {
-                audio.startLoop();
-            }
-            ui.updateLoopButton(audio.getLoopingState());
-        });
-    } else { console.warn("Loop Toggle button not found."); }
+            const wasLooping = audio.getLoopingState(); // Get state BEFORE action
+            console.log(`Loop state BEFORE toggle: ${wasLooping}`);
+            let newState = wasLooping; // Default to current state in case of error
 
+            try {
+                // Optional: await audio.resumeContext(); here too if start/stop don't handle it robustly enough
+                if (wasLooping) {
+                    console.log("Calling audio.stopLoop()");
+                    audio.stopLoop(); // stopLoop is synchronous
+                    newState = false; // State is definitively false
+                } else {
+                    console.log("Calling audio.startLoop()");
+                    await audio.startLoop(); // <--- ADD await
+                     // If startLoop completes without error, get the state *after* it finishes
+                    newState = audio.getLoopingState();
+                }
+                console.log(`Loop state AFTER toggle action: ${newState} (Type: ${typeof newState})`);
+                ui.updateLoopButton(newState); // Update UI with the confirmed new state
+
+            } catch (error) {
+                // Catch potential errors from await audio.startLoop()
+                console.error("Error during loop toggle:", error);
+                ui.showError(`Failed to toggle loop: ${error.message}`);
+                // Ensure UI reflects the state *after* failure
+                ui.updateLoopButton(audio.getLoopingState());
+            } finally {
+                console.groupEnd();
+            }
+        });
+    } else { console.warn("[setupEventListeners] Loop Toggle button not found."); }
 
     // Reverse Toggle Button
     if (reverseToggleBtn) {
@@ -262,8 +332,8 @@ function setupEventListeners() {
          console.warn("Info button or reference panel element not found. Reference cannot be toggled.");
      }
 
-    console.log("Event listeners set up.");
-}
+     console.log("Event listeners setup complete."); // Add confirmation log
+    }
 
 
 // --- Start the Application ---
@@ -274,5 +344,8 @@ if (document.readyState === 'loading') {
     // DOMContentLoaded has already fired
     initializeApp();
 }
+
+    console.log("Event listeners setup complete."); // Add confirmation log
+
 
 // --- END OF FILE main.js ---

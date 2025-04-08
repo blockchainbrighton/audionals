@@ -312,3 +312,38 @@ export function destroy() {
 }
 
 // --- END OF FILE keyboardShortcuts.js ---
+
+
+
+// --- KEYBOARD SHORTCUT REFERENCE ---
+/*
+    The following keyboard shortcuts are active when focus is NOT on an input field:
+
+    **Volume & Mute:**
+    *   Arrow Up:      Increase Volume (by VOLUME_STEP)
+    *   Arrow Down:    Decrease Volume (by VOLUME_STEP)
+    *   M:             Toggle Mute/Unmute
+
+    **Tempo (BPM):**
+    *   Shift + = / +: Increase Tempo by TEMPO_STEP_SMALL (+1 BPM)
+    *   Shift + - / _: Decrease Tempo by TEMPO_STEP_SMALL (-1 BPM)
+    *   Ctrl + Shift + = / +: Increase Tempo by TEMPO_STEP_LARGE (+10 BPM)
+    *   Ctrl + Shift + - / _: Decrease Tempo by TEMPO_STEP_LARGE (-10 BPM)
+        (Note: Ctrl can be Cmd on macOS)
+
+    **Pitch / Playback Rate:**
+    *   Shift + } (usually Shift + ]): Increase Pitch slightly (by PITCH_STEP_SMALL)
+    *   Shift + { (usually Shift + [): Decrease Pitch slightly (by PITCH_STEP_SMALL)
+    *   Ctrl + Shift + } (usually Ctrl + Shift + ]): Increase Pitch significantly (by PITCH_STEP_LARGE)
+    *   Ctrl + Shift + { (usually Ctrl + Shift + [): Decrease Pitch significantly (by PITCH_STEP_LARGE)
+    *   = (equals key): Double Current Pitch (x2 Multiplier)
+    *   - (minus key):  Halve Current Pitch (x0.5 Multiplier)
+    *   0 (zero key):   Reset Pitch to 1.0 (Normal Speed)
+        (Note: Ctrl can be Cmd on macOS)
+
+    **Playback (handled in main.js):**
+    *   Spacebar:      Play sample once
+
+*/
+// --- END KEYBOARD SHORTCUT REFERENCE ---
+
