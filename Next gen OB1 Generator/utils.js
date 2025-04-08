@@ -31,3 +31,13 @@ export function base64ToArrayBuffer(base64) {
 export function clamp(value, min, max) {
     return Math.max(min, Math.min(value, max));
 }
+
+/**
+ * Checks if the event target is an input element where shortcuts should be ignored.
+ * @param {EventTarget} target - The event target element.
+ * @returns {boolean} True if the target is an input type, false otherwise.
+ */
+export function _isInputFocused(target) {
+    const tagName = target.tagName.toLowerCase();
+    return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
+}

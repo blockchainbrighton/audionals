@@ -1,6 +1,7 @@
-// --- DOM Elements ---
-// Use 'let' so it can be reassigned by setControlsContainer if needed,
-// but initialize it here so the module works even if the function isn't called.
+// --- START OF FILE uiUpdater.js ---
+
+// --- DOM Elements (Looked up internally) ---
+// Use 'let' for controlsContainer as it can be updated by setControlsContainer
 let controlsContainer = document.getElementById('controls-container');
 const errorMessageDiv = document.getElementById('error-message');
 const playOnceBtn = document.getElementById('play-once-btn');
@@ -14,117 +15,154 @@ const volumeSlider = document.getElementById('volume-slider');
 const volumeValueSpan = document.getElementById('volume-value');
 const mainImage = document.getElementById('main-image');
 
-// --- NEW Function ---
+// List of control elements found internally, used for enable/disable helper
+// Filter out nulls in case elements don't exist in the DOM
+const controlElementsList = [
+    playOnceBtn,
+    loopToggleBtn,
+    reverseToggleBtn,
+    tempoSlider,
+    pitchSlider,
+    volumeSlider,
+].filter(el => el !== null); // Use filter(Boolean) or filter(el => el) as shorthand
+
+// --- Exported Function (Interface for main.js) ---
 /**
  * Allows external modules (like main.js) to explicitly set the
- * reference to the main controls container element.
+ * reference to the main controls container element. This maintains
+ * compatibility with the original design.
  * @param {HTMLElement} containerElement - The DOM element for the controls container.
  */
 export function setControlsContainer(containerElement) {
     // Basic validation: Check if it's a valid HTML element
     if (containerElement instanceof HTMLElement) {
-        controlsContainer = containerElement;
-        console.log("UI Updater: Controls container reference received from main.js.");
+        controlsContainer = containerElement; // Update the module-level reference
+        console.log("UI Updater: Controls container reference updated via setControlsContainer.");
     } else {
-        console.error("UI Updater: Invalid element passed to setControlsContainer. Using internally found element if available.");
-        // Optionally fall back to finding it again if it wasn't found initially
-        if (!controlsContainer) {
-             controlsContainer = document.getElementById('controls-container');
-        }
+        console.error("UI Updater: Invalid element passed to setControlsContainer. Internal reference unchanged.");
+        // No need to find it again here, as it was already looked up initially.
     }
 }
-// --- End NEW Function ---
 
+// --- Internal Helper Functions ---
 
-// --- UI Update Functions ---
+/**
+ * Generic helper to update the text content of a value display span,
+ * optionally applying a formatting function. Uses internally found elements.
+ * @param {HTMLElement | null} spanRef - Reference to the span element.
+ * @param {*} value - The raw value to display.
+ * @param {function(any): string} [formatter=(v) => String(v)] - Function to format the value for display.
+ * @param {string} [elementName='Value'] - Name of the element for logging warnings.
+ */
+function updateValueDisplay(spanRef, value, formatter = (v) => String(v), elementName = 'Value') {
+     if (spanRef) { // Check if element exists
+         spanRef.textContent = formatter(value);
+     } else {
+         console.warn(`UpdateValueDisplay: Span element not found for ${elementName}.`);
+     }
+}
+
+/**
+ * Generic helper to update the state (text and class) of a toggle button. Uses internally found elements.
+ * @param {HTMLButtonElement | null} buttonRef - Reference to the button element.
+ * @param {boolean} isActive - The state of the toggle (true = active/on).
+ * @param {string} textPrefix - The text to display before "On" or "Off".
+ */
+function updateToggleButton(buttonRef, isActive, textPrefix) {
+     if (buttonRef) { // Check if element exists
+         buttonRef.textContent = `${textPrefix}: ${isActive ? 'On' : 'Off'}`;
+         buttonRef.classList.toggle('active', !!isActive); // Ensure boolean check for class toggle
+     } else {
+          console.warn(`UpdateToggleButton: Button element not found for prefix "${textPrefix}"`);
+     }
+}
+
+/**
+ * Internal helper to set the disabled state of all registered control elements
+ * and toggle a class on the main controls container. Uses internally found elements.
+ * @param {boolean} isDisabled - True to disable controls, false to enable.
+ */
+function setControlsDisabledState(isDisabled) {
+    // Toggle class on the container first
+    if (controlsContainer) { // Check if container exists (it might be null initially or after failed setControlsContainer)
+         controlsContainer.classList.toggle('disabled', isDisabled);
+    } else {
+         // Log error but continue trying to disable individual controls
+         console.warn(`SetControlsDisabledState: Controls container element not found! Cannot toggle class.`);
+    }
+
+    // Iterate over the validated list of control elements found internally
+    controlElementsList.forEach(el => {
+        // el is guaranteed non-null here because of the filter during list creation
+        el.disabled = isDisabled;
+    });
+     console.log(`Controls ${isDisabled ? 'disabled' : 'enabled'}.`);
+}
+
+// --- Exported UI Update Functions (Using Helpers and Internal Elements) ---
 
 export function updateTempoDisplay(bpm) {
-    if (tempoValueSpan) {
-        tempoValueSpan.textContent = bpm;
-    } else { console.warn("Tempo value span not found"); }
+    updateValueDisplay(tempoValueSpan, bpm, (v) => String(v), 'Tempo');
 }
 
 export function updatePitchDisplay(rate) {
-     if (pitchValueSpan) {
-        pitchValueSpan.textContent = Math.round(rate * 100); // Display as percentage
-     } else { console.warn("Pitch value span not found"); }
+     updateValueDisplay(pitchValueSpan, rate, (v) => `${Math.round(v * 100)}`, 'Pitch');
 }
 
 export function updateVolumeDisplay(level) {
-    if (volumeValueSpan) {
-        volumeValueSpan.textContent = Math.round(level * 100); // Display as percentage
-    } else { console.warn("Volume value span not found"); }
+    updateValueDisplay(volumeValueSpan, level, (v) => `${Math.round(v * 100)}`, 'Volume');
 }
 
 export function updateLoopButton(isLooping) {
-    if (loopToggleBtn) {
-        loopToggleBtn.textContent = `Play Loop: ${isLooping ? 'On' : 'Off'}`;
-        loopToggleBtn.classList.toggle('active', isLooping === true); // Explicitly check boolean true
-    } else { console.warn("Loop toggle button not found"); }
+     updateToggleButton(loopToggleBtn, isLooping, 'Play Loop');
 }
 
 export function updateReverseButton(isReversed) {
-     if (reverseToggleBtn) {
-        reverseToggleBtn.textContent = `Reverse: ${isReversed ? 'On' : 'Off'}`;
-        reverseToggleBtn.classList.toggle('active', isReversed === true); // Explicitly check boolean true
-     } else { console.warn("Reverse toggle button not found"); }
+     updateToggleButton(reverseToggleBtn, isReversed, 'Reverse');
 }
 
 export function enableControls() {
-    // Add checks to ensure elements exist before modifying them
-    if (!controlsContainer) { console.error("EnableControls: Controls container not found!"); return; }
-    controlsContainer.classList.remove('disabled');
-
-    if (playOnceBtn) playOnceBtn.disabled = false; else console.warn("EnableControls: Play Once button not found.");
-    if (loopToggleBtn) loopToggleBtn.disabled = false; else console.warn("EnableControls: Loop Toggle button not found.");
-    if (reverseToggleBtn) reverseToggleBtn.disabled = false; else console.warn("EnableControls: Reverse Toggle button not found.");
-    if (tempoSlider) tempoSlider.disabled = false; else console.warn("EnableControls: Tempo slider not found.");
-    if (pitchSlider) pitchSlider.disabled = false; else console.warn("EnableControls: Pitch slider not found.");
-    if (volumeSlider) volumeSlider.disabled = false; else console.warn("EnableControls: Volume slider not found.");
+    setControlsDisabledState(false); // Use helper
 }
 
 export function disableControls() {
-    if (!controlsContainer) { console.error("DisableControls: Controls container not found!"); return; }
-    controlsContainer.classList.add('disabled');
-
-    if (playOnceBtn) playOnceBtn.disabled = true; else console.warn("DisableControls: Play Once button not found.");
-    if (loopToggleBtn) loopToggleBtn.disabled = true; else console.warn("DisableControls: Loop Toggle button not found.");
-    if (reverseToggleBtn) reverseToggleBtn.disabled = true; else console.warn("DisableControls: Reverse Toggle button not found.");
-    if (tempoSlider) tempoSlider.disabled = true; else console.warn("DisableControls: Tempo slider not found.");
-    if (pitchSlider) pitchSlider.disabled = true; else console.warn("DisableControls: Pitch slider not found.");
-    if (volumeSlider) volumeSlider.disabled = true; else console.warn("DisableControls: Volume slider not found.");
+    setControlsDisabledState(true); // Use helper
 }
 
 export function showError(message) {
-    if (errorMessageDiv) {
+    if (errorMessageDiv) { // Check if element exists
         errorMessageDiv.textContent = message;
-        // Use visibility or opacity for smoother transitions if needed,
-        // but display: block/none is functional.
         errorMessageDiv.style.display = message ? 'block' : 'none';
+        // Log only if the div was actually found and updated
+        console.error("UI Error Displayed:", message);
     } else {
-        console.error("Error message div not found! Cannot display:", message);
-        return; // Exit if the error element isn't there
+        // Log that the div is missing, plus the message that couldn't be shown
+        console.error("UI Error (Error message div not found!):", message);
     }
-    console.error("UI Error Displayed:", message); // Log to console regardless
 }
 
-
 export function clearError() {
-    if (errorMessageDiv) {
+    if (errorMessageDiv) { // Check if element exists
         errorMessageDiv.textContent = '';
         errorMessageDiv.style.display = 'none';
-    } else { console.warn("Error message div not found for clearing."); }
+    } else {
+        console.warn("clearError: Error message div not found.");
+    }
 }
 
 export function setImageSource(src) {
-    if (mainImage) {
+    if (mainImage) { // Check if element exists
         mainImage.src = src;
     } else {
         console.error("setImageSource: Main image element not found");
     }
 }
 
-// Add null checks to element references at the top (optional but safer)
-if (!controlsContainer) console.error("UI Updater: Initial controlsContainer element not found!");
-if (!errorMessageDiv) console.error("UI Updater: Initial errorMessageDiv element not found!");
-// ... add similar checks for other essential elements if desired ...
+// Optional: Initial checks logged to console (can be removed if too verbose)
+// These run only once when the module loads.
+if (!controlsContainer) console.warn("UI Updater: Initial lookup failed for controlsContainer.");
+if (!errorMessageDiv) console.warn("UI Updater: Initial lookup failed for errorMessageDiv.");
+if (!mainImage) console.warn("UI Updater: Initial lookup failed for mainImage.");
+console.log(`UI Updater: Initialized. Found ${controlElementsList.length} control elements internally.`);
+
+// --- END OF FILE uiUpdater.js ---

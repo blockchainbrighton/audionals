@@ -3,9 +3,10 @@
 // --- Module Imports ---
 import * as audio from './audioProcessor.js';
 import * as ui from './uiUpdater.js';
-import { clamp } from './utils.js'; // Assuming utils.js exists and exports clamp
+// Import clamp for slider logic and _isInputFocused for keydown checks
+import { clamp, _isInputFocused } from './utils.js';
 import * as keyboardShortcuts from './keyboardShortcuts.js';
-import { initReferencePanel, toggleReferencePanel } from './referenceDisplay.js'; // Import reference panel functions
+import { initReferencePanel, toggleReferencePanel } from './referenceDisplay.js';
 
 // --- DOM Element References ---
 const mainImage = document.getElementById('main-image');
@@ -15,337 +16,293 @@ const reverseToggleBtn = document.getElementById('reverse-toggle-btn');
 const tempoSlider = document.getElementById('tempo-slider');
 const pitchSlider = document.getElementById('pitch-slider');
 const volumeSlider = document.getElementById('volume-slider');
-const controlsContainer = document.getElementById('controls-container'); // Container for enabling/disabling
-const infoToggleBtn = document.getElementById('info-toggle-btn');       // Button to show reference
-const referencePanel = document.getElementById('reference-panel');     // Panel to display reference
+const controlsContainer = document.getElementById('controls-container');
+const infoToggleBtn = document.getElementById('info-toggle-btn');
+const referencePanel = document.getElementById('reference-panel');
+// Get references needed for UI initialization (if uiUpdater is refactored later)
+const tempoValueSpan = document.getElementById('tempo-value');
+const pitchValueSpan = document.getElementById('pitch-value');
+const volumeValueSpan = document.getElementById('volume-value');
+const errorMessageDiv = document.getElementById('error-message');
 
-// --- Global Variables / State (if any, though most state is in modules) ---
-// Example: let appInitialized = false; // If needed elsewhere
+
+// --- Helper Function for Data Validation/Formatting ---
+/**
+ * Validates base64 data and ensures it's a proper data URL.
+ * @param {string | undefined} base64Data - The input base64 data or data URL.
+ * @param {string} dataUrlPrefix - The expected data URL prefix (e.g., 'data:image/jpeg;base64,').
+ * @param {string} variableName - The name of the data source for error messages (e.g., 'Image').
+ * @returns {string} The validated and formatted data URL.
+ * @throws {Error} If the data is missing or invalid.
+ */
+function validateAndFormatDataSource(base64Data, dataUrlPrefix, variableName) {
+    if (typeof base64Data === 'undefined' || !base64Data || (typeof base64Data === 'string' && base64Data.startsWith("/*"))) {
+        throw new Error(`${variableName} data is missing or invalid.`);
+    }
+    return (typeof base64Data === 'string' && base64Data.startsWith('data:'))
+           ? base64Data
+           : `${dataUrlPrefix}${base64Data}`;
+}
+
+// --- Helper Function for Slider Input ---
+/**
+ * Generic handler for slider input events.
+ * Reads the slider value, clamps it, calls the audio setter, and updates the UI display.
+ * @param {Event} event - The input event object.
+ * @param {Function} audioSetter - The function from audioProcessor.js to call (e.g., audio.setTempo).
+ * @param {Function} uiUpdater - The function from uiUpdater.js to call (e.g., ui.updateTempoDisplay).
+ * @param {Function} [parser=parseFloat] - The function to parse the slider value (parseInt or parseFloat).
+ */
+function handleSliderInput(event, audioSetter, uiUpdater, parser = parseFloat) {
+    const slider = event.target;
+    if (!slider || typeof slider.value === 'undefined' || typeof slider.min === 'undefined' || typeof slider.max === 'undefined') {
+        console.error(`Slider element or its properties (value, min, max) missing for ${slider?.id || 'unknown slider'}.`);
+        return;
+    }
+    const rawValue = parser(slider.value);
+    const min = parser(slider.min);
+    const max = parser(slider.max);
+    const clampedValue = clamp(rawValue, min, max); // Use imported clamp
+
+    if (typeof audioSetter === 'function') {
+        audioSetter(clampedValue);
+    } else {
+        console.error(`Invalid audioSetter provided for ${slider.id}`);
+    }
+
+    if (typeof uiUpdater === 'function') {
+        uiUpdater(clampedValue);
+    } else {
+        console.error(`Invalid uiUpdater provided for ${slider.id}`);
+    }
+    // console.log(`${slider.id} updated to: ${clampedValue}`); // Keep logs minimal unless debugging
+}
+
+// --- Shared Async Helper for Loop Toggle ---
+/**
+ * Handles the logic for toggling the audio loop on/off.
+ */
+async function handleLoopToggle() {
+    // console.groupCollapsed("handleLoopToggle Action"); // Keep logs minimal unless debugging
+    const wasLooping = audio.getLoopingState();
+    // console.log(`Loop state BEFORE toggle: ${wasLooping}`);
+    let newState = wasLooping;
+
+    try {
+        await audio.resumeContext();
+
+        if (wasLooping) {
+            // console.log("Calling audio.stopLoop()");
+            audio.stopLoop();
+            newState = false;
+        } else {
+            // console.log("Calling audio.startLoop()");
+            await audio.startLoop();
+            newState = audio.getLoopingState();
+        }
+        // console.log(`Loop state AFTER toggle action: ${newState}`);
+
+    } catch (err) {
+        ui.showError(`Could not toggle loop: ${err.message}`);
+        console.error("Error toggling loop:", err);
+        newState = audio.getLoopingState();
+    } finally {
+         ui.updateLoopButton(newState);
+         // console.groupEnd(); // Keep logs minimal unless debugging
+    }
+}
 
 // --- Initialization ---
 async function initializeApp() {
     console.log("Initializing application...");
-    // Ensure UI module knows about the controls container if needed for disable/enable logic
-    if (ui.setControlsContainer) {
-         ui.setControlsContainer(controlsContainer);
-    } else {
-        console.warn("ui.setControlsContainer function not found in uiUpdater.js");
-    }
-    ui.clearError(); // Clear any previous errors
 
-    // 1. Validate Input Data (Image and Audio)
+    // Pass collected DOM elements to uiUpdater (if refactored - currently uses internal lookups)
+    // If uiUpdater.js is updated later to accept elements via init:
+    /*
+    ui.init({
+        controlsContainer, errorMessageDiv, playOnceBtn, loopToggleBtn,
+        reverseToggleBtn, tempoSlider, tempoValueSpan, pitchSlider,
+        pitchValueSpan, volumeSlider, volumeValueSpan, mainImage
+    });
+    */
+    // For now, stick to the compatible setControlsContainer if it exists
+    if (ui.setControlsContainer) {
+        ui.setControlsContainer(controlsContainer);
+    } else {
+        // This warning is valid if uiUpdater hasn't been updated yet
+        console.warn("ui.setControlsContainer function not found in uiUpdater.js (may indicate uiUpdater hasn't been refactored yet).");
+    }
+
+    ui.clearError();
+
+    // 1. Validate Input Data
     let imageSrc;
     let audioSource;
-
     try {
-        if (typeof imageBase64 === 'undefined' || !imageBase64 || imageBase64.startsWith("/*")) {
-            throw new Error("Image data is missing or invalid.");
-        }
-        // Attempt to handle raw base64 or data URLs
-        imageSrc = (typeof imageBase64 === 'string' && imageBase64.startsWith('data:image'))
-                   ? imageBase64
-                   : `data:image/jpeg;base64,${imageBase64}`; // Assume JPEG if no prefix
-        ui.setImageSource(imageSrc);
-
+        imageSrc = validateAndFormatDataSource(
+            typeof imageBase64 !== 'undefined' ? imageBase64 : undefined,
+            'data:image/jpeg;base64,', 'Image'
+        );
+        ui.setImageSource(imageSrc); // uiUpdater needs mainImage reference internally
     } catch (e) {
         ui.showError(`Failed to load image: ${e.message}`);
         console.error("Image loading error:", e);
-        ui.disableControls();
-        return; // Stop initialization
+        if(controlsContainer) ui.disableControls(); // Disable only if container exists
+        return;
     }
-
     try {
-        if (typeof audioBase64_Opus === 'undefined' || !audioBase64_Opus || audioBase64_Opus.startsWith("/*")) {
-            throw new Error("Audio data is missing or invalid.");
-        }
-         // Attempt to handle raw base64 or data URLs
-        audioSource = (typeof audioBase64_Opus === 'string' && audioBase64_Opus.startsWith('data:audio'))
-                      ? audioBase64_Opus
-                      : `data:audio/opus;base64,${audioBase64_Opus}`; // Assume Opus if no prefix
-
+         audioSource = validateAndFormatDataSource(
+             typeof audioBase64_Opus !== 'undefined' ? audioBase64_Opus : undefined,
+             'data:audio/opus;base64,', 'Audio'
+         );
     } catch (e) {
          ui.showError(`Invalid audio data provided: ${e.message}`);
          console.error("Audio data error:", e);
-         ui.disableControls();
-         return; // Stop initialization
-    }
+         if(controlsContainer) ui.disableControls();
+         return;
+     }
 
-
-    // 3. Initialize Audio Processor
+    // 2. Initialize Audio Processor
     console.log("Initializing audio...");
     const audioReady = await audio.init(audioSource);
-
     if (!audioReady) {
-        // ui.showError should be called within audio.init() on failure
         console.error("Audio initialization failed. Controls remain disabled.");
-        ui.disableControls(); // Ensure controls are disabled
-        return; // Stop initialization
+        if(controlsContainer) ui.disableControls();
+        return;
     }
 
-    // 4. Setup Post-Audio Initialization
+    // 3. Setup Post-Audio Initialization
     console.log("Audio ready. Setting up UI and listeners.");
-    ui.enableControls(); // Enable UI elements
-    setupEventListeners(); // Attach event listeners to controls
+    ui.enableControls();
+    setupEventListeners();
 
-    // Initialize Keyboard Shortcuts module, passing necessary elements/modules
+    // 4. Initialize Keyboard Shortcuts
     keyboardShortcuts.init({
-        audioModule: audio, // Pass modules for potential direct calls
-        uiModule: ui,
         tempoSlider: tempoSlider,
         pitchSlider: pitchSlider,
         volumeSlider: volumeSlider,
-        // Add other elements if keyboardShortcuts needs them (e.g., mainImage, buttons)
+        // No longer need to pass audio/ui modules if keyboardShortcuts imports them directly
     });
 
-    // Set initial display values based on default slider values and audio state
-    // Ensure sliders exist before accessing their value property
-    console.groupCollapsed("Setting Initial UI Values"); // Group initial logs
+    // 5. Set Initial UI Values
+    console.groupCollapsed("Setting Initial UI Values");
     try {
-        if (tempoSlider) {
-            const initialTempo = tempoSlider.value;
-            console.log(`Initial Tempo: ${initialTempo} BPM`);
-            ui.updateTempoDisplay(initialTempo);
-        } else { console.warn("Tempo slider not found for initial setup."); }
+        const sliderConfigs = [
+            { slider: tempoSlider, updater: ui.updateTempoDisplay, label: 'Tempo', parser: parseInt },
+            { slider: pitchSlider, updater: ui.updatePitchDisplay, label: 'Pitch' },
+            { slider: volumeSlider, updater: ui.updateVolumeDisplay, label: 'Volume' }
+        ];
+        sliderConfigs.forEach(config => {
+            if (config.slider) {
+                const parser = config.parser || parseFloat;
+                const value = parser(config.slider.value);
+                // console.log(`Initial ${config.label}: ${value}`); // Minimal logging
+                if (typeof config.updater === 'function') {
+                    config.updater(value);
+                } else { console.warn(`${config.label} UI updater function not found.`); }
+            } else { console.warn(`${config.label} slider not found for initial setup.`); }
+        });
 
-        if (pitchSlider) {
-            const initialPitch = pitchSlider.value;
-            console.log(`Initial Pitch: ${initialPitch}x`);
-            ui.updatePitchDisplay(initialPitch);
-        } else { console.warn("Pitch slider not found for initial setup."); }
+        ui.updateLoopButton(audio.getLoopingState());
+        ui.updateReverseButton(audio.getReverseState());
 
-        if (volumeSlider) {
-            const initialVolume = volumeSlider.value;
-            console.log(`Initial Volume: ${initialVolume}`);
-            ui.updateVolumeDisplay(initialVolume);
-        } else { console.warn("Volume slider not found for initial setup."); }
-
-        const initialLoopState = audio.getLoopingState();
-        console.log(`Initial Loop State: ${initialLoopState}`);
-        ui.updateLoopButton(initialLoopState);
-
-        const initialReverseState = audio.getReverseState();
-        console.log(`Initial Reverse State: ${initialReverseState}`);
-        ui.updateReverseButton(initialReverseState);
     } catch (error) {
          console.error("Error setting initial UI values:", error);
          ui.showError("Problem setting initial control values.");
     }
-    console.groupEnd(); // End group
+    console.groupEnd();
 
-    // appInitialized = true; // Set flag if needed
     console.log("Application initialized successfully.");
 }
 
-// --- Helper Function ---
+// --- REMOVED Local Definition of isTextInputFocused ---
+// The function is now imported from utils.js as _isInputFocused
+
+// --- Helper for Adding Event Listeners ---
 /**
- * Checks if the event target is an input element where typing occurs.
- * Used to prevent general shortcuts from firing during text input.
- * @param {EventTarget | null} target - The target element of the event.
- * @returns {boolean} True if the target is an input/textarea/select or contentEditable.
+ * Attaches an event listener if the element exists, warns if not.
+ * @param {Element | null} element - The DOM element to attach the listener to.
+ * @param {string} eventName - The name of the event (e.g., 'click', 'input').
+ * @param {EventListenerOrEventListenerObject} handler - The event handler function.
+ * @param {string} elementNameForWarn - A descriptive name for the element for warning messages.
  */
-function isTextInputFocused(target) {
-    if (!target) return false;
-    const tagName = target.tagName.toLowerCase();
-    // Exclude buttons from preventing most shortcuts, but keep for specific keys like Spacebar if needed elsewhere.
-    return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
+function addListener(element, eventName, handler, elementNameForWarn) {
+    if (element) {
+        element.addEventListener(eventName, handler);
+    } else {
+        // Only warn if the element is generally expected
+        const optionalElements = ['infoToggleBtn', 'referencePanel']; // Add other non-critical elements here
+        if (!optionalElements.includes(elementNameForWarn)) {
+            console.warn(`[setupEventListeners] Element "${elementNameForWarn}" not found. Listener not attached.`);
+        } else {
+             // console.log(`[setupEventListeners] Optional element "${elementNameForWarn}" not found. Listener not attached.`); // Less severe log for optional
+        }
+    }
 }
 
-// --- Event Listener Setup ---
+// --- Event Listener Setup (Refactored with addListener helper) ---
 function setupEventListeners() {
     console.log("Setting up event listeners...");
 
-    // Image Click -> Toggle Loop Playback
-    if (mainImage) {
-        // Make the listener async
-        mainImage.addEventListener('click', async () => { // <--- ADD async
-            console.groupCollapsed("Image Click Handler");
-            console.log("Main image clicked");
-            const wasLooping = audio.getLoopingState(); // Get state BEFORE action
-            console.log(`Loop state BEFORE toggle: ${wasLooping}`);
-            let newState = wasLooping; // Default to current state in case of error
+    // --- Control Listeners ---
+    addListener(mainImage, 'click', handleLoopToggle, 'mainImage');
+    addListener(playOnceBtn, 'click', () => audio.playOnce(), 'playOnceBtn');
+    addListener(loopToggleBtn, 'click', handleLoopToggle, 'loopToggleBtn');
+    addListener(reverseToggleBtn, 'click', () => {
+        audio.resumeContext()
+             .then(() => ui.updateReverseButton(audio.toggleReverse()))
+             .catch(err => {
+                console.error("Error toggling reverse:", err);
+                ui.showError(`Could not toggle reverse: ${err.message}`);
+             });
+    }, 'reverseToggleBtn');
 
-            try {
-                // It's often good practice to ensure context is running before any action
-                await audio.resumeContext(); // <--- Ensure context is awake
+    // --- Slider Listeners (Using helper within helper) ---
+    addListener(tempoSlider, 'input', (e) => handleSliderInput(e, audio.setTempo, ui.updateTempoDisplay, parseInt), 'tempoSlider');
+    addListener(pitchSlider, 'input', (e) => handleSliderInput(e, audio.setPitch, ui.updatePitchDisplay), 'pitchSlider');
+    addListener(volumeSlider, 'input', (e) => handleSliderInput(e, audio.setVolume, ui.updateVolumeDisplay), 'volumeSlider');
 
-                if (wasLooping) {
-                    console.log("Calling audio.stopLoop()");
-                    audio.stopLoop(); // stopLoop is synchronous
-                    newState = false; // State is definitively false now
-                } else {
-                    console.log("Calling audio.startLoop()");
-                    await audio.startLoop(); // <--- ADD await
-                    // If startLoop completes without error, get the state *after* it finishes
-                    newState = audio.getLoopingState();
-                }
-                console.log(`Loop state AFTER toggle action: ${newState} (Type: ${typeof newState})`);
-                ui.updateLoopButton(newState); // Update button text/state AFTER action completes
-
-            } catch (err) {
-               ui.showError(`Could not toggle loop: ${err.message}`);
-               console.error("Error toggling loop via image:", err);
-               // Update UI based on the state after error (likely unchanged)
-               ui.updateLoopButton(audio.getLoopingState());
-            } finally {
-                console.groupEnd();
-            }
-        });
-    } else { console.warn("[setupEventListeners] Main image element not found."); }
-
-    // Play Once Button
-    if (playOnceBtn) {
-        playOnceBtn.addEventListener('click', () => {
-            console.log("Play Once button clicked - Calling audio.playOnce()");
-            // playOnce should handle resumeContext internally if needed
-            audio.playOnce();
-        });
-    } else { console.warn("[setupEventListeners] Play Once button not found."); }
-
-    // Loop Toggle Button
-    if (loopToggleBtn) {
-        // Make the listener async
-        loopToggleBtn.addEventListener('click', async () => { // <--- ADD async
-            console.groupCollapsed("Loop Toggle Button Handler");
-            console.log("Loop Toggle button clicked");
-            const wasLooping = audio.getLoopingState(); // Get state BEFORE action
-            console.log(`Loop state BEFORE toggle: ${wasLooping}`);
-            let newState = wasLooping; // Default to current state in case of error
-
-            try {
-                // Optional: await audio.resumeContext(); here too if start/stop don't handle it robustly enough
-                if (wasLooping) {
-                    console.log("Calling audio.stopLoop()");
-                    audio.stopLoop(); // stopLoop is synchronous
-                    newState = false; // State is definitively false
-                } else {
-                    console.log("Calling audio.startLoop()");
-                    await audio.startLoop(); // <--- ADD await
-                     // If startLoop completes without error, get the state *after* it finishes
-                    newState = audio.getLoopingState();
-                }
-                console.log(`Loop state AFTER toggle action: ${newState} (Type: ${typeof newState})`);
-                ui.updateLoopButton(newState); // Update UI with the confirmed new state
-
-            } catch (error) {
-                // Catch potential errors from await audio.startLoop()
-                console.error("Error during loop toggle:", error);
-                ui.showError(`Failed to toggle loop: ${error.message}`);
-                // Ensure UI reflects the state *after* failure
-                ui.updateLoopButton(audio.getLoopingState());
-            } finally {
-                console.groupEnd();
-            }
-        });
-    } else { console.warn("[setupEventListeners] Loop Toggle button not found."); }
-
-    // Reverse Toggle Button
-    if (reverseToggleBtn) {
-        reverseToggleBtn.addEventListener('click', () => {
-            console.log("Reverse Toggle button clicked");
-            // Resume context first as toggling might restart playback implicitly
-            audio.resumeContext()
-                 .then(() => {
-                    const newState = audio.toggleReverse();
-                    ui.updateReverseButton(newState);
-                 })
-                 .catch(err => ui.showError(`Could not toggle reverse: ${err.message}`));
-        });
-     } else { console.warn("Reverse Toggle button not found."); }
-
-
-    // Tempo Slider Input
-    if (tempoSlider) {
-        tempoSlider.addEventListener('input', (e) => {
-            const bpm = parseInt(e.target.value, 10);
-            // Use clamp from utils.js if available, otherwise basic Math.min/max
-            const min = parseInt(tempoSlider.min, 10) || 30; // Default fallback
-            const max = parseInt(tempoSlider.max, 10) || 240;
-            const clampedBpm = typeof clamp === 'function' ? clamp(bpm, min, max) : Math.max(min, Math.min(bpm, max));
-
-            audio.setTempo(clampedBpm);
-            ui.updateTempoDisplay(clampedBpm);
-        });
-     } else { console.warn("Tempo slider not found."); }
-
-
-    // Pitch Slider Input
-    if (pitchSlider) {
-        pitchSlider.addEventListener('input', (e) => {
-            const rate = parseFloat(e.target.value);
-             const min = parseFloat(pitchSlider.min) || 0.1;
-             const max = parseFloat(pitchSlider.max) || 4.0;
-             const clampedRate = typeof clamp === 'function' ? clamp(rate, min, max) : Math.max(min, Math.min(rate, max));
-
-            audio.setPitch(clampedRate);
-            ui.updatePitchDisplay(clampedRate); // UI might format this (e.g., to percentage)
-        });
-     } else { console.warn("Pitch slider not found."); }
-
-
-    // Volume Slider Input
-    if (volumeSlider) {
-        volumeSlider.addEventListener('input', (e) => {
-            const level = parseFloat(e.target.value);
-             const min = parseFloat(volumeSlider.min) || 0.0;
-             const max = parseFloat(volumeSlider.max) || 1.0;
-             const clampedLevel = typeof clamp === 'function' ? clamp(level, min, max) : Math.max(min, Math.min(level, max));
-
-            audio.setVolume(clampedLevel);
-            ui.updateVolumeDisplay(clampedLevel); // UI might format this (e.g., to percentage)
-        });
-     } else { console.warn("Volume slider not found."); }
-
-
-    // --- Global Keydown Listener (for specific actions like Spacebar) ---
-    // Note: General shortcuts are handled within keyboardShortcuts.js
+    // --- Global Keydown Listener (Using imported _isInputFocused and optional chaining) ---
     window.addEventListener('keydown', (e) => {
-        // Spacebar for Play Once - Only if NOT focused on text input OR a button
-        const targetTagName = e.target?.tagName?.toLowerCase();
-        const blockSpace = targetTagName === 'input'
-                           || targetTagName === 'textarea'
-                           || targetTagName === 'select'
-                           || targetTagName === 'button' // Prevent space activating button AND playing sample
-                           || e.target?.isContentEditable;
+        // Use imported function to check focus state
+        const blockSpace = _isInputFocused(e.target) || e.target?.tagName?.toLowerCase() === 'button'; // Also block if focused on *any* button
 
         if (e.code === 'Space' && !blockSpace && !e.repeat) {
             // Ensure no modifier keys are pressed for this specific action
             if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
                 e.preventDefault(); // Prevent default space action (scroll, button click)
-                console.log("Spacebar pressed for playOnce");
+                // console.log("Spacebar pressed for playOnce"); // Minimal logging
                 audio.playOnce(); // Assumes playOnce handles context internally
             }
         }
-
-        // Add other global keydowns here if necessary, but prefer keyboardShortcuts.js
+        // Other global keydowns (if any needed outside keyboardShortcuts.js) would go here
     });
 
-    // --- Info Button Listener (for Reference Panel) ---
-     if (infoToggleBtn && referencePanel) {
-        infoToggleBtn.addEventListener('click', () => {
-            console.log("Info button clicked");
-            // Ensure content is injected (runs only once if panel is empty)
+    // --- Info Button Listener (Optional Elements) ---
+     addListener(infoToggleBtn, 'click', () => {
+        console.log("Info button clicked."); // <-- ADD THIS
+
+         if (referencePanel) { // Need to check panel existence here too
+            console.log("Reference panel element found:", referencePanel); // <-- ADD THIS
+            console.log("Panel innerHTML BEFORE init:", `"${referencePanel.innerHTML.trim()}"`); // <-- ADD THIS
+
             initReferencePanel(referencePanel);
-            // Toggle visibility class
+            console.log("Panel innerHTML AFTER init:", `"${referencePanel.innerHTML.trim()}"`); // <-- ADD THIS
+
             toggleReferencePanel(referencePanel);
-        });
-    } else {
-         console.warn("Info button or reference panel element not found. Reference cannot be toggled.");
-     }
+         } else {
+             console.warn("Info button clicked, but reference panel element is missing.");
+         }
+     }, 'infoToggleBtn'); // Reference panel check is inside handler
 
-     console.log("Event listeners setup complete."); // Add confirmation log
-    }
-
+     console.log("Event listeners setup complete.");
+}
 
 // --- Start the Application ---
-// Wait for the DOM to be fully loaded before initializing
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeApp);
 } else {
-    // DOMContentLoaded has already fired
     initializeApp();
 }
-
-    console.log("Event listeners setup complete."); // Add confirmation log
-
 
 // --- END OF FILE main.js ---

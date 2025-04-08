@@ -4,7 +4,6 @@
 // Storing the HTML structure directly in a template literal.
 const referenceContentHTML = `
     <h2>Keyboard Shortcuts</h2>
-    <p><em>Active when focus is NOT on an input field or button.</em></p>
 
     <h3>Volume & Mute</h3>
     <ul>
