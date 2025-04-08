@@ -296,13 +296,14 @@ function setupEventListeners() {
     addListener(pitchSlider, 'input', (e) => handleSliderInput(e, audio.setPitch, ui.updatePitchDisplay), 'pitchSlider');
     addListener(volumeSlider, 'input', (e) => handleSliderInput(e, audio.setVolume, ui.updateVolumeDisplay), 'volumeSlider');
 
-    // --- Global Keydown Listener (Using simplified column toggle) ---
+    // --- Global Keydown Listener (Add 'r' key handling) ---
     window.addEventListener('keydown', (e) => {
         const isInputFocused = typeof _isInputFocused === 'function' ? _isInputFocused(e.target) : false;
         const isButtonFocused = e.target?.tagName?.toLowerCase() === 'button';
+        // blockKeyboardControls prevents action when typing in inputs or focusing buttons
         const blockKeyboardControls = isInputFocused || isButtonFocused;
 
-        // Spacebar for Play Once (Unchanged)
+        // Spacebar for Play Once (Keep as is)
         if (e.code === 'Space' && !blockKeyboardControls && !e.repeat) {
             if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
                 e.preventDefault();
@@ -310,11 +311,30 @@ function setupEventListeners() {
             }
         }
 
-        // Toggle BOTH Columns with 'i' key (Using simplified CSS approach)
+        // Toggle BOTH Columns with 'i' key (Keep as is)
         if (e.key.toLowerCase() === 'i' && !blockKeyboardControls && !e.repeat) {
             e.preventDefault();
             toggleSideColumns(); // Use the dedicated toggle function
         }
+
+        // --- >>> NEW: Toggle Reverse with 'r' key <<< ---
+        if (e.key.toLowerCase() === 'r' && !blockKeyboardControls && !e.repeat) {
+            e.preventDefault(); // Prevent potential browser default actions if any
+            console.log("Reverse toggle requested via 'r' key"); // Optional: for debugging
+
+            // Exactly the same logic as the button click handler:
+            audio.resumeContext()
+                 .then(() => {
+                     const newState = audio.toggleReverse(); // Call the core audio function
+                     ui.updateReverseButton(newState);       // Update the UI button state/text
+                 })
+                 .catch(err => {
+                    // Consistent error handling
+                    console.error("Main: Error toggling reverse via key:", err);
+                    ui.showError(`Could not toggle reverse: ${err.message}`);
+                 });
+        }
+        // --- >>> END NEW <<< ---
 
         // Integrate other keyboard shortcuts (Unchanged)
         if (keyboardShortcuts && typeof keyboardShortcuts.handleKeydown === 'function') {
