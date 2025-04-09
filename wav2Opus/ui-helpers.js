@@ -1,22 +1,35 @@
 // ui-helpers.js
+
+// Dependencies assumed available globally:
+// DOM Elements (statusEl, progressEl, etc.)
+// Global State (ffmpeg, selectedFile, fileDuration, originalAudioUrl)
+// Utilities (window.formatBytes)
+// Data (audioFormatInfo)
+
 /**
  * Updates the status message display.
  * @param {string} msg - The message to display.
  * @param {boolean} [err=false] - Whether the message represents an error.
  */
 const updateStatus = (msg, err = false) => {
-  console.log(msg);
+  // console.log(`Status Update: ${msg} ${err ? '(ERROR)' : ''}`); // Keep console log concise maybe
   if (statusEl) {
     statusEl.textContent = `Status: ${msg}`;
-    statusEl.className = err ? 'error' : '';
+    statusEl.className = err ? 'error' : 'status'; // Use explicit class names
   }
-  if (progressEl) {
-    progressEl.style.display = 'none'; // Hide progress by default when status updates
-  }
-  if (err && convertBtn) {
-    // Re-enable buttons based on current state if an error occurs
-    enableConvertButtonIfNeeded();
-  }
+  // Hide progress only if it's NOT an error message (errors might happen during progress)
+  // Let updateProgress handle showing/hiding progress during conversion.
+  // Resetting progress should happen elsewhere (e.g., resetUIForNewFile, resetConversionOutputUI)
+  // if (progressEl && !err) {
+  //    progressEl.style.display = 'none';
+  // }
+
+  // Re-enable buttons only if it's an error AND conversion isn't actively running
+  // The finally block in runConversion is a better place to manage button state after attempts.
+  // Removing button logic from here to avoid conflicts.
+  // if (err && convertBtn) {
+  //    enableConvertButtonIfNeeded(); // Let finally block handle this
+  // }
 };
 
 /**
@@ -24,73 +37,101 @@ const updateStatus = (msg, err = false) => {
  * @param {number} ratio - The progress ratio (0 to 1).
  */
 const updateProgress = (ratio) => {
-    if (progressEl && statusEl) {
+  if (progressEl && statusEl) {
+    const percent = Math.max(0, Math.min(100, Math.round(ratio * 100)));
+    // Only show progress bar if conversion is actually happening (ratio > 0)
+    // or explicitly being reset (handle reset elsewhere). Assume ratio > 0 means show.
+    if (ratio > 0 && ratio <= 1) {
         progressEl.style.display = 'block';
-        const percent = Math.max(0, Math.min(100, Math.round(ratio * 100)));
         progressEl.value = percent;
-        updateStatus(`Converting... (${percent}%)`); // Also update status text
+        // Update status only during progress, don't overwrite final messages
+        // Use a specific check or flag if needed, otherwise let status be set by main process.
+        // updateStatus(`Converting... (${percent}%)`); // This can overwrite "Conversion Complete" etc.
+        statusEl.textContent = `Status: Converting... (${percent}%)`; // Update status directly
+        statusEl.className = 'status'; // Ensure status isn't stuck on error class
+    } else if (ratio <= 0) {
+        // Potentially hide progress if ratio is 0 (e.g., start or reset)
+        // Let reset functions handle hiding explicitly.
     }
-}
+  }
+};
 
 /**
  * Enables or disables the Convert and Play Sample buttons based on state.
- * @returns {boolean} True if the convert button was disabled, false otherwise.
  */
 const enableConvertButtonIfNeeded = () => {
-  // Ensure elements exist before accessing properties
-  const ffmpegReady = typeof ffmpeg !== 'undefined' && ffmpeg !== null;
-  const fileSelected = selectedFile !== null;
-
-  const convertEnabled = ffmpegReady && fileSelected;
-  const playEnabled = fileSelected;
+  // Ensure state variables are accessed safely
+  const ffmpegIsReady = typeof ffmpeg === 'object' && ffmpeg !== null && typeof ffmpeg.run === 'function'; // More robust check
+  const fileIsSelected = selectedFile instanceof File;
+  const convertEnabled = ffmpegIsReady && fileIsSelected;
 
   if (convertBtn) convertBtn.disabled = !convertEnabled;
-  if (playSampleBtn) playSampleBtn.disabled = !playEnabled;
-  return !convertEnabled; // Return true if convert button is disabled
+  if (playSampleBtn) playSampleBtn.disabled = !fileIsSelected;
+  // Removed return value as it wasn't used based on provided code.
 };
 
 /**
- * Updates the estimated file size display based on current settings and duration.
+ * Updates the estimated file size display based on current settings and file duration.
  */
 const updateEstimatedSize = () => {
-  // Add checks for element existence
-  if (!fileDuration || !selectedFile || !estSizeMp3Span || !estSizeOpusSpan || !formatRadios || !mp3QualitySlider || !opusBitrateSlider || !mp3QualityValueSpan || !opusBitrateValueSpan) {
-      // console.warn("Skipping size update - missing elements or data.");
+  // Check core dependencies first
+  if (!fileDuration || !selectedFile) {
+      // Clear estimates if prerequisites are missing
+      if (estSizeMp3Span) estSizeMp3Span.textContent = '';
+      if (estSizeOpusSpan) estSizeOpusSpan.textContent = '';
+      return;
+  }
+  // Check all required elements exist
+  const elementsExist = estSizeMp3Span && estSizeOpusSpan && formatRadios &&
+                        mp3QualitySlider && opusBitrateSlider &&
+                        mp3QualityValueSpan && opusBitrateValueSpan;
+  if (!elementsExist) {
+      console.warn("Missing elements required for estimated size calculation.");
       return;
   }
 
+
   const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
   if (!selectedFormatRadio) return; // No format selected
-  const selectedFormat = selectedFormatRadio.value;
 
+  const selectedFormat = selectedFormatRadio.value;
   let bitrateKbps = 0;
   let estimatedSizeBytes = 0;
 
-  estSizeMp3Span.textContent = ''; // Clear both initially
+  // Clear previous estimates before setting new one
+  estSizeMp3Span.textContent = '';
   estSizeOpusSpan.textContent = '';
 
-  if (selectedFormat === 'mp3') {
-    const visualQuality = parseInt(mp3QualitySlider.value, 10);
-    // Ensure mapping is correct: -q:a 0 (best) to 9 (worst)
-    const ffmpegQuality = visualQuality; // Assuming slider value 0-9 maps directly to -q:a 0-9
-
-    // Very rough approximation of typical VBR bitrates for -q:a settings
-    // Values roughly correspond to LAME presets (higher index = lower quality/bitrate)
-    const approxBitrates = [245, 225, 190, 175, 165, 130, 115, 100, 85, 65]; // Index 0 to 9
-    bitrateKbps = approxBitrates[ffmpegQuality] || 128; // Fallback if index out of bounds
-
-    // Original calculation from prompt: estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8 / 2;
-    // Revised standard calculation:
-    estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8; // bits to bytes
-
-    estSizeMp3Span.textContent = `~ ${formatBytes(estimatedSizeBytes)}`;
-  } else if (selectedFormat === 'opus') {
-    bitrateKbps = parseInt(opusBitrateSlider.value, 10);
-    estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8; // bits to bytes
-    estSizeOpusSpan.textContent = `~ ${formatBytes(estimatedSizeBytes)}`;
+  try { // Wrap calculations in try-catch for safety
+      if (selectedFormat === 'mp3') {
+          const visualQuality = parseInt(mp3QualitySlider.value, 10);
+          // Ensure mapping is safe
+          const approxBitrates = [245, 225, 190, 175, 165, 130, 115, 100, 85, 65];
+          if (visualQuality >= 0 && visualQuality < approxBitrates.length) {
+              bitrateKbps = approxBitrates[visualQuality];
+          } else {
+              bitrateKbps = 128; // Default fallback
+              console.warn("Invalid MP3 quality value, using default bitrate.");
+          }
+          estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8;
+          // Use window.formatBytes consistently
+          estSizeMp3Span.textContent = `~ ${window.formatBytes(estimatedSizeBytes)}`;
+      } else if (selectedFormat === 'opus') {
+          bitrateKbps = parseInt(opusBitrateSlider.value, 10);
+          if (!isFinite(bitrateKbps) || bitrateKbps <= 0) {
+               console.warn("Invalid Opus bitrate value.");
+               return; // Don't estimate if bitrate is invalid
+          }
+          estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8;
+          estSizeOpusSpan.textContent = `~ ${window.formatBytes(estimatedSizeBytes)}`;
+      }
+  } catch (e) {
+      console.error("Error calculating estimated size:", e);
+      // Clear estimates on error
+      if (estSizeMp3Span) estSizeMp3Span.textContent = '';
+      if (estSizeOpusSpan) estSizeOpusSpan.textContent = '';
   }
 };
-
 
 /**
  * Shows/hides the relevant quality settings (MP3/Opus) based on the selected format.
@@ -98,96 +139,189 @@ const updateEstimatedSize = () => {
 const updateQualityDisplays = () => {
   if (!formatRadios || !mp3SettingsDiv || !opusSettingsDiv) return;
   const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
-  if (!selectedFormatRadio) return; // Should not happen if one is checked by default
+  // Default to the first radio if none is checked somehow
+  const fmt = selectedFormatRadio ? selectedFormatRadio.value : (formatRadios[0] ? formatRadios[0].value : null);
 
-  const fmt = selectedFormatRadio.value;
-  mp3SettingsDiv.style.display = fmt === 'mp3' ? 'block' : 'none';
-  opusSettingsDiv.style.display = fmt === 'opus' ? 'block' : 'none';
+  if (fmt === 'mp3') {
+      mp3SettingsDiv.style.display = 'block';
+      opusSettingsDiv.style.display = 'none';
+  } else if (fmt === 'opus') {
+      mp3SettingsDiv.style.display = 'none';
+      opusSettingsDiv.style.display = 'block';
+  } else {
+       mp3SettingsDiv.style.display = 'none';
+       opusSettingsDiv.style.display = 'none';
+  }
   updateEstimatedSize(); // Update size estimate whenever format changes
 };
 
 /**
- * Resets UI elements related to conversion results and file selection.
+ * Resets UI elements related to file selection and ALL results (conversion + base64).
  */
 const resetUIForNewFile = () => {
-    if (resultEl) resultEl.innerHTML = '';
-    if (base64Container) base64Container.style.display = 'none';
-    if (base64Result) base64Result.innerHTML = '';
-    if (downloadBase64Btn) downloadBase64Btn.textContent = 'Download as TXT';
-    if (originalAudioContainer) {
-        originalAudioContainer.style.display = 'none';
-        originalAudioContainer.innerHTML = '';
-    }
-    if (playSampleBtn) playSampleBtn.textContent = 'Play Original';
-    if (estSizeMp3Span) estSizeMp3Span.textContent = '';
-    if (estSizeOpusSpan) estSizeOpusSpan.textContent = '';
-    if (progressEl) progressEl.style.display = 'none';
-    if (audioInfoContainer) audioInfoContainer.style.display = 'none'; // Hide info box too
+  console.log("Resetting UI for new file selection...");
+  // Reset Conversion Results Area
+  if (resultEl) resultEl.innerHTML = '';
 
-    // Clean up any existing blob URLs
-    if (originalAudioUrl) {
+  // Reset Base64 Area
+  if (base64Container) base64Container.style.display = 'none';
+  if (base64Output) base64Output.textContent = ''; // Use textContent for <pre> or similar
+  if (base64Output && base64Output.tagName === 'TEXTAREA') base64Output.value = ''; // Handle textarea
+  if (base64Result) base64Result.innerHTML = '';
+  if (copyBase64Btn) copyBase64Btn.disabled = true;
+  if (downloadBase64Btn) {
+      downloadBase64Btn.textContent = 'Download as TXT';
+      downloadBase64Btn.disabled = true;
+  }
+
+  // Reset Original Audio Player Area
+  if (originalAudioContainer) {
+    originalAudioContainer.innerHTML = ''; // Clear content
+    originalAudioContainer.style.display = 'none'; // Hide container
+  }
+  if (playSampleBtn) {
+      playSampleBtn.textContent = 'Play Original';
+      playSampleBtn.disabled = true; // Should be disabled if no file selected
+  }
+
+  // Revoke Original Audio URL if it exists
+  if (originalAudioUrl) {
+    try {
         URL.revokeObjectURL(originalAudioUrl);
-        originalAudioUrl = null;
+        console.log("Revoked previous original audio URL.");
+    } catch(e) {
+        console.warn("Could not revoke original audio URL:", e);
     }
-    // Note: Converted audio blob URL is revoked within createAudioPlayer's observer or needs manual cleanup if that fails.
+    originalAudioUrl = null; // Clear the reference
+  }
+  // Ensure the audio element reference itself is cleared (if managed globally)
+  if (typeof originalAudioElement !== 'undefined') {
+      originalAudioElement = null;
+  }
+
+
+  // Reset Estimates
+  if (estSizeMp3Span) estSizeMp3Span.textContent = '';
+  if (estSizeOpusSpan) estSizeOpusSpan.textContent = '';
+
+  // Reset Progress Bar
+  if (progressEl) {
+    progressEl.style.display = 'none';
+    progressEl.value = 0;
+  }
+
+  // Hide Info Modal
+  if (audioInfoContainer) audioInfoContainer.style.display = 'none';
+
+  // Reset status message (optional, might be set immediately after by file handler)
+  // updateStatus("Ready. Select a WAV file.");
 };
 
 /**
- * Resets UI elements specific to the conversion output.
+ * Resets UI elements specific to the conversion output (Result + Base64 sections + Progress).
+ * Called before starting a new conversion.
  */
 const resetConversionOutputUI = () => {
-    if (resultEl) resultEl.innerHTML = '';
-    if (base64Container) base64Container.style.display = 'none';
-    if (base64Result) base64Result.innerHTML = '';
-    if (progressEl) {
-        progressEl.style.display = 'none';
-        progressEl.value = 0;
-    }
-    if (audioInfoContainer) audioInfoContainer.style.display = 'none'; // Hide info box if open
+  console.log("Resetting conversion output UI...");
+  if (resultEl) resultEl.innerHTML = '';
+
+  if (base64Container) base64Container.style.display = 'none';
+   if (base64Output) base64Output.textContent = ''; // Use textContent for <pre> or similar
+   if (base64Output && base64Output.tagName === 'TEXTAREA') base64Output.value = ''; // Handle textarea
+  if (base64Result) base64Result.innerHTML = '';
+   if (copyBase64Btn) copyBase64Btn.disabled = true;
+   if (downloadBase64Btn) {
+       downloadBase64Btn.textContent = 'Download as TXT';
+       downloadBase64Btn.disabled = true;
+   }
+
+  if (progressEl) {
+    progressEl.style.display = 'none';
+    progressEl.value = 0;
+  }
+  // Typically don't hide the info container here, only reset results.
+  // if (audioInfoContainer) audioInfoContainer.style.display = 'none';
 };
 
-
-// --- NEW FUNCTION ---
 /**
-* Displays the audio format information in the designated container.
-*/
-const displayAudioFormatInfo = () => {
-  // Check if the data object and the container element exist
-  if (typeof audioFormatInfo === 'undefined') {
-      console.error("Audio format information data (audioFormatInfo) not found. Was audio-formats-explained.js loaded?");
-      if (audioInfoContent) audioInfoContent.innerHTML = "<p>Error: Could not load format information.</p>";
-       if (audioInfoContainer) audioInfoContainer.style.display = 'block'; // Show container even on error
-      return;
-  }
+ * Displays the audio format information in the designated container.
+ * Uses the globally available `audioFormatInfo` object.
+ * @param {string} [htmlContent] - Optional explicit HTML content to display instead of default assembly.
+ */
+const displayAudioFormatInfo = (htmlContent) => {
   if (!audioInfoContainer || !audioInfoContent) {
-      console.error("Audio info container elements not found in the DOM.");
-      return;
+    console.error("Audio info container elements not found in the DOM.");
+    return;
   }
 
-  // Build the HTML content from the imported object
-  let infoHTML = '';
-  infoHTML += audioFormatInfo.conceptsTitle || '';
-  infoHTML += audioFormatInfo.losslessVsLossy || '';
-  infoHTML += audioFormatInfo.bitrate || '';
-  infoHTML += '<hr>'; // Separator
-  infoHTML += audioFormatInfo.formatsTitle || '';
-  infoHTML += audioFormatInfo.wav || '';
-  infoHTML += audioFormatInfo.mp3 || '';
-  infoHTML += audioFormatInfo.opus || '';
-  infoHTML += '<hr>'; // Separator
-  infoHTML += audioFormatInfo.opusRecommendationsTitle || '';
-  infoHTML += audioFormatInfo.opusDetails || '';
+  // Use provided HTML if available, otherwise assemble from audioFormatInfo
+  if (typeof htmlContent === 'string') {
+     audioInfoContent.innerHTML = htmlContent;
+  } else if (typeof audioFormatInfo === 'object' && audioFormatInfo !== null) {
+      // Assemble default content carefully, checking each property exists
+      audioInfoContent.innerHTML = `
+        ${audioFormatInfo.usageInstructions || ''}
+        ${audioFormatInfo.conceptsTitle || ''}
+        ${audioFormatInfo.losslessVsLossy || ''}
+        ${audioFormatInfo.bitrate || ''}
+        ${audioFormatInfo.formatsTitle || ''}
+        ${audioFormatInfo.wav || ''}
+        ${audioFormatInfo.mp3 || ''}
+        ${audioFormatInfo.opus || ''}
+        ${audioFormatInfo.opusRecommendationsTitle || ''}
+        ${audioFormatInfo.opusDetails || ''}
+      `;
+  } else {
+      console.error("audioFormatInfo object not found or invalid.");
+      audioInfoContent.innerHTML = '<p>Error: Information content is unavailable.</p>';
+  }
 
-  // Set the inner HTML of the content area
-  audioInfoContent.innerHTML = infoHTML;
-
-  // Make the main container visible
   audioInfoContainer.style.display = 'block';
 };
 
-// --- Optional: Function to hide the info ---
+/**
+ * Hides the audio format information container.
+ */
 const hideAudioFormatInfo = () => {
   if (audioInfoContainer) {
-      audioInfoContainer.style.display = 'none';
+    audioInfoContainer.style.display = 'none';
   }
 };
+
+
+/*
+<!-- collapsible_note -->
+<!--
+<details>
+<summary>File Summary: ui-helpers.js (Refactored)</summary>
+
+**Purpose:** Provides a collection of functions dedicated to manipulating the user interface: status, progress, button states, size estimates, settings visibility, UI resets, and info display.
+
+**Key Functions:** (Signatures unchanged, implementation slightly improved)
+*   `updateStatus(msg, err)`: Updates status text/class.
+*   `updateProgress(ratio)`: Updates progress bar value and visibility.
+*   `enableConvertButtonIfNeeded()`: Manages convert/play button states based on ffmpeg/file state. (More robust ffmpeg check).
+*   `updateEstimatedSize()`: Calculates and displays estimated sizes. (Safer checks, uses window.formatBytes).
+*   `updateQualityDisplays()`: Toggles MP3/Opus settings visibility.
+*   `resetUIForNewFile()`: Resets ALL result areas (conversion, base64, original player) and estimates for new file selection. (More thorough reset).
+*   `resetConversionOutputUI()`: Resets only conversion/base64 results and progress, before a new conversion starts. (More focused reset).
+*   `displayAudioFormatInfo(htmlContent)`: Shows info modal with provided or default content. (Safer assembly).
+*   `hideAudioFormatInfo()`: Hides info modal.
+
+**Dependencies:** (Unchanged)
+*   DOM Elements (Implicitly Global)
+*   Global State Variables
+*   Global Utility Functions (`window.formatBytes`)
+*   Global Data Objects (`audioFormatInfo`)
+
+**Global Variables:**
+*   All functions are implicitly global.
+
+**Notes:**
+*   Minor improvements in robustness (e.g., checks for elements/state, safer calculations).
+*   Clarified difference between `resetUIForNewFile` (total reset) and `resetConversionOutputUI` (pre-conversion reset).
+*   Ensures consistent use of `window.formatBytes`.
+*   Progress bar logic slightly refined. Status updates during progress handled more carefully.
+</details>
+-->
+*/

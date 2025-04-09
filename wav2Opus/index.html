@@ -2,33 +2,40 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
-
   <title>Audio & Image Conversion Tools</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <nav class="main-nav">
-    <ul>
-      <li><a href="#audio-section">WAV to Opus Converter</a></li>
-      <li><a href="#image-section">Image to Base64 Converter</a></li>
-    </ul>
-  </nav>
 
+<main>
   <!-- Audio Conversion Section -->
   <section id="audio-section" class="conversion-section">
-    <h1>WAV to MP3/Opus Converter</h1>
+    <h1 id="audio-section-heading">WAV to MP3/Opus Converter</h1>
 
-    <label for="fileInput">1. Select WAV File:</label>
-    <input type="file" id="fileInput" accept=".wav,audio/wav,audio/x-wav">
+    <button id="showInfoBtn" class="button-small centered">
+      Click for Instructions and Audio Conversion Information
+    </button>
 
-    <fieldset id="formatOptions">
+    <!-- ARIA attributes added for accessibility -->
+    <div id="audioInfoContainer" class="info-popup hidden" role="dialog" aria-modal="true" aria-labelledby="audio-section-heading" aria-describedby="audioInfoContent">
+      <button id="closeInfoBtn" class="close-info-btn" title="Close" aria-label="Close">×</button>
+      <div id="audioInfoContent">
+        <!-- Content will be injected here by audio-formats-explained.js -->
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="fileInput">1. Select WAV File:</label>
+      <input type="file" id="fileInput" accept=".wav,audio/wav,audio/x-wav">
+    </div>
+
+    <fieldset id="formatOptions" class="form-group">
       <legend>2. Choose Output Format & Quality:</legend>
-      <div>
+      <div class="radio-group">
         <label><input type="radio" name="format" value="mp3" checked> MP3</label>
         <label><input type="radio" name="format" value="opus"> Opus</label>
-        <button id="showInfoBtn" class="button-small" style="margin-left: 15px;">About Formats</button>
       </div>
       <div id="mp3Settings" class="settings-group">
         <label for="mp3Quality">MP3 Quality (VBR -q:a, 0=Best/Largest File, 9=Worst/Smallest File):</label>
@@ -36,7 +43,7 @@
         <span id="mp3QualityValue">4</span>
         <span id="estSizeMp3" class="estimate"></span>
       </div>
-      <div id="opusSettings" class="settings-group" style="display:none">
+      <div id="opusSettings" class="settings-group hidden">
         <label for="opusBitrate">Opus Bitrate (kbps):</label>
         <input type="range" id="opusBitrate" min="16" max="256" value="96" step="8">
         <span id="opusBitrateValue">96 kbps</span>
@@ -44,29 +51,32 @@
       </div>
     </fieldset>
 
-    <div id="audioInfoContainer" class="info-popup" style="display: none;">
-      <button class="close-info-btn" title="Close">×</button>
-      <div id="audioInfoContent">
-          <!-- Content will be injected here -->
-      </div>
-    </div>
-
     <div class="button-container">
       <button id="playSampleBtn" disabled>Play Original</button>
       <button id="convertBtn" disabled>3. Convert</button>
     </div>
 
-    <div id="originalAudioContainer"></div>
-    <div id="status">Status: Initializing FFmpeg...</div>
-    <progress id="progress" value="0" max="100" style="display: none;"></progress>
-    <div id="result"></div>
-    <div id="base64Container" class="base64-container" style="display:none;">
+    <div id="originalAudioContainer">
+        <!-- Original audio player will be injected here -->
+    </div>
+    <!-- Status message with aria-live for screen reader announcements -->
+    <div id="status" aria-live="polite">Status: Initializing FFmpeg...</div>
+    <!-- Progress bar linked to status message -->
+    <progress id="progress" value="0" max="100" class="hidden" aria-labelledby="status"></progress>
+    <div id="result">
+        <!-- Conversion result (download link/player) will appear here -->
+    </div>
+    <div id="base64Container" class="base64-container hidden">
       <fieldset>
         <legend>4. Base64 Conversion:</legend>
-        <div id="base64Result"></div>
+        <div id="base64Result">
+            <!-- Base64 status/info will appear here -->
+        </div>
         <details>
           <summary>Show Base64 Output</summary>
-          <div id="base64Output" class="base64-output"></div>
+          <div id="base64Output" class="base64-output">
+              <!-- Base64 string will appear here -->
+          </div>
         </details>
         <div class="button-group">
           <button id="copyBase64Btn" class="copy-button">Copy Base64</button>
@@ -79,129 +89,80 @@
   <!-- Image Conversion Section -->
   <section id="image-section" class="conversion-section">
     <h1>Image to Base64 Converter</h1>
-    
+
     <div class="file-input-container">
+      <!-- Using label to style the file input -->
       <label for="image-file-input" class="custom-file-upload">
         Select Image File
       </label>
       <input type="file" id="image-file-input" accept="image/*">
     </div>
-    
+
     <div class="preview-container">
-      <img id="image-preview" alt="Image Preview" style="display: none;">
+      <img id="image-preview" alt="Image Preview" class="hidden">
     </div>
-    
+
     <div class="info-container">
       <p id="file-size-info"></p>
     </div>
-    
+
     <div class="button-container">
       <button id="convert-image-button" disabled>Convert to Base64</button>
     </div>
-    
+
     <div class="output-container">
       <details>
         <summary>Show Base64 Output</summary>
-        <textarea id="base64-output" style="display: none;" readonly></textarea>
+        <!-- Textarea made visible via CSS class toggle -->
+        <textarea id="base64-output-image" class="base64-output hidden" readonly></textarea>
       </details>
     </div>
-    
+
     <div class="button-container">
       <button id="download-base64-button" disabled>Download Base64 as Text</button>
     </div>
   </section>
 
-  <!-- Load FFmpeg library FIRST -->
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+  <!-- Generate Combined File Section -->
+  <section class="generate-controls">
+      <h2>Generate Combined File</h2>
+      <button id="generateOB1Button" class="control-button" disabled>Generate Clickable HTML (OB1)</button>
+      <p class="description">Requires both Audio (Opus format recommended) and Image Base64 data to be generated above.</p>
+  </section>
 
-  <!-- Load Modular JavaScript Files -->
-  <script src="config-state.js" defer></script>
-  <script src="dom-elements.js" defer></script>
-  <script src="utils.js" defer></script>
-  <script src="audio-formats-explained.js" defer></script>
-  <script src="ui-helpers.js" defer></script>
-  <script src="audio-player.js" defer></script>
-  <script src="ffmpeg-handler.js" defer></script>
-  <script src="file-handler.js" defer></script>
-  <script src="base64-handler.js" defer></script>
-  <script src="conversion-process.js" defer></script>
-  <script src="event-listeners.js" defer></script>
-  <script src="main.js" defer></script>
-  
-  <!-- Load Image Conversion Script as Module -->
-  <script type="module">
-    import { initializeImageConverter } from './image-to-base64.js';
-    
-    // Initialize the converter when the DOM is fully loaded
-    document.addEventListener('DOMContentLoaded', initializeImageConverter);
-  </script>
+</main>
+
+<!-- Load FFmpeg library FIRST -->
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+
+<!-- Load Modular JavaScript Files -->
+<!-- Configuration & State -->
+<script src="config-state.js" defer></script>
+<!-- DOM Element References -->
+<script src="dom-elements.js" defer></script>
+<!-- Utility Functions -->
+<script src="utils.js" defer></script>
+<!-- HTML Template Generation -->
+<script src="OB1_Template.js" defer></script>
+<script src="ob1-generator.js" defer></script>
+<!-- UI & Helper Modules -->
+<script src="audio-formats-explained.js" defer></script>
+<script src="ui-helpers.js" defer></script>
+<script src="audio-player.js" defer></script>
+<!-- Core Logic Modules -->
+<script src="ffmpeg-handler.js" defer></script>
+<script src="file-handler.js" defer></script>
+<script src="base64-handler.js" defer></script>
+<script src="conversion-process.js" defer></script>
+<!-- Event Listeners & Main Initialization -->
+<script src="event-listeners.js" defer></script>
+<script src="main.js" defer></script>
+
+<!-- Load Image Conversion Script as Module -->
+<script type="module">
+  import { initializeImageConverter } from './image-to-base64.js';
+  document.addEventListener('DOMContentLoaded', initializeImageConverter);
+</script>
+
 </body>
 </html>
-
-
-<!-- HTML to add to your index.html file -->
-<!-- Add this button at the bottom of your page, with disabled state by default -->
-<div class="control-container">
-  <button id="generateOB1Button" class="control-button" disabled>Generate OB1</button>
-</div>
-
-<!-- This is the template that will be used for generating the OB1 HTML file -->
-<template id="ob1Template">
-  <!DOCTYPE html>
-  <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audional OB1</title>
-    <style>
-      body, html {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background-color: #000;
-        overflow: hidden;
-      }
-      
-      .container {
-        height: 80vh;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-      }
-      
-      .audional-image {
-        height: 100%;
-        width: auto;
-        max-width: 100%;
-        object-fit: contain;
-      }
-      
-      audio {
-        display: none;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container" id="audioImageContainer">
-      <img src="{{IMAGE_BASE64}}" alt="Audional Image" class="audional-image" id="audionalImage">
-      <audio id="audionalAudio" src="{{AUDIO_BASE64}}"></audio>
-    </div>
-    
-    <script>
-      document.getElementById('audioImageContainer').addEventListener('click', function() {
-        const audio = document.getElementById('audionalAudio');
-        if (audio.paused) {
-          audio.play();
-        } else {
-          audio.pause();
-        }
-      });
-    </script>
-  </body>
-  </html>
-</template>
