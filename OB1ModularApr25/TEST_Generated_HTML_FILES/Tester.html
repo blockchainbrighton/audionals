@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OB1 Modular - Local Code Tester (Iframe/SrcDoc)</title>
+    <title>Audional Art - Beta Modular HTML Tester (Iframe/SrcDoc)</title>
     <style>
         html, body {
             height: 100%;
@@ -36,7 +36,7 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             transition: max-height 0.5s ease-in-out, padding 0.5s ease-in-out, opacity 0.5s ease-in-out; /* Animation */
             overflow: hidden;
-            max-height: 500px; /* Initial max height */
+            max-height: 600px; /* Increased initial max height slightly */
             opacity: 1;
         }
          /* State when output is active */
@@ -47,23 +47,32 @@
              opacity: 0.9;
         }
          #inputArea.collapsed textarea,
+         #inputArea.collapsed #fileInputLabel, /* Hide file input when collapsed */
+         #inputArea.collapsed #fileInput,     /* Hide file input when collapsed */
+         #inputArea.collapsed .input-separator, /* Hide separator */
+         #inputArea.collapsed #pasteLabel,      /* Hide paste label */
          #inputArea.collapsed #errorDisplay:not(:empty) /* Keep error visible if present */
          {
             display: none;
          }
-         #inputArea.collapsed label {
-             margin-bottom: 10px; /* Space before button */
+         #inputArea.collapsed #runButton {
+             margin-top: 5px; /* Adjust button spacing when collapsed */
          }
 
         #inputArea label { display: block; margin-bottom: 5px; font-weight: bold; }
+        #fileInput { margin-bottom: 15px; display: block; } /* Style file input */
+        .input-separator { text-align: center; margin: 10px 0; font-weight: bold; color: #555; }
+
         #htmlInput {
-             width: 98%; height: 200px; font-family: monospace; border: 1px solid #ccc;
+             width: 98%; height: 30px; /* Adjusted height */
+             font-family: monospace; border: 1px solid #ccc;
              padding: 10px; margin-bottom: 10px; display: block;
          }
         #runButton {
             padding: 10px 20px; font-size: 1em; cursor: pointer; background-color: #ffc107; /* Amber button */
             color: #212529; border: none; border-radius: 5px; transition: background-color 0.3s ease;
-            font-weight: bold;
+            font-weight: bold; display: block; /* Make button block for easier centering/margin */
+            margin-top: 5px; /* Add some space above the button */
         }
         #runButton:hover { background-color: #e0a800; }
         #outputArea {
@@ -93,22 +102,32 @@
     </style>
 </head>
 <body>
-    <h1>OB1 Modular - Local Code Tester (Iframe/SrcDoc)</h1>
+    <h1>Audional Art - (Beta) Modular HTML Tester (Iframe/SrcDoc)</h1>
 
     <div class="warning">
-        ⚠️ Security Warning: This page executes pasted code in an iframe. Only run pasted code that has been created by yourself or someone you trust.
+        ⚠️ Security Warning: This page executes loaded/pasted code in an iframe. Only run code that has been created by yourself or someone you trust. Avoid loading untrusted files.
     </div>
 
     <div id="container">
         <div id="inputArea">
-            <label for="htmlInput">Paste your FULL generated index.html content here:</label>
+            <!-- File Input Section -->
+            <label id="fileInputLabel" for="fileInput">Load index.html File:</label>
+            <input type="file" id="fileInput" accept=".html, .htm">
+
+            <!-- Separator -->
+            <div class="input-separator">OR</div>
+
+            <!-- Paste Section -->
+            <label id="pasteLabel" for="htmlInput">Paste FULL generated index.html content here:</label>
             <textarea id="htmlInput" placeholder="<!DOCTYPE html>...</html>"></textarea>
-            <button id="runButton">Run Pasted Code in Frame Below</button>
+
+            <!-- Run Button and Error Display -->
+            <button id="runButton">Run Code in Frame</button>
             <div id="errorDisplay"></div>
         </div>
 
         <div id="outputArea"> <!-- Initially hidden -->
-            <h2>Executed Content:</h2>
+            <h2>Executed Content: (Click inside iframe then press "i" for controls and information)</h2>
             <iframe id="executionFrame" title="Executed HTML Content">
                 <!-- Iframe content will be set via srcdoc -->
             </iframe>
@@ -123,6 +142,7 @@
         const outputArea = document.getElementById('outputArea');
         const executionFrame = document.getElementById('executionFrame');
         const errorDisplay = document.getElementById('errorDisplay');
+        const fileInput = document.getElementById('fileInput'); // Get the file input element
 
         // --- Cleanup Function ---
         function clearPreviousRun() {
@@ -146,16 +166,19 @@
             console.log(LOG_PREFIX + "Cleanup finished.");
         }
 
-        // --- Execution Function ---
-        function runPastedCode() {
-            console.log(LOG_PREFIX + "--- 'Run in Frame' button clicked ---");
-            // Don't clear yet, only clear on subsequent runs or load
-            // clearPreviousRun(); // Removed from here
-
+        // --- Execution Function (Renamed from runPastedCode) ---
+        function runCode() {
+            console.log(LOG_PREFIX + "--- Attempting to run code ---");
+            // Content is now taken solely from the textarea,
+            // which will be populated either by pasting or file loading.
             const htmlContent = htmlInput.value;
+
             if (!htmlContent.trim()) {
-                errorDisplay.textContent = 'Error: Input area is empty.';
+                errorDisplay.textContent = 'Error: Input area is empty. Load a file or paste code.';
                 console.warn(LOG_PREFIX + "Input area empty.");
+                // Ensure UI is reset if run is attempted while empty after a previous run
+                outputArea.classList.remove('visible');
+                inputArea.classList.remove('collapsed');
                 return;
             }
              // Clear previous errors before trying to run
@@ -164,16 +187,13 @@
             try {
                  // Basic validation
                  if (!htmlContent.includes('<html') || !htmlContent.includes('</html')) {
-                     console.warn(LOG_PREFIX + "Pasted content might not be complete HTML.");
-                     errorDisplay.textContent = 'Warning: Pasted content might not be complete HTML. Ensure you copied the entire file.';
-                     // Continue anyway...
+                     console.warn(LOG_PREFIX + "Content might not be complete HTML.");
+                     // Display warning but allow execution attempt
+                     errorDisplay.textContent = 'Warning: Content might not be complete HTML. Ensure you copied/loaded the entire file.';
                  }
 
                 console.log(LOG_PREFIX + "Setting iframe srcdoc attribute...");
                 // --- Populate Iframe using srcdoc ---
-                // The browser parses this HTML and renders it in the iframe.
-                // Crucially, it inherits the origin of Tester.html, allowing
-                // relative fetches for style.css, app.js, main.js etc. to work.
                 executionFrame.srcdoc = htmlContent;
                 console.log(LOG_PREFIX + "Iframe srcdoc set. Browser will now load content and resources.");
 
@@ -191,22 +211,68 @@
                 outputArea.classList.remove('visible');
                 inputArea.classList.remove('collapsed');
             }
-            console.log(LOG_PREFIX + "--- 'runPastedCode' function finished ---");
+            console.log(LOG_PREFIX + "--- 'runCode' function finished ---");
         }
 
-        // Add event listener to the button
+        // --- File Loading Function ---
+        function loadFile(event) {
+             console.log(LOG_PREFIX + "File input changed.");
+             const file = event.target.files[0]; // Get the selected file
+
+             if (!file) {
+                 console.log(LOG_PREFIX + "No file selected.");
+                 return; // No file chosen
+             }
+
+             // Clear previous run state *before* loading new file content
+             clearPreviousRun();
+
+             const reader = new FileReader();
+
+             reader.onload = function(e) {
+                 console.log(LOG_PREFIX + "File read successfully.");
+                 const fileContent = e.target.result;
+                 htmlInput.value = fileContent; // Populate the textarea
+                 console.log(LOG_PREFIX + "Textarea populated with file content.");
+
+                 // Automatically run the code after loading the file
+                 // Use a tiny timeout to allow the browser to update the textarea value reliably before running
+                 setTimeout(runCode, 10);
+             };
+
+             reader.onerror = function(e) {
+                 console.error(LOG_PREFIX + "Error reading file:", e);
+                 errorDisplay.textContent = 'Error reading file: ' + reader.error;
+                 // Make sure UI is in the non-collapsed state if file reading fails
+                 outputArea.classList.remove('visible');
+                 inputArea.classList.remove('collapsed');
+                 htmlInput.value = ''; // Clear textarea on error
+             };
+
+             console.log(LOG_PREFIX + `Attempting to read file: ${file.name} (${file.type})`);
+             reader.readAsText(file); // Read the file as text
+        }
+
+
+        // --- Event Listeners ---
+
+        // Add event listener to the Run button
         runButton.addEventListener('click', () => {
+             console.log(LOG_PREFIX + "--- 'Run Code' button clicked ---");
              // Clear the *previous* run *before* starting the new one
              clearPreviousRun();
              // Use a tiny timeout to allow the browser to process the cleanup before running new code
-             // This can sometimes help prevent race conditions with iframe loading/unloading.
-             setTimeout(runPastedCode, 10);
+             setTimeout(runCode, 10);
          });
+
+        // Add event listener to the file input
+        fileInput.addEventListener('change', loadFile);
 
         // Initial cleanup on page load in case of browser refresh/cache
         window.addEventListener('load', () => {
             console.log(LOG_PREFIX + "Page loaded. Performing initial cleanup.");
             clearPreviousRun();
+            fileInput.value = ''; // Clear file input selection on reload
         });
 
     </script>
