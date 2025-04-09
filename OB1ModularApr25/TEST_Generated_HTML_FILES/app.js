@@ -1,6 +1,6 @@
 // app.js
 console.log("--- app.js evaluating ---");
-alert("APP.JS EXECUTED"); // Use alert for unavoidable visibility
+// alert("APP.JS EXECUTED"); // Use alert for unavoidable visibility
 
 // Helper function to create an element with optional attributes and children.
 function createElem(type, attrs = {}, ...children) {
