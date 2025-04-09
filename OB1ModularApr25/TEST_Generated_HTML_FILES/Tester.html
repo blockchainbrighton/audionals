@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OB1 Modular - Local Code Tester (Dynamic Injection)</title>
+    <style>
+        body {
+            font-family: sans-serif; margin: 20px; background-color: #f4f4f4; display: flex; flex-direction: column; min-height: 95vh;
+        }
+        h1 { color: #333; text-align: center; margin-bottom: 15px; }
+        #container { display: flex; flex-direction: column; gap: 15px; flex-grow: 1; }
+        #inputArea { flex-shrink: 0; background-color: #fff; padding: 15px; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        #inputArea label { display: block; margin-bottom: 5px; font-weight: bold; }
+        #htmlInput { width: 98%; height: 200px; font-family: monospace; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+        #runButton { padding: 10px 20px; font-size: 1em; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; transition: background-color 0.3s ease; }
+        #runButton:hover { background-color: #0056b3; }
+        #outputArea { border: 1px dashed #aaa; padding: 15px; background-color: #fff; flex-grow: 1; display: flex; flex-direction: column; min-height: 300px; border-radius: 5px; margin-top: 15px; }
+        #outputArea h2 { margin: 0 0 10px 0; color: #555; font-size: 1.2em; text-align: left; flex-shrink: 0; }
+        #renderTarget { /* Container for injected HTML */ flex-grow: 1; position: relative; /* Needed if scripts position elements absolutely */ }
+        #errorDisplay { color: red; margin-top: 10px; font-weight: bold; white-space: pre-wrap; }
+        .warning { color: #d9534f; background-color: #f2dede; border: 1px solid #ebccd1; padding: 10px; margin-bottom: 15px; border-radius: 4px; font-weight: bold; }
+        /* Marker class for cleanup */
+        .dynamic-script { display: none; }
+    </style>
+</head>
+<body>
+    <h1>OB1 Modular - Local HTML Tester (Dynamic Injection)</h1>
+
+    <div class="warning">
+        ⚠️ Security Warning: Executes pasted code directly on this page. Only use trusted code.
+    </div>
+
+    <div id="container">
+        <div id="inputArea">
+            <label for="htmlInput">Paste your FULL generated index.html content here:</label>
+            <textarea id="htmlInput" placeholder="<!DOCTYPE html>...</html>"></textarea>
+            <button id="runButton">Run Pasted Code Here</button>
+            <div id="errorDisplay"></div>
+        </div>
+
+        <div id="outputArea">
+            <h2>Rendered Output & Execution Area:</h2>
+            <div id="renderTarget">
+                <!-- Pasted HTML body content will be rendered here -->
+                <!-- Dynamically added scripts will execute in this page context -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const LOG_PREFIX = "[Tester Injection Log] ";
+        const htmlInput = document.getElementById('htmlInput');
+        const runButton = document.getElementById('runButton');
+        const renderTarget = document.getElementById('renderTarget');
+        const errorDisplay = document.getElementById('errorDisplay');
+
+        // --- Cleanup Function ---
+        function clearPreviousRun() {
+            console.log(LOG_PREFIX + "Clearing previous run...");
+            // Clear rendered HTML
+            renderTarget.innerHTML = '';
+            console.log(LOG_PREFIX + "Cleared renderTarget HTML.");
+
+            // Clear any previous error messages
+            errorDisplay.textContent = '';
+
+            // Remove previously injected scripts to prevent conflicts/re-execution issues
+            const oldScripts = document.querySelectorAll('script.dynamic-script');
+            oldScripts.forEach(script => {
+                console.log(LOG_PREFIX + "Removing previous dynamic script:", script.id || script.src || 'inline data script');
+                script.remove();
+            });
+            console.log(LOG_PREFIX + `Removed ${oldScripts.length} previous dynamic script(s).`);
+
+            // --- Attempt to stop/cleanup audio ---
+            // This is speculative and might need adjustment based on how main.js exposes controls
+            if (typeof window.stopAudio === 'function') { // Assuming main.js might create a global stop function
+                try { window.stopAudio(); console.log(LOG_PREFIX + "Called window.stopAudio()"); }
+                catch (e) { console.warn(LOG_PREFIX + "Could not call window.stopAudio():", e); }
+            }
+            // Close common AudioContext variables if they exist globally
+             const contexts = ['audioContext', 'audioCtx', 'globalAudioContext']; // Add known context var names
+             contexts.forEach(ctxName => {
+                 if (window[ctxName] && typeof window[ctxName].close === 'function') {
+                    try {
+                        window[ctxName].close().then(() => console.log(LOG_PREFIX + `Closed previous AudioContext (${ctxName})`));
+                        window[ctxName] = null; // Release global reference
+                    } catch (e) { console.warn(LOG_PREFIX + `Error closing window.${ctxName}`, e); }
+                 }
+             });
+            console.log(LOG_PREFIX + "Cleanup finished.");
+        }
+
+        // --- Script Error Handler ---
+        function handleScriptError(event) {
+            const scriptSrc = event.target.src || 'Inline Script';
+            const errorMessage = `Error loading or executing script: ${scriptSrc}\nType: ${event.type}${event.message ? '\nMessage: ' + event.message : ''}`;
+            console.error(LOG_PREFIX + errorMessage, event);
+            errorDisplay.textContent = errorMessage + "\nCheck browser console (F12) for more details.";
+            // Optionally, perform more cleanup on error
+            // clearPreviousRun();
+        }
+
+
+        // --- Execution Function ---
+        function runPastedCode() {
+            console.log(LOG_PREFIX + "--- 'Run Pasted Code Here' button clicked ---");
+            clearPreviousRun(); // Clean up before running new code
+            const htmlContent = htmlInput.value;
+
+            if (!htmlContent.trim()) {
+                errorDisplay.textContent = 'Error: Input area is empty.';
+                return;
+            }
+
+            try {
+                console.log(LOG_PREFIX + "Parsing pasted HTML using DOMParser...");
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlContent, 'text/html');
+                const parseError = doc.querySelector('parsererror');
+                 if (parseError) {
+                     console.warn(LOG_PREFIX + "DOMParser found parsing errors, attempting to proceed anyway:", parseError.textContent);
+                     errorDisplay.textContent = "Warning: Potential errors found parsing the pasted HTML. Execution might fail.";
+                 } else {
+                      console.log(LOG_PREFIX + "HTML parsed successfully.");
+                 }
+
+                // --- 1. Extract and Inject Inline Base64 Data Script ---
+                const inlineDataScriptElement = doc.querySelector('body > script:not([src])'); // Find first script in body without src
+                if (inlineDataScriptElement && inlineDataScriptElement.textContent.includes('Base64')) {
+                     console.log(LOG_PREFIX + "Found inline data script. Extracting and injecting.");
+                     const dataScriptContent = inlineDataScriptElement.textContent;
+                     const newDataScript = document.createElement('script');
+                     // DO NOT set type="module" for this one
+                     newDataScript.textContent = dataScriptContent;
+                     newDataScript.classList.add('dynamic-script'); // Mark for cleanup
+                     newDataScript.id = 'dynamic-inline-data-script';
+                     document.body.appendChild(newDataScript); // Append to body to execute globally
+                     console.log(LOG_PREFIX + "Injected inline data script.");
+                } else {
+                     console.warn(LOG_PREFIX + "Could not find the expected inline data script in the pasted HTML body.");
+                     // Decide if this is fatal - maybe proceed anyway?
+                     // errorDisplay.textContent = "Error: Could not find the required inline base64 data script.";
+                     // return;
+                }
+
+                // --- 2. Extract and Inject HTML Body Content (excluding scripts already handled) ---
+                const bodyElement = doc.body;
+                if (bodyElement) {
+                    console.log(LOG_PREFIX + "Extracting and injecting body HTML content...");
+                    // Clone nodes to avoid modifying the parsed doc directly if needed elsewhere
+                    const clonedBodyNodes = Array.from(bodyElement.childNodes).map(node => node.cloneNode(true));
+                    renderTarget.innerHTML = ''; // Clear target first
+                    clonedBodyNodes.forEach(node => {
+                        // Avoid re-inserting the script we just handled, or module scripts
+                        if (node.nodeName !== 'SCRIPT') {
+                             renderTarget.appendChild(node);
+                        }
+                    });
+                    console.log(LOG_PREFIX + "Injected HTML body content into #renderTarget.");
+                } else {
+                    console.warn(LOG_PREFIX + "No <body> element found in parsed HTML.");
+                }
+
+                // --- 3. Dynamically Create and Append Module Script Tags ---
+                // We know from the structure we need app.js and main.js
+                const moduleScriptsToLoad = ['app.js', 'main.js'];
+
+                console.log(LOG_PREFIX + "Creating and appending module script tags:", moduleScriptsToLoad);
+                moduleScriptsToLoad.forEach(scriptSrc => {
+                     const newScript = document.createElement('script');
+                     newScript.type = 'module';
+                     newScript.src = scriptSrc; // Resolve relative to Tester.html
+                     newScript.defer = true; // Good practice, ensures DOM is ready
+                     newScript.classList.add('dynamic-script'); // Mark for cleanup
+                     newScript.onerror = handleScriptError; // Add error handling
+                     document.body.appendChild(newScript);
+                     console.log(LOG_PREFIX + `Appended <script type="module" src="${scriptSrc}">`);
+                });
+
+                 console.log(LOG_PREFIX + "*** Execution relies on dynamically added scripts. Check this console for logs/errors. ***");
+
+
+            } catch (e) {
+                console.error(LOG_PREFIX + "Error processing or executing pasted code:", e);
+                errorDisplay.textContent = `An error occurred: ${e.message}\n\nCheck the browser's console (F12) for more details.`;
+                 clearPreviousRun(); // Clean up visual clutter on error
+            }
+            console.log(LOG_PREFIX + "--- 'runPastedCode' function finished ---");
+        }
+
+        // Add event listener to the button
+        runButton.addEventListener('click', runPastedCode);
+
+        // Initial cleanup in case of page refresh with old state
+        window.addEventListener('load', () => {
+            console.log(LOG_PREFIX + "Page loaded. Performing initial cleanup.");
+            clearPreviousRun();
+        });
+
+    </script>
+
+</body>
+</html>
