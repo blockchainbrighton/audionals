@@ -24,7 +24,6 @@ function generateHtml(imageBase64Data, audioBase64Data) { // Maybe rename
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OB1 - Audional Art</title> 
-    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- --- Embedded Base64 Data Zone (as JS global variables) --- -->
@@ -37,6 +36,7 @@ function generateHtml(imageBase64Data, audioBase64Data) { // Maybe rename
     <!-- --- End Embedded Base64 Data Zone --- -->
 
     <!-- Container for dynamic content -->
+    <link rel="stylesheet" href="style.css">
     <div id="app">
         <!-- Static Audio Metadata Section (as per example) -->
         <div class="audio-metadata">
