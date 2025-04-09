@@ -1,3 +1,4 @@
+// OB1_Template.js
 /**
  * Generates an HTML file content string with embedded Base64 image and audio.
  * The generated HTML displays an image that plays a sound when clicked.

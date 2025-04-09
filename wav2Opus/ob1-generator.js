@@ -108,7 +108,7 @@ function generateOB1() {
 
   // 2. Ensure the generateHtml function is available (loaded from OB1_Template.js)
   if (typeof generateHtml !== 'function') {
-      console.error("CRITICAL ERROR: generateHtml function not found. Make sure OB1_Template.js loaded correctly BEFORE ob1-generator.js.");
+      console.error("CRITICAL ERROR: generateHtml function not found. Make sure OB1_Template2.js loaded correctly BEFORE ob1-generator.js.");
       alert("Error: HTML template generation function is missing. Cannot create file. Check browser console for errors.");
       return;
   }
@@ -181,4 +181,4 @@ document.addEventListener('DOMContentLoaded', initOB1Generator);
 // window.checkGenerateButton = checkGenerateButtonState; // Remove unless needed elsewhere
 
 // CRITICAL: Remove the duplicate generateHtml function definition from the end of this file.
-// It should only exist in OB1_Template.js
+// It should only exist in OB1_Template2.js
