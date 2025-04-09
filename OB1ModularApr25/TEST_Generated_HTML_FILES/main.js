@@ -1,6 +1,6 @@
 // --- START OF FILE main.js ---
 console.log("--- main.js evaluating ---");
-alert("MAIN.JS EXECUTED");
+// alert("MAIN.JS EXECUTED");
 
 // --- Module Imports ---
 import * as audio from './audioProcessor.js';

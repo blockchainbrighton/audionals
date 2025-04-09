@@ -3,197 +3,207 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OB1 Modular - Local Code Tester (Dynamic Injection)</title>
+    <title>OB1 Modular - Local Code Tester (Iframe/SrcDoc)</title>
     <style>
-        body {
-            font-family: sans-serif; margin: 20px; background-color: #f4f4f4; display: flex; flex-direction: column; min-height: 95vh;
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden; /* Prevent body scrollbars, manage scrolling in containers */
+            font-family: sans-serif;
+            background-color: #f4f4f4;
         }
-        h1 { color: #333; text-align: center; margin-bottom: 15px; }
-        #container { display: flex; flex-direction: column; gap: 15px; flex-grow: 1; }
-        #inputArea { flex-shrink: 0; background-color: #fff; padding: 15px; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        body {
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #333; text-align: center; margin: 0 0 15px 0; flex-shrink: 0;
+        }
+        .warning {
+            color: #d9534f; background-color: #f2dede; border: 1px solid #ebccd1;
+            padding: 10px; margin-bottom: 15px; border-radius: 4px; font-weight: bold;
+            flex-shrink: 0;
+        }
+        #container {
+            display: flex; flex-direction: column; gap: 15px; flex-grow: 1;
+            overflow: hidden; /* Prevent container overflow */
+        }
+        #inputArea {
+            flex-shrink: 0; /* Don't let input area shrink initially */
+            background-color: #fff; padding: 15px; border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: max-height 0.5s ease-in-out, padding 0.5s ease-in-out, opacity 0.5s ease-in-out; /* Animation */
+            overflow: hidden;
+            max-height: 500px; /* Initial max height */
+            opacity: 1;
+        }
+         /* State when output is active */
+        #inputArea.collapsed {
+             max-height: 80px; /* Height of label and button */
+             padding-top: 5px;
+             padding-bottom: 5px;
+             opacity: 0.9;
+        }
+         #inputArea.collapsed textarea,
+         #inputArea.collapsed #errorDisplay:not(:empty) /* Keep error visible if present */
+         {
+            display: none;
+         }
+         #inputArea.collapsed label {
+             margin-bottom: 10px; /* Space before button */
+         }
+
         #inputArea label { display: block; margin-bottom: 5px; font-weight: bold; }
-        #htmlInput { width: 98%; height: 200px; font-family: monospace; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
-        #runButton { padding: 10px 20px; font-size: 1em; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; transition: background-color 0.3s ease; }
-        #runButton:hover { background-color: #0056b3; }
-        #outputArea { border: 1px dashed #aaa; padding: 15px; background-color: #fff; flex-grow: 1; display: flex; flex-direction: column; min-height: 300px; border-radius: 5px; margin-top: 15px; }
-        #outputArea h2 { margin: 0 0 10px 0; color: #555; font-size: 1.2em; text-align: left; flex-shrink: 0; }
-        #renderTarget { /* Container for injected HTML */ flex-grow: 1; position: relative; /* Needed if scripts position elements absolutely */ }
-        #errorDisplay { color: red; margin-top: 10px; font-weight: bold; white-space: pre-wrap; }
-        .warning { color: #d9534f; background-color: #f2dede; border: 1px solid #ebccd1; padding: 10px; margin-bottom: 15px; border-radius: 4px; font-weight: bold; }
-        /* Marker class for cleanup */
-        .dynamic-script { display: none; }
+        #htmlInput {
+             width: 98%; height: 200px; font-family: monospace; border: 1px solid #ccc;
+             padding: 10px; margin-bottom: 10px; display: block;
+         }
+        #runButton {
+            padding: 10px 20px; font-size: 1em; cursor: pointer; background-color: #ffc107; /* Amber button */
+            color: #212529; border: none; border-radius: 5px; transition: background-color 0.3s ease;
+            font-weight: bold;
+        }
+        #runButton:hover { background-color: #e0a800; }
+        #outputArea {
+            border: 1px solid #ccc; /* Solid border */
+            background-color: #fff; flex-grow: 1; /* Takes remaining space */
+            display: flex; flex-direction: column;
+            min-height: 200px; /* Minimum output height */
+            border-radius: 5px;
+            overflow: hidden; /* Clip iframe border */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: none; /* Initially hidden */
+        }
+        #outputArea.visible {
+            display: flex; /* Show when run */
+        }
+        #outputArea h2 {
+             margin: 10px 15px; color: #555; font-size: 1.1em;
+             text-align: left; flex-shrink: 0; border-bottom: 1px solid #eee; padding-bottom: 8px;
+        }
+        #executionFrame {
+            flex-grow: 1; /* Iframe fills the output area */
+            border: none; /* Remove iframe default border */
+            width: 100%;
+            height: 100%; /* Fill the container */
+        }
+        #errorDisplay { color: red; margin-top: 10px; font-weight: bold; white-space: pre-wrap; font-size: 0.9em;}
     </style>
 </head>
 <body>
-    <h1>OB1 Modular - Local HTML Tester (Dynamic Injection)</h1>
+    <h1>OB1 Modular - Local Code Tester (Iframe/SrcDoc)</h1>
 
     <div class="warning">
-        ⚠️ Security Warning: Executes pasted code directly on this page. Only use trusted code.
+        ⚠️ Security Warning: This page executes pasted code in an iframe. Only run pasted code that has been created by yourself or someone you trust.
     </div>
 
     <div id="container">
         <div id="inputArea">
             <label for="htmlInput">Paste your FULL generated index.html content here:</label>
             <textarea id="htmlInput" placeholder="<!DOCTYPE html>...</html>"></textarea>
-            <button id="runButton">Run Pasted Code Here</button>
+            <button id="runButton">Run Pasted Code in Frame Below</button>
             <div id="errorDisplay"></div>
         </div>
 
-        <div id="outputArea">
-            <h2>Rendered Output & Execution Area:</h2>
-            <div id="renderTarget">
-                <!-- Pasted HTML body content will be rendered here -->
-                <!-- Dynamically added scripts will execute in this page context -->
-            </div>
+        <div id="outputArea"> <!-- Initially hidden -->
+            <h2>Executed Content:</h2>
+            <iframe id="executionFrame" title="Executed HTML Content">
+                <!-- Iframe content will be set via srcdoc -->
+            </iframe>
         </div>
     </div>
 
     <script>
-        const LOG_PREFIX = "[Tester Injection Log] ";
+        const LOG_PREFIX = "[Tester Iframe Log] ";
         const htmlInput = document.getElementById('htmlInput');
         const runButton = document.getElementById('runButton');
-        const renderTarget = document.getElementById('renderTarget');
+        const inputArea = document.getElementById('inputArea');
+        const outputArea = document.getElementById('outputArea');
+        const executionFrame = document.getElementById('executionFrame');
         const errorDisplay = document.getElementById('errorDisplay');
 
         // --- Cleanup Function ---
         function clearPreviousRun() {
             console.log(LOG_PREFIX + "Clearing previous run...");
-            // Clear rendered HTML
-            renderTarget.innerHTML = '';
-            console.log(LOG_PREFIX + "Cleared renderTarget HTML.");
+            // Clear the iframe safely
+            executionFrame.src = 'about:blank'; // More reliable than srcdoc = ''
+            console.log(LOG_PREFIX + "Cleared executionFrame content.");
+
+            // Hide output area, expand input area
+            outputArea.classList.remove('visible');
+            inputArea.classList.remove('collapsed');
+            console.log(LOG_PREFIX + "Reset UI layout.");
+
 
             // Clear any previous error messages
             errorDisplay.textContent = '';
 
-            // Remove previously injected scripts to prevent conflicts/re-execution issues
-            const oldScripts = document.querySelectorAll('script.dynamic-script');
-            oldScripts.forEach(script => {
-                console.log(LOG_PREFIX + "Removing previous dynamic script:", script.id || script.src || 'inline data script');
-                script.remove();
-            });
-            console.log(LOG_PREFIX + `Removed ${oldScripts.length} previous dynamic script(s).`);
-
-            // --- Attempt to stop/cleanup audio ---
-            // This is speculative and might need adjustment based on how main.js exposes controls
-            if (typeof window.stopAudio === 'function') { // Assuming main.js might create a global stop function
-                try { window.stopAudio(); console.log(LOG_PREFIX + "Called window.stopAudio()"); }
-                catch (e) { console.warn(LOG_PREFIX + "Could not call window.stopAudio():", e); }
-            }
-            // Close common AudioContext variables if they exist globally
-             const contexts = ['audioContext', 'audioCtx', 'globalAudioContext']; // Add known context var names
-             contexts.forEach(ctxName => {
-                 if (window[ctxName] && typeof window[ctxName].close === 'function') {
-                    try {
-                        window[ctxName].close().then(() => console.log(LOG_PREFIX + `Closed previous AudioContext (${ctxName})`));
-                        window[ctxName] = null; // Release global reference
-                    } catch (e) { console.warn(LOG_PREFIX + `Error closing window.${ctxName}`, e); }
-                 }
-             });
+            // NOTE: Cannot directly interact with JS/AudioContext inside the iframe from here
+            // after it's cleared. For complete audio reset, user might need to refresh Tester.html.
+             console.warn(LOG_PREFIX + "Audio running inside the previous iframe cannot be stopped directly. Refresh page for full reset if needed.");
             console.log(LOG_PREFIX + "Cleanup finished.");
         }
 
-        // --- Script Error Handler ---
-        function handleScriptError(event) {
-            const scriptSrc = event.target.src || 'Inline Script';
-            const errorMessage = `Error loading or executing script: ${scriptSrc}\nType: ${event.type}${event.message ? '\nMessage: ' + event.message : ''}`;
-            console.error(LOG_PREFIX + errorMessage, event);
-            errorDisplay.textContent = errorMessage + "\nCheck browser console (F12) for more details.";
-            // Optionally, perform more cleanup on error
-            // clearPreviousRun();
-        }
-
-
         // --- Execution Function ---
         function runPastedCode() {
-            console.log(LOG_PREFIX + "--- 'Run Pasted Code Here' button clicked ---");
-            clearPreviousRun(); // Clean up before running new code
-            const htmlContent = htmlInput.value;
+            console.log(LOG_PREFIX + "--- 'Run in Frame' button clicked ---");
+            // Don't clear yet, only clear on subsequent runs or load
+            // clearPreviousRun(); // Removed from here
 
+            const htmlContent = htmlInput.value;
             if (!htmlContent.trim()) {
                 errorDisplay.textContent = 'Error: Input area is empty.';
+                console.warn(LOG_PREFIX + "Input area empty.");
                 return;
             }
+             // Clear previous errors before trying to run
+             errorDisplay.textContent = '';
 
             try {
-                console.log(LOG_PREFIX + "Parsing pasted HTML using DOMParser...");
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(htmlContent, 'text/html');
-                const parseError = doc.querySelector('parsererror');
-                 if (parseError) {
-                     console.warn(LOG_PREFIX + "DOMParser found parsing errors, attempting to proceed anyway:", parseError.textContent);
-                     errorDisplay.textContent = "Warning: Potential errors found parsing the pasted HTML. Execution might fail.";
-                 } else {
-                      console.log(LOG_PREFIX + "HTML parsed successfully.");
+                 // Basic validation
+                 if (!htmlContent.includes('<html') || !htmlContent.includes('</html')) {
+                     console.warn(LOG_PREFIX + "Pasted content might not be complete HTML.");
+                     errorDisplay.textContent = 'Warning: Pasted content might not be complete HTML. Ensure you copied the entire file.';
+                     // Continue anyway...
                  }
 
-                // --- 1. Extract and Inject Inline Base64 Data Script ---
-                const inlineDataScriptElement = doc.querySelector('body > script:not([src])'); // Find first script in body without src
-                if (inlineDataScriptElement && inlineDataScriptElement.textContent.includes('Base64')) {
-                     console.log(LOG_PREFIX + "Found inline data script. Extracting and injecting.");
-                     const dataScriptContent = inlineDataScriptElement.textContent;
-                     const newDataScript = document.createElement('script');
-                     // DO NOT set type="module" for this one
-                     newDataScript.textContent = dataScriptContent;
-                     newDataScript.classList.add('dynamic-script'); // Mark for cleanup
-                     newDataScript.id = 'dynamic-inline-data-script';
-                     document.body.appendChild(newDataScript); // Append to body to execute globally
-                     console.log(LOG_PREFIX + "Injected inline data script.");
-                } else {
-                     console.warn(LOG_PREFIX + "Could not find the expected inline data script in the pasted HTML body.");
-                     // Decide if this is fatal - maybe proceed anyway?
-                     // errorDisplay.textContent = "Error: Could not find the required inline base64 data script.";
-                     // return;
-                }
+                console.log(LOG_PREFIX + "Setting iframe srcdoc attribute...");
+                // --- Populate Iframe using srcdoc ---
+                // The browser parses this HTML and renders it in the iframe.
+                // Crucially, it inherits the origin of Tester.html, allowing
+                // relative fetches for style.css, app.js, main.js etc. to work.
+                executionFrame.srcdoc = htmlContent;
+                console.log(LOG_PREFIX + "Iframe srcdoc set. Browser will now load content and resources.");
 
-                // --- 2. Extract and Inject HTML Body Content (excluding scripts already handled) ---
-                const bodyElement = doc.body;
-                if (bodyElement) {
-                    console.log(LOG_PREFIX + "Extracting and injecting body HTML content...");
-                    // Clone nodes to avoid modifying the parsed doc directly if needed elsewhere
-                    const clonedBodyNodes = Array.from(bodyElement.childNodes).map(node => node.cloneNode(true));
-                    renderTarget.innerHTML = ''; // Clear target first
-                    clonedBodyNodes.forEach(node => {
-                        // Avoid re-inserting the script we just handled, or module scripts
-                        if (node.nodeName !== 'SCRIPT') {
-                             renderTarget.appendChild(node);
-                        }
-                    });
-                    console.log(LOG_PREFIX + "Injected HTML body content into #renderTarget.");
-                } else {
-                    console.warn(LOG_PREFIX + "No <body> element found in parsed HTML.");
-                }
+                // --- Adjust UI ---
+                inputArea.classList.add('collapsed');
+                outputArea.classList.add('visible');
+                console.log(LOG_PREFIX + "Adjusted UI layout for output.");
 
-                // --- 3. Dynamically Create and Append Module Script Tags ---
-                // We know from the structure we need app.js and main.js
-                const moduleScriptsToLoad = ['app.js', 'main.js'];
-
-                console.log(LOG_PREFIX + "Creating and appending module script tags:", moduleScriptsToLoad);
-                moduleScriptsToLoad.forEach(scriptSrc => {
-                     const newScript = document.createElement('script');
-                     newScript.type = 'module';
-                     newScript.src = scriptSrc; // Resolve relative to Tester.html
-                     newScript.defer = true; // Good practice, ensures DOM is ready
-                     newScript.classList.add('dynamic-script'); // Mark for cleanup
-                     newScript.onerror = handleScriptError; // Add error handling
-                     document.body.appendChild(newScript);
-                     console.log(LOG_PREFIX + `Appended <script type="module" src="${scriptSrc}">`);
-                });
-
-                 console.log(LOG_PREFIX + "*** Execution relies on dynamically added scripts. Check this console for logs/errors. ***");
-
+                console.info(LOG_PREFIX + "*** Execution happening inside the iframe below. Check its context (Right-click -> Inspect Frame) or the main console for potential errors/logs. ***");
 
             } catch (e) {
-                console.error(LOG_PREFIX + "Error processing or executing pasted code:", e);
-                errorDisplay.textContent = `An error occurred: ${e.message}\n\nCheck the browser's console (F12) for more details.`;
-                 clearPreviousRun(); // Clean up visual clutter on error
+                console.error(LOG_PREFIX + "Error setting srcdoc or processing code:", e);
+                errorDisplay.textContent = `An critical error occurred: ${e.message}\nCheck console.`;
+                // Ensure UI is reset if error occurs before display
+                outputArea.classList.remove('visible');
+                inputArea.classList.remove('collapsed');
             }
             console.log(LOG_PREFIX + "--- 'runPastedCode' function finished ---");
         }
 
         // Add event listener to the button
-        runButton.addEventListener('click', runPastedCode);
+        runButton.addEventListener('click', () => {
+             // Clear the *previous* run *before* starting the new one
+             clearPreviousRun();
+             // Use a tiny timeout to allow the browser to process the cleanup before running new code
+             // This can sometimes help prevent race conditions with iframe loading/unloading.
+             setTimeout(runPastedCode, 10);
+         });
 
-        // Initial cleanup in case of page refresh with old state
+        // Initial cleanup on page load in case of browser refresh/cache
         window.addEventListener('load', () => {
             console.log(LOG_PREFIX + "Page loaded. Performing initial cleanup.");
             clearPreviousRun();
