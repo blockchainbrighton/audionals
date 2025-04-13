@@ -48,9 +48,28 @@ export function createControlsColumn() {
                 createElement('span', { className: 'value-display' }, [
                     createElement('span', { id: 'pitch-value', textContent: '100' }), '%'
                 ])
+            ]),
+            // --- >>> NEW: Multiplier Control Group <<< ---
+            createElement('div', { className: 'control-group' }, [
+                createElement('label', { for: 'multiplier-slider', textContent: 'Multiplier:' }),
+                // Define sensible min/max/step/value for the multiplier
+                createElement('input', { type: 'range', id: 'multiplier-slider', min: '1', max: '8', step: '1', value: '1', disabled: true }),
+                createElement('span', { className: 'value-display' }, [ // Reuse value-display style
+                     // Note: Text updated by updateScheduleMultiplierDisplay in uiUpdater.js
+                    createElement('span', { id: 'multiplier-value', textContent: 'x1' })
+                ])
             ])
+            // --- >>> END NEW <<< ---
         ])
     ]);
+
+    // Add specific CSS styling for the multiplier slider if needed (e.g., accent-color)
+    const multiplierSlider = controlsColumn.querySelector('#multiplier-slider');
+    if (multiplierSlider) {
+        // Example: Use one of the existing colors or a new one
+        multiplierSlider.style.accentColor = '#d08770'; // Orange/brown color from reference panel
+    }
+
 
     return controlsColumn;
 }

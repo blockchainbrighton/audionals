@@ -308,6 +308,23 @@ export function stopLoop() {
 }
 
 /**
+ * Sets the schedule multiplier for looped playback.
+ * @param {number} multiplier - How many notes to play per original beat (integer >= 1).
+ */
+export function setScheduleMultiplier(multiplier) {
+    timingManager.setScheduleMultiplier(multiplier);
+}
+
+/**
+ * Gets the current schedule multiplier.
+ * @returns {number} The current multiplier value.
+ */
+ export function getScheduleMultiplier() {
+     // Add getter in timingManager if you haven't already
+     return timingManager.getCurrentScheduleMultiplier ? timingManager.getCurrentScheduleMultiplier() : 1;
+ }
+
+/**
  * --- UPDATED: Sets the playback tempo (BPM). ---
  * Updates local state and informs the timing manager, which handles loop restart if needed.
  * @param {number} bpm The desired tempo in Beats Per Minute.
