@@ -148,8 +148,17 @@
         function clearPreviousRun() {
             console.log(LOG_PREFIX + "Clearing previous run...");
             // Clear the iframe safely
+            try {
+                // Try accessing contentWindow, might fail if cross-origin or already navigated
+                if (executionFrame.contentWindow && typeof executionFrame.contentWindow.stop === 'function') {
+                    executionFrame.contentWindow.stop(); // Try to stop loading/scripts
+                    console.log(LOG_PREFIX + "Called contentWindow.stop()");
+                }
+            } catch (e) {
+                console.warn(LOG_PREFIX + "Could not call contentWindow.stop():", e.message);
+            }
             executionFrame.src = 'about:blank'; // More reliable than srcdoc = ''
-            console.log(LOG_PREFIX + "Cleared executionFrame content.");
+            console.log(LOG_PREFIX + "Cleared executionFrame content (set src to about:blank).");
 
             // Hide output area, expand input area
             outputArea.classList.remove('visible');
@@ -160,41 +169,86 @@
             // Clear any previous error messages
             errorDisplay.textContent = '';
 
-            // NOTE: Cannot directly interact with JS/AudioContext inside the iframe from here
-            // after it's cleared. For complete audio reset, user might need to refresh Tester.html.
-             console.warn(LOG_PREFIX + "Audio running inside the previous iframe cannot be stopped directly. Refresh page for full reset if needed.");
+            console.warn(LOG_PREFIX + "Audio running inside the previous iframe cannot be stopped directly from here after src change. Refresh page for full reset if needed.");
             console.log(LOG_PREFIX + "Cleanup finished.");
         }
 
-        // --- Execution Function (Renamed from runPastedCode) ---
+        // --- Execution Function (Modified) ---
+        // --- Execution Function (Modified Again for Robust Base Tag Handling) ---
         function runCode() {
             console.log(LOG_PREFIX + "--- Attempting to run code ---");
-            // Content is now taken solely from the textarea,
-            // which will be populated either by pasting or file loading.
-            const htmlContent = htmlInput.value;
+            let htmlContent = htmlInput.value; // Use 'let' as we modify it
 
             if (!htmlContent.trim()) {
                 errorDisplay.textContent = 'Error: Input area is empty. Load a file or paste code.';
                 console.warn(LOG_PREFIX + "Input area empty.");
-                // Ensure UI is reset if run is attempted while empty after a previous run
                 outputArea.classList.remove('visible');
                 inputArea.classList.remove('collapsed');
                 return;
             }
-             // Clear previous errors before trying to run
-             errorDisplay.textContent = '';
+            errorDisplay.textContent = ''; // Clear previous errors
 
             try {
-                 // Basic validation
-                 if (!htmlContent.includes('<html') || !htmlContent.includes('</html')) {
-                     console.warn(LOG_PREFIX + "Content might not be complete HTML.");
-                     // Display warning but allow execution attempt
-                     errorDisplay.textContent = 'Warning: Content might not be complete HTML. Ensure you copied/loaded the entire file.';
-                 }
+                // Basic validation
+                if (!htmlContent.includes('<html') || !htmlContent.includes('</html')) {
+                    console.warn(LOG_PREFIX + "Content might not be complete HTML.");
+                    errorDisplay.textContent = 'Warning: Content might not be complete HTML. Ensure you copied/loaded the entire file.';
+                }
+
+                // *** Modification START: Robust Base Tag Handling ***
+                const baseHref = 'modules/'; // Define base path RELATIVE TO Tester.html
+                const desiredBaseTag = `<base href="${baseHref}">`;
+
+                // Regex to find an existing base tag (case-insensitive, handles quotes)
+                const baseRegex = /<\s*base\s[^>]*href\s*=\s*(['"]?)(.*?)\1[^>]*>/i;
+                const existingBaseMatch = htmlContent.match(baseRegex);
+
+                let baseTagHandled = false;
+
+                if (existingBaseMatch) {
+                    // Found existing base tag
+                    const oldBaseTag = existingBaseMatch[0];
+                    const oldHref = existingBaseMatch[2];
+                    if (oldHref !== baseHref) {
+                        // Replace its href if it's different
+                        const newBaseTag = oldBaseTag.replace(/href\s*=\s*(['"]?)(.*?)\1/i, `href="${baseHref}"`);
+                        htmlContent = htmlContent.replace(oldBaseTag, newBaseTag);
+                        console.log(LOG_PREFIX + `Updated existing <base> tag href from '${oldHref}' to '${baseHref}'.`);
+                        baseTagHandled = true;
+                    } else {
+                        console.log(LOG_PREFIX + `Existing <base> tag already has correct href '${baseHref}'.`);
+                        baseTagHandled = true; // No change needed
+                    }
+                }
+
+                if (!baseTagHandled) {
+                    // No existing base tag OR couldn't reliably update, inject a new one
+                    const headTagEndMatch = /<\s*head[^>]*>/i.exec(htmlContent);
+                    if (headTagEndMatch) {
+                        // Inject after the opening <head> tag
+                        const headTagEndIndex = headTagEndMatch.index + headTagEndMatch[0].length;
+                        htmlContent = htmlContent.slice(0, headTagEndIndex) + desiredBaseTag + htmlContent.slice(headTagEndIndex);
+                        console.log(LOG_PREFIX + `Successfully injected new <base href='${baseHref}'> tag.`);
+                        baseTagHandled = true;
+                    } else {
+                        // Fallback: Try inserting before </head>
+                        const headCloseMatch = /<\s*\/head\s*>/i.exec(htmlContent);
+                        if (headCloseMatch) {
+                            htmlContent = htmlContent.replace(headCloseMatch[0], desiredBaseTag + headCloseMatch[0]);
+                            console.log(LOG_PREFIX + `Injected new <base href='${baseHref}'> tag before </head> (fallback).`);
+                            baseTagHandled = true;
+                        } else {
+                             console.warn(LOG_PREFIX + "Could not find <head> tag to inject/update <base> tag. Relative paths might fail.");
+                             errorDisplay.textContent = (errorDisplay.textContent ? errorDisplay.textContent + '\n' : '') + 'Warning: Could not find <head> tag to adjust resource paths.';
+                             // Proceed anyway, maybe the paths were already absolute?
+                        }
+                    }
+                }
+                // *** Modification END ***
+
 
                 console.log(LOG_PREFIX + "Setting iframe srcdoc attribute...");
-                // --- Populate Iframe using srcdoc ---
-                executionFrame.srcdoc = htmlContent;
+                executionFrame.srcdoc = htmlContent; // Use the potentially modified content
                 console.log(LOG_PREFIX + "Iframe srcdoc set. Browser will now load content and resources.");
 
                 // --- Adjust UI ---
@@ -207,13 +261,13 @@
             } catch (e) {
                 console.error(LOG_PREFIX + "Error setting srcdoc or processing code:", e);
                 errorDisplay.textContent = `An critical error occurred: ${e.message}\nCheck console.`;
-                // Ensure UI is reset if error occurs before display
                 outputArea.classList.remove('visible');
                 inputArea.classList.remove('collapsed');
             }
             console.log(LOG_PREFIX + "--- 'runCode' function finished ---");
         }
 
+        // --- File Loading Function ---
         // --- File Loading Function ---
         function loadFile(event) {
              console.log(LOG_PREFIX + "File input changed.");
@@ -236,14 +290,12 @@
                  console.log(LOG_PREFIX + "Textarea populated with file content.");
 
                  // Automatically run the code after loading the file
-                 // Use a tiny timeout to allow the browser to update the textarea value reliably before running
-                 setTimeout(runCode, 10);
+                 setTimeout(runCode, 10); // Use a tiny timeout
              };
 
              reader.onerror = function(e) {
                  console.error(LOG_PREFIX + "Error reading file:", e);
                  errorDisplay.textContent = 'Error reading file: ' + reader.error;
-                 // Make sure UI is in the non-collapsed state if file reading fails
                  outputArea.classList.remove('visible');
                  inputArea.classList.remove('collapsed');
                  htmlInput.value = ''; // Clear textarea on error
@@ -268,10 +320,11 @@
         // Add event listener to the file input
         fileInput.addEventListener('change', loadFile);
 
-        // Initial cleanup on page load in case of browser refresh/cache
+        // Initial cleanup on page load
         window.addEventListener('load', () => {
             console.log(LOG_PREFIX + "Page loaded. Performing initial cleanup.");
             clearPreviousRun();
+            htmlInput.value = ''; // Also clear textarea on load
             fileInput.value = ''; // Clear file input selection on reload
         });
 
