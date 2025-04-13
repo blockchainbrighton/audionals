@@ -1,31 +1,32 @@
-// layoutBuilder.js
+// --- START OF FILE layoutBuilder.js ---
 
 // --- Imports ---
-import { createElement } from './utils/domUtils.js'; // Import from utils
-import { createControlsColumn } from './controlsColumn.js'; // Import the new function
+import { createElement } from './utils.js'; // Corrected import path
+import { createControlsColumn } from './controlsColumn.js';
 
 /**
  * Builds the main application layout and appends it to the target container.
  * Moves the existing audio metadata into the correct column.
- * @param {string|HTMLElement} targetSelectorOrElement - The CSS selector or DOM element to append the layout to.
+ * @param {HTMLElement} targetElement - The DOM element to append the layout to.
  */
-export function buildLayout(targetSelectorOrElement) {
-    const targetElement = typeof targetSelectorOrElement === 'string'
-        ? document.querySelector(targetSelectorOrElement)
-        : targetSelectorOrElement;
-
+export function buildLayout(targetElement) {
     if (!targetElement) {
-        console.error('Layout Builder: Target element not found.');
-        return;
+        console.error('Layout Builder: Target element not provided or invalid.');
+        throw new Error('Layout Builder requires a valid target element.');
     }
 
-    // --- Find Existing Elements ---
+    // --- Find Existing Elements within the Target ---
     const audioMetadataDiv = targetElement.querySelector('.audio-metadata');
     if (!audioMetadataDiv) {
-        console.warn('Layout Builder: .audio-metadata element not found. It will not be included.');
+        console.warn('Layout Builder: .audio-metadata element not found within target. It will not be included.');
+    } else {
+        console.log("Layout Builder: Found existing .audio-metadata element.");
+        // Detach it temporarily to prevent issues if targetElement is cleared
+        // and to ensure it's moved correctly later.
+        audioMetadataDiv.remove();
     }
 
-    // Clear the target container if needed (use with caution)
+    // Optional: Clear the target container before building (use if necessary)
     // targetElement.innerHTML = '';
 
     // --- Create Column 1: Controls (using the imported function) ---
@@ -34,12 +35,18 @@ export function buildLayout(targetSelectorOrElement) {
 
     // --- Create Column 2: Image (using imported createElement) ---
     const imageArea = createElement('div', { className: 'image-area' }, [
-        createElement('img', { id: 'main-image', src: '#', alt: 'Audional Art OB1 Visual', title: 'Click to toggle tempo loop' })
+        createElement('img', {
+            id: 'main-image',
+            src: '#', // Set initial src (or placeholder)
+            alt: 'Audional Art OB1 Visual',
+            title: 'Click to toggle tempo loop'
+            // Visibility is handled by uiUpdater after src is properly set
+        })
     ]);
 
     // --- Create Column 3: Reference (using imported createElement) ---
     const referenceColumn = createElement('div', { className: 'reference-column hidden' }, [
-        createElement('div', { id: 'reference-panel', className: 'reference-panel' }) // Content populated later by JS
+        createElement('div', { id: 'reference-panel', className: 'reference-panel' }) // Content populated later
     ]);
 
     // --- Assemble Main Layout ---
@@ -49,20 +56,24 @@ export function buildLayout(targetSelectorOrElement) {
         referenceColumn
     ]);
 
-     // --- Move Existing Metadata ---
-    // This logic MUST remain here to coordinate
+    // --- Move Existing Metadata (if found) ---
     if (audioMetadataDiv) {
-        // Find the placeholder *within the column returned by createControlsColumn*
+        // Find the placeholder *within the newly created controls column*
         const placeholder = controlsColumn.querySelector('.metadata-placeholder');
         if (placeholder) {
             // Replace placeholder with the actual metadata div
             placeholder.parentNode.replaceChild(audioMetadataDiv, placeholder);
             console.log("Layout Builder: Moved audio metadata into placeholder.");
         } else {
-            // This indicates an issue in createControlsColumn if the placeholder is missing
-            console.error('Layout Builder: .metadata-placeholder not found within the created controls column. Metadata not moved.');
-            // As a fallback, insert it somewhere, maybe after title bar:
-            // controlsColumn.insertBefore(audioMetadataDiv, controlsColumn.children[1]);
+            // Fallback if placeholder is missing in controlsColumn.js (shouldn't happen)
+            console.error('Layout Builder: .metadata-placeholder not found within the created controls column. Metadata could not be placed.');
+            // Insert somewhere reasonable as fallback, e.g., after title bar
+            const titleBar = controlsColumn.querySelector('.title-bar');
+            if (titleBar && titleBar.nextSibling) {
+                 controlsColumn.insertBefore(audioMetadataDiv, titleBar.nextSibling);
+            } else {
+                 controlsColumn.appendChild(audioMetadataDiv); // Append at end if all else fails
+            }
         }
     }
 
@@ -72,4 +83,4 @@ export function buildLayout(targetSelectorOrElement) {
     console.log("Layout built successfully using modular components.");
 }
 
-// Removed the internal createElement function definition from here
+// --- END OF FILE layoutBuilder.js ---

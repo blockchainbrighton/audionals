@@ -154,9 +154,10 @@ export function setImageSource(src) {
     if (mainImage) { // Check if element exists
         mainImage.src = src; // Set the actual image source
 
-        // --- ADD THIS LINE ---
-        // Now that the src is set, make the image element visible
+        // --- >>> FIX ADDED HERE <<< ---
+        // Make the image element visible now that the src is potentially valid
         mainImage.style.visibility = 'visible';
+        // --- >>> END FIX <<< ---
 
     } else {
         console.error("setImageSource: Main image element not found");

@@ -35,7 +35,6 @@ const referenceContentHTML = `
      <ul>
          <li><code>Spacebar</code>: Play sample once</li>
          <li><code>Click Image</code>: Toggle Loop</li>
-         <!-- >>> NEW LINE ADDED HERE <<< -->
          <li><code>R</code>: Toggle Reverse Playback</li>
     </ul>
 `;
@@ -61,21 +60,9 @@ function initReferencePanel(panelElement) {
     }
 }
 
-/**
- * Toggles the visibility of the reference panel by adding/removing the 'show' class.
- * NOTE: This function might become redundant if visibility is solely controlled by the parent column.
- * @param {HTMLElement} panelElement - The container element (e.g., #reference-panel).
- */
-function toggleReferencePanel(panelElement) {
-    if (!panelElement) {
-        console.error("Reference panel element not provided for toggling.");
-        return;
-    }
-    panelElement.classList.toggle('show');
-    console.log(`Reference panel '.show' class toggled. Has show: ${panelElement.classList.contains('show')}`);
-}
+// --- REMOVED toggleReferencePanel function ---
 
-// --- Export the functions needed by main.js ---
-export { initReferencePanel, toggleReferencePanel }; // Keep toggle export for now
+// --- Export ONLY the needed function ---
+export { initReferencePanel };
 
 // --- END OF FILE referenceDisplay.js ---
