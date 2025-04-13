@@ -13,11 +13,16 @@ let lastVolumeBeforeMute = 1.0; // Store volume for mute toggle
 // --- Constants ---
 const TEMPO_STEP_SMALL = 1;
 const TEMPO_STEP_LARGE = 10;
+// REMOVED: PITCH_STEP_SMALL = 0.01; // Still used for Shift+[ ]
 const PITCH_STEP_SMALL = 0.01;
-const PITCH_STEP_LARGE = 0.1;
+// REMOVED: PITCH_STEP_LARGE = 0.1; // Replaced by semitone calculation
 const VOLUME_STEP = 0.05;
 // Epsilon for safer float comparisons
 const FLOAT_COMPARISON_EPSILON = Number.EPSILON || 1e-9; // Fallback for older environments
+
+// --- NEW: Semitone Ratio ---
+// The factor to multiply/divide frequency (and thus playbackRate) by for a 1 semitone change.
+const SEMITONE_RATIO = Math.pow(2, 1 / 12); // Approx. 1.059463
 
 // --- Internal Helper Function ---
 
@@ -49,8 +54,9 @@ function _applySliderChange(sliderRef, audioSetter, uiUpdater, newValue, logLabe
         sliderRef.value = newValue;
 
         // Use appropriate formatting for logging
+        // Note: For pitch, we log the rate * 100, even though the underlying change might be semitonal
         const displayValue = Math.round(newValue * logMultiplier);
-        console.log(`${logLabel} adjusted via shortcut to: ${displayValue}${logUnit}`);
+        console.log(`${logLabel} adjusted via shortcut to: ${displayValue}${logUnit} (Rate: ${newValue.toFixed(4)})`);
     } catch (error) {
         console.error(`Error applying slider change for ${logLabel}:`, error);
         // Optionally call ui.showError here if significant errors can occur
@@ -76,10 +82,10 @@ function _adjustTempo(change) {
 }
 
 /**
- * Adjusts the pitch/playback rate based on the provided change.
+ * Adjusts the pitch/playback rate by a small fixed amount (for Shift + [ ]).
  * @param {number} change - The amount to change the playback rate by (+/-).
  */
-function _adjustPitch(change) {
+function _adjustPitchLinear(change) {
     if (!pitchSliderRef) return;
     const current = parseFloat(pitchSliderRef.value);
     const min = parseFloat(pitchSliderRef.min);
@@ -88,9 +94,34 @@ function _adjustPitch(change) {
 
     // Use epsilon for float comparison
     if (Math.abs(newValue - current) > FLOAT_COMPARISON_EPSILON) {
-         _applySliderChange(pitchSliderRef, audio.setPitch, ui.updatePitchDisplay, newValue, "Pitch", 100, "%"); // Log % like UI
+         _applySliderChange(pitchSliderRef, audio.setPitch, ui.updatePitchDisplay, newValue, "Pitch (Linear)", 100, "%"); // Log % like UI
     }
 }
+
+/**
+ * --- NEW: Adjusts the pitch/playback rate by one semitone. ---
+ * @param {number} direction - +1 to go up a semitone, -1 to go down.
+ */
+function _adjustPitchSemitone(direction) {
+    if (!pitchSliderRef) return;
+    const current = parseFloat(pitchSliderRef.value);
+    const min = parseFloat(pitchSliderRef.min);
+    const max = parseFloat(pitchSliderRef.max);
+
+    // Calculate the multiplier based on direction
+    const multiplier = (direction > 0) ? SEMITONE_RATIO : (1 / SEMITONE_RATIO);
+    let newValue = current * multiplier;
+
+    // Clamp the result to the slider's min/max bounds
+    newValue = clamp(newValue, min, max);
+
+    // Use epsilon for float comparison
+    if (Math.abs(newValue - current) > FLOAT_COMPARISON_EPSILON) {
+        const semitoneLabel = direction > 0 ? "+1 ST" : "-1 ST";
+        _applySliderChange(pitchSliderRef, audio.setPitch, ui.updatePitchDisplay, newValue, `Pitch (${semitoneLabel})`, 100, "%");
+    }
+}
+
 
 /**
  * Adjusts the pitch/playback rate by multiplying the current rate.
@@ -104,7 +135,7 @@ function _multiplyPitch(multiplier) {
      const newValue = clamp(current * multiplier, min, max);
 
      if (Math.abs(newValue - current) > FLOAT_COMPARISON_EPSILON) {
-         _applySliderChange(pitchSliderRef, audio.setPitch, ui.updatePitchDisplay, newValue, "Pitch", 100, "%");
+         _applySliderChange(pitchSliderRef, audio.setPitch, ui.updatePitchDisplay, newValue, "Pitch (Mult)", 100, "%");
      }
 }
 
@@ -120,7 +151,7 @@ function _resetPitch() {
       const newValue = clamp(defaultPitch, min, max);
 
       if (Math.abs(newValue - current) > FLOAT_COMPARISON_EPSILON) {
-          _applySliderChange(pitchSliderRef, audio.setPitch, ui.updatePitchDisplay, newValue, "Pitch", 100, "%");
+          _applySliderChange(pitchSliderRef, audio.setPitch, ui.updatePitchDisplay, newValue, "Pitch Reset", 100, "%");
       }
 }
 
@@ -175,7 +206,7 @@ function _toggleMute() {
 
 
 /**
- * Main keydown event handler. (Structure remains the same)
+ * Main keydown event handler.
  * @param {KeyboardEvent} event - The keydown event object.
  */
 function _handleKeyDown(event) {
@@ -200,10 +231,17 @@ function _handleKeyDown(event) {
                 _adjustTempo(TEMPO_STEP_LARGE); actionTaken = "Tempo +Large"; preventDefault = true; break;
             case '-': case '_':
                  _adjustTempo(-TEMPO_STEP_LARGE); actionTaken = "Tempo -Large"; preventDefault = true; break;
+
+            // --- MODIFIED PITCH CONTROLS ---
             case ']': case '}':
-                 _adjustPitch(PITCH_STEP_LARGE); actionTaken = "Pitch +Large"; preventDefault = true; break;
+                 // _adjustPitch(PITCH_STEP_LARGE); // OLD
+                 _adjustPitchSemitone(1);         // NEW: Adjust up one semitone
+                 actionTaken = "Pitch +1 ST"; preventDefault = true; break;
             case '[': case '{':
-                 _adjustPitch(-PITCH_STEP_LARGE); actionTaken = "Pitch -Large"; preventDefault = true; break;
+                 // _adjustPitch(-PITCH_STEP_LARGE); // OLD
+                 _adjustPitchSemitone(-1);        // NEW: Adjust down one semitone
+                 actionTaken = "Pitch -1 ST"; preventDefault = true; break;
+            // --- END MODIFIED PITCH CONTROLS ---
         }
     }
     // --- Shift Only ---
@@ -213,21 +251,24 @@ function _handleKeyDown(event) {
                 _adjustTempo(TEMPO_STEP_SMALL); actionTaken = "Tempo +Small"; preventDefault = true; break;
             case '-': case '_':
                  _adjustTempo(-TEMPO_STEP_SMALL); actionTaken = "Tempo -Small"; preventDefault = true; break;
+
+            // --- Kept original small linear adjustment for Shift+[ ] ---
             case ']': case '}':
-                 _adjustPitch(PITCH_STEP_SMALL); actionTaken = "Pitch +Small"; preventDefault = true; break;
+                 _adjustPitchLinear(PITCH_STEP_SMALL); actionTaken = "Pitch +Small"; preventDefault = true; break;
             case '[': case '{':
-                 _adjustPitch(-PITCH_STEP_SMALL); actionTaken = "Pitch -Small"; preventDefault = true; break;
+                 _adjustPitchLinear(-PITCH_STEP_SMALL); actionTaken = "Pitch -Small"; preventDefault = true; break;
+            // --- End small linear adjustment ---
         }
     }
     // --- No Modifiers ---
     else if (noModifiers) {
          switch (event.key) {
             case '=':
-                 _multiplyPitch(2); actionTaken = "Pitch x2"; preventDefault = true; break;
+                 _multiplyPitch(2); actionTaken = "Pitch x2"; preventDefault = true; break; // Octave Up
             case '-':
-                 _multiplyPitch(0.5); actionTaken = "Pitch x0.5"; preventDefault = true; break;
+                 _multiplyPitch(0.5); actionTaken = "Pitch x0.5"; preventDefault = true; // Octave Down
             case '0':
-                 _resetPitch(); actionTaken = "Pitch Reset"; preventDefault = true; break;
+                 _resetPitch(); actionTaken = "Pitch Reset"; preventDefault = true; break; // Reset to 1.0
             case 'ArrowUp':
                 _adjustVolume(VOLUME_STEP); actionTaken = "Volume Up"; preventDefault = true; break;
             case 'ArrowDown':
@@ -290,7 +331,7 @@ export function destroy() {
 
 
 
-// --- KEYBOARD SHORTCUT REFERENCE (Unchanged) ---
+// --- KEYBOARD SHORTCUT REFERENCE (Updated) ---
 /*
     The following keyboard shortcuts are active when focus is NOT on an input field:
 
@@ -307,17 +348,19 @@ export function destroy() {
         (Note: Ctrl can be Cmd on macOS)
 
     **Pitch / Playback Rate:**
-    *   Shift + ] / }: Increase Pitch slightly (by PITCH_STEP_SMALL)
-    *   Shift + [ / {: Decrease Pitch slightly (by PITCH_STEP_SMALL)
-    *   Ctrl + Shift + ] / }: Increase Pitch significantly (by PITCH_STEP_LARGE)
-    *   Ctrl + Shift + [ / {: Decrease Pitch significantly (by PITCH_STEP_LARGE)
-    *   = (equals key): Double Current Pitch (x2 Multiplier)
-    *   - (minus key):  Halve Current Pitch (x0.5 Multiplier)
+    *   Shift + ] / }: Increase Pitch slightly (Linear Step: +PITCH_STEP_SMALL)
+    *   Shift + [ / {: Decrease Pitch slightly (Linear Step: -PITCH_STEP_SMALL)
+    *   Ctrl + Shift + ] / }: Increase Pitch by one Semitone (x 1.05946)
+    *   Ctrl + Shift + [ / {: Decrease Pitch by one Semitone (/ 1.05946)
+    *   = (equals key): Double Current Pitch (x2 - Octave Up)
+    *   - (minus key):  Halve Current Pitch (x0.5 - Octave Down)
     *   0 (zero key):   Reset Pitch to 1.0 (Normal Speed)
-        (Note: Ctrl can be Cmd on macOS)
+        (Note: Ctrl can be Cmd on macOS for Tempo/Pitch shortcuts)
 
     **Playback (handled in main.js):**
     *   Spacebar:      Play sample once
+    *   Click Image:   Toggle Loop
+    *   R:             Toggle Reverse Playback
 
 */
 // --- END KEYBOARD SHORTCUT REFERENCE ---
