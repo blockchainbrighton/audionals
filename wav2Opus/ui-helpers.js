@@ -305,24 +305,35 @@ const hideAudioFormatInfo = () => {
 // --- Audional Instructions Info Popup ---
 
 /**
- * Displays the Audional Instructions popup.
- * Assumes audionalInfoContainer, audionalInfoContent, audioInfoContainer are accessible.
+ * Displays the Audional Instructions popup and injects the content.
+ * Assumes audionalInfoContainer, audionalInfoContent, audioInfoContainer, and audioFormatInfo are accessible.
  */
 const displayAudionalInfo = () => {
-    if (!audionalInfoContainer || !audionalInfoContent) {
-        console.error("Audional info container elements not found in the DOM.");
-        return;
-    }
-    // Content is hardcoded in HTML, so just need to show it and scroll
+  // Check if the necessary elements and data exist
+  if (typeof audioFormatInfo === 'undefined' || typeof audioFormatInfo.audionalInstructions === 'undefined') {
+      console.error("Audional instructions data (audioFormatInfo.audionalInstructions) not found.");
+      if (audionalInfoContent) audionalInfoContent.innerHTML = "<p>Error: Could not load Audional instructions.</p>";
+      if (audionalInfoContainer) audionalInfoContainer.style.display = 'block'; // Show container with error
+      return;
+  }
+  if (!audionalInfoContainer || !audionalInfoContent) {
+      console.error("Audional info container elements not found in the DOM.");
+      return;
+  }
 
-    // Show this popup and hide the other one
-    audionalInfoContainer.style.display = 'block';
-    if (audioInfoContainer) {
-        audioInfoContainer.style.display = 'none';
-    }
+  // --- ADDED THIS LINE ---
+  // Inject the content from the audioFormatInfo object
+  audionalInfoContent.innerHTML = audioFormatInfo.audionalInstructions;
+  // -----------------------
 
-    // Scroll content to top when opened
-    audionalInfoContent.scrollTop = 0;
+  // Show this popup and hide the other one
+  audionalInfoContainer.style.display = 'block';
+  if (audioInfoContainer) {
+      audioInfoContainer.style.display = 'none';
+  }
+
+  // Scroll content to top when opened
+  audionalInfoContent.scrollTop = 0;
 };
 
 /**
