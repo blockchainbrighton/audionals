@@ -20,14 +20,18 @@ const MAX_MULTIPLIER = 8; // As defined by slider range
  */
 export function createControlsColumn() {
     // --- Helper to create a standard control group ---
-    const createControlGroup = (label, id, type, min, max, step, value, unit = '', valueFormatter = (v) => String(v)) => {
-        const valueSpanId = `${id}-value`;
+    const createControlGroup = (label, sliderId, type, min, max, step, value, unit = '', valueFormatter = (v) => String(v)) => {
+        // --- FIX: Use the simpler ID for the value span ---
+        const valueSpanId = sliderId.replace('-slider', '-value'); // e.g., "tempo-slider" -> "tempo-value"
+        // --- END FIX ---
+
         const formattedValue = type === 'range' ? valueFormatter(value) : value; // Format initial value for display if range
 
         return createElement('div', { className: 'control-group' }, [
-            createElement('label', { for: id, textContent: label }),
-            createElement('input', { type, id, min, max, step, value, disabled: true }),
+            createElement('label', { for: sliderId, textContent: label }), // Label 'for' matches slider ID
+            createElement('input', { type, id: sliderId, min, max, step, value, disabled: true }), // Input uses sliderId
             createElement('span', { className: 'value-display' }, [
+                // Span containing the value uses the CORRECTED valueSpanId
                 createElement('span', { id: valueSpanId, textContent: formattedValue }),
                 unit // Add unit directly as text node
             ])
@@ -43,7 +47,6 @@ export function createControlsColumn() {
         ]),
 
         // --- Metadata Placeholder ---
-        // layoutBuilder.js will find this and insert the actual metadata div
         createElement('div', { className: 'metadata-placeholder' }),
 
         // --- Main Controls Container ---
@@ -58,50 +61,47 @@ export function createControlsColumn() {
                 createElement('button', { id: 'reverse-toggle-btn', disabled: true, textContent: 'Reverse: Off' })
             ]),
 
+            // --- Pass the SLIDER ID to the helper ---
             // Volume Control
             createControlGroup(
                 'Volume:', 'volume-slider', 'range', '0.0', String(MAX_VOLUME), '0.01', String(DEFAULT_VOLUME), '%',
-                (v) => Math.round(parseFloat(v) * 100) // Formatter for percentage
+                (v) => Math.round(parseFloat(v) * 100)
             ),
-
             // Tempo Control
             createControlGroup(
                 'Tempo:', 'tempo-slider', 'range', '1', String(MAX_TEMPO), '1', String(DEFAULT_TEMPO), ' BPM'
             ),
-
             // Global Pitch Control
             createControlGroup(
                 'Pitch:', 'pitch-slider', 'range', String(MIN_PITCH), String(MAX_PITCH), '0.01', String(DEFAULT_PITCH), '%',
-                (v) => Math.round(parseFloat(v) * 100) // Formatter for percentage
+                (v) => Math.round(parseFloat(v) * 100)
             ),
-
             // Multiplier Control
             createControlGroup(
                 'Multiplier:', 'multiplier-slider', 'range', '1', String(MAX_MULTIPLIER), '1', String(DEFAULT_MULTIPLIER), '',
-                (v) => `x${v}` // Formatter for 'x' prefix
+                (v) => `x${v}`
             ),
+            // --- End passing SLIDER ID ---
 
             // --- MIDI Controls Section ---
             createElement('div', { className: 'midi-controls control-group' }, [
                 createElement('label', { for: 'midi-device-select', textContent: 'MIDI In:' }),
                 createElement('select', { id: 'midi-device-select', disabled: true }, [
-                     createElement('option', { value: '', textContent: 'Loading MIDI...' }) // Initial state
+                     createElement('option', { value: '', textContent: 'Loading MIDI...' })
                 ]),
                 createElement('span', {
                     id: 'midi-status',
-                    className: 'value-display', // Reuse style but override specific parts in CSS
+                    className: 'value-display',
                     textContent: 'Unavailable',
-                    // Inline style for overrides if needed, though CSS is preferred
-                    // style: 'text-align: left; min-width: 80px; flex-grow:1;'
                 })
             ])
         ])
     ]);
 
-    // Apply specific accent color post-creation if desired (could also be done via CSS)
+    // Apply specific accent color post-creation if desired
     const multiplierSlider = controlsColumn.querySelector('#multiplier-slider');
     if (multiplierSlider) {
-        multiplierSlider.style.accentColor = '#d08770'; // Example color
+        multiplierSlider.style.accentColor = '#d08770';
     }
 
     return controlsColumn;
