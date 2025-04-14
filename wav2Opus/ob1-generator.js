@@ -5,10 +5,6 @@ let audioBase64 = null;
 let imageBase64 = null;
 
 // DOM element references for the modal
-const generateOB1Button = document.getElementById('generateOB1Button');
-const metadataModal = document.getElementById('metadataModal');
-const metadataForm = document.getElementById('metadataForm');
-const cancelMetadataBtn = document.getElementById('cancelMetadataBtn');
 const instrumentInput = document.getElementById('instrumentInput'); // Get input fields
 const noteInput = document.getElementById('noteInput');
 const frequencyInput = document.getElementById('frequencyInput');
