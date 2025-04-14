@@ -88,4 +88,15 @@ export function createElement(tag, options = {}, children = []) {
     return element;
 }
 
+export function addListener(element, eventName, handler, elementNameForWarn) {
+    if (element) {
+        element.addEventListener(eventName, handler);
+    } else {
+        const optionalElements = ['infoToggleBtn', 'referencePanel'];
+        if (!optionalElements.includes(elementNameForWarn)) {
+            console.warn(`[setupEventListeners] Element "${elementNameForWarn}" not found. Listener not attached.`);
+        }
+    }
+}
+
 // --- END OF FILE utils.js ---

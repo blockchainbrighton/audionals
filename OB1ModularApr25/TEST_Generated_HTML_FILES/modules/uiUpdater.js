@@ -1,86 +1,120 @@
 // --- START OF FILE uiUpdater.js ---
 
-// --- DOM Elements (Looked up internally) ---
-let controlsContainer = document.getElementById('controls-container');
-const errorMessageDiv = document.getElementById('error-message');
-const playOnceBtn = document.getElementById('play-once-btn');
-const loopToggleBtn = document.getElementById('loop-toggle-btn');
-const reverseToggleBtn = document.getElementById('reverse-toggle-btn');
-const tempoSlider = document.getElementById('tempo-slider');
-const tempoValueSpan = document.getElementById('tempo-value');
-const pitchSlider = document.getElementById('pitch-slider');
-const pitchValueSpan = document.getElementById('pitch-value');
-const volumeSlider = document.getElementById('volume-slider');
-const volumeValueSpan = document.getElementById('volume-value');
-// --- >>> NEW: Multiplier Slider Lookup <<< ---
-const multiplierSlider = document.getElementById('multiplier-slider');
-// --- >>> END NEW <<< ---
-const multiplierValueSpan = document.getElementById('multiplier-value'); // Already existed for text display
+// --- Module State ---
+// Keep references at module level, but initialize to null
+let controlsContainer = null; // Set via setControlsContainer or init
+let errorMessageDiv = null;
+let playOnceBtn = null;
+let loopToggleBtn = null;
+let reverseToggleBtn = null;
+let tempoSlider = null;
+let tempoValueSpan = null; // Will be found in init
+let pitchSlider = null;
+let pitchValueSpan = null; // Will be found in init
+let volumeSlider = null;
+let volumeValueSpan = null; // Will be found in init
+let multiplierSlider = null;
+let multiplierValueSpan = null; // Will be found in init
+let mainImage = null;
 
-const mainImage = document.getElementById('main-image');
+let controlElementsList = []; // Will be populated in init
 
-// List of control elements found internally, used for enable/disable helper
-// Filter out nulls in case elements don't exist in the DOM
-// --- >>> ADDED multiplierSlider to the list <<< ---
-const controlElementsList = [
-    playOnceBtn,
-    loopToggleBtn,
-    reverseToggleBtn,
-    tempoSlider,
-    pitchSlider,
-    volumeSlider,
-    multiplierSlider, // Add the new slider here
-].filter(el => el !== null);
-// --- >>> END ADDITION <<< ---
+/**
+ * Initializes the UI Updater by finding essential DOM elements
+ * This should be called AFTER the layout is built (e.g., in main.js initializeApp).
+ */
+export function init() {
+    console.log("UI Updater: Initializing element references...");
+    // Find elements *now* that the DOM should be ready
+    controlsContainer = document.getElementById('controls-container');
+    errorMessageDiv = document.getElementById('error-message');
+    playOnceBtn = document.getElementById('play-once-btn');
+    loopToggleBtn = document.getElementById('loop-toggle-btn');
+    reverseToggleBtn = document.getElementById('reverse-toggle-btn');
+    tempoSlider = document.getElementById('tempo-slider');
+    tempoValueSpan = document.getElementById('tempo-value'); // Find the span
+    pitchSlider = document.getElementById('pitch-slider');
+    pitchValueSpan = document.getElementById('pitch-value'); // Find the span
+    volumeSlider = document.getElementById('volume-slider');
+    volumeValueSpan = document.getElementById('volume-value'); // Find the span
+    multiplierSlider = document.getElementById('multiplier-slider');
+    multiplierValueSpan = document.getElementById('multiplier-value'); // Find the span
+    mainImage = document.getElementById('main-image');
+
+    // Re-populate the list used for enabling/disabling
+    controlElementsList = [
+        playOnceBtn, loopToggleBtn, reverseToggleBtn,
+        tempoSlider, pitchSlider, volumeSlider, multiplierSlider
+    ].filter(el => el !== null); // Filter out any that might still be missing
+
+    // Log found elements for debugging
+    if (!controlsContainer) console.warn("UI Updater init: controlsContainer not found.");
+    if (!tempoValueSpan) console.warn("UI Updater init: tempoValueSpan not found.");
+    if (!pitchValueSpan) console.warn("UI Updater init: pitchValueSpan not found.");
+    if (!volumeValueSpan) console.warn("UI Updater init: volumeValueSpan not found.");
+    if (!multiplierValueSpan) console.warn("UI Updater init: multiplierValueSpan not found.");
+    console.log(`UI Updater init: Found ${controlElementsList.length} control elements.`);
+}
 
 // --- Exported Function (Interface for main.js) ---
-// setControlsContainer function remains the same...
 export function setControlsContainer(containerElement) {
+    // This can still be used if main.js needs to set it explicitly,
+    // but init() will also find it.
     if (containerElement instanceof HTMLElement) {
         controlsContainer = containerElement;
         console.log("UI Updater: Controls container reference updated via setControlsContainer.");
     } else {
-        console.error("UI Updater: Invalid element passed to setControlsContainer. Internal reference unchanged.");
+        console.error("UI Updater: Invalid element passed to setControlsContainer.");
     }
 }
 
 
 // --- Internal Helper Functions ---
-// updateValueDisplay remains the same...
+// updateValueDisplay can now rely on spanRef being valid if init() worked
 function updateValueDisplay(spanRef, value, formatter = (v) => String(v), elementName = 'Value') {
      if (spanRef) {
-         spanRef.textContent = formatter(value);
+         // Check if formatter is a function before calling
+         if (typeof formatter === 'function') {
+             spanRef.textContent = formatter(value);
+         } else {
+             console.error(`Invalid formatter provided for ${elementName}`);
+             spanRef.textContent = value; // Fallback to raw value
+         }
      } else {
-         console.warn(`UpdateValueDisplay: Span element not found for ${elementName}.`);
+         // This warning is now more critical if it appears after init()
+         console.warn(`UpdateValueDisplay: Span element reference is missing for ${elementName}. Was UI Updater initialized correctly?`);
      }
 }
-// updateToggleButton remains the same...
+
 function updateToggleButton(buttonRef, isActive, textPrefix) {
      if (buttonRef) {
          buttonRef.textContent = `${textPrefix}: ${isActive ? 'On' : 'Off'}`;
          buttonRef.classList.toggle('active', !!isActive);
      } else {
-          console.warn(`UpdateToggleButton: Button element not found for prefix "${textPrefix}"`);
+          console.warn(`UpdateToggleButton: Button element reference is missing for "${textPrefix}"`);
      }
 }
-// setControlsDisabledState remains the same (it now includes multiplierSlider via the list)...
+
 function setControlsDisabledState(isDisabled) {
-    if (controlsContainer) {
-         controlsContainer.classList.toggle('disabled', isDisabled);
+    // Check controlsContainer validity each time
+    const container = controlsContainer || document.getElementById('controls-container');
+    if (container) {
+         container.classList.toggle('disabled', isDisabled);
     } else {
          console.warn(`SetControlsDisabledState: Controls container element not found! Cannot toggle class.`);
     }
+    // Use the populated list
     controlElementsList.forEach(el => {
-        el.disabled = isDisabled;
+        if (el) el.disabled = isDisabled; // Add extra null check inside loop
     });
-     console.log(`Controls ${isDisabled ? 'disabled' : 'enabled'}. Found ${controlElementsList.length} controls.`);
+     // console.log(`Controls ${isDisabled ? 'disabled' : 'enabled'}. List size: ${controlElementsList.length}`);
 }
 
 
 // --- Exported UI Update Functions ---
-// Tempo, Pitch, Volume, Loop, Reverse functions remain the same...
+// These now use the module-level variables populated by init()
 export function updateTempoDisplay(bpm) {
-    updateValueDisplay(tempoValueSpan, bpm, (v) => String(v), 'Tempo');
+    updateValueDisplay(tempoValueSpan, bpm, String, 'Tempo'); // Simplify formatter
 }
 export function updatePitchDisplay(rate) {
      updateValueDisplay(pitchValueSpan, rate, (v) => `${Math.round(v * 100)}`, 'Pitch');
@@ -94,8 +128,10 @@ export function updateLoopButton(isLooping) {
 export function updateReverseButton(isReversed) {
      updateToggleButton(reverseToggleBtn, isReversed, 'Reverse');
 }
+export function updateScheduleMultiplierDisplay(multiplier) {
+    updateValueDisplay(multiplierValueSpan, multiplier, (v) => `x${v}`, 'Multiplier');
+}
 
-// enable/disable functions remain the same...
 export function enableControls() {
     setControlsDisabledState(false);
 }
@@ -103,49 +139,36 @@ export function disableControls() {
     setControlsDisabledState(true);
 }
 
-// Error handling functions remain the same...
 export function showError(message) {
-    if (errorMessageDiv) {
-        errorMessageDiv.textContent = message;
-        errorMessageDiv.style.display = message ? 'block' : 'none';
-        console.error("UI Error Displayed:", message);
+    // Lookup errorMessageDiv each time for robustness, or rely on init()
+    const errorDiv = errorMessageDiv || document.getElementById('error-message');
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = message ? 'block' : 'none';
+        // Avoid logging the error twice if it came from console.error elsewhere
+        // console.error("UI Error Displayed:", message);
     } else {
         console.error("UI Error (Error message div not found!):", message);
     }
 }
 export function clearError() {
-    if (errorMessageDiv) {
-        errorMessageDiv.textContent = '';
-        errorMessageDiv.style.display = 'none';
-    } else {
-        console.warn("clearError: Error message div not found.");
+    const errorDiv = errorMessageDiv || document.getElementById('error-message');
+    if (errorDiv) {
+        errorDiv.textContent = '';
+        errorDiv.style.display = 'none';
     }
 }
 
-// setImageSource remains the same...
 export function setImageSource(src) {
-    if (mainImage) {
-        mainImage.src = src;
-        mainImage.style.visibility = 'visible';
+    // Lookup image each time or rely on init()
+    const img = mainImage || document.getElementById('main-image');
+    if (img) {
+        img.src = src;
+        img.style.visibility = 'visible'; // Make visible only when src is set
     } else {
         console.error("setImageSource: Main image element not found");
     }
 }
 
-// --- >>> updateScheduleMultiplierDisplay remains the same (targets the SPAN) <<< ---
-export function updateScheduleMultiplierDisplay(multiplier) {
-    updateValueDisplay(multiplierValueSpan, multiplier, (v) => `x${v}`, 'Multiplier');
-}
-// --- >>> END <<< ---
-
-
-// Initial checks log...
-if (!controlsContainer) console.warn("UI Updater: Initial lookup failed for controlsContainer.");
-if (!errorMessageDiv) console.warn("UI Updater: Initial lookup failed for errorMessageDiv.");
-if (!mainImage) console.warn("UI Updater: Initial lookup failed for mainImage.");
-// --- >>> Log if the new slider was found <<< ---
-if (!multiplierSlider) console.warn("UI Updater: Initial lookup failed for multiplierSlider.");
-// --- >>> END <<< ---
-console.log(`UI Updater: Initialized. Found ${controlElementsList.length} control elements internally.`);
 
 // --- END OF FILE uiUpdater.js ---

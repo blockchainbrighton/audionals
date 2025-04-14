@@ -3,93 +3,105 @@
 import { base64ToArrayBuffer } from './utils.js';
 import { showError } from './uiUpdater.js';
 import { triggerAnimation as triggerImageAnimation } from './imageAnimation.js';
-// --- NEW: Import the timing manager ---
 import * as timingManager from './timingManagement.js';
 
 // --- Constants ---
-// REMOVED: SCHEDULE_AHEAD_TIME
-// REMOVED: SCHEDULER_INTERVAL_MS
-const SMOOTH_PARAM_TIME = 0.01;  // (seconds) Time constant for smooth parameter changes (e.g., volume)
-// REMOVED: LOOP_START_DELAY (Timing manager has its own)
+const SMOOTH_PARAM_TIME = 0.01;  // Time constant for smooth GainNode changes
+
+// --- MIDI/Pitch Constants ---
+const A4_MIDI_NOTE = 69;
+const A4_FREQUENCY = 440.0;
+const SEMITONE_RATIO = Math.pow(2, 1 / 12); // Approx 1.05946
+const MIN_MIDI_NOTE = 21; // A0 on standard 88-key piano
+const MAX_MIDI_NOTE = 108; // C8 on standard 88-key piano
 
 // --- Module State ---
 let audioContext = null;        // The main Web Audio API interface
 let mainGainNode = null;        // Primary gain node for master volume control
 
 let decodedBuffer = null;       // Holds the original decoded audio data
-let reversedBuffer = null;      // Holds the reversed audio data (if successfully created)
+let reversedBuffer = null;      // Holds the reversed audio data
 
-// REMOVED: isLooping (Now managed by timingManager)
-let isReversed = false;         // Flag indicating if playback should use the reversed buffer
-let currentTempo;          // Current tempo in Beats Per Minute (BPM) - Still useful for init
-let currentPitch;         // Current playback rate (1.0 = normal speed) - Still useful for init
-let currentVolume = 1.0;        // Current volume level (0.0 to 1.0+)
+let isReversed = false;         // Flag indicating if playback uses the reversed buffer
+let currentTempo = 78;          // Current tempo (BPM) - initialized with a default
+let currentGlobalPitch = 1.0;   // Current global playback rate (set by slider/shortcuts)
+let currentVolume = 1.0;        // Current master volume level (0.0 to 1.0+)
 
-// REMOVED: loopTimeoutId
-// REMOVED: nextNoteTime
+// --- State for MIDI Pitch Mapping ---
+let originalSampleFrequency = null;   // Fundamental frequency of the loaded sample
+let midiNoteToPlaybackRate = new Map(); // Map<MIDINoteNumber, PlaybackRate>
 
 // --- Private Helper Functions ---
 
 /**
- * Attempts to resume the AudioContext if it's suspended.
- * Logs errors but doesn't prevent subsequent actions immediately.
- * @returns {Promise<void>} A promise that resolves when resume attempt is complete.
+ * Ensures the AudioContext is running, attempting to resume if suspended.
+ * Required before operations that need an active context.
+ * @returns {Promise<boolean>} True if context is running or resumed, false otherwise.
+ * @throws {Error} Re-throws error if resume fails, allowing callers to handle.
  */
-async function _ensureContextResumed() {
-    if (audioContext && audioContext.state === 'suspended') {
+async function _ensureContextRunning() {
+    if (!audioContext) {
+        console.error("AudioProcessor: AudioContext not initialized.");
+        showError("Audio system not ready.");
+        return false;
+    }
+    if (audioContext.state === 'suspended') {
         console.log("AudioProcessor: AudioContext is suspended, attempting to resume...");
         try {
             await audioContext.resume();
             console.log("AudioProcessor: AudioContext resumed successfully.");
+            return true;
         } catch (err) {
             console.error("AudioProcessor: Error resuming AudioContext:", err);
-            showError("Could not resume audio context. Interaction might be needed.");
-            // Re-throw to allow callers (like startLoop) to handle failure
-            throw err;
+            showError("Could not resume audio context. Please interact with the page.");
+            throw err; // Re-throw for callers like startLoop/playOnce
         }
     }
-    // If not suspended or no context, promise resolves immediately
+    return true; // Already running or closed (closed is non-recoverable here)
 }
 
 /**
- * Selects the appropriate audio buffer based on the current isReversed state.
+ * Selects the appropriate audio buffer (forward or reversed) based on the isReversed state.
+ * Handles error display if the required buffer is missing.
  * @returns {AudioBuffer | null} The buffer to play, or null if unavailable.
  */
 function _getCurrentBuffer() {
     const buffer = isReversed ? reversedBuffer : decodedBuffer;
     if (!buffer) {
-        console.error(`AudioProcessor: Required buffer is missing: ${isReversed ? 'Reversed' : 'Original'}`);
-        showError(`Cannot play: ${isReversed ? 'Reversed' : 'Original'} audio buffer is unavailable.`);
+        const direction = isReversed ? 'Reversed' : 'Original';
+        console.error(`AudioProcessor: Required buffer is missing: ${direction}`);
+        showError(`Cannot play: ${direction} audio buffer is unavailable.`);
     }
     return buffer;
 }
 
 /**
- * Creates and schedules a single AudioBufferSourceNode for playback.
- * This is called by playOnce and the timingManager's callback.
+ * Creates an AudioBufferSourceNode, configures it, connects it, and starts playback.
+ * Also triggers the visual animation.
+ * Assumes audioContext and mainGainNode are valid.
  * @param {AudioBuffer} buffer The audio buffer to play.
  * @param {number} time The audioContext.currentTime-based time to start playback.
- * @param {number} rate The playback rate (pitch/speed).
+ * @param {number} rate The specific playback rate (pitch/speed) for this instance.
  * @returns {AudioBufferSourceNode | null} The created source node, or null on failure.
  */
 function _playBuffer(buffer, time, rate) {
-    // No context resume check needed here, should be handled before calling
-    if (!audioContext || !mainGainNode || !buffer) {
-        console.error("AudioProcessor: Cannot play buffer: Missing context, gain node, or buffer.");
-        return null;
+    // Basic check (context/gain should be valid if this is called)
+    if (!buffer) {
+         console.error("AudioProcessor: _playBuffer called with null buffer.");
+         return null;
     }
 
     try {
         const source = audioContext.createBufferSource();
         source.buffer = buffer;
-        source.playbackRate.value = rate; // Use the provided rate (currentPitch)
+        source.playbackRate.value = rate;
         source.connect(mainGainNode);
 
-        // Trigger visual feedback
+        // Trigger visual feedback associated with sound emission
         triggerImageAnimation();
 
-        source.start(time); // Use the precise time provided
-        // console.log(`AudioProcessor: Scheduled play at ${time.toFixed(4)} with rate ${rate}`);
+        source.start(time);
+        // console.log(`AudioProcessor: Scheduled play at ${time.toFixed(4)} with rate ${rate.toFixed(4)}`);
         return source;
 
     } catch (error) {
@@ -99,26 +111,29 @@ function _playBuffer(buffer, time, rate) {
     }
 }
 
-// --- REMOVED: _scheduleLoop ---
-// --- REMOVED: _stopLoopInternal ---
-
 /**
- * Creates a reversed copy of an AudioBuffer. (Unchanged)
+ * Creates a reversed copy of an AudioBuffer.
  * @param {AudioBuffer} originalBuffer The buffer to reverse.
  * @returns {AudioBuffer | null} The reversed buffer, or null on failure.
  */
 function _createReversedBuffer(originalBuffer) {
-    if (!originalBuffer || !audioContext) return null;
+    if (!originalBuffer || !audioContext) {
+        console.warn("AudioProcessor: Cannot create reversed buffer - missing original or context.");
+        return null;
+    }
 
     try {
         const { numberOfChannels, length, sampleRate } = originalBuffer;
+        // Ensure context is available to create the buffer
+        if (!audioContext) throw new Error("AudioContext not available for creating buffer.");
         const reversed = audioContext.createBuffer(numberOfChannels, length, sampleRate);
 
         for (let channel = 0; channel < numberOfChannels; channel++) {
             const originalData = originalBuffer.getChannelData(channel);
             const reversedData = reversed.getChannelData(channel);
-            for (let i = 0; i < length; i++) {
-                reversedData[i] = originalData[length - 1 - i];
+            // Optimized copy loop slightly
+            for (let i = 0, j = length - 1; i < length; i++, j--) {
+                reversedData[i] = originalData[j];
             }
         }
         console.log("AudioProcessor: Reversed audio buffer created successfully.");
@@ -131,7 +146,7 @@ function _createReversedBuffer(originalBuffer) {
 }
 
 /**
- * Initializes the Web Audio API AudioContext and main GainNode. (Unchanged)
+ * Initializes the Web Audio API AudioContext and main GainNode.
  * @throws {Error} If Web Audio API is not supported or context creation fails.
  */
 function _setupAudioContext() {
@@ -142,22 +157,26 @@ function _setupAudioContext() {
         }
         audioContext = new AudioContext();
         mainGainNode = audioContext.createGain();
+        // Ensure initial volume is set correctly on the gain node
         mainGainNode.gain.setValueAtTime(currentVolume, audioContext.currentTime);
         mainGainNode.connect(audioContext.destination);
         console.log(`AudioProcessor: AudioContext created. State: ${audioContext.state}`);
     } catch (error) {
         console.error("AudioProcessor: Error setting up AudioContext:", error);
         showError(`Audio Setup Error: ${error.message}`);
-        throw error;
+        audioContext = null; // Ensure state reflects failure
+        mainGainNode = null;
+        throw error; // Propagate error
     }
 }
 
 /**
- * Decodes the Base64 audio data into an AudioBuffer and creates its reversed version. (Unchanged)
+ * Decodes the Base64 audio data, creates the reversed buffer, reads the original
+ * frequency from the DOM, and calculates the MIDI playback rate map.
  * @param {string} audioBase64 The Base64 encoded audio data (Opus format expected).
- * @throws {Error} If decoding fails or input data is invalid.
+ * @throws {Error} If decoding fails, DOM frequency element is missing/invalid, or input data is invalid.
  */
-async function _decodeAudio(audioBase64) {
+async function _decodeAudioAndPrepare(audioBase64) {
     if (!audioContext) {
         throw new Error("AudioProcessor: AudioContext not initialized before decoding.");
     }
@@ -165,207 +184,263 @@ async function _decodeAudio(audioBase64) {
          throw new Error("AudioProcessor: Invalid or missing Opus audio Base64 data provided.");
     }
 
+    // --- 1. Decode Audio ---
     try {
         const arrayBuffer = base64ToArrayBuffer(audioBase64);
         console.log(`AudioProcessor: Decoding ${arrayBuffer.byteLength} bytes of audio data...`);
         decodedBuffer = await audioContext.decodeAudioData(arrayBuffer);
         console.log("AudioProcessor: Audio decoded successfully.");
-
-        reversedBuffer = _createReversedBuffer(decodedBuffer);
-        if (!reversedBuffer) {
-             console.warn("AudioProcessor: Could not create reversed buffer. Reverse playback will be unavailable.");
-        }
     } catch (error) {
         console.error("AudioProcessor: Error decoding audio data:", error);
         const message = error instanceof DOMException ? `DOMException: ${error.message}` : error.message;
         showError(`Audio Decoding Error: ${message || 'Unknown decoding error'}`);
+        decodedBuffer = null; // Ensure state is clear on failure
         throw new Error(`Failed to decode audio data: ${message}`);
     }
+
+    // --- 2. Create Reversed Buffer (Best Effort) ---
+    reversedBuffer = _createReversedBuffer(decodedBuffer); // Doesn't throw, just logs/warns
+
+    // --- 3. Read Original Frequency & Calculate MIDI Rates ---
+    const freqSpan = document.getElementById('audio-meta-frequency');
+    if (!freqSpan || !freqSpan.textContent) {
+        showError("Missing base frequency metadata in HTML. MIDI playback disabled.");
+        throw new Error("AudioProcessor: Frequency span (#audio-meta-frequency) not found or empty.");
+    }
+
+    const freqText = freqSpan.textContent.trim().split(' ')[0]; // Get numerical part
+    const parsedFreq = parseFloat(freqText);
+
+    if (isNaN(parsedFreq) || parsedFreq <= 0) {
+        showError(`Invalid base frequency (${freqSpan.textContent}). MIDI playback disabled.`);
+        throw new Error(`AudioProcessor: Invalid frequency found in DOM: "${freqSpan.textContent}".`);
+    }
+
+    originalSampleFrequency = parsedFreq;
+    console.log(`AudioProcessor: Read original sample frequency: ${originalSampleFrequency} Hz`);
+    _calculatePlaybackRates(); // Calculate the MIDI map now that frequency is known
 }
 
+/**
+ * Calculates and populates the midiNoteToPlaybackRate map based on the
+ * originalSampleFrequency and standard tuning (A4=440Hz).
+ */
+function _calculatePlaybackRates() {
+    if (!originalSampleFrequency || originalSampleFrequency <= 0) {
+        console.error("AudioProcessor: Cannot calculate playback rates, original sample frequency is invalid or missing.");
+        midiNoteToPlaybackRate.clear();
+        return;
+    }
+
+    console.log("AudioProcessor: Calculating MIDI note playback rates...");
+    midiNoteToPlaybackRate.clear();
+
+    for (let midiNote = MIN_MIDI_NOTE; midiNote <= MAX_MIDI_NOTE; midiNote++) {
+        const semitonesFromA4 = midiNote - A4_MIDI_NOTE;
+        const targetFrequency = A4_FREQUENCY * Math.pow(SEMITONE_RATIO, semitonesFromA4);
+        const playbackRate = targetFrequency / originalSampleFrequency;
+        midiNoteToPlaybackRate.set(midiNote, playbackRate);
+    }
+    console.log(`AudioProcessor: Calculated ${midiNoteToPlaybackRate.size} playback rates for MIDI notes ${MIN_MIDI_NOTE}-${MAX_MIDI_NOTE}.`);
+}
 
 // --- Public API ---
 
 /**
-  * Initializes the audio processor: sets up context, decodes audio, and initializes timing manager.
-  * Assumes initialTempo and initialPitch passed in are valid numbers.
+  * Initializes the audio processor: sets up context, decodes audio, prepares buffers
+  * and MIDI mappings, and initializes the timing manager.
   * @param {string} audioBase64 The Base64 encoded audio data.
-  * @param {number} initialTempo - The starting tempo (BPM).
-  * @param {number} initialPitch - The starting pitch (playback rate).
+  * @param {number} initialTempo - The starting tempo (BPM). Must be > 0.
+  * @param {number} initialGlobalPitch - The starting global pitch (playback rate). Must be > 0.
   * @returns {Promise<boolean>} True if initialization succeeded, false otherwise.
   */
-export async function init(audioBase64, initialTempo, initialPitch) {
+export async function init(audioBase64, initialTempo, initialGlobalPitch) {
+    // Clear previous state if re-initializing
+    audioContext = null;
+    mainGainNode = null;
+    decodedBuffer = null;
+    reversedBuffer = null;
+    originalSampleFrequency = null;
+    midiNoteToPlaybackRate.clear();
+    isReversed = false;
+
+    // Basic validation of initial parameters
+    if (typeof initialTempo !== 'number' || initialTempo <= 0) {
+         console.warn(`AudioProcessor Init: Invalid initialTempo (${initialTempo}), using default 78.`);
+         initialTempo = 78;
+    }
+     if (typeof initialGlobalPitch !== 'number' || initialGlobalPitch <= 0) {
+         console.warn(`AudioProcessor Init: Invalid initialGlobalPitch (${initialGlobalPitch}), using default 1.0.`);
+         initialGlobalPitch = 1.0;
+    }
+
+    currentTempo = initialTempo;
+    currentGlobalPitch = initialGlobalPitch;
+
+    console.log(`AudioProcessor Init: Tempo=${currentTempo} BPM, Global Pitch=${currentGlobalPitch.toFixed(2)}x`);
+
     try {
-        // Directly assign the values passed from main.js
-        // No need for redundant validation or fallbacks here
-        currentTempo = initialTempo;
-        currentPitch = initialPitch; // Assuming main.js also validates/defaults pitch
+        _setupAudioContext(); // Throws on failure
+        await _decodeAudioAndPrepare(audioBase64); // Throws on critical failure (decode/freq read)
 
-        console.log(`AudioProcessor Init: Setting Tempo ${currentTempo}, Pitch ${currentPitch}`);
+        // Initialize the timing manager only after context and data are ready
+        timingManager.init(audioContext, currentTempo, currentGlobalPitch);
 
-        _setupAudioContext(); // Setup context and gain node
-        await _decodeAudio(audioBase64); // Decode audio
-
-        // --- Initialize the timing manager ---
-        // Pass the received values directly
-        timingManager.init(audioContext, currentTempo, currentPitch);
-
+        console.log("AudioProcessor: Initialization successful.");
         return true; // Indicate success
 
     } catch (error) {
-        console.error("Audio Processor initialization failed.", error);
+        console.error("Audio Processor initialization failed:", error.message);
+        // Errors should have been shown to the user by internal functions
+        // Clean up partially initialized state
+        if (audioContext && audioContext.state !== 'closed') {
+            audioContext.close().catch(e => console.error("Error closing audio context on init failure:", e));
+        }
+        audioContext = null;
+        mainGainNode = null;
+        decodedBuffer = null;
+        reversedBuffer = null;
+        originalSampleFrequency = null;
+        midiNoteToPlaybackRate.clear();
         return false; // Indicate failure
     }
 }
 
 /**
- * Plays the current audio sample (forward or reversed) once. (Largely Unchanged)
+ * Plays the current sample (forward/reversed) once using the GLOBAL pitch setting.
  */
 export async function playOnce() {
-    // Ensure context is active before playing
     try {
-        await _ensureContextResumed();
-    } catch (err) {
-        // Error already shown by _ensureContextResumed
-        return; // Don't proceed if context couldn't resume
-    }
+        if (!await _ensureContextRunning()) return; // Check context state
 
-    if (!audioContext) {
-        showError("Audio system not initialized.");
-        return;
+        const bufferToPlay = _getCurrentBuffer();
+        if (!bufferToPlay) return; // Error handled internally
+
+        // Use the global pitch setting for this playback type
+        _playBuffer(bufferToPlay, audioContext.currentTime, currentGlobalPitch);
+
+    } catch (err) {
+        // Errors from _ensureContextRunning are already handled/shown
+        console.error("AudioProcessor: Error in playOnce:", err);
     }
-    const bufferToPlay = _getCurrentBuffer();
-    if (!bufferToPlay) {
-        return; // Error handled by _getCurrentBuffer
-    }
-    // Play immediately using the current time
-    _playBuffer(bufferToPlay, audioContext.currentTime, currentPitch);
 }
 
 /**
- * --- UPDATED: Starts the tempo-synchronized loop playback using the timing manager. ---
+ * Starts the tempo-synchronized loop playback using the timing manager.
+ * The loop uses the GLOBAL pitch setting.
  */
 export async function startLoop() {
-    // Check if already looping via timing manager
     if (timingManager.getLoopingState()) {
-        console.warn("AudioProcessor: Loop already active (requested via timing manager).");
+        console.warn("AudioProcessor: Loop already active.");
         return;
     }
-    // Ensure context exists (should always if init succeeded)
-    if (!audioContext) {
-         console.error("AudioProcessor: Cannot start loop, AudioContext not available.");
-         return;
-    }
 
-    // Ensure buffer for the *current* direction is available before starting
-    const bufferToCheck = _getCurrentBuffer();
-    if (!bufferToCheck) {
-         showError(`Cannot start loop: ${isReversed ? 'Reversed' : 'Original'} audio buffer missing.`);
-         return;
-    }
-
-    // Ensure context is running before handing off to timing manager
     try {
-        await _ensureContextResumed();
+        if (!await _ensureContextRunning()) return; // Check context state
+
+        // Ensure buffer for the *current* direction is available before starting
+        const bufferToCheck = _getCurrentBuffer();
+        if (!bufferToCheck) {
+             // Error shown by _getCurrentBuffer
+             return;
+        }
 
         // Define the callback for the timing manager
+        // This callback uses the GLOBAL pitch setting
         const soundPlaybackCallback = (scheduledTime) => {
-            const bufferToPlay = _getCurrentBuffer();
+            const bufferToPlay = _getCurrentBuffer(); // Check again in case state changed
             if (bufferToPlay && audioContext && mainGainNode) {
-                // Use _playBuffer to handle node creation and connection
-                _playBuffer(bufferToPlay, scheduledTime, currentPitch);
+                _playBuffer(bufferToPlay, scheduledTime, currentGlobalPitch);
             } else {
-                console.error("AudioProcessor: Buffer/Context/Gain unavailable when playCallback was called by TimingManager. Stopping loop.");
+                console.error("AudioProcessor: Buffer/Context/Gain unavailable during loop callback. Stopping loop.");
                 showError("Loop stopped: audio resources unavailable.");
-                timingManager.stopLoop(); // Tell timing manager to stop
-                // Update UI externally if needed (main.js handles button state)
+                timingManager.stopLoop();
             }
         };
 
-        // Start the loop via the timing manager
         console.log("AudioProcessor: Starting loop via timingManager.");
-        timingManager.startLoop(soundPlaybackCallback);
+        timingManager.startLoop(soundPlaybackCallback); // TimingManager handles its own start logic
 
     } catch (err) {
-        // Error resuming context
-        console.error("AudioProcessor: Failed to start loop (context resume failed?).", err);
-        // No need to set local isLooping flag
-        // Error message handled by _ensureContextResumed
+        // Errors from _ensureContextRunning or timingManager.startLoop
+        console.error("AudioProcessor: Failed to start loop.", err);
+        // No need to show error here, should be handled upstream or by _ensureContextRunning
     }
 }
 
 /**
- * --- UPDATED: Stops the loop playback via the timing manager. ---
+ * Stops the loop playback via the timing manager.
  */
 export function stopLoop() {
-    // Delegate stopping entirely to the timing manager
-    if (timingManager.getLoopingState()) {
-        console.log("AudioProcessor: Stopping loop via timingManager.");
-        timingManager.stopLoop();
+    if (!timingManager.getLoopingState()) {
+        // console.log("AudioProcessor: Stop requested but loop not active.");
+        return;
+    }
+    console.log("AudioProcessor: Stopping loop via timingManager.");
+    timingManager.stopLoop();
+}
+
+/**
+ * Sets the schedule multiplier for looped playback via the timing manager.
+ * @param {number} multiplier - How many notes play per original beat (integer >= 1).
+ */
+export function setScheduleMultiplier(multiplier) {
+    // Delegate validation to timingManager if preferred, or validate here
+    const intMultiplier = parseInt(multiplier, 10);
+    if (Number.isInteger(intMultiplier) && intMultiplier >= 1) {
+        timingManager.setScheduleMultiplier(intMultiplier);
     } else {
-         // console.log("AudioProcessor: Stop requested but loop not active.");
+         console.warn(`AudioProcessor: Invalid schedule multiplier value: ${multiplier}`);
     }
 }
 
 /**
- * Sets the schedule multiplier for looped playback.
- * @param {number} multiplier - How many notes to play per original beat (integer >= 1).
- */
-export function setScheduleMultiplier(multiplier) {
-    timingManager.setScheduleMultiplier(multiplier);
-}
-
-/**
- * Gets the current schedule multiplier.
+ * Gets the current schedule multiplier from the timing manager.
  * @returns {number} The current multiplier value.
  */
  export function getScheduleMultiplier() {
-     // Add getter in timingManager if you haven't already
      return timingManager.getCurrentScheduleMultiplier ? timingManager.getCurrentScheduleMultiplier() : 1;
  }
 
 /**
- * --- UPDATED: Sets the playback tempo (BPM). ---
- * Updates local state and informs the timing manager, which handles loop restart if needed.
- * @param {number} bpm The desired tempo in Beats Per Minute.
+ * Sets the playback tempo (BPM). Updates local state and informs the timing manager.
+ * @param {number} bpm The desired tempo in Beats Per Minute (> 0).
  */
 export function setTempo(bpm) {
-    // Basic validation
     if (typeof bpm === 'number' && bpm > 0) {
-        console.log(`AudioProcessor: Setting tempo to ${bpm} BPM`);
-        currentTempo = bpm; // Update local state (might be useful elsewhere)
-        timingManager.setTempo(bpm); // Delegate to timing manager
+        // console.log(`AudioProcessor: Setting tempo to ${bpm} BPM`);
+        currentTempo = bpm;
+        timingManager.setTempo(bpm); // Timing manager handles validation and loop restart if needed
     } else {
          console.warn(`AudioProcessor: Invalid tempo value received: ${bpm}`);
     }
 }
 
 /**
- * --- UPDATED: Sets the playback rate (pitch/speed). ---
+ * Sets the GLOBAL playback rate (pitch/speed) used by playOnce and the loop.
  * Updates local state and informs the timing manager.
- * @param {number} rate Playback rate (1.0 = normal).
+ * @param {number} rate Playback rate (1.0 = normal). Must be > 0.
  */
-export function setPitch(rate) {
-    // Basic validation
+export function setGlobalPitch(rate) {
     if (typeof rate === 'number' && rate > 0) {
-        // console.log(`AudioProcessor: Setting pitch to ${rate}`);
-        currentPitch = rate; // Update local state
+        // console.log(`AudioProcessor: Setting global pitch rate to ${rate.toFixed(4)}`);
+        currentGlobalPitch = rate;
         timingManager.setPitch(rate); // Inform timing manager
     } else {
-         console.warn(`AudioProcessor: Invalid pitch value received: ${rate}`);
+         console.warn(`AudioProcessor: Invalid global pitch value received: ${rate}`);
     }
 }
 
 /**
- * Sets the master volume level smoothly. (Unchanged)
- * @param {number} level Volume level (0.0 = silent, 1.0 = normal). Values > 1.0 amplify.
+ * Sets the master volume level smoothly.
+ * @param {number} level Volume level (0.0 = silent, 1.0 = normal). Must be >= 0.
  */
 export function setVolume(level) {
     if (typeof level === 'number' && level >= 0) {
         currentVolume = level;
         if (mainGainNode && audioContext) {
+            // Use setTargetAtTime for smooth transitions
             mainGainNode.gain.setTargetAtTime(level, audioContext.currentTime, SMOOTH_PARAM_TIME);
-            // console.log(`Volume set to ${currentVolume}`);
         }
     } else {
          console.warn(`AudioProcessor: Invalid volume value received: ${level}`);
@@ -373,33 +448,30 @@ export function setVolume(level) {
 }
 
 /**
- * --- UPDATED: Toggles between forward and reversed playback. ---
- * Restarts the loop via timing manager if it was active.
+ * Toggles between forward and reversed playback. Restarts the loop if active.
  * @returns {boolean} The new state of isReversed.
  */
 export function toggleReverse() {
     const intendedNewState = !isReversed;
 
-    // Check buffer availability
+    // Check buffer availability *before* changing state
     if (intendedNewState === true && !reversedBuffer) {
         showError("Reversed audio is unavailable.");
-        console.warn("AudioProcessor: Attempted to switch to reverse playback, but reversed buffer is missing.");
+        console.warn("AudioProcessor: Cannot switch to reverse: reversed buffer is missing.");
         return isReversed; // Return current state unchanged
     }
 
-    // Proceed with state change
     isReversed = intendedNewState;
     console.log(`AudioProcessor: Reverse playback toggled: ${isReversed ? 'On' : 'Off'}`);
 
-    // If the loop is running (check via timing manager), restart it
+    // If the loop is running, stop and restart it to use the new buffer direction
     if (timingManager.getLoopingState()) {
-        console.log("AudioProcessor: Restarting loop scheduler due to reverse toggle.");
-        // Simply stopping and starting again handles buffer switching via the callback
+        console.log("AudioProcessor: Restarting loop due to reverse toggle.");
         timingManager.stopLoop();
-        // Re-call the public startLoop function to ensure context checks and callback setup happen correctly
+        // Use startLoop directly, it handles context checks and callback setup
         startLoop().catch(err => {
             console.error("AudioProcessor: Error restarting loop after reverse toggle:", err);
-            // Ensure loop is definitively stopped if restart fails
+            // Ensure loop is definitely stopped if restart fails
              if (timingManager.getLoopingState()) { timingManager.stopLoop(); }
         });
     }
@@ -407,15 +479,15 @@ export function toggleReverse() {
 }
 
 /**
- * --- UPDATED: Gets the current looping state from the timing manager. ---
+ * Gets the current looping state from the timing manager.
  * @returns {boolean} True if the loop is active, false otherwise.
  */
 export function getLoopingState() {
-    return timingManager.getLoopingState();
+    return timingManager.getLoopingState ? timingManager.getLoopingState() : false;
 }
 
 /**
- * Gets the current reverse playback state. (Unchanged logic, uses local state)
+ * Gets the current reverse playback state.
  * @returns {boolean} True if reversed playback is active, false otherwise.
  */
 export function getReverseState() {
@@ -423,7 +495,7 @@ export function getReverseState() {
 }
 
 /**
- * Gets the current state of the underlying AudioContext. (Unchanged)
+ * Gets the current state of the underlying AudioContext.
  * @returns {'suspended' | 'running' | 'closed' | 'unavailable'} The context state string.
  */
 export function getAudioContextState() {
@@ -431,13 +503,62 @@ export function getAudioContextState() {
 }
 
 /**
- * Public method to explicitly request resuming the AudioContext. (Unchanged)
+ * Public method to explicitly request resuming the AudioContext.
  * Useful for handling browser autoplay restrictions on user interaction.
- * @returns {Promise<void>} A promise resolving when the context resumes, or rejecting on error.
+ * @returns {Promise<void>} Resolves when the context resumes or is already running, rejects on error.
  */
 export function resumeContext() {
-    // Delegate to the internal helper, but return the promise
-    return _ensureContextResumed();
+    // Delegate to the internal helper, returning the promise/result
+    return _ensureContextRunning();
+}
+
+
+// --- MIDI Playback ---
+
+/**
+ * Retrieves the pre-calculated playback rate for a given MIDI note number.
+ * @param {number} noteNumber - The MIDI note number (e.g., 21-108).
+ * @returns {number | undefined} The playback rate, or undefined if note is outside the
+ *                               calculated range or the map wasn't generated.
+ */
+export function getPlaybackRateForNote(noteNumber) {
+    if (midiNoteToPlaybackRate.size === 0) {
+        console.warn("AudioProcessor: Playback rate map not yet calculated or failed.");
+        return undefined;
+    }
+    return midiNoteToPlaybackRate.get(noteNumber);
+}
+
+/**
+ * Plays the current sample (forward/reversed) once at a specific playback rate,
+ * bypassing the global pitch setting. Typically triggered by MIDI input.
+ * @param {number} rate - The desired playback rate. Must be > 0.
+ * @param {number} [velocity=127] - MIDI velocity (0-127). Currently ignored for volume scaling.
+ */
+export async function playSampleAtRate(rate, velocity = 127) {
+    if (typeof rate !== 'number' || rate <= 0) {
+        console.warn(`AudioProcessor: Invalid rate provided to playSampleAtRate: ${rate}`);
+        return;
+    }
+
+    try {
+        if (!await _ensureContextRunning()) return; // Check context state
+
+        const bufferToPlay = _getCurrentBuffer();
+        if (!bufferToPlay) return; // Error handled internally
+
+        // console.log(`AudioProcessor: Playing sample via MIDI trigger with rate: ${rate.toFixed(4)}`);
+        _playBuffer(bufferToPlay, audioContext.currentTime, rate); // Use the *provided* rate
+
+        // TODO: Implement velocity sensitivity if needed:
+        // - Create temporary GainNode
+        // - Set gain based on velocity / 127
+        // - Connect: source -> velocityGain -> mainGainNode
+
+    } catch (err) {
+        // Errors from _ensureContextRunning already handled/shown
+        console.error("AudioProcessor: Error in playSampleAtRate:", err);
+    }
 }
 
 // --- END OF FILE audioProcessor.js ---

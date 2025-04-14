@@ -4,403 +4,332 @@ console.log("--- main.js evaluating ---");
 // --- Module Imports ---
 import * as audio from './audioProcessor.js';
 import * as ui from './uiUpdater.js';
-import { clamp, _isInputFocused } from './utils.js';
+import * as midiHandler from './midiHandler.js';
 import * as keyboardShortcuts from './keyboardShortcuts.js';
 import { initReferencePanel } from './referenceDisplay.js';
+import { clamp, _isInputFocused, addListener, createElement } from './utils.js';
 
-// --- DOM Element References ---
-const mainImage = document.getElementById('main-image');
-const playOnceBtn = document.getElementById('play-once-btn');
-const loopToggleBtn = document.getElementById('loop-toggle-btn');
-const reverseToggleBtn = document.getElementById('reverse-toggle-btn');
-const tempoSlider = document.getElementById('tempo-slider');
-const pitchSlider = document.getElementById('pitch-slider');
-const volumeSlider = document.getElementById('volume-slider');
-// --- >>> Multiplier Slider Ref <<< ---
-const multiplierSlider = document.getElementById('multiplier-slider');
-// --- >>> END <<< ---
-const controlsContainer = document.getElementById('controls-container');
-const infoToggleBtn = document.getElementById('info-toggle-btn');
-const referencePanel = document.getElementById('reference-panel');
-// Get references needed for UI initialization
-const tempoValueSpan = document.getElementById('tempo-value');
-const pitchValueSpan = document.getElementById('pitch-value');
-const volumeValueSpan = document.getElementById('volume-value');
-// --- >>> Multiplier Span Ref <<< ---
-const multiplierValueSpan = document.getElementById('multiplier-value');
-// --- >>> END <<< ---
-const errorMessageDiv = document.getElementById('error-message');
-// Column References
-const controlsColumn = document.querySelector('.controls-column');
-const referenceColumn = document.querySelector('.reference-column');
+// --- Constants ---
+const DEFAULT_TEMPO = 78; // Default tempo if slider value is invalid or missing
+const DEFAULT_PITCH = 1.0;
+const DEFAULT_VOLUME = 1.0;
+const MIN_TEMPO = 1;
+const MAX_TEMPO = 400;
+const MIN_PITCH = 0.01;
+const MAX_PITCH = 10.0;
+const MIN_VOLUME = 0.0;
+const MAX_VOLUME = 1.5;
+const MIN_MULTIPLIER = 1;
+const MAX_MULTIPLIER = 8;
 
 
-// --- Early Check for Column Elements ---
-if (!controlsColumn) console.error("CRITICAL: Controls column element missing!");
-if (!referenceColumn) console.warn("Reference column element missing.");
-// --- >>> Check for new slider <<< ---
-if (!multiplierSlider) console.warn("Multiplier slider element (#multiplier-slider) not found!");
-// --- >>> END <<< ---
+// --- DOM Element References (Checked during Initialization) ---
+let appContainer, mainImage, playOnceBtn, loopToggleBtn, reverseToggleBtn,
+    tempoSlider, pitchSlider, volumeSlider, multiplierSlider,
+    controlsContainer, infoToggleBtn, referencePanel, errorMessageDiv,
+    midiDeviceSelect, midiStatusSpan, controlsColumn, referenceColumn;
 
+/**
+ * Finds and stores references to essential DOM elements.
+ * @returns {boolean} True if all critical elements are found, false otherwise.
+ */
+function findElements() {
+    appContainer = document.getElementById('app');
+    mainImage = document.getElementById('main-image');
+    playOnceBtn = document.getElementById('play-once-btn');
+    loopToggleBtn = document.getElementById('loop-toggle-btn');
+    reverseToggleBtn = document.getElementById('reverse-toggle-btn');
+    tempoSlider = document.getElementById('tempo-slider');
+    pitchSlider = document.getElementById('pitch-slider');
+    volumeSlider = document.getElementById('volume-slider');
+    multiplierSlider = document.getElementById('multiplier-slider');
+    controlsContainer = document.getElementById('controls-container');
+    infoToggleBtn = document.getElementById('info-toggle-btn');
+    referencePanel = document.getElementById('reference-panel');
+    errorMessageDiv = document.getElementById('error-message');
+    midiDeviceSelect = document.getElementById('midi-device-select');
+    midiStatusSpan = document.getElementById('midi-status');
+    controlsColumn = document.querySelector('.controls-column');
+    referenceColumn = document.querySelector('.reference-column');
 
-// --- Helper Function for Data Validation/Formatting ---
-function validateAndFormatDataSource(base64Data, dataUrlPrefix, variableName) {
-    // Ensure global variables (imageBase64, audioBase64_Opus) are defined or passed in
-    if (typeof base64Data === 'undefined' || !base64Data || (typeof base64Data === 'string' && base64Data.startsWith("/*"))) {
-        // Throw specific error if data var itself is undefined vs. invalid content
-        if (typeof base64Data === 'undefined') {
-             throw new Error(`${variableName} variable is not defined.`);
+    // Check critical elements
+    const critical = { appContainer, controlsContainer, errorMessageDiv, mainImage, controlsColumn };
+    for (const [name, element] of Object.entries(critical)) {
+        if (!element) {
+            console.error(`CRITICAL Error: UI element "${name}" not found. Application cannot initialize correctly.`);
+            const fallbackContainer = document.getElementById('app') || document.body;
+            fallbackContainer.innerHTML = `<p style="color:red; padding:20px;">Fatal Error: Required UI element "${name}" missing.</p>`;
+            return false; // Indicate critical failure
         }
-        throw new Error(`${variableName} data is missing or invalid.`);
     }
-    return (typeof base64Data === 'string' && base64Data.startsWith('data:'))
-           ? base64Data
-           : `${dataUrlPrefix}${base64Data}`;
+    // Warn about non-critical
+    if (!referenceColumn) console.warn("Reference column element missing.");
+    if (!midiDeviceSelect || !midiStatusSpan) console.warn("MIDI UI elements missing.");
+    // Add warnings for sliders/buttons if needed for debugging, though init handles nulls
+    if (!tempoSlider || !pitchSlider || !volumeSlider || !multiplierSlider) console.warn("One or more sliders not found.");
+
+    return true; // All critical elements found
+}
+
+
+// --- Helper Function for Data Validation ---
+function validateAndFormatDataSource(data, prefix, name) {
+    if (typeof data === 'undefined' || !data || (typeof data === 'string' && data.startsWith("/*"))) {
+        throw new Error(`Required data variable "${name}" is missing or invalid.`);
+    }
+    return (typeof data === 'string' && data.startsWith('data:')) ? data : `${prefix}${data}`;
 }
 
 // --- Helper Function for Slider Input ---
+// Handles direct user interaction with sliders
 function handleSliderInput(event, audioSetter, uiUpdater, parser = parseFloat) {
     const slider = event.target;
-    // Check slider exists and has necessary properties
-    if (!slider || typeof slider.value === 'undefined' || typeof slider.min === 'undefined' || typeof slider.max === 'undefined') {
-        console.error(`Slider element or its properties missing for event target:`, event.target);
-        return;
-    }
-    const rawValue = parser(slider.value);
-    const min = parser(slider.min);
-    const max = parser(slider.max);
-    // Ensure min/max parsing didn't result in NaN
-    if (isNaN(rawValue) || isNaN(min) || isNaN(max)) {
-        console.error(`Failed to parse value/min/max for slider #${slider.id}. Value: ${slider.value}, Min: ${slider.min}, Max: ${slider.max}`);
-        return;
-    }
+    if (!slider?.value || slider.min === undefined || slider.max === undefined) return; // Basic guard
 
-    const clampedValue = clamp(rawValue, min, max);
+    try {
+        const rawValue = parser(slider.value);
+        const min = parser(slider.min);
+        const max = parser(slider.max);
+        if (isNaN(rawValue) || isNaN(min) || isNaN(max)) {
+             console.error(`Failed to parse value/min/max for slider #${slider.id}.`);
+             return;
+        }
+        const clampedValue = clamp(rawValue, min, max);
 
-    // Check functions exist before calling
-    if (typeof audioSetter === 'function') {
-        audioSetter(clampedValue);
-    } else {
-        console.error(`Invalid audioSetter provided for slider #${slider.id}`);
-    }
+        // Update Audio Engine
+        if (typeof audioSetter === 'function') audioSetter(clampedValue);
+        else console.error(`Invalid audioSetter for slider #${slider.id}`);
 
-    if (typeof uiUpdater === 'function') {
-        uiUpdater(clampedValue);
-    } else {
-        console.error(`Invalid uiUpdater provided for slider #${slider.id}`);
+        // Update UI Display Span
+        if (typeof uiUpdater === 'function') uiUpdater(clampedValue);
+        else console.error(`Invalid uiUpdater for slider #${slider.id}`);
+
+    } catch (error) {
+        console.error(`Error handling slider input for #${slider.id}:`, error);
+        ui.showError("Error processing control input.");
     }
 }
 
-// --- Shared Async Helper for Loop Toggle ---
+// --- Async Helper for Loop Toggle ---
 async function handleLoopToggle() {
     const wasLooping = audio.getLoopingState();
-    let newState = wasLooping;
-    console.log(`Main: Toggling loop. Was looping: ${wasLooping}`);
+    console.log(`Main: Toggling loop. Current state: ${wasLooping ? 'On' : 'Off'}`);
     try {
-        // Ensure context is ready before starting/stopping loop
-        await audio.resumeContext(); // Good practice even if internal methods handle it
-
-        if (wasLooping) {
-            audio.stopLoop();
-            newState = audio.getLoopingState(); // Verify state change
-        } else {
-            await audio.startLoop(); // Needs await for potential context resume
-            newState = audio.getLoopingState(); // Verify state change
-        }
-         console.log(`Main: Loop toggle complete. Now looping: ${newState}`);
-
+        await audio.resumeContext(); // Ensure context active
+        if (wasLooping) audio.stopLoop();
+        else await audio.startLoop();
     } catch (err) {
-        // Use optional chaining and fallback for error message
-        const errorMessage = err?.message || "Unknown error during loop toggle";
-        ui.showError(`Could not toggle loop: ${errorMessage}`);
-        console.error("Main: Error toggling loop:", err); // Log full error
-        newState = audio.getLoopingState(); // Re-check state after error
+        ui.showError(`Could not toggle loop: ${err?.message || 'Unknown error'}`);
+        console.error("Main: Error toggling loop:", err);
     } finally {
-         // Update UI regardless of success/failure
-         ui.updateLoopButton(newState);
+        ui.updateLoopButton(audio.getLoopingState()); // Update UI based on actual state
+        console.log(`Main: Loop toggle finished. New state: ${audio.getLoopingState() ? 'On' : 'Off'}`);
     }
 }
 
 // --- Toggle Function for Side Columns ---
 function toggleSideColumns() {
-    if (!controlsColumn || !referenceColumn) {
-        console.error("Cannot toggle columns: one or both column elements missing.");
-        return;
-    }
+    if (!controlsColumn) return; // Guard against missing element
     controlsColumn.classList.toggle('hidden');
-    referenceColumn.classList.toggle('hidden');
-    const areNowHidden = controlsColumn.classList.contains('hidden');
-    console.log(`Side columns toggled via function. Now hidden: ${areNowHidden}`);
+    if (referenceColumn) referenceColumn.classList.toggle('hidden');
+    console.log(`Side columns toggled. Controls hidden: ${controlsColumn.classList.contains('hidden')}`);
 }
 
+// --- MIDI Callback Functions ---
+function handleNoteOn(noteNumber, velocity) {
+    const playbackRate = audio.getPlaybackRateForNote(noteNumber);
+    if (playbackRate !== undefined) {
+        audio.playSampleAtRate(playbackRate, velocity).catch(err => console.error("Error in playSampleAtRate:", err));
+    }
+}
+function handleNoteOff(noteNumber, velocity) { /* Placeholder */ }
+function handleMidiStateChange(state) {
+    // console.log("Main: MIDI State Change:", state);
+    if (!midiDeviceSelect || !midiStatusSpan) return;
 
-// --- Initialization ---
+    midiStatusSpan.textContent = state.message || state.status;
+    midiStatusSpan.style.color = (state.status === 'error' || state.status === 'unsupported') ? 'var(--error-color)' : '';
+    midiDeviceSelect.innerHTML = ''; // Clear
+    let placeholderText = '-- MIDI Unavailable --';
+    const placeholderOption = createElement('option', { value: '', textContent: placeholderText });
+    midiDeviceSelect.appendChild(placeholderOption); // Add placeholder first
+
+    if (state.status === 'ready' && state.devices.length > 0) {
+        midiDeviceSelect.disabled = false;
+        placeholderOption.textContent = '-- Select MIDI Device --';
+        state.devices.forEach(device => {
+            midiDeviceSelect.appendChild(createElement('option', { value: device.id, textContent: device.name }));
+        });
+    } else {
+        midiDeviceSelect.disabled = true;
+        if (state.status === 'ready') placeholderOption.textContent = '-- No MIDI Inputs --';
+        else placeholderOption.textContent = state.message || `-- ${state.status} --`;
+    }
+    midiDeviceSelect.value = ''; // Select placeholder
+}
+
+// --- Application Initialization ---
 async function initializeApp() {
     console.log("Initializing application...");
 
-    // Ensure crucial DOM elements exist before proceeding far
-    if (!controlsContainer || !errorMessageDiv /* || !mainImage etc. */) {
-         console.error("Fatal Error: Core UI elements missing. Aborting initialization.");
-         // Maybe display a message in the body itself
-         document.body.innerHTML = '<p style="color:red; padding:20px;">Application failed to initialize: Core UI elements not found.</p>';
-         return;
-    }
+    // 0. Find DOM Elements First
+    if (!findElements()) return; // Stop if critical elements are missing
 
-    // Pass controls container ref
-    if (ui.setControlsContainer) {
-        ui.setControlsContainer(controlsContainer);
-    } else {
-        console.warn("ui.setControlsContainer function not found...");
-    }
+    // 1. Initialize UI Updater (so it can find its elements)
+    if (ui.init) ui.init();
+    else console.error("CRITICAL: ui.init not found!");
+    ui.clearError();
 
-    ui.clearError(); // Clear errors from previous attempts if any
+    // 2. Pass Controls Container Ref (Optional, as ui.init finds it too)
+    // if (ui.setControlsContainer) ui.setControlsContainer(controlsContainer);
 
-    // 1. Validate Input Data
-    let imageSrc;
-    let audioSource;
+    // 3. Validate Input Data & Set Image
+    let imageSrc, audioSource;
     try {
-        // Explicitly check global scope or ensure data is passed correctly
         const imageData = typeof imageBase64 !== 'undefined' ? imageBase64 : undefined;
-        imageSrc = validateAndFormatDataSource(imageData, 'data:image/jpeg;base64,', 'Image');
-        ui.setImageSource(imageSrc); // Set image source early
-    } catch (e) {
-        const errorMessage = e?.message || "Unknown image loading error";
-        ui.showError(`Failed to load image: ${errorMessage}`);
-        console.error("Image loading error details:", e);
-        ui.disableControls(); // Disable controls on failure
-        return; // Stop initialization
-    }
-
-    try {
         const audioData = typeof audioBase64_Opus !== 'undefined' ? audioBase64_Opus : undefined;
-        audioSource = validateAndFormatDataSource(audioData, 'data:audio/opus;base64,', 'Audio');
-    } catch (e) {
-        const errorMessage = e?.message || "Unknown audio data error";
-        ui.showError(`Invalid audio data provided: ${errorMessage}`);
-        console.error("Audio data error details:", e);
-        ui.disableControls(); // Disable controls on failure
-        return; // Stop initialization
-     }
-
-   // Define the single default tempo constant
-   const DEFAULT_TEMPO = 78;
-
-   // 2. Get Initial Tempo/Pitch
-   console.log("Reading initial slider values for audio init...");
-   let initialTempo = DEFAULT_TEMPO;
-   let initialPitch = 1.0;
-
-   if (tempoSlider) {
-       const sliderValue = parseInt(tempoSlider.value, 10);
-       if (!isNaN(sliderValue) && sliderValue >= parseInt(tempoSlider.min, 10) && sliderValue <= parseInt(tempoSlider.max, 10)) {
-           initialTempo = sliderValue;
-           console.log(`Using initial tempo from slider: ${initialTempo}`);
-       } else {
-           console.warn(`Invalid initial tempo on slider (${tempoSlider.value}), using default ${DEFAULT_TEMPO}. Clamping.`);
-           initialTempo = clamp(sliderValue, parseInt(tempoSlider.min, 10) || 1, parseInt(tempoSlider.max, 10) || 400);
-           tempoSlider.value = initialTempo; // Correct slider if invalid
-       }
-   } else {
-       console.warn(`Tempo slider not found, using default initial tempo ${DEFAULT_TEMPO}.`);
-   }
-
-   if (pitchSlider) {
-       const sliderValue = parseFloat(pitchSlider.value);
-       if (!isNaN(sliderValue) && sliderValue >= parseFloat(pitchSlider.min) && sliderValue <= parseFloat(pitchSlider.max)) {
-           initialPitch = sliderValue;
-            console.log(`Using initial pitch from slider: ${initialPitch}`);
-       } else {
-           console.warn(`Invalid initial pitch on slider (${pitchSlider.value}), using default 1.0. Clamping.`);
-           initialPitch = clamp(sliderValue, parseFloat(pitchSlider.min) || 0.01, parseFloat(pitchSlider.max) || 10.0);
-           pitchSlider.value = initialPitch; // Correct slider if invalid
-       }
-   } else {
-       console.warn("Pitch slider not found, using default initial pitch 1.0.");
-   }
-
-
-   // 3. Initialize Audio Processor
-   console.log(`Initializing audio with Tempo: ${initialTempo}, Pitch: ${initialPitch}`);
-   const audioReady = await audio.init(audioSource, initialTempo, initialPitch);
-
-    if (!audioReady) {
-        console.error("Audio initialization failed. Controls remain disabled.");
-        ui.showError("Audio engine failed to initialize."); // Specific error message
-        ui.disableControls();
-        return; // Stop initialization
+        imageSrc = validateAndFormatDataSource(imageData, 'data:image/jpeg;base64,', 'imageBase64');
+        audioSource = validateAndFormatDataSource(audioData, 'data:audio/opus;base64,', 'audioBase64_Opus');
+        ui.setImageSource(imageSrc);
+    } catch (error) {
+        ui.showError(`Initialization failed: ${error.message}`);
+        console.error("Data validation error:", error);
+        return;
     }
 
-    // 4. Setup Post-Audio Initialization
-    console.log("Audio ready. Setting up UI and listeners.");
-    ui.enableControls(); // Enable controls NOW that audio is ready
+    // 4. Determine Initial Slider Values (with fallbacks)
+    let initialTempo = DEFAULT_TEMPO;
+    let initialGlobalPitch = DEFAULT_PITCH;
+    let initialVolume = DEFAULT_VOLUME;
+    let initialMultiplier = 1; // Default from controlsColumn
+    try {
+        if (tempoSlider) initialTempo = clamp(parseInt(tempoSlider.value, 10) || DEFAULT_TEMPO, MIN_TEMPO, MAX_TEMPO);
+        if (pitchSlider) initialGlobalPitch = clamp(parseFloat(pitchSlider.value) || DEFAULT_PITCH, MIN_PITCH, MAX_PITCH);
+        if (volumeSlider) initialVolume = clamp(parseFloat(volumeSlider.value) || DEFAULT_VOLUME, MIN_VOLUME, MAX_VOLUME);
+        if (multiplierSlider) initialMultiplier = clamp(parseInt(multiplierSlider.value, 10) || 1, MIN_MULTIPLIER, MAX_MULTIPLIER);
+
+        // Visually correct sliders if needed (important if initial HTML value was invalid)
+        if (tempoSlider) tempoSlider.value = initialTempo;
+        if (pitchSlider) pitchSlider.value = initialGlobalPitch;
+        if (volumeSlider) volumeSlider.value = initialVolume;
+        if (multiplierSlider) multiplierSlider.value = initialMultiplier;
+
+    } catch (e) { console.warn("Error reading initial slider values:", e); }
+    console.log(`Initial values - Tempo: ${initialTempo}, Pitch: ${initialGlobalPitch.toFixed(2)}, Volume: ${initialVolume.toFixed(2)}, Multiplier: ${initialMultiplier}`);
+
+    // 5. Initialize MIDI System
+    console.log("Initializing MIDI Handler...");
+    midiHandler.init(handleNoteOn, handleNoteOff, handleMidiStateChange);
+
+    // 6. Initialize Audio Processor
+    console.log("Initializing Audio Processor...");
+    const audioReady = await audio.init(audioSource, initialTempo, initialGlobalPitch);
+    if (!audioReady) { /* Error already shown by audio.init */ return; }
+     // Set initial volume in audio engine (init only sets tempo/pitch)
+     audio.setVolume(initialVolume);
+
+    // 7. Initialize Reference Panel Content
+    if (referencePanel && initReferencePanel) {
+        initReferencePanel(referencePanel);
+        console.log("Reference panel content initialized.");
+    }
+
+    // 8. Initialize Keyboard Shortcuts
+    // Must happen *after* audio is ready and sliders exist
+    if (keyboardShortcuts.init && tempoSlider && pitchSlider && volumeSlider && multiplierSlider) {
+        keyboardShortcuts.init({ tempoSlider, pitchSlider, volumeSlider, multiplierSlider });
+    } else {
+        console.error("Cannot initialize keyboard shortcuts: Function or slider elements missing.");
+    }
+
+    // 9. Setup Event Listeners for UI Controls
+    // Must happen *after* audio is ready so handlers can call audio functions
     setupEventListeners();
 
-    // Initialize Reference Panel Content
-    if (referencePanel) {
-        initReferencePanel(referencePanel); // Assumes referencePanel is the correct element
-        console.log("Reference panel content initialized.");
-    } else {
-        console.warn("Reference panel element not found during init, content may be missing.");
-    }
-
-    // 5. Initialize Keyboard Shortcuts <<< FIX IS HERE >>>
-    // Ensure all slider references are valid before initializing
-    if (tempoSlider && pitchSlider && volumeSlider && multiplierSlider) {
-        keyboardShortcuts.init({
-            tempoSlider: tempoSlider,
-            pitchSlider: pitchSlider,
-            volumeSlider: volumeSlider,
-            multiplierSlider: multiplierSlider, // <<< ADDED multiplierSlider HERE
-        });
-    } else {
-        console.error("Cannot initialize keyboard shortcuts: One or more slider elements are missing.");
-        // Optionally disable relevant features or show an error
-    }
-
-    // 6. Set Initial UI Values
+    // 10. Set Initial UI Display Values & Enable Controls
+    // This ensures UI reflects the *actual* initial state after all setup
     console.groupCollapsed("Setting Initial UI Values");
     try {
-        // Update displays based on initial audio state (which should match initialTempo/Pitch now)
         ui.updateTempoDisplay(initialTempo);
-        ui.updatePitchDisplay(initialPitch);
-        // Update volume display based on slider's actual initial value
-        if (volumeSlider) ui.updateVolumeDisplay(parseFloat(volumeSlider.value));
-
-        // Initialize Multiplier Slider and Display
-        const initialMultiplier = audio.getScheduleMultiplier(); // Get from audio module
-        if (multiplierSlider) {
-            // Ensure initial value is within slider bounds
-             const minMult = parseInt(multiplierSlider.min, 10);
-             const maxMult = parseInt(multiplierSlider.max, 10);
-             multiplierSlider.value = clamp(initialMultiplier, minMult, maxMult);
-        }
-        ui.updateScheduleMultiplierDisplay(initialMultiplier); // Update text display
-
-        // Update button states based on audio module state
+        ui.updatePitchDisplay(initialGlobalPitch);
+        ui.updateVolumeDisplay(initialVolume);
+        ui.updateScheduleMultiplierDisplay(initialMultiplier); // Use value read from slider
         ui.updateLoopButton(audio.getLoopingState());
         ui.updateReverseButton(audio.getReverseState());
-
+        ui.enableControls(); // Enable UI now
     } catch (error) {
-         console.error("Error setting initial UI values:", error);
-         ui.showError("Problem setting initial control values.");
+        console.error("Error setting initial UI values:", error);
+        ui.showError("Problem setting initial control values.");
+        ui.disableControls();
     }
     console.groupEnd();
 
     console.log("Application initialized successfully.");
 } // End of initializeApp
 
-// --- Helper for Adding Event Listeners ---
-function addListener(element, eventName, handler, elementNameForWarn) {
-    if (element) {
-        element.addEventListener(eventName, handler);
-    } else {
-        // Only warn for critical elements, not optional ones
-        const criticalElements = ['mainImage', 'playOnceBtn', 'loopToggleBtn', 'reverseToggleBtn', 'tempoSlider', 'pitchSlider', 'volumeSlider', 'multiplierSlider'];
-        if (criticalElements.includes(elementNameForWarn)) {
-            console.warn(`[setupEventListeners] CRITICAL Element "${elementNameForWarn}" not found. Listener not attached.`);
-        } else {
-            // console.log(`[setupEventListeners] Optional element "${elementNameForWarn}" not found.`); // Less noisy
-        }
-    }
-}
-
 // --- Event Listener Setup ---
 function setupEventListeners() {
     console.log("Setting up event listeners...");
 
-    // --- Control Listeners ---
+    // --- Playback Controls ---
     addListener(mainImage, 'click', handleLoopToggle, 'mainImage');
     addListener(playOnceBtn, 'click', () => audio.playOnce(), 'playOnceBtn');
     addListener(loopToggleBtn, 'click', handleLoopToggle, 'loopToggleBtn');
     addListener(reverseToggleBtn, 'click', () => {
-        audio.resumeContext().then(() => {
-                 const newState = audio.toggleReverse();
-                 ui.updateReverseButton(newState);
-             }).catch(err => {
-                const errorMessage = err?.message || "Unknown error";
-                console.error("Main: Error toggling reverse:", err);
-                ui.showError(`Could not toggle reverse: ${errorMessage}`);
-             });
+        audio.resumeContext()
+            .then(() => ui.updateReverseButton(audio.toggleReverse())) // Update UI after toggle succeeds
+            .catch(err => ui.showError(`Could not toggle reverse: ${err?.message || 'Unknown error'}`));
     }, 'reverseToggleBtn');
 
-    // --- Slider Listeners ---
+    // --- Slider Controls ---
+    // Connect sliders directly to their respective audio setters and UI updaters
     addListener(tempoSlider, 'input', (e) => handleSliderInput(e, audio.setTempo, ui.updateTempoDisplay, parseInt), 'tempoSlider');
-    addListener(pitchSlider, 'input', (e) => handleSliderInput(e, audio.setPitch, ui.updatePitchDisplay), 'pitchSlider');
+    addListener(pitchSlider, 'input', (e) => handleSliderInput(e, audio.setGlobalPitch, ui.updatePitchDisplay), 'pitchSlider');
     addListener(volumeSlider, 'input', (e) => handleSliderInput(e, audio.setVolume, ui.updateVolumeDisplay), 'volumeSlider');
-    // <<< Listener for Multiplier Slider >>>
-    addListener(multiplierSlider, 'input', (e) => handleSliderInput(
-        e,
-        audio.setScheduleMultiplier,
-        ui.updateScheduleMultiplierDisplay,
-        parseInt // Use parseInt for integer values
-    ), 'multiplierSlider');
-    // <<< END >>>
+    addListener(multiplierSlider, 'input', (e) => handleSliderInput(e, audio.setScheduleMultiplier, ui.updateScheduleMultiplierDisplay, parseInt), 'multiplierSlider');
 
-    // --- Global Keydown Listener ---
-    // Keep this simple: it handles specific main.js keys (space, i, r)
-    // It relies on the separate listener set up inside keyboardShortcuts.js for other keys
+    // --- MIDI Device Selection ---
+    addListener(midiDeviceSelect, 'change', (event) => {
+        midiHandler.selectDevice(event.target.value);
+    }, 'midiDeviceSelect');
+
+    // --- Info Panel Toggle Button ---
+    addListener(infoToggleBtn, 'click', toggleSideColumns, 'infoToggleBtn');
+
+    // --- Global Keydown Listener (Main Actions) ---
+    // Handles actions not covered by keyboardShortcuts module (Space, R, I)
     window.addEventListener('keydown', (e) => {
-        // Check focus to avoid interfering with inputs/buttons
-        const isInputFocused = _isInputFocused(e.target);
-        const isButtonFocused = e.target?.tagName?.toLowerCase() === 'button';
-        const blockKeyboardControls = isInputFocused || isButtonFocused;
+        if (e.repeat || _isInputFocused(e.target)) return; // Ignore repeats and input focus
 
-        // Ignore if repeating or blocked
-        if (e.repeat || blockKeyboardControls) {
-            return;
-        }
+        const noModifiers = !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
 
-        // Spacebar for Play Once (No Modifiers)
-        if (e.code === 'Space' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-            e.preventDefault();
-            audio.playOnce(); // Consider adding resumeContext here if needed
+        if (noModifiers) {
+            let handled = false;
+            switch (e.code) { // Use e.code for layout independence
+                case 'Space': audio.playOnce(); handled = true; break;
+            }
+            switch (e.key.toLowerCase()) { // Use e.key for character keys
+                case 'i': toggleSideColumns(); handled = true; break;
+                case 'r':
+                    audio.resumeContext()
+                         .then(() => ui.updateReverseButton(audio.toggleReverse()))
+                         .catch(err => ui.showError(`Could not toggle reverse: ${err?.message || 'Unknown error'}`));
+                    handled = true;
+                    break;
+            }
+            if (handled) e.preventDefault();
         }
-
-        // Toggle Side Columns ('i' key, No Modifiers)
-        else if (e.key.toLowerCase() === 'i' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-            e.preventDefault();
-            toggleSideColumns();
-        }
-
-        // Toggle Reverse ('r' key, No Modifiers)
-        else if (e.key.toLowerCase() === 'r' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-            e.preventDefault();
-            console.log("Reverse toggle requested via 'r' key");
-            audio.resumeContext().then(() => {
-                     const newState = audio.toggleReverse();
-                     ui.updateReverseButton(newState);
-                 }).catch(err => {
-                    const errorMessage = err?.message || "Unknown error";
-                    console.error("Main: Error toggling reverse via key:", err);
-                    ui.showError(`Could not toggle reverse: ${errorMessage}`);
-                 });
-        }
-        // NOTE: Other keys (Tempo, Pitch, Volume, Mute, Multiplier 1-9)
-        // are handled by the listener set up inside keyboardShortcuts.js
+        // Note: Tempo, Pitch, Volume, Mute, Multiplier shortcuts are handled entirely by keyboardShortcuts.js
     });
 
-    // --- Info Button Listener ---
-    addListener(infoToggleBtn, 'click', () => {
-        console.log("Info button clicked.");
-        if (referenceColumn) {
-            referenceColumn.classList.toggle('hidden');
-            const willBeHidden = referenceColumn.classList.contains('hidden');
-            console.log(`Reference column toggled via button. Now hidden: ${willBeHidden}`);
-        } else {
-            console.warn("Info button clicked, but reference column element is missing.");
-        }
-    }, 'infoToggleBtn'); // Mark as optional if it might not exist
-
     console.log("Event listeners setup complete.");
-}
+} // End of setupEventListeners
 
 // --- Start the Application ---
-// Use DOMContentLoaded to ensure layout and elements are ready
 if (document.readyState === 'loading') {
-   document.addEventListener('DOMContentLoaded', initializeApp);
+    document.addEventListener('DOMContentLoaded', initializeApp);
 } else {
-   // DOM already loaded
-   initializeApp();
+    initializeApp(); // DOM already loaded and ready
 }
 
 // --- END OF FILE main.js ---
