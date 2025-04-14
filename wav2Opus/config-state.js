@@ -9,6 +9,9 @@ let base64String = null;
 let originalAudioUrl = null;
 let originalAudioElement = null; // Reference to the <audio> element for the original file
 
-// Initial quality values (could be considered config)
-const initialMp3Quality = 4; // Example default, adjust as needed
-const initialOpusBitrate = 64; // Example default, adjust as needed
+// Initial quality/bitrate values (could be considered config)
+const initialMp3Quality = 4; // VBR quality setting (0-9, FFmpeg -q:a maps 9=worst to 0=best)
+const initialOpusBitrate = 96; // kbps (Used for Opus and WebM output)
+
+// Removed initialCafBitrate
+// const initialCafBitrate = 128;

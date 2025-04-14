@@ -15,11 +15,7 @@ const loadFFmpeg = async () => {
 
   try {
     updateStatus('Loading FFmpeg core...');
-    // Path to ffmpeg-core.js uploaded to the same server or CDN
-    // Using a specific version from CDN:
     const corePath = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js';
-    // Or if you host it yourself:
-    // const corePath = '/path/to/ffmpeg-core.js';
 
     ffmpeg = createFFmpeg({
         log: true, // Enable FFmpeg logging in console
@@ -28,7 +24,6 @@ const loadFFmpeg = async () => {
 
     await ffmpeg.load();
 
-    // Setup progress handler
     ffmpeg.setProgress(({ ratio }) => {
        updateProgress(ratio);
     });
@@ -47,7 +42,7 @@ const loadFFmpeg = async () => {
  * Runs the FFmpeg conversion command.
  * @param {string} inputFilename - The name of the input file in FFmpeg's virtual FS.
  * @param {string} outputFilename - The desired name for the output file in FFmpeg's virtual FS.
- * @param {string} outputFormat - 'mp3' or 'opus'.
+ * @param {string} outputFormat - 'mp3', 'opus', or 'webm'. // Updated doc
  * @returns {Promise<Uint8Array>} The raw byte data of the converted file.
  */
 const runFFmpegConversion = async (inputFilename, outputFilename, outputFormat) => {
@@ -55,31 +50,55 @@ const runFFmpegConversion = async (inputFilename, outputFilename, outputFormat) 
 
     // Build FFmpeg command
     let cmd = ['-i', inputFilename];
+
     if (outputFormat === 'opus') {
-        const bitrate = opusBitrateSlider ? opusBitrateSlider.value : initialOpusBitrate; // Use slider value or default
+        // Use the Opus slider value
+        const bitrate = opusBitrateSlider ? opusBitrateSlider.value : initialOpusBitrate;
+        // Opus command: -c:a libopus -b:a <bitrate>k
         cmd.push('-c:a', 'libopus', '-b:a', `${bitrate}k`, outputFilename);
-    } else { // MP3 (default)
-        const quality = mp3QualitySlider ? mp3QualitySlider.value : initialMp3Quality; // Use slider value or default
-        const ffmpegQuality = 9 - parseInt(quality, 10); // FFmpeg q:a is reverse of visual slider (0=best, 9=worst)
+
+    } else if (outputFormat === 'webm') { // Changed from 'caf'
+        // Use the Opus slider value (as UI is reused)
+        const bitrate = opusBitrateSlider ? opusBitrateSlider.value : initialOpusBitrate;
+        // WebM command using Opus codec: -c:a libopus -b:a <bitrate>k
+        // FFmpeg automatically handles the WebM container when the output filename ends in .webm
+        cmd.push('-c:a', 'libopus', '-b:a', `${bitrate}k`, outputFilename);
+        console.info("Using libopus codec for WebM container.");
+        // Note: '-vn' (disable video) is often implied for .webm audio but explicit doesn't hurt
+        // cmd.push('-vn', '-c:a', 'libopus', '-b:a', `${bitrate}k`, outputFilename);
+
+    } else { // MP3 (default fallback)
+        const quality = mp3QualitySlider ? mp3QualitySlider.value : initialMp3Quality; // Slider value 0-9
+        // Assuming label "0=Best... 9=Worst..." maps slider 0 to FFmpeg -q:a 0 (Best)
+        const ffmpegQuality = parseInt(quality, 10);
+        // If label means Slider 0 = Worst -> FFmpeg 9, use: const ffmpegQuality = 9 - parseInt(quality, 10);
         cmd.push('-c:a', 'libmp3lame', '-q:a', ffmpegQuality.toString(), outputFilename);
     }
 
     console.log("Running FFmpeg command:", cmd.join(' '));
     updateStatus(`Starting conversion to ${outputFormat.toUpperCase()}...`);
-    progressEl.style.display = 'block'; // Show progress bar before run starts
-    progressEl.value = 0;
+    if (progressEl) { // Ensure progressEl exists before using it
+        progressEl.style.display = 'block';
+        progressEl.value = 0;
+    }
 
-    // Run FFmpeg
-    await ffmpeg.run(...cmd);
-
-    // Read output file from virtual filesystem
-    const data = ffmpeg.FS('readFile', outputFilename);
-    return data; // Return the Uint8Array
+    try {
+        // Run FFmpeg
+        await ffmpeg.run(...cmd);
+        // Read output file from virtual filesystem
+        const data = ffmpeg.FS('readFile', outputFilename);
+        return data; // Return the Uint8Array
+    } catch (error) {
+        // Try to provide more specific feedback if FFmpeg fails
+        updateStatus(`Conversion to ${outputFormat.toUpperCase()} failed. Check console for details.`, true);
+        console.error(`FFmpeg run error for ${outputFormat}:`, error);
+        // Re-throw the error so the main conversion process catches it
+        throw error;
+    }
 };
 
 /**
  * Cleans up specified files from FFmpeg's virtual filesystem.
- * @param {string[]} filenames - An array of filenames to unlink.
  */
 const cleanupFFmpegFS = (filenames) => {
     if (!ffmpeg) return;

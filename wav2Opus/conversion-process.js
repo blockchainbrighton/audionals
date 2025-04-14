@@ -4,6 +4,7 @@
  * Handles the main audio conversion workflow.
  */
 const runConversion = async () => {
+    // --- Initial Checks ---
     if (!ffmpeg || !selectedFile) {
       return updateStatus('Error: FFmpeg not loaded or no file selected.', true);
     }
@@ -11,92 +12,103 @@ const runConversion = async () => {
         return updateStatus('Error: File duration not available. Cannot estimate or convert.', true);
     }
   
-    // Disable buttons during conversion
+    // --- UI Setup ---
     if (convertBtn) convertBtn.disabled = true;
-    if (playSampleBtn) playSampleBtn.disabled = true; // Disable original play during conversion
-  
-    // Reset previous results UI
+    if (playSampleBtn) playSampleBtn.disabled = true;
     resetConversionOutputUI();
-    convertedAudioBlob = null; // Clear state
-    base64String = null; // Clear state
+    convertedAudioBlob = null;
+    base64String = null;
   
     updateStatus('Preparing file for FFmpeg...');
-    const inputFilename = "input.wav"; // Consistent input name in virtual FS
+  
+    // --- Determine Output Format and Filenames ---
+    const inputFilename = "input.wav";
     const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
-    const outputFormat = selectedFormatRadio ? selectedFormatRadio.value : 'mp3'; // Default to mp3 if somehow none checked
-    const outputFilename = `output.${outputFormat}`;
+    // Default to mp3, handle mp3, opus, and webm
+    const outputFormat = selectedFormatRadio ? selectedFormatRadio.value : 'mp3';
+    const outputFilename = `output.${outputFormat}`; // e.g., output.mp3, output.opus, output.webm
     const originalNameBase = getBaseFilename(selectedFile.name);
   
-    // Ensure potential old files are cleaned from virtual FS first
+    // --- Filesystem Cleanup ---
     cleanupFFmpegFS([inputFilename, outputFilename]);
   
     try {
-      // Write input file to FFmpeg's virtual filesystem
-      updateStatus('Loading file into FFmpeg memory...');
-      const fileData = await fetchFile(selectedFile); // Use FFmpeg's fetchFile helper
-      ffmpeg.FS('writeFile', inputFilename, fileData);
+        // --- Load Input File ---
+        updateStatus('Loading file into FFmpeg memory...');
+        const fileData = await fetchFile(selectedFile);
+        ffmpeg.FS('writeFile', inputFilename, fileData);
   
-      // Run the conversion command
-      const outputData = await runFFmpegConversion(inputFilename, outputFilename, outputFormat); // Returns Uint8Array
+        // --- Run FFmpeg Conversion ---
+        // This function now handles mp3, opus, and webm
+        const outputData = await runFFmpegConversion(inputFilename, outputFilename, outputFormat);
   
-      updateStatus('Conversion complete! Processing output...');
+        updateStatus('Conversion complete! Processing output...');
   
-      // Create Blob from output data
-      const mimeType = outputFormat === 'mp3' ? 'audio/mpeg' : 'audio/opus';
-      convertedAudioBlob = new Blob([outputData.buffer], { type: mimeType }); // Update state
+        // --- Process Output Data ---
+        // Determine MIME Type based on the selected output format
+        let mimeType;
+        if (outputFormat === 'mp3') {
+            mimeType = 'audio/mpeg';
+        } else if (outputFormat === 'opus') {
+            mimeType = 'audio/opus';
+        } else if (outputFormat === 'webm') { // Changed from 'caf'
+            mimeType = 'audio/webm'; // Standard MIME type for WebM audio
+        } else {
+            mimeType = 'application/octet-stream'; // Fallback
+            console.warn(`Unknown output format for MIME type: ${outputFormat}`);
+        }
   
-      // --- Display Results ---
+        // Create Blob from the converted data
+        convertedAudioBlob = new Blob([outputData.buffer], { type: mimeType });
   
-      // Create download link
-      const downloadUrl = URL.createObjectURL(convertedAudioBlob);
-      const dlLink = Object.assign(document.createElement('a'), {
-          href: downloadUrl,
-          download: `${originalNameBase}.${outputFormat}`, // e.g., myaudio.mp3
-          textContent: `Download ${originalNameBase}.${outputFormat} (${formatBytes(convertedAudioBlob.size)})`,
-          style: 'display: block; margin-bottom: 10px;' // Basic styling
-      });
+        // --- Display Results ---
   
-      // Create audio player for converted file
-      const audioPlayerContainer = createAudioPlayer(convertedAudioBlob, mimeType, 'Converted Audio');
+        // 1. Create Download Link
+        const downloadUrl = URL.createObjectURL(convertedAudioBlob);
+        const dlLink = Object.assign(document.createElement('a'), {
+            href: downloadUrl,
+            download: `${originalNameBase}.${outputFormat}`, // e.g., myaudio.webm
+            textContent: `Download ${originalNameBase}.${outputFormat} (${formatBytes(convertedAudioBlob.size)})`,
+            style: 'display: block; margin-bottom: 10px;'
+        });
   
-      // Append results to the DOM
-      if (resultEl) {
-          resultEl.innerHTML = ''; // Clear previous before appending new
-          const resultTitle = document.createElement('h3');
-          resultTitle.textContent = 'Conversion Result';
-          resultTitle.style.margin = '15px 0 10px 0';
-          resultEl.append(resultTitle, dlLink, audioPlayerContainer);
-          // If using observer in createAudioPlayer: audioPlayerContainer.startObserving(resultEl);
+        // 2. Create Audio Player
+        // WebM audio playback is widely supported in modern browsers
+        const audioPlayerContainer = createAudioPlayer(
+            convertedAudioBlob,
+            mimeType,
+            `Converted Audio (${outputFormat.toUpperCase()})` // Label like "Converted Audio (WEBM)"
+        );
   
-          // Add manual cleanup for download link URL when results are replaced/cleared
-          dlLink.addEventListener('click', () => {
-              // Optional: Revoke URL after a short delay to allow download to start
-              // setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-          });
-           // We rely on resetUIForNewFile or resetConversionOutputUI clearing innerHTML,
-           // which should trigger the player's observer if used, or we manually revoke here if needed.
-           // For simplicity, let's assume clearing innerHTML is enough, or rely on browser GC for blob URLs eventually.
-      }
+        // 3. Append results to the DOM
+        if (resultEl) {
+            resultEl.innerHTML = '';
+            const resultTitle = document.createElement('h3');
+            resultTitle.textContent = 'Conversion Result';
+            resultTitle.style.margin = '15px 0 10px 0';
+            resultEl.append(resultTitle, dlLink, audioPlayerContainer);
   
-      updateStatus('Conversion successful! Output ready.');
+            dlLink.addEventListener('click', () => {
+                // Optional: setTimeout(() => URL.revokeObjectURL(downloadUrl), 1500);
+            });
+            // Relies on audio-player cleanup logic or resetUI functions
+        }
   
-      // Start Base64 conversion and display process (runs asynchronously)
-      // Use await here if subsequent steps depend on base64 completing, otherwise let it run.
-      await setupBase64DisplayAndActions(convertedAudioBlob, outputFormat, originalNameBase);
+        updateStatus('Conversion successful! Output ready.');
+  
+        // --- Base64 Handling ---
+        await setupBase64DisplayAndActions(convertedAudioBlob, outputFormat, originalNameBase);
   
     } catch (e) {
-      updateStatus(`Conversion failed: ${e.message || 'Unknown error'}`, true);
-      console.error("Conversion Error:", e);
-      // convertedAudioBlob might be null or invalid here
-      convertedAudioBlob = null; // Ensure state is cleared on error
-      // UI should already be reset or show error status
+        // Error handling updated in runFFmpegConversion, but keep this generic catch
+        updateStatus(`Conversion process failed: ${e.message || 'Unknown error'}`, true);
+        console.error("Conversion Process Error:", e);
+        convertedAudioBlob = null;
+        base64String = null;
     } finally {
-      // Always try to clean up files from virtual FS
-      cleanupFFmpegFS([inputFilename, outputFilename]);
-  
-      // Re-enable buttons based on the current state AFTER conversion attempt
-      enableConvertButtonIfNeeded();
-      // Play original button should be enabled if a file is still selected
-      if (playSampleBtn) playSampleBtn.disabled = !selectedFile;
+        // --- Final Cleanup ---
+        cleanupFFmpegFS([inputFilename, outputFilename]);
+        enableConvertButtonIfNeeded();
+        if (playSampleBtn) playSampleBtn.disabled = !selectedFile;
     }
   };
