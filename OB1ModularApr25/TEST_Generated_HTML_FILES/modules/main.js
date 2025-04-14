@@ -8,6 +8,7 @@ import * as midiHandler from './midiHandler.js';
 import * as keyboardShortcuts from './keyboardShortcuts.js';
 import { initReferencePanel } from './referenceDisplay.js';
 import { clamp, _isInputFocused, addListener, createElement } from './utils.js';
+import * as midiRecorder from './midiRecorder.js';
 
 // --- Constants ---
 const DEFAULT_TEMPO = 78; // Default tempo if slider value is invalid or missing
@@ -137,12 +138,23 @@ function toggleSideColumns() {
 
 // --- MIDI Callback Functions ---
 function handleNoteOn(noteNumber, velocity) {
+    const timestamp = Date.now(); // Get timestamp
+    // Call audio playback as before
     const playbackRate = audio.getPlaybackRateForNote(noteNumber);
     if (playbackRate !== undefined) {
         audio.playSampleAtRate(playbackRate, velocity).catch(err => console.error("Error in playSampleAtRate:", err));
     }
+    // Forward to recorder
+    midiRecorder.handleMidiEvent('noteon', noteNumber, velocity, timestamp);
 }
-function handleNoteOff(noteNumber, velocity) { /* Placeholder */ }
+
+function handleNoteOff(noteNumber, velocity) {
+    const timestamp = Date.now(); // Get timestamp
+    // Optional: Add Note Off playback logic in audioProcessor if needed later
+    // Forward to recorder
+    midiRecorder.handleMidiEvent('noteoff', noteNumber, velocity, timestamp);
+}
+
 function handleMidiStateChange(state) {
     // console.log("Main: MIDI State Change:", state);
     if (!midiDeviceSelect || !midiStatusSpan) return;
@@ -228,6 +240,10 @@ async function initializeApp() {
      // Set initial volume in audio engine (init only sets tempo/pitch)
      audio.setVolume(initialVolume);
 
+    // 6.5 Initialize MIDI Recorder
+     console.log("Initializing MIDI Recorder...");
+     midiRecorder.init(audio); // Pass the audio module reference
+
     // 7. Initialize Reference Panel Content
     if (referencePanel && initReferencePanel) {
         initReferencePanel(referencePanel);
@@ -300,9 +316,9 @@ function setupEventListeners() {
     // Handles actions not covered by keyboardShortcuts module (Space, R, I)
     window.addEventListener('keydown', (e) => {
         if (e.repeat || _isInputFocused(e.target)) return; // Ignore repeats and input focus
-
+    
         const noModifiers = !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
-
+    
         if (noModifiers) {
             let handled = false;
             switch (e.code) { // Use e.code for layout independence
@@ -311,9 +327,14 @@ function setupEventListeners() {
             switch (e.key.toLowerCase()) { // Use e.key for character keys
                 case 'i': toggleSideColumns(); handled = true; break;
                 case 'r':
+    
                     audio.resumeContext()
                          .then(() => ui.updateReverseButton(audio.toggleReverse()))
                          .catch(err => ui.showError(`Could not toggle reverse: ${err?.message || 'Unknown error'}`));
+                    handled = true;
+                    break;
+                case 'k': // <--- ADD THIS CASE
+                    midiRecorder.toggleUI();
                     handled = true;
                     break;
             }
