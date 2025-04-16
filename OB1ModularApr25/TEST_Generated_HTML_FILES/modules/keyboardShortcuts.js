@@ -222,7 +222,7 @@ function _setMultiplier(targetMultiplier) {
          console.warn(`_setMultiplier received invalid target: ${targetMultiplier}`);
          return;
     }
-    const currentMultiplier = audio.getScheduleMultiplier ? audio.getScheduleMultiplier() : 1;
+    const currentMultiplier = audio.getCurrentScheduleMultiplier ? audio.getCurrentScheduleMultiplier() : 1;
     if (targetMultiplier !== currentMultiplier) {
         _applySliderChange(
             multiplierSliderRef, // Ref can be null

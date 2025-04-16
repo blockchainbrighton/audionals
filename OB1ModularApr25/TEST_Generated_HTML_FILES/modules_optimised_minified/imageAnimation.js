@@ -1,0 +1,2 @@
+// --- imageAnimation.js ---
+const IMAGE_ID="main-image",ANIMATION_CLASS="shake-all-directions-animation",ANIMATION_DURATION_MS=150,imageElement=document.getElementById(IMAGE_ID);imageElement||console.warn(`Image animation module could not find element with ID: ${IMAGE_ID}. Animations will not work.`);export function triggerAnimation(){imageElement&&(imageElement.classList.contains(ANIMATION_CLASS)||(imageElement.classList.add(ANIMATION_CLASS),setTimeout((()=>{document.getElementById(IMAGE_ID)&&imageElement.classList.remove(ANIMATION_CLASS)}),150)))}

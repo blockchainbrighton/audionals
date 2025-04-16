@@ -62,7 +62,7 @@ function getCurrentAppState() {
         pitch: audio.getCurrentPitch ? audio.getCurrentPitch() : DEFAULT_PITCH,
         volume: /* Need a getter for current volume in audioProcessor */ audio.getCurrentVolume ? audio.getCurrentVolume() : DEFAULT_VOLUME,
         isReversed: audio.getReverseState ? audio.getReverseState() : false,
-        multiplier: audio.getScheduleMultiplier ? audio.getScheduleMultiplier() : 1,
+        multiplier: audio.getCurrentScheduleMultiplier ? audio.getCurrentScheduleMultiplier() : 1,
     };
     const midiRecordingData = midiRecorder.getRecordingData ? midiRecorder.getRecordingData() : [];
     const audioSource = { // Store the initial data used by this tab

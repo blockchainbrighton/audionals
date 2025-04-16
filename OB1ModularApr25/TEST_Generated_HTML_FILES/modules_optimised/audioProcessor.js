@@ -1,9 +1,26 @@
-// --- START OF FILE audioProcessor.js ---
+// --- audioProcessor.js ---
 
-import { base64ToArrayBuffer } from './utils.js';
-import { showError } from './uiUpdater.js';
-import { triggerAnimation as triggerImageAnimation } from './imageAnimation.js';
-import * as timingManager from './timingManagement.js';
+// import { base64ToArrayBuffer } from './utils.js';
+// import { showError } from './uiUpdater.js';
+// import { triggerAnimation as triggerImageAnimation } from './imageAnimation.js';
+// import * as timingManager from './timingManagement.js';
+
+
+// --- audioProcessor.js ---
+
+// Original: import { base64ToArrayBuffer } from './utils.js';
+import { base64ToArrayBuffer } from '/content/6ee146a17e6582c989ebaa2f2c8b6a039f29493f858d59a89edfb0d3485a7fc4i0';
+
+// Original: import { showError } from './uiUpdater.js';
+import { showError } from '/content/943baf5a8d4569764b325ed48a2b269fafaa7429463ab69f6c6a9524974d0d92i0';
+
+// Original: import { triggerAnimation as triggerImageAnimation } from './imageAnimation.js';
+import { triggerAnimation as triggerImageAnimation } from '/content/934cf04352b9a33a362848a4fd148388f5a3997578fbdfaabd116a8f2932f7b5i0';
+
+// Original: import * as timingManager from './timingManagement.js';
+import * as timingManager from '/content/de1f95cbea6670453fcfeda0921f55fe111bd6b455f405d26dbdfedc2355f048i0';
+
+
 
 // Constants
 const A4_MIDI_NOTE = 69, A4_FREQUENCY = 440.0, SEMITONE_RATIO = Math.pow(2, 1 / 12);
