@@ -94,7 +94,10 @@ These are the main JavaScript entry points referenced by the HTML. They depend o
         *   `midiRecorder.js` (Step 2 ID)
 *   **Files to Inscribe (After Updating):**
     *   `app.js` - e0974fc427a7c54c864ad3c3b2ffbd0fef3c17049c15f3187b58257d628dbc70i0
-    *   `main.js` - 9006eeb50fd9e8f7e00ff4ce1862b02c0711ea0b8d6aa1d3e1abca98a2338624i0
+    <!-- *   `main.js` - 9006eeb50fd9e8f7e00ff4ce1862b02c0711ea0b8d6aa1d3e1abca98a2338624i0 -->
+    <!-- A new main.js has been created to handle touch controls on mobile devices -->
+    *   `main.js` - 9f3a2017003dafeca94621a8b66bc2f0eb7b481c939c7ac50194a0b7685d54cei0
+
 *   **Action:**
     *   **`⚠️ Important:`** Modify the files listed under "Files Requiring Update" to replace relative paths in `import` statements with their corresponding `/content/<OrdinalID>` paths obtained in Steps 1, 2, & 3.
     *   Inscribe the updated files.

@@ -34,8 +34,8 @@ function generateHtml(imageBase64Data, audioBase64Data, instrument, note, freque
 <body>
     <!-- --- Embedded Base64 Data Zone (as JS global variables) --- -->
     <script>
-        const imageBase64 = \`${imageBase64Data}\`; // Injected Image Data
-        const audioBase64_Opus = \`${audioBase64Data}\`; // Injected Audio Data
+    const imageUrl = 'https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0'; // Your Image URL
+    const audioBase64_Opus = \`${audioBase64Data}\`; // Injected Audio Data
     </script>
     <!-- --- End Embedded Base64 Data Zone --- -->
 
