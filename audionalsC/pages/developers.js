@@ -441,4 +441,9 @@ audionals.saveComposition(composition)
         .guide-card {
           background-color: rgba(255, 255, 255, 0.05);
           border-radius: 8px;
-          padding: 2r<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>
+          padding: 2r;
+        }
+        `}</style> {/* <= Add this closing backtick, brace, and tag */}
+        </div> // <= Make sure this closing div for the main wrapper is present
+      ); // <= Add this closing parenthesis for the return statement
+    } // <= Add this closing curly brace for the Community function
