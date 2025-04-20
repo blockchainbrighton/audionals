@@ -1,198 +1,291 @@
-// --- START OF FILE waveformDisplay.js (Using ResizeObserver) ---
+// --- START OF FILE waveformDisplay.js (With Playhead) ---
 
 let canvas = null;
 let ctx = null;
 let logicalWidth = 0;
 let logicalHeight = 0;
 let dpr = 1;
-let isSizeInitialized = false; // Flag remains useful
-let resizeObserver = null;     // Store the observer instance
-let pendingAudioBuffer = null; // Store buffer if drawWaveform is called early
+let isSizeInitialized = false;
+let resizeObserver = null;
+let pendingAudioBuffer = null;
+let currentAudioBuffer = null; // Store the buffer being drawn
+
+// --- Playhead State ---
+let playheadAnimationId = null;
+let isPlayheadActive = false;
+let playheadStartTime = 0;    // audioContext.currentTime when playback started
+let playheadPlaybackRate = 1;
+let playheadBufferDuration = 0;
+let playheadColor = '#ff6b6b'; // A distinct color (e.g., error red)
+let audioContextRef = null; // Reference to the AudioContext
+
+/**
+ * Sets the AudioContext reference needed for time tracking.
+ * @param {AudioContext} context - The application's AudioContext.
+ */
+export function setAudioContext(context) {
+    if (context instanceof AudioContext) {
+        audioContextRef = context;
+        console.log("Waveform Display: AudioContext reference set.");
+    } else {
+        console.error("Waveform Display: Invalid AudioContext provided to setAudioContext.");
+        audioContextRef = null;
+    }
+}
+
 
 /**
  * Performs the actual canvas setup once dimensions are known.
- * Called by the ResizeObserver callback.
  */
 function performCanvasSetup(entry) {
-    // Get dimensions from the ResizeObserver entry's contentRect
-    // This reflects the actual rendered size *after* layout.
     const newLogicalWidth = entry.contentRect.width;
     const newLogicalHeight = entry.contentRect.height;
 
-    // Only proceed if dimensions are valid and different from current (or first time)
     if (newLogicalWidth > 0 && newLogicalHeight > 0) {
-
         logicalWidth = newLogicalWidth;
         logicalHeight = newLogicalHeight;
         dpr = window.devicePixelRatio || 1;
-
         console.log(`Waveform Display: ResizeObserver triggered valid size. DPR: ${dpr}, Logical: ${logicalWidth}x${logicalHeight}`);
 
-        // Set the internal canvas bitmap size scaled by DPR
         canvas.width = Math.round(logicalWidth * dpr);
         canvas.height = Math.round(logicalHeight * dpr);
-
-        // Reset transform before scaling (safer)
         ctx.resetTransform();
-        // Scale the canvas context to draw based on logical pixels
         ctx.scale(dpr, dpr);
-
-        isSizeInitialized = true; // Mark dimensions as successfully set
+        isSizeInitialized = true;
         console.log(`Waveform Display: Canvas setup complete. Physical: ${canvas.width}x${canvas.height}`);
 
-        // IMPORTANT: Disconnect the observer once we have the initial size.
-        // We only needed it for the initial layout calculation.
-        // If you needed to handle window resizing later, you'd keep observing.
         if (resizeObserver) {
             resizeObserver.disconnect();
-            resizeObserver = null; // Clear reference
+            resizeObserver = null;
             console.log("Waveform Display: ResizeObserver disconnected.");
         }
 
-        // Draw if audio data arrived before initialization was complete
         if (pendingAudioBuffer) {
             console.log("Waveform Display: Drawing pending audio buffer now.");
-            drawWaveform(pendingAudioBuffer);
-            pendingAudioBuffer = null; // Clear pending buffer
+            // Draw the pending buffer *without* starting playhead yet
+            drawWaveform(pendingAudioBuffer, undefined, null);
+            pendingAudioBuffer = null;
         } else {
-             // Clear the canvas initially even if no pending buffer
              clearWaveform();
         }
-
     } else {
         console.warn(`Waveform Display: ResizeObserver triggered with zero size (${newLogicalWidth}x${newLogicalHeight}). Waiting...`);
-        // No retry needed here, the observer will fire again if size changes.
     }
 }
 
 /**
  * Initializes the waveform display module using ResizeObserver.
- * @param {string} canvasId - The ID of the canvas element to draw on.
  */
 export function init(canvasId) {
-    // Reset state
     isSizeInitialized = false;
     pendingAudioBuffer = null;
+    currentAudioBuffer = null;
     logicalWidth = 0;
     logicalHeight = 0;
+    audioContextRef = null; // Reset context ref
+    stopPlayhead(); // Ensure playhead is stopped on re-init
     if (resizeObserver) {
-        resizeObserver.disconnect(); // Disconnect previous observer if re-initializing
+        resizeObserver.disconnect();
         resizeObserver = null;
     }
 
     canvas = document.getElementById(canvasId);
-    if (!canvas) {
-        console.error(`Waveform Display: Canvas element with ID "${canvasId}" not found.`);
-        return false;
-    }
+    if (!canvas) { /* ... error handling ... */ return false; }
     ctx = canvas.getContext('2d');
-    if (!ctx) {
-        console.error("Waveform Display: Failed to get 2D context from canvas.");
-        canvas = null; // Reset canvas ref if context fails
-        return false;
-    }
+    if (!ctx) { /* ... error handling ... */ return false; }
 
     console.log(`Waveform Display: Found canvas #${canvasId} and context. Setting up ResizeObserver.`);
 
-    // --- Setup ResizeObserver ---
     resizeObserver = new ResizeObserver(entries => {
-        // We usually only observe one element, so take the first entry
         if (entries && entries.length > 0) {
-            // Only call setup if the size is potentially valid (avoids issues before layout)
              if (entries[0].contentRect.width > 0 || entries[0].contentRect.height > 0 || !isSizeInitialized) {
                  performCanvasSetup(entries[0]);
              }
         }
     });
-
-    // Start observing the canvas element
     resizeObserver.observe(canvas);
-
-    // Return true: Initialization is underway, observer will handle the rest.
     return true;
 }
 
 /**
- * Clears the waveform canvas. Uses logical dimensions.
+ * Clears the waveform canvas.
  */
 export function clearWaveform() {
-    // Only clear if context exists and dimensions have been successfully initialized
-    if (!ctx || !canvas || !isSizeInitialized || logicalWidth <= 0 || logicalHeight <= 0) {
-        return; // Don't clear if not ready
-    }
-    ctx.fillStyle = '#222'; // Darker gray
+    if (!ctx || !canvas || !isSizeInitialized || logicalWidth <= 0 || logicalHeight <= 0) return;
+    ctx.fillStyle = '#222';
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 }
 
 /**
- * Draws the waveform from an AudioBuffer onto the canvas.
- * If size not initialized, stores the buffer to be drawn later.
- * @param {AudioBuffer} audioBuffer - The decoded audio data.
- * @param {string} [color='#88c0d0'] - The color for the waveform lines.
+ * Draws the base waveform. Separated from playhead drawing.
+ * @param {AudioBuffer} audioBuffer - The audio data to draw.
+ * @param {string} [color='#88c0d0'] - Color for the waveform lines.
  */
-export function drawWaveform(audioBuffer, color = '#88c0d0') {
+function drawBaseWaveform(audioBuffer, color = '#88c0d0') {
+    if (!isSizeInitialized || !ctx || !canvas || logicalWidth <= 0 || logicalHeight <= 0) return;
+    if (!audioBuffer || typeof audioBuffer.getChannelData !== 'function') return;
+
+    clearWaveform(); // Clear before drawing waveform
+
+    const channelData = audioBuffer.getChannelData(0);
+    const bufferLength = channelData.length;
+    const samplesPerPixel = Math.max(1, Math.floor(bufferLength / logicalWidth));
+    const middleY = logicalHeight / 2;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1 / dpr;
+    ctx.beginPath();
+    ctx.moveTo(0, middleY);
+
+    for (let x = 0; x < logicalWidth; x++) {
+        const startIndex = x * samplesPerPixel;
+        const endIndex = Math.min(startIndex + samplesPerPixel - 1, bufferLength - 1);
+        if (startIndex >= bufferLength) break;
+        if (endIndex < startIndex) continue;
+
+        let minSample = 1.0, maxSample = -1.0;
+        for (let i = startIndex; i <= endIndex; i++) {
+            const sample = channelData[i];
+            if (!isFinite(sample)) continue;
+            if (sample < minSample) minSample = sample;
+            if (sample > maxSample) maxSample = sample;
+        }
+         if (minSample === 1.0 && maxSample === -1.0) { minSample = 0; maxSample = 0; }
+
+        const yMin = middleY - (maxSample * middleY);
+        const yMax = middleY - (minSample * middleY);
+
+        if (yMax - yMin < (1 / dpr)) {
+            ctx.lineTo(x, middleY);
+        } else {
+            ctx.moveTo(x, yMin);
+            ctx.lineTo(x, yMax);
+        }
+    }
+    ctx.stroke();
+}
+
+/**
+ * Draws the playhead line at a specific X coordinate.
+ * @param {number} xPosition - The logical X coordinate.
+ */
+function drawPlayheadLine(xPosition) {
+    if (!isSizeInitialized || !ctx || !canvas || logicalWidth <= 0 || logicalHeight <= 0) return;
+
+    ctx.strokeStyle = playheadColor;
+    ctx.lineWidth = 1 / dpr; // Keep it thin
+    ctx.beginPath();
+    ctx.moveTo(xPosition, 0);
+    ctx.lineTo(xPosition, logicalHeight);
+    ctx.stroke();
+}
+
+/**
+ * The main drawing function, now optionally draws the playhead.
+ * @param {AudioBuffer} audioBuffer - The audio data to draw.
+ * @param {string} [color='#88c0d0'] - Color for the waveform lines.
+ * @param {number | null} [playheadX=null] - Optional logical X coordinate for the playhead.
+ */
+export function drawWaveform(audioBuffer, color = '#88c0d0', playheadX = null) {
     if (!ctx || !canvas) {
         console.warn("Waveform Display: Draw called but canvas/context missing.");
         return;
     }
-    if (!audioBuffer || typeof audioBuffer.getChannelData !== 'function') {
-        console.error("Waveform Display: Invalid AudioBuffer provided.");
-        if (isSizeInitialized) clearWaveform(); // Clear if ready
+     if (!audioBuffer || typeof audioBuffer.getChannelData !== 'function') {
+        console.error("Waveform Display: Invalid AudioBuffer provided to drawWaveform.");
+        if (isSizeInitialized) clearWaveform();
         return;
     }
 
-    // If size is ready, draw immediately
+    // Store the current buffer for redraws during playhead animation
+    currentAudioBuffer = audioBuffer;
+
     if (isSizeInitialized && logicalWidth > 0 && logicalHeight > 0) {
-        clearWaveform(); // Clear previous drawing
-
-        const channelData = audioBuffer.getChannelData(0);
-        const bufferLength = channelData.length;
-        const samplesPerPixel = Math.max(1, Math.floor(bufferLength / logicalWidth));
-        const middleY = logicalHeight / 2;
-
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1 / dpr;
-        ctx.beginPath();
-        ctx.moveTo(0, middleY);
-
-        for (let x = 0; x < logicalWidth; x++) {
-            const startIndex = x * samplesPerPixel;
-            const endIndex = Math.min(startIndex + samplesPerPixel - 1, bufferLength - 1);
-
-            if (startIndex >= bufferLength) break;
-            if (endIndex < startIndex) continue;
-
-            let minSample = 1.0;
-            let maxSample = -1.0;
-
-            for (let i = startIndex; i <= endIndex; i++) {
-                const sample = channelData[i];
-                if (!isFinite(sample)) continue;
-                if (sample < minSample) minSample = sample;
-                if (sample > maxSample) maxSample = sample;
-            }
-             if (minSample === 1.0 && maxSample === -1.0) {
-                 minSample = 0; maxSample = 0;
-             }
-
-            const yMin = middleY - (maxSample * middleY);
-            const yMax = middleY - (minSample * middleY);
-
-            if (yMax - yMin < (1 / dpr)) {
-                ctx.lineTo(x, middleY);
-            } else {
-                ctx.moveTo(x, yMin);
-                ctx.lineTo(x, yMax);
-            }
+        drawBaseWaveform(currentAudioBuffer, color); // Draw the background waveform
+        if (playheadX !== null && playheadX >= 0 && playheadX <= logicalWidth) {
+            drawPlayheadLine(playheadX); // Draw the playhead on top
         }
-        ctx.stroke();
-        // console.log(`Waveform drawn (${samplesPerPixel} samples/logical px).`); // Reduce log spam
-
     } else {
-        // Size not ready yet, store the buffer to draw when ready
         console.log("Waveform Display: Size not ready, storing audio buffer for later drawing.");
-        pendingAudioBuffer = audioBuffer; // Store the latest buffer
+        pendingAudioBuffer = audioBuffer;
     }
 }
+
+/**
+ * Animation loop for updating the playhead position.
+ */
+function _updatePlayhead() {
+    if (!isPlayheadActive || !isSizeInitialized || !audioContextRef || !currentAudioBuffer) {
+        isPlayheadActive = false; // Ensure stopped if conditions unmet
+        playheadAnimationId = null;
+        return; // Stop the loop
+    }
+
+    const currentTime = audioContextRef.currentTime;
+    const elapsedTime = currentTime - playheadStartTime;
+    let bufferPosition = elapsedTime * playheadPlaybackRate;
+
+    // Clamp position to buffer duration
+    bufferPosition = Math.max(0, Math.min(bufferPosition, playheadBufferDuration));
+
+    // Calculate X coordinate
+    const playheadX = (bufferPosition / playheadBufferDuration) * logicalWidth;
+
+    // Redraw waveform and playhead
+    drawWaveform(currentAudioBuffer, undefined, playheadX); // Use default color
+
+    // Check if playback has reached the end
+    if (bufferPosition >= playheadBufferDuration) {
+        console.log("Playhead reached end of buffer.");
+        stopPlayhead(); // Stop animation automatically
+    } else {
+        // Request the next frame
+        playheadAnimationId = requestAnimationFrame(_updatePlayhead);
+    }
+}
+
+/**
+ * Starts the playhead animation.
+ * @param {number} startTime - The audioContext.currentTime when playback began.
+ * @param {number} playbackRate - The playback rate of the sound.
+ * @param {number} bufferDuration - The duration of the buffer being played.
+ */
+export function startPlayhead(startTime, playbackRate, bufferDuration) {
+    if (!isSizeInitialized || !audioContextRef) {
+        console.warn("Waveform Display: Cannot start playhead, not initialized or context missing.");
+        return;
+    }
+     if (playheadAnimationId) {
+        cancelAnimationFrame(playheadAnimationId); // Stop any previous loop
+    }
+
+    playheadStartTime = startTime;
+    playheadPlaybackRate = playbackRate;
+    playheadBufferDuration = bufferDuration;
+    isPlayheadActive = true;
+
+    console.log(`Playhead started. StartTime: ${startTime.toFixed(3)}, Rate: ${playbackRate}, Duration: ${bufferDuration.toFixed(3)}`);
+
+    // Start the animation loop
+    playheadAnimationId = requestAnimationFrame(_updatePlayhead);
+}
+
+/**
+ * Stops the playhead animation.
+ */
+export function stopPlayhead() {
+    if (playheadAnimationId) {
+        cancelAnimationFrame(playheadAnimationId);
+        playheadAnimationId = null;
+    }
+    isPlayheadActive = false;
+    // console.log("Playhead stopped."); // Reduce log spam
+
+    // Optional: Redraw waveform once without playhead when stopped explicitly
+    if (isSizeInitialized && currentAudioBuffer) {
+       drawWaveform(currentAudioBuffer, undefined, null);
+    }
+}
+
 
 // --- END OF FILE waveformDisplay.js ---

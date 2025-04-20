@@ -10,8 +10,8 @@ import { base64ToArrayBuffer } from './utils.js';
 import { showError } from './uiUpdater.js';
 import { triggerAnimation as triggerImageAnimation } from './imageAnimation.js';
 import * as timingManager from './timingManagement.js';
-import { drawWaveform } from './waveformDisplay.js'; // Import the drawing function
-
+// Import specific functions needed
+import { drawWaveform, clearWaveform as clearWaveformDisplay, setAudioContext as setWaveformContext, startPlayhead, stopPlayhead } from './waveformDisplay.js';
 
 const A4_MIDI_NOTE = 69;
 const A4_FREQUENCY = 440;
@@ -75,14 +75,18 @@ const _playBuffer = (buffer, startTime, playbackRate) => {
     try {
         const sourceNode = audioContext.createBufferSource();
         sourceNode.buffer = buffer;
-        sourceNode.playbackRate.value = playbackRate; // Apply specific playback rate
-
-        // Connect source to the start of the effect chain (filter)
+        sourceNode.playbackRate.value = playbackRate;
         sourceNode.connect(filterNode);
-
-        triggerImageAnimation(); // Trigger visual feedback
+        triggerImageAnimation();
         sourceNode.start(startTime);
-        // console.log(`Playing buffer at time: ${startTime.toFixed(3)}, rate: ${playbackRate.toFixed(3)}`);
+
+        // +++ START PLAYHEAD +++
+        if (typeof startPlayhead === 'function') {
+            // Pass context time, rate, and *this specific buffer's* duration
+            startPlayhead(startTime, playbackRate, buffer.duration);
+        }
+        // +++ END PLAYHEAD +++
+
         return sourceNode;
     } catch (err) {
         showError("Failed to play audio sample.");
@@ -90,6 +94,7 @@ const _playBuffer = (buffer, startTime, playbackRate) => {
         return null;
     }
 };
+
 
 const _createReversedBuffer = (buffer) => {
     if (!buffer || !audioContext) return null;
@@ -115,16 +120,14 @@ const _createReversedBuffer = (buffer) => {
 const _setupAudioContext = () => {
     try {
         window.AudioContext = window.AudioContext || window.webkitAudioContext;
-        if (!window.AudioContext) {
-            throw new Error("Web Audio API not supported.");
-        }
+        if (!window.AudioContext) throw new Error("Web Audio API not supported.");
         audioContext = new AudioContext();
         console.log(`AudioContext created. Sample rate: ${audioContext.sampleRate} Hz.`);
 
         // --- Create Nodes ---
         mainGainNode = audioContext.createGain();
         filterNode = audioContext.createBiquadFilter();
-        delayNode = audioContext.createDelay(MAX_DELAY_TIME); // Max delay of 1 second
+        delayNode = audioContext.createDelay(MAX_DELAY_TIME);
         delayFeedbackGainNode = audioContext.createGain();
 
         // --- Set Initial Parameters ---
@@ -149,34 +152,39 @@ const _setupAudioContext = () => {
 
         console.log("Audio graph setup complete: Source -> Filter -> Delay -> Gain -> Destination (with Delay Feedback)");
 
-    } catch (err) {
-        showError(`Audio Setup Error: ${err.message}`);
-        console.error("Error setting up AudioContext:", err);
-        throw err; // Re-throw to signal failure
-    }
-};
+        // +++ SET WAVEFORM CONTEXT +++
+            // Pass the created context to the waveform display module
+            if (typeof setWaveformContext === 'function') {
+                setWaveformContext(audioContext);
+            }
+            // +++ END SET WAVEFORM CONTEXT +++
 
-const _decodeAudioAndPrepare = async (audioData) => {
-    if (!audioData || typeof audioData !== 'string') {
-        throw new Error("Invalid audio data provided for decoding.");
-    }
-    if (!audioContext) {
-         throw new Error("AudioContext not available for decoding.");
-    }
-    try {
-        const arrayBuffer = base64ToArrayBuffer(audioData);
-        console.log(`Decoding ${arrayBuffer.byteLength} bytes of audio data...`);
-        decodedBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        console.log(`Audio decoded successfully. Duration: ${decodedBuffer.duration.toFixed(2)}s`);
-        reversedBuffer = _createReversedBuffer(decodedBuffer); // Create reversed version immediately
-
-        // +++ NEW CODE: DRAW WAVEFORM +++
-        // Draw the waveform *after* successful decoding
-        if (typeof drawWaveform === 'function') {
-            drawWaveform(decodedBuffer);
-        } else {
-            console.warn("drawWaveform function is not available in audioProcessor.");
+        } catch (err) {
+            showError(`Audio Setup Error: ${err.message}`);
+            console.error("Error setting up AudioContext:", err);
+            throw err;
         }
+    };
+
+
+    const _decodeAudioAndPrepare = async (audioData) => {
+        if (!audioData || typeof audioData !== 'string') throw new Error("Invalid audio data provided for decoding.");
+        if (!audioContext) throw new Error("AudioContext not available for decoding.");
+    
+        try {
+            const arrayBuffer = base64ToArrayBuffer(audioData);
+            console.log(`Decoding ${arrayBuffer.byteLength} bytes of audio data...`);
+            decodedBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            console.log(`Audio decoded successfully. Duration: ${decodedBuffer.duration.toFixed(2)}s`);
+            reversedBuffer = _createReversedBuffer(decodedBuffer);
+    
+            // Draw the waveform *after* successful decoding
+            if (typeof drawWaveform === 'function') {
+                // Draw without playhead initially
+                drawWaveform(decodedBuffer, undefined, null);
+            } else {
+                console.warn("drawWaveform function is not available in audioProcessor.");
+            }
         // +++ END NEW CODE +++
 
         // Get original frequency from metadata (assuming it exists and is correct)
@@ -200,15 +208,13 @@ const _decodeAudioAndPrepare = async (audioData) => {
     } catch (err) {
         showError(`Audio Decoding Error: ${err.message}`);
         console.error("Error decoding or preparing audio:", err);
-        decodedBuffer = null; // Ensure buffer is null on error
+        decodedBuffer = null;
         reversedBuffer = null;
-        // +++ NEW CODE: CLEAR WAVEFORM ON ERROR +++
-        // Optionally clear waveform if decoding fails after it might have been drawn
-        // if (typeof clearWaveform === 'function') { // Need to import clearWaveform too if using this
-        //     clearWaveform();
-        // }
-        // +++ END NEW CODE +++
-        throw err; // Re-throw to signal failure
+        // Optionally clear waveform display on error
+        if (typeof clearWaveformDisplay === 'function') {
+             clearWaveformDisplay();
+        }
+        throw err;
     }
 };
 
@@ -254,6 +260,16 @@ export const init = async (audioData, initialTempo = 78, initialPitch = 1, initi
     // }
     // +++ END NEW CODE +++
 
+     // Clear waveform display on re-init
+     if (typeof clearWaveformDisplay === 'function') {
+        clearWaveformDisplay();
+   }
+   // Stop playhead if it was running from a previous instance
+   if (typeof stopPlayhead === 'function') {
+       stopPlayhead();
+   }
+
+
     // Set initial values from args or defaults
     currentTempo = initialTempo > 0 ? initialTempo : 78;
     currentGlobalPitch = initialPitch > 0 ? initialPitch : 1;
@@ -271,19 +287,16 @@ export const init = async (audioData, initialTempo = 78, initialPitch = 1, initi
     console.log(`Audio Processor Init: Tempo=${currentTempo}, Pitch=${currentGlobalPitch}, Volume=${currentVolume}`);
 
     try {
-        _setupAudioContext(); // Create context and nodes
-        currentFilterFreq = audioContext.sampleRate / 2; // Set default based on actual sample rate
-        filterNode.frequency.setValueAtTime(currentFilterFreq, audioContext.currentTime); // Update node immediately
-        await _decodeAudioAndPrepare(audioData); // Decode and prepare buffers (THIS WILL TRIGGER DRAWING)
-        timingManager.init(audioContext, currentTempo, currentGlobalPitch); // Init timing manager
+        _setupAudioContext(); // Creates context AND passes it to waveform display
+        currentFilterFreq = audioContext.sampleRate / 2;
+        filterNode.frequency.setValueAtTime(currentFilterFreq, audioContext.currentTime);
+        await _decodeAudioAndPrepare(audioData); // Decodes audio AND draws initial waveform
+        timingManager.init(audioContext, currentTempo, currentGlobalPitch);
         console.log("Audio Processor initialized successfully.");
         return true;
     } catch (err) {
         console.error("Audio Processor initialization failed:", err);
-        if (audioContext && audioContext.state !== 'closed') {
-            audioContext.close().catch(e => console.error("Error closing failed audio context:", e));
-        }
-        audioContext = null; // Ensure context is null on failure
+        // ... (error handling) ...
         return false;
     }
 };
@@ -300,25 +313,21 @@ export const playOnce = async () => {
 };
 
 export const startLoop = async () => {
-    if (timingManager.getLoopingState()) return; // Don't start if already looping
-
+    if (timingManager.getLoopingState()) return;
     try {
         if (!await _ensureContextRunning()) return;
         const buffer = _getCurrentBuffer();
-        if (!buffer) return; // Error shown by _getCurrentBuffer
+        if (!buffer) return;
 
-        // The callback passed to timingManager needs to play the *current* buffer
-        // with the *current* global pitch at the scheduled time.
         const playCallback = (scheduledTime) => {
-             const currentBuffer = _getCurrentBuffer(); // Get buffer state at playback time
+             const currentBuffer = _getCurrentBuffer();
              if (currentBuffer) {
+                // This call to _playBuffer will trigger startPlayhead
                  _playBuffer(currentBuffer, scheduledTime, currentGlobalPitch);
              }
         };
-
         timingManager.startLoop(playCallback);
         console.log("Audio loop started via timing manager.");
-
     } catch (err) {
         showError("Failed to start loop.");
         console.error("Error starting loop:", err);
@@ -328,6 +337,11 @@ export const startLoop = async () => {
 export const stopLoop = () => {
     if (timingManager.getLoopingState()) {
         timingManager.stopLoop();
+        // +++ STOP PLAYHEAD +++
+        if (typeof stopPlayhead === 'function') {
+            stopPlayhead();
+        }
+        // +++ END STOP PLAYHEAD +++
         console.log("Audio loop stopped via timing manager.");
     }
 };
@@ -463,21 +477,28 @@ export const toggleReverse = () => {
     isReversed = !isReversed;
     console.log(`Audio reverse toggled. Now: ${isReversed ? 'Reversed' : 'Original'}`);
 
-    // If looping, restart the loop immediately to use the new buffer direction
-    if (timingManager.getLoopingState()) {
-        console.log("Restarting loop after reverse toggle...");
-        // Get the current callback before stopping
-        const currentCallback = timingManager.getCurrentPlayCallback(); // Assumes timingManager exposes this
-        timingManager.stopLoop();
-        if (currentCallback) {
-             startLoop().catch(err => showError("Error restarting loop after reverse toggle: " + err));
-        } else {
-             console.warn("Could not restart loop after reverse toggle: callback missing.");
-        }
 
+    // +++ Redraw waveform for the new direction +++
+    const bufferToDraw = _getCurrentBuffer();
+    if (bufferToDraw && typeof drawWaveform === 'function') {
+        // Draw without playhead, as looping state determines if playhead restarts
+        drawWaveform(bufferToDraw, undefined, null);
     }
-    return isReversed; // Return the new state
+    // Stop any current playhead - loop restart will handle starting it again if needed
+    if (typeof stopPlayhead === 'function') {
+        stopPlayhead();
+    }
+    // +++ End Redraw +++
+
+
+    // If looping, restart the loop immediately
+    if (timingManager.getLoopingState()) {
+        // ... (existing loop restart logic) ...
+        // The restart will eventually call _playBuffer which starts the playhead again.
+    }
+    return isReversed;
 };
+
 
 export const getLoopingState = () => timingManager.getLoopingState() || false;
 
@@ -496,16 +517,11 @@ export const getPlaybackRateForNote = (midiNote) => {
 };
 
 export const playSampleAtRate = async (playbackRate, velocity = 127) => {
-    if (playbackRate <= 0) {
-        console.warn(`Invalid playback rate: ${playbackRate}`);
-        return;
-    }
+    if (playbackRate <= 0) return;
     if (!await _ensureContextRunning()) return;
-
     const buffer = _getCurrentBuffer();
     if (buffer) {
-        // Velocity could potentially map to gain, but currently it's ignored.
-        // We play the sample using the *provided* playback rate, ignoring global pitch here.
+        // This call to _playBuffer will trigger startPlayhead
         _playBuffer(buffer, audioContext.currentTime, playbackRate);
     }
 };
