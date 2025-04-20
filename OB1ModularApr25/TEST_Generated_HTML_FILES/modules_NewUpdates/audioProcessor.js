@@ -10,6 +10,7 @@ import { base64ToArrayBuffer } from './utils.js';
 import { showError } from './uiUpdater.js';
 import { triggerAnimation as triggerImageAnimation } from './imageAnimation.js';
 import * as timingManager from './timingManagement.js';
+import { drawWaveform } from './waveformDisplay.js'; // Import the drawing function
 
 
 const A4_MIDI_NOTE = 69;
@@ -169,6 +170,15 @@ const _decodeAudioAndPrepare = async (audioData) => {
         console.log(`Audio decoded successfully. Duration: ${decodedBuffer.duration.toFixed(2)}s`);
         reversedBuffer = _createReversedBuffer(decodedBuffer); // Create reversed version immediately
 
+        // +++ NEW CODE: DRAW WAVEFORM +++
+        // Draw the waveform *after* successful decoding
+        if (typeof drawWaveform === 'function') {
+            drawWaveform(decodedBuffer);
+        } else {
+            console.warn("drawWaveform function is not available in audioProcessor.");
+        }
+        // +++ END NEW CODE +++
+
         // Get original frequency from metadata (assuming it exists and is correct)
         const freqElement = document.getElementById('audio-meta-frequency');
         const freqText = freqElement?.textContent?.trim();
@@ -192,6 +202,12 @@ const _decodeAudioAndPrepare = async (audioData) => {
         console.error("Error decoding or preparing audio:", err);
         decodedBuffer = null; // Ensure buffer is null on error
         reversedBuffer = null;
+        // +++ NEW CODE: CLEAR WAVEFORM ON ERROR +++
+        // Optionally clear waveform if decoding fails after it might have been drawn
+        // if (typeof clearWaveform === 'function') { // Need to import clearWaveform too if using this
+        //     clearWaveform();
+        // }
+        // +++ END NEW CODE +++
         throw err; // Re-throw to signal failure
     }
 };
@@ -229,6 +245,15 @@ export const init = async (audioData, initialTempo = 78, initialPitch = 1, initi
     midiNoteToPlaybackRate.clear();
     isReversed = false;
 
+     // +++ NEW CODE: CLEAR WAVEFORM ON RE-INIT +++
+    // It's good practice to clear it when starting over
+    // Need to import `clearWaveform` if you uncomment this.
+    // import { drawWaveform, clearWaveform } from './waveformDisplay.js';
+    // if (typeof clearWaveform === 'function') {
+    //      clearWaveform();
+    // }
+    // +++ END NEW CODE +++
+
     // Set initial values from args or defaults
     currentTempo = initialTempo > 0 ? initialTempo : 78;
     currentGlobalPitch = initialPitch > 0 ? initialPitch : 1;
@@ -249,13 +274,12 @@ export const init = async (audioData, initialTempo = 78, initialPitch = 1, initi
         _setupAudioContext(); // Create context and nodes
         currentFilterFreq = audioContext.sampleRate / 2; // Set default based on actual sample rate
         filterNode.frequency.setValueAtTime(currentFilterFreq, audioContext.currentTime); // Update node immediately
-        await _decodeAudioAndPrepare(audioData); // Decode and prepare buffers
+        await _decodeAudioAndPrepare(audioData); // Decode and prepare buffers (THIS WILL TRIGGER DRAWING)
         timingManager.init(audioContext, currentTempo, currentGlobalPitch); // Init timing manager
         console.log("Audio Processor initialized successfully.");
         return true;
     } catch (err) {
         console.error("Audio Processor initialization failed:", err);
-        // Clean up context if it exists and failed mid-way
         if (audioContext && audioContext.state !== 'closed') {
             audioContext.close().catch(e => console.error("Error closing failed audio context:", e));
         }

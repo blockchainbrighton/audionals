@@ -1,4 +1,4 @@
-// --- START OF FILE layoutBuilder.js ---
+// --- START OF FILE layoutBuilder.js (Changes Highlighted) ---
 
 // --- Imports ---
 import { createElement } from './utils.js'; // Corrected import path
@@ -21,8 +21,6 @@ export function buildLayout(targetElement) {
         console.warn('Layout Builder: .audio-metadata element not found within target. It will not be included.');
     } else {
         console.log("Layout Builder: Found existing .audio-metadata element.");
-        // Detach it temporarily to prevent issues if targetElement is cleared
-        // and to ensure it's moved correctly later.
         audioMetadataDiv.remove();
     }
 
@@ -32,6 +30,15 @@ export function buildLayout(targetElement) {
     // --- Create Column 1: Controls (using the imported function) ---
     const controlsColumn = createControlsColumn();
     console.log("Layout Builder: Controls column created via controlsColumn.js.");
+
+    // +++ START NEW CODE +++
+    // --- Create Waveform Display Area ---
+    const waveformContainer = createElement('div', { id: 'waveform-container', className: 'waveform-container' }, [
+        createElement('canvas', { id: 'waveform-canvas', width: '300', height: '60' }) // Adjust width/height as needed
+    ]);
+    console.log("Layout Builder: Waveform container created.");
+    // +++ END NEW CODE +++
+
 
     // --- Create Column 2: Image (using imported createElement) ---
     const imageArea = createElement('div', { className: 'image-area' }, [
@@ -58,24 +65,35 @@ export function buildLayout(targetElement) {
 
     // --- Move Existing Metadata (if found) ---
     if (audioMetadataDiv) {
-        // Find the placeholder *within the newly created controls column*
         const placeholder = controlsColumn.querySelector('.metadata-placeholder');
         if (placeholder) {
-            // Replace placeholder with the actual metadata div
             placeholder.parentNode.replaceChild(audioMetadataDiv, placeholder);
             console.log("Layout Builder: Moved audio metadata into placeholder.");
         } else {
-            // Fallback if placeholder is missing in controlsColumn.js (shouldn't happen)
             console.error('Layout Builder: .metadata-placeholder not found within the created controls column. Metadata could not be placed.');
-            // Insert somewhere reasonable as fallback, e.g., after title bar
             const titleBar = controlsColumn.querySelector('.title-bar');
             if (titleBar && titleBar.nextSibling) {
                  controlsColumn.insertBefore(audioMetadataDiv, titleBar.nextSibling);
             } else {
-                 controlsColumn.appendChild(audioMetadataDiv); // Append at end if all else fails
+                 controlsColumn.appendChild(audioMetadataDiv);
             }
         }
     }
+
+    // +++ START NEW CODE +++
+    // --- Prepend Waveform to Controls Column ---
+    // Prepend waveform container *before* the title bar in the controls column
+    const titleBar = controlsColumn.querySelector('.title-bar');
+    if (titleBar) {
+        controlsColumn.insertBefore(waveformContainer, titleBar);
+        console.log("Layout Builder: Prepended waveform container to controls column.");
+    } else {
+        // Fallback: prepend to the column directly if title bar isn't found (shouldn't happen)
+        controlsColumn.prepend(waveformContainer);
+        console.warn("Layout Builder: Title bar not found, prepended waveform container directly to controls column.");
+    }
+    // +++ END NEW CODE +++
+
 
     // --- Append to Target ---
     targetElement.appendChild(mainLayout);

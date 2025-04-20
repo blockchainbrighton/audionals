@@ -19,6 +19,7 @@ import * as keyboardShortcuts from './keyboardShortcuts.js';
 import { initReferencePanel } from './referenceDisplay.js';
 import { clamp, _isInputFocused, addListener, createElement } from './utils.js';
 import * as midiRecorder from './midiRecorder.js';
+import * as waveformDisplay from './waveformDisplay.js'; // Import the new module
 
 
 // --- Constants ---
@@ -287,6 +288,8 @@ const handleMidiToggleTouch = () => {
 // --- Main Application Initialization ---
 async function initializeApp() {
     console.log("Initializing application...");
+    // NOTE: findElements() should be called *after* buildLayout() in the calling code (which it is, implicitly via DOMContentLoaded).
+    // If findElements was called *before* layoutBuilder, the canvas wouldn't exist yet.
     if (!findElements()) return; // Stop if critical elements missing
 
     // Initialize UI module first
@@ -294,12 +297,19 @@ async function initializeApp() {
         ui.init();
     } else {
          console.error("CRITICAL: ui.init not found!");
-         // Display error directly as UI module might be broken
          (document.getElementById("app") || document.body).innerHTML = `<p style="color:red; padding:20px;">Fatal Error: UI Updater module failed to load.</p>`;
          return;
     }
     ui.clearError(); // Clear any previous errors
 
+    // +++ NEW CODE: Initialize Waveform Display +++
+    // Init waveform display AFTER the layout is built and elements can be found.
+    // Pass the ID of the canvas we created in layoutBuilder.
+    if (!waveformDisplay.init('waveform-canvas')) {
+        console.warn("Waveform display failed to initialize. Proceeding without it.");
+        // Optionally show a less severe UI warning if desired
+    }
+    
     let imageUrlData = null;
     let imageSourceType = '';
     let imagePrefix = '';
