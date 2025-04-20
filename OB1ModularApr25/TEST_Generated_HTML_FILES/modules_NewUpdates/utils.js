@@ -99,4 +99,24 @@ export function addListener(element, eventName, handler, elementNameForWarn) {
     }
 }
 
+// +++ NEW FUNCTION +++
+/**
+ * Generates a unique identifier (UUID v4).
+ * Uses crypto.randomUUID() if available, otherwise falls back to Math.random().
+ * @returns {string} A unique identifier string.
+ */
+export function generateUniqueId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    // Fallback for browsers without crypto.randomUUID
+    // Based on https://stackoverflow.com/a/2117523/106302
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0; // random number between 0 and 15
+        const v = c === 'x' ? r : (r & 0x3 | 0x8); // for 'y', ensure variant bits are set (8, 9, A, or B)
+        return v.toString(16); // convert to hexadecimal
+    });
+}
+// +++ END NEW FUNCTION +++
+
 // --- END OF FILE utils.js ---

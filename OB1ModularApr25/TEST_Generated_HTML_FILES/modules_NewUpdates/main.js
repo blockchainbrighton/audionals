@@ -7,10 +7,15 @@ import * as ui from './uiUpdater.js';
 import * as midiHandler from './midiHandler.js';
 import * as keyboardShortcuts from './keyboardShortcuts.js'; // Keep this import
 import { initReferencePanel } from './referenceDisplay.js';
-import { clamp, _isInputFocused, addListener, createElement } from './utils.js';
+import { clamp, _isInputFocused, addListener, createElement, generateUniqueId } from './utils.js';
 import * as midiRecorder from './midiRecorder.js';
 import * as waveformDisplay from './waveformDisplay.js';
 import * as waveformTrimmer from './waveformTrimmer.js';
+
+// +++ GENERATE AND STORE THE ID EARLY +++
+const instanceId = generateUniqueId();
+console.log(`Application Instance ID: ${instanceId}`);
+
 
 // --- Constants ---
 const DEFAULTS = { TEMPO: 78, PITCH: 1, VOLUME: 1, MULTIPLIER: 1, DELAY_TIME: 0, DELAY_FEEDBACK: 0, FILTER_TYPE: 'lowpass', FILTER_FREQ: 20000, FILTER_Q: 1, FILTER_GAIN: 0 };
@@ -20,6 +25,15 @@ const AUDIO_PREFIX = "data:audio/opus;base64,";
 
 // --- Module Globals (DOM Elements Mapped) ---
 const els = {}; // Store elements in an object
+
+// +++ OPTIONAL: EXPORT THE ID (OR A GETTER) IF NEEDED ELSEWHERE +++
+/**
+ * Gets the unique identifier for this application instance.
+ * @returns {string} The instance ID.
+ */
+export function getInstanceId() {
+    return instanceId;
+}
 
 // --- Exported Action Functions for UI/Playback ---
 
@@ -204,7 +218,7 @@ const getInitialControlValue = (element, key, parser = parseFloat) => {
 
 // --- Main Application Initialization ---
 async function initializeApp() {
-    console.log("Initializing application...");
+    console.log(`Initializing application (Instance: ${instanceId})...`); // Add ID to log
     if (!findElements()) return; // Stop if critical elements missing
 
     // Init UI (essential)
