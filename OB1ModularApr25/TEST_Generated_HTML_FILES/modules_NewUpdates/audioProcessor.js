@@ -12,6 +12,8 @@ import { triggerAnimation as triggerImageAnimation } from './imageAnimation.js';
 import * as timingManager from './timingManagement.js';
 // Import specific functions needed
 import { drawWaveform, clearWaveform as clearWaveformDisplay, setAudioContext as setWaveformContext, startPlayhead, stopPlayhead } from './waveformDisplay.js';
+import { getTrimTimes, setBufferDuration as setTrimmerBufferDuration, resetTrims as resetTrimmer } from './waveformTrimmer.js';
+
 
 const A4_MIDI_NOTE = 69;
 const A4_FREQUENCY = 440;
@@ -72,28 +74,50 @@ const _getCurrentBuffer = () => {
 
 const _playBuffer = (buffer, startTime, playbackRate) => {
     if (!buffer || !audioContext) return null;
+
+    let offset = 0;
+    let duration = buffer.duration;
+    if (typeof getTrimTimes === 'function') {
+        const trimInfo = getTrimTimes();
+        offset = trimInfo.startTime;
+        duration = trimInfo.duration; // This is the actual duration to play
+        // console.log(`Playing trimmed: Offset=${offset.toFixed(3)}s, Duration=${duration.toFixed(3)}s`); // Reduce log spam
+    } else {
+         console.warn("Waveform Trimmer function getTrimTimes not available.");
+    }
+
+    if (duration <= 0) {
+         // console.log("Trimmed duration is zero or negative, skipping playback."); // Reduce log spam
+         // Stop playhead if it was somehow active from a previous invalid play attempt
+         if (typeof stopPlayhead === 'function') stopPlayhead();
+         return null;
+    }
+
     try {
         const sourceNode = audioContext.createBufferSource();
         sourceNode.buffer = buffer;
         sourceNode.playbackRate.value = playbackRate;
         sourceNode.connect(filterNode);
         triggerImageAnimation();
-        sourceNode.start(startTime);
 
-        // +++ START PLAYHEAD +++
+        // Start playing the buffer segment at the scheduled time `startTime`
+        sourceNode.start(startTime, offset, duration); // when, offset, duration
+
+        // Start playhead animation
         if (typeof startPlayhead === 'function') {
-            // Pass context time, rate, and *this specific buffer's* duration
-            startPlayhead(startTime, playbackRate, buffer.duration);
+            // Pass the actual audio start time, rate, buffer offset, and *segment duration*
+            startPlayhead(startTime, playbackRate, offset, duration);
         }
-        // +++ END PLAYHEAD +++
 
         return sourceNode;
     } catch (err) {
-        showError("Failed to play audio sample.");
+        showError(`Failed to play audio sample: ${err.message}`);
         console.error("Error in _playBuffer:", err);
         return null;
     }
 };
+
+
 
 
 const _createReversedBuffer = (buffer) => {
@@ -185,7 +209,14 @@ const _setupAudioContext = () => {
             } else {
                 console.warn("drawWaveform function is not available in audioProcessor.");
             }
-        // +++ END NEW CODE +++
+
+            // +++ Set Trimmer Duration +++
+            if (typeof setTrimmerBufferDuration === 'function') {
+                setTrimmerBufferDuration(decodedBuffer.duration);
+                // This will also call resetTrims within the trimmer module
+            } else {
+                console.warn("Waveform Trimmer function setBufferDuration not available.");
+            }
 
         // Get original frequency from metadata (assuming it exists and is correct)
         const freqElement = document.getElementById('audio-meta-frequency');
@@ -259,6 +290,14 @@ export const init = async (audioData, initialTempo = 78, initialPitch = 1, initi
     //      clearWaveform();
     // }
     // +++ END NEW CODE +++
+
+     // Clear waveform & stop playhead
+     if (typeof clearWaveformDisplay === 'function') { clearWaveformDisplay(); }
+     if (typeof stopPlayhead === 'function') { stopPlayhead(); }
+     // +++ Reset Trimmer +++
+      if (typeof resetTrimmer === 'function') {
+          resetTrimmer();
+      }
 
      // Clear waveform display on re-init
      if (typeof clearWaveformDisplay === 'function') {
@@ -478,17 +517,22 @@ export const toggleReverse = () => {
     console.log(`Audio reverse toggled. Now: ${isReversed ? 'Reversed' : 'Original'}`);
 
 
-    // +++ Redraw waveform for the new direction +++
     const bufferToDraw = _getCurrentBuffer();
-    if (bufferToDraw && typeof drawWaveform === 'function') {
-        // Draw without playhead, as looping state determines if playhead restarts
-        drawWaveform(bufferToDraw, undefined, null);
-    }
-    // Stop any current playhead - loop restart will handle starting it again if needed
-    if (typeof stopPlayhead === 'function') {
-        stopPlayhead();
-    }
-    // +++ End Redraw +++
+
+     // +++ Set Trimmer Duration (for potentially reversed buffer) & Reset +++
+     if (bufferToDraw && typeof setTrimmerBufferDuration === 'function') {
+         setTrimmerBufferDuration(bufferToDraw.duration); // This also resets trims
+     } else if (typeof resetTrimmer === 'function') {
+         resetTrimmer(); // Reset even if buffer is null? Maybe not needed if setBufferDuration handles it.
+     }
+
+     // Draw the newly oriented waveform (trim state is reset)
+     if (bufferToDraw && typeof drawWaveform === 'function') {
+         drawWaveform(bufferToDraw, undefined, null);
+     }
+
+     // Stop any current playhead
+     if (typeof stopPlayhead === 'function') { stopPlayhead(); }
 
 
     // If looping, restart the loop immediately
@@ -516,14 +560,14 @@ export const getPlaybackRateForNote = (midiNote) => {
     // Returns undefined if note not in map
 };
 
+// Make sure playSampleAtRate also uses the trimmed values
 export const playSampleAtRate = async (playbackRate, velocity = 127) => {
     if (playbackRate <= 0) return;
     if (!await _ensureContextRunning()) return;
     const buffer = _getCurrentBuffer();
     if (buffer) {
-        // This call to _playBuffer will trigger startPlayhead
+        // This call to _playBuffer will get trim times and start playhead correctly
         _playBuffer(buffer, audioContext.currentTime, playbackRate);
     }
 };
-
 // --- END OF FILE audioProcessor.js ---

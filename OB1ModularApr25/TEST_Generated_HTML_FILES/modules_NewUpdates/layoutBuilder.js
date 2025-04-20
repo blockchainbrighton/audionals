@@ -33,12 +33,14 @@ export function buildLayout(targetElement) {
 
     // +++ START NEW CODE +++
     // --- Create Waveform Display Area ---
-    const waveformContainer = createElement('div', { id: 'waveform-container', className: 'waveform-container' }, [
-        createElement('canvas', { id: 'waveform-canvas', width: '300', height: '60' }) // Adjust width/height as needed
+    const waveformContainer = createElement('div', {
+        id: 'waveform-container',
+        className: 'waveform-container',
+        // +++ Ensure relative positioning for handles +++
+        style: 'position: relative;'
+    }, [
+        createElement('canvas', { id: 'waveform-canvas', width: '300', height: '60' })
     ]);
-    console.log("Layout Builder: Waveform container created.");
-    // +++ END NEW CODE +++
-
 
     // --- Create Column 2: Image (using imported createElement) ---
     const imageArea = createElement('div', { className: 'image-area' }, [

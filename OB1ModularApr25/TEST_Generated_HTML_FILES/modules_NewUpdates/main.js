@@ -20,6 +20,7 @@ import { initReferencePanel } from './referenceDisplay.js';
 import { clamp, _isInputFocused, addListener, createElement } from './utils.js';
 import * as midiRecorder from './midiRecorder.js';
 import * as waveformDisplay from './waveformDisplay.js'; // Import the new module
+import * as waveformTrimmer from './waveformTrimmer.js';
 
 
 // --- Constants ---
@@ -309,7 +310,13 @@ async function initializeApp() {
         console.warn("Waveform display failed to initialize. Proceeding without it.");
         // Optionally show a less severe UI warning if desired
     }
-    
+
+    // +++ Init Waveform Trimmer +++
+    // Pass the ID of the *container* holding the canvas
+    if (!waveformTrimmer.init('waveform-container')) {
+        console.warn("Waveform trimmer failed to initialize.");
+    }
+
     let imageUrlData = null;
     let imageSourceType = '';
     let imagePrefix = '';
