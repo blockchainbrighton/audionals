@@ -1,473 +1,220 @@
 // --- START OF FILE midiRecorder.js ---
 
-import { createElement } from './utils.js'; // Assuming utils.js is accessible
+import { createElement } from './utils.js';
 
-// --- Module State ---
-let audioProcRef = null; // Reference to the main audioProcessor module
-let isArmedForRecording = false; // NEW: Flag for standby state
-let isRecording = false;         // Flag for active recording (after first note)
-let isPlaying = false;
-let recordedEvents = [];
-let recordingStartTime = 0;      // Timestamp of the *first* recorded note
-let playbackTimeoutIds = []; // To store setTimeout IDs for cancellation
-let uiPanel = null;       // Reference to the main UI panel element
-let recordButton, playButton, stopButton, saveButton, loadButton, statusIndicator; // UI Elements
+let audioProcRef = null, isArmedForRecording = false, isRecording = false, isPlaying = false;
+let recordedEvents = [], recordingStartTime = 0, playbackTimeoutIds = [], uiPanel = null;
+let recordButton, playButton, stopButton, saveButton, loadButton, statusIndicator;
 let isUIVisible = false;
 
-// --- Constants ---
-const FORMAT_VERSION = "1.0";
-const PANEL_ID = 'midi-recorder-panel';
+const FORMAT_VERSION = "1.0", PANEL_ID = 'midi-recorder-panel';
 
-// --- UI Creation & Management ---
+const setStyle = (el, style) => Object.assign(el.style, Object.fromEntries(
+    style.split(';').filter(Boolean).map(s => s.trim().split(/:(.+)/).map(v => v.trim()))
+));
 
-/** Creates the recorder UI panel and its elements */
+const makeButton = label => createElement('button', {
+    style: `padding:5px 10px;cursor:pointer;min-width:70px;text-align:center;
+            background:#333;border:1px solid #555;color:#ddd;border-radius:3px;`,
+    textContent: label
+});
+
 function _createUIPanel() {
-    // Panel Styling (simple example)
-    const panelStyle = `
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background-color: rgba(40, 40, 40, 0.9);
-        border: 1px solid #555;
-        border-radius: 5px;
-        padding: 10px 15px; /* Adjusted padding */
-        z-index: 1000;
-        /* Use flex column for layout */
-        display: flex;
-        flex-direction: column; /* Stack elements vertically */
-        align-items: center;    /* Center items horizontally */
-        gap: 8px;              /* Space between rows */
-        visibility: hidden; /* Start hidden */
-        opacity: 0;
-        transition: visibility 0s 0.2s, opacity 0.2s ease-in-out;
-        color: #ccc;
-        font-size: 0.9em;
-    `;
-     const buttonRowStyle = `
-        display: flex;
-        gap: 10px;
-        width: 100%; /* Make button row take full width */
-        justify-content: center; /* Center buttons within the row */
-    `;
-    const buttonStyle = `
-        padding: 5px 10px;
-        cursor: pointer;
-        min-width: 70px; /* Give buttons some minimum width */
-        text-align: center;
-        background-color: #333;
-        border: 1px solid #555;
-        color: #ddd;
-        border-radius: 3px;
-    `;
-     const statusStyle = `
-        min-height: 1.2em; /* Prevent layout shift */
-        font-style: italic;
-        color: #aaa;
-        text-align: center;
-        width: 100%;
-     `;
+    uiPanel = createElement('div', { id: PANEL_ID });
+    setStyle(uiPanel, `
+        position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+        background:rgba(40,40,40,0.9);border:1px solid #555;border-radius:5px;
+        padding:10px 15px;z-index:1000;display:flex;flex-direction:column;
+        align-items:center;gap:8px;visibility:hidden;opacity:0;
+        transition:visibility 0s 0.2s,opacity 0.2s ease-in-out;
+        color:#ccc;font-size:0.9em;
+    `);
 
-    uiPanel = createElement('div', { id: PANEL_ID, style: panelStyle });
+    const buttonRow = createElement('div');
+    setStyle(buttonRow, `display:flex;gap:10px;width:100%;justify-content:center;`);
 
-    // Create elements
-    statusIndicator = createElement('span', { style: statusStyle, textContent: 'Idle' });
-    const buttonRow = createElement('div', { style: buttonRowStyle }); // Container for buttons
-
-    recordButton = createElement('button', { style: buttonStyle, textContent: 'Record' });
-    playButton = createElement('button', { style: buttonStyle, textContent: 'Play' });
-    stopButton = createElement('button', { style: buttonStyle, textContent: 'Stop', disabled: true }); // Initially disabled
-    saveButton = createElement('button', { style: buttonStyle, textContent: 'Save' }); // Shortened text
-    loadButton = createElement('button', { style: buttonStyle, textContent: 'Load' }); // Shortened text
-
-    // Add Listeners
-    recordButton.addEventListener('click', () => {
-        if (!isArmedForRecording && !isRecording) {
-            armRecording(); // Arm instead of starting directly
-        } else {
-            stopRecording(); // Stop recording (or cancel arming) uses the same button
-        }
+    statusIndicator = createElement('span', {
+        style: `min-height:1.2em;font-style:italic;color:#aaa;text-align:center;width:100%;`,
+        textContent: 'Idle'
     });
 
-    playButton.addEventListener('click', () => {
-        if (!isPlaying) {
-            startPlayback();
-        }
-        _updateUIState(); // startPlayback calls _updateUIState, redundant here? Kept for safety.
-    });
+    [recordButton, playButton, stopButton, saveButton, loadButton] = ['Record', 'Play', 'Stop', 'Save', 'Load'].map(makeButton);
+    stopButton.disabled = true;
 
-    stopButton.addEventListener('click', () => {
-        // Stop cancels arming, stops recording, or stops playback
-        if (isArmedForRecording) cancelArming();
-        if (isRecording) stopRecording();
-        if (isPlaying) stopPlayback();
-        // _updateUIState() is called within the specific stop functions
-    });
+    recordButton.onclick = () => (!isArmedForRecording && !isRecording) ? armRecording() : stopRecording();
+    playButton.onclick = () => { if (!isPlaying) startPlayback(); _updateUIState(); };
+    stopButton.onclick = () => { isArmedForRecording && cancelArming(); isRecording && stopRecording(); isPlaying && stopPlayback(); };
+    saveButton.onclick = saveRecording;
+    loadButton.onclick = loadRecording;
 
-    saveButton.addEventListener('click', saveRecording);
-    loadButton.addEventListener('click', loadRecording);
-
-    // Append elements
     buttonRow.append(recordButton, playButton, stopButton, saveButton, loadButton);
-    uiPanel.append(statusIndicator, buttonRow); // Status first, then button row
+    uiPanel.append(statusIndicator, buttonRow);
     document.body.appendChild(uiPanel);
-
-    _updateUIState(); // Set initial button states/status
+    _updateUIState();
 }
 
-/** Updates button text, disabled states, and status indicator based on current module state */
 function _updateUIState() {
     if (!uiPanel) return;
+    const hasEvents = recordedEvents.length > 0;
+    const statusMap = {
+        idle: () => [`Idle${hasEvents ? ` (${hasEvents} events)` : ''}`, 'Record', '', false, hasEvents, true],
+        armed: () => ['Armed (Waiting for first note...)', 'Cancel Arm', '#d08770', true, false, false],
+        recording: () => ['Recording...', 'Stop', '#bf616a', true, false, false],
+        playing: () => ['Playing...', 'Record', '', true, false, false]
+    };
+    const [statusText, recText, recColor, stopOn, playSaveOn, loadOn] =
+        isArmedForRecording ? statusMap.armed() :
+        isRecording ? statusMap.recording() :
+        isPlaying ? statusMap.playing() : statusMap.idle();
 
-    let statusText = 'Idle';
-    let recButtonText = 'Record';
-    let recButtonColor = ''; // Default background
-    let stopEnabled = false;
-    let playSaveEnabled = recordedEvents.length > 0; // Can only play/save if there are events
-    let loadEnabled = true;
-
-    if (isArmedForRecording) {
-        statusText = 'Armed (Waiting for first note...)';
-        recButtonText = 'Cancel Arm';
-        recButtonColor = '#d08770'; // Orange-ish color for armed state
-        stopEnabled = true; // Stop button cancels arming
-        playSaveEnabled = false; // Cannot play/save while armed
-        loadEnabled = false; // Cannot load while armed
-    } else if (isRecording) {
-        statusText = 'Recording...';
-        recButtonText = 'Stop';
-        recButtonColor = '#bf616a'; // Red-ish color for recording state
-        stopEnabled = true; // Stop button stops recording
-        playSaveEnabled = false; // Cannot play/save while recording
-        loadEnabled = false; // Cannot load while recording
-    } else if (isPlaying) {
-        statusText = 'Playing...';
-        recButtonText = 'Record'; // Can't record while playing
-        stopEnabled = true; // Stop button stops playback
-        playSaveEnabled = false; // Can't play/save again while playing
-        loadEnabled = false; // Can't load while playing
-    } else {
-         // Idle state
-         statusText = recordedEvents.length > 0 ? `Ready (${recordedEvents.length} events)` : 'Idle';
-         // playSaveEnabled determined above based on recordedEvents.length
-    }
-
-
-    statusIndicator.textContent = statusText;
-    recordButton.textContent = recButtonText;
-    recordButton.style.backgroundColor = recButtonColor; // Apply specific color or default
-    recordButton.disabled = isPlaying; // Can't press Record/Cancel/Stop while playing
-
-    stopButton.disabled = !stopEnabled;
-    playButton.disabled = !playSaveEnabled || isArmedForRecording || isRecording || isPlaying;
-    saveButton.disabled = !playSaveEnabled || isArmedForRecording || isRecording || isPlaying;
-    loadButton.disabled = !loadEnabled || isArmedForRecording || isRecording || isPlaying;
-
-    // Reset record button color if not armed/recording
-    if (!isArmedForRecording && !isRecording) {
-         recordButton.style.backgroundColor = ''; // Revert to default CSS background
-    }
+    Object.assign(statusIndicator, { textContent: statusText });
+    Object.assign(recordButton, { textContent: recText, disabled: isPlaying });
+    recordButton.style.backgroundColor = recColor;
+    stopButton.disabled = !stopOn;
+    [playButton, saveButton].forEach(btn => btn.disabled = !playSaveOn || isArmedForRecording || isRecording || isPlaying);
+    loadButton.disabled = !loadOn || isArmedForRecording || isRecording || isPlaying;
+    if (!isArmedForRecording && !isRecording) recordButton.style.backgroundColor = '';
 }
 
-
-/** Toggles the visibility of the UI panel */
-function toggleUI() {
-    if (!uiPanel) _createUIPanel(); // Create if it doesn't exist yet
-
+export function toggleUI() {
+    if (!uiPanel) _createUIPanel();
     isUIVisible = !isUIVisible;
-    if (isUIVisible) {
-        uiPanel.style.visibility = 'visible';
-        uiPanel.style.opacity = '1';
-        uiPanel.style.transitionDelay = '0s'; // Show immediately
-    } else {
-        uiPanel.style.opacity = '0';
-        uiPanel.style.visibility = 'hidden';
-        uiPanel.style.transitionDelay = '0s, 0.2s'; // Hide visibility after opacity transition
-    }
-     console.log(`MIDI Recorder UI ${isUIVisible ? 'shown' : 'hidden'}.`);
+    Object.assign(uiPanel.style, {
+        visibility: isUIVisible ? 'visible' : 'hidden',
+        opacity: isUIVisible ? '1' : '0',
+        transitionDelay: isUIVisible ? '0s' : '0s,0.2s'
+    });
+    console.log(`MIDI Recorder UI ${isUIVisible ? 'shown' : 'hidden'}.`);
 }
 
-
-// --- Recording Logic ---
-
-/** Puts the recorder into standby mode, waiting for the first note. */
 function armRecording() {
     if (isArmedForRecording || isRecording || isPlaying) return;
-
-    isArmedForRecording = true;
-    isRecording = false;       // Ensure not actively recording yet
-    recordedEvents = [];       // Clear previous recording
-    recordingStartTime = 0;    // Reset start time, will be set on first note
+    isArmedForRecording = true; isRecording = false;
+    recordedEvents = []; recordingStartTime = 0;
     console.log("MIDI Recorder: Armed for recording. Waiting for first note...");
     _updateUIState();
 }
 
-/** Cancels the armed state without recording anything. */
 function cancelArming() {
-     if (!isArmedForRecording) return;
-     isArmedForRecording = false;
-     console.log("MIDI Recorder: Recording arm cancelled.");
-     _updateUIState();
-}
-
-/** Stops the current MIDI recording */
-function stopRecording() {
-    // This function now stops EITHER active recording OR cancels arming
-    if (!isRecording && !isArmedForRecording) return;
-
-    const wasRecording = isRecording; // Check if we actually recorded anything
-    const wasArmed = isArmedForRecording;
-
-    isRecording = false;
+    if (!isArmedForRecording) return;
     isArmedForRecording = false;
+    console.log("MIDI Recorder: Recording arm cancelled.");
+    _updateUIState();
+}
 
+function stopRecording() {
+    if (!isRecording && !isArmedForRecording) return;
+    const wasRecording = isRecording, wasArmed = isArmedForRecording;
+    isRecording = isArmedForRecording = false;
     if (wasRecording) {
-        // Calculate duration based on the time since the *first* note
-        const duration = (recordedEvents.length > 0)
-             ? (recordedEvents[recordedEvents.length - 1].time / 1000) // Time of last event
-             : 0;
-        console.log(`MIDI Recorder: Recording stopped. Recorded ${recordedEvents.length} events over ~${duration.toFixed(2)}s.`);
+        const duration = recordedEvents.length ? recordedEvents.at(-1).time / 1000 : 0;
+        console.log(`MIDI Recorder: Recording stopped. ${recordedEvents.length} events over ~${duration.toFixed(2)}s.`);
     } else if (wasArmed) {
-         console.log("MIDI Recorder: Recording arm cancelled via Stop button.");
+        console.log("MIDI Recorder: Recording arm cancelled via Stop button.");
     }
-     recordingStartTime = 0; // Reset start time
+    recordingStartTime = 0;
     _updateUIState();
 }
 
-/** Handles an incoming MIDI event (called externally by main.js) */
 export function handleMidiEvent(type, note, velocity, timestamp) {
-    // Ignore if not armed or already recording
     if (!isArmedForRecording && !isRecording) return;
-
-    // --- Start recording on the first valid note event when armed ---
     if (isArmedForRecording && type === 'noteon' && velocity > 0) {
-        isArmedForRecording = false; // No longer just armed
-        isRecording = true;          // Now actively recording
-        recordingStartTime = timestamp; // Set the start time to this event's timestamp
-        console.log("MIDI Recorder: First note received. Recording active.");
-
-        // Record the first event with time = 0
+        isArmedForRecording = false; isRecording = true;
+        recordingStartTime = timestamp;
         recordedEvents.push({ type, time: 0, note, velocity });
-        _updateUIState(); // Update UI to "Recording..." state
-        return; // Don't process further in this call for the first note
+        console.log("MIDI Recorder: First note received. Recording active.");
+        _updateUIState();
+        return;
     }
-
-    // --- Record subsequent events if already recording ---
     if (isRecording) {
-        // Calculate time relative to the *first* note's timestamp
-        const relativeTime = Math.max(0, timestamp - recordingStartTime); // Ensure non-negative time
-        recordedEvents.push({ type, time: relativeTime, note, velocity });
-        // Optional: Log subsequent events
-        // console.log('Rec:', { type, time: relativeTime, note, velocity });
+        const time = Math.max(0, timestamp - recordingStartTime);
+        recordedEvents.push({ type, time, note, velocity });
     }
 }
 
-// --- Playback Logic --- (Remains the same as before)
-
-/** Starts playback of the recorded events */
 function startPlayback() {
-    if (isPlaying || isRecording || isArmedForRecording || recordedEvents.length === 0) return; // Added check for armed state
-    if (!audioProcRef || typeof audioProcRef.playSampleAtRate !== 'function' || typeof audioProcRef.getPlaybackRateForNote !== 'function') { // Added check for getPlaybackRateForNote
-        console.error("MIDI Recorder: Cannot play, audioProcessor reference or required methods are invalid.");
-        return;
-    }
-
-    stopPlayback(); // Clear any previous playback timeouts just in case
+    if (isPlaying || isRecording || isArmedForRecording || !recordedEvents.length || !audioProcRef?.playSampleAtRate || !audioProcRef?.getPlaybackRateForNote) return;
+    stopPlayback();
     isPlaying = true;
-    // const playbackStartTime = Date.now(); // Not strictly needed for scheduling logic
     console.log(`MIDI Recorder: Starting playback of ${recordedEvents.length} events.`);
-
-    let eventsPlayed = 0;
-    // let lastTimeoutId = null; // Not currently used
-
-    recordedEvents.forEach(event => {
-        const scheduledPlayTime = event.time; // Time offset from start of *recording* (first note)
-
-        const timeoutId = setTimeout(() => { // Removed async as playSampleAtRate is not awaited
+    let played = 0;
+    recordedEvents.forEach(({ type, time, note, velocity }) => {
+        const id = setTimeout(() => {
             try {
-                // We only directly trigger 'noteon' events for playback in this simple model
-                if (event.type === 'noteon' && event.velocity > 0) {
-                     // Use the audio processor's ability to play a note at a specific *rate*
-                     // derived from the MIDI note number.
-                     const rate = audioProcRef.getPlaybackRateForNote(event.note);
-                     if (rate !== undefined) {
-                         // We don't await this, playback should trigger sounds immediately
-                         audioProcRef.playSampleAtRate(rate, event.velocity);
-                     } else {
-                         console.warn(`MIDI Recorder Playback: No playback rate found for note ${event.note}`);
-                     }
+                if (type === 'noteon' && velocity > 0) {
+                    const rate = audioProcRef.getPlaybackRateForNote(note);
+                    if (rate !== undefined) audioProcRef.playSampleAtRate(rate, velocity);
+                    else console.warn(`No playback rate for note ${note}`);
                 }
-                // Note Off events are currently ignored in playback, the sample plays fully.
-
-                // Remove the timeout ID from the list once it has executed
-                const index = playbackTimeoutIds.indexOf(timeoutId);
-                if (index > -1) {
-                    playbackTimeoutIds.splice(index, 1);
-                }
-
-                eventsPlayed++;
-                // Check if this is the last event *and* all timeouts have been cleared/fired
-                if (eventsPlayed === recordedEvents.length && playbackTimeoutIds.length === 0) {
-                    console.log("MIDI Recorder: Playback finished.");
-                    // Automatically stop playback state after the last event has fired
-                    // Ensure isPlaying is still true before calling stopPlayback,
-                    // in case the user manually stopped it mid-playback.
-                    if (isPlaying) {
-                        stopPlayback(); // Cleans up state and UI
-                    }
-                }
-
-            } catch (err) {
-                console.error("MIDI Recorder: Error during scheduled playback:", err);
-                 // Ensure state is cleaned up even if an error occurs mid-playback
-                 if (isPlaying) {
-                     stopPlayback(); // Stop if errors occur
-                 }
+                playbackTimeoutIds = playbackTimeoutIds.filter(t => t !== id);
+                if (++played === recordedEvents.length && !playbackTimeoutIds.length && isPlaying) stopPlayback();
+            } catch (e) {
+                console.error("Playback error:", e);
+                if (isPlaying) stopPlayback();
             }
-        }, scheduledPlayTime); // Schedule based on the event's relative time
-
-        playbackTimeoutIds.push(timeoutId);
-        // lastTimeoutId = timeoutId; // Keep track of the last scheduled event's ID (still not used)
+        }, time);
+        playbackTimeoutIds.push(id);
     });
-
     _updateUIState();
 }
 
-
-/** Stops the current playback */
 function stopPlayback() {
-    if (!isPlaying && playbackTimeoutIds.length === 0) return; // Only act if playing or timeouts exist
-
+    if (!isPlaying && !playbackTimeoutIds.length) return;
     console.log("MIDI Recorder: Stopping playback.");
-    isPlaying = false; // Set state immediately
-    playbackTimeoutIds.forEach(clearTimeout); // Clear all scheduled timeouts
-    playbackTimeoutIds = []; // Reset the array
-    _updateUIState(); // Update UI immediately after stopping
+    isPlaying = false;
+    playbackTimeoutIds.forEach(clearTimeout);
+    playbackTimeoutIds = [];
+    _updateUIState();
 }
 
-// --- File Handling --- (Remains the same as before)
-
-/** Saves the current recording as a JSON file */
 function saveRecording() {
-    if (recordedEvents.length === 0) {
-        alert("No MIDI data recorded to save.");
-        return;
-    }
-     if (isArmedForRecording || isRecording || isPlaying) { // Prevent saving while busy
-         alert("Cannot save while recording, armed, or playing.");
-         return;
-     }
-
-    const recordingData = {
-        formatVersion: FORMAT_VERSION,
-        events: recordedEvents
-    };
-
-    const jsonData = JSON.stringify(recordingData, null, 2); // Pretty print JSON
-    const blob = new Blob([jsonData], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-
-    const a = createElement('a', {
-        href: url,
-        download: `midi_recording_${Date.now()}.json` // Generate filename
-    });
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url); // Clean up
-
+    if (!recordedEvents.length) return alert("No MIDI data to save.");
+    if (isArmedForRecording || isRecording || isPlaying) return alert("Cannot save while busy.");
+    const blob = new Blob([JSON.stringify({ formatVersion: FORMAT_VERSION, events: recordedEvents }, null, 2)], { type: 'application/json' });
+    const a = createElement('a', { href: URL.createObjectURL(blob), download: `midi_recording_${Date.now()}.json` });
+    document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
     console.log("MIDI Recorder: Recording saved to JSON.");
 }
 
-/** Loads a recording from a user-selected JSON file */
 function loadRecording() {
-     if (isArmedForRecording || isRecording || isPlaying) { // Prevent loading while busy
-         alert("Cannot load while recording, armed, or playing.");
-         return;
-     }
+    if (isArmedForRecording || isRecording || isPlaying) return alert("Cannot load while busy.");
     const input = createElement('input', { type: 'file', accept: '.json,application/json' });
-
-    input.onchange = (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
+    input.onchange = ({ target: { files } }) => {
+        const file = files?.[0]; if (!file) return;
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = ({ target: { result } }) => {
             try {
-                const content = e.target.result;
-                const loadedData = JSON.parse(content);
-
-                // --- Basic Validation ---
-                if (!loadedData || typeof loadedData !== 'object') {
-                    throw new Error("Invalid file content: Not a JSON object.");
-                }
-                if (loadedData.formatVersion !== FORMAT_VERSION) {
-                     // Allow loading older versions with a warning, or reject
-                     console.warn(`Warning: Loading recording with format version ${loadedData.formatVersion}, expected ${FORMAT_VERSION}. Compatibility not guaranteed.`);
-                     // Or: throw new Error(`Incompatible format version: ${loadedData.formatVersion}`);
-                }
-                 if (!Array.isArray(loadedData.events)) {
-                     throw new Error("Invalid format: Missing or non-array 'events' property.");
-                 }
-                 // Optional: Further validation - check if first event has time 0? Check event types?
-
-                 // --- Normalize Timestamps (Ensure first event is at time 0) ---
-                 if (loadedData.events.length > 0) {
-                     const firstEventTime = loadedData.events[0].time || 0;
-                     if (firstEventTime !== 0) {
-                         console.warn(`MIDI Recorder: First event in loaded file has non-zero time (${firstEventTime}ms). Normalizing.`);
-                         for (let i = 0; i < loadedData.events.length; i++) {
-                             loadedData.events[i].time = Math.max(0, loadedData.events[i].time - firstEventTime);
-                         }
-                     }
-                 }
-                 // --------------------------------------------------------------
-
-
-                recordedEvents = loadedData.events;
-                console.log(`MIDI Recorder: Successfully loaded ${recordedEvents.length} events from ${file.name}.`);
+                const data = JSON.parse(result);
+                if (!data || typeof data !== 'object') throw new Error("Invalid JSON structure.");
+                if (data.formatVersion !== FORMAT_VERSION)
+                    console.warn(`Loading version ${data.formatVersion} (expected ${FORMAT_VERSION}).`);
+                if (!Array.isArray(data.events)) throw new Error("Missing 'events' array.");
+                const offset = data.events.at(0)?.time || 0;
+                if (offset) data.events.forEach(e => e.time = Math.max(0, e.time - offset));
+                recordedEvents = data.events;
+                console.log(`Loaded ${recordedEvents.length} events from ${file.name}.`);
                 alert(`Loaded ${recordedEvents.length} events.`);
-                // No need to call stopRecording/stopPlayback as we already checked we are idle
-                _updateUIState(); // Update UI to enable Play/Save
-
-            } catch (error) {
-                console.error("MIDI Recorder: Error loading or parsing JSON file:", error);
-                alert(`Error loading file: ${error.message}`);
-                 recordedEvents = []; // Clear potentially corrupt data
-                 _updateUIState();
+                _updateUIState();
+            } catch (e) {
+                console.error("Error loading file:", e);
+                alert(`Error: ${e.message}`);
+                recordedEvents = [];
+                _updateUIState();
             }
         };
-        reader.onerror = (e) => {
-             console.error("MIDI Recorder: Error reading file:", e);
-             alert("Error reading file.");
-        };
-        reader.readAsText(file); // Read file as text
+        reader.onerror = e => { console.error("Read error:", e); alert("Error reading file."); };
+        reader.readAsText(file);
     };
-
-    input.click(); // Trigger the file selection dialog
+    input.click();
 }
 
-
-// --- Public API ---
-
-/**
- * Initializes the MIDI Recorder module.
- * @param {object} audioProcessorReference - A reference to the initialized audioProcessor module.
- */
-export function init(audioProcessorReference) {
-    // Check for necessary methods on the audio processor reference
-    if (!audioProcessorReference ||
-        typeof audioProcessorReference.playSampleAtRate !== 'function' ||
-        typeof audioProcessorReference.getPlaybackRateForNote !== 'function') {
-        console.error("MIDI Recorder Init Error: Invalid audioProcessor reference or missing required methods (playSampleAtRate, getPlaybackRateForNote).");
-        return;
-    }
-    audioProcRef = audioProcessorReference;
-    _createUIPanel(); // Create the UI elements
+export function init(ref) {
+    if (!ref?.playSampleAtRate || !ref?.getPlaybackRateForNote) return console.error("Invalid audioProcessor reference.");
+    audioProcRef = ref;
+    _createUIPanel();
     console.log("MIDI Recorder Initialized.");
 }
 
-// Export toggleUI for external triggering (e.g., by 'K' key in main.js)
-export { toggleUI };
+
 
 // --- END OF FILE midiRecorder.js ---
