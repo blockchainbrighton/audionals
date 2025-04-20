@@ -5,12 +5,13 @@ let startHandle = null;
 let endHandle = null;
 
 let isDragging = false;
-let dragTarget = null; // 'start' or 'end'
+let dragTarget = null; // 'start' or 'end' (refers to the *element* being dragged)
 let dragOffsetX = 0; // Initial click offset within the handle
 
 let currentBufferDuration = 0; // in seconds
-let trimStartRatio = 0.0; // 0.0 to 1.0
-let trimEndRatio = 1.0;   // 0.0 to 1.0
+let trimStartRatio = 0.0; // Always 0.0 to 1.0 relative to ORIGINAL buffer
+let trimEndRatio = 1.0;   // Always 0.0 to 1.0 relative to ORIGINAL buffer
+let isReversed = false;   // --- NEW: Track reversal state ---
 
 const HANDLE_WIDTH = 10; // Width of the handle in pixels
 
@@ -39,7 +40,8 @@ export function init(containerId) {
     // --- Add Event Listeners ---
     _addEventListeners();
 
-    // --- Initial UI Update ---
+    // --- Initial State ---
+    isReversed = false; // Reset state on init
     resetTrims(); // Set to full range initially
 
     console.log("Waveform Trimmer initialized.");
@@ -50,135 +52,208 @@ export function init(containerId) {
 function _createHandle(type) {
     const handle = document.createElement('div');
     handle.className = `trim-handle trim-handle-${type}`;
-    handle.dataset.type = type; // Store type for event handling
+    handle.dataset.type = type; // Store type for event handling ('start' or 'end' element)
     return handle;
 }
 
 /** Adds all necessary event listeners */
 function _addEventListeners() {
     if (!startHandle || !endHandle || !trimmerContainer) return;
-
-    // Use capturing phase for mouseup/touchend on window/document
-    // to catch the event even if the cursor leaves the handle/container.
     const options = { capture: true };
 
     // Mouse Events
     startHandle.addEventListener('mousedown', _handleMouseDown);
     endHandle.addEventListener('mousedown', _handleMouseDown);
-    document.addEventListener('mousemove', _handleMouseMove); // Listen on document
-    document.addEventListener('mouseup', _handleMouseUp, options); // Listen on document (capturing)
+    document.addEventListener('mousemove', _handleMouseMove);
+    document.addEventListener('mouseup', _handleMouseUp, options);
 
     // Touch Events
-    startHandle.addEventListener('touchstart', _handleTouchStart, { passive: false }); // Prevent scroll
+    startHandle.addEventListener('touchstart', _handleTouchStart, { passive: false });
     endHandle.addEventListener('touchstart', _handleTouchStart, { passive: false });
-    document.addEventListener('touchmove', _handleTouchMove, { passive: false }); // Prevent scroll
+    document.addEventListener('touchmove', _handleTouchMove, { passive: false });
     document.addEventListener('touchend', _handleTouchEnd, options);
     document.addEventListener('touchcancel', _handleTouchEnd, options);
 }
 
-/** Updates the visual position of the handles based on ratios */
+// --- NEW: Set reversal state ---
+/**
+ * Updates the trimmer's internal state based on audio reversal.
+ * @param {boolean} reversed - Whether the audio is currently reversed.
+ */
+export function setReversed(reversed) {
+    if (isReversed !== reversed) {
+        isReversed = reversed;
+        console.log(`Waveform Trimmer: Set reversed state to ${isReversed}`);
+        _updateHandlesUI(); // Update handle positions immediately
+    }
+}
+
+
+/** --- MODIFIED: Updates visual position based on reversal --- */
 function _updateHandlesUI() {
     if (!startHandle || !endHandle || !trimmerContainer) return;
     const containerWidth = trimmerContainer.offsetWidth;
-    if (containerWidth <= 0) return; // Avoid division by zero if container not rendered
+    if (containerWidth <= 0) return;
 
-    // Calculate pixel positions based on ratio, adjusting for handle width
-    const startPos = trimStartRatio * containerWidth;
-    // For end handle, calculate position from left edge based on ratio
-    const endPos = trimEndRatio * containerWidth - HANDLE_WIDTH; // Adjust for handle width
+    // Calculate the *display* ratios based on the *original* ratios and reversal state
+    let displayStartRatio, displayEndRatio;
+    if (isReversed) {
+        // When reversed:
+        // Visual start handle corresponds to the *original* end trim point, flipped.
+        displayStartRatio = 1.0 - trimEndRatio;
+        // Visual end handle corresponds to the *original* start trim point, flipped.
+        displayEndRatio = 1.0 - trimStartRatio;
+    } else {
+        // Normal state: Visual matches original
+        displayStartRatio = trimStartRatio;
+        displayEndRatio = trimEndRatio;
+    }
 
-    startHandle.style.left = `${Math.max(0, startPos)}px`; // Clamp position
-    endHandle.style.left = `${Math.min(containerWidth - HANDLE_WIDTH, endPos)}px`; // Clamp position
+    // Calculate pixel positions based on *display* ratios
+    const startHandlePos = displayStartRatio * containerWidth;
+    // End handle position is calculated from its left edge based on display ratio,
+    // adjusted because the ratio marks the *end* of the selection.
+    const endHandlePos = displayEndRatio * containerWidth - HANDLE_WIDTH;
+
+    // Apply styles
+    startHandle.style.left = `${Math.max(0, startHandlePos)}px`;
+    endHandle.style.left = `${Math.min(containerWidth - HANDLE_WIDTH, endHandlePos)}px`;
 }
 
-/** Calculates the trim ratio based on mouse/touch X position within the container */
+/** Calculates the visual ratio based on X position within the container */
 function _calculateRatioFromX(clientX) {
     if (!trimmerContainer) return 0;
     const rect = trimmerContainer.getBoundingClientRect();
     const containerWidth = rect.width;
     if (containerWidth <= 0) return 0;
 
-    // Calculate position relative to the container's left edge
     const relativeX = clientX - rect.left;
-    // Clamp relativeX to container bounds [0, containerWidth]
     const clampedX = Math.max(0, Math.min(relativeX, containerWidth));
-    // Calculate ratio
-    const ratio = clampedX / containerWidth;
-
-    return ratio;
+    return clampedX / containerWidth;
 }
 
-/** Dispatch a custom event when trim points change */
+/** Dispatch a custom event with *original* trim ratios/times */
 function _dispatchTrimChangeEvent() {
     if (!trimmerContainer) return;
     const event = new CustomEvent('trimchanged', {
         detail: {
+            // Always dispatch the original, non-reversed ratios and times
             startRatio: trimStartRatio,
             endRatio: trimEndRatio,
             startTime: trimStartRatio * currentBufferDuration,
-            endTime: trimEndRatio * currentBufferDuration
+            endTime: trimEndRatio * currentBufferDuration,
+            // Add duration for convenience
+            duration: (trimEndRatio - trimStartRatio) * currentBufferDuration
         },
-        bubbles: true, // Allow event to bubble up
+        bubbles: true,
         cancelable: true
     });
     trimmerContainer.dispatchEvent(event);
-    // console.log(`Dispatched trimchanged: ${trimStartRatio.toFixed(2)} - ${trimEndRatio.toFixed(2)}`);
+    // console.log(`Dispatched trimchanged: Original ${trimStartRatio.toFixed(3)} - ${trimEndRatio.toFixed(3)}`);
 }
 
 // --- Event Handlers ---
 
 function _handleMouseDown(event) {
-    if (event.button !== 0) return; // Only react to left mouse button
+    if (event.button !== 0) return;
     isDragging = true;
+    // dragTarget identifies which *element* ('start' or 'end' handle) was clicked
     dragTarget = event.target.dataset.type;
 
-    // Calculate initial offset of the click within the handle itself
     const handleRect = event.target.getBoundingClientRect();
     dragOffsetX = event.clientX - handleRect.left;
 
-    event.preventDefault(); // Prevent text selection during drag
+    event.preventDefault();
     event.stopPropagation();
-    // Add a class to body maybe? document.body.classList.add('dragging-trimmer');
+    trimmerContainer.classList.add('dragging'); // Add visual feedback
 }
 
+/** --- MODIFIED: Calculates original ratio based on visual drag & reversal --- */
 function _handleMouseMove(event) {
-    if (!isDragging || !dragTarget) return;
+    if (!isDragging || !dragTarget || !trimmerContainer) return;
+    event.preventDefault();
 
-    event.preventDefault(); // Prevent other actions during drag
+    const containerWidth = trimmerContainer.offsetWidth;
+    if (containerWidth <= 0) return; // Need width for calculations
 
-    // Calculate potential new ratio based on mouse position, adjusted for click offset
+    // Calculate ideal visual position of the handle's left edge based on drag
     const currentX = event.clientX;
-    const handleRelativeClickX = currentX - dragOffsetX; // Where the handle's left edge should ideally be
-    let newRatio = _calculateRatioFromX(handleRelativeClickX);
+    const handleLeftEdgeIdealX = currentX - dragOffsetX;
+    // Calculate the visual ratio corresponding to this position
+    const visualRatio = _calculateRatioFromX(handleLeftEdgeIdealX);
 
-    // Snap ratio to prevent handles crossing and ensure validity
-    if (dragTarget === 'start') {
-        // Start handle cannot go past the end handle (minus a tiny bit for handle width)
-        const minEndRatio = trimEndRatio - (HANDLE_WIDTH / trimmerContainer.offsetWidth);
-        newRatio = Math.min(newRatio, minEndRatio);
-        newRatio = Math.max(0, newRatio); // Ensure not less than 0
-        if (trimStartRatio !== newRatio) {
-             trimStartRatio = newRatio;
-             _updateHandlesUI();
-             _dispatchTrimChangeEvent();
+    let newOriginalStartRatio = trimStartRatio;
+    let newOriginalEndRatio = trimEndRatio;
+    let changed = false;
+
+    // Define minimum separation based on handle width to prevent visual overlap
+    const minSeparationRatio = HANDLE_WIDTH / containerWidth;
+
+    if (dragTarget === 'start') { // Dragging the 'start' handle ELEMENT
+        if (isReversed) {
+            // This element visually represents (1 - original end)
+            // So, visualRatio = 1 - newOriginalEndRatio
+            let potentialOriginalEndRatio = 1.0 - visualRatio;
+            // Clamp: original end cannot be < original start + separation
+            potentialOriginalEndRatio = Math.max(potentialOriginalEndRatio, trimStartRatio + minSeparationRatio);
+            potentialOriginalEndRatio = Math.min(potentialOriginalEndRatio, 1.0); // Clamp: end <= 1
+            if (newOriginalEndRatio !== potentialOriginalEndRatio) {
+                newOriginalEndRatio = potentialOriginalEndRatio;
+                changed = true;
+            }
+        } else {
+            // Normal drag of start handle: visualRatio = newOriginalStartRatio
+            let potentialOriginalStartRatio = visualRatio;
+            // Clamp: original start cannot be > original end - separation
+            potentialOriginalStartRatio = Math.min(potentialOriginalStartRatio, trimEndRatio - minSeparationRatio);
+            potentialOriginalStartRatio = Math.max(potentialOriginalStartRatio, 0.0); // Clamp: start >= 0
+            if (newOriginalStartRatio !== potentialOriginalStartRatio) {
+                newOriginalStartRatio = potentialOriginalStartRatio;
+                changed = true;
+            }
         }
-    } else if (dragTarget === 'end') {
-        // Adjust calculation because ratio is based on left edge, but we drag the handle itself
-        // We need ratio where the *adjusted* handle position aligns with mouse
-        let adjustedClickX = currentX + (HANDLE_WIDTH - dragOffsetX); // Where right edge aligns with mouse
-        newRatio = _calculateRatioFromX(adjustedClickX - HANDLE_WIDTH); // Back-calculate left edge ratio
+    } else if (dragTarget === 'end') { // Dragging the 'end' handle ELEMENT
+         // --- Adjust calculation for end handle ---
+         // We drag the element, but the ratio corresponds to the *end* of the selection.
+         // The handle's *left* edge is at (visualRatio * width - handleWidth).
+         // We need the visual ratio corresponding to the *right* edge of the handle.
+         const handleRightEdgeIdealX = handleLeftEdgeIdealX + HANDLE_WIDTH;
+         const visualEndRatio = _calculateRatioFromX(handleRightEdgeIdealX);
+         // --- End adjustment ---
 
-        // End handle cannot go before the start handle (plus a tiny bit for handle width)
-        const minStartRatio = trimStartRatio + (HANDLE_WIDTH / trimmerContainer.offsetWidth);
-        newRatio = Math.max(newRatio, minStartRatio);
-        newRatio = Math.min(1, newRatio); // Ensure not more than 1
-        if (trimEndRatio !== newRatio) {
-            trimEndRatio = newRatio;
-            _updateHandlesUI();
-            _dispatchTrimChangeEvent();
+        if (isReversed) {
+            // This element visually represents (1 - original start)
+            // So, visualEndRatio = 1 - newOriginalStartRatio
+            let potentialOriginalStartRatio = 1.0 - visualEndRatio;
+            // Clamp: original start cannot be > original end - separation
+            potentialOriginalStartRatio = Math.min(potentialOriginalStartRatio, trimEndRatio - minSeparationRatio);
+            potentialOriginalStartRatio = Math.max(potentialOriginalStartRatio, 0.0); // Clamp: start >= 0
+             if (newOriginalStartRatio !== potentialOriginalStartRatio) {
+                newOriginalStartRatio = potentialOriginalStartRatio;
+                changed = true;
+            }
+        } else {
+            // Normal drag of end handle: visualEndRatio = newOriginalEndRatio
+            let potentialOriginalEndRatio = visualEndRatio;
+            // Clamp: original end cannot be < original start + separation
+            potentialOriginalEndRatio = Math.max(potentialOriginalEndRatio, trimStartRatio + minSeparationRatio);
+            potentialOriginalEndRatio = Math.min(potentialOriginalEndRatio, 1.0); // Clamp: end <= 1
+            if (newOriginalEndRatio !== potentialOriginalEndRatio) {
+                newOriginalEndRatio = potentialOriginalEndRatio;
+                changed = true;
+            }
         }
     }
+
+    // Apply changes if any occurred
+    if (changed) {
+        trimStartRatio = newOriginalStartRatio;
+        trimEndRatio = newOriginalEndRatio;
+        _updateHandlesUI(); // Update visual position based on new original ratios
+        _dispatchTrimChangeEvent(); // Dispatch event with new original ratios/times
+    }
 }
+
 
 function _handleMouseUp(event) {
     if (!isDragging) return;
@@ -187,49 +262,50 @@ function _handleMouseUp(event) {
     isDragging = false;
     dragTarget = null;
     dragOffsetX = 0;
-    event.stopPropagation(); // Prevent potential parent listeners
-     // document.body.classList.remove('dragging-trimmer');
-    // Final update/dispatch might be redundant if mousemove handled it, but safe
-    // _updateHandlesUI();
-    // _dispatchTrimChangeEvent();
+    event.stopPropagation();
+    if (trimmerContainer) trimmerContainer.classList.remove('dragging');
+    // Final update/dispatch might be redundant but safe.
+    // _updateHandlesUI(); // Usually done by mousemove
+    // _dispatchTrimChangeEvent(); // Usually done by mousemove
 }
 
-// --- Touch Event Handlers (Simplified - map to mouse handlers) ---
+// --- Touch Event Handlers ---
 let lastTouch = null; // Store touch info
 
 function _handleTouchStart(event) {
     if (event.touches.length !== 1) return; // Handle single touch only
-    isDragging = true;
-    dragTarget = event.target.dataset.type;
     lastTouch = event.touches[0];
-
-    const handleRect = event.target.getBoundingClientRect();
-    dragOffsetX = lastTouch.clientX - handleRect.left;
-
-    event.preventDefault(); // Crucial to prevent scrolling page
-    event.stopPropagation();
+    // Simulate mousedown
+    _handleMouseDown({
+        target: event.target, // The handle element
+        clientX: lastTouch.clientX,
+        button: 0, // Simulate left button
+        preventDefault: () => event.preventDefault(), // Pass preventDefault
+        stopPropagation: () => event.stopPropagation() // Pass stopPropagation
+    });
 }
 
 function _handleTouchMove(event) {
     if (!isDragging || event.touches.length !== 1) return;
-    event.preventDefault(); // Prevent scrolling
+    event.preventDefault(); // Prevent scrolling during drag
     lastTouch = event.touches[0];
     // Simulate mouse move
-    _handleMouseMove({ clientX: lastTouch.clientX, preventDefault: () => {} });
+    _handleMouseMove({
+        clientX: lastTouch.clientX,
+        preventDefault: () => {}, // No default action to prevent here
+        // No stopPropagation needed usually for move
+    });
 }
 
 function _handleTouchEnd(event) {
     if (!isDragging) return;
-    // Use changedTouches to detect the touch that ended
-    // const touch = event.changedTouches[0];
-    isDragging = false;
-    dragTarget = null;
-    lastTouch = null;
-    dragOffsetX = 0;
-    event.stopPropagation();
-    // Final update/dispatch
-    // _updateHandlesUI();
-    // _dispatchTrimChangeEvent();
+    // It's possible all touches end simultaneously (e.g., cancel)
+    // Simulate mouseup - button doesn't matter as much here
+    _handleMouseUp({
+        button: 0, // Simulate left button release
+        stopPropagation: () => event.stopPropagation()
+    });
+    lastTouch = null; // Clear last touch
 }
 
 
@@ -240,11 +316,13 @@ function _handleTouchEnd(event) {
  * @param {number} duration - Buffer duration in seconds.
  */
 export function setBufferDuration(duration) {
-    currentBufferDuration = Math.max(0, duration); // Ensure non-negative
-    console.log(`Waveform Trimmer: Buffer duration set to ${currentBufferDuration.toFixed(3)}s`);
-    // Optionally reset trims when a new buffer is loaded? Or keep existing trims?
-    // Let's reset for simplicity now.
-    resetTrims();
+    const newDuration = Math.max(0, duration); // Ensure non-negative
+    if (currentBufferDuration !== newDuration) {
+        currentBufferDuration = newDuration;
+        console.log(`Waveform Trimmer: Buffer duration set to ${currentBufferDuration.toFixed(3)}s`);
+        // Reset trims when a new buffer duration is set
+        resetTrims();
+    }
 }
 
 /**
@@ -253,22 +331,24 @@ export function setBufferDuration(duration) {
 export function resetTrims() {
     trimStartRatio = 0.0;
     trimEndRatio = 1.0;
-    _updateHandlesUI();
-    _dispatchTrimChangeEvent(); // Notify that trims reset
-    console.log("Waveform Trimmer: Trims reset to full range.");
+    // isReversed state remains unchanged here
+    _updateHandlesUI(); // Update visuals based on reset ratios and current isReversed state
+    _dispatchTrimChangeEvent(); // Notify that trims reset (with original 0-1 ratios)
+    console.log("Waveform Trimmer: Trims reset to full range (0.0 - 1.0).");
 }
 
 /**
- * Gets the current trim times.
- * @returns {{startTime: number, endTime: number, duration: number}} - Object containing start time, end time, and duration of the trimmed selection in seconds. Returns {0, 0, 0} if buffer duration is zero.
+ * Gets the current trim times, always relative to the *original* buffer.
+ * @returns {{startTime: number, endTime: number, duration: number}} Object containing start time, end time, and duration in seconds.
  */
 export function getTrimTimes() {
     if (currentBufferDuration <= 0) {
         return { startTime: 0, endTime: 0, duration: 0 };
     }
+    // Calculate times based on the stored *original* ratios
     const startTime = trimStartRatio * currentBufferDuration;
     const endTime = trimEndRatio * currentBufferDuration;
-    // Ensure end time is strictly greater than start time, otherwise duration is 0
+    // Ensure duration is not negative due to potential floating point issues
     const duration = Math.max(0, endTime - startTime);
 
     return {
