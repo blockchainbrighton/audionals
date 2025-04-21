@@ -150,12 +150,13 @@ export function toggleMute() {
 
 
 export function setMultiplier(target) {
-	if (typeof target !== 'number' || !Number.isInteger(target) || target < 1 || target > 8) { // Updated check
-	    console.warn(`_setMultiplier: bad target ${target}`); return;
+    // Validation for type/range
+    if (typeof target !== 'number' || !Number.isInteger(target) || target < 1 || target > 8) {
+        console.warn(`keyboardShortcuts.setMultiplier: bad target ${target}`);
+        return;
     }
-	const cur = audio.getCurrentScheduleMultiplier?.() ?? 1;
-	if (cur === target) return; // Use strict equality for integers
-	_applySliderChange(multiplierSliderRef, audio.setScheduleMultiplier, ui.updateScheduleMultiplierDisplay, target, 'Multiplier');
+    // Directly apply the change - the timingManager now handles if it's the same value
+    _applySliderChange(multiplierSliderRef, audio.setScheduleMultiplier, ui.updateScheduleMultiplierDisplay, target, 'Multiplier');
 }
 // --- NEW: Specific multiplier functions ---
 export const setMultiplier1 = () => setMultiplier(1);

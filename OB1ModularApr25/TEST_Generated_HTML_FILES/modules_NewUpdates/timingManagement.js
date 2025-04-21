@@ -49,13 +49,33 @@ export const getCurrentScheduleMultiplier = () => scheduleMultiplier;
 
 export const setScheduleMultiplier = m => {
   const newMult = Number.parseInt(m, 10);
-  if (!Number.isInteger(newMult) || newMult < 1 || newMult === scheduleMultiplier) return;
+  // Only validate type and range, allow setting the same value
+  if (!Number.isInteger(newMult) || newMult < 1) {
+      console.warn(`Timing Manager: Invalid multiplier value received: ${m}`);
+      return;
+  }
 
+  // If we reach here, the value is valid (1 or greater integer)
+  const previousMultiplier = scheduleMultiplier; // Store previous for comparison later if needed
   scheduleMultiplier = newMult;
+  console.log(`Timing Manager: Multiplier set to ${scheduleMultiplier}`); // Add log
+
+  // Update timing if looping and multiplier actually changed the sub-beat duration calculation needs
   if (isLooping && currentTempo > 0 && audioContext) {
-    const newDur = _calcSubBeatDur(currentTempo, scheduleMultiplier),
-          elapsed = Math.max(0, audioContext.currentTime - loopStartTime);
-    if (newDur > 0) scheduledSubBeat = Math.floor(elapsed / newDur);
+      // Check if recalculation is needed (it always is if the value changed,
+      // but this logic handles potential edge cases or future optimizations)
+      const oldDur = _calcSubBeatDur(currentTempo, previousMultiplier);
+      const newDur = _calcSubBeatDur(currentTempo, scheduleMultiplier);
+
+      // Only recalculate schedule position if duration actually changes
+      if (newDur > 0 && Math.abs(oldDur - newDur) > 1e-9) { // Compare floats carefully
+          const elapsed = Math.max(0, audioContext.currentTime - loopStartTime);
+          scheduledSubBeat = Math.floor(elapsed / newDur);
+          console.log(`Timing Manager: Recalculated scheduledSubBeat to ${scheduledSubBeat} due to multiplier change.`);
+      } else if (newDur <= 0) {
+          console.warn("Timing Manager: New sub-beat duration is zero or negative, stopping loop.");
+          stopLoop(); // Stop if the new duration is invalid
+      }
   }
 };
 
