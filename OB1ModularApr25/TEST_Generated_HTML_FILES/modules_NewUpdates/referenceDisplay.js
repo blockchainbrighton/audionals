@@ -1,13 +1,14 @@
 // --- START OF FILE referenceDisplay.js ---
 // --- Imports for Action Functions ---
-// Import specific actions from keyboardShortcuts.js
 import {
     adjustTempoSmallUp, adjustTempoSmallDown, adjustTempoLargeUp, adjustTempoLargeDown,
     adjustPitchLinearUp, adjustPitchLinearDown, adjustPitchSemitoneUp, adjustPitchSemitoneDown,
     multiplyPitchUp, multiplyPitchDown, resetPitch,
     adjustVolumeUp, adjustVolumeDown, toggleMute,
     setMultiplier1, setMultiplier2, setMultiplier3, setMultiplier4,
-    setMultiplier5, setMultiplier6, setMultiplier7, setMultiplier8 // Using 1-8 for clarity
+    setMultiplier5, setMultiplier6, setMultiplier7, setMultiplier8,
+    // +++ Import setMultiplier9 +++
+    setMultiplier9
 } from './keyboardShortcuts.js';
 
 // Import specific actions from main.js
@@ -44,22 +45,23 @@ const actionMap = {
     'setMultiplier6': setMultiplier6,
     'setMultiplier7': setMultiplier7,
     'setMultiplier8': setMultiplier8,
+    // +++ Add mapping for setMultiplier9 +++
+    'setMultiplier9': setMultiplier9,
     // Playback & UI
     'playOnce': playOnceAction,
-    'toggleLoop': toggleLoopAction, // Note: Triggered by image click, but link provided
+    'toggleLoop': toggleLoopAction,
     'toggleReverse': toggleReverseAction,
     'toggleInfoPanel': toggleSideColumnsAction,
     'toggleMidiPanel': toggleMidiRecorderUIAction,
 };
 
 
-// --- NEW: Updated Reference Content (Formatted as HTML) ---
-// Added Waveform, Effects, Filters sections and data-action attributes for shortcuts
+// --- Updated Reference Content (Formatted as HTML) ---
 const referenceContentHTML = `
     <h2>Controls & Shortcuts</h2>
     <p>Use the sliders and buttons in the left panel, or the keyboard shortcuts below. Click/Tap shortcut links to trigger them.</p>
 
-    <!-- NEW: Waveform Trimming -->
+    <!-- Waveform Trimming -->
     <h3 class="topic-waveform">Waveform Trimmer</h3>
     <ul>
         <li>Drag the <span style="color:#ff6b6b;">red handles</span> on the waveform display to select a portion of the audio.</li>
@@ -96,7 +98,8 @@ const referenceContentHTML = `
      <h3 class="topic-multiplier">Loop Schedule Multiplier</h3>
      <ul>
         <li>Determines how many times the sample triggers per metronome beat when looping.</li>
-        <li>Default is 1x (once per beat).</li>
+        <!-- +++ Clarify Mapping +++ -->
+        <li>Common values: 1=Quarter Notes, 2=Eighths, 4=Sixteenths.</li>
         <li><span class="shortcut-link" data-action="setMultiplier1" role="button" tabindex="0"><code>1</code></span>: Set to 1x</li>
         <li><span class="shortcut-link" data-action="setMultiplier2" role="button" tabindex="0"><code>2</code></span>: Set to 2x</li>
         <li><span class="shortcut-link" data-action="setMultiplier3" role="button" tabindex="0"><code>3</code></span>: Set to 3x</li>
@@ -105,9 +108,11 @@ const referenceContentHTML = `
         <li><span class="shortcut-link" data-action="setMultiplier6" role="button" tabindex="0"><code>6</code></span>: Set to 6x</li>
         <li><span class="shortcut-link" data-action="setMultiplier7" role="button" tabindex="0"><code>7</code></span>: Set to 7x</li>
         <li><span class="shortcut-link" data-action="setMultiplier8" role="button" tabindex="0"><code>8</code></span>: Set to 8x</li>
+        <!-- +++ Add description for 9 key +++ -->
+        <li><span class="shortcut-link" data-action="setMultiplier9" role="button" tabindex="0"><code>9</code></span>: Set to 4x (16ths)</li>
      </ul>
 
-    <!-- NEW: Effects Section -->
+    <!-- Effects Section -->
     <h3 class="topic-effects">Effects (Delay)</h3>
      <ul>
          <li><strong>Delay Time:</strong> Controls the time (in seconds) between the original sound and its echo. Use the 'Delay Time' slider.</li>
@@ -115,7 +120,7 @@ const referenceContentHTML = `
          <li><em>No specific keyboard shortcuts for Delay parameters.</em></li>
     </ul>
 
-    <!-- NEW: Filter Section -->
+    <!-- Filter Section -->
     <h3 class="topic-filter">Filter</h3>
      <ul>
          <li><strong>Filter Type:</strong> Select the type of filter (e.g., Lowpass removes high frequencies, Highpass removes low frequencies). Use the 'Filter Type' dropdown.</li>
@@ -136,6 +141,7 @@ const referenceContentHTML = `
      <p><em>(Note: <code>Ctrl</code> can be <code>Cmd</code> on macOS for some shortcuts)</em></p>
 `;
 
+// ... (handleClickableShortcut, handleKeypressOnShortcut, initReferencePanel functions remain the same) ...
 /**
  * Handles clicks on elements within the reference panel, specifically targeting shortcut links.
  * @param {Event} event - The click event.
@@ -208,6 +214,7 @@ function initReferencePanel(panelElement) {
          console.log("Reference panel already initialized.");
     }
 }
+
 
 // --- Export ONLY the init function ---
 export { initReferencePanel };
