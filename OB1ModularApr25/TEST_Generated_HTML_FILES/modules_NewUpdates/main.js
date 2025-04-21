@@ -7,14 +7,16 @@ import * as ui from './uiUpdater.js';
 import * as midiHandler from './midiHandler.js';
 import * as keyboardShortcuts from './keyboardShortcuts.js'; // Keep this import
 import { initReferencePanel } from './referenceDisplay.js';
-import { clamp, _isInputFocused, addListener, createElement, generateUniqueId } from './utils.js';
+import { clamp, _isInputFocused, addListener, createElement } from './utils.js';
 import * as midiRecorder from './midiRecorder.js';
 import * as waveformDisplay from './waveformDisplay.js';
 import * as waveformTrimmer from './waveformTrimmer.js';
+import * as instanceManager from './instanceManager.js';
 
-// +++ GENERATE AND STORE THE ID EARLY +++
-const instanceId = generateUniqueId();
-console.log(`Application Instance ID: ${instanceId}`);
+
+// // +++ GENERATE AND STORE THE ID EARLY +++
+// const instanceId = generateUniqueId();
+// console.log(`Application Instance ID: ${instanceId}`);
 
 
 // --- Constants ---
@@ -31,8 +33,22 @@ const els = {}; // Store elements in an object
  * Gets the unique identifier for this application instance.
  * @returns {string} The instance ID.
  */
+/**
+ * Gets the unique identifier (UUID) for this application instance from the manager.
+ * @returns {string | null} The instance UUID.
+ */
 export function getInstanceId() {
-    return instanceId;
+    // Get the UUID from the instance manager
+    return instanceManager.getInstanceUUID();
+}
+
+/**
+* Gets the assigned sequence number for this application instance from the manager.
+* @returns {number} The instance sequence number (1-based, or -1 if not initialized).
+*/
+export function getInstanceSequence() {
+    // Get the sequence number from the instance manager
+    return instanceManager.getInstanceSequence();
 }
 
 // --- Exported Action Functions for UI/Playback ---
@@ -218,8 +234,20 @@ const getInitialControlValue = (element, key, parser = parseFloat) => {
 
 // --- Main Application Initialization ---
 async function initializeApp() {
-    console.log(`Initializing application (Instance: ${instanceId})...`); // Add ID to log
+    // +++ Initialize Instance Manager FIRST +++
+    const sequence = instanceManager.init();
+    const currentInstanceUUID = instanceManager.getInstanceUUID(); // Get the *actual* UUID
+
+    // +++ FIX HERE: Use the correct variable name +++
+    console.log(`Initializing application #${sequence} (Instance ID: ${currentInstanceUUID})...`);
+    // +++ END Instance Manager Init +++
+  
     if (!findElements()) return; // Stop if critical elements missing
+
+    // --- Update Window Title ---
+    // Use the sequence number obtained from the manager
+    document.title = `OB1 #${sequence} - Audional Art`; // Changed BAM back to OB1 based on other code parts
+
 
     // Init UI (essential)
     if (!ui.init) {
