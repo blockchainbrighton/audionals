@@ -1,0 +1,83 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>BAM Metadata Editor</title><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" integrity="sha512-1ycn6IcaQQ40/MKBW2W4Rhis/DbILU74C1vSrLJxCq57o941Ym01SwNsOMqvEBFlcgUa6xLiPY/NS5R+E6ztJQ==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@latest/dist/jsoneditor.min.css">
+    <style>
+    body{padding-top:60px;font-family:sans-serif;background:#f8f9fa}
+    #toolbar{position:fixed;top:0;left:0;width:100%;background:#343a40;color:#fff;padding:.5rem 1rem;display:flex;justify-content:space-between;align-items:center;z-index:1050;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+    #toolbar span{font-size:1.2rem;font-weight:700}
+    #toolbar button{background:0 0;border:0;color:#fff;font-size:1.2rem;padding:.25rem .5rem;cursor:pointer}
+    #toolbar button:hover{color:#adb5bd}
+    #editor_holder{padding:1rem;background:#fff;border-radius:.25rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-top:1rem}
+    .readonly-field,input.form-control-plaintext[readonly]{background:#e9ecef;border:1px solid #ced4da;cursor:not-allowed}
+    .form-control-plaintext{padding:0 .75rem}
+    #settingsModal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;place-items:center;z-index:1060}
+    #settingsBox{background:#fff;padding:2rem;border-radius:5px;box-shadow:0 5px 15px rgba(0,0,0,.2);min-width:300px;max-width:90%;max-height:90vh;overflow-y:auto}
+    #settingsBox h2{margin:0 0 1.5rem;border-bottom:1px solid #dee2e6;padding-bottom:.5rem}
+    #settingsForm .form-check{margin-bottom:.75rem}
+    #settingsForm .form-check-label{cursor:pointer}
+    /* ─── NEW: make every property column‑based ────────────────────────────────── */
+    .je-object> .row>[class*=col]{padding-right:.75rem;padding-left:.75rem}
+    /* ≥ 576 px → two columns */
+    @media (min-width:576px){
+    .je-object> .row>[class*=col]{flex:0 0 50%;max-width:50%}
+    }
+    /* ≥ 992 px → three columns */
+    @media (min-width:992px){
+    .je-object> .row>[class*=col]{flex:0 0 33.333%;max-width:33.333%}
+    }
+    /* ≥ 1400 px → four columns */
+    @media (min-width:1400px){
+    .je-object> .row>[class*=col]{flex:0 0 25%;max-width:25%}
+    }
+    </style></head><body>
+    <header id="toolbar"><span>BAM Metadata Editor</span><button id="settingsBtn" title="Show/Hide Form Sections"><i class="fas fa-cog"></i><span class="visually-hidden">Settings</span></button></header>
+    <main id="editor_holder" class="container-fluid"></main>
+    <section id="settingsModal"><div id="settingsBox"><h2>Show / Hide Sections</h2><form id="settingsForm"></form><div class="text-end mt-3"><button id="settingsClose" class="btn btn-primary">Done</button></div></div></section>
+    <script src="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@latest/dist/jsoneditor.min.js"></script>
+    <script type="module">
+    /* ---------- helpers ---------- */
+    const $=(q,c=document)=>c.querySelector(q),$$=(q,c=document)=>c.querySelectorAll(q),on=(el,ev,fn)=>el.addEventListener(ev,fn);
+    /* ---------- constants ---------- */
+    const CURRENT_SCHEMA_VERSION="1.0.0",
+          DEFAULT_VISIBLE_PATHS=new Set(['root.BAMSchemaVersion','root.inscriptionRef','root.itemType','root.title','root.creator','root.description','root.tags','root.license']);
+    /* ---------- embedded schema (comments stripped) ---------- */
+    const schema={"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://audionals.com/schemas/bam-metadata-v1.0.schema.json","title":"BAM Item Metadata","description":"Simplified metadata for items inscribed on the Bitcoin Audional Matrix (BAM), including audio, compositions, plugins, synths, and presets.","type":"object","required":["BAMSchemaVersion","inscriptionRef","itemType","title","creator"],"properties":{"BAMSchemaVersion":{"type":"string","description":"Version of this BAM metadata schema.","examples":["1.0.0"]},"inscriptionRef":{"type":"string","description":"Reference to the specific Bitcoin inscription (e.g., Inscription ID, Sat Vout, URL).","examples":["<inscription_id>","<sat_ordinal>"]},"itemType":{"type":"string","description":"Primary category of the inscribed item.","enum":["Audio","Composition","Plugin","Synth","Preset","Other"]},"title":{"type":"string","description":"Primary name or title of the inscribed item."},"creator":{"type":"object","description":"Information about the primary creator.","required":["name"],"properties":{"name":{"type":"string","description":"Name or pseudonym of the creator."},"contact":{"type":"string","description":"Optional contact information."},"walletAddress":{"type":"string","description":"Optional Bitcoin address associated with the creator."}}},"version":{"type":"string","description":"Version of this specific item."},"description":{"type":"string","description":"A brief description of the item."},"tags":{"type":"array","description":"Keywords or tags for discoverability.","items":{"type":"string"},"examples":[["loop","drum beat","hip hop","808"]]},"genre":{"type":"array","description":"Musical or functional genre(s).","items":{"type":"string"},"examples":[["Electronic","Techno"],["Utility","Reverb"]]},"artworkRef":{"type":"string","description":"Optional reference to an inscription containing artwork."},"license":{"type":"object","description":"Usage rights for this item.","properties":{"type":{"type":"string","description":"Type of license.","enum":["CC0 (Public Domain Dedication)","CC BY (Attribution)","CC BY-SA (Attribution-ShareAlike)","CC BY-NC (Attribution-NonCommercial)","CC BY-NC-SA (Attribution-NonCommercial-ShareAlike)","Commercial - Exclusive","Commercial - Non-Exclusive","Royalty-Free","Educational Use Only","Personal Use Only","Custom","None"]},"termsUrl":{"type":"string","format":"uri","description":"URL to the full license terms."},"customTerms":{"type":"string","description":"Description of custom license terms."}}},"audioDetails":{"type":"object","description":"Details required if itemType is 'Audio'.","properties":{"audioType":{"type":"string","enum":["Track","Stem","Loop","Sample","Sound Effect","Field Recording","Voice","Other"],"description":"Specific kind of audio."},"fileName":{"type":"string","description":"Original file name."},"fileFormat":{"type":"string","examples":["WAV","MP3","FLAC","OGG"],"description":"Audio file format."},"durationSeconds":{"type":"number","description":"Duration in seconds."},"sampleRateHz":{"type":"integer","description":"Sample rate in Hertz."},"bitDepth":{"type":"integer","description":"Bit depth."},"channels":{"type":"integer","description":"Number of audio channels."},"bpm":{"type":"number","description":"Beats Per Minute."},"key":{"type":"string","description":"Musical key."},"stemType":{"type":"string","description":"If audioType is 'Stem', specify the type.","enum":["Drums","Bass","Guitar","Keys","Vocals","FX","Synth","Orchestral","Other"]}}},"compositionDetails":{"type":"object","description":"Details required if itemType is 'Composition'.","properties":{"compositionType":{"type":"string","enum":["MIDI","Score","Lyrics","Chord Chart","Other"]},"fileName":{"type":"string","description":"Original file name."},"fileFormat":{"type":"string","examples":["MID","PDF","TXT","XML"],"description":"File format."},"bpm":{"type":"number","description":"Beats Per Minute."},"key":{"type":"string","description":"Musical key."},"timeSignature":{"type":"string","examples":["4/4","3/4"],"description":"Time signature."}}},"pluginDetails":{"type":"object","description":"Details required if itemType is 'Plugin' or 'Synth'.","properties":{"isInstrument":{"type":"boolean","description":"True if it's an instrument."},"vendor":{"type":"string","description":"Developer/vendor name."},"pluginFormats":{"type":"array","items":{"type":"string","enum":["VST","VST3","AU","AAX","CLAP","LV2","Standalone"]},"description":"Supported plugin formats."},"homepage":{"type":"string","format":"uri","description":"Official website."},"systemRequirements":{"type":"string","description":"OS/DAW compatibility."}}},"presetDetails":{"type":"object","description":"Details required if itemType is 'Preset'.","properties":{"targetSoftware":{"type":"object","description":"The Synth/Plugin this preset is for.","required":["name"],"properties":{"name":{"type":"string","description":"Name of the target Synth or Plugin."},"vendor":{"type":"string","description":"Vendor of the target software."},"version":{"type":"string","description":"Version compatibility."}}},"fileName":{"type":"string","description":"Original file name."},"fileFormat":{"type":"string","examples":[".fxp",".fxb",".nks",".vital",".aupreset"],"description":"Preset file format."},"presetType":{"type":"string","enum":["Single","Bank","Collection","Sound Pack"],"description":"Type of preset content."}}},"notes":{"type":"string","description":"Additional notes"},"extensions":{"type":"object","additionalProperties":true,"description":"Future custom data extensions"}}};
+    /* ---------- editor setup ---------- */
+    window.schema=schema;
+    const editor = new JSONEditor($('#editor_holder'), {
+        schema,
+        theme: 'bootstrap5',
+        iconlib: 'fontawesome5',
+        /* ▼ NEW ▼ */
+        object_layout: 'grid',           // let JSON‑Editor render Bootstrap rows/cols
+        /* ▲ NEW ▲ */
+        disable_edit_json: true,
+        disable_properties: true,
+        show_errors: 'interaction',
+        remove_button_labels: true,
+        prompt_before_delete: false
+        });
+    window.editor=editor;
+    /* ---------- editor ready ---------- */
+    on(editor,'ready',()=>{
+      const lock=(p,v)=>{const e=editor.getEditor(p);e?.setValue(v);e?.disable();e?.input?.classList.add('readonly-field','form-control-plaintext');e?.input?.classList.remove('form-control');};
+      lock('root.BAMSchemaVersion',CURRENT_SCHEMA_VERSION);
+      const form=$('#settingsForm');form.innerHTML='';
+      Object.entries(editor.editors).filter(([p])=>/^root\.[^.]+$/.test(p)&&p!=='root.BAMSchemaVersion').forEach(([p,e])=>{
+        const id='ck_'+p.replaceAll('.','_'),vis=DEFAULT_VISIBLE_PATHS.has(p),title=e.schema.title||p.slice(5);
+        e.container.hidden=!vis;
+        form.insertAdjacentHTML('beforeend',`<div class="form-check"><input class="form-check-input" type="checkbox" id="${id}" data-path="${p}" ${vis?'checked':''}><label class="form-check-label" for="${id}">${title}</label></div>`);
+      });
+      $$('#settingsForm input').forEach(c=>on(c,'change',ev=>{
+        const ed=editor.getEditor(ev.target.dataset.path);
+        (ed?.container||ed?.element?.closest('.row,.mb-3,[data-schemaid]')||ed?.element?.parentElement).hidden=!ev.target.checked;
+      }));
+    });
+    /* ---------- dynamic section hint ---------- */
+    editor.watch('root.itemType',()=>{const it=editor.getEditor('root.itemType')?.getValue();if(!it)return;const cb=$(`#settingsForm input[data-path="root.${it.toLowerCase()}Details"]`);if(cb&&!cb.checked)console.log(`💡 Enable '${it} Details' from Settings if needed.`);});
+    /* ---------- modal controls ---------- */
+    const modal=$('#settingsModal');on($('#settingsBtn'),'click',()=>modal.style.display='grid');on($('#settingsClose'),'click',()=>modal.style.display='none');on(modal,'click',e=>{if(e.target===modal)modal.style.display='none';});
+    </script>
+    </body></html>
+    
