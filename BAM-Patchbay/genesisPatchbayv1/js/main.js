@@ -11,8 +11,8 @@
 import { logDebug } from './debug.js';
 import { checkLibraries } from './libraryChecker.js';
 import { initializeApp } from './app.js';
-import { setupUI } from './ui.js'; // <--- ADD THIS IMPORT
-
+import { setupUI } from './ui.js';
+import { initPatching } from './patchCable.js'; // <--- IMPORT THE NEW PATCHING MODULE
 
 
 /*
@@ -27,7 +27,6 @@ import { setupUI } from './ui.js'; // <--- ADD THIS IMPORT
  */
 
 // Example placeholder imports for future modules:
-// import { setupUI } from './ui.js';
 // import { createVisualizer } from './visualizer.js';
 
 // --- Application Startup Logic ---
@@ -36,40 +35,44 @@ import { setupUI } from './ui.js'; // <--- ADD THIS IMPORT
  * Asynchronous function to coordinate the application's startup sequence.
  * 1. Logs the start of the process.
  * 2. Waits for essential libraries (Tone.js, Three.js) to be verified.
- * 3. Initializes the main application logic.
- * 4. Initializes any other registered modules.
- * 5. Handles and logs any critical errors during startup.
+ * 3. Initializes the main application logic (e.g., Tone/Three setup).
+ * 4. Sets up the static UI grid elements.
+ * 5. Initializes the interactive patch cable system.
+ * 6. Initializes any other registered modules.
+ * 7. Handles and logs any critical errors during startup.
  */
 async function startApplication() {
     logDebug("Main script loaded via type=module. Starting application sequence...", 'info');
 
     try {
         // Step 1: Verify that required external libraries (Tone, THREE) are loaded and accessible.
-        // The `checkLibraries` function returns a Promise, so we use `await` to pause execution
-        // until the checks are complete. It will throw an error if checks fail.
         logDebug("Awaiting library checks...", 'info');
         await checkLibraries();
-        logDebug("Library checks passed.", 'success'); // Good to know this stage completed
+        logDebug("Library checks passed.", 'success');
 
-        // Step 2: Libraries are confirmed. Proceed with initializing the core application logic.
-        // This module likely sets up the primary Tone.js/Three.js interactions.
+        // Step 2: Initialize the core application logic.
+        // This might involve setting up basic Tone.js or Three.js objects.
         logDebug("Initializing core application module (app.js)...", 'info');
         initializeApp();
         logDebug("Core application module initialized.", 'success');
-        setupUI(); // <--- CALL THE NEW FUNCTION
-        logDebug("Core setupUI function called.", 'success');
 
+        // Step 3: Set up the UI grid structure.
+        // This creates the panels and jacks in the DOM.
+        logDebug("Setting up UI grid (ui.js)...", 'info');
+        setupUI();
+        logDebug("UI grid setup complete.", 'success');
 
+        // Step 4: Initialize the Patch Cable system.
+        // This adds event listeners to jacks and sets up the SVG layer for drawing cables.
+        // IMPORTANT: This must run *after* setupUI() so the jack elements exist.
+        logDebug("Initializing Patch Cable module (patchCable.js)...", 'info');
+        initPatching();
+        logDebug("Patch Cable module initialized.", 'success');
 
-        // Step 3: Initialize other modules in the desired order.
-        // Uncomment and add calls to the initialization functions imported above.
+        // Step 5: Initialize other modules in the desired order.
         // Example:
-        // logDebug("Initializing UI module...", 'info');
-        // setupUI();
-        // logDebug("UI module initialized.", 'success');
-
         // logDebug("Initializing Visualizer module...", 'info');
-        // const visualizer = createVisualizer(Tone.context); // Example passing dependencies if needed
+        // const visualizer = createVisualizer(Tone.context); // Example passing dependencies
         // logDebug("Visualizer module initialized.", 'success');
 
 
@@ -78,7 +81,6 @@ async function startApplication() {
 
     } catch (error) {
         // Catch any error thrown during the try block (e.g., library check failure, module init error).
-        // Log the specific error message that occurred.
         logDebug(`❌ CRITICAL STARTUP ERROR: ${error.message}`, 'error');
         console.error("Full startup error details:", error); // Log the full error object for devs
 
@@ -96,6 +98,7 @@ function displayStartupError(message) {
     if (container) {
         const errorDiv = document.createElement('div');
         errorDiv.textContent = message;
+        // Apply more robust styling than inline styles if possible (e.g., via CSS class)
         errorDiv.style.color = 'red';
         errorDiv.style.fontWeight = 'bold';
         errorDiv.style.border = '1px solid red';
@@ -119,9 +122,6 @@ function displayStartupError(message) {
 // --- Event Listener ---
 
 // Wait for the entire page to load, including assets like scripts and images.
-// This is generally safer when modules might depend on globally loaded library scripts
-// (like Tone.js and Three.js in this setup). 'DOMContentLoaded' might fire before
-// external scripts are fully parsed and ready.
 window.addEventListener('load', startApplication);
 
-logDebug("Main.js parsed, waiting for window load event...", 'info'); // Useful to see the script itself ran
+logDebug("Main.js parsed, waiting for window load event...", 'info');
