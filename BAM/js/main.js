@@ -189,3 +189,115 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+
+document.addEventListener('DOMContentLoaded', () => {
+
+    // --- Navigation Toggle for Mobile ---
+    const navToggle = document.querySelector('.nav-toggle');
+    const nav = document.querySelector('nav');
+
+    if (navToggle && nav) {
+        navToggle.addEventListener('click', () => {
+            nav.classList.toggle('active');
+            // Optional: Change burger icon to 'X' when active
+            const icon = navToggle.querySelector('i');
+            if (nav.classList.contains('active')) {
+                icon.classList.remove('fa-bars');
+                icon.classList.add('fa-times');
+            } else {
+                icon.classList.remove('fa-times');
+                icon.classList.add('fa-bars');
+            }
+        });
+
+        // Optional: Close nav when a link is clicked (good for single-page sites)
+        const navLinks = nav.querySelectorAll('a');
+        navLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                if (nav.classList.contains('active')) {
+                    nav.classList.remove('active');
+                    navToggle.querySelector('i').classList.remove('fa-times');
+                    navToggle.querySelector('i').classList.add('fa-bars');
+                }
+            });
+        });
+    }
+
+
+    // --- Add Placeholder Class and Tooltip Data to Audio Players ---
+    const samplePlayers = document.querySelectorAll('.sample-player');
+    samplePlayers.forEach(player => {
+        const audioSource = player.querySelector('audio source');
+
+        // Check if the source element exists and if its src is missing, empty, or '#'
+        let isPlaceholder = false;
+        if (!audioSource) {
+            // If there's no source tag at all
+            isPlaceholder = true;
+        } else {
+            const src = audioSource.getAttribute('src');
+            if (!src || src.trim() === '#' || src.trim() === '') {
+                // If src is missing, '#', or just whitespace
+                isPlaceholder = true;
+            }
+        }
+
+        // If it's determined to be a placeholder, add class and attribute
+        if (isPlaceholder) {
+            player.classList.add('placeholder');
+            player.setAttribute('data-tooltip', 'Coming Soon'); // Set attribute for CSS tooltip
+        }
+    });
+
+    // --- Optional: Category Filter Logic (Example) ---
+    const filterButtons = document.querySelectorAll('.category-filter .btn');
+    const sampleCards = document.querySelectorAll('.samples-grid .sample-card');
+
+    if (filterButtons.length > 0 && sampleCards.length > 0) {
+        filterButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                // Update active button style
+                filterButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+
+                const category = button.getAttribute('data-category');
+
+                // Filter cards
+                sampleCards.forEach(card => {
+                    if (category === 'all' || card.getAttribute('data-category') === category) {
+                        card.style.display = 'block'; // Or 'grid', 'flex', etc. depending on parent
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+        });
+    }
+
+    // --- Intersection Observer for Animations (Example - Adapt as needed) ---
+    const animatedElements = document.querySelectorAll('.slide-up, .fade-in');
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.animationPlayState = 'running';
+                 // Optional: Unobserve after animation starts if you only want it once
+                 // observer.unobserve(entry.target);
+            } else {
+                 // Optional: Reset animation if you want it to replay when scrolling back up
+                 // entry.target.style.animationPlayState = 'paused';
+                 // Or remove/re-add class if using simple class-based triggers
+            }
+        });
+    }, { threshold: 0.1 }); // Trigger when 10% visible
+
+    // Pause animations initially and observe elements
+    animatedElements.forEach(el => {
+        // Ensure animations don't play until visible
+        el.style.animationPlayState = 'paused';
+        observer.observe(el);
+    });
+
+
+}); // End DOMContentLoaded
