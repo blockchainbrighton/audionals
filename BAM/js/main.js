@@ -5,64 +5,50 @@
  */
 document.addEventListener('DOMContentLoaded', () => {
 
+    const neonRowColors = [ /* ... keep your color array ... */
+        'hsl(180, 100%, 50%)', 'hsl(300, 100%, 50%)', 'hsl(120, 100%, 50%)',
+        'hsl(60, 100%, 50%)', 'hsl(0, 100%, 50%)', 'hsl(30, 100%, 50%)',
+        'hsl(240, 100%, 60%)', 'hsl(330, 100%, 55%)', 'hsl(90, 100%, 50%)',
+        'hsl(210, 100%, 55%)', 'hsl(30, 95%, 60%)', 'hsl(150, 100%, 50%)',
+        'hsl(270, 100%, 60%)', 'hsl(45, 100%, 50%)', 'hsl(3, 100%, 60%)',
+        'hsl(195, 100%, 50%)', 'hsl(315, 100%, 50%)', 'hsl(75, 100%, 50%)',
+        'hsl(285, 90%, 60%)', 'hsl(15, 100%, 55%)', 'hsl(255, 100%, 65%)',
+        'hsl(135, 90%, 55%)', 'hsl(345, 100%, 58%)', 'hsl(170, 95%, 50%)',
+        'hsl(50, 100%, 55%)'
+    ];
+
     // =========================================================================
     // --- DYNAMIC SAMPLE CARD GENERATION ---
     // =========================================================================
-// =========================================================================
-    // --- DYNAMIC SAMPLE CARD GENERATION ---
-    // =========================================================================
-
-    // --- 1. Define the Sample Data ---
-    // #######################################################################
-    // ###  MANUALLY UPDATE THIS LIST WHEN AUDIO FILES CHANGE IN audio/ FOLDER ###
-    // #######################################################################
-    let sampleData = [ // Use 'let' because we will sort it in place
-        // Data based on the provided file list
-        // Titles, Details, Categories are inferred from filenames
-
-        // Boom Bap Kits
+    let sampleData = [ /* ... your data ... */
         { src: 'audio/KP_boomkit_100bpm_A1.webm', title: 'KP Boomkit A1', details: '100 BPM | Boom Bap', category: 'boom-bap' },
         { src: 'audio/KP_boomkit_100bpm_A2.webm', title: 'KP Boomkit A2', details: '100 BPM | Boom Bap', category: 'boom-bap' },
         { src: 'audio/KP_boomkit_100bpm_A3.webm', title: 'KP Boomkit A3', details: '100 BPM | Boom Bap', category: 'boom-bap' },
         { src: 'audio/KP_boomkit_98bpm_A1.webm',  title: 'KP Boomkit A1', details: '98 BPM | Boom Bap', category: 'boom-bap' },
         { src: 'audio/KP_boomkit_98bpm_A2.webm',  title: 'KP Boomkit A2', details: '98 BPM | Boom Bap', category: 'boom-bap' },
         { src: 'audio/KP_boomkit_98bpm_A3.webm',  title: 'KP Boomkit A3', details: '98 BPM | Boom Bap', category: 'boom-bap' },
-
-        // Cazio Kits
         { src: 'audio/KP_caziokit_129bpm_A.webm', title: 'KP CazioKit A', details: '129 BPM | Breakbeat', category: 'breakbeat' },
         { src: 'audio/KP_caziokit_129bpm_B.webm', title: 'KP CazioKit B', details: '129 BPM | Breakbeat', category: 'breakbeat' },
         { src: 'audio/KP_caziokit_129bpm_C.webm', title: 'KP CazioKit C', details: '129 BPM | Breakbeat', category: 'breakbeat' },
-        // Correcting typo in filename: .webm.webm -> .webm
         { src: 'audio/KP_caziokit_129bpm_D.webm', title: 'KP CazioKit D', details: '129 BPM | Breakbeat', category: 'breakbeat' },
         { src: 'audio/KP_caziokit_129bpm_E_8bar.webm', title: 'KP CazioKit E (8 bar)', details: '129 BPM | Breakbeat', category: 'breakbeat' },
-
-        // --- ADD ANY OTHER SAMPLES FROM THE FULL LIBRARY HERE FOLLOWING THE SAME STRUCTURE ---
     ];
 
     // --- 2. Sorting Logic ---
-    function getSortKeys(sample) {
-        const titleMatch = sample.title.match(/^(KP\s+\w+)\s*(.*)$/);
-        const bpmMatch = sample.details.match(/^(\d+)\s*BPM/);
+    function getSortKeys(sample) { /* ... no changes ... */
+        const titleMatch = sample.title.match(/^(KP\s+[\w-]+)\s*(.*)$/i);
+        const bpmMatch = sample.details.match(/^(\d+)\s*BPM/i);
         const kitName = titleMatch ? titleMatch[1].trim() : sample.title;
         const variation = titleMatch ? titleMatch[2].trim() : '';
         const bpm = bpmMatch ? parseInt(bpmMatch[1], 10) : 0;
-        // Create a unique identifier for the group (Kit Name + BPM)
         const groupIdentifier = `${kitName}-${bpm}`;
         return { kitName, bpm, variation, groupIdentifier };
-    }
-
-    // Sort the sampleData array primarily by group, then variation
-    sampleData.sort((a, b) => {
+     }
+    sampleData.sort((a, b) => { /* ... no changes ... */
         const keysA = getSortKeys(a);
         const keysB = getSortKeys(b);
-
-        // 1. Compare Group Identifier (KitName-BPM)
         const groupCompare = keysA.groupIdentifier.localeCompare(keysB.groupIdentifier);
-        if (groupCompare !== 0) {
-            return groupCompare;
-        }
-
-        // 2. Compare Variation within the same group
+        if (groupCompare !== 0) { return groupCompare; }
         return keysA.variation.localeCompare(keysB.variation, undefined, { numeric: true, sensitivity: 'base' });
     });
 
@@ -70,73 +56,74 @@ document.addEventListener('DOMContentLoaded', () => {
     const samplesGrid = document.querySelector('#kp-loops .samples-grid');
 
     if (samplesGrid) {
-        samplesGrid.innerHTML = ''; // Clear existing content
-        let previousGroupIdentifier = null; // Keep track of the last group
+        samplesGrid.innerHTML = '';
+        let previousGroupIdentifier = null;
+        let currentRowContainer = null;
+        let rowIndex = 0;
 
-        // --- 4. Generate HTML with Group Breaks ---
+        // --- 4. Generate HTML with Grouped Rows ---
         sampleData.forEach(sample => {
             const currentKeys = getSortKeys(sample);
             const currentGroupIdentifier = currentKeys.groupIdentifier;
 
-            // Check if the group has changed and it's not the very first item
-            if (currentGroupIdentifier !== previousGroupIdentifier && previousGroupIdentifier !== null) {
-                // Insert a break element to force a new row in flexbox
-                const breakElement = document.createElement('div');
-                breakElement.classList.add('group-break');
-                samplesGrid.appendChild(breakElement);
+            // Create new row container if needed
+            if (currentGroupIdentifier !== previousGroupIdentifier || currentRowContainer === null) {
+                currentRowContainer = document.createElement('div');
+                currentRowContainer.classList.add('sample-row');
+                const uniqueColor = neonRowColors[rowIndex % neonRowColors.length];
+
+                // Apply color to the row's top border (as before)
+                currentRowContainer.style.borderTopColor = uniqueColor;
+
+                // **** ADD THIS LINE: Set the CSS custom property for the row ****
+                currentRowContainer.style.setProperty('--row-border-color', uniqueColor);
+
+                samplesGrid.appendChild(currentRowContainer);
+                previousGroupIdentifier = currentGroupIdentifier;
+                rowIndex++;
             }
 
-            // --- Create the sample card (same logic as before) ---
+            // --- Create the sample card (no changes needed in card creation logic) ---
             const card = document.createElement('div');
             card.classList.add('sample-card');
-
+            card.dataset.group = currentGroupIdentifier;
+            // ... (rest of card creation: title, details, button, indicator, src etc.) ...
+            // ... as it was in the previous step ...
             if (sample.src) {
                 card.dataset.src = sample.src;
                 if (sample.category) card.dataset.category = sample.category;
-
                 const title = document.createElement('h3');
-                title.textContent = sample.title || 'Untitled Sample';
-                card.appendChild(title);
-
+                title.textContent = sample.title; card.appendChild(title);
                 const details = document.createElement('p');
-                details.textContent = sample.details || '';
-                card.appendChild(details);
-
+                details.textContent = sample.details || ''; card.appendChild(details);
                 const playButton = document.createElement('button');
                 playButton.classList.add('play-pause-btn');
-                playButton.setAttribute('aria-label', `Play ${sample.title || 'sample'}`);
+                playButton.setAttribute('tabindex', '-1');
+                playButton.setAttribute('aria-label', `Play/Pause ${sample.title || 'sample'}`);
                 const icon = document.createElement('i');
                 icon.classList.add('fas', 'fa-play');
-                playButton.appendChild(icon);
-                card.appendChild(playButton);
-
+                playButton.appendChild(icon); card.appendChild(playButton);
                 const loadingIndicator = document.createElement('span');
                 loadingIndicator.classList.add('loading-indicator');
                 loadingIndicator.style.display = 'none';
-                loadingIndicator.textContent = 'Loading...';
-                card.appendChild(loadingIndicator);
+                loadingIndicator.textContent = 'Loading...'; card.appendChild(loadingIndicator);
             } else {
-                // Handle placeholders if needed
                 card.classList.add('placeholder');
-                 card.setAttribute('data-tooltip', sample.details || 'Coming Soon');
                 const title = document.createElement('h3');
-                title.textContent = sample.title || 'Coming Soon...';
-                 card.appendChild(title);
+                title.textContent = sample.title || 'Coming Soon...'; card.appendChild(title);
                 const details = document.createElement('p');
-                details.textContent = sample.details || 'More loops incoming!';
-                 card.appendChild(details);
+                details.textContent = sample.details || 'More variants pending'; card.appendChild(details);
+                card.setAttribute('data-tooltip', sample.details || 'Loop not yet available');
             }
-            // --- Append the card ---
-            samplesGrid.appendChild(card);
+            currentRowContainer.appendChild(card); // Append card to row
 
-            // Update the previous group identifier for the next iteration
-            previousGroupIdentifier = currentGroupIdentifier;
-        });
+        }); // End of sampleData.forEach
 
     } else {
         console.error("Could not find the '.samples-grid' element to populate samples.");
     }
     // --- END of Dynamic Sample Card Generation ---
+
 
 
 
@@ -389,140 +376,126 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // =========================================================================
     // --- Web Audio API Looping Logic for Samples ---
-    // This MUST run AFTER the dynamic sample generation code above
     // =========================================================================
 
     // 1. Initialize Audio Context (lazily on first interaction)
     const AudioContext = window.AudioContext || window.webkitAudioContext;
-    let audioContext = null; // Initialize later
+    let audioContext = null;
 
-    // 2. Store state for each loop player (using Map for better element association)
-    const loopPlayers = new Map(); // Map: sampleCardElement -> playerStateObject
+    // 2. Store state for each loop player
+    const loopPlayers = new Map();
 
-    // 3. Select all sample cards that have audio data source (generated dynamically)
-    // Ensure this selector runs AFTER the cards are added to the DOM
+    // 3. Select all sample cards *that have audio data source*
     const sampleCardsWithAudio = document.querySelectorAll('.sample-card[data-src]');
 
     // 4. Setup each loop player found
     sampleCardsWithAudio.forEach(card => { // 'card' is the dynamically generated HTMLElement
+        // Find elements *within* this specific card
         const playButton = card.querySelector('.play-pause-btn');
         const loadingIndicator = card.querySelector('.loading-indicator');
-        const audioSrc = card.dataset.src; // Get src from the data attribute
-        const buttonIcon = playButton?.querySelector('i'); // Assuming Font Awesome icons
+        const audioSrc = card.dataset.src; // Get src from the card itself
+        const buttonIcon = playButton?.querySelector('i');
 
-        // Basic validation for required elements/data
         if (!playButton || !audioSrc || !loadingIndicator) {
-            console.warn('Sample card skipped: Missing play button, loading indicator or data-src.', card);
-            card.style.opacity = '0.6'; // Dim incomplete cards
-            card.title = 'Audio setup incomplete for this sample.';
-            if(playButton) playButton.disabled = true;
-            return; // Skip setup for this card
+             console.warn('Sample card skipped during audio setup: Missing required elements or data-src.', { card, audioSrc });
+             card.style.opacity = '0.6';
+             card.title = 'Audio setup incomplete for this sample.';
+             // Ensure no click listener added if setup fails
+             return; // Skip audio setup for this card
         }
 
-        // Initialize state object for this player and store it in the Map
+        // Initialize state object for this player and store it
         const playerState = {
             isPlaying: false,
-            audioBuffer: null,      // Decoded audio data (cached)
-            sourceNode: null,       // The currently playing Web Audio node
+            audioBuffer: null,
+            sourceNode: null,
             isLoading: false,
-            loadError: null,        // Store any loading/decoding errors
-            src: audioSrc,          // Store the source from the data attribute
-            button: playButton,     // Reference to the button element
-            indicator: loadingIndicator, // Reference to the indicator element
-            icon: buttonIcon        // Reference to the icon element (if present)
+            loadError: null,
+            src: audioSrc,
+            // Store references to elements *within this card*
+            button: playButton,
+            indicator: loadingIndicator,
+            icon: buttonIcon
         };
         loopPlayers.set(card, playerState); // Use the card element as the key
 
-        // Add click listener to the play/pause button
-        playButton.addEventListener('click', async () => {
-            // Get the state associated with the specific card that was clicked
-            const currentCardState = loopPlayers.get(card);
+        // *** CHANGE HERE: Add click listener to the CARD itself ***
+        card.addEventListener('click', async () => {
+            const currentCardState = loopPlayers.get(card); // Get state using the clicked card
 
-            // Prevent actions if state is missing or currently loading/error
+            // Prevent actions if state is missing, loading, or error
             if (!currentCardState || currentCardState.isLoading || currentCardState.loadError) {
-                if(currentCardState?.loadError) {
+                if (currentCardState?.loadError) {
                     alert(`Cannot play sample. Previous error: ${currentCardState.loadError.message}`);
-                }
-                return;
+                } else if (currentCardState?.isLoading) {
+                     console.log('Audio is currently loading, please wait.');
+                 }
+                return; // Exit if card is not ready
             }
 
-
-            // Initialize AudioContext on the *first* user interaction across all players
+            // --- Initialize/Resume AudioContext ---
+            // (Keep the existing robust AudioContext handling logic here)
             if (!audioContext) {
                 try {
                     console.log("Initializing AudioContext...");
                     audioContext = new AudioContext();
-                     // Resume context if it starts suspended (common in modern browsers)
-                     if (audioContext.state === 'suspended') {
-                         await audioContext.resume();
-                         console.log("AudioContext resumed on initialization.");
-                     }
+                     if (audioContext.state === 'suspended') { await audioContext.resume(); console.log("AudioContext resumed on initialization."); }
                 } catch (e) {
-                    console.error("Web Audio API is not supported or context creation failed.", e);
-                    // Disable all play buttons if context fails
-                    loopPlayers.forEach(state => { if(state.button) state.button.disabled = true; });
+                    console.error("Web Audio API not supported or context creation failed.", e);
+                     loopPlayers.forEach(state => { if(state.button) state.button.disabled = true; }); // Disable all
                     alert("Sorry, your browser doesn't support the required audio features for playback.");
-                    return; // Stop execution for this click
+                    return;
                 }
             }
+             if (audioContext.state === 'suspended') {
+                 try {
+                     await audioContext.resume(); console.log("AudioContext resumed on demand.");
+                 } catch (e) {
+                     console.error("Failed to resume AudioContext:", e);
+                     alert("Could not resume audio playback. Please interact with the page again.");
+                     return;
+                 }
+             }
 
-            // Ensure context is running (it might suspend if the tab is inactive)
-            if (audioContext.state === 'suspended') {
-                try {
-                    await audioContext.resume();
-                    console.log("AudioContext resumed on demand.");
-                } catch (e) {
-                    console.error("Failed to resume AudioContext:", e);
-                    alert("Could not resume audio playback. Please interact with the page again.");
-                    return; // Stop execution for this click
-                }
-            }
-
-            // --- Play/Pause Logic ---
+            // --- Play/Pause Logic (uses the functions below) ---
             if (currentCardState.isPlaying) {
-                stopLoop(card); // Stop this specific loop (pass the card element)
+                stopLoop(card); // Stop this specific loop
             } else {
-                // Stop any *other* loops currently playing before starting this one
-                stopAllLoops(card); // Pass current card element to exclude it
-
-                // Attempt to play the requested loop (pass the card element)
-                await playLoop(card);
+                stopAllLoops(card); // Stop OTHERS before starting this one
+                await playLoop(card); // Play this loop
             }
         });
-    }); // End of sampleCardsWithAudio.forEach
+    }); // --- END of sampleCardsWithAudio.forEach ---
+
+
+    // --- Functions for Audio Playback (stopLoop, stopAllLoops, playLoop, updateButtonUI) ---
+    // Keep these functions EXACTLY as they were in the previous version.
+    // They correctly use the `loopPlayers` Map and the `card` element passed to them.
+    // They update the button UI even though the click listener is on the card.
 
     /**
      * Stops playback for a specific audio loop identified by its card element.
      * @param {HTMLElement} card The sample card element whose loop should be stopped.
      */
     function stopLoop(card) {
-        const playerState = loopPlayers.get(card); // Get state using the card element
-
+        const playerState = loopPlayers.get(card);
         if (playerState && playerState.isPlaying && playerState.sourceNode) {
             try {
-                 playerState.sourceNode.stop(0); // Stop playback immediately
+                 playerState.sourceNode.stop(0);
                  console.log(`Stopped: ${playerState.src}`);
-                 // The onended event will fire, which should handle state cleanup
             } catch (e) {
-                 // Catch errors if the node is already stopped or in an invalid state
-                console.warn(`Error stopping node for ${playerState.src} (may have already stopped naturally):`, e.message);
-                // Manually ensure state is updated if stop() fails unexpectedly but node exists
-                if (playerState.sourceNode) {
-                    playerState.sourceNode.onended = null; // Prevent potential duplicate cleanup
-                    playerState.sourceNode = null;
-                }
-                playerState.isPlaying = false;
-                updateButtonUI(card, playerState, false); // Ensure UI reflects stopped state
+                 console.warn(`Error stopping node for ${playerState.src}:`, e.message);
+                 if (playerState.sourceNode) { playerState.sourceNode.onended = null; playerState.sourceNode = null; }
+                 playerState.isPlaying = false;
+                 updateButtonUI(card, playerState, false);
             }
-            // Note: Don't nullify sourceNode or set isPlaying=false here directly.
-            // Let the 'onended' handler do that for consistency, unless stop() throws.
         } else if (playerState && playerState.isPlaying) {
-             // Handle inconsistency: state says playing, but no node exists
-             console.warn(`Inconsistent state for ${playerState.src}: isPlaying=true but no valid sourceNode found. Resetting state.`);
-             playerState.isPlaying = false;
-             playerState.sourceNode = null; // Ensure node reference is cleared
-             updateButtonUI(card, playerState, false); // Update UI
+             console.warn(`Inconsistent state for ${playerState.src}: isPlaying=true but no valid sourceNode. Resetting.`);
+             playerState.isPlaying = false; playerState.sourceNode = null;
+             updateButtonUI(card, playerState, false);
         }
+         // Also add the visual playing class removal here for good measure
+         card.classList.remove('playing');
     }
 
     /**
@@ -530,11 +503,9 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {HTMLElement|null} exceptCard Optional: A card element whose loop should NOT be stopped.
      */
     function stopAllLoops(exceptCard = null) {
-        // console.log('Stopping other loops...'); // Can be noisy, enable if debugging
-        loopPlayers.forEach((state, card) => { // Iterate through the Map (value, key)
-            // Stop if the card is not the excluded one AND it is currently playing
+        loopPlayers.forEach((state, card) => {
             if (card !== exceptCard && state.isPlaying) {
-                stopLoop(card); // Pass the specific card element to stopLoop
+                stopLoop(card);
             }
         });
     }
@@ -545,175 +516,110 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {HTMLElement} card The sample card element whose loop should be played.
      */
     async function playLoop(card) {
-        const playerState = loopPlayers.get(card); // Get state using the card element
-
-        // --- Pre-play Checks ---
-        // Ensure we have a valid state object
-        if (!playerState) {
-            console.error("Cannot play loop: Player state not found for this card.", card);
-            return;
-        }
-        // Ensure AudioContext is initialized and running
-        if (!audioContext || audioContext.state !== 'running') {
-            console.error("Cannot play loop: AudioContext not available or not running.", { state: playerState, context: audioContext?.state });
-             // Attempt to resume again just in case
-             if (audioContext && audioContext.state === 'suspended') {
-                 try {
-                     await audioContext.resume();
-                     console.log("AudioContext resumed just before play attempt.");
-                 } catch (e) {
-                     alert("Could not resume audio playback. Please interact with the page again.");
-                     return;
-                 }
-            } else if (!audioContext) {
-                 alert("Audio system not initialized. Please click play again.");
-                 return; // Should have been caught earlier, but good failsafe
-            } else {
-                 return; // Other unexpected issue
-            }
-        }
-        // Prevent playing if already playing (should be handled by caller, but safety check)
-        if (playerState.isPlaying) {
-            console.warn(`Play called on already playing loop: ${playerState.src}`);
-            return;
-        }
-        // Prevent playing if there was a previous load error
-        if (playerState.loadError) {
-            console.error(`Cannot play ${playerState.src}, previous load error:`, playerState.loadError);
-            alert(`Could not play this sample due to a previous error:\n${playerState.loadError.message}`);
-            return;
+        const playerState = loopPlayers.get(card);
+        if (!playerState || playerState.isPlaying || playerState.loadError || !audioContext || audioContext.state !== 'running') {
+             console.warn("Play conditions not met.", { playerState, audioContextState: audioContext?.state });
+            if(playerState?.loadError) alert(`Could not play this sample due to a previous error:\n${playerState.loadError.message}`);
+             return;
         }
 
-        // --- Loading Phase ---
         playerState.isLoading = true;
-        playerState.button.disabled = true; // Disable button during load/play setup
+        if (playerState.button) playerState.button.disabled = true;
         if (playerState.indicator) playerState.indicator.style.display = 'inline';
-        updateButtonUI(card, playerState, false); // Keep icon as 'Play' visually during load
+        updateButtonUI(card, playerState, false); // Keep UI as 'Play' during load
+        card.classList.add('loading'); // Add visual loading state to card
 
         try {
-            // --- 1. Load Audio Buffer (Fetch and Decode if needed) ---
-            if (!playerState.audioBuffer) { // Only load if not already cached
-                console.log(`Loading audio data for: ${playerState.src}`);
-                const response = await fetch(playerState.src);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status} fetching ${playerState.src}`);
-                }
-                const arrayBuffer = await response.arrayBuffer();
-                console.log(`Decoding audio data for: ${playerState.src} (${(arrayBuffer.byteLength / 1024).toFixed(1)} KB)`);
-                // Use promise-based decodeAudioData
-                playerState.audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-                console.log(`Successfully decoded: ${playerState.src}`);
-                playerState.loadError = null; // Clear any previous error on successful load
-            }
-            // Double-check buffer exists after potential load
             if (!playerState.audioBuffer) {
-                throw new Error(`AudioBuffer is unexpectedly null after load/decode attempt for ${playerState.src}`);
+                console.log(`Loading: ${playerState.src}`);
+                const response = await fetch(playerState.src);
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                const arrayBuffer = await response.arrayBuffer();
+                console.log(`Decoding: ${playerState.src}`);
+                playerState.audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                playerState.loadError = null; // Clear error on success
             }
+            if (!playerState.audioBuffer) throw new Error(`AudioBuffer null after load`);
 
-            // --- 2. Create and Configure Audio Source Node ---
-            // Create a new source node *each time* play is called
             const sourceNode = audioContext.createBufferSource();
-            sourceNode.buffer = playerState.audioBuffer; // Assign the decoded buffer
-            sourceNode.loop = true;                      // Enable seamless looping
-            sourceNode.connect(audioContext.destination); // Connect to speakers
+            sourceNode.buffer = playerState.audioBuffer;
+            sourceNode.loop = true;
+            sourceNode.connect(audioContext.destination);
 
-            // --- 3. Setup Cleanup Handler (IMPORTANT) ---
-            // This function runs when the node stops for *any* reason (stopped manually, finished playing non-looped)
             sourceNode.onended = () => {
-                // Check if this specific node is the one currently tracked in the state
-                // This prevents issues if stop/play happens rapidly causing old onended events to fire
                 if (playerState.sourceNode === sourceNode) {
-                     console.log(`AudioNode ended naturally or stopped for ${playerState.src}. Current isPlaying state: ${playerState.isPlaying}`);
-                     // If the state still thought it was playing when 'onended' fired, it means
-                     // it wasn't stopped via the stopLoop function (e.g., context closed, unexpected stop).
-                     // Or, it's the expected end after stopLoop called sourceNode.stop().
-                     // Either way, ensure the state is consistent.
+                     console.log(`Node ended: ${playerState.src}`);
                      playerState.isPlaying = false;
-                     playerState.sourceNode = null; // Clear the reference to the ended node
-                     updateButtonUI(card, playerState, false); // Update button to "Play"
+                     playerState.sourceNode = null;
+                     updateButtonUI(card, playerState, false);
+                     card.classList.remove('playing'); // Ensure visual state cleared
                 } else {
-                     // This ended event belongs to an "orphaned" node (already replaced or stopped)
-                     console.log(`Orphaned AudioNode ended for ${playerState.src}`);
+                     console.log(`Orphaned Node ended: ${playerState.src}`);
                 }
-                 // No need to disconnect, garbage collection handles it once references are cleared.
             };
 
-            // --- 4. Start Playback ---
-            sourceNode.start(0); // Start playing immediately
-            playerState.sourceNode = sourceNode; // Store reference to the *currently playing* node
-            playerState.isPlaying = true;        // Update state
+            sourceNode.start(0);
+            playerState.sourceNode = sourceNode;
+            playerState.isPlaying = true;
             console.log(`Playing: ${playerState.src}`);
-            updateButtonUI(card, playerState, true); // Update button to "Pause"
+            updateButtonUI(card, playerState, true);
+            card.classList.add('playing'); // Add visual playing state to card
 
         } catch (error) {
-            // --- Error Handling ---
-            console.error(`Error processing or playing ${playerState.src}:`, error);
-            playerState.loadError = error; // Store the error state
-            playerState.isPlaying = false;
-            playerState.audioBuffer = null; // Clear potentially corrupted buffer
-            playerState.sourceNode = null; // Ensure no node reference is held
-            updateButtonUI(card, playerState, false); // Ensure button shows "Play"
-            alert(`Could not load or play the audio sample "${playerState.src.split('/').pop()}". Please check the console for details.\n\nError: ${error.message}`);
+            console.error(`Error playing ${playerState.src}:`, error);
+            playerState.loadError = error;
+            playerState.isPlaying = false; playerState.audioBuffer = null; playerState.sourceNode = null;
+            updateButtonUI(card, playerState, false);
+            alert(`Could not load/play "${playerState.src.split('/').pop()}". Error: ${error.message}`);
+            card.classList.remove('playing'); // Ensure visual state cleared
 
         } finally {
-            // --- Cleanup Loading State ---
-            // This runs regardless of success or failure in the try block
             playerState.isLoading = false;
+            card.classList.remove('loading'); // Remove visual loading state
             if (playerState.indicator) playerState.indicator.style.display = 'none';
-            // Re-enable button ONLY if there wasn't a load error
-            if (playerState.button && !playerState.loadError) {
-                playerState.button.disabled = false;
-            } else if (playerState.button) {
-                // Keep button disabled if a load error occurred
-                playerState.button.disabled = true;
-                 console.warn(`Button remains disabled for ${playerState.src} due to load error.`);
+             // Re-enable interaction (via card listener) ONLY if no load error
+            if (playerState.loadError) {
+                 console.warn(`Interaction disabled for ${playerState.src} due to load error.`);
+                 // Maybe add a visual error state to the card?
+                 card.classList.add('error');
+                 if (playerState.button) playerState.button.disabled = true; // Keep explicit button disabled
+            } else {
+                if (playerState.button) playerState.button.disabled = false; // Re-enable explicit button visually
+                card.classList.remove('error'); // Clear error state if any
             }
         }
     }
 
     /**
-     * Updates the visual state (icon/text) and ARIA label of a play/pause button
-     * based on the player's current state.
+     * Updates the visual state (icon/text) and ARIA label of the button *within* the card.
      * @param {HTMLElement} card The sample card element being updated.
      * @param {object} playerState The state object for the player associated with the card.
      * @param {boolean} isPlaying The target state (true for playing/pause icon, false for stopped/play icon).
      */
     function updateButtonUI(card, playerState, isPlaying) {
-        // Safety checks for robustness
         if (!card || !playerState || !playerState.button) {
-            console.warn("updateButtonUI called with invalid arguments", { card, playerState });
+            // console.warn("updateButtonUI called with invalid arguments", { card, playerState }); // Can be noisy
             return;
         }
-
         const button = playerState.button;
-        const icon = playerState.icon; // Get icon reference from state
+        const icon = playerState.icon;
+        const fullTitle = card.querySelector('h3')?.textContent.trim() || playerState.src.split('/').pop(); // Use the full title
 
-        // Update Icon or Text
         if (icon) {
-            // Use classList.replace for cleaner toggling if supported, otherwise remove/add
-            if (icon.classList.replace) {
-                icon.classList.replace(isPlaying ? 'fa-play' : 'fa-pause', isPlaying ? 'fa-pause' : 'fa-play');
-            } else {
-                icon.classList.remove(isPlaying ? 'fa-play' : 'fa-pause');
-                icon.classList.add(isPlaying ? 'fa-pause' : 'fa-play');
-            }
+             // Add/remove classes for play/pause icon state
+             icon.classList.toggle('fa-play', !isPlaying);
+             icon.classList.toggle('fa-pause', isPlaying);
         } else {
-            // Fallback if no icon element is found
-            button.textContent = isPlaying ? 'Pause' : 'Play';
+            button.textContent = isPlaying ? 'Pause' : 'Play'; // Fallback text
         }
-
-        // Update ARIA Label for Accessibility
+        // Update ARIA label based on full title
         const action = isPlaying ? 'Pause' : 'Play';
-        // Try to get the title from the card's h3, fallback to filename from state
-        const sampleName = card.querySelector('h3')?.textContent.trim() || playerState.src.split('/').pop();
-        button.setAttribute('aria-label', `${action} ${sampleName}`);
+        button.setAttribute('aria-label', `${action} ${fullTitle}`);
 
-        // Optional: Add/Remove a class on the button itself for styling based on state
-        button.classList.toggle('playing', isPlaying);
-        // Ensure card itself doesn't have the 'playing' class unless needed for styling
-        // card.classList.toggle('playing', isPlaying);
+        // Update overall card state class for styling (optional but good)
+        card.classList.toggle('playing', isPlaying);
     }
+    // --- END of Web Audio API Logic ---
 
-    // --- END of Web Audio API Looping Logic ---
 
-}); // End of DOMContentLoaded
+}); // === END of DOMContentLoaded ===
