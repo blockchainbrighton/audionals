@@ -31,6 +31,10 @@ let currentVolume = 1.0;        // Current master volume level (0.0 to 1.0+)
 let originalSampleFrequency = null;   // Fundamental frequency of the loaded sample
 let midiNoteToPlaybackRate = new Map(); // Map<MIDINoteNumber, PlaybackRate>
 
+let sampleType = 'one-shot'; // Default to one-shot
+let currentLoopingSource = null; // To hold the reference to the active looping node
+
+
 // --- Private Helper Functions ---
 
 /**
@@ -82,10 +86,10 @@ function _getCurrentBuffer() {
  * @param {AudioBuffer} buffer The audio buffer to play.
  * @param {number} time The audioContext.currentTime-based time to start playback.
  * @param {number} rate The specific playback rate (pitch/speed) for this instance.
+ * @param {boolean} [forceOneshot=false] - If true, plays as one-shot regardless of sampleType.
  * @returns {AudioBufferSourceNode | null} The created source node, or null on failure.
  */
-function _playBuffer(buffer, time, rate) {
-    // Basic check (context/gain should be valid if this is called)
+function _playBuffer(buffer, time, rate, forceOneshot = false) { // Added forceOneshot parameter
     if (!buffer) {
          console.error("AudioProcessor: _playBuffer called with null buffer.");
          return null;
@@ -95,13 +99,34 @@ function _playBuffer(buffer, time, rate) {
         const source = audioContext.createBufferSource();
         source.buffer = buffer;
         source.playbackRate.value = rate;
+
+        // *** Apply looping based on type and forceOneshot flag ***
+        if (sampleType === 'loop' && !forceOneshot) {
+            source.loop = true;
+            // Optional: Define loop points if not the whole buffer
+            // source.loopStart = 0;
+            // source.loopEnd = buffer.duration / rate; // Adjust loop end by rate? Usually not needed. WebAudio handles this.
+            console.log(`_playBuffer: Configuring source as looping. Time: ${time.toFixed(4)}, Rate: ${rate.toFixed(4)}`);
+        } else {
+             // console.log(`_playBuffer: Configuring source as one-shot. Time: ${time.toFixed(4)}, Rate: ${rate.toFixed(4)}`);
+        }
+
         source.connect(mainGainNode);
-
-        // Trigger visual feedback associated with sound emission
         triggerImageAnimation();
-
         source.start(time);
-        // console.log(`AudioProcessor: Scheduled play at ${time.toFixed(4)} with rate ${rate.toFixed(4)}`);
+
+        // Add an 'ended' event listener specifically for looping sources we manage
+        // This helps clean up the reference if it stops unexpectedly (e.g., end of duration if loopEnd is set)
+        if (source.loop) {
+            source.addEventListener('ended', () => {
+                // Check if this is the source we are actively managing
+                if (currentLoopingSource === source) {
+                    // console.log("AudioProcessor: Managed looping source ended.");
+                    currentLoopingSource = null;
+                }
+            });
+        }
+
         return source;
 
     } catch (error) {
@@ -216,10 +241,27 @@ async function _decodeAudioAndPrepare(audioBase64) {
         throw new Error(`AudioProcessor: Invalid frequency found in DOM: "${freqSpan.textContent}".`);
     }
 
+    // --- 4. Read Sample Type --- ADD THIS SECTION ---
+    const typeSpan = document.getElementById('audio-meta-sample-type');
+    if (typeSpan && typeSpan.textContent) {
+        const typeText = typeSpan.textContent.trim().toLowerCase();
+        if (typeText === 'loop' || typeText === 'one-shot') {
+            sampleType = typeText;
+            console.log(`AudioProcessor: Read sample type: ${sampleType}`);
+        } else {
+            console.warn(`AudioProcessor: Invalid sample type found in DOM: "${typeSpan.textContent}". Defaulting to 'one-shot'.`);
+            sampleType = 'one-shot';
+        }
+    } else {
+        console.warn("AudioProcessor: Sample type span (#audio-meta-sample-type) not found or empty. Defaulting to 'one-shot'.");
+        sampleType = 'one-shot';
+    }
+    // --- End Sample Type Reading ---
+
     originalSampleFrequency = parsedFreq;
     console.log(`AudioProcessor: Read original sample frequency: ${originalSampleFrequency} Hz`);
-    _calculatePlaybackRates(); // Calculate the MIDI map now that frequency is known
-}
+    _calculatePlaybackRates();
+    }
 
 /**
  * Calculates and populates the midiNoteToPlaybackRate map based on the
@@ -316,8 +358,9 @@ export async function playOnce() {
         const bufferToPlay = _getCurrentBuffer();
         if (!bufferToPlay) return; // Error handled internally
 
-        // Use the global pitch setting for this playback type
-        _playBuffer(bufferToPlay, audioContext.currentTime, currentGlobalPitch);
+        // *** Force one-shot playback ***
+        _playBuffer(bufferToPlay, audioContext.currentTime, currentGlobalPitch, true);
+        
 
     } catch (err) {
         // Errors from _ensureContextRunning are already handled/shown
@@ -327,57 +370,102 @@ export async function playOnce() {
 
 /**
  * Starts the tempo-synchronized loop playback using the timing manager.
- * The loop uses the GLOBAL pitch setting.
+ * Behavior depends on sampleType:
+ * - 'one-shot': Schedules repeated triggers via timingManager callback.
+ * - 'loop': Starts timingManager with a dummy callback, then plays the sample
+ *           once with internal looping enabled, starting at the loop start time.
  */
 export async function startLoop() {
+    // --- Initial checks (context, buffer) ---
     if (timingManager.getLoopingState()) {
         console.warn("AudioProcessor: Loop already active.");
         return;
     }
-
     try {
-        if (!await _ensureContextRunning()) return; // Check context state
+        if (!await _ensureContextRunning()) return;
+        const bufferToPlay = _getCurrentBuffer();
+        if (!bufferToPlay) return;
+    } catch (err) {
+        console.error("AudioProcessor: Failed context/buffer check before starting loop.", err);
+        return;
+    }
 
-        // Ensure buffer for the *current* direction is available before starting
-        const bufferToCheck = _getCurrentBuffer();
-        if (!bufferToCheck) {
-             // Error shown by _getCurrentBuffer
-             return;
-        }
+    console.log(`AudioProcessor: Starting loop. Sample Type: ${sampleType}`);
 
-        // Define the callback for the timing manager
-        // This callback uses the GLOBAL pitch setting
+    // --- Stop any previously playing looping source ---
+    if (currentLoopingSource) {
+        try {
+            currentLoopingSource.stop();
+        } catch (e) { /* Ignore errors if already stopped */ }
+        currentLoopingSource = null;
+    }
+
+    // --- Start Loop based on Type ---
+    if (sampleType === 'one-shot') {
+        // --- One-Shot Logic (Similar to before) ---
         const soundPlaybackCallback = (scheduledTime) => {
-            const bufferToPlay = _getCurrentBuffer(); // Check again in case state changed
-            if (bufferToPlay && audioContext && mainGainNode) {
-                _playBuffer(bufferToPlay, scheduledTime, currentGlobalPitch);
+            const currentBuffer = _getCurrentBuffer(); // Check buffer again inside callback
+            if (currentBuffer && audioContext && mainGainNode) {
+                // Play as one-shot, even though we're in 'loop mode'
+                _playBuffer(currentBuffer, scheduledTime, currentGlobalPitch, true);
             } else {
-                console.error("AudioProcessor: Buffer/Context/Gain unavailable during loop callback. Stopping loop.");
+                console.error("AudioProcessor: Resources unavailable during one-shot loop callback. Stopping loop.");
                 showError("Loop stopped: audio resources unavailable.");
-                timingManager.stopLoop();
+                stopLoop(); // Call the main stopLoop to clean up everything
             }
         };
+        console.log("AudioProcessor: Starting timingManager for repeated one-shot triggers.");
+        timingManager.startLoop(soundPlaybackCallback); // timingManager handles its own start logic
 
-        console.log("AudioProcessor: Starting loop via timingManager.");
-        timingManager.startLoop(soundPlaybackCallback); // TimingManager handles its own start logic
+    } else if (sampleType === 'loop') {
+        // --- Loop Logic ---
+        const dummyCallback = () => {}; // No repeated triggers needed from timingManager
+        console.log("AudioProcessor: Starting timingManager with dummy callback for looping sample.");
+        timingManager.startLoop(dummyCallback); // Start timing manager to maintain tempo grid
 
-    } catch (err) {
-        // Errors from _ensureContextRunning or timingManager.startLoop
-        console.error("AudioProcessor: Failed to start loop.", err);
-        // No need to show error here, should be handled upstream or by _ensureContextRunning
+        // Get the precise start time from the timing manager *after* it starts
+        const startTime = timingManager.getLoopStartTime ? timingManager.getLoopStartTime() : audioContext.currentTime + 0.05; // Fallback time
+
+        console.log(`AudioProcessor: Scheduling looping sample to start at ${startTime.toFixed(4)}`);
+        const bufferToPlay = _getCurrentBuffer(); // Get buffer again just in case
+        if (bufferToPlay) {
+            // Play ONCE with looping enabled (forceOneshot = false)
+            currentLoopingSource = _playBuffer(bufferToPlay, startTime, currentGlobalPitch, false);
+            if (!currentLoopingSource) {
+                 console.error("AudioProcessor: Failed to start looping source node. Stopping loop.");
+                 showError("Failed to start looping audio.");
+                 stopLoop(); // Clean up if source creation failed
+            }
+        } else {
+             console.error("AudioProcessor: Buffer unavailable when trying to start looping source. Stopping loop.");
+             showError("Loop stopped: audio buffer unavailable.");
+             stopLoop();
+        }
     }
 }
 
 /**
- * Stops the loop playback via the timing manager.
+ * Stops the loop playback via the timing manager AND stops any active looping source.
  */
 export function stopLoop() {
-    if (!timingManager.getLoopingState()) {
-        // console.log("AudioProcessor: Stop requested but loop not active.");
+    if (!timingManager.getLoopingState() && !currentLoopingSource) {
+        // console.log("AudioProcessor: Stop requested but loop/looping source not active.");
         return;
     }
-    console.log("AudioProcessor: Stopping loop via timingManager.");
-    timingManager.stopLoop();
+    console.log("AudioProcessor: Stopping loop via timingManager and stopping looping source.");
+    timingManager.stopLoop(); // Stop the scheduler
+
+    // Explicitly stop the looping source if it exists
+    if (currentLoopingSource) {
+        try {
+            currentLoopingSource.stop();
+            console.log("AudioProcessor: Looping source stopped.");
+        } catch (e) {
+             // Ignore error if it was already stopped or couldn't be stopped
+             // console.warn("AudioProcessor: Error stopping looping source (may already be stopped):", e.message);
+        }
+        currentLoopingSource = null; // Clear the reference
+    }
 }
 
 /**
@@ -402,18 +490,97 @@ export function setScheduleMultiplier(multiplier) {
      return timingManager.getCurrentScheduleMultiplier ? timingManager.getCurrentScheduleMultiplier() : 1;
  }
 
-/**
- * Sets the playback tempo (BPM). Updates local state and informs the timing manager.
- * @param {number} bpm The desired tempo in Beats Per Minute (> 0).
- */
+// --- Modify setTempo ---
 export function setTempo(bpm) {
     if (typeof bpm === 'number' && bpm > 0) {
-        // console.log(`AudioProcessor: Setting tempo to ${bpm} BPM`);
-        currentTempo = bpm;
-        timingManager.setTempo(bpm); // Timing manager handles validation and loop restart if needed
+        const wasLooping = timingManager.getLoopingState();
+        const oldTempo = currentTempo;
+        currentTempo = bpm; // Update local state first
+
+        // Inform timing manager - IT will handle restarting its internal scheduler/timebase
+        timingManager.setTempo(bpm);
+
+        // If the main loop was active AND the sample is a 'loop' type,
+        // we need to stop the old looping source and start a new one aligned
+        // with the timingManager's NEW start time.
+        if (wasLooping && sampleType === 'loop' && currentTempo !== oldTempo) {
+            console.log("AudioProcessor: Tempo changed for looping sample. Restarting source.");
+
+            // 1. Stop the current looping source immediately
+            if (currentLoopingSource) {
+                try { currentLoopingSource.stop(); } catch(e) {}
+                currentLoopingSource = null;
+            }
+
+            // 2. Get the new start time from the (restarted) timing manager
+            //    Need a slight delay to ensure timingManager has recalculated.
+            //    A cleaner way would be if timingManager emitted an event or callback on restart.
+            //    Using setTimeout is a pragmatic workaround here.
+            setTimeout(() => {
+                 // Ensure loop is still supposed to be running after the brief delay
+                if (timingManager.getLoopingState()) {
+                    const newStartTime = timingManager.getLoopStartTime ? timingManager.getLoopStartTime() : audioContext.currentTime + 0.05;
+                    const buffer = _getCurrentBuffer();
+                    console.log(`AudioProcessor: Starting new looping source after tempo change at ${newStartTime.toFixed(4)}`);
+                    if (buffer) {
+                         currentLoopingSource = _playBuffer(buffer, newStartTime, currentGlobalPitch, false);
+                         if (!currentLoopingSource) {
+                             console.error("Failed to restart looping source after tempo change.");
+                             showError("Failed to restart loop audio after tempo change.");
+                             stopLoop(); // Stop everything if restart failed
+                         }
+                    } else {
+                         console.error("Buffer unavailable for loop restart after tempo change.");
+                         showError("Loop audio unavailable after tempo change.");
+                         stopLoop();
+                    }
+                }
+            }, 5); // Small delay (5ms) - adjust if needed
+
+        } else if (!wasLooping){
+             // Tempo changed while stopped, no action needed on sources
+        }
+
     } else {
          console.warn(`AudioProcessor: Invalid tempo value received: ${bpm}`);
     }
+}
+
+
+// --- Modify toggleReverse ---
+export function toggleReverse() {
+    const intendedNewState = !isReversed;
+    if (intendedNewState === true && !reversedBuffer) {
+        showError("Reversed audio is unavailable.");
+        return isReversed;
+    }
+
+    const wasLooping = timingManager.getLoopingState(); // Check BEFORE changing state/stopping
+
+    // If a looping source is active, stop it before changing direction
+    if (wasLooping && sampleType === 'loop' && currentLoopingSource) {
+        console.log("AudioProcessor: Stopping current looping source for reverse toggle.");
+        try { currentLoopingSource.stop(); } catch(e) {}
+        currentLoopingSource = null;
+    }
+
+    // Now toggle the state
+    isReversed = intendedNewState;
+    console.log(`AudioProcessor: Reverse playback toggled: ${isReversed ? 'On' : 'Off'}`);
+
+    // If the loop was running, restart it with the new direction/source
+    if (wasLooping) {
+        console.log("AudioProcessor: Restarting loop due to reverse toggle.");
+        timingManager.stopLoop(); // Stop the scheduler first (stopLoop already cleared currentLoopingSource if it was looping)
+
+        // Use startLoop directly - it now contains the logic to handle
+        // both 'one-shot' and 'loop' types correctly based on the NEW isReversed state.
+        startLoop().catch(err => {
+            console.error("AudioProcessor: Error restarting loop after reverse toggle:", err);
+            stopLoop(); // Ensure fully stopped if restart fails
+        });
+    }
+    return isReversed; // Return the new state
 }
 
 /**
@@ -447,36 +614,6 @@ export function setVolume(level) {
     }
 }
 
-/**
- * Toggles between forward and reversed playback. Restarts the loop if active.
- * @returns {boolean} The new state of isReversed.
- */
-export function toggleReverse() {
-    const intendedNewState = !isReversed;
-
-    // Check buffer availability *before* changing state
-    if (intendedNewState === true && !reversedBuffer) {
-        showError("Reversed audio is unavailable.");
-        console.warn("AudioProcessor: Cannot switch to reverse: reversed buffer is missing.");
-        return isReversed; // Return current state unchanged
-    }
-
-    isReversed = intendedNewState;
-    console.log(`AudioProcessor: Reverse playback toggled: ${isReversed ? 'On' : 'Off'}`);
-
-    // If the loop is running, stop and restart it to use the new buffer direction
-    if (timingManager.getLoopingState()) {
-        console.log("AudioProcessor: Restarting loop due to reverse toggle.");
-        timingManager.stopLoop();
-        // Use startLoop directly, it handles context checks and callback setup
-        startLoop().catch(err => {
-            console.error("AudioProcessor: Error restarting loop after reverse toggle:", err);
-            // Ensure loop is definitely stopped if restart fails
-             if (timingManager.getLoopingState()) { timingManager.stopLoop(); }
-        });
-    }
-    return isReversed; // Return the new state
-}
 
 /**
  * Gets the current looping state from the timing manager.
@@ -548,7 +685,8 @@ export async function playSampleAtRate(rate, velocity = 127) {
         if (!bufferToPlay) return; // Error handled internally
 
         // console.log(`AudioProcessor: Playing sample via MIDI trigger with rate: ${rate.toFixed(4)}`);
-        _playBuffer(bufferToPlay, audioContext.currentTime, rate); // Use the *provided* rate
+        // *** Force one-shot playback for MIDI/direct triggers ***
+        _playBuffer(bufferToPlay, audioContext.currentTime, rate, true);
 
         // TODO: Implement velocity sensitivity if needed:
         // - Create temporary GainNode

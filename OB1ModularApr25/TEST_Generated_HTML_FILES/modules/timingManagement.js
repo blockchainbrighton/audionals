@@ -192,6 +192,10 @@ function _stopLoopInternal(resetState = true) {
      }
 }
 
+export function getLoopStartTime() {
+    return loopStartTime;
+}
+
 // --- Public API ---
 
 // --- init remains the same ---
