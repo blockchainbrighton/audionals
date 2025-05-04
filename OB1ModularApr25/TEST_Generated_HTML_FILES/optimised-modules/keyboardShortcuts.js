@@ -1,329 +1,181 @@
 // --- START OF FILE keyboardShortcuts.js ---
 
-import * as audio from './audioProcessor.js'; // Imports the UPDATED audioProcessor
+// --- keyboardShortcuts.js ---
+
+import * as audio from './audioProcessor.js';
 import * as ui from './uiUpdater.js';
 import { clamp, _isInputFocused } from './utils.js';
 
 // --- Module State ---
-let tempoSliderRef = null;
-let pitchSliderRef = null; // Controls GLOBAL pitch via shortcuts
-let volumeSliderRef = null;
-let multiplierSliderRef = null;
-let lastVolumeBeforeMute = 1.0;
+let tempoRef, pitchRef, volumeRef, multiplierRef;
+let lastVolume = 1.0;
 
 // --- Constants ---
-const TEMPO_STEP_SMALL = 1;
-const TEMPO_STEP_LARGE = 10;
-const PITCH_STEP_SMALL = 0.01; // Linear step for global pitch
-const VOLUME_STEP = 0.05;
-const FLOAT_COMPARISON_EPSILON = 1e-9; // Epsilon for float comparisons
-const SEMITONE_RATIO = Math.pow(2, 1 / 12); // ~1.059463
-
-// --- Multiplier Mapping ---
-const multiplierMap = {
-    '1': 1, '2': 2, '3': 3, '4': 4,
-    '5': 8, '6': 16, '7': 32, '8': 8, // Map 8 to 8x (matches slider max typically)
+const STEPS = {
+  TEMPO_SMALL: 1,
+  TEMPO_LARGE: 10,
+  PITCH_LINEAR: 0.01,
+  VOLUME: 0.05
 };
+const EPS = 1e-9;
+const ST_RATIO = Math.pow(2, 1 / 12);
+const MULT_MAP = { '1': 1, '2': 2, '3': 3, '4': 4, '5': 8, '6': 16, '7': 32, '8': 8 };
 
-// --- Internal Helper Function ---
-
-/**
- * Centralized function to apply changes triggered by shortcuts.
- * Updates audio processor, UI display, and optionally the slider position.
- */
-function _applySliderChange(sliderRef, audioSetter, uiUpdater, newValue, logLabel, logMultiplier = 1, logUnit = '') {
-    // Check if setter and updater functions are valid
-     if (typeof audioSetter !== 'function' || typeof uiUpdater !== 'function') {
-        console.error(`_applySliderChange: Invalid audioSetter or uiUpdater provided for ${logLabel}. Setter: ${typeof audioSetter}, Updater: ${typeof uiUpdater}`);
-        return; // Prevent errors further down
+// --- Core Helper ---
+function applyChange(ref, setter, updater, value, label, logMult = 1, logUnit = '') {
+  if (typeof setter !== 'function' || typeof updater !== 'function') {
+    console.error(`applyChange: invalid setter/updater for ${label}`);
+    return;
+  }
+  audio:
+  try {
+    setter(value);
+    updater(value);
+    if (ref) {
+      const min = parseFloat(ref.min), max = parseFloat(ref.max);
+      if (!isNaN(min) && !isNaN(max)) ref.value = clamp(value, min, max);
     }
-    // Check slider presence (except for multiplier which might not have one)
-    if (!sliderRef && logLabel !== "Multiplier") {
-        console.warn(`_applySliderChange: Slider reference missing for ${logLabel}. UI slider will not update.`);
-        // Allow proceeding without slider update for robustness
-    }
-
-    try {
-        // 1. Update Audio Engine
-        audioSetter(newValue);
-
-        // 2. Update UI Display Span
-        uiUpdater(newValue); // Assumes uiUpdater handles formatting
-
-        // 3. Update Slider Position (Visual Feedback)
-        if (sliderRef) {
-            try {
-                const min = parseFloat(sliderRef.min);
-                const max = parseFloat(sliderRef.max);
-                if (!isNaN(min) && !isNaN(max)) {
-                    // Clamp value to slider bounds before setting visual position
-                    const clampedValue = clamp(newValue, min, max);
-                    sliderRef.value = clampedValue;
-                } else {
-                    console.warn(`_applySliderChange: Could not parse min/max for slider ${sliderRef.id}. Slider visual position not updated.`);
-                }
-            } catch (parseError) {
-                 console.warn(`_applySliderChange: Error parsing slider min/max for ${sliderRef.id}:`, parseError);
-            }
-        }
-
-        // 4. Log the change
-        let displayLogValue;
-        if (logLabel === "Multiplier") {
-            displayLogValue = `x${newValue}`;
-        } else if (logMultiplier !== 1) {
-            displayLogValue = `${Math.round(newValue * logMultiplier)}${logUnit}`; // Percentages
-        } else {
-            displayLogValue = `${newValue}${logUnit}`; // Direct values
-        }
-        const rateInfo = (logLabel.startsWith("Pitch")) ? ` (Rate: ${newValue.toFixed(4)})` : "";
-        console.log(`${logLabel} adjusted via shortcut to: ${displayLogValue}${rateInfo}`);
-
-    } catch (error) {
-        console.error(`Error applying slider change for ${logLabel}:`, error);
-        ui.showError(`Failed to apply change for ${logLabel}`);
-    }
+    const display = label === 'Multiplier'
+      ? `x${value}`
+      : logMult !== 1
+        ? `${Math.round(value * logMult)}${logUnit}`
+        : `${value}${logUnit}`;
+    const extra = label.startsWith('Pitch') ? ` (Rate: ${value.toFixed(4)})` : '';
+    console.log(`${label} set to: ${display}${extra}`);
+  } catch (err) {
+    console.error(`applyChange error for ${label}:`, err);
+    ui.showError(`Failed to set ${label}`);
+  }
 }
 
-
-// --- Adjustment Functions ---
-
-/** Adjusts Tempo */
-function _adjustTempo(change) {
-    if (!tempoSliderRef) return;
-    try {
-        const current = parseInt(tempoSliderRef.value, 10);
-        const min = parseInt(tempoSliderRef.min, 10);
-        const max = parseInt(tempoSliderRef.max, 10);
-        if (isNaN(current) || isNaN(min) || isNaN(max)) throw new Error("Invalid tempo slider values");
-        const newValue = clamp(current + change, min, max);
-        if (newValue !== current) {
-            _applySliderChange(tempoSliderRef, audio.setTempo, ui.updateTempoDisplay, newValue, "Tempo", 1, " BPM");
-        }
-    } catch (e) { console.error("Error adjusting tempo:", e); }
+// --- Adjusters ---
+function adjustTempo(delta) {
+  if (!tempoRef) return;
+  const cur = parseInt(tempoRef.value, 10);
+  const min = parseInt(tempoRef.min, 10);
+  const max = parseInt(tempoRef.max, 10);
+  if ([cur, min, max].some(isNaN)) return console.error('Invalid tempo slider');
+  const next = clamp(cur + delta, min, max);
+  if (next !== cur) applyChange(tempoRef, audio.setTempo, ui.updateTempoDisplay, next, 'Tempo', 1, ' BPM');
 }
 
-// --- PITCH FUNCTIONS NOW USE audio.setGlobalPitch ---
-
-/** Linear pitch adjustment (Shift + [ ]) - Adjusts GLOBAL pitch */
-function _adjustPitchLinear(change) {
-    if (!pitchSliderRef) return;
-    try {
-        const current = parseFloat(pitchSliderRef.value);
-        const min = parseFloat(pitchSliderRef.min);
-        const max = parseFloat(pitchSliderRef.max);
-         if (isNaN(current) || isNaN(min) || isNaN(max)) throw new Error("Invalid pitch slider values");
-        const newValue = clamp(current + change, min, max);
-        if (Math.abs(newValue - current) > FLOAT_COMPARISON_EPSILON) {
-             _applySliderChange(pitchSliderRef, audio.setGlobalPitch, ui.updatePitchDisplay, newValue, "Pitch (Linear)", 100, "%"); // <-- CORRECTED
-        }
-    } catch (e) { console.error("Error adjusting linear pitch:", e); }
+function adjustPitch(type, amount = 0) {
+  if (!pitchRef) return;
+  const cur = parseFloat(pitchRef.value);
+  const min = parseFloat(pitchRef.min);
+  const max = parseFloat(pitchRef.max);
+  if ([cur, min, max].some(isNaN)) return console.error('Invalid pitch slider');
+  let next, label;
+  switch (type) {
+    case 'linear':
+      next = clamp(cur + amount, min, max);
+      label = 'Pitch (Linear)';
+      break;
+    case 'semitone':
+      next = clamp(cur * (amount > 0 ? ST_RATIO : 1 / ST_RATIO), min, max);
+      label = `Pitch (${amount > 0 ? '+1' : '-1'} ST)`;
+      break;
+    case 'mult':
+      next = clamp(cur * amount, min, max);
+      label = 'Pitch (Mult)';
+      break;
+    case 'reset':
+      next = clamp(1.0, min, max);
+      label = 'Pitch Reset';
+      break;
+    default:
+      return;
+  }
+  if (Math.abs(next - cur) > EPS) applyChange(pitchRef, audio.setGlobalPitch, ui.updatePitchDisplay, next, label, 100, '%');
 }
 
-/** Semitone pitch adjustment (Ctrl+Shift + [ ]) - Adjusts GLOBAL pitch */
-function _adjustPitchSemitone(direction) {
-    if (!pitchSliderRef) return;
-     try {
-        const current = parseFloat(pitchSliderRef.value);
-        const min = parseFloat(pitchSliderRef.min);
-        const max = parseFloat(pitchSliderRef.max);
-         if (isNaN(current) || isNaN(min) || isNaN(max)) throw new Error("Invalid pitch slider values");
-        const multiplier = (direction > 0) ? SEMITONE_RATIO : (1 / SEMITONE_RATIO);
-        const newValue = clamp(current * multiplier, min, max);
-        if (Math.abs(newValue - current) > FLOAT_COMPARISON_EPSILON) {
-            const semitoneLabel = direction > 0 ? "+1 ST" : "-1 ST";
-            _applySliderChange(pitchSliderRef, audio.setGlobalPitch, ui.updatePitchDisplay, newValue, `Pitch (${semitoneLabel})`, 100, "%"); // <-- CORRECTED
-        }
-    } catch (e) { console.error("Error adjusting semitone pitch:", e); }
+function adjustVolume(delta) {
+  if (!volumeRef) return;
+  const cur = parseFloat(volumeRef.value);
+  const min = parseFloat(volumeRef.min);
+  const max = parseFloat(volumeRef.max);
+  if ([cur, min, max].some(isNaN)) return console.error('Invalid volume slider');
+  const next = clamp(cur + delta, min, max);
+  if (Math.abs(next - cur) > EPS) {
+    if (next > min) lastVolume = next;
+    applyChange(volumeRef, audio.setVolume, ui.updateVolumeDisplay, next, 'Volume', 100, '%');
+  }
 }
 
-/** Multiplicative pitch adjustment (Octave up/down: = / - keys) - Adjusts GLOBAL pitch */
-function _multiplyPitch(multiplier) {
-    if (!pitchSliderRef) return;
-     try {
-        const current = parseFloat(pitchSliderRef.value);
-        const min = parseFloat(pitchSliderRef.min);
-        const max = parseFloat(pitchSliderRef.max);
-        if (isNaN(current) || isNaN(min) || isNaN(max)) throw new Error("Invalid pitch slider values");
-        const newValue = clamp(current * multiplier, min, max);
-        if (Math.abs(newValue - current) > FLOAT_COMPARISON_EPSILON) {
-            _applySliderChange(pitchSliderRef, audio.setGlobalPitch, ui.updatePitchDisplay, newValue, "Pitch (Mult)", 100, "%"); // <-- CORRECTED
-        }
-    } catch (e) { console.error("Error adjusting multiplicative pitch:", e); }
+function toggleMute() {
+  if (!volumeRef) return;
+  const cur = parseFloat(volumeRef.value);
+  const min = parseFloat(volumeRef.min);
+  const max = parseFloat(volumeRef.max);
+  if ([cur, min, max].some(isNaN)) return console.error('Invalid volume slider');
+  let next, label;
+  if (cur > min + EPS) {
+    lastVolume = cur;
+    next = min;
+    label = 'Mute';
+  } else {
+    next = clamp(lastVolume > min ? lastVolume : max, min, max);
+    label = 'Unmute';
+  }
+  if (Math.abs(next - cur) > EPS) applyChange(volumeRef, audio.setVolume, ui.updateVolumeDisplay, next, label, 100, '%');
 }
 
-/** Resets pitch to 1.0 (0 key) - Resets GLOBAL pitch */
-function _resetPitch() {
-    if (!pitchSliderRef) return;
-    try {
-        const current = parseFloat(pitchSliderRef.value);
-        const min = parseFloat(pitchSliderRef.min);
-        const max = parseFloat(pitchSliderRef.max);
-        if (isNaN(current) || isNaN(min) || isNaN(max)) throw new Error("Invalid pitch slider values");
-        const defaultPitch = 1.0;
-        const newValue = clamp(defaultPitch, min, max); // Ensure 1.0 is valid
-        if (Math.abs(newValue - current) > FLOAT_COMPARISON_EPSILON) {
-            _applySliderChange(pitchSliderRef, audio.setGlobalPitch, ui.updatePitchDisplay, newValue, "Pitch Reset", 100, "%"); // <-- CORRECTED
-        }
-    } catch (e) { console.error("Error resetting pitch:", e); }
+function setMultiplier(key) {
+  const target = MULT_MAP[key];
+  if (!target || typeof audio.setScheduleMultiplier !== 'function') return;
+  const current = audio.getScheduleMultiplier?.() || 1;
+  if (current !== target) applyChange(multiplierRef, audio.setScheduleMultiplier, ui.updateScheduleMultiplierDisplay, target, 'Multiplier');
 }
 
-// --- END PITCH FUNCTION CORRECTIONS ---
+// --- Event Handler ---
+function handleKey(event) {
+  if (_isInputFocused(event.target)) return;
+  const { shiftKey: s, ctrlKey: c, metaKey: m, altKey: a, key } = event;
+  const ctrl = c || m;
+  let handled = false;
 
+  if (ctrl && s && !a) {
+    if (['=', '+'].includes(key)) { adjustTempo(STEPS.TEMPO_LARGE); handled = true; }
+    if (['-', '_'].includes(key)) { adjustTempo(-STEPS.TEMPO_LARGE); handled = true; }
+    if ([']', '}'].includes(key)) { adjustPitch('semitone', 1); handled = true; }
+    if (['[', '{'].includes(key)) { adjustPitch('semitone', -1); handled = true; }
+  } else if (s && !ctrl && !a) {
+    if (['=', '+'].includes(key)) { adjustTempo(STEPS.TEMPO_SMALL); handled = true; }
+    if (['-', '_'].includes(key)) { adjustTempo(-STEPS.TEMPO_SMALL); handled = true; }
+    if ([']', '}'].includes(key)) { adjustPitch('linear', STEPS.PITCH_LINEAR); handled = true; }
+    if (['[', '{'].includes(key)) { adjustPitch('linear', -STEPS.PITCH_LINEAR); handled = true; }
+  } else if (!s && !ctrl && !a) {
+    if (key === '=') { adjustPitch('mult', 2); handled = true; }
+    if (key === '-') { adjustPitch('mult', 0.5); handled = true; }
+    if (key === '0') { adjustPitch('reset'); handled = true; }
+    if (key === 'ArrowUp') { adjustVolume(STEPS.VOLUME); handled = true; }
+    if (key === 'ArrowDown') { adjustVolume(-STEPS.VOLUME); handled = true; }
+    if (/[mM]/.test(key)) { toggleMute(); handled = true; }
+    if (MULT_MAP[key]) { setMultiplier(key); handled = true; }
+  }
 
-/** Adjusts Volume */
-function _adjustVolume(change) {
-    if (!volumeSliderRef) return;
-    try {
-        const current = parseFloat(volumeSliderRef.value);
-        const min = parseFloat(volumeSliderRef.min);
-        const max = parseFloat(volumeSliderRef.max);
-         if (isNaN(current) || isNaN(min) || isNaN(max)) throw new Error("Invalid volume slider values");
-        const newValue = clamp(current + change, min, max);
-        if (Math.abs(newValue - current) > FLOAT_COMPARISON_EPSILON) {
-            if (newValue > min) { // Update last known volume only when not muted to min value
-                lastVolumeBeforeMute = newValue;
-            }
-            _applySliderChange(volumeSliderRef, audio.setVolume, ui.updateVolumeDisplay, newValue, "Volume", 100, "%");
-        }
-    } catch (e) { console.error("Error adjusting volume:", e); }
+  if (handled) event.preventDefault();
 }
-
-/** Toggles Mute */
-function _toggleMute() {
-    if (!volumeSliderRef) return;
-    try {
-        const current = parseFloat(volumeSliderRef.value);
-        const min = parseFloat(volumeSliderRef.min);
-        const max = parseFloat(volumeSliderRef.max);
-        if (isNaN(current) || isNaN(min) || isNaN(max)) throw new Error("Invalid volume slider values");
-        let newValue;
-        let logLabel;
-
-        if (current > min + FLOAT_COMPARISON_EPSILON) { // If currently audible
-            lastVolumeBeforeMute = current;
-            newValue = min;
-            logLabel = "Mute";
-        } else { // Currently muted or at min
-            newValue = clamp((lastVolumeBeforeMute > min) ? lastVolumeBeforeMute : max, min, max); // Restore or go to max
-            logLabel = "Unmute";
-        }
-
-        if (Math.abs(newValue - current) > FLOAT_COMPARISON_EPSILON) {
-            _applySliderChange(volumeSliderRef, audio.setVolume, ui.updateVolumeDisplay, newValue, logLabel, 100, "%");
-        }
-    } catch (e) { console.error("Error toggling mute:", e); }
-}
-
-/** Sets Multiplier */
-function _setMultiplier(targetMultiplier) {
-    // Validation already done in multiplierMap logic mostly
-    if (typeof targetMultiplier !== 'number' || targetMultiplier < 1) {
-         console.warn(`_setMultiplier received invalid target: ${targetMultiplier}`);
-         return;
-    }
-    const currentMultiplier = audio.getScheduleMultiplier ? audio.getScheduleMultiplier() : 1;
-    if (targetMultiplier !== currentMultiplier) {
-        _applySliderChange(
-            multiplierSliderRef, // Ref can be null
-            audio.setScheduleMultiplier,
-            ui.updateScheduleMultiplierDisplay,
-            targetMultiplier,
-            "Multiplier", 1, ""
-        );
-    }
-}
-
-
-// --- Main Event Handler ---
-function _handleKeyDown(event) {
-    if (_isInputFocused(event.target)) return; // Ignore inputs
-
-    const shift = event.shiftKey;
-    const ctrl = event.ctrlKey || event.metaKey; // Cmd on Mac
-    const alt = event.altKey;
-    const noModifiers = !shift && !ctrl && !alt;
-
-    let actionHandled = false;
-
-    // --- Process based on modifiers ---
-    if (ctrl && shift && !alt) { // Ctrl+Shift (Tempo steps, Semitone pitch)
-        switch (event.key) {
-            case '=': case '+': _adjustTempo(TEMPO_STEP_LARGE); actionHandled = true; break;
-            case '-': case '_': _adjustTempo(-TEMPO_STEP_LARGE); actionHandled = true; break;
-            case ']': case '}': _adjustPitchSemitone(1); actionHandled = true; break;
-            case '[': case '{': _adjustPitchSemitone(-1); actionHandled = true; break;
-        }
-    } else if (shift && !ctrl && !alt) { // Shift only (Tempo small steps, Linear pitch)
-        switch (event.key) {
-            case '=': case '+': _adjustTempo(TEMPO_STEP_SMALL); actionHandled = true; break;
-            case '-': case '_': _adjustTempo(-TEMPO_STEP_SMALL); actionHandled = true; break;
-            case ']': case '}': _adjustPitchLinear(PITCH_STEP_SMALL); actionHandled = true; break;
-            case '[': case '{': _adjustPitchLinear(-PITCH_STEP_SMALL); actionHandled = true; break;
-        }
-    } else if (noModifiers) { // No Modifiers (Volume, Mute, Octave pitch, Reset pitch, Multiplier)
-        switch (event.key) {
-            // Pitch Octave/Reset
-            case '=': _multiplyPitch(2); actionHandled = true; break;
-            case '-': _multiplyPitch(0.5); actionHandled = true; break;
-            case '0': _resetPitch(); actionHandled = true; break;
-            // Volume
-            case 'ArrowUp': _adjustVolume(VOLUME_STEP); actionHandled = true; break;
-            case 'ArrowDown': _adjustVolume(-VOLUME_STEP); actionHandled = true; break;
-            // Mute
-            case 'm': case 'M': _toggleMute(); actionHandled = true; break;
-            // Multiplier Mapping
-            case '1': case '2': case '3': case '4':
-            case '5': case '6': case '7': case '8':
-                if (multiplierMap.hasOwnProperty(event.key)) {
-                    _setMultiplier(multiplierMap[event.key]);
-                    actionHandled = true;
-                }
-                break;
-        }
-    }
-
-    if (actionHandled) {
-        event.preventDefault(); // Prevent default browser actions for handled shortcuts
-    }
-}
-
 
 // --- Public API ---
-
-/** Initializes keyboard shortcuts */
-export function init(config) {
-    // Validate config object and slider instances
-    if (!config ||
-        !(config.tempoSlider instanceof HTMLInputElement) ||
-        !(config.pitchSlider instanceof HTMLInputElement) || // Checks the Pitch Slider ref
-        !(config.volumeSlider instanceof HTMLInputElement) ||
-        !(config.multiplierSlider instanceof HTMLInputElement)) {
-        console.error("Keyboard shortcuts init: Invalid or missing slider references in config.", config);
-        tempoSliderRef = pitchSliderRef = volumeSliderRef = multiplierSliderRef = null; // Clear all refs
-        return;
-    }
-
-    // Assign refs
-    tempoSliderRef = config.tempoSlider;
-    pitchSliderRef = config.pitchSlider; // Assign the global pitch slider reference
-    volumeSliderRef = config.volumeSlider;
-    multiplierSliderRef = config.multiplierSlider;
-    try {
-        lastVolumeBeforeMute = parseFloat(volumeSliderRef.value) || 1.0;
-    } catch {
-         lastVolumeBeforeMute = 1.0; // Fallback
-    }
-
-    document.addEventListener('keydown', _handleKeyDown);
-    console.log("Keyboard shortcuts initialized successfully."); // Simpler log message
+export function init({ tempoSlider, pitchSlider, volumeSlider, multiplierSlider }) {
+  if (![tempoSlider, pitchSlider, volumeSlider, multiplierSlider]
+    .every(el => el instanceof HTMLInputElement)) {
+    console.error('Invalid slider refs:', { tempoSlider, pitchSlider, volumeSlider, multiplierSlider });
+    tempoRef = pitchRef = volumeRef = multiplierRef = null;
+    return;
+  }
+  [tempoRef, pitchRef, volumeRef, multiplierRef] = [tempoSlider, pitchSlider, volumeSlider, multiplierSlider];
+  lastVolume = parseFloat(volumeRef.value) || lastVolume;
+  document.addEventListener('keydown', handleKey);
+  console.log('Keyboard shortcuts initialized.');
 }
 
-/** Destroys keyboard shortcuts */
 export function destroy() {
-    document.removeEventListener('keydown', _handleKeyDown);
-    tempoSliderRef = pitchSliderRef = volumeSliderRef = multiplierSliderRef = null; // Clear refs
-    console.log("Keyboard shortcuts destroyed.");
+  document.removeEventListener('keydown', handleKey);
+  tempoRef = pitchRef = volumeRef = multiplierRef = null;
+  console.log('Keyboard shortcuts destroyed.');
 }
+
 
 // --- END OF FILE keyboardShortcuts.js ---
