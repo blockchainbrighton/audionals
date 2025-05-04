@@ -1,8 +1,10 @@
 // --- START OF FILE audioProcessor.js ---
-import { base64ToArrayBuffer } from './utils.js';
-import { showError } from './uiUpdater.js';
-import { triggerAnimation } from './imageAnimation.js';
-import * as timingManager from './timingManagement.js';
+// --- Module Imports ---
+import { base64ToArrayBuffer } from "/content/6ee146a17e6582c989ebaa2f2c8b6a039f29493f858d59a89edfb0d3485a7fc4i0"; // Utility for Base64 conversion
+import { showError } from "/content/943baf5a8d4569764b325ed48a2b269fafaa7429463ab69f6c6a9524974d0d92i0"; // UI function to display errors
+import { triggerAnimation as triggerImageAnimation } from "/content/934cf04352b9a33a362848a4fd148388f5a3997578fbdfaabd116a8f2932f7b5i0"; // Function to trigger image animation on play
+import * as timingManager from "/content/7a20b480b6322d5f85a3c7471c2dda138473073425bdb54356c03ef19937e960i0"; // Manages looping and scheduling
+
 
 const SMOOTH_PARAM_TIME = 0.01;
 const A4_MIDI_NOTE = 69, A4_FREQUENCY = 440, SEMITONE_RATIO = 2 ** (1/12),

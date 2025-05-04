@@ -1,10 +1,14 @@
 // --- START OF FILE main.js ---
-import * as audio from './audioProcessor.js';
-import * as ui from './uiUpdater.js';
-import * as midiHandler from './midiHandler.js';
-import * as keyboardShortcuts from './keyboardShortcuts.js';
-import { initReferencePanel } from './referenceDisplay.js';
-import { clamp, _isInputFocused, addListener, createElement } from './utils.js';
+// --- Module Imports ---
+// Import core functionalities
+import * as audio from "/content/fd2db7ac8153b198609b621e152d46c135ed0079bf68102f14137c579f988b95i0"; // Audio processing
+import * as ui from "/content/943baf5a8d4569764b325ed48a2b269fafaa7429463ab69f6c6a9524974d0d92i0"; // UI updates and interactions
+import * as midiHandler from "/content/0f41339bffd53a3a48ce7d08c786e8764ac091afc21d8b640ef03aae0aeed3c9i0"; // MIDI device handling
+import * as keyboardShortcuts from "/content/665bc1893dea0d8a83d029f120902c2b4fb242b582b44e6f14703c49ec4978f1i0"; // Keyboard shortcut handling
+
+// Import specific utilities and components
+import { initReferencePanel } from "/content/0753fec2800a46bd1e06ad3f2bdd3d35a5febeb2976d607c64a8d9326ab74e5fi0"; // Function to initialize the reference panel
+import { clamp, _isInputFocused, addListener, createElement } from "/content/6ee146a17e6582c989ebaa2f2c8b6a039f29493f858d59a89edfb0d3485a7fc4i0"; // Utility functions
 
 const DEFAULT_TEMPO=78,DEFAULT_PITCH=1,DEFAULT_VOLUME=1,DEFAULT_MULTIPLIER=1;
 const MIN_TEMPO=1,MAX_TEMPO=400,MIN_PITCH=0.01,MAX_PITCH=10,MIN_VOLUME=0,MAX_VOLUME=1.5,MIN_MULT=1,MAX_MULT=8;
