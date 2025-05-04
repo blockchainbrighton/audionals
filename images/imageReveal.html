@@ -1,0 +1,1856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Reveal Art Program (Refactored)</title>
+    <style>
+        /* CSS remains largely the same as provided */
+        :root {
+            --controls-bg: #f0f0f0;
+            --canvas-bg: #000; /* Changed to black */
+            --button-bg: #e0e0e0;
+            --button-hover-bg: #d0d0d0;
+            --text-color: #333;
+            --border-color: #bbb;
+            --slider-thumb-bg: #888;
+            --slider-track-bg: #ddd;
+            --error-color: #d33;
+            --warning-color: #e9900a;
+            --info-color: #666;
+        }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; background-color: #f9f9f9; color: var(--text-color); margin: 0; min-height: 100vh; box-sizing: border-box; }
+        h1 { margin-top: 0; color: #555; text-align: center; }
+        #controls { background-color: var(--controls-bg); padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: grid; grid-template-columns: auto 1fr; gap: 10px 15px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border: 1px solid var(--border-color); max-width: 600px; width: 90%; }
+        #controls label, #controls button, #controls input, #controls select { font-size: 0.95rem; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); box-sizing: border-box; }
+        #controls label { border: none; padding: 0; text-align: right; font-weight: bold; white-space: nowrap; }
+        #controls input[type="file"] { padding: 3px; }
+        #controls button { background-color: var(--button-bg); cursor: pointer; transition: background-color 0.2s ease; width: 100%; }
+        #controls button:hover:not(:disabled) { background-color: var(--button-hover-bg); }
+        #controls button:disabled { cursor: not-allowed; opacity: 0.6; }
+        #controls input[type="range"] { width: 100%; cursor: pointer; appearance: none; background: var(--slider-track-bg); height: 8px; padding: 0; margin: 0 5px 0 0; vertical-align: middle; }
+        #controls input[type="range"]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; background: var(--slider-thumb-bg); border-radius: 50%; cursor: pointer; }
+        #controls input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; background: var(--slider-thumb-bg); border-radius: 50%; cursor: pointer; border: none; }
+        .duration-control span { display: inline-block; vertical-align: middle; }
+        #duration-value { display: inline-block; min-width: 45px; text-align: left; font-weight: bold; }
+        .button-group { grid-column: 1 / -1; display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+        .button-group button { flex: 1 1 auto; max-width: 150px; }
+        #canvas-container { width: 90%; max-width: 800px; position: relative; background-color: var(--canvas-bg); box-shadow: 0 4px 8px rgba(0,0,0,0.15); border: 1px solid var(--border-color); margin-bottom: 20px; display: flex; justify-content: center; align-items: center; overflow: hidden; min-height: 200px; }
+        canvas { display: block; max-width: 100%; max-height: 75vh; object-fit: contain; background-color: transparent; }
+        #status { margin-top: 10px; color: var(--info-color); min-height: 1.2em; font-style: italic; text-align: center; width: 90%; max-width: 600px; }
+        #status.error { color: var(--error-color); font-weight: bold; }
+        #status.warning { color: var(--warning-color); }
+    </style>
+    <!-- Import Map -->
+    <script type="importmap">
+     {
+       "imports": {
+         "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+         "three/examples/jsm/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/controls/OrbitControls.js",
+         "@tweenjs/tween.js": "https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.esm.js"
+       }
+     }
+   </script>
+</head>
+<body>
+    <h1>Image Reveal Art Program (Refactored)</h1>
+
+    <div id="controls">
+        <label for="file-input">Load Image:</label>
+        <input type="file" id="file-input" accept="image/webp, image/jpeg, image/png">
+
+        <label for="duration-slider">Duration (s):</label>
+        <span class="duration-control">
+            <input type="range" id="duration-slider" min="0.5" max="300" step="0.1" value="5">
+            <span id="duration-value">5.0s</span>
+        </span>
+
+        <label for="mode-select">Reveal Mode:</label>
+        <select id="mode-select">
+             <option value="simpleFade">Simple Fade</option>
+             <option value="pixelRandom">Pixel-by-Pixel Random</option>
+             <option value="lineByLineRow">Line-by-Line (Rows)</option>
+             <option value="lineByLineCol">Line-by-Line (Columns)</option>
+             <option value="geometricCircle">Geometric (Circle Expand)</option>
+             <option value="geometricGrid">Geometric (Grid Cells Random)</option>
+             <option value="colorSweepBright">Color Sweep (Brightness)</option>
+             <option value="regionTracing">Region Tracing (Blocks)</option>
+             <option value="outlineDrawing">Outline Drawing</option>
+             <option value="radialWipe">Radial Wipe</option>
+             <option value="blurToFocus">Blur-to-Focus</option>
+             <option value="mosaic">Mosaic/Pixelation</option>
+             <option value="waveScanH">Wave Scan (Horizontal)</option>
+             <option value="waveScanV">Wave Scan (Vertical)</option>
+             <option value="dissolveNoise">Dissolve (Noise)</option>
+             <option value="texturedDissolve">Dissolve (Textured)</option>
+             <option value="pixelSortBrightnessRow">Pixel Sorting (Bright Row)</option>
+             <option value="brushStrokes">Brush Strokes (Sim)</option>
+             <option value="tileFlip3D">3D Tile Flip</option>
+             <option value="channelStripWipe">Channel Strip Wipe</option>
+             <option value="gradientMaskWipeLR">Gradient Wipe (Left-Right)</option>
+             <option value="gradientMaskWipeRadial">Gradient Wipe (Radial)</option>
+             <option value="agentReveal">Agent Reveal</option>
+             <option value="glyphReveal">Glyph Reveal</option>
+             <option value="scanlineStretchV">Scanline Stretch (Vertical)</option>
+             <option value="scanlineStretchH">Scanline Stretch (Horizontal)</option>
+        </select>
+
+        <div class="button-group">
+            <button id="play-button" disabled>Play</button>
+            <button id="pause-button" disabled>Pause</button>
+            <button id="restart-button" disabled>Restart</button>
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <span>Load an image to begin</span>
+    </div>
+
+    <div id="status"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import TWEEN from '@tweenjs/tween.js';
+
+        // --- Constants ---
+        const DEBUG = false;
+        const DEBOUNCE_DELAY = 250;
+
+        // --- DOM Elements ---
+        const fileInput = document.getElementById('file-input');
+        const durationSlider = document.getElementById('duration-slider');
+        const durationValueSpan = document.getElementById('duration-value');
+        const modeSelect = document.getElementById('mode-select');
+        const playButton = document.getElementById('play-button');
+        const pauseButton = document.getElementById('pause-button');
+        const restartButton = document.getElementById('restart-button');
+        const canvasContainer = document.getElementById('canvas-container');
+        const statusDiv = document.getElementById('status');
+
+        // --- State Variables ---
+        let image = null; // Loaded HTMLImageElement
+        let canvasManager = null; // Instance of CanvasManager class
+        let animationId = null;
+        let startTime = 0;
+        let pausedTime = 0;
+        let isPlaying = false;
+        let isPaused = false;
+        let currentProgress = 0; // 0.0 to 1.0
+        let totalDuration = 5000; // ms
+        let currentMode = 'simpleFade';
+        let modeState = {}; // Mode-specific state storage
+        let resizeTimeout = null;
+
+        // === Helper Functions ===
+        const getPixelIndex = (x, y, w) => (y * w + x) * 4;
+        const getBrightness = (r, g, b) => (r + g + b) / 3;
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        /** Sets status message and style */
+        function setStatus(message, type = 'info') {
+            statusDiv.textContent = message;
+            statusDiv.className = type;
+            if (type === 'error') console.error("Status Error:", message);
+            else if (type === 'warning') console.warn("Status Warning:", message);
+        }
+
+        /** Determines if a mode inherently requires pixel data access */
+        function requiresImageData(mode) {
+            const modesNeedingData = [
+                'pixelRandom', 'pixelSortBrightnessRow', 'regionTracing', 'outlineDrawing',
+                'colorSweepBright', 'channelStripWipe', 'dissolveNoise', 'texturedDissolve',
+                'glyphReveal' // Reads image data for colors
+            ];
+            return modesNeedingData.includes(mode);
+        }
+
+        // === Canvas Manager Class ===
+        class CanvasManager {
+            constructor(containerElement, setStatusFn) {
+                this.container = containerElement;
+                this.setStatus = setStatusFn;
+                this.canvas = null;
+                this.ctx = null; // 2D
+                this.three = null; // { scene, camera, renderer, objects, texture }
+                this.width = 0;
+                this.height = 0;
+                this.imageData = null; // Original pixels
+                this.targetImageData = null; // Writable buffer for pixel effects
+                this.targetBuffer = null; // Uint8ClampedArray view of targetImageData
+                this.currentModeType = null; // '2d' or '3d'
+                if (DEBUG) console.log("CanvasManager instantiated");
+            }
+
+            _is3DMode(mode) { return mode === 'tileFlip3D'; }
+
+            async initialize(img, mode) {
+                this.width = img.naturalWidth;
+                this.height = img.naturalHeight;
+                this.currentModeType = this._is3DMode(mode) ? '3d' : '2d';
+                this.container.innerHTML = ''; // Clear placeholder
+
+                this._setContainerSize();
+
+                if (this.currentModeType === '3d') {
+                    return this._setup3D(img); // Returns promise potentially
+                } else {
+                    return this._setup2D(img, mode); // Returns promise potentially
+                }
+            }
+
+            async switchMode(newMode, img) {
+                if (!img) {
+                    this.clear();
+                    this.setStatus("Load an image first.");
+                    return false; // Indicate failure or inaction
+                 }
+
+                const newModeType = this._is3DMode(newMode) ? '3d' : '2d';
+                if (newModeType === this.currentModeType) {
+                    // Same type, just potentially update context options or re-cache image data
+                    if (this.currentModeType === '2d' && this.canvas) {
+                        this._cleanup2DContext(false); // Clean context but keep canvas
+                        this.ctx = this.canvas.getContext('2d', { willReadFrequently: requiresImageData(newMode) });
+                        if (!this.ctx) throw new Error("Failed to get 2D context after mode switch");
+                        this.ctx.imageSmoothingEnabled = true;
+                        if (!this.imageData) this._cacheImageData(img); // Recache if lost
+                    }
+                    this.currentMode = newMode; // Update current mode tracking if needed
+                    return true; // Indicate success
+                }
+
+                // Different type, requires full cleanup and setup
+                this.dispose(false); // Dispose old context, keep container
+                this.currentModeType = newModeType;
+                this.width = img.naturalWidth;
+                this.height = img.naturalHeight;
+                this._setContainerSize(); // Ensure container size is correct
+
+                try {
+                     if (this.currentModeType === '3d') {
+                         await this._setup3D(img);
+                     } else {
+                         await this._setup2D(img, newMode);
+                     }
+                     return true; // Indicate success
+                 } catch (error) {
+                     console.error(`Error switching to ${newModeType} mode:`, error);
+                     this.setStatus(`Error setting up ${newModeType} mode. Switching to fallback.`, 'error');
+                     this.dispose(false);
+                     // Fallback to a safe 2D mode
+                     this.currentModeType = '2d';
+                     try {
+                        await this._setup2D(img, 'simpleFade'); // Fallback setup
+                     } catch(fallbackError){
+                         console.error("Fallback 2D setup failed:", fallbackError);
+                         this.setStatus("Critical error setting up canvas.", 'error');
+                         return false; // Indicate failure
+                     }
+                     return false; // Indicate failure due to original switch error
+                 }
+            }
+
+            _setup2D(img, mode) {
+                 return new Promise((resolve, reject) => {
+                    try {
+                        this.canvas = document.createElement('canvas');
+                        this.canvas.width = this.width;
+                        this.canvas.height = this.height;
+                        this.container.appendChild(this.canvas);
+
+                        this.ctx = this.canvas.getContext('2d', { willReadFrequently: requiresImageData(mode) });
+                        if (!this.ctx) throw new Error("Could not get 2D canvas context.");
+                        this.ctx.imageSmoothingEnabled = true;
+
+                        this._cacheImageData(img); // Attempt to cache pixel data
+                        if (!this.imageData && requiresImageData(mode)) {
+                             this.setStatus("Warning: Could not access pixel data. Some effects limited.", 'warning');
+                        }
+                        // Ensure image is drawn if caching fails or not needed
+                        if(img && this.ctx && !this.imageData) this.ctx.drawImage(img, 0, 0);
+
+                        if (DEBUG) console.log("CanvasManager: 2D context initialized");
+                        resolve();
+                    } catch (error) {
+                        console.error("CanvasManager: Error setting up 2D context:", error);
+                        this.setStatus("Error setting up 2D canvas.", 'error');
+                        this._cleanup2D();
+                        reject(error);
+                    }
+                });
+            }
+
+             _setup3D(img) {
+                return new Promise((resolve, reject) => {
+                    try {
+                        if (!this.container.clientWidth || !this.container.clientHeight) {
+                            throw new Error("Canvas container has zero dimensions for 3D setup.");
+                        }
+                        const w = this.container.clientWidth;
+                        const h = this.container.clientHeight;
+
+                        const scene = new THREE.Scene();
+                        const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 1000);
+                        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                        renderer.setSize(w, h);
+                        renderer.setClearColor(0x000000, 0);
+                        this.container.appendChild(renderer.domElement);
+                        this.canvas = renderer.domElement; // Update canvas ref
+
+                        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+                        scene.add(ambientLight);
+                        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7);
+                        directionalLight.position.set(0.5, 1, 1).normalize();
+                        scene.add(directionalLight);
+
+                        const texture = new THREE.Texture(img);
+                        texture.needsUpdate = true;
+
+                        const gridCols = 12;
+                        const aspect = this.width / this.height;
+                        const gridRows = Math.max(1, Math.round(gridCols / aspect));
+                        const objects = [];
+                        const sceneWidth = 10;
+                        const sceneHeight = sceneWidth / aspect;
+                        camera.position.z = sceneWidth * 1.2;
+                        const tileWidthScene = sceneWidth / gridCols;
+                        const tileHeightScene = sceneHeight / gridRows;
+
+                        for (let r = 0; r < gridRows; r++) {
+                            for (let c = 0; c < gridCols; c++) {
+                                const geometry = new THREE.PlaneGeometry(tileWidthScene, tileHeightScene);
+                                const uvs = geometry.attributes.uv;
+                                const u0 = c / gridCols, v0 = 1 - (r + 1) / gridRows;
+                                const u1 = (c + 1) / gridCols, v1 = 1 - r / gridRows;
+                                uvs.setXY(0, u0, v0); uvs.setXY(1, u1, v0);
+                                uvs.setXY(2, u0, v1); uvs.setXY(3, u1, v1);
+                                uvs.needsUpdate = true;
+
+                                const material = new THREE.MeshStandardMaterial({
+                                    map: texture, side: THREE.DoubleSide, roughness: 0.8,
+                                    metalness: 0.1, transparent: true
+                                });
+                                const plane = new THREE.Mesh(geometry, material);
+                                plane.position.x = (c + 0.5) * tileWidthScene - sceneWidth / 2;
+                                plane.position.y = sceneHeight / 2 - (r + 0.5) * tileHeightScene; // Top-down
+                                scene.add(plane);
+                                objects.push(plane);
+                            }
+                        }
+
+                        this.three = { scene, camera, renderer, objects, texture };
+                        if (DEBUG) console.log(`CanvasManager: 3D context initialized with ${objects.length} tiles.`);
+                        this.updateSize(); // Final size adjustment
+                        resolve();
+                    } catch (error) {
+                         console.error("CanvasManager: Error initializing Three.js:", error);
+                         this.setStatus("Error setting up 3D mode. WebGL unsupported?", 'error');
+                         this._cleanup3D();
+                         reject(error); // Propagate error
+                    }
+                });
+            }
+
+             _cacheImageData(img) {
+                this.imageData = null;
+                this.targetImageData = null;
+                this.targetBuffer = null;
+                if (!this.ctx || !img) return;
+
+                try {
+                    // Draw temporarily to get data, then clear if needed by mode
+                    this.ctx.drawImage(img, 0, 0);
+                    this.imageData = this.ctx.getImageData(0, 0, this.width, this.height);
+                    this.targetImageData = this.ctx.createImageData(this.width, this.height);
+                    this.targetBuffer = this.targetImageData.data;
+                    if (DEBUG) console.log("CanvasManager: ImageData cached.");
+                } catch (e) {
+                    console.error("CanvasManager: Error getting ImageData (tainted canvas?):", e);
+                    this.imageData = null; // Ensure it's null on failure
+                    this.targetImageData = null;
+                    this.targetBuffer = null;
+                     // setStatus handled elsewhere based on requiresImageData check
+                }
+            }
+
+            updateSize() {
+                 this._setContainerSize();
+                 if (this.currentModeType === '3d' && this.three && this.container.clientWidth > 0) {
+                     const w = this.container.clientWidth;
+                     let h = this.container.clientHeight; // Use current height
+
+                     // Adjust height based on aspect ratio if needed (redundant with CSS aspect-ratio?)
+                     // const aspect = this.width / this.height;
+                     // h = w / aspect; // This might conflict with CSS aspect-ratio
+
+                     // Use container clientHeight which should respect aspect-ratio CSS
+                     if (this.container.clientHeight > 0) {
+                        h = this.container.clientHeight;
+                     } else {
+                         // Fallback if height is somehow zero
+                         const aspect = this.width / this.height;
+                         h = w / aspect;
+                     }
+
+
+                     this.three.renderer.setSize(w, h);
+                     this.three.camera.aspect = w / h;
+                     this.three.camera.updateProjectionMatrix();
+                     if (DEBUG) console.log(`CanvasManager: Renderer resized to ${w.toFixed(0)}x${h.toFixed(0)}`);
+                     // Re-render immediately after resize
+                     this.three.renderer.render(this.three.scene, this.three.camera);
+                 } else if (this.currentModeType === '2d' && this.ctx) {
+                    // 2D canvas buffer size doesn't change, but CSS might scale it.
+                    // Redrawing might be needed if visual state needs update after resize layout shift.
+                    // This responsibility is left to the main resize handler logic for now.
+                 }
+            }
+
+            _setContainerSize() {
+                 if (this.width > 0 && this.height > 0) {
+                     this.container.style.aspectRatio = `${this.width} / ${this.height}`;
+                     // Fallback height calc might still be useful briefly at load
+                     const currentWidth = this.container.clientWidth;
+                     if (currentWidth > 0) {
+                         this.container.style.height = `${(currentWidth * this.height / this.width)}px`;
+                     } else {
+                        this.container.style.height = '300px'; // Initial fallback
+                     }
+                 } else {
+                     this.container.style.aspectRatio = 'auto';
+                     this.container.style.height = '200px'; // Default when no image
+                 }
+            }
+
+            clear() {
+                this.container.innerHTML = '<span>Load an image to begin</span>';
+                 this.canvas = null;
+                 this.ctx = null;
+                 this.three = null;
+                 this.imageData = null;
+                 this.targetImageData = null;
+                 this.targetBuffer = null;
+                 this.width = 0;
+                 this.height = 0;
+                 this._setContainerSize(); // Reset container size
+            }
+
+            _cleanup2DContext(removeCanvas = true) {
+                if (DEBUG) console.log("CanvasManager: Cleaning up 2D context.");
+                this.ctx = null;
+                this.imageData = null; // Clear cached data refs
+                this.targetImageData = null;
+                this.targetBuffer = null;
+                 if (removeCanvas && this.canvas && this.canvas.parentNode) {
+                     this.canvas.parentNode.removeChild(this.canvas);
+                     this.canvas = null;
+                 }
+            }
+
+            _cleanup3D() {
+                if (this.three) {
+                    if (DEBUG) console.log("CanvasManager: Cleaning up 3D resources.");
+                    TWEEN.removeAll(); // Stop animations tied to 3D objects
+                    this.three.objects?.forEach(obj => {
+                        obj.geometry?.dispose();
+                        if (obj.material) {
+                            obj.material.map?.dispose(); // Dispose texture!
+                            obj.material.dispose();
+                        }
+                        this.three.scene?.remove(obj);
+                    });
+                    this.three.texture?.dispose(); // Dispose texture explicitly
+                    this.three.renderer?.dispose();
+                    if (this.three.renderer?.domElement.parentNode) {
+                        this.three.renderer.domElement.parentNode.removeChild(this.three.renderer.domElement);
+                    }
+                    this.three = null;
+                    this.canvas = null; // Renderer owns the canvas element
+                }
+            }
+
+            dispose(clearContainer = true) {
+                 if (this.currentModeType === '3d') {
+                     this._cleanup3D();
+                 } else {
+                     this._cleanup2DContext(true); // removeCanvas = true
+                 }
+                 this.currentModeType = null;
+                 this.width = this.height = 0;
+                 if (clearContainer) {
+                     this.container.innerHTML = ''; // Clear container visually
+                     this._setContainerSize(); // Reset container styles
+                 }
+                 if (DEBUG) console.log("CanvasManager: Disposed resources.");
+            }
+
+            // --- Accessors ---
+            getContext() { return this.ctx; }
+            getThreeContext() { return this.three; }
+            getCanvas() { return this.canvas; }
+            getImageData() { return this.imageData; }
+            getTargetImageData() { return this.targetImageData; }
+            getTargetBuffer() { return this.targetBuffer; }
+            getWidth() { return this.width; }
+            getHeight() { return this.height; }
+            getModeType() { return this.currentModeType; }
+        }
+
+
+        // === Pixel Processing Helper ===
+        /**
+         * Processes image data pixel by pixel using a callback.
+         * @param {ImageData} sourceImageData - The original image data.
+         * @param {Uint8ClampedArray} targetBuffer - The buffer to write results into.
+         * @param {number} width - Image width.
+         * @param {number} height - Image height.
+         * @param {number} progress - Current animation progress (0-1).
+         * @param {function} pixelProcessor - Callback fn(r, g, b, a, x, y, index, progress) => {r, g, b, a}.
+         */
+        function processImageData(sourceImageData, targetBuffer, width, height, progress, pixelProcessor) {
+            const sourceData = sourceImageData.data;
+            if (!sourceData || !targetBuffer) {
+                console.warn("processImageData: Missing source or target buffer.");
+                return;
+            }
+            // Clear target buffer before processing (most modes using this expect a full redraw)
+            // Note: Modes needing transparency might need alpha set to 0 initially
+            targetBuffer.fill(0); // Fill with black (and alpha 0 implicitly if buffer was cleared)
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const index = getPixelIndex(x, y, width);
+                    const result = pixelProcessor(
+                        sourceData[index],     // r
+                        sourceData[index + 1], // g
+                        sourceData[index + 2], // b
+                        sourceData[index + 3], // a
+                        x, y, index, progress
+                    );
+                    targetBuffer[index]     = result.r;
+                    targetBuffer[index + 1] = result.g;
+                    targetBuffer[index + 2] = result.b;
+                    targetBuffer[index + 3] = result.a;
+                }
+            }
+        }
+
+        // === 2D Renderer Wrapper ===
+        /**
+         * Creates a wrapped 2D render function handling common boilerplate.
+         * @param {function} renderLogicFn - Core rendering logic: (progress, ctx, image, width, height, modeState, canvasManager) => {}
+         * @param {object} options - { needsClear: boolean }
+         * @returns {function} The wrapped render function.
+         */
+        function create2DRenderer(renderLogicFn, options = { needsClear: false }) {
+            return function(progress, canvasManager, currentImage, currentModeState) {
+                const ctx = canvasManager.getContext();
+                const width = canvasManager.getWidth();
+                const height = canvasManager.getHeight();
+
+                if (!ctx || !currentImage || width <= 0 || height <= 0) return; // Basic checks
+
+                // Optional clear based on mode needs or progress reset
+                if (options.needsClear && (currentModeState.lastRenderedProgress < 0 || progress < currentModeState.lastRenderedProgress)) {
+                   ctx.clearRect(0, 0, width, height);
+                } else if (options.needsClear === 'always') { // Always clear option
+                    ctx.clearRect(0, 0, width, height);
+                }
+
+                ctx.save();
+                // Reset common properties that might be changed by modes
+                ctx.globalAlpha = 1.0;
+                ctx.filter = 'none';
+                ctx.globalCompositeOperation = 'source-over';
+
+                try {
+                    renderLogicFn(progress, ctx, currentImage, width, height, currentModeState, canvasManager);
+                } catch (error) {
+                    console.error(`Error during wrapped 2D render:`, error);
+                    setStatus(`Runtime Error in mode ${currentMode}. Stopping.`, 'error');
+                    stopAnimation(true); // Stop and reset visual
+                } finally {
+                    ctx.restore();
+                    currentModeState.lastRenderedProgress = progress; // Track progress for clearing logic
+                }
+            };
+        }
+
+
+        // === Initialization ===
+        function init() {
+            canvasManager = new CanvasManager(canvasContainer, setStatus);
+            setupEventListeners();
+            updateDurationDisplay();
+            setStatus("Load an image to start.");
+            if (DEBUG) console.log("Image Reveal Program Initialized");
+        }
+
+        function setupEventListeners() {
+            fileInput.addEventListener('change', handleFileLoad);
+            durationSlider.addEventListener('input', handleDurationChange);
+            modeSelect.addEventListener('change', handleModeChange);
+            playButton.addEventListener('click', playAnimation);
+            pauseButton.addEventListener('click', pauseAnimation);
+            restartButton.addEventListener('click', restartAnimation);
+            window.addEventListener('resize', handleResizeDebounced);
+        }
+
+        // === UI Updates ===
+        function updateDurationDisplay() {
+            totalDuration = parseFloat(durationSlider.value) * 1000;
+            durationValueSpan.textContent = `${parseFloat(durationSlider.value).toFixed(1)}s`;
+        }
+
+        function enableControls(canPlay = true) {
+            playButton.disabled = !canPlay || !image;
+            pauseButton.disabled = !isPlaying || isPaused;
+            restartButton.disabled = !!image; // Enable if image loaded
+            durationSlider.disabled = false;
+            modeSelect.disabled = false;
+        }
+
+        function disableControls() {
+            playButton.disabled = true;
+            pauseButton.disabled = true;
+            restartButton.disabled = true; // Keep disabled unless image loaded
+            // Allow mode/duration/file change even when controls 'disabled'
+        }
+
+        function updateButtonStates() {
+            playButton.disabled = isPlaying || !image;
+            pauseButton.disabled = !isPlaying || isPaused;
+            restartButton.disabled = !image; // Enable restart whenever an image is loaded
+            // If not playing and not paused, play should be enabled if image exists
+             if (!isPlaying && !isPaused && image) {
+                 playButton.disabled = false;
+                 // Pause is always disabled if not playing
+                 pauseButton.disabled = true;
+             }
+        }
+
+
+        // === Image Handling ===
+        function handleFileLoad(event) {
+            const file = event.target.files[0];
+            if (!file || !file.type.startsWith('image/')) {
+                setStatus(file ? "Please select a valid image file (WebP, JPEG, PNG)." : "No file selected.", 'warning');
+                if (image) { // If replacing an image, reset state but keep controls enabled
+                     stopAnimation(true);
+                     image = null;
+                     canvasManager.dispose();
+                     enableControls(false); // No image loaded yet
+                } else {
+                     disableControls();
+                }
+                return;
+            }
+
+            setStatus("Loading image...");
+            stopAnimation(false); // Stop any current animation
+            disableControls(); // Disable play/pause/restart during load
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const newImage = new Image();
+                newImage.onload = async () => {
+                    image = newImage; // Set global image ref
+                    currentMode = modeSelect.value; // Ensure current mode is up-to-date
+                    if (DEBUG) console.log(`Image loaded: ${image.naturalWidth}x${image.naturalHeight}`);
+
+                    try {
+                        await canvasManager.initialize(image, currentMode); // Initialize canvas via manager
+                        initializeModeState(); // Initialize state for the current mode
+                        drawInitialState(); // Draw the starting frame
+                        setStatus("Image loaded. Select mode and press Play.");
+                        enableControls(true);
+                    } catch (error) {
+                         setStatus("Error initializing canvas for image.", 'error');
+                         image = null;
+                         canvasManager.dispose();
+                         disableControls();
+                    }
+                };
+                newImage.onerror = () => {
+                    setStatus("Error loading image data. File might be corrupt.", 'error');
+                    image = null;
+                    canvasManager.dispose(); // Clean up canvas if setup failed
+                    disableControls();
+                };
+                newImage.src = e.target.result;
+            };
+            reader.onerror = () => {
+                setStatus("Error reading file.", 'error');
+                image = null;
+                canvasManager.dispose();
+                disableControls();
+            };
+            reader.readAsDataURL(file);
+        }
+
+
+        // === Mode/State Initialization ===
+
+        /** Draws the initial state (fully revealed, blank, or mode-specific start) */
+        function drawInitialState() {
+            currentProgress = 0;
+            pausedTime = 0;
+            isPaused = false;
+
+            if (!image || !canvasManager.getCanvas()) {
+                canvasManager.clear(); // Show placeholder message
+                return;
+            }
+
+            const modesStartingBlank = [
+                'pixelRandom', 'geometricGrid', 'colorSweepBright', 'regionTracing',
+                'dissolveNoise', 'texturedDissolve', 'pixelSortBrightnessRow',
+                'brushStrokes', 'channelStripWipe', 'agentReveal', 'glyphReveal',
+                'tileFlip3D', 'outlineDrawing'
+            ];
+
+            const requiresInitClear = [ 'brushStrokes', 'agentReveal' ]; // Modes needing explicit clear flag
+
+            if (modesStartingBlank.includes(currentMode)) {
+                 if (canvasManager.getModeType() === '2d') {
+                     const ctx = canvasManager.getContext();
+                     ctx.clearRect(0, 0, canvasManager.getWidth(), canvasManager.getHeight());
+                     // Trigger initial state draw for modes that need it (e.g., glyphs)
+                     if (currentMode === 'glyphReveal') {
+                          revealModes[currentMode](0, canvasManager, image, modeState);
+                     }
+                     if(requiresInitClear.includes(currentMode)) {
+                         modeState.needsClear = true; // Signal first frame clear
+                     }
+                 } else if (canvasManager.getModeType() === '3d') {
+                      update3DTiles(0); // Reset tiles to initial (e.g., flipped away) state
+                 }
+                currentProgress = 0;
+            } else {
+                 // Default: Show the final image initially
+                 drawFinalFrame(); // This sets progress to 1.0
+            }
+        }
+
+        /** Draws the final, fully revealed image */
+        function drawFinalFrame() {
+             if (!image) return;
+             const cm = canvasManager; // Alias
+             if (cm.getModeType() === '2d' && cm.getContext()) {
+                 const ctx = cm.getContext();
+                 ctx.globalAlpha = 1.0;
+                 ctx.globalCompositeOperation = 'source-over';
+                 ctx.filter = 'none';
+                 ctx.clearRect(0, 0, cm.getWidth(), cm.getHeight()); // Ensure clear bg
+                 ctx.drawImage(image, 0, 0, cm.getWidth(), cm.getHeight());
+             } else if (cm.getModeType() === '3d' && cm.getThreeContext()) {
+                  update3DTiles(1.0); // Show final state (flipped forward)
+             }
+             currentProgress = 1.0; // Reflect state
+        }
+
+         /** Initialize or reset mode-specific data */
+        function initializeModeState() {
+            modeState = {}; // Clear previous state entirely
+            TWEEN.removeAll(); // Stop any tweens from previous mode/run
+
+            const initializer = modeInitializers[currentMode];
+            if (initializer) {
+                try {
+                     // Check data requirement *before* initializing
+                     if (requiresImageData(currentMode) && !canvasManager.getImageData()) {
+                         throw new Error(`Mode '${currentMode}' requires ImageData, but it was not available.`);
+                     }
+                     initializer(canvasManager, modeState); // Pass manager & state object
+                     if (DEBUG) console.log(`Initialized state for mode: ${currentMode}`);
+                 } catch (error) {
+                     console.error(`Error initializing state for mode '${currentMode}':`, error);
+                     setStatus(`Error setting up mode ${currentMode}. Effect may fail.`, 'error');
+                      // Maybe disable play? Depends on severity.
+                      playButton.disabled = true;
+                 }
+            }
+
+            // Reset common 2D context properties if in 2D mode
+            const ctx = canvasManager.getContext();
+            if (ctx) {
+                  ctx.globalAlpha = 1.0;
+                  ctx.filter = 'none';
+                  ctx.globalCompositeOperation = 'source-over';
+            }
+
+             // Reset common internal state flags used by renderers/wrappers
+            modeState.lastRenderedProgress = -1; // Force initial render/clear check
+            modeState.lastDrawnIndex = 0; // For cumulative modes
+            modeState.needsClear = false; // Default, set true by specific initializers if needed
+        }
+
+
+        // === Animation Control ===
+
+        function playAnimation() {
+            if (isPlaying || !image || !canvasManager.getCanvas()) return;
+
+            // Handle modes requiring imageData that failed to load
+            if (requiresImageData(currentMode) && !canvasManager.getImageData()) {
+                 setStatus(`Mode '${currentMode}' requires pixel access, which failed. Cannot play.`, 'warning');
+                 playButton.disabled = true; // Prevent playing this mode
+                 return;
+            }
+
+            isPlaying = true;
+            isPaused = false;
+            updateButtonStates(); // Update buttons based on new state
+
+            // If resuming, adjust start time. Otherwise, reset progress and state.
+            if (pausedTime > 0) {
+                startTime = performance.now() - pausedTime;
+            } else {
+                startTime = performance.now();
+                currentProgress = 0;
+                // Re-initialize mode state ONLY if starting fresh (not resuming)
+                initializeModeState();
+                // Ensure correct starting visual (e.g., blank canvas for some modes)
+                drawInitialState();
+            }
+            pausedTime = 0; // Reset pause timer
+
+            if (DEBUG) console.log(`Playing animation. Mode: ${currentMode}, Duration: ${totalDuration}ms`);
+            setStatus("Playing...", 'info');
+
+            if (animationId) cancelAnimationFrame(animationId); // Safety check
+            animationId = requestAnimationFrame(animationLoop);
+        }
+
+        function pauseAnimation() {
+            if (!isPlaying || isPaused) return;
+
+            isPlaying = false;
+            isPaused = true;
+            if (animationId) cancelAnimationFrame(animationId);
+            animationId = null;
+            pausedTime = performance.now() - startTime; // Record elapsed time
+
+            updateButtonStates();
+            setStatus(`Paused at ${Math.round(currentProgress * 100)}%`, 'info');
+            if (DEBUG) console.log("Animation paused.");
+        }
+
+        function restartAnimation() {
+            if (!image || !canvasManager.getCanvas()) return;
+            stopAnimation(false); // Stop processes but don't draw final frame yet
+            initializeModeState(); // Reset mode state completely
+            drawInitialState(); // Reset visuals to the beginning
+            playAnimation(); // Start from beginning
+            if (DEBUG) console.log("Animation restarted.");
+        }
+
+        /** Stops animation processes, optionally resets visual state */
+        function stopAnimation(resetVisual = true) {
+             if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+             }
+             isPlaying = false;
+             isPaused = false;
+             startTime = 0;
+             // pausedTime = 0; // Reset only if visually resetting or restarting fully
+
+             if (canvasManager?.getModeType() === '3d') {
+                  TWEEN.removeAll();
+             }
+
+             if (resetVisual && image) {
+                  drawFinalFrame();
+                  setStatus("Ready.", 'info');
+                  pausedTime = 0; // Full reset includes pause time
+             } else if (!image) {
+                 canvasManager?.clear();
+                 setStatus("Load an image to start.", 'info');
+                 pausedTime = 0;
+             }
+             // else: Keep current visual state if resetVisual is false
+
+             updateButtonStates(); // Update buttons to reflect stopped state
+             if (DEBUG) console.log(`Animation stopped. Visual reset: ${resetVisual}`);
+        }
+
+        function animationLoop(timestamp) {
+            if (!isPlaying) return; // Exit if stopped/paused externally
+
+            if (canvasManager.getModeType() === '3d') {
+                TWEEN.update(timestamp); // Update Tween.js
+            }
+
+            const elapsedTime = timestamp - startTime;
+            currentProgress = Math.min(elapsedTime / totalDuration, 1.0);
+
+            const renderFunction = revealModes[currentMode];
+            if (renderFunction) {
+                try {
+                     // Pass necessary context/state to the render function
+                     renderFunction(currentProgress, canvasManager, image, modeState);
+
+                     // 3D rendering is triggered after state update (often by TWEEN)
+                     if (canvasManager.getModeType() === '3d' && canvasManager.getThreeContext()) {
+                         const threeCtx = canvasManager.getThreeContext();
+                         threeCtx.renderer.render(threeCtx.scene, threeCtx.camera);
+                     }
+                } catch (error) {
+                     // Error handling moved inside create2DRenderer for 2D, keep for 3D/direct modes
+                     if (canvasManager.getModeType() !== '2d' || !renderFunction.__isWrapped) {
+                        console.error(`Error during rendering mode '${currentMode}':`, error);
+                        setStatus(`Runtime Error in mode ${currentMode}. Stopping.`, 'error');
+                        stopAnimation(true); // Stop and reset visual
+                        return; // Exit loop
+                     }
+                     // If it's a wrapped 2D function, error is handled internally
+                }
+            } else {
+                console.warn(`Render function for mode '${currentMode}' not found.`);
+                setStatus(`Mode ${currentMode} implementation missing. Stopping.`, 'error');
+                stopAnimation(true);
+                return; // Exit loop
+            }
+
+            if (currentProgress >= 1.0) {
+                if (DEBUG) console.log("Animation finished.");
+                drawFinalFrame(); // Ensure perfect final frame
+                setStatus(`Finished (${currentMode}).`, 'info');
+                stopAnimation(false); // Stop processes, keep final frame visible
+                updateButtonStates(); // Ensure buttons are correct (Play disabled, Restart enabled)
+            } else {
+                animationId = requestAnimationFrame(animationLoop);
+            }
+        }
+
+        // === Event Handlers ===
+
+        function handleDurationChange() {
+             updateDurationDisplay();
+              if (isPlaying || isPaused) { // Adjust timing dynamically
+                  const elapsedProportion = currentProgress;
+                  const newStartTime = performance.now() - (elapsedProportion * totalDuration);
+                  if (isPlaying) startTime = newStartTime;
+                  if (isPaused) {
+                       pausedTime = elapsedProportion * totalDuration;
+                       startTime = performance.now() - pausedTime;
+                  }
+                  if (DEBUG) console.log("Duration changed dynamically.");
+              }
+        }
+
+        async function handleModeChange() {
+            const newMode = modeSelect.value;
+            if (newMode === currentMode && image) return; // No change needed if image exists
+
+            if (DEBUG) console.log(`Switching mode to: ${newMode}`);
+            const oldMode = currentMode;
+            currentMode = newMode;
+
+            stopAnimation(false); // Stop current animation process
+
+            if (image) {
+                 // Check for ImageData requirement *before* switching canvas
+                 if (requiresImageData(currentMode) && !canvasManager.getImageData() && !canvasManager.canAccessImageData()) {
+                     setStatus(`Warning: Mode '${currentMode}' requires pixel access, which may have failed. Effect might not work.`, 'warning');
+                     // Allow selecting, play button check will handle it later
+                 } else {
+                      // Clear potential warning if switching to a mode that works or has data
+                     if (statusDiv.className === 'warning') setStatus("Mode changed.", 'info');
+                 }
+
+                 try {
+                    const switched = await canvasManager.switchMode(currentMode, image); // Switch context if needed
+                    if (switched) {
+                        initializeModeState(); // Initialize state for the new mode
+                        drawInitialState(); // Draw the starting frame for this mode
+                        enableControls(true); // Re-enable controls correctly
+                    } else {
+                        // Switch failed, canvasManager tried to fallback or errored
+                        currentMode = canvasManager.getCurrentMode() || 'simpleFade'; // Reflect actual mode
+                        modeSelect.value = currentMode;
+                        initializeModeState();
+                        drawInitialState(); // Draw initial state of fallback
+                        enableControls(requiresImageData(currentMode) ? canvasManager.getImageData() : true);
+                        // Status already set by CanvasManager or switchMode
+                    }
+                 } catch (error) {
+                      // Should be caught by switchMode, but safety net
+                      setStatus(`Error switching mode to ${currentMode}.`, 'error');
+                      enableControls(false);
+                 }
+
+            } else {
+                 setStatus("Load an image first.", 'info');
+                 enableControls(false); // Ensure play is disabled
+                 // Update canvas manager state if needed (e.g., if switching from 3D to 2D placeholder)
+                 await canvasManager.switchMode(currentMode, null);
+            }
+        }
+
+        function handleResizeDebounced() {
+             clearTimeout(resizeTimeout);
+             resizeTimeout = setTimeout(handleResize, DEBOUNCE_DELAY);
+        }
+
+        function handleResize() {
+            if (DEBUG) console.log("Handling resize...");
+            if (!canvasManager) return;
+
+            canvasManager.updateSize(); // Manager handles resizing canvas/renderer
+
+            // Redraw current state after resize, as element scaling might change appearance
+             if (image && canvasManager.getCanvas()) {
+                 if (isPlaying || isPaused) {
+                     // Re-render the current frame
+                     const renderFunction = revealModes[currentMode];
+                     if (renderFunction) {
+                         renderFunction(currentProgress, canvasManager, image, modeState);
+                          // Explicit re-render for 3D if not covered by TWEEN update during pause
+                          if (isPaused && canvasManager.getModeType() === '3d') {
+                               const threeCtx = canvasManager.getThreeContext();
+                               threeCtx?.renderer.render(threeCtx.scene, threeCtx.camera);
+                          }
+                     }
+                 } else {
+                      // Redraw the state it should be in (initial or final)
+                      if (currentProgress >= 1.0) {
+                          drawFinalFrame();
+                      } else {
+                         drawInitialState();
+                      }
+                 }
+             }
+        }
+
+
+        // === Reveal Algorithm Implementations ===
+
+        const revealModes = {
+            // --- Basic Modes (Wrapped) ---
+            simpleFade: create2DRenderer((progress, ctx, img) => {
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                ctx.globalAlpha = progress;
+                ctx.drawImage(img, 0, 0);
+            }, { needsClear: false }), // Clear is handled by logic
+
+            lineByLineRow: create2DRenderer((progress, ctx, img, width, height) => {
+                const rowsToShow = Math.ceil(progress * height);
+                ctx.clearRect(0, 0, width, height);
+                if (rowsToShow > 0) {
+                    ctx.drawImage(img, 0, 0, width, rowsToShow, 0, 0, width, rowsToShow);
+                }
+            }, { needsClear: false }),
+
+            lineByLineCol: create2DRenderer((progress, ctx, img, width, height) => {
+                const colsToShow = Math.ceil(progress * width);
+                ctx.clearRect(0, 0, width, height);
+                if (colsToShow > 0) {
+                    ctx.drawImage(img, 0, 0, colsToShow, height, 0, 0, colsToShow, height);
+                }
+            }, { needsClear: false }),
+
+             // --- Geometric Modes (Wrapped) ---
+             geometricCircle: create2DRenderer((progress, ctx, img, width, height) => {
+                 const centerX = width / 2;
+                 const centerY = height / 2;
+                 const maxRadius = Math.sqrt(Math.max(centerX, width - centerX)**2 + Math.max(centerY, height - centerY)**2);
+                 const currentRadius = progress * maxRadius;
+                 ctx.clearRect(0, 0, width, height);
+                 ctx.beginPath();
+                 ctx.arc(centerX, centerY, currentRadius, 0, Math.PI * 2);
+                 ctx.clip();
+                 ctx.drawImage(img, 0, 0, width, height);
+            }, { needsClear: false }), // Logic clears explicitly
+
+             radialWipe: create2DRenderer((progress, ctx, img, width, height) => {
+                  const centerX = width / 2;
+                  const centerY = height / 2;
+                  const endAngle = progress * Math.PI * 2 - Math.PI / 2;
+                  const maxRadius = Math.sqrt(width*width + height*height)/2 * 1.1;
+                  ctx.clearRect(0, 0, width, height);
+                  ctx.beginPath();
+                  ctx.moveTo(centerX, centerY);
+                  ctx.arc(centerX, centerY, maxRadius, -Math.PI / 2, endAngle);
+                  ctx.closePath();
+                  ctx.clip();
+                  ctx.drawImage(img, 0, 0, width, height);
+             }, { needsClear: false }),
+
+             // --- Filter/Effect Modes (Wrapped) ---
+             blurToFocus: create2DRenderer((progress, ctx, img, width, height) => {
+                  const maxBlur = 20;
+                  const currentBlur = maxBlur * (1 - progress);
+                  ctx.clearRect(0, 0, width, height);
+                  ctx.filter = `blur(${Math.max(0, currentBlur).toFixed(2)}px)`;
+                  ctx.drawImage(img, 0, 0, width, height);
+                  // Filter reset by save/restore
+             }, { needsClear: false }),
+
+              mosaic: create2DRenderer((progress, ctx, img, width, height, state, cm) => {
+                  ctx.imageSmoothingEnabled = false; // Pixelated look
+                  ctx.clearRect(0, 0, width, height);
+
+                  if (progress >= 1.0) {
+                      ctx.imageSmoothingEnabled = true; // Restore smoothing for final frame
+                      ctx.drawImage(img, 0, 0, width, height);
+                      return;
+                  }
+
+                  const minBlocks = 4;
+                  const maxBlocks = Math.max(64, Math.min(width, height) / 4);
+                  const blockRange = maxBlocks - minBlocks;
+                  const easedProgress = 1.0 - (1.0 - progress) * (1.0 - progress); // Ease Out Quad
+                  const currentBlockLevel = Math.floor((1 - easedProgress) * blockRange);
+                  let numBlocks = Math.max(1, minBlocks + currentBlockLevel);
+
+                  const aspect = width / height;
+                  let blocksAcross = Math.max(1, Math.round(Math.sqrt(numBlocks * numBlocks * aspect)));
+                  let blocksDown = Math.max(1, Math.round(blocksAcross / aspect));
+                  blocksAcross = Math.min(blocksAcross, width);
+                  blocksDown = Math.min(blocksDown, height);
+
+                  if (blocksAcross >= 1 && blocksDown >= 1) {
+                       state.tempCanvas = state.tempCanvas || document.createElement('canvas');
+                       const tempCtx = state.tempCanvas.getContext('2d', { alpha: false }); // no alpha needed
+                       state.tempCanvas.width = blocksAcross;
+                       state.tempCanvas.height = blocksDown;
+                       tempCtx.imageSmoothingEnabled = false;
+                       tempCtx.drawImage(img, 0, 0, blocksAcross, blocksDown);
+                       ctx.drawImage(state.tempCanvas, 0, 0, width, height);
+                  }
+                  // Smoothing reset by save/restore
+             }, { needsClear: false }),
+
+
+             // --- Scan/Wipe Modes (Wrapped) ---
+             waveScanH: create2DRenderer((progress, ctx, img, width, height) => {
+                  const waveWidth = width * 0.3; const freq = 10; const amp = 20;
+                  const waveFrontX = progress * (width + waveWidth) - waveWidth;
+                  ctx.clearRect(0, 0, width, height);
+                  ctx.beginPath(); ctx.moveTo(0, 0);
+                  for (let y = 0; y <= height; y++) {
+                      ctx.lineTo(Math.max(0, waveFrontX + amp * Math.sin(y / height * 2 * Math.PI * freq)), y);
+                  }
+                  ctx.lineTo(0, height); ctx.closePath(); ctx.clip();
+                  ctx.drawImage(img, 0, 0, width, height);
+             }, { needsClear: false }),
+
+             waveScanV: create2DRenderer((progress, ctx, img, width, height) => {
+                  const waveHeight = height * 0.3; const freq = 10; const amp = 20;
+                  const waveFrontY = progress * (height + waveHeight) - waveHeight;
+                  ctx.clearRect(0, 0, width, height);
+                  ctx.beginPath(); ctx.moveTo(0, 0);
+                  for (let x = 0; x <= width; x++) {
+                      ctx.lineTo(x, Math.max(0, waveFrontY + amp * Math.sin(x / width * 2 * Math.PI * freq)));
+                  }
+                  ctx.lineTo(width, 0); ctx.closePath(); ctx.clip();
+                  ctx.drawImage(img, 0, 0, width, height);
+             }, { needsClear: false }),
+
+             gradientMaskWipeLR: create2DRenderer((progress, ctx, img, width, height) => {
+                  ctx.clearRect(0, 0, width, height);
+                  const gradient = ctx.createLinearGradient(0, 0, width, 0);
+                  gradient.addColorStop(0, 'black');
+                  gradient.addColorStop(Math.max(0, progress - 0.01), 'black');
+                  gradient.addColorStop(Math.min(1, progress + 0.01), 'rgba(0,0,0,0)');
+                  gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                  ctx.fillStyle = gradient;
+                  ctx.fillRect(0, 0, width, height);
+                  ctx.globalCompositeOperation = 'destination-in';
+                  ctx.drawImage(img, 0, 0, width, height);
+             }, { needsClear: false }),
+
+             gradientMaskWipeRadial: create2DRenderer((progress, ctx, img, width, height) => {
+                  const cx = width / 2, cy = height / 2;
+                  const maxR = Math.sqrt(width*width + height*height) / 2;
+                  const curR = progress * maxR;
+                  ctx.clearRect(0, 0, width, height);
+                  const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, curR));
+                  gradient.addColorStop(0, 'black');
+                  gradient.addColorStop(0.98, 'black');
+                  gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                  ctx.fillStyle = gradient;
+                  ctx.fillRect(0, 0, width, height);
+                  ctx.globalCompositeOperation = 'destination-in';
+                  ctx.drawImage(img, 0, 0, width, height);
+            }, { needsClear: false }),
+
+            scanlineStretchV: create2DRenderer((progress, ctx, img, width, height) => {
+                 ctx.clearRect(0, 0, width, height);
+                 const rowsRevealed = Math.max(1, Math.floor(progress * height));
+                 const stretchHeight = height / rowsRevealed;
+                 for (let y = 0; y < rowsRevealed; y++) {
+                     ctx.drawImage(img, 0, y, width, 1, 0, y * stretchHeight, width, stretchHeight + 1);
+                 }
+             }, { needsClear: false }),
+
+             scanlineStretchH: create2DRenderer((progress, ctx, img, width, height) => {
+                 ctx.clearRect(0, 0, width, height);
+                 const colsRevealed = Math.max(1, Math.floor(progress * width));
+                 const stretchWidth = width / colsRevealed;
+                 for (let x = 0; x < colsRevealed; x++) {
+                     ctx.drawImage(img, x, 0, 1, height, x * stretchWidth, 0, stretchWidth + 1, height);
+                 }
+             }, { needsClear: false }),
+
+             // --- Pixel Manipulation Modes (Using processImageData Helper or Direct Buffer Access) ---
+             colorSweepBright: (progress, cm, img, state) => {
+                 const sourceImageData = cm.getImageData();
+                 const targetBuffer = cm.getTargetBuffer();
+                 const ctx = cm.getContext();
+                 if (!ctx || !sourceImageData || !targetBuffer) return;
+
+                 processImageData(sourceImageData, targetBuffer, cm.getWidth(), cm.getHeight(), progress,
+                    (r, g, b, a, x, y, index, p) => {
+                        const brightness = getBrightness(r, g, b);
+                        const threshold = p * 255;
+                        if (brightness <= threshold) {
+                            return { r, g, b, a };
+                        } else {
+                            return { r: 0, g: 0, b: 0, a: 0 }; // Transparent/Black
+                        }
+                 });
+                 ctx.putImageData(cm.getTargetImageData(), 0, 0);
+             },
+
+             dissolveNoise: (progress, cm, img, state) => {
+                 const sourceImageData = cm.getImageData();
+                 const targetBuffer = cm.getTargetBuffer();
+                 const ctx = cm.getContext();
+                 if (!ctx || !sourceImageData || !targetBuffer) return;
+
+                 processImageData(sourceImageData, targetBuffer, cm.getWidth(), cm.getHeight(), progress,
+                     (r, g, b, a, x, y, index, p) => {
+                         if (Math.random() < p) {
+                             return { r, g, b, a }; // Show image pixel
+                         } else {
+                             const noiseVal = Math.random() * 50; // Dark gray noise
+                             return { r: noiseVal, g: noiseVal, b: noiseVal, a: 255 };
+                         }
+                     });
+                 ctx.putImageData(cm.getTargetImageData(), 0, 0);
+             },
+
+             texturedDissolve: (progress, cm, img, state) => {
+                 const sourceImageData = cm.getImageData();
+                 const targetBuffer = cm.getTargetBuffer();
+                 const ctx = cm.getContext();
+                 const noiseData = state.noiseData; // From initializer
+                 if (!ctx || !sourceImageData || !targetBuffer || !noiseData) return;
+
+                 processImageData(sourceImageData, targetBuffer, cm.getWidth(), cm.getHeight(), progress,
+                     (r, g, b, a, x, y, index, p) => {
+                         const noiseValue = noiseData[index]; // Use precomputed noise texture value (e.g., R channel)
+                         const threshold = p * 255;
+                         if (noiseValue <= threshold) {
+                              return { r, g, b, a }; // Show image pixel
+                         } else {
+                              return { r: 0, g: 0, b: 0, a: 0 }; // Transparent/Black
+                         }
+                     });
+                 ctx.putImageData(cm.getTargetImageData(), 0, 0);
+             },
+
+             channelStripWipe: (progress, cm, img, state) => {
+                 const sourceImageData = cm.getImageData();
+                 const targetBuffer = cm.getTargetBuffer();
+                 const ctx = cm.getContext();
+                 const height = cm.getHeight();
+                 if (!ctx || !sourceImageData || !targetBuffer) return;
+
+                 const phaseLength = 1 / 3;
+                 const pR = Math.min(1.0, progress / phaseLength);
+                 const pG = Math.max(0, Math.min(1.0, (progress - phaseLength) / phaseLength));
+                 const pB = Math.max(0, Math.min(1.0, (progress - phaseLength * 2) / phaseLength));
+                 const rowsR = Math.ceil(pR * height);
+                 const rowsG = Math.ceil(pG * height);
+                 const rowsB = Math.ceil(pB * height);
+
+                 processImageData(sourceImageData, targetBuffer, cm.getWidth(), height, progress,
+                     (r, g, b, a, x, y, index, p) => {
+                         const showR = y < rowsR;
+                         const showG = y < rowsG;
+                         const showB = y < rowsB;
+                         return {
+                             r: showR ? r : 0,
+                             g: showG ? g : 0,
+                             b: showB ? b : 0,
+                             a: (showR || showG || showB) ? a : 0
+                         };
+                     });
+                 ctx.putImageData(cm.getTargetImageData(), 0, 0);
+             },
+
+
+             // --- Modes with Cumulative or Complex Logic (Not fully using helpers/wrappers) ---
+             pixelRandom: (progress, cm, img, state) => {
+                 const ctx = cm.getContext();
+                 const sourceImageData = cm.getImageData();
+                 const targetBuffer = cm.getTargetBuffer();
+                 const targetImageData = cm.getTargetImageData();
+                 if (!ctx || !sourceImageData || !targetBuffer || !state.pixelOrder) return;
+
+                 const numPixelsTotal = state.pixelOrder.length;
+                 const numPixelsToShow = Math.floor(progress * numPixelsTotal);
+                 const sourceData = sourceImageData.data;
+
+                 // Optimization: Draw only new pixels if progress increases monotonically
+                 const prevNumPixels = state.lastDrawnIndex || 0;
+
+                 // Clear needed if restarting or progress decreased (e.g., slider)
+                 if (progress === 0 || numPixelsToShow < prevNumPixels) {
+                     targetBuffer.fill(0); // Clear buffer efficiently
+                     state.lastDrawnIndex = 0; // Reset index
+                      if(DEBUG && progress > 0) console.log("PixelRandom: Clearing buffer");
+                 }
+
+                 const startIdx = Math.max(0, state.lastDrawnIndex);
+                 for (let i = startIdx; i < numPixelsToShow; i++) {
+                     const pixelIndex = state.pixelOrder[i];
+                     const targetIdx = pixelIndex * 4;
+                     targetBuffer[targetIdx]     = sourceData[targetIdx];     // R
+                     targetBuffer[targetIdx + 1] = sourceData[targetIdx + 1]; // G
+                     targetBuffer[targetIdx + 2] = sourceData[targetIdx + 2]; // B
+                     targetBuffer[targetIdx + 3] = sourceData[targetIdx + 3]; // A
+                 }
+                 ctx.putImageData(targetImageData, 0, 0);
+                 state.lastDrawnIndex = numPixelsToShow;
+                 state.lastRenderedProgress = progress; // Track progress
+             },
+
+            geometricGrid: (progress, cm, img, state) => {
+                 const ctx = cm.getContext();
+                 const width = cm.getWidth();
+                 const height = cm.getHeight();
+                 if (!ctx || !img || !state.gridCells) return;
+
+                 const numCellsToShow = Math.floor(progress * state.gridCells.length);
+                 const prevNumCells = state.lastDrawnIndex || 0;
+
+                 if (progress === 0 || numCellsToShow <= prevNumCells) {
+                     ctx.clearRect(0, 0, width, height);
+                     state.lastDrawnIndex = 0;
+                 }
+
+                 if (numCellsToShow > prevNumCells) {
+                     ctx.save();
+                     ctx.beginPath();
+                     for (let i = prevNumCells; i < numCellsToShow; i++) {
+                         const cellIndex = state.gridCells[i];
+                         const gridX = cellIndex % state.gridCols;
+                         const gridY = Math.floor(cellIndex / state.gridCols);
+                         const cellWidth = width / state.gridCols;
+                         const cellHeight = height / state.gridRows;
+                         ctx.rect(gridX * cellWidth, gridY * cellHeight, cellWidth, cellHeight);
+                     }
+                     ctx.clip();
+                     ctx.drawImage(img, 0, 0, width, height);
+                     ctx.restore();
+                 }
+                 state.lastDrawnIndex = numCellsToShow;
+                 state.lastRenderedProgress = progress; // Track progress
+            },
+
+            regionTracing: (progress, cm, img, state) => {
+                 const ctx = cm.getContext();
+                 const width = cm.getWidth();
+                 const height = cm.getHeight();
+                 if (!ctx || !img || !state.regions) return;
+
+                 const numRegionsToShow = Math.floor(progress * state.regions.length);
+                 const prevNumRegions = state.lastDrawnIndex || 0;
+
+                 if (progress === 0 || numRegionsToShow <= prevNumRegions) {
+                     ctx.clearRect(0, 0, width, height);
+                     state.lastDrawnIndex = 0;
+                 }
+
+                 if (numRegionsToShow > prevNumRegions) {
+                     ctx.save();
+                     ctx.beginPath();
+                     for (let i = prevNumRegions; i < numRegionsToShow; i++) {
+                         const region = state.regions[i];
+                         ctx.rect(region.x, region.y, region.w, region.h);
+                     }
+                     ctx.clip();
+                     ctx.drawImage(img, 0, 0, width, height);
+                     ctx.restore();
+                 }
+                 state.lastDrawnIndex = numRegionsToShow;
+                 state.lastRenderedProgress = progress;
+             },
+
+            outlineDrawing: (progress, cm, img, state) => {
+                 const ctx = cm.getContext();
+                 const targetBuffer = cm.getTargetBuffer();
+                 const targetImageData = cm.getTargetImageData();
+                 const sourceImageData = cm.getImageData(); // Need original image for fill
+                 if (!ctx || !img || !targetBuffer || !state.edgesData || !state.edgePixelIndices || !sourceImageData) return;
+
+                 const edgeProgress = Math.min(1.0, progress * 2); // Edges draw in first half
+                 const fillProgress = Math.max(0, (progress - 0.5) * 2); // Fill happens in second half
+
+                 const numEdgePixelsToShow = Math.floor(edgeProgress * state.edgePixelIndices.length);
+                 const sourceEdgeData = state.edgesData.data;
+                 const sourceImgData = sourceImageData.data;
+
+                 // Always redraw buffer for this effect as fill changes over edges
+                 targetBuffer.fill(0); // Start black/transparent
+
+                 // Pass 1: Draw revealed edge pixels
+                 for (let i = 0; i < numEdgePixelsToShow; i++) {
+                     const pixelIndex = state.edgePixelIndices[i];
+                     const dataIndex = pixelIndex * 4;
+                     targetBuffer[dataIndex]     = sourceEdgeData[dataIndex];     // R (edge color)
+                     targetBuffer[dataIndex + 1] = sourceEdgeData[dataIndex + 1]; // G
+                     targetBuffer[dataIndex + 2] = sourceEdgeData[dataIndex + 2]; // B
+                     targetBuffer[dataIndex + 3] = 255;                          // A (opaque edge)
+                 }
+
+                 // Pass 2: Blend the original image over based on fillProgress
+                 if (fillProgress > 0) {
+                     const fillAlpha = fillProgress; // Use progress directly for alpha blending
+                     for (let i = 0; i < sourceImgData.length; i += 4) {
+                         const currentAlpha = targetBuffer[i+3] / 255.0; // Current alpha (0 to 1)
+                         const overlayR = sourceImgData[i];
+                         const overlayG = sourceImgData[i+1];
+                         const overlayB = sourceImgData[i+2];
+                         const overlayA = sourceImgData[i+3] / 255.0;
+
+                         // Alpha composite overlay (image * fillAlpha) over current buffer (edges/black)
+                         // Out = F*alpha_f + B*(1 - alpha_f) --- Where F is overlay, B is background
+                         const finalAlpha = overlayA * fillAlpha + currentAlpha * (1.0 - overlayA * fillAlpha);
+                         if (finalAlpha > 0) { // Avoid division by zero
+                            targetBuffer[i] = Math.round((overlayR * overlayA * fillAlpha + targetBuffer[i] * currentAlpha * (1.0 - overlayA * fillAlpha)) / finalAlpha);
+                            targetBuffer[i+1] = Math.round((overlayG * overlayA * fillAlpha + targetBuffer[i+1] * currentAlpha * (1.0 - overlayA * fillAlpha)) / finalAlpha);
+                            targetBuffer[i+2] = Math.round((overlayB * overlayA * fillAlpha + targetBuffer[i+2] * currentAlpha * (1.0 - overlayA * fillAlpha)) / finalAlpha);
+                            targetBuffer[i+3] = Math.round(finalAlpha * 255);
+                         } else {
+                             targetBuffer[i+3] = 0; // Ensure fully transparent if alpha is zero
+                         }
+                     }
+                 }
+                 ctx.putImageData(targetImageData, 0, 0);
+                 state.lastRenderedProgress = progress;
+            },
+
+            pixelSortBrightnessRow: (progress, cm, img, state) => {
+                 const ctx = cm.getContext();
+                 const targetBuffer = cm.getTargetBuffer();
+                 const targetImageData = cm.getTargetImageData();
+                 const sourceImageData = cm.getImageData(); // Need original for unsorted part
+                 if (!ctx || !targetBuffer || !targetImageData || !sourceImageData || !state.pixelDataCache) return;
+
+                 const sortedCache = state.pixelDataCache;
+                 const sourceData = sourceImageData.data;
+                 const width = cm.getWidth();
+                 const height = cm.getHeight();
+
+                 for (let y = 0; y < height; y++) {
+                     const sortThresholdIndex = Math.floor(progress * width);
+                     const rowBaseCacheIndex = y * width;
+
+                     for (let x = 0; x < width; x++) {
+                         const targetPixelDataIndex = getPixelIndex(x, y, width);
+                         let sourcePixel;
+
+                         if (x < sortThresholdIndex) {
+                             // Use pre-sorted pixel from cache for this target 'x' position
+                             sourcePixel = sortedCache[rowBaseCacheIndex + x];
+                         } else {
+                             // Use original pixel for the current (x,y) position
+                             const originalDataIndex = getPixelIndex(x, y, width);
+                             sourcePixel = {
+                                 r: sourceData[originalDataIndex], g: sourceData[originalDataIndex + 1],
+                                 b: sourceData[originalDataIndex + 2], a: sourceData[originalDataIndex + 3]
+                             };
+                         }
+                         targetBuffer[targetPixelDataIndex]     = sourcePixel.r;
+                         targetBuffer[targetPixelDataIndex + 1] = sourcePixel.g;
+                         targetBuffer[targetPixelDataIndex + 2] = sourcePixel.b;
+                         targetBuffer[targetPixelDataIndex + 3] = sourcePixel.a;
+                     }
+                 }
+                 ctx.putImageData(targetImageData, 0, 0);
+                 state.lastRenderedProgress = progress;
+            },
+
+             brushStrokes: (progress, cm, img, state) => {
+                 const ctx = cm.getContext();
+                 const width = cm.getWidth();
+                 const height = cm.getHeight();
+                 if (!ctx || !img || !state.strokeOrder) return;
+
+                 const numStrokesToShow = Math.floor(progress * state.strokeOrder.length);
+                 const baseRadius = Math.max(5, Math.min(width, height) / 30);
+
+                 if (state.needsClear) { // Initial clear only
+                    ctx.clearRect(0, 0, width, height);
+                    state.needsClear = false;
+                    state.lastDrawnIndex = 0;
+                 }
+
+                 const startIndex = state.lastDrawnIndex || 0;
+
+                 if (numStrokesToShow > startIndex) {
+                      ctx.save();
+                      ctx.beginPath(); // Clip path for *new* strokes only
+                      for (let i = startIndex; i < numStrokesToShow; i++) {
+                         const stroke = state.strokeOrder[i];
+                         const radius = baseRadius * (0.7 + Math.random() * 0.6);
+                          ctx.moveTo(stroke.x + radius, stroke.y);
+                          ctx.arc(stroke.x, stroke.y, radius, 0, Math.PI * 2);
+                      }
+                      ctx.clip();
+                      ctx.drawImage(img, 0, 0, width, height);
+                      ctx.restore();
+                      state.lastDrawnIndex = numStrokesToShow;
+                 }
+                 state.lastRenderedProgress = progress;
+             },
+
+             agentReveal: (progress, cm, img, state) => {
+                 const ctx = cm.getContext();
+                 const width = cm.getWidth();
+                 const height = cm.getHeight();
+                 if (!ctx || !img || !state.agents) return;
+
+                 if (state.needsClear) {
+                    ctx.clearRect(0, 0, width, height);
+                    state.needsClear = false;
+                 }
+
+                 const revealRadius = state.revealRadius || 15;
+                 ctx.save();
+                 ctx.beginPath(); // Combine all agent paths for one clip/draw
+
+                 state.agents.forEach(agent => {
+                     agent.x += (Math.random() - 0.5) * agent.speed;
+                     agent.y += (Math.random() - 0.5) * agent.speed;
+                     agent.x = Math.max(0, Math.min(width, agent.x)); // Clamp simple
+                     agent.y = Math.max(0, Math.min(height, agent.y)); // Clamp simple
+                     ctx.moveTo(agent.x + revealRadius, agent.y);
+                     ctx.arc(agent.x, agent.y, revealRadius, 0, Math.PI * 2);
+                 });
+
+                 ctx.clip();
+                 ctx.drawImage(img, 0, 0, width, height);
+                 ctx.restore();
+                 state.lastRenderedProgress = progress;
+            },
+
+        
+            glyphReveal: (progress, cm, img, state) => { // Needs ImageData access for revealed cells
+                 const ctx = cm.getContext();
+                 const sourceImageData = cm.getImageData(); // Needed for revealed cells
+                 const width = cm.getWidth();
+                 const height = cm.getHeight();
+                 // Check required data. sourceImageData check is important here.
+                 if (!ctx || !img || !sourceImageData || !state.glyphGrid) return;
+
+                 const { grid, cols, rows, cellW, cellH } = state.glyphGrid;
+                 const numCellsToReveal = Math.floor(progress * grid.length);
+                 const sourceData = sourceImageData.data;
+
+                 // Determine which cells *should* be revealed based on shuffled order
+                 const revealedCells = new Set();
+                 for(let i = 0; i < numCellsToReveal; i++) {
+                    revealedCells.add(state.shuffledIndices[i]);
+                 }
+
+                 // Clear canvas before drawing squares/image parts
+                 ctx.clearRect(0,0, width, height);
+                 // No text settings needed (font, textAlign, textBaseline)
+
+                 // Set style for the square outlines
+                 ctx.strokeStyle = state.glyphOutlineColor || '#aaa';
+                 ctx.lineWidth = 1; // Or make configurable
+
+                 for (let i = 0; i < grid.length; i++) {
+                      const cell = grid[i];
+                      const { x, y } = cell; // We only need position now
+
+                      if (revealedCells.has(i)) {
+                          // Reveal: Get image color and draw rect
+                          const center_x = x + cellW / 2; // Still use center to sample image
+                          const center_y = y + cellH / 2;
+                          const imgX = Math.min(width - 1, Math.max(0, Math.floor(center_x))); // Clamp coordinates
+                          const imgY = Math.min(height - 1, Math.max(0, Math.floor(center_y)));
+                          const dataIndex = getPixelIndex(imgX, imgY, width);
+                          const r = sourceData[dataIndex];
+                          const g = sourceData[dataIndex + 1];
+                          const b = sourceData[dataIndex + 2];
+                          const a = sourceData[dataIndex + 3];
+                          ctx.fillStyle = `rgba(${r},${g},${b},${a / 255})`;
+                          // Fill slightly smaller than cell for grid effect, or full cell
+                          ctx.fillRect(x, y, cellW, cellH);
+                      } else {
+                          // Draw empty square outline instead of text
+                           ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1); // Add 0.5 for sharper lines, reduce size slightly
+                      }
+                 }
+                 state.lastRenderedProgress = progress;
+             },
+
+            // --- 3D Mode ---
+            tileFlip3D: (progress, cm, img, state) => {
+                 const threeCtx = cm.getThreeContext();
+                 if (!threeCtx || !state.tileOrder || !threeCtx.objects) return;
+
+                 const tilesToFlipTarget = Math.floor(progress * state.tileOrder.length);
+                 const startIndex = state.lastFlippedTileIndex || 0;
+
+                 if (tilesToFlipTarget > startIndex) {
+                      for (let i = startIndex; i < tilesToFlipTarget; i++) {
+                         const tileIndex = state.tileOrder[i];
+                         const tile = threeCtx.objects[tileIndex];
+                          if (tile && !state.isTileFlipping[tileIndex]) {
+                              state.isTileFlipping[tileIndex] = true;
+                              const startRotation = tile.rotation.y;
+                              const endRotation = startRotation + Math.PI; // Flip 180 degrees
+
+                              new TWEEN.Tween(tile.rotation)
+                                  .to({ y: endRotation }, 600)
+                                  .easing(TWEEN.Easing.Quadratic.Out)
+                                  .delay(Math.random() * 100)
+                                  .onComplete(() => { state.isTileFlipping[tileIndex] = false; })
+                                  .start();
+                          }
+                      }
+                      state.lastFlippedTileIndex = tilesToFlipTarget;
+                 }
+                 // Rendering happens in main animationLoop after TWEEN update
+                 state.lastRenderedProgress = progress;
+             },
+        };
+        // Mark wrapped functions for potential error handling differences
+        Object.values(revealModes).forEach(fn => { if (fn.__isWrapped) fn.__isWrapped = true; });
+
+
+        // === Mode Initializers (Adapted for CanvasManager) ===
+        const modeInitializers = {
+            pixelRandom: (cm, state) => {
+                if (!cm.getImageData()) throw new Error("ImageData required.");
+                const numPixels = cm.getWidth() * cm.getHeight();
+                state.pixelOrder = shuffleArray(Array.from({ length: numPixels }, (_, i) => i));
+                state.lastDrawnIndex = 0;
+                cm.getTargetBuffer()?.fill(0); // Clear target buffer
+            },
+            geometricGrid: (cm, state) => {
+                const w = cm.getWidth(), h = cm.getHeight();
+                const aspectRatio = w / h;
+                const targetCellCount = 400;
+                state.gridCols = Math.max(1, Math.round(Math.sqrt(targetCellCount * aspectRatio)));
+                state.gridRows = Math.max(1, Math.round(Math.sqrt(targetCellCount / aspectRatio)));
+                const totalCells = state.gridCols * state.gridRows;
+                state.gridCells = shuffleArray(Array.from({ length: totalCells }, (_, i) => i));
+                state.lastDrawnIndex = 0;
+            },
+            regionTracing: (cm, state) => {
+                 const imgData = cm.getImageData();
+                 const w = cm.getWidth(), h = cm.getHeight();
+                 if (!imgData) throw new Error("ImageData required.");
+                 const gridCols = 16, gridRows = 16;
+                 const regions = [];
+                 const cellWidth = w / gridCols, cellHeight = h / gridRows;
+                 const data = imgData.data;
+                 for (let r = 0; r < gridRows; r++) {
+                     for (let c = 0; c < gridCols; c++) {
+                         let totalBrightness = 0, pixelCount = 0;
+                         const sx = Math.floor(c * cellWidth), sy = Math.floor(r * cellHeight);
+                         const ex = Math.min(w, Math.floor(sx + cellWidth)), ey = Math.min(h, Math.floor(sy + cellHeight));
+                         for (let y = sy; y < ey; y++) {
+                             for (let x = sx; x < ex; x++) {
+                                 const i = getPixelIndex(x, y, w);
+                                 totalBrightness += getBrightness(data[i], data[i+1], data[i+2]);
+                                 pixelCount++;
+                             }
+                         }
+                         regions.push({ x: sx, y: sy, w: Math.max(1, ex - sx), h: Math.max(1, ey - sy), brightness: pixelCount > 0 ? totalBrightness / pixelCount : 0 });
+                     }
+                 }
+                 regions.sort((a, b) => a.brightness - b.brightness); // Darkest first
+                 state.regions = regions;
+                 state.lastDrawnIndex = 0;
+            },
+            outlineDrawing: (cm, state) => {
+                 const imgData = cm.getImageData();
+                 const ctx = cm.getContext(); // Need context for ImageData creation
+                 const w = cm.getWidth(), h = cm.getHeight();
+                 if (!ctx || !imgData) throw new Error("Context and ImageData required.");
+
+                 const grayscaleData = new Uint8ClampedArray(w * h);
+                 const sourceData = imgData.data;
+                 for (let i = 0; i < sourceData.length; i += 4) {
+                     grayscaleData[i / 4] = Math.round(0.299 * sourceData[i] + 0.587 * sourceData[i + 1] + 0.114 * sourceData[i + 2]);
+                 }
+                 const edgeDataBytes = new Uint8ClampedArray(sourceData.length);
+                 const edgePixelIndices = []; const threshold = 50;
+                 const kX = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], kY = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]];
+
+                 for (let y = 1; y < h - 1; y++) {
+                     for (let x = 1; x < w - 1; x++) {
+                         let gx = 0, gy = 0;
+                         for (let ky = -1; ky <= 1; ky++) for (let kx = -1; kx <= 1; kx++) {
+                             const val = grayscaleData[(y + ky) * w + (x + kx)];
+                             gx += val * kX[ky + 1][kx + 1]; gy += val * kY[ky + 1][kx + 1];
+                         }
+                         const magnitude = Math.sqrt(gx * gx + gy * gy);
+                         const pixelIndex = (y * w + x); const dataIndex = pixelIndex * 4;
+                         if (magnitude > threshold) {
+                             edgeDataBytes[dataIndex]=edgeDataBytes[dataIndex+1]=edgeDataBytes[dataIndex+2]=200; // Gray edge
+                             edgeDataBytes[dataIndex + 3] = 255; edgePixelIndices.push(pixelIndex);
+                         } else edgeDataBytes[dataIndex + 3] = 0; // Transparent
+                     }
+                 }
+                 state.edgesData = new ImageData(edgeDataBytes, w, h);
+                 state.edgePixelIndices = shuffleArray(edgePixelIndices);
+                 state.lastDrawnIndex = 0;
+                 cm.getTargetBuffer()?.fill(0);
+            },
+            pixelSortBrightnessRow: (cm, state) => {
+                const imgData = cm.getImageData();
+                const w = cm.getWidth(), h = cm.getHeight();
+                if (!imgData) throw new Error("ImageData required.");
+                state.pixelDataCache = []; const data = imgData.data;
+                for (let y = 0; y < h; y++) {
+                     const rowPixels = [];
+                     for (let x = 0; x < w; x++) {
+                         const i = getPixelIndex(x, y, w);
+                         const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+                         rowPixels.push({ r, g, b, a, brightness: getBrightness(r,g,b), originalIndex: x });
+                     }
+                     rowPixels.sort((p1, p2) => p1.brightness - p2.brightness);
+                     state.pixelDataCache.push(...rowPixels); // Flatten cache
+                }
+                cm.getTargetBuffer()?.fill(0);
+            },
+            brushStrokes: (cm, state) => {
+                 const w = cm.getWidth(), h = cm.getHeight();
+                 const numStrokes = Math.max(100, Math.round(w * h / 500));
+                 state.strokeOrder = [];
+                 for (let i = 0; i < numStrokes; i++) {
+                     state.strokeOrder.push({ x: Math.random() * w, y: Math.random() * h });
+                 }
+                 state.lastDrawnIndex = 0;
+                 state.needsClear = true; // Signal first frame clear
+            },
+            texturedDissolve: (cm, state) => {
+                 const w = cm.getWidth(), h = cm.getHeight();
+                 // Create noise texture data directly
+                 const noiseSize = w * h * 4;
+                 const noiseBuf = new Uint8ClampedArray(noiseSize);
+                 for (let i = 0; i < noiseSize; i += 4) {
+                     const val = Math.random() * 255;
+                     noiseBuf[i] = noiseBuf[i + 1] = noiseBuf[i + 2] = val; // Grayscale
+                     noiseBuf[i + 3] = 255; // Opaque
+                 }
+                 state.noiseData = noiseBuf; // Store raw data buffer
+                 cm.getTargetBuffer()?.fill(0);
+            },
+            agentReveal: (cm, state) => {
+                  const w = cm.getWidth(), h = cm.getHeight();
+                  const numAgents = 10;
+                  state.agents = [];
+                  for (let i=0; i<numAgents; ++i) {
+                      state.agents.push({ x: Math.random()*w, y: Math.random()*h, speed: 2+Math.random()*3 });
+                  }
+                  state.revealRadius = Math.max(10, Math.min(w, h) / 25);
+                  state.needsClear = true;
+            },
+           
+            glyphReveal: (cm, state) => {
+                  const ctx = cm.getContext();
+                  const w = cm.getWidth(), h = cm.getHeight();
+                  // Check if context is available, although it should be if called correctly
+                  if (!ctx) throw new Error("Context required for glyphReveal initialization.");
+                  // No need to check imageData here, as the init just sets up the grid
+
+                  const fontSize = 12; // Still useful for determining cell size based on typical text height
+                  const fontFamily = 'monospace'; // Keep for potential font-based measurements
+                  // Temporarily set font to measure cell size (optional, could use fixed size)
+                  ctx.font = `${fontSize}px ${fontFamily}`;
+                  const charWidth = ctx.measureText('M').width; // Approx width
+                  const cellW = Math.max(2, Math.floor(charWidth)); // Ensure min width > line width
+                  const cellH = Math.max(2, Math.floor(fontSize * 1.1)); // Ensure min height > line width
+
+                  const cols = Math.floor(w / cellW);
+                  const rows = Math.floor(h / cellH);
+                  const grid = [];
+                  // Removed chars string and charIndex
+
+                  for (let r = 0; r < rows; r++) {
+                       for (let c = 0; c < cols; c++) {
+                           grid.push({
+                               // No 'char' needed anymore
+                               x: c * cellW,
+                               y: r * cellH,
+                               // gridX/gridY might still be useful for other effects later
+                               gridX: c,
+                               gridY: r
+                           });
+                       }
+                  }
+
+                  state.glyphGrid = { grid, cols, rows, cellW, cellH, fontSize, fontFamily };
+                  state.shuffledIndices = shuffleArray(Array.from(grid.keys()));
+                  // Use textColor for the square outline, or define a specific glyphOutlineColor
+                  state.glyphOutlineColor = '#aaa'; // Default outline color for squares
+                  state.needsClear = true; // Need to draw initial squares
+            },
+            
+             tileFlip3D: (cm, state) => {
+                  const threeCtx = cm.getThreeContext();
+                  if (!threeCtx || !threeCtx.objects) {
+                      console.warn("tileFlip3D initializer called before 3D context/objects ready.");
+                      return; // Should be initialized by CanvasManager first
+                  }
+                  TWEEN.removeAll(); // Stop existing animations
+                  // Reset rotations (objects already exist from CanvasManager setup)
+                  threeCtx.objects.forEach(obj => { obj.rotation.y = Math.PI; obj.visible = true; }); // Start flipped away
+                  if (DEBUG) console.log("3D Tiles: Initializer reset tiles rotation.");
+
+                  state.lastFlippedTileIndex = 0;
+                  state.isTileFlipping = Array(threeCtx.objects.length).fill(false);
+                  state.tileOrder = shuffleArray(threeCtx.objects.map((_, i) => i));
+
+                  // Render initial state (flipped away) immediately?
+                  // Render loop will handle updates, but an initial render might be good.
+                  // update3DTiles(0); // Called by drawInitialState
+            }
+             // Other modes need no specific initialization beyond modeState reset.
+        };
+
+        // === Three.js Specific Update Function ===
+        /** Update 3D tiles state instantly (e.g., for initial/final frame) */
+        function update3DTiles(progress) { // 0 = hidden/start(flipped), 1 = revealed/final(forward)
+             const threeCtx = canvasManager?.getThreeContext();
+             if (!threeCtx || !threeCtx.objects) return;
+             TWEEN.removeAll(); // Ensure no animations interfere
+
+              // Target rotation: 0 is face-forward (revealed), PI is flipped away (start/hidden)
+              const targetRotation = progress >= 1.0 ? 0 : Math.PI;
+
+             threeCtx.objects.forEach(obj => {
+                  obj.rotation.y = targetRotation;
+                  obj.visible = true;
+              });
+
+              threeCtx.renderer.render(threeCtx.scene, threeCtx.camera);
+             if (DEBUG) console.log(`3D tiles updated instantly to progress state ${progress}`);
+        }
+
+        // === Start Application ===
+        init();
+
+    </script>
+</body>
+</html>
