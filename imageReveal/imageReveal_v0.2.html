@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Reveal Art Program (Condensed)</title>
+    <style>
+        /* --- Base Styles (Existing) --- */
+        :root {
+            --controls-bg: #f0f0f0; --canvas-bg: #000; --button-bg: #e0e0e0;
+            --button-hover-bg: #d0d0d0; --text-color: #333; --border-color: #bbb;
+            --slider-thumb-bg: #888; --slider-track-bg: #ddd; --error-color: #d33;
+            --warning-color: #e9900a; --info-color: #666;
+            --modal-bg: rgba(255, 255, 255, 0.98);
+            --modal-overlay-bg: rgba(0, 0, 0, 0.6);
+            --modal-border: #ccc;
+            --code-bg: #eee;
+            --code-text: #333;
+        }
+        body {
+            font-family: sans-serif; display: flex; flex-direction: column; align-items: center;
+            padding: 20px; /* Default padding */
+            background-color: #f9f9f9; color: var(--text-color); margin: 0; min-height: 100vh; box-sizing: border-box;
+            transition: padding 0.3s ease; /* Smooth transition for padding */
+        }
+        h1 { margin-top: 0; color: #555; text-align: center; font-size: 1.5em; position: relative; display: inline-block; padding-right: 35px; transition: opacity 0.3s ease, transform 0.3s ease; }
+        #controls { background-color: var(--controls-bg); padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: grid; grid-template-columns: auto 1fr; gap: 10px 15px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border: 1px solid var(--border-color); max-width: 600px; width: 90%; transition: opacity 0.3s ease, transform 0.3s ease, margin 0.3s ease; }
+        #controls label, #controls button, #controls input, #controls select { font-size: 0.9rem; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); box-sizing: border-box; }
+        #controls label { border: none; padding: 0; text-align: right; font-weight: bold; white-space: nowrap; }
+        #controls input[type="file"] { padding: 3px; }
+        #controls button { background-color: var(--button-bg); cursor: pointer; transition: background-color 0.2s ease; width: 100%; }
+        #controls button:hover:not(:disabled) { background-color: var(--button-hover-bg); }
+        #controls button:disabled { cursor: not-allowed; opacity: 0.6; }
+        #controls input[type="range"] { width: 100%; cursor: pointer; appearance: none; background: var(--slider-track-bg); height: 8px; padding: 0; margin: 0 5px 0 0; vertical-align: middle; }
+        #controls input[type="range"]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; background: var(--slider-thumb-bg); border-radius: 50%; cursor: pointer; }
+        #controls input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; background: var(--slider-thumb-bg); border-radius: 50%; cursor: pointer; border: none; }
+        .duration-control span { display: inline-block; vertical-align: middle; }
+        #duration-value { display: inline-block; min-width: 45px; text-align: left; font-weight: bold; }
+        .button-group { grid-column: 1 / -1; display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+        .button-group button { flex: 1 1 auto; max-width: 150px; }
+        #reverse-container { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 5px; }
+        .reverse-label { text-align: left; font-weight: normal; order: 1; }
+        #reverse-checkbox { order: 0; width: auto; padding: 0; margin: 0; }
+        .mode-options { display: none; grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr; gap: inherit; align-items: center; margin-top: 8px; padding-left: 20px; border-left: 2px solid var(--border-color); padding-top: 5px; padding-bottom: 5px; }
+        .mode-options.visible { display: grid; }
+        .mode-options label { font-weight: normal; font-size: 0.85rem; white-space: nowrap; }
+        .mode-options .slider-container { display: flex; align-items: center; gap: 8px; }
+         .mode-options .slider-container input[type="range"] { flex-grow: 1; margin: 0; }
+         .mode-options .slider-container span { min-width: 35px; text-align: left; font-size: 0.85rem; font-weight: bold; }
+        #canvas-container {
+            width: 90%; max-width: 800px; /* Default size */
+            height: auto; /* Default height */
+            max-height: 75vh; /* Default max height */
+            position: relative; background-color: var(--canvas-bg); box-shadow: 0 4px 8px rgba(0,0,0,0.15); border: 1px solid var(--border-color); margin-bottom: 20px; display: flex; justify-content: center; align-items: center; overflow: hidden; min-height: 200px;
+            transition: width 0.3s ease, max-width 0.3s ease, height 0.3s ease, max-height 0.3s ease, margin 0.3s ease; /* Smooth transition */
+         }
+        canvas { display: block; max-width: 100%; max-height: 100%; /* Fit within container */ object-fit: contain; background-color: transparent; }
+        #status { margin-top: 10px; color: var(--info-color); min-height: 1.2em; font-style: italic; text-align: center; width: 90%; max-width: 600px; font-size: 0.9em; transition: opacity 0.3s ease, transform 0.3s ease; }
+        #info-button { position: absolute; top: 50%; right: 0; transform: translateY(-50%); width: 24px; height: 24px; padding: 0; border-radius: 50%; font-size: 1em; font-weight: bold; font-family: serif; line-height: 22px; text-align: center; cursor: pointer; border: 1px solid var(--border-color); background-color: var(--button-bg); color: var(--text-color); transition: background-color 0.2s ease, opacity 0.3s ease; }
+        #info-button:hover { background-color: var(--button-hover-bg); }
+        .modal { /* ... Modal styles remain the same ... */ display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: var(--modal-overlay-bg); padding-top: 60px; box-sizing: border-box; }
+        .modal.visible { display: block; }
+        .modal-content { background-color: var(--modal-bg); margin: auto; padding: 25px 30px; border: 1px solid var(--modal-border); width: 80%; max-width: 700px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; }
+        .modal-close-button { color: #aaa; position: absolute; top: 10px; right: 15px; font-size: 28px; font-weight: bold; line-height: 1; cursor: pointer; }
+        .modal-close-button:hover, .modal-close-button:focus { color: black; text-decoration: none; }
+        .modal h2 { margin-top: 0; color: #444; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px; } .modal h3 { margin-top: 25px; margin-bottom: 10px; color: #555; } .modal p, .modal ul { font-size: 0.95em; line-height: 1.6; margin-bottom: 15px; } .modal ul { padding-left: 25px; } .modal li { margin-bottom: 8px; } .modal code { background-color: var(--code-bg); color: var(--code-text); padding: 3px 6px; border-radius: 3px; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; word-wrap: break-word; } .modal strong { font-weight: bold; } .modal .indent { margin-left: 20px; } .modal .code-block { display: block; background-color: var(--code-bg); color: var(--code-text); padding: 10px 15px; border-radius: 4px; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; word-wrap: break-word; margin-top: 5px; margin-bottom: 15px; }
+
+        /* --- Fullscreen Mode Styles --- */
+        body.api-fullscreen-active {
+            padding: 5px; /* Minimal padding */
+            overflow: hidden; /* Prevent scrollbars if canvas is slightly too big */
+        }
+        body.api-fullscreen-active h1,
+        body.api-fullscreen-active #controls,
+        body.api-fullscreen-active #status {
+            opacity: 0;
+            transform: translateY(-20px); /* Optional: Slide out effect */
+            pointer-events: none; /* Prevent interaction when hidden */
+            margin-bottom: 0; /* Remove margin when hidden */
+        }
+         body.api-fullscreen-active #info-button { /* Also hide info button */
+             opacity: 0;
+             pointer-events: none;
+         }
+
+        body.api-fullscreen-active #canvas-container {
+            width: calc(100vw - 10px); /* Full width minus body padding */
+            height: calc(100vh - 10px); /* Full height minus body padding */
+            max-width: none; /* Override max-width */
+            max-height: none; /* Override max-height */
+            margin-bottom: 0;
+            border: none; /* Optional: remove border in fullscreen */
+            box-shadow: none; /* Optional: remove shadow in fullscreen */
+        }
+        /* Ensure canvas uses the available space within the container */
+        body.api-fullscreen-active #canvas-container canvas {
+             max-width: 100%;
+             max-height: 100%;
+             object-fit: contain; /* Or 'cover' or 'fill' depending on desired behavior */
+        }
+
+    </style>
+    <script type="importmap">
+     {
+       "imports": {
+         "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+         "@tweenjs/tween.js": "https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.esm.js"
+       }
+     }
+   </script>
+</head>
+<body>
+    <h1>Image Reveal Art Program <button id="info-button" title="Show Instructions">i</button></h1>
+
+    <div id="controls">
+        <!-- Controls remain the same -->
+        <label for="file-input">Image:</label>
+        <input type="file" id="file-input" accept="image/webp, image/jpeg, image/png">
+        <label for="duration-slider">Duration:</label>
+        <span class="duration-control"> <input type="range" id="duration-slider" min="0.5" max="300" step="0.1" value="5"> <span id="duration-value">5.0s</span> </span>
+        <label for="mode-select">Mode:</label>
+        <select id="mode-select"> <option value="simpleFade">Simple Fade</option> <option value="pixelRandom">Pixel-by-Pixel Random</option> <option value="lineByLineRow">Line-by-Line (Rows)</option> <option value="lineByLineCol">Line-by-Line (Columns)</option> <option value="geometricCircle">Geometric (Circle Expand)</option> <option value="geometricGrid">Geometric (Grid Cells Random)</option> <option value="colorSweepBright">Color Sweep (Brightness)</option> <option value="regionTracing">Region Tracing (Blocks)</option> <option value="outlineDrawing">Outline Drawing</option> <option value="radialWipe">Radial Wipe</option> <option value="blurToFocus">Blur-to-Focus</option> <option value="mosaic">Mosaic/Pixelation</option> <option value="waveScanH">Wave Scan (Horizontal)</option> <option value="waveScanV">Wave Scan (Vertical)</option> <option value="dissolveNoise">Dissolve (Noise)</option> <option value="texturedDissolve">Dissolve (Textured)</option> <option value="pixelSortBrightnessRow">Pixel Sorting (Bright Row)</option> <option value="tileFlip3D">3D Tile Flip</option> <option value="channelStripWipe">Channel Strip Wipe</option> <option value="gradientMaskWipeLR">Gradient Wipe (Left-Right)</option> <option value="gradientMaskWipeRadial">Gradient Wipe (Radial)</option> <option value="agentReveal">Agent Reveal</option> <option value="glyphReveal">Glyph Reveal</option> <option value="scanlineStretchV">Scanline Stretch (Vertical)</option> <option value="scanlineStretchH">Scanline Stretch (Horizontal)</option> </select>
+        <div id="reverse-container"> <input type="checkbox" id="reverse-checkbox" disabled> <label for="reverse-checkbox" class="reverse-label">Reverse</label> </div>
+        <div id="mode-options-agentReveal" class="mode-options"> <label for="agent-speed-slider">Agent Speed:</label> <span class="slider-container"> <input type="range" id="agent-speed-slider" min="0.1" max="10" step="0.1" value="2.5"> <span id="agent-speed-value">2.5</span> </span> <label for="agent-radius-slider">Agent Radius:</label> <span class="slider-container"> <input type="range" id="agent-radius-slider" min="1" max="100" step="1" value="15"> <span id="agent-radius-value">15</span> </span> </div>
+        <div id="mode-options-glyphReveal" class="mode-options"> <label for="glyph-order-select">Glyph Order:</label> <select id="glyph-order-select"> <option value="random">Random</option> <option value="brightness">Brightness</option> </select> </div>
+        <div class="button-group"> <button id="play-button" disabled>Play</button> <button id="pause-button" disabled>Pause</button> <button id="restart-button" disabled>Restart</button> </div>
+    </div>
+
+    <div id="canvas-container">
+        <span>Load an image to begin</span>
+    </div>
+
+    <div id="status"></div>
+
+    <!-- Info Modal Structure -->
+    <div id="info-modal" class="modal">
+        <div class="modal-content">
+            <span id="modal-close-button" class="modal-close-button" title="Close">×</span>
+            <h2>Instructions & API Guide</h2>
+            <!-- Instructions content remains the same, but add fullscreen info -->
+            <h3>Basic Usage</h3>
+             <ol> <li><strong>Load Image:</strong> Click the "Choose File" button or use the API <code>imageUrl</code> option.</li> <li><strong>Set Duration:</strong> Use the slider or API <code>duration</code> option.</li> <li><strong>Select Mode:</strong> Choose from the dropdown or use the API <code>effectIndex</code>.</li> <li><strong>Reverse (Optional):</strong> Check the box or use the API <code>reverse</code> option (if mode supports it).</li> <li><strong>Mode Options:</strong> Adjust sliders/selects that appear, or use the API <code>modeParams</code> option.</li> <li><strong>Control:</strong> Use Play/Pause/Restart buttons or the API.</li> </ol>
+
+             <h3>Keyboard Shortcuts</h3>
+             <p>Use number keys (optionally with Shift/Ctrl) to trigger effects 0-29 quickly (disabled when typing).</p>
+             <p><em>(See developer console (F12) for effect indices.)</em></p>
+
+             <h3>API Usage (for Developers)</h3>
+             <p>Use <code>window.ImageRevealAPI</code> in the developer console.</p>
+
+             <h4>Primary Function: <code>playEffectByIndex(index, options)</code></h4>
+             <p>Plays the specified effect, optionally loading an image first.</p>
+             <code class="code-block">ImageRevealAPI.playEffectByIndex(effectIndex, {<br>  imageUrl: 'OPTIONAL_URL',<br>  duration: OPTIONAL_SECONDS,<br>  reverse: OPTIONAL_BOOLEAN,<br>  fullscreen: OPTIONAL_BOOLEAN,<br>  modeParams: { OPTIONAL_PARAMS }<br>})</code>
+             <ul>
+                 <li><code>effectIndex</code> (Required): Number for the effect.</li>
+                 <li><code>options</code> (Optional) Object:
+                     <ul class="indent">
+                         <li><code>imageUrl</code> (String): URL to load image (subject to CORS).</li>
+                         <li><code>duration</code> (Number): Duration in seconds.</li>
+                         <li><code>reverse</code> (Boolean): Play in reverse (if supported).</li>
+                         <li><strong><code>fullscreen</code> (Boolean): If <code>true</code>, hides UI controls and expands canvas. Press <code>Esc</code> to exit this mode.</strong></li>
+                         <li><code>modeParams</code> (Object): Mode-specific settings (e.g., <code>{ agentSpeed: 5 }</code>).</li>
+                     </ul>
+                 </li>
+             </ul>
+             <p>Returns a Promise resolving to <code>true</code> or <code>false</code>.</p>
+
+             <h4>Examples:</h4>
+             <code class="code-block">
+                // Play effect 0 (Simple Fade) using UI settings (requires image loaded first)
+                ImageRevealAPI.playEffectByIndex(0);
+                
+                // Load an image from a URL and play effect 17 (3D Tile Flip) with 8s duration
+                ImageRevealAPI.playEffectByIndex(17, {
+                  imageUrl: 'https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0',
+                  duration: 8
+                });
+                
+                // Play effect 2 (Line-by-Line Rows) reversed, 3s duration (image must be loaded)
+                ImageRevealAPI.playEffectByIndex(2, { duration: 3, reverse: true });
+                
+                // Play effect 21 (Agent Reveal) with specific parameters (image must be loaded)
+                ImageRevealAPI.playEffectByIndex(21, { modeParams: { agentSpeed: 1, agentRadius: 10 } });
+                            </code>
+                
+                            <h4>Other Function: <code>loadImageFromURL(url)</code></h4>
+                            <p>Loads an image from a URL without automatically playing an effect.</p>
+                             <code class="code-block">
+                // Load an image, ready for manual playing via UI or another API call
+                ImageRevealAPI.loadImageFromURL('YOUR_IMAGE_URL_HERE');
+                             </code>
+                
+                        </div>
+                    </div>
+                
+
+
+    <script type="module">
+        import * as THREE from 'three';
+        import TWEEN from '@tweenjs/tween.js';
+
+        // --- Constants ---
+        const DEBOUNCE_DELAY = 250;
+        const REVERSIBLE_MODES = ['mosaic', 'pixelSortBrightnessRow', 'simpleFade', 'lineByLineRow', 'lineByLineCol', 'geometricCircle', 'radialWipe', 'blurToFocus', 'waveScanH', 'waveScanV', 'gradientMaskWipeLR', 'gradientMaskWipeRadial'];
+
+        // --- DOM Elements ---
+        // (Existing elements...)
+        const fileInput = document.getElementById('file-input');
+        const durationSlider = document.getElementById('duration-slider');
+        const durationValueSpan = document.getElementById('duration-value');
+        const modeSelect = document.getElementById('mode-select');
+        const playButton = document.getElementById('play-button');
+        const pauseButton = document.getElementById('pause-button');
+        const restartButton = document.getElementById('restart-button');
+        const canvasContainer = document.getElementById('canvas-container');
+        const statusDiv = document.getElementById('status');
+        const reverseCheckbox = document.getElementById('reverse-checkbox');
+        const agentOptionsContainer = document.getElementById('mode-options-agentReveal');
+        const agentSpeedSlider = document.getElementById('agent-speed-slider');
+        const agentSpeedValue = document.getElementById('agent-speed-value');
+        const agentRadiusSlider = document.getElementById('agent-radius-slider');
+        const agentRadiusValue = document.getElementById('agent-radius-value');
+        const glyphOptionsContainer = document.getElementById('mode-options-glyphReveal');
+        const glyphOrderSelect = document.getElementById('glyph-order-select');
+        const infoButton = document.getElementById('info-button');
+        const infoModal = document.getElementById('info-modal');
+        const modalCloseButton = document.getElementById('modal-close-button');
+
+
+        // --- State Variables ---
+        // (Existing state variables...)
+        let image = null;
+        let canvasManager = null;
+        let animationId = null;
+        let startTime = 0;
+        let pausedTime = 0;
+        let isPlaying = false;
+        let isPaused = false;
+        let currentProgress = 0;
+        let totalDuration = 5000;
+        let currentMode = 'simpleFade';
+        let isReversed = false;
+        let modeState = {};
+        let resizeTimeout = null;
+        let isInAPIFullscreen = false; // <-- New state variable
+
+
+        // === Helper Functions ===
+        // (Existing helpers...)
+        function getPixelIndex(x, y, w) { return (y * w + x) * 4; }
+        function getBrightness(r, g, b) { return (r + g + b) / 3; }
+        function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } return array; }
+        function setStatus(message, type = 'info') { /* Only update if not in fullscreen */ if (!isInAPIFullscreen) { statusDiv.textContent = message; statusDiv.className = type; } if (type === 'error') console.error("Status Error:", message); else if (type === 'warning') console.warn("Status Warning:", message); }
+        function requiresImageData(mode) { const modesNeedingData = ['pixelRandom', 'pixelSortBrightnessRow', 'regionTracing', 'outlineDrawing', 'colorSweepBright', 'channelStripWipe', 'dissolveNoise', 'texturedDissolve', 'glyphReveal']; return modesNeedingData.includes(mode); }
+
+
+        // === Canvas Manager Class ===
+        class CanvasManager { /* ... Class code remains the same ... */
+             constructor(containerElement, setStatusFn) { this.container = containerElement; this.setStatus = setStatusFn; this.canvas = null; this.ctx = null; this.three = null; this.width = 0; this.height = 0; this.imageData = null; this.targetImageData = null; this.targetBuffer = null; this.currentModeType = null; this.actualMode = 'simpleFade'; }
+             _is3DMode(mode) { return mode === 'tileFlip3D'; }
+             async initialize(img, mode) { this.width = img.naturalWidth; this.height = img.naturalHeight; this.actualMode = mode; this.currentModeType = this._is3DMode(mode) ? '3d' : '2d'; this.container.innerHTML = ''; this._setContainerSize(); try { return this.currentModeType === '3d' ? await this._setup3D(img) : await this._setup2D(img, mode); } catch (error) { this.setStatus("Error initializing canvas: " + error.message, 'error'); this.dispose(true); throw error; } }
+             async switchMode(newMode, img) { if (!img) { if (this._is3DMode(this.actualMode) && !this._is3DMode(newMode)) { this.dispose(false); this.currentModeType = '2d'; } else if (!this._is3DMode(this.actualMode) && this._is3DMode(newMode)) { this.dispose(false); this.currentModeType = '3d'; } this.actualMode = newMode; this.clear(); return true; } const newModeType = this._is3DMode(newMode) ? '3d' : '2d'; this.actualMode = newMode; if (newModeType === this.currentModeType) { if (this.currentModeType === '2d' && this.canvas) { this._cleanup2DContext(false); this.ctx = this.canvas.getContext('2d', { willReadFrequently: requiresImageData(newMode) }); if (!this.ctx) throw new Error("Failed to get 2D context after mode switch"); this.ctx.imageSmoothingEnabled = true; if (!this.imageData) this._cacheImageData(img); } return true; } this.dispose(false); this.currentModeType = newModeType; this.width = img.naturalWidth; this.height = img.naturalHeight; this._setContainerSize(); try { if (this.currentModeType === '3d') await this._setup3D(img); else await this._setup2D(img, newMode); return true; } catch (error) { console.error(`Error switching to ${newModeType} mode:`, error); this.setStatus(`Error setting up ${newModeType} mode. Reverting.`, 'error'); this.dispose(false); this.currentModeType = '2d'; this.actualMode = 'simpleFade'; try { await this._setup2D(img, 'simpleFade'); } catch(fallbackError){ console.error("Fallback 2D setup failed:", fallbackError); this.setStatus("Critical error setting up canvas.", 'error'); this.dispose(true); return false; } return false; } }
+             _setup2D(img, mode) { return new Promise((resolve, reject) => { try { this.canvas = document.createElement('canvas'); this.canvas.width = this.width; this.canvas.height = this.height; this.container.appendChild(this.canvas); this.ctx = this.canvas.getContext('2d', { willReadFrequently: requiresImageData(mode) }); if (!this.ctx) throw new Error("Could not get 2D canvas context."); this.ctx.imageSmoothingEnabled = true; this._cacheImageData(img); if (!this.imageData && requiresImageData(mode)) { this.setStatus("Warning: Could not access pixel data. Some effects limited.", 'warning'); } if(img && this.ctx && !this.imageData && !requiresImageData(mode)) { this.ctx.drawImage(img, 0, 0); } resolve(); } catch (error) { reject(error); } }); }
+             _setup3D(img) { return new Promise((resolve, reject) => { try { if (!this.container.clientWidth || !this.container.clientHeight) { throw new Error("Canvas container zero dimensions for 3D."); } const w = this.container.clientWidth, h = this.container.clientHeight; const scene = new THREE.Scene(); const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 1000); const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); renderer.setSize(w, h); renderer.setClearColor(0x000000, 0); this.container.appendChild(renderer.domElement); this.canvas = renderer.domElement; scene.add(new THREE.AmbientLight(0xffffff, 0.8)); const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7); directionalLight.position.set(0.5, 1, 1).normalize(); scene.add(directionalLight); const texture = new THREE.Texture(img); texture.needsUpdate = true; const gridCols = 12; const aspect = this.width / this.height; const gridRows = Math.max(1, Math.round(gridCols / aspect)); const objects = []; const sceneWidth = 10; const sceneHeight = sceneWidth / aspect; camera.position.z = sceneWidth * 1.2; const tileW = sceneWidth / gridCols; const tileH = sceneHeight / gridRows; for (let r = 0; r < gridRows; r++) { for (let c = 0; c < gridCols; c++) { const geom = new THREE.PlaneGeometry(tileW, tileH); const uvs = geom.attributes.uv; const u0 = c / gridCols, v0 = 1 - (r + 1) / gridRows; const u1 = (c + 1) / gridCols, v1 = 1 - r / gridRows; uvs.setXY(0, u0, v0); uvs.setXY(1, u1, v0); uvs.setXY(2, u0, v1); uvs.setXY(3, u1, v1); uvs.needsUpdate = true; const mat = new THREE.MeshStandardMaterial({ map: texture, side: THREE.DoubleSide, roughness: 0.8, metalness: 0.1, transparent: true }); const plane = new THREE.Mesh(geom, mat); plane.position.x = (c + 0.5) * tileW - sceneWidth / 2; plane.position.y = sceneHeight / 2 - (r + 0.5) * tileH; scene.add(plane); objects.push(plane); }} this.three = { scene, camera, renderer, objects, texture }; this.updateSize(); resolve(); } catch (error) { this._cleanup3D(); reject(error); } }); }
+             _cacheImageData(img) { this.imageData = this.targetImageData = this.targetBuffer = null; if (!this.ctx || !img || !this.width || !this.height) return; try { this.ctx.drawImage(img, 0, 0); this.imageData = this.ctx.getImageData(0, 0, this.width, this.height); this.targetImageData = this.ctx.createImageData(this.width, this.height); this.targetBuffer = this.targetImageData.data; } catch (e) { console.error("CanvasManager: Error getting ImageData (tainted canvas?):", e); this.imageData = this.targetImageData = this.targetBuffer = null; this.setStatus("Error: Could not access image pixel data. Some effects requiring pixel access will not work.", 'error'); } }
+             updateSize() { this._setContainerSize(); if (this.currentModeType === '3d' && this.three && this.container.clientWidth > 0 && this.container.clientHeight > 0) { const w = this.container.clientWidth; const h = this.container.clientHeight; this.three.renderer.setSize(w, h); this.three.camera.aspect = w / h; this.three.camera.updateProjectionMatrix(); this.three.renderer.render(this.three.scene, this.three.camera); } }
+             _setContainerSize() { if (this.width > 0 && this.height > 0) { this.container.style.aspectRatio = `${this.width} / ${this.height}`; const currentWidth = this.container.clientWidth; this.container.style.height = currentWidth > 0 ? `${(currentWidth * this.height / this.width)}px` : '300px'; } else { this.container.style.aspectRatio = 'auto'; this.container.style.height = '200px'; } }
+             clear() { this.container.innerHTML = '<span>Load an image to begin</span>'; this.canvas = this.ctx = this.three = this.imageData = this.targetImageData = this.targetBuffer = null; this.width = this.height = 0; this._setContainerSize(); }
+             _cleanup2DContext(removeCanvas = true) { this.ctx = this.imageData = this.targetImageData = this.targetBuffer = null; if (removeCanvas && this.canvas?.parentNode) { this.canvas.parentNode.removeChild(this.canvas); this.canvas = null; } }
+             _cleanup3D() { if (this.three) { TWEEN.removeAll(); this.three.objects?.forEach(obj => { obj.geometry?.dispose(); if (obj.material) { obj.material.map?.dispose(); obj.material.dispose(); } this.three.scene?.remove(obj); }); this.three.texture?.dispose(); this.three.renderer?.dispose(); if (this.three.renderer?.domElement.parentNode) { this.three.renderer.domElement.parentNode.removeChild(this.three.renderer.domElement); } this.three = null; this.canvas = null; } }
+             dispose(clearContainer = true) { if (this.currentModeType === '3d') this._cleanup3D(); else this._cleanup2DContext(true); this.currentModeType = null; this.width = this.height = 0; if (clearContainer) this.clear(); }
+             getContext() { return this.ctx; }
+             getThreeContext() { return this.three; }
+             getCanvas() { return this.canvas; }
+             getImageData() { return this.imageData; }
+             canAccessImageData() { return !!this.imageData; }
+             getTargetImageData() { return this.targetImageData; }
+             getTargetBuffer() { return this.targetBuffer; }
+             getWidth() { return this.width; }
+             getHeight() { return this.height; }
+             getModeType() { return this.currentModeType; }
+             getCurrentMode() { return this.actualMode; }
+        }
+
+
+        // === Pixel Processing Helper ===
+        function processImageData(srcImgData,targetBuf,w,h,p,fn){ /* ... No change ... */ const src=srcImgData.data;if(!src||!targetBuf)return;targetBuf.fill(0); for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=getPixelIndex(x,y,w);const r=fn(src[i],src[i+1],src[i+2],src[i+3],x,y,i,p);targetBuf[i]=r.r;targetBuf[i+1]=r.g;targetBuf[i+2]=r.b;targetBuf[i+3]=r.a;} }
+
+        // === 2D Renderer Wrapper ===
+        const create2DRenderer=(logic,opt={needsClear:false})=>{ /* ... No change ... */ const wrapped=(p,cm,img,state)=>{ const ctx=cm.getContext(),w=cm.getWidth(),h=cm.getHeight(); if(!ctx||!img||w<=0||h<=0)return; if(opt.needsClear==='always'||(opt.needsClear&&(state.lastRenderedProgress<0||p<state.lastRenderedProgress)))ctx.clearRect(0,0,w,h); ctx.save(); try{logic(p,ctx,img,w,h,state,cm);}catch(e){console.error(e);setStatus(`Runtime Error ${cm.getCurrentMode()}`,'error');stopAnimation(true);}finally{ctx.restore();state.lastRenderedProgress=p;} }; wrapped.__isWrapped=true;return wrapped; };
+
+
+        // === Initialization ===
+        function init() {
+            canvasManager = new CanvasManager(canvasContainer, setStatus);
+            setupEventListeners();
+            updateDurationDisplay();
+            updateModeOptionControls();
+            setupModal();
+            setupEscapeListener(); // <-- Set up global escape listener
+            setStatus("Load an image to start.");
+        }
+
+        // --------------------- Event Listeners ---------------------
+        function setupEventListeners(){
+            // (Existing listeners...)
+            fileInput.addEventListener('change',handleFileLoad);
+            durationSlider.addEventListener('input',handleDurationChange);
+            modeSelect.addEventListener('change',handleModeChange);
+            reverseCheckbox.addEventListener('change',handleReverseChange);
+            playButton.addEventListener('click',playAnimation);
+            pauseButton.addEventListener('click',pauseAnimation);
+            restartButton.addEventListener('click',restartAnimation);
+            window.addEventListener('resize',()=>{clearTimeout(resizeTimeout);resizeTimeout=setTimeout(handleResize,DEBOUNCE_DELAY);});
+            agentSpeedSlider.addEventListener('input',()=>{const v=+agentSpeedSlider.value.toFixed(1);agentSpeedValue.textContent=v;if(modeState)modeState.agentBaseSpeed=v;});
+            agentRadiusSlider.addEventListener('input',()=>{const v=+agentRadiusSlider.value;agentRadiusValue.textContent=v;if(modeState)modeState.revealRadius=v;});
+            glyphOrderSelect.addEventListener('change',()=>{ if(modeState)modeState.glyphOrder=glyphOrderSelect.value; if(isPlaying||isPaused)setStatus('Restart animation to apply Glyph Order change.','warning'); else if(image&tMode==='glyphReveal'){initializeModeState();drawInitialState();} });
+        }
+
+        // --- Modal Setup ---
+        function setupModal() { /* ... No change ... */ if (!infoButton || !infoModal || !modalCloseButton) { console.error("Modal elements not found!"); return; } infoButton.addEventListener('click', () => { infoModal.classList.add('visible'); }); modalCloseButton.addEventListener('click', () => { infoModal.classList.remove('visible'); }); infoModal.addEventListener('click', (event) => { if (event.target === infoModal) { infoModal.classList.remove('visible'); } }); }
+        // --- Global Escape Listener ---
+        function setupEscapeListener() {
+            window.addEventListener('keydown', (event) => {
+                 if (event.key === 'Escape') {
+                     if (infoModal.classList.contains('visible')) {
+                         // Priority 1: Close Modal
+                         infoModal.classList.remove('visible');
+                     } else if (isInAPIFullscreen) {
+                         // Priority 2: Exit API Fullscreen
+                         exitAPIFullscreen();
+                         // Optionally stop animation when exiting fullscreen?
+                         // stopAnimation(false); // Uncomment if desired
+                     }
+                 }
+             });
+        }
+
+        // === UI Updates ===
+        function updateDurationDisplay(durationSeconds = null) { /* ... No change ... */ if (durationSeconds !== null && !isNaN(durationSeconds) && durationSeconds >= parseFloat(durationSlider.min) && durationSeconds <= parseFloat(durationSlider.max)) { durationSlider.value = durationSeconds.toFixed(1); } totalDuration = parseFloat(durationSlider.value) * 1000; durationValueSpan.textContent = `${parseFloat(durationSlider.value).toFixed(1)}s`; }
+        function updateButtonStates() { /* ... No change ... */ playButton.disabled = isPlaying || !image; pauseButton.disabled = !isPlaying || isPaused; restartButton.disabled = !image; if (!isPlaying && !isPaused && image) { playButton.disabled = false; pauseButton.disabled = true; } }
+        function updateModeOptionControls() { /* ... No change ... */ const mode = modeSelect.value; agentOptionsContainer.classList.remove('visible'); glyphOptionsContainer.classList.remove('visible'); if (mode === 'agentReveal') { agentOptionsContainer.classList.add('visible'); const currentSpeed = modeState?.agentBaseSpeed ?? parseFloat(agentSpeedSlider.getAttribute('value')); const currentRadius = modeState?.revealRadius ?? parseFloat(agentRadiusSlider.getAttribute('value')); agentSpeedSlider.value = currentSpeed; agentSpeedValue.textContent = currentSpeed.toFixed(1); agentRadiusSlider.value = currentRadius; agentRadiusValue.textContent = currentRadius; } else if (mode === 'glyphReveal') { glyphOptionsContainer.classList.add('visible'); glyphOrderSelect.value = modeState?.glyphOrder ?? glyphOrderSelect.options[0].value; } reverseCheckbox.disabled = !REVERSIBLE_MODES.includes(mode); if (reverseCheckbox.disabled && reverseCheckbox.checked) { reverseCheckbox.checked = false; isReversed = false; } else { isReversed = reverseCheckbox.checked && !reverseCheckbox.disabled; } }
+
+        // === Image Handling ===
+        function handleFileLoad(event) { /* ... No change ... */ const file = event.target.files[0]; if (!file || !file.type.startsWith('image/')) { setStatus("Please select a valid image file (webp, jpg, png).", 'warning'); return; } setStatus("Loading image..."); stopAnimation(false); updateButtonStates(); const reader = new FileReader(); reader.onload = (e) => { const newImage = new Image(); newImage.onload = async () => { image = newImage; currentMode = modeSelect.value; updateModeOptionControls(); isReversed = reverseCheckbox.checked && !reverseCheckbox.disabled; try { setStatus("Initializing canvas..."); await canvasManager.initialize(image, currentMode); initializeModeState(); drawInitialState(); setStatus("Image loaded. Ready."); updateButtonStates(); } catch (error) { console.error("Initialization Error:", error); setStatus(`Error loading image/canvas: ${error.message}`, 'error'); image = null; canvasManager.clear(); updateButtonStates(); } }; newImage.onerror = () => { setStatus("Error loading image data.", 'error'); updateButtonStates(); image = null; }; newImage.src = e.target.result; }; reader.onerror = () => { setStatus("Error reading file.", 'error'); updateButtonStates(); image = null; }; reader.readAsDataURL(file); }
+
+        // === Mode/State Initialization ===
+        function drawInitialState() { /* ... No change ... */ currentProgress = 0; pausedTime = 0; isPaused = false; if (!image || !canvasManager.getCanvas()) { canvasManager.clear(); return; } if (isReversed) { drawFinalFrame(); currentProgress = 0; return; } const modesStartingBlank = ['pixelRandom', 'geometricGrid', 'colorSweepBright', 'regionTracing', 'dissolveNoise', 'texturedDissolve', 'pixelSortBrightnessRow', 'channelStripWipe', 'agentReveal', 'glyphReveal', 'tileFlip3D', 'outlineDrawing', 'mosaic']; const modesNeedingInitialRender = ['agentReveal', 'glyphReveal', 'mosaic', 'pixelSortBrightnessRow', 'tileFlip3D']; if (modesStartingBlank.includes(currentMode)) { if (canvasManager.getModeType() === '2d') { const ctx = canvasManager.getContext(); if (ctx) { ctx.clearRect(0, 0, canvasManager.getWidth(), canvasManager.getHeight()); if (modesNeedingInitialRender.includes(currentMode) && revealModes[currentMode]) { revealModes[currentMode](0, canvasManager, image, modeState); } } } else if (canvasManager.getModeType() === '3d' && currentMode === 'tileFlip3D') { update3DTiles(0); } currentProgress = 0; } else { drawFinalFrame(); currentProgress = 1.0; } }
+        function drawFinalFrame() { /* ... No change ... */ if (!image || !canvasManager) return; const cm = canvasManager; if (cm.getModeType() === '2d' && cm.getContext()) { const ctx = cm.getContext(); ctx.globalAlpha = 1.0; ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none'; ctx.clearRect(0, 0, cm.getWidth(), cm.getHeight()); ctx.drawImage(image, 0, 0, cm.getWidth(), cm.getHeight()); } else if (cm.getModeType() === '3d' && cm.getThreeContext()) { update3DTiles(1.0); } currentProgress = 1.0; }
+        function initializeModeState() { /* ... No change ... */ modeState = {}; TWEEN.removeAll(); if (currentMode === 'agentReveal') { modeState.agentBaseSpeed = parseFloat(agentSpeedSlider.value); modeState.revealRadius = parseFloat(agentRadiusSlider.value); } else if (currentMode === 'glyphReveal') { modeState.glyphOrder = glyphOrderSelect.value; } const initializer = modeInitializers[currentMode]; if (initializer) { try { if (requiresImageData(currentMode) && !canvasManager.canAccessImageData()) { if (currentMode === 'glyphReveal' && modeState.glyphOrder !== 'brightness') { setStatus(`Warning: Glyph brightness order unavailable without pixel access, using Random.`, 'warning'); modeState.glyphOrder = 'random'; glyphOrderSelect.value = 'random'; } else { throw new Error(`Mode '${currentMode}' requires pixel access which failed or is unavailable.`); } } initializer(canvasManager, modeState); } catch (error) { console.error(`Error initializing state for mode '${currentMode}':`, error); setStatus(`Error setting up mode ${currentMode}. Effect may fail. ${error.message}`, 'error'); playButton.disabled = true; } } const ctx = canvasManager.getContext(); if (ctx) { ctx.globalAlpha = 1.0; ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; } modeState.lastRenderedProgress = -1; modeState.lastDrawnIndex = 0; modeState.needsClear = false; modeState.lastFlippedTileIndex = 0; modeState.isTileFlipping = []; }
+
+        // === Animation Control ===
+        function playAnimation() { /* ... No change ... */ if (isPlaying || !image || !canvasManager.getCanvas()) return; if (requiresImageData(currentMode) && !canvasManager.canAccessImageData()) { if (currentMode === 'glyphReveal' && modeState.glyphOrder === 'random') { setStatus(`Playing '${currentMode}' (Random order) without full pixel access.`, 'warning'); } else { setStatus(`Cannot play '${currentMode}': requires pixel access which failed or is unavailable.`, 'error'); playButton.disabled = true; return; } } isPlaying = true; isPaused = false; updateButtonStates(); if (pausedTime > 0) { startTime = performance.now() - pausedTime; } else { startTime = performance.now(); currentProgress = 0; initializeModeState(); drawInitialState(); } pausedTime = 0; setStatus("Playing...", 'info'); if (animationId) cancelAnimationFrame(animationId); animationId = requestAnimationFrame(animationLoop); }
+        function pauseAnimation() { /* ... No change ... */ if (!isPlaying || isPaused) return; isPlaying = false; isPaused = true; if (animationId) cancelAnimationFrame(animationId); animationId = null; pausedTime = performance.now() - startTime; updateButtonStates(); setStatus(`Paused at ${Math.round(currentProgress * 100)}%`, 'info'); }
+        function restartAnimation() { /* ... No change ... */ if (!image || !canvasManager.getCanvas()) return; stopAnimation(false); playAnimation(); }
+        function stopAnimation(resetVisual = true) { /* ... No change ... */ if (animationId) { cancelAnimationFrame(animationId); animationId = null; } isPlaying = false; isPaused = false; startTime = 0; if (canvasManager?.getModeType() === '3d') TWEEN.removeAll(); if (resetVisual && image) { drawInitialState(); setStatus("Ready.", 'info'); } else if (!image) { canvasManager?.clear(); setStatus("Load an image to start.", 'info'); } if (resetVisual || !image) pausedTime = 0; currentProgress = isReversed ? 0 : (modeState.lastRenderedProgress ?? 0); updateButtonStates(); }
+        function animationLoop(timestamp) { /* ... No change ... */ if (!isPlaying) return; if (canvasManager.getModeType() === '3d') TWEEN.update(timestamp); const elapsedTime = timestamp - startTime; currentProgress = Math.min(elapsedTime / totalDuration, 1.0); const effectiveProgress = isReversed ? 1.0 - currentProgress : currentProgress; const renderFunction = revealModes[currentMode]; if (renderFunction) { try { renderFunction(effectiveProgress, canvasManager, image, modeState); if (canvasManager.getModeType() === '3d' && canvasManager.getThreeContext()) { const threeCtx = canvasManager.getThreeContext(); threeCtx.renderer.render(threeCtx.scene, threeCtx.camera); } } catch (error) { console.error(`Runtime Error in mode '${currentMode}' render:`, error); setStatus(`Runtime Error in mode ${currentMode}. Stopping.`, 'error'); stopAnimation(true); } } else { console.warn(`Render function for mode '${currentMode}' not found.`); setStatus(`Mode ${currentMode} cannot be rendered. Stopping.`, 'error'); stopAnimation(true); } if (currentProgress >= 1.0) { drawFinalFrame(); setStatus(`Finished (${currentMode}${isReversed ? ' - Reversed' : ''}).`, 'info'); stopAnimation(false); updateButtonStates(); } else { animationId = requestAnimationFrame(animationLoop); } }
+
+        // === Event Handlers ===
+        function handleDurationChange() { /* ... No change ... */ updateDurationDisplay(); if (isPlaying || isPaused) { const elapsedProportion = currentProgress; const newStartTime = performance.now() - (elapsedProportion * totalDuration); if (isPlaying) startTime = newStartTime; if (isPaused) { pausedTime = elapsedProportion * totalDuration; startTime = performance.now() - pausedTime; } } }
+        function handleReverseChange() { /* ... No change ... */ const newlyReversed = reverseCheckbox.checked; if (newlyReversed === isReversed) return; isReversed = newlyReversed; if (isPlaying) { startTime = performance.now() - (currentProgress * totalDuration); } else if (isPaused) { pausedTime = currentProgress * totalDuration; startTime = performance.now() - pausedTime; const effectiveProgress = isReversed ? 1.0 - currentProgress : currentProgress; revealModes[currentMode]?.(effectiveProgress, canvasManager, image, modeState); if (canvasManager.getModeType() === '3d') canvasManager.getThreeContext()?.renderer.render(canvasManager.getThreeContext().scene, canvasManager.getThreeContext().camera); } else if (image) { drawInitialState(); } }
+        async function handleModeChange() { /* ... No change ... */ const newMode = modeSelect.value; if (newMode === currentMode && image) { updateModeOptionControls(); return; } const oldMode = currentMode; currentMode = newMode; stopAnimation(false); updateModeOptionControls(); if (image) { setStatus("Switching mode...", 'info'); if (requiresImageData(currentMode) && !canvasManager.canAccessImageData()) { if (!(currentMode === 'glyphReveal' && glyphOrderSelect.value === 'random')) { setStatus(`Warning: Mode '${currentMode}' may fail or be limited due to missing pixel access.`, 'warning'); } else { setStatus(`Mode changed to ${currentMode}. (Glyph random ok without pixel access)`, 'info'); } } else if (statusDiv.className === 'warning' || statusDiv.className === 'error') { setStatus(`Mode changed to ${currentMode}.`, 'info'); } try { const switched = await canvasManager.switchMode(currentMode, image); if (switched) { initializeModeState(); drawInitialState(); setStatus(`Mode set to ${currentMode}. Ready.`, 'info'); } else { currentMode = canvasManager.getCurrentMode(); modeSelect.value = currentMode; updateModeOptionControls(); initializeModeState(); drawInitialState(); } updateButtonStates(); } catch (error) { console.error("Mode Switch Error:", error); setStatus(`Error switching mode: ${error.message}`, 'error'); currentMode = oldMode; modeSelect.value = oldMode; updateModeOptionControls(); updateButtonStates(); } } else { await canvasManager.switchMode(currentMode, null); setStatus("Load an image first.", 'info'); updateButtonStates(); } }
+        function handleResizeDebounced() { clearTimeout(resizeTimeout); resizeTimeout = setTimeout(handleResize, DEBOUNCE_DELAY); }
+        function handleResize() {
+            if (!canvasManager || !image || !canvasManager.getCanvas()) return;
+            canvasManager.updateSize();
+             // Redraw the current visual state after resize
+            if (isPlaying || isPaused) {
+                const renderFunction = revealModes[currentMode];
+                if (renderFunction) {
+                    const effectiveProgress = isReversed ? 1.0 - currentProgress : currentProgress;
+                    renderFunction(effectiveProgress, canvasManager, image, modeState);
+                    if (isPaused && canvasManager.getModeType() === '3d') {
+                        const threeCtx = canvasManager.getThreeContext();
+                        threeCtx?.renderer.render(threeCtx.scene, threeCtx.camera);
+                    }
+                }
+            } else {
+                drawInitialState();
+            }
+        }
+
+
+        // === Reveal Algorithm Implementations ===
+        const revealModes = { /* ... Algorithm code remains the same ... */
+             simpleFade: create2DRenderer((p, ctx, img) => { ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height); ctx.globalAlpha = p; ctx.drawImage(img, 0, 0); }), lineByLineRow: create2DRenderer((p, ctx, img, w, h) => { const rows = Math.ceil(p * h); ctx.clearRect(0, 0, w, h); if (rows > 0) ctx.drawImage(img, 0, 0, w, rows, 0, 0, w, rows); }), lineByLineCol: create2DRenderer((p, ctx, img, w, h) => { const cols = Math.ceil(p * w); ctx.clearRect(0, 0, w, h); if (cols > 0) ctx.drawImage(img, 0, 0, cols, h, 0, 0, cols, h); }), geometricCircle: create2DRenderer((p, ctx, img, w, h) => { const cx = w/2, cy = h/2; const maxR = Math.sqrt(Math.max(cx, w - cx)**2 + Math.max(cy, h - cy)**2); ctx.clearRect(0,0,w,h); ctx.beginPath(); ctx.arc(cx, cy, Math.max(0, p * maxR), 0, Math.PI*2); ctx.clip(); ctx.drawImage(img,0,0,w,h); }), radialWipe: create2DRenderer((p, ctx, img, w, h) => { const cx = w/2, cy = h/2; const end = p * Math.PI * 2 - Math.PI / 2; const maxR = Math.sqrt(w*w + h*h)/1.9; ctx.clearRect(0,0,w,h); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, maxR, -Math.PI / 2, end); ctx.closePath(); ctx.clip(); ctx.drawImage(img,0,0,w,h); }), blurToFocus: create2DRenderer((p, ctx, img, w, h) => { const blur = 20 * (1 - p); ctx.clearRect(0,0,w,h); ctx.filter = `blur(${Math.max(0, blur).toFixed(2)}px)`; ctx.drawImage(img,0,0,w,h); }), waveScanH: create2DRenderer((p, ctx, img, w, h) => { const ww = w*0.3, frq=10, amp=20; const frontX = p * (w+ww) - ww; ctx.clearRect(0,0,w,h); ctx.beginPath(); ctx.moveTo(0,0); for(let y=0;y<=h;y++) ctx.lineTo(Math.max(0, frontX+amp*Math.sin(y/h*2*Math.PI*frq)),y); ctx.lineTo(0,h); ctx.closePath(); ctx.clip(); ctx.drawImage(img,0,0,w,h); }), waveScanV: create2DRenderer((p, ctx, img, w, h) => { const wh = h*0.3, frq=10, amp=20; const frontY = p * (h+wh) - wh; ctx.clearRect(0,0,w,h); ctx.beginPath(); ctx.moveTo(0,0); for(let x=0;x<=w;x++) ctx.lineTo(x, Math.max(0, frontY+amp*Math.sin(x/w*2*Math.PI*frq))); ctx.lineTo(w,0); ctx.closePath(); ctx.clip(); ctx.drawImage(img,0,0,w,h); }), scanlineStretchV: create2DRenderer((p, ctx, img, w, h) => { ctx.clearRect(0,0,w,h); const rows=Math.max(1, Math.floor(p*h)); const sh=h/rows; for(let y=0;y<rows;y++) ctx.drawImage(img,0,y,w,1,0,y*sh,w,sh+1); }), scanlineStretchH: create2DRenderer((p, ctx, img, w, h) => { ctx.clearRect(0,0,w,h); const cols=Math.max(1, Math.floor(p*w)); const sw=w/cols; for(let x=0;x<cols;x++) ctx.drawImage(img,x,0,1,h,x*sw,0,sw+1,h); }),
+             mosaic: create2DRenderer((p, ctx, img, w, h, state, cm) => { ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, w, h); if (p >= 1.0) { ctx.imageSmoothingEnabled = true; ctx.drawImage(img, 0, 0, w, h); return; } if (p <= 0.0) { p = 0.0001; } const minB = 4; const maxB = Math.max(64, Math.min(w, h) / 4); const easedP = p**2; let blocks = Math.max(1, minB + Math.floor(easedP * (maxB - minB))); const aspect = w / h; let blocksX = Math.max(1, Math.min(w, Math.round(Math.sqrt(blocks*blocks * aspect)))); let blocksY = Math.max(1, Math.min(h, Math.round(blocksX / aspect))); if (blocksX >= 1 && blocksY >= 1) { state.tempCanvas = state.tempCanvas || document.createElement('canvas'); const tempCtx = state.tempCanvas.getContext('2d', { alpha: false }); state.tempCanvas.width = blocksX; state.tempCanvas.height = blocksY; tempCtx.imageSmoothingEnabled = false; tempCtx.drawImage(img, 0, 0, blocksX, blocksY); ctx.imageSmoothingEnabled = false; ctx.drawImage(state.tempCanvas, 0, 0, w, h); } else { ctx.imageSmoothingEnabled = true; ctx.drawImage(img, 0, 0, w, h); } }, { needsClear: false }),
+             gradientMaskWipeLR: create2DRenderer((p, ctx, img, w, h) => { ctx.clearRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h); const grad = ctx.createLinearGradient(0, 0, w, 0); const clampedP = Math.max(0, Math.min(1, p)); grad.addColorStop(0, 'rgba(0,0,0,1)'); grad.addColorStop(Math.max(0, clampedP - 0.01), 'rgba(0,0,0,1)'); grad.addColorStop(Math.min(1, clampedP + 0.01), 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(0,0,0,0)'); ctx.globalCompositeOperation = 'destination-in'; ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h); }, { needsClear: 'always' }), gradientMaskWipeRadial: create2DRenderer((p, ctx, img, w, h) => { const cx = w / 2; const cy = h / 2; const maxR = Math.sqrt(w * w + h * h) / 2; const currentR = Math.max(0, p * maxR); ctx.clearRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h); const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, currentR)); const edgeWidth = 0.02 * maxR; const innerStop = Math.max(0, Math.min(1, (currentR - edgeWidth / 2) / currentR)); const outerStop = Math.min(1, (currentR + edgeWidth / 2) / currentR); grad.addColorStop(0, 'rgba(0,0,0,1)'); grad.addColorStop(innerStop, 'rgba(0,0,0,1)'); grad.addColorStop(outerStop, 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(0,0,0,0)'); ctx.globalCompositeOperation = 'destination-in'; ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h); }, { needsClear: 'always' }),
+             colorSweepBright: (p, cm, img, state) => { const srcImgData = cm.getImageData(); const targetBuf = cm.getTargetBuffer(); const ctx = cm.getContext(); if (!ctx || !srcImgData || !targetBuf) return; processImageData(srcImgData, targetBuf, cm.getWidth(), cm.getHeight(), p, (r,g,b,a,x,y,idx,prog) => { const bright = getBrightness(r,g,b); const thresh = prog * 255; return bright <= thresh ? {r,g,b,a} : {r:0,g:0,b:0,a:0}; }); ctx.putImageData(cm.getTargetImageData(), 0, 0); state.lastRenderedProgress = p; }, dissolveNoise: (p, cm, img, state) => { const srcImgData = cm.getImageData(); const targetBuf = cm.getTargetBuffer(); const ctx = cm.getContext(); if (!ctx || !srcImgData || !targetBuf) return; processImageData(srcImgData, targetBuf, cm.getWidth(), cm.getHeight(), p, (r,g,b,a,x,y,idx,prog) => { if (Math.random() < prog) return {r,g,b,a}; else { const n = Math.random()*50; return {r:n,g:n,b:n,a:255}; } }); ctx.putImageData(cm.getTargetImageData(), 0, 0); state.lastRenderedProgress = p; }, texturedDissolve: (p, cm, img, state) => { const srcImgData = cm.getImageData(); const targetBuf = cm.getTargetBuffer(); const ctx = cm.getContext(); const noiseData = state.noiseData; if (!ctx || !srcImgData || !targetBuf || !noiseData) return; processImageData(srcImgData, targetBuf, cm.getWidth(), cm.getHeight(), p, (r,g,b,a,x,y,idx,prog) => { const noiseVal = noiseData[idx]; const thresh = prog * 255; return noiseVal <= thresh ? {r,g,b,a} : {r:0,g:0,b:0,a:0}; }); ctx.putImageData(cm.getTargetImageData(), 0, 0); state.lastRenderedProgress = p; }, channelStripWipe: (p, cm, img, state) => { const srcImgData = cm.getImageData(); const targetBuf = cm.getTargetBuffer(); const ctx = cm.getContext(); const h = cm.getHeight(); if (!ctx || !srcImgData || !targetBuf) return; const phase = 1/3; const pR=Math.min(1, p/phase), pG=Math.max(0,Math.min(1,(p-phase)/phase)), pB=Math.max(0,Math.min(1,(p-phase*2)/phase)); const rowsR=Math.ceil(pR*h), rowsG=Math.ceil(pG*h), rowsB=Math.ceil(pB*h); processImageData(srcImgData, targetBuf, cm.getWidth(), h, p, (r,g,b,a,x,y,idx,prog) => { const showR=y<rowsR, showG=y<rowsG, showB=y<rowsB; return {r:showR?r:0, g:showG?g:0, b:showB?b:0, a:(showR||showG||showB)?a:0}; }); ctx.putImageData(cm.getTargetImageData(), 0, 0); state.lastRenderedProgress = p; },
+             pixelSortBrightnessRow: (p, cm, img, state) => { const ctx = cm.getContext(); const targetBuf = cm.getTargetBuffer(); const targetImgData = cm.getTargetImageData(); const srcImgData = cm.getImageData(); if (!ctx || !targetBuf || !targetImgData || !srcImgData || !state.pixelDataCache) return; const cache = state.pixelDataCache; const srcData = srcImgData.data; const w = cm.getWidth(); const h = cm.getHeight(); const sortThreshIdx = Math.floor(p * w); for (let y = 0; y < h; y++) { const rowBaseIdx = y * w; for (let x = 0; x < w; x++) { const targetPixelDataIdx = getPixelIndex(x, y, w); let srcPix; if (x < sortThreshIdx) { srcPix = cache[rowBaseIdx + x]; } else { const originalPixelDataIdx = getPixelIndex(x, y, w); srcPix = { r:srcData[originalPixelDataIdx], g:srcData[originalPixelDataIdx+1], b:srcData[originalPixelDataIdx+2], a:srcData[originalPixelDataIdx+3] }; } targetBuf[targetPixelDataIdx]=srcPix.r; targetBuf[targetPixelDataIdx+1]=srcPix.g; targetBuf[targetPixelDataIdx+2]=srcPix.b; targetBuf[targetPixelDataIdx+3]=srcPix.a; } } ctx.putImageData(targetImgData, 0, 0); state.lastRenderedProgress = p; },
+             pixelRandom: (p, cm, img, state) => { const ctx = cm.getContext(); const srcImgData = cm.getImageData(); const targetBuf = cm.getTargetBuffer(); const targetImgData = cm.getTargetImageData(); if (!ctx || !srcImgData || !targetBuf || !state.pixelOrder) return; const totalPixels = state.pixelOrder.length; const showCount = Math.floor(p * totalPixels); const prevCount = state.lastDrawnIndex || 0; const srcData = srcImgData.data; if (p <= 0 || showCount < prevCount) { targetBuf.fill(0); state.lastDrawnIndex = 0; } const startIdx = Math.max(0, state.lastDrawnIndex); for (let i = startIdx; i < showCount; i++) { const targetIdx = state.pixelOrder[i] * 4; targetBuf[targetIdx]=srcData[targetIdx]; targetBuf[targetIdx+1]=srcData[targetIdx+1]; targetBuf[targetIdx+2]=srcData[targetIdx+2]; targetBuf[targetIdx+3]=srcData[targetIdx+3]; } ctx.putImageData(targetImgData, 0, 0); state.lastDrawnIndex = showCount; state.lastRenderedProgress = p; }, geometricGrid: (p, cm, img, state) => { const ctx = cm.getContext(); const w = cm.getWidth(); const h = cm.getHeight(); if (!ctx || !img || !state.gridCells) return; const showCount = Math.floor(p * state.gridCells.length); const prevCount = state.lastDrawnIndex || 0; if (p <= 0 || showCount < prevCount) { ctx.clearRect(0, 0, w, h); state.lastDrawnIndex = 0; } if (showCount > (state.lastDrawnIndex || 0)) { ctx.save(); ctx.beginPath(); const cellW = w / state.gridCols, cellH = h / state.gridRows; const drawStartIndex = state.lastDrawnIndex || 0; for (let i = drawStartIndex; i < showCount; i++) { const cellIdx = state.gridCells[i]; const gx = cellIdx % state.gridCols; const gy = Math.floor(cellIdx / state.gridCols); ctx.rect(gx * cellW, gy * cellH, cellW, cellH); } ctx.clip(); ctx.drawImage(img, 0, 0, w, h); ctx.restore(); } state.lastDrawnIndex = showCount; state.lastRenderedProgress = p; }, regionTracing: (p, cm, img, state) => { const ctx = cm.getContext(); const w = cm.getWidth(); const h = cm.getHeight(); if (!ctx || !img || !state.regions) return; const regionCount = state.regions.length; const showCount = Math.min(regionCount, Math.max(0, Math.floor(p * regionCount))); const prevCount = state.lastDrawnIndex || 0; if (p <= 0 || showCount < prevCount) { ctx.clearRect(0, 0, w, h); state.lastDrawnIndex = 0; if (showCount <= 0) { state.lastRenderedProgress = p; return; } } if (showCount > (state.lastDrawnIndex || 0)) { const drawStartIndex = state.lastDrawnIndex || 0; ctx.save(); ctx.beginPath(); for (let i = drawStartIndex; i < showCount; i++) { const r = state.regions[i]; if (!r) { console.warn(`Region tracing: undefined region at index ${i}`); continue; } ctx.rect(r.x, r.y, r.w, r.h); } ctx.clip(); ctx.drawImage(img, 0, 0, w, h); ctx.restore(); } state.lastDrawnIndex = showCount; state.lastRenderedProgress = p; }, outlineDrawing: (p, cm, img, state) => { const ctx = cm.getContext(); const targetBuf = cm.getTargetBuffer(); const targetImgData = cm.getTargetImageData(); const srcImgData = cm.getImageData(); if (!ctx || !img || !targetBuf || !state.edgesData || !state.edgePixelIndices || !srcImgData) return; const edgeP = Math.min(1, p*2); const fillP = Math.max(0, (p-0.5)*2); const showEdges = Math.floor(edgeP * state.edgePixelIndices.length); const edgeData = state.edgesData.data; const srcData = srcImgData.data; targetBuf.fill(0); for (let i = 0; i < showEdges; i++) { const dataIdx = state.edgePixelIndices[i] * 4; targetBuf[dataIdx]=edgeData[dataIdx]; targetBuf[dataIdx+1]=edgeData[dataIdx+1]; targetBuf[dataIdx+2]=edgeData[dataIdx+2]; targetBuf[dataIdx+3]=255; } if (fillP > 0) { for (let i = 0; i < srcData.length; i += 4) { const curA = targetBuf[i+3]/255; const ovrR=srcData[i], ovrG=srcData[i+1], ovrB=srcData[i+2], ovrA=srcData[i+3]/255; const finalA = ovrA * fillP + curA * (1 - ovrA * fillP); if (finalA > 1e-6) { targetBuf[i] = Math.round((ovrR * ovrA * fillP + targetBuf[i] * curA * (1 - ovrA * fillP)) / finalA); targetBuf[i+1] = Math.round((ovrG * ovrA * fillP + targetBuf[i+1] * curA * (1 - ovrA * fillP)) / finalA); targetBuf[i+2] = Math.round((ovrB * ovrA * fillP + targetBuf[i+2] * curA * (1 - ovrA * fillP)) / finalA); targetBuf[i+3] = Math.round(finalA * 255); } else { targetBuf[i+3] = 0; } } } ctx.putImageData(targetImgData, 0, 0); state.lastRenderedProgress = p; },
+             agentReveal: (p, cm, img, state) => { const ctx = cm.getContext(); const w = cm.getWidth(); const h = cm.getHeight(); if (!ctx || !img || !state.agents) return; if (state.needsClear) { ctx.clearRect(0,0,w,h); state.needsClear = false; } const radius = state.revealRadius ?? 15; const speedMultiplier = state.agentBaseSpeed ?? 2.5; ctx.save(); ctx.beginPath(); state.agents.forEach(a => { const moveScale = 0.5 * speedMultiplier; a.x += (Math.random() - 0.5) * a.speed * moveScale; a.y += (Math.random() - 0.5) * a.speed * moveScale; a.x = Math.max(0, Math.min(w, a.x)); a.y = Math.max(0, Math.min(h, a.y)); ctx.moveTo(a.x + radius, a.y); ctx.arc(a.x, a.y, radius, 0, Math.PI * 2); }); ctx.clip(); ctx.drawImage(img, 0, 0, w, h); ctx.restore(); },
+             glyphReveal: (p, cm, img, state) => { const ctx = cm.getContext(); const srcImgData = cm.getImageData(); const w = cm.getWidth(); const h = cm.getHeight(); if (!ctx || !img || !state.glyphGrid || !state.shuffledIndices) return; if (!srcImgData && p > 0 && state.glyphOrder === 'brightness') { console.warn("Glyph reveal: Missing image data for brightness fill."); return; } const { grid, cols, rows, cellW, cellH } = state.glyphGrid; const totalCells = grid.length; const showCount = Math.floor(p * totalCells); const srcData = srcImgData?.data; const prevCount = state.lastDrawnIndex ?? 0; if (showCount === prevCount && p !== 0 && p !== 1 && state.lastRenderedProgress === p) { return; } ctx.clearRect(0,0,w,h); ctx.strokeStyle = state.glyphOutlineColor || '#aaa'; ctx.lineWidth = 1; ctx.fillStyle = '#000'; const revealedThisFrame = new Set(); for(let i=0; i<showCount; i++) revealedThisFrame.add(state.shuffledIndices[i]); for (let i = 0; i < totalCells; i++) { const cell = grid[i]; const { x, y } = cell; if (revealedThisFrame.has(i)) { if (srcData) { const imgX = Math.min(w - 1, Math.max(0, Math.floor(x + cellW / 2))); const imgY = Math.min(h - 1, Math.max(0, Math.floor(y + cellH / 2))); const dataIdx = getPixelIndex(imgX, imgY, w); const r=srcData[dataIdx], g=srcData[dataIdx+1], b=srcData[dataIdx+2], a=srcData[dataIdx+3]; ctx.fillStyle = `rgba(${r},${g},${b},${a / 255})`; ctx.fillRect(x, y, cellW, cellH); } else { ctx.fillStyle = '#555'; ctx.fillRect(x, y, cellW, cellH); } } else { ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1); } } state.lastDrawnIndex = showCount; state.lastRenderedProgress = p; },
+             tileFlip3D: (p, cm, img, state) => { const threeCtx = cm.getThreeContext(); if (!threeCtx || !state.tileOrder || !threeCtx.objects) return; const totalTiles = state.tileOrder.length; const targetCount = Math.floor(p * totalTiles); const prevCount = state.lastFlippedTileIndex || 0; if (targetCount > prevCount) { for (let i = prevCount; i < targetCount; i++) { const tileIdx = state.tileOrder[i]; const tile = threeCtx.objects[tileIdx]; if (tile && !state.isTileFlipping[tileIdx]) { state.isTileFlipping[tileIdx] = true; const targetY = 0; new TWEEN.Tween(tile.rotation) .to({ y: targetY }, 600) .easing(TWEEN.Easing.Quadratic.Out) .delay(Math.random() * 50) .onComplete(() => { state.isTileFlipping[tileIdx] = false; }) .start(); } } } else if (targetCount < prevCount) { for (let i = targetCount; i < prevCount; i++) { const tileIdx = state.tileOrder[i]; const tile = threeCtx.objects[tileIdx]; if (tile && !state.isTileFlipping[tileIdx]) { state.isTileFlipping[tileIdx] = true; const targetY = Math.PI; TWEEN.remove(tile.rotation); new TWEEN.Tween(tile.rotation) .to({ y: targetY }, 300) .easing(TWEEN.Easing.Quadratic.In) .onComplete(() => { state.isTileFlipping[tileIdx] = false; }) .start(); } } } state.lastFlippedTileIndex = targetCount; state.lastRenderedProgress = p; },
+        };
+
+        // === Mode Initializers ===
+        const modeInitializers = { /* ... Initializer code remains the same ... */
+            pixelRandom: (cm, state) => { if (!cm.canAccessImageData()) throw new Error("ImageData required."); const n=cm.getWidth()*cm.getHeight(); state.pixelOrder = shuffleArray(Array.from({ length: n }, (_, i) => i)); state.lastDrawnIndex = 0; cm.getTargetBuffer()?.fill(0); }, geometricGrid: (cm, state) => { const w = cm.getWidth(), h = cm.getHeight(); const aspect = w/h; const target = 400; state.gridCols = Math.max(1,Math.round(Math.sqrt(target*aspect))); state.gridRows = Math.max(1,Math.round(Math.sqrt(target/aspect))); const total = state.gridCols*state.gridRows; state.gridCells = shuffleArray(Array.from({ length: total }, (_, i) => i)); state.lastDrawnIndex = 0; }, regionTracing: (cm, state) => { const imgData = cm.getImageData(); const w = cm.getWidth(), h = cm.getHeight(); if (!imgData) throw new Error("ImageData required."); const cols=16, rows=16; const regions = []; const cw=w/cols, ch=h/rows; const data=imgData.data; for(let r=0; r<rows; r++){ for(let c=0; c<cols; c++){ let bright=0, count=0; const sx=Math.floor(c*cw), sy=Math.floor(r*ch); const ex=Math.min(w,Math.floor(sx+cw)), ey=Math.min(h,Math.floor(sy+ch)); for(let y=sy;y<ey;y++){ for(let x=sx;x<ex;x++){ const i=getPixelIndex(x,y,w); bright+=getBrightness(data[i],data[i+1],data[i+2]); count++; }} regions.push({ x: sx, y: sy, w: Math.max(1,ex-sx), h: Math.max(1,ey-sy), brightness: count>0?bright/count:0 }); }} regions.sort((a,b)=>a.brightness-b.brightness); state.regions=regions; state.lastDrawnIndex=0; }, outlineDrawing: (cm, state) => { const imgData = cm.getImageData(); const ctx=cm.getContext(); const w=cm.getWidth(), h=cm.getHeight(); if (!ctx || !imgData) throw new Error("Context/ImageData required."); const gray=new Uint8ClampedArray(w*h); const data=imgData.data; for(let i=0; i<data.length; i+=4) gray[i/4] = Math.round(0.299*data[i]+0.587*data[i+1]+0.114*data[i+2]); const edgeBytes=new Uint8ClampedArray(data.length); const edgeIndices=[]; const thr=50; const kX=[[-1,0,1],[-2,0,2],[-1,0,1]], kY=[[-1,-2,-1],[0,0,0],[1,2,1]]; for(let y=1;y<h-1;y++){ for(let x=1;x<w-1;x++){ let gx=0, gy=0; for(let ky=-1;ky<=1;ky++) for(let kx=-1;kx<=1;kx++) { const v=gray[(y+ky)*w+(x+kx)]; gx+=v*kX[ky+1][kx+1]; gy+=v*kY[ky+1][kx+1]; } const mag=Math.sqrt(gx*gx+gy*gy); const pIdx=(y*w+x); const dIdx=pIdx*4; if(mag>thr){ edgeBytes[dIdx]=edgeBytes[dIdx+1]=edgeBytes[dIdx+2]=200; edgeBytes[dIdx+3]=255; edgeIndices.push(pIdx); } else edgeBytes[dIdx+3]=0; }} state.edgesData=new ImageData(edgeBytes,w,h); state.edgePixelIndices=shuffleArray(edgeIndices); state.lastDrawnIndex=0; cm.getTargetBuffer()?.fill(0); },
+            pixelSortBrightnessRow: (cm, state) => { const imgData = cm.getImageData(); const w=cm.getWidth(), h=cm.getHeight(); if (!imgData) throw new Error("ImageData required."); state.pixelDataCache=[]; const data=imgData.data; for(let y=0; y<h; y++){ const rowPixels = []; for(let x=0; x<w; x++){ const i=getPixelIndex(x,y,w); const r=data[i],g=data[i+1],b=data[i+2],a=data[i+3]; rowPixels.push({r,g,b,a, brightness:getBrightness(r,g,b)}); } rowPixels.sort((p1,p2)=>p1.brightness - p2.brightness); state.pixelDataCache.push(...rowPixels); } cm.getTargetBuffer()?.fill(0); state.lastRenderedProgress = -1; },
+            texturedDissolve: (cm, state) => { const w=cm.getWidth(), h=cm.getHeight(); const size=w*h*4; const buf=new Uint8ClampedArray(size); for(let i=0;i<size;i+=4){ const v=Math.random()*255; buf[i]=buf[i+1]=buf[i+2]=v; buf[i+3]=255; } state.noiseData=buf; cm.getTargetBuffer()?.fill(0); }, agentReveal: (cm, state) => { const w = cm.getWidth(), h = cm.getHeight(); const numAgents = 10; state.agents = []; const baseSpeed = state.agentBaseSpeed ?? 2.5; state.revealRadius = state.revealRadius ?? 15; for (let i = 0; i < numAgents; ++i) { state.agents.push({ x: Math.random() * w, y: Math.random() * h, speed: 1 + Math.random() * 1.5 }); } state.needsClear = true; state.lastRenderedProgress = -1; }, glyphReveal: (cm, state) => { const ctx = cm.getContext(); const w = cm.getWidth(); const h = cm.getHeight(); if (!ctx) throw new Error("Context needed for glyph init."); const cellW = 10, cellH = 14; const cols = Math.max(1, Math.floor(w / cellW)); const rows = Math.max(1, Math.floor(h / cellH)); const grid = []; for (let r=0;r<rows;r++) { for (let c=0;c<cols;c++) grid.push({x: c*cellW, y: r*cellH, index: r*cols + c}); } state.glyphGrid = { grid, cols, rows, cellW, cellH }; state.glyphOutlineColor = '#aaa'; state.needsClear = true; state.lastRenderedProgress = -1; state.lastDrawnIndex = 0; const orderBy = state.glyphOrder || 'random'; if (orderBy === 'brightness') { const imgData = cm.getImageData(); if (!imgData) { throw new Error("ImageData required for Glyph Brightness sort."); } const srcData = imgData.data; const cellsWithBrightness = grid.map(cell => { const imgX = Math.min(w - 1, Math.max(0, Math.floor(cell.x + cellW / 2))); const imgY = Math.min(h - 1, Math.max(0, Math.floor(cell.y + cellH / 2))); const dataIdx = getPixelIndex(imgX, imgY, w); const brightness = getBrightness(srcData[dataIdx], srcData[dataIdx+1], srcData[dataIdx+2]); return { index: cell.index, brightness: brightness }; }); cellsWithBrightness.sort((a, b) => a.brightness - b.brightness); state.shuffledIndices = cellsWithBrightness.map(cell => cell.index); } else { state.shuffledIndices = shuffleArray(Array.from(grid.keys())); } },
+            tileFlip3D: (cm, state) => { const threeCtx = cm.getThreeContext(); if (!threeCtx || !threeCtx.objects) return; TWEEN.removeAll(); threeCtx.objects.forEach(obj => { obj.rotation.y = Math.PI; obj.visible = true; }); state.lastFlippedTileIndex = 0; state.isTileFlipping = Array(threeCtx.objects.length).fill(false); state.tileOrder = shuffleArray(threeCtx.objects.map((_, i) => i)); state.lastRenderedProgress = -1; }
+        };
+
+
+        // === Three.js Specific Update Function ===
+        function update3DTiles(progress) { /* ... No change ... */ const threeCtx = canvasManager?.getThreeContext(); if (!threeCtx || !threeCtx.objects) return; TWEEN.removeAll(); const targetRot = progress >= 0.99 ? 0 : Math.PI; threeCtx.objects.forEach(obj => { obj.rotation.y = targetRot; obj.visible = true; }); if (threeCtx.renderer && threeCtx.scene && threeCtx.camera) { threeCtx.renderer.render(threeCtx.scene, threeCtx.camera); } }
+
+
+        // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        // +++                  PUBLIC API SECTION                    +++
+        // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+        // --- API Fullscreen Mode ---
+        function enterAPIFullscreen() {
+            if (isInAPIFullscreen) return;
+            console.log("Entering API Fullscreen mode...");
+            isInAPIFullscreen = true;
+            document.body.classList.add('api-fullscreen-active');
+            // Trigger resize handling AFTER styles are applied (use timeout)
+            setTimeout(handleResize, 50); // Small delay helps ensure transition finishes
+            setStatus("Fullscreen mode active (Press Esc to exit)", 'info');
+        }
+
+        function exitAPIFullscreen() {
+            if (!isInAPIFullscreen) return;
+            console.log("Exiting API Fullscreen mode...");
+            isInAPIFullscreen = false;
+            document.body.classList.remove('api-fullscreen-active');
+            // Trigger resize handling AFTER styles are applied (use timeout)
+            setTimeout(handleResize, 50);
+             // Restore status message if needed (e.g., show "Ready")
+             if (!isPlaying && !isPaused && image) {
+                 setStatus("Ready.", 'info');
+             } else if (!image) {
+                 setStatus("Load an image to start.", 'info');
+             } // Otherwise, let existing status (playing, paused, finished) remain
+        }
+
+        /** Internal helper to load image from URL */
+        function _loadImageFromURL(url) { /* ... No change ... */ return new Promise((resolve, reject) => { setStatus(`Loading image from: ${url.substring(0, 100)}${url.length > 100 ? '...' : ''}`, 'info'); const newImage = new Image(); newImage.crossOrigin = "Anonymous"; newImage.onload = () => { console.log(`Image loaded successfully from URL: ${url}`); resolve(newImage); }; newImage.onerror = (err) => { console.error(`Error loading image from URL: ${url}`, err); reject(new Error(`Failed to load image from URL. Check URL and CORS policy. Status: ${err.type || 'unknown error'}`)); }; newImage.src = url; }); }
+
+        /**
+         * Plays a specific effect identified by its index in the mode dropdown.
+         * Can optionally load an image from a URL first and enter fullscreen mode.
+         *
+         * @async
+         * @param {number} index - The 0-based index of the effect in the Mode dropdown.
+         * @param {object} [apiOptions={}] - Optional parameters for the effect.
+         * @param {string} [apiOptions.imageUrl] - Optional URL of an image to load.
+         * @param {number} [apiOptions.duration] - Optional duration in seconds.
+         * @param {boolean} [apiOptions.reverse] - Optional reverse setting.
+         * @param {boolean} [apiOptions.fullscreen=false] - Optional. If true, hides UI and expands canvas. Press Esc to exit.
+         * @param {object} [apiOptions.modeParams] - Optional mode-specific parameters.
+         * @returns {Promise<boolean>} A promise that resolves to true if the effect started successfully, false otherwise.
+         */
+         async function playEffectByIndex(index, apiOptions = {}) {
+            console.log(`API: playEffectByIndex(${index}, ${JSON.stringify(apiOptions)})`);
+
+            // 1. Validate Index & Canvas
+            if (typeof index !== 'number' || index < 0 || index >= modeSelect.options.length) { setStatus(`API Error: Invalid effect index ${index}. Must be 0-${modeSelect.options.length - 1}.`, 'error'); return false; }
+            if (!canvasManager) { setStatus("API Error: Canvas not initialized.", 'error'); return false; }
+
+            // --- Handle potential fullscreen exit first if already in it ---
+            if (isInAPIFullscreen && !apiOptions.fullscreen) {
+                exitAPIFullscreen(); // Exit if the new call doesn't request it
+            }
+
+            let imageToUse = image;
+            const modeName = modeSelect.options[index].value;
+
+            // 2. Handle Optional Image URL Loading
+            if (apiOptions.imageUrl && typeof apiOptions.imageUrl === 'string') {
+                stopAnimation(true);
+                try {
+                    imageToUse = await _loadImageFromURL(apiOptions.imageUrl);
+                    image = imageToUse;
+                    setStatus("Initializing canvas for new image...");
+                    await canvasManager.initialize(image, modeName);
+                    currentMode = modeName; modeSelect.value = modeName; isReversed = false; reverseCheckbox.checked = false; updateModeOptionControls();
+                } catch (error) { setStatus(`API Error: ${error.message}`, 'error'); image = null; canvasManager.clear(); updateButtonStates(); return false; }
+            }
+
+            // 3. Check Image Prerequisite
+            if (!imageToUse) { setStatus("API Error: No image available. Load an image via file input or provide 'imageUrl'.", 'error'); return false; }
+
+            // 4. Stop current animation (if any)
+            if (isPlaying || isPaused) { stopAnimation(false); }
+
+            const isReversible = REVERSIBLE_MODES.includes(modeName);
+            let finalReverseState = isReversed;
+
+            try {
+                setStatus(`API: Setting up effect '${modeName}' (${index})...`, 'info');
+
+                // 5. Set/Confirm Mode
+                if (modeSelect.value !== modeName) {
+                    modeSelect.value = modeName;
+                    await handleModeChange();
+                    finalReverseState = isReversed;
+                } else if (!apiOptions.imageUrl) {
+                    updateModeOptionControls();
+                    finalReverseState = isReversed;
+                }
+                 if (currentMode !== modeName) { setStatus(`API Error: Failed to switch to mode '${modeName}'. Current mode is '${currentMode}'.`, 'error'); return false; }
+
+                // 6. Set Duration
+                if (apiOptions.duration !== undefined && typeof apiOptions.duration === 'number' && apiOptions.duration > 0) { updateDurationDisplay(apiOptions.duration); } else { updateDurationDisplay(); }
+
+                // 7. Set Reverse
+                if (apiOptions.reverse !== undefined && typeof apiOptions.reverse === 'boolean') { if (isReversible) { finalReverseState = apiOptions.reverse; } else { console.warn(`API: Mode '${modeName}' is not reversible. Ignoring reverse option.`); finalReverseState = false; } }
+                isReversed = finalReverseState; reverseCheckbox.checked = isReversed; reverseCheckbox.disabled = !isReversible;
+
+                // 8. Set Mode-Specific Parameters
+                if (apiOptions.modeParams) { /* ... parameter setting code ... */ console.log(`API: Setting mode params: ${JSON.stringify(apiOptions.modeParams)}`); if (currentMode === 'agentReveal') { if (typeof apiOptions.modeParams.agentSpeed === 'number') { agentSpeedSlider.value = apiOptions.modeParams.agentSpeed; agentSpeedValue.textContent = parseFloat(agentSpeedSlider.value).toFixed(1); } if (typeof apiOptions.modeParams.agentRadius === 'number') { agentRadiusSlider.value = apiOptions.modeParams.agentRadius; agentRadiusValue.textContent = agentRadiusSlider.value; } } else if (currentMode === 'glyphReveal') { if (typeof apiOptions.modeParams.glyphOrder === 'string') { const validOrders = Array.from(glyphOrderSelect.options).map(opt => opt.value); if (validOrders.includes(apiOptions.modeParams.glyphOrder)) { glyphOrderSelect.value = apiOptions.modeParams.glyphOrder; } else { console.warn(`API: Invalid glyphOrder '${apiOptions.modeParams.glyphOrder}'. Valid options are: ${validOrders.join(', ')}`); } } } }
+
+                // 9. Enter Fullscreen (if requested) - Do this BEFORE playing
+                if (apiOptions.fullscreen === true) {
+                    enterAPIFullscreen();
+                }
+
+                // 10. Play
+                setStatus(`API: Playing effect '${modeName}'...`, 'info');
+                playAnimation(); // Reads final state from UI/variables
+                return true;
+
+            } catch (error) { setStatus(`API Error during setup for effect ${index} ('${modeName}'): ${error.message}`, 'error'); console.error("API Error:", error); updateButtonStates(); updateModeOptionControls(); return false; }
+        }
+
+        // Expose API globally
+        window.ImageRevealAPI = { /* ... No change ... */ playEffectByIndex: playEffectByIndex, loadImageFromURL: async (url) => { if (!canvasManager) { setStatus("API Error: Canvas not initialized.", 'error'); return false; } stopAnimation(true); try { const loadedImage = await _loadImageFromURL(url); image = loadedImage; await canvasManager.initialize(image, currentMode); initializeModeState(); drawInitialState(); setStatus("Image loaded via API. Ready.", 'info'); updateButtonStates(); return true; } catch (error) { setStatus(`API Error: ${error.message}`, 'error'); image = null; canvasManager.clear(); updateButtonStates(); return false; } } };
+
+        // Log info to console
+        console.log("--- Available Effects (for API use) ---"); /* ... No change ... */ Array.from(modeSelect.options).forEach((option, index) => { console.log(`${index}: ${option.textContent} ('${option.value}') ${REVERSIBLE_MODES.includes(option.value) ? '[Reversible]' : ''}`); });
+        console.log("--- Keyboard Shortcuts ---"); /* ... No change ... */ console.log("Numbers 1-9: Effects 0-8"); console.log("Number 0: Effect 9"); console.log("Shift + 1-9: Effects 10-18"); console.log("Shift + 0: Effect 19"); console.log("Ctrl + 1-9: Effects 20-28"); console.log("Ctrl + 0: Effect 29"); console.log("(Shortcuts disabled when typing in input fields)");
+        console.log("---------------------------");
+        console.log("--- Example API Calls ---"); /* ... No change ... */ console.log("ImageRevealAPI.playEffectByIndex(0);"); console.log(`ImageRevealAPI.playEffectByIndex(17, { imageUrl: 'URL_HERE', fullscreen: true });`); console.log(`ImageRevealAPI.loadImageFromURL('URL_HERE');`);
+        console.log("----------------------------------------");
+        console.log("Click the 'i' button next to the title for instructions.");
+
+
+        // +++ Keyboard Shortcut Listener +++
+        function handleEffectShortcut(event) {
+            // Ignore if typing in an input, select, or textarea
+            // Also ignore if modal is visible
+            const targetTagName = event.target.tagName.toUpperCase();
+            if (infoModal.classList.contains('visible') || targetTagName === 'INPUT' || targetTagName === 'SELECT' || targetTagName === 'TEXTAREA') {
+                return;
+            }
+            // --- Rest of shortcut logic remains the same ---
+             const key = event.key; if (!/^[0-9]$/.test(key)) { return; } const numberValue = parseInt(key, 10); let effectIndex = -1; let baseIndex = (numberValue === 0) ? 9 : numberValue - 1; if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey) { effectIndex = baseIndex + 20; } else if (event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) { effectIndex = baseIndex + 10; } else if (!event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) { effectIndex = baseIndex; } if (effectIndex !== -1) { console.log(`Keyboard Shortcut: Triggering effect index ${effectIndex} (Key: ${event.ctrlKey ? 'Ctrl+' : ''}${event.shiftKey ? 'Shift+' : ''}${key})`); event.preventDefault(); ImageRevealAPI.playEffectByIndex(effectIndex); }
+        }
+        window.addEventListener('keydown', handleEffectShortcut); // Attach shortcut listener
+
+
+        // +++ TESTING SECTION +++
+        /* // Keep commented out by default
+        document.addEventListener('DOMContentLoaded', () => {
+             setTimeout(() => {
+                 console.log("--- Running API Fullscreen Test ---");
+                 const testUrl = 'https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0';
+                 ImageRevealAPI.playEffectByIndex(11, { // 11 = Mosaic
+                     imageUrl: testUrl,
+                     duration: 10,
+                     fullscreen: true // Request fullscreen
+                 }).then(success => {
+                     if (success) { console.log("API Test: Fullscreen load and effect start initiated."); }
+                     else { console.error("API Test: Failed to start fullscreen effect."); }
+                 });
+             }, 1500); // Slightly longer delay maybe
+        });
+        */
+
+        // +++                  END OF PUBLIC API SECTION             +++
+
+
+        // === Start Application ===
+        init();
+
+    </script>
+</body>
+</html>
