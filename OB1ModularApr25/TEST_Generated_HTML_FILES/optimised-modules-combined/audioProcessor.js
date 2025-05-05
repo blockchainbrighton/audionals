@@ -1,7 +1,6 @@
 // --- START OF FILE audioProcessor.js ---
 import { base64ToArrayBuffer } from './utils.js';
-import { showError } from './uiUpdater.js';
-import { triggerAnimation } from './imageAnimation.js';
+import { triggerAnimation, showError } from './uiUpdater.js';
 import * as timingManager from './timingManagement.js';
 
 const SMOOTH_PARAM_TIME = 0.01;
