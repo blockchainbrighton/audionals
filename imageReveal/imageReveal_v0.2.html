@@ -66,15 +66,72 @@
         .modal-close-button:hover, .modal-close-button:focus { color: black; text-decoration: none; }
         .modal h2 { margin-top: 0; color: #444; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px; } .modal h3 { margin-top: 25px; margin-bottom: 10px; color: #555; } .modal p, .modal ul { font-size: 0.95em; line-height: 1.6; margin-bottom: 15px; } .modal ul { padding-left: 25px; } .modal li { margin-bottom: 8px; } .modal code { background-color: var(--code-bg); color: var(--code-text); padding: 3px 6px; border-radius: 3px; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; word-wrap: break-word; } .modal strong { font-weight: bold; } .modal .indent { margin-left: 20px; } .modal .code-block { display: block; background-color: var(--code-bg); color: var(--code-text); padding: 10px 15px; border-radius: 4px; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; word-wrap: break-word; margin-top: 5px; margin-bottom: 15px; }
 
-        /* --- Fullscreen Mode Styles --- */
-        body.api-fullscreen-active { padding: 5px; overflow: hidden; }
-        body.api-fullscreen-active h1,
-        body.api-fullscreen-active #controls,
-        body.api-fullscreen-active #status { opacity: 0; transform: translateY(-20px); pointer-events: none; margin-bottom: 0; }
-        body.api-fullscreen-active #info-button { opacity: 0; pointer-events: none; }
-        body.api-fullscreen-active #canvas-container { width: calc(100vw - 10px); height: calc(100vh - 10px); max-width: none; max-height: none; margin-bottom: 0; border: none; box-shadow: none; }
-        body.api-fullscreen-active #canvas-container canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
-    </style>
+     /* --- Fullscreen Mode Styles --- */
+body.api-fullscreen-active {
+    padding: 0; /* Remove padding on body itself for true fullscreen */
+    overflow: hidden;
+    /* Use flex on body to center container */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh; /* Ensure body takes full height */
+    background-color: var(--canvas-bg); /* Optional: Match canvas bg */
+}
+
+/* Hide UI elements completely */
+body.api-fullscreen-active h1,
+body.api-fullscreen-active #controls,
+body.api-fullscreen-active #status,
+body.api-fullscreen-active #info-button {
+    display: none; /* Remove from layout flow */
+    /* Keep opacity/transform for potential exit transition, though not strictly needed */
+    opacity: 0;
+    transform: translateY(-20px);
+    pointer-events: none;
+    margin: 0; /* Remove all margins */
+}
+
+/* Canvas Container in Fullscreen */
+body.api-fullscreen-active #canvas-container {
+    /* Container centers the canvas element */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    /* Container takes available space (now centered in body) */
+    /* It doesn't need explicit size if canvas has size */
+    width: auto;
+    height: auto;
+    max-width: 100vw; /* Constrain to viewport */
+    max-height: 100vh; /* Constrain to viewport */
+
+    /* Remove styles from non-fullscreen */
+    margin: 0;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    background-color: transparent; /* Let body handle bg or canvas */
+    aspect-ratio: unset !important; /* Override JS */
+}
+
+/* Canvas Element in Fullscreen */
+body.api-fullscreen-active #canvas-container canvas {
+    /* Set target size: 80vh square */
+    height: 80vh;
+    width: 80vh;
+
+    /* Ensure it doesn't exceed viewport bounds if 80vh is too big */
+    max-width: 100vw;
+    max-height: 100vh;
+
+    /* Maintain aspect ratio if constrained by max-w/h */
+    object-fit: contain;
+
+    display: block; /* Ensure it behaves as a block */
+    background-color: transparent; /* Or specific color if needed */
+}
+
+</style>
     <script type="importmap">
      {
        "imports": {
@@ -229,9 +286,45 @@ ImageRevealAPI.prepareEffectByIndex(11, {
              _setup2D(img, mode) { return new Promise((resolve, reject) => { try { this.canvas = document.createElement('canvas'); this.canvas.width = this.width; this.canvas.height = this.height; this.container.appendChild(this.canvas); this.ctx = this.canvas.getContext('2d', { willReadFrequently: requiresImageData(mode) }); if (!this.ctx) throw new Error("Could not get 2D canvas context."); this.ctx.imageSmoothingEnabled = true; this._cacheImageData(img); if (!this.imageData && requiresImageData(mode)) { this.setStatus("Warning: Could not access pixel data. Some effects limited.", 'warning'); } if(img && this.ctx && !this.imageData && !requiresImageData(mode)) { this.ctx.drawImage(img, 0, 0); } resolve(); } catch (error) { reject(error); } }); }
              _setup3D(img) { return new Promise((resolve, reject) => { try { if (!this.container.clientWidth || !this.container.clientHeight) { throw new Error("Canvas container zero dimensions for 3D."); } const w = this.container.clientWidth, h = this.container.clientHeight; const scene = new THREE.Scene(); const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 1000); const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); renderer.setSize(w, h); renderer.setClearColor(0x000000, 0); this.container.appendChild(renderer.domElement); this.canvas = renderer.domElement; scene.add(new THREE.AmbientLight(0xffffff, 0.8)); const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7); directionalLight.position.set(0.5, 1, 1).normalize(); scene.add(directionalLight); const texture = new THREE.Texture(img); texture.needsUpdate = true; const gridCols = 12; const aspect = this.width / this.height; const gridRows = Math.max(1, Math.round(gridCols / aspect)); const objects = []; const sceneWidth = 10; const sceneHeight = sceneWidth / aspect; camera.position.z = sceneWidth * 1.2; const tileW = sceneWidth / gridCols; const tileH = sceneHeight / gridRows; for (let r = 0; r < gridRows; r++) { for (let c = 0; c < gridCols; c++) { const geom = new THREE.PlaneGeometry(tileW, tileH); const uvs = geom.attributes.uv; const u0 = c / gridCols, v0 = 1 - (r + 1) / gridRows; const u1 = (c + 1) / gridCols, v1 = 1 - r / gridRows; uvs.setXY(0, u0, v0); uvs.setXY(1, u1, v0); uvs.setXY(2, u0, v1); uvs.setXY(3, u1, v1); uvs.needsUpdate = true; const mat = new THREE.MeshStandardMaterial({ map: texture, side: THREE.DoubleSide, roughness: 0.8, metalness: 0.1, transparent: true }); const plane = new THREE.Mesh(geom, mat); plane.position.x = (c + 0.5) * tileW - sceneWidth / 2; plane.position.y = sceneHeight / 2 - (r + 0.5) * tileH; scene.add(plane); objects.push(plane); }} this.three = { scene, camera, renderer, objects, texture }; this.updateSize(); resolve(); } catch (error) { this._cleanup3D(); reject(error); } }); }
              _cacheImageData(img) { this.imageData = this.targetImageData = this.targetBuffer = null; if (!this.ctx || !img || !this.width || !this.height) return; try { this.ctx.drawImage(img, 0, 0); this.imageData = this.ctx.getImageData(0, 0, this.width, this.height); this.targetImageData = this.ctx.createImageData(this.width, this.height); this.targetBuffer = this.targetImageData.data; } catch (e) { console.error("CanvasManager: Error getting ImageData (tainted canvas?):", e); this.imageData = this.targetImageData = this.targetBuffer = null; this.setStatus("Error: Could not access image pixel data. Some effects requiring pixel access will not work.", 'error'); } }
-             updateSize() { this._setContainerSize(); if (this.currentModeType === '3d' && this.three && this.container.clientWidth > 0 && this.container.clientHeight > 0) { const w = this.container.clientWidth; const h = this.container.clientHeight; this.three.renderer.setSize(w, h); this.three.camera.aspect = w / h; this.three.camera.updateProjectionMatrix(); this.three.renderer.render(this.three.scene, this.three.camera); } }
-             _setContainerSize() { if (this.width > 0 && this.height > 0 && !isInAPIFullscreen) { this.container.style.aspectRatio = `${this.width} / ${this.height}`; const currentWidth = this.container.clientWidth; this.container.style.height = currentWidth > 0 ? `${(currentWidth * this.height / this.width)}px` : '300px'; } else if (!isInAPIFullscreen) { this.container.style.aspectRatio = 'auto'; this.container.style.height = '200px'; } else { this.container.style.aspectRatio = ''; this.container.style.height = ''; } }
-             clear() { this.container.innerHTML = '<span>Load an image to begin</span>'; this.canvas = this.ctx = this.three = this.imageData = this.targetImageData = this.targetBuffer = null; this.width = this.height = 0; this._setContainerSize(); }
+            // Inside CanvasManager class
+            updateSize() {
+                        // Set container aspect/height ONLY if NOT in fullscreen
+                        this._setContainerSize(); // Determines container size/aspect for non-fullscreen
+
+                        // Update 3D context size based on the *actual canvas element size*
+                        if (this.currentModeType === '3d' && this.three && this.canvas) {
+                            // Get the current rendered dimensions of the canvas element
+                            const w = this.canvas.clientWidth;  // Use clientWidth/Height for actual rendered pixels
+                            const h = this.canvas.clientHeight;
+
+                            if (w > 0 && h > 0 && this.three.renderer && this.three.camera) {
+                                // Check if size actually changed to avoid unnecessary updates
+                                const currentRendererSize = this.three.renderer.getSize(new THREE.Vector2());
+                                if (currentRendererSize.x !== w || currentRendererSize.y !== h) {
+                                    console.log(`Resizing 3D renderer to: ${w} x ${h}`);
+                                    this.three.renderer.setSize(w, h); // Resize renderer to canvas actual size
+                                    this.three.camera.aspect = w / h;
+                                    this.three.camera.updateProjectionMatrix();
+                                }
+                            }
+                        }
+                        // No changes needed for 2D context size here, it's tied to image dimensions
+                    }            // Inside CanvasManager class
+            _setContainerSize() {
+                if (this.width > 0 && this.height > 0 && !isInAPIFullscreen) { // Condition already handles fullscreen
+                    this.container.style.aspectRatio = `${this.width} / ${this.height}`;
+                    const currentWidth = this.container.clientWidth;
+                    this.container.style.height = currentWidth > 0 ? `${(currentWidth * this.height / this.width)}px` : '300px';
+                } else if (!isInAPIFullscreen) { // Only applies when NOT fullscreen
+                    this.container.style.aspectRatio = 'auto';
+                    this.container.style.height = '200px';
+                } else {
+                    // In fullscreen: Remove explicit styles to let CSS control layout
+                    this.container.style.aspectRatio = '';
+                    this.container.style.height = '';
+                }
+            }             
+            clear() { this.container.innerHTML = '<span>Load an image to begin</span>'; this.canvas = this.ctx = this.three = this.imageData = this.targetImageData = this.targetBuffer = null; this.width = this.height = 0; this._setContainerSize(); }
              _cleanup2DContext(removeCanvas = true) { this.ctx = this.imageData = this.targetImageData = this.targetBuffer = null; if (removeCanvas && this.canvas?.parentNode) { this.canvas.parentNode.removeChild(this.canvas); this.canvas = null; } }
              _cleanup3D() { if (this.three) { TWEEN.removeAll(); this.three.objects?.forEach(obj => { obj.geometry?.dispose(); if (obj.material) { obj.material.map?.dispose(); obj.material.dispose(); } this.three.scene?.remove(obj); }); this.three.texture?.dispose(); this.three.renderer?.dispose(); if (this.three.renderer?.domElement.parentNode) { this.three.renderer.domElement.parentNode.removeChild(this.three.renderer.domElement); } this.three = null; this.canvas = null; } }
              dispose(clearContainer = true) { if (this.currentModeType === '3d') this._cleanup3D(); else this._cleanup2DContext(true); this.currentModeType = null; this.width = this.height = 0; if (clearContainer) this.clear(); }
@@ -746,17 +839,17 @@ ImageRevealAPI.prepareEffectByIndex(11, {
                  console.log("--- Running API Test: Prepare Glyph Reveal with Audio (Toggle on Click) ---");
                  const testImageUrl = 'https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0';
                  const testAudioUrl = 'CisC741.webm'; // Local file name
-                 const glyphEffectIndex = 22; // <-- Index for Glyph Reveal
+                 const effectIndex = 6; // <-- Index for Glyph Reveal
 
-                 ImageRevealAPI.prepareEffectByIndex(glyphEffectIndex, {
+                 ImageRevealAPI.prepareEffectByIndex(effectIndex, {
                      imageUrl: testImageUrl,
                      audioUrl: testAudioUrl,
-                     duration: 168, // Adjusted duration slightly for glyphs
-                     fullscreen: false, // Set to false as requested in user's last code block
+                     duration: 158, // Adjusted duration slightly for glyphs
+                     fullscreen: true, // Set to false as requested in user's last code block
                      // Optional: Add glyph-specific params if needed
                      // modeParams: { glyphOrder: 'brightness' } // or 'random' (default)
                  }).then(success => {
-                     if (success) console.log(`API Test: Prepared Effect ${glyphEffectIndex} (Glyph Reveal). Click canvas to toggle play/stop.`);
+                     if (success) console.log(`API Test: Prepared Effect ${effectIndex} (Glyph Reveal). Click canvas to toggle play/stop.`);
                      else console.error("API Test: Failed to prepare effect.");
                  }).catch(error => console.error("API Test Error:", error));
              }, 1500); // Delay for page setup
