@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Seamless WebM Player</title>
+    <style>
+        body { font-family: sans-serif; }
+        button { padding: 10px 15px; font-size: 1em; cursor: pointer; }
+        #status { margin-top: 15px; font-style: italic; color: #555; }
+    </style>
+</head>
+<body>
+
+<h1>Seamless WebM Audio Player</h1>
+
+<button id="playButton">Play All Seamlessly</button>
+<div id="status">Ready. Click Play to start.</div>
+
+<script>
+    const playButton = document.getElementById('playButton');
+    const statusDiv = document.getElementById('status');
+
+    // --- Configuration ---
+    const fileNames = [
+        'CisC_Part1.8.webm',
+        'CisC_Part2.8.webm',
+        'CisC_Part3.8.webm'
+    ];
+    // --------------------
+
+    let audioContext; // Will be initialized on first user interaction
+    let audioBuffers = []; // To store the decoded audio data
+    let currentSource = null; // To keep track of the currently playing source
+    let currentTrackIndex = 0;
+    let isLoading = false;
+    let isPlaying = false;
+
+    // Function to fetch and decode a single audio file
+    async function loadAudio(url) {
+        if (!audioContext) {
+            // Create AudioContext on demand (often required after user gesture)
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status} for ${url}`);
+            }
+            const arrayBuffer = await response.arrayBuffer();
+            // Use Promise-based decodeAudioData if available, fallback otherwise
+            if (audioContext.decodeAudioData.length === 1) {
+                 // Modern Promise-based syntax
+                 const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                 return audioBuffer;
+            } else {
+                 // Older callback-based syntax wrapped in a Promise
+                 return new Promise((resolve, reject) => {
+                    audioContext.decodeAudioData(arrayBuffer, resolve, reject);
+                 });
+            }
+
+        } catch (error) {
+            console.error('Error loading or decoding audio:', url, error);
+            statusDiv.textContent = `Error loading ${url}: ${error.message}`;
+            throw error; // Re-throw to stop Promise.all
+        }
+    }
+
+    // Function to load all audio files
+    async function loadAllFiles() {
+        if (isLoading || audioBuffers.length > 0) return; // Don't reload if already loaded or loading
+        isLoading = true;
+        statusDiv.textContent = 'Loading audio files...';
+        playButton.disabled = true;
+
+        try {
+            const loadPromises = fileNames.map(file => loadAudio(file));
+            audioBuffers = await Promise.all(loadPromises);
+            statusDiv.textContent = 'Audio loaded. Ready to play.';
+            console.log('All audio files loaded and decoded.');
+            isLoading = false;
+            playButton.disabled = false; // Re-enable button after loading
+        } catch (error) {
+            statusDiv.textContent = 'Failed to load all audio files. Check console for details.';
+            console.error("Failed to load one or more files.", error);
+            isLoading = false;
+            // Keep button disabled or provide a retry mechanism if desired
+        }
+    }
+
+    // Function to play the track at the given index
+    function playTrack(index) {
+        if (index >= audioBuffers.length) {
+            statusDiv.textContent = 'Playback finished.';
+            console.log('Playback finished.');
+            isPlaying = false;
+            playButton.textContent = 'Play All Seamlessly'; // Reset button text
+            playButton.disabled = false;
+            currentTrackIndex = 0; // Reset for next play
+            return; // End of playlist
+        }
+
+        // Stop previous source if any (though onended should handle this)
+        if (currentSource) {
+            currentSource.stop();
+            currentSource.disconnect();
+        }
+
+        // Create a new buffer source node
+        currentSource = audioContext.createBufferSource();
+        currentSource.buffer = audioBuffers[index];
+        currentSource.connect(audioContext.destination); // Connect to speakers
+
+        // IMPORTANT: Set the onended handler *before* starting
+        currentSource.onended = () => {
+            console.log(`Track ${index + 1} ended.`);
+            // Check if it ended naturally (not via stop()) before playing next
+            if (isPlaying) {
+                 playTrack(index + 1); // Play the next track
+            }
+        };
+
+        // Start playing the current track immediately
+        currentSource.start(0);
+        statusDiv.textContent = `Playing: ${fileNames[index]} (${index + 1}/${fileNames.length})`;
+        console.log(`Playing track ${index + 1}: ${fileNames[index]}`);
+        currentTrackIndex = index; // Update current track index
+    }
+
+    // Event listener for the play button
+    playButton.addEventListener('click', async () => {
+        if (isPlaying) {
+            // Optional: Implement Pause/Stop functionality if needed
+            // For simplicity, this example currently only starts playback
+             if (currentSource) {
+                 currentSource.stop(); // Stop the current track
+                 currentSource.disconnect();
+                 currentSource = null;
+             }
+             isPlaying = false;
+             statusDiv.textContent = 'Playback stopped.';
+             playButton.textContent = 'Play All Seamlessly';
+             playButton.disabled = false;
+             // Note: Stopping resets the sequence. Re-clicking play starts from track 1.
+             return;
+        }
+
+        // Ensure AudioContext is created (required on user interaction)
+         if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+             // Check if context is suspended (autoplay policy) and resume if needed
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+         } else if (audioContext.state === 'suspended') {
+             await audioContext.resume();
+         }
+
+
+        // Load files if not already loaded
+        if (audioBuffers.length === 0) {
+            try {
+                 await loadAllFiles();
+                 // Check if loading was successful before proceeding
+                 if (audioBuffers.length !== fileNames.length) {
+                     // An error occurred during loading, message already shown
+                     return;
+                 }
+            } catch(error) {
+                 // Loading failed, error already logged
+                 return;
+            }
+        }
+
+        // Start playing from the first track
+        isPlaying = true;
+        playButton.textContent = 'Stop Playback'; // Change button text while playing
+        // playButton.disabled = true; // Optionally disable button during playback
+        playTrack(0);
+    });
+
+</script>
+
+</body>
+</html>

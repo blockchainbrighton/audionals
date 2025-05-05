@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Reveal Art Program (Condensed)</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+    </style>
+    <link rel="stylesheet" href="style.css" />
+
+
+    <script type="importmap">
+     {
+       "imports": {
+         "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+         "@tweenjs/tween.js": "https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.esm.js"
+       }
+     }
+   </script>
+</head>
+<body>
+    <h1>Image Reveal Art Program <button id="info-button" title="Show Instructions">i</button></h1>
+
+    <div id="controls">
+        <!-- Controls -->
+        <label for="file-input">Image:</label>
+        <input type="file" id="file-input" accept="image/webp, image/jpeg, image/png">
+        <label for="duration-slider">Duration:</label>
+        <span class="duration-control"> <input type="range" id="duration-slider" min="0.5" max="300" step="0.1" value="5"> <span id="duration-value">5.0s</span> </span>
+        <label for="mode-select">Mode:</label>
+        <select id="mode-select"> <option value="simpleFade">Simple Fade</option> <option value="pixelRandom">Pixel-by-Pixel Random</option> <option value="lineByLineRow">Line-by-Line (Rows)</option> <option value="lineByLineCol">Line-by-Line (Columns)</option> <option value="geometricCircle">Geometric (Circle Expand)</option> <option value="geometricGrid">Geometric (Grid Cells Random)</option> <option value="colorSweepBright">Color Sweep (Brightness)</option> <option value="regionTracing">Region Tracing (Blocks)</option> <option value="outlineDrawing">Outline Drawing</option> <option value="radialWipe">Radial Wipe</option> <option value="blurToFocus">Blur-to-Focus</option> <option value="mosaic">Mosaic/Pixelation</option> <option value="waveScanH">Wave Scan (Horizontal)</option> <option value="waveScanV">Wave Scan (Vertical)</option> <option value="dissolveNoise">Dissolve (Noise)</option> <option value="texturedDissolve">Dissolve (Textured)</option> <option value="pixelSortBrightnessRow">Pixel Sorting (Bright Row)</option> <option value="tileFlip3D">3D Tile Flip</option> <option value="channelStripWipe">Channel Strip Wipe</option> <option value="gradientMaskWipeLR">Gradient Wipe (Left-Right)</option> <option value="gradientMaskWipeRadial">Gradient Wipe (Radial)</option> <option value="agentReveal">Agent Reveal</option> <option value="glyphReveal">Glyph Reveal</option> <option value="scanlineStretchV">Scanline Stretch (Vertical)</option> <option value="scanlineStretchH">Scanline Stretch (Horizontal)</option> </select>
+        <div id="reverse-container"> <input type="checkbox" id="reverse-checkbox" disabled> <label for="reverse-checkbox" class="reverse-label">Reverse</label> </div>
+        <div id="mode-options-agentReveal" class="mode-options"> <label for="agent-speed-slider">Agent Speed:</label> <span class="slider-container"> <input type="range" id="agent-speed-slider" min="0.1" max="10" step="0.1" value="2.5"> <span id="agent-speed-value">2.5</span> </span> <label for="agent-radius-slider">Agent Radius:</label> <span class="slider-container"> <input type="range" id="agent-radius-slider" min="1" max="100" step="1" value="15"> <span id="agent-radius-value">15</span> </span> </div>
+        <div id="mode-options-glyphReveal" class="mode-options"> <label for="glyph-order-select">Glyph Order:</label> <select id="glyph-order-select"> <option value="random">Random</option> <option value="brightness">Brightness</option> </select> </div>
+        <div class="button-group"> <button id="play-button" disabled>Play</button> <button id="pause-button" disabled>Pause</button> <button id="restart-button" disabled>Restart</button> </div>
+    </div>
+
+    <div id="canvas-container">
+        <span>Load an image to begin</span>
+        <!-- Retro “Click to Begin” overlay -->
+        <div id="click-overlay" class="click-overlay hidden">Click&nbsp;to&nbsp;Begin</div>
+    </div>
+
+    <div id="status"></div>
+
+    <!-- Info Modal -->
+    <div id="info-modal" class="modal">
+        <div class="modal-content">
+            <span id="modal-close-button" class="modal-close-button" title="Close">×</span>
+            <h2>Instructions & API Guide</h2>
+             <!-- ... Basic Usage ... -->
+             <h3>Keyboard Shortcuts</h3>
+             <p>Use number keys (optionally with Shift/Ctrl) to trigger effects 0-29 quickly (plays immediately, disabled when typing).</p>
+             <p><em>(See developer console (F12) for effect indices.)</em></p>
+
+             <h3>API Usage (for Developers)</h3>
+             <p>Use <code>window.ImageRevealAPI</code> in the developer console.</p>
+
+             <h4><code>playEffectByIndex(index, options)</code></h4>
+             <p>Loads resources (if specified) and immediately plays the effect.</p>
+             <code class="code-block">ImageRevealAPI.playEffectByIndex(effectIndex, { /* ... options ... */ })</code>
+
+             <h4><code>prepareEffectByIndex(index, options)</code></h4>
+             <p>Loads resources (if specified), sets up the effect and initial canvas state. It then waits for clicks on the image/canvas area to toggle playback:</p>
+             <ul>
+                 <li><strong>First Click:</strong> Starts animation and audio.</li>
+                 <li><strong>Second Click (while playing):</strong> Stops animation/audio and resets the visual to the start.</li>
+                 <li><strong>Third Click:</strong> Starts again from the beginning.</li>
+                 <li>... and so on.</li>
+             </ul>
+             <code class="code-block">ImageRevealAPI.prepareEffectByIndex(effectIndex, { /* ... options ... */ })</code>
+             <p>Takes the same <code>options</code> as <code>playEffectByIndex</code>.</p>
+             <p>Returns a Promise resolving to <code>true</code> if preparation was successful, <code>false</code> otherwise.</p>
+
+             <h4>Examples:</h4>
+             <code class="code-block">
+// Play effect 0 immediately
+ImageRevealAPI.playEffectByIndex(0);
+
+// Load and prepare effect 11 (Mosaic) with audio/fullscreen, then toggle play/stop on click
+ImageRevealAPI.prepareEffectByIndex(11, {
+  imageUrl: 'IMAGE_URL',
+  audioUrl: 'AUDIO_URL.webm',
+  duration: 10,
+  fullscreen: true
+});
+             </code>
+             <!-- ... loadImageFromURL, Rest of modal ... -->
+        </div>
+     </div>
+
+
+<script type="module" src="script.js"></script>
+      
+
+
+
+    <script>
+
+     // // +++ TESTING SECTION +++
+        //        document.addEventListener('DOMContentLoaded', () => {
+        //     setTimeout(() => {
+        //         console.log("--- Running API Test: Prepare Glyph Reveal with Sequential Audio (Toggle on Click) ---"); // Updated log message
+
+        //         const testImageUrl = 'https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0';
+
+        //         // Array of audio URLs for sequential playback
+        //         const testAudioUrls = [
+        //             'https://ordinals.com/content/055e30b37a547674bd750cd963b9c3e2dfaecfe60833cbb9a377e12b2eea05a6i0', // Part 1
+        //             'https://ordinals.com/content/a475da90928ae5dba210a6a2708a20278367d46f898acdebe9707c0e43b994cei0', // Part 2
+        //             'https://ordinals.com/content/797a56f20af6f7016853f817a7041847e82dedd2d2b9246515646e741a3e53b2i0'  // Part 3
+        //         ];
+
+        //         const effectIndex = 3; // Index for Glyph Reveal
+
+        //         ImageRevealAPI.prepareEffectByIndex(effectIndex, {
+        //             imageUrl: testImageUrl,
+        //             // audioUrl: testAudioUrl, // REMOVED or commented out the old single URL property
+        //             audioUrls: testAudioUrls,  // USE the new array property
+        //             duration: 158,             // Visual effect duration (audio duration is independent)
+        //             fullscreen: true,          // Keep fullscreen setting as desired
+        //             // Optional: Add glyph-specific params if needed
+        //             // modeParams: { glyphOrder: 'brightness' }
+        //         }).then(success => {
+        //             if (success) {
+        //                 console.log(`API Test: Prepared Effect ${effectIndex} (Glyph Reveal) with ${testAudioUrls.length} audio files in sequence. Click canvas to toggle play/stop.`);
+        //             } else {
+        //                 console.error("API Test: Failed to prepare effect.");
+        //             }
+        //         }).catch(error => console.error("API Test Error:", error));
+
+        //     }, 1500); // Delay for page setup
+        // });
+        // // */ // Ensure the test block end comment is correct if you use it
+        // // */ // End test block
+
+        // === Start Application ===
+
+    </script>
+</body>
+</html>
