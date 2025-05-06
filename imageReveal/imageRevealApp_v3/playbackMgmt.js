@@ -1,6 +1,6 @@
-// playbackMgmt.js
+// playbackMgmt.js  (synced with imageRevealCore)
 (() => {
-    // ---------- DOM ----------
+    /* ---------- DOM ---------- */
     const btn = document.getElementById('playBtn'),
           lg  = document.getElementById('log'),
           AC  = window.AudioContext || window.webkitAudioContext;
@@ -13,37 +13,31 @@
   
     if (!AC) { btn.textContent = 'Audio not supported'; btn.disabled = true; return; }
   
-    // ---------- State ----------
+    /* ---------- State ---------- */
     let ctx        = new AC();                    // single AudioContext
-    let buffers    = Array(audioParts.length);    // placeholder array
-    let partIdx    = 0;                           // which part should play next
-    let activeSrc  = null;                        // current BufferSource
-    let loading    = true;                        // still fetching/decoding?
-    let playing    = false;                       // are we in playback mode?
+    let buffers    = Array(audioParts.length);
+    let partIdx    = 0;
+    let activeSrc  = null;
+    let loading    = true;
+    let playing    = false;
   
-    // ---------- UI helper ----------
+    /* ---------- UI helper ---------- */
     const setBtn = () => {
-        // Disable **only** during the initial fetch / decode phase.
-        // Even if the first buffer isn’t scheduled yet we still want a responsive “Stop”.
-        btn.disabled = loading;
-    
-        btn.textContent = loading
+      btn.disabled = loading;
+      btn.textContent = loading
         ? 'Loading…'
         : (playing ? 'Stop Mix' : 'Play Mix');
     };
   
-    // ---------- Preload ----------
+    /* ---------- Pre‑load ---------- */
     (async () => {
       try {
-        // 1) Fetch + decode FIRST part for instant start
         log(`Fetching first part → ${audioParts[0]}`);
         const firstAB   = await (await fetch(audioParts[0])).arrayBuffer();
         buffers[0]      = await ctx.decodeAudioData(firstAB);
-        loading         = false;
+        loading         = false; setBtn();
         log(`First part ready (${buffers[0].duration.toFixed(2)} s).`);
-        setBtn();                       // ▶ button goes live here
   
-        // 2) Decode REMAINING parts silently in the background
         await Promise.all(
           audioParts.slice(1).map(async (url, i) => {
             const ab   = await (await fetch(url)).arrayBuffer();
@@ -53,47 +47,36 @@
         );
         log('All parts decoded. ✅');
       } catch (e) {
-        loading = false;
+        loading = false; setBtn();
         log(`Preload failed: ${e.message}`);
-        setBtn();
       }
     })();
   
-    // ---------- Playback helpers ----------
+    /* ---------- Playback helpers ---------- */
     const playPart = () => {
-        if (!playing) return;                       // user hit Stop while waiting
-      
-        if (partIdx >= buffers.length) {            // finished
-          playing = false; setBtn(); log('Finished. 🎉'); return;
-        }
-      
-        const buf = buffers[partIdx];
-        if (!buf) {                                 // not decoded yet
-          setTimeout(playPart, 200);
-          return;
-        }
-      
-        activeSrc = ctx.createBufferSource();
-        activeSrc.buffer = buf;
-        activeSrc.connect(ctx.destination);
-        activeSrc.start();
-        log(`▶ Part ${partIdx + 1}/${buffers.length} (${buf.duration.toFixed(2)} s)`);
-        partIdx++;
-      
-        activeSrc.onended = () => { 
-          activeSrc = null;
-          if (playing) playPart();                  // queue next if still playing
-        };
-      };
-      
+      if (!playing) return;
+      if (partIdx >= buffers.length) { playing = false; setBtn(); log('Finished. 🎉'); dispatchStopped(); return; }
+  
+      const buf = buffers[partIdx];
+      if (!buf) { setTimeout(playPart, 200); return; }
+  
+      activeSrc = ctx.createBufferSource();
+      activeSrc.buffer = buf;
+      activeSrc.connect(ctx.destination);
+      activeSrc.start();
+      log(`▶ Part ${partIdx + 1}/${buffers.length} (${buf.duration.toFixed(2)} s)`);
+      partIdx++;
+  
+      activeSrc.onended = () => { activeSrc = null; if (playing) playPart(); };
+    };
+  
+    const dispatchStarted  = () => document.dispatchEvent(new Event('playbackStarted'));
+    const dispatchStopped  = () => document.dispatchEvent(new Event('playbackStopped'));
   
     const start = async () => {
       if (loading || playing) return;
-      await ctx.resume();               // resume if user gesture required
-      playing  = true;
-      partIdx  = 0;
-      setBtn();
-      playPart();
+      await ctx.resume();
+      playing  = true; partIdx = 0; setBtn(); dispatchStarted(); playPart();
     };
   
     const stop = () => {
@@ -103,9 +86,13 @@
       activeSrc = null;
       log('Stopped by user.');
       setBtn();
+      dispatchStopped();
     };
   
-    // ---------- Button handler ----------
+    /* ---------- Button & external toggle ---------- */
     btn.onclick = () => (playing ? stop() : start());
+  
+    // Allow other modules (e.g. clicking the image) to toggle playback
+    document.addEventListener('togglePlayback', () => (playing ? stop() : start()));
   })();
   
