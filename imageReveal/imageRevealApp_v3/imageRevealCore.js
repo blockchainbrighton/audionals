@@ -1,264 +1,353 @@
-// imageRevealCore.js  (synced with playbackMgmt)
-import fadeEffects     from './effects/fade.js';
-import pixelateEffects from './effects/pixelate.js';
-import glyphEffects    from './effects/glyph.js';  
-import sweepBrightEffects from './effects/colourSweepBrightness.js';
+// imageRevealCore.js  – condensed version (05 May 2025) - MODIFIED FOR API
+import fade     from './effects/fade.js';
+import pixel    from './effects/pixelate.js';
+import glyph, { hideGlyphCover } from './effects/glyph.js';
+import sweep    from './effects/colourSweepBrightness.js';
 
+/* ── Effect registry ─────────────────────────────────────────────── */
+export const renders = { ...fade, ...pixel, ...glyph, ...sweep };
+const EFFECT_PAIRS = {                 // symmetrical fwd ↔ rev map
+  fadeIn:'fadeOut',   fadeOut:'fadeIn',
+  pixelateFwd:'pixelateRev', pixelateRev:'pixelateFwd',
+  glyphFwd:'glyphRev',       glyphRev:'glyphFwd',
+  sweepBrightFwd:'sweepBrightRev', sweepBrightRev:'sweepBrightFwd'
+};
+const isGlyph = k => k.startsWith('glyph');
 
-const renders = { ...fadeEffects, ...pixelateEffects, ...glyphEffects, ...sweepBrightEffects };
-
-/* ─── State & DOM refs ────────────────────────────────────────────── */
+/* ── Module‑level state ──────────────────────────────────────────── */
 let ui, effectSel, durSlider, durVal,
     canvas, ctx, img = null,
     dur = 10_000, start = 0, raf = null, running = false;
 
-/* ─── UI ──────────────────────────────────────────────────────────── */
+/* ── Duration & direction constants (needed for export) ────────── */
+const STEP_FINE = 0.25, STEP_COARSE = 2, DUR_MIN = 0.25, DUR_MAX = 600;
+const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+
+/* ── UI factory ──────────────────────────────────────────────────── */
 function makeUI () {
+  const labels = {
+    fadeIn:          'Fade In (Black → Image)',
+    fadeOut:         'Fade Out (Image → Black)',
+    pixelateFwd:     'Pixelate (Image → Pixels)',
+    pixelateRev:     'De‑Pixelate (Pixels → Image)',
+    glyphFwd:        'Glyph Fill (Outline → Image)',
+    glyphRev:        'Glyph Clear (Image → Outline)',
+    sweepBrightFwd:  'Brightness Sweep (Dark → Light)',
+    sweepBrightRev:  'Brightness Sweep (Light → Dark)'
+  };
+
   ui = document.createElement('div');
   ui.id = 'imageRevealContainer';
   ui.innerHTML = `
     <style>
       #imageRevealContainer{margin:20px 0;padding:15px;border:1px solid #ddd;background:#f9f9f9}
-      #imageCanvas{border:1px solid #000;margin-top:10px;max-width:100%;height:auto;background:black} 
-      </style>
-    <h2 style="margin:0">Image Reveal Effect</h2>
-    <div><label>Effect:
-      <select id="effectSelector">
-        <option value="fadeIn">Fade In (Black → Image)</option>
-        <option value="fadeOut">Fade Out (Image → Black)</option>
-        <option value="pixelateFwd">Pixelate (Image → Pixels)</option>
-        <option value="pixelateRev">De‑Pixelate (Pixels → Image)</option>
-        <option value="glyphFwd">Glyph Fill (Outline → Image)</option>
-        <option value="glyphRev">Glyph Clear (Image → Outline)</option>
-        <option value="sweepBrightFwd">Brightness Sweep (Dark → Light)</option>
-        <option value="sweepBrightRev">Brightness Sweep (Light → Dark)</option>
-
-      </select>
-    </label></div>
+      #imageCanvas{border:1px solid #000;margin-top:10px;max-width:100%;background:#000}
+    </style>
+    <h2 style="margin:0">Image Reveal Effect</h2>
+    <div><label>Effect:<select id="effectSelector"></select></label></div>
     <div><label>Duration:
-      <input type="range" id="durationSlider" min="10" max="300" value="10">
+      <input type="range" id="durationSlider" min="${DUR_MIN}" max="${DUR_MAX}" value="10" step="${STEP_FINE}">
       <span id="durationValueDisplay">10s</span>
     </label></div>
     <canvas id="imageCanvas" width="480" height="270"></canvas>
   `;
   document.body.appendChild(ui);
 
-  effectSel = ui.querySelector('#effectSelector');
-  durSlider = ui.querySelector('#durationSlider');
-  durVal    = ui.querySelector('#durationValueDisplay');
-  canvas    = ui.querySelector('#imageCanvas');
-  ctx       = canvas.getContext('2d');
+  /* cache refs */
+  [effectSel, durSlider, durVal, canvas] =
+    ['#effectSelector', '#durationSlider', '#durationValueDisplay', '#imageCanvas']
+      .map(q => ui.querySelector(q));
+  ctx = canvas.getContext('2d');
 
+  /* build selector */
+  for (const [val, txt] of Object.entries(labels)) {
+    const o = document.createElement('option');
+    o.value = val; o.textContent = txt;
+    effectSel.appendChild(o);
+  }
+
+  /* first placeholder frame */
   ctx.fillStyle = '#555';
   ctx.textAlign = 'center';
-  ctx.fillText('Image will appear here…', canvas.width / 2, canvas.height / 2);
+  ctx.fillText('Image will appear here…', canvas.width/2, canvas.height/2);
 
-  effectSel.onchange = () => running ? restart() : resetEffect();
-  durSlider.oninput  = e => {
-    dur = +e.target.value * 1000;
-    durVal.textContent = `${e.target.value}s`;
+  /* handlers */
+  effectSel.onchange = () => {
+    if (!isGlyph(effectSel.value)) hideGlyphCover(canvas);
+    running ? restart() : resetEffect();
+  };
+  durSlider.oninput = ({target:{value}}) => {
+    dur = Number(value) * 1000; // Ensure value is number
+    durVal.textContent = `${value}s`;
     if (running) restart();
   };
 }
 
-/* ─── Image hookup ────────────────────────────────────────────────── */
+/* ── Image hookup & API Function ─────────────────────────────────── */
+// Exported function to directly set the image from API or other modules
+export function setImage(newImgElement) {
+  img = newImgElement instanceof HTMLImageElement ? newImgElement : null;
+  if (!canvas || !ctx) { // Check if canvas and context are available
+      console.warn("ImageRevealCore: setImage called before canvas/ctx is ready. Attempting to get them.");
+      const c = document.getElementById('imageCanvas');
+      if (c) {
+          canvas = c; // Make sure canvas is assigned if found
+          ctx = canvas.getContext('2d');
+      } else {
+          console.error("ImageRevealCore: setImage - canvas not found in DOM.");
+          // If makeUI hasn't run, these won't exist.
+          // The API consumer should ensure core is initialized before calling.
+          return;
+      }
+  }
+
+  if (!img) {
+    showMsg('No valid image provided or loaded.');
+    // Optionally, reset canvas to default placeholder size/content
+    // if (canvas) {
+    //    canvas.width = 480; canvas.height = 270; // Default from makeUI
+    //    if (ctx) {
+    //      ctx.fillStyle = '#555';
+    //      ctx.textAlign = 'center';
+    //      ctx.fillText('Image will appear here…', canvas.width/2, canvas.height/2);
+    //    }
+    // }
+    return;
+  }
+  [canvas.width, canvas.height] = [img.naturalWidth, img.naturalHeight];
+  resetEffect(); // This will render the first frame of the current effect with the new image
+}
+
+// Original onImagesReady now uses the new setImage function
 function onImagesReady ({ detail }) {
-  img = detail?.images?.find(i => i instanceof HTMLImageElement) || null;
-  if (!img) return showMsg('No valid image loaded.');
-  canvas.width  = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  resetEffect();          // show first frame
+  const newImgForEffect = detail?.images?.find(i => i instanceof HTMLImageElement) || null;
+  setImage(newImgForEffect); // Call the exportable setImage
 }
 
-/* ─── Effect helpers ──────────────────────────────────────────────── */
+
+/* ── Core helpers ────────────────────────────────────────────────── */
+const renderFrame = p => renders[effectSel.value](ctx, canvas, img, p);
+
 function resetEffect () {
-  cancelAnimationFrame(raf);
-  running = false; raf = null;
-  renders[effectSel.value](ctx, canvas, img, 0);
-  document.dispatchEvent(new CustomEvent('imageRevealEffectStopped', {
-    detail: { effect: effectSel.value }
-  }));
+  if (!canvas || !ctx) return; // Guard against calls before UI is ready
+  cancelAnimationFrame(raf); running = false; raf = null;
+  if (!isGlyph(effectSel.value)) hideGlyphCover(canvas);
+  renderFrame(0);
+  dispatch('imageRevealEffectStopped');
 }
-
 function startEffect () {
-    if (!ctx || !img) return;
-  
-    // 1. Stop anything that might still be running
-    cancelAnimationFrame(raf);
-    running = true;
-  
-    /* 2. *Immediately* draw the very first frame (progress = 0)
-          so nothing old can be seen even for a single repaint       */
-    renders[effectSel.value](ctx, canvas, img, 0);
-  
-    // 3. Now begin the timeline → the next RAF will draw progress > 0
-    start = performance.now();
-    raf   = requestAnimationFrame(loop);
-  
-    document.dispatchEvent(
-      new CustomEvent('imageRevealEffectStarted', {
-        detail: { effect: effectSel.value, duration: dur }
-      })
-    );
-  }
-
-function restart () {
-    resetEffect();
-    startEffect();
-  }
+  if (!ctx || !img) return;
+  cancelAnimationFrame(raf); running = true;
+  if (!isGlyph(effectSel.value)) hideGlyphCover(canvas);
+  renderFrame(0);
+  start = performance.now();
+  raf   = requestAnimationFrame(loop);
+  dispatch('imageRevealEffectStarted', { duration: dur });
+}
+const restart = () => { resetEffect(); startEffect(); };
 
 function loop (t) {
   if (!running) return;
   const p = Math.min((t - start) / dur, 1);
-  renders[effectSel.value](ctx, canvas, img, p);
-  (p < 1) ? raf = requestAnimationFrame(loop)
-          : (running = false, raf = null);
+  renderFrame(p);
+  p < 1 ? raf = requestAnimationFrame(loop)
+        : (running = false, raf = null, dispatch('imageRevealEffectCompleted')); // Added completed event
 }
 
-/* ─── Add just below the existing `renders` object ────────────────── */
-const EFFECT_PAIRS = {               // quick forward↔reverse lookup
-    fadeIn:            'fadeOut',
-    fadeOut:           'fadeIn',
-    pixelateFwd:       'pixelateRev',
-    pixelateRev:       'pixelateFwd',
-    glyphFwd:          'glyphRev',
-    glyphRev:          'glyphFwd',
-    sweepBrightFwd:    'sweepBrightRev',
-    sweepBrightRev:    'sweepBrightFwd'
-  };
+const dispatch = (type, extra = {}) =>
+  document.dispatchEvent(new CustomEvent(type, { detail: { effect: effectSel.value, ...extra } }));
 
-    const STEP_FINE    = 0.25;   // 250 ms
-    const STEP_COARSE  = 2;      //   2 s
-    const DUR_MIN      = 0.25;   // clamp so we never reach 0
-    const DUR_MAX      = 600;    // 10 min hard upper limit
+/* ── Duration & direction utilities / API Functions ───────────────── */
+// Constants DUR_MIN, DUR_MAX, clamp defined earlier
 
-  
-  /* ─── Helper: change duration by delta secs OR multiply by factor ─── */
 function adjustDuration ({ delta = 0, factor = 1 } = {}) {
-    /* 1. work in seconds for human readability */
-    const currSecs   = +durSlider.value;
-    const nextSecs   = (delta !== 0)
-                       ? currSecs + delta
-                       : currSecs * factor;
-  
-    /* 2. clamp + round to 2 dp so the slider & label stay tidy */
-    const clamped    = Math.min(Math.max(nextSecs, DUR_MIN), DUR_MAX)
-                          .toFixed(2);
-  
-    /* 3. short‑circuit if unchanged */
-    if (+clamped === currSecs) return;
-  
-    /* 4. push back into the UI → this fires the existing `input` handler */
-    durSlider.value      = clamped;
-    durVal.textContent   = `${clamped.replace(/\.?0+$/, '')}s`;
-    durSlider.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-  
-/* ─── Helper: change direction *without* jumping; restart if at ends ─── */
+  if (!durSlider) return; // Guard if UI not ready
+  const next = delta ? +durSlider.value + delta
+                     : +durSlider.value * factor;
+  const secs = +clamp(next, DUR_MIN, DUR_MAX).toFixed(2);
+  if (secs === +durSlider.value) return;
+  durSlider.value = String(secs); // Use String for input value
+  durVal.textContent = `${String(secs).replace(/\.?0+$/,'')}s`;
+  durSlider.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 function setDirection (wantReverse = false) {
-    const curr = effectSel.value;
-    const pair = Object.entries(EFFECT_PAIRS)
-                       .find(([fwd, rev]) => fwd === curr || rev === curr);
-    if (!pair) return;                          // unknown renderer, bail‑out
-  
-    const [fwd, rev] = pair;
-    const isCurrRev  = curr === rev;
-  
-    /* 1️⃣  If the request matches the current direction … */
-    if (wantReverse === isCurrRev) {
-      /* …and we’re already running, nothing to do. */
-      if (running) return;
-  
-      /* …but the animation has finished (running === false) → simply replay. */
-      start   = performance.now();              // reset timeline
-      running = true;
-      raf     = requestAnimationFrame(loop);
-      return;
+  if(!effectSel) return; // Guard
+  const curr = effectSel.value, opposite = EFFECT_PAIRS[curr];
+  if (!opposite) return;
+
+  const isCurrReverse = curr === opposite; // This logic seems problematic. curr is never === opposite if they are different strings
+                                           // Let's re-evaluate: isCurrReverse means "is the current effect a 'Rev' effect?"
+                                           // A better check: does curr.endsWith('Rev') or is curr the reverse pair of some Fwd?
+                                           // For simplicity, let's assume EFFECT_PAIRS defines the directionality.
+                                           // The crucial check is: if wantReverse, is effectSel.value already the 'Rev' version?
+                                           // If !wantReverse, is effectSel.value already the 'Fwd' version?
+
+  let isAlreadyCorrectDirection = false;
+  // Check if current effect is the one we want (forward or reverse)
+  if (wantReverse) { // We want a reverse effect
+    // Is the current effect already the designated reverse effect for its pair?
+    // This requires finding which pair 'curr' belongs to.
+    const fwdBase = Object.keys(EFFECT_PAIRS).find(fwd => EFFECT_PAIRS[fwd] === curr);
+    if (fwdBase) { // current is a Rev effect
+        isAlreadyCorrectDirection = true;
+    } else if (EFFECT_PAIRS[curr] === curr) { // Symmetrical case, could be pixelateRev -> pixelateFwd but we want Rev
+        // This condition EFFECT_PAIRS[curr] === curr is never true with the given EFFECT_PAIRS
+        // The original logic "isCurrReverse = curr === opposite;" actually means
+        // "is the current effect its own opposite according to the map?" which is always false.
+        // Let's simplify: if we want reverse, and current is not opposite, or is opposite but is a fwd, change.
     }
-  
-    /* 2️⃣  We are flipping direction mid‑stream (or at an end) */
-    const elapsed = performance.now() - start;  // ms into the current run
-    const p       = Math.min(elapsed / dur, 1); // clamp to 1 in case it’s over
-  
-    const nextRenderer = wantReverse ? rev : fwd;
-    const nextP        = 1 - p;                 // mirror progress for new renderer
-  
-    /* shift timeline so (t − start)/dur === nextP on the very next frame */
-    start = performance.now() - nextP * dur;
-    effectSel.value = nextRenderer;
-  
-    /* draw the identical frame *immediately* to avoid flicker */
-    renders[nextRenderer](ctx, canvas, img, nextP);
-  
-    /* make sure the main loop is running */
-    if (!running) {
-      running = true;
-      raf     = requestAnimationFrame(loop);
+  } else { // We want a forward effect
+    // Is the current effect already the designated forward effect for its pair?
+    if (EFFECT_PAIRS[curr] && EFFECT_PAIRS[EFFECT_PAIRS[curr]] === curr) { // curr is a Fwd effect
+        isAlreadyCorrectDirection = true;
     }
   }
-  
-  
-  /* ─── Global key‑handler ──────────────────────────────────────────── */
-  function onKey (e) {
-    if (['INPUT','TEXTAREA','SELECT'].includes(
-          (document.activeElement?.tagName || '').toUpperCase())) return;
-  
-    /* ── speed control ─────────────────────────────────────────────── */
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      const sign   = e.key === 'ArrowUp' ? +1 : -1;
-      if (e.ctrlKey)                // Ctrl   → scale duration
-        adjustDuration({ factor : e.key === 'ArrowUp' ? 2 : 0.5 });
-      else if (e.shiftKey)          // Shift  → coarse step
-        adjustDuration({ delta  : sign * STEP_COARSE });
-      else                          // no mod → fine step
-        adjustDuration({ delta  : sign * STEP_FINE });
-      e.preventDefault();           // stop page scroll
-      return;
+  // The original logic for this was simpler:
+  // const isCurrReverse = curr === opposite; // This is always false.
+  // The original line: `if (wantReverse === isCurrReverse)`
+  // If wantReverse is true, this becomes `if(true === (curr === opposite))` -> `if(true === false)` -> `if(false)`
+  // If wantReverse is false, this becomes `if(false === (curr === opposite))` -> `if(false === false)` -> `if(true)`
+  // This means the original logic *always* thought it was in the "forward" direction state initially if wantReverse was false.
+  // Let's use a more direct check based on what 'opposite' means.
+
+  const currentlyIsReverseEffect = Object.values(EFFECT_PAIRS).includes(curr) && !Object.keys(EFFECT_PAIRS).some(key => EFFECT_PAIRS[key] === curr && key === curr);
+    // A simpler way to check if current is a "reverse" variant:
+    // It's a "Rev" if it's a value in EFFECT_PAIRS, and its key (the Fwd) is different.
+    // Example: if curr = 'fadeOut', its key is 'fadeIn'. 'fadeOut' is a reverse.
+    // if curr = 'pixelateRev', its key is 'pixelateFwd'. 'pixelateRev' is a reverse.
+    let isCurrentEffectReversed = false;
+    for (const fwdKey in EFFECT_PAIRS) {
+        if (EFFECT_PAIRS[fwdKey] === curr && fwdKey !== curr) {
+            isCurrentEffectReversed = true;
+            break;
+        }
     }
-    if (e.ctrlKey && e.key === '0') {          // Ctrl+0 → reset
-      adjustDuration({ delta : (10 - +durSlider.value) });
-      e.preventDefault();
-      return;
-    }
-  
-    /* ── direction control (unchanged) ─────────────────────────────── */
-    if (e.key === 'ArrowLeft')  { setDirection(true);  e.preventDefault(); return; }
-    if (e.key === 'ArrowRight') { setDirection(false); e.preventDefault(); return; }
+
+
+  if (wantReverse === isCurrentEffectReversed) { // Already in the desired direction
+    if (running) return; // If already running, don't just restart, let it play
+    // If not running, and direction is already correct, just start it
+    start = performance.now(); running = true; raf = requestAnimationFrame(loop);
+    return;
   }
 
-
-/* ─── Canvas click → toggle playback (not the effect directly) ────── */
-function onCanvasClick () {
-  document.dispatchEvent(new Event('togglePlayback'));
+  // If we need to switch direction:
+  const p = running ? Math.min((performance.now() - start) / dur, 1) : 0; // If not running, progress is 0
+  const nextP = 1 - p;
+  effectSel.value = opposite; // Switch to the opposite effect
+  start = performance.now() - nextP * dur;        // shift timeline
+  renderFrame(nextP); // Render the frame at the new progress
+  if (!running) { // If it wasn't running, start it
+      running = true; raf = requestAnimationFrame(loop);
+  }
+  // If it was running, it will continue with the new effect and adjusted timeline
+  // No need to explicitly call requestAnimationFrame(loop) if already running,
+  // but ensuring `running` is true and `raf` is set is good.
+  // If it was running, `raf` would not be null.
+  // Let's ensure it always starts/continues the loop if it's meant to be active.
+  if (raf === null) { // If it was stopped or just switched direction while stopped.
+    raf = requestAnimationFrame(loop);
+  }
 }
 
-/* ─── Listen to playback events to sync the visual effect ─────────── */
-document.addEventListener('playbackStarted',  () => startEffect());
-document.addEventListener('playbackStopped',  () => resetEffect());
+// API function to set effect
+export function setEffectParameter(effectName) {
+  if (!effectSel) { console.error("ImageRevealCore: setEffectParameter - effectSelector not found."); return; }
+  const isValidEffect = Array.from(effectSel.options).some(opt => opt.value === effectName);
+  if (!isValidEffect) {
+      console.warn(`ImageRevealCore: Effect "${effectName}" is not a valid option. No change made. Available: ${Array.from(effectSel.options).map(o=>o.value).join(', ')}`);
+      return;
+  }
+  if (effectSel.value !== effectName) {
+    effectSel.value = effectName;
+    if (effectSel.onchange) effectSel.onchange(); // Trigger existing logic (restarts or resets effect)
+  }
+}
 
-/* ─── Misc helpers ────────────────────────────────────────────────── */
+// API function to set duration
+export function setDurationParameter(seconds) {
+  if (!durSlider || !durVal) { console.error("ImageRevealCore: setDurationParameter - UI elements not found."); return; }
+  const newSliderValue = +clamp(Number(seconds), DUR_MIN, DUR_MAX).toFixed(2); // Ensure seconds is number
+  if (parseFloat(durSlider.value) !== newSliderValue) {
+    durSlider.value = String(newSliderValue);
+    // The oninput handler will update `dur` and `durVal.textContent` and restart if running
+    if (durSlider.oninput) durSlider.oninput({ target: { value: String(newSliderValue) } });
+  }
+}
+
+
+/* ── Keyboard & canvas handlers ───────────────────────────────────── */
+function onKey (e) {
+  if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return;
+  const { key, ctrlKey, shiftKey } = e;
+
+  if (key === 'ArrowUp' || key === 'ArrowDown') {
+    e.preventDefault(); // Prevent page scroll
+    const sign = key === 'ArrowUp' ? 1 : -1;
+    ctrlKey ? adjustDuration({ factor : key === 'ArrowUp' ? 2 : 0.5 })
+            : adjustDuration({ delta  : sign * (shiftKey ? STEP_COARSE : STEP_FINE) });
+    return;
+  }
+
+  if (ctrlKey && key === '0') {                   // Ctrl+0 → reset to 10 s
+    e.preventDefault();
+    // Calculate delta to reach 10s from current value
+    if (durSlider) adjustDuration({ delta: 10 - parseFloat(durSlider.value) });
+    return;
+  }
+  if (key === 'ArrowLeft')  { e.preventDefault(); setDirection(true);  return; }
+  if (key === 'ArrowRight') { e.preventDefault(); setDirection(false); return; }
+}
+
+const onCanvasClick = () => document.dispatchEvent(new Event('togglePlayback'));
+
+/* ── Misc ─────────────────────────────────────────────────────────── */
 function showMsg (txt) {
+  if (!ctx || !canvas) return; // Guard
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#555';
-  ctx.textAlign = 'center';
-  ctx.fillText(txt, canvas.width / 2, canvas.height / 2);
+  ctx.fillStyle = '#555'; ctx.textAlign = 'center';
+  ctx.fillText(txt, canvas.width/2, canvas.height/2);
 }
 
-/* ─── Init ────────────────────────────────────────────────────────── */
+/* ── Bootstrapping ────────────────────────────────────────────────── */
 function init () {
-    makeUI();
-  
-    document.addEventListener('appImagesReady', onImagesReady);
-    if (window.imageRevealLoadedImages)
-      onImagesReady({ detail: { images: window.imageRevealLoadedImages } });
-  
-    canvas.addEventListener('click', onCanvasClick);
-    window.addEventListener('keydown', onKey, { passive: false });
-  
-    console.log('ImageRevealCore ready');
+  makeUI();
+  document.addEventListener('appImagesReady', onImagesReady);
+  if (window.imageRevealLoadedImages) { // If images loaded before this script
+    // Make sure onImagesReady can handle this (it now calls setImage which checks for canvas)
+    onImagesReady({ detail: { images: window.imageRevealLoadedImages } });
   }
 
+  // Ensure canvas is available before adding event listener
+  if (canvas) {
+      canvas.addEventListener('click', onCanvasClick);
+  } else {
+      console.warn("ImageRevealCore: Canvas not found during init to add click listener.");
+  }
+  window.addEventListener('keydown', onKey, { passive: false }); // passive:false for preventDefault
+  document.addEventListener('playbackStarted', startEffect);
+  document.addEventListener('playbackStopped', resetEffect);
+
+  console.log('ImageRevealCore ready (condensed, API-enabled)');
+}
 
 document.readyState === 'loading'
   ? document.addEventListener('DOMContentLoaded', init)
   : init();
+
+// === Exports for Public API ===
+export {
+  // Core control functions
+  startEffect,
+  resetEffect,
+  restart as restartEffect, // Export existing 'restart' const, aliased as 'restartEffect'
+  setDirection,
+  // setImage, setEffectParameter, setDurationParameter are already exported with `export function ...`
+
+  // Constants and effect info
+  EFFECT_PAIRS,
+  DUR_MIN,
+  DUR_MAX,
+  // 'renders' is already exported at the top
+};

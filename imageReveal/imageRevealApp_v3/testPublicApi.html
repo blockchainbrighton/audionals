@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Image Reveal API Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        button { padding: 8px 12px; margin: 5px; cursor: pointer; }
+        .controls { margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;}
+    </style>
+</head>
+<body>
+    <h1>Image Reveal Controlled by Public API</h1>
+
+    <!-- imageRevealCore.js will create its UI.
+         It typically appends to document.body or a specific container if modified.
+         The default imageRevealCore.js appends its container to the body. -->
+
+    <div class="controls">
+        <p>API Controls:</p>
+        <button id="apiLoadPixelate">Load Image & Setup Pixelate (3s)</button>
+        <button id="apiLoadFadeIn">Load Another & Setup FadeIn (2s)</button>
+        <hr>
+        <button id="apiStart">API Start</button>
+        <button id="apiStop">API Stop</button>
+        <button id="apiRestart">API Restart</button>
+        <hr>
+        <label>Effect: <select id="apiEffectSelect"></select></label>
+        <button id="apiSetEffect">API Set Selected Effect</button><br>
+        <label>Duration (0.25-600s): <input type="number" id="apiDurationInput" value="5" step="0.25"></label>
+        <button id="apiSetDuration">API Set Duration</button>
+        <hr>
+        <button id="apiPlayForward">API Play Forward</button>
+        <button id="apiPlayReverse">API Play Reverse</button>
+        <hr>
+        <button id="apiGetSettings">Log Current Settings</button>
+    </div>
+
+
+    <!-- Core Image Reveal script (must be type="module") -->
+    <script type="module" src="imageRevealCore.js"></script>
+    
+    <!-- Public API script (must be type="module") -->
+    <script type="module" src="imageRevealPublicApi.js"></script>
+
+    <!-- Your script to use the API (must be type="module") -->
+    <script type="module">
+        // Import all functions from the API module
+        import * as imageRevealAPI from './imageRevealPublicApi.js';
+
+        // Optional: Make API globally accessible for easier debugging in console
+        window.imageRevealAPI = imageRevealAPI;
+
+        // URLs for testing
+        const imageUrl1 = "https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0";
+        const imageUrl2 = "https://picsum.photos/seed/test1/480/270"; // Different image
+
+        // Wait for the DOM and other modules to be ready
+        document.addEventListener('DOMContentLoaded', () => {
+            // A brief delay to ensure imageRevealCore.js has fully initialized its UI.
+            // More robust: imageRevealCore could dispatch a 'ready' event.
+            setTimeout(initializeApiDemo, 100);
+        });
+
+        function initializeApiDemo() {
+            if (typeof imageRevealAPI.setupEffect !== 'function') {
+                console.error("API not loaded correctly. Check script paths and module loading.");
+                alert("Error: Image Reveal API failed to load. Check console.");
+                return;
+            }
+            
+            console.log("API Demo Initializing...");
+
+            // Populate API effect selector
+            const apiEffectSelect = document.getElementById('apiEffectSelect');
+            const effects = imageRevealAPI.getAvailableEffects();
+            if (effects && effects.length > 0) {
+                effects.forEach(effect => {
+                    const option = document.createElement('option');
+                    option.value = effect.value;
+                    option.textContent = effect.text;
+                    apiEffectSelect.appendChild(option);
+                });
+            } else {
+                console.warn("No effects available to populate API dropdown. Core might not be ready or has no effects.");
+            }
+
+
+            // Button bindings
+            document.getElementById('apiLoadPixelate').onclick = async () => {
+                try {
+                    console.log("API: Calling setupEffect for Pixelate...");
+                    await imageRevealAPI.setupEffect(imageUrl1, 'pixelateFwd', 3);
+                    console.log("API: Pixelate setup complete. Call API Start to play.");
+                } catch (e) { console.error("API Error:", e); }
+            };
+
+            document.getElementById('apiLoadFadeIn').onclick = async () => {
+                try {
+                    console.log("API: Calling setupEffect for FadeIn...");
+                    await imageRevealAPI.setupEffect(imageUrl2, 'fadeIn', 2);
+                    console.log("API: FadeIn setup complete. Call API Start to play.");
+                } catch (e) { console.error("API Error:", e); }
+            };
+
+            document.getElementById('apiStart').onclick = () => imageRevealAPI.start();
+            document.getElementById('apiStop').onclick = () => imageRevealAPI.stop();
+            document.getElementById('apiRestart').onclick = () => imageRevealAPI.restart();
+
+            document.getElementById('apiSetEffect').onclick = () => {
+                const selectedEffect = apiEffectSelect.value;
+                imageRevealAPI.selectEffect(selectedEffect);
+                console.log(`API: Effect set to ${selectedEffect}`);
+            };
+
+            document.getElementById('apiSetDuration').onclick = () => {
+                const duration = parseFloat(document.getElementById('apiDurationInput').value);
+                imageRevealAPI.setEffectDuration(duration);
+                console.log(`API: Duration set to ${duration}s`);
+            };
+            
+            document.getElementById('apiPlayForward').onclick = () => {
+                imageRevealAPI.setPlaybackDirection(false); // false for forward
+                imageRevealAPI.start(); // Start if not already playing in new direction
+                console.log("API: Set to play Forward.");
+            };
+            document.getElementById('apiPlayReverse').onclick = () => {
+                imageRevealAPI.setPlaybackDirection(true);  // true for reverse
+                imageRevealAPI.start(); // Start if not already playing in new direction
+                console.log("API: Set to play Reverse.");
+            };
+
+            document.getElementById('apiGetSettings').onclick = () => {
+                const settings = imageRevealAPI.getCurrentSettings();
+                console.log("API: Current Settings:", settings);
+                alert(`Current Effect: ${settings.effect}\nDuration: ${settings.duration}s`);
+            };
+
+            // Initial setup example:
+            // imageRevealAPI.setupEffect(imageUrl1, 'glyphFwd', 4)
+            //  .then(() => console.log("Initial setup done via API."))
+            //  .catch(err => console.error("Initial API setup failed", err));
+        }
+
+    </script>
+</body>
+</html>

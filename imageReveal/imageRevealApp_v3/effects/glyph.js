@@ -158,4 +158,13 @@ export const glyphEffects = {
   glyphRev(ctx, canvas, img, progress) { glyphRender(ctx, canvas, img, progress, false); }
 };
 
+/* ─── external helper: turn the cover off if it exists ──────────── */
+export function hideGlyphCover(canvas) {
+    const c = canvas && canvas.__glyphCover;
+    if (c) {
+      c.style.display = 'none';
+      delete c.__framesLeft;          // reset counter
+    }
+  }
+
 export default glyphEffects;
