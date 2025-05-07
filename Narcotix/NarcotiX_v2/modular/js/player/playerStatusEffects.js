@@ -7,12 +7,11 @@ export const statusEffectsProperties = {
 export function initStatusEffects() {
     // 'this' refers to player object
     this.statusEffects = [];
-    this.updatePlayerStatusDisplay(); // Update the textual list of status effects
+    this.updatePlayerStatusDisplay(); 
 }
 
 export function applyStatusEffect(name, duration, data = {}) {
     // 'this' refers to player object
-    // Remove existing effect of the same name, unless it's C-Burst and new one is weaker
     this.statusEffects = this.statusEffects.filter(e => e.name !== name || (e.name === "C-Burst" && e.data.speedMultiplier > data.speedMultiplier));
     
     const effect = { name, duration, remainingTime: duration, data };
@@ -28,7 +27,7 @@ export function applyStatusEffect(name, duration, data = {}) {
     else if (name === "Sys-Marked") { this.game.utils.addMessage("System mark acquired! Hostiles prioritizing your signature."); }
 
     this.statusEffects.push(effect);
-    this.updatePlayerStatusDisplay(); // Update the textual list
+    this.updatePlayerStatusDisplay(); 
 }
 
 export function updateStatusEffects(deltaTime) {
@@ -44,21 +43,19 @@ export function updateStatusEffects(deltaTime) {
         }
     }
 
-    // Update player's actual speed property based on effects
     const speedBoosts = this.statusEffects.filter(e => e.name === "C-Burst" || e.name === "Kaos Frenzy");
     let maxMultiplier = 1;
     if(speedBoosts.length > 0) {
-        maxMultiplier = Math.max(...speedBoosts.map(sb => sb.data.speedMultiplier));
+        maxMultiplier = Math.max(...speedBoosts.map(sb => sb.data.speedMultiplier || 1)); // Ensure default of 1 if speedMultiplier is missing
     }
     const newSpeed = this.baseSpeed * maxMultiplier;
     if (this.speed !== newSpeed) {
-        this.speed = newSpeed; // Update the actual speed property on player
+        this.speed = newSpeed; 
         changed = true; 
     }
 
-
     if (changed) {
-        this.updatePlayerStatusDisplay(); // Update the textual list if effects changed or speed property updated
+        this.updatePlayerStatusDisplay(); 
     }
 }
 
@@ -77,11 +74,10 @@ export function isConfused() {
     return this.hasStatusEffect("System Glitch");
 }
 
-// This function updates the HUD element showing the list of active status effects.
 export function updatePlayerStatusDisplay() {
     // 'this' refers to player object
     const s = document.getElementById('playerStatus');
     if (!s) return;
-    if (!this.statusEffects) return; // Guard
+    if (!this.statusEffects) return; 
     s.textContent = this.statusEffects.length > 0 ? this.statusEffects.map(e => `${e.name}(${Math.ceil(e.remainingTime/1000)}s)`).join(', ') : "Nominal";
 }

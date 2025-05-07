@@ -6,19 +6,19 @@ export const weaponTypes = {
     UNARMED: 'unarmed',
 };
 
-// Base stats for unarmed combat
 export const UNARMED_STATS = {
     id: 'unarmed',
     name: "Unarmed",
     type: weaponTypes.UNARMED,
     damage: 2,
-    range: null, // Will be set dynamically based on player size or a small default
-    attackSpeed: 400, // milliseconds
-    char: '', // No specific character for unarmed, player's hands
+    range: null, 
+    attackSpeed: 400, 
+    char: '', 
     description: "Fists and fury.",
-    projectileType: null, // For ranged
+    projectileType: null, 
     ammoCapacity: 0,
     currentAmmo: 0,
+    color: '#FFF' // Unused for unarmed char, but consistent
 };
 
 
@@ -26,84 +26,75 @@ export const weaponsData = {
     // Melee Weapons
     'stick': {
         id: 'stick', name: "Old Stick", type: weaponTypes.MELEE, damage: 5, rangeMultiplier: 1.2, attackSpeed: 600,
-        char: '|', description: "A surprisingly sturdy stick."
+        char: '|', description: "A surprisingly sturdy stick.", color: '#A84'
     },
     'log': {
         id: 'log', name: "Heavy Log", type: weaponTypes.MELEE, damage: 10, rangeMultiplier: 1.3, attackSpeed: 900,
-        char: '▋', description: "Clunky, but packs a punch."
+        char: '▋', description: "Clunky, but packs a punch.", color: '#654'
     },
     'crowbar': {
         id: 'crowbar', name: "Crowbar", type: weaponTypes.MELEE, damage: 12, rangeMultiplier: 1.5, attackSpeed: 700,
-        char: 'T', description: "Good for prying and... other things."
+        char: 'T', description: "Good for prying and... other things.", color: '#D33'
     },
     'knife': {
         id: 'knife', name: "Combat Knife", type: weaponTypes.MELEE, damage: 8, rangeMultiplier: 1.0, attackSpeed: 350,
-        char: '!', description: "Quick and silent."
+        char: '!', description: "Quick and silent.", color: '#CCC'
     },
     'sword': {
         id: 'sword', name: "Katana Shard", type: weaponTypes.MELEE, damage: 18, rangeMultiplier: 1.8, attackSpeed: 650,
-        char: '†', description: "A relic from a bygone data-feud."
+        char: '†', description: "A relic from a bygone data-feud.", color: '#AEF'
     },
 
     // Ranged Weapons
     'pistol': {
-        id: 'pistol', name: "9mm Sidearm", type: weaponTypes.RANGED, damage: 10, rangeMultiplier: 8.0, attackSpeed: 500,
+        id: 'pistol', name: "9mm Sidearm", type: weaponTypes.RANGED, damage: 10, rangeMultiplier: 10.0, attackSpeed: 450, // Slightly increased range, speed
         projectileType: 'bullet_light', ammoCapacity: 12, currentAmmo: 12,
-        char: '¬', description: "Standard issue, reliable."
+        char: '¬', description: "Standard issue, reliable.", color: '#BBB', projectileColor: '#FF0', accuracyCone: 0.20 // radians, smaller is more accurate
     },
     'machine_gun': {
-        id: 'machine_gun', name: "Pulse Rifle", type: weaponTypes.RANGED, damage: 7, rangeMultiplier: 12.0, attackSpeed: 100,
+        id: 'machine_gun', name: "Pulse Rifle", type: weaponTypes.RANGED, damage: 7, rangeMultiplier: 15.0, attackSpeed: 100,
         projectileType: 'bullet_light', ammoCapacity: 30, currentAmmo: 30,
-        char: '=', description: "High fire rate, chews through targets and ammo."
+        char: '=', description: "High fire rate, chews through targets and ammo.", color: '#8F8', projectileColor: '#0F0', accuracyCone: 0.35
     }
 };
 
-/**
- * Retrieves a copy of weapon data by its ID.
- * Ensures the base TILE_SIZE is incorporated for range.
- * @param {string} weaponId - The ID of the weapon.
- * @param {object} gameConfig - The game's configuration object (for TILE_SIZE).
- * @returns {object|null} Weapon data object or null if not found.
- */
 export function getWeaponData(weaponId, gameConfig) {
+    let data = null;
     if (weaponsData[weaponId]) {
-        const data = { ...weaponsData[weaponId] };
-        // All weapons need a base range. For melee, it's relative to player size.
-        // For ranged, it's a larger multiplier.
-        data.baseRange = (gameConfig && gameConfig.TILE_SIZE) ? gameConfig.TILE_SIZE : 32; // Default TILE_SIZE if not provided
-        data.effectiveRange = data.baseRange * (data.rangeMultiplier || 1.0);
+        data = { ...weaponsData[weaponId] };
+    } else if (weaponId === UNARMED_STATS.id) {
+        data = { ...UNARMED_STATS };
+    }
+
+    if (data) {
+        data.baseRange = (gameConfig && gameConfig.TILE_SIZE) ? gameConfig.TILE_SIZE : 32;
+        if (data.type === weaponTypes.UNARMED) {
+            data.effectiveRange = data.baseRange * 0.8; // Unarmed always short
+        } else {
+            data.effectiveRange = data.baseRange * (data.rangeMultiplier || 1.0);
+        }
         
-        // Ranged weapons need currentAmmo if not defined (e.g. when first created as an item)
         if (data.type === weaponTypes.RANGED && data.currentAmmo === undefined) {
             data.currentAmmo = data.ammoCapacity;
         }
         return data;
     }
-    // For unarmed
-    if (weaponId === UNARMED_STATS.id) {
-        const unarmedData = { ...UNARMED_STATS };
-        unarmedData.range = (gameConfig && gameConfig.TILE_SIZE) ? gameConfig.TILE_SIZE * 0.8 : 25; // Short range for unarmed
-        return unarmedData;
-    }
     return null;
 }
 
-// Example ammo item IDs (these would be defined in your itemManager)
 export const ammoItemIds = {
     'bullet_light': 'ammo_light_rounds',
-    // 'bullet_heavy': 'ammo_heavy_rounds',
+    'bullet_heavy': 'ammo_heavy_rounds', // Example if you add heavy weapons
 };
 
-/**
- * Placeholder for reloading logic. In a full system, this would consume an ammo item.
- * @param {object} weapon - The weapon object (from player.equippedWeapon).
- * @param {object} player - The player instance (to access inventory).
- * @returns {boolean} True if reload was successful/attempted.
- */
 export function reloadWeapon(weapon, player) {
     if (weapon && weapon.type === weaponTypes.RANGED && weapon.currentAmmo < weapon.ammoCapacity) {
         const ammoItemId = ammoItemIds[weapon.projectileType];
-        if (ammoItemId && player.hasItem(ammoItemId)) {
+        if (!ammoItemId) {
+            player.game.utils.addMessage(`No ammo definition for ${weapon.projectileType}.`);
+            return false;
+        }
+        if (player.hasItem(ammoItemId)) {
             const neededAmmo = weapon.ammoCapacity - weapon.currentAmmo;
             const ammoItem = player.inventory.items.find(i => i.id === ammoItemId);
             const ammoToReload = Math.min(neededAmmo, ammoItem.quantity);
@@ -111,19 +102,16 @@ export function reloadWeapon(weapon, player) {
             weapon.currentAmmo += ammoToReload;
             player.removeItem(ammoItemId, ammoToReload);
             player.game.utils.addMessage(`Reloaded ${weapon.name}. ${weapon.currentAmmo}/${weapon.ammoCapacity} rounds.`);
-            // Potentially update HUD or weapon display here
             return true;
         } else {
-            player.game.utils.addMessage(`No ${ammoItemIds[weapon.projectileType] || 'compatible ammo'} found for ${weapon.name}.`);
+            player.game.utils.addMessage(`No ${ammoItemId} found for ${weapon.name}.`);
             return false;
         }
     }
-    player.game.utils.addMessage(`${weapon.name} cannot be reloaded or is full.`);
+    if (weapon && weapon.currentAmmo >= weapon.ammoCapacity) {
+         player.game.utils.addMessage(`${weapon.name} is already full.`);
+    } else if(weapon) {
+         player.game.utils.addMessage(`${weapon.name} cannot be reloaded.`);
+    }
     return false;
 }
-
-// Items that would be created by your itemManager:
-// Your itemManager would need to be updated to create items with 'type: "weapon"'
-// and 'weaponId: "id_from_weaponsData"'.
-// e.g., itemManager.createItem('stick_weapon') -> { id: 'stick_weapon', name: "Old Stick", type: "weapon", weaponId: "stick", ... }
-// e.g., itemManager.createItem('ammo_light') -> { id: 'ammo_light_rounds', name: "Light Rounds", type: "ammo", stackable: true, quantity: 20, ...}
