@@ -72,10 +72,11 @@ export function handleInputMovement(deltaTime) {
     if (this.game.gameState !== 'PLAYING' && this.game.gameState !== 'INVENTORY_OPEN' && this.game.gameState !== 'QUESTLOG_OPEN') return;
     
     let inputDx = 0, inputDy = 0; // Raw directional input
-    if (this.game.keysPressed['w'] || this.game.keysPressed['ArrowUp']) inputDy -= 1;
-    if (this.game.keysPressed['s'] || this.game.keysPressed['ArrowDown']) inputDy += 1;
-    if (this.game.keysPressed['a'] || this.game.keysPressed['ArrowLeft']) inputDx -= 1;
-    if (this.game.keysPressed['d'] || this.game.keysPressed['ArrowRight']) inputDx += 1;
+    // CORRECTED CHECKS FOR ARROW KEYS:
+    if (this.game.keysPressed['w'] || this.game.keysPressed['arrowup']) inputDy -= 1;
+    if (this.game.keysPressed['s'] || this.game.keysPressed['arrowdown']) inputDy += 1;
+    if (this.game.keysPressed['a'] || this.game.keysPressed['arrowleft']) inputDx -= 1;
+    if (this.game.keysPressed['d'] || this.game.keysPressed['arrowright']) inputDx += 1;
 
     // Update facingDirection based on horizontal input (before confusion)
     // this.facingDirection is part of playerCharacterDesignProperties mixed into player
