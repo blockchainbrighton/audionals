@@ -19,7 +19,7 @@
       cursor: pointer;              /* hint that a click starts playback */
     }
 
-    /* --- force‑override default UI injected by imageRevealCore ----------- */
+    /* --- force-override default UI injected by imageRevealCore ----------- */
     #imageRevealContainer {
       position: fixed;
       inset: 0;
@@ -36,7 +36,7 @@
       display: none !important;
     }
 
-    /* centred square canvas (auto‑injected by imageRevealCore) */
+    /* centred square canvas (auto-injected by imageRevealCore) */
     #imageCanvas {
       width: 90vh;
       height: 90vh;
@@ -47,6 +47,25 @@
       border: none !important;
     }
 
+    /* --- retro-pixel “Click to Begin” canvas ----------------------------- */
+    #pixelTextCanvas {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 90vh;
+      max-width: 90vw;
+      height: auto;
+      image-rendering: pixelated;
+      opacity: 1;
+      /* long 16s fade-and-shrink */
+      transition: opacity 16s ease-out, transform 16s ease-out;
+      z-index: 1000;
+    }
+    #pixelTextCanvas.hidden {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0);
+    }
+
     /* invisible helper button used by playbackMgmt.js */
     #playBtn {
       display: none;
@@ -54,6 +73,9 @@
   </style>
 </head>
 <body>
+  <!-- low-res pixel canvas for “Click to Begin” prompt -->
+  <canvas id="pixelTextCanvas" width="200" height="40"></canvas>
+
   <!-- hidden button consumed by playbackMgmt.js (needed for toggle) -->
   <button id="playBtn">Play Mix</button>
 
@@ -78,22 +100,93 @@
   <script type="module" src="imageRevealCore.js"></script>
   <script type="module" src="imageRevealPublicApi.js"></script>
 
-  <!-- bootstrapping: pre‑configure 30 s colour‑sweep, run on canvas click -->
+  <!-- bootstrapping and pixel-text logic ---------------------------------- -->
   <script type="module">
     import { setupEffect } from './imageRevealPublicApi.js';
 
-    const imgUrl = window.images?.[0] || null;
+    (function() {
+      const canvas = document.getElementById('pixelTextCanvas');
+      const ctx = canvas.getContext('2d');
+      const text = 'CLICK TO BEGIN';
+      let flickerInterval;
 
-    /* delay until window "load" so the core has built its UI */
+      // draw glow + text
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.font = 'bold 16px monospace';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#33CCFF';
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            ctx.fillText(text, canvas.width/2 + dx, canvas.height/2 + dy);
+          }
+        }
+        ctx.fillStyle = '#000';
+        ctx.fillText(text, canvas.width/2, canvas.height/2);
+      }
+
+      // start flicker
+      function startFlicker() {
+        clearInterval(flickerInterval); // Clear any existing interval
+        canvas.style.visibility = 'visible'; // Ensure it's visible when flicker starts
+        flickerInterval = setInterval(() => {
+          canvas.style.visibility = (canvas.style.visibility === 'hidden') ? 'visible' : 'hidden';
+        }, 500);
+      }
+
+      // stop flicker
+      function stopFlicker() {
+        clearInterval(flickerInterval);
+        canvas.style.visibility = 'visible'; // Ensure it's left in a visible state
+      }
+
+      // show canvas (fade back in and restart flicker)
+      function showCanvas() {
+        canvas.classList.remove('hidden');
+        // restart flicker once fully visible (after CSS transition)
+        setTimeout(startFlicker, 16 * 1000); 
+      }
+
+      // hide canvas (fade+shrink) and trigger playback start
+      canvas.addEventListener('click', () => {
+        stopFlicker();
+        canvas.classList.add('hidden');
+        document.getElementById('playBtn').click(); // Triggers playbackMgmt.js
+      });
+
+      // Listen for playback events dispatched by playbackMgmt.js
+      
+      // When playback starts:
+      document.addEventListener('playbackStarted', () => {
+        // The canvas click handler already hides the canvas and stops flicker.
+        // This listener acts as a safeguard or for alternative playback start triggers.
+        if (!canvas.classList.contains('hidden')) {
+            stopFlicker();
+            canvas.classList.add('hidden');
+        }
+      });
+
+      // When playback stops (naturally or by user action):
+      document.addEventListener('playbackStopped', () => {
+        showCanvas(); // Uses the existing showCanvas function to make it visible and restart flicker.
+      });
+
+      // Initial draw & flicker
+      draw();
+      startFlicker();
+    })(); // End of IIFE for pixelTextCanvas logic
+
+    // standard setupEffect on page load
     window.addEventListener('load', async () => {
+      const imgUrl = window.images?.[0] || null;
       if (!imgUrl) {
         console.error('Colour Sweep Player: no image URL provided.');
         return;
       }
       try {
-        // prepare the forward brightness‑sweep for 30 seconds
         await setupEffect(imgUrl, 'sweepBrightFwd', 165);
-        console.log('Colour sweep ready – click the canvas to start.');
+        console.log('Colour sweep ready – click to begin.');
       } catch (err) {
         console.error('Failed to prepare colour sweep:', err);
       }
