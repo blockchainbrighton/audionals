@@ -2,7 +2,7 @@
 import * as config from './config.js';
 import * as utils from './utils.js';
 import { mapManager, TILE_PROPERTIES } from './mapManager.js'; // Import TILE_PROPERTIES
-import { player } from './player.js';
+import { player } from './player/player.js'; // This import remains the same
 import { itemManager } from './itemManager.js';
 import { enemyManager } from './enemyManager.js';
 import { hud } from './hud.js';
@@ -65,7 +65,7 @@ export const game = {
 
         this.mapManager.init(this);
         this.itemManager.init(this); 
-        this.player.init(this);
+        this.player.init(this); // Player init is called here
         this.enemyManager.init(this); 
         this.questManager.init(this);
         this.zoneManager.init(this);
@@ -93,7 +93,7 @@ export const game = {
        
         this.player.updateAbilityCooldowns(); 
         this.player.updateStatusEffects(deltaTime);
-        this.player.updatePlayerStatusDisplay();
+        this.player.updatePlayerStatusDisplay(); // This specific display update from playerStatusEffects module
 
         if (this.gameState === 'PLAYING' || this.gameState === 'INVENTORY_OPEN' || this.gameState === 'QUESTLOG_OPEN') {
             this.gameTime += deltaTime * 1000; 
@@ -184,7 +184,7 @@ export const game = {
         if (activeQuestsDisplayEl) activeQuestsDisplayEl.innerHTML='';
 
         this.gameState = 'PLAYING'; 
-        this.init(this.canvas, this.ctx); 
+        this.init(this.canvas, this.ctx); // Player is re-initialized through player.init()
         this.utils.addMessage("Re-initializing NarcotiX Game Client...");
     },
 
