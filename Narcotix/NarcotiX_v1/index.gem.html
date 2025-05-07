@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NarcotiX Game V2</title>
+    <style>
+        body { margin: 0; background-color: #222; color: #fff; font-family: 'Courier New', Courier, monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+        canvas { border: 1px solid #888; background-color: #000; }
+        .ui-container { position: absolute; top: 10px; left: 10px; background-color: rgba(0,0,0,0.75); padding: 10px; border-radius: 5px; font-size: 14px; border: 1px solid #444; max-width: 250px; z-index: 50; }
+        #inventoryDisplay, #shopInterface, #questLog {
+            display: none; /* Initially hidden */
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            max-width: 500px;
+            background-color: rgba(20,20,20,0.95);
+            border: 2px solid #666;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+        #inventoryDisplayInner, #shopInterfaceInner, #questLogInner {
+             max-height: 400px;
+             overflow-y: auto;
+        }
+        #shopInterface h3, #inventoryDisplay h3, #questLog h3 { margin-top: 0; border-bottom: 1px solid #555; padding-bottom: 5px;}
+        .shopItem, .inventoryItem, .questItem { padding: 8px; border-bottom: 1px solid #444; }
+        .shopItem:last-child, .inventoryItem:last-child, .questItem:last-child { border-bottom: none; }
+        .shopItem:hover, .inventoryItem:hover { background-color: #383838; }
+        .abilityCooldown { font-size: 12px; color: #aaa; }
+        #tutorialPopup {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(30, 100, 200, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            z-index: 1000;
+            display: none;
+            border: 1px solid #58AFFF;
+            text-align: center;
+        }
+        .button {
+            background-color: #4CAF50; border: none; color: white; padding: 8px 12px;
+            text-align: center; text-decoration: none; display: inline-block; font-size: 14px; margin: 4px 2px; cursor: pointer; border-radius: 4px;
+        }
+        .button-sell { background-color: #f44336; }
+        .button-use { background-color: #2196F3; }
+        .button-close { background-color: #777; }
+        #messageLog {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            width: 300px;
+            height: 120px;
+            overflow-y: scroll;
+            background-color: rgba(0,0,0,0.6);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            border: 1px solid #444;
+            z-index: 50;
+        }
+        #messageLog div { margin-bottom: 3px; }
+
+        #keyLegend {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #444;
+            font-size: 12px;
+            width: 240px; 
+            overflow-y: auto;
+            z-index: 50;
+            /* Max height to prevent overlapping message log: calc(100vh - messageLogHeight - topOffset - bottomBuffer) */
+            /* msgLog height 120 + 10 padding + 10 body_bottom_margin ~140px */
+            /* bottom value sets this implicitly */
+            bottom: 150px; /* Adjust if messageLog moves or resizes */
+        }
+        #keyLegend h4 {
+            margin-top: 0;
+            margin-bottom: 5px;
+            color: #6CF; /* Light blue title */
+            border-bottom: 1px solid #369;
+            padding-bottom: 3px;
+        }
+        #keyLegend ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0 0 10px 0;
+        }
+        #keyLegend li {
+            margin-bottom: 4px;
+            display: flex; 
+            align-items: center;
+        }
+        #keyLegend .key-symbol {
+            display: inline-block;
+            width: 20px; 
+            font-weight: bold;
+            text-align: center;
+            margin-right: 8px;
+            font-family: Arial, sans-serif; 
+        }
+        #keyLegend .key-color-box { 
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+            border: 1px solid #666;
+        }
+
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="ui-container" id="hud">
+        <div>Health: <span id="playerHealth">100</span>/<span id="playerMaxHealth">100</span></div>
+        <div>Money: $<span id="playerMoney">0</span></div>
+        <div>Status: <span id="playerStatus">Normal</span></div>
+        <div id="activeQuestHUD">Active Quest: <span id="activeQuestTitle">None</span></div>
+        <div>FPS: <span id="fpsDisplay">0</span></div>
+        <div>Time: <span id="gameTimeDisplay">Day 1 - 00:00</span></div>
+        <div id="abilityStatus">
+            Abilities: (1) Boost (Ready) | (2) Stealth (Ready) | (3) Heal (Ready)
+        </div>
+    </div>
+
+    <div id="keyLegend">
+        <h4>Game Legend</h4>
+        <ul>
+            <li><span class="key-symbol" style="color: #3F3;">웃</span> Player (You! Survive & Thrive)</li>
+        </ul>
+        <h4>Enemies</h4>
+        <ul>
+            <li><span class="key-symbol" style="color: #F66;">T</span> Rogue Thug (30HP, 5 Dmg. Chases)</li>
+            <li><span class="key-symbol" style="color: #C00;">B</span> Street Boss (100HP, 15 Dmg. Guards)</li>
+            <li><span class="key-symbol" style="color: #88F;">d</span> Police Drone (20HP. Tags player)</li>
+        </ul>
+        <h4>Items on Map</h4>
+        <ul>
+            <li><span class="key-symbol" style="color: #FFD700;">$</span> Generic Item / Dropped Cash</li>
+            <li><span class="key-symbol" style="color: #FFD700;">+</span> First-Aid Kit (Heals 50 HP)</li>
+            <li><span class="key-symbol" style="color: #FFD700;">o</span> Sketchy Pillz (Risky use: Heal/DMG/Confuse)</li>
+            <li><span class="key-symbol" style="color: #FFD700;">></span> Energy Drink 'Zoom' (+50% Speed, 10s)</li>
+            <li><span class="key-symbol" style="color: #FFD700;">!</span> Laugh-a-Tonic (+30% Speed, 15s. Attracts foes)</li>
+            <li><span class="key-symbol" style="color: #FFD700;">D</span> Valuable Docs (Quest Item)</li>
+            <li><span class="key-symbol" style="color: #0F0;">S</span> Supply Drop (Event: Contains good item)</li>
+        </ul>
+        <h4>Quest Markers (Above Target)</h4>
+        <ul>
+            <li><span class="key-symbol" style="color: yellow;">!</span> New Quest Available</li>
+            <li><span class="key-symbol" style="color: lime;">?</span> Quest Ready for Turn-in</li>
+            <li><span class="key-symbol" style="color: cyan;">?</span> Active: Deliver Item Here</li>
+            <li><span class="key-symbol" style="color: red;">X</span> Active: Clear Enemies Here</li>
+            <li><span class="key-symbol" style="color: lightblue;">*</span> Active: Find Item Here</li>
+        </ul>
+        <h4>Map Tiles (Interactive/Notable)</h4>
+        <ul>
+            <li><span class="key-color-box" style="background-color: #777;"></span> Road (Faster movement)</li>
+            <li><span class="key-color-box" style="background-color: #383;"></span> Grass (Slower movement)</li>
+            <li><span class="key-color-box" style="background-color: #555;"></span> Wall (Blocks path)</li>
+            <li><span class="key-color-box" style="background-color: #33A;"></span> Water (Blocks path)</li>
+            <li><span class="key-color-box" style="background-color: #0FF;"></span> Shop Entrance (Aqua. Enter to trade)</li>
+            <li><span class="key-color-box" style="background-color: #F0F;"></span> Stash House Entrance (Magenta. Special trade/base)</li>
+            <li><span class="key-color-box" style="background-color: #FF0;"></span> Quest Giver (Yellow. Talk for quests)</li>
+            <li><span class="key-color-box" style="background-color: #411;"></span> Enemy Spawn Area</li>
+            <li><span class="key-color-box" style="background-color: #114;"></span> Item Spawn Area</li>
+        </ul>
+    </div>
+
+    <div id="inventoryDisplay">
+        <h3>Inventory (I or Esc to close)</h3>
+        <div id="inventoryDisplayInner">
+             <div id="inventoryItems"></div>
+        </div>
+        <button class="button button-close" onclick="game.toggleInventory()" style="margin-top:15px;">Close</button>
+    </div>
+
+    <div id="shopInterface">
+        <h3 id="shopName">Shop</h3>
+        <div id="shopInterfaceInner">
+            <p id="shopWelcomeMessage"></p>
+            <h4>Shop Items:</h4>
+            <div id="shopItemsForSale"></div>
+            <h4>Your Items to Sell:</h4>
+            <div id="playerItemsToSell"></div>
+        </div>
+        <button class="button button-close" onclick="game.closeShop()" style="margin-top:15px;">Close Shop</button>
+    </div>
+
+    <div id="questLog">
+        <h3>Active Quests (J or Esc to close)</h3>
+        <div id="questLogInner">
+            <div id="activeQuestsDisplay"></div>
+        </div>
+        <button class="button button-close" onclick="game.toggleQuestLog()" style="margin-top:15px;">Close</button>
+    </div>
+
+    <div id="messageLog"></div>
+    <div id="tutorialPopup"></div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const TILE_SIZE = 32;
+        const MAP_WIDTH_TILES = 100;
+        const MAP_HEIGHT_TILES = 100;
+        const VIEWPORT_WIDTH_TILES = 25;
+        const VIEWPORT_HEIGHT_TILES = 17;
+
+        canvas.width = VIEWPORT_WIDTH_TILES * TILE_SIZE;
+        canvas.height = VIEWPORT_HEIGHT_TILES * TILE_SIZE;
+
+        let gameState = 'PLAYING';
+        let gameTime = 0;
+        const TICKS_PER_GAME_MINUTE = 1; // How many actual game ticks make one in-game minute
+        const GAME_MINUTES_PER_DAY = 24 * 60;
+        let currentDay = 1;
+        let isDayTime = true;
+
+        let lastTime = 0;
+        let fps = 0;
+        let frameCount = 0;
+        let fpsUpdateInterval = 1000;
+        let lastFpsUpdateTime = 0;
+
+        const keysPressed = {};
+
+        const gameMessages = [];
+        const MAX_MESSAGES = 10;
+        let tutorialQueue = [];
+        let currentTutorial = null;
+        let tutorialDisplayTime = 5000;
+        let tutorialTimer = 0;
+
+        // --- Utility Functions ---
+        function AABBCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function distance(x1, y1, x2, y2) {
+            return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        }
+
+        function showTutorial(message, duration = 5000) {
+            const popup = document.getElementById('tutorialPopup');
+            popup.textContent = message;
+            popup.style.display = 'block';
+            tutorialDisplayTime = duration;
+            tutorialTimer = Date.now();
+
+            setTimeout(() => {
+                if (popup.textContent === message) {
+                     popup.style.display = 'none';
+                }
+            }, duration);
+        }
+
+        function queueTutorial(message, conditionFunction) {
+            tutorialQueue.push({ message, conditionFunction, shown: false });
+        }
+
+        function processTutorialQueue() {
+            if (currentTutorial && Date.now() - tutorialTimer < tutorialDisplayTime) return;
+            if (currentTutorial) {
+                document.getElementById('tutorialPopup').style.display = 'none';
+                currentTutorial = null;
+            }
+            for (let i = 0; i < tutorialQueue.length; i++) {
+                if (!tutorialQueue[i].shown && tutorialQueue[i].conditionFunction()) {
+                    currentTutorial = tutorialQueue[i];
+                    showTutorial(currentTutorial.message);
+                    tutorialQueue[i].shown = true;
+                    break;
+                }
+            }
+        }
+
+        function addMessage(text) {
+            gameMessages.unshift(text);
+            if (gameMessages.length > MAX_MESSAGES) gameMessages.pop();
+            renderMessages();
+        }
+
+        function renderMessages() {
+            const log = document.getElementById('messageLog');
+            log.innerHTML = gameMessages.map(msg => `<div>> ${msg}</div>`).join('');
+            log.scrollTop = 0; // Scroll to top to see newest message
+        }
+
+        const TILE_TYPES = { EMPTY: 0, ROAD: 1, GRASS: 2, WALL: 3, BUILDING_WALL: 4, SHOP_ENTRANCE: 5, SHOP_INTERIOR: 6, STASH_HOUSE_ENTRANCE: 7, STASH_HOUSE_INTERIOR: 8, ENEMY_SPAWN: 9, ITEM_SPAWN: 10, QUEST_GIVER: 11, WATER: 12 };
+        const TILE_PROPERTIES = {
+            [TILE_TYPES.EMPTY]: { color: '#111', collision: true, speedModifier: 0 },
+            [TILE_TYPES.ROAD]: { color: '#777', collision: false, speedModifier: 1.2 },
+            [TILE_TYPES.GRASS]: { color: '#383', collision: false, speedModifier: 0.8 },
+            [TILE_TYPES.WALL]: { color: '#555', collision: true, speedModifier: 0 },
+            [TILE_TYPES.BUILDING_WALL]: { color: '#604030', collision: true, speedModifier: 0 },
+            [TILE_TYPES.SHOP_ENTRANCE]: { color: '#0FF', collision: false, speedModifier: 1, interactive: true, type: 'shop_entrance' },
+            [TILE_TYPES.SHOP_INTERIOR]: { color: '#CCC', collision: false, speedModifier: 1 },
+            [TILE_TYPES.STASH_HOUSE_ENTRANCE]: { color: '#F0F', collision: false, speedModifier: 1, interactive: true, type: 'stash_entrance' },
+            [TILE_TYPES.STASH_HOUSE_INTERIOR]: { color: '#EAE', collision: false, speedModifier: 1 },
+            [TILE_TYPES.ENEMY_SPAWN]: { color: '#411', collision: false, speedModifier: 1 },
+            [TILE_TYPES.ITEM_SPAWN]: { color: '#114', collision: false, speedModifier: 1 },
+            [TILE_TYPES.QUEST_GIVER]: { color: '#FF0', collision: false, speedModifier: 1, interactive: true, type: 'quest_giver' },
+            [TILE_TYPES.WATER]: { color: '#33A', collision: true, speedModifier: 0 },
+        };
+
+        let mapData = [];
+        const camera = {
+            x: 0, y: 0, width: canvas.width, height: canvas.height,
+            update: function(targetEntity) {
+                let targetX = targetEntity.x - this.width / 2;
+                let targetY = targetEntity.y - this.height / 2;
+                targetX = Math.max(0, Math.min(targetX, MAP_WIDTH_TILES * TILE_SIZE - this.width));
+                targetY = Math.max(0, Math.min(targetY, MAP_HEIGHT_TILES * TILE_SIZE - this.height));
+                this.x = targetX;
+                this.y = targetY;
+            }
+        };
+
+        let itemsOnMap = [];
+        let enemies = [];
+       
+        const game = {
+            init: function() {
+                queueTutorial("Use WASD or Arrow Keys to move.", () => true);
+                queueTutorial("Press 'I' to open/close your inventory.", () => game.player.inventory.items.length > 0 || game.player.money > 10);
+                queueTutorial("Press Number Keys (1-3) to use abilities.", () => game.player.abilities.length > 0 && game.player.money > 0);
+                queueTutorial("Approach highlighted tiles (shops, quest givers) and press 'E' to interact.", () => true);
+                queueTutorial("Press 'Space' to attack nearby enemies.", () => enemies.some(e => distance(game.player.x, game.player.y, e.x, e.y) < game.player.attackRange * 2));
+               
+                this.itemManager.defineItems();
+                this.mapManager.generateMap();
+                this.player.init();
+                this.enemyManager.initEnemyTypes();
+                this.enemyManager.spawnInitialEnemies();
+                this.itemManager.spawnInitialItems();
+                this.questManager.initQuests();
+                this.zoneManager.initZones();
+                this.shopManager.initShops();
+
+                this.hud.update();
+                addMessage("Welcome to NarcotiX Game V2!");
+            },
+
+            mapManager: {
+                generateMap: function() {
+                    mapData = [];
+                    for (let r = 0; r < MAP_HEIGHT_TILES; r++) {
+                        mapData[r] = [];
+                        for (let c = 0; c < MAP_WIDTH_TILES; c++) {
+                            let tileType = TILE_TYPES.GRASS;
+                            if (c > 0 && c < MAP_WIDTH_TILES -1 && r > 0 && r < MAP_HEIGHT_TILES -1) {
+                                if ((c % 12 <= 1 || r % 12 <= 1) && (c > 2 && c < MAP_WIDTH_TILES - 3 && r > 2 && r < MAP_HEIGHT_TILES - 3)) tileType = TILE_TYPES.ROAD;
+                                if (Math.random() < 0.04 && tileType === TILE_TYPES.GRASS) tileType = TILE_TYPES.BUILDING_WALL;
+                                if (Math.random() < 0.005 && tileType === TILE_TYPES.GRASS) tileType = TILE_TYPES.WATER;
+                                if (Math.random() < 0.002 && tileType !== TILE_TYPES.ROAD && tileType !== TILE_TYPES.WATER && tileType !== TILE_TYPES.BUILDING_WALL) tileType = TILE_TYPES.ENEMY_SPAWN;
+                            }
+                            if (c === 0 || r === 0 || c === MAP_WIDTH_TILES - 1 || r === MAP_HEIGHT_TILES - 1) tileType = TILE_TYPES.WALL;
+
+                            let cellData = { type: tileType };
+                           
+                            if(c > 0 && c < MAP_WIDTH_TILES -1 && r > 0 && r < MAP_HEIGHT_TILES -1){
+                                if (c >= 9 && c <= 11 && r >= 9 && r <= 11) {cellData.type = TILE_TYPES.BUILDING_WALL;}
+                                if (c === 10 && r === 11) { cellData.type = TILE_TYPES.SHOP_ENTRANCE; cellData.interactionTargetId = 'central_market'; cellData.interactionType = 'shop'; }
+
+                                if (c >= 39 && c <= 41 && r >= 4 && r <= 6) { cellData.type = TILE_TYPES.BUILDING_WALL; }
+                                if (c === 40 && r === 6) { cellData.type = TILE_TYPES.SHOP_ENTRANCE; cellData.interactionTargetId = 'shady_dealer'; cellData.interactionType = 'shop'; }
+
+                                if (c >= 29 && c <= 31 && r >= 29 && r <= 31) {cellData.type = TILE_TYPES.BUILDING_WALL; }
+                                if (c === 30 && r === 31) { cellData.type = TILE_TYPES.STASH_HOUSE_ENTRANCE; cellData.interactionTargetId = 'my_stash'; cellData.interactionType = 'shop';}
+
+                                if (c === 5 && r === 15) { cellData.type = TILE_TYPES.QUEST_GIVER; cellData.interactionTargetId = 'old_timer'; cellData.interactionType = 'quest';}
+                            }
+                            mapData[r][c] = cellData;
+                        }
+                    }
+                },
+                render: function() {
+                    const { startCol, endCol, startRow, endRow } = game.getVisibleTiles();
+                    for (let r = startRow; r < endRow; r++) {
+                        for (let c = startCol; c < endCol; c++) {
+                            if (r < 0 || r >= MAP_HEIGHT_TILES || c < 0 || c >= MAP_WIDTH_TILES) continue;
+                            const tile = mapData[r][c];
+                            const tileDef = TILE_PROPERTIES[tile.type] || TILE_PROPERTIES[TILE_TYPES.EMPTY];
+                            ctx.fillStyle = tileDef.color;
+                            ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                        }
+                    }
+                },
+                getTilePropertiesAt: function(worldX, worldY) {
+                    const tileX = Math.floor(worldX / TILE_SIZE);
+                    const tileY = Math.floor(worldY / TILE_SIZE);
+                    if (tileX >= 0 && tileX < MAP_WIDTH_TILES && tileY >= 0 && tileY < MAP_HEIGHT_TILES) {
+                        const tile = mapData[tileY][tileX];
+                        return TILE_PROPERTIES[tile.type];
+                    }
+                    return TILE_PROPERTIES[TILE_TYPES.EMPTY];
+                },
+                isColliding: function(worldX, worldY) {
+                    const tileProps = this.getTilePropertiesAt(worldX, worldY);
+                    return tileProps ? tileProps.collision : true;
+                },
+                isValidTile: function(tileX, tileY) {
+                    return tileX >= 0 && tileX < MAP_WIDTH_TILES && tileY >= 0 && tileY < MAP_HEIGHT_TILES;
+                }
+            },
+           
+            player: {
+                x: TILE_SIZE * 5, y: TILE_SIZE * 5, width: TILE_SIZE * 0.7, height: TILE_SIZE * 0.7, color: '#3F3', char: '웃',
+                speed: 150, baseSpeed: 150, hp: 100, maxHp: 100, money: 150,
+                inventory: { items: [], capacity: 10 },
+                abilities: [
+                    { name: "Short Speed Boost", key: '1', cooldown: 30000, duration: 5000, lastUsedTime: 0, effect: () => { game.player.applyStatusEffect("Speed Boost", 5000, { speedMultiplier: 2 }); addMessage("Used Speed Boost!"); }},
+                    { name: "Temporary Stealth", key: '2', cooldown: 60000, duration: 10000, lastUsedTime: 0, effect: () => { game.player.applyStatusEffect("Stealth", 10000); addMessage("Used Stealth! Enemies may ignore you."); }},
+                    { name: "Panic Heal", key: '3', cooldown: 90000, duration: 0, lastUsedTime: 0, effect: () => { game.player.heal(25); addMessage("Used Panic Heal! +25 HP"); }}
+                ],
+                statusEffects: [], attackPower: 10, attackCooldown: 500, lastAttackTime: 0, attackRange: TILE_SIZE * 1.1,
+                init: function() {
+                    this.x = TILE_SIZE * (MAP_WIDTH_TILES / 2);
+                    this.y = TILE_SIZE * (MAP_HEIGHT_TILES / 2);
+                    camera.x = this.x - camera.width/2;
+                    camera.y = this.y - camera.height/2;
+                    this.hp = this.maxHp; this.money = 150; this.inventory.items = []; this.statusEffects = [];
+                    this.abilities.forEach(ab => ab.lastUsedTime = -ab.cooldown);
+                    const firstAid = game.itemManager.createItemById('first_aid'); if (firstAid) this.addItem(firstAid);
+                },
+                render: function() {
+                    ctx.fillStyle = this.isStealthed() ? 'rgba(50, 255, 50, 0.5)' : this.color;
+                    ctx.font = `${TILE_SIZE * 0.9}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText(this.char, this.x + this.width / 2, this.y + this.height / 2 + TILE_SIZE * 0.05);
+                    if (this.hp < this.maxHp) {
+                        const barY = this.y - 7;
+                        ctx.fillStyle = 'red'; ctx.fillRect(this.x, barY, this.width, 5);
+                        ctx.fillStyle = 'green'; ctx.fillRect(this.x, barY, this.width * (this.hp / this.maxHp), 5);
+                    }
+                },
+                handleInput: function(deltaTime) {
+                    if (gameState !== 'PLAYING' && gameState !== 'INVENTORY_OPEN' && gameState !== 'QUESTLOG_OPEN') return;
+                    let dx = 0, dy = 0;
+                    if (keysPressed['w'] || keysPressed['ArrowUp']) dy -= 1; if (keysPressed['s'] || keysPressed['ArrowDown']) dy += 1;
+                    if (keysPressed['a'] || keysPressed['ArrowLeft']) dx -= 1; if (keysPressed['d'] || keysPressed['ArrowRight']) dx += 1;
+
+                    if (this.isConfused()) { let temp = dx; dx = dy; dy = -temp; } 
+
+                    if (dx !== 0 || dy !== 0) {
+                        if (dx !== 0 && dy !== 0) { const fact = Math.sqrt(0.5); dx *= fact; dy *= fact; }
+                       
+                        const currentSpeed = this.speed * (this.statusEffects.find(e => e.name === "Speed Boost" || e.name === "Laugh-a-tonic Frenzy")?.data.speedMultiplier || 1);
+                        const tileProps = game.mapManager.getTilePropertiesAt(this.x + this.width/2, this.y + this.height/2);
+                        const effectiveSpeed = currentSpeed * (tileProps ? tileProps.speedModifier : 1);
+
+                        let nextX = this.x + dx * effectiveSpeed * deltaTime;
+                        let nextY = this.y + dy * effectiveSpeed * deltaTime;
+
+                        if (!this.checkCollision({ x: nextX, y: this.y, width: this.width, height: this.height })) this.x = nextX;
+                        if (!this.checkCollision({ x: this.x, y: nextY, width: this.width, height: this.height })) this.y = nextY;
+                       
+                        this.x = Math.max(this.width/2, Math.min(this.x, MAP_WIDTH_TILES * TILE_SIZE - this.width*1.5));
+                        this.y = Math.max(this.height/2, Math.min(this.y, MAP_HEIGHT_TILES * TILE_SIZE - this.height*1.5));
+                        this.pickupItems();
+                    }
+                },
+                checkCollision: function(rect) {
+                    const corners = [ { x: rect.x, y: rect.y }, { x: rect.x + rect.width, y: rect.y }, { x: rect.x, y: rect.y + rect.height }, { x: rect.x + rect.width, y: rect.y + rect.height }];
+                    for (const corner of corners) if (game.mapManager.isColliding(corner.x, corner.y)) return true;
+                    return false;
+                },
+                attack: function() {
+                    if (Date.now() - this.lastAttackTime < this.attackCooldown) return; this.lastAttackTime = Date.now();
+                    addMessage("Player swings!"); let attacked = false;
+                    enemies.forEach(enemy => {
+                        if (distance(this.x + this.width/2, this.y + this.height/2, enemy.x + enemy.width/2, enemy.y + enemy.height/2) < this.attackRange) {
+                            enemy.takeDamage(this.attackPower); attacked = true;
+                        }
+                    });
+                    if (!attacked) addMessage("...but hits only air.");
+                },
+                takeDamage: function(amount) { this.hp -= amount; addMessage(`Player took ${amount} damage! HP: ${this.hp}/${this.maxHp}`); if (this.hp <= 0) { this.hp = 0; game.gameOver(); } game.hud.update(); },
+                heal: function(amount) { this.hp = Math.min(this.hp + amount, this.maxHp); addMessage(`Player healed ${amount} HP. HP: ${this.hp}/${this.maxHp}`); game.hud.update(); },
+                addItem: function(item) {
+                    if (this.inventory.items.length >= this.inventory.capacity && (!item.stackable || !this.inventory.items.find(i => i.id === item.id))) { addMessage("Inventory full!"); return false; }
+                    const existing = this.inventory.items.find(i => i.id === item.id && item.stackable);
+                    if (existing) existing.quantity = (existing.quantity || 1) + (item.quantity || 1); else this.inventory.items.push({...item});
+                    addMessage(`Picked up ${item.name} (x${item.quantity || 1}).`); this.renderInventory(); game.hud.update(); return true;
+                },
+                removeItem: function(itemId, quantity = 1) {
+                    const idx = this.inventory.items.findIndex(i => i.id === itemId);
+                    if (idx > -1) { const item = this.inventory.items[idx]; if (item.quantity && item.quantity > quantity) item.quantity -= quantity; else this.inventory.items.splice(idx, 1); this.renderInventory(); game.hud.update(); return true; } return false;
+                },
+                hasItem: function(itemId, quantity = 1) { const item = this.inventory.items.find(i => i.id === itemId); return item && (item.quantity || 1) >= quantity; },
+                useItem: function(itemIndex) {
+                    const item = this.inventory.items[itemIndex];
+                    if (item) { if (item.effect) item.effect(this); else addMessage(`${item.name} has no direct use effect here.`); if (item.type === 'consumable') this.removeItem(item.id); else addMessage(`Used ${item.name}.`); this.renderInventory(); game.hud.update(); }
+                },
+                pickupItems: function() {
+                    for (let i = itemsOnMap.length - 1; i >= 0; i--) {
+                        const item = itemsOnMap[i];
+                        if (AABBCollision(this, item)) { if (this.addItem(game.itemManager.createItemById(item.id, item.quantity))) itemsOnMap.splice(i, 1); else addMessage(`Can't pick up ${item.name}. Inv full?`);}
+                    }
+                },
+                renderInventory: function() {
+                    const invDiv = document.getElementById('inventoryItems'); invDiv.innerHTML = '';
+                    if (this.inventory.items.length === 0) { invDiv.innerHTML = '<p>Your pockets are disconcertingly light.</p>'; return; }
+                    this.inventory.items.forEach((item, index) => {
+                        const itemDiv = document.createElement('div'); itemDiv.className = 'inventoryItem';
+                        let content = `${item.name} (x${item.quantity || 1}) - <i>${item.description}</i>`;
+                        if(item.type === 'consumable' || item.effect) { content += `<button class="button button-use" style="float:right;" onclick="game.player.useItem(${index})">Use</button>`; }
+                        itemDiv.innerHTML = content; invDiv.appendChild(itemDiv);
+                    });
+                },
+                useAbility: function(key) {
+                    const ability = this.abilities.find(a => a.key === key); if (!ability) return;
+                    const now = Date.now();
+                    if (now - ability.lastUsedTime >= ability.cooldown) { ability.effect(); ability.lastUsedTime = now; this.updateAbilityStatusDisplay(); }
+                    else { addMessage(`${ability.name} on cooldown: ${Math.ceil((ability.cooldown - (now - ability.lastUsedTime)) / 1000)}s`); }
+                },
+                updateAbilityCooldowns: function(dt) { this.updateAbilityStatusDisplay(); },
+                updateAbilityStatusDisplay: function() {
+                    const div = document.getElementById('abilityStatus');
+                    div.innerHTML = 'Abilities: ' + this.abilities.map(ab => {
+                        const cdLeft = Math.max(0, ab.cooldown - (Date.now() - ab.lastUsedTime));
+                        return `${ab.name} (${ab.key}) ${cdLeft > 0 ? `(CD ${Math.ceil(cdLeft/1000)}s)`: '(Ready)'}`;
+                    }).join(' | ');
+                },
+                applyStatusEffect: function(name, duration, data = {}) {
+                    this.statusEffects = this.statusEffects.filter(e => e.name !== name || (e.name === "Speed Boost" && e.data.speedMultiplier > data.speedMultiplier)); // Overwrite weaker speed boosts
+                    const effect = { name, duration, remainingTime: duration, data, removeEffect: () => {} };
+                    if (name === "Speed Boost") { /* speed handled in updateStatusEffects */ }
+                    else if (name === "Confusion") { addMessage("Urgh! Everything's sideways!"); } // was backwards
+                    else if (name === "Stealth") { addMessage("Like a shadow...");}
+                    else if (name === "Laugh-a-tonic Frenzy") { addMessage("HEHEHE! SO FAST! SO LOUD!"); enemies.forEach(e => { if (distance(this.x, this.y, e.x, e.y) < e.detectionRange * 2.5) e.alertToPosition(this.x, this.y); });}
+                    else if (name === "Marked") { addMessage("You're marked! They see you more easily."); }
+                    this.statusEffects.push(effect); this.updatePlayerStatusDisplay();
+                },
+                updateStatusEffects: function(deltaTime) {
+                    for (let i = this.statusEffects.length - 1; i >= 0; i--) {
+                        const e = this.statusEffects[i]; e.remainingTime -= deltaTime * 1000;
+                        if (e.remainingTime <= 0) { addMessage(`${e.name} wore off.`); this.statusEffects.splice(i, 1); this.updatePlayerStatusDisplay(); }
+                    }
+                    const speedBoosts = this.statusEffects.filter(e => e.name === "Speed Boost" || e.name === "Laugh-a-tonic Frenzy");
+                    let maxMultiplier = 1;
+                    if(speedBoosts.length > 0) maxMultiplier = Math.max(...speedBoosts.map(sb => sb.data.speedMultiplier));
+                    this.speed = this.baseSpeed * maxMultiplier;
+
+                    this.updatePlayerStatusDisplay();
+                },
+                hasStatusEffect: (name) => game.player.statusEffects.some(e => e.name === name),
+                isStealthed: () => game.player.hasStatusEffect("Stealth"),
+                isConfused: () => game.player.hasStatusEffect("Confusion"),
+                updatePlayerStatusDisplay: function() {
+                    const s = document.getElementById('playerStatus');
+                    s.textContent = this.statusEffects.length > 0 ? this.statusEffects.map(e => `${e.name}(${Math.ceil(e.remainingTime/1000)}s)`).join(', ') : "Normal";
+                },
+                payMoney: function(amount) { if (this.money >= amount) { this.money -= amount; game.hud.update(); return true; } return false; },
+                earnMoney: function(amount) { this.money += amount; addMessage(`Earned $${amount}.`); game.hud.update(); }
+            },
+
+            itemManager: {
+                items: {},
+                defineItems: function() { this.items = {
+                    'drug_generic': { id: 'drug_generic', name: "Sketchy Pillz", description: "Pop 'em and see.", type: 'consumable', buyPrice: 20, sellPrice: 15, stackable: true, effect: (p) => { const r = Math.random(); if (r < 0.3) { p.applyStatusEffect("Confusion", 10000); addMessage("Pillz make head spin!"); } else if (r < 0.6) {p.heal(10); addMessage("Pillz feel good!");} else {p.takeDamage(5); addMessage("Bad batch! Ouch!");} }},
+                    'first_aid': { id: 'first_aid', name: "First-Aid Kit", description: "Restores 50 HP.", type: 'consumable', buyPrice: 100, sellPrice: 40, stackable: true, effect: (p) => p.heal(50) },
+                    'speed_booster': { id: 'speed_booster', name: "Energy Drink 'Zoom'", description: "Temporary +50% speed.", type: 'consumable', buyPrice: 75, sellPrice: 30, stackable: true, effect: (p) => p.applyStatusEffect("Speed Boost", 10000, { speedMultiplier: 1.5 }) },
+                    'laugh_tonic': { id: 'laugh_tonic', name: "Laugh-a-Tonic", description: "Giggles & +30% Speed! (Loud!)", type: 'consumable', buyPrice: 150, sellPrice: 60, stackable: false, effect: (p) => { p.applyStatusEffect("Laugh-a-tonic Frenzy", 15000, { speedMultiplier: 1.3 }); }},
+                    'valuable_docs': { id: 'valuable_docs', name: "Sensitive Docs", description: "Looks important. Quest item.", type: 'quest_item', buyPrice: 0, sellPrice: 0, stackable: false }
+                };},
+                createItemById: function(id, quantity=1) { const def = this.items[id]; if(!def) return null; return {...def, quantity: def.stackable ? quantity : 1}; },
+                spawnInitialItems: function() { itemsOnMap = [];
+                    for(let i=0; i<20; i++) {
+                        let rX = Math.floor(Math.random()*MAP_WIDTH_TILES), rY = Math.floor(Math.random()*MAP_HEIGHT_TILES);
+                        let attempts = 0;
+                        while((game.mapManager.isColliding(rX*TILE_SIZE,rY*TILE_SIZE) || mapData[rY][rX].type === TILE_TYPES.WATER) && attempts < 10) {
+                            rX = Math.floor(Math.random()*MAP_WIDTH_TILES); rY = Math.floor(Math.random()*MAP_HEIGHT_TILES); attempts++;
+                        }
+                        if(attempts < 10) {
+                             const sItems = Object.keys(this.items).filter(id => this.items[id].type !== 'quest_item');
+                            const rId = sItems[Math.floor(Math.random()*sItems.length)]; const iDef = this.items[rId];
+                            if (iDef) itemsOnMap.push({ id: rId, x: rX*TILE_SIZE+TILE_SIZE*0.1, y: rY*TILE_SIZE+TILE_SIZE*0.1, width: TILE_SIZE*0.8, height: TILE_SIZE*0.8, name: iDef.name, quantity: iDef.stackable?(Math.floor(Math.random()*3)+1):1});
+                        }
+                    }
+                },
+                updateItemsOnMap: function(dt) {},
+                renderItemsOnMap: function() { itemsOnMap.forEach(item => {
+                    if (item.x + TILE_SIZE > camera.x && item.x < camera.x + camera.width && item.y + TILE_SIZE > camera.y && item.y < camera.y + camera.height) {
+                        let char = '$'; if(item.id === 'first_aid') char='+'; else if(item.id.includes('drug')) char='o'; else if(item.id==='speed_booster') char='>'; else if(item.id==='laugh_tonic') char='!'; else if(item.id.includes('docs')) char='D'; if (item.isEventItem && item.char) char = item.char;
+                        ctx.fillStyle = item.color || '#FFD700'; ctx.font = `${TILE_SIZE*0.7}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                        ctx.fillText(char, item.x + item.width/2, item.y + item.height/2 + TILE_SIZE*0.1);
+                    }
+                });}
+            },
+
+            enemyManager: {
+                enemyTypes: {},
+                initEnemyTypes: function() { this.enemyTypes = {
+                    'thug': { name: "Rogue Thug", char: 'T', color: '#F66', hp: 30, speed: 80, damage: 5, detectionRange: TILE_SIZE * 5, attackRange: TILE_SIZE * 0.9, ai: 'basic_melee', loot: () => { const r=Math.random(); if (r < 0.5) return { money: Math.floor(r*20)+5 }; if (r < 0.7) return { item: game.itemManager.createItemById('drug_generic') }; return null;}},
+                    'boss': { name: "Street Boss", char: 'B', color: '#C00', hp: 100, speed: 60, damage: 15, detectionRange: TILE_SIZE * 7, attackRange: TILE_SIZE * 1, ai: 'guard_area', loot: () => ({ money: Math.floor(Math.random()*50)+25, item: (Math.random() < 0.5 ? game.itemManager.createItemById('first_aid') : game.itemManager.createItemById('speed_booster')) }), isBoss: true},
+                    'drone': { name: "Police Drone", char: 'd', color: '#88F', hp: 20, speed: 120, damage: 0, detectionRange: TILE_SIZE * 8, attackRange: TILE_SIZE * 1.5, ai: 'tagger', attackEffect: (p)=>{ p.applyStatusEffect("Marked", 30000); addMessage("Drone tagged you!"); }, loot: () => (Math.random() < 0.2 ? {money: Math.floor(Math.random()*5)+1} : null)}
+                };},
+                createEnemy: function(typeId, x, y, patrolPath=[]) {
+                    const def = this.enemyTypes[typeId]; if(!def) return null;
+                    return {
+                        id: `e_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, typeId, x, y, width: TILE_SIZE * 0.8, height: TILE_SIZE * 0.8, ...def, currentHp: def.hp,
+                        aiState: 'PATROL', currentPatrolIndex:0, patrolPath, target: null, lastAttackTime: 0, attackCooldown: 1000, alertedPosition: null, isBoss: def.isBoss || false,
+                        takeDamage: function(amt) { this.currentHp -= amt; addMessage(`${this.name} took ${amt} damage.`); if (this.currentHp <= 0) this.die(); else if(this.aiState !== 'CHASE' && this.aiState !== 'ATTACK' && !game.player.isStealthed()) { this.aiState='CHASE'; this.target=game.player; addMessage(`${this.name} is hostile!`); }},
+                        die: function() { addMessage(`${this.name} neutralized!`); enemies = enemies.filter(e => e.id !== this.id); const loot = this.loot(); if(loot){if(loot.money)game.player.earnMoney(loot.money); if(loot.item){ itemsOnMap.push({...loot.item, x:this.x, y:this.y, width: TILE_SIZE*0.8, height: TILE_SIZE*0.8}); addMessage(`${this.name} dropped ${loot.item.name}.`);}} game.questManager.notifyEnemyDefeated(this); game.zoneManager.notifyEnemyDefeatedInZone(this);},
+                        updateAI: function(dt) {
+                            if (game.player.isStealthed() && this.aiState !== 'ATTACK' && this.target === game.player) { if (distance(this.x,this.y,game.player.x,game.player.y) > this.detectionRange * 0.75) { this.target = null; this.aiState = 'PATROL'; this.alertedPosition = null; addMessage(`${this.name} lost track of you...`);}}
+                            
+                            const distToPlayer = distance(this.x,this.y,game.player.x,game.player.y);
+                            
+                            if(this.alertedPosition){ const dAlert=distance(this.x,this.y,this.alertedPosition.x,this.alertedPosition.y); if(dAlert<TILE_SIZE){this.alertedPosition=null; if (this.aiState !== 'CHASE') this.aiState='PATROL';}else{this.moveTo(this.alertedPosition.x,this.alertedPosition.y,dt); return;}}
+                            
+                            const canSeePlayer = !game.player.isStealthed() || (this.target === game.player && distToPlayer < this.detectionRange * 0.5);
+                            const detectionRadius = (this.target === game.player && this.target.hasStatusEffect("Marked")) ? this.detectionRange * 1.5 : this.detectionRange;
+                            
+                            if(this.aiState === 'ATTACK'){ if(distToPlayer > this.attackRange * 1.2 || (this.target && this.target.hp <= 0)) {this.aiState = 'CHASE';} if(!this.target || this.target.hp <=0) {this.aiState = 'PATROL'; this.target = null;} }
+                            else if(this.aiState === 'CHASE'){ if(!this.target || this.target.hp <= 0 || (!canSeePlayer && distToPlayer > detectionRadius * 1.2)){this.aiState = 'PATROL'; this.target = null;} else if(distToPlayer <= this.attackRange) this.aiState = 'ATTACK';}
+                            else { /* PATROL or IDLE */ if(canSeePlayer && distToPlayer <= detectionRadius){this.aiState = 'CHASE'; this.target = game.player; addMessage(`${this.name} spotted you!`);}}
+                            
+                            switch(this.aiState){
+                                case 'PATROL': if(this.patrolPath && this.patrolPath.length>0){ const pt=this.patrolPath[this.currentPatrolIndex]; if(distance(this.x,this.y,pt.x,pt.y)<TILE_SIZE/2)this.currentPatrolIndex=(this.currentPatrolIndex+1)%this.patrolPath.length; this.moveTo(pt.x,pt.y,dt);}else{ if(Math.random()<0.01*(1/dt) || !this.wanderTarget){this.wanderTarget={x:this.x+(Math.random()-0.5)*TILE_SIZE*5,y:this.y+(Math.random()-0.5)*TILE_SIZE*5};} if(this.wanderTarget){if(distance(this.x,this.y,this.wanderTarget.x,this.wanderTarget.y)<TILE_SIZE/2 || game.mapManager.isColliding(this.wanderTarget.x, this.wanderTarget.y))this.wanderTarget=null;else this.moveTo(this.wanderTarget.x,this.wanderTarget.y,dt);}} break;
+                                case 'CHASE': if(this.target) this.moveTo(this.target.x,this.target.y,dt); break;
+                                case 'ATTACK': if(this.target && this.target.hp > 0 && Date.now()-this.lastAttackTime>=this.attackCooldown){this.lastAttackTime=Date.now(); if(this.attackEffect)this.attackEffect(this.target); else this.target.takeDamage(this.damage);} break;
+                            }
+                        },
+                        moveTo: function(tx,ty,dt){const dx=tx-this.x, dy=ty-this.y, distVal=Math.sqrt(dx*dx+dy*dy); if(distVal<1)return; const mx=(dx/distVal)*this.speed*dt, my=(dy/distVal)*this.speed*dt; if(!this.checkMapCollision({x:this.x+mx,y:this.y,width:this.width,height:this.height}))this.x+=mx; if(!this.checkMapCollision({x:this.x,y:this.y+my,width:this.width,height:this.height}))this.y+=my;},
+                        checkMapCollision: function(rect){const c=[{x:rect.x,y:rect.y},{x:rect.x+rect.width,y:rect.y},{x:rect.x,y:rect.y+rect.height},{x:rect.x+rect.width,y:rect.y+rect.height}]; for(const cn of c)if(game.mapManager.isColliding(cn.x,cn.y))return true; return false;},
+                        alertToPosition(x,y){this.alertedPosition={x,y}; if(this.aiState !== 'CHASE' && this.aiState !== 'ATTACK'){this.aiState='CHASE'; addMessage(`${this.name} heard a noise!`);} else {this.aiState='CHASE';} }
+                    };
+                },
+                spawnEnemy: function(typeId, tileX, tileY, patrolPath=[]) { const newE=this.createEnemy(typeId, tileX*TILE_SIZE, tileY*TILE_SIZE, patrolPath.map(p=>({x:p.x*TILE_SIZE,y:p.y*TILE_SIZE}))); if(newE)enemies.push(newE); },
+                spawnInitialEnemies: function() { enemies=[]; this.spawnEnemy('thug',15,15,[{x:14,y:14},{x:16,y:14},{x:16,y:16},{x:14,y:16}]); this.spawnEnemy('thug',20,25); this.spawnEnemy('drone',25,10); 
+                    const bossX=MAP_WIDTH_TILES-10, bossY=MAP_HEIGHT_TILES-10;
+                    this.spawnEnemy('boss', bossX, bossY);
+                    const doc = game.itemManager.createItemById('valuable_docs'); if(doc) itemsOnMap.push({...doc, x:bossX*TILE_SIZE, y:(bossY-1)*TILE_SIZE, width:TILE_SIZE*0.8, height:TILE_SIZE*0.8}); // Drop near boss
+                    for(let r=0;r<MAP_HEIGHT_TILES;r++)for(let c=0;c<MAP_WIDTH_TILES;c++)if(mapData[r][c].type === TILE_TYPES.ENEMY_SPAWN && Math.random()<0.3) this.spawnEnemy(Math.random()<0.7?'thug':'drone',c,r);
+                },
+                updateEnemies: function(dt) { for(let i=enemies.length-1;i>=0;i--)enemies[i].updateAI(dt); },
+                renderEnemies: function() { enemies.forEach(e => { if(e.x+e.width>camera.x && e.x<camera.x+camera.width && e.y+e.height>camera.y && e.y<camera.y+camera.height){
+                    ctx.fillStyle=e.color; ctx.font=`${TILE_SIZE*0.9}px Arial`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(e.char, e.x+e.width/2, e.y+e.height/2+TILE_SIZE*0.1);
+                    if(e.currentHp<e.hp){ const bY=e.y-6, bH=4; ctx.fillStyle='#500'; ctx.fillRect(e.x,bY,e.width,bH); ctx.fillStyle=e.color; ctx.fillRect(e.x,bY,e.width*(e.currentHp/e.hp),bH);}}
+                });}
+            },
+           
+            hud: { update: function() { document.getElementById('playerHealth').textContent=Math.max(0,game.player.hp); document.getElementById('playerMaxHealth').textContent=game.player.maxHp; document.getElementById('playerMoney').textContent=game.player.money; }},
+
+            shopManager: {
+                shops: {
+                    'central_market': {name:"Central Market", welcome:"Fresh goods, fresh prices!", inventory:[{itemId:'first_aid',stock:10,basePriceModifier:1.0},{itemId:'speed_booster',stock:5,basePriceModifier:1.0},{itemId:'drug_generic',stock:Infinity,basePriceModifier:1.0}], buys:['drug_generic']},
+                    'shady_dealer': {name:"Shady Dealer's Corner", welcome:"You need it, I might have it... for a price.", inventory:[{itemId:'drug_generic',stock:Infinity,basePriceModifier:0.8},{itemId:'laugh_tonic',stock:3,basePriceModifier:1.2}], buys:['drug_generic','valuable_docs']},
+                    'my_stash': {name:"Your Stash House", welcome:"Lay low, count your dough.", inventory:[{itemId:'first_aid', stock:3, basePriceModifier:0.9}], buys:[]} // Example for stash: slightly cheaper essentials maybe.
+                },
+                initShops: function(){ /* IDs are defined on map tiles with interactionTargetId */},
+                getPriceFluctuationModifier: function(itemId){ const iDef=game.itemManager.items[itemId]; if(!iDef || iDef.type!=='commodity')return 1.0; let mod=1.0; if(itemId==='drug_generic')mod*=isDayTime?0.9:1.3; if(game.randomEventManager.isEventActive('Market Frenzy')){const ed=game.randomEventManager.getActiveEventDetails(); if(ed.targetItem===itemId)mod*=ed.priceMultiplier;} return mod;},
+                getShopItemPrice: function(shopId,itemId){const s=this.shops[shopId],iDef=game.itemManager.items[itemId],entry=s.inventory.find(si=>si.itemId===itemId); if(!iDef||!entry)return 0; let p=iDef.buyPrice*entry.basePriceModifier*this.getPriceFluctuationModifier(itemId); return Math.ceil(p);},
+                getPlayerSellPrice:function(shopId,itemId){const s=this.shops[shopId],iDef=game.itemManager.items[itemId]; if(!iDef||(!s.buys.includes(iDef.id)&&!s.buys.includes(iDef.type)))return 0; return Math.floor(iDef.sellPrice*this.getPriceFluctuationModifier(itemId));},
+                populateShopUI: function(shopId){
+                    const shop = this.shops[shopId];
+                    document.getElementById('shopName').textContent = shop.name;
+                    document.getElementById('shopWelcomeMessage').textContent = shop.welcome;
+                    const sItemsDiv = document.getElementById('shopItemsForSale');
+                    const pItemsDiv = document.getElementById('playerItemsToSell');
+                    sItemsDiv.innerHTML = ''; pItemsDiv.innerHTML = '';
+
+                    if (shop.inventory.length === 0) sItemsDiv.innerHTML = "<p>Ain't got nothin' for sale right now.</p>";
+                    shop.inventory.forEach(entry=>{const iDef=game.itemManager.items[entry.itemId];if(iDef){const p=this.getShopItemPrice(shopId,entry.itemId),div=document.createElement('div');div.className='shopItem'; div.innerHTML=`${iDef.name} - $${p} (Stock: ${entry.stock > 9000 ? "Plenty" : entry.stock}) <button class="button" onclick="game.shopManager.buyItem('${shopId}','${entry.itemId}')">Buy</button>`; sItemsDiv.appendChild(div);}});
+                    
+                    let canSellSomething = false;
+                    game.player.inventory.items.forEach(pItem=>{const p=this.getPlayerSellPrice(shopId,pItem.id);if(p>0){ canSellSomething=true; const div=document.createElement('div');div.className='shopItem'; div.innerHTML=`${pItem.name} (x${pItem.quantity||1}) - Sell for $${p} each <button class="button button-sell" onclick="game.shopManager.sellItem('${shopId}','${pItem.id}',1)">Sell 1</button>`; if((pItem.quantity||1)>1){div.innerHTML+=`<button class="button button-sell" style="margin-left:5px;" onclick="game.shopManager.sellItem('${shopId}','${pItem.id}',${pItem.quantity||1})">Sell All</button>`;} pItemsDiv.appendChild(div);}});
+                    if (!canSellSomething) pItemsDiv.innerHTML = "<p>Not interested in your junk.</p>";
+                },
+                buyItem: function(shopId,itemId){const s=this.shops[shopId],iDef=game.itemManager.items[itemId],entry=s.inventory.find(si=>si.itemId===itemId); if(!iDef||!entry||entry.stock<=0){addMessage("Item unavailable.");return;}const p=this.getShopItemPrice(shopId,itemId); if(game.player.payMoney(p)){if(game.player.addItem(game.itemManager.createItemById(itemId))){entry.stock--;addMessage(`Bought ${iDef.name} for $${p}.`);this.populateShopUI(shopId);} else {game.player.earnMoney(p); /* refund */ addMessage("Couldn't add item, transaction cancelled.")}}else addMessage("Not enough cash, slick.");},
+                sellItem: function(shopId,itemId,qty){const iDef=game.itemManager.items[itemId]; if(!iDef || !game.player.hasItem(itemId,qty)){addMessage(`You don't have ${qty}x ${iDef.name}.`);return;} const pPI=this.getPlayerSellPrice(shopId,itemId); if(pPI>0){game.player.removeItem(itemId,qty);const tot=pPI*qty;game.player.earnMoney(tot);addMessage(`Sold ${qty}x ${iDef.name} for $${tot}.`); const entry=this.shops[shopId].inventory.find(si=>si.itemId===itemId); if(entry && game.itemManager.items[itemId].type !== 'quest_item')entry.stock+=qty; this.populateShopUI(shopId);}else addMessage("They won't buy that.");}
+            },
+
+            questManager: {
+                availableQuests: [], activeQuests: [],
+                initQuests: function(){ this.availableQuests = [
+                    {id:'q_delivery_1',title:"Urgent Delivery",giverId:'old_timer',description:"Take these 5 Sketchy Pillz to the Shady Dealer.",type:'DELIVER_ITEM_TO_NPC',itemToDeliverId:'drug_generic',quantity:5,targetNPCId:'shady_dealer',reward:{money:100, item:game.itemManager.createItemById('first_aid',1)},isCompleted:false,isAccepted:false,onAccept:()=>{const item=game.itemManager.createItemById('drug_generic',5); item.name += " (Quest)"; item.questItem=true; if(game.player.addItem(item)){addMessage("Old Timer gave you Pillz for delivery.");return true;}else{addMessage("Need inventory space for quest items!");return false;}},checkCompletion:()=>{return false;}}, /* completion handled by interaction at target*/
+                    {id:'q_clear_zone_1',title:"Sector Gamma Trouble",giverId:'old_timer',description:"Clear 2 thugs from Sector Gamma (NW of your stash).",type:'CLEAR_ZONE',targetZoneId:'sector_gamma',targetEnemyType:'thug',requiredKills:2,currentKills:0,reward:{money:150,item:game.itemManager.createItemById('speed_booster')},isCompleted:false,isAccepted:false,onAccept:()=>{addMessage("Quest: Clear Sector Gamma accepted!");return true;},checkCompletion:function(){return this.currentKills>=this.requiredKills;}},
+                    {id:'q_find_item_1',title:"Lost Property Retrieval",giverId:'old_timer',description:"A Street Boss (SE area) has Valuable Docs. Retrieve and return them.",type:'FIND_ITEM',itemToFindId:'valuable_docs',reward:{money:250,item:game.itemManager.createItemById('laugh_tonic')},isCompleted:false,isAccepted:false,onAccept:()=>{addMessage("Quest: Find Lost Property accepted!");return true;},checkCompletion:function(){return game.player.hasItem(this.itemToFindId);}}
+                ]; this.activeQuests=[]; this.renderQuestLog();},
+                interactWithQuestGiver: function(giverId){
+                    const activeReadyForTurnIn = this.activeQuests.find(q=>(q.giverId===giverId || q.type==='FIND_ITEM' && q.giverId===giverId) && q.checkCompletion&&q.checkCompletion()&&!q.isCompleted);
+                    if(activeReadyForTurnIn) { this.completeQuest(activeReadyForTurnIn); return;}
+
+                    const avail=this.availableQuests.filter(q=>q.giverId===giverId&&!q.isAccepted&&!q.isCompleted);
+                    if(avail.length>0){const qOffer=avail[0]; const accept=confirm(`${giverId}: Got a job. ${qOffer.title}\n"${qOffer.description}"\nReward: ${this.getRewardString(qOffer.reward)}\nAccept?`); if(accept)this.acceptQuest(qOffer);}
+                    else if(this.activeQuests.some(q=>q.giverId===giverId))addMessage(`${giverId}: "Still on that task I gave ya?"`); else addMessage(`${giverId}: "Nothin' for ya right now, beat it."`);
+                },
+                getRewardString:function(r){let s="";if(r.money)s+=`$${r.money} `; if(r.item)s+=`${r.item.name}(x${r.item.quantity||1})`; return s.trim()||"Your immense satisfaction";},
+                acceptQuest: function(q){if(q.onAccept&&!q.onAccept()){this.availableQuests.push(q); /* Add back if onAccept fails */ return;} q.isAccepted=true; this.activeQuests.push(q); const idx=this.availableQuests.findIndex(aq=>aq.id===q.id);if(idx>-1)this.availableQuests.splice(idx,1);addMessage(`Quest Accepted: ${q.title}`);this.renderQuestLog();game.hud.update();},
+                completeQuest: function(q){q.isCompleted=true;addMessage(`Quest Completed: ${q.title}! Reward: ${this.getRewardString(q.reward)}`); if(q.reward.money)game.player.earnMoney(q.reward.money); if(q.reward.item){const iR=game.itemManager.createItemById(q.reward.item.id,q.reward.item.quantity);if(iR)game.player.addItem(iR);} if(q.type==='DELIVER_ITEM_TO_NPC'||q.type==='FIND_ITEM')game.player.removeItem(q.itemToDeliverId||q.itemToFindId,q.quantity||1); this.activeQuests=this.activeQuests.filter(aq=>aq.id!==q.id);this.renderQuestLog();game.hud.update();},
+                notifyEnemyDefeated: function(e){this.activeQuests.forEach(q=>{if(q.type==='CLEAR_ZONE'&&!q.isCompleted){if(q.targetEnemyType && e.typeId !== q.targetEnemyType) return; const zone=game.zoneManager.getZoneById(q.targetZoneId); if(zone && game.zoneManager.isEnemyInZone(e,zone)){q.currentKills=(q.currentKills||0)+1;addMessage(`Quest(${q.title}): ${q.currentKills}/${q.requiredKills} targets in ${zone.name}.`);if(q.checkCompletion&&q.checkCompletion()){addMessage(`Objective for "${q.title}" met! Return to ${q.giverId}.`);}}}}); this.renderQuestLog();game.hud.update();},
+                checkDeliverQuestAtShop: function(shopId) {
+                    const qToDeliver = this.activeQuests.find(q=>q.type==='DELIVER_ITEM_TO_NPC'&&q.targetNPCId===shopId&&!q.isCompleted);
+                    if(qToDeliver){
+                        if(game.player.hasItem(qToDeliver.itemToDeliverId, qToDeliver.quantity)){
+                             if(confirm(`Deliver ${qToDeliver.quantity}x ${qToDeliver.itemToDeliverId} for "${qToDeliver.title}" to this contact?`)){this.completeQuest(qToDeliver);return true;}}
+                        else {addMessage(`Need ${qToDeliver.quantity}x ${qToDeliver.itemToDeliverId} for "${qToDeliver.title}".`); return false; /* prevent shop opening */ }
+                    } return false; /* no such quest or not ready */
+                },
+                renderQuestLog: function(){
+                    const div=document.getElementById('activeQuestsDisplay');div.innerHTML='';
+                    const hudQuestTitle = document.getElementById('activeQuestTitle');
+                    if(this.activeQuests.length===0){div.innerHTML='<p>No active missions. Check with contacts for work.</p>'; hudQuestTitle.textContent="None"; return;}
+                    
+                    this.activeQuests.forEach(q=>{
+                        const qDiv=document.createElement('div');qDiv.className='questItem';let stat="";
+                        if(q.type==='CLEAR_ZONE')stat=` (${q.currentKills||0}/${q.requiredKills||'N/A'})`;
+                        else if(q.type==='FIND_ITEM') stat = game.player.hasItem(q.itemToFindId) ? " (Item Acquired!)" : " (Item Not Found)";
+                        else if(q.type==='DELIVER_ITEM_TO_NPC') stat = game.player.hasItem(q.itemToDeliverId,q.quantity) ? " (Package Ready)" : ` (Need ${q.quantity-(game.player.inventory.items.find(i=>i.id===q.itemToDeliverId)?.quantity || 0)} more)`;
+                        if(q.checkCompletion&&q.checkCompletion() && (q.type !== 'DELIVER_ITEM_TO_NPC' /*handled by targetNPC interaction */) )stat+=" (Turn-in Ready!)";
+                        qDiv.innerHTML=`<b>${q.title}</b>: <i>${q.description}</i>${stat}`;div.appendChild(qDiv);
+                    });
+                    const firstActive = this.activeQuests[0];
+                    hudQuestTitle.textContent = firstActive.title.substring(0,20) + (firstActive.title.length > 20 ? "..." : "");
+                },
+                renderQuestMarkers: function(){this.availableQuests.forEach(q=>{if(!q.isAccepted){const gLoc=this.findLocation(q.giverId,'quest_giver');if(gLoc)this.drawMarker(gLoc.x,gLoc.y,"!","yellow");}}); this.activeQuests.forEach(q=>{if(!q.isCompleted){let tLoc;let markerChar="?"; let markerCol="white"; if(q.type==='DELIVER_ITEM_TO_NPC'){tLoc=this.findLocation(q.targetNPCId,'shop_entrance', q.targetNPCId); markerCol="cyan";}else if(q.type==='CLEAR_ZONE'){const z=game.zoneManager.getZoneById(q.targetZoneId);if(z)tLoc={x:z.x+z.width/2,y:z.y+z.height/2}; markerChar="X";markerCol="red";}else if(q.type==='FIND_ITEM'){const itm=itemsOnMap.find(i=>i.id===q.itemToFindId);if(itm)tLoc={x:itm.x,y:itm.y};else{const b=enemies.find(e=>e.isBoss && e.typeId === 'boss'); /* assuming docs are with a Street Boss type */ if(b && !game.player.hasItem(q.itemToFindId))tLoc={x:b.x,y:b.y};} markerChar="*"; markerCol="lightblue";} if(q.checkCompletion&&q.checkCompletion()){const gLoc=this.findLocation(q.giverId,'quest_giver');if(gLoc){tLoc=gLoc; markerChar="?"; markerCol="lime";}} if(tLoc)this.drawMarker(tLoc.x,tLoc.y,markerChar,markerCol);}});},
+                findLocation: function(targetId, tileType, shopId = null){
+                    for(let r=0;r<MAP_HEIGHT_TILES;r++)for(let c=0;c<MAP_WIDTH_TILES;c++){
+                        const t=mapData[r][c]; const tProp = TILE_PROPERTIES[t.type];
+                        if(tProp && tProp.interactive && tProp.type === tileType && t.interactionTargetId === (shopId || targetId) ){
+                            return{x:c*TILE_SIZE+TILE_SIZE/2,y:r*TILE_SIZE+TILE_SIZE/2};
+                        }
+                    } return null;},
+                drawMarker: function(wX,wY,char,col){if(wX>camera.x-TILE_SIZE && wX<camera.x+camera.width+TILE_SIZE && wY>camera.y-TILE_SIZE && wY<camera.y+camera.height+TILE_SIZE){ctx.fillStyle=col;ctx.font=`bold ${TILE_SIZE*0.9}px Arial`;ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(char,wX,wY-TILE_SIZE/2);}},
+            },
+
+            zoneManager: {
+                zones:[], controlDurationThreshold:30000, passiveIncomeInterval:60000,
+                initZones: function(){this.zones=[ // Sector Gamma slightly smaller, Market Outskirts is big
+                    {id:'sector_gamma',name:"Sector Gamma",x:12*TILE_SIZE,y:12*TILE_SIZE,width:6*TILE_SIZE,height:6*TILE_SIZE,isControlledByPlayer:false,controlTimer:0,incomeTimer:0,enemiesInZone:0,initialEnemiesToClear:2, incomeValue: 75},
+                    {id:'market_outskirts',name:"Market Outskirts",x:5*TILE_SIZE,y:5*TILE_SIZE,width:12*TILE_SIZE,height:12*TILE_SIZE,isControlledByPlayer:false,controlTimer:0,incomeTimer:0,enemiesInZone:0,initialEnemiesToClear:3, incomeValue: 120}
+                ]; this.zones.forEach(z=>this.updateEnemyCountInZone(z));},
+                update: function(dt){this.zones.forEach(z=>{this.updateEnemyCountInZone(z); if(z.enemiesInZone===0&&!z.isControlledByPlayer){z.controlTimer+=dt*1000; if(z.controlTimer>=this.controlDurationThreshold){z.isControlledByPlayer=true;z.incomeTimer=0;addMessage(`You control ${z.name}!`);}}else if(z.enemiesInZone>0&&z.isControlledByPlayer){z.isControlledByPlayer=false;z.controlTimer=0;addMessage(`${z.name} is contested!`);} if(z.isControlledByPlayer){z.incomeTimer+=dt*1000; if(z.incomeTimer>=this.passiveIncomeInterval){const inc= z.incomeValue || 50;game.player.earnMoney(inc);addMessage(`+$${inc} income from ${z.name}.`);z.incomeTimer=0;}}});},
+                updateDailyZoneResets: function(){this.zones.forEach(z=>{if(z.isControlledByPlayer||z.enemiesInZone===0){if(Math.random()<0.4){this.respawnEnemiesInZone(z,Math.ceil(z.initialEnemiesToClear/2)+Math.floor(Math.random()*2)); addMessage(`Enemies are moving into ${z.name}!`); z.isControlledByPlayer=false;z.controlTimer=0;}}});},
+                respawnEnemiesInZone:function(z,cnt){for(let i=0;i<cnt;i++){let att=0,spawned=false; while(att<10&&!spawned){const sX=z.x+Math.random()*z.width,sY=z.y+Math.random()*z.height; if(!game.mapManager.isColliding(sX,sY)){game.enemyManager.spawnEnemy(Math.random()<0.7?'thug':'drone',Math.floor(sX/TILE_SIZE),Math.floor(sY/TILE_SIZE));spawned=true;}att++;}}this.updateEnemyCountInZone(z);},
+                updateEnemyCountInZone:function(z){let cnt=0;enemies.forEach(e=>{if(this.isEnemyInZone(e,z))cnt++;});z.enemiesInZone=cnt;},
+                isEnemyInZone:function(e,z){const eX=e.x+e.width/2,eY=e.y+e.height/2; return eX>=z.x&&eX<=z.x+z.width&&eY>=z.y&&eY<=z.y+z.height;},
+                getZoneById:function(id){return this.zones.find(z=>z.id===id);},
+                notifyEnemyDefeatedInZone:function(e){this.zones.forEach(z=>{if(this.isEnemyInZone(e,z)){/* This check might be redundant with questManager.notifyEnemyDefeated which checks zone itself*/ }});}, // Quest manager handles zone based kills now.
+                render:function(){this.zones.forEach(z=>{if(z.x+z.width>camera.x && z.x<camera.x+camera.width && z.y+z.height>camera.y && z.y<camera.y+camera.height){ctx.globalAlpha=0.15; let col; if(z.isControlledByPlayer)col='rgba(0,255,0,0.5)'; else if(z.enemiesInZone>0)col='rgba(255,0,0,0.5)'; else col='rgba(255,255,0,0.4)';ctx.fillStyle=col;ctx.fillRect(z.x,z.y,z.width,z.height);ctx.globalAlpha=0.6;ctx.fillStyle='white';ctx.font='10px Courier New';ctx.textAlign='center';ctx.fillText(z.name,z.x+z.width/2,z.y+12);ctx.globalAlpha=1.0;}});}
+            },
+
+            randomEventManager: {
+                activeEvent: null, eventCheckInterval:20000, lastEventCheckTime:0, /* Increased check frequency slightly */
+                possibleEvents: [
+                    {name:"Police Raid",duration:60000,start:()=>{addMessage("EVENT: Police Raid in effect!");const q=Math.floor(Math.random()*4);let sX=0,sY=0,qW=MAP_WIDTH_TILES/2,qH=MAP_HEIGHT_TILES/2;if(q===1)sX=MAP_WIDTH_TILES/2;if(q===2)sY=MAP_HEIGHT_TILES/2;if(q===3){sX=MAP_WIDTH_TILES/2;sY=MAP_HEIGHT_TILES/2;} for(let i=0;i<3+Math.floor(Math.random()*3);i++){const rX=Math.floor(sX+Math.random()*qW),rY=Math.floor(sY+Math.random()*qH); if(!game.mapManager.isColliding(rX*TILE_SIZE,rY*TILE_SIZE))game.enemyManager.spawnEnemy('drone',rX,rY);} return{q};},end:(data)=>{addMessage("EVENT: Police Raid ended.");}},
+                    {name:"Supply Drop",duration:90000,start:()=>{let dX,dY,p=false;for(let i=0;i<20;i++){dX=Math.floor(Math.random()*MAP_WIDTH_TILES);dY=Math.floor(Math.random()*MAP_HEIGHT_TILES);if(!game.mapManager.isColliding(dX*TILE_SIZE,dY*TILE_SIZE) && mapData[dY][dX].type !== TILE_TYPES.WATER){p=true;break;}}if(!p){dX=MAP_WIDTH_TILES/2;dY=MAP_HEIGHT_TILES/2;} const itemPool=['first_aid','speed_booster','laugh_tonic']; const vItm=itemPool[Math.floor(Math.random()*itemPool.length)]; const qty=1,sId=`sd_${Date.now()}`;itemsOnMap.push({id:vItm,name:game.itemManager.items[vItm].name,x:dX*TILE_SIZE,y:dY*TILE_SIZE,width:TILE_SIZE,height:TILE_SIZE,char:'S',color:'#0F0',isEventItem:true,eventItemId:sId,quantity:qty});addMessage(`EVENT: Supply Drop at (${dX},${dY})! Contains ${game.itemManager.items[vItm].name}.`);return{eventItemId:sId, dropX: dX, dropY: dY};},end:(data)=>{itemsOnMap=itemsOnMap.filter(itm=>!(itm.isEventItem&&itm.eventItemId===data.eventItemId));addMessage("EVENT: Supply Drop retrieved or vanished.");}},
+                    {name:"Market Frenzy",duration:120000,start:()=>{const com=Object.keys(game.itemManager.items).filter(id=>game.itemManager.items[id].type==='commodity');if(com.length===0)return null;const tItm=com[Math.floor(Math.random()*com.length)],pM=1.4+Math.random()*0.4;addMessage(`EVENT: Market Frenzy for ${game.itemManager.items[tItm].name}! Sell prices are ${Math.round(pM*100-100)}% higher!`);return{targetItem:tItm,priceMultiplier:pM};},end:(data)=>{addMessage(`EVENT: Market Frenzy for ${game.itemManager.items[data.targetItem].name} over.`);}}
+                ],
+                update: function(dt){const now=Date.now();if(this.activeEvent){if(now>=this.activeEvent.endTime){if(this.activeEvent.definition.end)this.activeEvent.definition.end(this.activeEvent.data);this.activeEvent=null;}}else{if(now-this.lastEventCheckTime>=this.eventCheckInterval){this.lastEventCheckTime=now;if(Math.random()<0.2)this.triggerRandomEvent();}}},
+                triggerRandomEvent: function(){if(this.activeEvent||this.possibleEvents.length===0)return;const eDef=this.possibleEvents[Math.floor(Math.random()*this.possibleEvents.length)]; const eData=eDef.start?eDef.start():{}; if(eData===null)return; /* Specific case for market frenzy fail */ this.activeEvent={definition:eDef,startTime:Date.now(),endTime:Date.now()+eDef.duration,data:eData};},
+                isEventActive: function(eName){return this.activeEvent&&this.activeEvent.definition.name===eName;},
+                getActiveEventDetails: function(){if(this.activeEvent)return{name:this.activeEvent.definition.name,...this.activeEvent.data};return null;}
+            },
+           
+            update: function(deltaTime) {
+                if (gameState === 'GAME_OVER') return;
+                
+                // Global updates (cooldowns, status effects) occur regardless of minor UI popups
+                this.player.updateAbilityCooldowns(deltaTime);
+                this.player.updateStatusEffects(deltaTime);
+                this.player.updatePlayerStatusDisplay(); // Ensures HUD reflects timed effects
+
+                if (gameState === 'PLAYING' || gameState === 'INVENTORY_OPEN' || gameState === 'QUESTLOG_OPEN') {
+                    gameTime += deltaTime * 1000;
+                    const gameMins = Math.floor(gameTime / (TICKS_PER_GAME_MINUTE * 1000));
+                    const newDay = Math.floor(gameMins / GAME_MINUTES_PER_DAY) + 1;
+                    const minsInDay = gameMins % GAME_MINUTES_PER_DAY;
+                    const hrs = Math.floor(minsInDay / 60); const mins = minsInDay % 60;
+                    if (newDay > currentDay) { currentDay = newDay; addMessage(`Day ${currentDay} dawns.`); this.zoneManager.updateDailyZoneResets();this.shopManager.shops['central_market'].inventory.find(i=>i.itemId==='first_aid').stock=10;this.shopManager.shops['shady_dealer'].inventory.find(i=>i.itemId==='laugh_tonic').stock=3;} // Daily reset for some shop stocks
+                    isDayTime = hrs >= 6 && hrs < 18;
+                    document.getElementById('gameTimeDisplay').textContent = `Day ${currentDay} - ${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')} (${isDayTime?'Day':'Night'})`;
+                   
+                    this.player.handleInput(deltaTime); // Player movement and some interactions
+
+                    if (gameState === 'PLAYING') { // World simulation only when not in full-screen menu
+                        camera.update(this.player);
+                        this.enemyManager.updateEnemies(deltaTime);
+                        this.itemManager.updateItemsOnMap(deltaTime);
+                        // questManager.checkQuestCompletion handled implicitly by notifications or at turn-in
+                        this.zoneManager.update(deltaTime);
+                        this.randomEventManager.update(deltaTime);
+                    }
+                }
+                this.hud.update();
+                processTutorialQueue();
+            },
+            render: function() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.save(); ctx.translate(-camera.x, -camera.y);
+                this.mapManager.render();
+                this.zoneManager.render(); // Rendered before items/enemies for Z-order
+                this.itemManager.renderItemsOnMap();
+                this.enemyManager.renderEnemies();
+                this.player.render();
+                this.questManager.renderQuestMarkers();
+                ctx.restore();
+                if (gameState === 'GAME_OVER') {
+                    ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+                    ctx.fillStyle = 'red'; ctx.font = '48px Courier New'; ctx.textAlign = 'center';
+                    ctx.fillText('W A S T E D', canvas.width/2, canvas.height/2 - 20);
+                    ctx.font = '24px Courier New'; ctx.fillStyle = 'white';
+                    ctx.fillText('Press R to Restart', canvas.width/2, canvas.height/2 + 30);
+                }
+            },
+            gameOver: function() { gameState = 'GAME_OVER'; addMessage("Game Over! You've been put out of business."); },
+            restartGame: function() {
+                mapData=[]; itemsOnMap=[]; enemies=[]; gameTime=0; currentDay=1;
+                tutorialQueue.forEach(t=>t.shown=false); currentTutorial=null; document.getElementById('tutorialPopup').style.display='none';
+                document.getElementById('inventoryItems').innerHTML=''; document.getElementById('shopItemsForSale').innerHTML=''; document.getElementById('playerItemsToSell').innerHTML=''; document.getElementById('activeQuestsDisplay').innerHTML='';
+                gameMessages.length=0; renderMessages();
+                gameState = 'PLAYING'; this.init(); addMessage("Game Restarted. Back on the streets...");
+            },
+            openShop: function(shopId) {
+                if(this.questManager.checkDeliverQuestAtShop(shopId)) { // This function can complete quest & might mean we don't open shop UI
+                    // For example, if a quest "Talk to Shopkeeper X" completes, then we still want to open shop.
+                    // If it was "Deliver item Y to shopkeeper Z", then shop UI.
+                    // checkDeliverQuestAtShop now uses confirm, then completes quest if successful.
+                    // If it returns true (quest action taken), we can decide to skip opening shop or proceed.
+                    // For now, assume it completes and we *still* open the shop UI, player can close if done.
+                }
+                
+                const shopData = this.shopManager.shops[shopId]; if (!shopData) { addMessage("This joint's closed or inaccessible."); return; }
+                gameState = 'SHOP_MENU';
+                this.shopManager.populateShopUI(shopId);
+                document.getElementById('shopInterface').style.display = 'block';
+                document.getElementById('inventoryDisplay').style.display='none';
+                document.getElementById('questLog').style.display='none';
+            },
+            closeShop: function() { gameState = 'PLAYING'; document.getElementById('shopInterface').style.display = 'none'; addMessage("Left the shop."); },
+            toggleInventory: function() {
+                const d = document.getElementById('inventoryDisplay');
+                if (gameState === 'SHOP_MENU') return; // Don't allow inventory toggle if shop is open
+                if (d.style.display === 'block') { d.style.display = 'none'; if(gameState === 'INVENTORY_OPEN') gameState = 'PLAYING'; }
+                else { this.player.renderInventory(); d.style.display = 'block'; if(gameState === 'PLAYING') gameState = 'INVENTORY_OPEN'; document.getElementById('questLog').style.display='none';}
+            },
+            toggleQuestLog: function() {
+                const d = document.getElementById('questLog');
+                if (gameState === 'SHOP_MENU') return; // Don't allow quest log toggle if shop is open
+                if (d.style.display === 'block') { d.style.display = 'none'; if(gameState === 'QUESTLOG_OPEN') gameState = 'PLAYING'; }
+                else { this.questManager.renderQuestLog(); d.style.display = 'block'; if(gameState === 'PLAYING') gameState = 'QUESTLOG_OPEN'; document.getElementById('inventoryDisplay').style.display='none';}
+            },
+            interact: function() {
+                if (gameState !== 'PLAYING') return; // Only interact when in playing state (not menus)
+
+                const pCenterTileX = Math.floor((this.player.x + this.player.width/2)/TILE_SIZE);
+                const pCenterTileY = Math.floor((this.player.y + this.player.height/2)/TILE_SIZE);
+                const dirs = [[0,0],[0,-1],[0,1],[-1,0],[1,0], [-1,-1],[-1,1],[1,-1],[1,1]]; // Check adjacent too
+                
+                for (const [dx,dy] of dirs) {
+                    const cX=pCenterTileX+dx, cY=pCenterTileY+dy;
+                    if(this.mapManager.isValidTile(cX,cY)){
+                        const tileData = mapData[cY][cX];
+                        const tileProps = TILE_PROPERTIES[tileData.type];
+                        if(tileProps && tileProps.interactive){
+                             // Check distance, only allow interaction if very close to that tile
+                            const tileWorldX = cX * TILE_SIZE + TILE_SIZE/2;
+                            const tileWorldY = cY * TILE_SIZE + TILE_SIZE/2;
+                            if (distance(this.player.x + this.player.width/2, this.player.y + this.player.height/2, tileWorldX, tileWorldY) <= TILE_SIZE * 1.2) {
+                                if(tileData.interactionType){
+                                    switch(tileData.interactionType){
+                                        case 'shop': this.openShop(tileData.interactionTargetId); return;
+                                        case 'quest': this.questManager.interactWithQuestGiver(tileData.interactionTargetId); return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                addMessage("Nothin' of interest to interact with here.");
+            },
+            getVisibleTiles: function() { const sC=Math.max(0,Math.floor(camera.x/TILE_SIZE)),eC=Math.min(MAP_WIDTH_TILES, sC+Math.ceil(camera.width/TILE_SIZE)+1),sR=Math.max(0,Math.floor(camera.y/TILE_SIZE)),eR=Math.min(MAP_HEIGHT_TILES, sR+Math.ceil(camera.height/TILE_SIZE)+1); return{startCol:sC,endCol:eC,startRow:sR,endRow:eR};}
+        };
+
+        // Input Handling
+        window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            keysPressed[key] = true;
+
+            if (key === 'escape') {
+                if (document.getElementById('shopInterface').style.display === 'block') game.closeShop();
+                else if (document.getElementById('inventoryDisplay').style.display === 'block') game.toggleInventory();
+                else if (document.getElementById('questLog').style.display === 'block') game.toggleQuestLog();
+                else if (gameState === 'PLAYING') { /* Could add pause menu here if desired */ addMessage("Game paused (concept)."); }
+                return; // Escape should primarily handle UI, not game actions
+            }
+
+            if (gameState === 'GAME_OVER' && key === 'r') { game.restartGame(); return;}
+            if (gameState === 'SHOP_MENU') return; // Most keys disabled in shop
+
+            if (key >= '1' && key <= '3') game.player.useAbility(key);
+            if (key === 'i') game.toggleInventory();
+            if (key === 'j') game.toggleQuestLog();
+
+            // Actions only if game is primarily in 'PLAYING' or non-blocking UI
+            if (gameState === 'PLAYING' || gameState === 'INVENTORY_OPEN' || gameState === 'QUESTLOG_OPEN') {
+                if (key === 'e') game.interact();
+                if (key === ' ') { e.preventDefault(); game.player.attack(); }
+            }
+        });
+        window.addEventListener('keyup', (e) => { keysPressed[e.key.toLowerCase()] = false; });
+
+        // Main Game Loop
+        function gameLoop(currentTime) {
+            const deltaTime = Math.min(0.1, (currentTime - lastTime) / 1000);
+            lastTime = currentTime;
+
+            frameCount++;
+            if (currentTime - lastFpsUpdateTime > fpsUpdateInterval) {
+                fps = Math.round(frameCount / ((currentTime - lastFpsUpdateTime)/1000));
+                frameCount = 0; lastFpsUpdateTime = currentTime;
+                document.getElementById('fpsDisplay').textContent = fps;
+            }
+           
+            game.update(deltaTime);
+            game.render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.onload = () => {
+            game.init();
+            lastTime = performance.now(); lastFpsUpdateTime = lastTime;
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
