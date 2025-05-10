@@ -70,42 +70,54 @@ export function renderCore() {
 
 export function handleInputMovement(deltaTime) {
     if (this.game.gameState !== 'PLAYING' && this.game.gameState !== 'INVENTORY_OPEN' && this.game.gameState !== 'QUESTLOG_OPEN') return;
-    
-    let inputDx = 0, inputDy = 0; // Raw directional input
-    // CORRECTED CHECKS FOR ARROW KEYS:
-    if (this.game.keysPressed['w'] || this.game.keysPressed['arrowup']) inputDy -= 1;
-    if (this.game.keysPressed['s'] || this.game.keysPressed['arrowdown']) inputDy += 1;
-    if (this.game.keysPressed['a'] || this.game.keysPressed['arrowleft']) inputDx -= 1;
-    if (this.game.keysPressed['d'] || this.game.keysPressed['arrowright']) inputDx += 1;
+
+    let inputDx = 0, inputDy = 0;
+
+    // Prioritize touch joystick input if active and on a touch device
+    if (this.game.touchControls && this.game.touchControls.isTouchDevice && this.game.touchControls.joystick.active) {
+        inputDx = this.game.touchControls.joystick.inputDx;
+        inputDy = this.game.touchControls.joystick.inputDy;
+    } else { // Fallback to keyboard
+        if (this.game.keysPressed['w'] || this.game.keysPressed['arrowup']) inputDy -= 1;
+        if (this.game.keysPressed['s'] || this.game.keysPressed['arrowdown']) inputDy += 1;
+        if (this.game.keysPressed['a'] || this.game.keysPressed['arrowleft']) inputDx -= 1;
+        if (this.game.keysPressed['d'] || this.game.keysPressed['arrowright']) inputDx += 1;
+    }
+
 
     // Update facingDirection based on horizontal input (before confusion)
     // this.facingDirection is part of playerCharacterDesignProperties mixed into player
-    if (inputDx > 0) this.facingDirection = 1;
-    else if (inputDx < 0) this.facingDirection = -1;
+    if (inputDx > 0.1) this.facingDirection = 1; // Add a small deadzone for joystick
+    else if (inputDx < -0.1) this.facingDirection = -1;
     // If inputDx is 0, facingDirection remains unchanged (player faces last direction).
 
     let moveDx = inputDx;
     let moveDy = inputDy;
 
-    if (this.isConfused()) { 
-        let temp = moveDx; 
-        moveDx = moveDy; 
-        moveDy = -temp; 
+    if (this.isConfused()) {
+        let temp = moveDx;
+        moveDx = moveDy;
+        moveDy = -temp;
     }
 
-    if (moveDx !== 0 || moveDy !== 0) {
-        this.isMoving = true; 
+    // Add a small deadzone for joystick movement to prevent drift
+    const deadzone = 0.1;
+    if (Math.abs(moveDx) > deadzone || Math.abs(moveDy) > deadzone) {
+        this.isMoving = true;
 
         let normalizedDx = moveDx;
         let normalizedDy = moveDy;
-        if (moveDx !== 0 && moveDy !== 0) { 
-            const fact = Math.sqrt(0.5); 
-            normalizedDx *= fact; 
-            normalizedDy *= fact; 
+        // Normalization for diagonal movement (already handled if inputDx/Dy are normalized from joystick or keyboard)
+        // If using raw keyboard (0,1) and joystick (-1,1), need to ensure magnitude isn't > 1 for diagonal
+        const magnitude = Math.sqrt(normalizedDx * normalizedDx + normalizedDy * normalizedDy);
+        if (magnitude > 1) {
+            normalizedDx /= magnitude;
+            normalizedDy /= magnitude;
         }
-        this.lastDeltaX = normalizedDx; // Store normalized dx for potential animation use
 
-        const currentSpeed = this.speed; 
+        this.lastDeltaX = normalizedDx;
+
+        const currentSpeed = this.speed;
         const tileProps = this.game.mapManager.getTilePropertiesAt(this.x + this.width/2, this.y + this.height/2);
         const effectiveSpeed = currentSpeed * (tileProps ? tileProps.speedModifier : 1);
 
@@ -117,10 +129,10 @@ export function handleInputMovement(deltaTime) {
 
         this.x = Math.max(0, Math.min(this.x, this.game.config.MAP_WIDTH_TILES * this.game.config.TILE_SIZE - this.width));
         this.y = Math.max(0, Math.min(this.y, this.game.config.MAP_HEIGHT_TILES * this.game.config.TILE_SIZE - this.height));
-        
+
         this.pickupItems();
     } else {
-        this.isMoving = false; 
+        this.isMoving = false;
         this.lastDeltaX = 0;
     }
 }

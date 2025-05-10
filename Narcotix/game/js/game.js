@@ -10,6 +10,9 @@ import { shopManager } from './shopManager.js';
 import { questManager } from './questManager.js';
 import { zoneManager } from './zoneManager.js';
 import { eventManager } from './eventManager.js';
+import { touchControls } from './touchControls.js'; // ADD THIS
+
+
 
 // --- Projectile Manager ---
 // Can be a class or an object literal, using an object literal for simplicity here
@@ -101,6 +104,7 @@ export const game = {
     deltaTime: 0, // Store deltaTime for use by other modules if needed (like projectile tracer)
     currentDay: 1,
     isDayTime: true,
+    touchControls: touchControls, 
 
     camera: {
         x: 0, y: 0,
@@ -129,6 +133,8 @@ export const game = {
     randomEventManager: eventManager,
 
     init: function(canvas, ctx) {
+        this.touchControls.init(this); 
+        this.hud.init(this);
         this.canvas = canvas;
         this.ctx = ctx;
 
@@ -231,6 +237,9 @@ export const game = {
         this.questManager.renderQuestMarkers();
 
         this.ctx.restore();
+        // Render touch controls directly on canvas (joystick)
+        this.touchControls.render(this.ctx); // ADD THIS
+
 
         if (this.gameState === 'GAME_OVER') {
             this.ctx.fillStyle = 'rgba(0,0,0,0.85)';
