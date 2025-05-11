@@ -4,7 +4,7 @@ let moduleIdCounter = 0;
 
 // UPDATED Canvas Dimensions to match the CSS
 export const CANVAS_WIDTH = 3000; // Must match #canvas width in CSS
-export const CANVAS_HEIGHT = 2000; // Must match #canvas height in CSS
+export const CANVAS_HEIGHT = 3000; // Must match #canvas height in CSS
 
 export const DEFAULT_ZOOM = 0.5; // New: Define the default zoom level
 
