@@ -3,199 +3,112 @@ import { initPaletteAndCanvasDragDrop } from './drag_drop_manager.js';
 import { createModule } from './module_factory/module_factory.js';
 import { clearAllModules } from './module_manager.js';
 import { applyZoom, resetZoom, tidyModules } from './canvas_controls.js';
-import { state, getMasterBpm, setMasterBpm, getIsPlaying, setGlobalPlayState } from './shared_state.js'; // Added getIsPlaying, setGlobalPlayState
+import { state, getMasterBpm, setMasterBpm, getIsPlaying, setGlobalPlayState } from './shared_state.js';
 import { audioCtx } from './audio_context.js';
+import { createSampleGainOutputChain, createOscLfoGainOutputChain } from './ presetProcessingChains.js';
 
 
 document.addEventListener('DOMContentLoaded', () => {
-  console.log("Audio Modular Synthesizer Initializing...");
+  console.log('Audio Modular Synthesizer Initializing...');
 
-  // Get references to key DOM elements once
-  const canvasEl = document.getElementById('canvas'); // The large, scalable canvas
-  // const canvasContainerEl = document.getElementById('canvas-container'); // The scrollable viewport (drop target)
+  const $ = id => document.getElementById(id);
+  const canvasEl = $('canvas');
 
-  // New: Apply initial zoom based on shared state
-  if (canvasEl) {
-    canvasEl.style.transform = `scale(${state.currentZoom})`;
-    console.log(`Initial canvas zoom set to: ${state.currentZoom.toFixed(2)}`);
-  } else {
-    console.error("Initialization Error: Main #canvas element not found in DOM.");
-  }
+  if (!canvasEl) return console.error('#canvas element not found');
+  canvasEl.style.transform = `scale(${state.currentZoom})`;
+  console.log(`Initial canvas zoom set to: ${state.currentZoom.toFixed(2)}`);
 
-  // Canvas Actions
-  const clearAllButton = document.getElementById('clear-all-btn');
-  if (clearAllButton) {
-    clearAllButton.addEventListener('click', () => {
-      if (confirm("Are you sure you want to remove ALL modules from the canvas?")) {
-        clearAllModules();
-      }
+  // Button handlers map: id -> handler
+  const actions = {
+    'clear-all-btn': () => confirm('Remove ALL modules?') && clearAllModules(),
+    'zoom-in-btn': () => applyZoom(0.1),
+    'zoom-out-btn': () => applyZoom(-0.1),
+    'reset-zoom-btn': resetZoom,
+    'tidy-grid-btn': tidyModules
+  };
+  Object.entries(actions).forEach(([id, fn]) => $(id)?.addEventListener('click', fn));
+
+  // Master BPM
+  const bpmInput = $('master-bpm-input');
+  if (bpmInput) {
+    bpmInput.value = getMasterBpm();
+    const commit = () => {
+      let v = parseInt(bpmInput.value, 10);
+      const min = +bpmInput.min || 20, max = +bpmInput.max || 300;
+      if (isNaN(v) || v < min || v > max) {
+        console.warn(`Invalid BPM '${bpmInput.value}' (${min}-${max}), reverting.`);
+        bpmInput.value = getMasterBpm();
+      } else bpmInput.value = setMasterBpm(v);
+    };
+    bpmInput.addEventListener('blur', commit);
+    bpmInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') commit();
+      if (e.key === 'Escape') bpmInput.value = getMasterBpm();
     });
-  }
+  } else console.error("Element 'master-bpm-input' not found");
 
-  const zoomInButton = document.getElementById('zoom-in-btn');
-  if (zoomInButton) {
-    zoomInButton.addEventListener('click', () => applyZoom(0.1));
-  }
+  // Global Play/Stop
+  const playBtn = $('play-stop-button');
+  if (playBtn) {
+    const updateBtn = () => {
+      const playing = getIsPlaying();
+      playBtn.textContent = playing ? 'Stop' : 'Play';
+      playBtn.style.backgroundColor = playing ? '#28a745' : '#dc3545';
+    };
+    updateBtn();
+    playBtn.addEventListener('click', async () => {
+      const next = !getIsPlaying();
+      if (next && audioCtx.state === 'suspended') {
+        try { await audioCtx.resume(); console.log('AudioContext resumed'); }
+        catch (e) { return console.error('Error resuming AudioContext:', e); }
+      }
+      setGlobalPlayState(next);
+      updateBtn();
+    });
+  } else console.error("Element 'play-stop-button' not found");
 
-  const zoomOutButton = document.getElementById('zoom-out-btn');
-  if (zoomOutButton) {
-    zoomOutButton.addEventListener('click', () => applyZoom(-0.1));
-  }
 
-  const resetZoomButton = document.getElementById('reset-zoom-btn');
-  if (resetZoomButton) {
-    resetZoomButton.addEventListener('click', resetZoom);
-  }
+  // Add to existing actions or create new handlers
+  const presetActions = {
+    'preset-sample-chain-btn': () => createSampleGainOutputChain(50, 50), // Specify starting X, Y
+    'preset-osc-lfo-chain-btn': () => createOscLfoGainOutputChain(50, 250),
+  };
 
-  const tidyGridButton = document.getElementById('tidy-grid-btn');
-  if (tidyGridButton) {
-    tidyGridButton.addEventListener('click', tidyModules);
-  }
-
-  const masterBpmInput = document.getElementById('master-bpm-input');
-
-    if (masterBpmInput) {
-        // Initialize the input field with the current master BPM from the state
-        masterBpmInput.value = getMasterBpm();
-
-        /**
-       * Handles the commit of the BPM value from the input field.
-       * This function is called on 'blur' or 'Enter' key press.
-       * It validates the input and updates the master BPM in the shared state.
-       */
-        const handleBpmCommit = () => {
-            const rawValue = masterBpmInput.value;
-            const minBpm = parseInt(masterBpmInput.min, 10) || 20;
-            const maxBpm = parseInt(masterBpmInput.max, 10) || 300;
-            let bpmToAttempt = parseInt(rawValue, 10);
-  
-            if (isNaN(bpmToAttempt) || bpmToAttempt < minBpm || bpmToAttempt > maxBpm) {
-                console.warn(`Typed BPM "${rawValue}" is invalid or out of range (${minBpm}-${maxBpm}). Reverting to ${getMasterBpm()}.`);
-                masterBpmInput.value = getMasterBpm();
-            } else {
-                const actualBpmSet = setMasterBpm(bpmToAttempt);
-                masterBpmInput.value = actualBpmSet;
-            }
-        };
-        masterBpmInput.addEventListener('blur', handleBpmCommit);
-        masterBpmInput.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter') {
-                handleBpmCommit();
-                event.preventDefault();
-            }
-            if (event.key === 'Escape') {
-                masterBpmInput.value = getMasterBpm();
-                masterBpmInput.blur();
-            }
-        });
-    } else {
-        console.error("Master BPM input element ('master-bpm-input') not found!");
-    }
-  
-    // Global Play/Stop Button
-    const playStopButton = document.getElementById('play-stop-button');
-    if (playStopButton) {
-      playStopButton.textContent = getIsPlaying() ? 'Stop' : 'Play'; // Initial text
-  
-      playStopButton.addEventListener('click', async () => {
-        const newPlayState = !getIsPlaying();
-  
-        if (newPlayState && audioCtx.state === 'suspended') {
-          try {
-            await audioCtx.resume();
-            console.log("AudioContext resumed by global play button.");
-          } catch (err) {
-            console.error("Error resuming AudioContext:", err);
-            // Optionally, don't change play state if context can't resume
-            // alert("Could not start audio. Please interact with the page and try again.");
-            return;
-          }
-        }
-  
-        setGlobalPlayState(newPlayState);
-        playStopButton.textContent = newPlayState ? 'Stop' : 'Play';
-        // Optional: Add/remove a class for styling
-        if (newPlayState) {
-          playStopButton.style.backgroundColor = '#28a745'; // Green for playing
-        } else {
-          playStopButton.style.backgroundColor = '#dc3545'; // Red for stopped (or your neutral color)
+  Object.entries(presetActions).forEach(([id, fn]) => {
+    const button = document.getElementById(id);
+    if (button) {
+      button.addEventListener('click', async () => {
+        try {
+          await fn();
+        } catch (error) {
+          console.error(`[MainJS] Error executing preset action for ${id}:`, error);
         }
       });
     } else {
-      console.error("Play/Stop button ('play-stop-button') not found!");
+      // console.warn(`Preset action button with ID '${id}' not found.`);
     }
+  });
 
-  /**
-   * The final step: creates a module at the given UNCALED x, y coordinates.
-   * This function expects x and y to be coordinates on the large, unscaled canvas.
-   */
-  const handleModuleCreationRequest = async (type, x, y) => {
-    if (type && x !== undefined && y !== undefined) {
-      try {
-        const newModuleData = await createModule(type, x, y);
-        if (newModuleData) {
-          console.log(`Module ${newModuleData.type} (ID: ${newModuleData.id}) created at ${x.toFixed(0)}, ${y.toFixed(0)} (unscaled)`);
-        } else {
-          console.warn(`Failed to create module of type: ${type}`);
-        }
-      } catch (error) {
-        console.error(`Error creating module of type ${type}:`, error);
-      }
-    } else {
-        console.error("Invalid parameters for module creation request:", { type, x, y });
-    }
+
+  // Module creation
+  const create = async (type, x, y) => {
+    try {
+      const m = await createModule(type, x, y);
+      console.log(m ? `Module ${m.type} (ID: ${m.id}) at ${x.toFixed(0)},${y.toFixed(0)}`
+                          : `Failed to create ${type}`);
+    } catch (e) { console.error(`Error creating ${type}:`, e); }
   };
 
-  /**
-   * Handles the drop event on the canvas area (likely #canvas-container).
-   * Calculates the correct unscaled coordinates on the #canvas element,
-   * accounting for zoom and scroll, then requests module creation.
-   *
-   * This function should be called by initPaletteAndCanvasDragDrop
-   * with the module type and the raw DOM drop event.
-   *
-   * @param {string} type - The type of module to create (e.g., "oscillator").
-   * @param {DragEvent} event - The raw DOM drop event object.
-   */
-  const handleDropAndCalculatePosition = (type, event) => {
-    if (!type || !event) {
-        console.error("handleDropAndCalculatePosition: Missing module type or event object.", {type, event});
-        return;
-    }
-    if (!canvasEl) { // canvasEl is already defined in the outer scope
-        console.error("handleDropAndCalculatePosition: The main #canvas element was not found in the DOM.");
-        return;
-    }
-
-    event.preventDefault(); // Important to prevent default drop behavior
-
-    // Get the current on-screen position and dimensions of the large #canvas element.
-    // getBoundingClientRect() accounts for transforms (like scale) and parent scrolling.
-    const canvasRect = canvasEl.getBoundingClientRect();
-
-    // Mouse position relative to the viewport (browser window)
-    const mouseX_viewport = event.clientX;
-    const mouseY_viewport = event.clientY;
-
-    // Calculate mouse position relative to the #canvas element's own top-left corner.
-    // This gives us coordinates on the *scaled* canvas.
-    const mouseX_on_scaled_canvas = mouseX_viewport - canvasRect.left;
-    const mouseY_on_scaled_canvas = mouseY_viewport - canvasRect.top;
-
-    // Convert these scaled coordinates to *unscaled* coordinates on the large canvas.
-    // These are the coordinates that module.style.left and module.style.top will use.
-    const finalX = mouseX_on_scaled_canvas / state.currentZoom;
-    const finalY = mouseY_on_scaled_canvas / state.currentZoom;
-
-    console.log(`Drop details: Type=${type}, ViewportXY=(${mouseX_viewport},${mouseY_viewport}), CanvasRectLR=(${canvasRect.left.toFixed(2)},${canvasRect.top.toFixed(2)}), OnScaledCanvasXY=(${mouseX_on_scaled_canvas.toFixed(2)},${mouseY_on_scaled_canvas.toFixed(2)}), Zoom=${state.currentZoom.toFixed(2)}, FinalUnscaledXY=(${finalX.toFixed(2)},${finalY.toFixed(2)})`);
-
-    // Now, call the function that actually creates the module with the correct unscaled coordinates.
-    handleModuleCreationRequest(type, finalX, finalY);
+  const onDrop = (type, e) => {
+    if (!type || !e) return console.error('Invalid drop args');
+    e.preventDefault();
+    const rect = canvasEl.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / state.currentZoom;
+    const y = (e.clientY - rect.top) / state.currentZoom;
+    console.log(`Drop: ${type} @(${x.toFixed(2)},${y.toFixed(2)}) zoom=${state.currentZoom}`);
+    create(type, x, y);
   };
 
-  // Initialize palette and canvas drag-and-drop functionality.
-  initPaletteAndCanvasDragDrop(handleDropAndCalculatePosition);
-
-  console.log("Initialization Complete.");
+  initPaletteAndCanvasDragDrop(onDrop);
+  console.log('Initialization Complete.');
 });
-
