@@ -129,14 +129,40 @@ const tryAudioConnect = (src, dst, srcElem, dstElem) => {
 
 // Generic trigger connection
 const tryTriggerConnect = (src, dst, srcElem, dstElem) => {
-  if (src.type==='sequencer' && dst.type==='samplePlayer') {
-    src.connectedTriggers.push(dst.play);
-    const line = drawConnection(srcElem, dstElem);
-    addConnection({ srcId: src.id, dstId: dst.id, srcConnectorType:'trigger', dstConnectorType:'trigger', line });
-    return true;
-  }
-  return false;
-};
+    // src is the source module (sequencer)
+    // dst is the destination module (samplePlayer)
+  
+    // **** PROBLEM AREA ****
+    if (src.type === 'sequencer' && dst.type === 'samplePlayer') {
+      // This line assumes src.connectTrigger exists and dst.trigger exists
+      // and that dst.play is the correct function.
+      // In your sample_player.js, the function is named `trigger`, not `play`.
+  
+      // Let's use the sequencer's own `connectTrigger` method
+      // which has the validation logic we added.
+      if (typeof src.connectTrigger === 'function' && typeof dst.trigger === 'function') {
+        src.connectTrigger(dst.trigger); // Pass dst.trigger, NOT dst.play
+        
+        // The rest of this is fine if the connection above succeeds
+        const line = drawConnection(srcElem, dstElem);
+        addConnection({ 
+          srcId: src.id, 
+          dstId: dst.id, 
+          srcConnectorType: 'trigger', 
+          dstConnectorType: 'trigger', 
+          line 
+        });
+        return true;
+      } else {
+        console.error(`[ConnectionManager] Failed trigger connection: src.connectTrigger or dst.trigger is not a function.`);
+        if (src.type === 'sequencer') console.log(`  Sequencer (${src.id}) connectTrigger type: ${typeof src.connectTrigger}`);
+        if (dst.type === 'samplePlayer') console.log(`  SamplePlayer (${dst.id}) trigger type: ${typeof dst.trigger}`);
+        return false;
+      }
+    }
+    console.warn(`[ConnectionManager] tryTriggerConnect: Unsupported module types for trigger connection. Src: ${src.type}, Dst: ${dst.type}`);
+    return false;
+  };
 
 export function handleConnectorClick(id, dir, type='audio') {
   const mod = getModule(id);
@@ -161,20 +187,7 @@ export function handleConnectorClick(id, dir, type='audio') {
   if (dir==='output') state.selectedConnector={ id, elem, type, moduleType:mod.type }, elem.classList.add('selected');
 }
 
-export function handleDisconnect(id, dir, type='audio') {
-  state.connections.slice().reverse().forEach(c=>{
-    const match = (dir==='output'? c.srcId===id&&c.srcConnectorType===type : c.dstId===id&&c.dstConnectorType===type);
-    if (!match) return;
-    const src= getModule(c.srcId), dst=getModule(c.dstId);
-    if (c.srcConnectorType==='audio' && c.dstConnectorType==='audio') src?.audioNode.disconnect(c.dstParam?dst.audioNode[c.dstParam]:dst.audioNode||audioCtx.destination);
-    if (c.srcConnectorType==='trigger' && c.dstConnectorType==='trigger') {
-      const idx = src.connectedTriggers.indexOf(dst.play);
-      if (idx>-1) src.connectedTriggers.splice(idx,1);
-    }
-    c.line?.remove(); removeConnection(c);
-  });
-  if (state.selectedConnector?.id===id) state.selectedConnector.elem.classList.remove('selected'), state.selectedConnector=null;
-}
+
 
 // Refresh positions of lines
 export const refreshLinesForModule = mid => state.connections
@@ -191,17 +204,90 @@ export const refreshAllLines = () => state.connections.forEach(c=>{
   se&&de ? drawConnection(se,de,c.line) : console.warn('Missing elems for',c);
 });
 
-export function disconnectAllForModule(id) {
-  getConnectionsForModule(id).forEach(c=>{
-    const src=getModule(c.srcId), dst=getModule(c.dstId);
-    if (c.srcConnectorType==='audio') src.audioNode.disconnect(c.dstParam?dst.audioNode[c.dstParam]:audioCtx.destination);
-    if (c.srcConnectorType==='trigger') {
-      const idx=src.connectedTriggers.indexOf(dst.play);
-      if (idx>-1) src.connectedTriggers.splice(idx,1);
+export function handleDisconnect(id, dir, type='audio') {
+    state.connections.slice().reverse().forEach(c=>{
+      const match = (dir==='output'? c.srcId===id&&c.srcConnectorType===type : c.dstId===id&&c.dstConnectorType===type);
+      if (!match) return;
+      const src = getModule(c.srcId); // Get module instances
+      const dst = getModule(c.dstId);
+  
+      if (!src || !dst) {
+        console.warn(`[ConnectionManager] handleDisconnect: Could not find src or dst module for connection. SrcID: ${c.srcId}, DstID: ${c.dstId}`);
+        // Still remove the line and state if modules are missing
+        c.line?.remove(); 
+        removeConnection(c);
+        return;
+      }
+  
+      if (c.srcConnectorType==='audio' && c.dstConnectorType==='audio') {
+        if (src.audioNode) { // Check if audioNode exists
+          src.audioNode.disconnect(c.dstParam ? dst.audioNode[c.dstParam] : (dst.audioNode || audioCtx.destination));
+        } else {
+          console.warn(`[ConnectionManager] handleDisconnect: Source module ${src.id} audioNode missing for audio disconnect.`);
+        }
+      }
+      if (c.srcConnectorType==='trigger' && c.dstConnectorType==='trigger') {
+        // Use the sequencer's own disconnectTrigger method
+        if (typeof src.disconnectTrigger === 'function' && typeof dst.trigger === 'function') {
+          src.disconnectTrigger(dst.trigger);
+        } else {
+          console.warn(`[ConnectionManager] handleDisconnect: src.disconnectTrigger or dst.trigger not found for trigger connection between ${src.id} and ${dst.id}.`);
+          // Fallback to old direct manipulation if methods aren't there, but this is less ideal
+          // const idx = src.connectedTriggers.indexOf(dst.trigger); // Check for dst.trigger
+          // if (idx > -1) src.connectedTriggers.splice(idx,1);
+        }
+      }
+      c.line?.remove(); 
+      removeConnection(c);
+    });
+    if (state.selectedConnector?.id===id && state.selectedConnector.elem) { // Check if elem exists
+       state.selectedConnector.elem.classList.remove('selected');
+       state.selectedConnector=null;
     }
-    c.line?.remove(); removeConnection(c);
-  });
-  const mod = getModule(id);
-  if (mod?.audioNode?.disconnect && ['oscillator','lfo','samplePlayer','gain','filter'].includes(mod.type)) mod.audioNode.disconnect();
-  if (state.selectedConnector) state.selectedConnector.elem.classList.remove('selected'), state.selectedConnector=null;
-}
+  }
+
+  
+  export function disconnectAllForModule(id) {
+    getConnectionsForModule(id).forEach(c => {
+      const src = getModule(c.srcId);
+      const dst = getModule(c.dstId);
+  
+      if (!src || !dst) {
+        console.warn(`[ConnectionManager] disconnectAllForModule: Could not find src or dst module for connection. SrcID: ${c.srcId}, DstID: ${c.dstId}`);
+        c.line?.remove();
+        removeConnection(c);
+        return;
+      }
+  
+      if (c.srcConnectorType === 'audio') {
+        if (src.audioNode) {
+          src.audioNode.disconnect(c.dstParam ? dst.audioNode[c.dstParam] : (dst.audioNode || audioCtx.destination));
+        } else {
+          console.warn(`[ConnectionManager] disconnectAllForModule: Source module ${src.id} audioNode missing for audio disconnect.`);
+        }
+      }
+      if (c.srcConnectorType === 'trigger') {
+        if (typeof src.disconnectTrigger === 'function' && typeof dst.trigger === 'function') {
+          src.disconnectTrigger(dst.trigger);
+        } else {
+           console.warn(`[ConnectionManager] disconnectAllForModule: src.disconnectTrigger or dst.trigger not found for trigger connection between ${src.id} and ${dst.id}.`);
+        }
+      }
+      c.line?.remove();
+      removeConnection(c);
+    });
+  
+    const mod = getModule(id);
+    if (mod?.audioNode?.disconnect && ['oscillator', 'lfo', 'samplePlayer', 'gain', 'filter'].includes(mod.type)) {
+      try {
+        mod.audioNode.disconnect();
+      } catch (e) {
+        console.warn(`[ConnectionManager] Error disconnecting audioNode for module ${id} during disconnectAll:`, e);
+      }
+    }
+    
+    if (state.selectedConnector && state.selectedConnector.elem) { // check elem exists
+        state.selectedConnector.elem.classList.remove('selected');
+        state.selectedConnector=null;
+    }
+  }

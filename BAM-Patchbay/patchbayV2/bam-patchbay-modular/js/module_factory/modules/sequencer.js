@@ -1,19 +1,21 @@
 // js/module_factory/modules/sequencer.js
 import { audioCtx } from '../../audio_context.js';
+import { getMasterBpm } from '../../shared_state.js'; // Import getMasterBpm
 
 export function createSequencerModule(parent, moduleId) {
   const numSteps = 16;
   const steps = Array(numSteps).fill(false);
-  let current = 0,
-      playing = false,
-      bpm = 120,
-      interval = (60 / bpm / 4) * 1000,
-      nextTime = 0,
-      lookahead = 25,
-      ahead = 0.1,
-      timer;
+  let currentStep = 0; // Renamed from 'current' to avoid confusion
+  let isPlayingLocally = false; // Sequencer's own playing state, controlled globally
+  let currentBpm = getMasterBpm(); // Initialize with global BPM
+  let stepIntervalMs = (60 / currentBpm / 4) * 1000; // 16th notes
+  
+  let nextStepTime = 0;
+  const lookaheadMs = 25;     // How often we wake up to schedule
+  const scheduleAheadTimeSec = 0.1; // How far ahead to schedule audio events
 
-  // Tiny helper to create + style elements
+  let schedulerTimerId;
+
   const el = (tag, props = {}, style = {}) => {
     const e = document.createElement(tag);
     Object.assign(e, props);
@@ -21,105 +23,140 @@ export function createSequencerModule(parent, moduleId) {
     return e;
   };
 
-  // Controls
-  const playBtn = el('button', { textContent: 'Play' }),
-        stopBtn = el('button', { textContent: 'Stop' });
-  const ctrl = el('div');
-  ctrl.append(playBtn, stopBtn);
-  parent.append(ctrl);
-
-  // Step buttons
-  const stepEls = Array.from({ length: numSteps }, (_, i) => {
-    const s = el('div', {}, {
+  // --- Create UI Elements ---
+  const stepsContainer = el('div', {}, { display: 'flex', marginTop: '5px', marginBottom: '5px' });
+  const stepElements = Array.from({ length: numSteps }, (_, i) => {
+    const stepDiv = el('div', {}, {
       width: '20px', height: '20px', border: '1px solid #555',
-      marginRight: '2px', backgroundColor: '#333', cursor: 'pointer'
+      marginRight: '2px', backgroundColor: '#333', cursor: 'pointer',
+      boxSizing: 'border-box'
     });
-    s.onclick = () => {
+    stepDiv.onclick = () => {
       steps[i] = !steps[i];
-      s.style.backgroundColor = steps[i] ? 'orange' : '#333';
+      stepDiv.style.backgroundColor = steps[i] ? 'orange' : '#333';
     };
-    parent.appendChild(s.parentNode === null ? (el('div', {}, { display: 'flex', marginTop: '5px' }).append(s), parent.lastChild) : null);
-    return s;
+    stepsContainer.appendChild(stepDiv);
+    return stepDiv;
   });
-  // (Above line appends all stepEls into a flex container in one pass)
-  const stepsContainer = el('div', {}, { display: 'flex', marginTop: '5px' });
-  stepEls.forEach(s => stepsContainer.append(s));
-  parent.append(stepsContainer);
+  parent.appendChild(stepsContainer);
 
   const updateUI = () => {
-    stepEls.forEach((s, i) => {
-      s.style.boxShadow = playing && i === current ? '0 0 5px yellow' : '';
-      if (!playing) s.style.backgroundColor = steps[i] ? 'orange' : '#333';
+    stepElements.forEach((stepDiv, i) => {
+      if (isPlayingLocally && i === currentStep) {
+        stepDiv.style.border = '2px solid yellow';
+      } else {
+        stepDiv.style.border = '1px solid #555';
+      }
+      if (!isPlayingLocally) {
+         stepDiv.style.backgroundColor = steps[i] ? 'orange' : '#333';
+      }
     });
   };
 
-  const scheduleStep = (i, time) => {
-    if (steps[i]) mod.trigger(time);
-  };
+  // --- Scheduler Logic ---
+  const scheduleStepAudio = (stepIndex, time) => {
+    if (steps[stepIndex]) {
+      // Trigger connected modules
+      // **** ADD DIAGNOSTIC LOGGING HERE ****
+      if (moduleInstance.connectedTriggers.length > 0) {
+        console.log(`[Sequencer ${moduleId}] Step ${stepIndex} is active. Firing ${moduleInstance.connectedTriggers.length} connected triggers at time ${time.toFixed(3)}.`);
+      }
 
-  const scheduler = () => {
-    while (nextTime < audioCtx.currentTime + ahead) {
-      scheduleStep(current, nextTime);
-      nextTime += interval / 1000;
-      current = (current + 1) % numSteps;
-      updateUI();
-    }
-    if (playing) timer = setTimeout(scheduler, lookahead);
-  };
-
-  playBtn.onclick = () => {
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume().then(() =>
-        console.log(`[Sequencer ${moduleId}] AudioContext resumed`)
-      ).catch(() => {});
-    }
-    if (!playing) {
-      playing = true;
-      current = 0;
-      nextTime = audioCtx.currentTime + ahead;
-      scheduler();
-      playBtn.textContent = 'Pause';
-      console.log(`[Sequencer ${moduleId}] Play started`);
-    } else {
-      playing = false;
-      clearTimeout(timer);
-      playBtn.textContent = 'Play';
-      updateUI();
-      console.log(`[Sequencer ${moduleId}] Play paused`);
-    }
-  };
-
-  stopBtn.onclick = () => {
-    playing = false;
-    clearTimeout(timer);
-    current = 0;
-    playBtn.textContent = 'Play';
-    updateUI();
-    console.log(`[Sequencer ${moduleId}] Play stopped`);
-  };
-
-  const setTempo = newBpm => {
-    bpm = newBpm;
-    interval = (60 / bpm / 4) * 1000;
-    console.log(`[Sequencer ${moduleId}] Tempo set to ${bpm} BPM`);
-  };
-
-  const mod = {
-    id: moduleId,
-    type: 'sequencer',
-    element: parent,
-    audioNode: null,
-    play: () => playBtn.click(),
-    stop: () => stopBtn.click(),
-    setTempo,
-    connectedTriggers: [],
-    trigger: time => {
-      mod.connectedTriggers.forEach(fn => {
-        try { fn(time); }
-        catch (e) { console.error(`[Sequencer ${moduleId}] trigger error:`, e); }
+      moduleInstance.connectedTriggers.forEach((triggerFn, idx) => {
+        // **** MORE DIAGNOSTIC LOGGING ****
+        console.log(`[Sequencer ${moduleId}] Attempting to call connectedTriggers[${idx}]. Type: ${typeof triggerFn}`, triggerFn);
+        
+        if (typeof triggerFn === 'function') {
+          try {
+            triggerFn(time);
+          } catch (e) {
+            console.error(`[Sequencer ${moduleId}] Error EXECUTING connected trigger function connectedTriggers[${idx}]:`, e, "Function was:", triggerFn);
+          }
+        } else {
+          // This case should ideally be caught by connectTrigger, but as a safeguard:
+          console.error(`[Sequencer ${moduleId}] SKIPPING connectedTriggers[${idx}] because it's NOT A FUNCTION. Value:`, triggerFn);
+        }
       });
     }
   };
 
-  return mod;
+  const scheduler = () => {
+    while (nextStepTime < audioCtx.currentTime + scheduleAheadTimeSec) {
+      scheduleStepAudio(currentStep, nextStepTime);
+      nextStepTime += stepIntervalMs / 1000;
+      currentStep = (currentStep + 1) % numSteps;
+    }
+    updateUI(); 
+    if (isPlayingLocally) {
+      schedulerTimerId = setTimeout(scheduler, lookaheadMs);
+    }
+  };
+
+  const setTempo = (newBpm) => {
+    currentBpm = newBpm;
+    stepIntervalMs = (60 / currentBpm / 4) * 1000;
+    console.log(`[Sequencer ${moduleId}] Tempo set to ${currentBpm} BPM, interval ${stepIntervalMs.toFixed(2)}ms`);
+  };
+
+  const startSequence = () => {
+    if (isPlayingLocally) return;
+    if (audioCtx.state === 'suspended') {
+      console.warn(`[Sequencer ${moduleId}] AudioContext is suspended when starting sequence.`);
+    }
+    isPlayingLocally = true;
+    currentStep = 0;
+    nextStepTime = audioCtx.currentTime + 0.05;
+    
+    // **** DIAGNOSTIC LOGGING ****
+    console.log(`[Sequencer ${moduleId}] Starting sequence. Connected triggers:`, moduleInstance.connectedTriggers);
+
+    scheduler();
+    console.log(`[Sequencer ${moduleId}] Started by global play.`);
+    updateUI();
+  };
+
+  const stopSequence = () => {
+    if (!isPlayingLocally) return;
+    isPlayingLocally = false;
+    clearTimeout(schedulerTimerId);
+    console.log(`[Sequencer ${moduleId}] Stopped by global play.`);
+    updateUI();
+  };
+
+  updateUI();
+
+  const moduleInstance = {
+    id: moduleId,
+    type: 'sequencer',
+    element: parent,
+    audioNode: null,
+    setTempo,
+    startSequence,
+    stopSequence,
+    connectedTriggers: [],
+    
+    // **** UPDATE connectTrigger METHOD ****
+    connectTrigger: function(triggerFunctionToAdd) {
+      console.log(`[Sequencer ${this.id}] connectTrigger called. Attempting to add:`, triggerFunctionToAdd);
+      if (typeof triggerFunctionToAdd === 'function') {
+        this.connectedTriggers.push(triggerFunctionToAdd);
+        console.log(`[Sequencer ${this.id}] Successfully connected trigger. Total connected: ${this.connectedTriggers.length}`);
+      } else {
+        console.error(`[Sequencer ${this.id}] FAILED to connect trigger: Provided item is NOT A FUNCTION. Type: ${typeof triggerFunctionToAdd}. Received:`, triggerFunctionToAdd);
+        // Optionally, you could throw an error here to make it fail loudly at connection time
+        // throw new Error(`[Sequencer ${this.id}] Invalid item provided to connectTrigger. Expected function, got ${typeof triggerFunctionToAdd}.`);
+      }
+    },
+    disconnectTrigger: function(triggerFunctionToRemove) {
+      const initialLength = this.connectedTriggers.length;
+      this.connectedTriggers = this.connectedTriggers.filter(fn => fn !== triggerFunctionToRemove);
+      if (this.connectedTriggers.length < initialLength) {
+          console.log(`[Sequencer ${this.id}] Disconnected a trigger. Total connected: ${this.connectedTriggers.length}`);
+      } else {
+          console.warn(`[Sequencer ${this.id}] disconnectTrigger: function not found in connectedTriggers.`, triggerFunctionToRemove);
+      }
+    }
+  };
+
+  return moduleInstance;
 }

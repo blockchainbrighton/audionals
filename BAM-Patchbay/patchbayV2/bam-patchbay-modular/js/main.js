@@ -3,7 +3,7 @@ import { initPaletteAndCanvasDragDrop } from './drag_drop_manager.js';
 import { createModule } from './module_factory/module_factory.js';
 import { clearAllModules } from './module_manager.js';
 import { applyZoom, resetZoom, tidyModules } from './canvas_controls.js';
-import { state, getMasterBpm, setMasterBpm } from './shared_state.js'; // For accessing state.currentZoom
+import { state, getMasterBpm, setMasterBpm, getIsPlaying, setGlobalPlayState } from './shared_state.js'; // Added getIsPlaying, setGlobalPlayState
 import { audioCtx } from './audio_context.js';
 
 
@@ -63,58 +63,67 @@ document.addEventListener('DOMContentLoaded', () => {
        * This function is called on 'blur' or 'Enter' key press.
        * It validates the input and updates the master BPM in the shared state.
        */
-      const handleBpmCommit = () => {
-        const rawValue = masterBpmInput.value;
-        // Use min/max attributes from the input element itself, with fallbacks
-        const minBpm = parseInt(masterBpmInput.min, 10) || 20;
-        const maxBpm = parseInt(masterBpmInput.max, 10) || 300;
-
-        let bpmToAttempt = parseInt(rawValue, 10);
-
-        // Check if the parsed value is a valid number and within the min/max range
-        if (isNaN(bpmToAttempt) || bpmToAttempt < minBpm || bpmToAttempt > maxBpm) {
-            // If input is invalid (e.g., "abc", empty, or out of defined range like "10" or "500")
-            // revert the input field to the current valid master BPM from state.
-            console.warn(`Typed BPM "${rawValue}" is invalid or out of range (${minBpm}-${maxBpm}). Reverting to ${getMasterBpm()}.`);
-            masterBpmInput.value = getMasterBpm();
-            // No need to call setMasterBpm, as we are reverting to the value already in state.
+        const handleBpmCommit = () => {
+            const rawValue = masterBpmInput.value;
+            const minBpm = parseInt(masterBpmInput.min, 10) || 20;
+            const maxBpm = parseInt(masterBpmInput.max, 10) || 300;
+            let bpmToAttempt = parseInt(rawValue, 10);
+  
+            if (isNaN(bpmToAttempt) || bpmToAttempt < minBpm || bpmToAttempt > maxBpm) {
+                console.warn(`Typed BPM "${rawValue}" is invalid or out of range (${minBpm}-${maxBpm}). Reverting to ${getMasterBpm()}.`);
+                masterBpmInput.value = getMasterBpm();
+            } else {
+                const actualBpmSet = setMasterBpm(bpmToAttempt);
+                masterBpmInput.value = actualBpmSet;
+            }
+        };
+        masterBpmInput.addEventListener('blur', handleBpmCommit);
+        masterBpmInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                handleBpmCommit();
+                event.preventDefault();
+            }
+            if (event.key === 'Escape') {
+                masterBpmInput.value = getMasterBpm();
+                masterBpmInput.blur();
+            }
+        });
+    } else {
+        console.error("Master BPM input element ('master-bpm-input') not found!");
+    }
+  
+    // Global Play/Stop Button
+    const playStopButton = document.getElementById('play-stop-button');
+    if (playStopButton) {
+      playStopButton.textContent = getIsPlaying() ? 'Stop' : 'Play'; // Initial text
+  
+      playStopButton.addEventListener('click', async () => {
+        const newPlayState = !getIsPlaying();
+  
+        if (newPlayState && audioCtx.state === 'suspended') {
+          try {
+            await audioCtx.resume();
+            console.log("AudioContext resumed by global play button.");
+          } catch (err) {
+            console.error("Error resuming AudioContext:", err);
+            // Optionally, don't change play state if context can't resume
+            // alert("Could not start audio. Please interact with the page and try again.");
+            return;
+          }
+        }
+  
+        setGlobalPlayState(newPlayState);
+        playStopButton.textContent = newPlayState ? 'Stop' : 'Play';
+        // Optional: Add/remove a class for styling
+        if (newPlayState) {
+          playStopButton.style.backgroundColor = '#28a745'; // Green for playing
         } else {
-            // If the value is a number and within the HTML min/max range,
-            // then call setMasterBpm to update the application state.
-            // setMasterBpm itself also performs validation (which should be consistent).
-            const actualBpmSet = setMasterBpm(bpmToAttempt); // Pass the parsed integer
-
-            // Ensure the input field displays the exact value that was set in the state
-            // (in case setMasterBpm further processes it, e.g., if it handled floats differently).
-            masterBpmInput.value = actualBpmSet;
+          playStopButton.style.backgroundColor = '#dc3545'; // Red for stopped (or your neutral color)
         }
-    };
-
-    // Validate and commit BPM when the input field loses focus
-    masterBpmInput.addEventListener('blur', handleBpmCommit);
-
-    // Validate and commit BPM when Enter key is pressed in the input field
-    masterBpmInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-            handleBpmCommit();
-            event.preventDefault(); // Prevent default Enter behavior (e.g., form submission)
-        }
-        // Optional: Revert input to current master BPM on Escape key
-        if (event.key === 'Escape') {
-            masterBpmInput.value = getMasterBpm();
-            masterBpmInput.blur(); // Optionally remove focus
-        }
-    });
-
-    // The previous 'input' event listener has been removed.
-    // This allows users to type intermediate values (e.g., "1" when intending to type "120")
-    // without the input field immediately reverting. The browser's default behavior for
-    // type="number" will still restrict non-numeric characters in most cases.
-    // Final validation and state update occur on 'blur' or 'Enter' (via handleBpmCommit).
-
-} else {
-    console.error("Master BPM input element ('master-bpm-input') not found!");
-}
+      });
+    } else {
+      console.error("Play/Stop button ('play-stop-button') not found!");
+    }
 
   /**
    * The final step: creates a module at the given UNCALED x, y coordinates.
@@ -189,3 +198,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
   console.log("Initialization Complete.");
 });
+

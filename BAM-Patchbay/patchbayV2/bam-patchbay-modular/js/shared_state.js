@@ -9,18 +9,19 @@ export const CANVAS_HEIGHT = 3000; // Must match #canvas height in CSS
 export const DEFAULT_ZOOM = 0.5; // New: Define the default zoom level
 
 export const state = {
-  dragType: null,
-  modules: {},
-  connections: [],
-  dragState: {
-    id: null,
-    unscaledOffsetX: 0,
-    unscaledOffsetY: 0
-  },
-  selectedConnector: null,
-  currentZoom: DEFAULT_ZOOM, // Updated: Initialize with the new default zoom
-  masterBpm: 120 // New: Master BPM, default 120
-};
+    dragType: null,
+    modules: {},
+    connections: [],
+    dragState: {
+      id: null,
+      unscaledOffsetX: 0,
+      unscaledOffsetY: 0
+    },
+    selectedConnector: null,
+    currentZoom: DEFAULT_ZOOM,
+    masterBpm: 120,
+    isPlaying: false // NEW: Global play state
+  };
 
 export function getNextModuleId() {
   return 'module-' + moduleIdCounter++;
@@ -110,3 +111,46 @@ function broadcastBpmUpdate(newBpm) {
     // Add other module types here if they need BPM updates
   });
 }
+
+// --- Global Play/Stop Management ---
+/**
+ * @returns {boolean} The current global play state.
+ */
+export function getIsPlaying() {
+    return state.isPlaying;
+  }
+  
+  /**
+   * Sets the global play state and broadcasts the change.
+   * @param {boolean} shouldPlay - True to play, false to stop.
+   */
+  export function setGlobalPlayState(shouldPlay) {
+    if (state.isPlaying !== shouldPlay) {
+      state.isPlaying = shouldPlay;
+      console.log(`Global play state set to: ${state.isPlaying}`);
+      broadcastPlayStateChange(state.isPlaying);
+    }
+    return state.isPlaying;
+  }
+  
+  /**
+   * Broadcasts the play state change to relevant modules (e.g., sequencers).
+   * @param {boolean} isPlaying - The new play state.
+   */
+  function broadcastPlayStateChange(isPlaying) {
+    console.log(`Broadcasting global play state: ${isPlaying} to modules.`);
+    Object.values(state.modules).forEach(moduleData => {
+      if (moduleData && moduleData.type === 'sequencer') {
+        if (isPlaying && typeof moduleData.startSequence === 'function') {
+          moduleData.startSequence();
+        } else if (!isPlaying && typeof moduleData.stopSequence === 'function') {
+          moduleData.stopSequence();
+        }
+      }
+      // Add other module types here if they need global play/stop notifications
+      // For example, some LFOs might only run when global play is active.
+      // if (moduleData && moduleData.type === 'lfo' && typeof moduleData.onGlobalPlayStateChange === 'function') {
+      //   moduleData.onGlobalPlayStateChange(isPlaying);
+      // }
+    });
+  }
