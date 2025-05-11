@@ -1,11 +1,12 @@
 // js/canvas_controls.js
 import { canvas } from './dom_elements.js';
-import { state, getModule, CANVAS_WIDTH, CANVAS_HEIGHT } from './shared_state.js';
+// Updated: Import DEFAULT_ZOOM from shared_state
+import { state, getModule, CANVAS_WIDTH, CANVAS_HEIGHT, DEFAULT_ZOOM } from './shared_state.js';
 import { refreshAllLines } from './connection_manager.js';
 
 const ZOOM_STEP = 0.1;
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 2.0;
+const MIN_ZOOM = 0.25; // Updated: Allow canvas to shrink more (was 0.5)
+const MAX_ZOOM = 2.0;  // Kept the same, can be adjusted if needed
 
 /**
  * Applies a zoom transformation to the canvas.
@@ -17,21 +18,32 @@ export function applyZoom(zoomChange) {
 
     if (newZoom !== state.currentZoom) {
         state.currentZoom = newZoom;
-        canvas.style.transform = `scale(${state.currentZoom})`;
+        // Ensure canvas element exists before trying to style it
+        if (canvas) {
+            canvas.style.transform = `scale(${state.currentZoom})`;
+        } else {
+            console.error("applyZoom: Canvas element not found.");
+        }
         refreshAllLines(); // Redraw lines as connector positions appear to change
-        console.log(`Canvas zoomed to: ${state.currentZoom.toFixed(1)}`);
+        console.log(`Canvas zoomed to: ${state.currentZoom.toFixed(2)}`);
     }
 }
 
 /**
- * Resets the canvas zoom to its default (1.0).
+ * Resets the canvas zoom to its defined default.
  */
 export function resetZoom() {
-    if (state.currentZoom !== 1.0) {
-        state.currentZoom = 1.0;
-        canvas.style.transform = `scale(${state.currentZoom})`;
+    // Updated: Reset to DEFAULT_ZOOM instead of hardcoded 1.0
+    if (state.currentZoom !== DEFAULT_ZOOM) {
+        state.currentZoom = DEFAULT_ZOOM;
+        // Ensure canvas element exists
+        if (canvas) {
+            canvas.style.transform = `scale(${state.currentZoom})`;
+        } else {
+            console.error("resetZoom: Canvas element not found.");
+        }
         refreshAllLines();
-        console.log("Canvas zoom reset.");
+        console.log(`Canvas zoom reset to default: ${state.currentZoom.toFixed(2)}`);
     }
 }
 

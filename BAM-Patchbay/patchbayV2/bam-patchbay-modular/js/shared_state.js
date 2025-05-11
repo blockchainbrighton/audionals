@@ -6,6 +6,8 @@ let moduleIdCounter = 0;
 export const CANVAS_WIDTH = 3000; // Must match #canvas width in CSS
 export const CANVAS_HEIGHT = 2000; // Must match #canvas height in CSS
 
+export const DEFAULT_ZOOM = 0.5; // New: Define the default zoom level
+
 export const state = {
   dragType: null,
   modules: {},
@@ -16,10 +18,10 @@ export const state = {
     unscaledOffsetY: 0
   },
   selectedConnector: null,
-  currentZoom: 1.0
+  currentZoom: DEFAULT_ZOOM // Updated: Initialize with the new default zoom
 };
 
-// ... rest of your shared_state.js
+// ... rest of your shared_state.js (no changes from your original below this line)
 export function getNextModuleId() {
   return 'module-' + moduleIdCounter++;
 }
