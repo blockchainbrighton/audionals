@@ -58,34 +58,63 @@ document.addEventListener('DOMContentLoaded', () => {
         // Initialize the input field with the current master BPM from the state
         masterBpmInput.value = getMasterBpm();
 
-        masterBpmInput.addEventListener('input', (event) => {
-            const newBpmValue = event.target.value;
-            const validatedBpm = setMasterBpm(newBpmValue);
-            // If validation changed the value (e.g., clamped it or reverted), update the input field
-            if (parseFloat(newBpmValue) !== validatedBpm && event.target.value !== validatedBpm.toString()) {
-                event.target.value = validatedBpm;
-            }
-        });
+        /**
+       * Handles the commit of the BPM value from the input field.
+       * This function is called on 'blur' or 'Enter' key press.
+       * It validates the input and updates the master BPM in the shared state.
+       */
+      const handleBpmCommit = () => {
+        const rawValue = masterBpmInput.value;
+        // Use min/max attributes from the input element itself, with fallbacks
+        const minBpm = parseInt(masterBpmInput.min, 10) || 20;
+        const maxBpm = parseInt(masterBpmInput.max, 10) || 300;
 
-        // Optional: Add a 'blur' event to re-validate or reset if the user leaves an invalid value
-        masterBpmInput.addEventListener('blur', (event) => {
-            const currentVal = parseInt(event.target.value, 10);
-            const minBpm = parseInt(masterBpmInput.min, 10);
-            const maxBpm = parseInt(masterBpmInput.max, 10);
+        let bpmToAttempt = parseInt(rawValue, 10);
 
-            if (isNaN(currentVal) || currentVal < minBpm || currentVal > maxBpm) {
-                // If value is invalid after leaving the field, reset to current master BPM
-                event.target.value = getMasterBpm();
-                // No need to call setMasterBpm again if it resets to the already set masterBpm
-            } else {
-                // If value is valid but different (e.g. user typed 120.5, input event might have set 120)
-                // ensure it's correctly set in state. The 'input' event should mostly handle this.
-                setMasterBpm(event.target.value);
-            }
-        });
-    } else {
-        console.error("Master BPM input element ('master-bpm-input') not found!");
-    }
+        // Check if the parsed value is a valid number and within the min/max range
+        if (isNaN(bpmToAttempt) || bpmToAttempt < minBpm || bpmToAttempt > maxBpm) {
+            // If input is invalid (e.g., "abc", empty, or out of defined range like "10" or "500")
+            // revert the input field to the current valid master BPM from state.
+            console.warn(`Typed BPM "${rawValue}" is invalid or out of range (${minBpm}-${maxBpm}). Reverting to ${getMasterBpm()}.`);
+            masterBpmInput.value = getMasterBpm();
+            // No need to call setMasterBpm, as we are reverting to the value already in state.
+        } else {
+            // If the value is a number and within the HTML min/max range,
+            // then call setMasterBpm to update the application state.
+            // setMasterBpm itself also performs validation (which should be consistent).
+            const actualBpmSet = setMasterBpm(bpmToAttempt); // Pass the parsed integer
+
+            // Ensure the input field displays the exact value that was set in the state
+            // (in case setMasterBpm further processes it, e.g., if it handled floats differently).
+            masterBpmInput.value = actualBpmSet;
+        }
+    };
+
+    // Validate and commit BPM when the input field loses focus
+    masterBpmInput.addEventListener('blur', handleBpmCommit);
+
+    // Validate and commit BPM when Enter key is pressed in the input field
+    masterBpmInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            handleBpmCommit();
+            event.preventDefault(); // Prevent default Enter behavior (e.g., form submission)
+        }
+        // Optional: Revert input to current master BPM on Escape key
+        if (event.key === 'Escape') {
+            masterBpmInput.value = getMasterBpm();
+            masterBpmInput.blur(); // Optionally remove focus
+        }
+    });
+
+    // The previous 'input' event listener has been removed.
+    // This allows users to type intermediate values (e.g., "1" when intending to type "120")
+    // without the input field immediately reverting. The browser's default behavior for
+    // type="number" will still restrict non-numeric characters in most cases.
+    // Final validation and state update occur on 'blur' or 'Enter' (via handleBpmCommit).
+
+} else {
+    console.error("Master BPM input element ('master-bpm-input') not found!");
+}
 
   /**
    * The final step: creates a module at the given UNCALED x, y coordinates.

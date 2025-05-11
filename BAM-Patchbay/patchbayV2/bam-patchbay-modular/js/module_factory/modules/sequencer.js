@@ -1,149 +1,125 @@
 // js/module_factory/modules/sequencer.js
 import { audioCtx } from '../../audio_context.js';
-// Removed: import { state } from '../../shared_state.js'; // BPM will be handled by BPM module
 
-/**
- * Creates a Sequencer module.
- * @param {HTMLElement} parentElement - The module's main DOM element.
- * @param {string} moduleId - The ID of the module.
- * @returns {object} Module data.
- */
-export function createSequencerModule(parentElement, moduleId) { // Added moduleId
-    const numSteps = 16;
-    const steps = Array(numSteps).fill(false);
-    let currentStep = 0;
-    let isPlaying = false;
-    let bpm = 120;
-    let stepIntervalMs = (60 / bpm / 4) * 1000;
-    let nextStepTime = 0;
-    let lookaheadMs = 25.0;
-    let scheduleAheadTime = 0.1;
-    let timerID;
+export function createSequencerModule(parent, moduleId) {
+  const numSteps = 16;
+  const steps = Array(numSteps).fill(false);
+  let current = 0,
+      playing = false,
+      bpm = 120,
+      interval = (60 / bpm / 4) * 1000,
+      nextTime = 0,
+      lookahead = 25,
+      ahead = 0.1,
+      timer;
 
-    const controlsDiv = document.createElement('div');
-    const playButton = document.createElement('button');
-    playButton.textContent = 'Play';
-    const stopButton = document.createElement('button');
-    stopButton.textContent = 'Stop';
-    controlsDiv.appendChild(playButton);
-    controlsDiv.appendChild(stopButton);
-    parentElement.appendChild(controlsDiv);
+  // Tiny helper to create + style elements
+  const el = (tag, props = {}, style = {}) => {
+    const e = document.createElement(tag);
+    Object.assign(e, props);
+    Object.assign(e.style, style);
+    return e;
+  };
 
-    const stepsContainer = document.createElement('div');
-    stepsContainer.style.display = 'flex';
-    stepsContainer.style.marginTop = '5px';
-    const stepElements = [];
+  // Controls
+  const playBtn = el('button', { textContent: 'Play' }),
+        stopBtn = el('button', { textContent: 'Stop' });
+  const ctrl = el('div');
+  ctrl.append(playBtn, stopBtn);
+  parent.append(ctrl);
 
-    for (let i = 0; i < numSteps; i++) {
-        const stepEl = document.createElement('div');
-        stepEl.style.width = '20px';
-        stepEl.style.height = '20px';
-        stepEl.style.border = '1px solid #555';
-        stepEl.style.marginRight = '2px';
-        stepEl.style.backgroundColor = '#333';
-        stepEl.style.cursor = 'pointer';
-        stepEl.dataset.index = i;
-        stepEl.addEventListener('click', () => {
-            steps[i] = !steps[i];
-            stepEl.style.backgroundColor = steps[i] ? 'orange' : '#333';
-        });
-        stepsContainer.appendChild(stepEl);
-        stepElements.push(stepEl);
-    }
-    parentElement.appendChild(stepsContainer);
-
-    function updateStepHighlight() {
-        stepElements.forEach((el, idx) => {
-            el.style.boxShadow = (idx === currentStep && isPlaying) ? '0 0 5px yellow' : 'none';
-            el.style.backgroundColor = steps[idx] ? 'orange' : '#333';
-        });
-    }
-
-    function scheduleStep(stepIndex, time) {
-        if (steps[stepIndex]) {
-            if (moduleInstance.triggerOutput) {
-                moduleInstance.triggerOutput(time);
-            } else {
-                console.error(`Sequencer (ID: ${moduleInstance.id}): triggerOutput method is missing!`);
-            }
-        }
-    }
-
-    function scheduler() {
-        while (nextStepTime < audioCtx.currentTime + scheduleAheadTime) {
-            scheduleStep(currentStep, nextStepTime);
-            nextStepTime += stepIntervalMs / 1000;
-            currentStep = (currentStep + 1) % numSteps;
-            updateStepHighlight();
-        }
-        if (isPlaying) {
-            timerID = setTimeout(scheduler, lookaheadMs);
-        }
-    }
-
-    playButton.addEventListener('click', () => {
-        if (audioCtx.state === 'suspended') {
-            console.log(`Sequencer (ID: ${moduleInstance.id}): AudioContext suspended, attempting to resume via Play button.`);
-            audioCtx.resume().then(() => {
-                 console.log(`Sequencer (ID: ${moduleInstance.id}): AudioContext resumed.`);
-            }).catch(err => console.error(`Sequencer (ID: ${moduleInstance.id}): Error resuming AudioContext:`, err));
-        }
-        if (!isPlaying) {
-            isPlaying = true;
-            currentStep = 0;
-            nextStepTime = audioCtx.currentTime + 0.1; // Add a slight delay to ensure context can resume if needed
-            scheduler();
-            playButton.textContent = 'Pause';
-            console.log(`Sequencer (ID: ${moduleInstance.id}): Play started.`);
-        } else {
-            isPlaying = false;
-            clearTimeout(timerID);
-            updateStepHighlight();
-            playButton.textContent = 'Play';
-            console.log(`Sequencer (ID: ${moduleInstance.id}): Play paused.`);
-        }
+  // Step buttons
+  const stepEls = Array.from({ length: numSteps }, (_, i) => {
+    const s = el('div', {}, {
+      width: '20px', height: '20px', border: '1px solid #555',
+      marginRight: '2px', backgroundColor: '#333', cursor: 'pointer'
     });
-
-    stopButton.addEventListener('click', () => {
-        isPlaying = false;
-        clearTimeout(timerID);
-        currentStep = 0;
-        updateStepHighlight();
-        playButton.textContent = 'Play';
-        console.log(`Sequencer (ID: ${moduleInstance.id}): Play stopped.`);
-    });
-
-    function setTempo(newBpm) {
-        console.log(`Sequencer (ID: ${moduleInstance.id}): Setting tempo to ${newBpm} BPM.`);
-        bpm = newBpm;
-        stepIntervalMs = (60 / bpm / 4) * 1000;
-    }
-
-    const moduleInstance = {
-        id: moduleId, // Assign moduleId here
-        type: 'sequencer', // Explicitly set type
-        element: parentElement,
-        audioNode: null,
-        play: () => playButton.click(), // Allow programmatic play/pause
-        stop: () => stopButton.click(), // Allow programmatic stop
-        setTempo: setTempo,
-        connectedTriggers: [],
-        triggerOutput: (time) => {
-            console.log(`Sequencer (ID: ${moduleInstance.id}): Firing triggerOutput. Connected triggers: ${moduleInstance.connectedTriggers.length}`);
-            moduleInstance.connectedTriggers.forEach((triggerFn, index) => {
-                console.log(`  Sequencer (ID: ${moduleInstance.id}): Attempting to call trigger function #${index + 1}`);
-                console.log(`  Function to be called:`, triggerFn); // Log the function itself
-                try {
-                    if (typeof triggerFn === 'function') {
-                        triggerFn(); // Call the SamplePlayer's play method!
-                    } else {
-                        console.error(`  ERROR in Sequencer (ID: ${moduleInstance.id}): triggerFn at index ${index} is NOT a function! Type: ${typeof triggerFn}`, triggerFn);
-                    }
-                } catch (e) {
-                    console.error(`  ERROR in Sequencer (ID: ${moduleInstance.id}) executing triggerFn at index ${index}:`, e);
-                }
-            });
-        }
+    s.onclick = () => {
+      steps[i] = !steps[i];
+      s.style.backgroundColor = steps[i] ? 'orange' : '#333';
     };
-    return moduleInstance;
+    parent.appendChild(s.parentNode === null ? (el('div', {}, { display: 'flex', marginTop: '5px' }).append(s), parent.lastChild) : null);
+    return s;
+  });
+  // (Above line appends all stepEls into a flex container in one pass)
+  const stepsContainer = el('div', {}, { display: 'flex', marginTop: '5px' });
+  stepEls.forEach(s => stepsContainer.append(s));
+  parent.append(stepsContainer);
+
+  const updateUI = () => {
+    stepEls.forEach((s, i) => {
+      s.style.boxShadow = playing && i === current ? '0 0 5px yellow' : '';
+      if (!playing) s.style.backgroundColor = steps[i] ? 'orange' : '#333';
+    });
+  };
+
+  const scheduleStep = (i, time) => {
+    if (steps[i]) mod.trigger(time);
+  };
+
+  const scheduler = () => {
+    while (nextTime < audioCtx.currentTime + ahead) {
+      scheduleStep(current, nextTime);
+      nextTime += interval / 1000;
+      current = (current + 1) % numSteps;
+      updateUI();
+    }
+    if (playing) timer = setTimeout(scheduler, lookahead);
+  };
+
+  playBtn.onclick = () => {
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().then(() =>
+        console.log(`[Sequencer ${moduleId}] AudioContext resumed`)
+      ).catch(() => {});
+    }
+    if (!playing) {
+      playing = true;
+      current = 0;
+      nextTime = audioCtx.currentTime + ahead;
+      scheduler();
+      playBtn.textContent = 'Pause';
+      console.log(`[Sequencer ${moduleId}] Play started`);
+    } else {
+      playing = false;
+      clearTimeout(timer);
+      playBtn.textContent = 'Play';
+      updateUI();
+      console.log(`[Sequencer ${moduleId}] Play paused`);
+    }
+  };
+
+  stopBtn.onclick = () => {
+    playing = false;
+    clearTimeout(timer);
+    current = 0;
+    playBtn.textContent = 'Play';
+    updateUI();
+    console.log(`[Sequencer ${moduleId}] Play stopped`);
+  };
+
+  const setTempo = newBpm => {
+    bpm = newBpm;
+    interval = (60 / bpm / 4) * 1000;
+    console.log(`[Sequencer ${moduleId}] Tempo set to ${bpm} BPM`);
+  };
+
+  const mod = {
+    id: moduleId,
+    type: 'sequencer',
+    element: parent,
+    audioNode: null,
+    play: () => playBtn.click(),
+    stop: () => stopBtn.click(),
+    setTempo,
+    connectedTriggers: [],
+    trigger: time => {
+      mod.connectedTriggers.forEach(fn => {
+        try { fn(time); }
+        catch (e) { console.error(`[Sequencer ${moduleId}] trigger error:`, e); }
+      });
+    }
+  };
+
+  return mod;
 }
