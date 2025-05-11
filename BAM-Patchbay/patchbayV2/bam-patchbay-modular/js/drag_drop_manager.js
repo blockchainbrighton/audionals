@@ -1,13 +1,14 @@
 // drag_drop_manager.js
 import { canvas, paletteItems } from './dom_elements.js';
 import { state, getModule } from './shared_state.js';
-import { createModule } from './module_factory.js';
+// Removed: import { createModule } from './module_factory.js';
 import { refreshLinesForModule } from './connection_manager.js';
 
 /**
  * Initializes drag-from-palette and drop-onto-canvas functionality.
+ * @param {function(string, number, number): void} onModuleCreateRequested - Callback to execute when a module drop event occurs.
  */
-export function initPaletteAndCanvasDragDrop() {
+export function initPaletteAndCanvasDragDrop(onModuleCreateRequested) {
   paletteItems.forEach(item => {
     item.addEventListener('dragstart', e => {
       state.dragType = item.dataset.type;
@@ -29,11 +30,12 @@ export function initPaletteAndCanvasDragDrop() {
 
   canvas.addEventListener('drop', e => {
     e.preventDefault();
-    if (state.dragType) {
+    if (state.dragType && typeof onModuleCreateRequested === 'function') {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      createModule(state.dragType, x, y);
+      // Call the provided callback instead of createModule directly
+      onModuleCreateRequested(state.dragType, x, y);
       state.dragType = null;
     }
   });
