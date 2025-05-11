@@ -304,3 +304,7 @@ A brief overview of key files and directories:
 *   Additional module types (sequencers, envelope generators, delay, etc.).
 *   Improved UI/UX for parameter control and visualization.
 *   Polyphony.
+
+
+
+

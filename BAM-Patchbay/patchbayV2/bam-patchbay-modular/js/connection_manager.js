@@ -2,6 +2,8 @@
 import { svg as svgElementRef } from './dom_elements.js'; // Renamed import for clarity if needed, or ensure 'svg' is the DOM element
 import { state, getModule, addConnection, removeConnection, getConnectionsForModule } from './shared_state.js';
 import { audioCtx } from './audio_context.js';
+import { MODULE_DEFS } from './module_factory/modules/index.js';
+
 
 export function drawConnection(c1, c2) {
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -90,13 +92,14 @@ export function handleConnectorClick(moduleId, connectorDirection, connectorType
         const srcNode = srcModuleData.audioNode;
         let dstNodeOrParam = dstModuleData.audioNode;
         // ... (your LFO and param targeting logic) ...
-        if (srcNode && (dstNodeOrParam || (dstModuleData.type === 'output' && dstModuleData.audioNode === audioCtx.destination))) {
-             if (srcModuleData.type === 'lfo' && dstModuleData.type !== 'output') { // LFO Modulation
-                if (dstModuleData.audioNode?.frequency && (dstModuleData.type === 'oscillator' || dstModuleData.type === 'filter')) {
-                    dstNodeOrParam = dstModuleData.audioNode.frequency;
-                } else if (dstModuleData.audioNode?.gain && dstModuleData.type === 'gain') {
-                    dstNodeOrParam = dstModuleData.audioNode.gain;
-                } // etc.
+        if (srcNode && (dstNodeOrParam )) {
+            // LFO-to-param?
+            if (srcModuleData.type === 'lfo' && dstModuleData.type !== 'output') {
+              const destDef = MODULE_DEFS[dstModuleData.type];
+              const paramKey = destDef?.lfoTargets?.[dstModuleData.type] || Object.values(destDef.lfoTargets)[0];
+              if (paramKey && dstModuleData.audioNode[paramKey] instanceof AudioParam) {
+                dstNodeOrParam = dstModuleData.audioNode[paramKey];
+              }
             }
             try {
                 srcNode.connect(dstNodeOrParam);

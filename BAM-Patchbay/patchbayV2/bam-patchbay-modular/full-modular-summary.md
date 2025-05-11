@@ -403,3 +403,106 @@ Generates an LFO signal (oscillator + depth gain) for modulation, with rate an
 * Web Audio 
 
 
+## Interface Guide
+
+### Layout
+
+```
+┌ Palette ─────────┐  ┌──────────── Canvas Container ────────────┐  ┌ Instructions ┐
+│  drag sources    │  │ ┌──────────── <svg> connections ───────┐ │  │  usage help  │
+│  + zoom buttons  │  │ │  absolute-positioned modules         │ │  └─────────────┘
+└──────────────────┘  │ └───────────────────────────────────────┘ │
+                      └───────────────────────────────────────────┘
+```
+
+* **Palette** – module catalogue, plus zoom/grid/clear controls.
+* **Canvas** – huge workspace that can scroll & zoom; modules are absolutely positioned.
+* **Instructions panel** – built-in quick-reference guide (can be hidden in your fork).
+
+### Connectors
+
+| Colour         | Purpose                    | Notes                                                                   |
+| -------------- | -------------------------- | ----------------------------------------------------------------------- |
+| Red            | **Output** (audio/control) | Any module except the master **Output** has at least one red connector. |
+| Green          | **Input** (audio/control)  | **Oscillator**/ **LFO** lack inputs (they are pure sources).            |
+| Yellow outline | *Selected*                 | Shows the first connector clicked during cable creation.                |
+
+---
+
+## Module Reference
+
+| Type              | Role               | Key Parameters              | Default          |
+| ----------------- | ------------------ | --------------------------- | ---------------- |
+| **Oscillator**    | Sound source       | Frequency, Waveform, Detune | 440 Hz, `sine`   |
+| **Filter**        | Tone shaping       | Cut-off freq, Q             | 1 kHz, 1         |
+| **Gain**          | Volume / VCA       | Gain                        | 1.0              |
+| **LFO**           | Low-freq modulator | Rate, Waveform              | 5 Hz, `sine`     |
+| **Sample Player** | Triggered audio    | Start/Stop, File            | silent           |
+| **Sequencer**     | Step triggers      | Tempo, Steps                | 120 BPM, 8 steps |
+| **BPM Clock**     | Global clock       | Tempo                       | 120 BPM          |
+| **Output**        | Final sink         | –                           | –                |
+
+> **Modulation routing:** LFO → Oscillator `frequency`, Filter `frequency`, Gain `gain` automatically if such params exist.
+
+---
+
+## Extending the System
+
+1. **Create audio/UI logic** in `js/module_factory/modules/<your-module>.js`; export a function returning the primary `AudioNode`.
+2. **Register** it in `audio_component_factory.js` (`switch (type)`).
+3. **Define connectors** in `module_connectors.js` if it’s a pure source/sink.
+4. **Palette entry** – add a `<div class="module-item" draggable data-type="your-module">`.
+5. **(Optional) LFO support** – map its `AudioParam`s in `connection_manager.js#getParamName`.
+
+Hot-reload is automatic: refresh the browser and your module appears.
+
+---
+
+## Project Structure
+
+```
+.
+├─ index.html                   # bootstraps the UI
+├─ styles.css                   # global & responsive styles
+├─ readme.md                    # ← you are here
+├─ /js
+│  ├─ main.js                   # application entry point
+│  ├─ audio_context.js          # singleton AudioContext
+│  ├─ shared_state.js           # central state container
+│  ├─ dom_elements.js           # DOM element references
+│  ├─ drag_drop_manager.js      # drag-and-drop & move logic
+│  ├─ connection_manager.js     # draw, connect, disconnect lines
+│  ├─ canvas_controls.js        # zoom, tidy grid, clear
+│  └─ /module_factory
+│     ├─ module_factory.js          # orchestrates shell + audio + UI + connectors
+│     ├─ audio_component_factory.js # lazy-loads individual module logic
+│     ├─ module_dom.js              # DOM creators
+│     ├─ module_connectors.js       # input/output dots
+│     └─ modules/                   # **each concrete module here**
+│        ├─ oscillator.js
+│        ├─ filter.js
+│        └─ … etc.
+└─ MODULE_SUMMARY.md           # auto-generated API digest
+```
+
+---
+
+## Contributing
+
+Pull requests are welcome! Please:
+
+1. Fork → feature branch (`feat/<topic>`).
+2. Follow existing linting & naming conventions.
+3. Add unit tests where practical (Jest + `jsdom` recommended).
+4. Update **MODULE\_SUMMARY.md** by running the summariser script or following the style above.
+5. Describe **why** the change is useful.
+
+---
+
+## License
+
+This project is released under the MIT License – see `LICENSE` for details.
+
+---
+
+SUMMARY COMPLETE 

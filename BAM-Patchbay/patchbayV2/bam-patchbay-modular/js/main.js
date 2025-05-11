@@ -4,6 +4,8 @@ import { createModule } from './module_factory/module_factory.js';
 import { clearAllModules } from './module_manager.js';
 import { applyZoom, resetZoom, tidyModules } from './canvas_controls.js';
 import { state } from './shared_state.js'; // For accessing state.currentZoom
+import { audioCtx } from './audio_context.js';
+
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log("Audio Modular Synthesizer Initializing...");
