@@ -61,6 +61,9 @@ export function createLfoModule(audioCtx, parentElement) {
     parentElement.appendChild(depthSlider);
     parentElement.appendChild(depthValueDisplay);
   
+
+    console.log('LFO Module: createLfoModule returning:', lfoDepth); // ADD THIS LOG
+
     // The lfoDepth GainNode is returned as the connectable output of the LFO module
-    return lfoDepth;
+    return { audioNode: lfoDepth /*, anyOtherLfoSpecificData */ };
   }

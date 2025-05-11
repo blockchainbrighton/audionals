@@ -65,30 +65,33 @@ const tryAudioConnect = (src, dst, srcElem, dstElem) => {
     // Special handling if the source module is an LFO.
     // LFOs typically connect to AudioParams of other nodes, not their main audio inputs.
     if (src.type === 'lfo') {
-      // LFOs can only modulate parameters of an actual AudioNode (not audioCtx.destination directly).
-      // So, the destination module must have its own `dst.audioNode`.
-      if (dst.audioNode) { 
-        const dstModuleDef = MODULE_DEFS[dst.type];
-        if (dstModuleDef?.lfoTargets) {
-          // Determine the parameter name targeted by the LFO from the destination module's definition.
-          // The original logic `dstModuleDef.lfoTargets[dst.type]` is preserved.
-          const paramName = dstModuleDef.lfoTargets[dst.type] || Object.values(dstModuleDef.lfoTargets)[0];
-          
-          if (dst.audioNode[paramName] instanceof AudioParam) {
-            finalConnectTo = dst.audioNode[paramName]; // LFO targets the specific AudioParam.
+        if (dst.audioNode) {
+          const dstModuleDef = MODULE_DEFS[dst.type];
+          // Check if lfoTargets is defined and is a non-empty object
+          if (dstModuleDef && dstModuleDef.lfoTargets && Object.keys(dstModuleDef.lfoTargets).length > 0) {
+            // Original logic for finding paramName for LFO modulation
+            const paramName = dstModuleDef.lfoTargets[dst.type] || Object.values(dstModuleDef.lfoTargets)[0];
+
+            if (paramName && dst.audioNode[paramName] instanceof AudioParam) {
+              finalConnectTo = dst.audioNode[paramName];
+            } else {
+              console.warn(`LFO Connection: Specified parameter '${paramName || "N/A"}' for LFO modulation not found or not an AudioParam on ${dst.type} (ID: ${dst.id}). Attempting to connect to main audio input.`);
+              // If paramName is invalid, finalConnectTo remains baseTargetNode (dst.audioNode), allowing LFO as audio.
+            }
           } else {
-            console.warn(`LFO Connection: Specified parameter '${paramName}' for LFO modulation not found or not an AudioParam on ${dst.type} (ID: ${dst.id}). LFO may connect to main audio input if applicable, or fail.`);
-            // If param not found, finalConnectTo remains baseTargetNode. Connection might still occur to dst.audioNode's input.
+            // MODIFICATION HERE:
+            // dst.audioNode exists, but no LFO targets are defined for this module type.
+            // Allow LFO to connect as a regular audio source to the main input of dst.audioNode.
+            console.log(`LFO (ID: ${src.id}) attempting to connect as audio source to ${dst.type} (ID: ${dst.id}) as it defines no specific LFO target parameters.`);
+            // `finalConnectTo` will remain `baseTargetNode` (which is dst.audioNode or audioCtx.destination).
+            // DO NOT 'return false;' here if you want to allow this type of connection.
+            // The connection will proceed using baseTargetNode as finalConnectTo.
           }
+        } else { // dst.audioNode is null (should not happen for 'output' which is audioCtx.destination)
+          console.warn(`LFO (ID: ${src.id}) cannot connect to ${dst.type} (ID: ${dst.id}) as it has no specific AudioNode.`);
+          return false;
         }
-        // If dstModuleDef.lfoTargets is not defined, LFO connects to baseTargetNode (i.e., dst.audioNode's main input).
-      } else {
-        // Source is LFO, but destination module (e.g., 'output') does not have its own `audioNode`
-        // (implying baseTargetNode is audioCtx.destination).
-        console.warn(`LFO (ID: ${src.id}) cannot modulate ${dst.type} (ID: ${dst.id}) as it has no specific AudioNode with parameters. LFOs must target AudioParams.`);
-        return false; // Prevent LFO from connecting to audioCtx.destination if it was looking for a parameter.
       }
-    }
     
     // Perform pre-connection validation checks.
     if (!src.audioNode) {

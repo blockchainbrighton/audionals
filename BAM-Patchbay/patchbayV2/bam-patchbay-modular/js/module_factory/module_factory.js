@@ -25,6 +25,8 @@ export async function createModule(type, x, y) {
   modElement.appendChild(headerElement);
 
   const moduleInstanceData = await createAudioNodeAndUI(type, modElement);
+  console.log(`LFO Module: createModule, moduleInstanceData for type ${type}:`, moduleInstanceData); // ADD THIS LOG
+
 
   if (!moduleInstanceData) {
     console.error(`Failed to create audio/UI components for module type: ${type}`);
@@ -32,6 +34,11 @@ export async function createModule(type, x, y) {
         modElement.parentNode.removeChild(modElement);
     }
     return null;
+  }
+
+  // Add a specific check for LFO audioNode here for debugging
+    if (type === 'lfo' && (!moduleInstanceData || !moduleInstanceData.audioNode)) {
+      console.error('LFO CREATION ERROR: moduleInstanceData or its audioNode is null/undefined for LFO!', moduleInstanceData);
   }
 
   // 4. Create and append connectors
@@ -53,6 +60,8 @@ export async function createModule(type, x, y) {
     ...moduleInstanceData
   };
   addModule(id, completeModuleData);
+  console.log(`LFO Module: createModule, completeModuleData for type ${type}:`, completeModuleData); // ADD THIS LOG
+
 
   enableModuleDrag(modElement, id);
 

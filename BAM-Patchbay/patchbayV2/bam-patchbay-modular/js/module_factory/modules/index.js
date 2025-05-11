@@ -40,7 +40,7 @@ export const MODULE_DEFS = {
         import('./lfo.js')
           .then(m => m.createLfoModule(audioCtx, parentEl, id)),
       hasIn: false,
-      hasOut: false,
+      hasOut: true,
       hasTriggerIn: false,
       hasTriggerOut: false,
       lfoTargets: {}  // LFOs don’t host other LFOs
@@ -89,6 +89,6 @@ export const MODULE_DEFS = {
         hasOut: false,
         hasTriggerIn: false,
         hasTriggerOut: false,
-        lfoTargets: {}
+        lfoTargets: null // Or undefined. An empty object {} was causing the issue.
       }
   };
