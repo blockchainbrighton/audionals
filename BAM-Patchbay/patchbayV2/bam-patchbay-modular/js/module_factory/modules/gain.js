@@ -31,5 +31,5 @@ export function createGainModule(audioCtx, parentElement) {
     parentElement.appendChild(slider);
     parentElement.appendChild(valueDisplay);
   
-    return audioNode;
+    return { audioNode: audioNode }; // <<< CHANGE: Return an object
   }

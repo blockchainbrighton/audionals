@@ -1,392 +1,204 @@
 // js/connection_manager.js
-import { svg as svgElementRef } from './dom_elements.js'; // Renamed import for clarity if needed, or ensure 'svg' is the DOM element
+import { svg as svgElementRef } from './dom_elements.js';
 import { state, getModule, addConnection, removeConnection, getConnectionsForModule } from './shared_state.js';
 import { audioCtx } from './audio_context.js';
 import { MODULE_DEFS } from './module_factory/modules/index.js';
 
+// Utility: compute SVG-relative center coords for an element
+const getSvgCoords = elem => {
+  if (!elem) return {};
+  const { left, top, width, height } = elem.getBoundingClientRect();
+  const { left: sx, top: sy } = svgElementRef.getBoundingClientRect();
+  const x = (left + width/2 - sx) / state.currentZoom;
+  const y = (top + height/2 - sy) / state.currentZoom;
+  return { x, y };
+};
 
-export function drawConnection(c1, c2) {
-  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('stroke', '#fff');
-  line.setAttribute('stroke-width', '2'); // Consider making this also scale with zoom or be a fixed screen width
-  svgElementRef.appendChild(line); // Use the imported SVG element reference
-  setLinePos(line, c1, c2);
+// Draw or update line between two connectors
+export const drawConnection = (c1, c2, line = null) => {
+  if (!c1 || !c2) return null;
+  line ||= document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  if (!line.parentNode) {
+    ['stroke','#fff','stroke-width',2].reduce((el,attr,i,arr)=>{if(i%2===0)el.setAttribute(arr[i],arr[i+1]);return el}, line);
+    svgElementRef.appendChild(line);
+  }
+  const a = getSvgCoords(c1), b = getSvgCoords(c2);
+  if (a.x!=null && b.x!=null) Object.entries({ x1:a.x, y1:a.y, x2:b.x, y2:b.y })
+    .forEach(([k,v])=>line.setAttribute(k,v));
   return line;
-}
+};
 
-export function setLinePos(line, c1, c2) {
-    const svgNode = svgElementRef; // From dom_elements
-    if (!svgNode || !c1 || !c2) { return; }
-    const svgRect = svgNode.getBoundingClientRect();
-    const p1Rect = c1.getBoundingClientRect();
-    const p2Rect = c2.getBoundingClientRect();
+// Query connector element with fallback
+const findConnector = (moduleData, dir, type) => {
+  return moduleData.element.querySelector(`.connector.${dir}.${type}-${dir}`)
+    || moduleData.element.querySelector(`.connector.${dir}`);
+};
 
-    const x1_offset_on_screen = (p1Rect.left + p1Rect.width / 2) - svgRect.left;
-    const y1_offset_on_screen = (p1Rect.top + p1Rect.height / 2) - svgRect.top;
-    const x2_offset_on_screen = (p2Rect.left + p2Rect.width / 2) - svgRect.left;
-    const y2_offset_on_screen = (p2Rect.top + p2Rect.height / 2) - svgRect.top;
+// Determine param name
+const getParamName = (node,param) => ['frequency','Q','gain','detune']
+  .find(k=>node[k]===param) || 'unknown_param';
 
-    const x1_svg_user_coord = x1_offset_on_screen / state.currentZoom;
-    const y1_svg_user_coord = y1_offset_on_screen / state.currentZoom;
-    const x2_svg_user_coord = x2_offset_on_screen / state.currentZoom;
-    const y2_svg_user_coord = y2_offset_on_screen / state.currentZoom;
-
-    line.setAttribute('x1', x1_svg_user_coord);
-    line.setAttribute('y1', y1_svg_user_coord);
-    line.setAttribute('x2', x2_svg_user_coord);
-    line.setAttribute('y2', y2_svg_user_coord);
-}
-
-// Helper to get a common name for an AudioParam (Unchanged)
-function getParamName(node, param) {
-    if (!node || !param) return 'unknown_param';
-    if (node.frequency === param) return 'frequency';
-    if (node.Q === param) return 'Q';
-    if (node.gain === param) return 'gain';
-    if (node.detune === param) return 'detune';
-    return 'unknown_param';
-}
-
-// handleConnectorClick function (Assumed largely unchanged, as it deals with logic not rendering)
-export function handleConnectorClick(moduleId, connectorDirection, connectorType = 'audio') {
-  // ... (your existing handleConnectorClick logic)
-  const currentModuleData = getModule(moduleId);
-  if (!currentModuleData) {
-    console.error(`Module data not found for ID: ${moduleId}`);
-    return;
-  }
-  const connElem = currentModuleData.element.querySelector(`.connector.${connectorDirection}.${connectorType}-${connectorDirection}`);
-  if (!connElem) {
-      console.warn(`Connector element not found for module ${moduleId} (type: ${currentModuleData.type}), direction: ${connectorDirection}, connectorType: ${connectorType}.`);
-      return;
-  }
-
-  if (!state.selectedConnector) {
-    if (connectorDirection === 'output') {
-      state.selectedConnector = {
-        id: moduleId,
-        elem: connElem,
-        moduleType: currentModuleData.type,
-        connectorType: connectorType
-      };
-      connElem.classList.add('selected');
+// Generic audio connection
+const tryAudioConnect = (src, dst, srcElem, dstElem) => {
+    let baseTargetNode; // The primary AudioNode of the destination
+  
+    // Determine the actual AudioNode to connect to for the destination module
+    if (dst.type === 'output') {
+      // For the 'output' module, if it has its own audioNode (e.g., a master GainNode), use that.
+      // Otherwise, fall back to the global audio context's destination.
+      baseTargetNode = dst.audioNode || audioCtx.destination;
+    } else {
+      // For all other module types, use their specific audioNode.
+      baseTargetNode = dst.audioNode;
     }
-    return;
-  }
-
-  if (state.selectedConnector && connectorDirection === 'input' && state.selectedConnector.id !== moduleId) {
-    const srcModuleData = getModule(state.selectedConnector.id);
-    const dstModuleData = currentModuleData;
-
-    if (!srcModuleData || !dstModuleData) {
-        if(state.selectedConnector.elem) state.selectedConnector.elem.classList.remove('selected');
-        state.selectedConnector = null;
-        return;
+  
+    // If no valid audio target node can be determined for the destination, the connection cannot proceed.
+    if (!baseTargetNode) {
+      console.warn(`Connection failed: Destination module ${dst.id} (${dst.type}) has no valid audio target node.`);
+      return false;
+    }
+  
+    // `finalConnectTo` will be the actual target for the .connect() call (either an AudioNode or an AudioParam).
+    // By default, it's the baseTargetNode determined above.
+    let finalConnectTo = baseTargetNode;
+  
+    // Special handling if the source module is an LFO.
+    // LFOs typically connect to AudioParams of other nodes, not their main audio inputs.
+    if (src.type === 'lfo') {
+      // LFOs can only modulate parameters of an actual AudioNode (not audioCtx.destination directly).
+      // So, the destination module must have its own `dst.audioNode`.
+      if (dst.audioNode) { 
+        const dstModuleDef = MODULE_DEFS[dst.type];
+        if (dstModuleDef?.lfoTargets) {
+          // Determine the parameter name targeted by the LFO from the destination module's definition.
+          // The original logic `dstModuleDef.lfoTargets[dst.type]` is preserved.
+          const paramName = dstModuleDef.lfoTargets[dst.type] || Object.values(dstModuleDef.lfoTargets)[0];
+          
+          if (dst.audioNode[paramName] instanceof AudioParam) {
+            finalConnectTo = dst.audioNode[paramName]; // LFO targets the specific AudioParam.
+          } else {
+            console.warn(`LFO Connection: Specified parameter '${paramName}' for LFO modulation not found or not an AudioParam on ${dst.type} (ID: ${dst.id}). LFO may connect to main audio input if applicable, or fail.`);
+            // If param not found, finalConnectTo remains baseTargetNode. Connection might still occur to dst.audioNode's input.
+          }
+        }
+        // If dstModuleDef.lfoTargets is not defined, LFO connects to baseTargetNode (i.e., dst.audioNode's main input).
+      } else {
+        // Source is LFO, but destination module (e.g., 'output') does not have its own `audioNode`
+        // (implying baseTargetNode is audioCtx.destination).
+        console.warn(`LFO (ID: ${src.id}) cannot modulate ${dst.type} (ID: ${dst.id}) as it has no specific AudioNode with parameters. LFOs must target AudioParams.`);
+        return false; // Prevent LFO from connecting to audioCtx.destination if it was looking for a parameter.
+      }
     }
     
-    let successfulConnection = false;
-    let line = null;
-
-    // --- Connection Logic --- (Simplified for brevity, use your full logic)
-    if (state.selectedConnector.connectorType === 'audio' && connectorType === 'audio') {
-        const srcNode = srcModuleData.audioNode;
-        let dstNodeOrParam = dstModuleData.audioNode;
-        // ... (your LFO and param targeting logic) ...
-        if (srcNode && (dstNodeOrParam )) {
-            // LFO-to-param?
-            if (srcModuleData.type === 'lfo' && dstModuleData.type !== 'output') {
-              const destDef = MODULE_DEFS[dstModuleData.type];
-              const paramKey = destDef?.lfoTargets?.[dstModuleData.type] || Object.values(destDef.lfoTargets)[0];
-              if (paramKey && dstModuleData.audioNode[paramKey] instanceof AudioParam) {
-                dstNodeOrParam = dstModuleData.audioNode[paramKey];
-              }
-            }
-            try {
-                srcNode.connect(dstNodeOrParam);
-                line = drawConnection(state.selectedConnector.elem, connElem);
-                addConnection({
-                    srcId: state.selectedConnector.id, dstId: moduleId,
-                    srcConnectorType: state.selectedConnector.connectorType, dstConnectorType: connectorType,
-                    dstParam: (dstNodeOrParam instanceof AudioParam) ? getParamName(dstModuleData.audioNode, dstNodeOrParam) : null,
-                    line
-                });
-                successfulConnection = true;
-            } catch (e) { console.error("Failed to connect audio nodes:", e); }
-        }
-    } else if (state.selectedConnector.connectorType === 'trigger' && connectorType === 'trigger' &&
-               state.selectedConnector.moduleType === 'sequencer' && dstModuleData.type === 'samplePlayer') {
-        if (typeof dstModuleData.play === 'function' && Array.isArray(srcModuleData.connectedTriggers)) {
-            srcModuleData.connectedTriggers.push(dstModuleData.play);
-            line = drawConnection(state.selectedConnector.elem, connElem);
-            addConnection({ /* ... */ line });
-            successfulConnection = true;
-        } else { console.error("Trigger connection requirements not met."); }
-    } else {
-        console.warn(`Incompatible connection: ${state.selectedConnector.moduleType}[${state.selectedConnector.connectorType}] to ${dstModuleData.type}[${connectorType}]`);
+    // Perform pre-connection validation checks.
+    if (!src.audioNode) {
+      console.error(`Connection failed: Source module ${src.id} (${src.type}) does not have an initialized audioNode.`);
+      return false;
     }
-    // --- End Connection Logic ---
-
-    if(state.selectedConnector.elem) state.selectedConnector.elem.classList.remove('selected');
-    state.selectedConnector = null;
-  } else if (state.selectedConnector && state.selectedConnector.id === moduleId && state.selectedConnector.elem === connElem) {
-    state.selectedConnector.elem.classList.remove('selected');
-    state.selectedConnector = null;
-  } else if (state.selectedConnector && connectorDirection === 'output') {
-    state.selectedConnector.elem.classList.remove('selected');
-    state.selectedConnector = { id: moduleId, elem: connElem, moduleType: currentModuleData.type, connectorType };
-    connElem.classList.add('selected');
-  } else if (state.selectedConnector && state.selectedConnector.id === moduleId && connectorDirection === 'input') {
-      console.warn("Cannot connect module to itself."); // Keep selectedConnector to try another input
-  }
-}
-
-
-// handleDisconnect function (Assumed unchanged for this specific issue)
-export function handleDisconnect(moduleId, connectorDirection, connectorType = 'audio') {
-  // ... (your existing handleDisconnect logic) ...
-   for (let i = state.connections.length - 1; i >= 0; i--) {
-    const c = state.connections[i];
-    let performDisconnect = false;
-    if (connectorDirection === 'output' && c.srcId === moduleId && c.srcConnectorType === connectorType) performDisconnect = true;
-    else if (connectorDirection === 'input' && c.dstId === moduleId && c.dstConnectorType === connectorType) performDisconnect = true;
-
-    if (performDisconnect) {
-      const srcModule = getModule(c.srcId);
-      const dstModule = getModule(c.dstId);
-      if (!srcModule || !dstModule) { if (c.line) c.line.remove(); removeConnection(i); continue; }
-
-      if (c.srcConnectorType === 'audio' && c.dstConnectorType === 'audio') { /* ... your audio disconnect ... */ }
-      else if (c.srcConnectorType === 'trigger' && c.dstConnectorType === 'trigger') { /* ... your trigger disconnect ... */ }
+    if (!(finalConnectTo instanceof AudioNode || finalConnectTo instanceof AudioParam)) {
+      console.error(`Connection failed: Target for destination module ${dst.id} (${dst.type}) is not a valid AudioNode or AudioParam. Target:`, finalConnectTo);
+      return false;
+    }
+  
+    try {
+      // Attempt the Web Audio API connection.
+      src.audioNode.connect(finalConnectTo);
       
-      if (c.line) c.line.remove();
-      removeConnection(i);
+      // If connection succeeds, draw the visual line and record the connection.
+      const line = drawConnection(srcElem, dstElem);
+      addConnection({
+        srcId: src.id,
+        dstId: dst.id,
+        srcConnectorType: 'audio',
+        dstConnectorType: 'audio',
+        // If `finalConnectTo` is an AudioParam, record its name.
+        // `dst.audioNode` is the AudioNode instance that hosts the parameter.
+        dstParam: finalConnectTo instanceof AudioParam ? getParamName(dst.audioNode, finalConnectTo) : null,
+        line
+      });
+      return true; // Connection successful.
+    } catch (error) {
+      // Log the specific error from the .connect() call for easier debugging.
+      console.error(`Audio connection error from ${src.type} (ID: ${src.id}) to ${dst.type} (ID: ${dst.id}) targeting ${finalConnectTo}:`, error);
+      return false; // Connection failed.
     }
+  };
+
+// Generic trigger connection
+const tryTriggerConnect = (src, dst, srcElem, dstElem) => {
+  if (src.type==='sequencer' && dst.type==='samplePlayer') {
+    src.connectedTriggers.push(dst.play);
+    const line = drawConnection(srcElem, dstElem);
+    addConnection({ srcId: src.id, dstId: dst.id, srcConnectorType:'trigger', dstConnectorType:'trigger', line });
+    return true;
   }
-  if (state.selectedConnector && state.selectedConnector.id === moduleId) {
-    if(state.selectedConnector.elem) state.selectedConnector.elem.classList.remove('selected');
-    state.selectedConnector = null;
+  return false;
+};
+
+export function handleConnectorClick(id, dir, type='audio') {
+  const mod = getModule(id);
+  if (!mod) return console.error(`No module for ${id}`);
+  const elem = findConnector(mod, dir, type);
+  if (!elem) return console.warn(`No connector ${dir}-${type}`);
+
+  const sel = state.selectedConnector;
+  if (!sel && dir==='output') return void(state.selectedConnector={ id, elem, type, moduleType:mod.type }, elem.classList.add('selected'));
+  if (sel && sel.id!==id && dir==='input') {
+    const src = getModule(sel.id), dst = mod;
+    const ok = type==='audio' && sel.type==='audio'
+      ? tryAudioConnect(src,dst,sel.elem,elem)
+      : type==='trigger' && sel.type==='trigger'
+        ? tryTriggerConnect(src,dst,sel.elem,elem)
+        : false;
+    sel.elem.classList.remove('selected'); state.selectedConnector=null;
+    if (!ok) console.warn('Connection failed');
+    return;
   }
+  sel?.elem?.classList.remove('selected');
+  if (dir==='output') state.selectedConnector={ id, elem, type, moduleType:mod.type }, elem.classList.add('selected');
 }
 
-// refreshLinesForModule function (Unchanged, as it calls the corrected setLinePos)
-export function refreshLinesForModule(moduleId) {
-    state.connections.forEach(c => {
-      if (c.srcId === moduleId || c.dstId === moduleId) {
-        const srcModuleData = getModule(c.srcId);
-        const dstModuleData = getModule(c.dstId);
-        if (srcModuleData && dstModuleData && srcModuleData.element && dstModuleData.element) {
-          // Query for specific connector elements first
-          let srcConnElem = srcModuleData.element.querySelector(`.connector.output.${c.srcConnectorType}-output`);
-          let dstConnElem = dstModuleData.element.querySelector(`.connector.input.${c.dstConnectorType}-input`);
-          
-          // Fallback to generic if specific not found (though ideally they should always exist)
-          if (!srcConnElem) srcConnElem = srcModuleData.element.querySelector('.connector.output');
-          if (!dstConnElem) dstConnElem = dstModuleData.element.querySelector('.connector.input');
-
-          if (srcConnElem && dstConnElem && c.line) {
-            setLinePos(c.line, srcConnElem, dstConnElem);
-          } else {
-            // console.warn(`Could not find connectors to refresh line for connection:`, c, {srcFound:!!srcConnElem, dstFound:!!dstConnElem});
-          }
-        }
-      }
-    });
-  }
-  
-  export function refreshAllLines() {
-    console.log("%c--- refreshAllLines START ---", "color: blue; font-weight: bold;");
-    if (state.connections.length === 0) {
-        console.log("No connections to refresh.");
-        console.log("%c--- refreshAllLines END ---", "color: blue; font-weight: bold;");
-        return;
+export function handleDisconnect(id, dir, type='audio') {
+  state.connections.slice().reverse().forEach(c=>{
+    const match = (dir==='output'? c.srcId===id&&c.srcConnectorType===type : c.dstId===id&&c.dstConnectorType===type);
+    if (!match) return;
+    const src= getModule(c.srcId), dst=getModule(c.dstId);
+    if (c.srcConnectorType==='audio' && c.dstConnectorType==='audio') src?.audioNode.disconnect(c.dstParam?dst.audioNode[c.dstParam]:dst.audioNode||audioCtx.destination);
+    if (c.srcConnectorType==='trigger' && c.dstConnectorType==='trigger') {
+      const idx = src.connectedTriggers.indexOf(dst.play);
+      if (idx>-1) src.connectedTriggers.splice(idx,1);
     }
-
-    state.connections.forEach((c, index) => {
-        console.log(`%cConnection ${index + 1}/${state.connections.length}: Refreshing line for %c${c.srcId}%c (%c${c.srcConnectorType}%c) %c->%c %c${c.dstId}%c (%c${c.dstConnectorType}%c)`,
-            "color: navy;", "color: magenta;", "color: navy;", "color: green;", "color: navy;", // srcId, srcConnectorType
-            "color: gray;", // ->
-            "color: magenta;", "color: navy;", "color: green;", "color: navy;" // dstId, dstConnectorType
-        );
-
-        const srcModuleData = getModule(c.srcId);
-        const dstModuleData = getModule(c.dstId);
-
-        if (!c.line) {
-            console.warn("  L MISSING: Connection object is missing 'line' SVG element property. Skipping.", { connection: c });
-            return; // Skip to next connection
-        }
-        if (!c.line.parentNode) {
-            console.warn("  L GONE: Line element no longer in DOM. Might have been removed externally. Skipping.", { connection: c, lineElement: c.line });
-            // Potentially remove this dead connection from state if this occurs often:
-            // removeConnection(c); // Be cautious with modifying array while iterating, might need to iterate backwards or copy
-            return;
-        }
-
-        if (!srcModuleData || !srcModuleData.element) {
-            console.error(`  E SRC MODULE: Source module data or element NOT FOUND for ID: ${c.srcId}. Cannot refresh line.`, { connection: c });
-            return; // Skip to next connection
-        }
-        if (!dstModuleData || !dstModuleData.element) {
-            console.error(`  E DST MODULE: Destination module data or element NOT FOUND for ID: ${c.dstId}. Cannot refresh line.`, { connection: c });
-            return; // Skip to next connection
-        }
-
-        const srcQuery = `.connector.output.${c.srcConnectorType}-output`;
-        const dstQuery = `.connector.input.${c.dstConnectorType}-input`;
-        console.log(`  ? Specific Queries: Src="${srcQuery}", Dst="${dstQuery}"`);
-
-        const srcConnElem = srcModuleData.element.querySelector(srcQuery);
-        const dstConnElem = dstModuleData.element.querySelector(dstQuery);
-
-        if (srcConnElem && dstConnElem) {
-            console.log("  %cOK%c Specific connectors FOUND. Src:", "color: green; font-weight:bold;", "color: black;", srcConnElem, "Dst:", dstConnElem);
-            setLinePos(c.line, srcConnElem, dstConnElem);
-        } else {
-            console.warn("  %cWARN%c Specific connectors NOT FOUND. Fallback to generic.", "color: orange; font-weight:bold;", "color: black;");
-            console.log(`    Src (${c.srcConnectorType}-output) ${srcConnElem ? 'FOUND' : 'NOT FOUND'}. Dst (${c.dstConnectorType}-input) ${dstConnElem ? 'FOUND' : 'NOT FOUND'}.`);
-            
-            // Log innerHTML of modules if a specific connector isn't found, to see what IS there
-            if (!srcConnElem) {
-                console.log(`    HTML of Src Module (${c.srcId}, type: ${srcModuleData.type}):`, srcModuleData.element.innerHTML.replace(/\n\s*/g, '')); // Compact HTML
-            }
-            if (!dstConnElem) {
-                console.log(`    HTML of Dst Module (${c.dstId}, type: ${dstModuleData.type}):`, dstModuleData.element.innerHTML.replace(/\n\s*/g, '')); // Compact HTML
-            }
-
-            const genericSrcQuery = '.connector.output';
-            const genericDstQuery = '.connector.input';
-            console.log(`  ? Generic Queries: Src="${genericSrcQuery}", Dst="${genericDstQuery}"`);
-
-            const genericSrc = srcModuleData.element.querySelector(genericSrcQuery);
-            const genericDst = dstModuleData.element.querySelector(genericDstQuery);
-
-            if (genericSrc && genericDst) {
-                console.log("  %cOK%c Generic connectors FOUND and USED. Generic Src:", "color: darkgoldenrod; font-weight:bold;", "color: black;", genericSrc, "Generic Dst:", genericDst);
-                setLinePos(c.line, genericSrc, genericDst);
-            } else {
-                console.error("  %cFAIL%c CRITICAL - Could not find ANY connectors (specific or generic). Line NOT updated.", "color: red; font-weight:bold;", "color: black;", {
-                    connectionState: c,
-                    srcModule: c.srcId,
-                    srcModuleTypeFromState: srcModuleData.type,
-                    srcConnectorTypeInState: c.srcConnectorType,
-                    srcQueryUsed: srcQuery,
-                    srcGenericQueryUsed: genericSrcQuery,
-                    srcGenericFound: !!genericSrc,
-                    dstModule: c.dstId,
-                    dstModuleTypeFromState: dstModuleData.type,
-                    dstConnectorTypeInState: c.dstConnectorType,
-                    dstQueryUsed: dstQuery,
-                    dstGenericQueryUsed: genericDstQuery,
-                    dstGenericFound: !!genericDst,
-                });
-                // To see exactly where this "unattached" line might be drawing:
-                // You could temporarily try to draw it from module centers if connectors are lost
-                // Or if c1/c2 in setLinePos become null/undefined, setLinePos should handle it.
-            }
-        }
-    });
-    console.log("%c--- refreshAllLines END ---", "color: blue; font-weight: bold;");
+    c.line?.remove(); removeConnection(c);
+  });
+  if (state.selectedConnector?.id===id) state.selectedConnector.elem.classList.remove('selected'), state.selectedConnector=null;
 }
 
-// Ensure setLinePos can gracefully handle null connector elements if a line is attempted to be drawn with one.
-// Your existing setLinePos has: if (!svgNode || !c1 || !c2) { return; }
-// This will prevent errors if setLinePos is called with a null c1 or c2.
+// Refresh positions of lines
+export const refreshLinesForModule = mid => state.connections
+  .filter(c=>[c.srcId,c.dstId].includes(mid))
+  .forEach(c=>{
+    const src= getModule(c.srcId), dst=getModule(c.dstId);
+    const se=findConnector(src,'output',c.srcConnectorType), de=findConnector(dst,'input',c.dstConnectorType);
+    if (se&&de) drawConnection(se,de,c.line);
+  });
 
+export const refreshAllLines = () => state.connections.forEach(c=>{
+  const src = getModule(c.srcId), dst = getModule(c.dstId);
+  const se=findConnector(src,'output',c.srcConnectorType), de=findConnector(dst,'input',c.dstConnectorType);
+  se&&de ? drawConnection(se,de,c.line) : console.warn('Missing elems for',c);
+});
 
-/**
- * Disconnects all audio and trigger connections associated with a given module ID,
- * removes their visual lines, and updates the state.
- * @param {string} moduleId The ID of the module to disconnect.
- */
-export function disconnectAllForModule(moduleId) {
-    const connectionsToRemove = getConnectionsForModule(moduleId);
-    const moduleBeingRemoved = getModule(moduleId); // Get module data for potential .audioNode.disconnect()
-  
-    connectionsToRemove.forEach(c => {
-      const srcModule = getModule(c.srcId);
-      const dstModule = getModule(c.dstId);
-  
-      // Perform actual Web Audio API disconnection
-      if (srcModule && srcModule.audioNode && dstModule) {
-        if (c.srcConnectorType === 'audio' && c.dstConnectorType === 'audio') {
-          let targetToDisconnect = dstModule.audioNode;
-          if (c.dstParam && dstModule.audioNode && dstModule.audioNode[c.dstParam] instanceof AudioParam) {
-            targetToDisconnect = dstModule.audioNode[c.dstParam];
-          }
-          
-          // Check if targetToDisconnect is valid before attempting disconnect
-          if (targetToDisconnect) {
-              try {
-                  srcModule.audioNode.disconnect(targetToDisconnect);
-                  console.log(`Audio disconnected: ${srcModule.type} (${c.srcId}) from ${dstModule.type} (${c.dstId}) param: ${c.dstParam || 'node'}`);
-              } catch (e) {
-                  console.warn(`Error disconnecting ${srcModule.type} from ${dstModule.type} (param: ${c.dstParam}):`, e);
-                  // As a fallback, if the module being removed is the source, try a general disconnect.
-                  // This helps if the target was already removed or state is inconsistent.
-                  if (srcModule.id === moduleId && typeof srcModule.audioNode.disconnect === 'function' && !(targetToDisconnect instanceof AudioParam)) {
-                      try {
-                          srcModule.audioNode.disconnect(); // Disconnects all outputs from this node
-                          console.log(`Broad audio disconnect for source module ${srcModule.id}`);
-                      } catch (e2) {
-                          console.error(`Broad audio disconnect failed for ${srcModule.id}`, e2);
-                      }
-                  }
-              }
-          } else if (dstModule.type === 'output' && dstModule.audioNode === audioCtx.destination) {
-              // Special case for audioCtx.destination which might not have specific params and is a global target
-              try {
-                  srcModule.audioNode.disconnect(audioCtx.destination);
-                   console.log(`Audio disconnected: ${srcModule.type} (${c.srcId}) from Master Output`);
-              } catch (e) {
-                  console.warn(`Error disconnecting ${srcModule.type} from Master Output:`, e);
-              }
-          }
-           else {
-              console.warn(`Target for disconnection from ${srcModule.type} to ${dstModule.type} was null or invalid.`);
-          }
-  
-        } else if (c.srcConnectorType === 'trigger' && c.dstConnectorType === 'trigger' &&
-                   srcModule.type === 'sequencer' && dstModule.type === 'samplePlayer' &&
-                   Array.isArray(srcModule.connectedTriggers) && typeof dstModule.play === 'function') {
-          const index = srcModule.connectedTriggers.indexOf(dstModule.play);
-          if (index > -1) {
-            srcModule.connectedTriggers.splice(index, 1);
-            console.log(`Trigger disconnected: ${srcModule.type} from ${dstModule.type}`);
-          }
-        }
-        // Add other custom disconnection types here
-      }
-  
-      // Remove visual line
-      if (c.line && c.line.parentNode) {
-        c.line.remove();
-      }
-      // Remove from state.connections
-      removeConnection(c); // Pass the connection object itself
-    });
-  
-    // If the module being removed has an audioNode with a general disconnect method, call it.
-    // This is a "belt and braces" step to ensure it's not connected to anything else
-    // that might not have been in state.connections (though ideally, all connections are tracked).
-    if (moduleBeingRemoved && moduleBeingRemoved.audioNode && typeof moduleBeingRemoved.audioNode.disconnect === 'function') {
-        // For source nodes (Oscillator, LFO, SamplePlayer's gain node), disconnecting all its outputs is safe.
-        // For nodes that are primarily destinations (Filter, Gain, Output), this might be too aggressive
-        // if they are part of chains not yet fully cleaned up.
-        // However, since we are *removing* the module, cleaning all its outputs is generally correct.
-        if (['oscillator', 'lfo', 'samplePlayer', 'gain', 'filter'].includes(moduleBeingRemoved.type)) { // Output module's node is audioCtx.destination, don't disconnect broadly
-            try {
-                moduleBeingRemoved.audioNode.disconnect();
-                console.log(`Broadly disconnected audioNode outputs for module ${moduleId} (${moduleBeingRemoved.type})`);
-            } catch (e) {
-                console.warn(`Could not broadly disconnect audioNode for ${moduleId}:`, e);
-            }
-        }
+export function disconnectAllForModule(id) {
+  getConnectionsForModule(id).forEach(c=>{
+    const src=getModule(c.srcId), dst=getModule(c.dstId);
+    if (c.srcConnectorType==='audio') src.audioNode.disconnect(c.dstParam?dst.audioNode[c.dstParam]:audioCtx.destination);
+    if (c.srcConnectorType==='trigger') {
+      const idx=src.connectedTriggers.indexOf(dst.play);
+      if (idx>-1) src.connectedTriggers.splice(idx,1);
     }
-  
-  
-    // Deselect any connector if it was selected
-    if (state.selectedConnector) {
-      state.selectedConnector.elem.classList.remove('selected');
-      state.selectedConnector = null;
-    }
-  }
+    c.line?.remove(); removeConnection(c);
+  });
+  const mod = getModule(id);
+  if (mod?.audioNode?.disconnect && ['oscillator','lfo','samplePlayer','gain','filter'].includes(mod.type)) mod.audioNode.disconnect();
+  if (state.selectedConnector) state.selectedConnector.elem.classList.remove('selected'), state.selectedConnector=null;
+}

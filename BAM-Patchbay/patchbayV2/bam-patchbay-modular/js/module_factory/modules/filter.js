@@ -75,5 +75,5 @@ export function createFilterModule(audioCtx, parentElement) {
     parentElement.appendChild(typeSelector);
   
   
-    return audioNode;
+    return { audioNode: audioNode }; // <<< CHANGE: Return an object
   }

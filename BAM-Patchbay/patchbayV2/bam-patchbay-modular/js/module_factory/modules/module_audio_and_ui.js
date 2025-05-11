@@ -39,5 +39,5 @@ export async function createAudioNodeAndUI(type, parentElement) {
       console.error("Unknown module type for audio/UI:", type);
       return null;
   }
-  return audioNode;
+  return { audioNode: audioNode }; // <<< CHANGE: Return an object
 }
