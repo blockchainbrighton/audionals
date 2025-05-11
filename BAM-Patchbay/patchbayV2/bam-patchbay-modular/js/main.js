@@ -5,7 +5,7 @@ import { clearAllModules } from './module_manager.js';
 import { applyZoom, resetZoom, tidyModules } from './canvas_controls.js';
 import { state, getMasterBpm, setMasterBpm, getIsPlaying, setGlobalPlayState } from './shared_state.js';
 import { audioCtx } from './audio_context.js';
-import { createSampleGainOutputChain, createOscLfoGainOutputChain } from './ presetProcessingChains.js';
+import { createSampleSequencedChain, createOscillatorGainOutputChain } from './presetProcessingChains.js';
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -70,8 +70,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Add to existing actions or create new handlers
   const presetActions = {
-    'preset-sample-chain-btn': () => createSampleGainOutputChain(50, 50), // Specify starting X, Y
-    'preset-osc-lfo-chain-btn': () => createOscLfoGainOutputChain(50, 250),
+    // Update your button IDs if different
+    'preset-sample-chain-btn': () => createSampleSequencedChain(250, 50), // startX for sample player
+    // 'preset-osc-lfo-chain-btn': () => createOscLfoGainOutputChain(50, 250),
+    'preset-osc-lfo-chain-btn': () => createOscillatorGainOutputChain(50, 150), // NEW
+
   };
 
   Object.entries(presetActions).forEach(([id, fn]) => {
@@ -84,8 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
           console.error(`[MainJS] Error executing preset action for ${id}:`, error);
         }
       });
-    } else {
-      // console.warn(`Preset action button with ID '${id}' not found.`);
     }
   });
 
