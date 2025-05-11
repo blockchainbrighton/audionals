@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Modular Audio</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none; /* Prevents text selection during drag */
+        }
+
+        #palette {
+            width: 150px;
+            padding: 10px;
+            border-right: 1px solid #ccc;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .palette-module {
+            padding: 10px;
+            border: 1px solid #aaa;
+            background-color: #e0e0e0;
+            cursor: grab;
+            text-align: center;
+        }
+
+        #canvas-container {
+            flex-grow: 1;
+            position: relative; /* For absolute positioning of modules and SVG */
+            background-color: #fafafa;
+            overflow: hidden; /* Important for SVG bounds */
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            position: relative; /* Modules will be positioned relative to this */
+        }
+        
+        #patch-cables-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allows clicks to pass through to modules */
+            z-index: 1; /* Above modules but below active patching line */
+        }
+
+        .module {
+            position: absolute;
+            border: 1px solid #000;
+            background-color: #fff;
+            min-width: 120px;
+            padding-bottom: 5px; /* Space for ports */
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+            cursor: default;
+            z-index: 2; /* Above patch cables SVG by default */
+        }
+
+        .module-header {
+            background-color: #ddd;
+            padding: 5px;
+            cursor: move;
+            font-weight: bold;
+            text-align: center;
+            font-size: 0.9em;
+        }
+
+        .module-content {
+            padding: 5px;
+            font-size: 0.8em;
+        }
+        .module-content label {
+            display: block;
+            margin-bottom: 2px;
+        }
+        .module-content input[type="range"] {
+            width: 90%;
+        }
+
+
+        .ports-container {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 5px;
+            margin-top: 5px;
+        }
+
+        .inputs, .outputs {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .port {
+            width: 15px;
+            height: 15px;
+            border: 1px solid #555;
+            background-color: #ccc;
+            border-radius: 50%;
+            cursor: crosshair;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7em;
+        }
+        .port.input { background-color: #a0d0a0; }
+        .port.output { background-color: #d0a0a0; }
+        .port.connected { border: 2px solid #333; }
+
+        #temp-patch-line {
+            stroke: #007bff;
+            stroke-width: 2;
+            stroke-dasharray: 5,5;
+            z-index: 999; /* Above everything else */
+        }
+
+        .connection-line {
+            stroke: #333;
+            stroke-width: 2;
+        }
+
+        #start-audio-button {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            padding: 10px 15px;
+            font-size: 1em;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="palette">
+        <div class="palette-module" draggable="true" data-type="oscillator">Oscillator</div>
+        <div class="palette-module" draggable="true" data-type="gain">Gain</div>
+        <div class="palette-module" draggable="true" data-type="output">Output</div>
+    </div>
+
+    <div id="canvas-container">
+        <svg id="patch-cables-svg"></svg>
+        <div id="canvas">
+            <!-- Modules will be added here -->
+        </div>
+        <button id="start-audio-button">Start Audio</button>
+    </div>
+
+    <script>
+        let audioContext;
+        let mainOutputNode; // Special destination node
+
+        const canvas = document.getElementById('canvas');
+        const canvasContainer = document.getElementById('canvas-container');
+        const patchCablesSvg = document.getElementById('patch-cables-svg');
+        const startAudioButton = document.getElementById('start-audio-button');
+
+        let modules = {}; // Store module data: { id: { node, domElement, type, inputs, outputs, connections } }
+        let moduleIdCounter = 0;
+        let connections = []; // Store connections: { fromModuleId, fromPortIndex, toModuleId, toPortIndex, lineElement }
+
+        let isPatching = false;
+        let patchStartInfo = null; // { moduleId, portIndex, portElement, portType: 'input'/'output' }
+        let tempPatchLine = null;
+
+        // --- Audio Context Initialization ---
+        function initAudioContext() {
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    mainOutputNode = audioContext.destination; // The final output
+                    console.log("AudioContext started.");
+                    startAudioButton.style.display = 'none'; // Hide button after start
+                } catch (e) {
+                    alert('Web Audio API is not supported in this browser');
+                    console.error(e);
+                }
+            }
+            // Resume context if it's suspended (e.g., by autoplay policies)
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+        startAudioButton.addEventListener('click', initAudioContext);
+
+
+        // --- Module Creation ---
+        function createModuleElement(id, type, x, y) {
+            const moduleEl = document.createElement('div');
+            moduleEl.classList.add('module');
+            moduleEl.id = `module-${id}`;
+            moduleEl.style.left = `${x}px`;
+            moduleEl.style.top = `${y}px`;
+            moduleEl.dataset.moduleId = id;
+
+            const header = document.createElement('div');
+            header.classList.add('module-header');
+            header.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+            moduleEl.appendChild(header);
+
+            const content = document.createElement('div');
+            content.classList.add('module-content');
+            moduleEl.appendChild(content);
+
+            const portsContainer = document.createElement('div');
+            portsContainer.classList.add('ports-container');
+            const inputsDiv = document.createElement('div');
+            inputsDiv.classList.add('inputs');
+            const outputsDiv = document.createElement('div');
+            outputsDiv.classList.add('outputs');
+            portsContainer.appendChild(inputsDiv);
+            portsContainer.appendChild(outputsDiv);
+            moduleEl.appendChild(portsContainer);
+            
+            return { moduleEl, header, content, inputsDiv, outputsDiv };
+        }
+
+        function addModule(type, x, y) {
+            if (!audioContext) {
+                alert("Please click 'Start Audio' first!");
+                return;
+            }
+
+            const id = moduleIdCounter++;
+            let audioNode;
+            const moduleData = {
+                id,
+                type,
+                domElement: null,
+                audioNode: null,
+                inputs: [],  // { element, audioParam }
+                outputs: [] // { element }
+            };
+
+            const { moduleEl, header, content, inputsDiv, outputsDiv } = createModuleElement(id, type, x, y);
+            moduleData.domElement = moduleEl;
+
+            if (type === 'oscillator') {
+                audioNode = audioContext.createOscillator();
+                audioNode.type = 'sine';
+                audioNode.frequency.setValueAtTime(440, audioContext.currentTime);
+                audioNode.start();
+                moduleData.audioNode = audioNode;
+
+                // Control: Frequency
+                const freqLabel = document.createElement('label');
+                freqLabel.textContent = 'Freq: 440 Hz';
+                const freqSlider = document.createElement('input');
+                freqSlider.type = 'range';
+                freqSlider.min = 20;
+                freqSlider.max = 2000;
+                freqSlider.value = 440;
+                freqSlider.addEventListener('input', (e) => {
+                    audioNode.frequency.setValueAtTime(parseFloat(e.target.value), audioContext.currentTime);
+                    freqLabel.textContent = `Freq: ${e.target.value} Hz`;
+                });
+                content.appendChild(freqLabel);
+                content.appendChild(freqSlider);
+
+                // Output Port
+                const outPort = createPortElement(id, 0, 'output');
+                outputsDiv.appendChild(outPort);
+                moduleData.outputs.push({ element: outPort });
+
+            } else if (type === 'gain') {
+                audioNode = audioContext.createGain();
+                audioNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+                moduleData.audioNode = audioNode;
+
+                // Control: Gain
+                const gainLabel = document.createElement('label');
+                gainLabel.textContent = 'Gain: 0.5';
+                const gainSlider = document.createElement('input');
+                gainSlider.type = 'range';
+                gainSlider.min = 0;
+                gainSlider.max = 1;
+                gainSlider.step = 0.01;
+                gainSlider.value = 0.5;
+                gainSlider.addEventListener('input', (e) => {
+                    audioNode.gain.setValueAtTime(parseFloat(e.target.value), audioContext.currentTime);
+                    gainLabel.textContent = `Gain: ${e.target.value}`;
+                });
+                content.appendChild(gainLabel);
+                content.appendChild(gainSlider);
+
+                // Input Port
+                const inPort = createPortElement(id, 0, 'input');
+                inputsDiv.appendChild(inPort);
+                moduleData.inputs.push({ element: inPort, audioParam: audioNode }); // Connect to the node itself for gain
+
+                // Output Port
+                const outPort = createPortElement(id, 0, 'output'); // Gain node also acts as an output
+                outputsDiv.appendChild(outPort);
+                moduleData.outputs.push({ element: outPort });
+
+            } else if (type === 'output') {
+                audioNode = mainOutputNode; // Special case: connect to AudioContext.destination
+                moduleData.audioNode = audioNode; // No specific node, but use it as target
+                header.textContent = 'Main Out';
+
+                 // Input Port
+                const inPort = createPortElement(id, 0, 'input');
+                inputsDiv.appendChild(inPort);
+                moduleData.inputs.push({ element: inPort, audioParam: audioNode }); // Connect to destination
+            }
+
+            modules[id] = moduleData;
+            canvas.appendChild(moduleEl);
+            enableModuleDragging(moduleEl, header);
+            return moduleData;
+        }
+        
+        function createPortElement(moduleId, portIndex, portType) {
+            const portEl = document.createElement('div');
+            portEl.classList.add('port', portType);
+            portEl.dataset.moduleId = moduleId;
+            portEl.dataset.portIndex = portIndex;
+            portEl.dataset.portType = portType; // 'input' or 'output'
+            portEl.textContent = portType === 'input' ? 'I' : 'O';
+            portEl.addEventListener('mousedown', handlePortMouseDown); // Changed from click to mousedown for line dragging
+            portEl.addEventListener('mouseup', handlePortMouseUp);
+            return portEl;
+        }
+
+        // --- Dragging Palette Modules ---
+        document.querySelectorAll('.palette-module').forEach(pm => {
+            pm.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', e.target.dataset.type);
+                e.dataTransfer.effectAllowed = 'copy';
+            });
+        });
+
+        canvasContainer.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Allow drop
+            e.dataTransfer.dropEffect = 'copy';
+        });
+
+        canvasContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const type = e.dataTransfer.getData('text/plain');
+            const rect = canvasContainer.getBoundingClientRect();
+            // Adjust for canvas's own offset if it's not flush with canvasContainer
+            const canvasRect = canvas.getBoundingClientRect();
+            const x = e.clientX - canvasRect.left;
+            const y = e.clientY - canvasRect.top;
+            addModule(type, x, y);
+        });
+
+
+        // --- Dragging Placed Modules ---
+        function enableModuleDragging(moduleEl, headerEl) {
+            let offsetX, offsetY;
+            
+            function onMouseMove(e) {
+                moduleEl.style.left = `${e.pageX - offsetX}px`;
+                moduleEl.style.top = `${e.pageY - offsetY}px`;
+                updateConnectionsForModule(moduleEl.dataset.moduleId);
+            }
+
+            function onMouseUp() {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+
+            headerEl.addEventListener('mousedown', (e) => {
+                // Ensure we use pageX/pageY relative to the document for dragging,
+                // and adjust by the canvasContainer's offset.
+                const canvasRect = canvasContainer.getBoundingClientRect();
+                offsetX = e.pageX - moduleEl.offsetLeft; //offsetLeft is relative to canvas
+                offsetY = e.pageY - moduleEl.offsetTop;  //offsetTop is relative to canvas
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        }
+        
+        // --- Patching Logic ---
+        function handlePortMouseDown(e) {
+            if (!audioContext || audioContext.state === 'suspended') {
+                initAudioContext(); // Attempt to start/resume if not already
+                if(!audioContext || audioContext.state === 'suspended') return;
+            }
+
+            e.stopPropagation(); // Prevent module drag
+            const portEl = e.target.closest('.port');
+            if (!portEl) return;
+
+            const moduleId = portEl.dataset.moduleId;
+            const portIndex = parseInt(portEl.dataset.portIndex);
+            const portType = portEl.dataset.portType;
+
+            if (portType === 'output') {
+                isPatching = true;
+                patchStartInfo = { moduleId, portIndex, portElement: portEl, portType };
+                
+                tempPatchLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                tempPatchLine.setAttribute('id', 'temp-patch-line');
+                const startPos = getPortCenter(portEl);
+                tempPatchLine.setAttribute('x1', startPos.x);
+                tempPatchLine.setAttribute('y1', startPos.y);
+                tempPatchLine.setAttribute('x2', startPos.x); // Initially same
+                tempPatchLine.setAttribute('y2', startPos.y);
+                patchCablesSvg.appendChild(tempPatchLine);
+                
+                document.addEventListener('mousemove', onPatchingMouseMove);
+                // Mouseup is handled by port's mouseup or document's mouseup for cancelling
+            }
+        }
+
+        function handlePortMouseUp(e) {
+             if (isPatching) {
+                const portEl = e.target.closest('.port');
+                if (portEl && portEl.dataset.portType === 'input' && patchStartInfo.moduleId !== portEl.dataset.moduleId) {
+                    const endModuleId = portEl.dataset.moduleId;
+                    const endPortIndex = parseInt(portEl.dataset.portIndex);
+                    
+                    connectModules(
+                        patchStartInfo.moduleId, 
+                        patchStartInfo.portIndex, 
+                        endModuleId, 
+                        endPortIndex,
+                        patchStartInfo.portElement,
+                        portEl
+                    );
+                }
+                // Reset patching state whether successful or not (if it was an input port)
+                cancelPatching();
+            }
+        }
+        
+        document.addEventListener('mouseup', (e) => { // General mouseup to cancel patching if not on a valid input port
+            if (isPatching && !e.target.closest('.port[data-port-type="input"]')) {
+                cancelPatching();
+            }
+        });
+
+
+        function onPatchingMouseMove(e) {
+            if (!isPatching || !tempPatchLine) return;
+            const canvasRect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - canvasRect.left;
+            const mouseY = e.clientY - canvasRect.top;
+            tempPatchLine.setAttribute('x2', mouseX);
+            tempPatchLine.setAttribute('y2', mouseY);
+        }
+        
+        function cancelPatching() {
+            if (tempPatchLine) {
+                patchCablesSvg.removeChild(tempPatchLine);
+                tempPatchLine = null;
+            }
+            isPatching = false;
+            patchStartInfo = null;
+            document.removeEventListener('mousemove', onPatchingMouseMove);
+        }
+
+
+        function connectModules(fromModuleId, fromPortIndex, toModuleId, toPortIndex, fromPortEl, toPortEl) {
+            const fromModule = modules[fromModuleId];
+            const toModule = modules[toModuleId];
+
+            if (!fromModule || !toModule) {
+                console.error("Module not found for connection");
+                return;
+            }
+
+            // Avoid duplicate connections to the same input port
+            if (connections.some(c => c.toModuleId === toModuleId && c.toPortIndex === toPortIndex)) {
+                console.warn("Input port already connected. Disconnect first.");
+                // Optionally, disconnect existing connection first:
+                // disconnectModules(connections.find(c => c.toModuleId === toModuleId && c.toPortIndex === toPortIndex));
+                return;
+            }
+            
+            console.log(`Connecting ${fromModule.type}:${fromPortIndex} to ${toModule.type}:${toPortIndex}`);
+
+            try {
+                const sourceNode = fromModule.audioNode;
+                let destination;
+                if (toModule.type === 'output') { // Special handling for main output
+                    destination = audioContext.destination;
+                } else if (toModule.inputs[toPortIndex] && toModule.inputs[toPortIndex].audioParam) {
+                    // Check if input port corresponds to an AudioParam (e.g., GainNode.gain)
+                    // For simple gain module, we connect to the GainNode itself, not a specific param if there's only one input.
+                    // Our current simple Gain connects an oscillator to the GainNode directly.
+                    destination = toModule.audioNode; // This covers GainNode.
+                    // if (toModule.type === 'gain' && toModule.inputs[toPortIndex].audioParam === toModule.audioNode.gain) {
+                    //     destination = toModule.audioNode.gain;
+                    // } else {
+                    //    destination = toModule.audioNode; // Default connect to the node
+                    // }
+                } else {
+                     destination = toModule.audioNode;
+                }
+
+
+                sourceNode.connect(destination);
+
+                // Visual connection
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.classList.add('connection-line');
+                patchCablesSvg.appendChild(line);
+                
+                const conn = { fromModuleId, fromPortIndex, toModuleId, toPortIndex, lineElement: line, fromPortEl, toPortEl };
+                connections.push(conn);
+
+                fromPortEl.classList.add('connected');
+                toPortEl.classList.add('connected');
+
+                updateConnectionLine(conn); // Draw initial line
+                console.log("Connected successfully.");
+
+            } catch (error) {
+                console.error("Error connecting audio nodes:", error);
+            }
+        }
+
+        function disconnectModules(connection) {
+            const fromModule = modules[connection.fromModuleId];
+            const toModule = modules[connection.toModuleId];
+
+            if (fromModule && toModule && fromModule.audioNode) {
+                 let destination;
+                if (toModule.type === 'output') {
+                    destination = audioContext.destination;
+                } else if (toModule.inputs[connection.toPortIndex] && toModule.inputs[connection.toPortIndex].audioParam) {
+                    // destination = toModule.inputs[connection.toPortIndex].audioParam;
+                     destination = toModule.audioNode;
+                } else {
+                     destination = toModule.audioNode;
+                }
+                
+                try {
+                    fromModule.audioNode.disconnect(destination);
+                    console.log(`Disconnected ${fromModule.type} from ${toModule.type}`);
+                } catch (e) {
+                    // It might already be disconnected or was never connected, or connected to something else
+                    // WebAudio often throws if trying to disconnect something not connected in that specific way.
+                    // For robustness, we can try a general disconnect from the source.
+                    try {
+                        fromModule.audioNode.disconnect(); // Disconnect all from this output
+                        // Then, re-establish other connections from this output if any (more complex state mgmt)
+                        // For now, this simple disconnect is okay as we usually replace connections
+                        console.warn("Had to use general disconnect. Reconnections might be needed for complex patches.", e);
+                        // Re-establish other connections originating from fromModule.outputs[connection.fromPortIndex]
+                        connections.filter(c => c.fromModuleId === connection.fromModuleId && c.fromPortIndex === connection.fromPortIndex && c !== connection)
+                                   .forEach(rc => {
+                                       const reconToModule = modules[rc.toModuleId];
+                                       let reconDest;
+                                       if (reconToModule.type === 'output') reconDest = audioContext.destination;
+                                       else reconDest = reconToModule.audioNode; // Simplified
+                                       fromModule.audioNode.connect(reconDest);
+                                   });
+
+                    } catch (e2) {
+                         console.error("Error during audio disconnection:", e2);
+                    }
+                }
+            }
+
+            if (connection.lineElement) {
+                patchCablesSvg.removeChild(connection.lineElement);
+            }
+            connection.fromPortEl.classList.remove('connected');
+            connection.toPortEl.classList.remove('connected');
+            
+            connections = connections.filter(c => c !== connection);
+        }
+
+        // You might want a way to explicitly remove connections, e.g., right-click a port or line
+        // For now, connecting to an already connected input port could replace the connection:
+        // Modified connectModules to check this and allow replacing (or just prevent it).
+        // If we replace: find existing connection to toModuleId/toPortIndex and call disconnectModules on it first.
+
+        // --- SVG Line Updates ---
+        function getPortCenter(portElement) {
+            const portRect = portElement.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect(); // Use canvas for relative SVG coords
+
+            // Center of the port relative to the canvas
+            const x = portRect.left + portRect.width / 2 - canvasRect.left;
+            const y = portRect.top + portRect.height / 2 - canvasRect.top;
+            return { x, y };
+        }
+
+        function updateConnectionLine(conn) {
+            const fromModule = modules[conn.fromModuleId];
+            const toModule = modules[conn.toModuleId];
+
+            if (!fromModule || !toModule || !conn.lineElement) return;
+
+            // const fromPortEl = fromModule.outputs[conn.fromPortIndex]?.element;
+            // const toPortEl = toModule.inputs[conn.toPortIndex]?.element;
+            const fromPortEl = conn.fromPortEl; // We stored it
+            const toPortEl = conn.toPortEl;
+
+            if (!fromPortEl || !toPortEl) return;
+
+            const startPos = getPortCenter(fromPortEl);
+            const endPos = getPortCenter(toPortEl);
+
+            conn.lineElement.setAttribute('x1', startPos.x);
+            conn.lineElement.setAttribute('y1', startPos.y);
+            conn.lineElement.setAttribute('x2', endPos.x);
+            conn.lineElement.setAttribute('y2', endPos.y);
+        }
+
+        function updateConnectionsForModule(moduleId) {
+            connections.forEach(conn => {
+                if (conn.fromModuleId === moduleId || conn.toModuleId === moduleId) {
+                    updateConnectionLine(conn);
+                }
+            });
+        }
+
+        // Add an event listener to allow deleting connections (e.g. right click on a port)
+        document.addEventListener('contextmenu', (e) => {
+            const portEl = e.target.closest('.port.connected');
+            if (portEl) {
+                e.preventDefault(); // Prevent browser context menu
+                const moduleId = portEl.dataset.moduleId;
+                const portIndex = parseInt(portEl.dataset.portIndex);
+                const portType = portEl.dataset.portType;
+
+                let connectionsToRemove = [];
+                if (portType === 'input') {
+                    connectionsToRemove = connections.filter(c => c.toModuleId === moduleId && c.toPortIndex === portIndex);
+                } else { // output
+                    connectionsToRemove = connections.filter(c => c.fromModuleId === moduleId && c.fromPortIndex === portIndex);
+                }
+                
+                if (connectionsToRemove.length > 0) {
+                    if (confirm(`Delete ${connectionsToRemove.length} connection(s) from this port?`)) {
+                         connectionsToRemove.forEach(conn => disconnectModules(conn));
+                    }
+                }
+            }
+        });
+
+
+        // --- Initial Setup ---
+        // No modules loaded by default. User drags them.
+        // Prompt user to start audio context if not started by interaction.
+        // This is now handled by the button and first module drop/patch attempt.
+
+    </script>
+</body>
+</html>
