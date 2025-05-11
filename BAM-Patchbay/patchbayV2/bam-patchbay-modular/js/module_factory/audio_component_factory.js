@@ -1,57 +1,75 @@
 // js/module_factory/audio_component_factory.js
 import { audioCtx } from '../audio_context.js';
 
+/**
+ * Factory-helper that instantiates an audio node *and* its UI wrapper.
+ * Every module still owns its own DOM; this file only routes the call.
+ *
+ * @param {string}      type          — module type (e.g. "samplePlayer")
+ * @param {HTMLElement} parentElement — the module’s root div (already on canvas)
+ * @returns {Promise<object>}         — { id, type, audioNode, … }
+ */
 export async function createAudioNodeAndUI(type, parentElement) {
-  let moduleData;
-  const moduleId = parentElement.id; // parentElement.id is set to the moduleId in module_factory.js
+  const moduleId  = parentElement.id;      // set earlier by module_factory.js
+  let   moduleData = null;                 // will hold the object each module returns
 
   switch (type) {
-    case 'oscillator':
+    /* ───────────────────────── basic building-blocks ───────────────────────── */
+    case 'oscillator': {
       const { createOscillatorModule } = await import('./modules/oscillator.js');
-      const oscNode = createOscillatorModule(audioCtx, parentElement); // oscillator.js could also take moduleId for logging
-      moduleData = { audioNode: oscNode, id: moduleId, type };
+      moduleData = createOscillatorModule(audioCtx, parentElement, moduleId);
       break;
-    case 'gain':
+    }
+    case 'gain': {
       const { createGainModule } = await import('./modules/gain.js');
-      const gainNode = createGainModule(audioCtx, parentElement); // gain.js could take moduleId
-      moduleData = { audioNode: gainNode, id: moduleId, type };
+      moduleData = createGainModule(audioCtx, parentElement, moduleId);
       break;
-    case 'filter':
+    }
+    case 'filter': {
       const { createFilterModule } = await import('./modules/filter.js');
-      const filterNode = createFilterModule(audioCtx, parentElement); // filter.js could take moduleId
-      moduleData = { audioNode: filterNode, id: moduleId, type };
+      moduleData = createFilterModule(audioCtx, parentElement, moduleId);
       break;
-    case 'lfo':
+    }
+    case 'lfo': {
       const { createLfoModule } = await import('./modules/lfo.js');
-      const lfoGainNode = createLfoModule(audioCtx, parentElement); // lfo.js could take moduleId
-      moduleData = { audioNode: lfoGainNode, id: moduleId, type };
+      moduleData = createLfoModule(audioCtx, parentElement, moduleId);
       break;
-    case 'output':
-      moduleData = { audioNode: audioCtx.destination, id: moduleId, type };
+    }
+    case 'output': {
+      moduleData = { audioNode: audioCtx.destination };
       break;
+    }
 
-    case 'samplePlayer':
+    /* ─────────────────────────── advanced modules ─────────────────────────── */
+    case 'samplePlayer': {
       const { createSamplePlayerModule } = await import('./modules/sample_player.js');
-      moduleData = createSamplePlayerModule(parentElement, moduleId); // Pass moduleId
+      // NOTE: createSamplePlayerModule internally imports audioCtx,
+      // so we *only* pass parentElement + id.
+      moduleData = createSamplePlayerModule(parentElement, moduleId);
       break;
-    case 'sequencer':
+    }
+    case 'sequencer': {
       const { createSequencerModule } = await import('./modules/sequencer.js');
-      moduleData = createSequencerModule(parentElement, moduleId); // Pass moduleId
+      moduleData = createSequencerModule(parentElement, moduleId);
       break;
-    case 'bpmClock':
+    }
+    case 'bpmClock': {
       const { createBpmClockModule } = await import('./modules/bpm_clock.js');
-      moduleData = createBpmClockModule(parentElement, moduleId); // bpm_clock.js could take moduleId
+      moduleData = createBpmClockModule(parentElement, moduleId);
       break;
+    }
 
+    /* ─────────────────────────────── default ──────────────────────────────── */
     default:
-      console.error(`Unknown module type "${type}" for audio/UI (ID: ${moduleId})`);
+      console.error(`Unknown module type “${type}” (ID: ${moduleId})`);
       return null;
   }
 
-  // Ensure basic structure if not fully provided by module creator
-  if (moduleData && !moduleData.type) moduleData.type = type;
-  if (moduleData && !moduleData.id) moduleData.id = moduleId;
-  if (moduleData && moduleData.audioNode === undefined) moduleData.audioNode = null;
-
-  return moduleData;
+  /* ── normalise the object so callers can rely on the same keys ─────────── */
+  return {
+    id        : moduleId,
+    type,
+    audioNode : moduleData?.audioNode ?? null,
+    ...moduleData          // keeps any extra helpers (play, loadAudioBuffer, …)
+  };
 }

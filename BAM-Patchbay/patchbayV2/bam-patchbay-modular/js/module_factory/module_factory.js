@@ -3,7 +3,7 @@ import { canvas } from '../dom_elements.js';
 import { getNextModuleId, addModule, getModule } from '../shared_state.js';
 import { enableModuleDrag } from '../drag_drop_manager.js';
 
-import { removeModule, clearChannelToOutput } from './module_manager.js'; // Use ./ for same directory
+import { removeModule, clearChannelToOutput } from '../module_manager.js'; // Use ./ for same directory
 import { audioCtx } from '../audio_context.js'; // <<<--- ADD THIS if not already there
 
 import { createModuleShell, createModuleHeader } from './module_dom.js';

@@ -1,12 +1,18 @@
 // main.js
 import { initPaletteAndCanvasDragDrop } from './drag_drop_manager.js';
 import { createModule } from './module_factory/module_factory.js';
-import { clearAllModules } from './module_factory/module_manager.js'; // Adjust path if needed
-
+import { clearAllModules } from './module_manager.js';
+import { applyZoom, resetZoom, tidyModules } from './canvas_controls.js';
+import { state } from './shared_state.js'; // For accessing state.currentZoom
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log("Audio Modular Synthesizer Initializing...");
 
+  // Get references to key DOM elements once
+  const canvasEl = document.getElementById('canvas'); // The large, scalable canvas
+  // const canvasContainerEl = document.getElementById('canvas-container'); // The scrollable viewport (drop target)
+
+  // Canvas Actions
   const clearAllButton = document.getElementById('clear-all-btn');
   if (clearAllButton) {
     clearAllButton.addEventListener('click', () => {
@@ -16,16 +22,36 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const zoomInButton = document.getElementById('zoom-in-btn');
+  if (zoomInButton) {
+    zoomInButton.addEventListener('click', () => applyZoom(0.1));
+  }
 
-  // This function will be called by drag_drop_manager when a module is dropped
-  // It's now async to await the createModule call
+  const zoomOutButton = document.getElementById('zoom-out-btn');
+  if (zoomOutButton) {
+    zoomOutButton.addEventListener('click', () => applyZoom(-0.1));
+  }
+
+  const resetZoomButton = document.getElementById('reset-zoom-btn');
+  if (resetZoomButton) {
+    resetZoomButton.addEventListener('click', resetZoom);
+  }
+
+  const tidyGridButton = document.getElementById('tidy-grid-btn');
+  if (tidyGridButton) {
+    tidyGridButton.addEventListener('click', tidyModules);
+  }
+
+  /**
+   * The final step: creates a module at the given UNCALED x, y coordinates.
+   * This function expects x and y to be coordinates on the large, unscaled canvas.
+   */
   const handleModuleCreationRequest = async (type, x, y) => {
     if (type && x !== undefined && y !== undefined) {
       try {
-        // Await the module creation, as createModule is now async
-        const newModuleData = await createModule(type, x, y); // newModuleData is the object from shared_state
+        const newModuleData = await createModule(type, x, y); 
         if (newModuleData) {
-          console.log(`Module ${newModuleData.type} (ID: ${newModuleData.id}) created at ${x}, ${y}`);
+          console.log(`Module ${newModuleData.type} (ID: ${newModuleData.id}) created at ${x.toFixed(0)}, ${y.toFixed(0)} (unscaled)`);
         } else {
           console.warn(`Failed to create module of type: ${type}`);
         }
@@ -33,12 +59,67 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error(`Error creating module of type ${type}:`, error);
       }
     } else {
-        console.error("Invalid parameters for module creation request:", type, x, y);
+        console.error("Invalid parameters for module creation request:", { type, x, y });
     }
   };
 
-  // Pass the handler to the drag and drop initializer
-  initPaletteAndCanvasDragDrop(handleModuleCreationRequest);
+  /**
+   * Handles the drop event on the canvas area (likely #canvas-container).
+   * Calculates the correct unscaled coordinates on the #canvas element,
+   * accounting for zoom and scroll, then requests module creation.
+   *
+   * This function should be called by initPaletteAndCanvasDragDrop
+   * with the module type and the raw DOM drop event.
+   * 
+   * @param {string} type - The type of module to create (e.g., "oscillator").
+   * @param {DragEvent} event - The raw DOM drop event object.
+   */
+  const handleDropAndCalculatePosition = (type, event) => {
+    if (!type || !event) {
+        console.error("handleDropAndCalculatePosition: Missing module type or event object.", {type, event});
+        return;
+    }
+    if (!canvasEl) {
+        console.error("handleDropAndCalculatePosition: The main #canvas element was not found in the DOM.");
+        return;
+    }
+
+    event.preventDefault(); // Important to prevent default drop behavior
+
+    // Get the current on-screen position and dimensions of the large #canvas element.
+    // getBoundingClientRect() accounts for transforms (like scale) and parent scrolling.
+    const canvasRect = canvasEl.getBoundingClientRect();
+
+    // Mouse position relative to the viewport (browser window)
+    const mouseX_viewport = event.clientX;
+    const mouseY_viewport = event.clientY;
+
+    // Calculate mouse position relative to the #canvas element's own top-left corner.
+    // This gives us coordinates on the *scaled* canvas.
+    const mouseX_on_scaled_canvas = mouseX_viewport - canvasRect.left;
+    const mouseY_on_scaled_canvas = mouseY_viewport - canvasRect.top;
+
+    // Convert these scaled coordinates to *unscaled* coordinates on the large canvas.
+    // These are the coordinates that module.style.left and module.style.top will use.
+    const finalX = mouseX_on_scaled_canvas / state.currentZoom;
+    const finalY = mouseY_on_scaled_canvas / state.currentZoom;
+
+    console.log(`Drop details: Type=${type}, ViewportXY=(${mouseX_viewport},${mouseY_viewport}), CanvasRectLR=(${canvasRect.left.toFixed(2)},${canvasRect.top.toFixed(2)}), OnScaledCanvasXY=(${mouseX_on_scaled_canvas.toFixed(2)},${mouseY_on_scaled_canvas.toFixed(2)}), Zoom=${state.currentZoom.toFixed(2)}, FinalUnscaledXY=(${finalX.toFixed(2)},${finalY.toFixed(2)})`);
+    
+    // Now, call the function that actually creates the module with the correct unscaled coordinates.
+    handleModuleCreationRequest(type, finalX, finalY);
+  };
+
+  // Initialize palette and canvas drag-and-drop functionality.
+  // It's assumed that initPaletteAndCanvasDragDrop (from drag_drop_manager.js)
+  // will now call 'handleDropAndCalculatePosition' when a module is dropped,
+  // passing it the module's 'type' and the full 'event' object.
+  // For example, inside initPaletteAndCanvasDragDrop, the drop handler for #canvas-container might look like:
+  //   canvasContainer.addEventListener('drop', (dropEvent) => {
+  //     const type = dropEvent.dataTransfer.getData('application/x-module-type'); // or however type is transferred
+  //     callbackFromMainJS(type, dropEvent); // where callbackFromMainJS is handleDropAndCalculatePosition
+  //   });
+  initPaletteAndCanvasDragDrop(handleDropAndCalculatePosition);
 
   console.log("Initialization Complete.");
 });

@@ -1,38 +1,36 @@
 // shared_state.js
+
 let moduleIdCounter = 0;
 
+// UPDATED Canvas Dimensions to match the CSS
+export const CANVAS_WIDTH = 3000; // Must match #canvas width in CSS
+export const CANVAS_HEIGHT = 2000; // Must match #canvas height in CSS
+
 export const state = {
-  dragType: null, // Type of module being dragged from palette
-  modules: {},    // Stores module data: { id: { type, audioNode, element } }
-  connections: [],// Stores connection data: { srcId, dstId, line }
-  dragState: {    // For dragging existing modules
+  dragType: null,
+  modules: {},
+  connections: [],
+  dragState: {
     id: null,
-    offsetX: 0,
-    offsetY: 0
+    unscaledOffsetX: 0,
+    unscaledOffsetY: 0
   },
-  selectedConnector: null // For making connections
+  selectedConnector: null,
+  currentZoom: 1.0
 };
 
+// ... rest of your shared_state.js
 export function getNextModuleId() {
   return 'module-' + moduleIdCounter++;
 }
-
-// Functions to modify state if needed, e.g.:
 export function addModule(id, moduleData) {
   state.modules[id] = moduleData;
 }
-
 export function getModule(id) {
   return state.modules[id];
 }
-
-
-
-
 export function removeModuleState(moduleId) {
     if (state.modules[moduleId]) {
-      // If module has a 'dispose' or 'cleanup' method, call it
-      // This is good practice for modules with complex internal resources (e.g., event listeners, timers)
       if (typeof state.modules[moduleId].dispose === 'function') {
           state.modules[moduleId].dispose();
       }
@@ -42,12 +40,10 @@ export function removeModuleState(moduleId) {
     }
     return false;
   }
-  
-  export function addConnection(connectionData) {
+export function addConnection(connectionData) {
     state.connections.push(connectionData);
-  }
-  
-  export function removeConnection(indexOrConnectionObject) {
+}
+export function removeConnection(indexOrConnectionObject) {
     if (typeof indexOrConnectionObject === 'number') {
       if (indexOrConnectionObject >= 0 && indexOrConnectionObject < state.connections.length) {
         state.connections.splice(indexOrConnectionObject, 1);
@@ -58,18 +54,13 @@ export function removeModuleState(moduleId) {
         state.connections.splice(index, 1);
       }
     }
-  }
-  
-  // New: Get all connections for a specific module
-  export function getConnectionsForModule(moduleId) {
+}
+export function getConnectionsForModule(moduleId) {
       return state.connections.filter(c => c.srcId === moduleId || c.dstId === moduleId);
-  }
-  
-  // New: Function to get all modules (useful for "clear all")
-  export function getAllModules() {
+}
+export function getAllModules() {
       return Object.values(state.modules);
-  }
-  
-  export function getAllModuleIds() {
+}
+export function getAllModuleIds() {
       return Object.keys(state.modules);
-  }
+}
