@@ -3,7 +3,7 @@ import { initPaletteAndCanvasDragDrop } from './drag_drop_manager.js';
 import { createModule } from './module_factory/module_factory.js';
 import { clearAllModules } from './module_manager.js';
 import { applyZoom, resetZoom, tidyModules } from './canvas_controls.js';
-import { state } from './shared_state.js'; // For accessing state.currentZoom
+import { state, getMasterBpm, setMasterBpm } from './shared_state.js'; // For accessing state.currentZoom
 import { audioCtx } from './audio_context.js';
 
 
@@ -51,6 +51,41 @@ document.addEventListener('DOMContentLoaded', () => {
   if (tidyGridButton) {
     tidyGridButton.addEventListener('click', tidyModules);
   }
+
+  const masterBpmInput = document.getElementById('master-bpm-input');
+
+    if (masterBpmInput) {
+        // Initialize the input field with the current master BPM from the state
+        masterBpmInput.value = getMasterBpm();
+
+        masterBpmInput.addEventListener('input', (event) => {
+            const newBpmValue = event.target.value;
+            const validatedBpm = setMasterBpm(newBpmValue);
+            // If validation changed the value (e.g., clamped it or reverted), update the input field
+            if (parseFloat(newBpmValue) !== validatedBpm && event.target.value !== validatedBpm.toString()) {
+                event.target.value = validatedBpm;
+            }
+        });
+
+        // Optional: Add a 'blur' event to re-validate or reset if the user leaves an invalid value
+        masterBpmInput.addEventListener('blur', (event) => {
+            const currentVal = parseInt(event.target.value, 10);
+            const minBpm = parseInt(masterBpmInput.min, 10);
+            const maxBpm = parseInt(masterBpmInput.max, 10);
+
+            if (isNaN(currentVal) || currentVal < minBpm || currentVal > maxBpm) {
+                // If value is invalid after leaving the field, reset to current master BPM
+                event.target.value = getMasterBpm();
+                // No need to call setMasterBpm again if it resets to the already set masterBpm
+            } else {
+                // If value is valid but different (e.g. user typed 120.5, input event might have set 120)
+                // ensure it's correctly set in state. The 'input' event should mostly handle this.
+                setMasterBpm(event.target.value);
+            }
+        });
+    } else {
+        console.error("Master BPM input element ('master-bpm-input') not found!");
+    }
 
   /**
    * The final step: creates a module at the given UNCALED x, y coordinates.

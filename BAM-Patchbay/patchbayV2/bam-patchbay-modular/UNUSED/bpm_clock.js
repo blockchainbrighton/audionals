@@ -1,5 +1,5 @@
 // js/module_factory/modules/bpm_clock.js
-import { state, getModule } from '../../shared_state.js'; // To update other modules
+import { state, getModule } from '../js/shared_state.js'; // To update other modules
 
 /**
  * Creates a BPM Clock module.

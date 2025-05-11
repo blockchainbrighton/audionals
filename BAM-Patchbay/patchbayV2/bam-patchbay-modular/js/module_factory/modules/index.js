@@ -70,7 +70,7 @@ export const MODULE_DEFS = {
   
     bpmClock: {
       create: (_audioCtx, parentEl, id) =>
-        import('./bpm_clock.js')
+        import('../../../UNUSED/bpm_clock.js')
           .then(m => m.createBpmClockModule(parentEl, id)),
       hasIn: false,
       hasOut: false,

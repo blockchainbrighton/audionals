@@ -1,4 +1,4 @@
-// shared_state.js
+// js/shared_state.js
 
 let moduleIdCounter = 0;
 
@@ -18,10 +18,10 @@ export const state = {
     unscaledOffsetY: 0
   },
   selectedConnector: null,
-  currentZoom: DEFAULT_ZOOM // Updated: Initialize with the new default zoom
+  currentZoom: DEFAULT_ZOOM, // Updated: Initialize with the new default zoom
+  masterBpm: 120 // New: Master BPM, default 120
 };
 
-// ... rest of your shared_state.js (no changes from your original below this line)
 export function getNextModuleId() {
   return 'module-' + moduleIdCounter++;
 }
@@ -65,4 +65,48 @@ export function getAllModules() {
 }
 export function getAllModuleIds() {
       return Object.keys(state.modules);
+}
+
+// --- Master BPM Management ---
+/**
+ * Sets the master BPM.
+ * @param {string|number} newBpmInput - The new BPM value from user input.
+ * @returns {number} The validated and set BPM value.
+ */
+export function setMasterBpm(newBpmInput) {
+  const bpm = parseInt(newBpmInput, 10);
+  
+  // Validate BPM (e.g., between 20 and 300)
+  if (isNaN(bpm) || bpm < 20 || bpm > 300) {
+    console.warn(`Invalid BPM value: ${newBpmInput}. BPM not changed from ${state.masterBpm}.`);
+    return state.masterBpm; // Return current BPM if new value is invalid
+  }
+
+  if (state.masterBpm !== bpm) {
+    state.masterBpm = bpm;
+    console.log(`Master BPM updated to: ${state.masterBpm}`);
+    broadcastBpmUpdate(state.masterBpm);
+  }
+  return state.masterBpm;
+}
+
+/**
+ * @returns {number} The current master BPM.
+ */
+export function getMasterBpm() {
+  return state.masterBpm;
+}
+
+/**
+ * Broadcasts the BPM update to all relevant modules (e.g., sequencers).
+ * @param {number} newBpm - The new BPM to broadcast.
+ */
+function broadcastBpmUpdate(newBpm) {
+  console.log(`Broadcasting BPM: ${newBpm} to modules.`);
+  Object.values(state.modules).forEach(moduleData => {
+    if (moduleData && moduleData.type === 'sequencer' && typeof moduleData.setTempo === 'function') {
+      moduleData.setTempo(newBpm);
+    }
+    // Add other module types here if they need BPM updates
+  });
 }
