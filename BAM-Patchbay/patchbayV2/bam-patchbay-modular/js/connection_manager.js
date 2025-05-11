@@ -1,6 +1,7 @@
 // js/connection_manager.js
 import { svg, canvas as appCanvas } from './dom_elements.js';
-import { state, getModule, addConnection, removeConnection } from './shared_state.js';
+import { state, getModule, addConnection, removeConnection, getConnectionsForModule } from './shared_state.js'; // Added getConnectionsForModule
+import { audioCtx } from './audio_context.js'; // Make sure audioCtx is available
 
 export function drawConnection(c1, c2) {
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -12,14 +13,17 @@ export function drawConnection(c1, c2) {
 }
 
 export function setLinePos(line, c1, c2) {
-  const r = appCanvas.getBoundingClientRect();
-  const p1 = c1.getBoundingClientRect();
-  const p2 = c2.getBoundingClientRect();
-  line.setAttribute('x1', p1.left + p1.width / 2 - r.left);
-  line.setAttribute('y1', p1.top + p1.height / 2 - r.top);
-  line.setAttribute('x2', p2.left + p2.width / 2 - r.left);
-  line.setAttribute('y2', p2.top + p2.height / 2 - r.top);
-}
+    // Use the bounding rectangle of the SVG element as the reference
+    const svgRect = svg.getBoundingClientRect(); // <--- CHANGE THIS LINE
+    const p1 = c1.getBoundingClientRect();
+    const p2 = c2.getBoundingClientRect();
+  
+    // Calculate coordinates relative to the SVG element's top-left corner
+    line.setAttribute('x1', p1.left + p1.width / 2 - svgRect.left);
+    line.setAttribute('y1', p1.top + p1.height / 2 - svgRect.top);
+    line.setAttribute('x2', p2.left + p2.width / 2 - svgRect.left);
+    line.setAttribute('y2', p2.top + p2.height / 2 - svgRect.top);
+  }
 
 // Helper to get a common name for an AudioParam
 function getParamName(node, param) {
@@ -342,3 +346,101 @@ export function refreshLinesForModule(moduleId) {
     }
   });
 }
+
+/**
+ * Disconnects all audio and trigger connections associated with a given module ID,
+ * removes their visual lines, and updates the state.
+ * @param {string} moduleId The ID of the module to disconnect.
+ */
+export function disconnectAllForModule(moduleId) {
+    const connectionsToRemove = getConnectionsForModule(moduleId);
+    const moduleBeingRemoved = getModule(moduleId); // Get module data for potential .audioNode.disconnect()
+  
+    connectionsToRemove.forEach(c => {
+      const srcModule = getModule(c.srcId);
+      const dstModule = getModule(c.dstId);
+  
+      // Perform actual Web Audio API disconnection
+      if (srcModule && srcModule.audioNode && dstModule) {
+        if (c.srcConnectorType === 'audio' && c.dstConnectorType === 'audio') {
+          let targetToDisconnect = dstModule.audioNode;
+          if (c.dstParam && dstModule.audioNode && dstModule.audioNode[c.dstParam] instanceof AudioParam) {
+            targetToDisconnect = dstModule.audioNode[c.dstParam];
+          }
+          
+          // Check if targetToDisconnect is valid before attempting disconnect
+          if (targetToDisconnect) {
+              try {
+                  srcModule.audioNode.disconnect(targetToDisconnect);
+                  console.log(`Audio disconnected: ${srcModule.type} (${c.srcId}) from ${dstModule.type} (${c.dstId}) param: ${c.dstParam || 'node'}`);
+              } catch (e) {
+                  console.warn(`Error disconnecting ${srcModule.type} from ${dstModule.type} (param: ${c.dstParam}):`, e);
+                  // As a fallback, if the module being removed is the source, try a general disconnect.
+                  // This helps if the target was already removed or state is inconsistent.
+                  if (srcModule.id === moduleId && typeof srcModule.audioNode.disconnect === 'function' && !(targetToDisconnect instanceof AudioParam)) {
+                      try {
+                          srcModule.audioNode.disconnect(); // Disconnects all outputs from this node
+                          console.log(`Broad audio disconnect for source module ${srcModule.id}`);
+                      } catch (e2) {
+                          console.error(`Broad audio disconnect failed for ${srcModule.id}`, e2);
+                      }
+                  }
+              }
+          } else if (dstModule.type === 'output' && dstModule.audioNode === audioCtx.destination) {
+              // Special case for audioCtx.destination which might not have specific params and is a global target
+              try {
+                  srcModule.audioNode.disconnect(audioCtx.destination);
+                   console.log(`Audio disconnected: ${srcModule.type} (${c.srcId}) from Master Output`);
+              } catch (e) {
+                  console.warn(`Error disconnecting ${srcModule.type} from Master Output:`, e);
+              }
+          }
+           else {
+              console.warn(`Target for disconnection from ${srcModule.type} to ${dstModule.type} was null or invalid.`);
+          }
+  
+        } else if (c.srcConnectorType === 'trigger' && c.dstConnectorType === 'trigger' &&
+                   srcModule.type === 'sequencer' && dstModule.type === 'samplePlayer' &&
+                   Array.isArray(srcModule.connectedTriggers) && typeof dstModule.play === 'function') {
+          const index = srcModule.connectedTriggers.indexOf(dstModule.play);
+          if (index > -1) {
+            srcModule.connectedTriggers.splice(index, 1);
+            console.log(`Trigger disconnected: ${srcModule.type} from ${dstModule.type}`);
+          }
+        }
+        // Add other custom disconnection types here
+      }
+  
+      // Remove visual line
+      if (c.line && c.line.parentNode) {
+        c.line.remove();
+      }
+      // Remove from state.connections
+      removeConnection(c); // Pass the connection object itself
+    });
+  
+    // If the module being removed has an audioNode with a general disconnect method, call it.
+    // This is a "belt and braces" step to ensure it's not connected to anything else
+    // that might not have been in state.connections (though ideally, all connections are tracked).
+    if (moduleBeingRemoved && moduleBeingRemoved.audioNode && typeof moduleBeingRemoved.audioNode.disconnect === 'function') {
+        // For source nodes (Oscillator, LFO, SamplePlayer's gain node), disconnecting all its outputs is safe.
+        // For nodes that are primarily destinations (Filter, Gain, Output), this might be too aggressive
+        // if they are part of chains not yet fully cleaned up.
+        // However, since we are *removing* the module, cleaning all its outputs is generally correct.
+        if (['oscillator', 'lfo', 'samplePlayer', 'gain', 'filter'].includes(moduleBeingRemoved.type)) { // Output module's node is audioCtx.destination, don't disconnect broadly
+            try {
+                moduleBeingRemoved.audioNode.disconnect();
+                console.log(`Broadly disconnected audioNode outputs for module ${moduleId} (${moduleBeingRemoved.type})`);
+            } catch (e) {
+                console.warn(`Could not broadly disconnect audioNode for ${moduleId}:`, e);
+            }
+        }
+    }
+  
+  
+    // Deselect any connector if it was selected
+    if (state.selectedConnector) {
+      state.selectedConnector.elem.classList.remove('selected');
+      state.selectedConnector = null;
+    }
+  }

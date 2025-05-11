@@ -3,6 +3,9 @@ import { canvas } from '../dom_elements.js';
 import { getNextModuleId, addModule, getModule } from '../shared_state.js';
 import { enableModuleDrag } from '../drag_drop_manager.js';
 
+import { removeModule, clearChannelToOutput } from './module_manager.js'; // Use ./ for same directory
+import { audioCtx } from '../audio_context.js'; // <<<--- ADD THIS if not already there
+
 import { createModuleShell, createModuleHeader } from './module_dom.js';
 import { createAudioNodeAndUI } from './audio_component_factory.js';
 import { createAndAppendConnectors } from './module_connectors.js';
@@ -17,16 +20,10 @@ import { createAndAppendConnectors } from './module_connectors.js';
  */
 export async function createModule(type, x, y) {
   const id = getNextModuleId();
-
-  // 1. Create the basic module shell
   const modElement = createModuleShell(id, type, x, y);
-
-  // 2. Create and append the header
   const headerElement = createModuleHeader(type);
   modElement.appendChild(headerElement);
 
-  // 3. Create AudioNode and its UI (and other module-specific data)
-  // createAudioNodeAndUI now returns the full module instance data object
   const moduleInstanceData = await createAudioNodeAndUI(type, modElement);
 
   if (!moduleInstanceData) {
@@ -59,5 +56,26 @@ export async function createModule(type, x, y) {
 
   enableModuleDrag(modElement, id);
 
-  return getModule(id); // Returns the object stored in shared_state
-}
+  // Add right-click listener to the module's header for removal
+  headerElement.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation(); // Prevent canvas or other context menus
+
+    // Special handling for 'output' module: offer to clear channel
+    if (completeModuleData.type === 'output' || completeModuleData.audioNode === audioCtx.destination) {
+        // A more sophisticated approach would be a custom context menu.
+        // For simplicity, a confirm dialog:
+        if (confirm(`Remove this '${type}' module?\n\nAlternatively, (Cancel this and) press OK to clear the entire audio chain leading to this Output.`)) {
+            removeModule(id);
+        } else if (confirm(`Clear entire audio chain leading to this '${type}' module? (This will remove multiple modules)`)) {
+            clearChannelToOutput(id);
+        }
+    } else {
+        if (confirm(`Remove module '${type}' (ID: ${id})?`)) {
+            removeModule(id);
+        }
+    }
+  });
+
+  return getModule(id);
+  }

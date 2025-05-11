@@ -1,11 +1,20 @@
 // main.js
-import { audioCtx } from './audio_context.js'; // <<<--- ADD THIS IMPORT
 import { initPaletteAndCanvasDragDrop } from './drag_drop_manager.js';
 import { createModule } from './module_factory/module_factory.js';
+import { clearAllModules } from './module_factory/module_manager.js'; // Adjust path if needed
+
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log("Audio Modular Synthesizer Initializing...");
 
+  const clearAllButton = document.getElementById('clear-all-btn');
+  if (clearAllButton) {
+    clearAllButton.addEventListener('click', () => {
+      if (confirm("Are you sure you want to remove ALL modules from the canvas?")) {
+        clearAllModules();
+      }
+    });
+  }
 
 
   // This function will be called by drag_drop_manager when a module is dropped
