@@ -1,19 +1,45 @@
 // main.js
+import { audioCtx } from './audio_context.js'; // <<<--- ADD THIS IMPORT
 import { initPaletteAndCanvasDragDrop } from './drag_drop_manager.js';
-import { createModule } from './module_factory/module_factory.js'; // Import createModule here
+import { createModule } from './module_factory/module_factory.js';
 
-// Ensure DOM is fully loaded before initializing
 document.addEventListener('DOMContentLoaded', () => {
   console.log("Audio Modular Synthesizer Initializing...");
 
-  // This function will be called by drag_drop_manager when a module is dropped
-  const handleModuleCreationRequest = (type, x, y) => {
-    if (type && x !== undefined && y !== undefined) {
-      const newModule = createModule(type, x, y);
-      if (newModule) {
-        console.log(`Module ${newModule.type} created at ${x}, ${y}`);
+  // Ensure the button exists in your HTML, e.g.:
+  // <button id="startAudioButton" style="position:fixed; top:10px; left:10px; z-index: 10000;">Start Audio</button>
+  const startAudioButton = document.getElementById('startAudioButton');
+  if (startAudioButton) { // Check if the button exists to avoid errors if it's removed from HTML
+    startAudioButton.addEventListener('click', () => {
+      if (audioCtx.state === 'suspended') {
+          audioCtx.resume().then(() => {
+              console.log("AudioContext resumed by global button.");
+              startAudioButton.style.display = 'none'; // Hide after click
+          }).catch(e => console.error("Global button resume failed:", e));
       } else {
-        console.warn(`Failed to create module of type: ${type}`);
+          console.log("AudioContext already running.");
+          startAudioButton.style.display = 'none';
+      }
+    });
+  } else {
+    console.warn("Start Audio Button not found in HTML. AudioContext might require other user interaction to start if suspended.");
+  }
+
+
+  // This function will be called by drag_drop_manager when a module is dropped
+  // It's now async to await the createModule call
+  const handleModuleCreationRequest = async (type, x, y) => {
+    if (type && x !== undefined && y !== undefined) {
+      try {
+        // Await the module creation, as createModule is now async
+        const newModuleData = await createModule(type, x, y); // newModuleData is the object from shared_state
+        if (newModuleData) {
+          console.log(`Module ${newModuleData.type} (ID: ${newModuleData.id}) created at ${x}, ${y}`);
+        } else {
+          console.warn(`Failed to create module of type: ${type}`);
+        }
+      } catch (error) {
+        console.error(`Error creating module of type ${type}:`, error);
       }
     } else {
         console.error("Invalid parameters for module creation request:", type, x, y);
@@ -22,12 +48,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Pass the handler to the drag and drop initializer
   initPaletteAndCanvasDragDrop(handleModuleCreationRequest);
-
-  // Example: Pre-load an output module (this still works as intended)
-  // handleModuleCreationRequest('output', 500, 100); 
-  // or directly:
-  // createModule('output', 500, 100);
-
 
   console.log("Initialization Complete.");
 });

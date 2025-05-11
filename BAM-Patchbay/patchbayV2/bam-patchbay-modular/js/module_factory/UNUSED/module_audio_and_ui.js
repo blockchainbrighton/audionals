@@ -1,5 +1,5 @@
 // js/module_factory/module_audio_and_ui.js
-import { audioCtx } from '../audio_context.js';
+import { audioCtx } from '../../audio_context.js';
 
 /**
  * Creates the AudioNode and associated UI for a given module type.
