@@ -2,16 +2,21 @@
 
 export const MODULE_DEFS = {
     oscillator: {
-      // Uniform factory signature: (audioCtx, parentEl, id) => Promise<moduleData>
-      create: (audioCtx, parentEl, id) =>
-        import('./oscillator.js')
-          .then(m => m.createOscillatorModule(audioCtx, parentEl, id)),
-      hasIn: false,
-      hasOut: true,
-      hasTriggerIn: false,
-      hasTriggerOut: false,
-      lfoTargets: {}  // Oscillator doesn’t accept LFO
-    },
+        // Ensure the 'id' parameter is passed if your createOscillatorModule uses it
+        create: (audioCtx, parentEl, id) => // Ensure id is passed
+          import('./oscillator.js')
+            .then(m => m.createOscillatorModule(audioCtx, parentEl, id)), // Pass id
+        hasIn: false,        // No audio INPUT for processing by the oscillator itself
+        hasOut: true,        // Outputs audio signal
+        hasTriggerIn: false,
+        hasTriggerOut: false,
+        lfoTargets: {
+          // 'Label for UI': 'path.to.AudioParam.on.returned.object.from.createFunction'
+          // The 'audioNode' in the path refers to the 'audioNode' key in the object returned by createOscillatorModule.
+          'Frequency': 'audioNode.frequency', // Target the frequency of the mainOscillatorNode
+          'Detune': 'audioNode.detune'        // Also expose detune as a target
+        }
+      },
   
     gain: {
       create: (audioCtx, parentEl, id) =>
@@ -78,6 +83,48 @@ export const MODULE_DEFS = {
       hasTriggerOut: false,
       lfoTargets: {}
     },
+
+    delay: {
+        create: (ctx, el, id) => import('./delay.js').then(m => m.createDelayModule(ctx, el, id)),
+        hasIn: true, hasOut: true,
+        hasTriggerIn: false, hasTriggerOut: false,
+        lfoTargets: { time: 'delayTime', feedback: 'feedback', wet: 'wetGain', dry: 'dryGain' }
+      },
+
+      reverb: {
+        create: (ctx, el, id) => import('./reverb.js').then(m => m.createReverbModule(ctx, el, id)),
+        hasIn: true, hasOut: true,
+        hasTriggerIn: false, hasTriggerOut: false,
+        lfoTargets: { wet: 'wetGain', dry: 'dryGain' /*, decayAp1: 'ap1Feedback' */ }
+      },
+
+
+        compressor: {
+        create: (ctx, el, id) => import('./compressor.js').then(m => m.createCompressorModule(ctx, el, id)),
+        hasIn: true, hasOut: true,
+        hasTriggerIn: false, hasTriggerOut: false,
+        lfoTargets: { threshold: 'threshold', ratio: 'ratio', makeup: 'makeup' }
+      },
+
+      gate: {
+        create: (ctx, el, id) => import('./gate.js').then(m => m.createGateModule(ctx, el, id)),
+        hasIn: true, hasOut: true,
+        hasTriggerIn: false, hasTriggerOut: false,
+        lfoTargets: null // LFO controlling threshold would be tricky due to JS involvement; could add dummy AudioParam if needed
+      },
+
+
+      arpeggiator: {
+        create: (ctx, el, id) => import('./arpeggiator.js')
+          .then(m => m.createArpeggiatorModule(ctx, el, id)),
+        hasIn: false,
+        hasOut: true,       // Crucially, its audioNode outputs the pitch control signal
+        hasTriggerIn: false,
+        hasTriggerOut: true,
+        lfoTargets: { bpm: 'paramsForLfo.rate' }
+      },
+
+      
   
     output: {
         // Change the first parameter name from _audioCtx to audioCtx

@@ -1,6 +1,6 @@
 // js/module_factory/modules/gain.js
 
-import { createSlider } from '../ui/slider.js';
+import { createSlider, slider } from '../ui/slider.js';
 
 export function createGainModule(audioCtx, el) {
   const audioNode = audioCtx.createGain();

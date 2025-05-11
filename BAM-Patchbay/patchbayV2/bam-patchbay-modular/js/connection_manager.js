@@ -15,27 +15,86 @@ const drawConnection = (c1, c2, line = null) => {
   return line;
 };
 
-const findConnector = (m,d,t) => m.element.querySelector(`.connector.${d}.${t}-${d}`) || m.element.querySelector(`.connector.${d}`);
+const findConnector = (m, dir, type, specificKey = null) => {
+    if (specificKey && type === 'modulation' && dir === 'input') {
+      // Try to find by the data-param-key
+      return m.element.querySelector(`.connector.input.lfo-target-input[data-param-key="${specificKey}"]`);
+    }
+    // Fallback to existing logic (this might need more refinement based on your final class naming)
+    return m.element.querySelector(`.connector.${dir}.${type}-${dir}`) || m.element.querySelector(`.connector.${dir}`);
+  };
+  
 const getParamName = (node,param) => ['frequency','Q','gain','detune'].find(k=>node[k]===param) || null;
 
-const tryAudioConnect = (src,dst,sEl,dEl) => {
-  if (!src.audioNode) return console.error(`No src node`), false;
-  let target = dst.type==='output' ? dst.audioNode || audioCtx.destination : dst.audioNode;
-  if (!target) return console.warn(`No dst node`), false;
-  let final = target;
-  if (src.type==='lfo') {
-    const def = MODULE_DEFS[dst.type]?.lfoTargets;
-    if (dst.audioNode && def && Object.keys(def).length) {
-      const p = def[dst.type]||Object.values(def)[0];
-      final = p && dst.audioNode[p] instanceof AudioParam ? dst.audioNode[p] : target;
+const tryAudioConnect = (srcModule, dstModule, srcConnectorElem, dstConnectorElem, specificTargetKeyFromUI = null) => {
+    if (!srcModule.audioNode) {
+        console.error(`Source module ${srcModule.id} has no audioNode.`);
+        return false;
     }
-  }
-  try {
-    src.audioNode.connect(final);
-    const line = drawConnection(sEl,dEl);
-    addConnection({ srcId:src.id,dstId:dst.id,srcConnectorType:'audio',dstConnectorType:'audio',dstParam:final instanceof AudioParam?getParamName(dst.audioNode,final):null,line });
-    return true;
-  } catch(e){ console.error(e); return false; }
+
+    let finalAudioTarget; // This will be either an AudioNode or an AudioParam
+    let actualDstParamName = null; // To store 'frequency', 'Q', etc. if connecting to AudioParam
+
+    // Case 1: Destination is the master output (audioCtx.destination)
+    if (dstModule.type === 'output' || dstModule.audioNode === audioCtx.destination) {
+        finalAudioTarget = dstModule.audioNode || audioCtx.destination;
+    }
+    // Case 2: Destination is a specific AudioParam (Modulation Input)
+    else if (specificTargetKeyFromUI && MODULE_DEFS[dstModule.type]?.lfoTargets) {
+        const lfoTargetsOnDst = MODULE_DEFS[dstModule.type].lfoTargets;
+        const paramPath = lfoTargetsOnDst[specificTargetKeyFromUI]; // e.g., "audioNode.frequency"
+
+        if (paramPath) {
+            // Resolve the path on the destination module instance
+            const resolvedParam = paramPath.split('.').reduce((obj, key) => (obj && obj[key] !== 'undefined') ? obj[key] : undefined, dstModule);
+
+            if (resolvedParam instanceof AudioParam) {
+                finalAudioTarget = resolvedParam;
+                // Attempt to get the property name of the AudioParam (e.g., 'frequency')
+                // This relies on the AudioParam object being a direct property of dstModule.audioNode usually
+                const parentNodeForParam = paramPath.includes('.') ? dstModule[paramPath.split('.')[0]] : dstModule;
+                actualDstParamName = getParamName(parentNodeForParam, resolvedParam);
+                console.log(`Attempting to connect to ${dstModule.type} (${dstModule.id}) -> ${specificTargetKeyFromUI} (resolved to param: ${actualDstParamName || 'unknown param'})`);
+            } else {
+                console.warn(`Modulation target '${specificTargetKeyFromUI}' with path '${paramPath}' on ${dstModule.type} is not an AudioParam. Falling back to main audio node.`);
+                finalAudioTarget = dstModule.audioNode; // Fallback to main audio node if param not found
+            }
+        } else {
+            console.warn(`Modulation target key '${specificTargetKeyFromUI}' not found in lfoTargets for ${dstModule.type}. Falling back.`);
+            finalAudioTarget = dstModule.audioNode;
+        }
+    }
+    // Case 3: Standard audio connection to the destination module's main audioNode
+    else if (dstModule.audioNode) {
+        finalAudioTarget = dstModule.audioNode;
+    } else {
+        console.error(`Destination module ${dstModule.id} (${dstModule.type}) has no suitable audio target.`);
+        return false;
+    }
+
+    if (!finalAudioTarget) {
+         console.error(`Could not determine final audio target for ${dstModule.id} (${dstModule.type})`);
+         return false;
+    }
+
+    try {
+        srcModule.audioNode.connect(finalAudioTarget);
+        const line = drawConnection(srcConnectorElem, dstConnectorElem);
+        addConnection({
+            srcId: srcModule.id,
+            dstId: dstModule.id,
+            srcConnectorType: 'audio', // Could refine this later
+            dstConnectorType: specificTargetKeyFromUI ? 'modulation' : 'audio', // Could refine this
+            dstParamKey: specificTargetKeyFromUI, // Store "Frequency", "Detune", etc.
+            dstParam: actualDstParamName,       // Store actual AudioParam name like "frequency"
+            line
+        });
+        console.log(`Successfully connected ${srcModule.type} output to ${dstModule.type} ${specificTargetKeyFromUI ? 'param ' + specificTargetKeyFromUI : 'input'}.`);
+        return true;
+    } catch (e) {
+        console.error(`Audio connection failed: ${srcModule.id} to ${dstModule.id}`, e, {src: srcModule.audioNode, target: finalAudioTarget});
+        return false;
+    }
 };
 
 const tryTriggerConnect = (src,dst,sEl,dEl) => {
@@ -48,20 +107,55 @@ const tryTriggerConnect = (src,dst,sEl,dEl) => {
   return console.warn(`Unsupported trigger connection ${src.type}->${dst.type}`), false;
 };
 
-export function handleConnectorClick(id, dir, type='audio') {
-  const mod = getModule(id), sel = state.selectedConnector;
+// function handleConnectorClick(id, dir, type='audio') { // OLD
+export function handleConnectorClick(id, dir, type='audio', specificTargetKey = null) { // NEW
+  const mod = getModule(id);
+  const sel = state.selectedConnector;
   if (!mod) return console.error(`No module ${id}`);
-  const elem = findConnector(mod,dir,type);
-  if (!elem) return console.warn(`No connector ${dir}-${type}`);
-  if (!sel && dir==='output') return state.selectedConnector={id,elem,type}, elem.classList.add('selected');
-  if (sel && sel.id!==id && dir==='input') {
-    const ok = type==='audio'&&sel.type==='audio'?tryAudioConnect(getModule(sel.id),mod,sel.elem,elem):type==='trigger'&&sel.type==='trigger'?tryTriggerConnect(getModule(sel.id),mod,sel.elem,elem):false;
-    sel.elem.classList.remove('selected'); state.selectedConnector=null;
+  
+  // `findConnector` will need to be smarter if specificTargetKey is used.
+  // For lfo-target-inputs, the `specificTargetKey` would help find the exact div.
+  // Let's assume for now the 'elem' is correctly passed/found if this click originated
+  // from an LFO target connector created above.
+  const elem = findConnector(mod, dir, type, specificTargetKey); // `findConnector` might need update
+
+  if (!elem) return console.warn(`No connector ${dir}-${type}` + (specificTargetKey ? ` (${specificTargetKey})` : ''));
+
+  if (!sel && dir === 'output') { // Selecting an output (Arp output, LFO output, general audio output)
+    state.selectedConnector = { id, elem, type, outputType: mod.type }; // Store original output type
+    elem.classList.add('selected');
+    return;
+  }
+
+  if (sel && sel.id !== id && dir === 'input') { // Connecting selected output to an input
+    const sourceModule = getModule(sel.id);
+    
+    // sel.type is the type of the *output* connector (e.g. 'audio' from Arp, LFO, or a normal module)
+    // type is the type of the *input* connector being clicked on the destination (e.g., 'audio' or 'modulation')
+    // specificTargetKey is the "Frequency", "Detune" from the input connector on oscillator
+
+    let ok = false;
+    if (type === 'audio' && sel.type === 'audio') { // General Audio to Audio
+      ok = tryAudioConnect(sourceModule, mod, sel.elem, elem, null); // No specific param for general audio in
+    } else if (type === 'modulation' && sel.type === 'audio' && specificTargetKey) { // LFO/Arp (audio out) to a Modulation Input
+      // Pass specificTargetKey (e.g., "Frequency") to tryAudioConnect
+      ok = tryAudioConnect(sourceModule, mod, sel.elem, elem, specificTargetKey);
+    } else if (type === 'trigger' && sel.type === 'trigger') {
+      ok = tryTriggerConnect(sourceModule, mod, sel.elem, elem);
+    }
+    // Potentially other combinations
+
+    sel.elem.classList.remove('selected');
+    state.selectedConnector = null;
     if (!ok) console.warn('Connection failed');
     return;
   }
-  sel?.elem?.classList.remove('selected');
-  if (dir==='output') state.selectedConnector={id,elem,type}, elem.classList.add('selected');
+
+  sel?.elem?.classList.remove('selected'); // Clear selection if clicking same module or wrong direction
+  if (dir === 'output') {
+    state.selectedConnector = { id, elem, type, outputType: mod.type };
+    elem.classList.add('selected');
+  }
 }
 
 // Refresh helpers
@@ -75,12 +169,48 @@ export const refreshAllLines = () => state.connections.forEach(redraw);
 
 // Disconnect helpers
 const disconnect = c => {
-  const src = getModule(c.srcId), dst = getModule(c.dstId);
-  if (!src || !dst) return c.line?.remove(), removeConnection(c);
-  if (c.srcConnectorType==='audio') src.audioNode?.disconnect(c.dstParam?dst.audioNode[c.dstParam]:(dst.audioNode||audioCtx.destination));
-  if (c.srcConnectorType==='trigger') typeof src.disconnectTrigger==='function'?src.disconnectTrigger(dst.trigger):null;
-  c.line?.remove(); removeConnection(c);
-};
+    const src = getModule(c.srcId), dst = getModule(c.dstId);
+    if (!src || !dst) { c.line?.remove(); removeConnection(c); return; }
+  
+    if (c.srcConnectorType === 'audio' || (c.srcConnectorType === 'audio' && c.dstConnectorType === 'modulation')) {
+      if (src.audioNode && typeof src.audioNode.disconnect === 'function') {
+        let targetToDisconnectFrom;
+        if (c.dstParamKey && MODULE_DEFS[dst.type]?.lfoTargets) { // Disconnecting from a specific AudioParam
+          const paramPath = MODULE_DEFS[dst.type].lfoTargets[c.dstParamKey];
+          if (paramPath) {
+            const resolvedParam = paramPath.split('.').reduce((o, p) => (o && o[p] != null) ? o[p] : null, dst);
+            if (resolvedParam instanceof AudioParam) {
+              targetToDisconnectFrom = resolvedParam;
+            }
+          }
+        }
+        
+        if (!targetToDisconnectFrom) { // Fallback or standard audio disconnect
+          targetToDisconnectFrom = (dst.type === 'output' ? (dst.audioNode || audioCtx.destination) : dst.audioNode);
+        }
+  
+        if (targetToDisconnectFrom) {
+          try {
+            src.audioNode.disconnect(targetToDisconnectFrom);
+            console.log(`Disconnected ${src.id} from ${dst.id} ${c.dstParamKey ? ('param ' + c.dstParamKey) : 'audio input'}`);
+          } catch (e) {
+            console.warn(`Error during audio disconnect ${src.id} -> ${dst.id}:`, e);
+          }
+        } else {
+            console.warn(`Could not determine target for audio disconnect ${src.id} -> ${dst.id}`);
+        }
+      }
+    } else if (c.srcConnectorType === 'trigger') {
+      if (typeof src.disconnectTrigger === 'function') {
+        // Your trigger disconnect logic might need to change if dst.trigger is not always the target.
+        // Assuming dst.trigger is correct as per your existing code.
+        src.disconnectTrigger(dst.trigger);
+        console.log(`Disconnected trigger ${src.id} from ${dst.id}`);
+      }
+    }
+    c.line?.remove();
+    removeConnection(c);
+  };
 
 export function handleDisconnect(id, dir, type='audio') {
   [...state.connections].reverse().filter(c=>dir==='output'?c.srcId===id&&c.srcConnectorType===type:c.dstId===id&&c.dstConnectorType===type)
