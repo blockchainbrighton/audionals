@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Modular Audio Chain Builder</title>
+  <style>
+    body { margin:0; font-family: sans-serif; display: flex; height:100vh; }
+    #modules { width:200px; background:#f4f4f4; padding:10px; box-sizing:border-box; }
+    .module-item { padding:8px; margin-bottom:8px; background:#fff; border:1px solid #ccc; cursor:grab; }
+    #canvas { flex:1; position:relative; background:#282828;
+      /* subtle grid */
+      background-image:
+        linear-gradient(#383838 1px, transparent 1px),
+        linear-gradient(90deg, #383838 1px, transparent 1px);
+      background-size:50px 50px;
+    }
+    .module { position:absolute; width:120px; background:#fff; border:1px solid #000; border-radius:4px; padding:5px; box-shadow:2px 2px 5px rgba(0,0,0,0.3); }
+    .module header { font-weight:bold; margin-bottom:5px; text-align:center; }
+    .connector { width:10px; height:10px; background:#000; border-radius:50%; position:absolute; cursor:pointer; }
+    .connector.output { right:-5px; top:50%; transform:translateY(-50%); }
+    .connector.input  { left:-5px;  top:50%; transform:translateY(-50%); }
+    .connector.selected { background:red; }
+    svg { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+   
+    #info{
+        width:200px;
+        background:#f9f9f9;
+        padding:10px;
+        box-sizing:border-box;
+        font-size:12px;
+        color:#333;
+    }
+  </style>
+</head>
+<body>
+  <div id="modules">
+    <div class="module-item" draggable="true" data-type="oscillator">Oscillator</div>
+    <div class="module-item" draggable="true" data-type="gain">Gain</div>
+    <div class="module-item" draggable="true" data-type="output">Output</div>
+  </div>
+  <div id="canvas">
+    <svg id="connections"></svg>
+  </div>
+  <div id="info">
+    <h4>Quick Tips</h4>
+    <ul>
+      <li>Drag modules from the left onto the grid.</li>
+      <li>Click <em>output → input</em> to patch.</li>
+      <li><strong>Right-click</strong> either end of a cable to un-patch.</li>
+      <li>Red dot = currently selected output.</li>
+    </ul>
+  </div>
+  <script>
+    const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const canvas = document.getElementById('canvas');
+    const svg    = document.getElementById('connections');
+    let dragType = null;
+    let moduleIdCounter = 0;
+    const modules = {};
+    const connections = [];
+
+    let selectedConnector = null;
+
+    // Drag from palette
+    document.querySelectorAll('.module-item').forEach(item => {
+      item.addEventListener('dragstart', e => {
+        dragType = item.dataset.type;
+      });
+    });
+    // Drop onto canvas
+    canvas.addEventListener('dragover', e => e.preventDefault());
+    canvas.addEventListener('drop', e => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      createModule(dragType, x, y);
+      dragType = null;
+    });
+
+    function createModule(type, x, y) {
+        const id = 'module-' + moduleIdCounter++;
+        const mod = document.createElement('div');
+        mod.className = 'module';
+        mod.id = id;
+        mod.style.left = x + 'px';
+        mod.style.top  = y + 'px';
+
+      // Header
+      const header = document.createElement('header');
+      header.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+      mod.appendChild(header);
+
+      // Audio node + UI
+      let audioNode;
+      if (type === 'oscillator') {
+        audioNode = audioCtx.createOscillator();
+        audioNode.frequency.value = 440;
+        audioNode.start();
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = 100; slider.max = 1000; slider.value = 440;
+        slider.addEventListener('input', () => audioNode.frequency.value = slider.value);
+        mod.appendChild(slider);
+      } else if (type === 'gain') {
+        audioNode = audioCtx.createGain();
+        audioNode.gain.value = 1;
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = 0; slider.max = 1; slider.step = 0.01; slider.value = 1;
+        slider.addEventListener('input', () => audioNode.gain.value = slider.value);
+        mod.appendChild(slider);
+      } else { // output
+        audioNode = audioCtx.destination;
+      }
+      modules[id] = { type, audioNode, element: mod };
+
+      /* connectors ------------------------------------------------*/
+    if (type !== 'output') {
+        const out = document.createElement('div');
+        out.className = 'connector output';
+        out.addEventListener('click', () => handleConnectorClick(id, 'output'));
+        out.addEventListener('contextmenu', e => {                  // right-click
+        e.preventDefault();
+        handleDisconnect(id,'output');
+        });
+        mod.appendChild(out);
+    }
+    if (type !== 'oscillator') {
+        const inp = document.createElement('div');
+        inp.className = 'connector input';
+        inp.addEventListener('click', () => handleConnectorClick(id, 'input'));
+        inp.addEventListener('contextmenu', e => {                  // right-click
+        e.preventDefault();
+        handleDisconnect(id,'input');
+        });
+        mod.appendChild(inp);
+    }
+
+    canvas.appendChild(mod);
+    modules[id] = { type, audioNode, element: mod };              // unchanged
+    }
+
+    /*  REPLACE the whole handleConnectorClick function             */
+    function handleConnectorClick(id, io) {
+    const connElem = modules[id].element.querySelector(`.connector.${io}`);
+
+    // first half of a patch (select output)
+    if (!selectedConnector) {
+        if (io === 'output') {
+        selectedConnector = { id, elem: connElem };
+        connElem.classList.add('selected');
+        }
+        return;
+    }
+
+    // complete the patch (output -> input)
+    if (selectedConnector && io === 'input') {
+        const srcNode = modules[selectedConnector.id].audioNode;
+        const dstNode = modules[id].audioNode;
+        srcNode.connect(dstNode);
+
+        const line = drawConnection(selectedConnector.elem, connElem);
+        connections.push({ srcId: selectedConnector.id, dstId: id, line });
+
+        selectedConnector.elem.classList.remove('selected');
+        selectedConnector = null;
+    }
+    }
+
+    /*  REPLACE the whole drawConnection function                   */
+    function drawConnection(c1, c2) {
+    const r = canvas.getBoundingClientRect();
+    const p1 = c1.getBoundingClientRect(), p2 = c2.getBoundingClientRect();
+    const x1 = p1.left + p1.width / 2 - r.left;
+    const y1 = p1.top  + p1.height / 2 - r.top;
+    const x2 = p2.left + p2.width / 2 - r.left;
+    const y2 = p2.top  + p2.height / 2 - r.top;
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    line.setAttribute('stroke', '#fff');
+    line.setAttribute('stroke-width', '2');
+    svg.appendChild(line);
+    return line;                            // return so we can delete later
+    }
+
+    /*  NEW – remove every cable touching the given connector        */
+    function handleDisconnect(id, io) {
+    // walk backwards so splicing doesn’t skip items
+    for (let i = connections.length - 1; i >= 0; i--) {
+        const c = connections[i];
+        if ( (io === 'output' && c.srcId === id) ||
+            (io === 'input'  && c.dstId === id) ) {
+
+        modules[c.srcId].audioNode.disconnect(modules[c.dstId].audioNode);
+        c.line.remove();
+        connections.splice(i, 1);
+        }
+    }
+    }
+  </script>
+</body>
+</html>
