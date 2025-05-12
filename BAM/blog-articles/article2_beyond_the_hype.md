@@ -1,6 +1,5 @@
 # Beyond the Hype: Why On-Chain Music is More Than Just a Trend – It's the Future
 
-**(Approx. 10-15 minute read)**
 
 ## The Sound of Tomorrow: Is On-Chain Music a Fleeting Fad or the Future Fabric of the Industry?
 
@@ -55,5 +54,6 @@ The future of music isn't just coming; it's being composed, on-chain, right now.
 ---
 **References:**
 *   Audionals Website: [https://audionals.com/audionals/](https://audionals.com/audionals/)
+*   BAM Website: [https://audionals.com/BAM/](https://audionals.com/BAM/)
 *   Splits.org: "Onchain Music 101" - [https://splits.org/blog/onchain-music-101/](https://splits.org/blog/onchain-music-101/)
 *   Chainlink: "How Music NFTs Can Reshape the Music Industry" - [https://chain.link/education-hub/music-nfts](https://chain.link/education-hub/music-nfts)

@@ -1,6 +1,5 @@
 # Unchain Your Music: A Creator's Guide to the On-Chain Revolution
 
-**(Approx. 10-15 minute read)**
 
 ## The Symphony of Change: A New Era for Music Creators
 
@@ -28,7 +27,7 @@ The move towards on-chain music isn't just a technological novelty; it's a respo
 
 4.  **Immutable Record and Provenance:** Once your music or its components are minted on-chain, they exist there permanently. This creates an unalterable history of your work, establishing clear provenance and protecting against unauthorized use or disputes over creation. As Cooper Turley notes, "Once a song is minted onchain — it will exist there forever. This means that a song has a permanent lineage."
 
-5.  **New Monetization Avenues:** Beyond direct sales, on-chain music opens up innovative ways to monetize your work. Think of fractional ownership of master recordings, token-gated access to exclusive communities or content, and new licensing opportunities within the burgeoning Web3 ecosystem (the next generation of the internet, built on decentralized technologies). The Chainlink article on Music NFTs highlights how artists can generate income based on their primary focus—creating music—rather than solely relying on traditional, often less lucrative, avenues.
+5.  **New Monetization Avenues:** Beyond direct sales, on-chain music opens up innovative ways to monetize your work. Think of fractional ownership of master recordings, token-gated access to exclusive communities or content, and new licensing opportunities within the burgeoning Web3 ecosystem (the next generation of the internet, built on decentralized technologies). The Chainlink article on Music NFTs below highlights how artists can generate income based on their primary focus—creating music—rather than solely relying on traditional, often less lucrative, avenues.
 
 6.  **Empowering Emerging Artists:** For those just starting, the traditional industry can feel impenetrable. On-chain music levels the playing field. It provides tools and platforms for independent artists to produce, distribute, and monetize their music without needing a major label deal. This democratization of the music industry is crucial for fostering new talent and diverse voices.
 
@@ -42,7 +41,7 @@ Here’s a simplified path to begin your exploration:
 
 2.  **Explore the Audionals Ecosystem:** Visit **audionals.com** to see their on-chain digital audio workstation (DAW) in action. Understand how you can create music directly on the Bitcoin blockchain. This hands-on exploration is invaluable.
 
-3.  **Discover the Bitcoin Audional Matrix (BAM):** The user specifically mentioned BAM. This is an exciting part of the Audionals ecosystem. BAM is an interactive matrix that visualizes and plays Audional components directly from the Bitcoin blockchain. Learning about BAM will give you a deeper insight into how on-chain music can be structured and experienced. It’s a fantastic place to see the building blocks of this new music economy.
+3.  **Discover the Bitcoin Audional Matrix (BAM):**  Visit **audionals.com/BAM**This is an exciting part of the Audionals ecosystem. BAM is an interactive matrix that visualizes and plays Audional components directly from the Bitcoin blockchain. Learning about BAM will give you a deeper insight into how on-chain music can be structured and experienced. It’s a fantastic place to see the building blocks of this new music economy.
 
 4.  **Set Up a Digital Wallet:** To interact with blockchain applications and own digital assets like Music NFTs, you'll need a crypto wallet. There are many user-friendly options available, and platforms often provide guidance on which wallets are compatible.
 
@@ -68,5 +67,6 @@ This is your moment to unchain your music and redefine your creative destiny. Th
 ---
 **References:**
 *   Audionals Website: [https://audionals.com/audionals/](https://audionals.com/audionals/)
+*   BAM Website: [https://audionals.com/BAM/](https://audionals.com/BAM/)
 *   Splits.org: "Onchain Music 101" - [https://splits.org/blog/onchain-music-101/](https://splits.org/blog/onchain-music-101/)
 *   Chainlink: "How Music NFTs Can Reshape the Music Industry" - [https://chain.link/education-hub/music-nfts](https://chain.link/education-hub/music-nfts)
