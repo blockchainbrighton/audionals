@@ -153,6 +153,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     const playerState = {
                         isPlaying: false, audioBuffer: null, audioPromise: null, sourceNode: null,
+                        gainNode: null, // ADDED
+                        isMutedDueToSolo: false, // ADDED
                         isLoading: false, loadError: null, src: sample.src, button: playButton,
                         indicator: loadingIndicator, icon: icon, originalBPM: originalBPM
                     };
@@ -358,19 +360,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     let quantizeEnabled = false;
     let globalTargetBPM = 120;
+
+
     const quantizeToggle = document.getElementById('quantize-toggle');
     const bpmInput = document.getElementById('bpm-input');
 
     if (bpmInput) globalTargetBPM = parseInt(bpmInput.value, 10) || 120;
     if (quantizeToggle) quantizeEnabled = quantizeToggle.checked;
 
+    // ADDED: Global Solo State
+    let isSoloActive = false;
+    let soloedCard = null; // Will store the DOM element of the card that is soloed
+
+
     async function fetchAndDecodeAudio(playerState) {
         if (!audioContext) return Promise.reject(new Error("AudioContext not available."));
         if (playerState.audioPromise) {
-            // console.log(`fetchAndDecodeAudio: Awaiting existing load operation for ${playerState.src}`);
             return playerState.audioPromise;
         }
-
+    
         console.log(`fetchAndDecodeAudio: Starting fetch/decode for ${playerState.src}`);
         const loadPromise = (async () => {
             try {
@@ -388,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error(`fetchAndDecodeAudio: Error for ${playerState.src}:`, error);
                 playerState.loadError = error;
                 playerState.audioBuffer = null;
-                playerState.audioPromise = null; // Clear promise on error to allow retry
+                playerState.audioPromise = null;
                 throw error;
             }
         })();
@@ -462,48 +470,118 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // Setup click listeners for sample cards
-    loopPlayers.forEach((playerState, card) => { // loopPlayers only contains cards with audio src
-        card.addEventListener('click', async () => {
-            if (!audioContext) {
-                alert("Audio playback is not available. Web Audio API might not be supported or failed to initialize.");
+   // Setup click listeners for sample cards
+loopPlayers.forEach((playerState, card) => {
+    card.addEventListener('click', async (event) => {
+        if (!audioContext) {
+            alert("Audio playback is not available. Web Audio API might not be supported or failed to initialize.");
+            return;
+        }
+
+        // Define click types based on modifier keys
+        const isAltShiftClick = event.altKey && event.shiftKey && !event.ctrlKey; // SOLO CLICK
+        const isShiftOnlyClick = event.shiftKey && !event.altKey && !event.ctrlKey; // ADD TO MIX (Play without stopping others)
+        const isNormalClick = !event.shiftKey && !event.altKey && !event.ctrlKey;   // PLAY EXCLUSIVELY (Stop others)
+        // We're ignoring event.ctrlKey for now unless you want to reintroduce another combo
+
+        console.log(`CLICK EVENT: ${playerState.src}. Alt: ${event.altKey}, Shift: ${event.shiftKey}, Ctrl: ${event.ctrlKey}. SoloActive: ${isSoloActive}. PlayerIsPlaying: ${playerState.isPlaying}`);
+
+        if (playerState.isLoading) {
+            console.log("PlayLoop EVENT: Still loading (isLoading true), please wait.");
+            return;
+        }
+        if (playerState.loadError && !playerState.audioBuffer) {
+            alert(`Could not play. Error: ${playerState.loadError.message}. Try reloading or check console.`);
+            return;
+        }
+
+        if (audioContext.state === 'suspended') {
+            console.log("PlayLoop EVENT: AudioContext is suspended, attempting to resume.");
+            try {
+                await audioContext.resume();
+                console.log(`PlayLoop EVENT: AudioContext resumed. New state: ${audioContext.state}`);
+            } catch (e) {
+                console.error("PlayLoop EVENT: Error resuming AudioContext:", e);
+                alert("Could not activate audio playback. Please interact with the page again.");
                 return;
             }
-            console.log(`PlayLoop EVENT: Clicked ${playerState.src}. Buffer present: ${!!playerState.audioBuffer}, Promise exists: ${!!playerState.audioPromise}, Load Error: ${playerState.loadError?.message || 'none'}`);
+        }
+        // Ensure context is running after potential resume attempt
+        if (audioContext.state !== 'running') {
+             console.warn("PlayLoop EVENT: AudioContext not running even after resume attempt. Aborting.");
+             alert("Audio system is not ready. Please try interacting with the page again or reload.");
+             return;
+        }
 
-            if (playerState.isLoading) {
-                console.log("PlayLoop EVENT: Still loading (isLoading true), please wait.");
-                return;
-            }
-            // If there's a load error AND no buffer yet, show an alert and stop.
-            // If there's a load error but a buffer somehow exists (unlikely), it might still try to play.
-            if (playerState.loadError && !playerState.audioBuffer) {
-                 alert(`Could not play. Error: ${playerState.loadError.message}. Try reloading or check console.`);
-                 return;
-            }
 
-            if (audioContext.state === 'suspended') {
-                console.log("PlayLoop EVENT: AudioContext is suspended, attempting to resume.");
-                try {
-                    await audioContext.resume();
-                    console.log(`PlayLoop EVENT: AudioContext resumed. New state: ${audioContext.state}`);
-                } catch (e) {
-                    console.error("PlayLoop EVENT: Error resuming AudioContext:", e);
-                    alert("Could not activate audio playback. Please interact with the page again.");
-                    return;
+        // --- Handle SOLO click (Alt + Shift + Click) ---
+        if (isAltShiftClick) {
+            console.log("SOLO ACTION (Alt+Shift-Click) on card:", card.dataset.src);
+            if (!isSoloActive) { // No solo currently active
+                if (playerState.isPlaying) {
+                    activateSolo(card, playerState);
+                } else {
+                    // If you want Alt+Shift+Click on a non-playing track to also play it and then solo:
+                    await playLoop(card); // Attempt to play it
+                    if (playerState.isPlaying) { // Check if playing successfully started
+                        activateSolo(card, playerState);
+                    } else {
+                         console.log("SOLO: Alt+Shift-Clicked a non-playing track, but it failed to start. Cannot solo.");
+                    }
+                }
+            } else { // Solo IS active
+                if (soloedCard === card) { // Clicked the currently soloed card again (with Alt+Shift)
+                    deactivateSolo();
+                    // The track continues its previous state (playing or stopped)
+                } else { // Clicked a different card (with Alt+Shift) while solo is active
+                    deactivateSolo(); // Un-solo the previous one
+                    if (playerState.isPlaying) {
+                        activateSolo(card, playerState); // Solo the new one if it's already playing
+                    } else {
+                        // If you want Alt+Shift+Click on a non-playing track (while another is soloed)
+                        // to play it and then solo:
+                        await playLoop(card); // Attempt to play it
+                        if (playerState.isPlaying) { // Check if playing successfully started
+                            activateSolo(card, playerState);
+                        } else {
+                            console.log("SOLO: Alt+Shift-Clicked a different non-playing track while solo active, but it failed to start. Cannot solo new track.");
+                        }
+                    }
                 }
             }
+            return; // Solo action handled, exit the event listener
+        }
 
-            if (playerState.isPlaying) {
-                stopLoop(card);
-            } else {
-                stopAllLoops(card); // Stop other loops before playing a new one
-                await playLoop(card); // playLoop is the function that actually plays or loads if needed
+        // --- If any other click type (Normal or Shift-Only) occurs and a solo is active on a DIFFERENT card, deactivate solo first ---
+        // This ensures that playing a new track (either exclusively or adding to mix) clears any existing solo from *another* track.
+        if ((isNormalClick || isShiftOnlyClick) && isSoloActive && soloedCard !== card) {
+            console.log("Normal/Shift-Only Click while solo active on ANOTHER card. Deactivating solo first.");
+            deactivateSolo();
+        }
+        // If solo was active on THIS card, and this is a normal/shift-only click,
+        // it implies stopping it (if playing). The `onended` handler (triggered by stopLoop)
+        // or the direct call to `deactivateSolo` in `stopLoop` for the soloed card will handle solo deactivation.
+
+        // --- Proceed with Normal Click or Shift-Only Click logic ---
+        if (playerState.isPlaying) {
+            // If THIS card is playing, any click (Normal or Shift-Only, since Alt+Shift was handled) will stop it.
+            // If it was the soloed card, its onended (via stopLoop) should deactivate solo.
+            stopLoop(card);
+        } else {
+            // If THIS card is NOT playing, we want to start it.
+            if (isNormalClick) {
+                // Normal click stops all other NON-MUTED loops.
+                // If solo was active and just deactivated, all loops are now audible and subject to stopping.
+                stopAllLoops(card); // Stop other loops before playing this one
             }
-        });
+            // For Shift-Only click, we don't stop others.
+            // For Normal click, others have now been stopped.
+            await playLoop(card); // Play the current card's loop
+                                  // playLoop will respect solo state if this card IS the soloedCard
+                                  // or if another card is soloed (it will start muted).
+        }
     });
-
-
+});
     function updateRateForAllCurrentlyPlayingLoops() {
         if (!audioContext || audioContext.state !== 'running') {
             return;
@@ -543,81 +621,122 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    async function playLoop(card) { // This is the core function called by the event listener
+    async function playLoop(card) {
         const playerState = loopPlayers.get(card);
-        // Initial check, though event listener above has more detailed preliminary checks
+        // Initial check...
         if (!playerState || playerState.isPlaying || !audioContext || audioContext.state !== 'running') {
             if (audioContext && audioContext.state !== 'running') console.warn(`playLoop: AudioContext not running (state: ${audioContext.state}). Aborting play for ${playerState?.src}.`);
             else if (!playerState) console.warn(`playLoop: No playerState for card. Aborting.`);
             else if (playerState.isPlaying) console.warn(`playLoop: Already playing ${playerState.src}. Aborting.`);
             return;
         }
-
-        playerState.isLoading = true; // For click-initiated load or re-check
+    
+        playerState.isLoading = true;
         if (playerState.button) playerState.button.disabled = true;
         if (playerState.indicator) playerState.indicator.style.display = 'inline';
-        updateButtonUI(card, playerState, false); // Show play icon while (potentially) loading
+        // updateButtonUI(card, playerState, false); // Show play icon -- UI update will happen later or if error
         card.classList.add('loading');
-        card.classList.remove('audio-error'); // Attempt to clear previous error state on play attempt
-
+        card.classList.remove('audio-error');
+    
         try {
             if (!playerState.audioBuffer) {
+                // ... (fetchAndDecodeAudio logic from your original code) ...
                 console.log(`playLoop: Buffer NOT present for ${playerState.src}. Will await fetchAndDecodeAudio.`);
-                await fetchAndDecodeAudio(playerState); // This will use/create/await audioPromise
-                if (!playerState.audioBuffer) { // Should be set if fetchAndDecodeAudio resolved successfully
+                await fetchAndDecodeAudio(playerState);
+                if (!playerState.audioBuffer) {
                     console.error(`playLoop: FATAL - Audio buffer still null after fetchAndDecodeAudio for ${playerState.src}`, playerState.loadError);
                     throw playerState.loadError || new Error("Audio buffer unavailable after load attempt.");
                 }
                 console.log(`playLoop: Buffer acquired ON DEMAND for ${playerState.src}.`);
             } else {
-                console.log(`playLoop: Buffer was ALREADY PRESENT for ${playerState.src}. Using preloaded buffer.`);
+                console.log(`playLoop: Buffer was ALREADY PRESENT for ${playerState.src}.`);
             }
-
+    
             const sourceNode = audioContext.createBufferSource();
             sourceNode.buffer = playerState.audioBuffer;
             sourceNode.loop = true;
-
+    
             if (quantizeEnabled && playerState.originalBPM > 0 && globalTargetBPM > 0) {
                 sourceNode.playbackRate.value = globalTargetBPM / playerState.originalBPM;
             } else {
                 sourceNode.playbackRate.value = 1.0;
             }
-
-            sourceNode.connect(audioContext.destination);
+    
+            // MODIFIED: GainNode setup
+            const gainNode = audioContext.createGain();
+            playerState.gainNode = gainNode; // Store it
+    
+            if (isSoloActive && soloedCard !== card) {
+                gainNode.gain.value = 0; // Start muted if another track is soloed
+                playerState.isMutedDueToSolo = true;
+                console.log(`PLAYLOOP (SOLO): ${playerState.src} starting muted as another is soloed.`);
+            } else {
+                gainNode.gain.value = 1; // Default to full volume
+                playerState.isMutedDueToSolo = false;
+            }
+            // If this card *is* the one being soloed, activateSolo will handle setting its gain to 1 correctly.
+    
+            sourceNode.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+    
             sourceNode.onended = () => {
                 // Check if this specific sourceNode instance is the one that ended
                 if (playerState.sourceNode === sourceNode) {
-                     playerState.isPlaying = false;
-                     playerState.sourceNode = null; // Clear the ended node
-                     updateButtonUI(card, playerState, false);
-                     card.classList.remove('playing');
+                    console.log(`ONENDED: ${playerState.src}`);
+                    const wasPlaying = playerState.isPlaying; // Capture before reset
+                    const wasSoloedTrack = isSoloActive && soloedCard === card;
+    
+                    playerState.isPlaying = false;
+                    playerState.sourceNode = null;
+                    // updateButtonUI(card, playerState, false); // UI update will happen after solo check
+                    // card.classList.remove('playing'); // UI update will happen after solo check
+    
+                    if (playerState.gainNode) {
+                        playerState.gainNode.disconnect();
+                        playerState.gainNode = null;
+                    }
+                    const wasMutedBySolo = playerState.isMutedDueToSolo;
+                    playerState.isMutedDueToSolo = false;
+    
+                    // If the track that ended was the soloed one, deactivate solo mode.
+                    if (wasPlaying && wasSoloedTrack) {
+                        console.log(`ONENDED (SOLO): Soloed track ${playerState.src} ended. Deactivating solo.`);
+                        deactivateSolo(); // This will also update UIs
+                    } else {
+                        // If not the soloed track or solo wasn't active, just update this card's UI
+                        updateButtonUI(card, playerState, false);
+                        card.classList.remove('playing', 'muted-by-solo', 'soloed');
+                    }
                 }
             };
-
+    
             sourceNode.start(0);
             console.log(`playLoop: Started playback for ${playerState.src}`);
             playerState.sourceNode = sourceNode;
             playerState.isPlaying = true;
-            updateButtonUI(card, playerState, true);
+            updateButtonUI(card, playerState, true); // Update UI now that it's playing
             card.classList.add('playing');
-            playerState.loadError = null; // Clear any previous load error on successful play
-
+            playerState.loadError = null;
+    
         } catch (error) {
             console.error(`playLoop: Error playing ${playerState.src}:`, error);
-            playerState.loadError = error; // Ensure loadError is set from the catch
+            playerState.loadError = error;
             playerState.isPlaying = false;
-            // Critical error: Reset buffer and promise to allow a full retry if user clicks again
             playerState.audioBuffer = null;
             playerState.audioPromise = null;
             playerState.sourceNode = null;
+            if (playerState.gainNode) {
+                playerState.gainNode.disconnect();
+                playerState.gainNode = null;
+            }
+            playerState.isMutedDueToSolo = false;
             updateButtonUI(card, playerState, false);
             alert(`Could not load/play "${playerState.src.split('/').pop()}". Error: ${error.message}`);
-            card.classList.add('audio-error'); // Mark card with error
+            card.classList.add('audio-error');
         } finally {
             playerState.isLoading = false;
             card.classList.remove('loading');
             if (playerState.indicator) {
-                // Hide indicator unless there's a persistent load error shown by it
                 if (playerState.loadError && playerState.indicator.textContent === 'Load Error') {
                     // Keep 'Load Error' visible
                 } else {
@@ -625,11 +744,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             if (playerState.button) playerState.button.disabled = false;
-            if (playerState.loadError && playerState.button) {
-                 if (!playerState.button.title.includes("Audio failed to load")) {
-                    playerState.button.title = `Error: ${playerState.loadError.message}. Click to retry.`;
-                 }
-            }
+            // ... (rest of finally block)
         }
     }
 
@@ -637,28 +752,38 @@ document.addEventListener('DOMContentLoaded', () => {
         const playerState = loopPlayers.get(card);
         if (playerState && playerState.isPlaying && playerState.sourceNode) {
             try {
-                 playerState.sourceNode.stop(0);
-                 // onended will fire, which should update state.
-                 // Explicitly setting here too for immediate UI responsiveness can be an option,
-                 // but usually onended is sufficient.
-                 // playerState.isPlaying = false;
-                 // updateButtonUI(card, playerState, false);
-                 // card.classList.remove('playing');
-                 console.log(`stopLoop: Stopped: ${playerState.src}`);
+                console.log(`stopLoop: Attempting to stop ${playerState.src}`);
+                playerState.sourceNode.stop(0);
+                // onended will fire, which should update state including solo and gain node.
             } catch (e) {
-                 console.warn(`stopLoop: Error stopping node for ${playerState.src}:`, e.message);
-                 // Force reset state if stop fails badly
-                 if (playerState.sourceNode) { playerState.sourceNode.onended = null; playerState.sourceNode = null; }
-                 playerState.isPlaying = false;
-                 updateButtonUI(card, playerState, false);
-                 card.classList.remove('playing');
+                console.warn(`stopLoop: Error stopping node for ${playerState.src}:`, e.message);
+                // Force reset state if stop fails badly AND onended doesn't fire
+                if (playerState.sourceNode) { playerState.sourceNode.onended = null; /* avoid double handling */ }
+    
+                const wasSoloedAndThisCard = isSoloActive && soloedCard === card;
+    
+                playerState.isPlaying = false;
+                playerState.sourceNode = null;
+                if (playerState.gainNode) {
+                    playerState.gainNode.disconnect();
+                    playerState.gainNode = null;
+                }
+                playerState.isMutedDueToSolo = false;
+                updateButtonUI(card, playerState, false);
+                card.classList.remove('playing', 'soloed', 'muted-by-solo');
+    
+                if (wasSoloedAndThisCard) {
+                    console.warn(`stopLoop (SOLO): Forcefully deactivating solo for ${playerState.src} due to stop error.`);
+                    deactivateSolo(); // This will update other UIs
+                }
             }
         } else if (playerState && playerState.isPlaying) {
-             // This case indicates an inconsistent state
-             console.warn(`stopLoop: Inconsistent state for ${playerState.src}: isPlaying=true but no valid sourceNode. Resetting.`);
-             playerState.isPlaying = false; playerState.sourceNode = null;
-             updateButtonUI(card, playerState, false);
-             card.classList.remove('playing');
+            console.warn(`stopLoop: Inconsistent state for ${playerState.src}: isPlaying=true but no valid sourceNode. Resetting.`);
+            playerState.isPlaying = false; playerState.sourceNode = null;
+            if (playerState.gainNode) { playerState.gainNode.disconnect(); playerState.gainNode = null; }
+            playerState.isMutedDueToSolo = false;
+            updateButtonUI(card, playerState, false);
+            card.classList.remove('playing', 'soloed', 'muted-by-solo');
         }
     }
 
@@ -669,6 +794,83 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // --- SOLO Functions ---
+function activateSolo(cardToSolo, soloPlayerState) {
+    if (!audioContext || !soloPlayerState.isPlaying || !soloPlayerState.gainNode) {
+        console.warn("SOLO: Cannot activate - soloPlayerState not playing, no gainNode, or audioContext missing.");
+        return;
+    }
+
+    console.log(`SOLO: Activating for ${soloPlayerState.src}`);
+    isSoloActive = true;
+    soloedCard = cardToSolo;
+
+    // Ensure the soloed track is at full volume (use ramp for smoothness)
+    // It should already be at 1 if it was just started, but this is a safeguard
+    // and handles cases where it might have been muted for other reasons.
+    soloPlayerState.gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.015); // Small ramp
+    soloPlayerState.isMutedDueToSolo = false; // Explicitly mark it as not muted by solo logic
+
+    // Mute other playing tracks
+    loopPlayers.forEach((otherPlayerState, otherCard) => {
+        if (otherCard !== cardToSolo && otherPlayerState.isPlaying && otherPlayerState.gainNode) {
+            otherPlayerState.gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.015);
+            otherPlayerState.isMutedDueToSolo = true;
+            console.log(`SOLO: Muting ${otherPlayerState.src}`);
+            otherCard.classList.add('muted-by-solo');
+        } else if (otherCard === cardToSolo) {
+            // Ensure the soloed card itself is not marked as muted by solo
+            otherCard.classList.remove('muted-by-solo');
+        }
+        // The UI for the soloed card will be updated below.
+        // UI for other cards will be updated by their next updateButtonUI call, or if needed, explicitly here.
+        // For now, we assume updateButtonUI will be called if their state changes (e.g. they stop).
+    });
+
+    cardToSolo.classList.add('soloed');
+    updateButtonUI(cardToSolo, soloPlayerState, soloPlayerState.isPlaying); // Update UI specifically for the newly soloed card
+}
+
+function deactivateSolo() {
+    if (!audioContext || !isSoloActive) {
+        // console.log("SOLO: Deactivate called but no solo active or no audioContext.");
+        return;
+    }
+    console.log("SOLO: Deactivating solo.");
+
+    const previouslySoloedCardElement = soloedCard; // Store reference before resetting
+
+    isSoloActive = false;
+    soloedCard = null;
+
+    // Unmute all tracks that were muted due to solo, and reset UI classes
+    loopPlayers.forEach((playerState, card) => {
+        if (playerState.isMutedDueToSolo && playerState.gainNode) {
+            // Only restore volume if the track is actually still considered playing.
+            // If it was stopped while solo was active, its gainNode might be null or it shouldn't be unmuted.
+            if (playerState.isPlaying) {
+                playerState.gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.015);
+                console.log(`SOLO: Unmuting ${playerState.src}`);
+            }
+            playerState.isMutedDueToSolo = false; // Reset the flag
+        }
+        // Clean up UI classes from all cards
+        card.classList.remove('muted-by-solo');
+        card.classList.remove('soloed');
+        // Refresh UI for all cards to reflect the solo deactivation
+        updateButtonUI(card, playerState, playerState.isPlaying);
+    });
+
+    // It's possible the previouslySoloedCardElement's UI wasn't fully updated if it stopped
+    // exactly when solo was deactivated. The loop above should generally handle it,
+    // but an explicit update can be a safeguard if issues are seen.
+    // if (previouslySoloedCardElement) {
+    //     const ps = loopPlayers.get(previouslySoloedCardElement);
+    //     if (ps) updateButtonUI(previouslySoloedCardElement, ps, ps.isPlaying);
+    // }
+}
+// --- END SOLO Functions ---
 
     function updateButtonUI(card, playerState, isPlaying) {
         if (!card || !playerState || !playerState.button) {
