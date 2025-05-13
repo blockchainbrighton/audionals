@@ -1,69 +1,115 @@
 // js/module_factory/modules/lfo.js
+import { createSlider } from '../ui/slider.js'; // Import the shared slider
 
 /**
  * Creates an LFO (OscillatorNode + GainNode for depth) and its UI.
  * @param {AudioContext} audioCtx - The AudioContext.
- * @param {HTMLElement} parentElement - The module's main DOM element to append UI to.
- * @returns {GainNode} The GainNode representing the LFO's output (depth controlled).
+ * @param {HTMLElement} parentEl - The module's main DOM element to append UI to.
+ * @param {string} id - The unique ID for this module instance.
+ * @returns {object} An object containing the audioNode (lfoDepth), id, params, and dispose method.
  */
-export function createLfoModule(audioCtx, parentElement) {
-    const lfoOscillator = audioCtx.createOscillator(); // This is the LFO's core oscillator
-    lfoOscillator.frequency.value = 5; // Default LFO rate (e.g., 5 Hz)
-    lfoOscillator.start();
-  
-    const lfoDepth = audioCtx.createGain(); // GainNode to control the LFO's amplitude/depth
-    lfoDepth.gain.value = 100; // Default depth (e.g., for frequency modulation +/- 100Hz)
-  
-    lfoOscillator.connect(lfoDepth); // The oscillator's output is scaled by the lfoDepth GainNode
-  
-    // LFO Rate Slider
-    const rateSlider = document.createElement('input');
-    rateSlider.type = 'range';
-    rateSlider.min = 0.1; // Very slow
-    rateSlider.max = 20;  // Up to 20 Hz
-    rateSlider.value = 5;
-    rateSlider.step = 0.1;
-    rateSlider.className = 'module-slider';
-    rateSlider.addEventListener('input', () => lfoOscillator.frequency.value = parseFloat(rateSlider.value));
-  
-    const rateLabel = document.createElement('label');
-    rateLabel.textContent = 'Rate:';
-    rateLabel.htmlFor = rateSlider.id = `lfo-rate-${Math.random().toString(36).substring(7)}`;
-  
-    const rateValueDisplay = document.createElement('span');
-    rateValueDisplay.textContent = rateSlider.value + ' Hz';
-    rateSlider.addEventListener('input', () => rateValueDisplay.textContent = parseFloat(rateSlider.value).toFixed(1) + ' Hz');
-  
-    parentElement.appendChild(rateLabel);
-    parentElement.appendChild(rateSlider);
-    parentElement.appendChild(rateValueDisplay);
-  
-    // LFO Depth Slider
-    const depthSlider = document.createElement('input');
-    depthSlider.type = 'range';
-    depthSlider.min = 0;
-    depthSlider.max = 500; // Adjust max depth as needed
-    depthSlider.value = 100;
-    depthSlider.step = 1;
-    depthSlider.className = 'module-slider';
-    depthSlider.addEventListener('input', () => lfoDepth.gain.value = parseFloat(depthSlider.value));
-  
-    const depthLabel = document.createElement('label');
-    depthLabel.textContent = 'Depth:';
-    depthLabel.htmlFor = depthSlider.id = `lfo-depth-${Math.random().toString(36).substring(7)}`;
-  
-    const depthValueDisplay = document.createElement('span');
-    depthValueDisplay.textContent = depthSlider.value;
-    depthSlider.addEventListener('input', () => depthValueDisplay.textContent = depthSlider.value);
-  
-  
-    parentElement.appendChild(depthLabel);
-    parentElement.appendChild(depthSlider);
-    parentElement.appendChild(depthValueDisplay);
-  
+export function createLfoModule(audioCtx, parentEl, id) {
+  // 1. Audio Nodes
+  const lfoOscillator = audioCtx.createOscillator();
+  lfoOscillator.type = 'sine'; // Default waveform
+  lfoOscillator.frequency.setValueAtTime(5, audioCtx.currentTime); // Default LFO rate
+  lfoOscillator.start();
 
-    console.log('LFO Module: createLfoModule returning:', lfoDepth); // ADD THIS LOG
+  const lfoDepth = audioCtx.createGain(); // Controls LFO amplitude/depth
+  lfoDepth.gain.setValueAtTime(100, audioCtx.currentTime); // Default depth (e.g., for freq mod +/- 100Hz)
 
-    // The lfoDepth GainNode is returned as the connectable output of the LFO module
-    return { audioNode: lfoDepth /*, anyOtherLfoSpecificData */ };
-  }
+  lfoOscillator.connect(lfoDepth); // Oscillator output scaled by depth
+
+  // 2. UI Elements Management
+  const uiElements = [];
+
+  // 3. Create Module Title
+  const titleEl = Object.assign(document.createElement('h3'), {
+    textContent: `LFO ${id}`
+  });
+  parentEl.appendChild(titleEl);
+  uiElements.push(titleEl);
+
+  // 4. Create LFO Waveform Selector
+  const waveformWrapper = document.createElement('div');
+  waveformWrapper.className = 'lfo-waveform-selector setting-group';
+
+  const waveformLabel = Object.assign(document.createElement('label'),{
+    textContent: 'Wave:',
+    htmlFor: `lfo-wave-${id}`
+  });
+  const waveformSelector = Object.assign(document.createElement('select'), {
+    id: `lfo-wave-${id}`
+  });
+  const lfoTypes = ['sine', 'square', 'sawtooth', 'triangle'];
+  lfoTypes.forEach(type => {
+    const option = document.createElement('option');
+    option.value = type;
+    option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+    if (type === lfoOscillator.type) option.selected = true;
+    waveformSelector.appendChild(option);
+  });
+  waveformSelector.addEventListener('change', () => {
+    lfoOscillator.type = waveformSelector.value;
+  });
+  waveformWrapper.append(waveformLabel, waveformSelector);
+  parentEl.appendChild(waveformWrapper);
+  uiElements.push(waveformWrapper);
+
+
+  // 5. Create Sliders
+  // LFO Rate Slider
+  const rateSliderWrapper = createSlider({
+    parent: parentEl,
+    labelText: 'Rate',
+    min: 0.01, max: 30, step: 0.01, // Adjusted range for LFO
+    value: lfoOscillator.frequency.value,
+    unit: 'Hz',
+    decimalPlaces: 2,
+    onInput: (newValue) => {
+      lfoOscillator.frequency.setValueAtTime(newValue, audioCtx.currentTime);
+    }
+  });
+  uiElements.push(rateSliderWrapper);
+
+  // LFO Depth Slider
+  const depthSliderWrapper = createSlider({
+    parent: parentEl,
+    labelText: 'Depth',
+    min: 0, max: 1000, step: 1, // Max depth depends on typical target param range
+    value: lfoDepth.gain.value,
+    unit: '', // Unit depends on what it's modulating
+    decimalPlaces: 0,
+    onInput: (newValue) => {
+      lfoDepth.gain.setValueAtTime(newValue, audioCtx.currentTime);
+    }
+  });
+  uiElements.push(depthSliderWrapper);
+
+  // 6. Return Module API
+  return {
+    id,
+    audioNode: lfoDepth, // This is the node to connect FROM, to modulate other params
+    params: {
+      frequency: lfoOscillator.frequency, // Expose for direct connection/automation
+      depth: lfoDepth.gain,             // Expose for direct connection/automation
+      // 'type' is not an AudioParam, controlled by the select element
+      setType: (newType) => { // Method to set type if needed externally
+        if (lfoTypes.includes(newType)) {
+          lfoOscillator.type = newType;
+          waveformSelector.value = newType; // Update UI
+        }
+      }
+    },
+    dispose() {
+      // Stop and disconnect audio nodes
+      lfoOscillator.stop();
+      lfoOscillator.disconnect();
+      lfoDepth.disconnect();
+
+      // Remove UI elements
+      uiElements.forEach(el => el.remove());
+      console.log(`LFO module ${id} disposed.`);
+    }
+  };
+}
