@@ -1,33 +1,24 @@
 // js/modules/index.js
+import { makeLoader } from './utils.js';
+
 
 export const MODULE_DEFS = {
-    oscillator: {
-        // Ensure the 'id' parameter is passed if your createOscillatorModule uses it
-        create: (audioCtx, parentEl, id) => // Ensure id is passed
-          import('./oscillator.js')
-            .then(m => m.createOscillatorModule(audioCtx, parentEl, id)), // Pass id
-        hasIn: false,        // No audio INPUT for processing by the oscillator itself
-        hasOut: true,        // Outputs audio signal
-        hasTriggerIn: false,
-        hasTriggerOut: false,
-        lfoTargets: {
-          // 'Label for UI': 'path.to.AudioParam.on.returned.object.from.createFunction'
-          // The 'audioNode' in the path refers to the 'audioNode' key in the object returned by createOscillatorModule.
-          'Frequency': 'audioNode.frequency', // Target the frequency of the mainOscillatorNode
-          'Detune': 'audioNode.detune'        // Also expose detune as a target
-        }
-      },
-  
-    gain: {
-      create: (audioCtx, parentEl, id) =>
-        import('./gain.js')
-          .then(m => m.createGainModule(audioCtx, parentEl, id)),
-      hasIn: true,
-      hasOut: true,
-      hasTriggerIn: false,
-      hasTriggerOut: false,
-      lfoTargets: { gain: 'gain' }
-    },
+  oscillator: {
+    create: makeLoader('oscillator', 'createOscillatorModule'),
+    hasIn: false,
+    hasOut: true,
+    hasTriggerIn: false,
+    hasTriggerOut: false,
+    lfoTargets: { Frequency: 'audioNode.frequency', Detune: 'audioNode.detune' }
+  },
+  gain: {
+    create: makeLoader('gain', 'createGainModule'),
+    hasIn: true,
+    hasOut: true,
+    hasTriggerIn: false,
+    hasTriggerOut: false,
+    lfoTargets: { gain: 'gain' }
+  },
   
     filter: {
       create: (audioCtx, parentEl, id) =>

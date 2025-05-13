@@ -1,6 +1,6 @@
 // js/module_factory/module_audio_and_ui.js
 import { audioCtx } from '../audio_context.js';
-import { createModule } from './factory.js';
+import { createModule } from '../js/module_factory/modules/factory.js';
 
 /**
  * Dynamically creates the AudioNode *and* its UI for the requested module
