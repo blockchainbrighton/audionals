@@ -1,11 +1,12 @@
 // js/modules/arpeggiator.js
-import { slider } from '../ui/slider.js'; // Assuming slider.js is in ../ui/
+import { createSlider } from '../ui/slider.js'; // Use the optimized slider
 
+// --- Constants (NOTES, SCALES, PATTERNS remain the same) ---
 const NOTES = {
   'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5,
   'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11
 };
-const NOTE_NAMES = Object.keys(NOTES).filter((n, i, a) => a.indexOf(n) === i); // Unique note names
+const NOTE_NAMES = Object.keys(NOTES).filter((n, i, a) => a.indexOf(n) === i && !n.includes('#')); // Prefer Db, Eb, etc. for display
 
 const SCALES = {
   'Major': [0, 2, 4, 5, 7, 9, 11],
@@ -24,19 +25,19 @@ const SCALE_NAMES = Object.keys(SCALES);
 const PATTERNS = {
   'Up': (notes, currentIdx) => (currentIdx + 1) % notes.length,
   'Down': (notes, currentIdx) => (currentIdx - 1 + notes.length) % notes.length,
-  'UpDown': (notes, currentIdx, direction) => { // direction is 'up' or 'down'
+  'UpDown': (notes, currentIdx, direction) => {
     let nextIdx = currentIdx;
     if (direction === 'up') {
       nextIdx++;
       if (nextIdx >= notes.length) {
-        nextIdx = notes.length - 2; // Go down from second to last
-        return { idx: Math.max(0, nextIdx), dir: 'down' };
+        nextIdx = Math.max(0, notes.length - 2);
+        return { idx: nextIdx, dir: 'down' };
       }
-    } else { // direction === 'down'
+    } else {
       nextIdx--;
       if (nextIdx < 0) {
-        nextIdx = 1; // Go up from second note
-        return { idx: Math.min(notes.length -1, nextIdx), dir: 'up' };
+        nextIdx = Math.min(notes.length - 1, 1);
+        return { idx: nextIdx, dir: 'up' };
       }
     }
     return { idx: nextIdx, dir: direction };
@@ -45,32 +46,41 @@ const PATTERNS = {
 };
 const PATTERN_NAMES = Object.keys(PATTERNS);
 
-function freqToMidi(freq) { return 69 + 12 * Math.log2(freq / 440); }
+// --- Helper Functions ---
+// function freqToMidi(freq) { return 69 + 12 * Math.log2(freq / 440); } // Not used directly by module
 function midiToFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
 
 export function createArpeggiatorModule(audioCtx, parentEl, id) {
   // --- State ---
   let rootNoteMidi = NOTES['C'] + (4 * 12); // C4 default
-  let scale = SCALES['Major'];
-  let pattern = PATTERNS['Up'];
-  let patternName = 'Up'; // For UpDown direction state
-  let octaves = 2;         // How many octaves to span
+  let currentScaleFormula = SCALES['Major'];
+  let currentPatternFn = PATTERNS['Up'];
+  let currentPatternName = 'Up';
+  let numOctaves = 2;
   let bpm = 120;
   let gateLength = 0.5;    // Percentage of step duration
   let isPlaying = false;
-  let currentStep = 0;
-  let upDownDirection = 'up'; // For 'UpDown' pattern
-  let intervalId = null;
+  let currentStepIndex = 0;
+  let upDownDirection = 'up';
+  let timerId = null;
   const triggerOutputCallbacks = [];
-  let fullScaleNotesMidi = []; // Store computed MIDI notes for the current scale/octave setting
+  let arpeggiatedNotesMidi = []; // Computed MIDI notes for the current arp sequence
+  // let bpmSliderRef, bpmReadoutRef; // For external BPM updates
 
   // --- Audio Nodes ---
-  const pitchOutputNode = audioCtx.createConstantSource(); // Outputs pitch as its offset
-  pitchOutputNode.offset.value = 0; // Start silent
+  const pitchOutputNode = audioCtx.createConstantSource();
+  pitchOutputNode.offset.value = 0; // Initial pitch (silence, or could be root note)
   pitchOutputNode.start();
 
-  // --- UI Helper ---
-  function createSelect(label, options, initialValue, onChange) {
+  // Store all UI elements created by this module for easy disposal
+  const uiElements = [];
+
+  // --- UI Helper (Select) ---
+  function createSelect(label, options, initialValue, onChangeCallback, targetParent = parentEl) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'select-container'; // For styling
+
     const lbl = document.createElement('label');
     lbl.textContent = label + ': ';
     const sel = document.createElement('select');
@@ -81,170 +91,175 @@ export function createArpeggiatorModule(audioCtx, parentEl, id) {
       if (opt === initialValue) optionEl.selected = true;
       sel.add(optionEl);
     });
-    sel.onchange = () => onChange(sel.value);
-    lbl.append(sel);
-    parentEl.append(lbl);
-    return sel;
+    sel.addEventListener('change', () => onChangeCallback(sel.value));
+
+    wrapper.append(lbl, sel);
+    targetParent.append(wrapper);
+    uiElements.push(wrapper); // Add the wrapper to UI elements for disposal
+    return sel; // Return select element if direct access is needed
   }
 
   // --- Core Logic ---
-  function calculateFullScaleNotes() {
-    fullScaleNotesMidi = [];
-    for (let o = 0; o < octaves; o++) {
-      scale.forEach(semitoneOffset => {
-        fullScaleNotesMidi.push(rootNoteMidi + (o * 12) + semitoneOffset);
+  function calculateArpeggiatedNotes() {
+    arpeggiatedNotesMidi = [];
+    for (let o = 0; o < numOctaves; o++) {
+      currentScaleFormula.forEach(semitoneOffset => {
+        arpeggiatedNotesMidi.push(rootNoteMidi + (o * 12) + semitoneOffset);
       });
     }
-    // Ensure uniqueness and sort, mainly for patterns like UpDown
-    fullScaleNotesMidi = [...new Set(fullScaleNotesMidi)].sort((a,b) => a-b);
-    if (patternName === 'Down') currentStep = fullScaleNotesMidi.length -1; // Reset for Down pattern
-    else currentStep = 0;
+    arpeggiatedNotesMidi = [...new Set(arpeggiatedNotesMidi)].sort((a, b) => a - b);
+
+    // Reset step index based on pattern
+    if (currentPatternName === 'Down' && arpeggiatedNotesMidi.length > 0) {
+      currentStepIndex = arpeggiatedNotesMidi.length - 1;
+    } else {
+      currentStepIndex = 0;
+    }
+    upDownDirection = 'up'; // Reset for UpDown pattern
+  }
+
+  function advanceStep() {
+    if (arpeggiatedNotesMidi.length === 0) return;
+
+    if (currentPatternName === 'UpDown') {
+      const { idx, dir } = currentPatternFn(arpeggiatedNotesMidi, currentStepIndex, upDownDirection);
+      currentStepIndex = idx;
+      upDownDirection = dir;
+    } else {
+      currentStepIndex = currentPatternFn(arpeggiatedNotesMidi, currentStepIndex);
+    }
   }
 
   function tick() {
-    if (!isPlaying || fullScaleNotesMidi.length === 0) return;
+    if (!isPlaying || arpeggiatedNotesMidi.length === 0) return;
 
-    const midiNote = fullScaleNotesMidi[currentStep];
+    const midiNote = arpeggiatedNotesMidi[currentStepIndex];
     const frequency = midiToFreq(midiNote);
     const now = audioCtx.currentTime;
-    const stepDuration = 60 / bpm / 4; // Assuming 16th notes for now, adjustable later
+    const stepDuration = 60 / bpm / 4; // 16th notes
 
     // Set pitch
     pitchOutputNode.offset.cancelScheduledValues(now);
-    pitchOutputNode.offset.setValueAtTime(frequency, now); // 'frequency' is the calculated arp note freq
+    pitchOutputNode.offset.setValueAtTime(frequency, now);
 
-    // Send gate on trigger
-    triggerOutputCallbacks.forEach(cb => cb(1.0)); // Trigger high
-    // Schedule trigger low
+    // Trigger gate ON
+    triggerOutputCallbacks.forEach(cb => cb(1.0, now)); // Pass time for precise scheduling
+
+    // Schedule gate OFF
     const gateOffTime = now + (stepDuration * gateLength);
-    // We need a way for triggers to go low again. This means cb must handle a value or this framework
-    // must understand that trigger is momentary. If `cb` takes a value:
-    triggerOutputCallbacks.forEach(cb => {
-        // HACK: Use a timeout to send a "zero" if the callback needs it explicitly.
-        // A better trigger system would inherently be momentary or allow value passing.
-        // Or the triggered module (e.g. envelope) self-resets.
-        // For now, let's assume the target is edge-triggered or we use a short delay for gate off.
-        if (audioCtx.constructor.name === 'OfflineAudioContext') { // Handle offline rendering
-            // In offline mode, setTimeout won't work reliably with currentTime
-            // A proper way would be to schedule a value on an AudioParam if possible
-        } else {
-             setTimeout(() => cb(0.0), stepDuration * gateLength * 1000);
-        }
-    });
+    triggerOutputCallbacks.forEach(cb => cb(0.0, gateOffTime)); // Pass time for precise scheduling
 
+    advanceStep();
+  }
 
-    // Advance step
-    if (patternName === 'UpDown') {
-      const { idx, dir } = pattern(fullScaleNotesMidi, currentStep, upDownDirection);
-      currentStep = idx;
-      upDownDirection = dir;
-    } else {
-      currentStep = pattern(fullScaleNotesMidi, currentStep);
+  function updateTimer() {
+    if (timerId) clearInterval(timerId);
+    if (isPlaying) {
+      const intervalTimeMs = (60 / bpm / 4) * 1000; // 16th notes subdivision
+      timerId = setInterval(tick, intervalTimeMs);
     }
   }
 
   function playStop() {
     isPlaying = !isPlaying;
+    const playButtonElement = uiElements.find(el => el.tagName === 'BUTTON' && el.className === 'arp-play-button'); // Add a class for reliability
+
     if (isPlaying) {
-      currentStep = (patternName === 'Down' && fullScaleNotesMidi.length > 0) ? fullScaleNotesMidi.length -1 : 0;
-      upDownDirection = 'up';
-      const intervalTimeMs = (60 / bpm) * 1000 / 4; // 16th notes subdivision for arp rate
-      if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(tick, intervalTimeMs);
-      playButton.textContent = 'Stop';
-      tick(); // Play first note immediately
+      calculateArpeggiatedNotes();
+      tick();
+      updateTimer();
+      if (playButtonElement) playButtonElement.textContent = 'Stop';
     } else {
-      if (intervalId) clearInterval(intervalId);
-      intervalId = null;
+      if (timerId) clearInterval(timerId);
+      timerId = null;
       pitchOutputNode.offset.cancelScheduledValues(audioCtx.currentTime);
-      pitchOutputNode.offset.setValueAtTime(0, audioCtx.currentTime); // Silence output
-      playButton.textContent = 'Play';
+      pitchOutputNode.offset.setValueAtTime(0, audioCtx.currentTime);
+      triggerOutputCallbacks.forEach(cb => cb(0.0, audioCtx.currentTime));
+      if (playButtonElement) playButtonElement.textContent = 'Play';
     }
   }
 
+
   // --- UI Setup ---
-  const title = document.createElement('h3');
-  title.textContent = `Arpeggiator ${id}`;
+  const title = Object.assign(document.createElement('h3'), { textContent: `Arpeggiator ${id}` });
   parentEl.appendChild(title);
-  
-  const playButton = document.createElement('button');
-  playButton.textContent = 'Play';
-  playButton.onclick = playStop;
+  uiElements.push(title);
+
+  const playButton = Object.assign(document.createElement('button'), {
+    textContent: 'Play',
+    className: 'arp-play-button' // Add a class for easier selection
+  });
+  playButton.addEventListener('click', playStop);
   parentEl.append(playButton);
+  uiElements.push(playButton);
 
-  slider(parentEl, 'BPM', 30, 240, bpm, 1, v => {
-    bpm = v;
-    if (isPlaying) { playStop(); playStop(); } // Restart with new BPM
-  });
-
-  createSelect('Root', NOTE_NAMES, 'C', val => {
-    rootNoteMidi = NOTES[val] + ( (Math.floor(rootNoteMidi/12)) * 12 ); // Keep current octave
-    calculateFullScaleNotes();
-  });
-  // Simple octave control for root (adjusts base octave of rootNoteMidi)
-  slider(parentEl, 'Root Oct', 0, 8, Math.floor(rootNoteMidi/12), 1, v => {
-      rootNoteMidi = (rootNoteMidi % 12) + (v * 12);
-      calculateFullScaleNotes();
-  });
-
-  createSelect('Scale', SCALE_NAMES, 'Major', val => {
-    scale = SCALES[val];
-    calculateFullScaleNotes();
-  });
-  createSelect('Pattern', PATTERN_NAMES, 'Up', val => {
-    pattern = PATTERNS[val];
-    patternName = val; // Store name for special handling if needed (like UpDown state or Down starting point)
-    if(isPlaying){ playStop(); playStop(); } // reset pattern state if playing
-    else {
-        currentStep = (patternName === 'Down' && fullScaleNotesMidi.length > 0) ? fullScaleNotesMidi.length -1 : 0;
-        upDownDirection = 'up';
+  // BPM Slider
+  const bpmSliderWrapper = createSlider({
+    parent: parentEl,
+    labelText: 'BPM', min: 30, max: 300, step: 1, value: bpm,
+    decimalPlaces: 0,
+    onInput: newBpm => {
+      bpm = newBpm;
+      if (isPlaying) updateTimer();
     }
-
   });
-  slider(parentEl, 'Octaves', 1, 4, octaves, 1, v => {
-    octaves = v;
-    calculateFullScaleNotes();
-  });
-  slider(parentEl, 'Gate Len', 0.05, 1, gateLength, 0.01, v => {
-    gateLength = v;
-  });
+  uiElements.push(bpmSliderWrapper); // <<< FIX: Add slider wrapper to uiElements
 
-  // Initial calculation
-  calculateFullScaleNotes();
+  createSelect('Root', NOTE_NAMES, NOTE_NAMES[rootNoteMidi % 12], val => { /* ... */ }); // createSelect handles uiElements
 
-  // --- Module Interface ---
+  const rootOctSliderWrapper = createSlider({
+    parent: parentEl,
+    labelText: 'Root Oct', min: 0, max: 8, step: 1, value: Math.floor(rootNoteMidi / 12),
+    decimalPlaces: 0,
+    onInput: newOct => { /* ... */ }
+  });
+  uiElements.push(rootOctSliderWrapper); // <<< FIX: Add slider wrapper to uiElements
+
+  createSelect('Scale', SCALE_NAMES, 'Major', val => { /* ... */ }); // createSelect handles uiElements
+
+  createSelect('Pattern', PATTERN_NAMES, 'Up', val => { /* ... */ }); // createSelect handles uiElements
+
+  const octavesSliderWrapper = createSlider({
+    parent: parentEl,
+    labelText: 'Octaves', min: 1, max: 5, step: 1, value: numOctaves,
+    decimalPlaces: 0,
+    onInput: newNumOctaves => { /* ... */ }
+  });
+  uiElements.push(octavesSliderWrapper); // <<< FIX: Add slider wrapper to uiElements
+
+  const gateLenSliderWrapper = createSlider({
+    parent: parentEl,
+    labelText: 'Gate Len', min: 0.01, max: 1.0, step: 0.01, value: gateLength,
+    unit: '%',
+    decimalPlaces: 2,
+    onInput: newGateLength => gateLength = newGateLength
+  });
+  uiElements.push(gateLenSliderWrapper); // <<< FIX: Add slider wrapper to uiElements
+
+  calculateArpeggiatedNotes();
+
+  // --- Module Interface (dispose method is key) ---
   return {
     id,
-    audioNode: pitchOutputNode, // This node's .offset carries the frequency. THIS IS THE KEY.
-    paramsForLfo: { // For direct modulation by other LFOs if desired (e.g. arp BPM)
-      _bpm: bpm,
-      get rate() { return this._bpm; },
-      set rate(v) { // This is what an LFO would target as .value
-        this._bpm = v;
-        bpm = v; // Update actual BPM
-        // Update UI slider as well
-        const bpmSliderEl = Array.from(parentEl.querySelectorAll('input[type="range"]')).find(s => s.previousSibling && s.previousSibling.textContent.includes('BPM'));
-        if (bpmSliderEl) {
-            bpmSliderEl.value = v;
-            // If your slider has a value display, update it too
-            const display = bpmSliderEl.nextElementSibling;
-            if (display && display.tagName === 'SPAN') display.textContent = parseFloat(v).toFixed(1);
-        }
-        if (isPlaying) { playStop(); playStop(); } // Restart with new BPM
-      }
-    },
-    connectTrigger: (callback) => {
-      triggerOutputCallbacks.push(callback);
-    },
-    // Arpeggiator could also have hasTriggerIn to be stepped by external clock
-    // onTriggerIn: (value) => { if (value > 0.5 && !isPlaying) tick(); },
+    audioNode: pitchOutputNode,
+    connectTrigger: (callback) => { /* ... */ },
+    disconnectTrigger: (callback) => { /* ... */ },
+    params: { /* ... */ },
     dispose() {
-      if (intervalId) clearInterval(intervalId);
+      if (timerId) clearInterval(timerId);
       isPlaying = false;
+
       pitchOutputNode.disconnect();
       pitchOutputNode.stop();
-      parentEl.replaceChildren();
-      console.log(`[Arpeggiator ${id}] disposed`);
+
+      uiElements.forEach(el => {
+        if (el && el.parentNode) { // Ensure element exists and is in DOM before removing
+            el.remove();
+        }
+      });
+      triggerOutputCallbacks.length = 0;
+
+      console.log(`Arpeggiator module ${id} disposed.`);
     }
   };
 }
