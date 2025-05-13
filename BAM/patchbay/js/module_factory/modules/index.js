@@ -9,7 +9,7 @@ export const MODULE_DEFS = {
     hasOut: true,
     hasTriggerIn: false,
     hasTriggerOut: false,
-    lfoTargets: { Frequency: 'audioNode.frequency', Detune: 'audioNode.detune' }
+    lfoTargets: { Frequency: 'params.frequency', Detune: 'params.detune' } // Corrected path
   },
   gain: {
     create: makeLoader('gain', 'createGainModule'),
@@ -17,7 +17,7 @@ export const MODULE_DEFS = {
     hasOut: true,
     hasTriggerIn: false,
     hasTriggerOut: false,
-    lfoTargets: { gain: 'gain' }
+    lfoTargets: { gain: 'params.gain' } // Assuming gain module now returns params.gain
   },
   
     filter: {
@@ -28,7 +28,7 @@ export const MODULE_DEFS = {
       hasOut: true,
       hasTriggerIn: false,
       hasTriggerOut: false,
-      lfoTargets: { frequency: 'frequency', Q: 'Q' }
+      lfoTargets: { frequency: 'params.frequency', Q: 'params.q', gain: 'params.gain' } // Corrected paths
     },
   
     lfo: {
@@ -79,7 +79,7 @@ export const MODULE_DEFS = {
         create: (ctx, el, id) => import('./delay.js').then(m => m.createDelayModule(ctx, el, id)),
         hasIn: true, hasOut: true,
         hasTriggerIn: false, hasTriggerOut: false,
-        lfoTargets: { time: 'delayTime', feedback: 'feedback', wet: 'wetGain', dry: 'dryGain' }
+        lfoTargets: { wet: 'params.wetGain', dry: 'params.dryGain' } // <--- CORRECTED PATHS
       },
 
       reverb: {
@@ -94,7 +94,7 @@ export const MODULE_DEFS = {
         create: (ctx, el, id) => import('./compressor.js').then(m => m.createCompressorModule(ctx, el, id)),
         hasIn: true, hasOut: true,
         hasTriggerIn: false, hasTriggerOut: false,
-        lfoTargets: { threshold: 'threshold', ratio: 'ratio', makeup: 'makeup' }
+        lfoTargets: { threshold: 'params.threshold', ratio: 'params.ratio', makeup: 'params.makeup' } // Corrected paths
       },
 
       gate: {
@@ -112,7 +112,7 @@ export const MODULE_DEFS = {
         hasOut: true,       // Crucially, its audioNode outputs the pitch control signal
         hasTriggerIn: false,
         hasTriggerOut: true,
-        lfoTargets: { bpm: 'paramsForLfo.rate' }
+        lfoTargets: { bpm: 'params.paramsForLfo.rate' } // Assuming arpeggiator returns { ..., params: { paramsForLfo: { rate: ... } } }
       },
 
       
