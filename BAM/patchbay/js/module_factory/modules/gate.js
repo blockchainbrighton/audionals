@@ -60,7 +60,10 @@ export function createGateModule(audioCtx, parentEl, id) {
   
     processAudioLevel();
   
-    parentEl.innerHTML = `<h3>Gate ${id}</h3>`;
+    const title = document.createElement('h3');
+    title.textContent = `Gate ${id}`;
+    parentEl.appendChild(title);
+    
     slider(parentEl, 'Threshold (dB)', -100, 0, currentThreshold, 1, v => currentThreshold = v);
     slider(parentEl, 'Attack (s)', 0.001, 0.5, attackTime, 0.001, v => attackTime = v);
     slider(parentEl, 'Release (s)', 0.01, 1, releaseTime, 0.01, v => releaseTime = v);

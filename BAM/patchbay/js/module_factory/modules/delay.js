@@ -37,7 +37,10 @@ export function createDelayModule(audioCtx, parentEl, id) {
   // Here, we'll set input.gain to control dry level.
   
   // UI
-  parentEl.innerHTML = `<h3>Delay ${id}</h3>`;
+  const title = document.createElement('h3');
+  title.textContent = `Delay ${id}`;
+  parentEl.appendChild(title);
+  
   slider(parentEl, 'Time (s)', 0.01, 5.0, 0.5, 0.01, v => delayNode.delayTime.value = v);
   slider(parentEl, 'Feedback', 0, 0.95, 0.3, 0.01, v => feedbackGain.gain.value = v);
   slider(parentEl, 'Wet Level', 0, 1, 0.5, 0.01, v => wetLevelGain.gain.value = v);

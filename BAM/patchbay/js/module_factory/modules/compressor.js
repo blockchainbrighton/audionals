@@ -37,31 +37,34 @@ export function createCompressorModule(audioCtx, parentEl, id) {
   // Output from effect chain (output) feeds back to main io node (input).
   output.connect(input);
 
-
-  parentEl.innerHTML = `<h3>Compressor ${id}</h3>`;
-  slider(parentEl, 'Threshold (dB)', -100, 0, compressorNode.threshold.value, 1, v => compressorNode.threshold.value = v);
-  slider(parentEl, 'Knee (dB)', 0, 40, compressorNode.knee.value, 1, v => compressorNode.knee.value = v);
-  slider(parentEl, 'Ratio', 1, 20, compressorNode.ratio.value, 0.1, v => compressorNode.ratio.value = v);
-  slider(parentEl, 'Attack (s)', 0, 1, compressorNode.attack.value, 0.001, v => compressorNode.attack.value = v);
-  slider(parentEl, 'Release (s)', 0, 1, compressorNode.release.value, 0.01, v => compressorNode.release.value = v);
-  slider(parentEl, 'Makeup Gain', 0, 5, makeupGain.gain.value, 0.1, v => makeupGain.gain.value = v);
-
-  return {
-    id,
-    audioNode: input,
-    threshold: compressorNode.threshold,
-    knee: compressorNode.knee,
-    ratio: compressorNode.ratio,
-    attack: compressorNode.attack,
-    release: compressorNode.release,
-    makeup: makeupGain.gain,
-    dispose() {
-      input.disconnect();
-      output.disconnect();
-      compressorNode.disconnect();
-      makeupGain.disconnect();
-      parentEl.replaceChildren();
-      console.log(`[Compressor ${id}] disposed`);
-    }
-  };
-}
+   // Create and append the title
+   const title = document.createElement('h3');
+   title.textContent = `Compressor ${id}`;
+   parentEl.appendChild(title);
+ 
+   slider(parentEl, 'Threshold (dB)', -100, 0, compressorNode.threshold.value, 1, v => compressorNode.threshold.value = v);
+   slider(parentEl, 'Knee (dB)', 0, 40, compressorNode.knee.value, 1, v => compressorNode.knee.value = v);
+   slider(parentEl, 'Ratio', 1, 20, compressorNode.ratio.value, 0.1, v => compressorNode.ratio.value = v);
+   slider(parentEl, 'Attack (s)', 0, 1, compressorNode.attack.value, 0.001, v => compressorNode.attack.value = v);
+   slider(parentEl, 'Release (s)', 0, 1, compressorNode.release.value, 0.01, v => compressorNode.release.value = v);
+   slider(parentEl, 'Makeup Gain', 0, 5, makeupGain.gain.value, 0.1, v => makeupGain.gain.value = v);
+ 
+   return {
+     id,
+     audioNode: input,
+     threshold: compressorNode.threshold,
+     knee: compressorNode.knee,
+     ratio: compressorNode.ratio,
+     attack: compressorNode.attack,
+     release: compressorNode.release,
+     makeup: makeupGain.gain,
+     dispose() {
+       input.disconnect();
+       output.disconnect();
+       compressorNode.disconnect();
+       makeupGain.disconnect();
+       parentEl.replaceChildren(); // This is fine for dispose
+       console.log(`[Compressor ${id}] disposed`);
+     }
+   };
+ }

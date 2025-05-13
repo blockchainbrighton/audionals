@@ -22,7 +22,8 @@ export function createOscillatorModule(audioCtx, parentElement, id) {
     mainOscillatorNode.start();
 
     // --- UI Setup ---
-    parentElement.innerHTML = ''; // Clear any existing content
+    // parentElement.innerHTML = ''; // Clear any existing content
+
     const title = document.createElement('h3');
     title.textContent = `Oscillator ${id}`;
     parentElement.appendChild(title);

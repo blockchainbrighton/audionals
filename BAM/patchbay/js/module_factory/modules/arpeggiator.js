@@ -163,7 +163,10 @@ export function createArpeggiatorModule(audioCtx, parentEl, id) {
   }
 
   // --- UI Setup ---
-  parentEl.innerHTML = `<h3>Arpeggiator ${id}</h3>`;
+  const title = document.createElement('h3');
+  title.textContent = `Arpeggiator ${id}`;
+  parentEl.appendChild(title);
+  
   const playButton = document.createElement('button');
   playButton.textContent = 'Play';
   playButton.onclick = playStop;

@@ -55,7 +55,10 @@ export function createReverbModule(audioCtx, parentEl, id) {
   // Route mixed signal back to input
   output.connect(input);
 
-  parentEl.innerHTML = `<h3>Reverb ${id}</h3>`;
+  const title = document.createElement('h3');
+  title.textContent = `Reverb ${id}`;
+  parentEl.appendChild(title);
+  
   slider(parentEl, 'Wet Level', 0, 1, 0.4, 0.01, v => wetLevelGain.gain.value = v);
   slider(parentEl, 'Dry Level', 0, 1, 0.8, 0.01, v => input.gain.value = v);
   // Could add sliders for individual AP delays/feedbacks if desired (makes it complex)
