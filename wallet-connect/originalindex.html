@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect Wallet</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        button { padding: 10px 15px; margin: 5px 0; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .wallet-list button { display: block; margin-bottom: 10px; }
+        .status, .balances, .nfts { margin-top: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        .status p, .balances p, .nfts p { margin: 5px 0; }
+        .balances table, .nfts table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .balances th, .balances td, .nfts th, .nfts td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .balances th, .nfts th { background-color: #f0f0f0; }
+        #walletConnectQR { margin-top: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-align: center; }
+        #qrCodeImage { margin-top: 10px; }
+        .hidden { display: none; }
+        .address { font-family: monospace; }
+        .nft-image-container { max-width: 100px; max-height: 100px; overflow: hidden; }
+        .nft-image-container img { width: 100%; height: auto; display: block; }
+        .nft-data-container { max-height: 100px; overflow-y: auto; font-size: 0.8em; white-space: pre-wrap; word-break: break-all; border: 1px solid #eee; padding: 5px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Connect Wallet</h1>
+
+        <div id="walletSelection">
+            <h2>Available Wallets</h2>
+            <div id="walletList" class="wallet-list">
+                <p>Scanning for wallets...</p>
+            </div>
+            <p>If no extension wallet is found or you prefer mobile, WalletConnect will be used.</p>
+            <button id="connectWalletConnectButton">Connect with WalletConnect</button>
+        </div>
+
+        <div id="walletConnectQR" class="hidden">
+            <h2>Scan with WalletConnect</h2>
+            <div id="qrCodeImage"></div>
+            <p>Scan this QR code with your WalletConnect-compatible mobile wallet.</p>
+        </div>
+
+        <div id="connectionDetails" class="status hidden">
+            <h2>Connection Status</h2>
+            <p>Status: <span id="connectionStatus">Disconnected</span></p>
+            <p>Bitcoin Address: <span id="btcAddress" class="address">N/A</span></p>
+            <p>Stacks Address: <span id="stxAddress" class="address">N/A</span></p>
+            <button id="disconnectButton">Disconnect</button>
+            <button id="refreshButton">Refresh Balances</button>
+        </div>
+
+        <div id="bitcoinBalances" class="balances hidden">
+            <h2>Bitcoin Balance</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Asset</th>
+                        <th>Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>BTC</td>
+                        <td id="btcBalance">N/A</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="stacksBalances" class="balances hidden">
+            <h2>Stacks Balances & Tokens</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Asset</th>
+                        <th>Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>STX</td>
+                        <td id="stxBalance">N/A</td>
+                    </tr>
+                    <!-- Fungible tokens will be populated here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+
+        <div id="stacksNFTs" class="nfts hidden">
+            <h2>Stacks NFTs</h2>
+            <table id="nftTable">
+                <thead>
+                    <tr>
+                        <th>Collection</th>
+                        <th>Name</th>
+                        <th>ID</th>
+                        <th>Asset</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- NFT rows will be populated here by JavaScript -->
+                    <tr><td colspan="4" id="nftStatus">N/A</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/sats-connect@0.3.0/dist/sats-connect.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/sign-client@2.13.0/dist/umd/index.min.js"></script>
+    <script type="module">
+        // JavaScript code will go here
+        console.log("Page loaded, script running.");
+
+        // Placeholder for WalletConnect Project ID
+        const walletConnectProjectId = "audionals"; // Replace with your actual Project ID if needed
+
+        // DOM Elements
+        const walletListDiv = document.getElementById("walletList");
+        const connectWalletConnectButton = document.getElementById("connectWalletConnectButton");
+        const walletConnectQRDiv = document.getElementById("walletConnectQR");
+        const qrCodeImageDiv = document.getElementById("qrCodeImage");
+        const connectionDetailsDiv = document.getElementById("connectionDetails");
+        const connectionStatusSpan = document.getElementById("connectionStatus");
+        const btcAddressSpan = document.getElementById("btcAddress");
+        const stxAddressSpan = document.getElementById("stxAddress");
+        const disconnectButton = document.getElementById("disconnectButton");
+        const refreshButton = document.getElementById("refreshButton");
+        const bitcoinBalancesDiv = document.getElementById("bitcoinBalances");
+        const btcBalanceTd = document.getElementById("btcBalance");
+        const stacksBalancesDiv = document.getElementById("stacksBalances");
+        const stxBalanceTd = document.getElementById("stxBalance");
+        const stacksNFTsDiv = document.getElementById("stacksNFTs");
+        const nftTableBody = document.querySelector("#nftTable tbody");
+        const nftStatusTd = document.getElementById("nftStatus");
+        const walletSelectionDiv = document.getElementById("walletSelection");
+
+        // App State
+        let connectedWalletProvider = null;
+        let walletConnectSignClient = null;
+        let walletConnectSession = null;
+        let currentBtcAddress = null;
+        let currentStxAddress = null;
+        let detectedProviders = [];
+
+        // Helper: Mask address
+        function maskAddress(address) {
+            if (!address) return "N/A";
+            if (address.length < 10) return address; // Too short to mask meaningfully
+            return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+        }
+
+        // Helper: Update UI after connection
+        function updateUIForConnection(btcAddr, stxAddr, providerName) {
+            currentBtcAddress = btcAddr;
+            currentStxAddress = stxAddr;
+
+            connectionStatusSpan.textContent = `Connected (${providerName})`;
+            btcAddressSpan.textContent = maskAddress(btcAddr);
+            stxAddressSpan.textContent = maskAddress(stxAddr);
+
+            walletSelectionDiv.classList.add("hidden");
+            walletConnectQRDiv.classList.add("hidden");
+            connectionDetailsDiv.classList.remove("hidden");
+            
+            if (currentBtcAddress) bitcoinBalancesDiv.classList.remove("hidden");
+            else bitcoinBalancesDiv.classList.add("hidden");
+
+            if (currentStxAddress) {
+                stacksBalancesDiv.classList.remove("hidden");
+                stacksNFTsDiv.classList.remove("hidden");
+            } else {
+                stacksBalancesDiv.classList.add("hidden");
+                stacksNFTsDiv.classList.add("hidden");
+            }
+            // Fetch balances after connection
+            fetchAllBalances();
+        }
+
+        // Helper: Reset UI on disconnect
+        function resetUIOnDisconnect() {
+            initializeUI(); // Re-initializes to default disconnected state
+            currentBtcAddress = null;
+            currentStxAddress = null;
+            connectedWalletProvider = null;
+            walletConnectSession = null;
+            // Re-detect wallets
+            detectWallets();
+        }
+
+        // 3.1. Initialization & Library Setup
+        async function initializeWalletConnect() {
+            try {
+                if (!window.WalletConnectSign || !window.WalletConnectSign.SignClient) {
+                    console.error("WalletConnectSign client not loaded");
+                    alert("Error: WalletConnect library not loaded. Please refresh.");
+                    return;
+                }
+                walletConnectSignClient = await window.WalletConnectSign.SignClient.init({
+                    projectId: walletConnectProjectId,
+                    metadata: {
+                        name: "My DApp",
+                        description: "Connect to Bitcoin and Stacks wallets",
+                        url: window.location.href,
+                        icons: [window.location.origin + "/favicon.ico"] // Optional: provide an icon
+                    }
+                });
+                console.log("WalletConnect SignClient initialized");
+
+                walletConnectSignClient.on("session_event", (event) => {
+                    console.log("WalletConnect session_event:", event);
+                    // e.g. accountsChanged. WalletConnect v2 uses `caip10` prefixed addresses.
+                    // You might need to re-query or update based on the event.
+                    if (event.params.event.name === "accountsChanged") {
+                        // Potentially re-establish accounts or notify user
+                        alert("WalletConnect accounts changed. Please reconnect if necessary.");
+                        handleDisconnect(); // Simple disconnect, user can reconnect
+                    }
+                });
+
+                walletConnectSignClient.on("session_update", ({ topic, params }) => {
+                    console.log("WalletConnect session_update:", topic, params);
+                    // const { namespaces } = params;
+                    // Potentially update accounts if they changed during an update
+                });
+
+                walletConnectSignClient.on("session_delete", ({ topic }) => {
+                    console.log("WalletConnect session_delete:", topic);
+                    if (walletConnectSession && walletConnectSession.topic === topic) {
+                        handleDisconnect();
+                    }
+                });
+
+            } catch (e) {
+                console.error("Could not initialize WalletConnect SignClient", e);
+                alert("Error initializing WalletConnect. Please refresh.");
+            }
+        }
+
+        // 3.2. Wallet Detection (Sats Connect)
+        async function detectWallets() {
+            walletListDiv.innerHTML = "<p>Scanning for wallets...</p>"; // Clear previous list
+            if (typeof SatsConnect === 'undefined') {
+                console.error("SatsConnect not loaded");
+                walletListDiv.innerHTML = "<p>Error: SatsConnect library not loaded. Please refresh.</p>";
+                return;
+            }
+
+            try {
+                // SatsConnect's getProviders() might be available directly or need specific invocation
+                // Assuming SatsConnect is an object with a getProviders method
+                // This part needs to be verified against the actual SatsConnect CDN library structure
+                // For now, let's assume a global `SatsConnect` object with `getProviders`
+                // Or, if it injects providers into `window.BitcoinProvider` etc., that needs different handling.
+                // The prompt implies getProviders() from Sats Connect.
+
+                // Let's assume SatsConnect might populate window.LeatherProvider, window.XverseProvider, window.UnisatProvider
+                // or a generic window.BitcoinProvider / window.StacksProvider
+                // For now, we'll simulate a getProviders() or check for known global providers.
+                // This is a simplification. Real SatsConnect might have a more specific API.
+                
+                // Clear previous buttons if any
+                const existingButtons = walletListDiv.querySelectorAll("button");
+                existingButtons.forEach(btn => btn.remove());
+                walletListDiv.querySelector("p").textContent = "Scanning for wallets...";
+
+                // Example: Check for specific known global providers if getProviders() is not straightforward
+                const providersToCheck = [
+                    { name: "Leather", id: "leather", check: () => window.LeatherProvider },
+                    { name: "Xverse", id: "xverse", check: () => window.XverseProvider },
+                    { name: "Hiro Wallet", id: "hiro", check: () => window.HiroWalletProvider }, // Hiro often uses this name
+                    { name: "Unisat", id: "unisat", check: () => window.unisat }, // Unisat often uses window.unisat
+                    // Add other known wallet provider checks here
+                ];
+
+                detectedProviders = [];
+                providersToCheck.forEach(p => {
+                    const provider = p.check();
+                    if (provider) {
+                        detectedProviders.push({ name: p.name, id: p.id, provider: provider });
+                    }
+                });
+
+                if (detectedProviders.length > 0) {
+                    walletListDiv.innerHTML = ""; // Clear "Scanning..." message
+                    detectedProviders.forEach(wallet => {
+                        const button = document.createElement("button");
+                        button.textContent = `Connect ${wallet.name}`;
+                        button.onclick = () => connectToExtensionWallet(wallet);
+                        walletListDiv.appendChild(button);
+                    });
+                } else {
+                    walletListDiv.innerHTML = "<p>No browser extension wallets detected. Use WalletConnect.</p>";
+                }
+
+            } catch (error) {
+                console.error("Error detecting wallets:", error);
+                walletListDiv.innerHTML = "<p>Error detecting wallets. Try WalletConnect.</p>";
+            }
+        }
+
+        // 3.3. Browser Extension Wallet Connection
+        async function connectToExtensionWallet(wallet) {
+            console.log(`Attempting to connect to ${wallet.name}`);
+            try {
+                // SatsConnect's request method or direct provider request
+                // The request for 'getAddresses' should be compatible with SatsConnect philosophy
+                // This is a common pattern, but actual method might vary by provider slightly if not using SatsConnect facade
+                let response;
+                if (wallet.id === 'unisat' && typeof wallet.provider.requestAccounts === 'function') {
+                     // Unisat has a specific way, often requestAccounts then getAccounts
+                    await wallet.provider.requestAccounts();
+                    const accounts = await wallet.provider.getAccounts();
+                    if (!accounts || accounts.length === 0) throw new Error ("Unisat: No accounts returned from getAccounts");
+                    // Unisat might return only BTC. We need to check its capabilities for Stacks.
+                    // For simplicity, assuming the first account is the primary BTC address.
+                    // Stacks address might need a different call or may not be supported by all BTC wallets.
+                    // The prompt implies SatsConnect handles this, so ideally a unified 'getAddresses' would work.
+                    // Let's simulate a response structure that SatsConnect might give.
+                    response = {
+                        jsonrpc: "2.0",
+                        id: 1,
+                        result: [
+                            {
+                                symbol: "BTC",
+                                type: "p2wpkh", // or p2tr
+                                address: accounts[0]
+                            },
+                            // TODO: How to get Stacks address from Unisat if supported?
+                            // For now, we'll assume it might not provide one directly here.
+                        ]
+                    };
+                } else if (typeof wallet.provider.request === 'function') { // Common for EIP-1193 like providers (Xverse, Leather)
+                     response = await wallet.provider.request('getAddresses');
+                } else if (typeof SatsConnect !== 'undefined' && typeof SatsConnect.request === 'function') {
+                    // Fallback to using SatsConnect.request if available and direct provider.request is not what we want
+                    // This assumes SatsConnect.request can take the provider object or its ID
+                    response = await SatsConnect.request('getAddresses', {
+                        provider: wallet.provider, // Or wallet.id, depending on SatsConnect API
+                        payload: { purposes: ['payment', 'ordinals', 'stacks'] } // Specify purposes
+                    });
+                } else {
+                    throw new Error (`${wallet.name} does not support the required connection method.`);
+                }
+
+                console.log(`${wallet.name} getAddresses response:`, response);
+
+                if (!response || !response.result || !Array.isArray(response.result)) {
+                    throw new Error("Invalid response from wallet provider");
+                }
+
+                let btcAddr = null;
+                let stxAddr = null;
+
+                response.result.forEach(acc => {
+                    if (acc.symbol === 'BTC' && (acc.type === 'p2wpkh' || acc.type === 'p2tr')) {
+                        if (!btcAddr) btcAddr = acc.address; // Take the first one
+                    }
+                    if (acc.symbol === 'STX') {
+                        if (!stxAddr) stxAddr = acc.address;
+                    }
+                });
+
+                if (!btcAddr && !stxAddr) {
+                    // If getAddresses doesn't give symbols, try a more generic approach if only one address is returned
+                    if(response.result.length === 1 && response.result[0].address) {
+                        // This is a guess - could be BTC or STX. User might need to confirm.
+                        // For now, assume BTC if it looks like one, else STX. This is not robust.
+                        const genericAddr = response.result[0].address;
+                        if (genericAddr.startsWith('bc1') || genericAddr.startsWith('tb1') || genericAddr.startsWith('3') || genericAddr.startsWith('1')) {
+                            btcAddr = genericAddr;
+                        } else if (genericAddr.startsWith('ST') || genericAddr.startsWith('SP')) {
+                            stxAddr = genericAddr;
+                        }
+                        console.warn("Received generic address, attempting to classify:", genericAddr);
+                    } else {
+                         throw new Error("No compatible Bitcoin (SegWit/Taproot) or Stacks address found.");
+                    }
+                }
+                
+                if (!btcAddr && !stxAddr) {
+                     throw new Error("No compatible Bitcoin (SegWit/Taproot) or Stacks address found from provider.");
+                }
+
+                connectedWalletProvider = wallet.provider; // Store the connected provider
+                updateUIForConnection(btcAddr, stxAddr, wallet.name);
+
+                // Listen for account changes (if supported by the provider)
+                if (typeof connectedWalletProvider.on === 'function') {
+                    connectedWalletProvider.on('accountsChanged', (accounts) => {
+                        console.log(`${wallet.name} accountsChanged:`, accounts);
+                        // Re-process accounts or simply disconnect and ask user to reconnect for simplicity
+                        alert("Wallet accounts changed. Please reconnect to update.");
+                        handleDisconnect(); 
+                    });
+                    connectedWalletProvider.on('disconnect', () => {
+                        console.log(`${wallet.name} disconnected.`);
+                        handleDisconnect();
+                    });
+                }
+
+            } catch (error) {
+                console.error(`Error connecting to ${wallet.name}:`, error);
+                alert(`Could not connect to ${wallet.name}: ${error.message}`);
+                // Optionally, reset UI or specific parts
+            }
+        }
+
+        // 3.4. WalletConnect Fallback
+        async function connectWithWalletConnect() {
+            if (!walletConnectSignClient) {
+                alert("WalletConnect is not initialized. Please wait or refresh.");
+                console.error("WalletConnect client not ready for connection.");
+                return;
+            }
+            console.log("Initiating WalletConnect connection...");
+            qrCodeImageDiv.innerHTML = "<p>Generating QR code...</p>";
+            walletConnectQRDiv.classList.remove("hidden");
+
+            try {
+                const requiredNamespaces = {
+                    stacks: {
+                        methods: ["stx_getAddresses"], // Standard Stacks method
+                        chains: ["stacks:1"], // Stacks mainnet
+                        events: ["accountsChanged"]
+                    },
+                    // Bitcoin namespace for WalletConnect is less standardized than EVM.
+                    // We might need to use a generic one or one supported by common WC-enabled BTC wallets.
+                    // For now, let's try a common pattern. This might need adjustment based on wallet support.
+                    // Using CIP-34 for Bitcoin namespace: https://github.com/ChainAgnostic/CAIPs/blob/master/CAIPs/caip-34.md
+                    // However, actual wallet support for specific methods under this namespace can vary.
+                    // A common approach is to request a generic `getAccounts` or similar.
+                    // Let's try a simple request for now and parse later.
+                    // The prompt mentions `request('getAddresses')` for extensions, WC might be different.
+                    // WalletConnect typically returns CAIP-10 addresses.
+                    bitcoin: {
+                        methods: ["bitcoin_getAccounts", "bitcoin_signMessage"], // bitcoin_getAccounts is a guess, might be wallet specific
+                        chains: ["bip122:000000000019d6689c085ae165831e93"], // Bitcoin mainnet CAIP-2 ID
+                        events: ["accountsChanged"]
+                    }
+                };
+
+                const { uri, approval } = await walletConnectSignClient.connect({
+                    requiredNamespaces
+                });
+
+                if (uri) {
+                    qrCodeImageDiv.innerHTML = ""; // Clear previous
+                    new QRCode(qrCodeImageDiv, {
+                        text: uri,
+                        width: 256,
+                        height: 256,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+                    console.log("WalletConnect URI generated:", uri);
+                } else {
+                    throw new Error("Failed to generate WalletConnect URI");
+                }
+
+                console.log("Awaiting WalletConnect session approval...");
+                walletConnectSession = await approval();
+                console.log("WalletConnect session approved:", walletConnectSession);
+                qrCodeImageDiv.innerHTML = "<p>Connected! Processing accounts...</p>";
+
+                let btcAddr = null;
+                let stxAddr = null;
+
+                // Extract accounts from the session
+                // WalletConnect returns accounts in CAIP-10 format: namespace:chainId:address
+                if (walletConnectSession.namespaces.stacks && walletConnectSession.namespaces.stacks.accounts) {
+                    const stacksAccount = walletConnectSession.namespaces.stacks.accounts[0]; // Take the first one
+                    if (stacksAccount) stxAddr = stacksAccount.split(':')[2];
+                }
+                if (walletConnectSession.namespaces.bitcoin && walletConnectSession.namespaces.bitcoin.accounts) {
+                    const btcAccount = walletConnectSession.namespaces.bitcoin.accounts[0]; // Take the first one
+                    if (btcAccount) btcAddr = btcAccount.split(':')[2];
+                }
+                
+                // Fallback if specific namespaces aren't there but a general one is (less likely with v2 requiredNamespaces)
+                if (!btcAddr && !stxAddr && walletConnectSession.namespaces.eip155) { // eip155 is for EVM, but some multi-wallets might put things there
+                    // This is unlikely for BTC/STX, but as a defensive measure.
+                    console.warn("Checking eip155 namespace as a fallback - this is not expected for BTC/STX.");
+                }
+
+                if (!btcAddr && !stxAddr) {
+                    // Try to find any account if specific namespaces failed
+                    for (const namespaceKey in walletConnectSession.namespaces) {
+                        const namespace = walletConnectSession.namespaces[namespaceKey];
+                        if (namespace.accounts && namespace.accounts.length > 0) {
+                            const account = namespace.accounts[0];
+                            const address = account.split(':')[2];
+                            if (address.startsWith('ST') || address.startsWith('SP')) {
+                                if (!stxAddr) stxAddr = address;
+                            } else if (address.startsWith('bc1') || address.startsWith('tb1') || address.startsWith('1') || address.startsWith('3')) {
+                                if (!btcAddr) btcAddr = address;
+                            }
+                        }
+                    }
+                }
+
+                if (!btcAddr && !stxAddr) {
+                    throw new Error("Could not retrieve compatible Bitcoin or Stacks address from WalletConnect session.");
+                }
+
+                updateUIForConnection(btcAddr, stxAddr, "WalletConnect");
+
+            } catch (error) {
+                console.error("WalletConnect connection error:", error);
+                alert(`WalletConnect Error: ${error.message}`);
+                qrCodeImageDiv.innerHTML = `<p>Error: ${error.message}. Try again.</p>`;
+                // Do not hide QR div on error, user might want to retry or see the error
+                // walletConnectQRDiv.classList.add("hidden"); 
+                if (walletConnectSession) {
+                    try {
+                        await walletConnectSignClient.disconnect({ topic: walletConnectSession.topic, reason: { code: 0, message: "User cancelled or error" } });
+                    } catch (disconnectError) {
+                        console.error("Error during WC disconnect after failure:", disconnectError);
+                    }
+                    walletConnectSession = null;
+                }
+            }
+        }
+
+        // 3.8. Event Handling (Disconnect)
+        async function handleDisconnect() {
+            console.log("Disconnecting...");
+            if (connectedWalletProvider && typeof connectedWalletProvider.disconnect === 'function') {
+                try {
+                    // Some providers might have a specific disconnect method
+                    // await connectedWalletProvider.disconnect(); // This is not standard for all
+                    console.log("Provider specific disconnect not called, relying on state reset.");
+                } catch (e) {
+                    console.error("Error during provider disconnect:", e);
+                }
+            }
+            if (walletConnectSession && walletConnectSignClient) {
+                try {
+                    await walletConnectSignClient.disconnect({
+                        topic: walletConnectSession.topic,
+                        reason: { code: 6000, message: "User disconnected" }
+                    });
+                    console.log("WalletConnect session disconnected.");
+                } catch (e) {
+                    console.error("Error disconnecting WalletConnect session:", e);
+                }
+            }
+            resetUIOnDisconnect();
+        }
+
+        // --- TODO: Implement the rest of the logic as per todo.md ---
+        // 3.5. State Management (partially initialized above)
+        // 3.6. UI Updates (partially done with helpers)
+        // 3.7. Balance Fetching
+        // 3.8. Event Handling (Refresh, other WC events)
+        // 3.9. Helper Functions (some added)
+
+        // Initial UI setup & Wallet Detection
+        document.addEventListener('DOMContentLoaded', async () => {
+            initializeUI();
+            await initializeWalletConnect(); // Initialize WC client first
+            await detectWallets(); // Then detect extension wallets
+
+            connectWalletConnectButton.addEventListener("click", connectWithWalletConnect);
+            disconnectButton.addEventListener("click", handleDisconnect);
+            // refreshButton listener will be added later with balance fetching logic
+        });
+
+        // 3.7. Balance Fetching
+        async function fetchBitcoinBalance() {
+            if (!currentBtcAddress) {
+                btcBalanceTd.textContent = "N/A (No address)";
+                return;
+            }
+            btcBalanceTd.textContent = "Fetching...";
+            try {
+                let balanceSatoshis = null;
+                // Try provider.request("getBalance") first
+                if (connectedWalletProvider && typeof connectedWalletProvider.request === 'function') {
+                    try {
+                        // This is a non-standard call, structure of request & response may vary.
+                        // Assuming it might be specific to SatsConnect or certain wallets.
+                        // For now, let's assume a hypothetical call. If it fails, we use mempool.space.
+                        // The prompt mentions "if the wallet exposes it".
+                        const balanceResponse = await connectedWalletProvider.request('getBalance', [{ address: currentBtcAddress, type: 'bitcoin' }]);
+                        if (balanceResponse && balanceResponse.balance) { // Adjust based on actual response structure
+                            balanceSatoshis = BigInt(balanceResponse.balance); // Assuming balance is in satoshis
+                            console.log("Fetched BTC balance from provider:", balanceSatoshis.toString());
+                        }
+                    } catch (providerError) {
+                        console.warn("getBalance via provider failed, falling back to mempool.space:", providerError);
+                    }
+                }
+
+                if (balanceSatoshis === null) {
+                    const response = await fetch(`https://mempool.space/api/address/${currentBtcAddress}`);
+                    if (!response.ok) {
+                        throw new Error(`Mempool.space API error: ${response.statusText}`);
+                    }
+                    const data = await response.json();
+                    // Sum of funded_txo_sum and spent_txo_sum gives the current balance
+                    balanceSatoshis = BigInt(data.chain_stats.funded_txo_sum) - BigInt(data.chain_stats.spent_txo_sum);
+                    console.log("Fetched BTC balance from mempool.space:", balanceSatoshis.toString());
+                }
+
+                const btcValue = Number(balanceSatoshis) / 100000000;
+                btcBalanceTd.textContent = `${btcValue.toFixed(8)} BTC`;
+            } catch (error) {
+                console.error("Error fetching Bitcoin balance:", error);
+                btcBalanceTd.textContent = "Error fetching balance";
+            }
+        }
+
+        async function fetchStacksDetails() {
+            if (!currentStxAddress) {
+                stxBalanceTd.textContent = "N/A (No address)";
+                nftStatusTd.textContent = "N/A (No address)";
+                // Clear previous fungible tokens and NFTs
+                const ftPlaceholder = document.getElementById("stacksBalances").querySelector("tbody").querySelector("tr[data-ft-placeholder]");
+                if(ftPlaceholder) ftPlaceholder.innerHTML = "<td colspan=\"2\">N/A (No address)</td>";
+                
+                while (nftTableBody.children.length > 1) { // Keep header, remove data rows including status
+                    nftTableBody.removeChild(nftTableBody.lastChild);
+                }
+                const initialNftRow = nftTableBody.querySelector("tr"); // The header row
+                const newStatusRow = nftTableBody.insertRow(-1);
+                nftStatusTd = newStatusRow.insertCell(0);
+                nftStatusTd.colSpan = 4;
+                nftStatusTd.textContent = "N/A (No address)";
+
+                return;
+            }
+            stxBalanceTd.textContent = "Fetching...";
+            nftStatusTd.textContent = "Fetching NFTs...";
+
+            // Clear previous fungible tokens (except STX itself) and NFTs
+            const ftTableBody = document.getElementById("stacksBalances").querySelector("tbody");
+            const existingFtRows = ftTableBody.querySelectorAll("tr:not(:first-child)"); // Exclude STX row
+            existingFtRows.forEach(row => row.remove());
+
+            while (nftTableBody.children.length > 1) { // Keep header, remove data rows including status
+                 nftTableBody.removeChild(nftTableBody.lastChild);
+            }
+            // Re-add the status row, which might have been removed
+            const initialNftRow = nftTableBody.querySelector("tr"); // The header row
+            if (!nftTableBody.querySelector("#nftStatus")) {
+                const newStatusRow = nftTableBody.insertRow(-1);
+                nftStatusTd = newStatusRow.insertCell(0);
+                nftStatusTd.colSpan = 4;
+                nftStatusTd.id = "nftStatus"; // ensure it has the ID
+            }
+            nftStatusTd.textContent = "Fetching NFTs...";
+
+
+            try {
+                const response = await fetch(`https://api.mainnet.hiro.so/extended/v1/address/${currentStxAddress}/balances`);
+                if (!response.ok) {
+                    throw new Error(`Hiro API error: ${response.statusText}`);
+                }
+                const data = await response.json();
+                console.log("Fetched Stacks details:", data);
+
+                // STX Balance
+                const stxMicroValue = BigInt(data.stx.balance);
+                const stxValue = Number(stxMicroValue) / 1000000;
+                stxBalanceTd.textContent = `${stxValue.toFixed(6)} STX`;
+
+                // Fungible Tokens
+                if (data.fungible_tokens && Object.keys(data.fungible_tokens).length > 0) {
+                    Object.entries(data.fungible_tokens).forEach(([key, token]) => {
+                        const tokenSymbol = key.split("::")[1] || key; // Basic symbol extraction
+                        const tokenBalance = BigInt(token.balance);
+                        // Assuming FTs have a decimals property, otherwise need to fetch metadata
+                        // For simplicity, displaying raw balance if decimals not readily available
+                        // A proper implementation would fetch token metadata for decimals.
+                        const ftRow = ftTableBody.insertRow(-1);
+                        ftRow.insertCell(0).textContent = tokenSymbol;
+                        ftRow.insertCell(1).textContent = tokenBalance.toString(); // Display raw amount
+                    });
+                } else {
+                    const ftRow = ftTableBody.insertRow(-1);
+                    ftRow.setAttribute("data-ft-placeholder", "true");
+                    const cell = ftRow.insertCell(0);
+                    cell.colSpan = 2;
+                    cell.textContent = "No other fungible tokens found.";
+                }
+
+                // NFTs
+                if (data.non_fungible_tokens && Object.keys(data.non_fungible_tokens).length > 0) {
+                    nftStatusTd.parentElement.remove(); // Remove "Fetching/No NFTs" row
+                    Object.entries(data.non_fungible_tokens).forEach(async ([key, nftData]) => {
+                        if (nftData.count && parseInt(nftData.count) > 0) {
+                            // Fetch individual NFTs for this collection if count > 0
+                            // The balances endpoint only gives counts. We need asset details.
+                            // Need to make another call to get actual NFT list with metadata
+                            // e.g., /extended/v1/address/{stxAddress}/nft_events (too broad) or specific collection API
+                            // For now, let's assume we need to list up to `count` NFTs from a collection.
+                            // The prompt implies the balances endpoint is enough, but it only gives counts.
+                            // Let's try to get general NFT list for the address.
+                            // The endpoint /extended/v1/address/{address}/assets also includes NFTs with metadata
+                            try {
+                                const assetsResponse = await fetch(`https://api.mainnet.hiro.so/extended/v1/address/${currentStxAddress}/assets`);
+                                if (!assetsResponse.ok) throw new Error("Failed to fetch assets for NFTs");
+                                const assetsData = await assetsResponse.json();
+                                
+                                if (assetsData.results) {
+                                    const nfts = assetsData.results.filter(r => r.asset_event_type === 'non_fungible_token_asset');
+                                    if (nfts.length > 0) {
+                                        if (nftTableBody.querySelector("#nftStatus")) {
+                                            nftTableBody.querySelector("#nftStatus").parentElement.remove();
+                                        }
+                                    }
+                                    nfts.forEach(nft => {
+                                        const nftRow = nftTableBody.insertRow(-1);
+                                        const collectionName = nft.asset.contract_asset.contract_id.split(".")[1] || "Unknown Collection";
+                                        const nftName = nft.asset.contract_asset.asset_id.split("::")[1] || "Unknown Name";
+                                        const nftId = nft.asset.value.repr; // Usually (uint u123)
+                                        
+                                        nftRow.insertCell(0).textContent = collectionName;
+                                        nftRow.insertCell(1).textContent = nftName;
+                                        nftRow.insertCell(2).textContent = nftId;
+                                        const assetCell = nftRow.insertCell(3);
+
+                                        // Attempt to display image or data
+                                        // This requires fetching metadata for the NFT, which is often a separate URL
+                                        // The Hiro API might provide a metadata URL or direct content_uri
+                                        // For simplicity, we'll look for a common pattern or placeholder
+                                        // This part is highly dependent on NFT metadata standards and API responses
+                                        // We'll try to find a metadata URL from the asset data if possible
+                                        // This is a placeholder for actual metadata fetching and display logic
+                                        const imageContainer = document.createElement('div');
+                                        imageContainer.className = 'nft-image-container';
+                                        const dataContainer = document.createElement('div');
+                                        dataContainer.className = 'nft-data-container';
+
+                                        // Try to find metadata URL (this is a guess, actual field may vary)
+                                        let metadataUrl = null;
+                                        if (nft.asset && nft.asset.token_metadata && nft.asset.token_metadata.uri) {
+                                            metadataUrl = nft.asset.token_metadata.uri;
+                                        } else if (nft.asset && nft.asset.metadata && nft.asset.metadata.uri) {
+                                            metadataUrl = nft.asset.metadata.uri;
+                                        }
+
+                                        if (metadataUrl) {
+                                            // Try to fetch and parse metadata
+                                            fetch(metadataUrl.replace("ipfs://", "https://ipfs.io/ipfs/")) // Basic IPFS gateway
+                                                .then(res => res.json())
+                                                .then(meta => {
+                                                    if (meta.image || meta.image_url) {
+                                                        const img = document.createElement('img');
+                                                        img.src = (meta.image || meta.image_url).replace("ipfs://", "https://ipfs.io/ipfs/");
+                                                        img.alt = nftName;
+                                                        img.onerror = () => { 
+                                                            dataContainer.textContent = `Could not load image. Metadata: ${JSON.stringify(meta, null, 2)}`;
+                                                            assetCell.appendChild(dataContainer);
+                                                        };
+                                                        imageContainer.appendChild(img);
+                                                        assetCell.appendChild(imageContainer);
+                                                    } else {
+                                                        dataContainer.textContent = `No image in metadata. Data: ${JSON.stringify(meta, null, 2)}`;
+                                                        assetCell.appendChild(dataContainer);
+                                                    }
+                                                })
+                                                .catch(err => {
+                                                    console.warn("Error fetching/parsing NFT metadata:", metadataUrl, err);
+                                                    dataContainer.textContent = `Error fetching metadata: ${metadataUrl}`;
+                                                    assetCell.appendChild(dataContainer);
+                                                });
+                                        } else {
+                                            dataContainer.textContent = "No metadata URI found.";
+                                            assetCell.appendChild(dataContainer);
+                                        }
+                                    });
+                                }
+                                if (nftTableBody.children.length <= 1) { // Only header row exists
+                                     const newStatusRow = nftTableBody.insertRow(-1);
+                                     nftStatusTd = newStatusRow.insertCell(0);
+                                     nftStatusTd.colSpan = 4;
+                                     nftStatusTd.id = "nftStatus";
+                                     nftStatusTd.textContent = "No NFTs found.";
+                                }
+
+                            } catch (assetError) {
+                                console.error("Error fetching Stacks NFT asset details:", assetError);
+                                nftStatusTd.textContent = "Error fetching NFT details.";
+                            }
+                        }
+                    });
+                } else {
+                    nftStatusTd.textContent = "No NFTs found.";
+                }
+
+            } catch (error) {
+                console.error("Error fetching Stacks details:", error);
+                stxBalanceTd.textContent = "Error fetching STX balance";
+                nftStatusTd.textContent = "Error fetching NFTs";
+            }
+        }
+
+        async function fetchAllBalances() {
+            if (currentBtcAddress) {
+                await fetchBitcoinBalance();
+            }
+            if (currentStxAddress) {
+                await fetchStacksDetails();
+            }
+        }
+
+        // 3.8. Event Handling (Refresh)
+        refreshButton.addEventListener("click", fetchAllBalances);
+
+        // --- TODO: Implement the rest of the logic as per todo.md ---
+        // 3.5. State Management (partially initialized above)
+        // 3.6. UI Updates (partially done with helpers)
+        // 3.8. Event Handling (other WC events)
+        // 3.9. Helper Functions (some added)
+
+
+        // Initial UI setup
+        function initializeUI() {
+            walletSelectionDiv.classList.remove("hidden");
+            walletConnectQRDiv.classList.add("hidden");
+            connectionDetailsDiv.classList.add("hidden");
+            bitcoinBalancesDiv.classList.add("hidden");
+            stacksBalancesDiv.classList.add("hidden");
+            stacksNFTsDiv.classList.add("hidden");
+            connectionStatusSpan.textContent = "Disconnected";
+            btcAddressSpan.textContent = "N/A";
+            stxAddressSpan.textContent = "N/A";
+            btcBalanceTd.textContent = "N/A";
+            stxBalanceTd.textContent = "N/A";
+            nftStatusTd.textContent = "N/A";
+            if (nftTableBody.children.length > 1) { // Keep header, remove data rows
+                 Array.from(nftTableBody.children).slice(1).forEach(row => row.remove());
+            }
+        }
+
+        initializeUI(); // Call on page load
+
+    </script>
+</body>
+</html>
+

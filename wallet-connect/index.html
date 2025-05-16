@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect Wallet</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        button { padding: 10px 15px; margin: 5px 0; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .wallet-list button { display: block; margin-bottom: 10px; }
+        .status, .balances, .nfts { margin-top: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        .status p, .balances p, .nfts p { margin: 5px 0; }
+        .balances table, .nfts table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .balances th, .balances td, .nfts th, .nfts td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .balances th, .nfts th { background-color: #f0f0f0; }
+        #walletConnectQR { margin-top: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; text-align: center; }
+        #qrCodeImage { margin-top: 10px; }
+        .hidden { display: none; }
+        .address { font-family: monospace; }
+        .nft-image-container { max-width: 100px; max-height: 100px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        .nft-image-container img { width: 100%; height: auto; display: block; object-fit: contain; }
+        .nft-data-container { max-height: 100px; overflow-y: auto; font-size: 0.8em; white-space: pre-wrap; word-break: break-all; border: 1px solid #eee; padding: 5px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Connect Wallet</h1>
+
+        <div id="walletSelection">
+            <h2>Available Wallets</h2>
+            <div id="walletList" class="wallet-list">
+                <p>Scanning for wallets...</p>
+            </div>
+            <p>If no extension wallet is found or you prefer mobile, WalletConnect will be used.</p>
+            <button id="connectWalletConnectButton">Connect with WalletConnect</button>
+        </div>
+
+        <div id="walletConnectQR" class="hidden">
+            <h2>Scan with WalletConnect</h2>
+            <div id="qrCodeImage"></div>
+            <p>Scan this QR code with your WalletConnect-compatible mobile wallet.</p>
+        </div>
+
+        <div id="connectionDetails" class="status hidden">
+            <h2>Connection Status</h2>
+            <p>Status: <span id="connectionStatus">Disconnected</span></p>
+            <p>Bitcoin Address: <span id="btcAddress" class="address">N/A</span></p>
+            <p>Stacks Address: <span id="stxAddress" class="address">N/A</span></p>
+            <button id="disconnectButton">Disconnect</button>
+            <button id="refreshButton">Refresh Balances</button>
+        </div>
+
+        <div id="bitcoinBalances" class="balances hidden">
+            <h2>Bitcoin Balance</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Asset</th>
+                        <th>Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>BTC</td>
+                        <td id="btcBalance">N/A</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="stacksBalances" class="balances hidden">
+            <h2>Stacks Balances & Tokens</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Asset</th>
+                        <th>Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>STX</td>
+                        <td id="stxBalance">N/A</td>
+                    </tr>
+                    <!-- Fungible tokens will be populated here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+
+        <div id="stacksNFTs" class="nfts hidden">
+            <h2>Stacks NFTs</h2>
+            <table id="nftTable">
+                <thead>
+                    <tr>
+                        <th>Collection</th>
+                        <th>Name</th>
+                        <th>ID</th>
+                        <th>Asset</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- NFT rows will be populated here by JavaScript -->
+                    <tr><td colspan="4" id="nftStatus">N/A</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+<!-- BEFORE your own <script type="module"> tag -->
+    <!-- MODIFIED LINE BELOW for sats-connect -->
+    <script src="https://cdn.jsdelivr.net/npm/sats-connect@3.5.0/dist/sats-connect.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+    <!-- MODIFIED LINE BELOW for @walletconnect/sign-client -->
+    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/sign-client@2.13.0/dist/umd/index.min.js" defer></script>
+    
+    <script type="module">
+        console.log("Page loaded, script running.");
+
+        const walletConnectProjectId = "audionals"; // Replace with your actual Project ID from WalletConnect Cloud
+
+        // DOM Elements
+        const walletListDiv = document.getElementById("walletList");
+        const connectWalletConnectButton = document.getElementById("connectWalletConnectButton");
+        const walletConnectQRDiv = document.getElementById("walletConnectQR");
+        const qrCodeImageDiv = document.getElementById("qrCodeImage");
+        const connectionDetailsDiv = document.getElementById("connectionDetails");
+        const connectionStatusSpan = document.getElementById("connectionStatus");
+        const btcAddressSpan = document.getElementById("btcAddress");
+        const stxAddressSpan = document.getElementById("stxAddress");
+        const disconnectButton = document.getElementById("disconnectButton");
+        const refreshButton = document.getElementById("refreshButton");
+        const bitcoinBalancesDiv = document.getElementById("bitcoinBalances");
+        const btcBalanceTd = document.getElementById("btcBalance");
+        const stacksBalancesDiv = document.getElementById("stacksBalances");
+        const stxBalanceTd = document.getElementById("stxBalance");
+        const stacksNFTsDiv = document.getElementById("stacksNFTs");
+        const nftTableBody = document.querySelector("#nftTable tbody");
+        let nftStatusTd; // Initialized in DOMContentLoaded
+        const walletSelectionDiv = document.getElementById("walletSelection");
+
+        // App State
+        let connectedWalletProvider = null;
+        let walletConnectSignClient = null;
+        let walletConnectSession = null;
+        let currentBtcAddress = null;
+        let currentStxAddress = null;
+        let detectedProviders = [];
+
+        function maskAddress(address) {
+            if (!address) return "N/A";
+            if (address.length < 10) return address;
+            return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+        }
+
+        function updateUIForConnection(btcAddr, stxAddr, providerName) {
+            currentBtcAddress = btcAddr;
+            currentStxAddress = stxAddr;
+
+            connectionStatusSpan.textContent = `Connected (${providerName})`;
+            btcAddressSpan.textContent = maskAddress(btcAddr);
+            stxAddressSpan.textContent = maskAddress(stxAddr);
+
+            walletSelectionDiv.classList.add("hidden");
+            walletConnectQRDiv.classList.add("hidden");
+            connectionDetailsDiv.classList.remove("hidden");
+            
+            if (currentBtcAddress) bitcoinBalancesDiv.classList.remove("hidden");
+            else bitcoinBalancesDiv.classList.add("hidden");
+
+            if (currentStxAddress) {
+                stacksBalancesDiv.classList.remove("hidden");
+                stacksNFTsDiv.classList.remove("hidden");
+            } else {
+                stacksBalancesDiv.classList.add("hidden");
+                stacksNFTsDiv.classList.add("hidden");
+            }
+            fetchAllBalances();
+        }
+
+        function resetUIOnDisconnect() {
+            initializeUI();
+            currentBtcAddress = null;
+            currentStxAddress = null;
+            connectedWalletProvider = null;
+            walletConnectSession = null;
+            detectWallets();
+        }
+
+        async function initializeWalletConnect() {
+            try {
+                if (!window.WalletConnectSign || !window.WalletConnectSign.SignClient) {
+                    console.error("WalletConnectSign client not loaded");
+                    alert("Error: WalletConnect library not loaded. Please refresh.");
+                    connectWalletConnectButton.disabled = true;
+                    return;
+                }
+                walletConnectSignClient = await window.WalletConnectSign.SignClient.init({
+                    projectId: walletConnectProjectId,
+                    metadata: {
+                        name: "My DApp",
+                        description: "Connect to Bitcoin and Stacks wallets",
+                        url: window.location.href,
+                        icons: [window.location.origin + "/favicon.ico"]
+                    }
+                });
+                console.log("WalletConnect SignClient initialized");
+
+                walletConnectSignClient.on("session_event", (event) => {
+                    console.log("WalletConnect session_event:", event);
+                    if (event.params.event.name === "accountsChanged") {
+                        alert("WalletConnect accounts changed. Please reconnect if necessary.");
+                        handleDisconnect();
+                    }
+                });
+
+                walletConnectSignClient.on("session_update", ({ topic, params }) => {
+                    console.log("WalletConnect session_update:", topic, params);
+                });
+
+                walletConnectSignClient.on("session_delete", ({ topic }) => {
+                    console.log("WalletConnect session_delete:", topic);
+                    if (walletConnectSession && walletConnectSession.topic === topic) {
+                        handleDisconnect();
+                    }
+                });
+
+            } catch (e) {
+                console.error("Could not initialize WalletConnect SignClient", e);
+                alert("Error initializing WalletConnect. Please refresh.");
+                connectWalletConnectButton.disabled = true;
+            }
+        }
+
+        async function detectWallets() {
+            walletListDiv.innerHTML = "<p>Scanning for wallets...</p>";
+            if (typeof SatsConnect === 'undefined') {
+                console.warn("SatsConnect not loaded, will check for global providers directly.");
+                // Do not return, proceed to check global providers
+            }
+
+            const providersToCheck = [
+                { name: "Leather", id: "leather", check: () => window.LeatherProvider },
+                { name: "Xverse", id: "xverse", check: () => window.XverseProvider },
+                { name: "Hiro Wallet", id: "hiro", check: () => window.HiroWalletProvider },
+                { name: "Unisat", id: "unisat", check: () => window.unisat },
+            ];
+
+            detectedProviders = [];
+            providersToCheck.forEach(p => {
+                try {
+                    const provider = p.check();
+                    if (provider) {
+                        detectedProviders.push({ name: p.name, id: p.id, provider: provider });
+                    }
+                } catch (e) {
+                    console.warn(`Error checking for ${p.name} provider:`, e);
+                }
+            });
+
+            if (detectedProviders.length > 0) {
+                walletListDiv.innerHTML = "";
+                detectedProviders.forEach(wallet => {
+                    const button = document.createElement("button");
+                    button.textContent = `Connect ${wallet.name}`;
+                    button.onclick = () => connectToExtensionWallet(wallet);
+                    walletListDiv.appendChild(button);
+                });
+            } else {
+                walletListDiv.innerHTML = "<p>No browser extension wallets detected. Use WalletConnect.</p>";
+            }
+        }
+
+        async function connectToExtensionWallet(wallet) {
+            console.log(`Attempting to connect to ${wallet.name}`);
+            try {
+                let response;
+                if (wallet.id === 'unisat' && typeof wallet.provider.requestAccounts === 'function') {
+                    await wallet.provider.requestAccounts();
+                    const accounts = await wallet.provider.getAccounts();
+                    if (!accounts || accounts.length === 0) throw new Error ("Unisat: No accounts returned");
+                    response = { result: [{ symbol: "BTC", type: "p2wpkh", address: accounts[0] }] }; // Unisat primarily BTC
+                } else if (typeof SatsConnect !== 'undefined' && typeof SatsConnect.request === 'function') {
+                    // Prefer SatsConnect.request if available, as it standardizes calls
+                     response = await SatsConnect.request('getAddresses');
+                     // SatsConnect.request might not need a provider passed if it manages current provider
+                     // Or it might be SatsConnect.request('getAddresses', { provider: wallet.provider })
+                     // Assuming basic SatsConnect.request('getAddresses') for now.
+                     console.log("Used SatsConnect.request");
+                } else if (wallet.provider && typeof wallet.provider.request === 'function') {
+                    // Standard EIP-1193 like request
+                    response = await wallet.provider.request({ method: 'getAddresses' });
+                    console.log("Used provider.request");
+                } else {
+                    throw new Error (`${wallet.name} does not support a known connection method.`);
+                }
+
+                console.log(`${wallet.name} getAddresses response:`, response);
+
+                if (!response || !response.result || !Array.isArray(response.result)) {
+                    // Some wallets (like Xverse with direct .request) might return addresses directly in response, not response.result
+                    if (Array.isArray(response) && response.length > 0 && response[0].address && response[0].publicKey) {
+                         // This looks like a direct response from Xverse or similar
+                         response = { result: response };
+                    } else {
+                        throw new Error("Invalid response structure from wallet provider");
+                    }
+                }
+
+                let btcAddr = null;
+                let stxAddr = null;
+
+                response.result.forEach(acc => {
+                    // Ensure acc.address exists and acc.symbol/type are checked carefully
+                    if (acc.address) {
+                        if (acc.symbol === 'BTC' && (acc.type === 'p2wpkh' || acc.type === 'p2tr' || acc.purpose === 'payment')) {
+                            if (!btcAddr) btcAddr = acc.address;
+                        }
+                        if (acc.symbol === 'STX' || acc.purpose === 'stacks') {
+                            if (!stxAddr) stxAddr = acc.address;
+                        }
+                        // Fallback for addresses without symbol/type if only one type is expected from the wallet
+                        if (!acc.symbol && !acc.type && !acc.purpose) {
+                            if (acc.address.startsWith('bc1') || acc.address.startsWith('tb1') || acc.address.startsWith('1') || acc.address.startsWith('3')) {
+                                if(!btcAddr) btcAddr = acc.address;
+                            } else if (acc.address.startsWith('ST') || acc.address.startsWith('SP')) {
+                                if(!stxAddr) stxAddr = acc.address;
+                            }
+                        }
+                    }
+                });
+                
+                if (!btcAddr && !stxAddr) {
+                     throw new Error("No compatible Bitcoin (SegWit/Taproot) or Stacks address found from provider.");
+                }
+
+                connectedWalletProvider = wallet.provider;
+                updateUIForConnection(btcAddr, stxAddr, wallet.name);
+
+                if (typeof connectedWalletProvider.on === 'function') {
+                    connectedWalletProvider.on('accountsChanged', (accounts) => {
+                        console.log(`${wallet.name} accountsChanged:`, accounts);
+                        alert("Wallet accounts changed. Please reconnect to update.");
+                        handleDisconnect(); 
+                    });
+                    connectedWalletProvider.on('disconnect', () => {
+                        console.log(`${wallet.name} disconnected.`);
+                        handleDisconnect();
+                    });
+                }
+
+            } catch (error) {
+                console.error(`Error connecting to ${wallet.name}:`, error);
+                alert(`Could not connect to ${wallet.name}: ${error.message}`);
+            }
+        }
+
+        async function connectWithWalletConnect() {
+            if (!walletConnectSignClient) {
+                alert("WalletConnect is not initialized. Please wait or refresh.");
+                return;
+            }
+            qrCodeImageDiv.innerHTML = "<p>Generating QR code...</p>";
+            walletConnectQRDiv.classList.remove("hidden");
+
+            try {
+                const requiredNamespaces = {
+                    stacks: { methods: ["stx_getAddresses", "stx_signMessage"], chains: ["stacks:1"], events: ["accountsChanged"] },
+                    bitcoin: { methods: ["bitcoin_getAccounts", "bitcoin_signMessage"], chains: ["bip122:000000000019d6689c085ae165831e93"], events: ["accountsChanged"] }
+                };
+                 const optionalNamespaces = { // Adding optional namespaces can increase compatibility
+                    cip34: { // Alternative Bitcoin namespace
+                        methods: ["getAccounts", "signMessage"],
+                        chains: ["bip122:000000000019d6689c085ae165831e93"],
+                        events: ["accountsChanged"]
+                    }
+                };
+
+
+                const { uri, approval } = await walletConnectSignClient.connect({ requiredNamespaces, optionalNamespaces });
+
+                if (uri) {
+                    qrCodeImageDiv.innerHTML = "";
+                    new QRCode(qrCodeImageDiv, { text: uri, width: 256, height: 256 });
+                } else { throw new Error("Failed to generate WalletConnect URI"); }
+
+                walletConnectSession = await approval();
+                qrCodeImageDiv.innerHTML = "<p>Connected! Processing accounts...</p>";
+
+                let btcAddr = null;
+                let stxAddr = null;
+
+                const accounts = walletConnectSession.namespaces?.stacks?.accounts || [];
+                for (const account of accounts) {
+                    stxAddr = account.split(':')[2];
+                    if (stxAddr) break;
+                }
+                
+                const btcAccounts = walletConnectSession.namespaces?.bitcoin?.accounts || walletConnectSession.namespaces?.cip34?.accounts || [];
+                for (const account of btcAccounts) {
+                    btcAddr = account.split(':')[2];
+                    if (btcAddr) break;
+                }
+
+                if (!btcAddr && !stxAddr) { // Fallback for less specific namespaces
+                    for (const namespaceKey in walletConnectSession.namespaces) {
+                        const namespace = walletConnectSession.namespaces[namespaceKey];
+                        if (namespace.accounts && namespace.accounts.length > 0) {
+                            const account = namespace.accounts[0];
+                            const address = account.split(':')[2];
+                            if (!stxAddr && (address.startsWith('ST') || address.startsWith('SP'))) stxAddr = address;
+                            if (!btcAddr && (address.startsWith('bc1') || address.startsWith('tb1') || address.startsWith('1') || address.startsWith('3'))) btcAddr = address;
+                        }
+                    }
+                }
+
+                if (!btcAddr && !stxAddr) {
+                    throw new Error("Could not retrieve compatible Bitcoin or Stacks address from WalletConnect session.");
+                }
+                updateUIForConnection(btcAddr, stxAddr, "WalletConnect");
+
+            } catch (error) {
+                console.error("WalletConnect connection error:", error);
+                alert(`WalletConnect Error: ${error.message}`);
+                qrCodeImageDiv.innerHTML = `<p>Error: ${error.message}. Try again or close.</p>`;
+                if (walletConnectSession) {
+                    try { await walletConnectSignClient.disconnect({ topic: walletConnectSession.topic, reason: { code: 1, message: "Connection error" } }); }
+                    catch (e) { console.error("WC disconnect error", e); }
+                    walletConnectSession = null;
+                }
+            }
+        }
+
+        async function handleDisconnect() {
+            console.log("Disconnecting...");
+            if (connectedWalletProvider && typeof connectedWalletProvider.disconnect === 'function') {
+                try { await connectedWalletProvider.disconnect(); } catch (e) { console.error("Error during provider disconnect:", e); }
+            }
+            if (walletConnectSession && walletConnectSignClient) {
+                try { await walletConnectSignClient.disconnect({ topic: walletConnectSession.topic, reason: { code: 6000, message: "User disconnected" } }); }
+                catch (e) { console.error("Error disconnecting WalletConnect session:", e); }
+            }
+            resetUIOnDisconnect();
+        }
+        
+        async function fetchBitcoinBalance() {
+            if (!currentBtcAddress) {
+                btcBalanceTd.textContent = "N/A"; return;
+            }
+            btcBalanceTd.textContent = "Fetching...";
+            try {
+                let balanceSatoshis = null;
+                // Wallet provider check for getBalance (non-standard, hypothetical)
+                // if (connectedWalletProvider && typeof connectedWalletProvider.request === 'function') {
+                //     try {
+                //         const balanceResponse = await connectedWalletProvider.request('getBalance', [{ address: currentBtcAddress, type: 'bitcoin' }]);
+                //         if (balanceResponse && balanceResponse.balance) balanceSatoshis = BigInt(balanceResponse.balance);
+                //     } catch (providerError) { console.warn("getBalance via provider failed, falling back:", providerError); }
+                // }
+
+                // Fallback to mempool.space API
+                if (balanceSatoshis === null) {
+                    const response = await fetch(`https://mempool.space/api/address/${currentBtcAddress}`);
+                    if (!response.ok) throw new Error(`Mempool.space API error: ${response.statusText}`);
+                    const data = await response.json();
+                    balanceSatoshis = BigInt(data.chain_stats.funded_txo_sum) - BigInt(data.chain_stats.spent_txo_sum);
+                }
+                btcBalanceTd.textContent = `${(Number(balanceSatoshis) / 100000000).toFixed(8)} BTC`;
+            } catch (error) {
+                console.error("Error fetching Bitcoin balance:", error);
+                btcBalanceTd.textContent = "Error";
+            }
+        }
+
+        function displayNftAsset(assetCell, metadataUrl, nftName, nftFullData) {
+            const imageContainer = document.createElement('div');
+            imageContainer.className = 'nft-image-container';
+            const dataContainer = document.createElement('div');
+            dataContainer.className = 'nft-data-container';
+
+            if (metadataUrl) {
+                fetch(metadataUrl.replace(/^ipfs:\/\//, "https://ipfs.io/ipfs/").replace(/^ar:\/\//, "https://arweave.net/"))
+                    .then(res => {
+                        if (!res.ok) throw new Error(`HTTP error! status: ${res.status} for ${metadataUrl}`);
+                        const contentType = res.headers.get("content-type");
+                        if (contentType && (contentType.startsWith("image/") || contentType.startsWith("video/"))) { // Allow video too
+                            return res.blob().then(blob => ({ directMedia: URL.createObjectURL(blob), mediaType: contentType }));
+                        }
+                        return res.json();
+                    })
+                    .then(meta => {
+                        let mediaUrl = null;
+                        let mediaType = meta.mediaType || 'image'; // Default to image
+
+                        if (meta.directMedia) {
+                            mediaUrl = meta.directMedia;
+                        } else if (meta.image) {
+                            mediaUrl = meta.image;
+                        } else if (meta.image_url) {
+                            mediaUrl = meta.image_url;
+                        } else if (meta.animation_url) { // Common for videos/GIFs
+                            mediaUrl = meta.animation_url;
+                            mediaType = 'video'; // Or determine from URL extension
+                        } else if (typeof meta.uri === 'string' && (meta.uri.startsWith('http') || meta.uri.startsWith('ipfs') || meta.uri.startsWith('ar:'))) {
+                            mediaUrl = meta.uri;
+                        }
+                        
+                        if (mediaUrl) {
+                            mediaUrl = mediaUrl.replace(/^ipfs:\/\//, "https://ipfs.io/ipfs/").replace(/^ar:\/\//, "https://arweave.net/");
+                            if (mediaType.startsWith('image')) {
+                                const img = document.createElement('img');
+                                img.src = mediaUrl;
+                                img.alt = nftName;
+                                img.onerror = () => { dataContainer.textContent = `Could not load image. Metadata: ${JSON.stringify(meta, null, 2)}`; assetCell.appendChild(dataContainer); };
+                                imageContainer.appendChild(img);
+                            } else if (mediaType.startsWith('video')) {
+                                const video = document.createElement('video');
+                                video.src = mediaUrl;
+                                video.alt = nftName;
+                                video.controls = true; video.muted = true; video.autoplay = true; video.loop = true; video.style.maxWidth = '100px'; video.style.maxHeight = '100px';
+                                video.onerror = () => { dataContainer.textContent = `Could not load video. Metadata: ${JSON.stringify(meta, null, 2)}`; assetCell.appendChild(dataContainer); };
+                                imageContainer.appendChild(video);
+                            }
+                            assetCell.appendChild(imageContainer);
+                        } else {
+                            dataContainer.textContent = `No image/media in metadata. Data: ${JSON.stringify(meta, null, 2)}`;
+                            assetCell.appendChild(dataContainer);
+                        }
+                    })
+                    .catch(err => {
+                        console.warn("Error fetching/parsing NFT metadata:", metadataUrl, err);
+                        dataContainer.textContent = `Error fetching metadata. Raw: ${JSON.stringify(nftFullData.asset?.value?.repr || nftFullData, null, 2)}`;
+                        assetCell.appendChild(dataContainer);
+                    });
+            } else {
+                dataContainer.textContent = `No metadata URI. Raw: ${JSON.stringify(nftFullData.asset?.value?.repr || nftFullData, null, 2)}`;
+                assetCell.appendChild(dataContainer);
+            }
+        }
+
+        async function fetchStacksDetails() {
+            const ftTableBody = document.getElementById("stacksBalances").querySelector("tbody");
+            const stxRow = ftTableBody.querySelector("tr"); // First row is STX
+            while (ftTableBody.children.length > 1) { ftTableBody.removeChild(ftTableBody.lastChild); } // Clear old FTs, keep STX
+
+            while (nftTableBody.firstChild) { nftTableBody.removeChild(nftTableBody.firstChild); } // Clear all previous NFT rows/status
+            const statusRowNft = nftTableBody.insertRow(-1);
+            nftStatusTd = statusRowNft.insertCell(0); // Assign to global let nftStatusTd
+            nftStatusTd.id = "nftStatus";
+            nftStatusTd.colSpan = 4;
+
+            if (!currentStxAddress) {
+                stxBalanceTd.textContent = "N/A";
+                nftStatusTd.textContent = "N/A (No address)";
+                const noFtRow = ftTableBody.insertRow(-1);
+                const cell = noFtRow.insertCell(0); cell.colSpan = 2; cell.textContent = "N/A (No address)";
+                return;
+            }
+
+            stxBalanceTd.textContent = "Fetching...";
+            nftStatusTd.textContent = "Fetching NFTs...";
+
+            try {
+                const balancesResponse = await fetch(`https://api.mainnet.hiro.so/extended/v1/address/${currentStxAddress}/balances`);
+                if (!balancesResponse.ok) throw new Error(`Hiro Balances API error: ${balancesResponse.statusText}`);
+                const balancesData = await balancesResponse.json();
+
+                stxBalanceTd.textContent = `${(Number(BigInt(balancesData.stx.balance)) / 1000000).toFixed(6)} STX`;
+
+                if (balancesData.fungible_tokens && Object.keys(balancesData.fungible_tokens).length > 0) {
+                    Object.entries(balancesData.fungible_tokens).forEach(([key, token]) => {
+                        const tokenSymbol = key.split("::")[1] || key;
+                        // TODO: Fetch metadata for decimals for proper display. For now, raw balance.
+                        const ftRow = ftTableBody.insertRow(-1);
+                        ftRow.insertCell(0).textContent = tokenSymbol;
+                        ftRow.insertCell(1).textContent = BigInt(token.balance).toString();
+                    });
+                } else {
+                    const noFtRow = ftTableBody.insertRow(-1);
+                    const cell = noFtRow.insertCell(0); cell.colSpan = 2; cell.textContent = "No other fungible tokens.";
+                }
+
+                let hasPotentialNfts = false;
+                if (balancesData.non_fungible_tokens && Object.keys(balancesData.non_fungible_tokens).length > 0) {
+                    for (const coll in balancesData.non_fungible_tokens) {
+                        if (parseInt(balancesData.non_fungible_tokens[coll].count) > 0) {
+                            hasPotentialNfts = true; break;
+                        }
+                    }
+                }
+
+                if (hasPotentialNfts) {
+                    const assetsResponse = await fetch(`https://api.mainnet.hiro.so/extended/v1/address/${currentStxAddress}/assets?limit=50&unanchored=true`);
+                    if (!assetsResponse.ok) throw new Error(`Hiro Assets API error: ${assetsResponse.statusText}`);
+                    const assetsData = await assetsResponse.json();
+                    
+                    const nfts = assetsData.results ? assetsData.results.filter(r => r.asset_event_type === 'non_fungible_token_asset') : [];
+
+                    if (nfts.length > 0) {
+                        nftStatusTd.parentElement.remove(); // Remove "Fetching..." row
+                        nfts.forEach(nft => {
+                            const collectionName = nft.asset?.contract_asset?.contract_id.split('.')[1] || "Unknown Collection";
+                            const nftName = nft.asset?.contract_asset?.asset_id.split('::')[1] || nft.asset?.value?.repr?.match(/name\s*\(string-utf8\s*"([^"]+)"\)/)?.[1] || "Unknown Name";
+                            const nftId = nft.asset?.value?.repr || "Unknown ID";
+                            
+                            const nftRow = nftTableBody.insertRow(-1);
+                            nftRow.insertCell(0).textContent = collectionName;
+                            nftRow.insertCell(1).textContent = nftName;
+                            nftRow.insertCell(2).textContent = nftId.length > 20 ? nftId.substring(0,17) + "..." : nftId; // Shorten long IDs
+
+                            const assetCell = nftRow.insertCell(3);
+                            let metadataUrl = nft.asset?.token_metadata?.uri || nft.token_uri; 
+                            // SIP019 token_uri can be directly in the asset or from a metadata URL
+                            // For SIP009, metadata is often embedded in value.repr, handled by displayNftAsset if URL missing.
+
+                            displayNftAsset(assetCell, metadataUrl, nftName, nft);
+                        });
+                    } else {
+                        nftStatusTd.textContent = "No NFTs found.";
+                    }
+                } else {
+                    nftStatusTd.textContent = "No NFTs found.";
+                }
+
+            } catch (error) {
+                console.error("Error fetching Stacks details:", error);
+                stxBalanceTd.textContent = "Error";
+                nftStatusTd.textContent = "Error fetching Stacks data.";
+            }
+        }
+
+        async function fetchAllBalances() {
+            refreshButton.disabled = true;
+            if (currentBtcAddress) await fetchBitcoinBalance();
+            if (currentStxAddress) await fetchStacksDetails();
+            refreshButton.disabled = false;
+        }
+        
+        function initializeUI() {
+            walletSelectionDiv.classList.remove("hidden");
+            walletConnectQRDiv.classList.add("hidden");
+            connectionDetailsDiv.classList.add("hidden");
+            bitcoinBalancesDiv.classList.add("hidden");
+            stacksBalancesDiv.classList.add("hidden");
+            stacksNFTsDiv.classList.add("hidden");
+            
+            connectionStatusSpan.textContent = "Disconnected";
+            btcAddressSpan.textContent = "N/A";
+            stxAddressSpan.textContent = "N/A";
+            btcBalanceTd.textContent = "N/A";
+            stxBalanceTd.textContent = "N/A";
+
+            const ftTableBody = document.getElementById("stacksBalances").querySelector("tbody");
+            while (ftTableBody.children.length > 1) { ftTableBody.removeChild(ftTableBody.lastChild); } // Clear old FTs
+
+            while (nftTableBody.firstChild) { nftTableBody.removeChild(nftTableBody.firstChild); }
+            const statusRow = nftTableBody.insertRow(-1);
+            nftStatusTd = statusRow.insertCell(0); // Assign to global let nftStatusTd
+            nftStatusTd.id = "nftStatus";
+            nftStatusTd.colSpan = 4;
+            nftStatusTd.textContent = "N/A";
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            nftStatusTd = document.getElementById("nftStatus"); // Initialize the global reference
+
+            initializeUI();
+            await initializeWalletConnect();
+            await detectWallets();
+
+            connectWalletConnectButton.addEventListener("click", connectWithWalletConnect);
+            disconnectButton.addEventListener("click", handleDisconnect);
+            refreshButton.addEventListener("click", fetchAllBalances);
+        });
+
+    </script>
+</body>
+</html>
