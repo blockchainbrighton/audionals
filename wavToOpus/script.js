@@ -82,7 +82,7 @@ if (typeof FFmpeg === 'undefined') {
       }
     };
   
-    const getWavDuration = file => new Promise((res, rej) => {
+    const getAudioDuration = file => new Promise((res, rej) => {
       const reader = new FileReader();
       reader.onload = e => {
         try {
@@ -290,7 +290,7 @@ if (typeof FFmpeg === 'undefined') {
         updateStatus(`File selected: ${selectedFile.name}. Reading duration...`);
         enableConvertButtonIfNeeded(); // Enable convert if FFmpeg is ready
         try {
-          fileDuration = await getWavDuration(selectedFile);
+          fileDuration = await getAudioDuration(selectedFile);
           updateStatus(`File selected: ${selectedFile.name} (${fileDuration.toFixed(1)}s)`);
           updateEstimatedSize(); // Update size estimate now that we have duration
           setupOriginalAudioPlayer(); // Prepare the original audio player

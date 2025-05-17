@@ -1,14 +1,14 @@
 // file-handler.js
 
 /**
- * Gets the duration of a WAV file using the Web Audio API.
- * @param {File} file - The WAV file object.
+ * Gets the duration of an audio file using the Web Audio API.
+ * @param {File} file - The audio file object.
  * @returns {Promise<number>} A promise that resolves with the duration in seconds.
  */
-const getWavDuration = file => new Promise((resolve, reject) => {
-    if (!file || !file.type.startsWith('audio/')) {
-        return reject("Invalid file type provided.");
-    }
+const getAudioDuration = file => new Promise((resolve, reject) => { // Renamed from getWavDuration
+  if (!file || !file.type.startsWith('audio/')) {
+      return reject("Invalid file type provided for duration check.");
+  }
   
     const reader = new FileReader();
   
@@ -71,10 +71,11 @@ const getWavDuration = file => new Promise((resolve, reject) => {
     originalAudioElement = null; // Clear reference
   
     if (file) {
-      if (!file.type || (!file.type.startsWith('audio/wav') && !file.type.startsWith('audio/x-wav'))) {
-          updateStatus(`Error: Please select a WAV file. Selected type: ${file.type || 'unknown'}`, true);
+      // Make the check more general for any audio type
+      if (!file.type || !file.type.startsWith('audio/')) {
+          updateStatus(`Error: Please select a valid audio file. Selected type: ${file.type || 'unknown'}`, true);
           fileInput.value = ''; // Clear the input
-          enableConvertButtonIfNeeded();
+          enableConvertButtonIfNeeded(); // Ensure this is called
           return;
       }
   
@@ -83,7 +84,7 @@ const getWavDuration = file => new Promise((resolve, reject) => {
       enableConvertButtonIfNeeded(); // Might enable convert if FFmpeg is ready
   
       try {
-        fileDuration = await getWavDuration(selectedFile); // Update state
+        fileDuration = await getAudioDuration(selectedFile); // Update state
         updateStatus(`File ready: ${selectedFile.name} (${fileDuration.toFixed(1)}s)`);
         updateEstimatedSize(); // Update size estimate now we have duration
         setupOriginalAudioPlayer(); // Prepare the original audio player now

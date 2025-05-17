@@ -31,7 +31,7 @@ if (typeof FFmpeg === 'undefined' || typeof FFmpeg.createFFmpeg === 'undefined')
         loadFFmpeg(); // Start loading FFmpeg core (async)
         setupEventListeners(); // Setup UI interactions
         // Initial status message might be quickly overwritten by loadFFmpeg()
-        updateStatus('Ready. Select a WAV file.'); // Or wait for FFmpeg load confirmation
+        updateStatus('Ready. Select an audio file.'); // Or wait for FFmpeg load confirmation
     };
 
     // --- Initial Setup on Page Load ---
