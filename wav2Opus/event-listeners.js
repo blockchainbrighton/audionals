@@ -39,14 +39,23 @@ const setupEventListeners = () => {
         console.error("Format radio buttons not found.");
     }
 
+    // --- NEW: Audio Profile Selector Listener ---
+    if (audioProfileSelect) {
+        audioProfileSelect.addEventListener('change', (e) => {
+            const selectedProfileKey = e.target.value;
+            applyAudioProfileSettings(selectedProfileKey); // This will also update description and estimated size
+        });
+    } else {
+        console.error("Audio Profile select element not found.");
+    }
+
     // MP3 Quality Slider (If still potentially used)
     if (mp3QualitySlider && mp3QualityValueSpan) {
         mp3QualitySlider.addEventListener('input', (e) => {
             mp3QualityValueSpan.textContent = e.target.value;
             updateEstimatedSize();
+            // If MP3 settings are changed, ensure audio profile is not misleading (though profiles are for Opus)
         });
-    } else {
-        // console.warn("MP3 quality slider or value span not found or hidden.");
     }
 
     // Opus Bitrate Slider (Used for WebM and Opus)
@@ -54,18 +63,24 @@ const setupEventListeners = () => {
         opusBitrateSlider.addEventListener('input', (e) => {
             opusBitrateValueSpan.textContent = `${e.target.value} kbps`;
             updateEstimatedSize();
+            // If user manually changes, switch profile to manual
+            if (audioProfileSelect && audioProfileSelect.value !== 'manual') {
+                audioProfileSelect.value = 'manual';
+                updateAudioProfileDescription('manual');
+            }
         });
     } else {
         console.error("Opus/WebM bitrate slider or value span not found.");
     }
 
-    // --- NEW Opus Advanced Controls Listeners ---
-    // (Assuming opusVbrModeSelect, opusCompressionLevelSlider, opusCompressionLevelValueSpan, opusApplicationSelect are globally available or selected from dom-elements.js)
-
     // Opus VBR Mode Select
-    if (window.opusVbrModeSelect) { 
+    if (window.opusVbrModeSelect) {
         opusVbrModeSelect.addEventListener('change', () => {
-            // console.log("Opus VBR Mode changed to:", opusVbrModeSelect.value);
+            // If user manually changes, switch profile to manual
+            if (audioProfileSelect && audioProfileSelect.value !== 'manual') {
+                audioProfileSelect.value = 'manual';
+                updateAudioProfileDescription('manual');
+            }
         });
     } else {
         console.warn("Opus VBR Mode select element (opusVbrMode) not found.");
@@ -75,7 +90,11 @@ const setupEventListeners = () => {
     if (window.opusCompressionLevelSlider && window.opusCompressionLevelValueSpan) {
         opusCompressionLevelSlider.addEventListener('input', (e) => {
             opusCompressionLevelValueSpan.textContent = e.target.value;
-            // console.log("Opus Compression Level changed to:", e.target.value);
+            // If user manually changes, switch profile to manual
+            if (audioProfileSelect && audioProfileSelect.value !== 'manual') {
+                audioProfileSelect.value = 'manual';
+                updateAudioProfileDescription('manual');
+            }
         });
     } else {
         console.warn("Opus Compression Level slider (opusCompressionLevel) or its value span not found.");
@@ -84,13 +103,15 @@ const setupEventListeners = () => {
     // Opus Application Select
     if (window.opusApplicationSelect) {
         opusApplicationSelect.addEventListener('change', () => {
-            // console.log("Opus Application changed to:", opusApplicationSelect.value);
+            // If user manually changes, switch profile to manual
+            if (audioProfileSelect && audioProfileSelect.value !== 'manual') {
+                audioProfileSelect.value = 'manual';
+                updateAudioProfileDescription('manual');
+            }
         });
     } else {
         console.warn("Opus Application select element (opusApplication) not found.");
     }
-    // --- END NEW Opus Advanced Controls Listeners ---
-
 
     // Convert Button
     if (convertBtn) {
@@ -158,28 +179,73 @@ const setupEventListeners = () => {
  * initialOpusVbrMode, initialOpusCompressionLevel, initialOpusApplication are available)
  * (Assuming DOM elements are globally available, e.g. from dom-elements.js)
  */
+/**
+ * Sets the initial state of UI elements like sliders and displays.
+ */
 const initializeUIState = () => {
+    console.log("[event-listeners.js] initializeUIState called."); // DEBUG
     // Initialize MP3 display (if applicable)
     if (mp3QualitySlider && mp3QualityValueSpan) {
-        mp3QualitySlider.value = initialMp3Quality; // Set from config
+        mp3QualitySlider.value = initialMp3Quality;
         mp3QualityValueSpan.textContent = mp3QualitySlider.value;
     }
-    // Initialize Opus/WebM Bitrate
+    // Initialize Opus/WebM Bitrate and other Opus controls to their default config values
     if (opusBitrateSlider && opusBitrateValueSpan) {
-         opusBitrateSlider.value = initialOpusBitrate; // Set from config
-         opusBitrateValueSpan.textContent = `${opusBitrateSlider.value} kbps`;
+         opusBitrateSlider.value = initialOpusBitrate;
+         opusBitrateValueSpan.textContent = `${initialOpusBitrate} kbps`;
     }
-
-    // --- Initialize NEW Opus Advanced Controls ---
-    if (window.opusVbrModeSelect) { 
-        opusVbrModeSelect.value = initialOpusVbrMode; // Set from config
+    if (window.opusVbrModeSelect) { // These window. prefixes are okay but direct reference is cleaner
+        opusVbrModeSelect.value = initialOpusVbrMode;
     }
     if (window.opusCompressionLevelSlider && window.opusCompressionLevelValueSpan) {
-        opusCompressionLevelSlider.value = initialOpusCompressionLevel; // Set from config
-        opusCompressionLevelValueSpan.textContent = opusCompressionLevelSlider.value;
+        opusCompressionLevelSlider.value = initialOpusCompressionLevel;
+        opusCompressionLevelValueSpan.textContent = initialOpusCompressionLevel.toString();
     }
     if (window.opusApplicationSelect) {
-        opusApplicationSelect.value = initialOpusApplication; // Set from config
+        opusApplicationSelect.value = initialOpusApplication;
+    }
+
+    // --- NEW: Initialize Audio Profile System ---
+    console.log("[event-listeners.js] Attempting to initialize audio profile system..."); // DEBUG
+    if (typeof populateAudioProfileSelector === 'function') {
+        populateAudioProfileSelector(); // Fill the dropdown
+        console.log("[event-listeners.js] Audio profile selector innerHTML after populate:", audioProfileSelect ? audioProfileSelect.innerHTML : "audioProfileSelect is null");
+    } else {
+        console.error("[event-listeners.js] populateAudioProfileSelector function is not defined!");
+    }
+
+    if (audioProfileSelect && typeof initialAudioProfile !== 'undefined') {
+        if (audioProfileSelect.options.length > 0) {
+            audioProfileSelect.value = initialAudioProfile;
+            console.log(`[event-listeners.js] Set audioProfileSelect.value to: ${initialAudioProfile}`); // DEBUG
+        } else {
+            console.warn("[event-listeners.js] Cannot set initial audio profile value, selector has no options.");
+        }
+    } else {
+        if (!audioProfileSelect) console.warn("[event-listeners.js] audioProfileSelect is null, cannot set initial value for profile.");
+        if (typeof initialAudioProfile === 'undefined') console.warn("[event-listeners.js] initialAudioProfile is undefined.");
+    }
+
+    console.log("[event-listeners.js] Attempting to apply initial audio profile settings..."); // DEBUG
+    if (typeof applyAudioProfileSettings === 'function' && typeof initialAudioProfile !== 'undefined') {
+        applyAudioProfileSettings(initialAudioProfile);
+    } else {
+        if(typeof applyAudioProfileSettings !== 'function') console.error("[event-listeners.js] applyAudioProfileSettings function is not defined!");
+        if(typeof initialAudioProfile === 'undefined') console.error("[event-listeners.js] initialAudioProfile variable is not defined!");
+    }
+
+    // --- NEW: Initialize Audio Profile System ---
+    if (typeof populateAudioProfileSelector === 'function') {
+        populateAudioProfileSelector(); // Fill the dropdown
+    }
+    if (audioProfileSelect && typeof initialAudioProfile !== 'undefined') {
+        audioProfileSelect.value = initialAudioProfile; // Set to default profile
+    }
+    // Apply settings for the initial profile (could be 'manual' or a preset)
+    // This must be called *after* Opus sliders are set to their initial values,
+    // so if initial profile is 'manual', it respects them. If it's a preset, it overrides them.
+    if (typeof applyAudioProfileSettings === 'function' && typeof initialAudioProfile !== 'undefined') {
+        applyAudioProfileSettings(initialAudioProfile);
     }
     // --- END Initialize NEW Opus Advanced Controls ---
 

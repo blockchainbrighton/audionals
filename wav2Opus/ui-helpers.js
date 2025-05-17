@@ -55,6 +55,7 @@ const enableConvertButtonIfNeeded = () => {
   return !convertEnabled; // Return true if convert button is disabled
 };
 
+
 /**
  * Updates the estimated file size display based on current settings and duration.
  * Assumes relevant DOM elements (spans, sliders, radios) and fileDuration are accessible.
@@ -137,6 +138,91 @@ const updateQualityDisplays = () => {
 
   // Recalculate and display estimate for the now-visible format
   updateEstimatedSize();
+};
+
+/**
+ * Populates the audio profile selector dropdown.
+ * Assumes audioProfileSelect (from dom-elements.js) and audioProfiles (from config-state.js) are available.
+ */
+const populateAudioProfileSelector = () => {
+    console.log("[ui-helpers.js] populateAudioProfileSelector called."); // DEBUG
+    if (!audioProfileSelect || typeof audioProfiles === 'undefined') {
+        console.error("[ui-helpers.js] Audio profile select element or profiles data not found.", {
+            audioProfileSelectExists: !!audioProfileSelect,
+            audioProfilesType: typeof audioProfiles
+        });
+        return;
+    }
+    audioProfileSelect.innerHTML = ''; // Clear existing options
+    console.log("[ui-helpers.js] audioProfiles data:", audioProfiles); // DEBUG
+
+    let optionCount = 0;
+    for (const profileKey in audioProfiles) {
+        // console.log(`[ui-helpers.js] Processing profileKey: ${profileKey}`, audioProfiles[profileKey]); // DEBUG (can be verbose)
+        if (Object.hasOwnProperty.call(audioProfiles, profileKey)) { // Good practice for-in loop
+            const option = document.createElement('option');
+            option.value = profileKey;
+            option.textContent = audioProfiles[profileKey].displayName;
+            audioProfileSelect.appendChild(option);
+            optionCount++;
+        }
+    }
+    console.log(`[ui-helpers.js] Added ${optionCount} options to audioProfileSelect.`); // DEBUG
+    if (optionCount === 0) {
+        console.warn("[ui-helpers.js] No options were added to the audio profile selector. Check audioProfiles data.");
+    }
+};
+
+/**
+ * Updates the displayed description for the currently selected audio profile.
+ * @param {string} profileKey - The key of the selected profile (e.g., 'manual', 'voice_clear').
+ * Assumes audioProfileDescriptionEl and audioProfiles are available.
+ */
+const updateAudioProfileDescription = (profileKey) => {
+    if (!audioProfileDescriptionEl || typeof audioProfiles === 'undefined' || !audioProfiles[profileKey]) {
+        if(audioProfileDescriptionEl) audioProfileDescriptionEl.textContent = 'Profile description not available.';
+        return;
+    }
+    audioProfileDescriptionEl.textContent = audioProfiles[profileKey].description || '';
+};
+
+/**
+ * Applies the settings of a selected audio profile to the Opus UI controls.
+ * @param {string} profileKey - The key of the selected profile.
+ * Assumes Opus UI elements, audioProfiles, and updateEstimatedSize are available.
+ */
+const applyAudioProfileSettings = (profileKey) => {
+    if (typeof audioProfiles === 'undefined' || !audioProfiles[profileKey]) {
+        console.warn(`Audio profile "${profileKey}" not found. No settings applied.`);
+        updateAudioProfileDescription(profileKey); // Update description to an error or default
+        return;
+    }
+
+    const profile = audioProfiles[profileKey];
+    updateAudioProfileDescription(profileKey); // Update description first
+
+    if (profileKey !== 'manual' && profile.opus) {
+        // Apply profile settings to UI controls
+        if (opusBitrateSlider) opusBitrateSlider.value = profile.opus.bitrate;
+        if (opusBitrateValueSpan) opusBitrateValueSpan.textContent = `${profile.opus.bitrate} kbps`;
+
+        if (opusVbrModeSelect) opusVbrModeSelect.value = profile.opus.vbr;
+
+        if (opusCompressionLevelSlider) opusCompressionLevelSlider.value = profile.opus.compressionLevel;
+        if (opusCompressionLevelValueSpan) opusCompressionLevelValueSpan.textContent = profile.opus.compressionLevel.toString();
+
+        if (opusApplicationSelect) opusApplicationSelect.value = profile.opus.application;
+    }
+    // If 'manual', UI controls are not changed here; they reflect current manual settings.
+    // Or, if you want 'manual' to reset to initial defaults:
+    // else if (profileKey === 'manual') {
+    //     if (opusBitrateSlider) opusBitrateSlider.value = initialOpusBitrate;
+    //     if (opusBitrateValueSpan) opusBitrateValueSpan.textContent = `${initialOpusBitrate} kbps`;
+    //     // ... reset other Opus controls to their initial values ...
+    // }
+
+
+    updateEstimatedSize(); // Recalculate estimated size with new settings
 };
 
 
