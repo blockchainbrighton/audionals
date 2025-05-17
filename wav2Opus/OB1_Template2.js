@@ -41,7 +41,7 @@ function generateHtml(imageBase64Data, audioBase64Data, instrument, note, freque
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OB1 - Audional Art</title>
+    <title>Audional Art Inscription Code Generator</title>
     <link rel="stylesheet" href="style.css"> <!-- Common style for both player types -->
 </head>
 <body>

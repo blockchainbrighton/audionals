@@ -233,7 +233,7 @@ const initializeUIState = () => {
     // Disable Generate OB1 button initially
     // (This might also be handled within ob1-generator.js checkGenerateButton)
     const generateOb1Btn = document.getElementById('generateOB1Button');
-    if(generateOb1Btn) generateOb1Btn.disabled = true;
+    if(generateOb1Btn) generateOb1Btn.disabled = false;
 
     console.log("UI state initialized.");
 };

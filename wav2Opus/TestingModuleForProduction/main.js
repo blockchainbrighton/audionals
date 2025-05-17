@@ -13,6 +13,11 @@ const MIN_TEMPO = 1, MAX_TEMPO = 400,
       MIN_VOLUME = 0, MAX_VOLUME = 1.5,
       MIN_MULT = 1, MAX_MULT = 8;
 
+// Default prefixes for Base64 data
+const DEFAULT_IMAGE_MIME_TYPE = 'image/jpeg'; // Or make this configurable if needed
+const DEFAULT_AUDIO_MIME_TYPE = 'audio/opus';
+
+
 /* ------------------------------------------------------------------ */
 /*  🔑 BOOTSTRAP – ex‑app.js logic                                     */
 /* ------------------------------------------------------------------ */
@@ -80,12 +85,27 @@ function findElements () {
   return true;
 }
 
-function validateAndFormatDataSource (data, prefix, name) {
+/**
+ * Validates and formats a data source, expecting Base64 data.
+ * Adds a data URI prefix if not already present.
+ * @param {string} data The Base64 string.
+ * @param {string} defaultPrefix Default data URI prefix (e.g., 'data:image/jpeg;base64,').
+ * @param {string} sourceName For logging.
+ * @returns {string} The formatted data URI string.
+ * @throws {Error} If data is invalid.
+ */
+function validateAndFormatBase64DataSource (data, defaultPrefix, sourceName) {
   if (!data || typeof data !== 'string' || data.startsWith('/*')) {
-    throw new Error(`Missing or invalid ${name}`);
+    throw new Error(`Missing or invalid ${sourceName}`);
   }
-  return data.startsWith('data:') ? data : prefix + data;
+  // If it already has a data URI prefix, use it as is.
+  if (data.startsWith('data:')) {
+    return data;
+  }
+  // Otherwise, add the default prefix.
+  return defaultPrefix + data;
 }
+
 
 function handleSliderInput (event, audioSetter, uiUpdater, parser = parseFloat) {
   const s   = event.target,
@@ -158,34 +178,165 @@ async function initializeApp () {
   ui.init?.();
   ui.clearError();
 
-  let imageSrc, audioSrc;
-  try {
-    imageSrc = validateAndFormatDataSource(imageBase64,
-      'data:image/jpeg;base64,', 'imageBase64');
-    audioSrc = validateAndFormatDataSource(audioBase64_Opus,
-      'data:audio/opus;base64,', 'audioBase64_Opus');
-    ui.setImageSource(imageSrc);
-  } catch (err) {
-    ui.showError(err.message);
-    return;
+  let finalImageSrc = null;
+  let finalAudioSrc = null; // This will be Base64 data URI for audioProcessor
+
+  const imageMimePrefix = `data:${DEFAULT_IMAGE_MIME_TYPE};base64,`;
+  const audioMimePrefix = `data:${DEFAULT_AUDIO_MIME_TYPE};base64,`;
+
+  // --- IMAGE DATA LOADING ---
+  console.log("Attempting to load image data...");
+
+  // 1. Check imageBase64
+  console.log("Checking for global 'imageBase64'...");
+  // Ensure global variables are checked safely
+  const _imageBase64 = typeof imageBase64 !== 'undefined' ? imageBase64 : null;
+  if (_imageBase64) {
+    try {
+      finalImageSrc = validateAndFormatBase64DataSource(_imageBase64, imageMimePrefix, 'imageBase64');
+      console.log("Image data SUCCESS: Found and validated 'imageBase64'. Preview:", finalImageSrc.substring(0, 60) + "...");
+    } catch (e) {
+      console.warn("Image data FAILED: Validating 'imageBase64':", e.message);
+      finalImageSrc = null;
+    }
+  } else {
+    console.log("Image data INFO: 'imageBase64' not found or empty.");
   }
 
+  // 2. If not found, check imageURL
+  if (!finalImageSrc) {
+    console.log("Checking for global 'imageURL'...");
+    const _imageURL = typeof imageURL !== 'undefined' ? imageURL : null;
+    if (_imageURL && typeof _imageURL === 'string' && !_imageURL.startsWith('/*') && _imageURL.trim() !== '') {
+      finalImageSrc = _imageURL; // Direct URL
+      console.log("Image data SUCCESS: Found URL in 'imageURL':", finalImageSrc);
+    } else {
+      console.log("Image data INFO: 'imageURL' not found, empty, or invalid.");
+    }
+  }
+
+  // 3. If not found, check imageScript (assuming it's Base64)
+  if (!finalImageSrc) {
+    console.log("Checking for global 'imageScript' (expected as Base64)...");
+    const _imageScript = typeof imageScript !== 'undefined' ? imageScript : null;
+    if (_imageScript) {
+      try {
+        finalImageSrc = validateAndFormatBase64DataSource(_imageScript, imageMimePrefix, 'imageScript (as Base64)');
+        console.log("Image data SUCCESS: Found and validated 'imageScript' (as Base64). Preview:", finalImageSrc.substring(0, 60) + "...");
+      } catch (e) {
+        console.warn("Image data FAILED: Validating 'imageScript' (as Base64):", e.message);
+        finalImageSrc = null;
+      }
+    } else {
+      console.log("Image data INFO: 'imageScript' not found or empty.");
+    }
+  }
+
+  if (!finalImageSrc) {
+    ui.showError("No image data source found (checked imageBase64, imageURL, imageScript). Image will not be displayed.");
+    console.error("Image data CRITICAL: No valid image source could be loaded.");
+    ui.setImageSource(null); // Tell UI to handle missing image
+  } else {
+    ui.setImageSource(finalImageSrc);
+  }
+
+  // --- AUDIO DATA LOADING ---
+  console.log("Attempting to load audio data...");
+
+  // 1. Check audioBase64_Opus
+  console.log("Checking for global 'audioBase64_Opus'...");
+  const _audioBase64_Opus = typeof audioBase64_Opus !== 'undefined' ? audioBase64_Opus : null;
+  if (_audioBase64_Opus) {
+    try {
+      finalAudioSrc = validateAndFormatBase64DataSource(_audioBase64_Opus, audioMimePrefix, 'audioBase64_Opus');
+      console.log("Audio data SUCCESS: Found and validated 'audioBase64_Opus'. Preview:", finalAudioSrc.substring(0, 60) + "...");
+    } catch (e) {
+      console.warn("Audio data FAILED: Validating 'audioBase64_Opus':", e.message);
+      finalAudioSrc = null;
+    }
+  } else {
+    console.log("Audio data INFO: 'audioBase64_Opus' not found or empty.");
+  }
+
+  // 2. If not found, check audioURL
+  if (!finalAudioSrc) {
+    console.log("Checking for global 'audioURL'...");
+    const _audioURL = typeof audioURL !== 'undefined' ? audioURL : null;
+    if (_audioURL && typeof _audioURL === 'string' && !_audioURL.startsWith('/*') && _audioURL.trim() !== '') {
+      console.log("Audio data INFO: Found URL in 'audioURL'. Attempting to fetch:", _audioURL);
+      try {
+        const response = await fetch(_audioURL);
+        if (!response.ok) {
+          throw new Error(`HTTP error ${response.status} while fetching from ${_audioURL}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        // Determine MIME type from response headers if possible, otherwise use default
+        const contentType = response.headers.get("content-type") || DEFAULT_AUDIO_MIME_TYPE;
+        console.log(`Audio data INFO: Fetched from URL. Content-Type: ${contentType}`);
+
+        let binary = '';
+        const bytes = new Uint8Array(arrayBuffer);
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64String = window.btoa(binary);
+        finalAudioSrc = `data:${contentType};base64,` + base64String;
+        console.log("Audio data SUCCESS: Fetched and converted audio from URL to Base64. Preview:", finalAudioSrc.substring(0, 60) + "...");
+      } catch (e) {
+        console.error("Audio data FAILED: Fetching or processing 'audioURL':", e);
+        ui.showError(`Failed to load audio from URL '${_audioURL}': ${e.message}`);
+        finalAudioSrc = null;
+      }
+    } else {
+      console.log("Audio data INFO: 'audioURL' not found, empty, or invalid.");
+    }
+  }
+
+  // 3. If not found, check audioScript (assuming it's Base64)
+  if (!finalAudioSrc) {
+    console.log("Checking for global 'audioScript' (expected as Base64)...");
+    const _audioScript = typeof audioScript !== 'undefined' ? audioScript : null;
+    if (_audioScript) {
+      try {
+        finalAudioSrc = validateAndFormatBase64DataSource(_audioScript, audioMimePrefix, 'audioScript (as Base64)');
+        console.log("Audio data SUCCESS: Found and validated 'audioScript' (as Base64). Preview:", finalAudioSrc.substring(0, 60) + "...");
+      } catch (e) {
+        console.warn("Audio data FAILED: Validating 'audioScript' (as Base64):", e.message);
+        finalAudioSrc = null;
+      }
+    } else {
+      console.log("Audio data INFO: 'audioScript' not found or empty.");
+    }
+  }
+
+  if (!finalAudioSrc) {
+    ui.showError("No audio data source found (checked audioBase64_Opus, audioURL, audioScript). Audio features will be disabled.");
+    console.error("Audio data CRITICAL: No valid audio source could be loaded. Disabling audio-dependent features.");
+    ui.disableControls(); // Ensure all controls are disabled if audio is critical
+    return; // Stop further initialization as audio is essential
+  }
+
+  // --- Setup initial parameters and initialize audio ---
   const ini = {
-    tempo : clamp(+tempoSlider.value || DEFAULT_TEMPO, MIN_TEMPO, MAX_TEMPO),
-    pitch : clamp(+pitchSlider.value || DEFAULT_PITCH, MIN_PITCH, MAX_PITCH),
-    volume: clamp(+volumeSlider.value || DEFAULT_VOLUME, MIN_VOLUME, MAX_VOLUME),
-    mult  : clamp(+multiplierSlider.value || DEFAULT_MULTIPLIER,
-                  MIN_MULT, MAX_MULT)
+    tempo : clamp(+(tempoSlider?.value) || DEFAULT_TEMPO, MIN_TEMPO, MAX_TEMPO),
+    pitch : clamp(+(pitchSlider?.value) || DEFAULT_PITCH, MIN_PITCH, MAX_PITCH),
+    volume: clamp(+(volumeSlider?.value) || DEFAULT_VOLUME, MIN_VOLUME, MAX_VOLUME),
+    mult  : clamp(+(multiplierSlider?.value) || DEFAULT_MULTIPLIER, MIN_MULT, MAX_MULT)
   };
 
-  tempoSlider.value      = ini.tempo;
-  pitchSlider.value      = ini.pitch;
-  volumeSlider.value     = ini.volume;
-  multiplierSlider.value = ini.mult;
+  if(tempoSlider) tempoSlider.value = ini.tempo;
+  if(pitchSlider) pitchSlider.value = ini.pitch;
+  if(volumeSlider) volumeSlider.value = ini.volume;
+  if(multiplierSlider) multiplierSlider.value = ini.mult;
 
   midiHandler.init(handleNoteOn, () => {}, handleMidiStateChange);
 
-  if (!(await audio.init(audioSrc, ini.tempo, ini.pitch))) return;
+  if (!(await audio.init(finalAudioSrc, ini.tempo, ini.pitch))) {
+      ui.showError("Failed to initialize audio module. Audio features will be disabled.");
+      console.error("Audio Initialization CRITICAL: audio.init() returned false/failed.");
+      ui.disableControls();
+      return;
+  }
   audio.setVolume(ini.volume);
 
   referencePanel && initReferencePanel(referencePanel);
@@ -201,7 +352,8 @@ async function initializeApp () {
   ui.updateScheduleMultiplierDisplay(ini.mult);
   ui.updateLoopButton(audio.getLoopingState());
   ui.updateReverseButton(audio.getReverseState());
-  ui.enableControls();
+  ui.enableControls(); // Enable controls only if everything initialized successfully
+  console.log("Application initialized successfully.");
 }
 
 function setupEventListeners () {
