@@ -51,27 +51,33 @@ const runFFmpegConversion = async (inputFilename, outputFilename, outputFormat) 
     // Build FFmpeg command
     let cmd = ['-i', inputFilename];
 
-    if (outputFormat === 'opus') {
-        // Use the Opus slider value
+    if (outputFormat === 'opus' || outputFormat === 'webm') { // Common settings for Opus and WebM (Opus)
         const bitrate = opusBitrateSlider ? opusBitrateSlider.value : initialOpusBitrate;
-        // Opus command: -c:a libopus -b:a <bitrate>k
-        cmd.push('-c:a', 'libopus', '-b:a', `${bitrate}k`, outputFilename);
+        const vbrMode = opusVbrModeSelect ? opusVbrModeSelect.value : initialOpusVbrMode;
+        const compressionLevel = opusCompressionLevelSlider ? opusCompressionLevelSlider.value : initialOpusCompressionLevel;
+        const application = opusApplicationSelect ? opusApplicationSelect.value : initialOpusApplication;
 
-    } else if (outputFormat === 'webm') { // Changed from 'caf'
-        // Use the Opus slider value (as UI is reused)
-        const bitrate = opusBitrateSlider ? opusBitrateSlider.value : initialOpusBitrate;
-        // WebM command using Opus codec: -c:a libopus -b:a <bitrate>k
-        // FFmpeg automatically handles the WebM container when the output filename ends in .webm
-        cmd.push('-c:a', 'libopus', '-b:a', `${bitrate}k`, outputFilename);
-        console.info("Using libopus codec for WebM container.");
-        // Note: '-vn' (disable video) is often implied for .webm audio but explicit doesn't hurt
-        // cmd.push('-vn', '-c:a', 'libopus', '-b:a', `${bitrate}k`, outputFilename);
+        cmd.push('-c:a', 'libopus');
+        cmd.push('-b:a', `${bitrate}k`);
+        
+        // VBR mode: FFmpeg's libopus uses 0 for 'off', 1 for 'on', 2 for 'constrained'
+        let vbrValue = '1'; // Default to 'on'
+        if (vbrMode === 'off') vbrValue = '0';
+        else if (vbrMode === 'constrained') vbrValue = '2';
+        cmd.push('-vbr', vbrValue);
+
+        cmd.push('-compression_level', compressionLevel.toString());
+        cmd.push('-application', application);
+
+        if (outputFormat === 'webm') {
+            console.info("Using libopus codec for WebM container with specified settings.");
+            // FFmpeg automatically handles the WebM container. '-vn' might be added if source could have video.
+        }
+        cmd.push(outputFilename);
 
     } else { // MP3 (default fallback)
         const quality = mp3QualitySlider ? mp3QualitySlider.value : initialMp3Quality; // Slider value 0-9
-        // Assuming label "0=Best... 9=Worst..." maps slider 0 to FFmpeg -q:a 0 (Best)
         const ffmpegQuality = parseInt(quality, 10);
-        // If label means Slider 0 = Worst -> FFmpeg 9, use: const ffmpegQuality = 9 - parseInt(quality, 10);
         cmd.push('-c:a', 'libmp3lame', '-q:a', ffmpegQuality.toString(), outputFilename);
     }
 

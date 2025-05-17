@@ -13,5 +13,13 @@ let originalAudioElement = null; // Reference to the <audio> element for the ori
 const initialMp3Quality = 4; // VBR quality setting (0-9, FFmpeg -q:a maps 9=worst to 0=best)
 const initialOpusBitrate = 96; // kbps (Used for Opus and WebM output)
 
+
+// New Opus-specific settings
+const initialOpusVbrMode = 'on'; // 'on', 'off', 'constrained'
+const initialOpusCompressionLevel = 10; // 0-10
+const initialOpusApplication = 'audio'; // 'audio', 'voip', 'lowdelay'
+
+
+
 // Removed initialCafBitrate
 // const initialCafBitrate = 128;

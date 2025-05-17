@@ -13,6 +13,12 @@ const mp3QualitySlider = document.getElementById('mp3Quality');
 const mp3QualityValueSpan = document.getElementById('mp3QualityValue');
 const opusBitrateSlider = document.getElementById('opusBitrate');   // Reused for WebM
 const opusBitrateValueSpan = document.getElementById('opusBitrateValue'); // Reused for WebM
+// New Opus controls
+const opusVbrModeSelect = document.getElementById('opusVbrMode');
+const opusCompressionLevelSlider = document.getElementById('opusCompressionLevel');
+const opusCompressionLevelValueSpan = document.getElementById('opusCompressionLevelValue');
+const opusApplicationSelect = document.getElementById('opusApplication');
+
 const estSizeMp3Span = document.getElementById('estSizeMp3');
 const estSizeOpusSpan = document.getElementById('estSizeOpus');
 const estSizeWebmSpan = document.getElementById('estSizeWebm');
