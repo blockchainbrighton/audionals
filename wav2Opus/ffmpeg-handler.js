@@ -18,7 +18,7 @@ const loadFFmpeg = async () => {
     const corePath = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js';
 
     ffmpeg = createFFmpeg({
-        log: true, // Enable FFmpeg logging in console
+        log: false, // Enable FFmpeg logging in console
         corePath: corePath
     });
 
