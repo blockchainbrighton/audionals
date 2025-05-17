@@ -63,11 +63,8 @@ const setupEventListeners = () => {
     // (Assuming opusVbrModeSelect, opusCompressionLevelSlider, opusCompressionLevelValueSpan, opusApplicationSelect are globally available or selected from dom-elements.js)
 
     // Opus VBR Mode Select
-    if (window.opusVbrModeSelect) { // Using window scope for clarity, assuming global or from dom-elements.js
+    if (window.opusVbrModeSelect) { 
         opusVbrModeSelect.addEventListener('change', () => {
-            // This setting primarily affects quality/encoding for a given bitrate.
-            // Re-calculating estimated size (which is bitrate-dependent) isn't strictly necessary
-            // unless a more complex estimation considering VBR mode is implemented.
             // console.log("Opus VBR Mode changed to:", opusVbrModeSelect.value);
         });
     } else {
@@ -78,8 +75,6 @@ const setupEventListeners = () => {
     if (window.opusCompressionLevelSlider && window.opusCompressionLevelValueSpan) {
         opusCompressionLevelSlider.addEventListener('input', (e) => {
             opusCompressionLevelValueSpan.textContent = e.target.value;
-            // Compression level mainly affects encoding time vs. slight compression efficiency.
-            // It doesn't change file size as directly as bitrate.
             // console.log("Opus Compression Level changed to:", e.target.value);
         });
     } else {
@@ -89,8 +84,6 @@ const setupEventListeners = () => {
     // Opus Application Select
     if (window.opusApplicationSelect) {
         opusApplicationSelect.addEventListener('change', () => {
-            // This optimizes encoding for content type (audio, voip, lowdelay).
-            // Does not directly change size calculation based on bitrate.
             // console.log("Opus Application changed to:", opusApplicationSelect.value);
         });
     } else {
@@ -107,9 +100,12 @@ const setupEventListeners = () => {
     }
 
     // --- Base64 Button Listeners ---
-    // Audio Base64 copy/download
-    if (copyBase64Btn) copyBase64Btn.addEventListener('click', handleCopyBase64);
-    if (downloadBase64Btn) downloadBase64Btn.addEventListener('click', handleDownloadBase64);
+    // The actual functionality for copyBase64Btn and downloadBase64Btn
+    // is set up within setupBase64DisplayAndActions in base64-handler.js
+    // No need to add listeners for them here. The buttons will be enabled/disabled
+    // and their onclick handlers assigned dynamically by that function.
+    // if (copyBase64Btn) copyBase64Btn.addEventListener('click', handleCopyBase64); // REMOVE THIS LINE
+    // if (downloadBase64Btn) downloadBase64Btn.addEventListener('click', handleDownloadBase64); // REMOVE THIS LINE
 
 
     // --- Info Popups Listeners ---
@@ -175,7 +171,7 @@ const initializeUIState = () => {
     }
 
     // --- Initialize NEW Opus Advanced Controls ---
-    if (window.opusVbrModeSelect) { // Use window scope if not imported from dom-elements.js
+    if (window.opusVbrModeSelect) { 
         opusVbrModeSelect.value = initialOpusVbrMode; // Set from config
     }
     if (window.opusCompressionLevelSlider && window.opusCompressionLevelValueSpan) {
