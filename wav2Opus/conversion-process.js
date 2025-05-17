@@ -22,7 +22,7 @@ const runConversion = async () => {
     updateStatus('Preparing file for FFmpeg...');
   
     // --- Determine Output Format and Filenames ---
-    const inputFilename = "input.wav";
+    const inputFilename = "input_audio_file"; // More generic
     const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
     // Default to mp3, handle mp3, opus, and webm
     const outputFormat = selectedFormatRadio ? selectedFormatRadio.value : 'mp3';
