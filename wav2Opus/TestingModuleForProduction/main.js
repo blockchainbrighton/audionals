@@ -187,20 +187,20 @@ async function initializeApp () {
   // --- IMAGE DATA LOADING ---
   console.log("Attempting to load image data...");
 
-  // 1. Check imageBase64
-  console.log("Checking for global 'imageBase64'...");
+  // 1. Check audionalVisualBase64
+  console.log("Checking for global 'audionalVisualBase64'...");
   // Ensure global variables are checked safely
-  const _imageBase64 = typeof imageBase64 !== 'undefined' ? imageBase64 : null;
-  if (_imageBase64) {
+  const _audionalVisualBase64 = typeof audionalVisualBase64 !== 'undefined' ? audionalVisualBase64 : null;
+  if (_audionalVisualBase64) {
     try {
-      finalImageSrc = validateAndFormatBase64DataSource(_imageBase64, imageMimePrefix, 'imageBase64');
-      console.log("Image data SUCCESS: Found and validated 'imageBase64'. Preview:", finalImageSrc.substring(0, 60) + "...");
+      finalImageSrc = validateAndFormatBase64DataSource(_audionalVisualBase64, imageMimePrefix, 'audionalVisualBase64');
+      console.log("Image data SUCCESS: Found and validated 'audionalVisualBase64'. Preview:", finalImageSrc.substring(0, 60) + "...");
     } catch (e) {
-      console.warn("Image data FAILED: Validating 'imageBase64':", e.message);
+      console.warn("Image data FAILED: Validating 'audionalVisualBase64':", e.message);
       finalImageSrc = null;
     }
   } else {
-    console.log("Image data INFO: 'imageBase64' not found or empty.");
+    console.log("Image data INFO: 'audionalVisualBase64' not found or empty.");
   }
 
   // 2. If not found, check imageURL
@@ -233,7 +233,7 @@ async function initializeApp () {
   }
 
   if (!finalImageSrc) {
-    ui.showError("No image data source found (checked imageBase64, imageURL, imageScript). Image will not be displayed.");
+    ui.showError("No image data source found (checked audionalVisualBase64, imageURL, imageScript). Image will not be displayed.");
     console.error("Image data CRITICAL: No valid image source could be loaded.");
     ui.setImageSource(null); // Tell UI to handle missing image
   } else {
@@ -243,19 +243,19 @@ async function initializeApp () {
   // --- AUDIO DATA LOADING ---
   console.log("Attempting to load audio data...");
 
-  // 1. Check audioBase64_Opus
-  console.log("Checking for global 'audioBase64_Opus'...");
-  const _audioBase64_Opus = typeof audioBase64_Opus !== 'undefined' ? audioBase64_Opus : null;
-  if (_audioBase64_Opus) {
+  // 1. Check audionalBase64_Opus
+  console.log("Checking for global 'audionalBase64_Opus'...");
+  const _audionalBase64_Opus = typeof audionalBase64_Opus !== 'undefined' ? audionalBase64_Opus : null;
+  if (_audionalBase64_Opus) {
     try {
-      finalAudioSrc = validateAndFormatBase64DataSource(_audioBase64_Opus, audioMimePrefix, 'audioBase64_Opus');
-      console.log("Audio data SUCCESS: Found and validated 'audioBase64_Opus'. Preview:", finalAudioSrc.substring(0, 60) + "...");
+      finalAudioSrc = validateAndFormatBase64DataSource(_audionalBase64_Opus, audioMimePrefix, 'audionalBase64_Opus');
+      console.log("Audio data SUCCESS: Found and validated 'audionalBase64_Opus'. Preview:", finalAudioSrc.substring(0, 60) + "...");
     } catch (e) {
-      console.warn("Audio data FAILED: Validating 'audioBase64_Opus':", e.message);
+      console.warn("Audio data FAILED: Validating 'audionalBase64_Opus':", e.message);
       finalAudioSrc = null;
     }
   } else {
-    console.log("Audio data INFO: 'audioBase64_Opus' not found or empty.");
+    console.log("Audio data INFO: 'audionalBase64_Opus' not found or empty.");
   }
 
   // 2. If not found, check audioURL
@@ -310,7 +310,7 @@ async function initializeApp () {
   }
 
   if (!finalAudioSrc) {
-    ui.showError("No audio data source found (checked audioBase64_Opus, audioURL, audioScript). Audio features will be disabled.");
+    ui.showError("No audio data source found (checked audionalBase64_Opus, audioURL, audioScript). Audio features will be disabled.");
     console.error("Audio data CRITICAL: No valid audio source could be loaded. Disabling audio-dependent features.");
     ui.disableControls(); // Ensure all controls are disabled if audio is critical
     return; // Stop further initialization as audio is essential

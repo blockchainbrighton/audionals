@@ -1,8 +1,8 @@
 // ob1-generator.js - Handles OB1 generation using the HTML_Template function
 
 // State variables to track the base64 data
-let audioBase64 = null;
-let imageBase64 = null;
+let audionalBase64 = null;
+let audionalVisualBase64 = null;
 
 // DOM element references for the modal (assuming these are correctly fetched at the top of your actual file)
 // const instrumentInput = document.getElementById('instrumentInput');
@@ -48,13 +48,13 @@ function initOB1Generator() {
   window.metadataForm.addEventListener('submit', handleMetadataSubmit);
   window.cancelMetadataBtn.addEventListener('click', hideMetadataModal);
 
-  document.addEventListener('audioBase64Generated', function(e) {
-    console.log("Received audioBase64Generated event");
-    updateAudioBase64(e.detail.base64Data);
+  document.addEventListener('audionalBase64Generated', function(e) {
+    console.log("Received audionalBase64Generated event");
+    updateaudionalBase64(e.detail.base64Data);
   });
-  document.addEventListener('imageBase64Generated', function(e) {
-    console.log("Received imageBase64Generated event");
-    updateImageBase64(e.detail.base64Data);
+  document.addEventListener('audionalVisualBase64Generated', function(e) {
+    console.log("Received audionalVisualBase64Generated event");
+    updateaudionalVisualBase64(e.detail.base64Data);
   });
 
   checkGenerateButtonState();
@@ -106,8 +106,8 @@ function handleMetadataSubmit(event) {
 /**
  * Updates the internal audio base64 data state.
  */
-function updateAudioBase64(base64Data) {
-  audioBase64 = base64Data; // This is a global variable in this script's scope
+function updateaudionalBase64(base64Data) {
+  audionalBase64 = base64Data; // This is a global variable in this script's scope
   console.log("Audio Base64 state updated.");
   checkGenerateButtonState();
 }
@@ -115,8 +115,8 @@ function updateAudioBase64(base64Data) {
 /**
  * Updates the internal image base64 data state.
  */
-function updateImageBase64(base64Data) {
-  imageBase64 = base64Data; // This is a global variable in this script's scope
+function updateaudionalVisualBase64(base64Data) {
+  audionalVisualBase64 = base64Data; // This is a global variable in this script's scope
   console.log("Image Base64 state updated.");
   checkGenerateButtonState();
 }
@@ -125,23 +125,23 @@ function updateImageBase64(base64Data) {
  * Checks if audio and image data are available and enables/disables the generate button.
  */
 function checkGenerateButtonState() {
-    const audioReady = typeof audioBase64 === 'string' && audioBase64.trim() !== '';
+    const audioReady = typeof audionalBase64 === 'string' && audionalBase64.trim() !== '';
     // Image is optional for OB1, so we only strictly require audio for the button
     // However, your current check requires both. Let's adjust based on your intent.
     // If image is truly optional, the condition should primarily depend on audio.
     // For now, keeping your original logic that requires both (audioReady && imageReady).
-    const imageActuallyReady = typeof imageBase64 === 'string' && imageBase64.trim() !== '';
+    const imageActuallyReady = typeof audionalVisualBase64 === 'string' && audionalVisualBase64.trim() !== '';
 
 
     // The generateHtmlButton (now window.generateHtmlButton) should be enabled if EITHER:
     // 1. Audio is ready AND Image is ready
     // OR
-    // 2. Audio is ready AND Image is NOT required (i.e., imageBase64 can be null/empty string for HTML_Template)
+    // 2. Audio is ready AND Image is NOT required (i.e., audionalVisualBase64 can be null/empty string for HTML_Template)
     // For simplicity, if your template *always* expects an image string (even if empty),
-    // then imageBase64 can just be an empty string if no image is selected.
-    // The event listener for 'imageBase64Generated' will set imageBase64.
-    // If no image is converted, imageBase64 remains null or its initial value.
-    // Let's assume the HTML_Template can handle an empty string for imageBase64Data.
+    // then audionalVisualBase64 can just be an empty string if no image is selected.
+    // The event listener for 'audionalVisualBase64Generated' will set audionalVisualBase64.
+    // If no image is converted, audionalVisualBase64 remains null or its initial value.
+    // Let's assume the HTML_Template can handle an empty string for audionalVisualBase64Data.
     // So the button should be enabled if audio is ready. Image is a "nice to have".
 
     if (audioReady) { // Primary condition: Audio must be ready
@@ -169,7 +169,7 @@ function checkGenerateButtonState() {
 function generateAndDownloadOb1File(title, instrument, note, frequency, isLoop, bpm) {
   console.log("Starting OB1 file generation with metadata:", { title, instrument, note, frequency, isLoop, bpm });
 
-  if (!audioBase64) { // Check for audioBase64 (the global in this script)
+  if (!audionalBase64) { // Check for audionalBase64 (the global in this script)
     console.error("Cannot generate OB1: Missing audio Base64 data.");
     alert("Error: Missing audio Base64 data. Please ensure audio has been converted.");
     return;
@@ -182,11 +182,11 @@ function generateAndDownloadOb1File(title, instrument, note, frequency, isLoop, 
       return;
   }
 
-  const pureAudioBase64 = stripDataURIPrefix(audioBase64);
-  // ImageBase64 can be null or empty if no image was processed. The template should handle this.
-  const pureImageBase64 = imageBase64 ? stripDataURIPrefix(imageBase64) : '';
+  const pureaudionalBase64 = stripDataURIPrefix(audionalBase64);
+  // audionalVisualBase64 can be null or empty if no image was processed. The template should handle this.
+  const pureaudionalVisualBase64 = audionalVisualBase64 ? stripDataURIPrefix(audionalVisualBase64) : '';
 
-  if (!pureAudioBase64) { // Audio is essential
+  if (!pureaudionalBase64) { // Audio is essential
     console.error("Error extracting pure Base64 data for audio.");
     alert("Error: Could not prepare audio Base64 data. Please check the console.");
     return;
@@ -202,8 +202,8 @@ function generateAndDownloadOb1File(title, instrument, note, frequency, isLoop, 
       frequency,
       isLoop,
       bpm,
-      pureAudioBase64,    // Audio data
-      pureImageBase64     // Image data (can be empty string)
+      pureaudionalBase64,    // Audio data
+      pureaudionalVisualBase64     // Image data (can be empty string)
   );
 
   if (htmlContent.includes("Error generating Audional")) { // Check for error string from template
@@ -235,5 +235,5 @@ function generateAndDownloadOb1File(title, instrument, note, frequency, isLoop, 
 document.addEventListener('DOMContentLoaded', initOB1Generator);
 
 // Make functions available on window if called from other modules (optional, but can be helpful)
-window.updateAudioBase64 = updateAudioBase64;
-window.updateImageBase64 = updateImageBase64;
+window.updateaudionalBase64 = updateaudionalBase64;
+window.updateaudionalVisualBase64 = updateaudionalVisualBase64;

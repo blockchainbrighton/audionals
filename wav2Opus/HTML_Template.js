@@ -10,13 +10,13 @@
  * @param {string} frequency - The frequency value provided by the user.
  * @param {boolean} isLoop - Whether the audio is a loop.
  * @param {string} bpm - The BPM if it's a loop.
- * @param {string} audioBase64Data - The pure Base64 encoded string for the Opus audio (NO prefix).
- * @param {string} imageBase64Data - The pure Base64 encoded string for the image (NO prefix). Can be empty.
+ * @param {string} audionalBase64Data - The pure Base64 encoded string for the Opus audio (NO prefix).
+ * @param {string} audionalVisualBase64Data - The pure Base64 encoded string for the image (NO prefix). Can be empty.
  * @returns {string} A string containing the complete, streamlined HTML document.
  */
-function HTML_Template(title, instrument, note, frequency, isLoop, bpm, audioBase64Data, imageBase64Data) {
-    if (typeof audioBase64Data !== 'string' || audioBase64Data.trim() === '') {
-      console.error("HTML_Template Error: audioBase64Data must be a non-empty string.");
+function HTML_Template(title, instrument, note, frequency, isLoop, bpm, audionalBase64Data, audionalVisualBase64Data) {
+    if (typeof audionalBase64Data !== 'string' || audionalBase64Data.trim() === '') {
+      console.error("HTML_Template Error: audionalBase64Data must be a non-empty string.");
       return `<!DOCTYPE html><html><head><title>Error</title></head><body><h1>Error generating Audional: Invalid or missing audio data.</h1></body></html>`;
     }
 
@@ -27,7 +27,7 @@ function HTML_Template(title, instrument, note, frequency, isLoop, bpm, audioBas
     const metaIsLoop = isLoop ? 'Yes' : 'No';
     const metaBPM = isLoop && bpm ? bpm : 'N/A';
 
-    const hasImage = typeof imageBase64Data === 'string' && imageBase64Data.trim() !== '';
+    const hasImage = typeof audionalVisualBase64Data === 'string' && audionalVisualBase64Data.trim() !== '';
 
     // Determine player scripts based on whether an image is present
     // This logic assumes your player scripts (app.js, main.js, playButton.js) are in the same directory
@@ -73,8 +73,8 @@ function HTML_Template(title, instrument, note, frequency, isLoop, bpm, audioBas
     </div>
 
     <script>
-        window.imageBase64 = \`${imageBase64Data || ''}\`;
-        window.audioBase64_Opus = \`${audioBase64Data}\`;
+        window.audionalVisualBase64 = \`${audionalVisualBase64Data || ''}\`;
+        window.audionalBase64_Opus = \`${audionalBase64Data}\`;
     <\/script>
 
     ${playerScripts}
