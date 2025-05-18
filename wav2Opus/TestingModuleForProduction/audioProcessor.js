@@ -1,436 +1,211 @@
-// --- audioProcessor.js — Combined audio processing + timing management module ---
-// This single file replaces the previous `audioProcessor.js` **and** `timingManagement.js`.
-// Public APIs remain identical, so no other modules need to change their imports.
-
+// Refactored audioProcessor.js with integrated timingManagement
 import { base64ToArrayBuffer } from './utils.js';
 import { showError, triggerAnimation } from './uiUpdater.js';
 
-// -----------------------------------------------------------------------------
-// Audio‑side constants & state
-// -----------------------------------------------------------------------------
-const SMOOTH_PARAM_TIME = 0.01; // Time constant for smooth parameter changes
-const A4_MIDI_NOTE = 69,
-      A4_FREQUENCY = 440,
-      SEMITONE_RATIO = 2 ** (1 / 12),
-      MIN_MIDI_NOTE = 21,
-      MAX_MIDI_NOTE = 108;
+const SMOOTH_PARAM_TIME = 0.01, A4_NOTE = 69, A4_FREQ = 440, SEMITONE = 2 ** (1 / 12), MIN_NOTE = 21, MAX_NOTE = 108;
+let audioContext, mainGainNode, decodedBuffer, reversedBuffer, isReversed = false,
+    currentTempo = 78, currentGlobalPitch = 1, currentVolume = 1, originalSampleFrequency,
+    sampleType = 'one-shot', midiNoteToPlaybackRate = new Map(), currentLoopingSource;
 
-let audioContext,
-    mainGainNode,
-    decodedBuffer,
-    reversedBuffer,
-    isReversed = false,
-    currentTempo = 78,
-    currentGlobalPitch = 1,
-    currentVolume = 1,
-    originalSampleFrequency,
-    sampleType = 'one-shot', // Default to 'one-shot'
-    midiNoteToPlaybackRate = new Map(),
-    currentLoopingSource; // Holds the reference to the AudioBufferSourceNode if sampleType is 'loop'
-
-// -----------------------------------------------------------------------------
-// Timing logic (formerly timingManagement.js)  — wrapped in an IIFE to keep
-//  internal state private while preserving the original API surface.
-// -----------------------------------------------------------------------------
 const timingManager = (() => {
-  // --- Constants ---
-  const SCHEDULER_INTERVAL_MS = 25,
-        SCHEDULE_AHEAD_TIME_S = 0.1,
-        LOOP_START_DELAY_S = 0.05;
+  const INTERVAL = 25, AHEAD = 0.1, DELAY = 0.05;
+  let ctx, tempo = 120, pitch = 1, isLooping = false, timeoutId, multiplier = 1,
+      cb, startTime = 0, subBeatCount = 0;
 
-  // --- Module‑level state ---
-  let audioContext = null,
-      currentTempo = 120,
-      currentPitch = 1, // This pitch is for timingManager's own state, not directly used for buffer playback rate here
-      isLooping = false,
-      schedulerTimeoutId = null,
-      scheduleMultiplier = 1,
-      playCallback = null,
-      loopStartTime = 0.0,
-      scheduledSubBeatCounter = 0;
+  const subBeatDur = () => (tempo > 0 && multiplier > 0) ? 60 / tempo / multiplier : 0;
 
-  // --- Helpers ---
-  const _calculateSubBeatDuration = (bpm, mult) => (bpm > 0 && mult > 0) ? (60 / bpm) / mult : 0;
-
-  function _scheduleLoopIterations() {
-    if (!isLooping || !audioContext) return;
-
-    const now = audioContext.currentTime;
-    const scheduleUntil = now + SCHEDULE_AHEAD_TIME_S;
-    const subBeat = _calculateSubBeatDuration(currentTempo, scheduleMultiplier);
-
-    if (subBeat <= 0) {
-      console.error('Invalid sub‑beat duration. Stopping loop.');
-      stopLoop(); // timingManager's stopLoop
-      return;
-    }
-
+  const loop = () => {
+    if (!isLooping || !ctx) return;
+    const now = ctx.currentTime, until = now + AHEAD, dur = subBeatDur();
+    if (!dur) return stop();
     while (true) {
-      const target = loopStartTime + (scheduledSubBeatCounter * subBeat);
-      if (target >= scheduleUntil) break;
-      if (typeof playCallback === 'function') playCallback(target);
-      else { console.error('playCallback missing. Stopping loop.'); stopLoop(); return; } // timingManager's stopLoop
-      scheduledSubBeatCounter++;
+      const t = startTime + subBeatCount * dur;
+      if (t >= until) break;
+      if (typeof cb === 'function') cb(t); else return stop();
+      subBeatCount++;
     }
+    timeoutId = setTimeout(loop, INTERVAL);
+  };
 
-    schedulerTimeoutId = setTimeout(_scheduleLoopIterations, SCHEDULER_INTERVAL_MS);
-  }
+  const stop = (reset = true) => {
+    clearTimeout(timeoutId);
+    timeoutId = null;
+    if (reset) startTime = subBeatCount = 0;
+  };
 
-  function _stopLoopInternal(reset = true) {
-    if (schedulerTimeoutId) clearTimeout(schedulerTimeoutId);
-    schedulerTimeoutId = null;
-    if (reset) loopStartTime = scheduledSubBeatCounter = 0;
-  }
-
-  // --- Public API (mirrors original timingManagement.js exports) ---
-  function init(ctx, tempo, pitch) {
-    if (!(ctx instanceof AudioContext)) throw new Error('Invalid AudioContext supplied to timingManager.init');
-    audioContext   = ctx;
-    currentTempo   = tempo;
-    currentPitch   = pitch; // Store pitch for timingManager state
-    scheduleMultiplier = 1;
-    isLooping      = false;
-    playCallback   = null;
-    _stopLoopInternal(true);
-  }
-
-  function startLoop(cb) { // timingManager's startLoop
-    if (isLooping || !audioContext) { console.warn('TimingManager: Loop already active or audio context unavailable.'); return; }
-    if (typeof cb !== 'function')  { console.error('TimingManager.startLoop requires a callback'); return; }
-
-    isLooping    = true;
-    playCallback = cb;
-    loopStartTime = audioContext.currentTime + LOOP_START_DELAY_S;
-    scheduledSubBeatCounter = 0;
-
-    _scheduleLoopIterations();
-  }
-
-  function stopLoop() { // timingManager's stopLoop
-    if (!isLooping) return;
-    isLooping    = false;
-    playCallback = null; // Clear callback
-    _stopLoopInternal(true);
-  }
-
-  function setTempo(bpm) {
-    bpm = +bpm;
-    if (bpm <= 0 || Number.isNaN(bpm)) return console.warn('Invalid tempo', bpm);
-    const oldTempo = currentTempo;
-    currentTempo = bpm;
-
-    if (isLooping && oldTempo !== bpm) {
-      const cb  = playCallback;
-      const mult= scheduleMultiplier;
-      _stopLoopInternal(false); // Preserve counters for smoother transition if possible, though startLoop resets them
-      scheduleMultiplier = mult; // Restore multiplier
-      startLoop(cb); // This will re-initialize loopStartTime and counters
-    }
-  }
-
-  function setPitch(rate) { // timingManager's setPitch
-    if (rate > 0) currentPitch = rate;
-    else console.warn('Invalid pitch for timingManager', rate);
-  }
-
-  function setScheduleMultiplier(mult) {
-    const m = parseInt(mult, 10);
-    if (!Number.isInteger(m) || m < 1) return console.warn('Invalid schedule multiplier', mult);
-    if (scheduleMultiplier === m) return;
-    
-    const oldMultiplier = scheduleMultiplier;
-    scheduleMultiplier = m;
-
-    // realign schedule during active loop
-    if (isLooping && audioContext && currentTempo > 0 && oldMultiplier !== scheduleMultiplier) {
-        // Restart the scheduler to apply the new multiplier correctly
-        const cb = playCallback;
-        _stopLoopInternal(false); // Stop current scheduling
-        startLoop(cb); // Restart with new multiplier
-    }
-  }
-
-  // Simple getters
-  const getLoopStartTime              = () => loopStartTime;
-  const getCurrentScheduleMultiplier  = () => scheduleMultiplier;
-  const getLoopingState               = () => isLooping;
-  const getCurrentTempo               = () => currentTempo;
-  const getCurrentPitch               = () => currentPitch; // timingManager's pitch
-
-  // Exposed interface
   return {
-    init, startLoop, stopLoop, setTempo, setPitch, setScheduleMultiplier,
-    getCurrentScheduleMultiplier, getLoopStartTime,
-    getLoopingState, getCurrentTempo, getCurrentPitch
+    init: (_ctx, _tempo, _pitch) => {
+      if (!(_ctx instanceof AudioContext)) throw Error('Invalid AudioContext');
+      [ctx, tempo, pitch, multiplier, isLooping, cb] = [_ctx, _tempo, _pitch, 1, false, null];
+      stop();
+    },
+    startLoop: f => {
+      if (isLooping || !ctx || typeof f !== 'function') return;
+      [isLooping, cb, startTime, subBeatCount] = [true, f, ctx.currentTime + DELAY, 0];
+      loop();
+    },
+    stopLoop: () => { if (isLooping) { isLooping = cb = false; stop(); } },
+    setTempo: bpm => {
+      bpm = +bpm;
+      if (bpm <= 0 || Number.isNaN(bpm)) return;
+      const t = tempo;
+      tempo = bpm;
+      if (isLooping && t !== bpm) {
+        const f = cb, m = multiplier;
+        stop(false); multiplier = m; timingManager.startLoop(f);
+      }
+    },
+    setPitch: r => r > 0 ? (pitch = r) : null,
+    setScheduleMultiplier: m => {
+      m = parseInt(m, 10);
+      if (m < 1 || m === multiplier || !Number.isInteger(m)) return;
+      const f = cb;
+      multiplier = m;
+      if (isLooping && ctx && tempo > 0) {
+        stop(false); timingManager.startLoop(f);
+      }
+    },
+    getLoopStartTime: () => startTime,
+    getCurrentScheduleMultiplier: () => multiplier,
+    getLoopingState: () => isLooping,
+    getCurrentTempo: () => tempo,
+    getCurrentPitch: () => pitch
   };
 })();
 
-// -----------------------------------------------------------------------------
-// Audio helpers
-// -----------------------------------------------------------------------------
-async function _ensureContext() {
-  if (!audioContext) { showError('Audio system not ready.'); return false; }
-  if (audioContext.state === 'suspended') {
-    try { await audioContext.resume(); } catch (e) { showError('Could not resume audio context.'); throw e; }
-  }
+const _ensureContext = async () => {
+  if (!audioContext) return showError('Audio system not ready.'), false;
+  if (audioContext.state === 'suspended') try { await audioContext.resume(); } catch (e) { showError('Could not resume audio.'); throw e; }
   return true;
-}
+};
 
-function _selectBuffer() {
+const _selectBuffer = () => {
   const buf = isReversed ? reversedBuffer : decodedBuffer;
-  if (!buf) showError(`Cannot play: ${isReversed ? 'Reversed' : 'Original'} buffer unavailable.`);
-  return buf;
-}
+  return buf || showError(`Cannot play: ${isReversed ? 'Reversed' : 'Original'} buffer unavailable.`);
+};
 
-// Modified _play to clearly distinguish AudioBufferSourceNode's loop property
-function _play(buf, time, rate, useAudioBufferSourceLoop = false) {
-  if (!buf || !audioContext) return null;
+const _play = (buf, time, rate, loop = false) => {
+  if (!buf || !audioContext) return;
   try {
     const src = audioContext.createBufferSource();
-    src.buffer = buf;
+    Object.assign(src, { buffer: buf, loop });
     src.playbackRate.value = rate;
-    if (useAudioBufferSourceLoop) { // This flag explicitly controls src.loop
-        src.loop = true;
-    }
     src.connect(mainGainNode);
     triggerAnimation();
     src.start(time);
-    
-    // If this source is the main looping one, manage its reference for stopping
-    if (useAudioBufferSourceLoop) {
-        src.addEventListener('ended', () => {
-            // This 'ended' event fires if src.stop() is called.
-            // We only clear currentLoopingSource if it's this exact source.
-            if (currentLoopingSource === src) {
-                // console.log("AudioBufferSourceNode with loop=true ended/stopped.");
-                // currentLoopingSource = null; // Cleared in stopLoop() or when restarting
-            }
-        });
-    }
     return src;
-  } catch (err) {
-    showError('Failed to play audio.');
-    console.error(err);
-    return null;
-  }
-}
+  } catch (e) { showError('Failed to play.'); console.error(e); }
+};
 
-
-function _reverse(buf) {
-  if (!buf || !audioContext) return null;
+const _reverse = buf => {
   const { numberOfChannels, length, sampleRate } = buf;
   const rev = audioContext.createBuffer(numberOfChannels, length, sampleRate);
-  for (let ch = 0; ch < numberOfChannels; ch++) {
-    const d = buf.getChannelData(ch);
-    const r = rev.getChannelData(ch);
-    for (let i = 0, j = length - 1; i < length; i++, j--) r[i] = d[j];
-  }
+  for (let ch = 0; ch < numberOfChannels; ch++)
+    buf.getChannelData(ch).forEach((_, i, d) => rev.getChannelData(ch)[i] = d[d.length - 1 - i]);
   return rev;
-}
+};
 
-function _setupContext() {
-  try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) throw 'No AudioContext available';
-    audioContext = new Ctx();
-    mainGainNode = audioContext.createGain();
-    mainGainNode.gain.setValueAtTime(currentVolume, audioContext.currentTime);
-    mainGainNode.connect(audioContext.destination);
-  } catch (e) {
-    showError(`Audio Setup Error: ${e}`);
-    audioContext = mainGainNode = null;
-    throw e;
-  }
-}
+const _setupContext = () => {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) throw 'No AudioContext';
+  audioContext = new Ctx();
+  mainGainNode = audioContext.createGain();
+  mainGainNode.gain.setValueAtTime(currentVolume, audioContext.currentTime);
+  mainGainNode.connect(audioContext.destination);
+};
 
-async function _decodeAndPrepare(base64) {
-  if (!audioContext) throw new Error("AudioContext not initialized before decoding.");
-  decodedBuffer  = await audioContext.decodeAudioData(base64ToArrayBuffer(base64));
+const _decodeAndPrepare = async base64 => {
+  decodedBuffer = await audioContext.decodeAudioData(base64ToArrayBuffer(base64));
   reversedBuffer = _reverse(decodedBuffer);
-
-  const freqEl = document.getElementById('audio-meta-frequency');
-  const freq = parseFloat(freqEl?.textContent || '');
-  if (!freqEl || !freq || Number.isNaN(freq)) {
-    showError('Missing or invalid base frequency in metadata (audio-meta-frequency).');
-    throw new Error('Base frequency missing or invalid');
-  }
+  const freq = parseFloat(document.getElementById('audio-meta-frequency')?.textContent || '');
+  if (Number.isNaN(freq)) throw showError('Invalid base frequency'), Error('Missing base freq');
   originalSampleFrequency = freq;
-
-  // --- MODIFIED PART FOR SAMPLE TYPE DETECTION ---
-  let typeEl = document.getElementById('audio-meta-sample-type');
-  let sourceOfTypeText = "id 'audio-meta-sample-type'";
-
-  if (!typeEl) {
-    console.log("AudioProcessor: Element with id 'audio-meta-sample-type' not found. Trying id 'audio-meta-loop'.");
-    typeEl = document.getElementById('audio-meta-loop'); // Fallback ID
-    sourceOfTypeText = "id 'audio-meta-loop'";
-  }
-
-  const typeText = typeEl ? typeEl.textContent.trim().toLowerCase() : ''; 
-  
-  if (typeEl) {
-    console.log(`AudioProcessor: Found element with ${sourceOfTypeText}. Raw text content: "${typeEl.textContent}". Normalized: "${typeText}"`);
-  } else {
-    console.log(`AudioProcessor: Neither element with id 'audio-meta-sample-type' nor 'audio-meta-loop' found. Defaulting sampleType to 'one-shot'.`);
-  }
-
+  const typeText = (document.getElementById('audio-meta-sample-type') || document.getElementById('audio-meta-loop'))?.textContent.trim().toLowerCase();
   sampleType = (typeText === 'loop' || typeText === 'yes') ? 'loop' : 'one-shot';
-  console.log(`AudioProcessor: Final sampleType determined as: '${sampleType}' (derived from text: "${typeText}" from element with ${sourceOfTypeText}).`);
-  // --- END OF MODIFIED PART ---
-
   midiNoteToPlaybackRate = new Map(
-    Array.from({ length: MAX_MIDI_NOTE - MIN_MIDI_NOTE + 1 }, (_, idx) => {
-      const note = MIN_MIDI_NOTE + idx;
-      const rate = (A4_FREQUENCY * SEMITONE_RATIO ** (note - A4_MIDI_NOTE)) / originalSampleFrequency;
-      return [note, rate];
+    Array.from({ length: MAX_NOTE - MIN_NOTE + 1 }, (_, i) => {
+      const note = MIN_NOTE + i;
+      return [note, (A4_FREQ * SEMITONE ** (note - A4_NOTE)) / originalSampleFrequency];
     })
   );
-}
+};
 
-// -----------------------------------------------------------------------------
-// Public API — everything callers used to get from audioProcessor **or** timingManagement
-// -----------------------------------------------------------------------------
 export async function init(base64, tempo = 78, pitch = 1) {
-  currentTempo        = tempo > 0 ? tempo : 78;
-  currentGlobalPitch  = pitch > 0 ? pitch : 1;
-  currentVolume       = 1; // Default volume
-
-  [audioContext, mainGainNode, decodedBuffer, reversedBuffer, currentLoopingSource] = [null, null, null, null, null];
-  midiNoteToPlaybackRate.clear();
-  isReversed = false;
-  sampleType = 'one-shot'; // Reset sample type before decoding
-
+  [currentTempo, currentGlobalPitch, currentVolume, isReversed] = [tempo, pitch, 1, false];
+  [audioContext, mainGainNode, decodedBuffer, reversedBuffer, currentLoopingSource] = Array(5).fill(null);
+  midiNoteToPlaybackRate.clear(); sampleType = 'one-shot';
   try {
-    _setupContext();
-    await _decodeAndPrepare(base64);
-    timingManager.init(audioContext, currentTempo, currentGlobalPitch); // Pass global pitch to timingManager for its state
-  } catch (error) {
-    console.error("Error during audio initialization:", error);
-    showError(`Audio Init Failed: ${error.message}`);
-    return false; // Indicate failure
-  }
+    _setupContext(); await _decodeAndPrepare(base64);
+    timingManager.init(audioContext, tempo, pitch);
+  } catch (e) { showError(`Audio Init Failed: ${e.message}`); return false; }
   return true;
 }
 
 export async function playOnce() {
-  if (!await _ensureContext() || !_selectBuffer()) return;
-  _play(_selectBuffer(), audioContext.currentTime, currentGlobalPitch, false); // false for useAudioBufferSourceLoop
+  if (await _ensureContext() && _selectBuffer()) _play(_selectBuffer(), audioContext.currentTime, currentGlobalPitch);
 }
 
-export async function startLoop() { // This is the main exported startLoop
-  if (timingManager.getLoopingState()) return; // Already looping (either type)
-  if (!await _ensureContext()) return;
-  
-  const bufferToPlay = _selectBuffer();
-  if (!bufferToPlay) return;
-
-  // Stop any existing continuously looping source explicitly before starting a new one
-  if (currentLoopingSource) {
-    currentLoopingSource.stop();
-    currentLoopingSource = null;
-  }
-
+export async function startLoop() {
+  if (timingManager.getLoopingState() || !await _ensureContext()) return;
+  const buf = _selectBuffer(); if (!buf) return;
+  currentLoopingSource?.stop(); currentLoopingSource = null;
   if (sampleType === 'one-shot') {
-    // For one-shot samples, timingManager schedules individual plays
-    timingManager.startLoop(time => _play(bufferToPlay, time, currentGlobalPitch, false)); // false for useAudioBufferSourceLoop
-  } else { // sampleType === 'loop'
-    // For 'loop' samples, timingManager's callback is a no-op.
-    // AudioBufferSourceNode handles its own looping.
-    timingManager.startLoop(() => {}); // Silent scheduler
-    const startTime = timingManager.getLoopStartTime() || (audioContext.currentTime + 0.05); // Use timingManager's start time
-    currentLoopingSource = _play(bufferToPlay, startTime, currentGlobalPitch, true); // true for useAudioBufferSourceLoop
-    if (!currentLoopingSource) {
-      showError('Failed to start looping audio.');
-      stopLoop(); // Full stop if source creation failed
-    }
+    timingManager.startLoop(t => _play(buf, t, currentGlobalPitch));
+  } else {
+    timingManager.startLoop(() => {});
+    const t = timingManager.getLoopStartTime() || audioContext.currentTime + 0.05;
+    currentLoopingSource = _play(buf, t, currentGlobalPitch, true);
+    if (!currentLoopingSource) showError('Looping failed.'), stopLoop();
   }
 }
 
-export function stopLoop() { // This is the main exported stopLoop
-  timingManager.stopLoop(); // Stop the timingManager's scheduler regardless of sampleType
-  if (currentLoopingSource) {
-    try {
-        currentLoopingSource.stop();
-    } catch (e) {
-        // console.warn("Error stopping currentLoopingSource (might have already stopped or not started):", e.message);
-    }
-    currentLoopingSource = null;
-  }
+export function stopLoop() {
+  timingManager.stopLoop();
+  try { currentLoopingSource?.stop(); } catch {}
+  currentLoopingSource = null;
 }
 
-export function setScheduleMultiplier(m) {
-  timingManager.setScheduleMultiplier(Math.max(1, parseInt(m, 10)));
-}
+export function setScheduleMultiplier(m) { timingManager.setScheduleMultiplier(Math.max(1, parseInt(m, 10))); }
 export const getScheduleMultiplier = () => timingManager.getCurrentScheduleMultiplier();
 
 export function setTempo(bpm) {
-  if (bpm > 0) {
-    currentTempo = bpm;
-    // timingManager handles its own restart logic if its tempo changes while its loop is active.
-    // This is fine for 'one-shot' types.
-    // For 'loop' types, the timingManager's scheduler callback is empty, so its restart
-    // doesn't re-trigger the AudioBufferSourceNode.
-    timingManager.setTempo(bpm);
-  }
+  if (bpm > 0) currentTempo = bpm, timingManager.setTempo(bpm);
 }
 
 export function toggleReverse() {
-  if (!decodedBuffer || !reversedBuffer) { // Buffers must exist
-    console.warn("Cannot toggle reverse: Buffers not ready.");
-    return isReversed;
-  }
-  // No need for: if (!isReversed && !reversedBuffer) return isReversed; as covered by above.
-
-  const wasLooping = timingManager.getLoopingState();
-  if (wasLooping) {
-    // If it was any kind of loop, stop it fully before changing state.
-    // This ensures currentLoopingSource is also stopped if it was a 'loop' type.
-    stopLoop(); 
-  }
-  
+  if (!decodedBuffer || !reversedBuffer) return isReversed;
+  const looping = timingManager.getLoopingState();
+  if (looping) stopLoop();
   isReversed = !isReversed;
-  
-  if (wasLooping) {
-    startLoop(); // Restart the loop; startLoop will use the new _selectBuffer()
-  }
+  if (looping) startLoop();
   return isReversed;
 }
 
-export function setGlobalPitch(rate) {
-  if (rate > 0 && audioContext) {
-    currentGlobalPitch = rate;
-    timingManager.setPitch(rate); // Update timingManager's pitch state as well
-
-    if (sampleType === 'loop' && currentLoopingSource) {
-      // If it's a self-looping AudioBufferSourceNode, update its playbackRate directly
-      currentLoopingSource.playbackRate.setTargetAtTime(rate, audioContext.currentTime, SMOOTH_PARAM_TIME);
-    }
-    // For 'one-shot' type, newly scheduled samples by timingManager's callback
-    // will automatically use the updated currentGlobalPitch when _play is called.
+export function setGlobalPitch(r) {
+  if (r > 0 && audioContext) {
+    currentGlobalPitch = r;
+    timingManager.setPitch(r);
+    currentLoopingSource?.playbackRate.setTargetAtTime(r, audioContext.currentTime, SMOOTH_PARAM_TIME);
   }
 }
 
 export function setVolume(v) {
-  if (v >= 0 && mainGainNode && audioContext) {
-    currentVolume = v;
+  if (v >= 0 && mainGainNode && audioContext)
+    currentVolume = v,
     mainGainNode.gain.setTargetAtTime(v, audioContext.currentTime, SMOOTH_PARAM_TIME);
-  }
 }
 
-// --- Convenience getters (legacy compatibility) --------------------------------
-export const getLoopingState      = () => timingManager.getLoopingState(); // This reflects timingManager's loop state
-export const getReverseState      = () => isReversed;
+export const getLoopingState = () => timingManager.getLoopingState();
+export const getReverseState = () => isReversed;
 export const getAudioContextState = () => audioContext?.state || 'unavailable';
-export const resumeContext        = _ensureContext;
+export const resumeContext = _ensureContext;
+export const getPlaybackRateForNote = n => midiNoteToPlaybackRate.get(n);
 
-export const getPlaybackRateForNote = note => midiNoteToPlaybackRate.get(note);
-
-export async function playSampleAtRate(rate) { // For MIDI triggered notes
-  if (rate > 0 && await _ensureContext() && _selectBuffer())
-    _play(_selectBuffer(), audioContext.currentTime, rate, false); // false for useAudioBufferSourceLoop
+export async function playSampleAtRate(r) {
+  if (r > 0 && await _ensureContext() && _selectBuffer())
+    _play(_selectBuffer(), audioContext.currentTime, r);
 }
 
-// --- Re‑export a few timing helpers in case external code relied on them -------
 export const getLoopStartTime = () => timingManager.getLoopStartTime();
-export const getCurrentTempo  = () => currentTempo; // Exporting module's currentTempo
-export const getCurrentPitch  = () => currentGlobalPitch; // Exporting module's currentGlobalPitch
+export const getCurrentTempo = () => currentTempo;
+export const getCurrentPitch = () => currentGlobalPitch;
