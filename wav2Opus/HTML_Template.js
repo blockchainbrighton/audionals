@@ -1,4 +1,4 @@
-// OB1_Template2.js
+// HTML_Template.js
 
 /**
  * Generates a streamlined HTML file content string that embeds Base64 data
@@ -14,9 +14,9 @@
  * @param {string} imageBase64Data - The pure Base64 encoded string for the image (NO prefix). Can be empty.
  * @returns {string} A string containing the complete, streamlined HTML document.
  */
-function OB1_Template2(title, instrument, note, frequency, isLoop, bpm, audioBase64Data, imageBase64Data) {
+function HTML_Template(title, instrument, note, frequency, isLoop, bpm, audioBase64Data, imageBase64Data) {
     if (typeof audioBase64Data !== 'string' || audioBase64Data.trim() === '') {
-      console.error("OB1_Template2 Error: audioBase64Data must be a non-empty string.");
+      console.error("HTML_Template Error: audioBase64Data must be a non-empty string.");
       return `<!DOCTYPE html><html><head><title>Error</title></head><body><h1>Error generating Audional: Invalid or missing audio data.</h1></body></html>`;
     }
 
@@ -84,5 +84,5 @@ function OB1_Template2(title, instrument, note, frequency, isLoop, bpm, audioBas
     return htmlContent;
 }
 
-// Make it available on the window object if OB1_Template2.js is loaded as a separate script tag
-window.OB1_Template2 = OB1_Template2;
+// Make it available on the window object if HTML_Template.js is loaded as a separate script tag
+window.HTML_Template = HTML_Template;

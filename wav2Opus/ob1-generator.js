@@ -1,4 +1,4 @@
-// ob1-generator.js - Handles OB1 generation using the OB1_Template2 function
+// ob1-generator.js - Handles OB1 generation using the HTML_Template function
 
 // State variables to track the base64 data
 let audioBase64 = null;
@@ -136,12 +136,12 @@ function checkGenerateButtonState() {
     // The generateHtmlButton (now window.generateHtmlButton) should be enabled if EITHER:
     // 1. Audio is ready AND Image is ready
     // OR
-    // 2. Audio is ready AND Image is NOT required (i.e., imageBase64 can be null/empty string for OB1_Template2)
+    // 2. Audio is ready AND Image is NOT required (i.e., imageBase64 can be null/empty string for HTML_Template)
     // For simplicity, if your template *always* expects an image string (even if empty),
     // then imageBase64 can just be an empty string if no image is selected.
     // The event listener for 'imageBase64Generated' will set imageBase64.
     // If no image is converted, imageBase64 remains null or its initial value.
-    // Let's assume the OB1_Template2 can handle an empty string for imageBase64Data.
+    // Let's assume the HTML_Template can handle an empty string for imageBase64Data.
     // So the button should be enabled if audio is ready. Image is a "nice to have".
 
     if (audioReady) { // Primary condition: Audio must be ready
@@ -175,9 +175,9 @@ function generateAndDownloadOb1File(title, instrument, note, frequency, isLoop, 
     return;
   }
 
-  // Ensure the OB1_Template2 function (from OB1_Template2.js) is available
-  if (typeof window.OB1_Template2 !== 'function') {
-      console.error("CRITICAL ERROR: OB1_Template2 function not found. Make sure OB1_Template2.js loaded correctly.");
+  // Ensure the HTML_Template function (from HTML_Template.js) is available
+  if (typeof window.HTML_Template !== 'function') {
+      console.error("CRITICAL ERROR: HTML_Template function not found. Make sure HTML_Template.js loaded correctly.");
       alert("Error: HTML template generation function is missing. Cannot create file.");
       return;
   }
@@ -192,10 +192,10 @@ function generateAndDownloadOb1File(title, instrument, note, frequency, isLoop, 
     return;
   }
 
-  console.log("Calling OB1_Template2 with data and metadata...");
+  console.log("Calling HTML_Template with data and metadata...");
 
-  // Call the imported OB1_Template2 function WITH ALL METADATA
-  const htmlContent = window.OB1_Template2(
+  // Call the imported HTML_Template function WITH ALL METADATA
+  const htmlContent = window.HTML_Template(
       title,
       instrument,
       note,
@@ -207,8 +207,8 @@ function generateAndDownloadOb1File(title, instrument, note, frequency, isLoop, 
   );
 
   if (htmlContent.includes("Error generating Audional")) { // Check for error string from template
-      console.error("OB1_Template2 function reported an error during HTML generation.");
-      // Alert might have been shown by OB1_Template2, or add one here
+      console.error("HTML_Template function reported an error during HTML generation.");
+      // Alert might have been shown by HTML_Template, or add one here
       alert("An error occurred while generating the HTML content for the Audional file.");
       return;
   }
@@ -216,7 +216,7 @@ function generateAndDownloadOb1File(title, instrument, note, frequency, isLoop, 
   try {
       const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `Audional_OB1_${title.replace(/[^a-z0-9]/gi, '_') || 'Player'}_${timestamp}.html`;
+      const filename = `Audional_HTML_${title.replace(/[^a-z0-9]/gi, '_') || 'Player'}_${timestamp}.html`;
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = filename;
