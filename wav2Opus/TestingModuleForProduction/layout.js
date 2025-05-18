@@ -193,22 +193,15 @@ export function buildLayout(targetElement) {
         throw new Error('buildLayout requires a valid DOM element.');
     }
 
-    // Locate any existing audio‑metadata div in the entire document
-    const audioMetadataDiv = document.querySelector('.audio-metadata'); // <--- MODIFIED LINE
+    const audioMetadataDiv = document.querySelector('.audio-metadata');
 
     if (audioMetadataDiv) {
-        // If found, remove it from its current position to prevent duplication
-        // and to allow it to be re-inserted into the new layout structure.
-        audioMetadataDiv.remove();
+        audioMetadataDiv.remove(); // Remove from original position
     } else {
-        // Log a warning if it's not found, as it's expected for this feature.
         console.warn('buildLayout: .audio-metadata div not found in the document. Metadata will not be displayed.');
     }
 
-    // Column 1 — controls -----------------------------------------------------
-    const controlsColumn = createControlsColumn(); // This creates .metadata-placeholder
-
-    // Column 2 — main image ---------------------------------------------------
+    const controlsColumn = createControlsColumn();
     const imageArea = createElement('div', { className: 'image-area' }, [
         createElement('img', {
             id: 'main-image',
@@ -217,46 +210,86 @@ export function buildLayout(targetElement) {
             title: 'Click to toggle tempo loop'
         })
     ]);
-
-    // Column 3 — reference panel ---------------------------------------------
     const referenceColumn = createElement('div', { className: 'reference-column hidden' }, [
         createElement('div', { id: 'reference-panel', className: 'reference-panel' })
     ]);
-
-    // Assemble layout --------------------------------------------------------
     const mainLayout = createElement('div', { className: 'main-layout' }, [
         controlsColumn,
         imageArea,
         referenceColumn
     ]);
 
-    // Re‑insert existing metadata (if found) into the new controls column
     if (audioMetadataDiv) {
         const placeholder = controlsColumn.querySelector('.metadata-placeholder');
         if (placeholder) {
-            // Replace the placeholder with the actual metadata div
             placeholder.parentNode.replaceChild(audioMetadataDiv, placeholder);
             console.log('buildLayout: Successfully moved .audio-metadata into controls column.');
+            // PRUNING LOGIC REMOVED FROM HERE
         } else {
-            // Fallback: if placeholder somehow isn't there, try to insert it logically.
             console.warn('buildLayout: .metadata-placeholder not found in controlsColumn. Attempting to insert .audio-metadata before #controls-container.');
             const controlsContainerEl = controlsColumn.querySelector('#controls-container');
             if (controlsContainerEl) {
                 controlsColumn.insertBefore(audioMetadataDiv, controlsContainerEl);
             } else {
-                // Absolute fallback, just append it to the controls column
                 console.warn('buildLayout: #controls-container also not found in controlsColumn. Appending .audio-metadata to end of controlsColumn.');
                 controlsColumn.appendChild(audioMetadataDiv);
             }
         }
     }
 
-    // Mount to DOM - Clear the target element before appending new layout to prevent duplication
     targetElement.innerHTML = '';
     targetElement.appendChild(mainLayout);
 
     console.log('Layout built successfully.');
 }
+
+/**
+ * Prunes the content of the .audio-metadata div for display purposes.
+ * This should be called AFTER other modules (like audioProcessor) have read
+ * any necessary data from the original metadata structure.
+ */
+export function pruneMetadataForDisplay() {
+    // Use a more specific selector to ensure we're targeting the one in the controls column
+    const audioMetadataDiv = document.querySelector('.controls-column .audio-metadata');
+    if (!audioMetadataDiv) {
+        console.warn('pruneMetadataForDisplay: .audio-metadata div not found in controls column. Cannot prune.');
+        return;
+    }
+
+    console.log('pruneMetadataForDisplay: Attempting to prune metadata display...');
+
+    // 1. Remove the "Loop" paragraph entirely
+    const loopSpan = audioMetadataDiv.querySelector('#audio-meta-loop');
+    if (loopSpan && loopSpan.parentElement && loopSpan.parentElement.tagName === 'P') {
+        loopSpan.parentElement.remove();
+        console.log('pruneMetadataForDisplay: Pruned "Loop" metadata line.');
+    } else {
+        console.log('pruneMetadataForDisplay: "Loop" metadata line or its span not found for pruning.');
+    }
+
+    // 2. Modify the "Note" paragraph to remove the frequency part
+    const noteSpan = audioMetadataDiv.querySelector('#audio-meta-note');
+    if (noteSpan && noteSpan.parentElement && noteSpan.parentElement.tagName === 'P') {
+        const noteParagraph = noteSpan.parentElement;
+        const labelTextNode = noteParagraph.firstChild; // Expected "Note: "
+
+        if (labelTextNode && labelTextNode.nodeType === Node.TEXT_NODE) {
+            // Reconstruct the paragraph with only the label and the note span
+            const preservedLabel = labelTextNode.cloneNode(true);
+            const preservedNoteSpan = noteSpan.cloneNode(true);
+
+            noteParagraph.innerHTML = ''; // Clear existing content
+            noteParagraph.appendChild(preservedLabel);
+            noteParagraph.appendChild(preservedNoteSpan);
+            console.log('pruneMetadataForDisplay: Pruned frequency from "Note" metadata line.');
+        } else {
+            console.warn('pruneMetadataForDisplay: Could not prune frequency: "Note" paragraph structure not as expected (label missing or not a text node).');
+        }
+    } else {
+        console.log('pruneMetadataForDisplay: "Note" metadata line or its span not found for pruning.');
+    }
+}
+
 
 // -----------------------------------------------------------------------------
 // Named exports (already exported where declared, but consolidated for clarity)
@@ -264,8 +297,7 @@ export function buildLayout(targetElement) {
 export default {
     createControlsColumn,
     initReferencePanel,
-    buildLayout
+    buildLayout,
+    pruneMetadataForDisplay // <-- EXPORT THE NEW FUNCTION
 };
-
-
 // --- END OF FILE layout.js ---

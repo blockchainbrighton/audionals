@@ -18,7 +18,8 @@ let controlsContainer = null,
 
 const $ = id => document.getElementById(id);
 
-export function init() {
+// --- Exported UI Initialization ---
+export function init() { // <<<< MAKE SURE THIS IS EXPORTED
   console.log("UI Updater: Initializing element references...");
   controlsContainer = $('controls-container');
   errorMessageDiv = $('error-message');
@@ -35,6 +36,10 @@ export function init() {
   multiplierValueSpan = $('multiplier-value');
   mainImage = $('main-image');
 
+  if (!mainImage) {
+    console.error("UI Updater CRITICAL: mainImage element not found in init(). Shake animation will fail.");
+  }
+
   controlElementsList = [playOnceBtn, loopToggleBtn, reverseToggleBtn, tempoSlider, pitchSlider, volumeSlider, multiplierSlider].filter(Boolean);
 
   if (!controlsContainer) console.warn("UI Updater: controlsContainer not found.");
@@ -42,10 +47,11 @@ export function init() {
   if (!pitchValueSpan) console.warn("UI Updater: pitchValueSpan not found.");
   if (!volumeValueSpan) console.warn("UI Updater: volumeValueSpan not found.");
   if (!multiplierValueSpan) console.warn("UI Updater: multiplierValueSpan not found.");
-  console.log(`UI Updater: Found ${controlElementsList.length} control elements.`);
+  console.log(`UI Updater: Found ${controlElementsList.length} control elements. Main image for animation:`, mainImage);
 }
 
-export const setControlsContainer = el => {
+// --- Exported UI State Modifiers ---
+export const setControlsContainer = el => { // <<<< EXPORT
   if (el instanceof HTMLElement) {
     controlsContainer = el;
     console.log("UI Updater: Controls container set via setControlsContainer.");
@@ -69,18 +75,18 @@ const setControlsDisabledState = disabled => {
   controlElementsList.forEach(el => el && (el.disabled = disabled));
 };
 
-export const updateTempoDisplay = bpm => updateValueDisplay(tempoValueSpan, bpm, String, 'Tempo');
-export const updatePitchDisplay = rate => updateValueDisplay(pitchValueSpan, rate, v => `${Math.round(v * 100)}`, 'Pitch');
-export const updateVolumeDisplay = level => updateValueDisplay(volumeValueSpan, level, v => `${Math.round(v * 100)}`, 'Volume');
-export const updateScheduleMultiplierDisplay = m => updateValueDisplay(multiplierValueSpan, m, v => `x${v}`, 'Multiplier');
+export const updateTempoDisplay = bpm => updateValueDisplay(tempoValueSpan, bpm, String, 'Tempo'); // <<<< EXPORT
+export const updatePitchDisplay = rate => updateValueDisplay(pitchValueSpan, rate, v => `${Math.round(v * 100)}`, 'Pitch'); // <<<< EXPORT
+export const updateVolumeDisplay = level => updateValueDisplay(volumeValueSpan, level, v => `${Math.round(v * 100)}`, 'Volume'); // <<<< EXPORT
+export const updateScheduleMultiplierDisplay = m => updateValueDisplay(multiplierValueSpan, m, v => `x${v}`, 'Multiplier'); // <<<< EXPORT
 
-export const updateLoopButton = isLooping => updateToggleButton(loopToggleBtn, isLooping, 'Play Loop');
-export const updateReverseButton = isReversed => updateToggleButton(reverseToggleBtn, isReversed, 'Reverse');
+export const updateLoopButton = isLooping => updateToggleButton(loopToggleBtn, isLooping, 'Play Loop'); // <<<< EXPORT
+export const updateReverseButton = isReversed => updateToggleButton(reverseToggleBtn, isReversed, 'Reverse'); // <<<< EXPORT
 
-export const enableControls = () => setControlsDisabledState(false);
-export const disableControls = () => setControlsDisabledState(true);
+export const enableControls = () => setControlsDisabledState(false); // <<<< EXPORT
+export const disableControls = () => setControlsDisabledState(true); // <<<< EXPORT
 
-export const showError = msg => {
+export const showError = msg => { // <<<< EXPORT
   const div = errorMessageDiv || $('error-message');
   if (div) {
     div.textContent = msg;
@@ -90,7 +96,7 @@ export const showError = msg => {
   }
 };
 
-export const clearError = () => {
+export const clearError = () => { // <<<< EXPORT
   const div = errorMessageDiv || $('error-message');
   if (div) {
     div.textContent = '';
@@ -98,32 +104,36 @@ export const clearError = () => {
   }
 };
 
-export const setImageSource = src => {
-  const img = mainImage || $('main-image');
+export const setImageSource = src => { // <<<< EXPORT
+  const img = mainImage;
   if (img) {
     img.src = src;
     img.style.visibility = 'visible';
   } else {
-    console.error("UI Updater: mainImage not found.");
+    console.error("UI Updater: mainImage not found (setImageSource).");
   }
 };
 
-// --- END OF FILE uiUpdater.js ---
 
-
-// imageAnimation.js
-
-const IMAGE_ID = 'main-image';
+// --- This was the "imageAnimation.js" part ---
 const ANIMATION_CLASS = 'shake-all-directions-animation';
 const ANIMATION_DURATION_MS = 150;
 
-const el = document.getElementById(IMAGE_ID);
-if (!el) console.warn(`Image animation module: no element with ID "${IMAGE_ID}"`);
+export function triggerAnimation() { // <<<< EXPORT (This was likely already correct)
+  const elToAnimate = mainImage;
 
-export function triggerAnimation() {
-  if (!el || el.classList.contains(ANIMATION_CLASS)) return;
-  el.classList.add(ANIMATION_CLASS);
+  if (!elToAnimate) {
+    return;
+  }
+  if (elToAnimate.classList.contains(ANIMATION_CLASS)) {
+    return;
+  }
+
+  elToAnimate.classList.add(ANIMATION_CLASS);
   setTimeout(() => {
-    if (el.isConnected) el.classList.remove(ANIMATION_CLASS);
+    if (elToAnimate && elToAnimate.isConnected) {
+      elToAnimate.classList.remove(ANIMATION_CLASS);
+    }
   }, ANIMATION_DURATION_MS);
 }
+// --- END OF FILE uiUpdater.js ---
