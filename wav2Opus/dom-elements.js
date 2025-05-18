@@ -23,9 +23,17 @@ const audioProfileSelect = document.getElementById('audioProfileSelect');
 const audioProfileDescriptionEl = document.getElementById('audioProfileDescription');
 // --- END NEW: Audio Profile Elements ---
 
-const estSizeMp3Span = document.getElementById('estSizeMp3');
-const estSizeOpusSpan = document.getElementById('estSizeOpus');
-const estSizeWebmSpan = document.getElementById('estSizeWebm');
+// --- NEW: Output Info Elements ---
+const outputInfoSectionEl = document.getElementById('outputInfoSection');
+const originalFileInfoEl = document.getElementById('originalFileInfo');
+const currentEstimatedOutputSizeEl = document.getElementById('currentEstimatedOutputSize');
+// --- END NEW: Output Info Elements ---
+
+// REMOVED: estSizeMp3Span, estSizeOpusSpan, estSizeWebmSpan
+// const estSizeMp3Span = document.getElementById('estSizeMp3');
+// const estSizeOpusSpan = document.getElementById('estSizeOpus');
+// const estSizeWebmSpan = document.getElementById('estSizeWebm');
+
 const base64Container = document.getElementById('base64Container');
 const base64Result = document.getElementById('base64Result');
 const base64Output = document.getElementById('base64Output');
@@ -56,4 +64,4 @@ const imageBase64Output = document.getElementById('image-base64-output');
 const copyImageBase64Button = document.getElementById('copy-image-base64-button');
 const downloadImageBase64Button = document.getElementById('download-image-base64-button');
 
-const generateOB1Button = document.getElementById('generateOB1Button');
+const generateHtmlButton = document.getElementById('generateHtmlButton');

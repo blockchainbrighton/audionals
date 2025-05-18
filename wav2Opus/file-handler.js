@@ -5,16 +5,15 @@
  * @param {File} file - The audio file object.
  * @returns {Promise<number>} A promise that resolves with the duration in seconds.
  */
-const getAudioDuration = file => new Promise((resolve, reject) => { // Renamed from getWavDuration
-  if (!file || !file.type.startsWith('audio/')) {
-      return reject("Invalid file type provided for duration check.");
+const getAudioDuration = file => new Promise((resolve, reject) => {
+  if (!file || !(file instanceof File) || !file.type.startsWith('audio/')) { // Added instanceof File check
+      return reject("Invalid file object or type provided for duration check.");
   }
   
     const reader = new FileReader();
   
     reader.onload = e => {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      // Use decodeAudioData for better compatibility and error handling
       audioContext.decodeAudioData(e.target.result)
         .then(buffer => {
             resolve(buffer.duration);
@@ -28,7 +27,6 @@ const getAudioDuration = file => new Promise((resolve, reject) => { // Renamed f
             reject(userMessage);
         })
         .finally(() => {
-            // Close the context to release resources, especially important on mobile
             if (audioContext.state !== 'closed') {
                 audioContext.close().catch(e => console.warn("Error closing AudioContext:", e));
             }
@@ -53,51 +51,77 @@ const getAudioDuration = file => new Promise((resolve, reject) => { // Renamed f
   });
   
   
-  /**
-   * Handles the file input change event.
-   * @param {Event} e - The change event object.
-   */
-  const handleFileChange = async (e) => {
+/**
+ * Handles the file input change event.
+ * @param {Event} e - The change event object.
+ */
+const handleFileChange = async (e) => {
     const file = e.target.files ? e.target.files[0] : null;
-  
+
     // Reset everything related to the previous file/conversion
-    resetUIForNewFile();
-  
-    // Clear state variables
+    // This will also call updateOriginalFileInfoDisplay(null) and updateEstimatedSize()
+    if (typeof resetUIForNewFile === 'function') {
+        resetUIForNewFile();
+    } else {
+        console.warn("resetUIForNewFile function not found.");
+    }
+
+    // Clear state variables (some might be redundant if resetUIForNewFile handles them too)
     selectedFile = null;
     fileDuration = null;
     convertedAudioBlob = null;
     base64String = null;
-    originalAudioElement = null; // Clear reference
-  
+    // originalAudioElement is cleared by resetUIForNewFile calling originalAudioContainer.innerHTML = ''
+
     if (file) {
-      // Make the check more general for any audio type
-      if (!file.type || !file.type.startsWith('audio/')) {
-          updateStatus(`Error: Please select a valid audio file. Selected type: ${file.type || 'unknown'}`, true);
-          fileInput.value = ''; // Clear the input
-          enableConvertButtonIfNeeded(); // Ensure this is called
-          return;
-      }
-  
-      selectedFile = file; // Update state
-      updateStatus(`File selected: ${selectedFile.name}. Reading duration...`);
-      enableConvertButtonIfNeeded(); // Might enable convert if FFmpeg is ready
-  
-      try {
-        fileDuration = await getAudioDuration(selectedFile); // Update state
-        updateStatus(`File ready: ${selectedFile.name} (${fileDuration.toFixed(1)}s)`);
-        updateEstimatedSize(); // Update size estimate now we have duration
-        setupOriginalAudioPlayer(); // Prepare the original audio player now
-      } catch (err) {
-        updateStatus(`Error reading file: ${err}`, true);
-        fileDuration = null; // Reset duration on error
-        selectedFile = null; // Deselect file if essential info fails
-        fileInput.value = ''; // Clear the input
-      }
+        if (!file.type || !file.type.startsWith('audio/')) {
+            updateStatus(`Error: Please select a valid audio file. Selected type: ${file.type || 'unknown'}`, true);
+            if (fileInput) fileInput.value = '';
+            // updateOriginalFileInfoDisplay(null); // Already called by resetUIForNewFile
+            // updateEstimatedSize(); // Already called by resetUIForNewFile
+            enableConvertButtonIfNeeded();
+            return;
+        }
+
+        selectedFile = file;
+        updateStatus(`File selected: ${selectedFile.name}. Reading duration...`);
+        
+        // Update original file info display immediately
+        if (typeof updateOriginalFileInfoDisplay === 'function') {
+            updateOriginalFileInfoDisplay(selectedFile);
+        }
+
+        enableConvertButtonIfNeeded();
+
+        try {
+            fileDuration = await getAudioDuration(selectedFile);
+            updateStatus(`File ready: ${selectedFile.name} (${fileDuration.toFixed(1)}s)`);
+            
+            if (typeof updateEstimatedSize === 'function') {
+                updateEstimatedSize(); // Update size estimate now we have duration
+            }
+            if (typeof setupOriginalAudioPlayer === 'function') {
+                setupOriginalAudioPlayer();
+            } else {
+                console.warn("setupOriginalAudioPlayer function not found.");
+            }
+        } catch (err) {
+            updateStatus(`Error reading file: ${err}`, true);
+            fileDuration = null;
+            selectedFile = null;
+            if (fileInput) fileInput.value = '';
+            if (typeof updateOriginalFileInfoDisplay === 'function') {
+                updateOriginalFileInfoDisplay(null); // Clear original info on error
+            }
+            if (typeof updateEstimatedSize === 'function') {
+                updateEstimatedSize(); // Reset estimate on error
+            }
+        }
     } else {
-      updateStatus('No file selected.');
+        updateStatus('No file selected.');
+        // updateOriginalFileInfoDisplay(null); // Handled by resetUIForNewFile if called initially
+        // updateEstimatedSize(); // Handled by resetUIForNewFile
     }
-  
-    // Final check on button states after processing
+
     enableConvertButtonIfNeeded();
-  };
+};

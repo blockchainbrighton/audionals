@@ -6,430 +6,368 @@
  * @param {boolean} [err=false] - Whether the message represents an error.
  */
 const updateStatus = (msg, err = false) => {
-  // Assumes statusEl is globally available or imported from dom-elements.js
-  console.log(`Status Update: ${msg}${err ? ' (Error)' : ''}`);
-  if (statusEl) {
-    statusEl.textContent = `Status: ${msg}`;
-    statusEl.className = err ? 'error' : '';
-    // Ensure status is visible and announced
-    statusEl.setAttribute('aria-hidden', 'false');
-  }
-  // Hide progress bar by default when status updates, unless it's a progress message
-  if (progressEl && !msg.includes('%')) {
-    progressEl.style.display = 'none';
-    progressEl.setAttribute('aria-hidden', 'true');
-  }
-  // Re-enable buttons based on current state if an error occurs, handled by calling function generally
-};
-
-/**
- * Updates the FFmpeg conversion progress bar.
- * @param {number} ratio - The progress ratio (0 to 1).
- */
-const updateProgress = (ratio) => {
-    // Assumes progressEl and statusEl are globally available or imported
-    if (progressEl && statusEl) {
-        progressEl.style.display = 'block';
-        progressEl.setAttribute('aria-hidden', 'false');
-        const percent = Math.max(0, Math.min(100, Math.round(ratio * 100)));
-        progressEl.value = percent;
-        updateStatus(`Converting... (${percent}%)`); // Also update status text
+    // Assumes statusEl is globally available or imported from dom-elements.js
+    console.log(`Status Update: ${msg}${err ? ' (Error)' : ''}`);
+    if (statusEl) {
+      statusEl.textContent = `Status: ${msg}`;
+      statusEl.className = err ? 'error' : '';
+      statusEl.setAttribute('aria-hidden', 'false');
     }
-};
-
-/**
- * Enables or disables the Convert and Play Sample buttons based on state.
- * Assumes ffmpeg, selectedFile, convertBtn, playSampleBtn are accessible.
- * @returns {boolean} True if the convert button was disabled, false otherwise.
- */
-const enableConvertButtonIfNeeded = () => {
-  const ffmpegReady = typeof ffmpeg !== 'undefined' && ffmpeg !== null;
-  const fileSelected = selectedFile !== null;
-
-  const convertEnabled = ffmpegReady && fileSelected;
-  const playEnabled = fileSelected;
-
-  if (convertBtn) convertBtn.disabled = !convertEnabled;
-  if (playSampleBtn) playSampleBtn.disabled = !playEnabled;
-
-  return !convertEnabled; // Return true if convert button is disabled
-};
-
-
-/**
- * Updates the estimated file size display based on current settings and duration.
- * Assumes relevant DOM elements (spans, sliders, radios) and fileDuration are accessible.
- */
-const updateEstimatedSize = () => {
-  // Ensure necessary elements and data are present
-  if (!fileDuration || !selectedFile || !estSizeMp3Span || !estSizeOpusSpan || !estSizeWebmSpan ||
-      !formatRadios || !mp3QualitySlider || !opusBitrateSlider ||
-      !mp3QualityValueSpan || !opusBitrateValueSpan) {
-      // console.warn("Skipping size update - missing elements or data.");
-      return;
-  }
-
-  const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
-  if (!selectedFormatRadio) return;
-  const selectedFormat = selectedFormatRadio.value;
-
-  let bitrateKbps = 0;
-  let estimatedSizeBytes = 0;
-
-  // Clear all estimates initially
-  estSizeMp3Span.textContent = '';
-  estSizeOpusSpan.textContent = '';
-  estSizeWebmSpan.textContent = '';
-
-  try {
-      if (selectedFormat === 'mp3') {
-          const visualQuality = parseInt(mp3QualitySlider.value, 10);
-          const ffmpegQuality = visualQuality; // Assuming slider 0 = best = -q:a 0
-          // Approximate VBR bitrates for -q:a 0-9 (LAME defaults may vary)
-          const approxBitrates = [245, 225, 190, 175, 165, 130, 115, 100, 85, 65];
-          bitrateKbps = approxBitrates[ffmpegQuality] || 128; // Fallback
-          estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8;
-          // Ensure formatBytes function is available (from utils.js)
-          estSizeMp3Span.textContent = `~ ${window.formatBytes ? window.formatBytes(estimatedSizeBytes) : `${(estimatedSizeBytes / 1024).toFixed(1)} KB`}`;
-
-      } else if (selectedFormat === 'opus' || selectedFormat === 'webm') { // Combined Opus and WebM(Opus)
-          bitrateKbps = parseInt(opusBitrateSlider.value, 10);
-          estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8;
-          const formattedSize = window.formatBytes ? window.formatBytes(estimatedSizeBytes) : `${(estimatedSizeBytes / 1024).toFixed(1)} KB`;
-          // Display in the correct span based on format
-          if (selectedFormat === 'opus') {
-              estSizeOpusSpan.textContent = `~ ${formattedSize}`;
-          } else { // webm
-              estSizeWebmSpan.textContent = `~ ${formattedSize}`;
+    if (progressEl && !msg.includes('%')) {
+      progressEl.style.display = 'none';
+      progressEl.setAttribute('aria-hidden', 'true');
+    }
+  };
+  
+  /**
+   * Updates the FFmpeg conversion progress bar.
+   * @param {number} ratio - The progress ratio (0 to 1).
+   */
+  const updateProgress = (ratio) => {
+      if (progressEl && statusEl) {
+          progressEl.style.display = 'block';
+          progressEl.setAttribute('aria-hidden', 'false');
+          const percent = Math.max(0, Math.min(100, Math.round(ratio * 100)));
+          progressEl.value = percent;
+          updateStatus(`Converting... (${percent}%)`);
+      }
+  };
+  
+  /**
+   * Enables or disables the Convert and Play Sample buttons based on state.
+   */
+  const enableConvertButtonIfNeeded = () => {
+    const ffmpegReady = typeof ffmpeg !== 'undefined' && ffmpeg !== null;
+    const fileSelected = selectedFile !== null;
+  
+    const convertEnabled = ffmpegReady && fileSelected;
+    const playEnabled = fileSelected;
+  
+    if (convertBtn) convertBtn.disabled = !convertEnabled;
+    if (playSampleBtn) playSampleBtn.disabled = !playEnabled;
+  
+    return !convertEnabled;
+  };
+  
+  /**
+   * Updates the displayed original file information.
+   * @param {File|null} file - The selected file object, or null to clear.
+   */
+  function updateOriginalFileInfoDisplay(file) {
+      if (originalFileInfoEl) { // Assumes originalFileInfoEl is from dom-elements.js
+          if (file && typeof window.formatBytes === 'function') {
+              const type = file.type ? (file.type.split('/')[1] || file.name.split('.').pop()) : (file.name.split('.').pop() || 'unknown');
+              originalFileInfoEl.textContent = `${type.toUpperCase()}, ${window.formatBytes(file.size)}`;
+          } else {
+              originalFileInfoEl.textContent = 'N/A';
           }
       }
-  } catch (e) {
-      console.error("Error calculating estimated size:", e);
-      // Clear estimates on error
-      estSizeMp3Span.textContent = '';
-      estSizeOpusSpan.textContent = '';
-      estSizeWebmSpan.textContent = '';
   }
-};
-
-
-/**
- * Shows/hides the relevant quality settings groups based on the selected format.
- * Assumes formatRadios, mp3SettingsDiv, opusSettingsDiv, estSizeOpusSpan, estSizeWebmSpan are accessible.
- */
-const updateQualityDisplays = () => {
-  if (!formatRadios || !mp3SettingsDiv || !opusSettingsDiv) {
-      console.warn("Quality display elements not found, cannot update.");
-      return;
-  }
-  const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
-  if (!selectedFormatRadio) return; // No format selected yet
-
-  const fmt = selectedFormatRadio.value;
-
-  // Opus settings div used for both 'opus' and 'webm' formats
-  opusSettingsDiv.style.display = (fmt === 'opus' || fmt === 'webm') ? 'block' : 'none';
-  // MP3 settings div only shown for 'mp3' format
-  mp3SettingsDiv.style.display = fmt === 'mp3' ? 'block' : 'none';
-
-  // Toggle visibility of estimate spans WITHIN the Opus/WebM settings div
-  if (estSizeOpusSpan) estSizeOpusSpan.style.display = fmt === 'opus' ? 'inline' : 'none';
-  if (estSizeWebmSpan) estSizeWebmSpan.style.display = fmt === 'webm' ? 'inline' : 'none';
-
-  // Recalculate and display estimate for the now-visible format
-  updateEstimatedSize();
-};
-
-/**
- * Populates the audio profile selector dropdown.
- * Assumes audioProfileSelect (from dom-elements.js) and audioProfiles (from config-state.js) are available.
- */
-const populateAudioProfileSelector = () => {
-    console.log("[ui-helpers.js] populateAudioProfileSelector called."); // DEBUG
-    if (!audioProfileSelect || typeof audioProfiles === 'undefined') {
-        console.error("[ui-helpers.js] Audio profile select element or profiles data not found.", {
-            audioProfileSelectExists: !!audioProfileSelect,
-            audioProfilesType: typeof audioProfiles
-        });
+  
+  /**
+   * Updates the estimated output file size display based on current settings.
+   * This function now updates the consolidated 'currentEstimatedOutputSizeEl'.
+   */
+  const updateEstimatedSize = () => {
+      // Assumes currentEstimatedOutputSizeEl is from dom-elements.js
+      if (!currentEstimatedOutputSizeEl) {
+          return;
+      }
+  
+      if (typeof fileDuration === 'undefined' || fileDuration === null || !selectedFile) {
+          currentEstimatedOutputSizeEl.textContent = 'N/A (No file loaded or duration unknown)';
+          // Ensure original file info is also appropriate if fileDuration is missing
+          if (!selectedFile && originalFileInfoEl) {
+               updateOriginalFileInfoDisplay(null);
+          }
+          return;
+      }
+  
+      const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
+      if (!selectedFormatRadio) {
+          currentEstimatedOutputSizeEl.textContent = 'N/A (No format selected)';
+          return;
+      }
+      const selectedFormat = selectedFormatRadio.value;
+      let estimateValue = 'Calculating...';
+      let estimatedSizeBytes = 0;
+  
+      if (typeof window.formatBytes !== 'function') {
+          currentEstimatedOutputSizeEl.textContent = 'Error: Sizing function unavailable.';
+          console.error("formatBytes function is not defined on window.");
+          return;
+      }
+  
+      if (selectedFormat === 'mp3' && mp3QualitySlider) {
+          const visualQuality = parseInt(mp3QualitySlider.value, 10);
+          // Approximate VBR bitrates for -q:a 0-9 (LAME defaults may vary)
+          const approxBitrates = [245, 225, 190, 175, 165, 130, 115, 100, 85, 65];
+          const bitrateKbps = approxBitrates[visualQuality] || 165; // Fallback
+          estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8;
+          estimateValue = `~${window.formatBytes(estimatedSizeBytes)} (MP3 VBR q:${visualQuality})`;
+  
+      } else if ((selectedFormat === 'opus' || selectedFormat === 'webm') && opusBitrateSlider) {
+          const bitrateKbps = parseInt(opusBitrateSlider.value, 10);
+          estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8;
+          const formatName = selectedFormat === 'opus' ? 'Opus' : 'WebM (Opus)';
+          estimateValue = `~${window.formatBytes(estimatedSizeBytes)} (${formatName} @${bitrateKbps}kbps)`;
+      } else {
+          estimateValue = 'N/A (Settings incomplete)';
+      }
+  
+      currentEstimatedOutputSizeEl.textContent = estimateValue;
+  };
+  
+  
+  /**
+   * Shows/hides the relevant quality settings groups based on the selected format.
+   * The new info section is inside opusSettingsDiv, so its visibility is handled implicitly.
+   */
+  const updateQualityDisplays = () => {
+    if (!formatRadios || !mp3SettingsDiv || !opusSettingsDiv) {
+        console.warn("Quality display elements not found, cannot update.");
         return;
     }
-    audioProfileSelect.innerHTML = ''; // Clear existing options
-    console.log("[ui-helpers.js] audioProfiles data:", audioProfiles); // DEBUG
-
-    let optionCount = 0;
-    for (const profileKey in audioProfiles) {
-        // console.log(`[ui-helpers.js] Processing profileKey: ${profileKey}`, audioProfiles[profileKey]); // DEBUG (can be verbose)
-        if (Object.hasOwnProperty.call(audioProfiles, profileKey)) { // Good practice for-in loop
-            const option = document.createElement('option');
-            option.value = profileKey;
-            option.textContent = audioProfiles[profileKey].displayName;
-            audioProfileSelect.appendChild(option);
-            optionCount++;
-        }
-    }
-    console.log(`[ui-helpers.js] Added ${optionCount} options to audioProfileSelect.`); // DEBUG
-    if (optionCount === 0) {
-        console.warn("[ui-helpers.js] No options were added to the audio profile selector. Check audioProfiles data.");
-    }
-};
-
-/**
- * Updates the displayed description for the currently selected audio profile.
- * @param {string} profileKey - The key of the selected profile (e.g., 'manual', 'voice_clear').
- * Assumes audioProfileDescriptionEl and audioProfiles are available.
- */
-const updateAudioProfileDescription = (profileKey) => {
-    if (!audioProfileDescriptionEl || typeof audioProfiles === 'undefined' || !audioProfiles[profileKey]) {
-        if(audioProfileDescriptionEl) audioProfileDescriptionEl.textContent = 'Profile description not available.';
+    const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
+    if (!selectedFormatRadio) return;
+  
+    const fmt = selectedFormatRadio.value;
+  
+    opusSettingsDiv.style.display = (fmt === 'opus' || fmt === 'webm') ? 'block' : 'none';
+    mp3SettingsDiv.style.display = fmt === 'mp3' ? 'block' : 'none';
+  
+    // The individual estimate spans (estSizeOpusSpan, estSizeWebmSpan) are removed
+    // from HTML and dom-elements.js, so no need to manage their display here.
+    // The new #outputInfoSection is inside #opusSettings so it's handled.
+  
+    updateEstimatedSize(); // Recalculate for the current view
+  };
+  
+  /**
+   * Populates the audio profile selector dropdown.
+   */
+  const populateAudioProfileSelector = () => {
+      console.log("[ui-helpers.js] populateAudioProfileSelector called.");
+      if (!audioProfileSelect || typeof audioProfiles === 'undefined') {
+          console.error("[ui-helpers.js] Audio profile select element or profiles data not found.");
+          return;
+      }
+      audioProfileSelect.innerHTML = '';
+      console.log("[ui-helpers.js] audioProfiles data:", audioProfiles);
+  
+      let optionCount = 0;
+      for (const profileKey in audioProfiles) {
+          if (Object.hasOwnProperty.call(audioProfiles, profileKey)) {
+              const option = document.createElement('option');
+              option.value = profileKey;
+              option.textContent = audioProfiles[profileKey].displayName;
+              audioProfileSelect.appendChild(option);
+              optionCount++;
+          }
+      }
+      console.log(`[ui-helpers.js] Added ${optionCount} options to audioProfileSelect.`);
+      if (optionCount === 0) {
+          console.warn("[ui-helpers.js] No options were added to the audio profile selector.");
+      }
+  };
+  
+  /**
+   * Updates the displayed description for the currently selected audio profile.
+   * @param {string} profileKey - The key of the selected profile.
+   */
+  const updateAudioProfileDescription = (profileKey) => {
+      if (!audioProfileDescriptionEl || typeof audioProfiles === 'undefined' || !audioProfiles[profileKey]) {
+          if(audioProfileDescriptionEl) audioProfileDescriptionEl.textContent = 'Profile description not available.';
+          return;
+      }
+      audioProfileDescriptionEl.textContent = audioProfiles[profileKey].description || '';
+  };
+  
+  /**
+   * Applies the settings of a selected audio profile to the Opus UI controls.
+   * @param {string} profileKey - The key of the selected profile.
+   */
+  const applyAudioProfileSettings = (profileKey) => {
+      if (typeof audioProfiles === 'undefined' || !audioProfiles[profileKey]) {
+          console.warn(`Audio profile "${profileKey}" not found. No settings applied.`);
+          updateAudioProfileDescription(profileKey);
+          return;
+      }
+  
+      const profile = audioProfiles[profileKey];
+      updateAudioProfileDescription(profileKey);
+  
+      if (profileKey !== 'manual' && profile.opus) {
+          if (opusBitrateSlider) opusBitrateSlider.value = profile.opus.bitrate;
+          if (opusBitrateValueSpan) opusBitrateValueSpan.textContent = `${profile.opus.bitrate} kbps`;
+          if (opusVbrModeSelect) opusVbrModeSelect.value = profile.opus.vbr;
+          if (opusCompressionLevelSlider) opusCompressionLevelSlider.value = profile.opus.compressionLevel;
+          if (opusCompressionLevelValueSpan) opusCompressionLevelValueSpan.textContent = profile.opus.compressionLevel.toString();
+          if (opusApplicationSelect) opusApplicationSelect.value = profile.opus.application;
+      }
+      updateEstimatedSize();
+  };
+  
+  
+  /**
+   * Resets UI elements related to conversion results and file selection.
+   */
+  const resetUIForNewFile = () => {
+      console.log("Resetting UI for new file...");
+      if (resultEl) resultEl.innerHTML = '';
+      if (base64Container) base64Container.style.display = 'none';
+      if (base64Result) base64Result.innerHTML = '';
+      if (base64Output) base64Output.textContent = '';
+      if (copyBase64Btn) copyBase64Btn.disabled = true;
+      if (downloadBase64Btn) {
+          downloadBase64Btn.disabled = true;
+          downloadBase64Btn.textContent = 'Download Audio Base64 as TXT';
+      }
+      if (originalAudioContainer) {
+          originalAudioContainer.style.display = 'none';
+          originalAudioContainer.innerHTML = '';
+      }
+      if (playSampleBtn) {
+          playSampleBtn.textContent = 'Play Original';
+          playSampleBtn.disabled = true;
+      }
+  
+      // Reset new info display elements
+      if (typeof updateOriginalFileInfoDisplay === 'function') {
+          updateOriginalFileInfoDisplay(null);
+      }
+      if (typeof updateEstimatedSize === 'function') {
+          // Call updateEstimatedSize directly, it will show N/A if no file/duration
+          updateEstimatedSize();
+      }
+      // Old estimate spans (estSizeMp3Span, etc.) are removed, so no need to clear them.
+  
+      if (progressEl) {
+           progressEl.style.display = 'none';
+           progressEl.value = 0;
+           progressEl.removeAttribute('aria-valuenow');
+           progressEl.setAttribute('aria-hidden', 'true');
+      }
+      if (convertBtn) convertBtn.disabled = true;
+  
+      if (audioInfoContainer) audioInfoContainer.style.display = 'none';
+      if (audionalInfoContainer) audionalInfoContainer.style.display = 'none';
+  
+      if (imageFileInput) imageFileInput.value = '';
+      if (imagePreview) {
+          imagePreview.style.display = 'none';
+          imagePreview.src = '#';
+      }
+      if (fileSizeInfo) fileSizeInfo.textContent = '';
+      if (convertImageButton) {
+          convertImageButton.disabled = true;
+          convertImageButton.textContent = 'Convert to Base64';
+      }
+      if (imageBase64Output) {
+          const detailsParent = imageBase64Output.closest('details');
+          if(detailsParent) detailsParent.open = false;
+          imageBase64Output.style.display = 'none';
+          imageBase64Output.value = '';
+      }
+      if (copyImageBase64Button) {
+          copyImageBase64Button.disabled = true;
+          copyImageBase64Button.textContent = 'Copy Image Base64';
+      }
+      if (downloadImageBase64Button) {
+          downloadImageBase64Button.disabled = true;
+          downloadImageBase64Button.textContent = 'Download Image Base64 as TXT';
+      }
+  
+      if (typeof window.updateAudioBase64 === 'function') window.updateAudioBase64(null);
+      if (typeof window.updateImageBase64 === 'function') window.updateImageBase64(null);
+  
+      if (originalAudioUrl) {
+          URL.revokeObjectURL(originalAudioUrl);
+          originalAudioUrl = null;
+      }
+  };
+  
+  /**
+   * Resets UI elements specific to the *result* of a conversion.
+   */
+  const resetConversionOutputUI = () => {
+      console.log("Resetting conversion output UI...");
+      if (resultEl) resultEl.innerHTML = '';
+      if (base64Container) base64Container.style.display = 'none';
+      if (base64Result) base64Result.innerHTML = '';
+      if (base64Output) base64Output.textContent = '';
+      if (copyBase64Btn) copyBase64Btn.disabled = true;
+      if (downloadBase64Btn) {
+          downloadBase64Btn.disabled = true;
+          downloadBase64Btn.textContent = 'Download Audio Base64 as TXT';
+      }
+      if (progressEl) {
+          progressEl.style.display = 'none';
+          progressEl.value = 0;
+          progressEl.setAttribute('aria-hidden', 'true');
+      }
+      if (typeof window.updateAudioBase64 === 'function') window.updateAudioBase64(null);
+  };
+  
+  // --- Audio Format Info Popup ---
+  const displayAudioFormatInfo = () => {
+    if (typeof audioFormatInfo === 'undefined') {
+        console.error("Audio format info data (audioFormatInfo) not found.");
+        if (audioInfoContent) audioInfoContent.innerHTML = "<p>Error: Could not load format information.</p>";
+        if (audioInfoContainer) audioInfoContainer.style.display = 'block';
         return;
     }
-    audioProfileDescriptionEl.textContent = audioProfiles[profileKey].description || '';
-};
-
-/**
- * Applies the settings of a selected audio profile to the Opus UI controls.
- * @param {string} profileKey - The key of the selected profile.
- * Assumes Opus UI elements, audioProfiles, and updateEstimatedSize are available.
- */
-const applyAudioProfileSettings = (profileKey) => {
-    if (typeof audioProfiles === 'undefined' || !audioProfiles[profileKey]) {
-        console.warn(`Audio profile "${profileKey}" not found. No settings applied.`);
-        updateAudioProfileDescription(profileKey); // Update description to an error or default
+    if (!audioInfoContainer || !audioInfoContent) {
+        console.error("Audio info container elements not found in the DOM.");
         return;
     }
-
-    const profile = audioProfiles[profileKey];
-    updateAudioProfileDescription(profileKey); // Update description first
-
-    if (profileKey !== 'manual' && profile.opus) {
-        // Apply profile settings to UI controls
-        if (opusBitrateSlider) opusBitrateSlider.value = profile.opus.bitrate;
-        if (opusBitrateValueSpan) opusBitrateValueSpan.textContent = `${profile.opus.bitrate} kbps`;
-
-        if (opusVbrModeSelect) opusVbrModeSelect.value = profile.opus.vbr;
-
-        if (opusCompressionLevelSlider) opusCompressionLevelSlider.value = profile.opus.compressionLevel;
-        if (opusCompressionLevelValueSpan) opusCompressionLevelValueSpan.textContent = profile.opus.compressionLevel.toString();
-
-        if (opusApplicationSelect) opusApplicationSelect.value = profile.opus.application;
-    }
-    // If 'manual', UI controls are not changed here; they reflect current manual settings.
-    // Or, if you want 'manual' to reset to initial defaults:
-    // else if (profileKey === 'manual') {
-    //     if (opusBitrateSlider) opusBitrateSlider.value = initialOpusBitrate;
-    //     if (opusBitrateValueSpan) opusBitrateValueSpan.textContent = `${initialOpusBitrate} kbps`;
-    //     // ... reset other Opus controls to their initial values ...
-    // }
-
-
-    updateEstimatedSize(); // Recalculate estimated size with new settings
-};
-
-
-/**
- * Resets UI elements related to conversion results and file selection.
- * Called when a new file is selected or the process needs a hard reset.
- * Assumes all relevant DOM elements are accessible.
- */
-const resetUIForNewFile = () => {
-    console.log("Resetting UI for new file...");
-    // --- Audio Section Resets ---
-    if (resultEl) resultEl.innerHTML = '';
-    if (base64Container) base64Container.style.display = 'none'; // Hide audio base64 section
-    if (base64Result) base64Result.innerHTML = '';
-    if (base64Output) base64Output.textContent = ''; // Clear audio base64 output div
-    if (copyBase64Btn) copyBase64Btn.disabled = true;
-    if (downloadBase64Btn) {
-        downloadBase64Btn.disabled = true;
-        downloadBase64Btn.textContent = 'Download Audio Base64 as TXT'; // Reset text
-    }
-    if (originalAudioContainer) {
-        originalAudioContainer.style.display = 'none';
-        originalAudioContainer.innerHTML = '';
-    }
-    if (playSampleBtn) {
-        playSampleBtn.textContent = 'Play Original';
-        playSampleBtn.disabled = true;
-    }
-    // Clear audio estimate spans
-    if (estSizeMp3Span) estSizeMp3Span.textContent = '';
-    if (estSizeOpusSpan) estSizeOpusSpan.textContent = '';
-    if (estSizeWebmSpan) estSizeWebmSpan.textContent = '';
-    if (progressEl) {
-         progressEl.style.display = 'none';
-         progressEl.value = 0;
-         progressEl.removeAttribute('aria-valuenow'); // Clear aria value if set
-         progressEl.setAttribute('aria-hidden', 'true');
-    }
-    if (convertBtn) convertBtn.disabled = true;
-
-    // --- Info Popup Resets ---
-    if (audioInfoContainer) audioInfoContainer.style.display = 'none';
-    if (audionalInfoContainer) audionalInfoContainer.style.display = 'none';
-
-    // --- Image Section Resets ---
-    if (imageFileInput) imageFileInput.value = '';
-    if (imagePreview) {
-        imagePreview.style.display = 'none';
-        imagePreview.src = '#'; // Use '#' or '' to clear source
-    }
-    if (fileSizeInfo) fileSizeInfo.textContent = '';
-    if (convertImageButton) {
-        convertImageButton.disabled = true;
-        convertImageButton.textContent = 'Convert to Base64';
-    }
-    if (imageBase64Output) { // Assumes this is the TEXTAREA with the new ID
-        const detailsParent = imageBase64Output.closest('details');
-        if(detailsParent) detailsParent.open = false;
-        imageBase64Output.style.display = 'none';
-        imageBase64Output.value = '';
-    }
-    if (copyImageBase64Button) { // Assumes button with new ID
-        copyImageBase64Button.disabled = true;
-        copyImageBase64Button.textContent = 'Copy Image Base64';
-    }
-    if (downloadImageBase64Button) { // Assumes button with new ID
-        downloadImageBase64Button.disabled = true;
-        downloadImageBase64Button.textContent = 'Download Image Base64 as TXT';
-    }
-
-    // --- Reset OB1 Generator State (via global functions if exposed) ---
-    if (typeof window.updateAudioBase64 === 'function') window.updateAudioBase64(null);
-    if (typeof window.updateImageBase64 === 'function') window.updateImageBase64(null);
-    // OB1 Generator's own logic should disable the generate button via checkGenerateButton
-
-    // --- Clean up Blob URLs ---
-    // Revoke original audio URL if it exists
-    if (originalAudioUrl) {
-        URL.revokeObjectURL(originalAudioUrl);
-        originalAudioUrl = null; // Reset state variable (assuming defined in config-state.js)
-    }
-    // Note: URLs for converted audio player/download link are typically revoked
-    // automatically when the elements are removed or manually via audio-player logic.
-};
-
-
-/**
- * Resets UI elements specific to the *result* of a conversion (player, download link, base64 output).
- * Called before starting a new conversion.
- */
-const resetConversionOutputUI = () => {
-    console.log("Resetting conversion output UI...");
-    if (resultEl) resultEl.innerHTML = ''; // Clear previous player/link
-    if (base64Container) base64Container.style.display = 'none'; // Hide audio base64 section
-    if (base64Result) base64Result.innerHTML = ''; // Clear base64 player area
-    if (base64Output) base64Output.textContent = ''; // Clear audio base64 text
-    if (copyBase64Btn) copyBase64Btn.disabled = true;
-    if (downloadBase64Btn) {
-        downloadBase64Btn.disabled = true;
-        downloadBase64Btn.textContent = 'Download Audio Base64 as TXT'; // Reset text
-    }
-    if (progressEl) {
-        progressEl.style.display = 'none';
-        progressEl.value = 0;
-        progressEl.setAttribute('aria-hidden', 'true');
-    }
-    // Reset OB1 generator's audio state
-    if (typeof window.updateAudioBase64 === 'function') window.updateAudioBase64(null);
-};
-
-
-// --- Audio Format Info Popup ---
-
-/**
- * Displays the Audio Format Information popup.
- * Assumes audioFormatInfo object, audioInfoContainer, audioInfoContent, audionalInfoContainer are accessible.
- */
-const displayAudioFormatInfo = () => {
-  // Check if the data object and the container element exist
-  if (typeof audioFormatInfo === 'undefined') {
-      console.error("Audio format info data (audioFormatInfo) not found.");
-      if (audioInfoContent) audioInfoContent.innerHTML = "<p>Error: Could not load format information.</p>";
-      if (audioInfoContainer) audioInfoContainer.style.display = 'block'; // Show container with error
-      return;
-  }
-  if (!audioInfoContainer || !audioInfoContent) {
-      console.error("Audio info container elements not found in the DOM.");
-      return;
-  }
-
-  // Build the HTML content from the audioFormatInfo object
-  let infoHTML = '';
-  infoHTML += audioFormatInfo.conceptsTitle || '';
-  infoHTML += audioFormatInfo.losslessVsLossy || '';
-  infoHTML += audioFormatInfo.bitrate || '';
-  infoHTML += audioFormatInfo.formatsTitle || '';
-  infoHTML += audioFormatInfo.wav || '';
-  infoHTML += audioFormatInfo.webm || '';
-  infoHTML += audioFormatInfo.opus || '';
-  infoHTML += audioFormatInfo.mp3 || '';
-  infoHTML += audioFormatInfo.opusRecommendationsTitle || '';
-  infoHTML += audioFormatInfo.opusDetails || '';
-
-  // Set the inner HTML and scroll to top
-  audioInfoContent.innerHTML = infoHTML;
-  audioInfoContent.scrollTop = 0;
-
-  // Show this popup and hide the other one
-  audioInfoContainer.style.display = 'block';
-  if (audionalInfoContainer) {
-      audionalInfoContainer.style.display = 'none';
-  }
-};
-
-/**
- * Hides the Audio Format Information popup.
- * Assumes audioInfoContainer is accessible.
- */
-const hideAudioFormatInfo = () => {
-  if (audioInfoContainer) {
-      audioInfoContainer.style.display = 'none';
-  }
-};
-
-
-// --- Audional Instructions Info Popup ---
-
-/**
- * Displays the Audional Instructions popup and injects the content.
- * Assumes audionalInfoContainer, audionalInfoContent, audioInfoContainer, and audioFormatInfo are accessible.
- */
-const displayAudionalInfo = () => {
-  // Check if the necessary elements and data exist
-  if (typeof audioFormatInfo === 'undefined' || typeof audioFormatInfo.audionalInstructions === 'undefined') {
-      console.error("Audional instructions data (audioFormatInfo.audionalInstructions) not found.");
-      if (audionalInfoContent) audionalInfoContent.innerHTML = "<p>Error: Could not load Audional instructions.</p>";
-      if (audionalInfoContainer) audionalInfoContainer.style.display = 'block'; // Show container with error
-      return;
-  }
-  if (!audionalInfoContainer || !audionalInfoContent) {
-      console.error("Audional info container elements not found in the DOM.");
-      return;
-  }
-
-  // --- ADDED THIS LINE ---
-  // Inject the content from the audioFormatInfo object
-  audionalInfoContent.innerHTML = audioFormatInfo.audionalInstructions;
-  // -----------------------
-
-  // Show this popup and hide the other one
-  audionalInfoContainer.style.display = 'block';
-  if (audioInfoContainer) {
-      audioInfoContainer.style.display = 'none';
-  }
-
-  // Scroll content to top when opened
-  audionalInfoContent.scrollTop = 0;
-};
-
-/**
- * Hides the Audional Instructions popup.
- * Assumes audionalInfoContainer is accessible.
- */
-const hideAudionalInfo = () => {
+    let infoHTML = '';
+    infoHTML += audioFormatInfo.conceptsTitle || '';
+    infoHTML += audioFormatInfo.losslessVsLossy || '';
+    infoHTML += audioFormatInfo.bitrate || '';
+    infoHTML += audioFormatInfo.formatsTitle || '';
+    infoHTML += audioFormatInfo.wav || '';
+    infoHTML += audioFormatInfo.webm || '';
+    infoHTML += audioFormatInfo.opus || '';
+    infoHTML += audioFormatInfo.mp3 || '';
+    infoHTML += audioFormatInfo.opusRecommendationsTitle || '';
+    infoHTML += audioFormatInfo.opusDetails || '';
+    audioInfoContent.innerHTML = infoHTML;
+    audioInfoContent.scrollTop = 0;
+    audioInfoContainer.style.display = 'block';
     if (audionalInfoContainer) {
         audionalInfoContainer.style.display = 'none';
     }
-};
-
-// --- End of file ---
+  };
+  
+  const hideAudioFormatInfo = () => {
+    if (audioInfoContainer) {
+        audioInfoContainer.style.display = 'none';
+    }
+  };
+  
+  // --- Audional Instructions Info Popup ---
+  const displayAudionalInfo = () => {
+    if (typeof audioFormatInfo === 'undefined' || typeof audioFormatInfo.audionalInstructions === 'undefined') {
+        console.error("Audional instructions data (audioFormatInfo.audionalInstructions) not found.");
+        if (audionalInfoContent) audionalInfoContent.innerHTML = "<p>Error: Could not load Audional instructions.</p>";
+        if (audionalInfoContainer) audionalInfoContainer.style.display = 'block';
+        return;
+    }
+    if (!audionalInfoContainer || !audionalInfoContent) {
+        console.error("Audional info container elements not found in the DOM.");
+        return;
+    }
+    audionalInfoContent.innerHTML = audioFormatInfo.audionalInstructions;
+    audionalInfoContainer.style.display = 'block';
+    if (audioInfoContainer) {
+        audioInfoContainer.style.display = 'none';
+    }
+    audionalInfoContent.scrollTop = 0;
+  };
+  
+  const hideAudionalInfo = () => {
+      if (audionalInfoContainer) {
+          audionalInfoContainer.style.display = 'none';
+      }
+  };

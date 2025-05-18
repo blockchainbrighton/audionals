@@ -1,4 +1,4 @@
-// OB1_Template2.js (Option 1: Classic Script)
+// OB1_Template2.js
 
 /**
  * Generates a streamlined HTML file content string that embeds Base64 data
@@ -23,23 +23,24 @@ function OB1_Template2(title, instrument, note, frequency, isLoop, bpm, audioBas
     const metaTitle = title || 'Audional Player';
     const metaInstrument = instrument || 'N/A';
     const metaNote = note || 'N/A';
-    const metaFrequency = frequency || 'N/A';
+    const metaFrequency = frequency || 'N/A'; // frequency should already be a string like "XX.XX Hz"
     const metaIsLoop = isLoop ? 'Yes' : 'No';
     const metaBPM = isLoop && bpm ? bpm : 'N/A';
 
     const hasImage = typeof imageBase64Data === 'string' && imageBase64Data.trim() !== '';
 
+    // Determine player scripts based on whether an image is present
+    // This logic assumes your player scripts (app.js, main.js, playButton.js) are in the same directory
+    // as the generated HTML file and are named accordingly.
     let playerScripts = '';
     if (hasImage) {
+        // Assumes app.js and main.js are for the image-based player
         playerScripts = `
-    <script type="module" src="app.js" defer><\/script>
     <script type="module" src="main.js" defer><\/script>`;
     } else {
-        // playButton.js is included as a classic script, ensure it's deferred
-        // so it runs after the DOM and the inline data script.
+        // Assumes playButton.js is for the audio-only player
         playerScripts = `
-    <script src="playButton.js" defer><\/script>
-    <!-- app.js and main.js are assumed not to be needed for the no-image standalone button scenario -->`;
+    <script src="playButton.js" defer><\/script>`;
     }
 
     const htmlContent = `
@@ -57,32 +58,25 @@ function OB1_Template2(title, instrument, note, frequency, isLoop, bpm, audioBas
         .audio-metadata { font-size: 0.9em; color: #b0b0b0; margin-top: 15px; }
         .audio-metadata p { margin: 4px 0; }
         .audio-metadata span { font-weight: bold; color: #f0f0f0; }
-        /* Ensure playButton.js styles are distinct or complementary */
     </style>
 </head>
 <body>
-    <!-- Container for dynamic content -->
     <div id="app">
-        <!-- Content for #app will be populated by main.js (if image) or playButton.js (if no image) -->
+        <!-- Player content will be injected here by the respective JS -->
     </div>
 
-    <!-- Static Audio Metadata Section (Always present, styled by style.css or fallback) -->
     <div class="audio-metadata">
         <p>Title: <span id="audio-meta-title">${metaTitle}</span></p>
         <p>Instrument: <span id="audio-meta-instrument">${metaInstrument}</span></p>
-        <p>Note: <span id="audio-meta-note">${metaNote}</span> (<span id="audio-meta-frequency">${metaFrequency} Hz</span>)</p>
-        <p>Loop: <span id="audio-meta-loop">${metaIsLoop}</span>${isLoop ? `, BPM: <span id="audio-meta-bpm">${metaBPM}</span>` : ''}</p>
+        <p>Note: <span id="audio-meta-note">${metaNote}</span> (<span id="audio-meta-frequency">${metaFrequency}</span>)</p> <!-- Frequency already includes " Hz" -->
+        <p>Loop: <span id="audio-meta-loop">${metaIsLoop}</span>${isLoop && metaBPM !== 'N/A' ? `, BPM: <span id="audio-meta-bpm">${metaBPM}</span>` : ''}</p>
     </div>
 
-    <!-- --- Embedded Base64 Data Zone (as JS global variables) --- -->
     <script>
-        // These variables are intended for the player scripts (app.js/main.js or playButton.js)
-        const imageBase64 = \`${imageBase64Data || ''}\`;
-        const audioBase64_Opus = \`${audioBase64Data}\`;
+        window.imageBase64 = \`${imageBase64Data || ''}\`;
+        window.audioBase64_Opus = \`${audioBase64Data}\`;
     <\/script>
-    <!-- --- End Embedded Base64 Data Zone --- -->
 
-    <!-- Load the JS that builds the layout and adds interactivity -->
     ${playerScripts}
 </body>
 </html>
@@ -90,6 +84,5 @@ function OB1_Template2(title, instrument, note, frequency, isLoop, bpm, audioBas
     return htmlContent;
 }
 
-// Renamed function to OB1_Template2 to match its usage in ob1-generator.js
-// Ensure ob1-generator.js calls OB1_Template2 with all necessary arguments.
-// The arguments in the function signature have been updated to include all metadata.
+// Make it available on the window object if OB1_Template2.js is loaded as a separate script tag
+window.OB1_Template2 = OB1_Template2;
