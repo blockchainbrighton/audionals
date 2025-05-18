@@ -88,7 +88,7 @@ export function createControlsColumn() {
     const controlsColumn = createElement('div', { className: 'controls-column hidden' }, [
         // Title bar -----------------------------------------------------------
         createElement('div', { className: 'title-bar' }, [
-            createElement('h1', { textContent: 'OB1 - Audional Art' }),
+            createElement('h1', { textContent: 'Audional Art' }),
             createElement('button', {
                 id: 'info-toggle-btn',
                 title: 'Show/Hide Keyboard Shortcuts',
@@ -204,7 +204,7 @@ export function buildLayout(targetElement) {
         createElement('img', {
             id: 'main-image',
             src: '#',
-            alt: 'Audional Art OB1 Visual',
+            alt: 'Audional Art Visuals',
             title: 'Click to toggle tempo loop'
         })
     ]);

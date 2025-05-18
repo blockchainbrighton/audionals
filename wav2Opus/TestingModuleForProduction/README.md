@@ -1,8 +1,8 @@
-# OB1 - Audional Art Player
+# Audional Art Player
 
 ## Overview
 
-OB1 is a web-based application designed to present "Audional Art" – a combination of a static visual (image) with interactive audio playback. Users can click the main image to toggle audio looping and use a control panel or keyboard shortcuts to manipulate audio parameters like tempo, pitch, volume, and playback direction. The application also supports MIDI input for triggering samples at different pitches.
+Audional HTML Art Generator is a web-based application designed to present "Audional Art" – a combination of a static visual (image) with interactive audio playback. Users can click the main image to toggle audio looping and use a control panel or keyboard shortcuts to manipulate audio parameters like tempo, pitch, volume, and playback direction. The application also supports MIDI input for triggering samples at different pitches.
 
 The core audio and image data are embedded directly into the `index.html` file as Base64 strings, making the application self-contained once loaded. The UI is dynamically built using JavaScript.
 
@@ -55,7 +55,7 @@ The core audio and image data are embedded directly into the `index.html` file a
 
 *   **Click the Image:** Clicking the large central image will toggle the audio loop on or off.
 *   **Controls Panel (Left Column):**
-    *   **Title Bar:** Shows "OB1 - Audional Art". The "ℹ️" button toggles the visibility of the controls column and the reference/shortcuts column.
+    *   **Title Bar:** Shows "Audional Art". The "ℹ️" button toggles the visibility of the controls column and the reference/shortcuts column.
     *   **Audio Metadata:** Displays information about the embedded audio (Instrument, Note, Frequency). This is initially in the HTML but moved into the dynamically generated controls column.
     *   **Error Display:** Shows any operational errors.
     *   **Buttons:**
