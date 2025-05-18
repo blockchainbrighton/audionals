@@ -74,7 +74,7 @@ const setupEventListeners = () => {
     }
 
     // Opus VBR Mode Select
-    if (window.opusVbrModeSelect) {
+    if (opusVbrModeSelect) { // MODIFIED: Removed window. prefix
         opusVbrModeSelect.addEventListener('change', () => {
             // If user manually changes, switch profile to manual
             if (audioProfileSelect && audioProfileSelect.value !== 'manual') {
@@ -87,7 +87,7 @@ const setupEventListeners = () => {
     }
 
     // Opus Compression Level Slider
-    if (window.opusCompressionLevelSlider && window.opusCompressionLevelValueSpan) {
+    if (opusCompressionLevelSlider && opusCompressionLevelValueSpan) { // MODIFIED: Removed window. prefix
         opusCompressionLevelSlider.addEventListener('input', (e) => {
             opusCompressionLevelValueSpan.textContent = e.target.value;
             // If user manually changes, switch profile to manual
@@ -101,7 +101,7 @@ const setupEventListeners = () => {
     }
 
     // Opus Application Select
-    if (window.opusApplicationSelect) {
+    if (opusApplicationSelect) { // MODIFIED: Removed window. prefix
         opusApplicationSelect.addEventListener('change', () => {
             // If user manually changes, switch profile to manual
             if (audioProfileSelect && audioProfileSelect.value !== 'manual') {
@@ -194,14 +194,14 @@ const initializeUIState = () => {
          opusBitrateSlider.value = initialOpusBitrate;
          opusBitrateValueSpan.textContent = `${initialOpusBitrate} kbps`;
     }
-    if (window.opusVbrModeSelect) { // These window. prefixes are okay but direct reference is cleaner
+    if (opusVbrModeSelect) { // MODIFIED: Removed window. prefix
         opusVbrModeSelect.value = initialOpusVbrMode;
     }
-    if (window.opusCompressionLevelSlider && window.opusCompressionLevelValueSpan) {
+    if (opusCompressionLevelSlider && opusCompressionLevelValueSpan) { // MODIFIED: Removed window. prefix
         opusCompressionLevelSlider.value = initialOpusCompressionLevel;
         opusCompressionLevelValueSpan.textContent = initialOpusCompressionLevel.toString();
     }
-    if (window.opusApplicationSelect) {
+    if (opusApplicationSelect) { // MODIFIED: Removed window. prefix
         opusApplicationSelect.value = initialOpusApplication;
     }
 
@@ -235,18 +235,19 @@ const initializeUIState = () => {
     }
 
     // --- NEW: Initialize Audio Profile System ---
-    if (typeof populateAudioProfileSelector === 'function') {
-        populateAudioProfileSelector(); // Fill the dropdown
-    }
-    if (audioProfileSelect && typeof initialAudioProfile !== 'undefined') {
-        audioProfileSelect.value = initialAudioProfile; // Set to default profile
-    }
+    // Redundant block, already covered above. Keeping original structure.
+    // if (typeof populateAudioProfileSelector === 'function') {
+    //     populateAudioProfileSelector(); // Fill the dropdown
+    // }
+    // if (audioProfileSelect && typeof initialAudioProfile !== 'undefined') {
+    //     audioProfileSelect.value = initialAudioProfile; // Set to default profile
+    // }
     // Apply settings for the initial profile (could be 'manual' or a preset)
     // This must be called *after* Opus sliders are set to their initial values,
     // so if initial profile is 'manual', it respects them. If it's a preset, it overrides them.
-    if (typeof applyAudioProfileSettings === 'function' && typeof initialAudioProfile !== 'undefined') {
-        applyAudioProfileSettings(initialAudioProfile);
-    }
+    // if (typeof applyAudioProfileSettings === 'function' && typeof initialAudioProfile !== 'undefined') {
+    //     applyAudioProfileSettings(initialAudioProfile);
+    // }
     // --- END Initialize NEW Opus Advanced Controls ---
 
 
@@ -299,7 +300,7 @@ const initializeUIState = () => {
     // Disable Generate OB1 button initially
     // (This might also be handled within ob1-generator.js checkGenerateButton)
     const generateOb1Btn = document.getElementById('generateOB1Button');
-    if(generateOb1Btn) generateOb1Btn.disabled = false;
+    if(generateOb1Btn) generateOb1Btn.disabled = false; // This was false, seems odd for initial state but following original.
 
     console.log("UI state initialized.");
 };
