@@ -275,11 +275,11 @@ const updateStatus = (msg, err = false) => {
       }
       // ** END CORRECTIONS **
   
-      // --- Reset OB1 Generator State ---
-      // Assuming these are the correct function names exposed by ob1-generator.js for state updates
+      // --- Reset HTML Generator State ---
+      // Assuming these are the correct function names exposed by html-generator.js for state updates
       if (typeof window.updateAudioBase64 === 'function') window.updateAudioBase64(null);
       if (typeof window.updateImageBase64 === 'function') window.updateImageBase64(null);
-      // The checkGenerateButtonState in ob1-generator.js should handle its button state.
+      // The checkGenerateButtonState in html-generator.js should handle its button state.
   
       // --- Clean up Blob URLs ---
       if (originalAudioUrl) {
@@ -307,8 +307,8 @@ const updateStatus = (msg, err = false) => {
           progressEl.value = 0;
           progressEl.setAttribute('aria-hidden', 'true');
       }
-      // Reset OB1 generator's audio state
-      // ** CORRECTED FUNCTION NAME FOR OB1 GENERATOR AUDIO RESET **
+      // Reset HTML generator's audio state
+      // ** CORRECTED FUNCTION NAME FOR HTML GENERATOR AUDIO RESET **
       if (typeof window.updateAudioBase64 === 'function') window.updateAudioBase64(null);
   };
   

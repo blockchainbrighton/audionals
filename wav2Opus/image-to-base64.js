@@ -3,7 +3,7 @@
  */
 
 // Assuming utility functions like formatBytes are globally available (window.formatBytes)
-// Assuming ob1-generator functions like updateaudionalVisualBase64 are globally available (window.updateaudionalVisualBase64)
+// Assuming html-generator functions like updateaudionalVisualBase64 are globally available (window.updateaudionalVisualBase64)
 
 /**
  * Converts an image file to a base64 string (Data URL).
@@ -94,7 +94,7 @@ export function initializeImageConverter() {
           copyButton.disabled = true;     // Disable until conversion
           base64OutputTextarea.value = '';
           base64OutputTextarea.style.display = 'none'; // Hide output initially
-           // Reset corresponding OB1 generator state if needed
+           // Reset corresponding HTML generator state if needed
            if (typeof window.updateaudionalVisualBase64 === 'function') {
                window.updateaudionalVisualBase64(null); // Signal no image data ready
            }
@@ -142,10 +142,10 @@ export function initializeImageConverter() {
               downloadButton.disabled = false;
               copyButton.disabled = false;
 
-              // Update OB1 generator with the pure base64 image data
+              // Update HTML generator with the pure base64 image data
               if (typeof window.updateaudionalVisualBase64 === 'function') {
                   window.updateaudionalVisualBase64(currentPureBase64Data);
-                  console.log('Image base64 data sent to OB1 generator after conversion');
+                  console.log('Image base64 data sent to HTML generator after conversion');
               } else {
                   console.warn('updateaudionalVisualBase64 function not found on window object');
               }

@@ -51,14 +51,7 @@ function HTML_Template(title, instrument, note, frequency, isLoop, bpm, audional
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${metaTitle}</title>
     <link rel="stylesheet" href="style.css"> <!-- Common style for both player types -->
-    <style>
-        /* Minimal fallback styles if style.css is missing */
-        body { margin: 0; background-color: #1a1a1a; color: #e0e0e0; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; text-align: center; padding: 10px; box-sizing: border-box; }
-        #app { border: 1px solid #333; background-color: #282828; padding: 20px; border-radius: 8px; max-width: 500px; width: 90%; margin-bottom: 20px; }
-        .audio-metadata { font-size: 0.9em; color: #b0b0b0; margin-top: 15px; }
-        .audio-metadata p { margin: 4px 0; }
-        .audio-metadata span { font-weight: bold; color: #f0f0f0; }
-    </style>
+   
 </head>
 <body>
     <div id="app">

@@ -69,7 +69,7 @@ const setupBase64DisplayAndActions = async (audioBlob, outputFormat, originalNam
     updateStatus('Converting audio to Base64...');
     generatedBase64String = await convertBlobToBase64(audioBlob);
 
-    // --- *** DISPATCH THE EVENT FOR OB1 GENERATOR *** ---
+    // --- *** DISPATCH THE EVENT FOR HTML GENERATOR *** ---
     console.log("Dispatching audionalBase64Generated event...");
     document.dispatchEvent(new CustomEvent('audionalBase64Generated', {
         detail: { base64Data: generatedBase64String } // Send the pure base64 string
@@ -154,7 +154,7 @@ const setupBase64DisplayAndActions = async (audioBlob, outputFormat, originalNam
     base64Result.innerHTML = ''; // Clear any partial results
     copyBase64Btn.disabled = true;
     downloadBase64Btn.disabled = true;
-    // Ensure OB1 generator knows data is invalid/missing if needed (though it relies on events)
+    // Ensure HTML generator knows data is invalid/missing if needed (though it relies on events)
   }
 };
 
