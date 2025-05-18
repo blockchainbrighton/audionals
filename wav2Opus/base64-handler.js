@@ -70,8 +70,8 @@ const setupBase64DisplayAndActions = async (audioBlob, outputFormat, originalNam
     generatedBase64String = await convertBlobToBase64(audioBlob);
 
     // --- *** DISPATCH THE EVENT FOR OB1 GENERATOR *** ---
-    console.log("Dispatching audioBase64Generated event...");
-    document.dispatchEvent(new CustomEvent('audioBase64Generated', {
+    console.log("Dispatching audionalBase64Generated event...");
+    document.dispatchEvent(new CustomEvent('audionalBase64Generated', {
         detail: { base64Data: generatedBase64String } // Send the pure base64 string
     }));
     // --- *** END OF EVENT DISPATCH *** ---

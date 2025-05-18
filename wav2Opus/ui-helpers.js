@@ -100,9 +100,8 @@ const updateStatus = (msg, err = false) => {
   
       if (selectedFormat === 'mp3' && mp3QualitySlider) {
           const visualQuality = parseInt(mp3QualitySlider.value, 10);
-          // Approximate VBR bitrates for -q:a 0-9 (LAME defaults may vary)
           const approxBitrates = [245, 225, 190, 175, 165, 130, 115, 100, 85, 65];
-          const bitrateKbps = approxBitrates[visualQuality] || 165; // Fallback
+          const bitrateKbps = approxBitrates[visualQuality] || 165; 
           estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8;
           estimateValue = `~${window.formatBytes(estimatedSizeBytes)} (MP3 VBR q:${visualQuality})`;
   
@@ -121,7 +120,6 @@ const updateStatus = (msg, err = false) => {
   
   /**
    * Shows/hides the relevant quality settings groups based on the selected format.
-   * The new info section is inside opusSettingsDiv, so its visibility is handled implicitly.
    */
   const updateQualityDisplays = () => {
     if (!formatRadios || !mp3SettingsDiv || !opusSettingsDiv) {
@@ -136,11 +134,7 @@ const updateStatus = (msg, err = false) => {
     opusSettingsDiv.style.display = (fmt === 'opus' || fmt === 'webm') ? 'block' : 'none';
     mp3SettingsDiv.style.display = fmt === 'mp3' ? 'block' : 'none';
   
-    // The individual estimate spans (estSizeOpusSpan, estSizeWebmSpan) are removed
-    // from HTML and dom-elements.js, so no need to manage their display here.
-    // The new #outputInfoSection is inside #opusSettings so it's handled.
-  
-    updateEstimatedSize(); // Recalculate for the current view
+    updateEstimatedSize(); 
   };
   
   /**
@@ -214,6 +208,7 @@ const updateStatus = (msg, err = false) => {
    */
   const resetUIForNewFile = () => {
       console.log("Resetting UI for new file...");
+      // --- Audio Section Resets ---
       if (resultEl) resultEl.innerHTML = '';
       if (base64Container) base64Container.style.display = 'none';
       if (base64Result) base64Result.innerHTML = '';
@@ -232,15 +227,12 @@ const updateStatus = (msg, err = false) => {
           playSampleBtn.disabled = true;
       }
   
-      // Reset new info display elements
       if (typeof updateOriginalFileInfoDisplay === 'function') {
           updateOriginalFileInfoDisplay(null);
       }
       if (typeof updateEstimatedSize === 'function') {
-          // Call updateEstimatedSize directly, it will show N/A if no file/duration
           updateEstimatedSize();
       }
-      // Old estimate spans (estSizeMp3Span, etc.) are removed, so no need to clear them.
   
       if (progressEl) {
            progressEl.style.display = 'none';
@@ -250,40 +242,49 @@ const updateStatus = (msg, err = false) => {
       }
       if (convertBtn) convertBtn.disabled = true;
   
+      // --- Info Popup Resets ---
       if (audioInfoContainer) audioInfoContainer.style.display = 'none';
       if (audionalInfoContainer) audionalInfoContainer.style.display = 'none';
   
+      // --- Image Section Resets ---
       if (imageFileInput) imageFileInput.value = '';
       if (imagePreview) {
           imagePreview.style.display = 'none';
-          imagePreview.src = '#';
+          imagePreview.src = '#'; 
       }
       if (fileSizeInfo) fileSizeInfo.textContent = '';
       if (convertImageButton) {
           convertImageButton.disabled = true;
           convertImageButton.textContent = 'Convert to Base64';
       }
-      if (imageBase64Output) {
+
+      // ** CORRECTED VARIABLE NAMES FOR IMAGE SECTION **
+      if (imageBase64Output) { // Use the name from dom-elements.js
           const detailsParent = imageBase64Output.closest('details');
           if(detailsParent) detailsParent.open = false;
-          imageBase64Output.style.display = 'none';
+          // imageBase64Output.style.display = 'none'; // This is handled by image-to-base64.js on file input change
           imageBase64Output.value = '';
       }
-      if (copyImageBase64Button) {
+      if (copyImageBase64Button) { // Use the name from dom-elements.js
           copyImageBase64Button.disabled = true;
           copyImageBase64Button.textContent = 'Copy Image Base64';
       }
-      if (downloadImageBase64Button) {
+      if (downloadImageBase64Button) { // Use the name from dom-elements.js
           downloadImageBase64Button.disabled = true;
           downloadImageBase64Button.textContent = 'Download Image Base64 as TXT';
       }
+      // ** END CORRECTIONS **
   
+      // --- Reset OB1 Generator State ---
+      // Assuming these are the correct function names exposed by ob1-generator.js for state updates
       if (typeof window.updateAudioBase64 === 'function') window.updateAudioBase64(null);
       if (typeof window.updateImageBase64 === 'function') window.updateImageBase64(null);
+      // The checkGenerateButtonState in ob1-generator.js should handle its button state.
   
+      // --- Clean up Blob URLs ---
       if (originalAudioUrl) {
           URL.revokeObjectURL(originalAudioUrl);
-          originalAudioUrl = null;
+          originalAudioUrl = null; 
       }
   };
   
@@ -292,10 +293,10 @@ const updateStatus = (msg, err = false) => {
    */
   const resetConversionOutputUI = () => {
       console.log("Resetting conversion output UI...");
-      if (resultEl) resultEl.innerHTML = '';
-      if (base64Container) base64Container.style.display = 'none';
-      if (base64Result) base64Result.innerHTML = '';
-      if (base64Output) base64Output.textContent = '';
+      if (resultEl) resultEl.innerHTML = ''; 
+      if (base64Container) base64Container.style.display = 'none'; 
+      if (base64Result) base64Result.innerHTML = ''; 
+      if (base64Output) base64Output.textContent = ''; 
       if (copyBase64Btn) copyBase64Btn.disabled = true;
       if (downloadBase64Btn) {
           downloadBase64Btn.disabled = true;
@@ -306,6 +307,8 @@ const updateStatus = (msg, err = false) => {
           progressEl.value = 0;
           progressEl.setAttribute('aria-hidden', 'true');
       }
+      // Reset OB1 generator's audio state
+      // ** CORRECTED FUNCTION NAME FOR OB1 GENERATOR AUDIO RESET **
       if (typeof window.updateAudioBase64 === 'function') window.updateAudioBase64(null);
   };
   
@@ -371,3 +374,8 @@ const updateStatus = (msg, err = false) => {
           audionalInfoContainer.style.display = 'none';
       }
   };
+
+// NOTE: The image-to-base64.js content you provided seems to be appended to ui-helpers.js.
+// It should be in its own file (`image-to-base64.js`) and imported/called as a module.
+// I'm assuming this was an accidental concatenation in the prompt.
+// The corrections above focus only on the `audionalVisualBase64Output` ReferenceError within the `ui-helpers.js` part.

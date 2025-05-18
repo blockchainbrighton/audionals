@@ -1,4 +1,4 @@
-// ob1-generator.js - Handles OB1 generation using the HTML_Template function
+// html-generator.js - Handles html generation using the HTML_Template function
 
 // State variables to track the base64 data
 let audionalBase64 = null;
@@ -30,15 +30,15 @@ function stripDataURIPrefix(dataString) {
 }
 
 /**
- * Initialize the OB1 generator
+ * Initialize the html generator
  */
-function initOB1Generator() {
+function inithtmlGenerator() {
   // Make sure all DOM elements are correctly referenced here
   // Using the globally defined DOM elements from dom-elements.js is better
   if (!window.generateHtmlButton || !window.metadataModal || !window.metadataForm || !window.cancelMetadataBtn ||
       !window.instrumentInput || !window.noteInput || !window.frequencyInput || !window.titleInput ||
       !window.loopCheckbox || !window.bpmInput) {
-    console.error("OB1 Generator or Modal elements not found! Check HTML IDs and dom-elements.js.");
+    console.error("html Generator or Modal elements not found! Check HTML IDs and dom-elements.js.");
     if (window.generateHtmlButton) window.generateHtmlButton.disabled = true;
     return;
   }
@@ -58,7 +58,7 @@ function initOB1Generator() {
   });
 
   checkGenerateButtonState();
-  console.log("OB1 Generator Initialized with Modal Logic");
+  console.log("html Generator Initialized with Modal Logic");
 }
 
 /**
@@ -99,7 +99,7 @@ function handleMetadataSubmit(event) {
     hideMetadataModal();
 
     // Call the orchestrator function with the collected metadata
-    generateAndDownloadOb1File(title, instrument, note, frequency, isLoop, bpm);
+    generateAndDownloadhtmlFile(title, instrument, note, frequency, isLoop, bpm);
 }
 
 
@@ -126,7 +126,7 @@ function updateaudionalVisualBase64(base64Data) {
  */
 function checkGenerateButtonState() {
     const audioReady = typeof audionalBase64 === 'string' && audionalBase64.trim() !== '';
-    // Image is optional for OB1, so we only strictly require audio for the button
+    // Image is optional for html, so we only strictly require audio for the button
     // However, your current check requires both. Let's adjust based on your intent.
     // If image is truly optional, the condition should primarily depend on audio.
     // For now, keeping your original logic that requires both (audioReady && imageReady).
@@ -147,18 +147,18 @@ function checkGenerateButtonState() {
     if (audioReady) { // Primary condition: Audio must be ready
         if (window.generateHtmlButton) {
             window.generateHtmlButton.disabled = false;
-            console.log("OB1 Generate button ENABLED (Audio ready).");
+            console.log("html Generate button ENABLED (Audio ready).");
         }
     } else {
         if (window.generateHtmlButton) {
             window.generateHtmlButton.disabled = true;
-            // console.log("OB1 Generate button remains disabled (Audio not ready).");
+            // console.log("html Generate button remains disabled (Audio not ready).");
         }
     }
 }
 
 /**
- * Orchestrates OB1 HTML file generation and triggers download.
+ * Orchestrates html HTML file generation and triggers download.
  * @param {string} title
  * @param {string} instrument
  * @param {string} note
@@ -166,11 +166,11 @@ function checkGenerateButtonState() {
  * @param {boolean} isLoop
  * @param {string} bpm
  */
-function generateAndDownloadOb1File(title, instrument, note, frequency, isLoop, bpm) {
-  console.log("Starting OB1 file generation with metadata:", { title, instrument, note, frequency, isLoop, bpm });
+function generateAndDownloadhtmlFile(title, instrument, note, frequency, isLoop, bpm) {
+  console.log("Starting html file generation with metadata:", { title, instrument, note, frequency, isLoop, bpm });
 
   if (!audionalBase64) { // Check for audionalBase64 (the global in this script)
-    console.error("Cannot generate OB1: Missing audio Base64 data.");
+    console.error("Cannot generate html: Missing audio Base64 data.");
     alert("Error: Missing audio Base64 data. Please ensure audio has been converted.");
     return;
   }
@@ -231,8 +231,8 @@ function generateAndDownloadOb1File(title, instrument, note, frequency, isLoop, 
   }
 }
 
-// Initialize the OB1 generator when the DOM is loaded
-document.addEventListener('DOMContentLoaded', initOB1Generator);
+// Initialize the html generator when the DOM is loaded
+document.addEventListener('DOMContentLoaded', inithtmlGenerator);
 
 // Make functions available on window if called from other modules (optional, but can be helpful)
 window.updateaudionalBase64 = updateaudionalBase64;

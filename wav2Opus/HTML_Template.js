@@ -73,8 +73,11 @@ function HTML_Template(title, instrument, note, frequency, isLoop, bpm, audional
     </div>
 
     <script>
-        window.audionalVisualBase64 = \`${audionalVisualBase64Data || ''}\`;
         window.audionalBase64_Opus = \`${audionalBase64Data}\`;
+    <\/script>
+    
+    <script>
+        window.audionalVisualBase64 = \`${audionalVisualBase64Data || ''}\`;
     <\/script>
 
     ${playerScripts}

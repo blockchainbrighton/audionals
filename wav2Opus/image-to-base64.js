@@ -3,7 +3,7 @@
  */
 
 // Assuming utility functions like formatBytes are globally available (window.formatBytes)
-// Assuming ob1-generator functions like updateImageBase64 are globally available (window.updateImageBase64)
+// Assuming ob1-generator functions like updateaudionalVisualBase64 are globally available (window.updateaudionalVisualBase64)
 
 /**
  * Converts an image file to a base64 string (Data URL).
@@ -95,8 +95,8 @@ export function initializeImageConverter() {
           base64OutputTextarea.value = '';
           base64OutputTextarea.style.display = 'none'; // Hide output initially
            // Reset corresponding OB1 generator state if needed
-           if (typeof window.updateImageBase64 === 'function') {
-               window.updateImageBase64(null); // Signal no image data ready
+           if (typeof window.updateaudionalVisualBase64 === 'function') {
+               window.updateaudionalVisualBase64(null); // Signal no image data ready
            }
 
       } else {
@@ -109,8 +109,8 @@ export function initializeImageConverter() {
           copyButton.disabled = true;
           base64OutputTextarea.value = '';
           base64OutputTextarea.style.display = 'none';
-          if (typeof window.updateImageBase64 === 'function') {
-               window.updateImageBase64(null);
+          if (typeof window.updateaudionalVisualBase64 === 'function') {
+               window.updateaudionalVisualBase64(null);
            }
       }
   });
@@ -143,11 +143,11 @@ export function initializeImageConverter() {
               copyButton.disabled = false;
 
               // Update OB1 generator with the pure base64 image data
-              if (typeof window.updateImageBase64 === 'function') {
-                  window.updateImageBase64(currentPureBase64Data);
+              if (typeof window.updateaudionalVisualBase64 === 'function') {
+                  window.updateaudionalVisualBase64(currentPureBase64Data);
                   console.log('Image base64 data sent to OB1 generator after conversion');
               } else {
-                  console.warn('updateImageBase64 function not found on window object');
+                  console.warn('updateaudionalVisualBase64 function not found on window object');
               }
 
           } catch (error) {
@@ -158,8 +158,8 @@ export function initializeImageConverter() {
               copyButton.disabled = true;
               base64OutputTextarea.value = '';
               base64OutputTextarea.style.display = 'none';
-              if (typeof window.updateImageBase64 === 'function') {
-                   window.updateImageBase64(null); // Signal error/no data
+              if (typeof window.updateaudionalVisualBase64 === 'function') {
+                   window.updateaudionalVisualBase64(null); // Signal error/no data
                }
 
           } finally {
