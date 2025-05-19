@@ -41,9 +41,9 @@ export function createControlsColumn() {
         createElement('button', { id: 'loop-toggle-btn', disabled: true, textContent: 'Play Loop: Off' }),
         createElement('button', { id: 'reverse-toggle-btn', disabled: true, textContent: 'Reverse: Off' })
       ]),
-      createControlGroup('Volume:', 'volume-slider', 'range', '0.0', MAX_VOLUME, '0.01', DEFAULT_VOLUME, '%', v => Math.round(v * 100)),
+      createControlGroup('Volume:', 'volume-slider', 'range', '0.0', MAX_VOLUME, '0.01', DEFAULT_VOLUME, v => Math.round(v * 100)),
       createControlGroup('Tempo:', 'tempo-slider', 'range', '1', MAX_TEMPO, '1', DEFAULT_TEMPO, ' BPM'),
-      createControlGroup('Pitch:', 'pitch-slider', 'range', MIN_PITCH, MAX_PITCH, '0.01', DEFAULT_PITCH, '%', v => Math.round(v * 100)),
+      createControlGroup('Pitch:', 'pitch-slider', 'range', MIN_PITCH, MAX_PITCH, '0.01', DEFAULT_PITCH, v => Math.round(v * 100)),
       createControlGroup('Multiplier:', 'multiplier-slider', 'range', '1', MAX_MULTIPLIER, '1', DEFAULT_MULTIPLIER, '', v => `x${v}`),
       createElement('div', { className: 'midi-controls control-group' }, [
         createElement('label', { for: 'midi-device-select', textContent: 'MIDI In:' }),
