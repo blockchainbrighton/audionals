@@ -99,38 +99,87 @@ export async function startLoop() {
   if (currentGlobalPitch <= 0 && sampleType === 'loop') return;
   const buf = _selectBuffer(); if (!buf) return showError("Buffer not available for loop.");
   if (currentLoopingSource) try { currentLoopingSource.stop(); } catch { } currentLoopingSource = null;
+  
+  // Reset tracking
   nextNativeLoopAnimationTime = 0;
+
   const scheduleCallback = (scheduledTime, effectiveRate) => {
     if (effectiveRate <= 0) return;
-    if (sampleType === 'one-shot') _play(buf, scheduledTime, effectiveRate);
-    else if (sampleType === 'loop' && decodedBuffer && nextNativeLoopAnimationTime > 0 && effectiveRate > 0) {
+    
+    if (sampleType === 'one-shot') {
+      _play(buf, scheduledTime, effectiveRate);
+    }
+    else if (sampleType === 'loop' && decodedBuffer && effectiveRate > 0) {
       const d = decodedBuffer.duration / effectiveRate;
       if (d <= NATIVE_LOOP_ANIMATION_EPSILON / 2) return;
+      
       if (scheduledTime >= nextNativeLoopAnimationTime - NATIVE_LOOP_ANIMATION_EPSILON) {
-        triggerAnimation();
+        // Instead of triggering animation here, do nothing or keep minimal logic
+        // Animation will be scheduled exactly when starting playback below
+        
         while (nextNativeLoopAnimationTime <= scheduledTime + NATIVE_LOOP_ANIMATION_EPSILON) {
           nextNativeLoopAnimationTime += d;
-          if (d < 0.001 && audioContext && nextNativeLoopAnimationTime > audioContext.currentTime + 60) { nextNativeLoopAnimationTime = 0; break; }
+          if (d < 0.001 && audioContext && nextNativeLoopAnimationTime > audioContext.currentTime + 60) {
+            nextNativeLoopAnimationTime = 0;
+            break;
+          }
         }
       }
     }
   };
-  const ok = timingManager.startLoop(scheduleCallback); if (!ok) return showError('Failed to start timing loop.'), nextNativeLoopAnimationTime = 0;
+
+  const ok = timingManager.startLoop(scheduleCallback);
+  if (!ok) return showError('Failed to start timing loop.'), nextNativeLoopAnimationTime = 0;
+
   if (sampleType === 'loop') {
     const st = timingManager.getSessionInitialStartTime();
     if (st > 0 && decodedBuffer && currentGlobalPitch > 0) {
       mainGainNode.gain.setTargetAtTime(currentVolume, audioContext.currentTime, SMOOTH_PARAM_TIME);
+
+      // Start the loop playback source at st
       currentLoopingSource = _play(buf, st, currentGlobalPitch, true);
-      const d = decodedBuffer.duration / currentGlobalPitch; nextNativeLoopAnimationTime = d > 0 ? st + d : 0;
-    } else nextNativeLoopAnimationTime = 0;
-  } else nextNativeLoopAnimationTime = 0;
+
+      // Schedule the animation exactly at st
+      const delayMs = Math.max(0, (st - audioContext.currentTime) * 1000);
+      setTimeout(() => {
+        triggerAnimation();
+        // Then, set up a repeating timer for subsequent loops:
+        const loopDurationMs = (decodedBuffer.duration / currentGlobalPitch) * 1000;
+        // Use setInterval to keep triggering animation at loop boundaries
+        const animationInterval = setInterval(() => {
+          triggerAnimation();
+        }, loopDurationMs);
+
+        // Optionally store animationInterval to clear it on stopLoop
+        currentLoopingSource.animationInterval = animationInterval;
+      }, delayMs);
+
+      const d = decodedBuffer.duration / currentGlobalPitch;
+      nextNativeLoopAnimationTime = d > 0 ? st + d : 0;
+    } else {
+      nextNativeLoopAnimationTime = 0;
+    }
+  } else {
+    nextNativeLoopAnimationTime = 0;
+  }
 }
 
 export function stopLoop() {
   timingManager.stopLoop();
-  if (currentLoopingSource) try { currentLoopingSource.stop(); } catch {} currentLoopingSource = null;
+  if (currentLoopingSource) {
+    try {
+      // Clear scheduled animation interval if any
+      if (currentLoopingSource.animationInterval) {
+        clearInterval(currentLoopingSource.animationInterval);
+        currentLoopingSource.animationInterval = null;
+      }
+      currentLoopingSource.stop();
+    } catch {}
+  }
+  currentLoopingSource = null;
   nextNativeLoopAnimationTime = 0;
 }
+
 
 export function setScheduleMultiplier(m) { timingManager.setScheduleMultiplier(Math.max(1, parseInt(m, 10))); }
 export const getScheduleMultiplier = () => timingManager.getCurrentScheduleMultiplier();
