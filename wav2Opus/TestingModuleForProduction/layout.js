@@ -1,8 +1,9 @@
 // layout.js — consolidated module (controls column, layout builder, reference display)
-import { createElement } from './utils.js';
+import { createElement, sValToP, PITCH_SLIDER_CONFIG } from './utils.js'; // Added sValToP, PITCH_SLIDER_CONFIG
 
-const DEFAULT_VOLUME = 1.0, DEFAULT_TEMPO = 78, DEFAULT_PITCH = 1.0, DEFAULT_MULTIPLIER = 1;
-const MAX_VOLUME = 1.5, MAX_TEMPO = 400, MAX_PITCH = 10.0, MIN_PITCH = 0.01, MAX_MULTIPLIER = 8;
+const DEFAULT_VOLUME = 1.0, DEFAULT_TEMPO = 78, DEFAULT_PITCH = PITCH_SLIDER_CONFIG.NEUTRAL_S, DEFAULT_MULTIPLIER = 1; // DEFAULT_PITCH is s_val
+const MAX_VOLUME = 1.5, MAX_TEMPO = 400, MAX_PITCH = PITCH_SLIDER_CONFIG.MAX_S, MIN_PITCH = PITCH_SLIDER_CONFIG.MIN_S, MAX_MULTIPLIER = 8;
+
 
 const referenceContentHTML = `
 <h2>Keyboard Shortcuts</h2><h3>Volume & Mute</h3><ul>
@@ -17,23 +18,42 @@ const referenceContentHTML = `
 </ul><p><em>(<code>Ctrl</code> can be <code>Cmd</code> on macOS)</em></p><h3>Playback</h3><ul>
 <li><code>Spacebar</code>: Play sample once</li><li><code>Click Image</code>: Toggle Loop</li><li><code>R</code>: Toggle Reverse Playback</li></ul>`;
 
-// Labelled slider control
-const createControlGroup = (label, id, type, min, max, step, val, unit = '', fmt = v => String(v)) =>
-  createElement('div', { className: 'control-group' }, [
-    createElement('label', { for: id, textContent: label }),
-    createElement('input', { type, id, min, max, step, value: val, disabled: true }),
-    createElement('span', { className: 'value-display' }, [
-      createElement('span', { id: id.replace('-slider', '-value'), textContent: fmt(val) }), unit
+// Revised Labelled slider control with manual input
+const createControlGroupFinal = (
+    label,
+    sliderId, // e.g., 'volume-slider'
+    sliderMin, sliderMax, sliderStep, sliderVal, // Values for the range slider
+    numberInputVal, // Initial value for the number input (e.g., P for pitch, % for volume)
+    numberInputMin, numberInputMax, numberInputStep, // Attributes for the number input
+    displayUnit = '', // e.g., "BPM" or "%"
+    formatDisplayValue = v => String(v) // Formats `numberInputVal` for the text span
+) => {
+  const numberInputId = sliderId.replace('-slider', '-input');
+  const textDisplaySpanId = sliderId.replace('-slider', '-value'); // This is the ID uiUpdater targets for text
+
+  return createElement('div', { className: 'control-group' }, [
+    createElement('label', { for: sliderId, textContent: label }),
+    createElement('input', { type: 'range', id: sliderId, min: String(sliderMin), max: String(sliderMax), step: String(sliderStep), value: String(sliderVal), disabled: true }),
+    createElement('input', {
+      type: 'number',
+      id: numberInputId,
+      className: 'value-input manual-value-input',
+      min: String(numberInputMin),
+      max: String(numberInputMax),
+      step: String(numberInputStep),
+      value: String(numberInputVal), // Use the specific initial value for number input
+      disabled: true
+    }),
+    createElement('span', { className: 'value-display' }, [ // Container for formatted text and unit
+      createElement('span', { id: textDisplaySpanId, textContent: formatDisplayValue(numberInputVal) }),
+      createElement('span', { className: 'unit', textContent: ` ${displayUnit.trim()}` })
     ])
   ]);
+};
 
 export function createControlsColumn() {
   const controls = createElement('div', { className: 'controls-column hidden' }, [
-    createElement('div', { className: 'title-bar' }, [
-      createElement('h1', { textContent: 'Audional Art' }),
-      createElement('button', { id: 'info-toggle-btn', title: 'Show/Hide Keyboard Shortcuts', textContent: 'ℹ️' })
-    ]),
-    createElement('div', { className: 'metadata-placeholder' }),
+    // ... (title-bar, metadata-placeholder) ...
     createElement('div', { id: 'controls-container', className: 'controls disabled' }, [
       createElement('div', { id: 'error-message', className: 'error' }),
       createElement('div', { className: 'button-group' }, [
@@ -41,10 +61,27 @@ export function createControlsColumn() {
         createElement('button', { id: 'loop-toggle-btn', disabled: true, textContent: 'Play Loop: Off' }),
         createElement('button', { id: 'reverse-toggle-btn', disabled: true, textContent: 'Reverse: Off' })
       ]),
-      createControlGroup('Volume:', 'volume-slider', 'range', '0.0', MAX_VOLUME, '0.01', DEFAULT_VOLUME, v => Math.round(v * 100)),
-      createControlGroup('Tempo:', 'tempo-slider', 'range', '1', MAX_TEMPO, '1', DEFAULT_TEMPO, ' BPM'),
-      createControlGroup('Pitch:', 'pitch-slider', 'range', MIN_PITCH, MAX_PITCH, '0.01', DEFAULT_PITCH, v => Math.round(v * 100)),
-      createControlGroup('Multiplier:', 'multiplier-slider', 'range', '1', MAX_MULTIPLIER, '1', DEFAULT_MULTIPLIER, '', v => `x${v}`),
+      // Use createControlGroupFinal
+      createControlGroupFinal('Volume:', 'volume-slider',
+        '0.0', MAX_VOLUME, '0.01', DEFAULT_VOLUME,                             // Slider: raw 0.0-1.5
+        Math.round(DEFAULT_VOLUME * 100), 0, Math.round(MAX_VOLUME * 100), 1,  // Number Input: 0-150
+        '%', v => String(v)                                                    // Unit & formatter for display val (which is already 0-150)
+      ),
+      createControlGroupFinal('Tempo:', 'tempo-slider',
+        '1', MAX_TEMPO, '1', DEFAULT_TEMPO,                                    // Slider: BPM
+        DEFAULT_TEMPO, 1, MAX_TEMPO, 1,                                       // Number Input: BPM
+        'BPM', v => String(v)
+      ),
+      createControlGroupFinal('Pitch:', 'pitch-slider',
+        MIN_PITCH, MAX_PITCH, PITCH_SLIDER_CONFIG.STEP, DEFAULT_PITCH,         // Slider: s_val
+        sValToP(DEFAULT_PITCH), -1000, 1000, 1,                                // Number Input: P value (-1000 to 1000)
+        '%', v => String(v)                                                    // Unit & formatter for P value
+      ),
+      createControlGroupFinal('Multiplier:', 'multiplier-slider',
+        '1', MAX_MULTIPLIER, '1', DEFAULT_MULTIPLIER,                           // Slider: raw multiplier
+        DEFAULT_MULTIPLIER, 1, MAX_MULTIPLIER, 1,                             // Number Input: raw multiplier
+        '', v => `x${v}`                                                        // No suffix unit, formatter adds 'x' prefix
+      ),
       createElement('div', { className: 'midi-controls control-group' }, [
         createElement('label', { for: 'midi-device-select', textContent: 'MIDI In:' }),
         createElement('select', { id: 'midi-device-select', disabled: true }, [

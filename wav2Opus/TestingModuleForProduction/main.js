@@ -4,7 +4,7 @@ import * as ui from './uiUpdater.js';
 import * as midiHandler from './midiHandler.js';
 import * as keyboardShortcuts from './keyboardShortcuts.js';
 import { buildLayout, initReferencePanel } from './layout.js';
-import { clamp, _isInputFocused, addListener, createElement, PITCH_SLIDER_CONFIG, sValToP } from './utils.js';
+import { clamp, _isInputFocused, addListener, createElement, PITCH_SLIDER_CONFIG, sValToP, pToSVal } from './utils.js'; // Added pToSVal
 
 const D = {
   tempo: 78, pitch: PITCH_SLIDER_CONFIG.NEUTRAL_S, minPitch: PITCH_SLIDER_CONFIG.MIN_S, maxPitch: PITCH_SLIDER_CONFIG.MAX_S,
@@ -14,28 +14,37 @@ const D = {
 
 let appContainer, mainImage, playOnceBtn, loopToggleBtn, reverseToggleBtn,
   tempoSlider, pitchSlider, volumeSlider, multiplierSlider,
+  tempoInput, pitchInput, volumeInput, multiplierInput,
+
   controlsContainer, infoToggleBtn, referencePanel, errorMessageDiv,
   midiDeviceSelect, midiStatusSpan, controlsColumn, referenceColumn;
 
-const idMap = [
-  ['app',    el => appContainer = document.getElementById(el)],
-  ['main-image', el => mainImage = document.getElementById(el)],
-  ['play-once-btn', el => playOnceBtn = document.getElementById(el)],
-  ['loop-toggle-btn', el => loopToggleBtn = document.getElementById(el)],
-  ['reverse-toggle-btn', el => reverseToggleBtn = document.getElementById(el)],
-  ['tempo-slider', el => tempoSlider = document.getElementById(el)],
-  ['pitch-slider', el => pitchSlider = document.getElementById(el)],
-  ['volume-slider', el => volumeSlider = document.getElementById(el)],
-  ['multiplier-slider', el => multiplierSlider = document.getElementById(el)],
-  ['controls-container', el => controlsContainer = document.getElementById(el)],
-  ['info-toggle-btn', el => infoToggleBtn = document.getElementById(el)],
-  ['reference-panel', el => referencePanel = document.getElementById(el)],
-  ['error-message', el => errorMessageDiv = document.getElementById(el)],
-  ['midi-device-select', el => midiDeviceSelect = document.getElementById(el)],
-  ['midi-status', el => midiStatusSpan = document.getElementById(el)],
-  ['.controls-column', sel => controlsColumn = document.querySelector(sel)],
-  ['.reference-column', sel => referenceColumn = document.querySelector(sel)],
-];
+  const idMap = [
+    ['app',    el => appContainer = document.getElementById(el)],
+    ['main-image', el => mainImage = document.getElementById(el)],
+    ['play-once-btn', el => playOnceBtn = document.getElementById(el)],
+    ['loop-toggle-btn', el => loopToggleBtn = document.getElementById(el)],
+    ['reverse-toggle-btn', el => reverseToggleBtn = document.getElementById(el)],
+    // Sliders
+    ['tempo-slider', el => tempoSlider = document.getElementById(el)],
+    ['pitch-slider', el => pitchSlider = document.getElementById(el)],
+    ['volume-slider', el => volumeSlider = document.getElementById(el)],
+    ['multiplier-slider', el => multiplierSlider = document.getElementById(el)],
+    // Number Inputs
+    ['tempo-input', el => tempoInput = document.getElementById(el)],
+    ['pitch-input', el => pitchInput = document.getElementById(el)],
+    ['volume-input', el => volumeInput = document.getElementById(el)],
+    ['multiplier-input', el => multiplierInput = document.getElementById(el)],
+    // Other UI
+    ['controls-container', el => controlsContainer = document.getElementById(el)],
+    ['info-toggle-btn', el => infoToggleBtn = document.getElementById(el)],
+    ['reference-panel', el => referencePanel = document.getElementById(el)],
+    ['error-message', el => errorMessageDiv = document.getElementById(el)],
+    ['midi-device-select', el => midiDeviceSelect = document.getElementById(el)],
+    ['midi-status', el => midiStatusSpan = document.getElementById(el)],
+    ['.controls-column', sel => controlsColumn = document.querySelector(sel)],
+    ['.reference-column', sel => referenceColumn = document.querySelector(sel)],
+  ];
 
 const findElements = () => {
   idMap.forEach(([sel, setter]) => setter(sel));
@@ -103,36 +112,49 @@ const fetchAudioFromUrl = async (url, defMime) => {
   } catch (e) { ui.showError(`Failed to load audio from URL '${url}': ${e.message}`); console.error("Audio fetch error:", e); return null; }
 };
 
+// In initializeApp, ensure D.pitch uses the s_val from config.
+// D.pitch: PITCH_SLIDER_CONFIG.NEUTRAL_S, this is correct.
 const initializeApp = async () => {
   if (!findElements()) return;
   ui.init?.(); ui.clearError();
   const g = window, im = D.imageMime, am = D.audioMime;
   let imgSrc = await loadDataSrc(g, ['audionalVisualBase64', 'imageScript'], im, 'image data') ??
     (typeof g.imageURL === 'string' && !g.imageURL.startsWith('/*') && g.imageURL.trim() !== '' ? g.imageURL : null);
-  if (!imgSrc) { ui.showError("No image data source found."); ui.setImageSource(null); } else ui.setImageSource(imgSrc);
+  if (!imgSrc) { ui.showError("No image data source found."); ui.setImageSource(null); } else ui.setImageSource(imgSrc); // No change for GIF needed here
   let audSrc = await loadDataSrc(g, ['audionalBase64_Opus', 'audioScript'], am, 'audio data') ??
     (typeof g.audioURL === 'string' && !g.audioURL.startsWith('/*') && g.audioURL.trim() !== ''
       ? await fetchAudioFromUrl(g.audioURL, am) : null);
   if (!audSrc) { ui.showError("No audio data source found."); ui.disableControls(); return; }
+  
+  // Initial values for audio module and UI (sliders already set by layout.js default values)
   const ini = {
-    tempo: clamp(+(tempoSlider?.value ?? D.tempo), D.minTempo, D.maxTempo),
-    pitch_s_val: clamp(D.pitch, D.minPitch, D.maxPitch),
-    volume: clamp(+(volumeSlider?.value ?? D.volume), D.minVolume, D.maxVolume),
-    mult: clamp(+(multiplierSlider?.value ?? D.mult), D.minMult, D.maxMult),
+    tempo: +(tempoSlider?.value ?? D.tempo),
+    pitch_s_val: +(pitchSlider?.value ?? D.pitch), // D.pitch is NEUTRAL_S
+    volume: +(volumeSlider?.value ?? D.volume),
+    mult: +(multiplierSlider?.value ?? D.mult),
   };
-  if (tempoSlider) Object.assign(tempoSlider, { min: D.minTempo, max: D.maxTempo, value: ini.tempo });
-  if (pitchSlider) Object.assign(pitchSlider, { min: D.minPitch, max: D.maxPitch, step: D.pitchStep, value: ini.pitch_s_val });
-  if (volumeSlider) Object.assign(volumeSlider, { min: D.minVolume, max: D.maxVolume, step: 0.01, value: ini.volume });
-  if (multiplierSlider) Object.assign(multiplierSlider, { min: D.minMult, max: D.maxMult, step: 1, value: ini.mult });
+
+  // The layout.js already sets initial slider and number input values based on defaults.
+  // We mainly need to ensure the audio module is initialized with these.
+  // And UI display functions are called once.
+
   midiHandler.init(handleNoteOn, () => {}, handleMidiStateChange);
   if (!(await audio.init(audSrc, ini.tempo, ini.pitch_s_val))) { ui.showError("Failed to initialize audio module."); ui.disableControls(); return; }
   audio.setVolume(ini.volume);
+  audio.setScheduleMultiplier(ini.mult); // Set initial multiplier in audio module if not done by init
+  
   referencePanel && initReferencePanel(referencePanel);
   keyboardShortcuts.init?.({ tempoSlider, pitchSlider, volumeSlider, multiplierSlider });
-  setupEventListeners();
-  ui.updateTempoDisplay(ini.tempo); ui.updatePitchDisplay(sValToP(ini.pitch_s_val));
-  ui.updateVolumeDisplay(ini.volume); ui.updateScheduleMultiplierDisplay(ini.mult);
-  ui.updateLoopButton(audio.getLoopingState()); ui.updateReverseButton(audio.getReverseState());
+  setupEventListeners(); // Sets up listeners for sliders AND new number inputs
+
+  // Call UI updaters to ensure all parts (text spans, number inputs) are synced based on initial slider values
+  ui.updateTempoDisplay(ini.tempo);
+  ui.updatePitchDisplay(sValToP(ini.pitch_s_val)); // Pass P value
+  ui.updateVolumeDisplay(ini.volume); // Pass raw level
+  ui.updateScheduleMultiplierDisplay(ini.mult); // Pass raw multiplier
+
+  ui.updateLoopButton(audio.getLoopingState());
+  ui.updateReverseButton(audio.getReverseState());
   ui.enableControls();
   console.log("Application initialized successfully.");
 };
@@ -146,14 +168,88 @@ function setupEventListeners() {
       const { new_s_val, new_isReversed } = audio.toggleReverse();
       ui.updateReverseButton(new_isReversed);
       if (pitchSlider && parseFloat(pitchSlider.value) !== new_s_val) {
-        pitchSlider.value = new_s_val; ui.updatePitchDisplay(sValToP(new_s_val));
+        pitchSlider.value = new_s_val;
+        // When reverse changes s_val, update pitch display (P) and pitch number input (P)
+        ui.updatePitchDisplay(sValToP(new_s_val));
       }
     });
   });
+
+  // Slider input listeners (these will trigger UI updates that also refresh the number inputs)
   addListener(tempoSlider, 'input', e => handleSliderInput(e, audio.setTempo, ui.updateTempoDisplay, parseInt));
-  addListener(pitchSlider, 'input', e => handleSliderInput(e, audio.setGlobalPitch, ui.updatePitchDisplay, parseInt, sValToP));
-  addListener(volumeSlider, 'input', e => handleSliderInput(e, audio.setVolume, ui.updateVolumeDisplay));
+  addListener(pitchSlider, 'input', e => handleSliderInput(e, audio.setGlobalPitch, ui.updatePitchDisplay, parseFloat, sValToP)); // sValToP converts s_val to P for UI
+  addListener(volumeSlider, 'input', e => handleSliderInput(e, audio.setVolume, ui.updateVolumeDisplay)); // ui.updateVolumeDisplay handles conversion for display
   addListener(multiplierSlider, 'input', e => handleSliderInput(e, audio.setScheduleMultiplier, ui.updateScheduleMultiplierDisplay, parseInt));
+
+  // Listeners for manual number inputs (use 'change' to update on blur/enter)
+  addListener(tempoInput, 'change', e => {
+    const inputElem = e.target;
+    const sliderElem = tempoSlider;
+    let val = parseInt(inputElem.value, 10);
+    if (!isNaN(val)) {
+      val = clamp(val, parseInt(sliderElem.min, 10), parseInt(sliderElem.max, 10));
+      inputElem.value = String(val); // Update input in case it was clamped
+      sliderElem.value = String(val);
+      audio.setTempo(val);
+      ui.updateTempoDisplay(val); // Sync text display
+    } else { // Revert to current slider value if input is invalid
+      inputElem.value = sliderElem.value;
+    }
+  });
+
+  addListener(volumeInput, 'change', e => { // Volume input is 0-150 (%)
+    const inputElem = e.target;
+    const sliderElem = volumeSlider; // Slider is 0.0-1.5
+    let displayVal = parseInt(inputElem.value, 10); // e.g., 75
+    if (!isNaN(displayVal)) {
+      const displayMin = parseInt(inputElem.min, 10); // Should be 0
+      const displayMax = parseInt(inputElem.max, 10); // Should be MAX_VOLUME * 100
+      displayVal = clamp(displayVal, displayMin, displayMax);
+      inputElem.value = String(displayVal);
+
+      const audioVal = displayVal / 100.0; // Convert to 0.0-1.5 for audio/slider
+      sliderElem.value = String(audioVal);
+      audio.setVolume(audioVal);
+      ui.updateVolumeDisplay(audioVal); // Expects raw level
+    } else {
+      inputElem.value = String(Math.round(parseFloat(sliderElem.value) * 100));
+    }
+  });
+
+  addListener(pitchInput, 'change', e => { // Pitch input is P value (-1000 to 1000)
+    const inputElem = e.target;
+    const sliderElem = pitchSlider; // Slider is s_val
+    let pVal = parseInt(inputElem.value, 10);
+    if (!isNaN(pVal)) {
+      const pMin = parseInt(inputElem.min, 10); // Should be -1000
+      const pMax = parseInt(inputElem.max, 10); // Should be 1000
+      pVal = clamp(pVal, pMin, pMax);
+      inputElem.value = String(pVal);
+
+      const sVal = pToSVal(pVal); // Convert P to s_val for audio/slider
+      sliderElem.value = String(sVal);
+      audio.setGlobalPitch(sVal);
+      ui.updatePitchDisplay(pVal); // Expects P
+    } else {
+      inputElem.value = String(sValToP(parseFloat(sliderElem.value)));
+    }
+  });
+
+  addListener(multiplierInput, 'change', e => {
+    const inputElem = e.target;
+    const sliderElem = multiplierSlider;
+    let val = parseInt(inputElem.value, 10);
+    if (!isNaN(val)) {
+      val = clamp(val, parseInt(sliderElem.min, 10), parseInt(sliderElem.max, 10));
+      inputElem.value = String(val);
+      sliderElem.value = String(val);
+      audio.setScheduleMultiplier(val);
+      ui.updateScheduleMultiplierDisplay(val);
+    } else {
+      inputElem.value = sliderElem.value;
+    }
+  });
+
   addListener(midiDeviceSelect, 'change', e => midiHandler.selectDevice(e.target.value));
   addListener(infoToggleBtn, 'click', toggleSideColumns);
   window.addEventListener('keydown', e => {
