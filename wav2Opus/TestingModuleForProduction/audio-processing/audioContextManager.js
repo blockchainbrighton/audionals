@@ -1,62 +1,25 @@
 // audio-processing/audioContextManager.js
-import { showError } from '../uiUpdater.js'; // Adjust path as needed
+import { showError } from '../uiUpdater.js';
 
-let audioContextInstance = null;
-let mainGainNodeInstance = null;
+let ctx = null, gain = null;
 
-export function setupAudioContext(initialVolume = 1) {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) {
-        const errorMsg = 'AudioContext not supported by this browser.';
-        showError(errorMsg);
-        throw new Error(errorMsg);
-    }
-    // Ensure any existing context is properly closed before creating a new one
-    if (audioContextInstance && audioContextInstance.state !== 'closed') {
-        audioContextInstance.close().catch(e => console.warn("Error closing previous AudioContext:", e));
-    }
-
-    audioContextInstance = new Ctx();
-    mainGainNodeInstance = audioContextInstance.createGain();
-    mainGainNodeInstance.gain.setValueAtTime(initialVolume, audioContextInstance.currentTime);
-    mainGainNodeInstance.connect(audioContextInstance.destination);
-    
-    return { audioContext: audioContextInstance, mainGainNode: mainGainNodeInstance };
+export function setupAudioContext(vol = 1) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) { showError('AudioContext not supported.'); throw Error('AudioContext not supported.'); }
+  if (ctx && ctx.state !== 'closed') ctx.close().catch(e => console.warn('Error closing AudioContext:', e));
+  ctx = new AudioCtx();
+  gain = ctx.createGain();
+  gain.gain.setValueAtTime(vol, ctx.currentTime);
+  gain.connect(ctx.destination);
+  return { audioContext: ctx, mainGainNode: gain };
 }
-
-export function getAudioContext() {
-    return audioContextInstance;
-}
-
-export function getMainGainNode() {
-    return mainGainNodeInstance;
-}
+export const getAudioContext = () => ctx;
+export const getMainGainNode = () => gain;
+export const getAudioContextState = () => ctx?.state || 'unavailable';
+export const closeAudioContext = () => { if (ctx && ctx.state !== 'closed') ctx.close().catch(()=>{}); ctx = gain = null; };
 
 export async function ensureAudioContextActive() {
-    if (!audioContextInstance) {
-        showError('Audio system not ready.');
-        return false;
-    }
-    if (audioContextInstance.state === 'suspended') {
-        try {
-            await audioContextInstance.resume();
-        } catch (e) {
-            showError('Could not resume audio.');
-            console.error('Could not resume audio:', e);
-            return false;
-        }
-    }
-    return true;
-}
-
-export function getAudioContextState() {
-    return audioContextInstance?.state || 'unavailable';
-}
-
-export function closeAudioContext() {
-    if (audioContextInstance && audioContextInstance.state !== 'closed') {
-        audioContextInstance.close().catch(e => console.warn("Error closing AudioContext:", e));
-    }
-    audioContextInstance = null;
-    mainGainNodeInstance = null;
+  if (!ctx) return showError('Audio system not ready.'), false;
+  if (ctx.state === 'suspended') try { await ctx.resume(); } catch (e) { showError('Could not resume audio.'); return false; }
+  return true;
 }

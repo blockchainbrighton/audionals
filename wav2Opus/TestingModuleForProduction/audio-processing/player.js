@@ -1,27 +1,16 @@
 // audio-processing/player.js
-import { showError, triggerAnimation } from '../uiUpdater.js'; // Adjust path as needed
+import { showError, triggerAnimation } from '../uiUpdater.js';
 
-export function playBufferSource(audioCtx, destinationNode, buffer, time, rate, loop = false, onEndedCallback = null, offset = 0) {
-    if (!audioCtx || !destinationNode || !buffer || rate <= 0) {
-        console.warn("playBufferSource: Invalid parameters, buffer, or rate.", { audioCtxExists: !!audioCtx, destinationExists: !!destinationNode, bufferExists: !!buffer, rate });
-        if (rate <= 0) showError("Playback rate must be positive.");
-        return null;
-    }
-    try {
-        const source = audioCtx.createBufferSource();
-        Object.assign(source, { buffer, loop });
-        source.playbackRate.value = rate;
-        source.connect(destinationNode);
-        source.start(time, offset);
-
-        if (onEndedCallback && typeof onEndedCallback === 'function') {
-            source.onended = onEndedCallback;
-        }
-        triggerAnimation(); // As per original _play behavior
-        return source;
-    } catch (e) {
-        showError('Failed to play audio source.');
-        console.error('Failed to play audio source:', e);
-        return null;
-    }
+export function playBufferSource(ctx, dest, buf, time, rate, loop = false, onEnded = null, offset = 0) {
+  if (!ctx || !dest || !buf || rate <= 0) return rate <= 0 && showError('Playback rate must be positive.'), null;
+  try {
+    const src = ctx.createBufferSource();
+    Object.assign(src, { buffer: buf, loop });
+    src.playbackRate.value = rate;
+    src.connect(dest);
+    src.start(time, offset);
+    if (onEnded) src.onended = onEnded;
+    triggerAnimation();
+    return src;
+  } catch (e) { showError('Failed to play audio source.'); return null; }
 }

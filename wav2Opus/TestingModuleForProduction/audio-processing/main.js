@@ -1,7 +1,6 @@
 // audio-processing/main.js
 import { PITCH_SLIDER_CONFIG, sValToP, pToSVal } from '../utils.js';
 import { showError, triggerAnimation } from '../uiUpdater.js';
-
 import * as C from './constants.js';
 import * as AudioManager from './audioContextManager.js';
 import * as BufferManager from './bufferManager.js';
@@ -9,463 +8,195 @@ import * as Player from './player.js';
 import { timingManager } from './timingManager.js';
 
 // --- State ---
-let isReversed = false;
-let currentTempo = 78;
-let currentGlobalPitch = 1; // Absolute pitch rate
-let currentVolume = 1;
-
-let currentLoopingSource = null;
-let currentLoopingGainNode = null;
-let secondaryLoopingSource = null;
-let secondaryLoopingGainNode = null;
-
-let currentLoopingSourceStartTime = 0;
-let currentLoopingSourceOffset = 0;
-let currentLoopingSourcePlaybackRate = 1;
-let currentLoopingSourceBufferDuration = 0;
+let isReversed = false, currentTempo = 78, currentGlobalPitch = 1, currentVolume = 1;
+let currentLoopingSource = null, currentLoopingGainNode = null, secondaryLoopingSource = null, secondaryLoopingGainNode = null;
+let currentLoopingSourceStartTime = 0, currentLoopingSourceOffset = 0, currentLoopingSourcePlaybackRate = 1, currentLoopingSourceBufferDuration = 0;
 
 // --- Helpers ---
-
-/**
- * Computes the current playback position (in seconds) within the buffer,
- * accounting for playback start time, playback rate, and looping wrap-around.
- */
-function getCurrentPlaybackPosition() {
+const safeStop = s => { try { s?.stop(); } catch {} }, safeDisconnect = n => { try { n?.disconnect(); } catch {} };
+const clearAnim = s => s?.animationInterval && (clearInterval(s.animationInterval), s.animationInterval = null);
+const createGain = (ctx, v, dest) => (g => (g.gain.setValueAtTime(v, ctx.currentTime), g.connect(dest), g))(ctx.createGain());
+const fadeGain = (g, v, d) => { const now = g.context.currentTime; g.gain.cancelScheduledValues(now); g.gain.linearRampToValueAtTime(v, now + d); };
+const scheduleAnim = (src, dur, cond) => { triggerAnimation(); if (dur > 0.001 && dur < Infinity) src.animationInterval = setInterval(() => cond() ? triggerAnimation() : clearAnim(src), dur * 1000); };
+const getCurrentPlaybackPosition = () => {
   if (!currentLoopingSourceStartTime || !currentLoopingSourceBufferDuration) return 0;
-  const audioCtx = AudioManager.getAudioContext();
-  if (!audioCtx) return 0;
-
-  const elapsed = (audioCtx.currentTime - currentLoopingSourceStartTime) * currentLoopingSourcePlaybackRate;
-  let pos = currentLoopingSourceOffset + elapsed;
-
-  // Handle looping wrap-around
+  const ctx = AudioManager.getAudioContext(); if (!ctx) return 0;
+  let pos = currentLoopingSourceOffset + (ctx.currentTime - currentLoopingSourceStartTime) * currentLoopingSourcePlaybackRate;
   while (pos < 0) pos += currentLoopingSourceBufferDuration;
   while (pos > currentLoopingSourceBufferDuration) pos -= currentLoopingSourceBufferDuration;
-
   return pos;
-}
-
-const safeStop = (source) => { try { source?.stop(); } catch {} };
-const safeDisconnect = (node) => { try { node?.disconnect(); } catch {} };
-const clearAnimationInterval = (source) => {
-  if (source?.animationInterval) {
-    clearInterval(source.animationInterval);
-    source.animationInterval = null;
-  }
-};
-const createGainWithValue = (audioCtx, gainVal, connectTo) => {
-  const gainNode = audioCtx.createGain();
-  gainNode.gain.setValueAtTime(gainVal, audioCtx.currentTime);
-  gainNode.connect(connectTo);
-  return gainNode;
-};
-const scheduleAnimation = (source, duration, conditionCheck) => {
-  triggerAnimation();
-  if (duration > 0.001 && duration < Infinity) {
-    source.animationInterval = setInterval(() => {
-      if (conditionCheck()) triggerAnimation();
-      else clearAnimationInterval(source);
-    }, duration * 1000);
-  }
-};
-const fadeGain = (gainNode, toVal, duration) => {
-  const now = gainNode.context.currentTime;
-  gainNode.gain.cancelScheduledValues(now);
-  gainNode.gain.linearRampToValueAtTime(toVal, now + duration);
 };
 
-// --- Core API Functions ---
+// --- Core API ---
 
 export async function init(base64Audio, tempo = 78, initial_s_val = PITCH_SLIDER_CONFIG.NEUTRAL_S) {
-  currentTempo = tempo;
-  currentVolume = 1;
-
+  currentTempo = tempo; currentVolume = 1;
   const initial_P = sValToP(initial_s_val);
   currentGlobalPitch = Math.abs(initial_P / 100);
   isReversed = initial_P < 0 && !(currentGlobalPitch === 0 && initial_P === 0);
 
-  [currentLoopingSource, currentLoopingGainNode, secondaryLoopingSource, secondaryLoopingGainNode].forEach((node) => {
-    if (node) {
-      safeStop(node);
-      clearAnimationInterval(node);
-      safeDisconnect(node);
-    }
-  });
-  currentLoopingSource = currentLoopingGainNode = secondaryLoopingSource = secondaryLoopingGainNode = null;
+  [currentLoopingSource, currentLoopingGainNode, secondaryLoopingSource, secondaryLoopingGainNode].forEach(n => { safeStop(n); clearAnim(n); safeDisconnect(n); });
+  [currentLoopingSource, currentLoopingGainNode, secondaryLoopingSource, secondaryLoopingGainNode] = [null, null, null, null];
 
-  BufferManager.clearBuffers();
-  AudioManager.closeAudioContext();
-
+  BufferManager.clearBuffers(); AudioManager.closeAudioContext();
   try {
     AudioManager.setupAudioContext(currentVolume);
-    const audioCtx = AudioManager.getAudioContext();
-    if (!audioCtx) throw new Error("Failed to setup AudioContext.");
-
-    const loaded = await BufferManager.loadAndPrepareBuffers(audioCtx, base64Audio);
-    if (!loaded) throw new Error("Failed to load or prepare audio buffers.");
-
-    timingManager.init(audioCtx, currentTempo);
-  } catch (e) {
-    showError(`Audio Init Failed: ${e.message || e}`);
-    console.error("Audio Init Failed:", e);
-    return false;
-  }
+    const ctx = AudioManager.getAudioContext();
+    if (!ctx) throw Error('Failed to setup AudioContext.');
+    if (!await BufferManager.loadAndPrepareBuffers(ctx, base64Audio)) throw Error('Failed to load or prepare audio buffers.');
+    timingManager.init(ctx, currentTempo);
+  } catch (e) { showError(`Audio Init Failed: ${e.message || e}`); return false; }
   return true;
 }
 
 export async function playOnce() {
-  if (!(await AudioManager.ensureAudioContextActive())) return;
-  const audioCtx = AudioManager.getAudioContext();
-  const mainGain = AudioManager.getMainGainNode();
-  if (!audioCtx || !mainGain) return;
-
-  const buffer = BufferManager.selectCurrentBuffer(isReversed);
-  if (buffer && currentGlobalPitch > 0) {
-    Player.playBufferSource(audioCtx, mainGain, buffer, audioCtx.currentTime, currentGlobalPitch, false);
-  }
+  if (!await AudioManager.ensureAudioContextActive()) return;
+  const ctx = AudioManager.getAudioContext(), gain = AudioManager.getMainGainNode();
+  const buf = BufferManager.selectCurrentBuffer(isReversed);
+  if (buf && currentGlobalPitch > 0) Player.playBufferSource(ctx, gain, buf, ctx.currentTime, currentGlobalPitch, false);
 }
 
 export async function startLoop() {
-  if (timingManager.getLoopingState() || !(await AudioManager.ensureAudioContextActive())) return;
-
-  const audioCtx = AudioManager.getAudioContext();
-  const mainGain = AudioManager.getMainGainNode();
-  if (!audioCtx || !mainGain) {
-    showError("Audio context or main gain not ready for starting loop.");
-    return;
-  }
-
+  if (timingManager.getLoopingState() || !await AudioManager.ensureAudioContextActive()) return;
+  const ctx = AudioManager.getAudioContext(), mainGain = AudioManager.getMainGainNode();
+  if (!ctx || !mainGain) return showError("Audio context or main gain not ready for starting loop.");
   const sampleType = BufferManager.getSampleType();
-  if (currentGlobalPitch <= 0 && sampleType === 'loop') {
-    showError("Native loop requires positive pitch.");
-    return;
-  }
+  if (currentGlobalPitch <= 0 && sampleType === 'loop') return showError("Native loop requires positive pitch.");
+  const bufToPlay = BufferManager.selectCurrentBuffer(isReversed), decodedBuf = BufferManager.getDecodedBuffer();
+  if (!bufToPlay || !decodedBuf) return showError("Buffer or decoded buffer not available for loop.");
 
-  const bufferToPlay = BufferManager.selectCurrentBuffer(isReversed);
-  const decodedBuf = BufferManager.getDecodedBuffer();
+  [currentLoopingSource, currentLoopingGainNode].forEach((n, i) => { n && (safeStop(n), clearAnim(n), i && safeDisconnect(n)); });
+  [currentLoopingSource, currentLoopingGainNode] = [null, null];
 
-  if (!bufferToPlay || !decodedBuf) {
-    showError("Buffer or decoded buffer not available for loop.");
-    return;
-  }
+  const rate = currentGlobalPitch, dur = decodedBuf.duration; currentLoopingSourceBufferDuration = dur;
+  let offset = currentLoopingSource ? getCurrentPlaybackPosition() : 0;
+  if (isReversed) offset = dur - offset;
+  currentLoopingSourceStartTime = ctx.currentTime; currentLoopingSourceOffset = offset; currentLoopingSourcePlaybackRate = isReversed ? -rate : rate;
 
-  // Cleanup prior loop sources and gains
-  [currentLoopingSource, currentLoopingGainNode].forEach((node, idx) => {
-    if (node) {
-      safeStop(node);
-      clearAnimationInterval(node);
-      if (idx === 1) safeDisconnect(node); // Only disconnect gainNode
-    }
-  });
-  currentLoopingSource = currentLoopingGainNode = null;
-
-  // Calculate rate and offset for starting playback at current position
-  const new_rate_abs = currentGlobalPitch;
-  const bufferDuration = decodedBuf.duration;
-  currentLoopingSourceBufferDuration = bufferDuration;
-
-  let offset = 0; // start at beginning by default
-  if (currentLoopingSource) {
-    offset = getCurrentPlaybackPosition();
-  }
-
-  if (isReversed) {
-    offset = bufferDuration - offset;
-  }
-
-  currentLoopingSourceStartTime = audioCtx.currentTime;
-  currentLoopingSourceOffset = offset;
-  currentLoopingSourcePlaybackRate = isReversed ? -new_rate_abs : new_rate_abs;
-
-  // Schedule callback for one-shot sample types
-  const scheduleCallback = (scheduledTime) => {
+  const scheduleCb = t => {
     if (currentGlobalPitch <= 0 && sampleType === 'one-shot') return;
-
-    const effectiveBuffer = BufferManager.selectCurrentBuffer(isReversed);
-    if (!effectiveBuffer) return;
-
-    if (sampleType === 'one-shot') {
-      const gainNode = AudioManager.getMainGainNode();
-      if (gainNode) Player.playBufferSource(audioCtx, gainNode, effectiveBuffer, scheduledTime, currentGlobalPitch, false);
-      else console.warn("Main gain node unavailable for scheduled one-shot.");
-    }
+    const effBuf = BufferManager.selectCurrentBuffer(isReversed);
+    if (sampleType === 'one-shot' && effBuf) Player.playBufferSource(ctx, mainGain, effBuf, t, currentGlobalPitch, false);
   };
-
-  if (!timingManager.startLoop(scheduleCallback)) {
-    showError('Failed to start timing loop.');
-    return;
-  }
-
+  if (!timingManager.startLoop(scheduleCb)) return showError('Failed to start timing loop.');
   if (sampleType !== 'loop') return;
 
-  const loopStartTime = timingManager.getSessionInitialStartTime();
-  if (!(loopStartTime > 0)) {
-    timingManager.stopLoop();
-    showError("Invalid start time for native loop.");
-    return;
-  }
+  const loopStart = timingManager.getSessionInitialStartTime();
+  if (!(loopStart > 0)) return timingManager.stopLoop(), showError("Invalid start time for native loop.");
 
-  currentLoopingGainNode = createGainWithValue(audioCtx, currentVolume, mainGain);
-  currentLoopingSource = Player.playBufferSource(
-    audioCtx,
-    currentLoopingGainNode,
-    bufferToPlay,
-    audioCtx.currentTime,
-    new_rate_abs,
-    true,
-    null,
-    offset
-  );
+  currentLoopingGainNode = createGain(ctx, currentVolume, mainGain);
+  currentLoopingSource = Player.playBufferSource(ctx, currentLoopingGainNode, bufToPlay, ctx.currentTime, rate, true, null, offset);
+  if (!currentLoopingSource) return timingManager.stopLoop(), showError("Failed to create looping source."), safeDisconnect(currentLoopingGainNode), currentLoopingGainNode = null;
 
-  if (!currentLoopingSource) {
-    timingManager.stopLoop();
-    showError("Failed to create looping source.");
-    safeDisconnect(currentLoopingGainNode);
-    currentLoopingGainNode = null;
-    return;
-  }
-
-  clearAnimationInterval(currentLoopingSource);
-
-  const delayMs = Math.max(0, (loopStartTime - audioCtx.currentTime) * 1000);
+  clearAnim(currentLoopingSource);
   setTimeout(() => {
-    if (currentLoopingSource && timingManager.getLoopingState()) {
-      scheduleAnimation(
-        currentLoopingSource,
-        decodedBuf.duration / currentGlobalPitch,
-        () => timingManager.getLoopingState() && currentGlobalPitch > 0
-      );
-    }
-  }, delayMs);
+    if (currentLoopingSource && timingManager.getLoopingState())
+      scheduleAnim(currentLoopingSource, dur / currentGlobalPitch, () => timingManager.getLoopingState() && currentGlobalPitch > 0);
+  }, Math.max(0, (loopStart - ctx.currentTime) * 1000));
 }
 
 export function stopLoop() {
   timingManager.stopLoop();
-
   [currentLoopingSource, secondaryLoopingSource].forEach(safeStop);
   [currentLoopingGainNode, secondaryLoopingGainNode].forEach(safeDisconnect);
   [currentLoopingSource, currentLoopingGainNode, secondaryLoopingSource, secondaryLoopingGainNode] = [null, null, null, null];
-
-  // Clear playback tracking
-  currentLoopingSourceStartTime = 0;
-  currentLoopingSourceOffset = 0;
-  currentLoopingSourcePlaybackRate = 1;
-  currentLoopingSourceBufferDuration = 0;
+  currentLoopingSourceStartTime = 0; currentLoopingSourceOffset = 0; currentLoopingSourcePlaybackRate = 1; currentLoopingSourceBufferDuration = 0;
 }
 
-export function setScheduleMultiplier(m) {
-  timingManager.setScheduleMultiplier(Math.max(1, parseInt(m, 10) || 1));
-}
+export function setScheduleMultiplier(m) { timingManager.setScheduleMultiplier(Math.max(1, parseInt(m, 10) || 1)); }
 export const getScheduleMultiplier = () => timingManager.getCurrentScheduleMultiplier();
-
-export function setTempo(bpm) {
-  bpm = parseFloat(bpm);
-  if (bpm > 0) {
-    currentTempo = bpm;
-    timingManager.setTempo(bpm);
-  }
-}
+export function setTempo(bpm) { bpm = parseFloat(bpm); if (bpm > 0) { currentTempo = bpm; timingManager.setTempo(bpm); } }
 
 export function toggleReverse() {
-  const audioCtx = AudioManager.getAudioContext();
-  if (!audioCtx || !BufferManager.getDecodedBuffer() || !BufferManager.getReversedBuffer()) {
+  const ctx = AudioManager.getAudioContext();
+  if (!ctx || !BufferManager.getDecodedBuffer() || !BufferManager.getReversedBuffer()) {
     const val = Math.round((isReversed ? -currentGlobalPitch : currentGlobalPitch) * 100);
     return { new_s_val: pToSVal(val), new_isReversed: isReversed };
   }
-
   let val = Math.round((isReversed ? -currentGlobalPitch : currentGlobalPitch) * 100);
-  const newVal = val === 0 ? (isReversed ? 100 : -100) : -val;
-  const new_s_val = pToSVal(newVal);
+  const newVal = val === 0 ? (isReversed ? 100 : -100) : -val, new_s_val = pToSVal(newVal);
   setGlobalPitch(new_s_val);
   return { new_s_val, new_isReversed: isReversed };
 }
 
 export function setGlobalPitch(s_val) {
-  const audioCtx = AudioManager.getAudioContext();
-  const mainGain = AudioManager.getMainGainNode();
-  if (!audioCtx || !mainGain) return;
-
-  const P_new = sValToP(s_val);
-  const new_rate_abs = Math.abs(P_new / 100);
-  const new_isReversed = P_new < 0;
-
-  const wasLooping = timingManager.getLoopingState();
-  const old_isReversed = isReversed;
-  const old_rate_abs = currentGlobalPitch;
-
-  const stopping = new_rate_abs === 0 && old_rate_abs > 0;
-  const starting = new_rate_abs > 0 && old_rate_abs === 0;
-  const directionChange = new_isReversed !== old_isReversed && new_rate_abs > 0;
-
-  isReversed = new_isReversed;
-  currentGlobalPitch = new_rate_abs;
-  if (P_new === 0) isReversed = false;
-
+  const ctx = AudioManager.getAudioContext(), mainGain = AudioManager.getMainGainNode();
+  if (!ctx || !mainGain) return;
+  const P_new = sValToP(s_val), new_rate = Math.abs(P_new / 100), new_rev = P_new < 0;
+  const wasLooping = timingManager.getLoopingState(), old_rev = isReversed, old_rate = currentGlobalPitch;
+  const stopping = new_rate === 0 && old_rate > 0, starting = new_rate > 0 && old_rate === 0, dirChange = new_rev !== old_rev && new_rate > 0;
+  isReversed = new_rev; currentGlobalPitch = new_rate; if (P_new === 0) isReversed = false;
   const sampleType = BufferManager.getSampleType();
 
   if (!wasLooping || !currentLoopingSource || sampleType === 'one-shot') {
-    if (currentLoopingSource && sampleType === 'loop' && new_rate_abs > 0) {
-      currentLoopingSource.playbackRate.setTargetAtTime(new_rate_abs, audioCtx.currentTime, C.SMOOTH_PARAM_TIME);
-    }
+    if (currentLoopingSource && sampleType === 'loop' && new_rate > 0)
+      currentLoopingSource.playbackRate.setTargetAtTime(new_rate, ctx.currentTime, C.SMOOTH_PARAM_TIME);
     return;
   }
 
-  clearAnimationInterval(currentLoopingSource);
-  const decodedBuf = BufferManager.getDecodedBuffer();
-  if (!decodedBuf) return;
+  clearAnim(currentLoopingSource);
+  const decodedBuf = BufferManager.getDecodedBuffer(); if (!decodedBuf) return;
+  const dur = decodedBuf.duration; currentLoopingSourceBufferDuration = dur;
+  let offset = currentLoopingSource ? getCurrentPlaybackPosition() : 0;
+  if (isReversed) offset = dur - offset;
+  currentLoopingSourceStartTime = ctx.currentTime; currentLoopingSourceOffset = offset; currentLoopingSourcePlaybackRate = new_rev ? -new_rate : new_rate;
 
-  const bufferDuration = decodedBuf.duration;
-  currentLoopingSourceBufferDuration = bufferDuration;
-
-  let offset = 0;
-  if (currentLoopingSource) {
-    offset = getCurrentPlaybackPosition();
-  }
-  if (isReversed) {
-    offset = bufferDuration - offset;
-  }
-
-  const newPlaybackRate = new_isReversed ? -new_rate_abs : new_rate_abs;
-  currentLoopingSourceStartTime = audioCtx.currentTime;
-  currentLoopingSourceOffset = offset;
-  currentLoopingSourcePlaybackRate = newPlaybackRate;
-
-  if (stopping) {
-    currentLoopingGainNode?.gain.cancelScheduledValues(audioCtx.currentTime);
-    currentLoopingGainNode?.gain.setTargetAtTime(0, audioCtx.currentTime, C.CROSSFADE_DURATION);
-    return;
-  }
+  if (stopping) return currentLoopingGainNode?.gain.cancelScheduledValues(ctx.currentTime), currentLoopingGainNode?.gain.setTargetAtTime(0, ctx.currentTime, C.CROSSFADE_DURATION);
 
   if (starting) {
     const buffer = BufferManager.selectCurrentBuffer(isReversed);
     if (!buffer) return showError("Buffer unavailable for starting loop.");
-
-    if (currentLoopingSource && old_isReversed !== isReversed) {
-      safeStop(currentLoopingSource);
-      safeDisconnect(currentLoopingGainNode);
-      currentLoopingSource = currentLoopingGainNode = null;
-    }
-
+    if (currentLoopingSource && old_rev !== isReversed) safeStop(currentLoopingSource), safeDisconnect(currentLoopingGainNode), [currentLoopingSource, currentLoopingGainNode] = [null, null];
     if (!currentLoopingSource) {
       safeDisconnect(currentLoopingGainNode);
-      currentLoopingGainNode = createGainWithValue(audioCtx, 0, mainGain);
-      currentLoopingSource = Player.playBufferSource(
-        audioCtx,
-        currentLoopingGainNode,
-        buffer,
-        audioCtx.currentTime,
-        new_rate_abs,
-        true,
-        null,
-        offset
-      );
-
-      if (!currentLoopingSource) {
-        showError("Failed to create source for starting loop.");
-        safeDisconnect(currentLoopingGainNode);
-        currentLoopingGainNode = null;
-        return;
-      }
-    } else {
-      currentLoopingSource.playbackRate.setTargetAtTime(new_rate_abs, audioCtx.currentTime, C.SMOOTH_PARAM_TIME);
-    }
+      currentLoopingGainNode = createGain(ctx, 0, mainGain);
+      currentLoopingSource = Player.playBufferSource(ctx, currentLoopingGainNode, buffer, ctx.currentTime, new_rate, true, null, offset);
+      if (!currentLoopingSource) return showError("Failed to create source for starting loop."), safeDisconnect(currentLoopingGainNode), currentLoopingGainNode = null;
+    } else currentLoopingSource.playbackRate.setTargetAtTime(new_rate, ctx.currentTime, C.SMOOTH_PARAM_TIME);
     fadeGain(currentLoopingGainNode, currentVolume, C.CROSSFADE_DURATION);
-
-  } else if (directionChange) {
-    const newBuffer = BufferManager.selectCurrentBuffer(isReversed);
-    if (!newBuffer) return showError("Buffer unavailable for direction change.");
+  } else if (dirChange) {
+    const newBuf = BufferManager.selectCurrentBuffer(isReversed);
+    if (!newBuf) return showError("Buffer unavailable for direction change.");
     if (!currentLoopingGainNode) return console.error("Missing gain node for crossfade.");
-
-    safeStop(secondaryLoopingSource);
-    safeDisconnect(secondaryLoopingGainNode);
-
-    const t0 = audioCtx.currentTime;
-    secondaryLoopingGainNode = createGainWithValue(audioCtx, 0, mainGain);
-    secondaryLoopingSource = Player.playBufferSource(
-      audioCtx,
-      secondaryLoopingGainNode,
-      newBuffer,
-      t0,
-      new_rate_abs,
-      true,
-      null,
-      offset
-    );
-
-    if (!secondaryLoopingSource) {
-      showError("Failed to create secondary source for crossfade.");
-      safeDisconnect(secondaryLoopingGainNode);
-      secondaryLoopingGainNode = null;
-      return;
-    }
-
-    fadeGain(currentLoopingGainNode, 0, C.CROSSFADE_DURATION);
-    fadeGain(secondaryLoopingGainNode, currentVolume, C.CROSSFADE_DURATION);
-
-    const oldSrc = currentLoopingSource;
-    const oldGain = currentLoopingGainNode;
-
-    currentLoopingSource = secondaryLoopingSource;
-    currentLoopingGainNode = secondaryLoopingGainNode;
-    secondaryLoopingSource = null;
-    secondaryLoopingGainNode = null;
-
-    setTimeout(() => {
-      safeStop(oldSrc);
-      safeDisconnect(oldGain);
-    }, C.CROSSFADE_DURATION * 1000 + 50);
-
-  } else if (new_rate_abs > 0 && currentLoopingSource) {
-    currentLoopingSource.playbackRate.setTargetAtTime(new_rate_abs, audioCtx.currentTime, C.SMOOTH_PARAM_TIME);
+    safeStop(secondaryLoopingSource); safeDisconnect(secondaryLoopingGainNode);
+    const t0 = ctx.currentTime;
+    secondaryLoopingGainNode = createGain(ctx, 0, mainGain);
+    secondaryLoopingSource = Player.playBufferSource(ctx, secondaryLoopingGainNode, newBuf, t0, new_rate, true, null, offset);
+    if (!secondaryLoopingSource) return showError("Failed to create secondary source for crossfade."), safeDisconnect(secondaryLoopingGainNode), secondaryLoopingGainNode = null;
+    fadeGain(currentLoopingGainNode, 0, C.CROSSFADE_DURATION); fadeGain(secondaryLoopingGainNode, currentVolume, C.CROSSFADE_DURATION);
+    const oldSrc = currentLoopingSource, oldGain = currentLoopingGainNode;
+    [currentLoopingSource, currentLoopingGainNode, secondaryLoopingSource, secondaryLoopingGainNode] = [secondaryLoopingSource, secondaryLoopingGainNode, null, null];
+    setTimeout(() => { safeStop(oldSrc); safeDisconnect(oldGain); }, C.CROSSFADE_DURATION * 1000 + 50);
+  } else if (new_rate > 0 && currentLoopingSource) {
+    currentLoopingSource.playbackRate.setTargetAtTime(new_rate, ctx.currentTime, C.SMOOTH_PARAM_TIME);
   }
 
-  if (currentLoopingSource && decodedBuf && currentGlobalPitch > 0) {
-    scheduleAnimation(
-      currentLoopingSource,
-      decodedBuf.duration / currentGlobalPitch,
-      () => timingManager.getLoopingState() && currentGlobalPitch > 0
-    );
-  }
+  if (currentLoopingSource && decodedBuf && currentGlobalPitch > 0)
+    scheduleAnim(currentLoopingSource, decodedBuf.duration / currentGlobalPitch, () => timingManager.getLoopingState() && currentGlobalPitch > 0);
 }
 
 export function setVolume(v) {
-  const mainGain = AudioManager.getMainGainNode();
-  const audioCtx = AudioManager.getAudioContext();
+  const gain = AudioManager.getMainGainNode(), ctx = AudioManager.getAudioContext();
   v = parseFloat(v);
-  if (v >= 0 && mainGain && audioCtx) {
+  if (v >= 0 && gain && ctx) {
     currentVolume = v;
-    mainGain.gain.setTargetAtTime(currentVolume, audioCtx.currentTime, C.SMOOTH_PARAM_TIME);
-    if (currentLoopingGainNode && currentGlobalPitch > 0) {
-      currentLoopingGainNode.gain.setTargetAtTime(currentVolume, audioCtx.currentTime, C.SMOOTH_PARAM_TIME);
-    }
+    gain.gain.setTargetAtTime(currentVolume, ctx.currentTime, C.SMOOTH_PARAM_TIME);
+    if (currentLoopingGainNode && currentGlobalPitch > 0) currentLoopingGainNode.gain.setTargetAtTime(currentVolume, ctx.currentTime, C.SMOOTH_PARAM_TIME);
   }
 }
 
+// --- State Getters ---
 export const getLoopingState = () => timingManager.getLoopingState();
 export const getReverseState = () => isReversed;
 export const getAudioContextState = () => AudioManager.getAudioContextState();
 export const resumeContext = async () => AudioManager.ensureAudioContextActive();
-
-export const getPlaybackRateForNote = (noteNumber) => {
-  if (currentGlobalPitch === 0) return 0;
-  const baseRate = BufferManager.getBasePlaybackRateForMidiNote(noteNumber);
-  return baseRate === undefined ? undefined : baseRate * currentGlobalPitch;
-};
-
+export const getPlaybackRateForNote = n => currentGlobalPitch === 0 ? 0 : (BufferManager.getBasePlaybackRateForMidiNote(n) ?? undefined) * currentGlobalPitch;
 export async function playSampleAtRate(rate) {
-  rate = parseFloat(rate);
-  if (!(await AudioManager.ensureAudioContextActive())) return;
-
-  const audioCtx = AudioManager.getAudioContext();
-  const mainGain = AudioManager.getMainGainNode();
-  if (!audioCtx || !mainGain) return;
-  if (rate === 0) return;
-
-  const playReversed = rate < 0;
-  const buffer = BufferManager.selectCurrentBuffer(playReversed);
-  if (buffer) Player.playBufferSource(audioCtx, mainGain, buffer, audioCtx.currentTime, Math.abs(rate), false);
+  rate = parseFloat(rate); if (!await AudioManager.ensureAudioContextActive()) return;
+  const ctx = AudioManager.getAudioContext(), gain = AudioManager.getMainGainNode();
+  if (!ctx || !gain || rate === 0) return;
+  const buf = BufferManager.selectCurrentBuffer(rate < 0); if (buf) Player.playBufferSource(ctx, gain, buf, ctx.currentTime, Math.abs(rate), false);
 }
-
 export const getSessionStartTime = () => timingManager.getSessionInitialStartTime();
 export const getCurrentTempo = () => currentTempo;
 export const getCurrentPitch = () => currentGlobalPitch;
