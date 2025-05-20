@@ -1,5 +1,5 @@
 // --- main.js ---
-import * as audio from './audioProcessor.js';
+import * as audio from './audio-processing/main.js';
 import * as ui from './uiUpdater.js';
 import * as midiHandler from './midiHandler.js';
 import * as keyboardShortcuts from './keyboardShortcuts.js';
