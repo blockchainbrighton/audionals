@@ -1,6 +1,6 @@
 // --- START OF FILE keyboardShortcuts.js ---
 
-import * as audio from './audioProcessor.js';
+import * as audio from './audio-processing/main.js';
 import * as ui from './uiUpdater.js';
 import { clamp, _isInputFocused, sValToP, pToSVal, PITCH_SLIDER_CONFIG } from './utils.js'; // Added sValToP, pToSVal, PITCH_SLIDER_CONFIG
 

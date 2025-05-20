@@ -1,6 +1,6 @@
 // --- audioProcessor.js ---
-import { base64ToArrayBuffer, sValToP, pToSVal, PITCH_SLIDER_CONFIG } from './utils.js';
-import { showError, triggerAnimation } from './uiUpdater.js';
+import { base64ToArrayBuffer, sValToP, pToSVal, PITCH_SLIDER_CONFIG } from '../utils.js';
+import { showError, triggerAnimation } from '../uiUpdater.js';
 
 const SMOOTH_PARAM_TIME = 0.01, A4_NOTE = 69, A4_FREQ = 440, SEMITONE = 2 ** (1 / 12), MIN_NOTE = 21, MAX_NOTE = 108, CROSSFADE_DURATION = 0.010, NATIVE_LOOP_ANIMATION_EPSILON = 0.02;
 let audioContext, mainGainNode, decodedBuffer, reversedBuffer, isReversed = false,
