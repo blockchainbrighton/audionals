@@ -8,7 +8,7 @@
     .container { position: relative; display: inline-block; width: 1080px; height: 1080px; }
     #sheet { display: block; width: 100%; height: auto; user-select: none; }
     #zoomCanvas { position: absolute; top:0; left:0; display:none; border:2px solid yellow; box-sizing:border-box; }
-    .overlay { position: absolute; border:2px solid red; box-sizing:border-box; pointer-events:none; }
+    .overlay { position: absolute; border:2px solid rgb(0, 0, 0); box-sizing:border-box; pointer-events:none; }
     .clickable { pointer-events:auto; cursor:pointer; }
   </style>
 </head>
@@ -18,51 +18,94 @@
     <img id="sheet" src="colliders-character-sheet.jpg" alt="Colliders Character Sheet" />
     <canvas id="zoomCanvas" width="1080" height="1080"></canvas>
     <div class="overlay" style="left:0;top:0;width:1080px;height:1080px;"></div>
+    <!-- Audio element for the song -->
+    <audio id="backgroundMusic" src="like-the-wind.webm" preload="auto"></audio>
     <script>
       // All overlays as [x, y, w, h]
       const overlays = [
-        // Top letters
+        // Top letters (9 elements, indices 0-8)
         [41,45,109,105],[150,45,109,105],[259,45,109,105],[368,45,109,105],[477,45,109,105],[586,45,109,105],[695,45,109,105],[804,45,109,105],[913,45,111,105],
-        // Portrait row 1
+        // Portrait row 1 (7 elements, indices 9-15)
         [2,206,136,150],[159,206,137,150],[315,206,137,150],[473,206,135,150],[630,206,135,150],[785,206,138,150],[944,206,135,150],
-        // Portrait row 2
+        // Portrait row 2 (7 elements, indices 16-22)
         [1,435,136,165],[159,435,135,165],[316,435,136,165],[472,435,136,165],[629,435,136,165],[785,435,138,165],[944,435,136,165],
-        // Portrait row 3
+        // Portrait row 3 (7 elements, indices 23-29)
         [2,677,136,163],[159,677,135,163],[316,677,136,163],[473,677,135,163],[630,677,135,163],[787,677,136,163],[944,677,136,163],
-        // Bottom letters
+        // Bottom letters (9 elements, indices 30-38)
         [42,912,109,105],[151,912,109,105],[260,912,109,105],[369,912,109,105],[478,912,109,105],[587,912,109,105],[696,912,109,105],[805,912,109,105],[914,912,110,105]
       ];
-      // Generate overlays
+      
       const c = document.querySelector('.container');
-      overlays.forEach(([x,y,w,h])=>{
+      const numTopLetters = 9;
+      const numProfiles = 7 * 3; // 3 rows of 7 profiles
+      
+      // Generate overlays and assign type
+      overlays.forEach(([x,y,w,h], index)=>{
         const d=document.createElement('div');
         d.className="overlay clickable";
         d.style=`left:${x}px;top:${y}px;width:${w}px;height:${h}px;`;
         d.dataset.x=x; d.dataset.y=y; d.dataset.w=w; d.dataset.h=h;
+
+        if (index < numTopLetters || index >= (numTopLetters + numProfiles) ) {
+            d.dataset.type = "letter";
+        } else {
+            d.dataset.type = "profile";
+        }
         c.appendChild(d);
       });
-      // Zoom logic
+
       window.addEventListener('DOMContentLoaded',()=>{
-        const img = sheet, canvas = zoomCanvas, ctx = canvas.getContext('2d');
+        const img = document.getElementById('sheet');
+        const canvas = document.getElementById('zoomCanvas');
+        const ctx = canvas.getContext('2d');
+        const backgroundAudio = document.getElementById('backgroundMusic');
         let zoomed = false;
+
+        // Click logic for overlays (includes audio and zoom)
         c.querySelectorAll('.clickable').forEach(el=>{
-          el.onclick=e=>{
-            if(zoomed) return;
+          el.onclick = e => {
+            const type = el.dataset.type;
+
+            // --- Audio Logic ---
+            if (type === 'letter') {
+              backgroundAudio.pause();
+              backgroundAudio.currentTime = 0; // Reset to beginning
+            } else if (type === 'profile') {
+              if (backgroundAudio.paused) {
+                // If it was paused (or never started), play it.
+                // If it was reset by a letter, it will start from 0.
+                // If it was paused by some other means (not in current spec), it would resume.
+                backgroundAudio.play().catch(err => console.error("Audio play error:", err));
+              }
+              // If already playing and it's a profile click, do nothing to audio.
+            }
+
+            // --- Zoom Logic (only if not already zoomed) ---
+            if (zoomed) {
+                // If already zoomed, clicking an original overlay area (which is hidden)
+                // shouldn't re-trigger zoom. The unzoom is handled by canvas.onclick.
+                // Audio logic for letters has already run above if applicable.
+                return; 
+            }
+            
             let {x,y,w,h}=el.dataset;
             ctx.clearRect(0,0,1080,1080);
             ctx.drawImage(img,+x,+y,+w,+h,0,0,1080,1080);
             canvas.style.display='block';
             img.style.display='none';
             c.querySelectorAll('.overlay').forEach(o=>o.style.display='none');
-            zoomed=1;
+            zoomed=true;
           }
         });
+
+        // Click logic for unzooming (on the canvas)
         canvas.onclick=()=>{
           if(!zoomed) return;
           canvas.style.display='none';
           img.style.display='block';
           c.querySelectorAll('.overlay').forEach(o=>o.style.display='block');
-          zoomed=0;
+          zoomed=false;
+          // No audio change on unzoom by default, per current requirements
         }
       });
     </script>
