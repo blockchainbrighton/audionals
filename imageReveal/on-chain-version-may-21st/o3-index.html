@@ -18,59 +18,69 @@
        /* ----------------------------  Overlays  --------------------------- */
        effectOrder: ['grain', 'scanline', 'blur', 'vignette'],
 
-       grainEffect: {
-            enabled: true,
-            frameIntervalMs: 20,     // Faster updates = more motion
-            opacity: 0.85,           // Stronger initial grain
-            endFrameIntervalMs: 8,   // Even more rapid toward the end
-            endOpacity: 0.65,        // Keep grain prominent throughout
-            duration: 30             // Match other durations or go longer
-            },
-            vignetteEffect: {
-            enabled: false,
-            strength: 0.6,          // start (0-1)
-            color: "#000",          // stays fixed or morph between two colors if needed
-            endStrength: 0.9,       // end
-            endColor: "#08081a",    // (optional, to morph between colors)
-            duration: 30            // seconds for morph
+        /* === GRAIN EFFECT SETTINGS ===
+                areaMode:
+                    "image"      — match the #imageCanvas exactly (default)
+                    "fullscreen" — fill the viewport (ignore image position)
+                    "custom"     — use grainArea to specify exact region (see below)
+            */
+            grainEffect: {
+                enabled: true,
+                frameIntervalMs: 20,    // Initial update interval (lower = more animation)
+                opacity: 0.85,          // Initial grain opacity
+                endFrameIntervalMs: 8,  // Final update interval (at end of animation)
+                endOpacity: 0.65,       // Final opacity (at end of animation)
+                duration: 30,           // Animation duration (seconds)
+                areaMode: "fullscreen",      // "image", "fullscreen", or "custom"
+                grainArea: {            // Used only if areaMode === "custom"
+                }
             },
 
-       scanlineEffect: {
-            enabled: false,
-            lineHeightPx: 24,    // Initial value (start)
-            opacity: 0.52,       // Initial value (start)
-            speed: 10,           // Initial value (start)
-            endLineHeightPx: 2,  // End value (thin)
-            endOpacity: 0.12,    // End value (less visible)
-            endSpeed: 0.5,       // End value (faster)
-            duration: 30         // Animation duration in seconds
-            },     
-       /* -----------------------------  Blur  ------------------------------ */
 
-       blurEffect: {
-            enabled: false,
-            direction: "all",
-            steps: [
+            /* === VIGNETTE EFFECT SETTINGS === */
+                vignetteEffect: {
+                    enabled: false,
+                    strength: 0.6,
+                    color: "#000",
+                    endStrength: 0.9,
+                    endColor: "#08081a",
+                    duration: 30
+                },
+
+            /* === SCANLINE EFFECT SETTINGS === */
+            scanlineEffect: {
+                enabled: false,
+                lineHeightPx: 24,
+                opacity: 0.52,
+                speed: 10,
+                endLineHeightPx: 2,
+                endOpacity: 0.12,
+                endSpeed: 0.5,
+                duration: 30
+            },
+
+            /* === BLUR EFFECT SETTINGS === */
+            blurEffect: {
+                enabled: true,
+                direction: "all",
+                steps: [
                 { blur: 40, duration: 5000 },
                 { blur: 0,  duration: 4000 },
                 { blur: 25, duration: 3000 },
                 { blur: 0,  duration: 3000 }
-            ]
+                ]
             },
 
-       /* ------------------  Core (unchanged from original)  --------------- */
-       // mainRevealEffectOptions: fadeIn:'fadeOut', fadeOut:'fadeIn', pixelateFwd:'pixelateRev', pixelateRev:'pixelateFwd',
-       // glyphFwd:'glyphRev', glyphRev:'glyphFwd', sweepBrightFwd:'sweepBrightRev', sweepBrightRev:'sweepBrightFwd'
-
-       mainRevealEffect: { name: "fadeIn", duration: 1.5 },
-       clickToBegin: {
-         text: "ENTER MATRIX",
-         fadeOutDurationMs: 35000,
-         blinkIntervalMs: 750,
-         reappearDelayMs: 5000
-       }
-     };
-     </script>
+            /* === REVEAL & BEGIN TEXT === */
+            mainRevealEffect: { name: "fadeIn", duration: 1.5 },
+            clickToBegin: {
+                text: "ENTER MATRIX",
+                fadeOutDurationMs: 35000,
+                blinkIntervalMs: 750,
+                reappearDelayMs: 5000
+            }
+            };
+        </script>
 
 <script>
     function clipOverlayToCanvas(overlayEl, targetCanvasEl) { // Renamed canvasEl to targetCanvasEl for clarity
@@ -227,41 +237,52 @@
       active && (noiseRAF = requestAnimationFrame(loop));
     };
     const start = () => {
-      stop();
-      const cfg = window.APP_CONFIG?.grainEffect;
-      if (!cfg?.enabled) return;
-      const startCfg = {
-        interval: cfg.frameIntervalMs ?? 50,
-        op: cfg.opacity ?? 0.15,
-      };
-      const endCfg = {
-        interval: cfg.endFrameIntervalMs ?? 10,
-        op: cfg.endOpacity ?? 0.35,
-      };
-      overlay = H.createOverlay({
-        tag: 'canvas',
-        id: 'grainCanvas',
-        z: 9000,
-        blend: 'overlay',
-        style: { opacity: startCfg.op },
-      });
-      ctx = overlay.getContext('2d');
-      stopResize = H.bindResize(overlay, 'imageCanvas');
-      active = true;
-      curInterval = startCfg.interval;
-      lastDraw = 0;
-      H.animate({
-        duration: (cfg.duration ?? 20) * 1000,
-        onUpdate: t => {
-          curInterval =
-            startCfg.interval + (endCfg.interval - startCfg.interval) * t;
-          overlay.style.opacity =
-            startCfg.op + (endCfg.op - startCfg.op) * t;
-        },
-        activeRef: () => active,
-      });
-      loop();
-    };
+        stop();
+        const cfg = window.APP_CONFIG?.grainEffect;
+        if (!cfg?.enabled) return;
+        const startCfg = {
+            interval: cfg.frameIntervalMs ?? 50,
+            op: cfg.opacity ?? 0.15,
+        };
+        const endCfg = {
+            interval: cfg.endFrameIntervalMs ?? 10,
+            op: cfg.endOpacity ?? 0.35,
+        };
+        overlay = H.createOverlay({
+            tag: 'canvas',
+            id: 'grainCanvas',
+            z: 9000,
+            blend: 'overlay',
+            style: { opacity: startCfg.op },
+        });
+        ctx = overlay.getContext('2d');
+        
+        // ↓↓↓  CHANGED AREA LOGIC ↓↓↓
+        let areaMode = cfg.areaMode || "image";
+        if (areaMode === "fullscreen") {
+            stopResize = H.bindResize(overlay, null);
+        } else if (areaMode === "image") {
+            stopResize = H.bindResize(overlay, 'imageCanvas');
+        } else if (areaMode === "custom" && cfg.grainArea) {
+            // implement your own custom resize logic here if needed
+            stopResize = H.bindResize(overlay, null);
+            // Optionally, set overlay position/dimensions manually here
+        }
+        // ↑↑↑ END AREA LOGIC ↑↑↑
+
+        active = true;
+        curInterval = startCfg.interval;
+        lastDraw = 0;
+        H.animate({
+            duration: (cfg.duration ?? 20) * 1000,
+            onUpdate: t => {
+            curInterval = startCfg.interval + (endCfg.interval - startCfg.interval) * t;
+            overlay.style.opacity = startCfg.op + (endCfg.op - startCfg.op) * t;
+            },
+            activeRef: () => active,
+        });
+        loop();
+        };
     const stop = () => {
       active = false;
       cancelAnimationFrame(noiseRAF);
