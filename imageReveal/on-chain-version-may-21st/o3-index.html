@@ -96,73 +96,93 @@
             • Adjust visibility via opacity (0-1)
           ──────────────────────────────────────────────────────────────────── -->
           <script id="grain-effect-script">
-            document.addEventListener('DOMContentLoaded', () => {
-              const cfg = window.APP_CONFIG?.grainEffect;
-              if (!cfg?.enabled) return;
+            (function() {
+              let cvs, ctx, resize, drawNoiseLoopRAF, animateRAF;
+              let animationActive = false, lastDraw = 0, curInterval = 50, curOpacity = 0.15;
+              let start, end, duration, startTime;
             
-              // Set up start/end/duration
-              const start = {
-                interval: cfg.frameIntervalMs ?? 50,
-                op: cfg.opacity ?? 0.15,
-              };
-              const end = {
-                interval: cfg.endFrameIntervalMs ?? 10,
-                op: cfg.endOpacity ?? 0.35,
-              };
-              const duration = (cfg.duration ?? 20) * 1000;
+              function startGrain() {
+                // Remove existing overlay if any
+                stopGrain();
             
-              // Create canvas
-              const cvs = document.createElement('canvas');
-              cvs.id = 'grainCanvas';
-              Object.assign(cvs.style, {
-                position: 'fixed',
-                inset: 0,
-                zIndex: 900,
-                pointerEvents: 'none',
-                opacity: start.op,
-                mixBlendMode: 'screen',
-              });
-              document.body.appendChild(cvs);
+                // Get config
+                const cfg = window.APP_CONFIG?.grainEffect;
+                if (!cfg?.enabled) return;
             
-              const ctx = cvs.getContext('2d');
-              const resize = () => {
-                cvs.width = window.innerWidth;
-                cvs.height = window.innerHeight;
-                clipOverlayToCanvas(cvs, document.getElementById('imageCanvas'));
-              };
-              resize();
-              window.addEventListener('resize', resize);
+                // Set up params
+                start = { interval: cfg.frameIntervalMs ?? 50, op: cfg.opacity ?? 0.15 };
+                end = { interval: cfg.endFrameIntervalMs ?? 10, op: cfg.endOpacity ?? 0.35 };
+                duration = (cfg.duration ?? 20) * 1000;
             
-              // Morph loop for interval and opacity
-              let lastDraw = 0, curInterval = start.interval, curOpacity = start.op;
-              let startTime = performance.now();
+                // Create canvas
+                cvs = document.createElement('canvas');
+                cvs.id = 'grainCanvas';
+                Object.assign(cvs.style, {
+                  position: 'fixed', inset: 0, zIndex: 900,
+                  pointerEvents: 'none', opacity: start.op, mixBlendMode: 'screen'
+                });
+                document.body.appendChild(cvs);
+                ctx = cvs.getContext('2d');
+                resize = () => {
+                  cvs.width = window.innerWidth;
+                  cvs.height = window.innerHeight;
+                  clipOverlayToCanvas(cvs, document.getElementById('imageCanvas'));
+                };
+                resize();
+                window.addEventListener('resize', resize);
             
-              function animate() {
-                const now = performance.now();
-                const t = Math.min(1, (now - startTime) / duration);
-                curInterval = start.interval + (end.interval - start.interval) * t;
-                curOpacity = start.op + (end.op - start.op) * t;
-                cvs.style.opacity = curOpacity;
-                requestAnimationFrame(animate);
-              }
-              animate();
+                // Animate grain
+                animationActive = true;
+                lastDraw = 0;
+                curInterval = start.interval;
+                curOpacity = start.op;
+                startTime = performance.now();
             
-              // Dynamic noise draw loop using variable interval
-              function drawNoiseLoop() {
-                const now = performance.now();
-                if (now - lastDraw > curInterval) {
-                  lastDraw = now;
-                  const imgData = ctx.createImageData(cvs.width, cvs.height);
-                  const buf = new Uint32Array(imgData.data.buffer);
-                  for (let i = 0; i < buf.length; i++)
-                    buf[i] = (Math.random() * 255) | 0 << 24;
-                  ctx.putImageData(imgData, 0, 0);
+                function animate() {
+                  if (!animationActive) return;
+                  const now = performance.now();
+                  const t = Math.min(1, (now - startTime) / duration);
+                  curInterval = start.interval + (end.interval - start.interval) * t;
+                  curOpacity = start.op + (end.op - start.op) * t;
+                  cvs.style.opacity = curOpacity;
+                  animateRAF = requestAnimationFrame(animate);
                 }
-                requestAnimationFrame(drawNoiseLoop);
+                animate();
+            
+                function drawNoiseLoop() {
+                  if (!animationActive) return;
+                  const now = performance.now();
+                  if (now - lastDraw > curInterval) {
+                    lastDraw = now;
+                    const imgData = ctx.createImageData(cvs.width, cvs.height);
+                    const buf = new Uint32Array(imgData.data.buffer);
+                    for (let i = 0; i < buf.length; i++)
+                      buf[i] = (Math.random() * 255) | 0 << 24;
+                    ctx.putImageData(imgData, 0, 0);
+                  }
+                  drawNoiseLoopRAF = requestAnimationFrame(drawNoiseLoop);
+                }
+                drawNoiseLoop();
               }
-              drawNoiseLoop();
-            });
+            
+              function stopGrain() {
+                animationActive = false;
+                if (drawNoiseLoopRAF) cancelAnimationFrame(drawNoiseLoopRAF);
+                if (animateRAF) cancelAnimationFrame(animateRAF);
+                window.removeEventListener('resize', resize);
+                if (cvs && cvs.parentNode) cvs.parentNode.removeChild(cvs);
+                cvs = ctx = resize = null;
+              }
+            
+              // Listen for playback events
+              document.addEventListener('playbackStarted', startGrain);
+              document.addEventListener('playbackStopped', stopGrain);
+            
+              // Optional: run on load for initial view, or only on playback
+              // startGrain();
+            })();
             </script>
+            
             
      
      <!-- ────────────────────────────────────────────────────────────────────
@@ -174,64 +194,66 @@
             • color = any CSS colour (default black)
           ──────────────────────────────────────────────────────────────────── -->
           <script id="vignette-effect-script">
-            document.addEventListener('DOMContentLoaded', () => {
-              const cfg = window.APP_CONFIG?.vignetteEffect;
-              if (!cfg?.enabled) return;
+            (function() {
+              let div, animateRAF, resizeHandler, animationActive = false;
+              function startVignette() {
+                stopVignette();
+                const cfg = window.APP_CONFIG?.vignetteEffect;
+                if (!cfg?.enabled) return;
+                const start = { strength: cfg.strength ?? 0.6, color: cfg.color ?? "#000" };
+                const end   = { strength: cfg.endStrength ?? start.strength, color: cfg.endColor ?? start.color };
+                const duration = (cfg.duration ?? 30) * 1000;
             
-              const start = {
-                strength: cfg.strength ?? 0.6,
-                color: cfg.color ?? "#000"
-              };
-              const end = {
-                strength: cfg.endStrength ?? start.strength,
-                color: cfg.endColor ?? start.color
-              };
-              const duration = (cfg.duration ?? 30) * 1000;
+                function lerpColor(a, b, t) {
+                  const ah = a.length === 7 ? a : "#000000";
+                  const bh = b.length === 7 ? b : "#000000";
+                  const av = [1, 3, 5].map(i => parseInt(ah.slice(i, i+2), 16));
+                  const bv = [1, 3, 5].map(i => parseInt(bh.slice(i, i+2), 16));
+                  const rv = av.map((v, i) => Math.round(v + (bv[i] - v) * t));
+                  return "#" + rv.map(x => x.toString(16).padStart(2, "0")).join("");
+                }
             
-              // Helper: morph color (hex strings only for now)
-              function lerpColor(a, b, t) {
-                // hex: "#RRGGBB"
-                const ah = a.length === 7 ? a : "#000000";
-                const bh = b.length === 7 ? b : "#000000";
-                const av = [1, 3, 5].map(i => parseInt(ah.slice(i, i+2), 16));
-                const bv = [1, 3, 5].map(i => parseInt(bh.slice(i, i+2), 16));
-                const rv = av.map((v, i) => Math.round(v + (bv[i] - v) * t));
-                return "#" + rv.map(x => x.toString(16).padStart(2, "0")).join("");
+                div = document.createElement('div');
+                div.id = 'vignetteOverlay';
+                Object.assign(div.style, {
+                  position: 'fixed', inset: 0, zIndex: 910, pointerEvents: 'none'
+                });
+                document.body.appendChild(div);
+            
+                function update(strength, color) {
+                  div.style.background = `radial-gradient(circle at center, transparent 60%, ${color} ${strength * 100}%)`;
+                }
+            
+                let startTime = performance.now();
+                animationActive = true;
+                function animate() {
+                  if (!animationActive) return;
+                  const now = performance.now();
+                  const t = Math.min(1, (now - startTime) / duration);
+                  const s = start.strength + (end.strength - start.strength) * t;
+                  const c = start.color === end.color ? start.color : lerpColor(start.color, end.color, t);
+                  update(s, c);
+                  if (t < 1) animateRAF = requestAnimationFrame(animate);
+                }
+                animate();
+            
+                const canvas = document.getElementById('imageCanvas');
+                resizeHandler = () => clipOverlayToCanvas(div, canvas);
+                resizeHandler();
+                window.addEventListener('resize', resizeHandler);
               }
-            
-              const div = document.createElement('div');
-              div.id = 'vignetteOverlay';
-              Object.assign(div.style, {
-                position: 'fixed',
-                inset: 0,
-                zIndex: 910,
-                pointerEvents: 'none'
-              });
-              document.body.appendChild(div);
-            
-              function update(strength, color) {
-                div.style.background = `radial-gradient(circle at center, transparent 60%, ${color} ${strength * 100}%)`;
+              function stopVignette() {
+                animationActive = false;
+                if (animateRAF) cancelAnimationFrame(animateRAF);
+                if (resizeHandler) window.removeEventListener('resize', resizeHandler);
+                if (div && div.parentNode) div.parentNode.removeChild(div);
+                div = animateRAF = resizeHandler = null;
               }
-            
-              // Animate vignette
-              let startTime = performance.now();
-              function animate() {
-                const now = performance.now();
-                const t = Math.min(1, (now - startTime) / duration);
-                const s = start.strength + (end.strength - start.strength) * t;
-                const c = start.color === end.color ? start.color : lerpColor(start.color, end.color, t);
-                update(s, c);
-                if (t < 1) requestAnimationFrame(animate);
-              }
-              animate();
-            
-              // Overlay positioning on resize
-              const canvas = document.getElementById('imageCanvas');
-              function clip() { clipOverlayToCanvas(div, canvas); }
-              clip();
-              window.addEventListener('resize', clip);
-            });
+              document.addEventListener('playbackStarted', startVignette);
+              document.addEventListener('playbackStopped', stopVignette);
+            })();
             </script>
+            
             
      
      <!-- ────────────────────────────────────────────────────────────────────
@@ -243,125 +265,149 @@
             • speed = animation duration (seconds) for one cycle
           ──────────────────────────────────────────────────────────────────── -->
           <script id="scanline-effect-script">
-            document.addEventListener('DOMContentLoaded', () => {
-              const cfg = window.APP_CONFIG?.scanlineEffect;
-              if (!cfg?.enabled) return;
+            (function() {
+              let div, style, animateRAF, resizeHandler, animationActive = false;
+              function startScanlines() {
+                stopScanlines();
+                const cfg = window.APP_CONFIG?.scanlineEffect;
+                if (!cfg?.enabled) return;
             
-              // Create overlay div and style element
-              const style = document.createElement('style');
-              document.head.appendChild(style);
+                // Use config for morph
+                const start = {
+                  h: cfg.lineHeightPx ?? 24,
+                  op: cfg.opacity ?? 0.52,
+                  speed: cfg.speed ?? 10
+                };
+                const end = {
+                  h: cfg.endLineHeightPx ?? 2,
+                  op: cfg.endOpacity ?? 0.12,
+                  speed: cfg.endSpeed ?? 0.5
+                };
+                const duration = (cfg.duration ?? 30) * 1000;
             
-              const div = document.createElement('div');
-              div.id = 'scanlineOverlay';
-              Object.assign(div.style, {
-                position: 'fixed',
-                inset: 0,
-                zIndex: 905,
-                pointerEvents: 'none',
-              });
-              document.body.appendChild(div);
+                style = document.createElement('style');
+                document.head.appendChild(style);
             
-              // Helper to apply scanline params
-              function updateScanlines(lineHeightPx, opacity, speed) {
-                // Update gradient background and animation
-                div.style.background = `repeating-linear-gradient(
-                  0deg,
-                  rgba(0,0,0,${opacity}) 0 ${lineHeightPx}px,
-                  transparent ${lineHeightPx}px ${lineHeightPx * 2}px
-                )`;
-                style.textContent = `
-                  @keyframes scanSlide {
-                    0% { background-position:0 0; }
-                    100% { background-position:0 ${lineHeightPx * 2}px; }
-                  }
-                  #scanlineOverlay {
-                    animation: scanSlide ${speed}s linear infinite;
-                  }
-                `;
+                div = document.createElement('div');
+                div.id = 'scanlineOverlay';
+                Object.assign(div.style, {
+                  position: 'fixed', inset: 0, zIndex: 905, pointerEvents: 'none'
+                });
+                document.body.appendChild(div);
+            
+                function updateScanlines(lineHeightPx, opacity, speed) {
+                  div.style.background = `repeating-linear-gradient(
+                    0deg,
+                    rgba(0,0,0,${opacity}) 0 ${lineHeightPx}px,
+                    transparent ${lineHeightPx}px ${lineHeightPx * 2}px
+                  )`;
+                  style.textContent = `
+                    @keyframes scanSlide {
+                      0% { background-position:0 0; }
+                      100% { background-position:0 ${lineHeightPx * 2}px; }
+                    }
+                    #scanlineOverlay {
+                      animation: scanSlide ${speed}s linear infinite;
+                    }
+                  `;
+                }
+            
+                let startTime = performance.now();
+                animationActive = true;
+                function animate() {
+                  if (!animationActive) return;
+                  const now = performance.now();
+                  const t = Math.min(1, (now - startTime) / duration);
+                  const h = start.h + (end.h - start.h) * t;
+                  const op = start.op + (end.op - start.op) * t;
+                  const sp = start.speed + (end.speed - start.speed) * t;
+                  updateScanlines(h, op, sp);
+                  if (t < 1) animateRAF = requestAnimationFrame(animate);
+                }
+                animate();
+            
+                const canvas = document.getElementById('imageCanvas');
+                resizeHandler = () => clipOverlayToCanvas(div, canvas);
+                resizeHandler();
+                window.addEventListener('resize', resizeHandler);
               }
-            
-              // Preset: start thick, slow; end thin, fast (over 30s)
-              const start = { h: 24, op: 0.52, speed: 10 };
-              const end = { h: 2, op: 0.12, speed: 0.5 };
-              const duration = 30 * 1000; // ms
-            
-              let startTime = performance.now();
-              function animate() {
-                const now = performance.now();
-                const t = Math.min(1, (now - startTime) / duration);
-                // Linear interpolation
-                const h = start.h + (end.h - start.h) * t;
-                const op = start.op + (end.op - start.op) * t;
-                const speed = start.speed + (end.speed - start.speed) * t;
-                updateScanlines(h, op, speed);
-                if (t < 1) requestAnimationFrame(animate);
-                // else: keep final state
+              function stopScanlines() {
+                animationActive = false;
+                if (animateRAF) cancelAnimationFrame(animateRAF);
+                if (resizeHandler) window.removeEventListener('resize', resizeHandler);
+                if (style && style.parentNode) style.parentNode.removeChild(style);
+                if (div && div.parentNode) div.parentNode.removeChild(div);
+                div = style = animateRAF = resizeHandler = null;
               }
-              animate();
-            
-              // Also update on window resize (for overlay positioning)
-              const canvas = document.getElementById('imageCanvas');
-              function clip() { clipOverlayToCanvas(div, canvas); }
-              clip();
-              window.addEventListener('resize', clip);
-            });
+              document.addEventListener('playbackStarted', startScanlines);
+              document.addEventListener('playbackStopped', stopScanlines);
+            })();
             </script>
+            
             
      
      <!-- ────────────────────────────────────────────────────────────────────
           5.   BLUR EFFECT  
           ──────────────────────────────────────────────────────────────────── -->
           <script id="dynamic-blur-effect-script">
-            document.addEventListener('DOMContentLoaded', () => {
-              const el = document.getElementById('imageRevealContainer');
-              const cfg = window.APP_CONFIG?.blurEffect;
-              if (!cfg?.enabled || !el) return;
-            
-              const direction = cfg.direction ?? "all";
-              const steps = Array.isArray(cfg.steps) && cfg.steps.length > 1 ? cfg.steps : [
-                { blur: cfg.initialBlurPx ?? 50, duration: 0 },
-                { blur: cfg.finalBlurPx ?? 0,   duration: cfg.duration ?? 10000 }
-              ];
-            
-              // Helper: normalize step to {x, y} object
-              function toXY(val) {
-                if (direction === "all") return {x: val, y: val};
-                if (direction === "x")   return {x: val, y: 0};
-                if (direction === "y")   return {x: 0,   y: val};
-                if (direction === "custom") return {x: val.x ?? 0, y: val.y ?? 0};
-                return {x: val, y: val};
-              }
-            
-              // Sequence animator: interpolates between steps
-              function animateSteps(index = 0) {
-                if (index >= steps.length - 1) {
-                  // Final state
-                  const last = toXY(steps[steps.length - 1].blur);
-                  el.style.filter = (last.x || last.y)
-                    ? `blur(${last.x}px) blur(${last.y}px)`
-                    : 'none';
-                  return;
+            (function() {
+              let blurRAF, el, steps, direction, animationActive;
+              function startBlur() {
+                stopBlur();
+                el = document.getElementById('imageRevealContainer');
+                const cfg = window.APP_CONFIG?.blurEffect;
+                if (!cfg?.enabled || !el) return;
+                direction = cfg.direction ?? "all";
+                steps = Array.isArray(cfg.steps) && cfg.steps.length > 1 ? cfg.steps : [
+                  { blur: cfg.initialBlurPx ?? 50, duration: 0 },
+                  { blur: cfg.finalBlurPx ?? 0,   duration: cfg.duration ?? 10000 }
+                ];
+                animationActive = true;
+                function toXY(val) {
+                  if (direction === "all") return {x: val, y: val};
+                  if (direction === "x")   return {x: val, y: 0};
+                  if (direction === "y")   return {x: 0,   y: val};
+                  if (direction === "custom") return {x: val.x ?? 0, y: val.y ?? 0};
+                  return {x: val, y: val};
                 }
-                const stepA = toXY(steps[index].blur);
-                const stepB = toXY(steps[index + 1].blur);
-                const dur = Math.max(16, steps[index + 1].duration);
-            
-                const startTime = performance.now();
-                function frame() {
-                  const t = Math.min(1, (performance.now() - startTime) / dur);
-                  const x = stepA.x + (stepB.x - stepA.x) * t;
-                  const y = stepA.y + (stepB.y - stepA.y) * t;
-                  el.style.filter = (x || y)
-                    ? `blur(${x}px) blur(${y}px)`
-                    : 'none';
-                  if (t < 1) requestAnimationFrame(frame);
-                  else animateSteps(index + 1);
+                function animateSteps(index = 0) {
+                  if (!animationActive) return;
+                  if (index >= steps.length - 1) {
+                    const last = toXY(steps[steps.length - 1].blur);
+                    el.style.filter = (last.x || last.y)
+                      ? `blur(${last.x}px) blur(${last.y}px)`
+                      : 'none';
+                    return;
+                  }
+                  const stepA = toXY(steps[index].blur);
+                  const stepB = toXY(steps[index + 1].blur);
+                  const dur = Math.max(16, steps[index + 1].duration);
+                  const startTime = performance.now();
+                  function frame() {
+                    if (!animationActive) return;
+                    const t = Math.min(1, (performance.now() - startTime) / dur);
+                    const x = stepA.x + (stepB.x - stepA.x) * t;
+                    const y = stepA.y + (stepB.y - stepA.y) * t;
+                    el.style.filter = (x || y)
+                      ? `blur(${x}px) blur(${y}px)`
+                      : 'none';
+                    if (t < 1) blurRAF = requestAnimationFrame(frame);
+                    else animateSteps(index + 1);
+                  }
+                  frame();
                 }
-                frame();
+                animateSteps();
               }
-              animateSteps();
-            });
+              function stopBlur() {
+                animationActive = false;
+                if (blurRAF) cancelAnimationFrame(blurRAF);
+                if (el) el.style.filter = 'none';
+              }
+              document.addEventListener('playbackStarted', startBlur);
+              document.addEventListener('playbackStopped', stopBlur);
+            })();
             </script>
+            
             
 
 
