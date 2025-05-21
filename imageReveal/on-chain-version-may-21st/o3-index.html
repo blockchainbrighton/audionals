@@ -11,7 +11,7 @@
      <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 
      <!-- ────────────────────────────────────────────────────────────────────
-          1. GLOBAL CONFIG – add three new effect blocks
+          0. GLOBAL CONFIG – add three new effect blocks
           ──────────────────────────────────────────────────────────────────── -->
      <script id="global-app-config">
      window.APP_CONFIG = {
@@ -86,327 +86,269 @@
             }
 
      </script>
-     
-     <!-- ────────────────────────────────────────────────────────────────────
-          2.  GRAIN EFFECT  – animated film grain
-          --------------------------------------------------------------------
-          HOW TO CALL:
-            • Enabled by default: APP_CONFIG.grainEffect.enabled = true
-            • Adjust density via frameIntervalMs (lower = faster)
-            • Adjust visibility via opacity (0-1)
-          ──────────────────────────────────────────────────────────────────── -->
-          <script id="grain-effect-script">
-            (function() {
-              let cvs, ctx, resize, drawNoiseLoopRAF, animateRAF;
-              let animationActive = false, lastDraw = 0, curInterval = 50, curOpacity = 0.15;
-              let start, end, duration, startTime;
-            
-              function startGrain() {
-                // Remove existing overlay if any
-                stopGrain();
-            
-                // Get config
-                const cfg = window.APP_CONFIG?.grainEffect;
-                if (!cfg?.enabled) return;
-            
-                // Set up params
-                start = { interval: cfg.frameIntervalMs ?? 50, op: cfg.opacity ?? 0.15 };
-                end = { interval: cfg.endFrameIntervalMs ?? 10, op: cfg.endOpacity ?? 0.35 };
-                duration = (cfg.duration ?? 20) * 1000;
-            
-                // Create canvas
-                cvs = document.createElement('canvas');
-                cvs.id = 'grainCanvas';
-                Object.assign(cvs.style, {
-                  position: 'fixed', inset: 0, zIndex: 900,
-                  pointerEvents: 'none', opacity: start.op, mixBlendMode: 'screen'
-                });
-                document.body.appendChild(cvs);
-                ctx = cvs.getContext('2d');
-                resize = () => {
-                  cvs.width = window.innerWidth;
-                  cvs.height = window.innerHeight;
-                  clipOverlayToCanvas(cvs, document.getElementById('imageCanvas'));
-                };
-                resize();
-                window.addEventListener('resize', resize);
-            
-                // Animate grain
-                animationActive = true;
-                lastDraw = 0;
-                curInterval = start.interval;
-                curOpacity = start.op;
-                startTime = performance.now();
-            
-                function animate() {
-                  if (!animationActive) return;
-                  const now = performance.now();
-                  const t = Math.min(1, (now - startTime) / duration);
-                  curInterval = start.interval + (end.interval - start.interval) * t;
-                  curOpacity = start.op + (end.op - start.op) * t;
-                  cvs.style.opacity = curOpacity;
-                  animateRAF = requestAnimationFrame(animate);
-                }
-                animate();
-            
-                function drawNoiseLoop() {
-                  if (!animationActive) return;
-                  const now = performance.now();
-                  if (now - lastDraw > curInterval) {
-                    lastDraw = now;
-                    const imgData = ctx.createImageData(cvs.width, cvs.height);
-                    const buf = new Uint32Array(imgData.data.buffer);
-                    for (let i = 0; i < buf.length; i++)
-                      buf[i] = (Math.random() * 255) | 0 << 24;
-                    ctx.putImageData(imgData, 0, 0);
-                  }
-                  drawNoiseLoopRAF = requestAnimationFrame(drawNoiseLoop);
-                }
-                drawNoiseLoop();
-              }
-            
-              function stopGrain() {
-                animationActive = false;
-                if (drawNoiseLoopRAF) cancelAnimationFrame(drawNoiseLoopRAF);
-                if (animateRAF) cancelAnimationFrame(animateRAF);
-                window.removeEventListener('resize', resize);
-                if (cvs && cvs.parentNode) cvs.parentNode.removeChild(cvs);
-                cvs = ctx = resize = null;
-              }
-            
-              // Listen for playback events
-              document.addEventListener('playbackStarted', startGrain);
-              document.addEventListener('playbackStopped', stopGrain);
-            
-              // Optional: run on load for initial view, or only on playback
-              // startGrain();
-            })();
-            </script>
-            
-            
-     
-     <!-- ────────────────────────────────────────────────────────────────────
-          3.  VIGNETTE EFFECT – radial darkening edges
-          --------------------------------------------------------------------
-          HOW TO CALL:
-            • APP_CONFIG.vignetteEffect.enabled = true
-            • strength 0-1 = how dark edges become
-            • color = any CSS colour (default black)
-          ──────────────────────────────────────────────────────────────────── -->
-          <script id="vignette-effect-script">
-            (function() {
-              let div, animateRAF, resizeHandler, animationActive = false;
-              function startVignette() {
-                stopVignette();
-                const cfg = window.APP_CONFIG?.vignetteEffect;
-                if (!cfg?.enabled) return;
-                const start = { strength: cfg.strength ?? 0.6, color: cfg.color ?? "#000" };
-                const end   = { strength: cfg.endStrength ?? start.strength, color: cfg.endColor ?? start.color };
-                const duration = (cfg.duration ?? 30) * 1000;
-            
-                function lerpColor(a, b, t) {
-                  const ah = a.length === 7 ? a : "#000000";
-                  const bh = b.length === 7 ? b : "#000000";
-                  const av = [1, 3, 5].map(i => parseInt(ah.slice(i, i+2), 16));
-                  const bv = [1, 3, 5].map(i => parseInt(bh.slice(i, i+2), 16));
-                  const rv = av.map((v, i) => Math.round(v + (bv[i] - v) * t));
-                  return "#" + rv.map(x => x.toString(16).padStart(2, "0")).join("");
-                }
-            
-                div = document.createElement('div');
-                div.id = 'vignetteOverlay';
-                Object.assign(div.style, {
-                  position: 'fixed', inset: 0, zIndex: 910, pointerEvents: 'none'
-                });
-                document.body.appendChild(div);
-            
-                function update(strength, color) {
-                  div.style.background = `radial-gradient(circle at center, transparent 60%, ${color} ${strength * 100}%)`;
-                }
-            
-                let startTime = performance.now();
-                animationActive = true;
-                function animate() {
-                  if (!animationActive) return;
-                  const now = performance.now();
-                  const t = Math.min(1, (now - startTime) / duration);
-                  const s = start.strength + (end.strength - start.strength) * t;
-                  const c = start.color === end.color ? start.color : lerpColor(start.color, end.color, t);
-                  update(s, c);
-                  if (t < 1) animateRAF = requestAnimationFrame(animate);
-                }
-                animate();
-            
-                const canvas = document.getElementById('imageCanvas');
-                resizeHandler = () => clipOverlayToCanvas(div, canvas);
-                resizeHandler();
-                window.addEventListener('resize', resizeHandler);
-              }
-              function stopVignette() {
-                animationActive = false;
-                if (animateRAF) cancelAnimationFrame(animateRAF);
-                if (resizeHandler) window.removeEventListener('resize', resizeHandler);
-                if (div && div.parentNode) div.parentNode.removeChild(div);
-                div = animateRAF = resizeHandler = null;
-              }
-              document.addEventListener('playbackStarted', startVignette);
-              document.addEventListener('playbackStopped', stopVignette);
-            })();
-            </script>
-            
-            
-     
-     <!-- ────────────────────────────────────────────────────────────────────
-          4.  SCANLINE EFFECT – moving CRT lines
-          --------------------------------------------------------------------
-          HOW TO CALL:
-            • APP_CONFIG.scanlineEffect.enabled = true
-            • lineHeightPx = thickness of each dark bar
-            • speed = animation duration (seconds) for one cycle
-          ──────────────────────────────────────────────────────────────────── -->
-          <script id="scanline-effect-script">
-            (function() {
-              let div, style, animateRAF, resizeHandler, animationActive = false;
-              function startScanlines() {
-                stopScanlines();
-                const cfg = window.APP_CONFIG?.scanlineEffect;
-                if (!cfg?.enabled) return;
-            
-                // Use config for morph
-                const start = {
-                  h: cfg.lineHeightPx ?? 24,
-                  op: cfg.opacity ?? 0.52,
-                  speed: cfg.speed ?? 10
-                };
-                const end = {
-                  h: cfg.endLineHeightPx ?? 2,
-                  op: cfg.endOpacity ?? 0.12,
-                  speed: cfg.endSpeed ?? 0.5
-                };
-                const duration = (cfg.duration ?? 30) * 1000;
-            
-                style = document.createElement('style');
-                document.head.appendChild(style);
-            
-                div = document.createElement('div');
-                div.id = 'scanlineOverlay';
-                Object.assign(div.style, {
-                  position: 'fixed', inset: 0, zIndex: 905, pointerEvents: 'none'
-                });
-                document.body.appendChild(div);
-            
-                function updateScanlines(lineHeightPx, opacity, speed) {
-                  div.style.background = `repeating-linear-gradient(
-                    0deg,
-                    rgba(0,0,0,${opacity}) 0 ${lineHeightPx}px,
-                    transparent ${lineHeightPx}px ${lineHeightPx * 2}px
-                  )`;
-                  style.textContent = `
-                    @keyframes scanSlide {
-                      0% { background-position:0 0; }
-                      100% { background-position:0 ${lineHeightPx * 2}px; }
-                    }
-                    #scanlineOverlay {
-                      animation: scanSlide ${speed}s linear infinite;
-                    }
-                  `;
-                }
-            
-                let startTime = performance.now();
-                animationActive = true;
-                function animate() {
-                  if (!animationActive) return;
-                  const now = performance.now();
-                  const t = Math.min(1, (now - startTime) / duration);
-                  const h = start.h + (end.h - start.h) * t;
-                  const op = start.op + (end.op - start.op) * t;
-                  const sp = start.speed + (end.speed - start.speed) * t;
-                  updateScanlines(h, op, sp);
-                  if (t < 1) animateRAF = requestAnimationFrame(animate);
-                }
-                animate();
-            
-                const canvas = document.getElementById('imageCanvas');
-                resizeHandler = () => clipOverlayToCanvas(div, canvas);
-                resizeHandler();
-                window.addEventListener('resize', resizeHandler);
-              }
-              function stopScanlines() {
-                animationActive = false;
-                if (animateRAF) cancelAnimationFrame(animateRAF);
-                if (resizeHandler) window.removeEventListener('resize', resizeHandler);
-                if (style && style.parentNode) style.parentNode.removeChild(style);
-                if (div && div.parentNode) div.parentNode.removeChild(div);
-                div = style = animateRAF = resizeHandler = null;
-              }
-              document.addEventListener('playbackStarted', startScanlines);
-              document.addEventListener('playbackStopped', stopScanlines);
-            })();
-            </script>
-            
-            
-     
-     <!-- ────────────────────────────────────────────────────────────────────
-          5.   BLUR EFFECT  
-          ──────────────────────────────────────────────────────────────────── -->
-          <script id="dynamic-blur-effect-script">
-            (function() {
-              let blurRAF, el, steps, direction, animationActive;
-              function startBlur() {
-                stopBlur();
-                el = document.getElementById('imageRevealContainer');
-                const cfg = window.APP_CONFIG?.blurEffect;
-                if (!cfg?.enabled || !el) return;
-                direction = cfg.direction ?? "all";
-                steps = Array.isArray(cfg.steps) && cfg.steps.length > 1 ? cfg.steps : [
-                  { blur: cfg.initialBlurPx ?? 50, duration: 0 },
-                  { blur: cfg.finalBlurPx ?? 0,   duration: cfg.duration ?? 10000 }
-                ];
-                animationActive = true;
-                function toXY(val) {
-                  if (direction === "all") return {x: val, y: val};
-                  if (direction === "x")   return {x: val, y: 0};
-                  if (direction === "y")   return {x: 0,   y: val};
-                  if (direction === "custom") return {x: val.x ?? 0, y: val.y ?? 0};
-                  return {x: val, y: val};
-                }
-                function animateSteps(index = 0) {
-                  if (!animationActive) return;
-                  if (index >= steps.length - 1) {
-                    const last = toXY(steps[steps.length - 1].blur);
-                    el.style.filter = (last.x || last.y)
-                      ? `blur(${last.x}px) blur(${last.y}px)`
-                      : 'none';
-                    return;
-                  }
-                  const stepA = toXY(steps[index].blur);
-                  const stepB = toXY(steps[index + 1].blur);
-                  const dur = Math.max(16, steps[index + 1].duration);
-                  const startTime = performance.now();
-                  function frame() {
-                    if (!animationActive) return;
-                    const t = Math.min(1, (performance.now() - startTime) / dur);
-                    const x = stepA.x + (stepB.x - stepA.x) * t;
-                    const y = stepA.y + (stepB.y - stepA.y) * t;
-                    el.style.filter = (x || y)
-                      ? `blur(${x}px) blur(${y}px)`
-                      : 'none';
-                    if (t < 1) blurRAF = requestAnimationFrame(frame);
-                    else animateSteps(index + 1);
-                  }
-                  frame();
-                }
-                animateSteps();
-              }
-              function stopBlur() {
-                animationActive = false;
-                if (blurRAF) cancelAnimationFrame(blurRAF);
-                if (el) el.style.filter = 'none';
-              }
-              document.addEventListener('playbackStarted', startBlur);
-              document.addEventListener('playbackStopped', stopBlur);
-            })();
-            </script>
+
+
+   <!-- effects-module.js (drop-in replacement) -->
+<script id="effects-module">
+(() => {
+  /* ───── 1. SHARED HELPERS ───── */
+  const H = (window.OverlayEffectHelpers ??= {
+    createOverlay: ({
+      tag = 'div', id, z = 999, blend, pointer = 'none',
+      style = {}, append = document.body,
+    }) => {
+      const el = Object.assign(document.createElement(tag), { id });
+      Object.assign(
+        el.style,
+        { position: 'fixed', inset: 0, zIndex: z, pointerEvents: pointer },
+        blend && { mixBlendMode: blend },
+        style,
+      );
+      append.appendChild(el);
+      return el;
+    },
+    destroyOverlay: el => el?.remove(),
+    animate: ({
+      duration = 1, onUpdate, onDone, easing,
+      activeRef = () => true,
+    }) => {
+      const s = performance.now();
+      const f = now => {
+        if (!activeRef()) return;
+        const t = Math.min(1, (now - s) / duration);
+        onUpdate(easing ? easing(t) : t);
+        t < 1 ? requestAnimationFrame(f) : onDone?.();
+      };
+      requestAnimationFrame(f);
+    },
+    bindResize: (overlay, target) => {
+      const resize = () =>
+        window.clipOverlayToCanvas?.(
+          overlay,
+          typeof target === 'string' ? document.getElementById(target) : target,
+        );
+      window.addEventListener('resize', resize);
+      resize();
+      return () => window.removeEventListener('resize', resize);
+    },
+    lerpColor: (a = '#000', b = '#000', t = 0) =>
+      '#' +
+      [1, 3, 5]
+        .map(i => {
+          const av = parseInt(a.slice(i, i + 2) || '00', 16);
+          const bv = parseInt(b.slice(i, i + 2) || '00', 16);
+          return Math.round(av + (bv - av) * t)
+            .toString(16)
+            .padStart(2, '0');
+        })
+        .join(''),
+  });
+
+  /* util: wire start/stop to playback events */
+  const wire = (start, stop) => {
+    document.addEventListener('playbackStarted', start);
+    document.addEventListener('playbackStopped', stop);
+  };
+
+  /* ───── 2. GRAIN EFFECT ───── */
+  (() => {
+    let overlay, ctx, noiseRAF, active = false, stopResize, curInterval, lastDraw;
+    const drawNoise = () => {
+      const { width, height } = overlay;
+      const img = ctx.createImageData(width, height);
+      const buf = new Uint32Array(img.data.buffer);
+      for (let i = 0; i < buf.length; i++) buf[i] = (Math.random() * 255) << 24;
+      ctx.putImageData(img, 0, 0);
+    };
+    const loop = () => {
+      const now = performance.now();
+      if (now - lastDraw > curInterval) {
+        lastDraw = now;
+        drawNoise();
+      }
+      active && (noiseRAF = requestAnimationFrame(loop));
+    };
+    const start = () => {
+      stop();
+      const cfg = window.APP_CONFIG?.grainEffect;
+      if (!cfg?.enabled) return;
+      const startCfg = {
+        interval: cfg.frameIntervalMs ?? 50,
+        op: cfg.opacity ?? 0.15,
+      };
+      const endCfg = {
+        interval: cfg.endFrameIntervalMs ?? 10,
+        op: cfg.endOpacity ?? 0.35,
+      };
+      overlay = H.createOverlay({
+        tag: 'canvas',
+        id: 'grainCanvas',
+        z: 900,
+        blend: 'screen',
+        style: { opacity: startCfg.op },
+      });
+      ctx = overlay.getContext('2d');
+      stopResize = H.bindResize(overlay, 'imageCanvas');
+      active = true;
+      curInterval = startCfg.interval;
+      lastDraw = 0;
+      H.animate({
+        duration: (cfg.duration ?? 20) * 1000,
+        onUpdate: t => {
+          curInterval =
+            startCfg.interval + (endCfg.interval - startCfg.interval) * t;
+          overlay.style.opacity =
+            startCfg.op + (endCfg.op - startCfg.op) * t;
+        },
+        activeRef: () => active,
+      });
+      loop();
+    };
+    const stop = () => {
+      active = false;
+      cancelAnimationFrame(noiseRAF);
+      stopResize?.();
+      H.destroyOverlay(overlay);
+      overlay = ctx = stopResize = null;
+    };
+    wire(start, stop);
+  })();
+
+  /* ───── 3. VIGNETTE EFFECT ───── */
+  (() => {
+    let overlay, active = false, stopResize;
+    const start = () => {
+      stop();
+      const cfg = window.APP_CONFIG?.vignetteEffect;
+      if (!cfg?.enabled) return;
+      const s0 = cfg.strength ?? 0.6,
+        c0 = cfg.color ?? '#000',
+        s1 = cfg.endStrength ?? s0,
+        c1 = cfg.endColor ?? c0;
+      overlay = H.createOverlay({ id: 'vignetteOverlay', z: 910 });
+      active = true;
+      H.animate({
+        duration: (cfg.duration ?? 30) * 1000,
+        onUpdate: t => {
+          const s = s0 + (s1 - s0) * t;
+          const c = c0 === c1 ? c0 : H.lerpColor(c0, c1, t);
+          overlay.style.background = `radial-gradient(circle at center,transparent 60%,${c} ${s * 100}%)`;
+        },
+        activeRef: () => active,
+      });
+      stopResize = H.bindResize(overlay, 'imageCanvas');
+    };
+    const stop = () => {
+      active = false;
+      stopResize?.();
+      H.destroyOverlay(overlay);
+      overlay = stopResize = null;
+    };
+    wire(start, stop);
+  })();
+
+  /* ───── 4. SCANLINE EFFECT ───── */
+  (() => {
+    let overlay, styleTag, active = false, stopResize;
+    const start = () => {
+      stop();
+      const cfg = window.APP_CONFIG?.scanlineEffect;
+      if (!cfg?.enabled) return;
+      const h0 = cfg.lineHeightPx ?? 24,
+        o0 = cfg.opacity ?? 0.52,
+        s0 = cfg.speed ?? 10,
+        h1 = cfg.endLineHeightPx ?? 2,
+        o1 = cfg.endOpacity ?? 0.12,
+        s1 = cfg.endSpeed ?? 0.5;
+      styleTag = document.head.appendChild(document.createElement('style'));
+      overlay = H.createOverlay({ id: 'scanlineOverlay', z: 905 });
+      active = true;
+      const update = (h, op, spd) => {
+        overlay.style.background = `repeating-linear-gradient(0deg,rgba(0,0,0,${op}) 0 ${h}px,transparent ${h}px ${
+          h * 2
+        }px)`;
+        styleTag.textContent = `@keyframes scanSlide{0%{background-position:0 0}100%{background-position:0 ${
+          h * 2
+        }px}}#scanlineOverlay{animation:scanSlide ${spd}s linear infinite}`;
+      };
+      H.animate({
+        duration: (cfg.duration ?? 30) * 1000,
+        onUpdate: t =>
+          update(
+            h0 + (h1 - h0) * t,
+            o0 + (o1 - o0) * t,
+            s0 + (s1 - s0) * t,
+          ),
+        activeRef: () => active,
+      });
+      stopResize = H.bindResize(overlay, 'imageCanvas');
+    };
+    const stop = () => {
+      active = false;
+      styleTag?.remove();
+      stopResize?.();
+      H.destroyOverlay(overlay);
+      overlay = styleTag = stopResize = null;
+    };
+    wire(start, stop);
+  })();
+
+  /* ───── 5. BLUR EFFECT ───── */
+  (() => {
+    let blurRAF, el, steps, active = false;
+    const toXY = (dir, v) =>
+      dir === 'x'
+        ? { x: v, y: 0 }
+        : dir === 'y'
+        ? { x: 0, y: v }
+        : dir === 'custom'
+        ? { x: v.x ?? 0, y: v.y ?? 0 }
+        : { x: v, y: v };
+    const start = () => {
+      stop();
+      el = document.getElementById('imageRevealContainer');
+      const cfg = window.APP_CONFIG?.blurEffect;
+      if (!cfg?.enabled || !el) return;
+      const dir = cfg.direction ?? 'all';
+      steps = (
+        cfg.steps?.length > 1
+          ? cfg.steps
+          : [
+              { blur: cfg.initialBlurPx ?? 50, duration: 0 },
+              { blur: cfg.finalBlurPx ?? 0, duration: cfg.duration ?? 10000 },
+            ]
+      ).map(s => ({ ...s, xy: toXY(dir, s.blur) }));
+      active = true;
+      (function run(i = 0) {
+        if (!active || i >= steps.length - 1) {
+          const { x, y } = steps.at(-1).xy;
+          el.style.filter = x || y ? `blur(${x}px) blur(${y}px)` : 'none';
+          return;
+        }
+        const a = steps[i].xy,
+          b = steps[i + 1].xy,
+          d = Math.max(16, steps[i + 1].duration),
+          s = performance.now();
+        (function frame() {
+          if (!active) return;
+          const t = Math.min(1, (performance.now() - s) / d),
+            x = a.x + (b.x - a.x) * t,
+            y = a.y + (b.y - a.y) * t;
+          el.style.filter = x || y ? `blur(${x}px) blur(${y}px)` : 'none';
+          t < 1 ? (blurRAF = requestAnimationFrame(frame)) : run(i + 1);
+        })();
+      })();
+    };
+    const stop = () => {
+      active = false;
+      cancelAnimationFrame(blurRAF);
+      el && (el.style.filter = 'none');
+    };
+    wire(start, stop);
+  })();
+})();
+</script>
+
             
             
 
