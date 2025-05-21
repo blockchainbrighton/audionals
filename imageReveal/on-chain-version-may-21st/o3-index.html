@@ -16,16 +16,18 @@
      <script id="global-app-config">
      window.APP_CONFIG = {
        /* ----------------------------  Overlays  --------------------------- */
+       effectOrder: ['grain', 'scanline', 'blur', 'vignette'],
+
        grainEffect: {
             enabled: true,
-            frameIntervalMs: 50,    // start
-            opacity: 0.15,          // start
-            endFrameIntervalMs: 10, // end
-            endOpacity: 0.35,       // end
-            duration: 20            // seconds for morph
+            frameIntervalMs: 20,     // Faster updates = more motion
+            opacity: 0.85,           // Stronger initial grain
+            endFrameIntervalMs: 8,   // Even more rapid toward the end
+            endOpacity: 0.65,        // Keep grain prominent throughout
+            duration: 30             // Match other durations or go longer
             },
             vignetteEffect: {
-            enabled: true,
+            enabled: false,
             strength: 0.6,          // start (0-1)
             color: "#000",          // stays fixed or morph between two colors if needed
             endStrength: 0.9,       // end
@@ -34,7 +36,7 @@
             },
 
        scanlineEffect: {
-            enabled: true,
+            enabled: false,
             lineHeightPx: 24,    // Initial value (start)
             opacity: 0.52,       // Initial value (start)
             speed: 10,           // Initial value (start)
@@ -46,7 +48,7 @@
        /* -----------------------------  Blur  ------------------------------ */
 
        blurEffect: {
-            enabled: true,
+            enabled: false,
             direction: "all",
             steps: [
                 { blur: 40, duration: 5000 },
@@ -55,11 +57,6 @@
                 { blur: 0,  duration: 3000 }
             ]
             },
-
-
-
-
-
 
        /* ------------------  Core (unchanged from original)  --------------- */
        // mainRevealEffectOptions: fadeIn:'fadeOut', fadeOut:'fadeIn', pixelateFwd:'pixelateRev', pixelateRev:'pixelateFwd',
@@ -75,17 +72,66 @@
      };
      </script>
 
-     <script>
-        function clipOverlayToCanvas(overlayEl, canvasEl) {
-            if (!overlayEl || !canvasEl) return;
-            const rect = canvasEl.getBoundingClientRect();
-            // inset(top, right, bottom, left)
-            const clip = `inset(${rect.top}px ${window.innerWidth - rect.right}px ${window.innerHeight - rect.bottom}px ${rect.left}px)`;
-            overlayEl.style.clipPath = clip;
-            overlayEl.style.WebkitClipPath = clip;
-            }
+<script>
+    function clipOverlayToCanvas(overlayEl, targetCanvasEl) { // Renamed canvasEl to targetCanvasEl for clarity
+        if (!overlayEl) return;
 
-     </script>
+        let targetRect;
+
+        if (targetCanvasEl) {
+            targetRect = targetCanvasEl.getBoundingClientRect();
+            // If the target canvas has no dimensions yet, it might not be fully initialized.
+            // Fallback to window dimensions in such a case, or decide how to handle.
+            // For simplicity here, if rect has 0 width/height, we might as well make overlay fullscreen for now.
+            if (targetRect.width === 0 || targetRect.height === 0) {
+                targetCanvasEl = null; // Treat as if no target was specified
+            }
+        }
+
+        if (!targetCanvasEl) { // No valid target canvas, or it had zero dimensions
+            targetRect = {
+                top: 0,
+                left: 0,
+                width: window.innerWidth,
+                height: window.innerHeight,
+                right: window.innerWidth,
+                bottom: window.innerHeight
+            };
+        }
+
+        // If the overlay is a CANVAS, set its drawing surface dimensions
+        if (overlayEl.tagName === 'CANVAS') {
+            const newWidth = Math.round(targetRect.width);
+            const newHeight = Math.round(targetRect.height);
+            // Only update if necessary to avoid clearing canvas/performance issues
+            if (overlayEl.width !== newWidth || overlayEl.height !== newHeight) {
+                overlayEl.width = newWidth;
+                overlayEl.height = newHeight;
+            }
+        }
+
+        // Apply clip-path based on the original target (if one was provided and valid)
+        if (targetCanvasEl) { // Check original targetCanvasEl for clipping
+            const rectForClip = targetCanvasEl.getBoundingClientRect(); // Re-get, in case it became valid
+             if (rectForClip.width > 0 && rectForClip.height > 0) {
+                const clip = `inset(${Math.round(rectForClip.top)}px ${Math.round(window.innerWidth - rectForClip.right)}px ${Math.round(window.innerHeight - rectForClip.bottom)}px ${Math.round(rectForClip.left)}px)`;
+                overlayEl.style.clipPath = clip;
+                overlayEl.style.WebkitClipPath = clip;
+            } else { // Target exists but has no size, don't clip
+                overlayEl.style.clipPath = 'none';
+                overlayEl.style.WebkitClipPath = 'none';
+            }
+        } else { // No target canvas at all, make it full screen (no clip)
+            overlayEl.style.clipPath = 'none';
+            overlayEl.style.WebkitClipPath = 'none';
+        }
+    }
+
+    const getZ = name => {
+        const order = window.APP_CONFIG?.effectOrder ?? ['grain', 'scanline', 'blur', 'vignette'];
+        return 900 + order.indexOf(name) * 10;
+    };
+ </script>
 
 
    <!-- effects-module.js (drop-in replacement) -->
@@ -154,10 +200,22 @@
   (() => {
     let overlay, ctx, noiseRAF, active = false, stopResize, curInterval, lastDraw;
     const drawNoise = () => {
+      if (!overlay || !ctx) return; // Ensure overlay and context exist
       const { width, height } = overlay;
+      if (width === 0 || height === 0) return; // Don't draw if canvas has no dimensions
+
       const img = ctx.createImageData(width, height);
       const buf = new Uint32Array(img.data.buffer);
-      for (let i = 0; i < buf.length; i++) buf[i] = (Math.random() * 255) << 24;
+      // Use a slightly more varied random for less uniform noise if desired
+      // For classic white noise, Math.random() is fine.
+      for (let i = 0; i < buf.length; i++) {
+        const rand = Math.random() * 255;
+        buf[i] = (255 << 24) | (rand << 16) | (rand << 8) | rand; // Grayscale noise
+      }
+      // Original white noise:
+      // for (let i = 0; i < buf.length; i++) buf[i] = (255 << 24) | 0xffffff * Math.random();
+
+
       ctx.putImageData(img, 0, 0);
     };
     const loop = () => {
@@ -183,8 +241,8 @@
       overlay = H.createOverlay({
         tag: 'canvas',
         id: 'grainCanvas',
-        z: 900,
-        blend: 'screen',
+        z: 9000,
+        blend: 'overlay',
         style: { opacity: startCfg.op },
       });
       ctx = overlay.getContext('2d');
@@ -488,63 +546,50 @@ body::-webkit-scrollbar, html::-webkit-scrollbar {
        <script id="image-data">
          window.images = ["https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
        </script>
-     
-     <script>
-        (() => {
-          const t = document.getElementById("playBtn"),
-            e = document.getElementById("log"),
-            a = window.AudioContext || window.webkitAudioContext,
-            n = document.getElementById("clickToBeginText"),
-            d = m => { e && (e.textContent += `${(new Date).toLocaleTimeString()}: ${m}\n`, e.scrollTop = e.scrollHeight); };
-          if (!a) return t.textContent = "Audio not supported", t.disabled = !0;
-          n || console.warn('"Click to Begin" text element not found in playbackMgmt.js context');
-          let o = new a, i = Array(audioParts.length), r = 0, s = null, c = !0, l = !1;
-          const u = () => { t.disabled = c; t.textContent = c ? "Loading…" : l ? "Stop Mix" : "Play Mix"; };
-          (async () => {
-            try {
-              d(`Fetching first part → ${audioParts[0]}`);
-              i[0] = await o.decodeAudioData(await (await fetch(audioParts[0])).arrayBuffer());
-              c = !1; u(); d(`First part ready (${i[0].duration.toFixed(2)} s).`);
-              await Promise.all(audioParts.slice(1).map(async (t, e) =>
-                i[e + 1] = await o.decodeAudioData(await (await fetch(t)).arrayBuffer()), d(`Decoded part ${e + 2}/${audioParts.length}`)
-              ));
-              d("All parts decoded. ✅");
-            } catch (err) { c = !1; u(); d(`Preload failed: ${err.message}`); }
-          })();
-          const p = () => {
-            if (!l) return;
-            if (r >= i.length) return l = !1, u(), d("Finished. 🎉"), y();
-            const tbuf = i[r];
-            if (!tbuf) return d(`Part ${r + 1} buffer not ready, retrying...`), setTimeout(p, 200);
-            s = o.createBufferSource(); s.buffer = tbuf; s.connect(o.destination); s.start();
-            d(`▶ Part ${r + 1}/${i.length} (${tbuf.duration.toFixed(2)} s)`); r++;
-            s.onended = () => { s = null; l && p(); };
-          };
-          const y = () => document.dispatchEvent(new Event("playbackStopped"));
-          const f = async () => {
-            if (c || l) return;
-            if (o.state === "suspended") await o.resume();
-            l = !0; r = 0; u(); document.dispatchEvent(new Event("playbackStarted")); p();
-          };
-          const g = () => {
-            if (l) {
-              l = !1;
-              if (s) try { s.onended = null; s.stop(); } catch (err) { d(`Error stopping active source: ${err.message}`); }
-              s = null; d("Stopped by user."); u(); y();
-            }
-          };
-          t.onclick = () => l ? g() : f();
-          document.addEventListener("togglePlayback", () => l ? g() : f());
-          document.addEventListener("playbackStarted", () => {});
-          document.addEventListener("playbackStopped", () => {});
-        })();
-        </script>
+           <!-- imageLoadMgmt.js -->
+           <script src="https://ordinals.com/content/a698a70c8eda8e6a58abf2e65921ca629e1734a91c67e2d74a941a2cc5c36027i0"></script>
+           <!-- imageRevealCore.js -->
+              <script type="module" src="https://ordinals.com/content/7b66beb111fbc673a99867f13480a3289afc522b811ddd60163b3bcbb82aa758i0"></script>
+          
+   
+              <script type="module">
+              (()=>{const el=id=>document.getElementById(id),
+              t=el("playBtn"),e=el("log"),
+              a=window.AudioContext||window.webkitAudioContext,
+              n=el("clickToBeginText"),
+              d=m=>{if(!e)return;e.textContent+=`${new Date().toLocaleTimeString()}: ${m}\n`;e.scrollTop=e.scrollHeight},
+              emit=ev=>document.dispatchEvent(new Event(ev)),
+              setTxt=txt=>t.textContent=txt;
+              if(!a)return setTxt("Audio not supported"),t.disabled=!0;
+              n||console.warn('"Click to Begin" text element not found in playbackMgmt.js context');
+              let o=new a,i=new Array(audioParts.length),r=0,s=null,c=!0,l=!1;
+              const u=()=>{t.disabled=c;setTxt(c?"Loading…":l?"Stop Mix":"Play Mix");},
+              h=async(url,idx,first=!1)=>{first&&d(`Fetching first part → ${url}`);
+              i[idx]=await o.decodeAudioData(await(await fetch(url)).arrayBuffer());
+              d(`${first?"First part ready":`Decoded part ${idx+1}/${audioParts.length}`} (${i[idx].duration.toFixed(2)} s).`);};
+              (async()=>{try{await h(audioParts[0],0,!0);c=!1;u();
+              await Promise.all(audioParts.slice(1).map((url,idx)=>h(url,idx+1)));d("All parts decoded. ✅");}
+              catch(err){c=!1;u();d(`Preload failed: ${err.message}`);}})();
+              const p=()=>{if(!l)return;if(r>=i.length)return l=!1,u(),d("Finished. 🎉"),y();
+              const buf=i[r];if(!buf)return d(`Part ${r+1} buffer not ready, retrying...`),setTimeout(p,200);
+              (s=o.createBufferSource()).buffer=buf;s.connect(o.destination);s.start();
+              d(`▶ Part ${r+1}/${i.length} (${buf.duration.toFixed(2)} s)`);r++;
+              s.onended=()=>{s=null;l&&p();};},
+              y=()=>emit("playbackStopped"),
+              f=async()=>{if(c||l)return;if(o.state==="suspended")await o.resume();
+              l=!0;r=0;u();emit("playbackStarted");p();},
+              g=()=>{if(!l)return;l=!1;if(s)try{s.onended=null;s.stop();}catch(err){d(`Error stopping active source: ${err.message}`);}
+              s=null;d("Stopped by user.");u();y();},
+              toggle=()=>{(l?g:f)();};
+              t.onclick=toggle;
+              document.addEventListener("togglePlayback",toggle);
+              document.addEventListener("playbackStarted",()=>{});
+              document.addEventListener("playbackStopped",()=>{});})();
+              </script>
+   
+              
         
-    <!-- imageLoadMgmt.js -->
-        <script src="https://ordinals.com/content/a698a70c8eda8e6a58abf2e65921ca629e1734a91c67e2d74a941a2cc5c36027i0"></script>
-     <!-- imageRevealCore.js -->
-        <script type="module" src="https://ordinals.com/content/7b66beb111fbc673a99867f13480a3289afc522b811ddd60163b3bcbb82aa758i0"></script>
-    
+
     <!-- imageRevealPublicApi.js (inline module script that USES the import) -->
     <script type="module">
         import { setupEffect } from "https://ordinals.com/content/6addd1c637ee377bd7e3510c7e78ec35a7fb037676f2ef416131067c9d1d4cf6i0";
@@ -563,12 +608,11 @@ body::-webkit-scrollbar, html::-webkit-scrollbar {
           el.onclick = () => (blinkFn("visible"), el.classList.add("hidden"), document.getElementById("playBtn").click());
           document.addEventListener("playbackStarted", () => { if (!el.classList.contains("hidden")) blinkFn("visible"), el.classList.add("hidden"); });
           document.addEventListener("playbackStopped", () => { el.classList.remove("hidden"); setTimeout(startBlink, reapMs); });
-          ((draw = txt) => {
+          (() => {
             ctx.clearRect(0, 0, el.width, el.height);
-            ctx.font = "bold 16px monospace"; ctx.textBaseline = "middle"; ctx.textAlign = "center";
-            ctx.fillStyle = "#33CCFF";
-            for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) ctx.fillText(draw, el.width / 2 + dx, el.height / 2 + dy);
-            ctx.fillStyle = "#000"; ctx.fillText(draw, el.width / 2, el.height / 2);
+            ctx.font = "bold 16px monospace"; ctx.textBaseline = "middle"; ctx.textAlign = "center"; ctx.fillStyle = "#33CCFF";
+            for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) ctx.fillText(txt, el.width/2 + dx, el.height/2 + dy);
+            ctx.fillStyle = "#000"; ctx.fillText(txt, el.width/2, el.height/2);
           })();
           startBlink();
         })();
@@ -582,6 +626,7 @@ body::-webkit-scrollbar, html::-webkit-scrollbar {
           catch (err) { console.error("Failed to prepare colour sweep:", err); }
         });
         </script>
+        
         
         
         <div id="backgroundBlackout" style="
