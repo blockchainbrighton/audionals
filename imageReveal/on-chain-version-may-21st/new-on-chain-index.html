@@ -1,0 +1,484 @@
+<!-- /* effect registry & helpers FOR REFERENCE */
+// export const renders = { ...fade, ...pixel, ...glyph, ...sweep };
+// export const EFFECT_PAIRS = {
+// fadeIn:'fadeOut',          fadeOut:'fadeIn',
+// pixelateFwd:'pixelateRev', pixelateRev:'pixelateFwd',
+// glyphFwd:'glyphRev',       glyphRev:'glyphFwd',
+// sweepBrightFwd:'sweepBrightRev', sweepBrightRev:'sweepBrightFwd'
+// }; -->
+
+<script id="global-app-config">
+    window.APP_CONFIG = {
+      // New Top Layer Effects
+      vignetteEffect: {
+        enabled: true,
+        color: 'rgba(0,0,0,0.6)', // Color of the vignette (typically dark)
+        spread: '150px',          // How far the vignette spreads from the edge
+        blur: '100px'             // How blurred the edge of the vignette is
+                                  // CSS box-shadow: inset 0 0 <blur> <spread> <color>;
+      },
+      scanlinesEffect: {
+        enabled: true,
+        lineColor: 'rgba(0, 0, 0, 0.15)', // Color and opacity of the scanlines
+        lineHeightPx: 1,                  // Height of each scanline
+        gapHeightPx: 2,                   // Height of the gap between scanlines
+        animationSeconds: 0               // Duration for one cycle of vertical animation (0 for static)
+      },
+      colorTintEffect: {
+        enabled: true,
+        color: 'rgba(0, 25, 50, 0.05)'     // RGBA color for the tint overlay
+      },
+
+      // Existing Effects
+      blurEffect: { initialBlurPx: 100, unblurDurationMs: 180000 }, // was 180000
+      mainRevealEffect: { name: "pixelateRev", duration: 110.5 },
+      clickToBegin: {
+        text: "ENTER MATRIX",
+        fadeOutDurationMs: 35000, // was 35000
+        blinkIntervalMs: 750,
+        reappearDelayMs: 5000
+      }
+    };
+</script>
+
+<!-- The Bitcoin Audional Matrix - Opus of Efficiency -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Colour Sweep Player</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+        body,
+        html {
+            margin: 0;
+            height: 100%;
+            background: #000;
+            display: flex; /*
+            This might not be strictly necessary on body if #imageRevealContainer is handling centering.
+            However, keeping it for now as it doesn't conflict. */
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        #imageRevealContainer {
+            position: fixed;
+            inset: 0;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            background: #000 !important; /* Background for the area where image canvas appears */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* z-index can be 0 or 1, will be under new overlays and pixelTextCanvas */
+        }
+
+        #imageRevealContainer>:not(canvas) {
+            display: none !important;
+        }
+
+        #imageCanvas { /* Style for the canvas handled by on-chain imageLoadMgmt.js */
+            width: 90vh;
+            height: 90vh;
+            max-width: 90vw;
+            max-height: 90vh;
+            display: block;
+            background: #000 !important; /* Fallback, often image itself covers this */
+            border: none !important;
+        }
+
+        #pixelTextCanvas {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90vh; /* Adjusted for better visual consistency if text is long */
+            max-width: 90vw;
+            height: auto;
+            image-rendering: pixelated;
+            opacity: 1;
+            transition: opacity 16s ease-out, transform 16s ease-out; /* Default, overridden by JS */
+            z-index: 1000; /* Highest layer for UI interaction */
+        }
+
+        #pixelTextCanvas.hidden {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0);
+        }
+
+        #playBtn {
+            display: none; /* Hidden, controlled by JS */
+        }
+
+        /* Styles for new top-layer effect overlays */
+        .top-layer-overlay {
+            position: fixed;
+            inset: 0;
+            pointer-events: none; /* Allow clicks to pass through */
+        }
+        #vignetteOverlayEffectElement { z-index: 500; }
+        #scanlinesOverlayEffectElement { z-index: 501; }
+        #colorTintOverlayEffectElement { z-index: 502; }
+
+        /* Keyframes for scanlines animation (if used) */
+        @keyframes verticalScanlinesAnimation {
+            0% { background-position-y: 0; }
+            100% { background-position-y: var(--scanline-total-height); }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- "Click to Begin" text canvas - Topmost UI -->
+    <canvas id="pixelTextCanvas" width="200" height="40"></canvas>
+    <button id="playBtn">Play Mix</button>
+
+    <!-- New Top Layer Effect Overlay Elements -->
+    <!-- These sit on top of #imageRevealContainer and are NOT blurred -->
+    <div id="vignetteOverlayEffectElement" class="top-layer-overlay"></div>
+    <div id="scanlinesOverlayEffectElement" class="top-layer-overlay"></div>
+    <div id="colorTintOverlayEffectElement" class="top-layer-overlay"></div>
+
+    <!-- Container for the main image/visuals that WILL be blurred -->
+    <div id="imageRevealContainer">
+        <!-- The main image canvas (e.g., #imageCanvas) is expected to be dynamically inserted here by on-chain scripts. -->
+    </div>
+
+    <script id="audio-data">
+        const audioParts = [
+            "https://ordinals.com/content/055e30b37a547674bd750cd963b9c3e2dfaecfe60833cbb9a377e12b2eea05a6i0",
+            "https://ordinals.com/content/a475da90928ae5dba210a6a2708a20278367d46f898acdebe9707c0e43b994cei0",
+            "https://ordinals.com/content/797a56f20af6f7016853f817a7041847e82dedd2d2b9246515646e741a3e53b2i0"
+        ];
+    </script>
+
+    <script id="image-data">
+        window.images = ["https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
+    </script>
+
+    <!--
+    Explanatory Note for Vignette Effect:
+    Adds a vignette (darkened/colored edges) overlay.
+    Configuration in window.APP_CONFIG.vignetteEffect:
+    {
+        enabled: true,                   // boolean: true to enable
+        color: 'rgba(0,0,0,0.6)',        // string: CSS color for the vignette
+        spread: '150px',                 // string: CSS length for spread (outer radius)
+        blur: '100px'                    // string: CSS length for blur (transition size)
+    }
+    Requires <div id="vignetteOverlayEffectElement" class="top-layer-overlay"></div> in HTML.
+    -->
+    <script id="vignette-effect-script">
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById('vignetteOverlayEffectElement'),
+            cfg = window.APP_CONFIG?.vignetteEffect;
+      if (!cfg || !cfg.enabled || !el)
+        return console.log('Vignette effect not applied (disabled or element/config missing).');
+      
+      el.style.boxShadow = `inset 0 0 ${cfg.blur || '100px'} ${cfg.spread || '150px'} ${cfg.color || 'rgba(0,0,0,0.5)'}`;
+      console.log('Vignette effect applied.');
+    });
+    </script>
+
+    <!--
+    Explanatory Note for Scanlines Effect:
+    Adds a scanlines overlay for a retro CRT monitor look.
+    Configuration in window.APP_CONFIG.scanlinesEffect:
+    {
+        enabled: true,                        // boolean: true to enable
+        lineColor: 'rgba(0, 0, 0, 0.15)',     // string: CSS color for scanlines
+        lineHeightPx: 1,                      // number: height of each line in pixels
+        gapHeightPx: 2,                       // number: height of the gap between lines in pixels
+        animationSeconds: 0                   // number: duration for one vertical animation cycle (0 for static)
+    }
+    Requires <div id="scanlinesOverlayEffectElement" class="top-layer-overlay"></div> in HTML.
+    -->
+    <script id="scanlines-effect-script">
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById('scanlinesOverlayEffectElement'),
+            cfg = window.APP_CONFIG?.scanlinesEffect;
+      if (!cfg || !cfg.enabled || !el)
+        return console.log('Scanlines effect not applied (disabled or element/config missing).');
+
+      const lineHeight = cfg.lineHeightPx || 1;
+      const gapHeight = cfg.gapHeightPx || 1;
+      const totalLineHeight = lineHeight + gapHeight;
+      const color = cfg.lineColor || 'rgba(0,0,0,0.1)';
+
+      el.style.backgroundImage = `repeating-linear-gradient(
+        transparent 0px,
+        transparent ${gapHeight}px,
+        ${color} ${gapHeight}px,
+        ${color} ${totalLineHeight}px
+      )`;
+      el.style.backgroundSize = `100% ${totalLineHeight}px`;
+
+      if (cfg.animationSeconds && cfg.animationSeconds > 0) {
+        el.style.setProperty('--scanline-total-height', `${totalLineHeight}px`);
+        el.style.animation = `verticalScanlinesAnimation ${cfg.animationSeconds}s linear infinite`;
+      }
+      console.log('Scanlines effect applied.');
+    });
+    </script>
+
+    <!--
+    Explanatory Note for Color Tint Effect:
+    Adds a translucent color overlay across the entire screen.
+    Configuration in window.APP_CONFIG.colorTintEffect:
+    {
+        enabled: true,                        // boolean: true to enable
+        color: 'rgba(0, 25, 50, 0.05)'        // string: RGBA CSS color for the tint
+    }
+    Requires <div id="colorTintOverlayEffectElement" class="top-layer-overlay"></div> in HTML.
+    -->
+    <script id="color-tint-effect-script">
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById('colorTintOverlayEffectElement'),
+            cfg = window.APP_CONFIG?.colorTintEffect;
+      if (!cfg || !cfg.enabled || !el)
+        return console.log('Color tint effect not applied (disabled or element/config missing).');
+      
+      el.style.backgroundColor = cfg.color || 'rgba(0,0,0,0.1)';
+      console.log('Color tint effect applied.');
+    });
+    </script>
+
+    <script id="dynamic-blur-effect-script">
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById('imageRevealContainer'),
+        cfg = window.APP_CONFIG?.blurEffect;
+      if (!cfg || !el || cfg.initialBlurPx <= 0 || cfg.unblurDurationMs <= 0)
+        return console[(el ? "log" : "error")]('Blur effect not applied (config missing, invalid, or element not found).');
+      
+      let blur = cfg.initialBlurPx;
+      // Calculate step to complete unblur in unblurDurationMs, assuming roughly 30fps (33.33ms interval)
+      const step = blur / Math.max(1, cfg.unblurDurationMs / 33.33); 
+      
+      el.style.filter = `blur(${blur}px)`;
+      el.style.transition = 'filter 0.03s linear'; // Smooth transition between steps
+
+      const int = setInterval(() => {
+        blur -= step;
+        if (blur <= 0) {
+          el.style.filter = 'none';
+          clearInterval(int);
+          console.log('Blur effect finished.');
+        } else {
+          el.style.filter = `blur(${blur}px)`;
+        }
+      }, 33.33);
+      console.log('Dynamic blur effect initiated.');
+    });
+    </script>
+        
+    <script>
+    (() => {
+      const t = document.getElementById("playBtn"),
+        // e = document.getElementById("log"), // 'log' element is not in HTML, d() would fail or log to console.
+        // For robustness, check if 'e' exists before using it, or remove if not used.
+        // Since no #log element, I'll make 'd' log to console only if 'e' is absent.
+        d = m => {
+            const logEl = document.getElementById("log");
+            if (logEl) {
+                logEl.textContent += `${(new Date).toLocaleTimeString()}: ${m}\n`;
+                logEl.scrollTop = logEl.scrollHeight;
+            } else {
+                // console.log(`AUDIO_LOG: ${m}`); // Alternative if no DOM log element
+            }
+        };
+
+      const a = window.AudioContext || window.webkitAudioContext;
+      //   const n = document.getElementById("clickToBeginText"); // This ID does not exist. It's "pixelTextCanvas".
+      const n = document.getElementById("pixelTextCanvas"); 
+      if (!a) return t.textContent = "Audio not supported", t.disabled = !0;
+      if (!n) console.warn('"Click to Begin" canvas element (pixelTextCanvas) not found in playbackMgmt.js context');
+      
+      let o = new a, i = Array(audioParts.length), r = 0, s = null, c = true, l = false;
+      const u = () => { t.disabled = c; t.textContent = c ? "Loading…" : l ? "Stop Mix" : "Play Mix"; };
+      
+      (async () => {
+        try {
+          d(`Fetching first part → ${audioParts[0]}`);
+          i[0] = await o.decodeAudioData(await (await fetch(audioParts[0])).arrayBuffer());
+          c = false; u(); d(`First part ready (${i[0].duration.toFixed(2)} s).`);
+          await Promise.all(audioParts.slice(1).map(async (audioUrl, idx) => { // Renamed t to audioUrl to avoid conflict with playBtn `t`
+            i[idx + 1] = await o.decodeAudioData(await (await fetch(audioUrl)).arrayBuffer());
+            d(`Decoded part ${idx + 2}/${audioParts.length}`);
+          }));
+          d("All parts decoded. ✅");
+        } catch (err) { c = false; u(); d(`Preload failed: ${err.message}`); console.error("Audio preload failed:", err); }
+      })();
+      
+      const p = () => {
+        if (!l) return;
+        if (r >= i.length) {
+            l = false; u(); d("Finished. 🎉"); y();
+            return;
+        }
+        const tbuf = i[r];
+        if (!tbuf) {
+            d(`Part ${r + 1} buffer not ready, retrying...`);
+            setTimeout(p, 200);
+            return;
+        }
+        s = o.createBufferSource(); s.buffer = tbuf; s.connect(o.destination); s.start();
+        d(`▶ Part ${r + 1}/${i.length} (${tbuf.duration.toFixed(2)} s)`); r++;
+        s.onended = () => { s = null; if (l) p(); }; // ensure l is still true
+      };
+      
+      const y = () => document.dispatchEvent(new Event("playbackStopped"));
+      
+      const f = async () => {
+        if (c || l) return; // if loading or already playing
+        if (o.state === "suspended") await o.resume().catch(err => {d(`AudioContext resume failed: ${err.message}`); console.error("AudioContext resume failed:", err);});
+        l = true; r = 0; u(); document.dispatchEvent(new Event("playbackStarted")); p();
+      };
+      
+      const g = () => {
+        if (l) { // only if playing
+          l = false;
+          if (s) {
+            try { s.onended = null; s.stop(); }
+            catch (err) { d(`Error stopping active source: ${err.message}`); console.error("Error stopping audio source:", err); }
+          }
+          s = null; d("Stopped by user."); u(); y();
+        }
+      };
+      
+      t.onclick = () => l ? g() : f();
+      document.addEventListener("togglePlayback", () => l ? g() : f());
+      // document.addEventListener("playbackStarted", () => {}); // Empty listeners, can be removed or used.
+      // document.addEventListener("playbackStopped", () => {});
+    })();
+    </script>
+    
+    <!-- imageLoadMgmt.js -->
+    <script src="https://ordinals.com/content/a698a70c8eda8e6a58abf2e65921ca629e1734a91c67e2d74a941a2cc5c36027i0"></script>
+    <!-- imageRevealCore.js -->
+    <script type="module" src="https://ordinals.com/content/7b66beb111fbc673a99867f13480a3289afc522b811ddd60163b3bcbb82aa758i0"></script>
+
+    <!-- imageRevealPublicApi.js (inline module script that USES the import) -->
+    <script type="module">
+    import { setupEffect } from "https://ordinals.com/content/6addd1c637ee377bd7e3510c7e78ec35a7fb037676f2ef416131067c9d1d4cf6i0";
+    (() => {
+      const cfg = window.APP_CONFIG?.clickToBegin ?? {},
+        txt = cfg.text ?? "CLICK TO BEGIN",
+        fadeMs = cfg.fadeOutDurationMs ?? 16000,
+        blinkMs = cfg.blinkIntervalMs ?? 500,
+        reapMs = cfg.reappearDelayMs ?? 16000, // Default from original was 16000, config has 5000
+        el = document.getElementById("pixelTextCanvas"),
+        ctx = el.getContext("2d");
+      
+      if (!el) return console.error("pixelTextCanvas element not found for clickToBegin setup.");
+
+      let blinkIntervalHandle; // Renamed from 'blink' to be more descriptive
+      // Ensure transition matches the actual fadeMs from config.
+      el.style.transition = `opacity ${fadeMs/1000}s ease-out, transform ${fadeMs/1000}s ease-out`;
+
+      const setVisibility = (visible) => { // Renamed from blinkFn for clarity
+        clearInterval(blinkIntervalHandle);
+        el.style.visibility = visible ? "visible" : "hidden";
+      };
+
+      const startBlinking = () => { // Renamed from startBlink
+        setVisibility(true); // Ensure it's visible before starting to blink
+        blinkIntervalHandle = setInterval(() => {
+            el.style.visibility = el.style.visibility === "hidden" ? "visible" : "hidden";
+        }, blinkMs);
+      };
+
+      el.onclick = () => {
+        setVisibility(true); // Ensure visible before hiding animation
+        el.classList.add("hidden");
+        // Programmatically click the actual play button to start audio
+        document.getElementById("playBtn").click(); 
+      };
+
+      document.addEventListener("playbackStarted", () => {
+        // If text is not already hidden, hide it.
+        if (!el.classList.contains("hidden")) {
+            setVisibility(true); // Ensure visible before hiding animation
+            el.classList.add("hidden");
+        }
+      });
+
+      document.addEventListener("playbackStopped", () => {
+        el.classList.remove("hidden");
+        // Delay reappear based on config (reapMs)
+        setTimeout(startBlinking, reapMs); 
+      });
+
+      // Draw the text onto the canvas
+      ((drawText = txt) => { // Renamed 'draw' to 'drawText' for clarity
+        // Adjust canvas width based on text to prevent clipping if text is long
+        ctx.font = "bold 16px monospace"; // Set font before measuring
+        const textMetrics = ctx.measureText(drawText);
+        // Add some padding to the measured width
+        const newWidth = Math.max(200, textMetrics.width + 40); 
+        if (el.width !== newWidth) { // Only update if necessary
+            el.width = newWidth;
+        }
+        // If canvas width changed, context properties might reset, so re-apply.
+        ctx.font = "bold 16px monospace"; 
+        ctx.textBaseline = "middle"; 
+        ctx.textAlign = "center";
+        
+        ctx.clearRect(0, 0, el.width, el.height); // Clear with new dimensions if any
+
+        // Outline effect
+        ctx.fillStyle = "#33CCFF"; // Outline color
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                // Skip rendering the center fill for the outline pass
+                if (dx === 0 && dy === 0) continue; 
+                ctx.fillText(drawText, el.width / 2 + dx, el.height / 2 + dy);
+            }
+        }
+        // Main text fill
+        ctx.fillStyle = "#000"; // Text color (center part)
+        ctx.fillText(drawText, el.width / 2, el.height / 2);
+      })(); // Immediately invoke to draw text
+
+      startBlinking(); // Start blinking animation initially
+    })();
+
+    window.addEventListener("load", async () => {
+      const imgUrl = window.images?.[0];
+      if (!imgUrl) return console.error("Colour Sweep Player: no image URL provided.");
+      
+      let eff = { name: "fadeIn", duration: 60 }; // Default effect
+      const cfg = window.APP_CONFIG?.mainRevealEffect;
+
+      if (cfg && cfg.name && typeof cfg.duration === 'number' && cfg.duration > 0) {
+        eff = { name: cfg.name, duration: cfg.duration };
+        console.log(`Using mainRevealEffect from APP_CONFIG: ${eff.name}, duration: ${eff.duration}s`);
+      } else {
+        console.warn("mainRevealEffect not found or invalid in APP_CONFIG. Using defaults: fadeIn, 60s.");
+      }
+      
+      try {
+        // Ensure setupEffect is called with duration in SECONDS as expected by imageRevealCore.js
+        await setupEffect(imgUrl, eff.name, eff.duration); 
+        console.log("Main image reveal effect ready – click to begin.");
+      } catch (err) {
+        console.error("Failed to prepare main image reveal effect:", err);
+        // Provide a fallback visual or message if critical
+        const errorDisplay = document.createElement('div');
+        errorDisplay.textContent = 'Error loading visual effect. Please refresh.';
+        errorDisplay.style.color = 'red';
+        errorDisplay.style.position = 'fixed';
+        errorDisplay.style.top = '50%';
+        errorDisplay.style.left = '50%';
+        errorDisplay.style.transform = 'translate(-50%, -50%)';
+        errorDisplay.style.zIndex = '2000';
+        document.body.appendChild(errorDisplay);
+      }
+    });
+    </script>
+    
+</body>
+</html>

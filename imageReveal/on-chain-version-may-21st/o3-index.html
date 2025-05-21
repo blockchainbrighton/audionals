@@ -1,0 +1,608 @@
+<!-- ======================================================================
+     COLOUR SWEEP PLAYER – enhanced with Grain, Vignette & Scanlines
+     All new overlay scripts live above the existing blur script, are
+     self-contained, and respect window.APP_CONFIG.
+     ==================================================================== -->
+     <!DOCTYPE html>
+     <html lang="en">
+     <head>
+     <meta charset="UTF-8">
+     <title>Colour Sweep Player</title>
+     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+
+     <!-- ────────────────────────────────────────────────────────────────────
+          1. GLOBAL CONFIG – add three new effect blocks
+          ──────────────────────────────────────────────────────────────────── -->
+     <script id="global-app-config">
+     window.APP_CONFIG = {
+       /* ----------------------------  Overlays  --------------------------- */
+       grainEffect: {
+            enabled: true,
+            frameIntervalMs: 50,    // start
+            opacity: 0.15,          // start
+            endFrameIntervalMs: 10, // end
+            endOpacity: 0.35,       // end
+            duration: 20            // seconds for morph
+            },
+            vignetteEffect: {
+            enabled: true,
+            strength: 0.6,          // start (0-1)
+            color: "#000",          // stays fixed or morph between two colors if needed
+            endStrength: 0.9,       // end
+            endColor: "#08081a",    // (optional, to morph between colors)
+            duration: 30            // seconds for morph
+            },
+
+       scanlineEffect: {
+            enabled: true,
+            lineHeightPx: 24,    // Initial value (start)
+            opacity: 0.52,       // Initial value (start)
+            speed: 10,           // Initial value (start)
+            endLineHeightPx: 2,  // End value (thin)
+            endOpacity: 0.12,    // End value (less visible)
+            endSpeed: 0.5,       // End value (faster)
+            duration: 30         // Animation duration in seconds
+            },     
+       /* -----------------------------  Blur  ------------------------------ */
+
+       blurEffect: {
+            enabled: true,
+            direction: "all",
+            steps: [
+                { blur: 40, duration: 5000 },
+                { blur: 0,  duration: 4000 },
+                { blur: 25, duration: 3000 },
+                { blur: 0,  duration: 3000 }
+            ]
+            },
+
+
+
+
+
+
+       /* ------------------  Core (unchanged from original)  --------------- */
+       // mainRevealEffectOptions: fadeIn:'fadeOut', fadeOut:'fadeIn', pixelateFwd:'pixelateRev', pixelateRev:'pixelateFwd',
+       // glyphFwd:'glyphRev', glyphRev:'glyphFwd', sweepBrightFwd:'sweepBrightRev', sweepBrightRev:'sweepBrightFwd'
+
+       mainRevealEffect: { name: "fadeIn", duration: 1.5 },
+       clickToBegin: {
+         text: "ENTER MATRIX",
+         fadeOutDurationMs: 35000,
+         blinkIntervalMs: 750,
+         reappearDelayMs: 5000
+       }
+     };
+     </script>
+
+     <script>
+        function clipOverlayToCanvas(overlayEl, canvasEl) {
+            if (!overlayEl || !canvasEl) return;
+            const rect = canvasEl.getBoundingClientRect();
+            // inset(top, right, bottom, left)
+            const clip = `inset(${rect.top}px ${window.innerWidth - rect.right}px ${window.innerHeight - rect.bottom}px ${rect.left}px)`;
+            overlayEl.style.clipPath = clip;
+            overlayEl.style.WebkitClipPath = clip;
+            }
+
+     </script>
+     
+     <!-- ────────────────────────────────────────────────────────────────────
+          2.  GRAIN EFFECT  – animated film grain
+          --------------------------------------------------------------------
+          HOW TO CALL:
+            • Enabled by default: APP_CONFIG.grainEffect.enabled = true
+            • Adjust density via frameIntervalMs (lower = faster)
+            • Adjust visibility via opacity (0-1)
+          ──────────────────────────────────────────────────────────────────── -->
+          <script id="grain-effect-script">
+            document.addEventListener('DOMContentLoaded', () => {
+              const cfg = window.APP_CONFIG?.grainEffect;
+              if (!cfg?.enabled) return;
+            
+              // Set up start/end/duration
+              const start = {
+                interval: cfg.frameIntervalMs ?? 50,
+                op: cfg.opacity ?? 0.15,
+              };
+              const end = {
+                interval: cfg.endFrameIntervalMs ?? 10,
+                op: cfg.endOpacity ?? 0.35,
+              };
+              const duration = (cfg.duration ?? 20) * 1000;
+            
+              // Create canvas
+              const cvs = document.createElement('canvas');
+              cvs.id = 'grainCanvas';
+              Object.assign(cvs.style, {
+                position: 'fixed',
+                inset: 0,
+                zIndex: 900,
+                pointerEvents: 'none',
+                opacity: start.op,
+                mixBlendMode: 'screen',
+              });
+              document.body.appendChild(cvs);
+            
+              const ctx = cvs.getContext('2d');
+              const resize = () => {
+                cvs.width = window.innerWidth;
+                cvs.height = window.innerHeight;
+                clipOverlayToCanvas(cvs, document.getElementById('imageCanvas'));
+              };
+              resize();
+              window.addEventListener('resize', resize);
+            
+              // Morph loop for interval and opacity
+              let lastDraw = 0, curInterval = start.interval, curOpacity = start.op;
+              let startTime = performance.now();
+            
+              function animate() {
+                const now = performance.now();
+                const t = Math.min(1, (now - startTime) / duration);
+                curInterval = start.interval + (end.interval - start.interval) * t;
+                curOpacity = start.op + (end.op - start.op) * t;
+                cvs.style.opacity = curOpacity;
+                requestAnimationFrame(animate);
+              }
+              animate();
+            
+              // Dynamic noise draw loop using variable interval
+              function drawNoiseLoop() {
+                const now = performance.now();
+                if (now - lastDraw > curInterval) {
+                  lastDraw = now;
+                  const imgData = ctx.createImageData(cvs.width, cvs.height);
+                  const buf = new Uint32Array(imgData.data.buffer);
+                  for (let i = 0; i < buf.length; i++)
+                    buf[i] = (Math.random() * 255) | 0 << 24;
+                  ctx.putImageData(imgData, 0, 0);
+                }
+                requestAnimationFrame(drawNoiseLoop);
+              }
+              drawNoiseLoop();
+            });
+            </script>
+            
+     
+     <!-- ────────────────────────────────────────────────────────────────────
+          3.  VIGNETTE EFFECT – radial darkening edges
+          --------------------------------------------------------------------
+          HOW TO CALL:
+            • APP_CONFIG.vignetteEffect.enabled = true
+            • strength 0-1 = how dark edges become
+            • color = any CSS colour (default black)
+          ──────────────────────────────────────────────────────────────────── -->
+          <script id="vignette-effect-script">
+            document.addEventListener('DOMContentLoaded', () => {
+              const cfg = window.APP_CONFIG?.vignetteEffect;
+              if (!cfg?.enabled) return;
+            
+              const start = {
+                strength: cfg.strength ?? 0.6,
+                color: cfg.color ?? "#000"
+              };
+              const end = {
+                strength: cfg.endStrength ?? start.strength,
+                color: cfg.endColor ?? start.color
+              };
+              const duration = (cfg.duration ?? 30) * 1000;
+            
+              // Helper: morph color (hex strings only for now)
+              function lerpColor(a, b, t) {
+                // hex: "#RRGGBB"
+                const ah = a.length === 7 ? a : "#000000";
+                const bh = b.length === 7 ? b : "#000000";
+                const av = [1, 3, 5].map(i => parseInt(ah.slice(i, i+2), 16));
+                const bv = [1, 3, 5].map(i => parseInt(bh.slice(i, i+2), 16));
+                const rv = av.map((v, i) => Math.round(v + (bv[i] - v) * t));
+                return "#" + rv.map(x => x.toString(16).padStart(2, "0")).join("");
+              }
+            
+              const div = document.createElement('div');
+              div.id = 'vignetteOverlay';
+              Object.assign(div.style, {
+                position: 'fixed',
+                inset: 0,
+                zIndex: 910,
+                pointerEvents: 'none'
+              });
+              document.body.appendChild(div);
+            
+              function update(strength, color) {
+                div.style.background = `radial-gradient(circle at center, transparent 60%, ${color} ${strength * 100}%)`;
+              }
+            
+              // Animate vignette
+              let startTime = performance.now();
+              function animate() {
+                const now = performance.now();
+                const t = Math.min(1, (now - startTime) / duration);
+                const s = start.strength + (end.strength - start.strength) * t;
+                const c = start.color === end.color ? start.color : lerpColor(start.color, end.color, t);
+                update(s, c);
+                if (t < 1) requestAnimationFrame(animate);
+              }
+              animate();
+            
+              // Overlay positioning on resize
+              const canvas = document.getElementById('imageCanvas');
+              function clip() { clipOverlayToCanvas(div, canvas); }
+              clip();
+              window.addEventListener('resize', clip);
+            });
+            </script>
+            
+     
+     <!-- ────────────────────────────────────────────────────────────────────
+          4.  SCANLINE EFFECT – moving CRT lines
+          --------------------------------------------------------------------
+          HOW TO CALL:
+            • APP_CONFIG.scanlineEffect.enabled = true
+            • lineHeightPx = thickness of each dark bar
+            • speed = animation duration (seconds) for one cycle
+          ──────────────────────────────────────────────────────────────────── -->
+          <script id="scanline-effect-script">
+            document.addEventListener('DOMContentLoaded', () => {
+              const cfg = window.APP_CONFIG?.scanlineEffect;
+              if (!cfg?.enabled) return;
+            
+              // Create overlay div and style element
+              const style = document.createElement('style');
+              document.head.appendChild(style);
+            
+              const div = document.createElement('div');
+              div.id = 'scanlineOverlay';
+              Object.assign(div.style, {
+                position: 'fixed',
+                inset: 0,
+                zIndex: 905,
+                pointerEvents: 'none',
+              });
+              document.body.appendChild(div);
+            
+              // Helper to apply scanline params
+              function updateScanlines(lineHeightPx, opacity, speed) {
+                // Update gradient background and animation
+                div.style.background = `repeating-linear-gradient(
+                  0deg,
+                  rgba(0,0,0,${opacity}) 0 ${lineHeightPx}px,
+                  transparent ${lineHeightPx}px ${lineHeightPx * 2}px
+                )`;
+                style.textContent = `
+                  @keyframes scanSlide {
+                    0% { background-position:0 0; }
+                    100% { background-position:0 ${lineHeightPx * 2}px; }
+                  }
+                  #scanlineOverlay {
+                    animation: scanSlide ${speed}s linear infinite;
+                  }
+                `;
+              }
+            
+              // Preset: start thick, slow; end thin, fast (over 30s)
+              const start = { h: 24, op: 0.52, speed: 10 };
+              const end = { h: 2, op: 0.12, speed: 0.5 };
+              const duration = 30 * 1000; // ms
+            
+              let startTime = performance.now();
+              function animate() {
+                const now = performance.now();
+                const t = Math.min(1, (now - startTime) / duration);
+                // Linear interpolation
+                const h = start.h + (end.h - start.h) * t;
+                const op = start.op + (end.op - start.op) * t;
+                const speed = start.speed + (end.speed - start.speed) * t;
+                updateScanlines(h, op, speed);
+                if (t < 1) requestAnimationFrame(animate);
+                // else: keep final state
+              }
+              animate();
+            
+              // Also update on window resize (for overlay positioning)
+              const canvas = document.getElementById('imageCanvas');
+              function clip() { clipOverlayToCanvas(div, canvas); }
+              clip();
+              window.addEventListener('resize', clip);
+            });
+            </script>
+            
+     
+     <!-- ────────────────────────────────────────────────────────────────────
+          5.   BLUR EFFECT  
+          ──────────────────────────────────────────────────────────────────── -->
+          <script id="dynamic-blur-effect-script">
+            document.addEventListener('DOMContentLoaded', () => {
+              const el = document.getElementById('imageRevealContainer');
+              const cfg = window.APP_CONFIG?.blurEffect;
+              if (!cfg?.enabled || !el) return;
+            
+              const direction = cfg.direction ?? "all";
+              const steps = Array.isArray(cfg.steps) && cfg.steps.length > 1 ? cfg.steps : [
+                { blur: cfg.initialBlurPx ?? 50, duration: 0 },
+                { blur: cfg.finalBlurPx ?? 0,   duration: cfg.duration ?? 10000 }
+              ];
+            
+              // Helper: normalize step to {x, y} object
+              function toXY(val) {
+                if (direction === "all") return {x: val, y: val};
+                if (direction === "x")   return {x: val, y: 0};
+                if (direction === "y")   return {x: 0,   y: val};
+                if (direction === "custom") return {x: val.x ?? 0, y: val.y ?? 0};
+                return {x: val, y: val};
+              }
+            
+              // Sequence animator: interpolates between steps
+              function animateSteps(index = 0) {
+                if (index >= steps.length - 1) {
+                  // Final state
+                  const last = toXY(steps[steps.length - 1].blur);
+                  el.style.filter = (last.x || last.y)
+                    ? `blur(${last.x}px) blur(${last.y}px)`
+                    : 'none';
+                  return;
+                }
+                const stepA = toXY(steps[index].blur);
+                const stepB = toXY(steps[index + 1].blur);
+                const dur = Math.max(16, steps[index + 1].duration);
+            
+                const startTime = performance.now();
+                function frame() {
+                  const t = Math.min(1, (performance.now() - startTime) / dur);
+                  const x = stepA.x + (stepB.x - stepA.x) * t;
+                  const y = stepA.y + (stepB.y - stepA.y) * t;
+                  el.style.filter = (x || y)
+                    ? `blur(${x}px) blur(${y}px)`
+                    : 'none';
+                  if (t < 1) requestAnimationFrame(frame);
+                  else animateSteps(index + 1);
+                }
+                frame();
+              }
+              animateSteps();
+            });
+            </script>
+            
+
+
+     <!-- ────────────────────────────────────────────────────────────────────
+          6.  PAGE STYLES  (identical to original; extra z-index is handled above)
+          ──────────────────────────────────────────────────────────────────── -->
+     <style>
+html, body {
+  box-sizing: border-box !important;
+  border: none !important;
+  outline: none !important;
+  background: #000 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-width: 100vw !important;
+  min-height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+  border: none !important;
+  outline: none !important;
+  background: transparent;
+}
+
+
+#imageRevealContainer {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: #000 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+body::-webkit-scrollbar, html::-webkit-scrollbar {
+  display: none !important; /* hide any scrollbars */
+}
+
+#imageRevealContainer > :not(canvas) {
+  display: none !important;
+}
+
+#imageCanvas {
+  width: 90vh;
+  height: 90vh;
+  max-width: 90vw;
+  max-height: 90vh;
+  background: #000;
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: block;
+  image-rendering: pixelated;
+
+  transform: translateZ(0);
+  will-change: transform;
+
+  box-shadow:
+    inset 0 1px 0 0 #000,
+    inset 0 -1px 0 0 #000;
+  box-sizing: border-box;
+}
+
+#pixelTextCanvas {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90vh;
+  max-width: 90vw;
+  height: auto;
+  image-rendering: pixelated;
+  opacity: 1;
+  transition: opacity 16s ease-out, transform 16s ease-out;
+  z-index: 1000;
+}
+
+#pixelTextCanvas.hidden {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0);
+}
+
+#playBtn {
+  display: none;
+}
+
+#backgroundBlackout {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 0;
+  pointer-events: none;
+}
+
+     </style>
+     </head>
+     
+     <!-- ────────────────────────────────────────────────────────────────────
+          7.  DOM  (unchanged)
+          ──────────────────────────────────────────────────────────────────── -->
+     <body>
+        <div id="backgroundBlackout" style="
+        position: fixed;
+        inset: 0;
+        background: #000;
+        z-index: 0;
+        pointer-events: none;
+        "></div>
+
+       <canvas id="pixelTextCanvas" width="200" height="40"></canvas>
+       <button id="playBtn">Play Mix</button>
+     
+       <!-- Audio URLs -->
+       <script id="audio-data">
+         const audioParts = [
+           "https://ordinals.com/content/055e30b37a547674bd750cd963b9c3e2dfaecfe60833cbb9a377e12b2eea05a6i0",
+           "https://ordinals.com/content/a475da90928ae5dba210a6a2708a20278367d46f898acdebe9707c0e43b994cei0",
+           "https://ordinals.com/content/797a56f20af6f7016853f817a7041847e82dedd2d2b9246515646e741a3e53b2i0"
+         ];
+       </script>
+     
+       <!-- Image URLs -->
+       <script id="image-data">
+         window.images = ["https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
+       </script>
+     
+     <script>
+        (() => {
+          const t = document.getElementById("playBtn"),
+            e = document.getElementById("log"),
+            a = window.AudioContext || window.webkitAudioContext,
+            n = document.getElementById("clickToBeginText"),
+            d = m => { e && (e.textContent += `${(new Date).toLocaleTimeString()}: ${m}\n`, e.scrollTop = e.scrollHeight); };
+          if (!a) return t.textContent = "Audio not supported", t.disabled = !0;
+          n || console.warn('"Click to Begin" text element not found in playbackMgmt.js context');
+          let o = new a, i = Array(audioParts.length), r = 0, s = null, c = !0, l = !1;
+          const u = () => { t.disabled = c; t.textContent = c ? "Loading…" : l ? "Stop Mix" : "Play Mix"; };
+          (async () => {
+            try {
+              d(`Fetching first part → ${audioParts[0]}`);
+              i[0] = await o.decodeAudioData(await (await fetch(audioParts[0])).arrayBuffer());
+              c = !1; u(); d(`First part ready (${i[0].duration.toFixed(2)} s).`);
+              await Promise.all(audioParts.slice(1).map(async (t, e) =>
+                i[e + 1] = await o.decodeAudioData(await (await fetch(t)).arrayBuffer()), d(`Decoded part ${e + 2}/${audioParts.length}`)
+              ));
+              d("All parts decoded. ✅");
+            } catch (err) { c = !1; u(); d(`Preload failed: ${err.message}`); }
+          })();
+          const p = () => {
+            if (!l) return;
+            if (r >= i.length) return l = !1, u(), d("Finished. 🎉"), y();
+            const tbuf = i[r];
+            if (!tbuf) return d(`Part ${r + 1} buffer not ready, retrying...`), setTimeout(p, 200);
+            s = o.createBufferSource(); s.buffer = tbuf; s.connect(o.destination); s.start();
+            d(`▶ Part ${r + 1}/${i.length} (${tbuf.duration.toFixed(2)} s)`); r++;
+            s.onended = () => { s = null; l && p(); };
+          };
+          const y = () => document.dispatchEvent(new Event("playbackStopped"));
+          const f = async () => {
+            if (c || l) return;
+            if (o.state === "suspended") await o.resume();
+            l = !0; r = 0; u(); document.dispatchEvent(new Event("playbackStarted")); p();
+          };
+          const g = () => {
+            if (l) {
+              l = !1;
+              if (s) try { s.onended = null; s.stop(); } catch (err) { d(`Error stopping active source: ${err.message}`); }
+              s = null; d("Stopped by user."); u(); y();
+            }
+          };
+          t.onclick = () => l ? g() : f();
+          document.addEventListener("togglePlayback", () => l ? g() : f());
+          document.addEventListener("playbackStarted", () => {});
+          document.addEventListener("playbackStopped", () => {});
+        })();
+        </script>
+        
+    <!-- imageLoadMgmt.js -->
+        <script src="https://ordinals.com/content/a698a70c8eda8e6a58abf2e65921ca629e1734a91c67e2d74a941a2cc5c36027i0"></script>
+     <!-- imageRevealCore.js -->
+        <script type="module" src="https://ordinals.com/content/7b66beb111fbc673a99867f13480a3289afc522b811ddd60163b3bcbb82aa758i0"></script>
+    
+    <!-- imageRevealPublicApi.js (inline module script that USES the import) -->
+    <script type="module">
+        import { setupEffect } from "https://ordinals.com/content/6addd1c637ee377bd7e3510c7e78ec35a7fb037676f2ef416131067c9d1d4cf6i0";
+        (() => {
+          const cfg = window.APP_CONFIG?.clickToBegin ?? {},
+            txt = cfg.text ?? "CLICK TO BEGIN",
+            fadeMs = cfg.fadeOutDurationMs ?? 16000,
+            blinkMs = cfg.blinkIntervalMs ?? 500,
+            reapMs = cfg.reappearDelayMs ?? 16000,
+            el = document.getElementById("pixelTextCanvas"),
+            ctx = el.getContext("2d");
+          let blink;
+          el.style.transition = `opacity ${fadeMs/1e3}s ease-out,transform ${fadeMs/1e3}s ease-out`;
+          const blinkFn = vis => { clearInterval(blink); el.style.visibility = vis; },
+            startBlink = () => { blinkFn("visible"); blink = setInterval(() => el.style.visibility = el.style.visibility === "hidden" ? "visible" : "hidden", blinkMs); };
+          el.onclick = () => (blinkFn("visible"), el.classList.add("hidden"), document.getElementById("playBtn").click());
+          document.addEventListener("playbackStarted", () => { if (!el.classList.contains("hidden")) blinkFn("visible"), el.classList.add("hidden"); });
+          document.addEventListener("playbackStopped", () => { el.classList.remove("hidden"); setTimeout(startBlink, reapMs); });
+          ((draw = txt) => {
+            ctx.clearRect(0, 0, el.width, el.height);
+            ctx.font = "bold 16px monospace"; ctx.textBaseline = "middle"; ctx.textAlign = "center";
+            ctx.fillStyle = "#33CCFF";
+            for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) ctx.fillText(draw, el.width / 2 + dx, el.height / 2 + dy);
+            ctx.fillStyle = "#000"; ctx.fillText(draw, el.width / 2, el.height / 2);
+          })();
+          startBlink();
+        })();
+        window.addEventListener("load", async () => {
+          const imgUrl = window.images?.[0];
+          if (!imgUrl) return console.error("Colour Sweep Player: no image URL provided.");
+          let eff = { name: "fadeIn", duration: 60 }, cfg = window.APP_CONFIG?.mainRevealEffect;
+          if (cfg) eff = { name: cfg.name, duration: cfg.duration }, console.log(`Using mainRevealEffect: ${eff.name}, duration: ${eff.duration}`);
+          else console.warn("mainRevealEffect not found. Using defaults.");
+          try { await setupEffect(imgUrl, eff.name, eff.duration); console.log("Colour sweep ready – click to begin."); }
+          catch (err) { console.error("Failed to prepare colour sweep:", err); }
+        });
+        </script>
+        
+        
+        <div id="backgroundBlackout" style="
+        position: fixed;
+        inset: 0;
+        background: #000;
+        z-index: 0;
+        pointer-events: none;
+      "></div>
+      
+    </body>
+    </html>

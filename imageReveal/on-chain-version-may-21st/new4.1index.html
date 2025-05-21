@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Colour Sweep Player</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    html, body {
+      margin: 0; height: 100%; background: #000;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; cursor: pointer;
+    }
+    #imageRevealContainer {
+      position: fixed; inset: 0;
+      margin: 0 !important; padding: 0 !important; border: none !important;
+      background: #000 !important;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #imageRevealContainer > :not(canvas) { display: none !important; }
+    #imageCanvas {
+      width: 90vh; height: 90vh; max-width: 90vw; max-height: 90vh;
+      display: block; background: #000 !important; border: none !important;
+    }
+    #pixelTextCanvas {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 200px; max-width: 90vw; height: 40px; image-rendering: pixelated;
+      opacity: 1; transition: opacity 16s ease-out, transform 16s ease-out;
+      z-index: 1000;
+    }
+    #pixelTextCanvas.hidden { opacity: 0; transform: translate(-50%, -50%) scale(0); }
+    #playBtn { display: none; }
+    /* Effect Styles */
+    @keyframes pulseBorder {
+      0%,100% { box-shadow: 0 0 8px 6px var(--pulse-color,rgba(0,255,255,1)); }
+      50%     { box-shadow: 0 0 60px 40px var(--pulse-color,rgba(0,255,255,1)); }
+    }
+    #imageRevealContainer.pulsating {
+      animation: pulseBorder var(--pulse-duration,1.5s) infinite;
+    }
+    #vignetteOverlay {
+      pointer-events: none; position: fixed; inset: 0; z-index: 1500; opacity: 0;
+      transition: opacity .4s;
+      background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,1) 100%);
+    }
+    #vignetteOverlay.active { opacity: var(--vignette-opacity,1);}
+    #flashOverlay {
+      pointer-events: none; position: fixed; inset: 0; z-index: 2000;
+      background: var(--flash-color,rgba(255,0,255,0.7)); opacity: 0;
+      transition: opacity 0.12s;
+    }
+    #noiseOverlay {
+      pointer-events: none; position: fixed; inset: 0; z-index: 1800; opacity: 0;
+      transition: opacity .2s; background: transparent; mix-blend-mode: normal;
+    }
+    #noiseOverlay.active { opacity: var(--noise-opacity,1);}
+  </style>
+
+  <!-- ========================== -->
+  <!--   GLOBAL EFFECT SETTINGS   -->
+  <!-- ========================== -->
+  <script id="global-app-config">
+    // *** TEST SETTINGS: HIGH INTENSITY FOR VISIBILITY ***
+    window.APP_CONFIG = {
+      blurEffect: { initialBlurPx: 0, unblurDurationMs: 800 },
+      pulsatingBorderEffect: { color: "rgba(0,255,255,1)", pulseDurationMs: 1200 },
+      vignetteEffect: { opacity: 1 }, // max black vignette for test
+      flashOverlayEffect: { color: "rgba(255,0,255,0.7)", flashDurationMs: 700 },
+      noiseEffect: { opacity: 1 }, // full strength noise
+      mainRevealEffect: { name: "fadeIn", duration: 2.2 },
+      clickToBegin: {
+        text: "ENTER MATRIX",
+        fadeOutDurationMs: 1500,
+        blinkIntervalMs: 500,
+        reappearDelayMs: 4000
+      }
+    };
+  </script>
+  <!-- ========================== -->
+
+  <!-- ========== EFFECT SCRIPTS ========== -->
+  <script id="effect-test-trigger">
+    // SEQUENCED TEST: Stage effects one by one on playbackStarted
+    document.addEventListener('DOMContentLoaded', () => {
+      let started = false;
+      document.addEventListener('playbackStarted', () => {
+        if (started) return; // Only run sequence on first playback for testing
+        started = true;
+        const log = msg => { console.log('%c[EffectTest]', 'color: #0ff', msg); };
+        // Disable all to begin with
+        document.getElementById('imageRevealContainer').classList.remove('pulsating');
+        const vignette = document.getElementById('vignetteOverlay');
+        vignette && vignette.classList.remove('active');
+        const noise = document.getElementById('noiseOverlay');
+        noise && noise.classList.remove('active');
+        // Stage 1: Pulsating Border
+        setTimeout(() => {
+          log('PULSATING BORDER: ON (cyan glow, 2s)');
+          document.getElementById('imageRevealContainer').classList.add('pulsating');
+        }, 300); // starts at 0.3s
+        setTimeout(() => {
+          log('PULSATING BORDER: OFF');
+          document.getElementById('imageRevealContainer').classList.remove('pulsating');
+        }, 2300); // ends at 2.3s
+        // Stage 2: Vignette
+        setTimeout(() => {
+          log('VIGNETTE: ON (full black edges, 2s)');
+          vignette && vignette.classList.add('active');
+        }, 2500);
+        setTimeout(() => {
+          log('VIGNETTE: OFF');
+          vignette && vignette.classList.remove('active');
+        }, 4500);
+        // Stage 3: Noise
+        setTimeout(() => {
+          log('NOISE: ON (full static, 2s)');
+          noise && noise.classList.add('active');
+        }, 4700);
+        setTimeout(() => {
+          log('NOISE: OFF');
+          noise && noise.classList.remove('active');
+        }, 6700);
+        setTimeout(() => {
+          log('END OF STAGED EFFECTS. Resume normal effect behaviour.');
+        }, 7000);
+      });
+    });
+  </script>
+
+  <!-- 1. Pulsating Border Effect -->
+  <script id="pulsating-border-effect">
+    document.addEventListener('DOMContentLoaded', () => {
+      const c = document.getElementById('imageRevealContainer'),
+        cfg = window.APP_CONFIG?.pulsatingBorderEffect;
+      if (!c || !cfg) return;
+      c.style.setProperty('--pulse-color', cfg.color || 'rgba(0,255,255,1)');
+      c.style.setProperty('--pulse-duration', (cfg.pulseDurationMs||1200)/1000+'s');
+      // Effect is toggled by test trigger
+    });
+  </script>
+
+  <!-- 2. Vignette Overlay Effect -->
+  <script id="vignette-effect">
+    document.addEventListener('DOMContentLoaded', () => {
+      let ov = document.createElement('div');
+      ov.id = 'vignetteOverlay';
+      document.body.appendChild(ov);
+      let opacity = window.APP_CONFIG?.vignetteEffect?.opacity ?? 1;
+      ov.style.setProperty('--vignette-opacity', opacity);
+      // Effect is toggled by test trigger
+    });
+  </script>
+
+  <!-- 3. Flash Overlay Effect -->
+  <script id="flash-overlay-effect">
+    document.addEventListener('DOMContentLoaded', () => {
+      let ov = document.createElement('div');
+      ov.id = 'flashOverlay';
+      document.body.appendChild(ov);
+      const cfg = window.APP_CONFIG?.flashOverlayEffect ?? {};
+      ov.style.setProperty('--flash-color', cfg.color || 'rgba(255,0,255,0.7)');
+      let firstStart = true;
+      document.addEventListener('playbackStarted', () => {
+        if (firstStart) { firstStart = false; return; }
+        ov.style.opacity = 1;
+        setTimeout(() => ov.style.opacity = 0, cfg.flashDurationMs || 700);
+      });
+    });
+  </script>
+
+  <!-- 4. Noise/Grain Overlay Effect -->
+  <script id="noise-effect">
+    document.addEventListener('DOMContentLoaded', () => {
+      let canvas = document.createElement('canvas');
+      canvas.id = 'noiseOverlay';
+      document.body.appendChild(canvas);
+      const op = window.APP_CONFIG?.noiseEffect?.opacity ?? 1;
+      canvas.style.setProperty('--noise-opacity', op);
+      const resize = () => {
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+      };
+      resize(); window.addEventListener('resize', resize);
+      function noise() {
+        let ctx = canvas.getContext('2d');
+        let w = canvas.width, h = canvas.height, id = ctx.createImageData(w, h), d = id.data;
+        for (let i = 0; i < d.length; i += 4) {
+          let v = 32 + Math.random() * 220;
+          d[i] = d[i+1] = d[i+2] = v; d[i+3] = 200;
+        }
+        ctx.putImageData(id, 0, 0);
+        if (canvas.classList.contains('active')) requestAnimationFrame(noise);
+      }
+      document.addEventListener('playbackStarted', () => {
+        // Effect is toggled by test trigger
+        noise();
+      });
+    });
+  </script>
+
+  <!-- 5. Dynamic Blur Effect (unchanged) -->
+  <script id="dynamic-blur-effect-script">
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById('imageRevealContainer'),
+        cfg = window.APP_CONFIG?.blurEffect;
+      if (!cfg || !el || cfg.initialBlurPx <= 0 || cfg.unblurDurationMs <= 0)
+        return;
+      let blur = cfg.initialBlurPx,
+        step = blur / Math.max(1, cfg.unblurDurationMs / 33.33);
+      el.style.filter = `blur(${blur}px)`;
+      el.style.transition = 'filter .1s linear';
+      const int = setInterval(() => {
+        blur -= step;
+        if (blur <= 0) {
+          el.style.filter = 'none';
+          clearInterval(int);
+        } else el.style.filter = `blur(${blur}px)`;
+      }, 33.33);
+    });
+  </script>
+  <!-- ========== END EFFECT SCRIPTS ========== -->
+</head>
+
+<body>
+  <div id="imageRevealContainer">
+    <!-- Canvas(s) added by core scripts -->
+  </div>
+  <canvas id="pixelTextCanvas" width="200" height="40"></canvas>
+  <button id="playBtn">Play Mix</button>
+
+  <!-- AUDIO and IMAGE DATA (unchanged) -->
+  <script id="audio-data">
+    const audioParts = [
+      "https://ordinals.com/content/055e30b37a547674bd750cd963b9c3e2dfaecfe60833cbb9a377e12b2eea05a6i0",
+      "https://ordinals.com/content/a475da90928ae5dba210a6a2708a20278367d46f898acdebe9707c0e43b994cei0",
+      "https://ordinals.com/content/797a56f20af6f7016853f817a7041847e82dedd2d2b9246515646e741a3e53b2i0"
+    ];
+  </script>
+  <script id="image-data">
+    window.images = ["https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
+  </script>
+
+  <!-- AUDIO PLAYBACK/CONTROL (unchanged) -->
+  <script>
+    (() => {
+      const t = document.getElementById("playBtn"),
+        e = document.getElementById("log"),
+        a = window.AudioContext || window.webkitAudioContext,
+        n = document.getElementById("clickToBeginText"),
+        d = m => { e && (e.textContent += `${(new Date).toLocaleTimeString()}: ${m}\n`, e.scrollTop = e.scrollHeight); };
+      if (!a) return t.textContent = "Audio not supported", t.disabled = !0;
+      n || console.warn('"Click to Begin" text element not found in playbackMgmt.js context');
+      let o = new a, i = Array(audioParts.length), r = 0, s = null, c = !0, l = !1;
+      const u = () => { t.disabled = c; t.textContent = c ? "Loading…" : l ? "Stop Mix" : "Play Mix"; };
+      (async () => {
+        try {
+          d(`Fetching first part → ${audioParts[0]}`);
+          i[0] = await o.decodeAudioData(await (await fetch(audioParts[0])).arrayBuffer());
+          c = !1; u(); d(`First part ready (${i[0].duration.toFixed(2)} s).`);
+          await Promise.all(audioParts.slice(1).map(async (t, e) =>
+            i[e + 1] = await o.decodeAudioData(await (await fetch(t)).arrayBuffer()), d(`Decoded part ${e + 2}/${audioParts.length}`)
+          ));
+          d("All parts decoded. ✅");
+        } catch (err) { c = !1; u(); d(`Preload failed: ${err.message}`); }
+      })();
+      const p = () => {
+        if (!l) return;
+        if (r >= i.length) return l = !1, u(), d("Finished. 🎉"), y();
+        const tbuf = i[r];
+        if (!tbuf) return d(`Part ${r + 1} buffer not ready, retrying...`), setTimeout(p, 200);
+        s = o.createBufferSource(); s.buffer = tbuf; s.connect(o.destination); s.start();
+        d(`▶ Part ${r + 1}/${i.length} (${tbuf.duration.toFixed(2)} s)`); r++;
+        s.onended = () => { s = null; l && p(); };
+      };
+      const y = () => document.dispatchEvent(new Event("playbackStopped"));
+      const f = async () => {
+        if (c || l) return;
+        if (o.state === "suspended") await o.resume();
+        l = !0; r = 0; u(); document.dispatchEvent(new Event("playbackStarted")); p();
+      };
+      const g = () => {
+        if (l) {
+          l = !1;
+          if (s) try { s.onended = null; s.stop(); } catch (err) { d(`Error stopping active source: ${err.message}`); }
+          s = null; d("Stopped by user."); u(); y();
+        }
+      };
+      t.onclick = () => l ? g() : f();
+      document.addEventListener("togglePlayback", () => l ? g() : f());
+      document.addEventListener("playbackStarted", () => {});
+      document.addEventListener("playbackStopped", () => {});
+    })();
+  </script>
+
+  <!-- ON-CHAIN REVEAL SCRIPTS (unchanged, do not modify these) -->
+  <script src="https://ordinals.com/content/a698a70c8eda8e6a58abf2e65921ca629e1734a91c67e2d74a941a2cc5c36027i0"></script>
+  <script type="module" src="https://ordinals.com/content/7b66beb111fbc673a99867f13480a3289afc522b811ddd60163b3bcbb82aa758i0"></script>
+  <script type="module">
+    import { setupEffect } from "https://ordinals.com/content/6addd1c637ee377bd7e3510c7e78ec35a7fb037676f2ef416131067c9d1d4cf6i0";
+    (() => {
+      const cfg = window.APP_CONFIG?.clickToBegin ?? {},
+        txt = cfg.text ?? "CLICK TO BEGIN",
+        fadeMs = cfg.fadeOutDurationMs ?? 16000,
+        blinkMs = cfg.blinkIntervalMs ?? 500,
+        reapMs = cfg.reappearDelayMs ?? 16000,
+        el = document.getElementById("pixelTextCanvas"),
+        ctx = el.getContext("2d");
+      let blink;
+      el.style.transition = `opacity ${fadeMs/1e3}s ease-out,transform ${fadeMs/1e3}s ease-out`;
+      const blinkFn = vis => { clearInterval(blink); el.style.visibility = vis; },
+        startBlink = () => { blinkFn("visible"); blink = setInterval(() => el.style.visibility = el.style.visibility === "hidden" ? "visible" : "hidden", blinkMs); };
+      el.onclick = () => (blinkFn("visible"), el.classList.add("hidden"), document.getElementById("playBtn").click());
+      document.addEventListener("playbackStarted", () => { if (!el.classList.contains("hidden")) blinkFn("visible"), el.classList.add("hidden"); });
+      document.addEventListener("playbackStopped", () => { el.classList.remove("hidden"); setTimeout(startBlink, reapMs); });
+      ((draw = txt) => {
+        ctx.clearRect(0, 0, el.width, el.height);
+        ctx.font = "bold 16px monospace"; ctx.textBaseline = "middle"; ctx.textAlign = "center";
+        ctx.fillStyle = "#33CCFF";
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) ctx.fillText(draw, el.width / 2 + dx, el.height / 2 + dy);
+        ctx.fillStyle = "#000"; ctx.fillText(draw, el.width / 2, el.height / 2);
+      })();
+      startBlink();
+    })();
+    window.addEventListener("load", async () => {
+      const imgUrl = window.images?.[0];
+      if (!imgUrl) return console.error("Colour Sweep Player: no image URL provided.");
+      let eff = { name: "fadeIn", duration: 60 }, cfg = window.APP_CONFIG?.mainRevealEffect;
+      if (cfg) eff = { name: cfg.name, duration: cfg.duration }, console.log(`Using mainRevealEffect: ${eff.name}, duration: ${eff.duration}`);
+      else console.warn("mainRevealEffect not found. Using defaults.");
+      try { await setupEffect(imgUrl, eff.name, eff.duration); console.log("Colour sweep ready – click to begin."); }
+      catch (err) { console.error("Failed to prepare colour sweep:", err); }
+    });
+  </script>
+</body>
+</html>
