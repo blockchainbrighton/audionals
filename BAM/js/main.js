@@ -48,40 +48,70 @@ document.addEventListener('DOMContentLoaded', () => {
         { src: 'audio/KP_boomkit_98bpm_A1.webm',  title: 'KP Boomkit A1', details: '98 BPM | Boom Bap', category: 'boom-bap' },
         { src: 'audio/KP_boomkit_98bpm_A2.webm',  title: 'KP Boomkit A2', details: '98 BPM | Boom Bap', category: 'boom-bap' },
         { src: 'audio/KP_boomkit_98bpm_A3.webm',  title: 'KP Boomkit A3', details: '98 BPM | Boom Bap', category: 'boom-bap' },
+
         { src: 'audio/KP_caziokit_129bpm_A.webm', title: 'KP CazioKit A', details: '129 BPM | Breakbeat', category: 'breakbeat' },
         { src: 'audio/KP_caziokit_129bpm_B.webm', title: 'KP CazioKit B', details: '129 BPM | Breakbeat', category: 'breakbeat' },
         { src: 'audio/KP_caziokit_129bpm_C.webm', title: 'KP CazioKit C', details: '129 BPM | Breakbeat', category: 'breakbeat' },
         { src: 'audio/KP_caziokit_129bpm_D.webm', title: 'KP CazioKit D', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+
         { src: 'audio/KP_caziokit_129bpm_E_8bar.webm', title: 'KP CazioKit E (8 bar)', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+       
         { src: 'audio/KP_ABkit_113bpm_A1.webm', title: 'KP ABkit A1', details: '113 BPM | ABkit', category: 'abkit' },
         { src: 'audio/KP_ABkit_113bpm_A2.webm', title: 'KP ABkit A2', details: '113 BPM | ABkit', category: 'abkit' },
         { src: 'audio/KP_ABkit_113bpm_A3.webm', title: 'KP ABkit A3', details: '113 BPM | ABkit', category: 'abkit' },
-    
-        // === New Samples ===
+
+
+        { src: 'audio/KP_SwingKit_68bpm_A1.webm', title: 'KP SwingKit A1', details: '68 BPM | Swing', category: 'swing' },
+        { src: 'audio/KP_SwingKit_68bpm_A2.webm', title: 'KP SwingKit A2', details: '68 BPM | Swing', category: 'swing' },
+
+        { src: 'audio/KP_SwingKit_68bpm_PianoPerc.webm', title: 'KP SwingKit PianoPerc', details: '68 BPM | Percussion', category: 'swing' },
+        { src: 'audio/KP_SwingKit_68bpm_SleepSYNTH.webm', title: 'KP SwingKit SleepSYNTH', details: '68 BPM | Synth', category: 'swing' },
+        { src: 'audio/KP_SwingKit_68bpm_WitnessBASS.webm', title: 'KP SwingKit WitnessBASS', details: '68 BPM | Bass', category: 'swing' },
+
+        // === Loops from screenshot ===
+        { src: 'audio/KP_TAPkit_135bpm_B2.webm', title: 'KP TAPkit B2', details: '135 BPM | TAPkit', category: 'tapkit' },
+        { src: 'audio/KP_TAPkit_135bpm_B1.webm', title: 'KP TAPkit B1', details: '135 BPM | TAPkit', category: 'tapkit' },
+        { src: 'audio/KP_TAPkit_135bpm_A3.webm', title: 'KP TAPkit A3', details: '135 BPM | TAPkit', category: 'tapkit' },
+        { src: 'audio/KP_TAPkit_135bpm_A2.webm', title: 'KP TAPkit A2', details: '135 BPM | TAPkit', category: 'tapkit' },
+        { src: 'audio/KP_TAPkit_135bpm_A1.webm', title: 'KP TAPkit A1', details: '135 BPM | TAPkit', category: 'tapkit' },
+
+        { src: 'audio/KP_VANkit_127_A4.webm', title: 'KP VANkit A4', details: '127 BPM | VANkit', category: 'vankit' },
+        { src: 'audio/KP_VANkit_127_A3.webm', title: 'KP VANkit A3', details: '127 BPM | VANkit', category: 'vankit' },
+        { src: 'audio/KP_VANkit_127_A2.webm', title: 'KP VANkit A2', details: '127 BPM | VANkit', category: 'vankit' },
+        { src: 'audio/KP_VANkit_127_A1.webm', title: 'KP VANkit A1', details: '127 BPM | VANkit', category: 'vankit' },
+
+    ];
+
+    let wargasmSamples = [
+        // === Wargasm Samples to Play ===
         { src: 'audio/KP_FunKit_101bpm_A1.webm', title: 'KP FunKit A1', details: '101 BPM | FunKit', category: 'funkit' },
         { src: 'audio/KP_FunKit_101bpm_A2.webm', title: 'KP FunKit A2', details: '101 BPM | FunKit', category: 'funkit' },
         { src: 'audio/KP_FunKit_101bpm_B1.webm', title: 'KP FunKit B1', details: '101 BPM | FunKit', category: 'funkit' },
         { src: 'audio/KP_FunKit_101bpm_B2.webm', title: 'KP FunKit B2', details: '101 BPM | FunKit', category: 'funkit' },
+
         { src: 'audio/KP_FunKit_101bpm_Bass1.webm', title: 'KP FunKit Bass1', details: '101 BPM | Bass', category: 'funkit' },
         { src: 'audio/KP_FunKit_101bpm_Bass2.webm', title: 'KP FunKit Bass2', details: '101 BPM | Bass', category: 'funkit' },
         { src: 'audio/KP_FunKit_101bpm_Bass3.webm', title: 'KP FunKit Bass3', details: '101 BPM | Bass', category: 'funkit' },
         { src: 'audio/KP_FunKit_101bpm_Bass4.webm', title: 'KP FunKit Bass4', details: '101 BPM | Bass', category: 'funkit' },
+
         { src: 'audio/KP_FunKit_101bpm_arp1.webm', title: 'KP FunKit Arp1', details: '101 BPM | Arp', category: 'funkit' },
         { src: 'audio/KP_FunKit_101bpm_arp2.webm', title: 'KP FunKit Arp2', details: '101 BPM | Arp', category: 'funkit' },
+        
         { src: 'audio/KP_FunKit_101bpm_pulse1.webm', title: 'KP FunKit Pulse1', details: '101 BPM | Pulse', category: 'funkit' },
         { src: 'audio/KP_FunKit_101bpm_pulse2.webm', title: 'KP FunKit Pulse2', details: '101 BPM | Pulse', category: 'funkit' },
         { src: 'audio/KP_FunKit_101bpm_synth1.webm', title: 'KP FunKit Synth1', details: '101 BPM | Synth', category: 'funkit' },
         { src: 'audio/KP_FunKit_101bpm_synth2.webm', title: 'KP FunKit Synth2', details: '101 BPM | Synth', category: 'funkit' },
-    
-        { src: 'audio/KP_SwingKit_68bpm_A1.webm', title: 'KP SwingKit A1', details: '68 BPM | Swing', category: 'swing' },
-        { src: 'audio/KP_SwingKit_68bpm_A2.webm', title: 'KP SwingKit A2', details: '68 BPM | Swing', category: 'swing' },
-        { src: 'audio/KP_SwingKit_68bpm_PianoPerc.webm', title: 'KP SwingKit PianoPerc', details: '68 BPM | Percussion', category: 'swing' },
-        { src: 'audio/KP_SwingKit_68bpm_SleepSYNTH.webm', title: 'KP SwingKit SleepSYNTH', details: '68 BPM | Synth', category: 'swing' },
-        { src: 'audio/KP_SwingKit_68bpm_WitnessBASS.webm', title: 'KP SwingKit WitnessBASS', details: '68 BPM | Bass', category: 'swing' },
     ];
+
+
     
 
-    // --- Sorting Logic ---
+     // =========================================================================
+    // --- DYNAMIC SAMPLE CARD GENERATION ---
+    // =========================================================================
+    const loopPlayers = new Map(); // Shared map for all audio players
+
+    // --- Sorting Logic Function ---
     function getSortKeys(sample) {
         const titleMatch = sample.title.match(/^(KP\s+[\w-]+)\s*(.*)$/i);
         const bpmMatch = (sample.details && typeof sample.details === 'string') ? sample.details.match(/^(\d+)\s*BPM/i) : null;
@@ -91,6 +121,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const groupIdentifier = `${kitName}-${bpm || 'NoBPM'}`;
         return { kitName, bpm, variation, groupIdentifier };
     }
+
+    // Sort KP Loops
     sampleData.sort((a, b) => {
         const keysA = getSortKeys(a);
         const keysB = getSortKeys(b);
@@ -99,25 +131,37 @@ document.addEventListener('DOMContentLoaded', () => {
         return keysA.variation.localeCompare(keysB.variation, undefined, { numeric: true, sensitivity: 'base' });
     });
 
-    const samplesGrid = document.querySelector('#kp-loops .samples-grid');
-    const loopPlayers = new Map();
+    // Sort Wargasm Samples
+    wargasmSamples.sort((a, b) => {
+        const keysA = getSortKeys(a);
+        const keysB = getSortKeys(b);
+        const groupCompare = keysA.groupIdentifier.localeCompare(keysB.groupIdentifier);
+        if (groupCompare !== 0) { return groupCompare; }
+        return keysA.variation.localeCompare(keysB.variation, undefined, { numeric: true, sensitivity: 'base' });
+    });
 
-    if (samplesGrid) {
-        samplesGrid.innerHTML = '';
+    // --- Function to Populate a Grid with Samples ---
+    function populateSamplesInGrid(dataArray, gridElement, loopPlayersMap, audioCtx, neonColorsArray, getSortKeysFunc) {
+        if (!gridElement) {
+            console.error("Target grid element not found for populating samples.");
+            return 0;
+        }
+        gridElement.innerHTML = ''; // Clear previous content
         let previousGroupIdentifier = null;
         let currentRowContainer = null;
-        let rowIndex = 0;
+        let rowIndex = 0; // For neon colors, specific to this grid, starts at 0 for each call
+        let playersAddedThisCall = 0;
 
-        sampleData.forEach(sample => {
-            const currentKeys = getSortKeys(sample);
+        dataArray.forEach(sample => {
+            const currentKeys = getSortKeysFunc(sample);
 
             if (currentKeys.groupIdentifier !== previousGroupIdentifier || currentRowContainer === null) {
                 currentRowContainer = document.createElement('div');
                 currentRowContainer.classList.add('sample-row');
-                const uniqueColor = neonRowColors[rowIndex % neonRowColors.length];
+                const uniqueColor = neonColorsArray[rowIndex % neonColorsArray.length];
                 currentRowContainer.style.borderTopColor = uniqueColor;
                 currentRowContainer.style.setProperty('--row-border-color', uniqueColor);
-                samplesGrid.appendChild(currentRowContainer);
+                gridElement.appendChild(currentRowContainer);
                 previousGroupIdentifier = currentKeys.groupIdentifier;
                 rowIndex++;
             }
@@ -146,25 +190,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadingIndicator.style.display = 'none';
                 loadingIndicator.textContent = 'Loading...'; card.appendChild(loadingIndicator);
 
-                if (audioContext) {
+                if (audioCtx) {
                     const originalBPM = parseInt(card.dataset.originalBpm, 10) || currentKeys.bpm || 0;
                     if (originalBPM === 0 && sample.src) {
                         console.warn(`Sample "${sample.src}" has no discernible BPM for quantize. Defaults to normal speed.`);
                     }
                     const playerState = {
                         isPlaying: false, audioBuffer: null, audioPromise: null, sourceNode: null,
-                        gainNode: null, // ADDED
-                        isMutedDueToSolo: false, // ADDED
+                        gainNode: null,
+                        isMutedDueToSolo: false,
                         isLoading: false, loadError: null, src: sample.src, button: playButton,
                         indicator: loadingIndicator, icon: icon, originalBPM: originalBPM
                     };
-                    loopPlayers.set(card, playerState);
+                    loopPlayersMap.set(card, playerState);
+                    playersAddedThisCall++;
                 } else {
                     playButton.disabled = true; playButton.title = "Audio playback not available.";
                     loadingIndicator.textContent = "Audio N/A"; loadingIndicator.style.display = 'inline';
                     card.classList.add('audio-error');
                 }
-
             } else { // Placeholder card
                 card.classList.add('placeholder');
                 const titleEl = document.createElement('h3');
@@ -175,11 +219,32 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             currentRowContainer.appendChild(card);
         });
-        console.log(`Generated ${loopPlayers.size} audio players (cards with audio src).`);
-    } else {
-        console.error("Could not find the '.samples-grid' element to populate samples.");
+        console.log(`Populated ${playersAddedThisCall} players in grid targeted by: ${gridElement.parentElement.parentElement.id}`);
+        return playersAddedThisCall;
     }
+
+    // Get grid DOM elements
+    const kpLoopsGridElement = document.querySelector('#kp-loops .samples-grid');
+    const wargasmRemixGridElement = document.querySelector('#wargasm-remix .samples-grid');
+
+    // Populate KP Loops grid
+    if (kpLoopsGridElement) {
+        populateSamplesInGrid(sampleData, kpLoopsGridElement, loopPlayers, audioContext, neonRowColors, getSortKeys);
+    } else {
+        console.error("KP Loops grid element (#kp-loops .samples-grid) not found.");
+    }
+
+    // Populate Wargasm Remix grid
+    if (wargasmRemixGridElement) {
+        populateSamplesInGrid(wargasmSamples, wargasmRemixGridElement, loopPlayers, audioContext, neonRowColors, getSortKeys);
+    } else {
+        console.error("Wargasm Remix grid element (#wargasm-remix .samples-grid) not found.");
+    }
+    
+    console.log(`Total generated audio players across all grids: ${loopPlayers.size}.`);
     // --- END of Dynamic Sample Card Generation ---
+
+
 
 
     // --- Mobile Nav Toggle ---
@@ -287,9 +352,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Category Filter for Samples ---
+    // IMPORTANT: Modify this to only target the KP Loops section if desired
     const filterButtons = document.querySelectorAll('.category-filter button, .category-filter .btn');
     if (filterButtons.length > 0) {
-        const sampleCardsToFilter = document.querySelectorAll('.samples-grid .sample-card');
+        // To make filter apply ONLY to KP Loops:
+        const sampleCardsToFilter = document.querySelectorAll('#kp-loops .samples-grid .sample-card');
+        // If you want filter to apply to both (and Wargasm 'funkit' loops would be hidden unless 'All' or 'funkit' filter is active):
+        // const sampleCardsToFilter = document.querySelectorAll('.samples-grid .sample-card'); 
+        
         filterButtons.forEach(button => {
             button.addEventListener('click', () => {
                 filterButtons.forEach(btn => btn.classList.remove('active'));
@@ -310,6 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.log("No category filter buttons found in the HTML.");
     }
+
 
 
     // --- Retro Computer Screen Flicker Effect ---
