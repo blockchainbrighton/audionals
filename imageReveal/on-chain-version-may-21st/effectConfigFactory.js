@@ -215,7 +215,7 @@ function buildJourneyConfig(seed = 1) {
   const fadeOutBarOpt = [0, 4, 8, 16, 32, 48, 64];
   const fadeOutBar = fadeOutBarOpt[randInt(rng,0,fadeOutBarOpt.length-1)];
   const clickToBegin = {
-    text: `JOURNEY ${seed}`,
+    text: `OPUS ${seed}`,
     fadeOutDurationMs: fadeOutBar ? fadeOutBar * BAR_MS : 3500,
     blinkIntervalMs: 750,
     reappearDelayMs: 5000
