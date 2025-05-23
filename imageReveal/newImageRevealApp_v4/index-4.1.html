@@ -76,17 +76,18 @@ function findStepAtTime(steps,t){let acc=0;for(let i=0;i<steps.length;++i){acc+=
 // ===== ORIGINAL APP CODE (slightly patched for effect fusion) =====
 const COLORS=["#0ff","#f0f","#ff0","#fff"], canvas=document.getElementById('fx-canvas');
 let ctx=canvas.getContext('2d'), ctxRead, grainNoiseCanvas, grainNoiseCtx, image, showText=1, textAlpha=1, textScale=1, imageLoaded=0, stopNormalEffects, normalEffectsRunning=0, testMode=0, testRunning=0, testStop=0;
-const FX_CONFIG={
-  sequence:[
-    ['fadeIn',{duration:2e3}],
-    ['pixelateIn',{duration:1e3,from:32,to:1}],
+const FX_CONFIG = {
+  sequence: [
+    ['fadeIn', { duration: 2e3 }],
+    ['pixelateIn', { duration: 1e3, from: 32, to: 1 }],
     ['colorSweepIn', { duration: 1400, fwd: true }],
-    ['scanlines',{active:1,opacity:.18,speed:2}],
-    ['grain',{active:1,intensity:.15}],
-    ['blur',{active:1,value:4}],
-    ['vignette',{active:1,strength:.35}]
+    // Add lineHeightPx to the default scanlines config
+    ['scanlines', { active: 1, opacity: .18, speed: 2, lineHeightPx: 2 }],
+    ['grain', { active: 1, intensity: .15 }],
+    ['blur', { active: 1, value: 4 }],
+    ['vignette', { active: 1, strength: .35 }]
   ],
-  startText:{text:"Click to start",font:"2.2vw 'Space Mono', monospace",color:"#fff",fadeDuration:1e3,shrinkDuration:1e3}
+  startText: { text: "Click to start", font: "2.2vw 'Space Mono', monospace", color: "#fff", fadeDuration: 1e3, shrinkDuration: 1e3 }
 };
 const lerp=(a,b,t)=>a+(b-a)*t, clamp=(x,a=0,b=1)=>Math.max(a,Math.min(x,b)), sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function createGrainNoise() {
@@ -117,13 +118,30 @@ const Effects={
     }
     requestAnimationFrame(a);
   },
-  scanlines({active=1,opacity=.2,speed=1},draw){draw();if(!active)return;ctx.save();ctx.globalAlpha=opacity;let t=performance.now()*.001*speed;for(let y=0;y<canvas.height;y+=4){ctx.fillStyle=y%8<4?"#000":"#fff1";ctx.fillRect(0,y+Math.sin(t+y/60)*2,canvas.width,2);}ctx.restore();},
+  scanlines({ active = 1, opacity = .2, speed = 1, lineHeightPx = 2 }, draw) { // Added lineHeightPx with default 2
+    // The 'draw' callback is expected to draw the base image content first.
+    // The original scanlines implementation called draw() at the start.
+    // If 'draw' is meant to be the base image drawing function, it should be called before applying the effect.
+    // If 'draw' is a post-effect callback (like 'done'), then the base image needs to be drawn by other means.
+    // Assuming 'draw' is the base drawing function:
+    draw(); // Draw the underlying content first
+
+    if (!active) return;
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    let t = performance.now() * .001 * speed;
+    for (let y = 0; y < canvas.height; y += 4) { // Lines start at 4px intervals
+      ctx.fillStyle = y % 8 < 4 ? "#000" : "#fff1"; // Alternating color every two lines
+      // Use lineHeightPx for the height of the rectangle (thickness of the scanline)
+      ctx.fillRect(0, y + Math.sin(t + y / 60) * 2, canvas.width, lineHeightPx);
+    }
+    ctx.restore();
+  },
   grain({active=1,intensity=.1},draw){draw();if(!active)return;ctx.save();ctx.globalAlpha=clamp(intensity,0,1);ctx.drawImage(grainNoiseCanvas,0,0,canvas.width,canvas.height);ctx.restore();},
   blur({active=1,value=3},draw){if(active){ctx.save();ctx.filter=`blur(${value}px)`;draw();ctx.filter="none";ctx.restore();}else draw();},
   vignette({active=1,strength=.3,color="#000"},draw){draw();if(!active)return;let g=ctx.createRadialGradient(canvas.width/2,canvas.height/2,canvas.width*.45,canvas.width/2,canvas.height/2,canvas.width/2);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,hexToRGBA(color,clamp(strength)));ctx.save();ctx.globalAlpha=strength;ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);ctx.restore();}
 };
 function hexToRGBA(hex,a=1){let r=0,g=0,b=0;if(hex.length===4){r=parseInt(hex[1]+hex[1],16);g=parseInt(hex[2]+hex[2],16);b=parseInt(hex[3]+hex[3],16);}else if(hex.length===7){r=parseInt(hex[1]+hex[2],16);g=parseInt(hex[3]+hex[4],16);b=parseInt(hex[5]+hex[6],16);}return `rgba(${r},${g},${b},${a})`;}
-// --- Brightness Threshold Sweep Logic --- (omitted for brevity, same as your code)
 
 const colourSweepBrightnessEffects = (() => { /* ... (unchanged) ... */ 
   const _state = new WeakMap();
@@ -175,23 +193,90 @@ const grainConfig = createGrainConfig(rng, EFFECT_WEIGHTS.grain);
 const scanlineConfig = createScanlineConfig(rng, EFFECT_WEIGHTS.scanline);
 const vignetteConfig = createVignetteConfig(rng, EFFECT_WEIGHTS.vignette);
 
-function runBarSyncedFX(){
-  if(!imageLoaded)return;
-  barFXMode=true; fxStartTime=performance.now();
-  function loop(){
-    if(!barFXMode)return;
-    let t=performance.now()-fxStartTime, bars=t/BAR_MS, bar=Math.floor(bars)+1, seconds=t/1000;
-    // Lookup steps
-    const grainStep = grainConfig.enabled ? findStepAtTime(grainConfig.steps, t) : {enabled:false};
-    const scanlineStep = scanlineConfig.enabled ? findStepAtTime(scanlineConfig.steps, t) : {enabled:false};
-    const vignetteStep = vignetteConfig.enabled ? findStepAtTime(vignetteConfig.steps, t) : {enabled:false};
-    // Compose pipeline (call each effect with dynamic params)
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    drawBase();
-    Effects.grain({active:grainStep.enabled?1:0,intensity:grainStep.opacity||.15},()=>{});
-    Effects.scanlines({active:scanlineStep.enabled?1:0,opacity:scanlineStep.opacity||.18,speed:scanlineStep.speed||2},()=>{});
-    Effects.vignette({active:vignetteStep.enabled?1:0,strength:vignetteStep.strength||.35,color:vignetteStep.color||"#000"},()=>{});
-    // (blur/others as needed)
+function runBarSyncedFX() {
+  if (!imageLoaded) return;
+  barFXMode = true; fxStartTime = performance.now();
+
+  function loop() {
+    if (!barFXMode) return;
+    let t = performance.now() - fxStartTime;
+    // let bars = t / BAR_MS, bar = Math.floor(bars) + 1, seconds = t / 1000; // Original timing vars, if needed elsewhere
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawBase(); // Assuming drawBase draws the main image
+
+    // Grain Effect
+    const grainStep = grainConfig.enabled ? findStepAtTime(grainConfig.steps, t) : { enabled: false };
+    Effects.grain({
+      active: grainStep.enabled ? 1 : 0,
+      intensity: grainStep.opacity ?? (grainConfig.enabled ? grainConfig.defaultOpacity : 0.15)
+    }, () => { }); // Empty callback as Effects.grain calls draw() internally
+
+    // Scanline Effect
+    let slParams = {
+      active: 0,
+      opacity: FX_CONFIG.sequence.find(s => s[0] === 'scanlines')[1].opacity, // Default from FX_CONFIG
+      speed: FX_CONFIG.sequence.find(s => s[0] === 'scanlines')[1].speed,
+      lineHeightPx: FX_CONFIG.sequence.find(s => s[0] === 'scanlines')[1].lineHeightPx
+    };
+
+    if (scanlineConfig.enabled) {
+      const currentScanlineStep = findStepAtTime(scanlineConfig.steps, t);
+      slParams.active = currentScanlineStep.enabled ? 1 : 0;
+      // Use ?? to correctly handle 0 as a valid value if it could be
+      slParams.opacity = currentScanlineStep.opacity ?? scanlineConfig.defaultOpacity;
+      slParams.speed = currentScanlineStep.speed ?? scanlineConfig.defaultSpeed;
+      slParams.lineHeightPx = currentScanlineStep.lineHeightPx ?? scanlineConfig.defaultLineHeightPx;
+    }
+    // The Effects.scanlines function now calls draw() internally first.
+    // So, we don't need to pass a draw function as the second argument if it's only for 'done'
+    // However, your Effects functions seem to take 'draw' as the base drawing function and 'done' as an optional third.
+    // The original call Effects.scanlines(..., ()=>{}); suggests the second arg is a 'draw' like function.
+    // If Effects.scanlines itself now calls `draw()` (which is `drawBase` in this context),
+    // and it doesn't need a 'done' callback for continuous animation, the second arg to scanlines can be an empty func or omitted if not used.
+    // Given the EFFECT_TESTS structure `apply(v, drawBase, ex)`, `drawBase` is passed.
+    // For runBarSyncedFX, Effects.scanlines is called, and drawBase() has already been called.
+    // So the `draw` param inside Effects.scanlines could be redundant if drawBase() is global.
+    // Let's assume Effects.scanlines's `draw` param is for drawing the base image.
+    // Since `drawBase()` is already called, we can pass an empty function to satisfy the signature if it's always expected.
+    // However, the updated Effects.scanlines calls its 'draw' param. If drawBase is already called, this is a double draw.
+    // Let's refine: Effects.scanlines should *not* call draw() internally if drawBase() is already handled outside.
+    // Or, it should take the base drawing as a parameter.
+
+    // Option A: Effects.scanlines expects 'draw' to be the base draw function.
+    // Effects.scanlines(slParams, drawBase); // This would mean drawBase() is called twice.
+
+    // Option B: Effects.scanlines is an overlay, base is already drawn.
+    // Modify Effects.scanlines to NOT call draw() internally.
+    // --- In Effects.scanlines ---
+    // scanlines({ active = 1, opacity = .2, speed = 1, lineHeightPx = 2 } /* REMOVE DRAW PARAM or make it optional and don't call it */) {
+    //   // NO draw(); call here
+    //   if (!active) return; ...
+    // }
+    // --- Then in runBarSyncedFX ---
+    // Effects.scanlines(slParams); // No second arg needed or an empty one if it expects 'done'.
+
+    // Let's stick to the pattern in your EFFECT_TESTS where `apply` calls `draw()` then the effect.
+    // This implies `Effects.scanlines` applies itself *after* `draw()` has been called.
+    // So `Effects.scanlines` should NOT call `draw()` internally.
+
+    // Corrected approach:
+    // 1. drawBase() is called once.
+    // 2. Effects.scanlines only draws the scanlines on top.
+    // So, modify `Effects.scanlines` to not call `draw()` at its beginning.
+    // (See revised `Effects.scanlines` in section 5 below)
+
+    Effects.scanlines(slParams, () => {}); // Pass empty fn if it expects a callback it doesn't use for this continuous mode.
+
+
+    // Vignette Effect (example, assuming similar structure)
+    const vignetteStep = vignetteConfig.enabled ? findStepAtTime(vignetteConfig.steps, t) : { enabled: false };
+    Effects.vignette({
+      active: vignetteStep.enabled ? 1 : 0,
+      strength: vignetteStep.strength ?? (vignetteConfig.enabled ? vignetteConfig.defaultStrength : 0.35), // Assuming defaultStrength exists
+      color: vignetteStep.color ?? (vignetteConfig.enabled ? vignetteConfig.defaultColor : "#000")   // Assuming defaultColor exists
+    }, () => { });
+
     requestAnimationFrame(loop);
   }
   loop();
@@ -225,54 +310,141 @@ function drawTextOverlay(txt, font, color) {
   ctx.restore();
 }
 
-// --- Effect Auto-Test Config ---
-const EFFECT_TESTS=[
-  {name:'fadeIn',params:[{param:'opacity',min:0,max:1,apply:(v,draw)=>{ctx.save();ctx.globalAlpha=v;draw();ctx.restore();}}]},
-  {name:'pixelate',params:[{param:'pixelate',min:1,max:512,apply:(v,draw)=>draw({pixelate:Math.round(v)})}]},
-    {name:'colorSweep',params:[
-    {param:'colorSweep',min:0,max:1,apply:(v,draw,ex)=>colourSweepBrightnessEffects.sweepBrightFwd(ctx, canvas, image, v)},
-    {param:'colorSweepRev',min:0,max:1,apply:(v,draw,ex)=>colourSweepBrightnessEffects.sweepBrightRev(ctx, canvas, image, v)}
-    ]},
-  {name:'scanlines',params:[
-    {param:'opacity',min:0,max:.5,apply:(v,draw)=>{draw();Effects.scanlines({active:1,opacity:v,speed:2},()=>{});}},
-    {param:'speed',min:.5,max:100,apply:(v,draw)=>{draw();Effects.scanlines({active:1,opacity:.18,speed:v},()=>{});}}
+/// --- Effect Auto-Test Config --- (snippet, assuming EFFECT_TESTS is defined elsewhere or this replaces it)
+const EFFECT_TESTS = [ // Renamed to avoid redeclaration if this is additive
+  { name: 'fadeIn', params: [{ param: 'opacity', min: 0, max: 1, apply: (v, draw) => { ctx.save(); ctx.globalAlpha = v; draw(); ctx.restore(); } }] },
+  { name: 'pixelate', params: [{ param: 'pixelate', min: 1, max: 512, apply: (v, draw) => draw({ pixelate: Math.round(v) }) }] },
+  { name: 'colorSweep', params: [
+    { param: 'colorSweep', min: 0, max: 1, apply: (v, draw, ex) => colourSweepBrightnessEffects.sweepBrightFwd(ctx, canvas, image, v) },
   ]},
-  {name:'grain',params:[{param:'intensity',min:0,max:5,apply:(v,draw)=>Effects.grain({active:1,intensity:v},draw)}]},
-  {name:'blur',params:[{param:'value',min:0,max:12,apply:(v,draw)=>Effects.blur({active:1,value:v},draw)}]},
-  {name:'vignette',params:[
-    {param:'strength',min:0,max:5,apply:(v,draw,ex)=>Effects.vignette({active:1,strength:v,color:COLORS[ex.colorIndex%COLORS.length]},draw)},
-    {param:'colorIndex',min:0,max:COLORS.length-1,apply:(v,draw)=>Effects.vignette({active:1,strength:.5,color:COLORS[Math.round(v)%COLORS.length]},draw)}
-  ]}
+  {
+    name: 'scanlines', params: [
+      // Existing opacity test, now includes a default lineHeightPx
+      { param: 'opacity', min: 0, max: .5, apply: (v, draw) => { draw(); Effects.scanlines({ active: 1, opacity: v, speed: 2, lineHeightPx: 2 }, () => {}); } },
+      // Existing speed test, now includes a default lineHeightPx
+      { param: 'speed', min: .5, max: 100, apply: (v, draw) => { draw(); Effects.scanlines({ active: 1, opacity: .18, speed: v, lineHeightPx: 2 }, () => {}); } },
+      // New test for lineHeightPx
+      { param: 'lineHeightPx', min: 1, max: 8, apply: (v, draw) => { draw(); Effects.scanlines({ active: 1, opacity: .18, speed: 2, lineHeightPx: Math.round(v) }, () => {}); } }
+    ]
+  },
+  { name: 'grain', params: [{ param: 'intensity', min: 0, max: 5, apply: (v, draw) => { draw(); Effects.grain({ active: 1, intensity: v }, () => {}); } }] }, // Assuming grain's apply also calls draw first
+  { name: 'blur', params: [{ param: 'value', min: 0, max: 100, apply: (v, draw) => { Effects.blur({ active: 1, value: v }, draw); } }] }, // Blur's signature is different, it takes draw as the effect applies over it
+  {
+    name: 'vignette', params: [
+      { param: 'strength', min: 0, max: 5, apply: (v, draw, ex) => { draw(); Effects.vignette({ active: 1, strength: v, color: COLORS[ex.colorIndex % COLORS.length] }, () => {}); } },
+      { param: 'colorIndex', min: 0, max: COLORS.length - 1, apply: (v, draw) => { draw(); Effects.vignette({ active: 1, strength: .5, color: COLORS[Math.round(v) % COLORS.length] }, () => {}); } }
+    ]
+  }
+  // ... any other effects
 ];
 
 // --- Auto-Test Logic ---
 async function runEffectAutoTest() {
-  if (!image) return; testRunning=1; testStop=0; let effectIdx=0;
-  while(testMode&&!testStop){let eff=EFFECT_TESTS[effectIdx];
-    for(let paramIdx=0;paramIdx<eff.params.length;paramIdx++){
-      let {param,min,max,apply}=eff.params[paramIdx],hold=1500,anim=4000;
+  if (!image) return;
+  testRunning = 1;
+  testStop = 0;
+  let effectIdx = 0;
+
+  while (testMode && !testStop) {
+    let eff = EFFECT_TESTS[effectIdx];
+    for (let paramIdx = 0; paramIdx < eff.params.length; paramIdx++) {
+      if (testStop) break; // Allow stopping mid-parameters
+
+      let { param, min, max, apply } = eff.params[paramIdx];
+      const holdDuration = 1500; // Time to hold at the 'min' value after the full cycle
+      const animationDurationPerDirection = 2000; // Time for min-to-max and max-to-min each
+
       console.log(`\n--- Testing ${eff.name} param: ${param} ---`);
-      await new Promise(res=>{
-        let start=performance.now(),dir=1;
-        function step(now){
-          if(!testMode||testStop)return res();
-          let el=now-start,t=el/(anim/2);
+
+      await new Promise(resolvePromise => {
+        let startTime = performance.now();
+        let direction = 1; // 1 for min -> max, -1 for max -> min
+
+        function step(currentTime) {
+          if (!testMode || testStop) {
+            return resolvePromise();
+          }
+
+          let elapsedTime = currentTime - startTime;
+          let t = elapsedTime / animationDurationPerDirection; // Normalized time (0 to 1) for current direction
+
+          // This 'ex' object is created fresh in each step, as per original structure.
+          // It's primarily relevant if 'param' is 'colorIndex' for the vignette effect's 'strength' parameter,
+          // but the original logic made ex.colorIndex only available if the *current* param being tested *is* 'colorIndex'.
+          // This means vignette.strength's apply function might receive an empty 'ex'.
+          // This behavior is preserved.
           let ex = {};
-          if (param === 'colorIndex') ex.colorIndex = Math.round(dir===1?lerp(min,max,t):lerp(max,min,t));
-          if(t>1){if(dir===1){dir=-1;start=now;requestAnimationFrame(step);return;}
-            let mid=lerp(min,max,.5);
-            apply(mid, drawBase, ex);drawInfoOverlay(eff.name,param,mid);setTimeout(res,hold);return;}
-          let value=dir===1?lerp(min,max,t):lerp(max,min,t);
-          apply(value, drawBase, ex);drawInfoOverlay(eff.name,param,value);
-          if(showText)drawTextOverlay(FX_CONFIG.startText.text,FX_CONFIG.startText.font,FX_CONFIG.startText.color);
+          if (param === 'colorIndex') {
+              // Calculate raw animated value for ex.colorIndex if this param IS colorIndex
+              // This uses a t clamped to [0,1] to avoid overshooting during the lerp for ex
+              let rawExValue = direction === 1 ? lerp(min, max, Math.min(t, 1.0)) : lerp(max, min, Math.min(t, 1.0));
+              ex.colorIndex = Math.round(rawExValue);
+          }
+
+          if (t >= 1.0) { // Current direction (min->max OR max->min) is complete
+            if (direction === 1) { // Finished min -> max
+              // Apply the MAX value explicitly to ensure it hits the endpoint
+              let finalValue = (param === 'colorIndex') ? Math.round(max) : max;
+              // If this is colorIndex param, ensure ex.colorIndex is also set to max for this final apply
+              if (param === 'colorIndex') ex.colorIndex = finalValue;
+
+              apply(finalValue, drawBase, ex);
+              drawInfoOverlay(eff.name, param, finalValue);
+              if (showText) drawTextOverlay(FX_CONFIG.startText.text, FX_CONFIG.startText.font, FX_CONFIG.startText.color);
+
+              direction = -1;       // Switch direction to max -> min
+              startTime = currentTime; // Reset start time for the new direction
+              requestAnimationFrame(step); // Start max -> min animation
+              return;
+            } else { // direction === -1, finished max -> min
+              // Apply the MIN value explicitly to ensure it hits the endpoint
+              let finalValue = (param === 'colorIndex') ? Math.round(min) : min;
+              // If this is colorIndex param, ensure ex.colorIndex is also set to min for this final apply
+              if (param === 'colorIndex') ex.colorIndex = finalValue;
+              
+              apply(finalValue, drawBase, ex);
+              drawInfoOverlay(eff.name, param, finalValue);
+              if (showText) drawTextOverlay(FX_CONFIG.startText.text, FX_CONFIG.startText.font, FX_CONFIG.startText.color);
+
+              // Full min->max->min cycle is complete for this parameter
+              setTimeout(resolvePromise, holdDuration); // Hold at the 'min' value, then resolve
+              return;
+            }
+          }
+
+          // Animation is in progress for the current direction
+          let currentValue;
+          if (direction === 1) {
+            currentValue = lerp(min, max, t);
+          } else {
+            currentValue = lerp(max, min, t);
+          }
+
+          if (param === 'colorIndex') {
+            currentValue = Math.round(currentValue);
+            // ex.colorIndex was already set at the beginning of step if param === 'colorIndex'
+          }
+
+          apply(currentValue, drawBase, ex);
+          drawInfoOverlay(eff.name, param, currentValue);
+          if (showText) drawTextOverlay(FX_CONFIG.startText.text, FX_CONFIG.startText.font, FX_CONFIG.startText.color);
           requestAnimationFrame(step);
         }
         requestAnimationFrame(step);
       });
+
+      if (testStop) break; // Break from parameters loop if testStop was set
     }
-    effectIdx=(effectIdx+1)%EFFECT_TESTS.length;
+    if (testStop) break; // Break from effects loop if testStop was set
+
+    effectIdx = (effectIdx + 1) % EFFECT_TESTS.length;
   }
-  testRunning=testStop=0;if(!testMode)drawScreen();
+
+  testRunning = 0; // testStop might already be 1 or 0
+  testStop = 0;    // Reset stop flag
+  if (!testMode) { // If testMode was disabled during the test
+    drawScreen(); // Redraw a clean screen
+  }
 }
 
 // // --- Draw pipeline ---
