@@ -1,0 +1,352 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Image FX Demo (Lean, Modern, Efficient)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    html,body {height:100%;margin:0;background:#111;overflow:hidden;}
+    body {display:flex;align-items:center;justify-content:center;height:100vh;}
+    #fx-canvas {display:block;margin:auto;box-shadow:0 0 40px #0008;border-radius:2vw;transition:box-shadow .3s;}
+    #fx-btn, #fx-tbtn {
+      position:fixed;left:50%;transform:translateX(-50%);
+      background:#222;color:#fff;font:1em monospace;padding:.7em 1.6em;
+      border:none;border-radius:2em;z-index:99;box-shadow:0 3px 12px #000a;opacity:.92;cursor:pointer;transition:.2s;
+    }
+    #fx-btn {top:32px;}
+    #fx-tbtn {top:84px;display:none;}
+    #fx-btn:active,#fx-tbtn:active {background:#444;}
+    #fx-label {
+      position:fixed;top:22px;right:38px;color:#ccc;font:1em monospace;
+      background:#000b;padding:.4em 1.3em;border-radius:2em;user-select:none;z-index:10;
+      pointer-events:none;opacity:.88;letter-spacing:.08em;
+      text-shadow:0 2px 8px #000c;
+    }
+  </style>
+</head>
+<body>
+<canvas id="fx-canvas"></canvas>
+<button id="fx-btn">▶ Start FX</button>
+<button id="fx-tbtn">🛠 Test All Effects</button>
+<div id="fx-label"></div>
+<script type="module">
+window.images = [
+  "https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"
+];
+const BPM=104.15,BEAT_MS=60000/BPM,BAR_MS=BEAT_MS*4,PEAK_BARS=[9,17,25,33,41,49];
+const lerp=(a,b,t)=>a+(b-a)*t, clamp=(v,a,b)=>Math.max(a,Math.min(v,b));
+const $=id=>document.getElementById(id);
+let W=0,H=0,S=0, img, canvas, ctx, running=0, autoTest=0, frame=0, lastBar=-1, bar=0, beat=0, barTime=0, fxParams={}, stopFX=()=>{}, tBtn, infoLabel, loopId=0;
+
+// Resize & Square canvas
+const resize=()=>{
+  const vh=Math.floor(window.innerHeight*.8), vw=window.innerWidth*.8, S=Math.min(vh,vw);
+  canvas.width=canvas.height=S;
+  W=H=S;
+  if(running) draw();
+};
+window.addEventListener('resize',resize);
+
+// RNG
+const hashSeed=str=>{
+  let h=2166136261>>>0;
+  for(let i=0;i<str.length;i++) h^=str.charCodeAt(i),h+=(h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24);
+  return h>>>0;
+};
+const makeRNG=seed=>{
+  let s=seed>>>0;
+  return ()=>((s=Math.imul(48271,s)&0x7fffffff)/0x7fffffff);
+};
+
+// Canvas helpers
+const createCanvas=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c;};
+
+// FX PARAMS (bar-synced, modulated)
+const baseParams = {
+  grain: {amount:0.17,size:1.6,speed:1},
+  scan:  {height:2,spacing:4,speed:0.15,alpha:0.12},
+  vignette: {strength:0.3,softness:0.7},
+  blur:   {radius:2.2},
+};
+const peakParams = {
+  grain: {amount:0.34,size:2.4,speed:1.6},
+  scan:  {height:2,spacing:3,speed:0.33,alpha:0.21},
+  vignette: {strength:0.43,softness:0.92},
+  blur:   {radius:3.2},
+};
+const paramLerp=(from,to,t)=>{
+  let out={};
+  for(const k in from) out[k]=lerp(from[k],to[k],t);
+  return out;
+};
+
+// Main init
+function init(){
+  canvas=$('fx-canvas');
+  ctx=canvas.getContext('2d');
+  tBtn=$('fx-tbtn');
+  infoLabel=$('fx-label');
+  $('fx-btn').onclick=startIntro;
+  tBtn.onclick=toggleAutoTest;
+  window.addEventListener('keydown',e=>{
+    if(e.key==='t'||e.key==='T') toggleAutoTest();
+    if(e.key===' ') running?stopAll():startSteady();
+  });
+  loadImage(window.images[0]);
+}
+
+function loadImage(src){
+  img=new window.Image();
+  img.crossOrigin='anonymous';
+  img.onload=()=>{
+    resize();
+    ctx.clearRect(0,0,W,H);
+    ctx.globalAlpha=1;
+    ctx.drawImage(img,0,0,W,H);
+    tBtn.style.display='block';
+    infoLabel.textContent='';
+  };
+  img.onerror=()=>{infoLabel.textContent="Image failed to load.";}
+  img.src=src;
+}
+
+function startIntro(){
+  $('fx-btn').style.display='none'; tBtn.disabled=true;
+  autoTest=0; running=0; infoLabel.textContent='';
+  stopFX(); frame=0; lastBar=-1;
+  resize();
+  // Fade in, Pixelate, Color Sweep
+  let t0=performance.now();
+  const introDur=[800,900,1000], // ms for fade, px, sweep
+        pxSteps=9;
+  let step=0, pxT=0, fadeT=0, sweepT=0;
+  function introLoop(now){
+    frame++;
+    const t=now-t0;
+    // Fade-in
+    if(t<introDur[0]){
+      fadeT=clamp(t/introDur[0],0,1);
+      drawFX({fade:fadeT});
+      infoLabel.textContent='Fade-in';
+      requestAnimationFrame(introLoop);
+      return;
+    }
+    // Pixel Dissolve
+    if(t<introDur[0]+introDur[1]){
+      pxT=clamp((t-introDur[0])/introDur[1],0,1);
+      drawFX({pixelate:1-pxT});
+      infoLabel.textContent='Block Dissolve';
+      requestAnimationFrame(introLoop);
+      return;
+    }
+    // Color Sweep
+    if(t<introDur[0]+introDur[1]+introDur[2]){
+      sweepT=clamp((t-introDur[0]-introDur[1])/introDur[2],0,1);
+      drawFX({sweep:sweepT});
+      infoLabel.textContent='Colour Sweep';
+      requestAnimationFrame(introLoop);
+      return;
+    }
+    // Steady-state
+    infoLabel.textContent='';
+    tBtn.disabled=false;
+    startSteady();
+  }
+  requestAnimationFrame(introLoop);
+}
+
+function drawFX(eff){
+  ctx.clearRect(0,0,W,H);
+  if(eff.fade!==undefined){
+    ctx.save();ctx.globalAlpha=eff.fade;
+    ctx.drawImage(img,0,0,W,H);ctx.restore();
+    return;
+  }
+  if(eff.pixelate!==undefined){
+    let scale=lerp(0.09,1,eff.pixelate), pw=Math.max(1,Math.ceil(W*scale)), ph=Math.max(1,Math.ceil(H*scale));
+    let temp = drawFX._pxc || (drawFX._pxc = createCanvas(pw, ph));
+    temp.width = pw; temp.height = ph;
+    let tctx = temp.getContext('2d');
+    tctx.imageSmoothingEnabled = false;
+    tctx.drawImage(img, 0, 0, pw, ph);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(temp, 0, 0, pw, ph, 0, 0, W, H);
+    ctx.restore();
+    return;
+  }
+
+  if(eff.sweep!==undefined){
+    let x=W*eff.sweep;
+    ctx.save();
+    ctx.drawImage(img,0,0,W,H);
+    ctx.globalCompositeOperation="destination-in";
+    let grad=ctx.createLinearGradient(0,0,W,0);
+    grad.addColorStop(0,"#fff");
+    grad.addColorStop(clamp(eff.sweep-.08,0,1),"#fff");
+    grad.addColorStop(clamp(eff.sweep+.02,0,1),"#0000");
+    grad.addColorStop(1,"#0000");
+    ctx.fillStyle=grad;
+    ctx.fillRect(0,0,W,H);
+    ctx.restore();
+    return;
+  }
+}
+
+function startSteady(){
+  if(running) return;
+  running=1; autoTest=0; tBtn.textContent="🛠 Test All Effects";
+  infoLabel.textContent='';
+  let barStart=performance.now(), peakActive=0, rng=makeRNG(hashSeed("steady"));
+  function loop(now){
+    if(!running) return;
+    frame++;
+    // Time + bar sync
+    let t=now-barStart, barF=t/BAR_MS, curBar=Math.floor(barF)+1;
+    beat=Math.floor((t%BAR_MS)/BEAT_MS)+1;
+    bar=curBar;
+    if(bar!==lastBar){
+      lastBar=bar; peakActive=PEAK_BARS.includes(bar%64)?1:0;
+      fxParams=peakActive?paramLerp(baseParams,peakParams,1):paramLerp(baseParams,peakParams,0);
+      if (fxParams.grain && typeof fxParams.grain === "object")
+        fxParams.grain.seed = (rng()*99999)|0;
+    }
+    // Draw base image, then overlays
+    ctx.clearRect(0,0,W,H);
+    ctx.save();
+    ctx.filter=`blur(${fxParams.blur.radius}px)`;
+    ctx.drawImage(img,0,0,W,H);
+    ctx.restore();
+    drawScanLines(fxParams.scan);
+    drawGrain(fxParams.grain);
+    drawVignette(fxParams.vignette);
+    infoLabel.textContent=peakActive?"PEAK BAR!":`Bar:${bar%64} Beat:${beat}`;
+    loopId=requestAnimationFrame(loop);
+  }
+  stopFX=()=>{
+    running=0; autoTest=0; infoLabel.textContent='Stopped.';
+    tBtn.textContent="🛠 Test All Effects";
+    cancelAnimationFrame(loopId);
+  };
+  loopId=requestAnimationFrame(loop);
+}
+
+function stopAll(){
+  stopFX();
+  tBtn.disabled=false;
+  infoLabel.textContent='Stopped.';
+}
+
+// Scan-lines: thin, drifting horizontal lines
+function drawScanLines({height,spacing,speed,alpha}){
+  ctx.save();
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle='#fff';
+  let off=(frame*speed)%spacing;
+  for(let y=off;y<H;y+=spacing)
+    ctx.fillRect(0,y,W,height);
+  ctx.restore();
+}
+
+// Grain: random monochrome noise over image
+// drawGrain function
+function drawGrain({amount,size,seed,speed}) {
+  const gW=W,gH=H,gSize=Math.max(1,Math.floor(size)),nP=(gW*gH*amount)|0;
+  if(!drawGrain.noise) drawGrain.noise=createCanvas(gW,gH);
+  let gctx = drawGrain.noise.getContext('2d', { willReadFrequently: true }); // fix warning
+  let data=gctx.getImageData(0,0,gW,gH),d=data.data;
+  let rng=makeRNG(seed+frame);
+  for(let i=0;i<nP;i++){
+    let x=(rng()*gW)|0, y=(rng()*gH)|0, val=160+(rng()*90)|0, idx=(y*gW+x)*4;
+    d[idx]=d[idx+1]=d[idx+2]=val;d[idx+3]=42+(rng()*70)|0;
+  }
+  gctx.putImageData(data,0,0);
+  ctx.save();ctx.globalAlpha=.16;
+  ctx.drawImage(drawGrain.noise,0,0,W,H);
+  ctx.restore();
+}
+
+
+// Vignette: darken corners/edges
+function drawVignette({strength,softness}) {
+  // Only draw if canvas size is valid and softness is a valid number
+  if (!W || !H || W < 2 || H < 2 || !isFinite(W) || !isFinite(H) ||
+      !isFinite(strength) || !isFinite(softness) ||
+      strength < 0 || softness <= 0) return;
+  ctx.save();
+  let r = W / 2;
+  // Clamp softness for safety
+  let soft = Math.max(0.01, Math.min(softness, 2));
+  let g = ctx.createRadialGradient(r, r, r * 0.32, r, r, r * soft);
+  g.addColorStop(0, "#0000");
+  g.addColorStop(1, `rgba(0,0,0,${clamp(strength,0,1)})`);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+
+
+// ===== AUTO TEST MODE =====
+function toggleAutoTest(){
+  if(!img) return;
+  if(!autoTest){
+    stopFX(); autoTest=1;
+    tBtn.textContent="⏹ Exit Test Mode";
+    infoLabel.textContent='Testing All FX';
+    runAutoTest();
+  }else{
+    stopFX(); tBtn.textContent="🛠 Test All Effects";
+    infoLabel.textContent='';
+    startSteady();
+  }
+}
+
+function runAutoTest(){
+  autoTest=1;
+  const tests=[
+    {name:'Fade-in', eff:'fade',min:0,max:1,dur:900},
+    {name:'Pixelate', eff:'pixelate',min:1,max:0,dur:900},
+    {name:'Colour Sweep', eff:'sweep',min:0,max:1,dur:1000},
+    {name:'Scan-lines', eff:'scan',min:0,max:1,dur:1100},
+    {name:'Grain', eff:'grain',min:0,max:1,dur:1000},
+    {name:'Vignette', eff:'vignette',min:0,max:1,dur:1200},
+    {name:'Blur', eff:'blur',min:0,max:1,dur:1100},
+  ];
+  let idx=0, rev=0, t0=performance.now();
+  function testLoop(now){
+    if(!autoTest) return;
+    let t=now-t0, cur=tests[idx], pct=clamp(t/cur.dur,0,1);
+    let val=rev?lerp(cur.max,cur.min,pct):lerp(cur.min,cur.max,pct);
+    if(cur.eff==='fade') drawFX({fade:val});
+    else if(cur.eff==='pixelate') drawFX({pixelate:val});
+    else if(cur.eff==='sweep') drawFX({sweep:val});
+    else{
+      ctx.clearRect(0,0,W,H);
+      ctx.drawImage(img,0,0,W,H);
+      if(cur.eff==='scan') drawScanLines({...baseParams.scan,alpha:lerp(0,baseParams.scan.alpha,val)});
+      if(cur.eff==='grain') drawGrain({...baseParams.grain,amount:lerp(0,baseParams.grain.amount,val),seed:33333});
+      if(cur.eff==='vignette') drawVignette({...baseParams.vignette,strength:lerp(0,baseParams.vignette.strength,val)});
+      if(cur.eff==='blur'){
+        ctx.save();ctx.filter=`blur(${lerp(0,baseParams.blur.radius,val)}px)`;
+        ctx.drawImage(img,0,0,W,H);ctx.restore();
+      }
+    }
+    infoLabel.textContent=`[TEST] ${cur.name} | ${cur.eff}: ${val.toFixed(2)}`;
+    if(pct<1){requestAnimationFrame(testLoop);return;}
+    if(!rev){rev=1;t0=performance.now();requestAnimationFrame(testLoop);return;}
+    idx++;rev=0;t0=performance.now();
+    if(idx<tests.length) requestAnimationFrame(testLoop);
+    else setTimeout(()=>{idx=0;runAutoTest();},500);
+  }
+  requestAnimationFrame(testLoop);
+}
+
+// Boot
+init();
+</script>
+</body>
+</html>
+

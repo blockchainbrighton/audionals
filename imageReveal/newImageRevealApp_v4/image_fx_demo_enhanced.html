@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Image FX Playground</title>
+<style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#121212;color:#f0f0f0;font-family:Arial,sans-serif;overflow:hidden;display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;position:relative}
+    #canvas-container{position:relative;width:80vh;height:80vh;max-width:80vw;max-height:80vh;cursor:pointer}
+    canvas{position:absolute;top:0;left:0;width:100%;height:100%;border-radius:4px;box-shadow:0 0 20px #0008}
+    .fx-btns{display:flex;gap:12px;justify-content:center;align-items:center;position:absolute;bottom:16px;left:50%;transform:translateX(-50%);}
+    .fx-btn{padding:10px 16px;background:linear-gradient(135deg,#6e8efb,#a777e3);color:white;border:none;border-radius:4px;font-size:15px;cursor:pointer;opacity:.93;transition:.2s;box-shadow:0 4px 6px #0002}
+    .fx-btn:hover{background:linear-gradient(135deg,#5d7df9,#9666d6);transform:translateY(-2px);}
+    .fx-btn.active {background: linear-gradient(135deg,#3a4ca2,#7d3ed7)!important;box-shadow:0 4px 18px #4416;opacity:1;}
+    .fx-btn:disabled{opacity:.4;cursor:default;}
+    #error-message{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#ff5555;font-size:18px;text-align:center;display:none}
+    #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#f0f0f0;font-size:18px;text-align:center}
+</style>
+</head>
+<body>
+<div id="canvas-container">
+    <canvas id="main-canvas"></canvas>
+    <div id="loading">Loading image...</div>
+    <div id="error-message">Failed to load image. Please check the URL.</div>
+</div>
+<div class="fx-btns" id="fx-btns"></div>
+<script type="module">
+window.images = ["https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
+const log=(...a)=>console.log('[FXDEMO]',...a);
+const utils=(()=>{
+    const permutation=Array.from({length:256},()=>Math.floor(Math.random()*256)), p=[...permutation,...permutation];
+    const fade=t=>t**3*(t*(t*6-15)+10), lerp=(a,b,t)=>a+t*(b-a),
+    grad=(h,x,y,z)=>{let u=h<8?x:y,v=h<4?y:(h==12||h==14?x:z);return((h&1)===0?u:-u)+((h&2)===0?v:-v);};
+    return {
+        lerp,
+        clamp:(v,min,max)=>Math.max(min,Math.min(max,v)),
+        random:(min,max)=>Math.random()*(max-min)+min,
+        randomInt:(min,max)=>Math.floor(Math.random()*(max-min+1))+min,
+        easeInOut:t=>t<.5?2*t*t:1-((-2*t+2)**2/2),
+        noise:(x,y,z)=>{
+            const X=Math.floor(x)&255,Y=Math.floor(y)&255,Z=Math.floor(z)&255;
+            x-=Math.floor(x); y-=Math.floor(y); z-=Math.floor(z);
+            const u=fade(x),v=fade(y),w=fade(z);
+            const A=p[X]+Y,AA=p[A]+Z,AB=p[A+1]+Z,B=p[X+1]+Y,BA=p[B]+Z,BB=p[B+1]+Z;
+            return lerp(
+                lerp(
+                    lerp(grad(p[AA],x,y,z),grad(p[BA],x-1,y,z),u),
+                    lerp(grad(p[AB],x,y-1,z),grad(p[BB],x-1,y-1,z),u),v),
+                lerp(
+                    lerp(grad(p[AA+1],x,y,z-1),grad(p[BA+1],x-1,y,z-1),u),
+                    lerp(grad(p[AB+1],x,y-1,z-1),grad(p[BB+1],x-1,y-1,z-1),u),v),w);
+        }
+    };
+})();
+
+const effectDefaults = {
+    scanLines:   { intensity: 0.4, speed: 1.5, lineWidth: 3, spacing: 6, verticalShift: 0, active: false },
+    filmGrain:   { intensity: 1.0, size: 1.2, speed: 80, density: 1.0, dynamicRange: 1.0, lastUpdate: 0, noiseZ: 0, active: false },
+    blur:        { radius: 8, active: false },
+    vignette:    { intensity: 1.0, size: 0.45, active: false },
+    glitch:      { intensity: 0.5, active: false },
+    chromaShift: { intensity: 0.3, active: false },
+    colourSweep: { progress: 0, direction: 1, randomize: 1, active: false }
+};
+
+const effectParamDefs = {
+    scanLines: [
+        {name:'intensity', min:0, max:1},
+        {name:'speed', min:0, max:6},
+        {name:'lineWidth', min:1, max:0.5, relTo:'height'},
+        {name:'spacing', min:1, max:64},
+        {name:'verticalShift', min:0, max:32}
+    ],
+    filmGrain: [
+        {name:'intensity', min:0.1, max:1.2},
+        {name:'size', min:1, max:2.5},
+        {name:'speed', min:20, max:120},
+        {name:'density', min:0.3, max:1},
+        {name:'dynamicRange', min:0.2, max:1}
+    ],
+    blur: [
+        {name:'radius', min:0, max:32}
+    ],
+    vignette: [
+        {name:'intensity', min:0.01, max:1.5},
+        {name:'size', min:0.05, max:1.0}
+    ],
+    glitch: [
+        {name:'intensity', min:0, max:1}
+    ],
+    chromaShift: [
+        {name:'intensity', min:0, max:0.35}
+    ],
+    colourSweep: [
+        {name:'progress', min:0, max:1},
+        {name:'direction', min:0, max:1},
+        {name:'randomize', min:0, max:1}
+    ]
+};
+
+function cloneDefaults(key) {
+    return JSON.parse(JSON.stringify(effectDefaults[key]));
+}
+
+const app = (() => {
+    let mainCanvas, mainCtx, effectCanvases={},effectCtxs={},width,height,image=null,imageLoaded=false,imageError=false;
+    let animationId=null, isPlaying=false;
+    let effects = {};
+    const effectKeys = ['scanLines','filmGrain','blur','vignette','glitch','chromaShift','colourSweep'];
+    let testActive = null, testAnimFrame = null, sweepSeed = 0, testStartTime = null;
+
+    // --- Colour Sweep Effect Implementation ---
+    const colourSweepState = new WeakMap();
+    function colourSweepInit(cv, img, randomize=1) {
+        const { width: w, height: h } = cv;
+        const off = document.createElement('canvas').getContext('2d');
+        off.canvas.width = w; off.canvas.height = h;
+        off.drawImage(img, 0, 0, w, h);
+        let src;
+        try { src = off.getImageData(0, 0, w, h); }
+        catch { return { src: null }; }
+        const N = w * h, bright = new Float32Array(N);
+        const d = src.data;
+        for (let i = 0; i < N; i++) {
+            const p = i << 2;
+            bright[i] = Math.min((d[p] + d[p + 1] + d[p + 2]) / 3 + (randomize ? Math.random() : 0), 255);
+        }
+        return {
+            src, bright,
+            out: new ImageData(new Uint8ClampedArray(d.length), w, h),
+            lastP: -1
+        };
+    }
+    function getColourSweepState(cv, img, randomize) {
+        let state = colourSweepState.get(cv);
+        if (!state || state.img !== img || state.randomize !== randomize) {
+            state = { img, randomize, ...colourSweepInit(cv, img, randomize) };
+            colourSweepState.set(cv, state);
+        }
+        return state;
+    }
+    function applyColourSweepEffect() {
+        const ctx = effectCtxs.colourSweep;
+        if (!ctx || !imageLoaded) return;
+        const g = effects.colourSweep;
+        // Always ensure state is initialized with current randomize
+        const state = getColourSweepState(effectCanvases.colourSweep, image, g.randomize|0);
+        if (!state.src) { ctx.clearRect(0,0,width,height); return; }
+        let p = utils.clamp(g.progress, 0, 1), fwd = (g.direction|0)!==0;
+        if (!fwd) p = 1 - p;
+        const thr = p * 255;
+        const { src, bright, out } = state, S = src.data, O = out.data;
+        for (let i = 0; i < bright.length; i++) {
+            const q = i << 2;
+            if (bright[i] <= thr) {
+                O[q] = S[q];
+                O[q+1] = S[q+1];
+                O[q+2] = S[q+2];
+                O[q+3] = S[q+3];
+            } else {
+                O[q+3] = 0;
+            }
+        }
+        ctx.clearRect(0,0,width,height);
+        ctx.putImageData(out, 0, 0);
+        // Draw ONLY the effect, do NOT draw the main image
+        mainCtx.clearRect(0,0,width,height);
+        mainCtx.drawImage(effectCanvases.colourSweep, 0, 0);
+    }
+
+    // --- Core App Logic ---
+    const init = () => {
+        effectKeys.forEach(k=>effects[k]=cloneDefaults(k));
+        mainCanvas=document.getElementById('main-canvas');
+        mainCtx=mainCanvas.getContext('2d',{alpha:false});
+        window.addEventListener('resize',handleResize);
+        mainCanvas.addEventListener('click',()=>!imageError&&(isPlaying?stopEffects():startEffects()));
+        handleResize(); loadImage();
+        log('App initialized and DOM loaded.');
+    };
+    const handleResize = () => {
+        const container=document.getElementById('canvas-container');
+        const size=Math.min(window.innerHeight*.8,window.innerWidth*.8);
+        container.style.width=container.style.height=`${size}px`;
+        width=height=size;
+        mainCanvas.width=mainCanvas.height=size;
+        for(const e in effectCanvases) effectCanvases[e]&&(effectCanvases[e].width=effectCanvases[e].height=size);
+        imageLoaded&&!isPlaying&&drawImage();
+    };
+    const loadImage = () => {
+        if(!window.images?.length) return showError();
+        image=new Image();
+        image.crossOrigin='anonymous';
+        image.onload=()=>{
+            imageLoaded=true;
+            document.getElementById('loading').style.display='none';
+            drawImage();
+            document.getElementById('fx-btns').style.opacity='1';
+            createEffectButtons();
+        };
+        image.onerror=()=>{ imageError=true; showError(); };
+        image.src=window.images[0];
+    };
+    const showError = () => {
+        document.getElementById('loading').style.display='none';
+        document.getElementById('error-message').style.display='block';
+    };
+    const drawImage = () => {
+        if(!imageLoaded) return;
+        mainCtx.fillStyle='#000'; mainCtx.fillRect(0,0,width,height);
+        const ar=image.width/image.height; let w,h;
+        if(ar>1){w=width;h=width/ar;}else{h=height;w=height*ar;}
+        mainCtx.drawImage(image,(width-w)/2,(height-h)/2,w,h);
+    };
+    function fxLoop(ts=performance.now()) {
+        if (!isPlaying) return;
+        drawImage();
+        const ct = ts / 1000;
+        effectKeys.forEach(fx => {
+            if (effects[fx].active) {
+                createEffectCanvas(fx);
+                applyEffect(fx, ct);
+            }
+        });
+        animationId = requestAnimationFrame(fxLoop);
+    }
+    const startEffects = () => {
+        isPlaying = true;
+        fxLoop();
+    };
+    const stopEffects = () => {
+        isPlaying=false;
+        animationId&&(cancelAnimationFrame(animationId),animationId=null);
+        for(const e of effectKeys) effects[e]=cloneDefaults(e);
+        clearAllEffectCanvases();
+        drawImage();
+        updateButtonStates();
+        testStartTime = null;
+    };
+    function createEffectButtons() {
+        const btns = document.getElementById('fx-btns');
+        btns.innerHTML = '';
+        effectKeys.forEach(fx => {
+            const btn = document.createElement('button');
+            btn.className = 'fx-btn';
+            btn.textContent = `${fx} (Test)`;
+            btn.dataset.fx = fx;
+            btn.onclick = () => {
+                if (testActive === fx) stopEffectTest();
+                else runEffectTest(fx);
+            };
+            btns.appendChild(btn);
+        });
+        updateButtonStates();
+    }
+    function updateButtonStates() {
+        document.querySelectorAll('.fx-btn').forEach(btn => {
+            const fx = btn.dataset.fx;
+            btn.classList.toggle('active', testActive===fx);
+            btn.disabled = !!testActive && fx !== testActive;
+        });
+    }
+    function clearAllEffectCanvases() {
+        for(const e in effectCanvases){
+            if(effectCanvases[e]){
+                effectCanvases[e].remove(); effectCanvases[e]=effectCtxs[e]=null;
+            }
+        }
+    }
+
+    // --- COLOUR SWEEP: TEST LOGIC (SIMPLE, LINEAR SWEEP OVER 10 SECONDS) ---
+    function runEffectTest(fx) {
+        stopEffects();
+        testActive = fx;
+        sweepSeed = Math.random()*1000;
+        testStartTime = null;
+        effectKeys.forEach(k=>{
+            effects[k]=cloneDefaults(k);
+            effects[k].active = (k===fx);
+        });
+        updateButtonStates();
+        autoTestFrame();
+    }
+    function stopEffectTest() {
+        if(testAnimFrame) cancelAnimationFrame(testAnimFrame);
+        testAnimFrame = null;
+        testActive = null;
+        stopEffects();
+        updateButtonStates();
+    }
+    function autoTestFrame(now=performance.now()) {
+        if (!testActive) return;
+        if (testActive === 'colourSweep') {
+            // Linear sweep progress 0→1 over 10 seconds, looping
+            if(!testStartTime) testStartTime = now;
+            const elapsed = (now - testStartTime) / 1000; // seconds
+            const prog = Math.min((elapsed % 10) / 10, 1);
+            effects.colourSweep.progress = prog;
+            effects.colourSweep.direction = 1;
+            effects.colourSweep.randomize = 1;
+        } else {
+            const t = (now/1000) + sweepSeed;
+            const def = effectParamDefs[testActive];
+            if(def){
+                def.forEach(param=>{
+                    let min=param.min, max=param.max;
+                    if(param.relTo==='height') {
+                        min = param.min * height;
+                        max = param.max * height;
+                    }
+                    let val;
+                    val = min + (max-min) * (
+                        0.5+0.5*Math.sin(
+                            t*0.7 + 1.5*Math.sin(t*0.33 + (param.name.charCodeAt(0)%4)) + Math.cos(t*0.21 + (param.name.length))
+                        )*utils.easeInOut(0.5+0.5*Math.sin(t*0.11+param.name.length))
+                    );
+                    effects[testActive][param.name]=val;
+                });
+            }
+        }
+        if (testActive !== 'colourSweep') drawImage();
+        createEffectCanvas(testActive);
+        applyEffect(testActive, (now/1000));
+        testAnimFrame = requestAnimationFrame(autoTestFrame);
+    }
+
+    // --- Effect Application Switch ---
+    const createEffectCanvas = e => {
+        if(!effectCanvases[e]){
+            const c=document.createElement('canvas');
+            c.width=c.height=width;
+            Object.assign(c.style,{position:'absolute',top:0,left:0,width:'100%',height:'100%'});
+            document.getElementById('canvas-container').appendChild(c);
+            effectCanvases[e]=c; effectCtxs[e]=c.getContext('2d',{alpha:true});
+        }
+    };
+    const applyEffect = (effect, ct) => {
+        switch(effect){
+            case 'scanLines':   applyScanLinesEffect(ct); break;
+            case 'filmGrain':   applyFilmGrainEffect(ct); break;
+            case 'blur':        applyBlurEffect(); break;
+            case 'vignette':    applyVignetteEffect(); break;
+            case 'glitch':      applyGlitchEffect(ct); break;
+            case 'chromaShift': applyChromaShiftEffect(ct); break;
+            case 'colourSweep': applyColourSweepEffect(); break;
+        }
+    };
+    const applyScanLinesEffect = ct => {
+        const ctx = effectCtxs.scanLines;
+        if (!ctx) return;
+        ctx.clearRect(0, 0, width, height);
+        const { intensity, lineWidth, spacing, speed, verticalShift = 0 } = effects.scanLines;
+        const offset = (speed > 0 ? (ct * speed * spacing) % spacing : 0) + verticalShift;
+        ctx.globalAlpha = intensity;
+        ctx.fillStyle = "#000";
+        for (let y = offset; y < height; y += spacing) {
+            ctx.fillRect(0, y, width, Math.max(1, lineWidth));
+        }
+        ctx.globalAlpha = 1;
+        mainCtx.drawImage(effectCanvases.scanLines, 0, 0);
+    };
+    function makeRNG(seed) {
+        let s = seed >>> 0;
+        return () => ((s = Math.imul(48271, s) & 0x7fffffff) / 0x7fffffff);
+    }
+    const applyFilmGrainEffect = ct => {
+    const g = effects.filmGrain;
+    const { intensity = 1, size = 1, speed = 60, density = 1 } = g;
+    const canvasWidth = width, canvasHeight = height;
+    const grainW = Math.floor(canvasWidth / Math.max(1, size));
+    const grainH = Math.floor(canvasHeight / Math.max(1, size));
+    if (!applyFilmGrainEffect.noiseCanvas ||
+        applyFilmGrainEffect.noiseCanvas.width !== grainW ||
+        applyFilmGrainEffect.noiseCanvas.height !== grainH
+    ) {
+        applyFilmGrainEffect.noiseCanvas = document.createElement("canvas");
+        applyFilmGrainEffect.noiseCanvas.width = grainW;
+        applyFilmGrainEffect.noiseCanvas.height = grainH;
+    }
+    const nctx = applyFilmGrainEffect.noiseCanvas.getContext("2d");
+    const imgData = nctx.createImageData(grainW, grainH);
+    const data = imgData.data;
+    const rng = makeRNG(Math.floor(ct * speed * 1000));
+    const activeRatio = Math.max(0.12, Math.min(1, density * intensity * 0.8 + 0.18));
+    // Get base image data (scaled down)
+    let srcImg;
+    try {
+        srcImg = mainCtx.getImageData(0, 0, canvasWidth, canvasHeight);
+    } catch (e) {
+        // Some browsers may block, fallback to plain grain
+        srcImg = null;
+    }
+    // Loop each grain pixel
+    for (let y = 0; y < grainH; ++y) {
+        for (let x = 0; x < grainW; ++x) {
+            const p = (y * grainW + x) * 4;
+            // Map to source image pixel
+            let isColoured = true;
+            if (srcImg) {
+                const srcX = Math.floor(x * canvasWidth / grainW);
+                const srcY = Math.floor(y * canvasHeight / grainH);
+                const sp = (srcY * canvasWidth + srcX) * 4;
+                const r = srcImg.data[sp], g = srcImg.data[sp + 1], b = srcImg.data[sp + 2];
+                isColoured = (r + g + b > 30);
+            }
+            if (isColoured) {
+                const isActive = rng() < activeRatio;
+                const val = isActive
+                    ? 200 + Math.floor(rng() * 55)
+                    : 60 + Math.floor(rng() * 40);
+                data[p] = data[p + 1] = data[p + 2] = val;
+                data[p + 3] = isActive ? 180 + Math.floor(rng() * 60) : 80 + Math.floor(rng() * 40);
+            } else {
+                data[p] = data[p + 1] = data[p + 2] = 0;
+                data[p + 3] = 0;
+            }
+        }
+    }
+    nctx.putImageData(imgData, 0, 0);
+    mainCtx.save();
+    mainCtx.globalAlpha = 0.28 * Math.min(1, intensity) + 0.14 * Math.min(1, density);
+    mainCtx.imageSmoothingEnabled = false;
+    mainCtx.drawImage(applyFilmGrainEffect.noiseCanvas,
+        0, 0, grainW, grainH,
+        0, 0, canvasWidth, canvasHeight
+    );
+    mainCtx.imageSmoothingEnabled = true;
+    mainCtx.globalAlpha = 1;
+    mainCtx.restore();
+};
+
+    const applyBlurEffect = () => {
+        const ctx=effectCtxs.blur;
+        if(!ctx)return;
+        ctx.clearRect(0,0,width,height);
+        ctx.filter=`blur(${effects.blur.radius}px)`;
+        ctx.drawImage(mainCanvas,0,0);
+        ctx.filter='none';
+        mainCtx.globalAlpha=.85;
+        mainCtx.drawImage(effectCanvases.blur,0,0);
+        mainCtx.globalAlpha=1;
+    };
+    const applyVignetteEffect = () => {
+        const ctx=effectCtxs.vignette;
+        if(!ctx)return;
+        ctx.clearRect(0,0,width,height);
+        const {intensity,size}=effects.vignette;
+        const grad=ctx.createRadialGradient(width/2,height/2,0,width/2,height/2,width*size);
+        grad.addColorStop(0,'rgba(0,0,0,0)');
+        grad.addColorStop(.5,'rgba(0,0,0,0)');
+        grad.addColorStop(1,`rgba(0,0,0,${intensity})`);
+        ctx.fillStyle=grad;
+        ctx.fillRect(0,0,width,height);
+        mainCtx.globalAlpha = 1;
+        mainCtx.drawImage(effectCanvases.vignette,0,0);
+    };
+    const applyGlitchEffect = ct => {
+        const ctx=effectCtxs.glitch,g=effects.glitch;
+        if(!ctx||g.intensity===0)return;
+        ctx.clearRect(0,0,width,height);
+        const slices=utils.randomInt(3,7),sliceHeight=height/slices;
+        for(let i=0;i<slices;i++){
+            const y=i*sliceHeight,ox=utils.random(-width*g.intensity,width*g.intensity);
+            ctx.drawImage(mainCanvas,0,y,width,sliceHeight,ox,y,width,sliceHeight);
+            if(Math.random()>.5){
+                ctx.globalCompositeOperation='lighten';
+                ctx.fillStyle=`rgba(${utils.randomInt(0,255)},${utils.randomInt(0,255)},${utils.randomInt(0,255)},0.14)`;
+                ctx.fillRect(ox,y,width,sliceHeight);
+                ctx.globalCompositeOperation='source-over';
+            }
+        }
+        mainCtx.drawImage(effectCanvases.glitch,0,0);
+    };
+    const applyChromaShiftEffect = ct => {
+        const ctx=effectCtxs.chromaShift,c=effects.chromaShift;
+        if(!ctx||c.intensity===0)return;
+        ctx.clearRect(0,0,width,height);
+        const ox=Math.sin(ct*2)*width*c.intensity,oy=Math.cos(ct*1.5)*height*c.intensity*.5;
+        ctx.globalCompositeOperation='lighter';
+        ctx.globalAlpha=0.8;
+        ctx.drawImage(mainCanvas,ox,oy);
+        ctx.globalAlpha=0.8;
+        ctx.drawImage(mainCanvas,-ox,-oy);
+        ctx.globalAlpha=1;
+        ctx.globalCompositeOperation='source-over';
+        mainCtx.drawImage(effectCanvases.chromaShift,0,0);
+    };
+    return {init};
+})();
+document.addEventListener('DOMContentLoaded', app.init);
+</script>
+</body>
+</html>

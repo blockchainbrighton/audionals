@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image FX Demo</title>
+    <style>
+        body { margin: 0; background-color: #111; color: #eee; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; overflow: hidden; }
+        #imageCanvas { background-color: #000; display: block; cursor: pointer; }
+        #controls { margin-top: 10px; }
+        button { padding: 8px 15px; background-color: #333; color: #eee; border: 1px solid #555; cursor: pointer; font-size: 14px; }
+        button:hover { background-color: #444; }
+        #testButton { display: none; } /* Initially hidden */
+    </style>
+</head>
+<body>
+    <canvas id="imageCanvas"></canvas>
+    <div id="controls">
+        <button id="testButton">Test All Effects</button>
+    </div>
+
+    <script type="module">
+        const ImageFXApp = (() => {
+            // --- Configuration ---
+            const config = {
+                bpm: 104.15,
+                peakBars: [9, 17, 25, 33, 41, 49],
+                viewportHeightRatio: 0.8,
+                introDurations: {
+                    fadeIn: 800,       // ms
+                    pixelDissolve: 1500, // ms
+                    colorSweep: 1200,  // ms
+                },
+                effectsDefaults: {
+                    scanlineOpacity: 0.08,
+                    scanlineThickness: 1, 
+                    scanlineSpeed: 60,    // pixels per second
+                    grainIntensity: 0.04,
+                    blurRadius: 0, 
+                    vignetteIntensity: 0.6,
+                    vignetteSize: 0.4, 
+                },
+                effectsPeakMultipliers: { // Multiplies base value on peak bars
+                    scanlineOpacity: 1.8,
+                    grainIntensity: 2.5,
+                    vignetteIntensity: 1.3,
+                    vignetteSize: 0.8, // e.g. 0.4 * 0.8 = 0.32 (smaller size = more intense vignette)
+                },
+            };
+
+            // --- State ---
+            let state = {
+                imageLoaded: false,
+                effectsRunning: false,      // Master switch for animation loop activity
+                introPlayedOnce: false,     // Has the intro sequence completed at least once?
+                isIntroRunning: false,      // Is the intro sequence currently playing?
+                testModeActive: false,      // Is test mode active?
+                
+                currentBar: 0,
+                elapsedTimeInBar: 0,        // ms
+                lastFrameTime: 0,           // timestamp
+                animationFrameId: null,
+                isPeakBar: false,
+
+                effectParams: { ...config.effectsDefaults },
+
+                currentTestEffectIndex: 0,
+                testEffectTime: 0, 
+                testEffects: [], 
+            };
+
+            let introState = {
+                phase: 'fadeIn', 
+                phaseStartTime: 0,
+            };
+
+            // --- DOM Elements ---
+            let dom = { canvas: null, ctx: null, testButton: null };
+            let sourceImage = null; 
+            let offscreenCanvases = { imageBuffer: null, pixelationBuffer: null };
+            let timing = { msPerBeat: 0, msPerBar: 0 };
+
+            // --- Helper Functions ---
+            const lerp = (a, b, t) => a * (1 - t) + b * t;
+            const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
+
+            // --- Canvas & DOM Management ---
+            const setupDOM = () => {
+                dom.canvas = document.getElementById('imageCanvas');
+                dom.ctx = dom.canvas.getContext('2d');
+                dom.testButton = document.getElementById('testButton');
+            };
+
+            const resizeCanvas = () => {
+                const size = Math.min(window.innerWidth, window.innerHeight) * config.viewportHeightRatio;
+                dom.canvas.width = Math.round(size);
+                dom.canvas.height = Math.round(size);
+                
+                Object.keys(offscreenCanvases).forEach(key => { offscreenCanvases[key] = null; }); // Force recreation
+
+                if (state.imageLoaded && !state.effectsRunning) {
+                    drawStaticImage();
+                }
+            };
+
+            const loadImage = (imageUrl) => {
+                sourceImage = new Image();
+                sourceImage.crossOrigin = "Anonymous";
+                sourceImage.onload = () => {
+                    state.imageLoaded = true;
+                    dom.testButton.style.display = 'inline-block';
+                    resizeCanvas(); // Sets initial size and may draw static image
+                };
+                sourceImage.onerror = () => {
+                    state.imageLoaded = false;
+                    console.error(`Failed to load image: ${imageUrl}`);
+                    if(dom.ctx) {
+                        dom.ctx.clearRect(0,0,dom.canvas.width, dom.canvas.height);
+                        dom.ctx.fillStyle = 'red';
+                        dom.ctx.textAlign = 'center';
+                        dom.ctx.font = `${Math.min(20, dom.canvas.width/10)}px sans-serif`;
+                        dom.ctx.fillText('Error loading image.', dom.canvas.width / 2, dom.canvas.height / 2);
+                    }
+                };
+                sourceImage.src = imageUrl;
+            };
+
+            const drawStaticImage = () => {
+                if (!sourceImage || !state.imageLoaded || !dom.ctx) return;
+                prepareImageBufferInternal(false); // No blur for static image
+                dom.ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
+                if (offscreenCanvases.imageBuffer) {
+                    dom.ctx.drawImage(offscreenCanvases.imageBuffer, 0, 0);
+                }
+            };
+            
+            const getOrCreateCanvas = (name, width, height) => {
+                if (!offscreenCanvases[name] || offscreenCanvases[name].width !== width || offscreenCanvases[name].height !== height) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    offscreenCanvases[name] = canvas;
+                }
+                return offscreenCanvases[name];
+            };
+
+            const destroyOffscreenCanvases = () => {
+                Object.keys(offscreenCanvases).forEach(key => { offscreenCanvases[key] = null; });
+            };
+
+            const prepareImageBufferInternal = (applySteadyStateBlur) => {
+                if (!sourceImage || !dom.canvas || dom.canvas.width === 0 || dom.canvas.height === 0) return;
+                
+                const buffer = getOrCreateCanvas('imageBuffer', dom.canvas.width, dom.canvas.height);
+                const ctx = buffer.getContext('2d');
+                ctx.clearRect(0, 0, buffer.width, buffer.height);
+
+                const imgAspect = sourceImage.naturalWidth / sourceImage.naturalHeight;
+                const canvasAspect = buffer.width / buffer.height;
+                let drawWidth, drawHeight, dx, dy;
+
+                if (imgAspect > canvasAspect) {
+                    drawWidth = buffer.width;
+                    drawHeight = drawWidth / imgAspect;
+                    dx = 0;
+                    dy = (buffer.height - drawHeight) / 2;
+                } else {
+                    drawHeight = buffer.height;
+                    drawWidth = drawHeight * imgAspect;
+                    dy = 0;
+                    dx = (buffer.width - drawWidth) / 2;
+                }
+                ctx.drawImage(sourceImage, dx, dy, drawWidth, drawHeight);
+
+                if (applySteadyStateBlur && state.effectParams.blurRadius > 0) {
+                    ctx.filter = `blur(${state.effectParams.blurRadius}px)`;
+                    ctx.drawImage(buffer, 0, 0); 
+                    ctx.filter = 'none'; 
+                }
+            };
+
+            // --- Event Handlers ---
+            const handleCanvasClick = () => {
+                if (!state.imageLoaded) return;
+                if (state.effectsRunning) { // Catches intro, steady, and test mode
+                    stopShow();
+                } else {
+                    startShow();
+                }
+            };
+
+            const handleTestButtonClick = () => {
+                if (!state.imageLoaded) return;
+                toggleTestMode();
+            };
+            
+            const handleKeydown = (e) => {
+                if (e.key.toLowerCase() === 't' && state.imageLoaded) {
+                    e.preventDefault(); // Prevent 't' from typing in other inputs if any
+                    toggleTestMode();
+                }
+            };
+
+            // --- Main Show Control ---
+            const startShow = () => { // Called when system is fully stopped
+                state.effectsRunning = true; 
+                state.lastFrameTime = performance.now();
+
+                if (!state.introPlayedOnce) { 
+                    state.isIntroRunning = true;
+                    introState.phase = 'fadeIn';
+                    introState.phaseStartTime = state.lastFrameTime;
+                } else { 
+                    state.isIntroRunning = false;
+                    state.currentBar = 1; 
+                    state.elapsedTimeInBar = 0;
+                    calculateBeatSyncedParameters(); 
+                }
+                
+                if (!state.animationFrameId) {
+                    state.animationFrameId = requestAnimationFrame(renderLoop);
+                }
+            };
+
+            const stopShow = () => { // Stops all activity
+                state.effectsRunning = false;
+                state.isIntroRunning = false;
+                state.testModeActive = false; 
+                dom.testButton.textContent = "Test All Effects";
+
+                if (state.animationFrameId) {
+                    cancelAnimationFrame(state.animationFrameId);
+                    state.animationFrameId = null;
+                }
+                destroyOffscreenCanvases(); // Clean up
+                drawStaticImage(); 
+            };
+
+            // --- Beat Synchronization & Parameter Calculation ---
+            const updateBeatSync = (deltaTime) => {
+                if (state.isIntroRunning || state.testModeActive) return; 
+
+                state.elapsedTimeInBar += deltaTime;
+                if (state.elapsedTimeInBar >= timing.msPerBar) {
+                    state.elapsedTimeInBar %= timing.msPerBar; 
+                    state.currentBar++;
+                    calculateBeatSyncedParameters();
+                }
+            };
+
+            const calculateBeatSyncedParameters = () => {
+                if (state.testModeActive) return; // Test mode drives params
+
+                state.isPeakBar = config.peakBars.includes(state.currentBar);
+                
+                Object.keys(config.effectsDefaults).forEach(key => {
+                    let baseVal = config.effectsDefaults[key];
+                    if (state.isPeakBar && config.effectsPeakMultipliers[key] !== undefined) {
+                        state.effectParams[key] = baseVal * config.effectsPeakMultipliers[key];
+                    } else {
+                        state.effectParams[key] = baseVal;
+                    }
+                });
+                // Ensure blur is default unless test mode changes it (blur is not beat-synced by default)
+                state.effectParams.blurRadius = config.effectsDefaults.blurRadius;
+            };
+
+            // --- Intro Sequence Logic ---
+            const runIntroSequence = (currentTime) => {
+                const elapsedInPhase = currentTime - introState.phaseStartTime;
+                let phaseProgress = 0;
+                
+                prepareImageBufferInternal(false); 
+                const mainCtx = dom.ctx;
+                const canvasWidth = mainCtx.canvas.width;
+                const canvasHeight = mainCtx.canvas.height;
+                
+                mainCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+                if (!offscreenCanvases.imageBuffer) return true; 
+
+                switch (introState.phase) {
+                    case 'fadeIn':
+                        phaseProgress = Math.min(1, elapsedInPhase / config.introDurations.fadeIn);
+                        mainCtx.globalAlpha = phaseProgress;
+                        mainCtx.drawImage(offscreenCanvases.imageBuffer, 0, 0);
+                        mainCtx.globalAlpha = 1.0;
+                        if (phaseProgress >= 1) {
+                            introState.phase = 'pixelDissolve';
+                            introState.phaseStartTime = currentTime;
+                        }
+                        break;
+                    case 'pixelDissolve':
+                        phaseProgress = Math.min(1, elapsedInPhase / config.introDurations.pixelDissolve);
+                        const t = 1.0 - phaseProgress; 
+                        const minLogBlockSize = 0; const maxLogBlockSize = 6; 
+                        const currentLogBlockSize = lerp(minLogBlockSize, maxLogBlockSize, t * t);
+                        const blockSize = Math.max(1, Math.pow(2, Math.round(currentLogBlockSize)));
+
+                        if (blockSize > 1 && canvasWidth > 0 && canvasHeight > 0) {
+                            const pixelBufWidth = Math.max(1, Math.ceil(canvasWidth / blockSize));
+                            const pixelBufHeight = Math.max(1, Math.ceil(canvasHeight / blockSize));
+                            const pixelBuf = getOrCreateCanvas('pixelationBuffer', pixelBufWidth, pixelBufHeight);
+                            const pixelCtx = pixelBuf.getContext('2d');
+                            
+                            pixelCtx.imageSmoothingEnabled = true; 
+                            pixelCtx.drawImage(offscreenCanvases.imageBuffer, 0, 0, pixelBufWidth, pixelBufHeight);
+                            
+                            mainCtx.imageSmoothingEnabled = false; 
+                            mainCtx.drawImage(pixelBuf, 0, 0, canvasWidth, canvasHeight);
+                            mainCtx.imageSmoothingEnabled = true; 
+                        } else {
+                            mainCtx.drawImage(offscreenCanvases.imageBuffer, 0, 0); 
+                        }
+                        if (phaseProgress >= 1) {
+                            introState.phase = 'colorSweep';
+                            introState.phaseStartTime = currentTime;
+                        }
+                        break;
+                    case 'colorSweep':
+                        phaseProgress = Math.min(1, elapsedInPhase / config.introDurations.colorSweep);
+                        const sweepWidth = canvasWidth * phaseProgress;
+                        mainCtx.drawImage(offscreenCanvases.imageBuffer, 0, 0, sweepWidth, canvasHeight, 0, 0, sweepWidth, canvasHeight);
+                        if (phaseProgress >= 1) introState.phase = 'done';
+                        break;
+                }
+
+                if (introState.phase === 'done') {
+                    state.isIntroRunning = false;
+                    state.introPlayedOnce = true;
+                    state.currentBar = 1;
+                    state.elapsedTimeInBar = 0;
+                    state.lastFrameTime = currentTime; 
+                    calculateBeatSyncedParameters();
+                    return false; 
+                }
+                return true; 
+            };
+
+            // --- Steady-State Effect Drawing Functions ---
+            const drawScanlines = (ctx) => {
+                if (state.effectParams.scanlineOpacity <= 0) return;
+                const { scanlineOpacity, scanlineThickness, scanlineSpeed } = state.effectParams;
+                const timeSeconds = state.lastFrameTime / 1000; 
+
+                ctx.fillStyle = `rgba(0, 0, 0, ${scanlineOpacity})`;
+                const linePlusSpace = scanlineThickness * 3; 
+                let yOffset = (timeSeconds * scanlineSpeed) % linePlusSpace;
+
+                for (let y = yOffset - linePlusSpace; y < ctx.canvas.height; y += linePlusSpace) {
+                    ctx.fillRect(0, Math.round(y), ctx.canvas.width, scanlineThickness);
+                }
+            };
+
+            const drawGrain = (ctx) => {
+                if (state.effectParams.grainIntensity <= 0) return;
+                const amount = state.effectParams.grainIntensity;
+                const width = ctx.canvas.width;
+                const height = ctx.canvas.height;
+                const numGrains = Math.floor(width * height * amount * 0.15); 
+
+                for (let i = 0; i < numGrains; i++) {
+                    const x = Math.random() * width;
+                    const y = Math.random() * height;
+                    const intensity = Math.floor(Math.random() * 100 + 50); 
+                    const alpha = (Math.random() * 0.6 + 0.1) * amount * 3; 
+                    ctx.fillStyle = `rgba(${intensity}, ${intensity}, ${intensity}, ${clamp(alpha,0,0.7)})`;
+                    ctx.fillRect(x, y, 1, 1); 
+                }
+            };
+            
+            const drawVignette = (ctx) => {
+                if (state.effectParams.vignetteIntensity <= 0) return;
+                const { vignetteIntensity, vignetteSize } = state.effectParams;
+                const width = ctx.canvas.width;
+                const height = ctx.canvas.height;
+                const centerX = width / 2; const centerY = height / 2;
+                const outerRadius = Math.sqrt(centerX*centerX + centerY*centerY);
+                const innerRadius = outerRadius * clamp(vignetteSize, 0.01, 0.99); 
+
+                const gradient = ctx.createRadialGradient(centerX, centerY, innerRadius, centerX, centerY, outerRadius);
+                gradient.addColorStop(0, `rgba(0,0,0,0)`);
+                gradient.addColorStop(1, `rgba(0,0,0,${clamp(vignetteIntensity,0,1)})`);
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, width, height);
+            };
+
+            // --- Test Mode ---
+            const initializeTestEffects = () => {
+                state.testEffects = [
+                    { name: 'Blur Radius', paramKey: 'blurRadius', min: 0, max: 8, duration: 4000 },
+                    { name: 'Scanline Opacity', paramKey: 'scanlineOpacity', min: 0, max: 0.3, duration: 3000 },
+                    { name: 'Scanline Speed', paramKey: 'scanlineSpeed', min: 10, max: 150, duration: 3000 },
+                    { name: 'Grain Intensity', paramKey: 'grainIntensity', min: 0, max: 0.2, duration: 4000 },
+                    { name: 'Vignette Intensity', paramKey: 'vignetteIntensity', min: 0, max: 1, duration: 3000 },
+                    { name: 'Vignette Size', paramKey: 'vignetteSize', min: 0.1, max: 0.9, duration: 3000 },
+                ];
+            };
+
+            const toggleTestMode = () => {
+                if (state.testModeActive) { // Turning OFF test mode
+                    state.testModeActive = false;
+                    dom.testButton.textContent = "Test All Effects";
+                    calculateBeatSyncedParameters(); // Restore normal params
+                    if (!state.effectsRunning) { // If was fully stopped before test, remain stopped.
+                        drawStaticImage();
+                    } // Otherwise, loop continues with normal params.
+                } else { // Turning ON test mode
+                    state.testModeActive = true;
+                    dom.testButton.textContent = "Stop Test & Restore";
+                    state.isIntroRunning = false; // Test mode overrides intro
+
+                    state.currentTestEffectIndex = 0;
+                    state.testEffectTime = 0;
+                    // Set all params to default, then current test param to its min
+                    Object.keys(config.effectsDefaults).forEach(key => {
+                        state.effectParams[key] = config.effectsDefaults[key];
+                    });
+                    const firstTest = state.testEffects[0];
+                    if (firstTest) state.effectParams[firstTest.paramKey] = firstTest.min;
+
+                    if (!state.effectsRunning) { 
+                        state.effectsRunning = true;
+                        state.lastFrameTime = performance.now();
+                        if (!state.animationFrameId) {
+                            state.animationFrameId = requestAnimationFrame(renderLoop);
+                        }
+                    }
+                }
+            };
+
+            const updateTestModeCycle = (deltaTime) => {
+                if (!state.testModeActive || state.testEffects.length === 0) return;
+
+                const currentTest = state.testEffects[state.currentTestEffectIndex];
+                state.testEffectTime += deltaTime;
+                let cycleProgress = (state.testEffectTime / currentTest.duration) * 2; 
+                
+                let value;
+                if (cycleProgress < 1) { 
+                    value = lerp(currentTest.min, currentTest.max, cycleProgress);
+                } else if (cycleProgress < 2) { 
+                    value = lerp(currentTest.max, currentTest.min, cycleProgress - 1);
+                } else { 
+                    state.testEffectTime = 0;
+                    state.currentTestEffectIndex = (state.currentTestEffectIndex + 1) % state.testEffects.length;
+                    Object.keys(config.effectsDefaults).forEach(key => { // Reset all to default for next test
+                        state.effectParams[key] = config.effectsDefaults[key];
+                    });
+                    const nextTest = state.testEffects[state.currentTestEffectIndex];
+                    value = nextTest.min; // Start next test at its min value
+                    cycleProgress = 0; // For the current frame, use min value
+                }
+                state.effectParams[currentTest.paramKey] = value;
+            };
+
+            // --- Render Loop ---
+            const renderLoop = (currentTime) => {
+                if (!state.effectsRunning) { // Master stop condition
+                     state.animationFrameId = null; 
+                     return;
+                }
+                state.animationFrameId = requestAnimationFrame(renderLoop);
+
+                const deltaTime = currentTime - state.lastFrameTime;
+                state.lastFrameTime = currentTime;
+                
+                const mainCtx = dom.ctx;
+                if (!mainCtx || mainCtx.canvas.width === 0 || mainCtx.canvas.height === 0) return; // Canvas not ready
+                mainCtx.clearRect(0, 0, mainCtx.canvas.width, mainCtx.canvas.height);
+
+                if (!state.imageLoaded) { 
+                    mainCtx.fillStyle = 'gray';
+                    mainCtx.fillText('Waiting for image...', mainCtx.canvas.width/2, mainCtx.canvas.height/2);
+                    return;
+                }
+
+                if (state.isIntroRunning) {
+                    runIntroSequence(currentTime); 
+                } else { // Steady state or Test Mode
+                    if (state.testModeActive) {
+                        updateTestModeCycle(deltaTime);
+                    } else {
+                        updateBeatSync(deltaTime); // updates params via calculateBeatSyncedParameters on bar change
+                    }
+                    
+                    prepareImageBufferInternal(state.effectParams.blurRadius > 0);
+                    if (offscreenCanvases.imageBuffer) {
+                         mainCtx.drawImage(offscreenCanvases.imageBuffer, 0, 0);
+                    }
+
+                    drawScanlines(mainCtx);
+                    drawGrain(mainCtx);
+                    drawVignette(mainCtx);
+                }
+            };
+
+            // --- Initialization ---
+            const init = () => {
+                if (!window.images || !Array.isArray(window.images) || window.images.length === 0) {
+                    console.error("ImageFXApp: window.images array is missing or empty.");
+                    if(dom.canvas && dom.ctx) dom.ctx.fillText('window.images missing', dom.canvas.width/2, dom.canvas.height/2); else alert("window.images missing");
+                    return;
+                }
+                const imageUrl = window.images[0];
+
+                setupDOM();
+                
+                timing.msPerBeat = (60 / config.bpm) * 1000;
+                timing.msPerBar = timing.msPerBeat * 4;
+
+                initializeTestEffects(); 
+                calculateBeatSyncedParameters(); // Set initial defaults
+
+                loadImage(imageUrl); // This will call resize and drawStaticImage on load
+
+                window.addEventListener('resize', resizeCanvas);
+                dom.canvas.addEventListener('click', handleCanvasClick);
+                dom.testButton.addEventListener('click', handleTestButtonClick);
+                window.addEventListener('keydown', handleKeydown);
+                
+                // Initial state is stopped, resizeCanvas/loadImage will draw static if available
+            };
+
+            return { init };
+        })();
+
+        window.ImageFXApp = ImageFXApp;
+
+              // Example Usage:
+        // Define window.images before initializing
+        window.images = ["https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"]; 
+        // window.images = ["YOUR_IMAGE_URL_HERE"]; // Make sure it's CORS-friendly if from another domain
+
+        // For a quick test without needing to set window.images manually in console:
+        // (Remove or comment out for final use if window.images is set externally)
+        if (!window.images) {
+            // A default image for easier testing if window.images isn't set.
+            // Using a data URI for a simple placeholder to avoid CORS issues with random web images.
+            // This is a 100x100 red square.
+            window.images = ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAAaklEQVR4Xu3BMQEAAADCoPVPbQ0PoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbgDsCgABXAlUBQAAAABJRU5ErkJggg=="];
+            console.warn("window.images not set. Using a default placeholder image.");
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            ImageFXApp.init();
+        });
+    </script>
+</body>
+</html>
+
+ 

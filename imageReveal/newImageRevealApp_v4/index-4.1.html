@@ -6,10 +6,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     html,body{height:100%;margin:0;background:#000;overflow:hidden;}
-    body{display:flex;align-items:center;justify-content:center;height:100vh;}
+    body{display:flex;align-items:center;justify-content:center;height:100vh; position: relative;} /* Added position:relative for absolute children */
     canvas{display:block;margin:auto;box-shadow:0 0 48px #000a;border-radius:2vw;}
-    #test-btn{position:fixed;top:30px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:0.7em 1.4em;font:1.2em monospace;border:none;border-radius:2em;z-index:10;box-shadow:0 4px 16px #000a;cursor:pointer;opacity:.92;transition:.2s;}
+    #test-btn{position:fixed;top:30px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:0.7em 1.4em;font:1.2em monospace;border:none;border-radius:2em;z-index:1000;box-shadow:0 4px 16px #000a;cursor:pointer;opacity:.92;transition:.2s;}
     #test-btn:active{background:#444;}
+    /* #grainCanvas styling is handled by H.createOverlay and H.bindResize */
   </style>
   <script>
     window.images=["https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
@@ -19,517 +20,178 @@
 <button id="test-btn" style="display:none">Test All Effects</button>
 <canvas id="fx-canvas"></canvas>
 <script>
-// ===== BAR-SYNCED FX LOGIC (WITH PATCHED COLOR) =====
-const BPM = 104.15, BEAT_MS = 60000/BPM, BAR_MS = BEAT_MS*4, PEAK_BARS = [9,17,25,33,41,49];
-const EFFECT_WEIGHTS = { grain:1, scanline:1, vignette:1 };
-function hashSeed(str){let h=2166136261>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h+=(h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24);}return h>>>0;}
-function makeRNG(seed){let s=seed>>>0;return ()=>((s=Math.imul(48271,s)&0x7fffffff)/0x7fffffff);}
-function randInt(rng,a,b){return Math.floor(rng()*(b-a+1))+a;}
-function randFloat(rng,a,b,d=2){return +(a+(b-a)*rng()).toFixed(d);}
-function buildStepsWithPeaks(lowFactory,highFactory,rng){
-  let steps=[],bar=1;
-  for(let peak of PEAK_BARS){
-    while(bar<peak){
-      let chunk=Math.min(randInt(rng,2,4),peak-bar);
-      steps.push({...lowFactory(),duration:chunk*BAR_MS});
-      bar+=chunk;
+  // ===== BAR-SYNCED FX LOGIC (UNCHANGED) =====
+  const BPM=104.15,BEAT_MS=6e4/BPM,BAR_MS=BEAT_MS*4,PEAK_BARS=[9,17,25,33,41,49],EFFECT_WEIGHTS={grain:1,scanline:1,vignette:1};
+  function hashSeed(str){let h=2166136261>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h+=(h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24);}return h>>>0;}
+  function makeRNG(seed){let s=seed>>>0;return()=>((s=Math.imul(48271,s)&0x7fffffff)/0x7fffffff);}
+  const randInt=(rng,a,b)=>Math.floor(rng()*(b-a+1))+a,randFloat=(rng,a,b,d=2)=>+(a+(b-a)*rng()).toFixed(d);
+  const buildStepsWithPeaks=(lo,hi,rng)=>{
+    let steps=[],bar=1;
+    for(const peak of PEAK_BARS){
+      while(bar<peak){let c=Math.min(randInt(rng,2,4),peak-bar);steps.push({...lo(),duration:c*BAR_MS});bar+=c;}
+      steps.push({...hi(),duration:BAR_MS});bar++;
     }
-    steps.push({...highFactory(),duration:BAR_MS});
-    bar++;
-  }
-  steps.push({enabled:false,duration:4*BAR_MS});
-  return steps;
-}
-function createGrainConfig(rng,weight=1){
-  if(weight<1&&rng()>weight)return{enabled:false};
-  const steps=buildStepsWithPeaks(
-    ()=>({enabled:true,opacity:randFloat(rng,0.05,0.4),frameIntervalMs:randInt(rng,30,60)}),
-    ()=>({enabled:true,opacity:randFloat(rng,0.6,1.0),frameIntervalMs:randInt(rng,5,20)}),
-    rng
-  );
-  return {enabled:true,steps,defaultOpacity:steps[0].opacity,defaultFrameIntervalMs:steps[0].frameIntervalMs};
-}
-function createScanlineConfig(rng,weight=1){
-  if(weight<1&&rng()>weight)return{enabled:false};
-  const steps=buildStepsWithPeaks(
-    ()=>({enabled:true,opacity:randFloat(rng,0.05,0.3),lineHeightPx:randInt(rng,40,150),speed:randInt(rng,15,40)}),
-    ()=>({enabled:true,opacity:randFloat(rng,0.6,0.9),lineHeightPx:randInt(rng,1,6),speed:randInt(rng,2,10)}),
-    rng
-  );
-  return {enabled:true,steps,defaultOpacity:steps[0].opacity,defaultLineHeightPx:steps[0].lineHeightPx,defaultSpeed:steps[0].speed};
-}
-function createVignetteConfig(rng,weight=1){
-  if(weight<1&&rng()>weight)return{enabled:false};
-  const steps=buildStepsWithPeaks(
-    ()=>{
-      let c=randInt(rng,0,15).toString(16);
-      return{enabled:true,strength:randFloat(rng,0.1,0.4),color:'#'+c.repeat(3)};
-    },
-    ()=>({enabled:true,strength:randFloat(rng,0.6,1.0),color:'#000'}),
-    rng
-  );
-  return {enabled:true,steps,defaultStrength:steps[0].strength,defaultColor:steps[0].color};
-}
-function findStepAtTime(steps,t){let acc=0;for(let i=0;i<steps.length;++i){acc+=steps[i].duration;if(t<acc)return steps[i];}return steps[steps.length-1];}
-// ===== END PATCH =====
-
-// ===== ORIGINAL APP CODE (slightly patched for effect fusion) =====
-const COLORS=["#0ff","#f0f","#ff0","#fff"], canvas=document.getElementById('fx-canvas');
-let ctx=canvas.getContext('2d'), ctxRead, grainNoiseCanvas, grainNoiseCtx, image, showText=1, textAlpha=1, textScale=1, imageLoaded=0, stopNormalEffects, normalEffectsRunning=0, testMode=0, testRunning=0, testStop=0;
-const FX_CONFIG = {
-  sequence: [
-    ['fadeIn', { duration: 2e3 }],
-    ['pixelateIn', { duration: 1e3, from: 32, to: 1 }],
-    ['colorSweepIn', { duration: 1400, fwd: true }],
-    // Add lineHeightPx to the default scanlines config
-    ['scanlines', { active: 1, opacity: .18, speed: 2, lineHeightPx: 2 }],
-    ['grain', { active: 1, intensity: .15 }],
-    ['blur', { active: 1, value: 4 }],
-    ['vignette', { active: 1, strength: .35 }]
-  ],
-  startText: { text: "Click to start", font: "2.2vw 'Space Mono', monospace", color: "#fff", fadeDuration: 1e3, shrinkDuration: 1e3 }
-};
-const lerp=(a,b,t)=>a+(b-a)*t, clamp=(x,a=0,b=1)=>Math.max(a,Math.min(x,b)), sleep=ms=>new Promise(r=>setTimeout(r,ms));
-function createGrainNoise() {
-  if (!grainNoiseCanvas) grainNoiseCanvas=document.createElement('canvas');
-  grainNoiseCanvas.width=canvas.width, grainNoiseCanvas.height=canvas.height;
-  grainNoiseCtx=grainNoiseCanvas.getContext('2d');
-  let d=grainNoiseCtx.createImageData(canvas.width,canvas.height);
-  for(let i=0;i<d.data.length;i+=4){let v=Math.random()*255;d.data[i]=d.data[i+1]=d.data[i+2]=v;d.data[i+3]=255;}
-  grainNoiseCtx.putImageData(d,0,0);
-}
-function resizeCanvas(){
-  let size=Math.floor(window.innerHeight*.8);
-  canvas.width=canvas.height=size;ctx=canvas.getContext('2d');ctxRead=canvas.getContext('2d',{willReadFrequently:true});createGrainNoise();
-}
-window.addEventListener('resize',resizeCanvas);resizeCanvas();
-function loadImage(url){return new Promise((res,rej)=>{let img=new Image();img.crossOrigin="Anonymous";img.onload=()=>res(img);img.onerror=rej;img.src=url;});}
-// ---- Effects Library ---- //
-const Effects={
-  fadeIn({duration},draw,done){let t0=performance.now();function a(now){let p=clamp((now-t0)/duration);ctx.save();ctx.globalAlpha=p;draw();ctx.restore();p<1?requestAnimationFrame(a):done&&done();}requestAnimationFrame(a);},
-  pixelateIn({duration,from,to},draw,done){let t0=performance.now();function a(now){let p=clamp((now-t0)/duration),px=Math.round(lerp(from,to,p));draw({pixelate:px});p<1?requestAnimationFrame(a):done&&done();}requestAnimationFrame(a);},
-  colorSweepIn({duration, fwd=true}, draw, done) {
-    let t0 = performance.now();
-    function a(now) {
-        let p = clamp((now - t0) / duration);
-        colourSweepBrightnessEffects[fwd ? 'sweepBrightFwd' : 'sweepBrightRev'](ctx, canvas, image, p);
-        if (p < 1) requestAnimationFrame(a);
-        else done && done();
-    }
-    requestAnimationFrame(a);
-  },
-  scanlines({ active = 1, opacity = .2, speed = 1, lineHeightPx = 2 }, draw) { // Added lineHeightPx with default 2
-    // The 'draw' callback is expected to draw the base image content first.
-    // The original scanlines implementation called draw() at the start.
-    // If 'draw' is meant to be the base image drawing function, it should be called before applying the effect.
-    // If 'draw' is a post-effect callback (like 'done'), then the base image needs to be drawn by other means.
-    // Assuming 'draw' is the base drawing function:
-    draw(); // Draw the underlying content first
-
-    if (!active) return;
-    ctx.save();
-    ctx.globalAlpha = opacity;
-    let t = performance.now() * .001 * speed;
-    for (let y = 0; y < canvas.height; y += 4) { // Lines start at 4px intervals
-      ctx.fillStyle = y % 8 < 4 ? "#000" : "#fff1"; // Alternating color every two lines
-      // Use lineHeightPx for the height of the rectangle (thickness of the scanline)
-      ctx.fillRect(0, y + Math.sin(t + y / 60) * 2, canvas.width, lineHeightPx);
-    }
-    ctx.restore();
-  },
-  grain({active=1,intensity=.1},draw){draw();if(!active)return;ctx.save();ctx.globalAlpha=clamp(intensity,0,1);ctx.drawImage(grainNoiseCanvas,0,0,canvas.width,canvas.height);ctx.restore();},
-  blur({active=1,value=3},draw){if(active){ctx.save();ctx.filter=`blur(${value}px)`;draw();ctx.filter="none";ctx.restore();}else draw();},
-  vignette({active=1,strength=.3,color="#000"},draw){draw();if(!active)return;let g=ctx.createRadialGradient(canvas.width/2,canvas.height/2,canvas.width*.45,canvas.width/2,canvas.height/2,canvas.width/2);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,hexToRGBA(color,clamp(strength)));ctx.save();ctx.globalAlpha=strength;ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);ctx.restore();}
-};
-function hexToRGBA(hex,a=1){let r=0,g=0,b=0;if(hex.length===4){r=parseInt(hex[1]+hex[1],16);g=parseInt(hex[2]+hex[2],16);b=parseInt(hex[3]+hex[3],16);}else if(hex.length===7){r=parseInt(hex[1]+hex[2],16);g=parseInt(hex[3]+hex[4],16);b=parseInt(hex[5]+hex[6],16);}return `rgba(${r},${g},${b},${a})`;}
-
-const colourSweepBrightnessEffects = (() => { /* ... (unchanged) ... */ 
-  const _state = new WeakMap();
-  function _init(cv, img) {
-    const { width: w, height: h } = cv;
-    const off = document.createElement('canvas').getContext('2d');
-    off.canvas.width = w; off.canvas.height = h;
-    off.drawImage(img, 0, 0, w, h);
-    let src;
-    try { src = off.getImageData(0, 0, w, h); }
-    catch { return { src: null }; }
-    const N = w * h, bright = new Float32Array(N), d = src.data;
-    for (let i = 0; i < N; i++) {
-      const p = i << 2;
-      bright[i] = Math.min((d[p] + d[p + 1] + d[p + 2]) / 3 + Math.random(), 255);
-    }
-    return { src, bright, out: new ImageData(new Uint8ClampedArray(d.length), w, h), lastP: -1 };
-  }
-  function _get(cv, img) {
-    let s = _state.get(cv);
-    if (!s || s.img !== img) { s = { img, ..._init(cv, img) }; _state.set(cv, s); }
-    return s;
-  }
-  function _draw(ctx, cv, img, p, fwd) {
-    const s = _get(cv, img); if (!s.src) { ctx.clearRect(0, 0, cv.width, cv.height); ctx.fillStyle = '#555'; ctx.fillRect(0, 0, cv.width, cv.height); return; }
-    if (p === s.lastP) return; s.lastP = p;
-    const thr = (fwd ? p : 1 - p) * 255, { src, bright, out } = s, S = src.data, O = out.data;
-    for (let i = 0; i < bright.length; i++) {
-      const q = i << 2;
-      if (bright[i] <= thr) { O[q] = S[q]; O[q+1] = S[q+1]; O[q+2] = S[q+2]; O[q+3] = S[q+3]; }
-      else O[q+3] = 0;
-    }
-    ctx.putImageData(out, 0, 0);
-  }
-  return {
-    sweepBrightFwd: (ctx, cv, img, p) => _draw(ctx, cv, img, p, true),
-    sweepBrightRev: (ctx, cv, img, p) => _draw(ctx, cv, img, p, false)
+    steps.push({enabled:false,duration:4*BAR_MS});
+    return steps;
   };
-})();
-
-// --- Draw pipeline and overlay functions unchanged (drawBase, drawTextOverlay, etc.) ---
-
-// --- (Effect Test, DrawScreen, UI, etc. unchanged) ---
-
-// ========== Bar-synced "auto mode" ========== //
-let barFXMode = false, fxStartTime = null;
-const SEED = "example-seed", rng = makeRNG(hashSeed(SEED));
-const grainConfig = createGrainConfig(rng, EFFECT_WEIGHTS.grain);
-const scanlineConfig = createScanlineConfig(rng, EFFECT_WEIGHTS.scanline);
-const vignetteConfig = createVignetteConfig(rng, EFFECT_WEIGHTS.vignette);
-
-function runBarSyncedFX() {
-  if (!imageLoaded) return;
-  barFXMode = true; fxStartTime = performance.now();
-
-  function loop() {
-    if (!barFXMode) return;
-    let t = performance.now() - fxStartTime;
-    // let bars = t / BAR_MS, bar = Math.floor(bars) + 1, seconds = t / 1000; // Original timing vars, if needed elsewhere
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawBase(); // Assuming drawBase draws the main image
-
-    // Grain Effect
-    const grainStep = grainConfig.enabled ? findStepAtTime(grainConfig.steps, t) : { enabled: false };
-    Effects.grain({
-      active: grainStep.enabled ? 1 : 0,
-      intensity: grainStep.opacity ?? (grainConfig.enabled ? grainConfig.defaultOpacity : 0.15)
-    }, () => { }); // Empty callback as Effects.grain calls draw() internally
-
-    // Scanline Effect
-    let slParams = {
-      active: 0,
-      opacity: FX_CONFIG.sequence.find(s => s[0] === 'scanlines')[1].opacity, // Default from FX_CONFIG
-      speed: FX_CONFIG.sequence.find(s => s[0] === 'scanlines')[1].speed,
-      lineHeightPx: FX_CONFIG.sequence.find(s => s[0] === 'scanlines')[1].lineHeightPx
+  const createGrainConfig=(rng,weight=1)=>(weight<1&&rng()>weight)?{enabled:false}:{enabled:true,steps:buildStepsWithPeaks(()=>({enabled:true,opacity:randFloat(rng,.05,.4),frameIntervalMs:randInt(rng,30,60)}),()=>({enabled:true,opacity:randFloat(rng,.6,1),frameIntervalMs:randInt(rng,5,20)}),rng),defaultOpacity:randFloat(rng,.05,.4),defaultFrameIntervalMs:randInt(rng,30,60)};
+  const createScanlineConfig=(rng,weight=1)=>(weight<1&&rng()>weight)?{enabled:false}:{enabled:true,steps:buildStepsWithPeaks(()=>({enabled:true,opacity:randFloat(rng,.05,.3),lineHeightPx:randInt(rng,40,150),speed:randInt(rng,15,40)}),()=>({enabled:true,opacity:randFloat(rng,.6,.9),lineHeightPx:randInt(rng,1,6),speed:randInt(rng,2,10)}),rng),defaultOpacity:randFloat(rng,.05,.3),defaultLineHeightPx:randInt(rng,40,150),defaultSpeed:randInt(rng,15,40)};
+  const createVignetteConfig=(rng,weight=1)=>(weight<1&&rng()>weight)?{enabled:false}:{enabled:true,steps:buildStepsWithPeaks(()=>{let c=randInt(rng,0,15).toString(16);return{enabled:true,strength:randFloat(rng,.1,.4),color:'#'+c.repeat(3)};},()=>({enabled:true,strength:randFloat(rng,.6,1),color:'#000'}),rng),defaultStrength:randFloat(rng,.1,.4),defaultColor:'#000'};
+  const findStepAtTime=(steps,t)=>{let acc=0;for(const s of steps){acc+=s.duration;if(t<acc)return s;}return steps.at(-1);};
+  
+  // ===== SHARED DOM/FX HELPERS =====
+  const H={
+    createOverlay:({tag='canvas',id,z,blend,parent})=>{
+      const el=document.createElement(tag);if(id)el.id=id;Object.assign(el.style,{position:'absolute',pointerEvents:'none',zIndex:z, mixBlendMode:blend});
+      (parent||document.getElementById('fx-canvas')?.parentElement||document.body).appendChild(el);return el;
+    },
+    getZ:n=>n==='grain'?50:1,
+    bindResize:(ov, tgt=document.getElementById('fx-canvas'))=>{
+      if(!tgt||!tgt.parentElement)return()=>{};
+      const upd=()=>{const r1=tgt.getBoundingClientRect(),r2=tgt.parentElement.getBoundingClientRect();Object.assign(ov.style,{left:r1.left-r2.left+'px',top:r1.top-r2.top+'px'});if(ov.width!==tgt.width)ov.width=tgt.width;if(ov.height!==tgt.height)ov.height=tgt.height;};
+      const ro=new ResizeObserver(()=>upd());ro.observe(tgt);upd();window.addEventListener('resize',upd);return()=>{ro.unobserve(tgt);window.removeEventListener('resize',upd);};
+    },
+    destroyOverlay:el=>el?.remove()
+  };
+  
+  // ===== GRAIN EFFECT MODULE =====
+  const GrainModule=(()=>{
+    let overlay,ctx,raf,active=0,stopResize,frameInt=50,lastDraw=0;
+    const draw=()=>{
+      if(!overlay||!ctx||!active||!overlay.style.opacity||+overlay.style.opacity===0)return;
+      const{width:w,height:h}=overlay;if(!w||!h)return;
+      const img=ctx.createImageData(w,h),buf=new Uint32Array(img.data.buffer);
+      for(let i=0;i<buf.length;i++){const v=Math.random()*255;buf[i]=255<<24|v<<16|v<<8|v;}
+      ctx.putImageData(img,0,0);
+    },loop=()=>{
+      if(!active)return;raf=requestAnimationFrame(loop);
+      const now=performance.now(),interval=frameInt??50;
+      if(now-lastDraw>interval){lastDraw=now-((now-lastDraw)%interval);draw();}
+    },set=(p)=>{
+      if(!overlay&&p.enabled)return;
+      if(overlay)overlay.style.opacity=p.enabled?(p.opacity??0):'0';
+      frameInt=p.frameIntervalMs??50;
     };
-
-    if (scanlineConfig.enabled) {
-      const currentScanlineStep = findStepAtTime(scanlineConfig.steps, t);
-      slParams.active = currentScanlineStep.enabled ? 1 : 0;
-      // Use ?? to correctly handle 0 as a valid value if it could be
-      slParams.opacity = currentScanlineStep.opacity ?? scanlineConfig.defaultOpacity;
-      slParams.speed = currentScanlineStep.speed ?? scanlineConfig.defaultSpeed;
-      slParams.lineHeightPx = currentScanlineStep.lineHeightPx ?? scanlineConfig.defaultLineHeightPx;
-    }
-    // The Effects.scanlines function now calls draw() internally first.
-    // So, we don't need to pass a draw function as the second argument if it's only for 'done'
-    // However, your Effects functions seem to take 'draw' as the base drawing function and 'done' as an optional third.
-    // The original call Effects.scanlines(..., ()=>{}); suggests the second arg is a 'draw' like function.
-    // If Effects.scanlines itself now calls `draw()` (which is `drawBase` in this context),
-    // and it doesn't need a 'done' callback for continuous animation, the second arg to scanlines can be an empty func or omitted if not used.
-    // Given the EFFECT_TESTS structure `apply(v, drawBase, ex)`, `drawBase` is passed.
-    // For runBarSyncedFX, Effects.scanlines is called, and drawBase() has already been called.
-    // So the `draw` param inside Effects.scanlines could be redundant if drawBase() is global.
-    // Let's assume Effects.scanlines's `draw` param is for drawing the base image.
-    // Since `drawBase()` is already called, we can pass an empty function to satisfy the signature if it's always expected.
-    // However, the updated Effects.scanlines calls its 'draw' param. If drawBase is already called, this is a double draw.
-    // Let's refine: Effects.scanlines should *not* call draw() internally if drawBase() is already handled outside.
-    // Or, it should take the base drawing as a parameter.
-
-    // Option A: Effects.scanlines expects 'draw' to be the base draw function.
-    // Effects.scanlines(slParams, drawBase); // This would mean drawBase() is called twice.
-
-    // Option B: Effects.scanlines is an overlay, base is already drawn.
-    // Modify Effects.scanlines to NOT call draw() internally.
-    // --- In Effects.scanlines ---
-    // scanlines({ active = 1, opacity = .2, speed = 1, lineHeightPx = 2 } /* REMOVE DRAW PARAM or make it optional and don't call it */) {
-    //   // NO draw(); call here
-    //   if (!active) return; ...
-    // }
-    // --- Then in runBarSyncedFX ---
-    // Effects.scanlines(slParams); // No second arg needed or an empty one if it expects 'done'.
-
-    // Let's stick to the pattern in your EFFECT_TESTS where `apply` calls `draw()` then the effect.
-    // This implies `Effects.scanlines` applies itself *after* `draw()` has been called.
-    // So `Effects.scanlines` should NOT call `draw()` internally.
-
-    // Corrected approach:
-    // 1. drawBase() is called once.
-    // 2. Effects.scanlines only draws the scanlines on top.
-    // So, modify `Effects.scanlines` to not call `draw()` at its beginning.
-    // (See revised `Effects.scanlines` in section 5 below)
-
-    Effects.scanlines(slParams, () => {}); // Pass empty fn if it expects a callback it doesn't use for this continuous mode.
-
-
-    // Vignette Effect (example, assuming similar structure)
-    const vignetteStep = vignetteConfig.enabled ? findStepAtTime(vignetteConfig.steps, t) : { enabled: false };
-    Effects.vignette({
-      active: vignetteStep.enabled ? 1 : 0,
-      strength: vignetteStep.strength ?? (vignetteConfig.enabled ? vignetteConfig.defaultStrength : 0.35), // Assuming defaultStrength exists
-      color: vignetteStep.color ?? (vignetteConfig.enabled ? vignetteConfig.defaultColor : "#000")   // Assuming defaultColor exists
-    }, () => { });
-
-    requestAnimationFrame(loop);
+    return{
+      start:(tgt,init)=>{
+        if(active)return set(init);
+        overlay=H.createOverlay({tag:'canvas',id:'grainCanvas',z:H.getZ('grain'),blend:'overlay'});
+        ctx=overlay.getContext('2d',{willReadFrequently:true});
+        stopResize=H.bindResize(overlay,tgt);
+        active=1;set(init);lastDraw=performance.now();loop();
+      },
+      stop:()=>{if(!active)return;active=0;cancelAnimationFrame(raf);raf=undefined;stopResize?.();stopResize=null;H.destroyOverlay(overlay);overlay=ctx=null;frameInt=50;},
+      update:set,
+      isActive:()=>active
+    };
+  })();
+  
+  // ===== MAIN EFFECT/APP CODE =====
+  const COLORS=["#0ff","#f0f","#ff0","#fff"],canvas=document.getElementById('fx-canvas');
+  let ctx=canvas.getContext('2d'),ctxRead,image,showText=1,textAlpha=1,textScale=1,imageLoaded=0,stopNormalEffects,normalEffectsRunning=0,testMode=0,testRunning=0,testStop=0;
+  const FX_CONFIG={sequence:[['fadeIn',{duration:2e3}],['pixelateIn',{duration:1e3,from:32,to:1}],['colorSweepIn',{duration:1400,fwd:!0}],['scanlines',{active:1,opacity:.18,speed:2,lineHeightPx:2}],['grain',{active:1,opacity:.15,frameIntervalMs:50}],['blur',{active:1,value:4}],['vignette',{active:1,strength:.35}]],startText:{text:"Click to start",font:"2.2vw 'Space Mono', monospace",color:"#fff",fadeDuration:1e3,shrinkDuration:1e3}};
+  const lerp=(a,b,t)=>a+(b-a)*t,clamp=(x,a=0,b=1)=>Math.max(a,Math.min(x,b)),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  function resizeCanvas(){let s=Math.floor(window.innerHeight*.8);if(canvas.width!==s||canvas.height!==s){canvas.width=canvas.height=s;}ctx=canvas.getContext('2d');ctxRead=canvas.getContext('2d',{willReadFrequently:!0});}
+  window.addEventListener('resize',resizeCanvas);
+  const loadImage=u=>new Promise((res,rej)=>{let i=new Image();i.crossOrigin="Anonymous";i.onload=()=>res(i);i.onerror=rej;i.src=u;});
+  const Effects={
+    fadeIn({duration},draw,done){let t0=performance.now();(function a(now){let p=clamp((now-t0)/duration);ctx.save();ctx.globalAlpha=p;draw();ctx.restore();p<1?requestAnimationFrame(a):done&&done();})(performance.now());},
+    pixelateIn({duration,from,to},draw,done){let t0=performance.now();(function a(now){let p=clamp((now-t0)/duration),px=Math.round(lerp(from,to,p));draw({pixelate:px});p<1?requestAnimationFrame(a):done&&done();})(performance.now());},
+    colorSweepIn({duration,fwd=!0},draw,done){let t0=performance.now();(function a(now){let p=clamp((now-t0)/duration);colourSweepBrightnessEffects[fwd?'sweepBrightFwd':'sweepBrightRev'](ctx,canvas,image,p);p<1?requestAnimationFrame(a):done&&done();})(performance.now());},
+    scanlines({active=1,opacity=.2,speed=1,lineHeightPx=2}){if(!active)return;ctx.save();ctx.globalAlpha=opacity;let t=performance.now()*.001*speed;for(let y=0;y<canvas.height;y+=4){ctx.fillStyle=y%8<4?"#000":"#fff1";ctx.fillRect(0,y+Math.sin(t+y/60)*2,canvas.width,lineHeightPx);}ctx.restore();},
+    grain:({active=1,intensity,opacity,frameIntervalMs})=>active?GrainModule.start(document.getElementById('fx-canvas'),{opacity:intensity??opacity??.15,frameIntervalMs:frameIntervalMs??50,enabled:!0}):GrainModule.isActive()&&GrainModule.stop(),
+    blur({active=1,value=3},draw){active?(ctx.save(),ctx.filter=`blur(${value}px)`,draw(),ctx.filter="none",ctx.restore()):draw();},
+    vignette({active=1,strength=.3,color="#000"}){if(!active)return;let g=ctx.createRadialGradient(canvas.width/2,canvas.height/2,canvas.width*.45,canvas.width/2,canvas.height/2,canvas.width/2);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,hexToRGBA(color,clamp(strength)));ctx.save();ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);ctx.restore();}
+  };
+  function hexToRGBA(hex,a=1){let r=0,g=0,b=0;if(hex.length===4){r=parseInt(hex[1]+hex[1],16);g=parseInt(hex[2]+hex[2],16);b=parseInt(hex[3]+hex[3],16);}else if(hex.length===7){r=parseInt(hex[1]+hex[2],16);g=parseInt(hex[3]+hex[4],16);b=parseInt(hex[5]+hex[6],16);}return `rgba(${r},${g},${b},${a})`;}
+  const colourSweepBrightnessEffects=(()=>{const _state=new WeakMap(),_init=(cv,img)=>{const{width:w,height:h}=cv,off=document.createElement('canvas').getContext('2d');off.canvas.width=w;off.canvas.height=h;if(!img||!img.width||!img.height)return{src:null};off.drawImage(img,0,0,w,h);let src;try{src=off.getImageData(0,0,w,h);}catch(e){console.error("Error getting image data for sweep:",e);return{src:null};}const N=w*h,bright=new Float32Array(N),d=src.data;for(let i=0;i<N;i++){const p=i<<2;bright[i]=Math.min((d[p]+d[p+1]+d[p+2])/3+Math.random(),255);}return{src,bright,out:new ImageData(new Uint8ClampedArray(d.length),w,h),lastP:-1,imgRef:img};},_get=(cv,img)=>{let s=_state.get(cv);if(!s||s.imgRef!==img||s.src===null){s=_init(cv,img);_state.set(cv,s);}return s;},_draw=(ctx,cv,img,p,fwd)=>{const s=_get(cv,img);if(!s.src){ctx.clearRect(0,0,cv.width,cv.height);ctx.fillStyle='#555';ctx.fillRect(0,0,cv.width,cv.height);return;}if(p===s.lastP&&s.out){ctx.putImageData(s.out,0,0);return;}s.lastP=p;const thr=(fwd?p:1-p)*255,{src,bright,out}=s,S=src.data,O=out.data;for(let i=0;i<bright.length;i++){const q=i<<2;if(bright[i]<=thr){O[q]=S[q];O[q+1]=S[q+1];O[q+2]=S[q+2];O[q+3]=S[q+3];}else{O[q]=O[q+1]=O[q+2]=0;O[q+3]=0;}}ctx.putImageData(out,0,0);};return{sweepBrightFwd:(ctx,cv,img,p)=>_draw(ctx,cv,img,p,!0),sweepBrightRev:(ctx,cv,img,p)=>_draw(ctx,cv,img,p,!1)};})();
+  let barFXMode=0,fxStartTime=null,SEED="example-seed",rng=makeRNG(hashSeed(SEED)),grainConfig=createGrainConfig(rng,EFFECT_WEIGHTS.grain),scanlineConfig=createScanlineConfig(rng,EFFECT_WEIGHTS.scanline),vignetteConfig=createVignetteConfig(rng,EFFECT_WEIGHTS.vignette);
+  
+  function runBarSyncedFX(){
+    if(!imageLoaded)return;barFXMode=1;fxStartTime=performance.now();
+    (function loop(){
+      if(!barFXMode){GrainModule.isActive()&&GrainModule.stop();return;}
+      let t=performance.now()-fxStartTime;
+      ctx.clearRect(0,0,canvas.width,canvas.height);drawBase();
+      const grainStep=grainConfig.enabled?findStepAtTime(grainConfig.steps,t):{enabled:0};
+      Effects.grain({active:grainStep.enabled?1:0,opacity:grainStep.opacity??grainConfig.defaultOpacity,frameIntervalMs:grainStep.frameIntervalMs??grainConfig.defaultFrameIntervalMs});
+      let slParams={active:0,opacity:.18,speed:2,lineHeightPx:2};
+      if(scanlineConfig.enabled){const step=findStepAtTime(scanlineConfig.steps,t);Object.assign(slParams,{active:step.enabled?1:0,opacity:step.opacity??scanlineConfig.defaultOpacity,speed:step.speed??scanlineConfig.defaultSpeed,lineHeightPx:step.lineHeightPx??scanlineConfig.defaultLineHeightPx});}
+      Effects.scanlines(slParams);
+      const vigStep=vignetteConfig.enabled?findStepAtTime(vignetteConfig.steps,t):{enabled:0};
+      Effects.vignette({active:vigStep.enabled?1:0,strength:vigStep.strength??vignetteConfig.defaultStrength,color:vigStep.color??vignetteConfig.defaultColor});
+      requestAnimationFrame(loop);
+    })();
   }
-  loop();
-}
-
-function drawBase(params={}) {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  if(!image) return;
-  let pixelate = params.pixelate || 1;
-  let size = pixelate > 1 ? Math.ceil(canvas.width / pixelate) : canvas.width;
-  ctx.imageSmoothingEnabled = pixelate === 1;
-  if(pixelate > 1) {
-    ctx.drawImage(image, 0, 0, image.width, image.height, 0, 0, size, size);
-    ctx.drawImage(canvas, 0, 0, size, size, 0, 0, canvas.width, canvas.height);
-  } else {
-    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-  }
-}
-
-function drawTextOverlay(txt, font, color) {
-  if (!showText || !txt) return;
-  ctx.save();
-  ctx.globalAlpha = textAlpha;
-  ctx.font = font;
-  ctx.fillStyle = color;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.setTransform(textScale, 0, 0, textScale, canvas.width / 2, canvas.height / 2);
-  ctx.fillText(txt, 0, 0);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.restore();
-}
-
-/// --- Effect Auto-Test Config --- (snippet, assuming EFFECT_TESTS is defined elsewhere or this replaces it)
-const EFFECT_TESTS = [ // Renamed to avoid redeclaration if this is additive
-  { name: 'fadeIn', params: [{ param: 'opacity', min: 0, max: 1, apply: (v, draw) => { ctx.save(); ctx.globalAlpha = v; draw(); ctx.restore(); } }] },
-  { name: 'pixelate', params: [{ param: 'pixelate', min: 1, max: 512, apply: (v, draw) => draw({ pixelate: Math.round(v) }) }] },
-  { name: 'colorSweep', params: [
-    { param: 'colorSweep', min: 0, max: 1, apply: (v, draw, ex) => colourSweepBrightnessEffects.sweepBrightFwd(ctx, canvas, image, v) },
-  ]},
-  {
-    name: 'scanlines', params: [
-      // Existing opacity test, now includes a default lineHeightPx
-      { param: 'opacity', min: 0, max: .5, apply: (v, draw) => { draw(); Effects.scanlines({ active: 1, opacity: v, speed: 2, lineHeightPx: 2 }, () => {}); } },
-      // Existing speed test, now includes a default lineHeightPx
-      { param: 'speed', min: .5, max: 100, apply: (v, draw) => { draw(); Effects.scanlines({ active: 1, opacity: .18, speed: v, lineHeightPx: 2 }, () => {}); } },
-      // New test for lineHeightPx
-      { param: 'lineHeightPx', min: 1, max: 8, apply: (v, draw) => { draw(); Effects.scanlines({ active: 1, opacity: .18, speed: 2, lineHeightPx: Math.round(v) }, () => {}); } }
-    ]
-  },
-  { name: 'grain', params: [{ param: 'intensity', min: 0, max: 5, apply: (v, draw) => { draw(); Effects.grain({ active: 1, intensity: v }, () => {}); } }] }, // Assuming grain's apply also calls draw first
-  { name: 'blur', params: [{ param: 'value', min: 0, max: 100, apply: (v, draw) => { Effects.blur({ active: 1, value: v }, draw); } }] }, // Blur's signature is different, it takes draw as the effect applies over it
-  {
-    name: 'vignette', params: [
-      { param: 'strength', min: 0, max: 5, apply: (v, draw, ex) => { draw(); Effects.vignette({ active: 1, strength: v, color: COLORS[ex.colorIndex % COLORS.length] }, () => {}); } },
-      { param: 'colorIndex', min: 0, max: COLORS.length - 1, apply: (v, draw) => { draw(); Effects.vignette({ active: 1, strength: .5, color: COLORS[Math.round(v) % COLORS.length] }, () => {}); } }
-    ]
-  }
-  // ... any other effects
-];
-
-// --- Auto-Test Logic ---
-async function runEffectAutoTest() {
-  if (!image) return;
-  testRunning = 1;
-  testStop = 0;
-  let effectIdx = 0;
-
-  while (testMode && !testStop) {
-    let eff = EFFECT_TESTS[effectIdx];
-    for (let paramIdx = 0; paramIdx < eff.params.length; paramIdx++) {
-      if (testStop) break; // Allow stopping mid-parameters
-
-      let { param, min, max, apply } = eff.params[paramIdx];
-      const holdDuration = 1500; // Time to hold at the 'min' value after the full cycle
-      const animationDurationPerDirection = 2000; // Time for min-to-max and max-to-min each
-
-      console.log(`\n--- Testing ${eff.name} param: ${param} ---`);
-
-      await new Promise(resolvePromise => {
-        let startTime = performance.now();
-        let direction = 1; // 1 for min -> max, -1 for max -> min
-
-        function step(currentTime) {
-          if (!testMode || testStop) {
-            return resolvePromise();
+  function drawBase(p={}){ctx.clearRect(0,0,canvas.width,canvas.height);if(!image||!image.width||!image.height){ctx.fillStyle='#222';ctx.fillRect(0,0,canvas.width,canvas.height);return;}let px=p.pixelate||1,size=px>1?Math.ceil(canvas.width/px):canvas.width;ctx.imageSmoothingEnabled=px===1;if(px>1){ctx.drawImage(image,0,0,image.width,image.height,0,0,size,size);ctx.drawImage(canvas,0,0,size,size,0,0,canvas.width,canvas.height);}else ctx.drawImage(image,0,0,canvas.width,canvas.height);}
+  const EFFECT_TESTS=[{name:'fadeIn',params:[{param:'opacity',min:0,max:1,apply:(v,draw)=>{ctx.save();ctx.globalAlpha=v;draw();ctx.restore();}}]},{name:'pixelate',params:[{param:'pixelate',min:1,max:64,apply:(v,draw)=>draw({pixelate:Math.round(v)})}]},{name:'colorSweep',params:[{param:'colorSweep',min:0,max:1,apply:(v,draw)=>{draw();colourSweepBrightnessEffects.sweepBrightFwd(ctx,canvas,image,v);}}]},{name:'scanlines',params:[{param:'opacity',min:0,max:.5,apply:(v,draw)=>{draw();Effects.scanlines({active:1,opacity:v,speed:2,lineHeightPx:2});}},{param:'speed',min:.5,max:100,apply:(v,draw)=>{draw();Effects.scanlines({active:1,opacity:.18,speed:v,lineHeightPx:2});}},{param:'lineHeightPx',min:1,max:8,apply:(v,draw)=>{draw();Effects.scanlines({active:1,opacity:.18,speed:2,lineHeightPx:Math.round(v)});}}]},{name:'grain',params:[{param:'opacity',min:0,max:1,apply:(v,draw)=>{draw();Effects.grain({active:1,opacity:v});}},{param:'frameIntervalMs',min:5,max:200,apply:(v,draw)=>{draw();Effects.grain({active:1,frameIntervalMs:Math.round(v),opacity:.2});}}]},{name:'blur',params:[{param:'value',min:0,max:20,apply:(v,draw)=>{Effects.blur({active:1,value:v},draw);} }]},{name:'vignette',params:[{param:'strength',min:0,max:1,apply:(v,draw,ex)=>{draw();Effects.vignette({active:1,strength:v,color:COLORS[(ex.colorIndex??0)%COLORS.length]});}},{param:'colorIndex',min:0,max:COLORS.length-1,apply:(v,draw)=>{draw();Effects.vignette({active:1,strength:.5,color:COLORS[Math.round(v)%COLORS.length]});}}]}];
+  async function runEffectAutoTest(){
+    if(!imageLoaded||!image){console.log("AutoTest: Image not loaded.");return;}
+    if(barFXMode){console.log("AutoTest: Bar FX mode active, stopping it first.");barFXMode=0;}
+    if(normalEffectsRunning){console.log("AutoTest: Normal effects active, stopping them first.");stopNormalEffects?.();normalEffectsRunning=0;}
+    GrainModule.isActive()&&GrainModule.stop();
+    testRunning=1;testStop=0;let effectIdx=0;
+    while(testMode&&!testStop){let eff=EFFECT_TESTS[effectIdx];for(let paramIdx=0;paramIdx<eff.params.length;paramIdx++){if(testStop)break;let{param,min,max,apply}=eff.params[paramIdx],hold=1500,dur=2000;console.log(`\n--- Testing ${eff.name} param: ${param} ---`);
+      await new Promise(res=>{
+        let t0=performance.now(),dir=1,ex={};
+        function step(now){
+          if(!testMode||testStop){GrainModule.isActive()&&GrainModule.stop();return res();}
+          let t=(now-t0)/dur,val=dir===1?lerp(min,max,Math.min(t,1)):lerp(max,min,Math.min(t,1));
+          if(param==='colorIndex'&&eff.name==='vignette')val=Math.round(val),ex.colorIndex=val;
+          if(t>=1){
+            apply(val,drawBase,ex);drawInfoOverlay(eff.name,param,val);showText&&FX_CONFIG.startText&&drawTextOverlay(FX_CONFIG.startText.text,FX_CONFIG.startText.font,FX_CONFIG.startText.color);
+            if(dir===1){dir=-1;t0=now;requestAnimationFrame(step);}
+            else{setTimeout(res,hold);}
+            return;
           }
-
-          let elapsedTime = currentTime - startTime;
-          let t = elapsedTime / animationDurationPerDirection; // Normalized time (0 to 1) for current direction
-
-          // This 'ex' object is created fresh in each step, as per original structure.
-          // It's primarily relevant if 'param' is 'colorIndex' for the vignette effect's 'strength' parameter,
-          // but the original logic made ex.colorIndex only available if the *current* param being tested *is* 'colorIndex'.
-          // This means vignette.strength's apply function might receive an empty 'ex'.
-          // This behavior is preserved.
-          let ex = {};
-          if (param === 'colorIndex') {
-              // Calculate raw animated value for ex.colorIndex if this param IS colorIndex
-              // This uses a t clamped to [0,1] to avoid overshooting during the lerp for ex
-              let rawExValue = direction === 1 ? lerp(min, max, Math.min(t, 1.0)) : lerp(max, min, Math.min(t, 1.0));
-              ex.colorIndex = Math.round(rawExValue);
-          }
-
-          if (t >= 1.0) { // Current direction (min->max OR max->min) is complete
-            if (direction === 1) { // Finished min -> max
-              // Apply the MAX value explicitly to ensure it hits the endpoint
-              let finalValue = (param === 'colorIndex') ? Math.round(max) : max;
-              // If this is colorIndex param, ensure ex.colorIndex is also set to max for this final apply
-              if (param === 'colorIndex') ex.colorIndex = finalValue;
-
-              apply(finalValue, drawBase, ex);
-              drawInfoOverlay(eff.name, param, finalValue);
-              if (showText) drawTextOverlay(FX_CONFIG.startText.text, FX_CONFIG.startText.font, FX_CONFIG.startText.color);
-
-              direction = -1;       // Switch direction to max -> min
-              startTime = currentTime; // Reset start time for the new direction
-              requestAnimationFrame(step); // Start max -> min animation
-              return;
-            } else { // direction === -1, finished max -> min
-              // Apply the MIN value explicitly to ensure it hits the endpoint
-              let finalValue = (param === 'colorIndex') ? Math.round(min) : min;
-              // If this is colorIndex param, ensure ex.colorIndex is also set to min for this final apply
-              if (param === 'colorIndex') ex.colorIndex = finalValue;
-              
-              apply(finalValue, drawBase, ex);
-              drawInfoOverlay(eff.name, param, finalValue);
-              if (showText) drawTextOverlay(FX_CONFIG.startText.text, FX_CONFIG.startText.font, FX_CONFIG.startText.color);
-
-              // Full min->max->min cycle is complete for this parameter
-              setTimeout(resolvePromise, holdDuration); // Hold at the 'min' value, then resolve
-              return;
-            }
-          }
-
-          // Animation is in progress for the current direction
-          let currentValue;
-          if (direction === 1) {
-            currentValue = lerp(min, max, t);
-          } else {
-            currentValue = lerp(max, min, t);
-          }
-
-          if (param === 'colorIndex') {
-            currentValue = Math.round(currentValue);
-            // ex.colorIndex was already set at the beginning of step if param === 'colorIndex'
-          }
-
-          apply(currentValue, drawBase, ex);
-          drawInfoOverlay(eff.name, param, currentValue);
-          if (showText) drawTextOverlay(FX_CONFIG.startText.text, FX_CONFIG.startText.font, FX_CONFIG.startText.color);
-          requestAnimationFrame(step);
+          apply(val,drawBase,ex);drawInfoOverlay(eff.name,param,val);showText&&FX_CONFIG.startText&&drawTextOverlay(FX_CONFIG.startText.text,FX_CONFIG.startText.font,FX_CONFIG.startText.color);requestAnimationFrame(step);
         }
         requestAnimationFrame(step);
       });
-
-      if (testStop) break; // Break from parameters loop if testStop was set
-    }
-    if (testStop) break; // Break from effects loop if testStop was set
-
-    effectIdx = (effectIdx + 1) % EFFECT_TESTS.length;
+      if(eff.name==='grain'&&GrainModule.isActive())GrainModule.stop();
+      if(testStop)break;
+    }effectIdx=(effectIdx+1)%EFFECT_TESTS.length;}
+    GrainModule.isActive()&&GrainModule.stop();testRunning=0;testStop=0;if(!testMode)drawScreen();
   }
-
-  testRunning = 0; // testStop might already be 1 or 0
-  testStop = 0;    // Reset stop flag
-  if (!testMode) { // If testMode was disabled during the test
-    drawScreen(); // Redraw a clean screen
+  function drawScreen(p={}){ctx.clearRect(0,0,canvas.width,canvas.height);drawBase(p);for(const[n,fxcfg]of FX_CONFIG.sequence.filter(e=>e[1]?.active||0)){n==='blur'?Effects[n](fxcfg,drawBase):Effects[n](fxcfg);}showText&&FX_CONFIG.startText&&drawTextOverlay(FX_CONFIG.startText.text,FX_CONFIG.startText.font,FX_CONFIG.startText.color);}
+  function drawTextOverlay(txt,font,color){if(!showText||!txt||!FX_CONFIG.startText)return;ctx.save();ctx.globalAlpha=textAlpha;ctx.font=font;ctx.fillStyle=color;ctx.textAlign="center";ctx.textBaseline="middle";ctx.setTransform(textScale,0,0,textScale,canvas.width/2,canvas.height/2);ctx.fillText(txt,0,0);ctx.setTransform(1,0,0,1,0,0);ctx.restore();}
+  async function hideTextOverlay(cfg){if(!cfg)return;let{fadeDuration,shrinkDuration}=cfg,t0=performance.now(),t1=t0+fadeDuration;function f(now){textAlpha=clamp(1-(now-t0)/fadeDuration);textScale=1;drawScreen();textAlpha>0?requestAnimationFrame(f):s(performance.now());}function s(now){textAlpha=0;textScale=clamp(1-(now-t1)/shrinkDuration,0,1);drawScreen();textScale>0?requestAnimationFrame(s):(showText=0,drawScreen());}requestAnimationFrame(f);}
+  function drawInfoOverlay(effect,param,value){ctx.save();ctx.globalAlpha=.9;ctx.font=`bold ${Math.max(canvas.height/26,18)}px monospace`;ctx.fillStyle="#fff";ctx.textAlign="left";ctx.textBaseline="top";ctx.shadowColor="#000";ctx.shadowBlur=6;ctx.fillText(`${effect} (${param}): ${typeof value=="number"?value.toFixed(3):value}`,20,20);ctx.restore();}
+  const testBtn=document.getElementById('test-btn');
+  (async function init(){
+    resizeCanvas();drawScreen();
+    canvas.addEventListener('click',async function(){
+      if(!imageLoaded)return;
+      if(testMode)testMode=0;
+      if(barFXMode)barFXMode=0;
+      if(normalEffectsRunning)stopNormalEffects?.(),normalEffectsRunning=0;
+      GrainModule.isActive()&&GrainModule.stop();
+      if(!image){
+        image=await loadImage(window.images[0]);imageLoaded=1;resizeCanvas();await sleep(100);showText=0;FX_CONFIG.startText&&await hideTextOverlay(FX_CONFIG.startText);runBarSyncedFX();
+      }else{
+        if(!barFXMode&&!GrainModule.isActive())runBarSyncedFX();
+        else drawScreen();
+        console.log('All FX stopped. Click again to start Bar FX.');
+      }
+      testBtn.style.display='';
+    });
+    testBtn.onclick=()=>{
+      if(!imageLoaded)return;
+      if(barFXMode)barFXMode=0;
+      if(normalEffectsRunning)stopNormalEffects?.(),normalEffectsRunning=0;
+      if(GrainModule.isActive()&&!testMode)GrainModule.stop();
+      if(testMode){testMode=0;console.log('Effect auto-test stopping...');}
+      else{testMode=1;testStop=0;runEffectAutoTest();console.log('Effect auto-test started.');}
+    };
+    image=await loadImage(window.images[0]);imageLoaded=1;resizeCanvas();await sleep(100);drawScreen();testBtn.style.display='';
+  })();
+  window.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='t'){if(!imageLoaded)return;testBtn.click();}});
+  function runEffects(seq){
+    console.log("Running initial effect sequence...");
+    for(const[n,p]of seq)if(typeof Effects[n]==="function"){n==='blur'?Effects[n](p,drawBase):['fadeIn','pixelateIn','colorSweepIn'].includes(n)?Effects[n](p,drawBase,()=>console.log(`${n} sequence step done.`)):Effects[n](p);}
+    return()=>{console.log("stopNormalEffects called.");GrainModule.isActive()&&GrainModule.stop();};
   }
-}
-
-// // --- Draw pipeline ---
-// function drawScreen(params={}) {
-//   ctx.clearRect(0,0,canvas.width,canvas.height); drawBase(params);
-//   for(const [n,fxcfg] of FX_CONFIG.sequence.filter(e=>e[1]?.active||0))if(['scanlines','grain','blur','vignette'].includes(n))Effects[n](fxcfg,()=>{});
-//   if(showText)drawTextOverlay(FX_CONFIG.startText.text,FX_CONFIG.startText.font,FX_CONFIG.startText.color);
-// }
-
-// --- UI & Startup ---
-const testBtn=document.getElementById('test-btn');
-(async function start(){
-  drawScreen();
-  canvas.addEventListener('click',async function(){
-    if(!imageLoaded)return;
-    if(normalEffectsRunning){stopNormalEffects&&stopNormalEffects();stopNormalEffects=0;normalEffectsRunning=0;testBtn.style.display='';drawScreen();console.log('Normal effects stopped.');}
-    else{
-      if(testMode)testMode=testStop=testRunning=0;
-      if(!image){image=await loadImage(window.images[0]);imageLoaded=1;await sleep(200);showText=0;await hideTextOverlay(FX_CONFIG.startText);}
-      stopNormalEffects=runEffects(FX_CONFIG.sequence);normalEffectsRunning=1;testBtn.style.display='';console.log('Normal effects started.');
-    }
-  });
-  testBtn.style.display='none';
-  image=await loadImage(window.images[0]);imageLoaded=1;await sleep(200);drawScreen();
-})();
-testBtn.onclick=()=>{
-  if(!imageLoaded)return;
-  if(testMode){testMode=testStop=testRunning=0;testBtn.style.display='';drawScreen();console.log('Effect auto-test stopped.');}
-  else{stopNormalEffects&&stopNormalEffects();stopNormalEffects=0;normalEffectsRunning=0;testMode=1;testStop=0;testBtn.style.display='';runEffectAutoTest();console.log('Effect auto-test started.');}
-};
-window.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='t'){if(!imageLoaded)return;testBtn.click();}});
-
-
-function drawScreen(params={}) {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawBase(params);
-  for(const [n,fxcfg] of FX_CONFIG.sequence.filter(e=>e[1]?.active||0))
-    if(['scanlines','grain','blur','vignette'].includes(n))
-      Effects[n](fxcfg,()=>{});
-  if(showText)
-    drawTextOverlay(FX_CONFIG.startText.text,FX_CONFIG.startText.font,FX_CONFIG.startText.color);
-}
-
-// --- Draw overlays and info ---
-function drawTextOverlay(txt,font,color){if(!showText||!txt)return;ctx.save();ctx.globalAlpha=textAlpha;ctx.font=font;ctx.fillStyle=color;ctx.textAlign="center";ctx.textBaseline="middle";ctx.setTransform(textScale,0,0,textScale,canvas.width/2,canvas.height/2);ctx.fillText(txt,0,0);ctx.setTransform(1,0,0,1,0,0);ctx.restore();}
-async function hideTextOverlay(cfg){
-  let {fadeDuration,shrinkDuration}=cfg,t0=performance.now(),t1=t0+fadeDuration;
-  function stepFade(now){textAlpha=clamp(1-(now-t0)/fadeDuration);textScale=1;drawScreen();textAlpha>0?requestAnimationFrame(stepFade):stepShrink(performance.now());}
-  function stepShrink(now){textAlpha=0;textScale=clamp(1-(now-t1)/shrinkDuration,0,1);drawScreen();textScale>0?requestAnimationFrame(stepShrink):(showText=0,drawScreen());}
-  requestAnimationFrame(stepFade);
-}
-function drawInfoOverlay(effect,param,value){
-  ctx.save();ctx.globalAlpha=.9;ctx.font=`bold ${Math.max(canvas.height/26,18)}px monospace`;
-  ctx.fillStyle="#fff";ctx.textAlign="left";ctx.textBaseline="top";ctx.shadowColor="#000";ctx.shadowBlur=6;
-  ctx.fillText(`${effect} (${param}): ${typeof value=="number"?value.toFixed(3):value}`,20,20);ctx.restore();
-}
-
-
-
-// --- UI & Startup, toggle between normal and bar-synced FX
-// const testBtn=document.getElementById('test-btn');
-(async function start(){
-  drawScreen();
-  canvas.addEventListener('click',async function(){
-    if(!imageLoaded)return;
-    if(barFXMode){barFXMode=0;testBtn.style.display='';drawScreen();console.log('Bar FX stopped.');}
-    else if(normalEffectsRunning){stopNormalEffects&&stopNormalEffects();stopNormalEffects=0;normalEffectsRunning=0;testBtn.style.display='';drawScreen();console.log('Normal effects stopped.');}
-    else{
-      if(testMode)testMode=testStop=testRunning=0;
-      if(!image){image=await loadImage(window.images[0]);imageLoaded=1;await sleep(200);showText=0;await hideTextOverlay(FX_CONFIG.startText);}
-      runBarSyncedFX();
-      testBtn.style.display='';console.log('Bar FX started.');
-    }
-  });
-  testBtn.style.display='none';
-  image=await loadImage(window.images[0]);imageLoaded=1;await sleep(200);drawScreen();
-})();
-testBtn.onclick=()=>{
-  if(!imageLoaded)return;
-  if(testMode){testMode=testStop=testRunning=0;testBtn.style.display='';drawScreen();console.log('Effect auto-test stopped.');}
-  else{stopNormalEffects&&stopNormalEffects();stopNormalEffects=0;normalEffectsRunning=0;testMode=1;testStop=0;testBtn.style.display='';runEffectAutoTest();console.log('Effect auto-test started.');}
-};
-window.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='t'){if(!imageLoaded)return;testBtn.click();}});
-function runEffects(seq){let idx=0,stop=0;function next(){if(stop)return;if(idx>=seq.length)idx=0;let[n,params]=seq[idx++];if(typeof Effects[n]=="function")Effects[n](params,drawBase,next);else next();}next();return()=>{stop=1;};}
-
-</script>
+  </script>
+  
 </body>
 </html>

@@ -1,0 +1,136 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Image FX Demo – Lean Edition</title>
+<style>
+html,body{margin:0;height:100%;display:flex;justify-content:center;align-items:center;background:#000;font-family:sans-serif}
+#stage{position:relative;width:80vh;height:80vh;max-width:80vmin;max-height:80vmin}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+button{position:fixed;bottom:1rem;right:1rem;padding:.5rem 1rem;font-weight:600;cursor:pointer;z-index:10;opacity:.85;background:#222;color:#fff;border:1px solid #555;border-radius:4px}
+</style>
+</head>
+<body>
+<div id="stage"><canvas></canvas></div>
+<button id="btnTest" style="display:none">Test All Effects (T)</button>
+
+<script type="module">
+/* public surface ------------------------------------------------------------------- */
+window.images = window.images || [
+  "https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"    /* swap with your own URL if desired */
+];
+const PLACEHOLDER =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABAABJzQnCgAAAABJRU5ErkJggg==";
+
+const init = () => {
+  const img = new Image();
+  img.src = window.images[0];
+  img.onload = () => start(img);
+  img.onerror = () => {
+    console.error("Image load error:", img.src);
+    const ph = new Image();
+    ph.src = PLACEHOLDER;
+    ph.onload = () => start(ph);
+  };
+};
+document.readyState === "loading"
+  ? document.addEventListener("DOMContentLoaded", init)
+  : init();
+
+/* helpers -------------------------------------------------------------------------- */
+const clamp = (v,a=0,b=1)=>v<a?a:v>b?b:v;
+const lerp  = (a,b,t)=>a+(b-a)*t;
+const rand  = (a=0,b=1)=>Math.random()*(b-a)+a;
+
+/* constants ------------------------------------------------------------------------ */
+const BPM=104.15,BEAT=60000/BPM,BAR=BEAT*4,PEAKS=new Set([9,17,25,33,41,49]);
+const BASE={grain:.05,scan:.12,blur:2,vignette:.3};
+const PEAK={grain:.15,scan:.25,blur:4,vignette:.5};
+
+/* main ----------------------------------------------------------------------------- */
+function start(image){
+  const stage=document.getElementById("stage");
+  const canvas=stage.querySelector("canvas");
+  const ctx=canvas.getContext("2d");
+  const btn=document.getElementById("btnTest");
+
+  /* state */
+  let size=0,running=false,introDone=false,autoTest=false,raf=0;
+  let startT=0,lastBar=-1,scanY=0,grainC=null,scanPat=null,vigC=null;
+  let testIdx=0,phase=0,lastTest=0;
+  const params={...BASE};
+  const keys=Object.keys(BASE);
+
+  /* overlays */
+  const makeGrain=()=>{const g=document.createElement("canvas");g.width=g.height=size;
+    const gctx=g.getContext("2d");const id=gctx.createImageData(size,size);
+    for(let i=0;i<id.data.length;i+=4){const v=rand(0,255);id.data[i]=id.data[i+1]=id.data[i+2]=v;id.data[i+3]=255;}
+    gctx.putImageData(id,0,0);return g;};
+  const makeScan=()=>{const p=document.createElement("canvas");p.width=1;p.height=4;
+    p.getContext("2d").fillRect(0,0,1,2);return ctx.createPattern(p,"repeat");};
+  const makeVignette=()=>{const v=document.createElement("canvas");v.width=v.height=size;
+    const vc=v.getContext("2d");
+    const g=vc.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+    g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,1)");
+    vc.fillStyle=g;vc.fillRect(0,0,size,size);return v;};
+  const buildOverlays=()=>{grainC=makeGrain();scanPat=makeScan();vigC=makeVignette();};
+  const clearOverlays=()=>{grainC=scanPat=vigC=null;};
+
+  /* resize */
+  const resize=()=>{const s=Math.min(stage.clientWidth,stage.clientHeight);
+    if(s!==size){size=s;canvas.width=canvas.height=size;clearOverlays();if(running||autoTest)buildOverlays();}};
+  window.addEventListener("resize",resize);
+
+  /* intro */
+  const dFade=1000,dPix=1500,dSweep=1000,maxPix=50;let t0=0;
+  const intro=ts=>{if(!t0)t0=ts;const t=ts-t0;ctx.clearRect(0,0,size,size);
+    ctx.globalAlpha=clamp(t/dFade);
+    if(t<dFade+dPix){const p=clamp((t-dFade)/dPix);const pix=Math.round(lerp(maxPix,1,p));
+      ctx.imageSmoothingEnabled=false;
+      ctx.drawImage(image,0,0,image.width,image.height,0,0,pix,pix);
+      ctx.drawImage(canvas,0,0,pix,pix,0,0,size,size);
+      ctx.imageSmoothingEnabled=true;
+    }else ctx.drawImage(image,0,0,size,size);
+    if(t>dFade+dPix){const p=clamp((t-dFade-dPix)/dSweep);
+      ctx.save();ctx.globalCompositeOperation="destination-in";
+      ctx.fillRect(0,0,size*p,size);ctx.restore();}
+    ctx.globalAlpha=1;
+    if(t>=dFade+dPix+dSweep){introDone=true;play(ts);}else raf=requestAnimationFrame(intro);};
+
+  /* render */
+  const render=ts=>{resize();
+    const bar=Math.floor((ts-startT)/BAR)+1;
+    if(bar!==lastBar){lastBar=bar;Object.assign(params,PEAKS.has(bar)?PEAK:BASE);grainC=makeGrain();}
+    ctx.clearRect(0,0,size,size);
+    ctx.filter=`blur(${params.blur}px)`;ctx.drawImage(image,0,0,size,size);ctx.filter="none";
+    ctx.save();scanY=(scanY+.5)%4;ctx.translate(0,scanY);ctx.globalAlpha=params.scan;
+    ctx.fillStyle=scanPat;ctx.fillRect(0,-scanY,size,size+4);ctx.restore();
+    ctx.globalAlpha=params.grain;ctx.drawImage(grainC,0,0);ctx.globalAlpha=1;
+    ctx.globalAlpha=params.vignette;ctx.drawImage(vigC,0,0);ctx.globalAlpha=1;
+    if(autoTest)advanceTest(ts);
+    if(running||autoTest)raf=requestAnimationFrame(render);};
+
+  /* auto-test */
+  const advanceTest=ts=>{const dt=ts-lastTest;lastTest=ts;const dur=4000;
+    phase+=(dt/dur)*Math.PI*2;const p=.5*(1-Math.cos(phase));const k=keys[testIdx];
+    params[k]=lerp(BASE[k],PEAK[k],p);if(phase>=Math.PI*2){phase=0;testIdx=(testIdx+1)%keys.length;}};
+
+  /* controls */
+  const play=ts=>{running=true;startT=ts;buildOverlays();raf=requestAnimationFrame(render);};
+  const stop=()=>{running=autoTest=false;cancelAnimationFrame(raf);clearOverlays();
+    ctx.clearRect(0,0,size,size);ctx.drawImage(image,0,0,size,size);};
+  const toggleTest=()=>{if(!introDone)return;autoTest=!autoTest;
+    if(autoTest&&!running){running=true;buildOverlays();lastTest=performance.now();raf=requestAnimationFrame(render);}
+    else if(!autoTest&&!running)stop();};
+
+  canvas.addEventListener("click",()=>{!introDone?raf=requestAnimationFrame(intro):(!running?play(performance.now()):stop());});
+  btn.addEventListener("click",toggleTest);
+  window.addEventListener("keydown",e=>{if(e.key.toLowerCase()==="t")toggleTest();});
+
+  /* first paint */
+  resize();ctx.drawImage(image,0,0,size,size);btn.style.display="block";}
+</script>
+</body>
+</html>
+
