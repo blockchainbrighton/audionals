@@ -61,7 +61,8 @@ const effectDefaults = {
     vignette:    { intensity: 1.0, size: 0.45, active: false },
     glitch:      { intensity: 0.5, active: false },
     chromaShift: { intensity: 0.3, active: false },
-    colourSweep: { progress: 0, direction: 1, randomize: 1, active: false }
+    colourSweep: { progress: 0, direction: 1, randomize: 1, active: false },
+    pixelate:    { pixelSize: 1, active: false } // <-- Pixelate defaults
 };
 
 const effectParamDefs = {
@@ -96,6 +97,9 @@ const effectParamDefs = {
         {name:'progress', min:0, max:1},
         {name:'direction', min:0, max:1},
         {name:'randomize', min:0, max:1}
+    ],
+    pixelate: [
+        {name:'pixelSize', min:1, max:64}
     ]
 };
 
@@ -107,10 +111,11 @@ const app = (() => {
     let mainCanvas, mainCtx, effectCanvases={},effectCtxs={},width,height,image=null,imageLoaded=false,imageError=false;
     let animationId=null, isPlaying=false;
     let effects = {};
-    const effectKeys = ['scanLines','filmGrain','blur','vignette','glitch','chromaShift','colourSweep'];
+    // Add 'pixelate' to effectKeys
+    const effectKeys = ['scanLines','filmGrain','blur','vignette','glitch','chromaShift','colourSweep','pixelate'];
     let testActive = null, testAnimFrame = null, sweepSeed = 0, testStartTime = null;
 
-    // --- Colour Sweep Effect Implementation ---
+    // --- Colour Sweep Effect Implementation (unchanged) ---
     const colourSweepState = new WeakMap();
     function colourSweepInit(cv, img, randomize=1) {
         const { width: w, height: h } = cv;
@@ -167,6 +172,37 @@ const app = (() => {
         // Draw ONLY the effect, do NOT draw the main image
         mainCtx.clearRect(0,0,width,height);
         mainCtx.drawImage(effectCanvases.colourSweep, 0, 0);
+    }
+
+    // --- Pixelate Effect Implementation ---
+    function applyPixelateEffect() {
+        const ctx = effectCtxs.pixelate;
+        if (!ctx || !imageLoaded) return;
+        ctx.clearRect(0, 0, width, height);
+        let px = Math.round(effects.pixelate.pixelSize) || 1;
+        px = utils.clamp(px, 1, 128);
+        if (!image?.width) return;
+        let ar = image.width / image.height;
+        let iw, ih;
+        if (ar > 1) { iw = width; ih = width / ar; }
+        else { ih = height; iw = height * ar; }
+        // Downscale image to small canvas then upscale
+        if (px > 1) {
+            // Draw scaled down to pixel blocks
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(image,
+                0, 0, image.width, image.height,
+                (width - iw) / 2, (height - ih) / 2, Math.ceil(iw / px), Math.ceil(ih / px));
+            ctx.drawImage(ctx.canvas,
+                (width - iw) / 2, (height - ih) / 2, Math.ceil(iw / px), Math.ceil(ih / px),
+                (width - iw) / 2, (height - ih) / 2, iw, ih);
+            ctx.imageSmoothingEnabled = true;
+        } else {
+            ctx.drawImage(image, (width - iw) / 2, (height - ih) / 2, iw, ih);
+        }
+        // Draw onto main context
+        mainCtx.clearRect(0, 0, width, height);
+        mainCtx.drawImage(effectCanvases.pixelate, 0, 0);
     }
 
     // --- Core App Logic ---
@@ -269,7 +305,7 @@ const app = (() => {
         }
     }
 
-    // --- COLOUR SWEEP: TEST LOGIC (SIMPLE, LINEAR SWEEP OVER 10 SECONDS) ---
+    // --- TEST LOGIC: animate main parameter for each effect ---
     function runEffectTest(fx) {
         stopEffects();
         testActive = fx;
@@ -299,6 +335,15 @@ const app = (() => {
             effects.colourSweep.progress = prog;
             effects.colourSweep.direction = 1;
             effects.colourSweep.randomize = 1;
+        } else if (testActive === 'pixelate') {
+            // Animate pixelSize from max to min and back
+            if(!testStartTime) testStartTime = now;
+            const period = 5.0; // seconds for full loop
+            const elapsed = (now - testStartTime) / 1000;
+            // 1 → 64 → 1
+            const t = (elapsed % period) / period;
+            let px = 1 + Math.abs(Math.sin(Math.PI * t)) * 63; // range 1-64-1
+            effects.pixelate.pixelSize = px;
         } else {
             const t = (now/1000) + sweepSeed;
             const def = effectParamDefs[testActive];
@@ -344,6 +389,7 @@ const app = (() => {
             case 'glitch':      applyGlitchEffect(ct); break;
             case 'chromaShift': applyChromaShiftEffect(ct); break;
             case 'colourSweep': applyColourSweepEffect(); break;
+            case 'pixelate':    applyPixelateEffect(); break;
         }
     };
     const applyScanLinesEffect = ct => {
