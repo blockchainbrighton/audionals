@@ -104,7 +104,8 @@ const cloneDefaults = k => JSON.parse(JSON.stringify(effectDefaults[k]));
 const app=(()=>{
   let mainCanvas,mainCtx,effectCanvases={},effectCtxs={},width,height,image=null,imageLoaded=false,imageError=false,animationId=null,isPlaying=false,effects={};
   const effectKeys=['scanLines','filmGrain','blur','vignette','glitch','chromaShift','colourSweep','pixelate'];
-  let testActive=null,testAnimFrame=null,sweepSeed=0,testStartTime=null;
+  const testActive = new Set();       // which effects are in auto-test mode
+  let    testAnimFrame = null, sweepSeed = 0, testStartTime = null;
 
   // Colour Sweep state and helpers
   const colourSweepState=new WeakMap();
@@ -214,13 +215,23 @@ const app=(()=>{
   };
 
   // Animation loop
-  const fxLoop=(ts=performance.now())=>{
-    if(!isPlaying)return;
+  const fxLoop = (ts = performance.now()) => {
+    if (!isPlaying) return;
     drawImage();
-    const ct=ts/1000;
-    effectKeys.forEach(fx=>{if(effects[fx].active){createEffectCanvas(fx);applyEffect(fx,ct);}});
-    animationId=requestAnimationFrame(fxLoop);
-  };
+    const ct = ts / 1000;
+
+    // NEW: update parameters for every test that’s ON
+    autoTestFrame(ct);
+
+    effectKeys.forEach(fx => {
+        if (effects[fx].active) {
+        createEffectCanvas(fx);
+        applyEffect(fx, ct);
+        }
+    });
+
+    animationId = requestAnimationFrame(fxLoop);
+    };
   const startEffects=()=>{
     isPlaying=true;
     fxLoop();
@@ -235,24 +246,45 @@ const app=(()=>{
     testStartTime=null;
   };
   // Buttons & UI
-  const createEffectButtons=()=>{
-    const btns=document.getElementById('fx-btns');
-    btns.innerHTML='';
-    effectKeys.forEach(fx=>{
-      const b=document.createElement('button');
-      b.className='fx-btn';
-      b.textContent=`${fx} (Test)`;
-      b.dataset.fx=fx;
-      b.onclick=()=>testActive===fx?stopEffectTest():runEffectTest(fx);
-      btns.appendChild(b);
-    });
-    updateButtonStates();
-  };
-  const updateButtonStates=()=>document.querySelectorAll('.fx-btn').forEach(btn=>{
-    const fx=btn.dataset.fx;
-    btn.classList.toggle('active',testActive===fx);
-    btn.disabled=!!testActive&&fx!==testActive;
+ const createEffectButtons = () => {
+  const btns = document.getElementById('fx-btns');
+  btns.innerHTML = '';
+
+  effectKeys.forEach(fx => {
+    const b       = document.createElement('button');
+    b.className   = 'fx-btn';
+    b.textContent = `${fx} (Test)`;
+    b.dataset.fx  = fx;
+
+    // ⇣ NEW: toggle the effect
+    b.onclick = () => {
+      if (testActive.has(fx)) {
+        // turn it OFF
+        testActive.delete(fx);
+        effects[fx].active = false;
+        removeEffectCanvas(fx);   // helper just like clearAllEffectCanvases but per-fx
+      } else {
+        // turn it ON
+        testActive.add(fx);
+        effects[fx] = cloneDefaults(fx);   // fresh params
+        effects[fx].active = true;
+      }
+      // start/stop the main loop automatically
+      if (testActive.size) startEffects(); else stopEffects();
+      updateButtonStates();
+    };
+
+    btns.appendChild(b);
   });
+  updateButtonStates();
+};
+
+const updateButtonStates = () =>
+  document.querySelectorAll('.fx-btn').forEach(btn => {
+    const fx = btn.dataset.fx;
+    btn.classList.toggle('active', testActive.has(fx));
+  });
+
   const clearAllEffectCanvases=()=>{
     for(const e in effectCanvases){
       if(effectCanvases[e]){
@@ -282,34 +314,34 @@ const app=(()=>{
     stopEffects();
     updateButtonStates();
   };
-  const autoTestFrame=(now=performance.now())=>{
-    if(!testActive)return;
-    if(testActive==='colourSweep'){
-      if(!testStartTime)testStartTime=now;
-      const elapsed=(now-testStartTime)/1e3;
-      const prog=Math.min(elapsed%10/10,1);
-      Object.assign(effects.colourSweep,{progress:prog,direction:1,randomize:1});
-    } else if(testActive==='pixelate'){
-      if(!testStartTime)testStartTime=now;
-      const period=5,elapsed=(now-testStartTime)/1e3;
-      effects.pixelate.pixelSize=1+Math.abs(Math.sin(Math.PI*(elapsed%period/period)))*63;
+  const autoTestFrame = (ct) => {
+  testActive.forEach(fx => {
+    if (fx === 'colourSweep') {
+      const prog = (ct % 10) / 10;
+      Object.assign(effects.colourSweep, { progress: prog, direction: 1, randomize: 1 });
+    } else if (fx === 'pixelate') {
+      effects.pixelate.pixelSize = 1 + Math.abs(Math.sin(Math.PI * (ct % 5) / 5)) * 63;
     } else {
-      const t=now/1e3+sweepSeed;
-      const def=effectParamDefs[testActive];
-      if(def)def.forEach(({name,min,max,relTo})=>{
-        if(relTo==='height'){min*=height;max*=height;}
-        effects[testActive][name]=min+(max-min)*(
-          0.5+0.5*Math.sin(
-            t*0.7+1.5*Math.sin(t*0.33+name.charCodeAt(0)%4)+Math.cos(t*0.21+name.length)
-          )*utils.easeInOut(0.5+0.5*Math.sin(t*0.11+name.length))
-        );
+      const def = effectParamDefs[fx];
+      if (!def) return;
+      def.forEach(({ name, min, max, relTo }) => {
+        if (relTo === 'height') { min *= height; max *= height; }
+        effects[fx][name] =
+          min + (max - min) *
+          (0.5 + 0.5 * Math.sin(ct * 0.7 + 1.5 * Math.sin(ct * 0.33 + name.charCodeAt(0) % 4) +
+                                Math.cos(ct * 0.21 + name.length)) *
+           utils.easeInOut(0.5 + 0.5 * Math.sin(ct * 0.11 + name.length)));
       });
     }
-    if(testActive!=='colourSweep')drawImage();
-    createEffectCanvas(testActive);
-    applyEffect(testActive,now/1e3);
-    testAnimFrame=requestAnimationFrame(autoTestFrame);
-  };
+  });
+};
+
+const removeEffectCanvas = fx => {
+  if (effectCanvases[fx]) {
+    effectCanvases[fx].remove();
+    effectCanvases[fx] = effectCtxs[fx] = null;
+  }
+};
 
   // Create or reuse effect canvas
   const createEffectCanvas=e=>{
