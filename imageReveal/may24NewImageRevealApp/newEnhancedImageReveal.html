@@ -59,17 +59,24 @@ const utils=(()=>{
   };
 })();
 
-const effectDefaults={
-  scanLines:{intensity:0.4,speed:1.5,lineWidth:3,spacing:6,verticalShift:0,active:false},
-  filmGrain:{intensity:1,size:1.2,speed:80,density:1,dynamicRange:1,lastUpdate:0,noiseZ:0,active:false},
-  blur:{radius:8,active:false},
-  vignette:{intensity:1,size:0.45,active:false},
-  glitch:{intensity:0.5,active:false},
-  chromaShift:{intensity:0.3,active:false},
-  colourSweep:{progress:0,direction:1,randomize:1,active:false},
-  pixelate:{pixelSize:1,active:false}
+const effectDefaults = {
+  fade:        { speed: 1, active: false },   //  NEW
+  scanLines:   { intensity: 0.4, speed: 1.5, lineWidth: 3, spacing: 6, verticalShift: 0, active: false },
+  filmGrain:   { intensity: 1,  size: 1.2, speed: 80, density: 1, dynamicRange: 1, lastUpdate: 0, noiseZ: 0, active: false },
+  blur:        { radius: 8, active: false },
+  vignette:    { intensity: 1, size: 0.45, active: false },
+  glitch:      { intensity: 0.5, active: false },
+  chromaShift: { intensity: 0.3, active: false },
+  colourSweep: { progress: 0, direction: 1, randomize: 1, active: false },
+  pixelate:    { pixelSize: 1, active: false }
 };
+
 const effectParamDefs={
+  fade: [
+    { name: 'fade', min: 0, max: 1 },
+    { name: 'direction', min: 0, max: 1 },
+    { name: 'speed', min: 0.25, max: 2 }
+  ],
   scanLines:[
     {name:'intensity',min:0,max:1},
     {name:'speed',min:0,max:6},
@@ -104,7 +111,9 @@ const app=(()=>{
   let mainCanvas,mainCtx,width,height,image=null,imageLoaded=false,imageError=false,animationId=null,isPlaying=false,effects={};
   // Keep the *order* the user enables effects
   let enabledOrder = [];
-  const effectKeys=['scanLines','filmGrain','blur','vignette','glitch','chromaShift','colourSweep','pixelate'];
+  const effectKeys=[
+  'fade','scanLines','filmGrain','blur','vignette','glitch','chromaShift','colourSweep','pixelate'
+  ];
   const testActive = new Set(); // which effects are in auto-test mode
   let testAnimFrame = null, sweepSeed = 0, testStartTime = null;
 
@@ -278,8 +287,24 @@ const app=(()=>{
     }
   }
 
-  // Map of effect functions
+  function applyFade(srcCtx, dstCtx, ct, params) {
+    const { speed = 1 } = params;
+    // Alpha oscillates 0 → 1 → 0; higher speed = faster cycle
+    const alpha = 0.5 + 0.5 * Math.sin(ct * speed * Math.PI * 2);
+
+    // Start with a black frame
+    dstCtx.clearRect(0, 0, width, height);
+    dstCtx.fillStyle = '#000';
+    dstCtx.fillRect(0, 0, width, height);
+
+    // Draw the incoming image with a varying globalAlpha
+    dstCtx.globalAlpha = alpha;
+    dstCtx.drawImage(srcCtx.canvas, 0, 0);
+    dstCtx.globalAlpha = 1;
+  }
+
   const effectMap = {
+    fade: applyFade,
     scanLines: applyScanLines,
     filmGrain: applyFilmGrain,
     blur: applyBlur,
@@ -409,6 +434,10 @@ const app=(()=>{
   // --- Param auto-test logic (unchanged) ---
   const autoTestFrame = (ct) => {
     enabledOrder.forEach(fx => {
+      if (fx === 'fade') {
+        const speed = effects.fade.speed || 1;
+        effects.fade.fade = 0.5 + 0.5 * Math.sin(ct * speed * Math.PI / 3);
+      }      
       if (fx === 'colourSweep') {
         const prog = (ct % 10) / 10;
         Object.assign(effects.colourSweep, { progress: prog, direction: 1, randomize: 1 });
