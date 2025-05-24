@@ -98,314 +98,92 @@ const effectParamDefs={
   pixelate:[
     {name:'pixelSize',min:1,max:64}]
 };
-
 const cloneDefaults = k => JSON.parse(JSON.stringify(effectDefaults[k]));
 
 const app=(()=>{
-  let mainCanvas,mainCtx,effectCanvases={},effectCtxs={},width,height,image=null,imageLoaded=false,imageError=false,animationId=null,isPlaying=false,effects={};
+  let mainCanvas,mainCtx,width,height,image=null,imageLoaded=false,imageError=false,animationId=null,isPlaying=false,effects={};
+  // Keep the *order* the user enables effects
+  let enabledOrder = [];
   const effectKeys=['scanLines','filmGrain','blur','vignette','glitch','chromaShift','colourSweep','pixelate'];
-  const testActive = new Set();       // which effects are in auto-test mode
-  let    testAnimFrame = null, sweepSeed = 0, testStartTime = null;
+  const testActive = new Set(); // which effects are in auto-test mode
+  let testAnimFrame = null, sweepSeed = 0, testStartTime = null;
 
-  // Colour Sweep state and helpers
-  const colourSweepState=new WeakMap();
-  const colourSweepInit=(cv,img,randomize=1)=>{
-    const {width:w,height:h}=cv;
-    const off=document.createElement('canvas').getContext('2d');
-    off.canvas.width=w;off.canvas.height=h;
-    off.drawImage(img,0,0,w,h);
-    let src;
-    try{src=off.getImageData(0,0,w,h);}catch{return {src:null};}
-    const N=w*h,bright=new Float32Array(N),d=src.data;
-    for(let i=0;i<N;i++){
-      const p=i<<2;
-      bright[i]=Math.min((d[p]+d[p+1]+d[p+2])/3+(randomize?Math.random():0),255);
+  // Create buffer canvas
+  let bufferA, bufferB, bufferCtxA, bufferCtxB;
+  // Used for temporary swapping (double buffering)
+  function ensureBuffers() {
+    if(!bufferA) {
+      bufferA = document.createElement('canvas');
+      bufferB = document.createElement('canvas');
+      bufferCtxA = bufferA.getContext('2d', {alpha:true});
+      bufferCtxB = bufferB.getContext('2d', {alpha:true});
     }
-    return {src,bright,out:new ImageData(new Uint8ClampedArray(d.length),w,h),lastP:-1};
-  };
-  const getColourSweepState=(cv,img,randomize)=> {
-    let s=colourSweepState.get(cv);
-    if(!s||s.img!==img||s.randomize!==randomize){
-      s={img,randomize,...colourSweepInit(cv,img,randomize)};
-      colourSweepState.set(cv,s);
-    }
-    return s;
-  };
-  const applyColourSweepEffect=()=>{
-    const ctx=effectCtxs.colourSweep;if(!ctx||!imageLoaded)return;
-    const g=effects.colourSweep,state=getColourSweepState(effectCanvases.colourSweep,image,g.randomize|0);
-    if(!state.src){ctx.clearRect(0,0,width,height);return;}
-    let p=utils.clamp(g.progress,0,1),fwd=(g.direction|0)!==0;
-    if(!fwd)p=1-p;
-    const thr=p*255,{src,bright,out}=state,S=src.data,O=out.data;
-    for(let i=0;i<bright.length;i++){
-      const q=i<<2;
-      if(bright[i]<=thr){O[q]=S[q];O[q+1]=S[q+1];O[q+2]=S[q+2];O[q+3]=S[q+3];}
-      else O[q+3]=0;
-    }
-    ctx.clearRect(0,0,width,height);
-    ctx.putImageData(out,0,0);
-    mainCtx.clearRect(0,0,width,height);
-    mainCtx.drawImage(effectCanvases.colourSweep,0,0);
-  };
-
-  // Pixelate Effect
-  const applyPixelateEffect=()=>{
-    const ctx=effectCtxs.pixelate;if(!ctx||!imageLoaded)return;
-    ctx.clearRect(0,0,width,height);
-    let px=utils.clamp(Math.round(effects.pixelate.pixelSize)||1,1,128);
-    if(!image?.width)return;
-    const ar=image.width/image.height;
-    let iw,ih;
-    if(ar>1){iw=width;ih=width/ar;}else{ih=height;iw=height*ar;}
-    if(px>1){
-      ctx.imageSmoothingEnabled=false;
-      ctx.drawImage(image,0,0,image.width,image.height,(width-iw)/2,(height-ih)/2,Math.ceil(iw/px),Math.ceil(ih/px));
-      ctx.drawImage(ctx.canvas,(width-iw)/2,(height-ih)/2,Math.ceil(iw/px),Math.ceil(ih/px),(width-iw)/2,(height-ih)/2,iw,ih);
-      ctx.imageSmoothingEnabled=true;
-    } else ctx.drawImage(image,(width-iw)/2,(height-ih)/2,iw,ih);
-    mainCtx.clearRect(0,0,width,height);
-    mainCtx.drawImage(effectCanvases.pixelate,0,0);
-  };
-
-  // Init & Setup
-  const init=()=>{
-    effectKeys.forEach(k=>effects[k]=cloneDefaults(k));
-    mainCanvas=document.getElementById('main-canvas');
-    mainCtx=mainCanvas.getContext('2d',{alpha:false});
-    window.addEventListener('resize',handleResize);
-    mainCanvas.addEventListener('click',()=>!imageError&&(isPlaying?stopEffects():startEffects()));
-    handleResize();loadImage();
-    log('App initialized and DOM loaded.');
-  };
-  const handleResize=()=>{
-    const container=document.getElementById('canvas-container');
-    const size=Math.min(window.innerHeight*.8,window.innerWidth*.8);
-    container.style.width=container.style.height=`${size}px`;
-    width=height=size;
-    mainCanvas.width=mainCanvas.height=size;
-    for(const e in effectCanvases)if(effectCanvases[e])effectCanvases[e].width=effectCanvases[e].height=size;
-    if(imageLoaded&&!isPlaying)drawImage();
-  };
-  const loadImage=()=>{
-    if(!window.images?.length)return showError();
-    image=new Image();
-    image.crossOrigin='anonymous';
-    image.onload=()=>{
-      imageLoaded=true;
-      document.getElementById('loading').style.display='none';
-      drawImage();
-      document.getElementById('fx-btns').style.opacity='1';
-      createEffectButtons();
-    };
-    image.onerror=()=>{imageError=true;showError();};
-    image.src=window.images[0];
-  };
-  const showError=()=>{
-    document.getElementById('loading').style.display='none';
-    document.getElementById('error-message').style.display='block';
-  };
-  const drawImage=()=>{
-    if(!imageLoaded)return;
-    mainCtx.fillStyle='#000';mainCtx.fillRect(0,0,width,height);
-    const ar=image.width/image.height;
-    let w,h;
-    if(ar>1){w=width;h=width/ar;}else{h=height;w=height*ar;}
-    mainCtx.drawImage(image,(width-w)/2,(height-h)/2,w,h);
-  };
-
-  // Animation loop
-  const fxLoop = (ts = performance.now()) => {
-    if (!isPlaying) return;
-    drawImage();
-    const ct = ts / 1000;
-
-    // NEW: update parameters for every test that’s ON
-    autoTestFrame(ct);
-
-    effectKeys.forEach(fx => {
-        if (effects[fx].active) {
-        createEffectCanvas(fx);
-        applyEffect(fx, ct);
-        }
-    });
-
-    animationId = requestAnimationFrame(fxLoop);
-    };
-  const startEffects=()=>{
-    isPlaying=true;
-    fxLoop();
-  };
-  const stopEffects=()=>{
-    isPlaying=false;
-    if(animationId)cancelAnimationFrame(animationId),animationId=null;
-    effectKeys.forEach(k=>effects[k]=cloneDefaults(k));
-    clearAllEffectCanvases();
-    drawImage();
-    updateButtonStates();
-    testStartTime=null;
-  };
-  // Buttons & UI
- const createEffectButtons = () => {
-  const btns = document.getElementById('fx-btns');
-  btns.innerHTML = '';
-
-  effectKeys.forEach(fx => {
-    const b       = document.createElement('button');
-    b.className   = 'fx-btn';
-    b.textContent = `${fx} (Test)`;
-    b.dataset.fx  = fx;
-
-    // ⇣ NEW: toggle the effect
-    b.onclick = () => {
-      if (testActive.has(fx)) {
-        // turn it OFF
-        testActive.delete(fx);
-        effects[fx].active = false;
-        removeEffectCanvas(fx);   // helper just like clearAllEffectCanvases but per-fx
-      } else {
-        // turn it ON
-        testActive.add(fx);
-        effects[fx] = cloneDefaults(fx);   // fresh params
-        effects[fx].active = true;
-      }
-      // start/stop the main loop automatically
-      if (testActive.size) startEffects(); else stopEffects();
-      updateButtonStates();
-    };
-
-    btns.appendChild(b);
-  });
-  updateButtonStates();
-};
-
-const updateButtonStates = () =>
-  document.querySelectorAll('.fx-btn').forEach(btn => {
-    const fx = btn.dataset.fx;
-    btn.classList.toggle('active', testActive.has(fx));
-  });
-
-  const clearAllEffectCanvases=()=>{
-    for(const e in effectCanvases){
-      if(effectCanvases[e]){
-        effectCanvases[e].remove();
-        effectCanvases[e]=effectCtxs[e]=null;
-      }
-    }
-  };
-
-  // Test logic
-  const runEffectTest=fx=>{
-    stopEffects();
-    testActive=fx;
-    sweepSeed=Math.random()*1e3;
-    testStartTime=null;
-    effectKeys.forEach(k=>{
-      effects[k]=cloneDefaults(k);
-      effects[k].active=k===fx;
-    });
-    updateButtonStates();
-    autoTestFrame();
-  };
-  const stopEffectTest=()=>{
-    if(testAnimFrame)cancelAnimationFrame(testAnimFrame);
-    testAnimFrame=null;
-    testActive=null;
-    stopEffects();
-    updateButtonStates();
-  };
-  const autoTestFrame = (ct) => {
-  testActive.forEach(fx => {
-    if (fx === 'colourSweep') {
-      const prog = (ct % 10) / 10;
-      Object.assign(effects.colourSweep, { progress: prog, direction: 1, randomize: 1 });
-    } else if (fx === 'pixelate') {
-      effects.pixelate.pixelSize = 1 + Math.abs(Math.sin(Math.PI * (ct % 5) / 5)) * 63;
-    } else {
-      const def = effectParamDefs[fx];
-      if (!def) return;
-      def.forEach(({ name, min, max, relTo }) => {
-        if (relTo === 'height') { min *= height; max *= height; }
-        effects[fx][name] =
-          min + (max - min) *
-          (0.5 + 0.5 * Math.sin(ct * 0.7 + 1.5 * Math.sin(ct * 0.33 + name.charCodeAt(0) % 4) +
-                                Math.cos(ct * 0.21 + name.length)) *
-           utils.easeInOut(0.5 + 0.5 * Math.sin(ct * 0.11 + name.length)));
-      });
-    }
-  });
-};
-
-const removeEffectCanvas = fx => {
-  if (effectCanvases[fx]) {
-    effectCanvases[fx].remove();
-    effectCanvases[fx] = effectCtxs[fx] = null;
+    bufferA.width = bufferB.width = width;
+    bufferA.height = bufferB.height = height;
   }
-};
 
-  // Create or reuse effect canvas
-  const createEffectCanvas=e=>{
-    if(effectCanvases[e])return;
-    const c=document.createElement('canvas');
-    c.width=c.height=width;
-    Object.assign(c.style,{position:'absolute',top:0,left:0,width:'100%',height:'100%'});
-    document.getElementById('canvas-container').appendChild(c);
-    effectCanvases[e]=c;
-    effectCtxs[e]=c.getContext('2d',{alpha:true});
-  };
-  // Effect switch
-  const applyEffect=(effect,ct)=>{
-    switch(effect){
-      case 'scanLines':applyScanLinesEffect(ct);break;
-      case 'filmGrain':applyFilmGrainEffect(ct);break;
-      case 'blur':applyBlurEffect();break;
-      case 'vignette':applyVignetteEffect();break;
-      case 'glitch':applyGlitchEffect(ct);break;
-      case 'chromaShift':applyChromaShiftEffect(ct);break;
-      case 'colourSweep':applyColourSweepEffect();break;
-      case 'pixelate':applyPixelateEffect();break;
+  // --- ColourSweep state, slightly revised ---
+  const colourSweepCache = new WeakMap();
+  function getColourSweepState(imgData, w, h, randomize) {
+    // Cache key based on pixel hash + settings
+    const cacheKey = imgData;
+    let cached = colourSweepCache.get(cacheKey);
+    if (cached && cached.randomize === randomize) return cached;
+    // Calculate brightness array
+    const N = w * h, bright = new Float32Array(N), d = imgData.data;
+    for (let i = 0; i < N; i++) {
+      const p = i << 2;
+      bright[i] = Math.min((d[p] + d[p+1] + d[p+2]) / 3 + (randomize ? Math.random() : 0), 255);
     }
-  };
+    const out = new ImageData(new Uint8ClampedArray(d.length), w, h);
+    cached = {randomize, bright, out};
+    colourSweepCache.set(cacheKey, cached);
+    return cached;
+  }
 
-  // Effects implementations
-  const applyScanLinesEffect=ct=>{
-    const ctx=effectCtxs.scanLines; if(!ctx)return;
-    ctx.clearRect(0,0,width,height);
-    const {intensity,lineWidth,spacing,speed,verticalShift=0}=effects.scanLines;
+  // --- EFFECTS: All now accept (srcCtx, dstCtx, t) signature ---
+  function applyScanLines(srcCtx, dstCtx, ct, params) {
+    dstCtx.clearRect(0,0,width,height);
+    dstCtx.drawImage(srcCtx.canvas, 0, 0);
+    const {intensity,lineWidth,spacing,speed,verticalShift=0} = params;
     const offset=((speed>0?(ct*speed*spacing)%spacing:0)+verticalShift);
-    ctx.globalAlpha=intensity; ctx.fillStyle='#000';
-    for(let y=offset;y<height;y+=spacing)ctx.fillRect(0,y,width,Math.max(1,lineWidth));
-    ctx.globalAlpha=1;
-    mainCtx.drawImage(effectCanvases.scanLines,0,0);
-  };
-  const makeRNG=seed=>{
-    let s=seed>>>0;
-    return ()=>((s=Math.imul(48271,s)&0x7fffffff)/0x7fffffff);
-  };
-  const applyFilmGrainEffect=ct=>{
-    const g=effects.filmGrain, {intensity=1,size=1,speed=60,density=1}=g;
+    dstCtx.globalAlpha = intensity;
+    dstCtx.fillStyle='#000';
+    for(let y=offset;y<height;y+=spacing) dstCtx.fillRect(0,y,width,Math.max(1,lineWidth));
+    dstCtx.globalAlpha=1;
+  }
+
+  function makeRNG(seed) {
+    let s = seed >>> 0;
+    return () => ((s = Math.imul(48271, s) & 0x7fffffff) / 0x7fffffff);
+  }
+
+  function applyFilmGrain(srcCtx, dstCtx, ct, params) {
+    dstCtx.clearRect(0,0,width,height);
+    dstCtx.drawImage(srcCtx.canvas,0,0);
+    const {intensity=1,size=1,speed=60,density=1} = params;
     const cw=width,ch=height,gw=Math.floor(cw/Math.max(1,size)),gh=Math.floor(ch/Math.max(1,size));
-    if(!applyFilmGrainEffect.noiseCanvas||
-      applyFilmGrainEffect.noiseCanvas.width!==gw||
-      applyFilmGrainEffect.noiseCanvas.height!==gh)
-      applyFilmGrainEffect.noiseCanvas=document.createElement('canvas');
-    const nctx=applyFilmGrainEffect.noiseCanvas.getContext('2d');
-    applyFilmGrainEffect.noiseCanvas.width=gw;
-    applyFilmGrainEffect.noiseCanvas.height=gh;
-    const imgData=nctx.createImageData(gw,gh),data=imgData.data;
-    const rng=makeRNG(Math.floor(ct*speed*1e3));
-    const activeRatio=Math.max(0.12,Math.min(1,density*intensity*0.8+0.18));
-    let srcImg=null;
-    try{srcImg=mainCtx.getImageData(0,0,cw,ch);}catch{}
-    for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){
+    let noiseCanvas = applyFilmGrain.noiseCanvas;
+    if(!noiseCanvas||noiseCanvas.width!==gw||noiseCanvas.height!==gh) {
+      noiseCanvas=document.createElement('canvas');
+      noiseCanvas.width=gw;noiseCanvas.height=gh;
+      applyFilmGrain.noiseCanvas=noiseCanvas;
+    }
+    const nctx = noiseCanvas.getContext('2d');
+    const imgData = nctx.createImageData(gw,gh), data=imgData.data;
+    const rng = makeRNG(Math.floor(ct*speed*1e3));
+    const activeRatio = Math.max(0.12, Math.min(1, density*intensity*0.8+0.18));
+    let srcImg;
+    try { srcImg = srcCtx.getImageData(0,0,cw,ch); } catch {}
+    for(let y=0; y<gh; y++) for(let x=0; x<gw; x++) {
       const p=(y*gw+x)*4;
       let isColoured=true;
-      if(srcImg){
+      if(srcImg) {
         const sp=((Math.floor(y*ch/gh)*cw)+Math.floor(x*cw/gw))*4;
         const r=srcImg.data[sp],g=srcImg.data[sp+1],b=srcImg.data[sp+2];
-        isColoured=r+g+b>30;
+        isColoured = r+g+b>30;
       }
-      if(isColoured){
+      if(isColoured) {
         const active=rng()<activeRatio;
         const val=active?200+Math.floor(rng()*55):60+Math.floor(rng()*40);
         data[p]=data[p+1]=data[p+2]=val;
@@ -413,67 +191,242 @@ const removeEffectCanvas = fx => {
       } else data.set([0,0,0,0],p);
     }
     nctx.putImageData(imgData,0,0);
-    mainCtx.save();
-    mainCtx.globalAlpha=0.28*Math.min(1,intensity)+0.14*Math.min(1,density);
-    mainCtx.imageSmoothingEnabled=false;
-    mainCtx.drawImage(applyFilmGrainEffect.noiseCanvas,0,0,gw,gh,0,0,cw,ch);
-    mainCtx.imageSmoothingEnabled=true;
-    mainCtx.globalAlpha=1;
-    mainCtx.restore();
-  };
-  const applyBlurEffect=()=>{
-    const ctx=effectCtxs.blur;if(!ctx)return;
-    ctx.clearRect(0,0,width,height);
-    ctx.filter=`blur(${effects.blur.radius}px)`;
-    ctx.drawImage(mainCanvas,0,0);
-    ctx.filter='none';
-    mainCtx.globalAlpha=0.85;
-    mainCtx.drawImage(effectCanvases.blur,0,0);
-    mainCtx.globalAlpha=1;
-  };
-  const applyVignetteEffect=()=>{
-    const ctx=effectCtxs.vignette;if(!ctx)return;
-    ctx.clearRect(0,0,width,height);
-    const {intensity,size}=effects.vignette;
-    const grad=ctx.createRadialGradient(width/2,height/2,0,width/2,height/2,width*size);
+    dstCtx.save();
+    dstCtx.globalAlpha=0.28*Math.min(1,intensity)+0.14*Math.min(1,density);
+    dstCtx.imageSmoothingEnabled=false;
+    dstCtx.drawImage(noiseCanvas,0,0,gw,gh,0,0,cw,ch);
+    dstCtx.imageSmoothingEnabled=true;
+    dstCtx.globalAlpha=1;
+    dstCtx.restore();
+  }
+
+  function applyBlur(srcCtx, dstCtx, _ct, params) {
+    dstCtx.clearRect(0,0,width,height);
+    dstCtx.filter = `blur(${params.radius}px)`;
+    dstCtx.drawImage(srcCtx.canvas, 0, 0);
+    dstCtx.filter = 'none';
+  }
+
+  function applyVignette(srcCtx, dstCtx, _ct, params) {
+    dstCtx.clearRect(0,0,width,height);
+    dstCtx.drawImage(srcCtx.canvas,0,0);
+    const {intensity, size} = params;
+    const grad = dstCtx.createRadialGradient(width/2, height/2, 0, width/2, height/2, width*size);
     grad.addColorStop(0,'rgba(0,0,0,0)');
     grad.addColorStop(.5,'rgba(0,0,0,0)');
     grad.addColorStop(1,`rgba(0,0,0,${intensity})`);
-    ctx.fillStyle=grad;
-    ctx.fillRect(0,0,width,height);
-    mainCtx.globalAlpha=1;
-    mainCtx.drawImage(effectCanvases.vignette,0,0);
-  };
-  const applyGlitchEffect=ct=>{
-    const ctx=effectCtxs.glitch,g=effects.glitch;
-    if(!ctx||g.intensity===0)return;
-    ctx.clearRect(0,0,width,height);
+    dstCtx.fillStyle = grad;
+    dstCtx.fillRect(0,0,width,height);
+  }
+
+  function applyGlitch(srcCtx, dstCtx, ct, params) {
+    dstCtx.clearRect(0,0,width,height);
+    const g = params;
     const slices=utils.randomInt(3,7),sliceHeight=height/slices;
-    for(let i=0;i<slices;i++){
+    for(let i=0;i<slices;i++) {
       const y=i*sliceHeight,ox=utils.random(-width*g.intensity,width*g.intensity);
-      ctx.drawImage(mainCanvas,0,y,width,sliceHeight,ox,y,width,sliceHeight);
-      if(Math.random()>.5){
-        ctx.globalCompositeOperation='lighten';
-        ctx.fillStyle=`rgba(${utils.randomInt(0,255)},${utils.randomInt(0,255)},${utils.randomInt(0,255)},0.14)`;
-        ctx.fillRect(ox,y,width,sliceHeight);
-        ctx.globalCompositeOperation='source-over';
+      dstCtx.drawImage(srcCtx.canvas,0,y,width,sliceHeight,ox,y,width,sliceHeight);
+      if(Math.random()>.5) {
+        dstCtx.globalCompositeOperation='lighten';
+        dstCtx.fillStyle=`rgba(${utils.randomInt(0,255)},${utils.randomInt(0,255)},${utils.randomInt(0,255)},0.14)`;
+        dstCtx.fillRect(ox,y,width,sliceHeight);
+        dstCtx.globalCompositeOperation='source-over';
       }
     }
-    mainCtx.drawImage(effectCanvases.glitch,0,0);
+  }
+
+  function applyChromaShift(srcCtx, dstCtx, ct, params) {
+    dstCtx.clearRect(0,0,width,height);
+    const c = params;
+    const ox = Math.sin(ct*2)*width*c.intensity, oy = Math.cos(ct*1.5)*height*c.intensity*0.5;
+    dstCtx.globalCompositeOperation='lighter';
+    dstCtx.globalAlpha=0.8;
+    dstCtx.drawImage(srcCtx.canvas, ox, oy);
+    dstCtx.globalAlpha=0.8;
+    dstCtx.drawImage(srcCtx.canvas, -ox, -oy);
+    dstCtx.globalAlpha=1;
+    dstCtx.globalCompositeOperation='source-over';
+  }
+
+  function applyColourSweep(srcCtx, dstCtx, _ct, params) {
+    const {progress, direction, randomize} = params;
+    const srcImg = srcCtx.getImageData(0,0,width,height);
+    const state = getColourSweepState(srcImg, width, height, randomize|0);
+    let p = utils.clamp(progress, 0, 1), fwd = (direction|0)!==0;
+    if (!fwd) p = 1-p;
+    const thr = p * 255, {bright, out} = state, S = srcImg.data, O = out.data;
+    for(let i=0;i<bright.length;i++) {
+      const q=i<<2;
+      if(bright[i]<=thr) {
+        O[q]=S[q]; O[q+1]=S[q+1]; O[q+2]=S[q+2]; O[q+3]=S[q+3];
+      } else O[q+3]=0;
+    }
+    dstCtx.clearRect(0,0,width,height);
+    dstCtx.putImageData(out,0,0);
+  }
+
+  function applyPixelate(srcCtx, dstCtx, _ct, params) {
+    let px=utils.clamp(Math.round(params.pixelSize)||1,1,128);
+    dstCtx.clearRect(0,0,width,height);
+    if(px>1) {
+      dstCtx.imageSmoothingEnabled=false;
+      dstCtx.drawImage(srcCtx.canvas,0,0,width,height,0,0,Math.ceil(width/px),Math.ceil(height/px));
+      dstCtx.drawImage(dstCtx.canvas,0,0,Math.ceil(width/px),Math.ceil(height/px),0,0,width,height);
+      dstCtx.imageSmoothingEnabled=true;
+    } else {
+      dstCtx.drawImage(srcCtx.canvas,0,0,width,height);
+    }
+  }
+
+  // Map of effect functions
+  const effectMap = {
+    scanLines: applyScanLines,
+    filmGrain: applyFilmGrain,
+    blur: applyBlur,
+    vignette: applyVignette,
+    glitch: applyGlitch,
+    chromaShift: applyChromaShift,
+    colourSweep: applyColourSweep,
+    pixelate: applyPixelate
   };
-  const applyChromaShiftEffect=ct=>{
-    const ctx=effectCtxs.chromaShift,c=effects.chromaShift;
-    if(!ctx||c.intensity===0)return;
-    ctx.clearRect(0,0,width,height);
-    const ox=Math.sin(ct*2)*width*c.intensity,oy=Math.cos(ct*1.5)*height*c.intensity*0.5;
-    ctx.globalCompositeOperation='lighter';
-    ctx.globalAlpha=0.8;
-    ctx.drawImage(mainCanvas,ox,oy);
-    ctx.globalAlpha=0.8;
-    ctx.drawImage(mainCanvas,-ox,-oy);
-    ctx.globalAlpha=1;
-    ctx.globalCompositeOperation='source-over';
-    mainCtx.drawImage(effectCanvases.chromaShift,0,0);
+
+  // --- CORE PIPELINE LOGIC ---
+  function fxLoop(ts = performance.now()) {
+    if (!isPlaying) return;
+    const ct = ts / 1000;
+    ensureBuffers();
+    // 1. Draw image to bufferA (start of chain)
+    bufferCtxA.clearRect(0,0,width,height);
+    drawImage(bufferCtxA);
+    let readCtx = bufferCtxA, writeCtx = bufferCtxB;
+    // 2. Build effect pipeline in enabledOrder
+    autoTestFrame(ct);
+    for(const fx of enabledOrder) {
+      if (!effects[fx].active) continue;
+      writeCtx.clearRect(0,0,width,height);
+      effectMap[fx](readCtx, writeCtx, ct, effects[fx]);
+      // Swap buffers for next effect
+      [readCtx, writeCtx] = [writeCtx, readCtx];
+    }
+    // 3. Copy to mainCanvas
+    mainCtx.clearRect(0,0,width,height);
+    mainCtx.drawImage(readCtx.canvas, 0, 0);
+    animationId = requestAnimationFrame(fxLoop);
+  }
+
+  // --- UI & State Management ---
+  function init() {
+    effectKeys.forEach(k=>effects[k]=cloneDefaults(k));
+    mainCanvas=document.getElementById('main-canvas');
+    mainCtx=mainCanvas.getContext('2d',{alpha:false});
+    window.addEventListener('resize',handleResize);
+    mainCanvas.addEventListener('click',()=>!imageError&&(isPlaying?stopEffects():startEffects()));
+    handleResize();loadImage();
+    log('App initialized and DOM loaded.');
+  }
+  function handleResize() {
+    const container=document.getElementById('canvas-container');
+    const size=Math.min(window.innerHeight*.8,window.innerWidth*.8);
+    container.style.width=container.style.height=`${size}px`;
+    width=height=size;
+    mainCanvas.width=mainCanvas.height=size;
+    ensureBuffers();
+    if(imageLoaded&&!isPlaying) drawImage(mainCtx);
+  }
+  function loadImage() {
+    if(!window.images?.length) return showError();
+    image=new Image();
+    image.crossOrigin='anonymous';
+    image.onload=()=>{
+      imageLoaded=true;
+      document.getElementById('loading').style.display='none';
+      drawImage(mainCtx);
+      document.getElementById('fx-btns').style.opacity='1';
+      createEffectButtons();
+    };
+    image.onerror=()=>{imageError=true;showError();};
+    image.src=window.images[0];
+  }
+  function showError() {
+    document.getElementById('loading').style.display='none';
+    document.getElementById('error-message').style.display='block';
+  }
+  function drawImage(ctx) {
+    if(!imageLoaded) return;
+    ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
+    const ar=image.width/image.height;
+    let w,h;
+    if(ar>1){w=width;h=width/ar;}else{h=height;w=height*ar;}
+    ctx.drawImage(image,(width-w)/2,(height-h)/2,w,h);
+  }
+  function startEffects() {
+    isPlaying=true;
+    fxLoop();
+  }
+  function stopEffects() {
+    isPlaying=false;
+    if(animationId) cancelAnimationFrame(animationId),animationId=null;
+    enabledOrder = [];
+    effectKeys.forEach(k=>effects[k]=cloneDefaults(k));
+    drawImage(mainCtx);
+    updateButtonStates();
+    testStartTime=null;
+  }
+
+  // --- Effect Buttons: now preserve *activation order* ---
+  function createEffectButtons() {
+    const btns = document.getElementById('fx-btns');
+    btns.innerHTML = '';
+    effectKeys.forEach(fx => {
+      const b = document.createElement('button');
+      b.className = 'fx-btn';
+      b.textContent = `${fx} (Test)`;
+      b.dataset.fx  = fx;
+      b.onclick = () => {
+        const idx = enabledOrder.indexOf(fx);
+        if (idx !== -1) {
+          enabledOrder.splice(idx, 1);
+          effects[fx].active = false;
+        } else {
+          enabledOrder.push(fx);
+          effects[fx] = cloneDefaults(fx);
+          effects[fx].active = true;
+        }
+        if (enabledOrder.length) startEffects(); else stopEffects();
+        updateButtonStates();
+      };
+      btns.appendChild(b);
+    });
+    updateButtonStates();
+  }
+  function updateButtonStates() {
+    document.querySelectorAll('.fx-btn').forEach(btn => {
+      const fx = btn.dataset.fx;
+      btn.classList.toggle('active', enabledOrder.includes(fx));
+    });
+  }
+
+  // --- Param auto-test logic (unchanged) ---
+  const autoTestFrame = (ct) => {
+    enabledOrder.forEach(fx => {
+      if (fx === 'colourSweep') {
+        const prog = (ct % 10) / 10;
+        Object.assign(effects.colourSweep, { progress: prog, direction: 1, randomize: 1 });
+      } else if (fx === 'pixelate') {
+        effects.pixelate.pixelSize = 1 + Math.abs(Math.sin(Math.PI * (ct % 5) / 5)) * 63;
+      } else {
+        const def = effectParamDefs[fx];
+        if (!def) return;
+        def.forEach(({ name, min, max, relTo }) => {
+          if (relTo === 'height') { min *= height; max *= height; }
+          effects[fx][name] =
+            min + (max - min) *
+            (0.5 + 0.5 * Math.sin(ct * 0.7 + 1.5 * Math.sin(ct * 0.33 + name.charCodeAt(0) % 4) +
+                                  Math.cos(ct * 0.21 + name.length)) *
+             utils.easeInOut(0.5 + 0.5 * Math.sin(ct * 0.11 + name.length)));
+        });
+      }
+    });
   };
 
   return {init};
