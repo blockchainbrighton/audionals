@@ -1,7 +1,16 @@
+This README.md document covers:
 
-# Image FX Playground
+* The full automation/timing API (`fxAPI`)
+* Effect details with all tunable parameters (per effect and combined)
+* Effect chains: how order impacts results, how to reorder
+* Practical API usage examples
+* All new automation and timing features
 
-**Image FX Playground** is an interactive web-based application for live image effects and generative visual experiments. Built with pure HTML5, CSS, and modern JavaScript (ES2020+), it offers a modular, real-time pipeline for toggling and mixing multiple visual effects in a flexible order. Ideal for creative coding, generative art, and prototyping new image effects.
+---
+
+# Audional Image FX Playground
+
+**Audional Image FX Playground** is an interactive, tempo-aware web application for live image effects and generative visual experiments. Powered by pure HTML5, CSS, and modern JavaScript (ES2020+), it offers a modular, real-time pipeline for mixing, automating, and synchronizing multiple visual effects in a flexible, reorderable chain. It now features a robust API for effect parameter control, timed and BPM-synced automation, and advanced effect chaining.
 
 ---
 
@@ -11,7 +20,10 @@
 * [Live Demo](#live-demo)
 * [Getting Started](#getting-started)
 * [Usage](#usage)
-* [Effects Overview](#effects-overview)
+* [Effect Overview & Parameters](#effect-overview--parameters)
+* [Effect Chains & Order](#effect-chains--order)
+* [API Reference](#api-reference)
+* [Practical API Examples](#practical-api-examples)
 * [Customizing & Extending](#customizing--extending)
 * [Technical Details](#technical-details)
 * [Troubleshooting](#troubleshooting)
@@ -21,18 +33,20 @@
 
 ## Features
 
-* 🔁 **Real-time FX Pipeline**: Mix multiple effects in any order—effects stack and interact, not just toggle.
-* 🖱️ **Toggle-on-the-fly**: Enable/disable effects with a click; see instant visual feedback.
-* 🎛️ **Parameter Animation**: Effects run in auto-test mode, smoothly sweeping parameters for visual exploration.
-* 🖼️ **Responsive Canvas**: Adapts to browser window, with aspect-correct image scaling.
-* ✨ **Modern Code**: No frameworks, no dependencies—easy to audit, learn, and extend.
+* 🔁 **Real-time FX Pipeline:** Mix and chain multiple effects in any order.
+* 🎚️ **Full Parameter Automation:** Schedule any parameter change over time, in seconds, beats, or bars (with BPM sync).
+* 🖱️ **Toggle/Order on the Fly:** Click to enable, disable, and reorder effects live.
+* ⏱️ **Tempo-Synced Animation:** Set BPM, and automate FX in sync with musical timing.
+* 🎛️ **API-Driven Control:** Access all effect settings and schedules programmatically via `fxAPI`.
+* 🖼️ **Responsive Canvas:** Fluid resizing and aspect-correct image scaling.
+* ✨ **Modern, Extensible Codebase:** Easy to audit, extend, or embed elsewhere.
 
 ---
 
 ## Live Demo
 
 > **Try it now:**
-> *\[Paste the HTML file into your browser or run via localhost]*
+> *Copy the HTML into your browser or run it via localhost*
 
 ---
 
@@ -40,163 +54,260 @@
 
 ### 1. Clone or Download
 
-* Save the provided HTML file as `image-fx-playground.html`.
+* Save the provided HTML as `image-fx-playground.html`.
 
 ### 2. Open in Browser
 
 * Double-click the file or drag it into your browser.
 
-> *No build step, no server required!*
+*No build tools or servers required!*
 
 ---
 
 ## Usage
 
 1. **Load the App:**
-   The app will load a default test image (from Ordinals.com).
+   The default test image loads (from Ordinals.com).
 
 2. **Enable Effects:**
 
-   * Buttons at the bottom let you toggle each effect.
-   * Multiple effects can be active at once.
-   * The *order* in which you enable effects changes the result.
-   * Click the canvas to start/stop the animation.
+   * Use the buttons to toggle any effect on/off.
+   * Activate multiple effects for stacking/combo visuals.
+   * The *order* you activate effects changes the output (see [Effect Chains & Order](#effect-chains--order)).
+   * Click the canvas to start/stop animation.
 
-3. **Observe & Experiment:**
+3. **Observe, Experiment, Automate:**
 
-   * Each effect auto-tests its parameters (cycling intensity, scale, etc.).
-   * Turn effects on/off to explore combinatorial possibilities.
+   * Watch auto-testing sweep parameters for each effect.
+   * Use the API to schedule, sync, and script effect changes.
 
-4. **Add Your Own Image (Optional):**
-   Edit the `window.images` array in the script to use your own images:
+4. **Custom Images:**
+   Edit the `window.images` array in the script to use your own images (must be CORS-enabled):
 
    ```js
    window.images = [
-     "https://yourdomain.com/path/to/image.jpg"
+     "https://yourdomain.com/image.jpg"
    ];
    ```
 
-   Images must be CORS-enabled for loading.
+---
+
+## Effect Overview & Parameters
+
+**All effects are modular and can be combined in any order. Most parameters can be automated individually.**
+
+| Effect           | Key           | Key Parameters                                                            |
+| ---------------- | ------------- | ------------------------------------------------------------------------- |
+| **Fade**         | `fade`        | `progress` (0–1), `direction`, `speed`, `paused`                          |
+| **Scan Lines**   | `scanLines`   | `progress`, `intensity`, `speed`, `lineWidth`, `spacing`, `verticalShift` |
+| **Film Grain**   | `filmGrain`   | `intensity`, `size`, `speed`, `density`, `dynamicRange`                   |
+| **Blur**         | `blur`        | `progress`, `radius`, `direction`                                         |
+| **Vignette**     | `vignette`    | `progress`, `intensity`, `size`, `direction`                              |
+| **Glitch**       | `glitch`      | `intensity`                                                               |
+| **Chroma Shift** | `chromaShift` | `progress`, `intensity`, `speed`, `direction`                             |
+| **Colour Sweep** | `colourSweep` | `progress`, `direction`, `randomize`, `paused`                            |
+| **Pixelate**     | `pixelate`    | `progress`, `pixelSize`, `direction`, `speed`, `paused`                   |
+
+#### Detailed Parameters per Effect
+
+* **Fade**: Cross-fade from black to image. `progress` (0=black, 1=image).
+* **ScanLines**: Animated horizontal lines. Adjust `intensity`, `lineWidth`, `spacing`, `verticalShift`, etc.
+* **Film Grain**: High-res animated grain (affects only colored pixels). Tweak `intensity`, `size`, `speed`, `density`.
+* **Blur**: Real-time blur, controlled by `radius` and `progress`.
+* **Vignette**: Dark corners. Adjust `intensity` and `size` for soft or hard vignette.
+* **Glitch**: Shifts random slices, adds random color overlays. `intensity` controls frequency/strength.
+* **Chroma Shift**: Animated RGB offset. Increase `intensity` for wild color fringing.
+* **Colour Sweep**: Animated brightness mask; reveals image by brightness. Control `progress`, `direction`, `randomize`.
+* **Pixelate**: Animated pixel blocks; control with `pixelSize`.
+
+#### Combining Parameters
+
+* Each effect is **fully independent**.
+* Combined effects can create unique visual styles:
+
+  * *Fade + ScanLines*: "CRT fade-in"
+  * *Pixelate + Blur*: "VHS pixel smudge"
+  * *ChromaShift + Glitch*: "Analog color distortion"
 
 ---
 
-## Effects Overview
+## Effect Chains & Order
 
-### 1. **Scanlines**
+* **Order Matters:**
+  Effects are processed in the *order you activate them*. Each effect processes the image produced by the previous one in the chain.
 
-* Animated horizontal lines for a CRT/retro display effect.
-* Adjustable: intensity, speed, line width, spacing, offset.
+* **Changing Order:**
+  Disable and re-enable effects to change their order (first enabled is first in the chain).
 
-### 2. **Film Grain**
+* **Typical Use-Cases:**
 
-* Dynamic, high-res grain pattern blended into colored areas only.
-* Intensity, size, speed, density, and dynamic range are swept.
+  * *Pixelate → Blur* is **different** than *Blur → Pixelate*.
+  * Stacking *ScanLines*, *ColourSweep*, and *ChromaShift* can simulate "animated TV static."
 
-### 3. **Blur**
+* **Multiple Effects:**
+  There is no hard limit—combine as many as your GPU/CPU allows.
 
-* Fast, real-time Gaussian-like blur.
-* Controls: blur radius.
+---
 
-### 4. **Vignette**
+## API Reference
 
-* Darkening at the corners using a radial gradient.
-* Adjustable: intensity, vignette size.
+All timing, effect, and automation features are accessible via the global `window.fxAPI` object.
 
-### 5. **Glitch**
+### API Methods
 
-* Simulates datamosh-like horizontal slice shifting and random color overlays.
-* Adjustable: intensity.
+| Method                                                          | Description                                                                    |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `setBPM(bpm)`                                                   | Set the global tempo (beats per minute) for automation                         |
+| `getBPM()`                                                      | Get the current BPM                                                            |
+| `setBeatsPerBar(beats)`                                         | Set time signature (beats per bar)                                             |
+| `getBeatsPerBar()`                                              | Get the beats per bar                                                          |
+| `schedule({effect, param, from, to, start, end, unit, easing})` | Schedule any effect parameter to change over time, beats, or bars              |
+| `getElapsed()`                                                  | Get current playback time `{sec, beat, bar}`                                   |
+| `getEffects()`                                                  | Get a copy of the current effects state                                        |
+| `setEffect(effect, params)`                                     | Set one or more parameters on any effect (e.g. progress, pixelSize, intensity) |
+| `getAutomationQueue()`                                          | Get the list of scheduled automations                                          |
+| `clearAutomation()`                                             | Cancel all scheduled automations                                               |
+| `reset()`                                                       | Stop all effects and reset to defaults                                         |
 
-### 6. **Chroma Shift**
+#### Automation Scheduling Parameters
 
-* RGB channel offset effect, animated over time.
-* Adjustable: intensity.
+| Parameter | Description                                      | Example Value |
+| --------- | ------------------------------------------------ | ------------- |
+| `effect`  | Name/key of effect (e.g. `"fade"`, `"pixelate"`) | `"fade"`      |
+| `param`   | Effect parameter to animate                      | `"progress"`  |
+| `from`    | Starting value                                   | `0`           |
+| `to`      | Ending value                                     | `1`           |
+| `start`   | When to start (sec, beat, or bar, see `unit`)    | `0`, `4`      |
+| `end`     | When to end (sec, beat, or bar, see `unit`)      | `2`, `8`      |
+| `unit`    | `"sec"`, `"beat"`, or `"bar"`                    | `"beat"`      |
+| `easing`  | `"linear"` or `"easeInOut"` (optional)           | `"linear"`    |
 
-### 7. **Colour Sweep**
+### **API Usage Examples**
 
-* Animated mask that reveals portions of the image based on brightness.
-* Progressively wipes across bright/dark regions.
-* Controls: progress, direction, randomize.
+#### Schedule a Fade-in Over 4 Beats at 128 BPM:
 
-### 8. **Pixelate**
+```js
+fxAPI.setBPM(128);
+fxAPI.schedule({
+  effect: "fade",
+  param: "progress",
+  from: 0,
+  to: 1,
+  start: 0,
+  end: 4,
+  unit: "beat"
+});
+```
 
-* Blocky pixelation effect with animated block size.
-* Adjustable: pixel size.
+#### Pixelate Over 2 Bars (At Current BPM & Time Signature):
+
+```js
+fxAPI.schedule({
+  effect: "pixelate",
+  param: "pixelSize",
+  from: 1,
+  to: 180,
+  start: 1,
+  end: 3,
+  unit: "bar",
+  easing: "easeInOut"
+});
+```
+
+#### Instantly Set ChromaShift:
+
+```js
+fxAPI.setEffect("chromaShift", { intensity: 0.2, progress: 0.5 });
+```
+
+#### Get Current Effect States and Automations:
+
+```js
+fxAPI.getEffects();
+fxAPI.getAutomationQueue();
+```
+
+#### Get Current Playhead Position:
+
+```js
+fxAPI.getElapsed(); // { sec, beat, bar }
+```
+
+#### Clear All Scheduled Automations:
+
+```js
+fxAPI.clearAutomation();
+```
 
 ---
 
 ## Customizing & Extending
 
-* **Change Default Image:**
-  Edit the `window.images` array at the top of the `<script>`.
-* **Adjust Effect Defaults:**
-  Modify the `effectDefaults` object to tweak initial effect settings.
+* **Add Your Own Image:**
+  Change `window.images` in the `<script>` section.
+
+* **Adjust Defaults:**
+  Modify `effectDefaults` in the script.
+
 * **Add New Effects:**
 
-  * Create a new effect function (see existing `applyX` functions for pattern).
-  * Register it in `effectMap` and add a button label.
-* **Change FX Parameters:**
-  The `effectParamDefs` object defines sweep ranges for each effect’s parameters.
+  * Implement `applyYourEffect(ctx, ...)`
+  * Add to `effectMap`
+  * Add a button label for activation
+
+* **Parameter Ranges:**
+  See `effectParamDefs` (if included) for valid parameter ranges.
 
 ---
 
 ## Technical Details
 
 * **Effect Chaining:**
-  Effects are processed in the order you enable them, using double-buffered canvases for correct compositing and interaction.
-* **Auto-Testing:**
-  Parameters for each effect are smoothly animated using sine/easing functions, giving visual feedback of the entire parameter range.
+  Effects process images in chain order using double-buffered canvases for correct blending and compositing.
+
+* **Timing & Automation:**
+  The API scheduler lets you animate *any* effect parameter over time, musical beat/bar, or absolute seconds.
+  BPM and time signature are fully user-definable.
+
 * **Performance:**
-  Efficient use of `requestAnimationFrame` and offscreen canvases for smooth 60fps playback (hardware allowing).
+  Uses efficient requestAnimationFrame and offscreen canvases for 60fps playback (hardware allowing).
+
+* **Modern JS:**
+  All code is ES2020+ and easy to extend.
 
 ---
 
 ## Troubleshooting
 
 * **Image Not Loading?**
-
-  * Make sure your image source supports [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS).
-  * Test with the default image to confirm app functionality.
-
+  Make sure your image source supports [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS).
 * **No Effects Visible?**
-
-  * Ensure at least one effect is enabled (button should highlight).
-  * If effects look odd when mixed, try changing their activation order.
-
-* **Canvas Not Scaling?**
-
-  * App resizes responsively; make sure your browser window is not too small or restricted.
-
-* **Browser Support:**
-
-  * Works in all modern browsers (Chrome, Firefox, Edge, Safari).
-  * No legacy/IE support.
+  Enable at least one effect; check activation order for intended combinations.
+* **Browser Support?**
+  Chrome, Firefox, Safari, Edge. No IE/legacy.
+* **Automations Not Firing?**
+  Ensure animation is running (click canvas to play), and BPM is set if using `"beat"`/`"bar"` units.
 
 ---
 
 ## Credits & License
 
 * **Author:**
-  *\[Your Name Here or "Jim Crane"]*
+  Jim Crane (or your name)
 
 * **Libraries:**
-
-  * No third-party libraries used.
-  * Inspired by classic generative art and image processing techniques.
+  None—pure vanilla JavaScript, HTML, CSS.
 
 * **License:**
-  MIT License (or your choice)
+  MIT (or as you choose)
 
 ---
 
 ### Contributions
 
-Pull requests and suggestions are welcome!
-Open an issue or fork and submit your feature/fix.
+Pull requests and suggestions are always welcome!
+Open an issue or submit a fork for new features or fixes.
 
 ---
 
-**Enjoy creating visual magic!**
-
----
-
+**Enjoy exploring creative, synchronized visual FX!**
