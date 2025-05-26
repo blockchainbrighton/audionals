@@ -7,8 +7,9 @@ const log = (...a) => console.log('[FXDEMO]', ...a);
 const images = window.images ?? [
   "https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"
 ];
-let bpm = window.fxInitialBPM ?? 120;
+let bpm = window.fxInitialBPM ?? 104.15;
 let beatsPerBar = window.fxInitialBeatsPerBar ?? 4;
+
 
 // --- Timing & Automation ---
 let startTime = null;
@@ -194,6 +195,22 @@ const effectMap = { fade: applyFade, scanLines: applyScanLines, filmGrain: apply
 let mainCanvas, mainCtx, width, height, image = null, imageLoaded = false, imageError = false, animationId = null, isPlaying = false, effects = {}, enabledOrder = [], testStartTime = null;
 let bufferA, bufferB, bufferCtxA, bufferCtxB;
 
+// --- Timeline Logging State ---
+let lastLoggedBar = -1;
+const milestoneBars = new Set([9, 17, 33, 49, 57]); // big log milestones, add more as needed
+
+// For effect activation logging
+let automationActiveState = {}; // {effect_param: boolean}
+function getAutomationWindows(bar) {
+  // Return all automations active at a given bar
+  return automations.filter(a => {
+    const startBar = a.startSec / barsToSeconds(1);
+    const endBar = a.endSec / barsToSeconds(1);
+    return bar >= Math.floor(startBar) && bar < Math.ceil(endBar);
+  });
+}
+
+
 function ensureBuffers() {
   if (!bufferA) {
     bufferA = document.createElement('canvas'); bufferB = document.createElement('canvas');
@@ -202,20 +219,51 @@ function ensureBuffers() {
   }
   bufferA.width = bufferB.width = width; bufferA.height = bufferB.height = height;
 }
+
 function fxLoop(ts = performance.now()) {
-  if (!isPlaying) return;
-  const now = performance.now() / 1000;
-  if (startTime == null) startTime = now;
-  const ct = now - startTime;
-  ensureBuffers();
-  bufferCtxA.clearRect(0, 0, width, height); drawImage(bufferCtxA);
-  let readCtx = bufferCtxA, writeCtx = bufferCtxB;
-  processAutomations(ct);
-  autoTestFrame(ct);
-  for (const fx of enabledOrder) if (effects[fx].active) { writeCtx.clearRect(0, 0, width, height); effectMap[fx](readCtx, writeCtx, ct, effects[fx]); [readCtx, writeCtx] = [writeCtx, readCtx]; }
-  mainCtx.clearRect(0, 0, width, height); mainCtx.drawImage(readCtx.canvas, 0, 0);
-  animationId = requestAnimationFrame(fxLoop);
-}
+    if (!isPlaying) return;
+    const now = performance.now() / 1000;
+    if (startTime == null) startTime = now;
+    const ct = now - startTime;
+    ensureBuffers();
+    bufferCtxA.clearRect(0, 0, width, height); drawImage(bufferCtxA);
+    let readCtx = bufferCtxA, writeCtx = bufferCtxB;
+    processAutomations(ct);
+    autoTestFrame(ct);
+    for (const fx of enabledOrder) if (effects[fx].active) { writeCtx.clearRect(0, 0, width, height); effectMap[fx](readCtx, writeCtx, ct, effects[fx]); [readCtx, writeCtx] = [writeCtx, readCtx]; }
+    mainCtx.clearRect(0, 0, width, height); mainCtx.drawImage(readCtx.canvas, 0, 0);
+  
+    // === BAR LOGGING SECTION ===
+    const elapsed = getElapsed();
+    const bar = Math.floor(elapsed.bar);
+    if (bar !== lastLoggedBar) {
+      if (bar % 4 === 1 && bar !== 1) { // logs at 5, 9, 13, etc.
+        if (milestoneBars.has(bar)) {
+          log(`========== BIG MILESTONE: Bar ${bar} ==========`)
+        } else {
+          log(`Bar: ${bar}`);
+        }
+      }
+      lastLoggedBar = bar;
+  
+      // EFFECT ACTIVATION LOGGING
+      automations.forEach(a => {
+        const key = `${a.effect}_${a.param}`;
+        const startBar = a.startSec / barsToSeconds(1);
+        const endBar = a.endSec / barsToSeconds(1);
+        if (!automationActiveState[key] && Math.floor(startBar) === bar) {
+          log(`Effect "${a.effect}" param "${a.param}" ACTIVATED at bar ${bar} (${a.from} → ${a.to})`);
+          automationActiveState[key] = true;
+        }
+        if (automationActiveState[key] && Math.floor(endBar) === bar) {
+          log(`Effect "${a.effect}" param "${a.param}" DEACTIVATED at bar ${bar}`);
+          automationActiveState[key] = false;
+        }
+      });
+    }
+  
+    animationId = requestAnimationFrame(fxLoop);
+  }
 
 let timelinePlaying = false;
 
@@ -228,19 +276,22 @@ function init() {
   mainCanvas.addEventListener('click', () => {
     if (imageError) return;
     if (timelinePlaying) {
-      // Stop timeline effects & animation
       timelinePlaying = false;
       stopEffects();
       fxAPI.clearAutomation();
       enabledOrder.length = 0;
       Object.keys(effects).forEach(k => effects[k].active = false);
       updateButtonStates();
+      // ADD THIS:
+      window.playback && window.playback.stop();
     } else {
-      // Start timeline effects & animation
       timelinePlaying = true;
       runEffectTimeline();
+      // ADD THIS:
+      window.playback && window.playback.play();
     }
   });
+  
 
   handleResize();
   loadImage();
@@ -359,27 +410,63 @@ window.fxAPI = {
 document.addEventListener('DOMContentLoaded', init);
 
 function runEffectTimeline() {
-  fxAPI.clearAutomation();
-  enabledOrder.length = 0;
-  Object.keys(effects).forEach(k => effects[k].active = false);
-
-  // Schedule fade-in over 2 bars
-  fxAPI.schedule({ effect: 'fade', param: 'progress', from: 0, to: 1, start: 0, end: 2, unit: 'bar' });
-  effects.fade.active = true; enabledOrder.push('fade');
-
-  // Scanlines rise and fall over bars 1-5
-  fxAPI.schedule({ effect: 'scanLines', param: 'intensity', from: 0, to: 0.8, start: 1, end: 3, unit: 'bar' });
-  fxAPI.schedule({ effect: 'scanLines', param: 'intensity', from: 0.8, to: 0, start: 3, end: 5, unit: 'bar' });
-  effects.scanLines.active = true; enabledOrder.push('scanLines');
-
-  // Pixelate grows from 1 to 50 from bars 4 to 8
-  fxAPI.schedule({ effect: 'pixelate', param: 'pixelSize', from: 1, to: 50, start: 4, end: 8, unit: 'bar' });
-  effects.pixelate.active = true; enabledOrder.push('pixelate');
-
-  // Chroma shift pulses between bars 6 and 10
-  fxAPI.schedule({ effect: 'chromaShift', param: 'intensity', from: 0, to: 0.4, start: 6, end: 8, unit: 'bar' });
-  fxAPI.schedule({ effect: 'chromaShift', param: 'intensity', from: 0.4, to: 0, start: 8, end: 10, unit: 'bar' });
-  effects.chromaShift.active = true; enabledOrder.push('chromaShift');
-
-  startEffects();
-}
+    fxAPI.clearAutomation();
+    enabledOrder.length = 0;
+    Object.keys(effects).forEach(k => effects[k].active = false);
+  
+    // 1. Fade in very slowly (0-16 bars)
+    fxAPI.schedule({ effect: 'fade', param: 'progress', from: 0, to: 1, start: 0, end: 16, unit: 'bar' });
+    effects.fade.active = true; enabledOrder.push('fade');
+  
+    // 2. Vignette - small window expands, hiding most of the image until bar 32
+    fxAPI.schedule({ effect: 'vignette', param: 'intensity', from: 1, to: 0.1, start: 0, end: 32, unit: 'bar' }); // very strong to nearly off
+    fxAPI.schedule({ effect: 'vignette', param: 'size', from: 0.15, to: 0.7, start: 0, end: 32, unit: 'bar' });   // tiny window to large window
+    effects.vignette.active = true; enabledOrder.push('vignette');
+  
+    // 3. Pixelate - very blocky, resolving from bar 0 to 28
+    fxAPI.schedule({ effect: 'pixelate', param: 'pixelSize', from: 120, to: 4, start: 0, end: 28, unit: 'bar' });
+    fxAPI.schedule({ effect: 'pixelate', param: 'pixelSize', from: 4, to: 1, start: 28, end: 32, unit: 'bar' }); // fine detail just before 32
+    effects.pixelate.active = true; enabledOrder.push('pixelate');
+  
+    // 4. Blur - heavy at start, decreasing by bar 32
+    fxAPI.schedule({ effect: 'blur', param: 'radius', from: 32, to: 4, start: 0, end: 28, unit: 'bar' });
+    fxAPI.schedule({ effect: 'blur', param: 'radius', from: 4, to: 0, start: 28, end: 32, unit: 'bar' });
+    effects.blur.active = true; enabledOrder.push('blur');
+  
+    // 5. FilmGrain - heavy at start, clearing by bar 32
+    fxAPI.schedule({ effect: 'filmGrain', param: 'intensity', from: 2, to: 0, start: 0, end: 32, unit: 'bar' });
+    effects.filmGrain.active = true; enabledOrder.push('filmGrain');
+  
+    // 6. ChromaShift - subtle shifting for "ghostly" movement, 0-32 bars
+    fxAPI.schedule({ effect: 'chromaShift', param: 'intensity', from: 0.15, to: 0, start: 0, end: 32, unit: 'bar' });
+    effects.chromaShift.active = true; enabledOrder.push('chromaShift');
+  
+    // 7. ScanLines - fade in and out periodically, more as a distraction in the reveal
+    for (let i = 4; i < 32; i += 8) {
+      fxAPI.schedule({ effect: 'scanLines', param: 'intensity', from: 0, to: 0.6, start: i, end: i + 2, unit: 'bar' });
+      fxAPI.schedule({ effect: 'scanLines', param: 'intensity', from: 0.6, to: 0, start: i + 2, end: i + 4, unit: 'bar' });
+    }
+    effects.scanLines.active = true; enabledOrder.push('scanLines');
+  
+    // 8. After bar 32: most effects drop away, colourSweep and glitch add drama, fade out at end
+  
+    // ColourSweep (dramatic color reveal after the full image is seen)
+    fxAPI.schedule({ effect: 'colourSweep', param: 'progress', from: 0, to: 1, start: 40, end: 52, unit: 'bar' });
+    fxAPI.schedule({ effect: 'colourSweep', param: 'progress', from: 1, to: 0, start: 52, end: 60, unit: 'bar' });
+    effects.colourSweep.active = true; enabledOrder.push('colourSweep');
+  
+    // Glitch bursts (bars 50-56)
+    for (let i = 50; i < 56; i += 2) {
+      fxAPI.schedule({ effect: 'glitch', param: 'intensity', from: 0, to: 0.6, start: i, end: i + 1, unit: 'bar' });
+      fxAPI.schedule({ effect: 'glitch', param: 'intensity', from: 0.6, to: 0, start: i + 1, end: i + 2, unit: 'bar' });
+    }
+    effects.glitch.active = true; enabledOrder.push('glitch');
+  
+    // Final fade out (bars 60-64)
+    fxAPI.schedule({ effect: 'fade', param: 'progress', from: 1, to: 0, start: 60, end: 64, unit: 'bar' });
+    if (!enabledOrder.includes('fade')) enabledOrder.push('fade');
+  
+    startEffects();
+  }
+  
+  
