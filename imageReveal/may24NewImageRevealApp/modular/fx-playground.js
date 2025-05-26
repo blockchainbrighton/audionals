@@ -216,13 +216,37 @@ function fxLoop(ts = performance.now()) {
   mainCtx.clearRect(0, 0, width, height); mainCtx.drawImage(readCtx.canvas, 0, 0);
   animationId = requestAnimationFrame(fxLoop);
 }
+
+let timelinePlaying = false;
+
 function init() {
   effectKeys.forEach(k => effects[k] = cloneDefaults(k));
-  mainCanvas = document.getElementById('main-canvas'); mainCtx = mainCanvas.getContext('2d', { alpha: false });
+  mainCanvas = document.getElementById('main-canvas');
+  mainCtx = mainCanvas.getContext('2d', { alpha: false });
   window.addEventListener('resize', handleResize);
-  mainCanvas.addEventListener('click', () => !imageError && (isPlaying ? stopEffects() : startEffects()));
-  handleResize(); loadImage(); log('App initialized and DOM loaded.');
+
+  mainCanvas.addEventListener('click', () => {
+    if (imageError) return;
+    if (timelinePlaying) {
+      // Stop timeline effects & animation
+      timelinePlaying = false;
+      stopEffects();
+      fxAPI.clearAutomation();
+      enabledOrder.length = 0;
+      Object.keys(effects).forEach(k => effects[k].active = false);
+      updateButtonStates();
+    } else {
+      // Start timeline effects & animation
+      timelinePlaying = true;
+      runEffectTimeline();
+    }
+  });
+
+  handleResize();
+  loadImage();
+  log('App initialized and DOM loaded.');
 }
+
 function handleResize() {
   const container = document.getElementById('canvas-container');
   const size = Math.min(window.innerHeight * .8, window.innerWidth * .8);
@@ -333,3 +357,29 @@ window.fxAPI = {
 };
 
 document.addEventListener('DOMContentLoaded', init);
+
+function runEffectTimeline() {
+  fxAPI.clearAutomation();
+  enabledOrder.length = 0;
+  Object.keys(effects).forEach(k => effects[k].active = false);
+
+  // Schedule fade-in over 2 bars
+  fxAPI.schedule({ effect: 'fade', param: 'progress', from: 0, to: 1, start: 0, end: 2, unit: 'bar' });
+  effects.fade.active = true; enabledOrder.push('fade');
+
+  // Scanlines rise and fall over bars 1-5
+  fxAPI.schedule({ effect: 'scanLines', param: 'intensity', from: 0, to: 0.8, start: 1, end: 3, unit: 'bar' });
+  fxAPI.schedule({ effect: 'scanLines', param: 'intensity', from: 0.8, to: 0, start: 3, end: 5, unit: 'bar' });
+  effects.scanLines.active = true; enabledOrder.push('scanLines');
+
+  // Pixelate grows from 1 to 50 from bars 4 to 8
+  fxAPI.schedule({ effect: 'pixelate', param: 'pixelSize', from: 1, to: 50, start: 4, end: 8, unit: 'bar' });
+  effects.pixelate.active = true; enabledOrder.push('pixelate');
+
+  // Chroma shift pulses between bars 6 and 10
+  fxAPI.schedule({ effect: 'chromaShift', param: 'intensity', from: 0, to: 0.4, start: 6, end: 8, unit: 'bar' });
+  fxAPI.schedule({ effect: 'chromaShift', param: 'intensity', from: 0.4, to: 0, start: 8, end: 10, unit: 'bar' });
+  effects.chromaShift.active = true; enabledOrder.push('chromaShift');
+
+  startEffects();
+}
