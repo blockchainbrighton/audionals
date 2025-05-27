@@ -466,13 +466,16 @@ function getTimelineNameByFn(fn) {
 }
 
 function runEffectTimeline(timelineArg) {
-  // If a timeline is passed, use it, else get from global or window
   let timeline = timelineArg;
   let timelineName = "Loaded Timeline";
-  
-  // Prefer window.fxTimeline array if defined and non-empty
+
+  // --- Always use manual (UI) timeline if it exists ---
   if (!timeline) {
-    if (window.fxTimeline && Array.isArray(window.fxTimeline) && window.fxTimeline.length) {
+    if (Array.isArray(effectTimeline) && effectTimeline.length) {
+      timeline = effectTimeline;
+      timelineName = 'Manual UI Timeline (effectTimeline)';
+      log(`[FX] Using manual timeline from UI editor.`);
+    } else if (window.fxTimeline && Array.isArray(window.fxTimeline) && window.fxTimeline.length) {
       timeline = window.fxTimeline;
       timelineName = 'User-defined Timeline Array';
     } else if (typeof window.fxTimelineFunctionId === 'number' && timelineFunctions[window.fxTimelineFunctionId]) {
@@ -491,7 +494,7 @@ function runEffectTimeline(timelineArg) {
     }
   }
 
-  // Log timeline details with timelineName
+
   logTimelineDetails(timeline, timelineName);
 
   // ...rest of your runEffectTimeline as before...
