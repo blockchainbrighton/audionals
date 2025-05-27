@@ -85,13 +85,21 @@ function processAutomations(currentSec) {
 
 // ===== Buffers & Main Loop =====
 function ensureBuffers() {
+  // Early-out if nothing changed
+  if (bufferA && bufferA.width === width && bufferA.height === height) return;
+
+  // (Re)create once per size change
   if (!bufferA) {
-    bufferA = document.createElement('canvas'); bufferB = document.createElement('canvas');
-    bufferCtxA = bufferA.getContext('2d', { alpha: true, willReadFrequently: true });
-    bufferCtxB = bufferB.getContext('2d', { alpha: true, willReadFrequently: true });
+    bufferA      = document.createElement('canvas');
+    bufferB      = document.createElement('canvas');
+    bufferCtxA   = bufferA.getContext('2d', { alpha: true, willReadFrequently: true });
+    bufferCtxB   = bufferB.getContext('2d', { alpha: true, willReadFrequently: true });
   }
-  bufferA.width = bufferB.width = width; bufferA.height = bufferB.height = height;
+
+  bufferA.width  = bufferB.width  = width;
+  bufferA.height = bufferB.height = height;
 }
+
 
 // Only log bar changes and major events.
 const BAR_LOG_INTERVAL = 4; // Only log every 4 bars
@@ -219,34 +227,55 @@ function applyScanLines(src, dst, _, p) {
   dst.globalAlpha = 1;
 }
 function applyFilmGrain(src, dst, ct, p) {
-  const cw = width, ch = height, scale = 3, gw = Math.ceil(cw / scale), gh = Math.ceil(ch / scale);
+  const cw = width, ch = height;
+  // --- Map API params ---
+  const scale = Math.max(1, p.size ?? 2); // << map size param
+  const range = 128 * (p.dynamicRange ?? 1); // << dynamic range
+  const gw = Math.ceil(cw / scale), gh = Math.ceil(ch / scale);
   if (!applyFilmGrain._c || applyFilmGrain._c.gw !== gw || applyFilmGrain._c.gh !== gh) {
     const nc = document.createElement('canvas'); nc.width = gw; nc.height = gh;
     applyFilmGrain._c = { nc, nctx: nc.getContext('2d', { willReadFrequently: true }), gw, gh, ls: null, mask: null, mf: -1 };
   }
-  const { nc, nctx } = applyFilmGrain._c, fs = Math.floor(ct * p.speed * .7);
+  const { nc, nctx } = applyFilmGrain._c, fs = Math.floor(ct * (p.speed ?? 1) * 0.9);
   if (applyFilmGrain._c.ls !== fs) {
-    const id = nctx.createImageData(gw, gh), d = id.data, g = 200 + Math.random() * 55, a = 90 + 130 * (p.density * p.intensity);
-    for (let i = 0; i < d.length; i += 4) d[i] = d[i + 1] = d[i + 2] = g, d[i + 3] = a;
+    const id = nctx.createImageData(gw, gh), d = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      // DynamicRange now affects contrast (range)
+      const noise = 128 + (Math.random() - 0.5) * range * 2;
+      d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, noise));
+      // density controls fill/alpha, intensity can also modulate
+      d[i + 3] = Math.max(0, Math.min(255, 128 + 127 * (p.density ?? 1) * (p.intensity ?? 1)));
+    }
     nctx.putImageData(id, 0, 0); applyFilmGrain._c.ls = fs;
   }
   dst.clearRect(0, 0, cw, ch); dst.drawImage(src.canvas, 0, 0);
+
   if (applyFilmGrain._c.mf !== fs) {
     const mc = applyFilmGrain._c.mc || document.createElement('canvas');
     if (!applyFilmGrain._c.mc) mc.width = cw, mc.height = ch, applyFilmGrain._c.mc = mc;
     const mctx = mc.getContext('2d'), srcId = src.getImageData(0, 0, cw, ch), mId = mctx.createImageData(cw, ch),
       sData = srcId.data, dData = mId.data;
-    for (let i = 0; i < sData.length; i += 4) dData[i] = dData[i + 1] = dData[i + 2] = 255, dData[i + 3] = sData[i] + sData[i + 1] + sData[i + 2] > 30 ? 255 : 0;
+    for (let i = 0; i < sData.length; i += 4)
+      dData[i] = dData[i + 1] = dData[i + 2] = 255, dData[i + 3] = sData[i] + sData[i + 1] + sData[i + 2] > 30 ? 255 : 0;
     mctx.putImageData(mId, 0, 0); applyFilmGrain._c.mask = mc; applyFilmGrain._c.mf = fs;
   }
   const tc = applyFilmGrain._c.tc || document.createElement('canvas');
   if (!applyFilmGrain._c.tc) tc.width = cw, tc.height = ch, applyFilmGrain._c.tc = tc;
   const tctx = tc.getContext('2d');
-  tctx.clearRect(0, 0, cw, ch); tctx.globalAlpha = 0.18 + 0.23 * Math.min(1, p.intensity);
-  tctx.imageSmoothingEnabled = false; tctx.drawImage(nc, 0, 0, gw, gh, 0, 0, cw, ch); tctx.imageSmoothingEnabled = true; tctx.globalAlpha = 1;
-  tctx.globalCompositeOperation = "destination-in"; tctx.drawImage(applyFilmGrain._c.mask, 0, 0, cw, ch); tctx.globalCompositeOperation = "source-over";
+  tctx.clearRect(0, 0, cw, ch);
+
+  // intensity now maps opacity, but more pronounced
+  tctx.globalAlpha = 0.3 + 0.6 * Math.min(1, p.intensity ?? 1);
+  tctx.imageSmoothingEnabled = false;
+  tctx.drawImage(nc, 0, 0, gw, gh, 0, 0, cw, ch);
+  tctx.imageSmoothingEnabled = true;
+  tctx.globalAlpha = 1;
+  tctx.globalCompositeOperation = "destination-in";
+  tctx.drawImage(applyFilmGrain._c.mask, 0, 0, cw, ch);
+  tctx.globalCompositeOperation = "source-over";
   dst.drawImage(tc, 0, 0, cw, ch);
 }
+
 function applyBlur(src, dst, _, { radius }) {
   dst.clearRect(0, 0, width, height); dst.filter = `blur(${radius}px)`; dst.drawImage(src.canvas, 0, 0); dst.filter = 'none';
 }
@@ -416,21 +445,7 @@ function renderTimelineTable() {
         <td><button onclick="fxAPI.removeLane(${i})">✕</button></td>
       </tr>`).join('');
 }
-window.fxAPI = {
-  setBPM: v => { bpm = v; },
-  getBPM: () => bpm,
-  setBeatsPerBar: v => { beatsPerBar = v; },
-  getBeatsPerBar: () => beatsPerBar,
-  schedule: scheduleAutomation,
-  getElapsed: getElapsed,
-  getEffects: () => structuredClone(effects),
-  setEffect: (effect, params) => Object.assign(effects[effect] ??= cloneDefaults(effect), params),
-  getAutomationQueue: () => automations.map(a => ({...a})),
-  clearAutomation: () => { automations.length = 0; },
-  reset: stopEffects,
-  updateLane: (i, k, v) => { effectTimeline[i][k] = k.match(/Bar/) ? +v : v; renderTimelineTable(); },
-  removeLane: i => { effectTimeline.splice(i,1); renderTimelineTable(); }
-};
+
 
 // ===== Autotest Frame =====
 function autoTestFrame(ct) {
@@ -516,19 +531,25 @@ function runEffectTimeline(timelineArg) {
 }
 
 // ===== API =====
+// --- SINGLE source of truth ---
 window.fxAPI = {
-  setBPM: v => { bpm = v; },
-  getBPM: () => bpm,
-  setBeatsPerBar: v => { beatsPerBar = v; },
-  getBeatsPerBar: () => beatsPerBar,
-  schedule: scheduleAutomation,
+  setBPM:               v => { bpm = v },
+  getBPM:               () => bpm,
+  setBeatsPerBar:       v => { beatsPerBar = v },
+  getBeatsPerBar:       () => beatsPerBar,
+  schedule:             scheduleAutomation,
   getElapsed,
-  getEffects: () => structuredClone(effects),
-  setEffect: (effect, params) => Object.assign(effects[effect] ??= cloneDefaults(effect), params),
-  getAutomationQueue: () => automations.map(a => ({ ...a })),
-  clearAutomation: () => { automations.length = 0; },
-  reset: stopEffects,
-  updateLane: (i, k, v) => { effectTimeline[i][k] = k.match(/Bar/) ? +v : v; renderTimelineTable(); },
-  removeLane: i => { effectTimeline.splice(i, 1); renderTimelineTable(); }
+  getEffects:           () => structuredClone(effects),
+  setEffect:            (effect, params) =>
+                          Object.assign(effects[effect] ??= cloneDefaults(effect), params),
+  getAutomationQueue:   () => automations.map(a => ({ ...a })),
+  clearAutomation:      () => { automations.length = 0 },
+  reset:                stopEffects,
+  updateLane:           (i, k, v) => { 
+                            effectTimeline[i][k] = /Bar$/.test(k) ? +v : v;
+                            renderTimelineTable();
+                          },
+  removeLane:           i => { effectTimeline.splice(i, 1); renderTimelineTable() }
 };
+
 document.addEventListener('DOMContentLoaded', init, logAvailableTimelines());
