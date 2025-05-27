@@ -1,4 +1,9 @@
 // fx-playground.js
+import { dramaticRevealTimeline, glitchyPulseTimeline } from './timelines.js'; // Or whatever file you keep them in
+
+let activeEmbeddedTimeline = dramaticRevealTimeline; // Set your default embedded scene here
+
+
 const log = (...a) => console.log('[FXDEMO]', ...a);
 const images = window.images ?? [
   "https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"
@@ -224,7 +229,13 @@ function init() {
       window.playback && window.playback.stop();
     } else {
       timelinePlaying = true;
-      runEffectTimeline();
+      // -- CHOOSE THE TIMELINE --
+      if (hasUserTimeline()) {
+        runEffectTimeline(effectTimeline);
+      } else {
+        // Always run the current embedded module (switchable in code)
+        runEffectTimeline(activeEmbeddedTimeline());
+      }
       window.playback && window.playback.play();
     }
   });
@@ -299,7 +310,7 @@ function createTimelineUI() {
   document.getElementById('add-lane').onclick = addTimelineLane;
   document.getElementById('save-timeline').onclick = () => { saveTimeline(); log("Timeline saved."); };
   document.getElementById('load-timeline').onclick = () => { effectTimeline = JSON.parse(localStorage.getItem("fxTimeline") || "[]"); renderTimelineTable(); log("Timeline loaded."); };
-  document.getElementById('clear-timeline').onclick = () => { effectTimeline = []; renderTimelineTable(); };
+  document.getElementById('clear-timeline').onclick = () => { effectTimeline = []; renderTimelineTable();  stopEffects(); };
   renderTimelineTable();
 }
 function addTimelineLane() {
@@ -392,14 +403,25 @@ function autoTestFrame(ct) {
   });
 }
 
+// Returns true if there are manual (UI-programmed) lanes
+function hasUserTimeline() {
+  return Array.isArray(effectTimeline) && effectTimeline.length > 0;
+}
+
 
 // --- Timeline Runner ---
-function runEffectTimeline() {
+function runEffectTimeline(timeline = effectTimeline) {
   fxAPI.clearAutomation();
   effectKeys.forEach(k => effects[k].active = false);
   enabledOrder.length = 0;
-  for (const lane of effectTimeline) {
-    fxAPI.schedule({ effect: lane.effect, param: lane.param, from: +lane.from, to: +lane.to, start: +lane.startBar, end: +lane.endBar, unit: 'bar', easing: lane.easing });
+  for (const lane of timeline) {
+    fxAPI.schedule({ 
+      effect: lane.effect, param: lane.param, 
+      from: +lane.from, to: +lane.to, 
+      start: +lane.startBar, end: +lane.endBar, 
+      unit: lane.unit || 'bar', 
+      easing: lane.easing 
+    });
     effects[lane.effect].active = true;
     if (!enabledOrder.includes(lane.effect)) enabledOrder.push(lane.effect);
   }
