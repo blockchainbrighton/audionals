@@ -1,31 +1,147 @@
-// fx-playground.js
 import * as timelines from './timelines.js';
 
-// ===== CONFIG: All values come from HTML (window.*) =====
-const images       = window.images ?? [];
-let   bpm         = window.fxInitialBPM ?? 120;
-let   beatsPerBar = window.fxInitialBeatsPerBar ?? 4;
-let   effectTimeline = window.fxTimeline ?? [];
-let   activeTimelineFn = window.fxTimelineFunction ?? null;
-
-// ===== Console Log Helper =====
+const images = window.images ?? [];
+let bpm = window.fxInitialBPM ?? 120;
+let beatsPerBar = window.fxInitialBeatsPerBar ?? 4;
+let effectTimeline = window.fxTimeline ?? [];
+let activeTimelineFn = window.fxTimelineFunction ?? null;
 const log = (...a) => console.log('[FXDEMO]', ...a);
 
-// ===== Timeline Selection Logic =====
 function getSelectedTimeline() {
-  // 1. If an array timeline is set (UI/user), use it.
   if (Array.isArray(effectTimeline) && effectTimeline.length) return effectTimeline;
-  // 2. If an actual function is set, call it.
   if (typeof activeTimelineFn === 'function') return activeTimelineFn();
-  // 3. If a function name is given and exists in timelines.js, use that.
-  if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function') {
+  if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function')
     return timelines[window.fxTimelineFunctionName]();
-  }
-  // 4. Fallback to built-in embedded timeline.
   return timelines.dramaticRevealTimeline();
 }
+function logAvailableTimelines() {
+  const timelineFns = Object.entries(timelines)
+    .filter(([k, v]) => typeof v === "function" && k.endsWith("Timeline"));
+  log("[FX] Available Timelines:");
+  timelineFns.forEach(([name]) => log(`  - ${name}`));
+}
 
-// ===== Utility Functions =====
+function logTimelineDetails(timeline, name = "Loaded Timeline") {
+  if (!timeline.length) return log(`[FX] ${name}: (empty)`);
+  log(`[FX] ${name}:`);
+  log("  #  Effect       Param         From  To    Start End   Easing");
+  timeline.forEach((cmd, i) =>
+    log(
+      `${String(i).padStart(2, " ")}  ${cmd.effect.padEnd(10)} ${cmd.param.padEnd(12)} ` +
+      `${String(cmd.from).padEnd(5)} ${String(cmd.to).padEnd(5)} ` +
+      `${String(cmd.startBar).padEnd(5)} ${String(cmd.endBar).padEnd(5)} ` +
+      `${cmd.easing || 'linear'}`
+    )
+  );
+}
+
+
+// ===== Timing, Automation, and State =====
+let startTime = null, animationId = null, isPlaying = false, timelinePlaying = false;
+let mainCanvas, mainCtx, width, height, image = null, imageLoaded = false, imageError = false, effects = {}, enabledOrder = [], bufferA, bufferB, bufferCtxA, bufferCtxB, testStartTime = null;
+let lastLoggedBar = -1, automationActiveState = {}, timelineCompleteLogged = false;
+
+const beatsToSeconds = beats => (60 / bpm) * beats;
+const barsToSeconds = bars => beatsToSeconds(bars * beatsPerBar);
+const secondsToBeats = sec => (sec * bpm) / 60;
+const getElapsed = () => {
+  const now = performance.now() / 1000;
+  const sec = now - (startTime ?? now);
+  return { sec, beat: secondsToBeats(sec), bar: Math.floor(secondsToBeats(sec) / beatsPerBar) };
+};
+
+const automations = [];
+function scheduleAutomation({ effect, param, from, to, start, end, unit = "sec", easing = "linear" }) {
+  let [startSec, endSec] =
+    unit === "bar" ? [barsToSeconds(start), barsToSeconds(end)] :
+    unit === "beat" ? [beatsToSeconds(start), beatsToSeconds(end)] : [start, end];
+  automations.push({ effect, param, from, to, startSec, endSec, easing, done: false });
+  // Only log new lanes (not every frame)
+  // log(`[FX] Timeline lane: ${effect}.${param} from ${from} → ${to} [${unit} ${start}→${end}]`);
+}
+
+function processAutomations(currentSec) {
+  let anyActive = false;
+  for (const a of automations) {
+    if (a.done || currentSec < a.startSec) continue;
+    let t = (currentSec - a.startSec) / (a.endSec - a.startSec);
+    if (t >= 1) { t = 1; a.done = true; }
+    if (t < 0) t = 0;
+    if (a.easing === "easeInOut") t = utils.easeInOut(t);
+    effects[a.effect][a.param] = a.from + (a.to - a.from) * t;
+    anyActive = true;
+  }
+  if (!anyActive && automations.length && !timelineCompleteLogged) {
+    timelineCompleteLogged = true;
+    log("[FX] Timeline completed.");
+    let summary = automations.map(
+      a => `- ${a.effect}.${a.param} | from ${a.from} → ${a.to} | ${a.startSec.toFixed(2)}s to ${a.endSec.toFixed(2)}s (${a.easing})`
+    ).join('\n');
+    log(`[FX] Timeline Summary:\n${summary}`);
+  }
+}
+
+// ===== Buffers & Main Loop =====
+function ensureBuffers() {
+  if (!bufferA) {
+    bufferA = document.createElement('canvas'); bufferB = document.createElement('canvas');
+    bufferCtxA = bufferA.getContext('2d', { alpha: true, willReadFrequently: true });
+    bufferCtxB = bufferB.getContext('2d', { alpha: true, willReadFrequently: true });
+  }
+  bufferA.width = bufferB.width = width; bufferA.height = bufferB.height = height;
+}
+
+// Only log bar changes and major events.
+const BAR_LOG_INTERVAL = 4; // Only log every 4 bars
+function fxLoop(ts = performance.now()) {
+  if (!isPlaying) return;
+  const now = performance.now() / 1000;
+  if (startTime == null) startTime = now;
+  const ct = now - startTime;
+  ensureBuffers();
+  bufferCtxA.clearRect(0, 0, width, height); drawImage(bufferCtxA);
+  let readCtx = bufferCtxA, writeCtx = bufferCtxB;
+  autoTestFrame(ct);
+  processAutomations(ct);
+  for (const fx of enabledOrder) if (effects[fx].active) { effectMap[fx](readCtx, writeCtx, ct, effects[fx]); [readCtx, writeCtx] = [writeCtx, readCtx]; }
+  mainCtx.clearRect(0, 0, width, height); mainCtx.drawImage(readCtx.canvas, 0, 0);
+
+  const elapsed = getElapsed(), bar = Math.floor(elapsed.bar);
+  if (bar !== lastLoggedBar) {
+    if (bar % BAR_LOG_INTERVAL === 0) log(`[FX] Bar ${bar}`);
+    lastLoggedBar = bar;
+    automations.forEach(a => {
+      const key = `${a.effect}_${a.param}`;
+      const startBar = a.startSec / barsToSeconds(1), endBar = a.endSec / barsToSeconds(1);
+      // Only log activation/deactivation at bar milestones
+      if (!automationActiveState[key] && Math.floor(startBar) === bar) {
+        log(`[FX] Effect "${a.effect}" param "${a.param}" ACTIVATED at bar ${bar} (${a.from} → ${a.to})`);
+        automationActiveState[key] = true;
+      }
+      if (automationActiveState[key] && Math.floor(endBar) === bar) {
+        log(`[FX] Effect "${a.effect}" param "${a.param}" DEACTIVATED at bar ${bar}`);
+        automationActiveState[key] = false;
+      }
+    });
+  }
+  animationId = requestAnimationFrame(fxLoop);
+}
+
+// EffectMap: No per-frame logs!
+const effectMap = {
+  fade:        (src, dst, t, p) => applyFade(src, dst, t, p),
+  scanLines:   (src, dst, t, p) => applyScanLines(src, dst, t, p),
+  filmGrain:   (src, dst, t, p) => applyFilmGrain(src, dst, t, p),
+  blur:        (src, dst, t, p) => applyBlur(src, dst, t, p),
+  vignette:    (src, dst, t, p) => applyVignette(src, dst, t, p),
+  glitch:      (src, dst, t, p) => applyGlitch(src, dst, t, p),
+  chromaShift: (src, dst, t, p) => applyChromaShift(src, dst, t, p),
+  colourSweep: (src, dst, t, p) => applyColourSweep(src, dst, t, p),
+  pixelate:    (src, dst, t, p) => applyPixelate(src, dst, t, p)
+};
+
+
+// ===== Utilities =====
 const utils = (() => {
   const p = Array.from({ length: 256 }, () => Math.floor(Math.random() * 256)), pp = [...p, ...p];
   const fade = t => t ** 3 * (t * (t * 6 - 15) + 10);
@@ -35,7 +151,7 @@ const utils = (() => {
     return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
   };
   return {
-    lerp: lerp,
+    lerp,
     clamp: (v, min, max) => Math.max(min, Math.min(max, v)),
     random: (min, max) => Math.random() * (max - min) + min,
     randomInt: (min, max) => Math.floor(Math.random() * (max - min + 1)) + min,
@@ -57,7 +173,7 @@ const utils = (() => {
   };
 })();
 
-// ===== Effect Defaults and Cloning =====
+// ===== Effects/Defaults =====
 const effectDefaults = {
   fade:        { progress: 0, direction: 1, speed: 1, paused: false, active: false },
   scanLines:   { progress: 0, direction: 1, intensity: 0.4, speed: 1.5, lineWidth: 3, spacing: 6, verticalShift: 0, paused: false, active: false },
@@ -69,12 +185,12 @@ const effectDefaults = {
   colourSweep: { progress: 0, direction: 1, randomize: 1, paused: false, active: false },
   pixelate:    { progress: 0, direction: 1, pixelSize: 1, speed: 1, paused: false, active: false }
 };
-const cloneDefaults = k => structuredClone(effectDefaults[k]);
-const effectKeys = Object.keys(effectDefaults);
-const effectParams = {};
-effectKeys.forEach(k => effectParams[k] = Object.keys(effectDefaults[k]));
 
-// ===== Colour Sweep State Caching =====
+const effectKeys = Object.keys(effectDefaults);
+const cloneDefaults = k => structuredClone(effectDefaults[k]);
+const effectParams = {}; effectKeys.forEach(k => effectParams[k] = Object.keys(effectDefaults[k]));
+
+// ===== Colour Sweep State Cache =====
 const colourSweepCache = new WeakMap();
 function getColourSweepState(imgData, w, h, randomize) {
   let cached = colourSweepCache.get(imgData);
@@ -86,6 +202,7 @@ function getColourSweepState(imgData, w, h, randomize) {
   colourSweepCache.set(imgData, cached);
   return cached;
 }
+
 
 // ===== Effect Functions =====
 function applyFade(src, dst, _, { progress }) {
@@ -174,92 +291,10 @@ function applyPixelate(src, dst, _, p) {
   } else dst.drawImage(src.canvas, 0, 0, width, height);
 }
 
-// ===== Effect Function Map =====
-const effectMap = {
-  fade:        applyFade,
-  scanLines:   applyScanLines,
-  filmGrain:   applyFilmGrain,
-  blur:        applyBlur,
-  vignette:    applyVignette,
-  glitch:      applyGlitch,
-  chromaShift: applyChromaShift,
-  colourSweep: applyColourSweep,
-  pixelate:    applyPixelate
-};
 
-// ===== Timing and Automation =====
-let startTime = null;
-const beatsToSeconds = beats => (60 / bpm) * beats;
-const barsToSeconds = bars => beatsToSeconds(bars * beatsPerBar);
-const secondsToBeats = sec => (sec * bpm) / 60;
-const getElapsed = () => {
-  const now = performance.now() / 1000;
-  const sec = now - (startTime ?? now);
-  return { sec, beat: secondsToBeats(sec), bar: Math.floor(secondsToBeats(sec) / beatsPerBar) };
-};
-const automations = [];
-function scheduleAutomation({ effect, param, from, to, start, end, unit = "sec", easing = "linear" }) {
-  let [startSec, endSec] =
-    unit === "bar"
-      ? [barsToSeconds(start), barsToSeconds(end)]
-      : unit === "beat"
-        ? [beatsToSeconds(start), beatsToSeconds(end)]
-        : [start, end];
-  automations.push({ effect, param, from, to, startSec, endSec, easing, done: false });
-}
-function processAutomations(currentSec) {
-  for (const a of automations) {
-    if (a.done || currentSec < a.startSec) continue;
-    let t = (currentSec - a.startSec) / (a.endSec - a.startSec);
-    if (t >= 1) { t = 1; a.done = true; }
-    if (t < 0) t = 0;
-    if (a.easing === "easeInOut") t = utils.easeInOut(t);
-    const v = a.from + (a.to - a.from) * t;
-    effects[a.effect][a.param] = v;
-  }
-}
 
-// ===== Buffers, Main State, and Loop =====
-let mainCanvas, mainCtx, width, height, image = null, imageLoaded = false, imageError = false, animationId = null, isPlaying = false, effects = {}, enabledOrder = [], testStartTime = null;
-let bufferA, bufferB, bufferCtxA, bufferCtxB;
-let lastLoggedBar = -1, milestoneBars = new Set([9, 17, 33, 49, 57]), automationActiveState = {};
-let timelinePlaying = false;
 
-function ensureBuffers() {
-  if (!bufferA) {
-    bufferA = document.createElement('canvas'); bufferB = document.createElement('canvas');
-    bufferCtxA = bufferA.getContext('2d', { alpha: true, willReadFrequently: true });
-    bufferCtxB = bufferB.getContext('2d', { alpha: true, willReadFrequently: true });
-  }
-  bufferA.width = bufferB.width = width; bufferA.height = bufferB.height = height;
-}
-
-function fxLoop(ts = performance.now()) {
-  if (!isPlaying) return;
-  const now = performance.now() / 1000;
-  if (startTime == null) startTime = now;
-  const ct = now - startTime;
-  ensureBuffers();
-  bufferCtxA.clearRect(0, 0, width, height); drawImage(bufferCtxA);
-  let readCtx = bufferCtxA, writeCtx = bufferCtxB;
-  autoTestFrame(ct);
-  processAutomations(ct);
-  for (const fx of enabledOrder) if (effects[fx].active) { writeCtx.clearRect(0, 0, width, height); effectMap[fx](readCtx, writeCtx, ct, effects[fx]); [readCtx, writeCtx] = [writeCtx, readCtx]; }
-  mainCtx.clearRect(0, 0, width, height); mainCtx.drawImage(readCtx.canvas, 0, 0);
-  const elapsed = getElapsed(), bar = Math.floor(elapsed.bar);
-  if (bar !== lastLoggedBar) {
-    if (bar % 4 === 1 && bar !== 1) milestoneBars.has(bar) ? log(`========== BIG MILESTONE: Bar ${bar} ==========`) : log(`Bar: ${bar}`);
-    lastLoggedBar = bar;
-    automations.forEach(a => {
-      const key = `${a.effect}_${a.param}`, startBar = a.startSec / barsToSeconds(1), endBar = a.endSec / barsToSeconds(1);
-      if (!automationActiveState[key] && Math.floor(startBar) === bar) { log(`Effect "${a.effect}" param "${a.param}" ACTIVATED at bar ${bar} (${a.from} → ${a.to})`); automationActiveState[key] = true; }
-      if (automationActiveState[key] && Math.floor(endBar) === bar) { log(`Effect "${a.effect}" param "${a.param}" DEACTIVATED at bar ${bar}`); automationActiveState[key] = false; }
-    });
-  }
-  animationId = requestAnimationFrame(fxLoop);
-}
-
-// ===== App Init & Resize =====
+// ===== App Init & UI =====
 function init() {
   effectKeys.forEach(k => effects[k] = cloneDefaults(k));
   mainCanvas = document.getElementById('main-canvas');
@@ -310,7 +345,7 @@ function drawImage(ctx) {
   if (ar > 1) { w = width; h = width / ar; } else { h = height; w = height * ar; }
   ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
 }
-function startEffects() { isPlaying = true; startTime = null; fxLoop(); }
+function startEffects() { isPlaying = true; startTime = null; timelineCompleteLogged = false; fxLoop(); }
 function stopEffects() {
   isPlaying = false; if (animationId) cancelAnimationFrame(animationId), animationId = null;
   enabledOrder = []; effectKeys.forEach(k => effects[k] = cloneDefaults(k)); drawImage(mainCtx); updateButtonStates(); testStartTime = null; startTime = null;
@@ -338,7 +373,6 @@ function updateButtonStates() {
 }
 
 // ===== Timeline UI & Storage =====
-let effectTimelineUI = JSON.parse(localStorage.getItem("fxTimeline") || "[]");
 function saveTimeline() { localStorage.setItem("fxTimeline", JSON.stringify(effectTimeline)); }
 function createTimelineUI() {
   let panel = document.getElementById('timeline-ui');
@@ -395,46 +429,20 @@ window.fxAPI = {
   updateLane: (i, k, v) => { effectTimeline[i][k] = k.match(/Bar/) ? +v : v; renderTimelineTable(); },
   removeLane: i => { effectTimeline.splice(i,1); renderTimelineTable(); }
 };
-document.addEventListener('DOMContentLoaded', init);
 
 // ===== Autotest Frame =====
 function autoTestFrame(ct) {
-  // Skip if timeline automation is active
   if (timelinePlaying) return;
   enabledOrder.forEach(fx => {
     if (!effects[fx].active) return;
-    let p = effects[fx].progress ?? 0,
-      dir = effects[fx].direction ?? 1,
-      paused = effects[fx].paused,
-      speed = effects[fx].speed ?? 1;
-
+    let p = effects[fx].progress ?? 0, dir = effects[fx].direction ?? 1, paused = effects[fx].paused, speed = effects[fx].speed ?? 1;
     if (['fade','scanLines','colourSweep','pixelate','blur','vignette','chromaShift'].includes(fx)) {
-      if (fx === 'scanLines') {
-        Object.assign(effects.scanLines, {
-          intensity: 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(ct * 0.8)),
-          lineWidth: 1 + 14 * (0.5 + 0.5 * Math.sin(ct * 1.1)),
-          spacing: 4 + 40 * (0.5 + 0.5 * Math.sin(ct * 0.9 + 1)),
-          verticalShift: 32 * (0.5 + 0.5 * Math.sin(ct * 0.35)),
-          speed: 0.3 + 5 * (0.5 + 0.5 * Math.sin(ct * 0.5))
-        });
-      }
+      if (fx === 'scanLines') Object.assign(effects.scanLines, { intensity: 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(ct * 0.8)), lineWidth: 1 + 14 * (0.5 + 0.5 * Math.sin(ct * 1.1)), spacing: 4 + 40 * (0.5 + 0.5 * Math.sin(ct * 0.9 + 1)), verticalShift: 32 * (0.5 + 0.5 * Math.sin(ct * 0.35)), speed: 0.3 + 5 * (0.5 + 0.5 * Math.sin(ct * 0.5)) });
       if (fx === 'colourSweep') {
-        if (!paused) {
-          p += (0.2 + 0.8 * Math.sin(ct * 0.4)) * dir * (1 / 60);
-          if (p > 1) { p = 1; dir = -1; }
-          if (p < 0) { p = 0; dir = 1; }
-        }
-        Object.assign(effects.colourSweep, {
-          progress: utils.clamp(p, 0, 1), direction: dir,
-          speed: 0.6 + 1.7 * (0.5 + 0.5 * Math.cos(ct * 0.35)),
-          randomize: (Math.floor(ct / 5) % 2)
-        });
+        if (!paused) { p += (0.2 + 0.8 * Math.sin(ct * 0.4)) * dir * (1 / 60); if (p > 1) { p = 1; dir = -1; } if (p < 0) { p = 0; dir = 1; } }
+        Object.assign(effects.colourSweep, { progress: utils.clamp(p, 0, 1), direction: dir, speed: 0.6 + 1.7 * (0.5 + 0.5 * Math.cos(ct * 0.35)), randomize: (Math.floor(ct / 5) % 2) });
       }
-      if (!paused && fx !== 'colourSweep') {
-        p += 1/5 * dir * speed * (1/60);
-        if (p > 1) { p = 1; dir = -1; }
-        if (p < 0) { p = 0; dir = 1; }
-      }
+      if (!paused && fx !== 'colourSweep') { p += 1/5 * dir * speed * (1/60); if (p > 1) { p = 1; dir = -1; } if (p < 0) { p = 0; dir = 1; } }
       Object.assign(effects[fx], { progress: utils.clamp(p, 0, 1), direction: dir });
       if (fx === 'fade') effects.fade.progress = p;
       if (fx === 'scanLines') effects.scanLines.progress = p;
@@ -446,12 +454,9 @@ function autoTestFrame(ct) {
   });
 }
 
-// ===== Timeline Helpers =====
-function hasUserTimeline() {
-  return Array.isArray(effectTimeline) && effectTimeline.length > 0;
-}
-
+// ===== Timeline Helpers & Run Timeline =====
 function runEffectTimeline(timeline = getSelectedTimeline()) {
+  logTimelineDetails(timeline); // <--- log all effect commands
   fxAPI.clearAutomation();
   effectKeys.forEach(k => effects[k].active = false);
   enabledOrder.length = 0;
@@ -468,3 +473,21 @@ function runEffectTimeline(timeline = getSelectedTimeline()) {
   }
   startEffects();
 }
+
+// ===== API =====
+window.fxAPI = {
+  setBPM: v => { bpm = v; },
+  getBPM: () => bpm,
+  setBeatsPerBar: v => { beatsPerBar = v; },
+  getBeatsPerBar: () => beatsPerBar,
+  schedule: scheduleAutomation,
+  getElapsed,
+  getEffects: () => structuredClone(effects),
+  setEffect: (effect, params) => Object.assign(effects[effect] ??= cloneDefaults(effect), params),
+  getAutomationQueue: () => automations.map(a => ({ ...a })),
+  clearAutomation: () => { automations.length = 0; },
+  reset: stopEffects,
+  updateLane: (i, k, v) => { effectTimeline[i][k] = k.match(/Bar/) ? +v : v; renderTimelineTable(); },
+  removeLane: i => { effectTimeline.splice(i, 1); renderTimelineTable(); }
+};
+document.addEventListener('DOMContentLoaded', init, logAvailableTimelines());
