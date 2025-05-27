@@ -1,4 +1,6 @@
 import * as timelines from './timelines.js';
+import { timelineFunctions } from './timelines.js';
+
 
 const images = window.images ?? [];
 let bpm = window.fxInitialBPM ?? 120;
@@ -455,18 +457,54 @@ function autoTestFrame(ct) {
 }
 
 // ===== Timeline Helpers & Run Timeline =====
-function runEffectTimeline(timeline = getSelectedTimeline()) {
-  logTimelineDetails(timeline); // <--- log all effect commands
+function getTimelineNameByFn(fn) {
+  // Returns the name as exported in timelines.js
+  for (const [name, f] of Object.entries(timelines)) {
+    if (f === fn) return name;
+  }
+  return '(unnamed)';
+}
+
+function runEffectTimeline(timelineArg) {
+  // If a timeline is passed, use it, else get from global or window
+  let timeline = timelineArg;
+  let timelineName = "Loaded Timeline";
+  
+  // Prefer window.fxTimeline array if defined and non-empty
+  if (!timeline) {
+    if (window.fxTimeline && Array.isArray(window.fxTimeline) && window.fxTimeline.length) {
+      timeline = window.fxTimeline;
+      timelineName = 'User-defined Timeline Array';
+    } else if (typeof window.fxTimelineFunctionId === 'number' && timelineFunctions[window.fxTimelineFunctionId]) {
+      const fn = timelineFunctions[window.fxTimelineFunctionId];
+      timeline = fn();
+      timelineName = `[ID ${window.fxTimelineFunctionId}] ${getTimelineNameByFn(fn)}`;
+      log(`[FX] Using timeline ID: ${window.fxTimelineFunctionId} (${getTimelineNameByFn(fn)})`);
+    } else if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function') {
+      timeline = timelines[window.fxTimelineFunctionName]();
+      timelineName = window.fxTimelineFunctionName;
+      log(`[FX] Using timeline function name: ${timelineName}`);
+    } else {
+      timeline = timelines.dramaticRevealTimeline();
+      timelineName = 'dramaticRevealTimeline (default)';
+      log(`[FX] No timeline specified, defaulting to dramaticRevealTimeline.`);
+    }
+  }
+
+  // Log timeline details with timelineName
+  logTimelineDetails(timeline, timelineName);
+
+  // ...rest of your runEffectTimeline as before...
   fxAPI.clearAutomation();
   effectKeys.forEach(k => effects[k].active = false);
   enabledOrder.length = 0;
   for (const lane of timeline) {
-    fxAPI.schedule({ 
-      effect: lane.effect, param: lane.param, 
-      from: +lane.from, to: +lane.to, 
-      start: +lane.startBar, end: +lane.endBar, 
-      unit: lane.unit || 'bar', 
-      easing: lane.easing 
+    fxAPI.schedule({
+      effect: lane.effect, param: lane.param,
+      from: +lane.from, to: +lane.to,
+      start: +lane.startBar, end: +lane.endBar,
+      unit: lane.unit || 'bar',
+      easing: lane.easing
     });
     effects[lane.effect].active = true;
     if (!enabledOrder.includes(lane.effect)) enabledOrder.push(lane.effect);
