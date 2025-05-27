@@ -190,6 +190,7 @@ function fxLoop(ts = performance.now()) {
   ensureBuffers();
   bufferCtxA.clearRect(0, 0, width, height); drawImage(bufferCtxA);
   let readCtx = bufferCtxA, writeCtx = bufferCtxB;
+  autoTestFrame(ct);
   processAutomations(ct);
   for (const fx of enabledOrder) if (effects[fx].active) { writeCtx.clearRect(0, 0, width, height); effectMap[fx](readCtx, writeCtx, ct, effects[fx]); [readCtx, writeCtx] = [writeCtx, readCtx]; }
   mainCtx.clearRect(0, 0, width, height); mainCtx.drawImage(readCtx.canvas, 0, 0);
@@ -341,6 +342,57 @@ window.fxAPI = {
   removeLane: i => { effectTimeline.splice(i,1); renderTimelineTable(); }
 };
 document.addEventListener('DOMContentLoaded', init);
+
+function autoTestFrame(ct) {
+  // Skip if timeline automation is active
+  if (timelinePlaying) return;
+  enabledOrder.forEach(fx => {
+    if (!effects[fx].active) return;
+    let p = effects[fx].progress ?? 0,
+      dir = effects[fx].direction ?? 1,
+      paused = effects[fx].paused,
+      speed = effects[fx].speed ?? 1;
+
+    if (['fade','scanLines','colourSweep','pixelate','blur','vignette','chromaShift'].includes(fx)) {
+      if (fx === 'scanLines') {
+        Object.assign(effects.scanLines, {
+          intensity: 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(ct * 0.8)),
+          lineWidth: 1 + 14 * (0.5 + 0.5 * Math.sin(ct * 1.1)),
+          spacing: 4 + 40 * (0.5 + 0.5 * Math.sin(ct * 0.9 + 1)),
+          verticalShift: 32 * (0.5 + 0.5 * Math.sin(ct * 0.35)),
+          speed: 0.3 + 5 * (0.5 + 0.5 * Math.sin(ct * 0.5))
+        });
+      }
+      if (fx === 'colourSweep') {
+        if (!paused) {
+          p += (0.2 + 0.8 * Math.sin(ct * 0.4)) * dir * (1 / 60);
+          if (p > 1) { p = 1; dir = -1; }
+          if (p < 0) { p = 0; dir = 1; }
+        }
+        Object.assign(effects.colourSweep, {
+          progress: utils.clamp(p, 0, 1), direction: dir,
+          speed: 0.6 + 1.7 * (0.5 + 0.5 * Math.cos(ct * 0.35)),
+          randomize: (Math.floor(ct / 5) % 2)
+        });
+      }
+      if (!paused && fx !== 'colourSweep') {
+        p += 1/5 * dir * speed * (1/60);
+        if (p > 1) { p = 1; dir = -1; }
+        if (p < 0) { p = 0; dir = 1; }
+      }
+      Object.assign(effects[fx], { progress: utils.clamp(p, 0, 1), direction: dir });
+      if (fx === 'fade') effects.fade.progress = p;
+      if (fx === 'scanLines') effects.scanLines.progress = p;
+      if (fx === 'pixelate') effects.pixelate.pixelSize = 1 + (240 * p);
+      if (fx === 'blur') effects.blur.radius = 32 * p;
+      if (fx === 'vignette') effects.vignette.intensity = 1.5 * p;
+      if (fx === 'chromaShift') effects.chromaShift.intensity = 0.35 * p;
+    }
+    // Add more custom demo logic if needed for other FX
+  });
+}
+
+
 // --- Timeline Runner ---
 function runEffectTimeline() {
   fxAPI.clearAutomation();
