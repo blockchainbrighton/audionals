@@ -1,39 +1,31 @@
 // fx-playground.js
-import { dramaticRevealTimeline, glitchyPulseTimeline } from './timelines.js'; // Or whatever file you keep them in
+import * as timelines from './timelines.js';
 
-let activeEmbeddedTimeline = dramaticRevealTimeline; // Set your default embedded scene here
+// ===== CONFIG: All values come from HTML (window.*) =====
+const images       = window.images ?? [];
+let   bpm         = window.fxInitialBPM ?? 120;
+let   beatsPerBar = window.fxInitialBeatsPerBar ?? 4;
+let   effectTimeline = window.fxTimeline ?? [];
+let   activeTimelineFn = window.fxTimelineFunction ?? null;
 
-
+// ===== Console Log Helper =====
 const log = (...a) => console.log('[FXDEMO]', ...a);
-const images = window.images ?? [
-  "https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"
-];
-let bpm = window.fxInitialBPM ?? 104.15, beatsPerBar = window.fxInitialBeatsPerBar ?? 4;
-let startTime = null;
-const beatsToSeconds = beats => (60 / bpm) * beats;
-const barsToSeconds = bars => beatsToSeconds(bars * beatsPerBar);
-const secondsToBeats = sec => (sec * bpm) / 60;
-const getElapsed = () => {
-  const now = performance.now() / 1000;
-  const sec = now - (startTime ?? now);
-  return { sec, beat: secondsToBeats(sec), bar: Math.floor(secondsToBeats(sec) / beatsPerBar) };
-};
-const automations = [];
-function scheduleAutomation({effect, param, from, to, start, end, unit = "sec", easing = "linear"}) {
-  let [startSec, endSec] = unit === "bar" ? [barsToSeconds(start), barsToSeconds(end)] : unit === "beat" ? [beatsToSeconds(start), beatsToSeconds(end)] : [start, end];
-  automations.push({effect, param, from, to, startSec, endSec, easing, done: false});
-}
-function processAutomations(currentSec) {
-  for (const a of automations) {
-    if (a.done || currentSec < a.startSec) continue;
-    let t = (currentSec - a.startSec) / (a.endSec - a.startSec);
-    if (t >= 1) { t = 1; a.done = true; }
-    if (t < 0) t = 0;
-    if (a.easing === "easeInOut") t = utils.easeInOut(t);
-    const v = a.from + (a.to - a.from) * t;
-    effects[a.effect][a.param] = v;
+
+// ===== Timeline Selection Logic =====
+function getSelectedTimeline() {
+  // 1. If an array timeline is set (UI/user), use it.
+  if (Array.isArray(effectTimeline) && effectTimeline.length) return effectTimeline;
+  // 2. If an actual function is set, call it.
+  if (typeof activeTimelineFn === 'function') return activeTimelineFn();
+  // 3. If a function name is given and exists in timelines.js, use that.
+  if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function') {
+    return timelines[window.fxTimelineFunctionName]();
   }
+  // 4. Fallback to built-in embedded timeline.
+  return timelines.dramaticRevealTimeline();
 }
+
+// ===== Utility Functions =====
 const utils = (() => {
   const p = Array.from({ length: 256 }, () => Math.floor(Math.random() * 256)), pp = [...p, ...p];
   const fade = t => t ** 3 * (t * (t * 6 - 15) + 10);
@@ -43,7 +35,8 @@ const utils = (() => {
     return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
   };
   return {
-    lerp, clamp: (v, min, max) => Math.max(min, Math.min(max, v)),
+    lerp: lerp,
+    clamp: (v, min, max) => Math.max(min, Math.min(max, v)),
     random: (min, max) => Math.random() * (max - min) + min,
     randomInt: (min, max) => Math.floor(Math.random() * (max - min + 1)) + min,
     easeInOut: t => t < .5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2 / 2),
@@ -63,6 +56,8 @@ const utils = (() => {
     }
   };
 })();
+
+// ===== Effect Defaults and Cloning =====
 const effectDefaults = {
   fade:        { progress: 0, direction: 1, speed: 1, paused: false, active: false },
   scanLines:   { progress: 0, direction: 1, intensity: 0.4, speed: 1.5, lineWidth: 3, spacing: 6, verticalShift: 0, paused: false, active: false },
@@ -78,6 +73,8 @@ const cloneDefaults = k => structuredClone(effectDefaults[k]);
 const effectKeys = Object.keys(effectDefaults);
 const effectParams = {};
 effectKeys.forEach(k => effectParams[k] = Object.keys(effectDefaults[k]));
+
+// ===== Colour Sweep State Caching =====
 const colourSweepCache = new WeakMap();
 function getColourSweepState(imgData, w, h, randomize) {
   let cached = colourSweepCache.get(imgData);
@@ -89,7 +86,8 @@ function getColourSweepState(imgData, w, h, randomize) {
   colourSweepCache.set(imgData, cached);
   return cached;
 }
-// --- FX Functions ---
+
+// ===== Effect Functions =====
 function applyFade(src, dst, _, { progress }) {
   dst.clearRect(0, 0, width, height); dst.fillStyle = '#000'; dst.fillRect(0, 0, width, height);
   dst.globalAlpha = utils.clamp(progress, 0, 1); dst.drawImage(src.canvas, 0, 0); dst.globalAlpha = 1;
@@ -175,10 +173,58 @@ function applyPixelate(src, dst, _, p) {
     dst.drawImage(dst.canvas, 0, 0, Math.ceil(width / px), Math.ceil(height / px), 0, 0, width, height); dst.imageSmoothingEnabled = true;
   } else dst.drawImage(src.canvas, 0, 0, width, height);
 }
-const effectMap = { fade: applyFade, scanLines: applyScanLines, filmGrain: applyFilmGrain, blur: applyBlur, vignette: applyVignette, glitch: applyGlitch, chromaShift: applyChromaShift, colourSweep: applyColourSweep, pixelate: applyPixelate };
+
+// ===== Effect Function Map =====
+const effectMap = {
+  fade:        applyFade,
+  scanLines:   applyScanLines,
+  filmGrain:   applyFilmGrain,
+  blur:        applyBlur,
+  vignette:    applyVignette,
+  glitch:      applyGlitch,
+  chromaShift: applyChromaShift,
+  colourSweep: applyColourSweep,
+  pixelate:    applyPixelate
+};
+
+// ===== Timing and Automation =====
+let startTime = null;
+const beatsToSeconds = beats => (60 / bpm) * beats;
+const barsToSeconds = bars => beatsToSeconds(bars * beatsPerBar);
+const secondsToBeats = sec => (sec * bpm) / 60;
+const getElapsed = () => {
+  const now = performance.now() / 1000;
+  const sec = now - (startTime ?? now);
+  return { sec, beat: secondsToBeats(sec), bar: Math.floor(secondsToBeats(sec) / beatsPerBar) };
+};
+const automations = [];
+function scheduleAutomation({ effect, param, from, to, start, end, unit = "sec", easing = "linear" }) {
+  let [startSec, endSec] =
+    unit === "bar"
+      ? [barsToSeconds(start), barsToSeconds(end)]
+      : unit === "beat"
+        ? [beatsToSeconds(start), beatsToSeconds(end)]
+        : [start, end];
+  automations.push({ effect, param, from, to, startSec, endSec, easing, done: false });
+}
+function processAutomations(currentSec) {
+  for (const a of automations) {
+    if (a.done || currentSec < a.startSec) continue;
+    let t = (currentSec - a.startSec) / (a.endSec - a.startSec);
+    if (t >= 1) { t = 1; a.done = true; }
+    if (t < 0) t = 0;
+    if (a.easing === "easeInOut") t = utils.easeInOut(t);
+    const v = a.from + (a.to - a.from) * t;
+    effects[a.effect][a.param] = v;
+  }
+}
+
+// ===== Buffers, Main State, and Loop =====
 let mainCanvas, mainCtx, width, height, image = null, imageLoaded = false, imageError = false, animationId = null, isPlaying = false, effects = {}, enabledOrder = [], testStartTime = null;
 let bufferA, bufferB, bufferCtxA, bufferCtxB;
 let lastLoggedBar = -1, milestoneBars = new Set([9, 17, 33, 49, 57]), automationActiveState = {};
+let timelinePlaying = false;
+
 function ensureBuffers() {
   if (!bufferA) {
     bufferA = document.createElement('canvas'); bufferB = document.createElement('canvas');
@@ -187,6 +233,7 @@ function ensureBuffers() {
   }
   bufferA.width = bufferB.width = width; bufferA.height = bufferB.height = height;
 }
+
 function fxLoop(ts = performance.now()) {
   if (!isPlaying) return;
   const now = performance.now() / 1000;
@@ -211,7 +258,8 @@ function fxLoop(ts = performance.now()) {
   }
   animationId = requestAnimationFrame(fxLoop);
 }
-let timelinePlaying = false;
+
+// ===== App Init & Resize =====
 function init() {
   effectKeys.forEach(k => effects[k] = cloneDefaults(k));
   mainCanvas = document.getElementById('main-canvas');
@@ -229,13 +277,7 @@ function init() {
       window.playback && window.playback.stop();
     } else {
       timelinePlaying = true;
-      // -- CHOOSE THE TIMELINE --
-      if (hasUserTimeline()) {
-        runEffectTimeline(effectTimeline);
-      } else {
-        // Always run the current embedded module (switchable in code)
-        runEffectTimeline(activeEmbeddedTimeline());
-      }
+      runEffectTimeline();
       window.playback && window.playback.play();
     }
   });
@@ -294,8 +336,9 @@ function updateButtonStates() {
     const fx = btn.dataset.fx; btn.classList.toggle('active', enabledOrder.includes(fx));
   });
 }
-// --- Timeline UI & Storage ---
-let effectTimeline = JSON.parse(localStorage.getItem("fxTimeline") || "[]");
+
+// ===== Timeline UI & Storage =====
+let effectTimelineUI = JSON.parse(localStorage.getItem("fxTimeline") || "[]");
 function saveTimeline() { localStorage.setItem("fxTimeline", JSON.stringify(effectTimeline)); }
 function createTimelineUI() {
   let panel = document.getElementById('timeline-ui');
@@ -343,7 +386,7 @@ window.fxAPI = {
   setBeatsPerBar: v => { beatsPerBar = v; },
   getBeatsPerBar: () => beatsPerBar,
   schedule: scheduleAutomation,
-  getElapsed,
+  getElapsed: getElapsed,
   getEffects: () => structuredClone(effects),
   setEffect: (effect, params) => Object.assign(effects[effect] ??= cloneDefaults(effect), params),
   getAutomationQueue: () => automations.map(a => ({...a})),
@@ -354,6 +397,7 @@ window.fxAPI = {
 };
 document.addEventListener('DOMContentLoaded', init);
 
+// ===== Autotest Frame =====
 function autoTestFrame(ct) {
   // Skip if timeline automation is active
   if (timelinePlaying) return;
@@ -399,18 +443,15 @@ function autoTestFrame(ct) {
       if (fx === 'vignette') effects.vignette.intensity = 1.5 * p;
       if (fx === 'chromaShift') effects.chromaShift.intensity = 0.35 * p;
     }
-    // Add more custom demo logic if needed for other FX
   });
 }
 
-// Returns true if there are manual (UI-programmed) lanes
+// ===== Timeline Helpers =====
 function hasUserTimeline() {
   return Array.isArray(effectTimeline) && effectTimeline.length > 0;
 }
 
-
-// --- Timeline Runner ---
-function runEffectTimeline(timeline = effectTimeline) {
+function runEffectTimeline(timeline = getSelectedTimeline()) {
   fxAPI.clearAutomation();
   effectKeys.forEach(k => effects[k].active = false);
   enabledOrder.length = 0;
