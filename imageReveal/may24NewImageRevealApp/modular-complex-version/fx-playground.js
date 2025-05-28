@@ -1,7 +1,6 @@
 import * as timelines from './timelines.js';
 import { timelineFunctions } from './timelines.js';
 
-
 const images = window.images ?? [];
 let bpm = window.fxInitialBPM ?? 120;
 let beatsPerBar = window.fxInitialBeatsPerBar ?? 4;
@@ -16,31 +15,25 @@ function getSelectedTimeline() {
     return timelines[window.fxTimelineFunctionName]();
   return timelines.dramaticRevealTimeline();
 }
+
 function logAvailableTimelines() {
-  const timelineFns = Object.entries(timelines)
-    .filter(([k, v]) => typeof v === "function" && k.endsWith("Timeline"));
-  log("[FX] Available Timelines:");
-  timelineFns.forEach(([name]) => log(`  - ${name}`));
+  Object.entries(timelines)
+    .filter(([k, v]) => typeof v === "function" && k.endsWith("Timeline"))
+    .forEach(([name]) => log(`[FX] Timeline: ${name}`));
 }
 
-function logTimelineDetails(timeline, name = "Loaded Timeline") {
-  if (!timeline.length) return log(`[FX] ${name}: (empty)`);
-  log(`[FX] ${name}:`);
-  log("  #  Effect       Param         From  To    Start End   Easing");
-  timeline.forEach((cmd, i) =>
-    log(
-      `${String(i).padStart(2, " ")}  ${cmd.effect.padEnd(10)} ${cmd.param.padEnd(12)} ` +
-      `${String(cmd.from).padEnd(5)} ${String(cmd.to).padEnd(5)} ` +
-      `${String(cmd.startBar).padEnd(5)} ${String(cmd.endBar).padEnd(5)} ` +
-      `${cmd.easing || 'linear'}`
-    )
+function logTimelineDetails(tl, name = "Loaded Timeline") {
+  if (!tl.length) return log(`[FX] ${name}: (empty)`);
+  log(`[FX] ${name}:\n  #  Effect       Param         From  To    Start End   Easing`);
+  tl.forEach((cmd, i) =>
+    log(`${i.toString().padStart(2)}  ${cmd.effect.padEnd(10)} ${cmd.param.padEnd(12)} ${String(cmd.from).padEnd(5)} ${String(cmd.to).padEnd(5)} ${String(cmd.startBar).padEnd(5)} ${String(cmd.endBar).padEnd(5)} ${cmd.easing||'linear'}`)
   );
 }
 
-
-// ===== Timing, Automation, and State =====
+// === Timing, Automation, and State ===
 let startTime = null, animationId = null, isPlaying = false, timelinePlaying = false;
-let mainCanvas, mainCtx, width, height, image = null, imageLoaded = false, imageError = false, effects = {}, enabledOrder = [], bufferA, bufferB, bufferCtxA, bufferCtxB, testStartTime = null;
+let mainCanvas, mainCtx, width, height, image = null, imageLoaded = false, imageError = false;
+let effects = {}, enabledOrder = [], bufferA, bufferB, bufferCtxA, bufferCtxB;
 let lastLoggedBar = -1, automationActiveState = {}, timelineCompleteLogged = false;
 
 const beatsToSeconds = beats => (60 / bpm) * beats;
@@ -58,8 +51,6 @@ function scheduleAutomation({ effect, param, from, to, start, end, unit = "sec",
     unit === "bar" ? [barsToSeconds(start), barsToSeconds(end)] :
     unit === "beat" ? [beatsToSeconds(start), beatsToSeconds(end)] : [start, end];
   automations.push({ effect, param, from, to, startSec, endSec, easing, done: false });
-  // Only log new lanes (not every frame)
-  // log(`[FX] Timeline lane: ${effect}.${param} from ${from} → ${to} [${unit} ${start}→${end}]`);
 }
 
 function processAutomations(currentSec) {
@@ -76,33 +67,26 @@ function processAutomations(currentSec) {
   if (!anyActive && automations.length && !timelineCompleteLogged) {
     timelineCompleteLogged = true;
     log("[FX] Timeline completed.");
-    let summary = automations.map(
+    log(`[FX] Timeline Summary:\n` + automations.map(
       a => `- ${a.effect}.${a.param} | from ${a.from} → ${a.to} | ${a.startSec.toFixed(2)}s to ${a.endSec.toFixed(2)}s (${a.easing})`
-    ).join('\n');
-    log(`[FX] Timeline Summary:\n${summary}`);
+    ).join('\n'));
   }
 }
 
-// ===== Buffers & Main Loop =====
+// === Buffers & Main Loop ===
 function ensureBuffers() {
-  // Early-out if nothing changed
   if (bufferA && bufferA.width === width && bufferA.height === height) return;
-
-  // (Re)create once per size change
   if (!bufferA) {
-    bufferA      = document.createElement('canvas');
-    bufferB      = document.createElement('canvas');
-    bufferCtxA   = bufferA.getContext('2d', { alpha: true, willReadFrequently: true });
-    bufferCtxB   = bufferB.getContext('2d', { alpha: true, willReadFrequently: true });
+    bufferA = document.createElement('canvas');
+    bufferB = document.createElement('canvas');
+    bufferCtxA = bufferA.getContext('2d', { alpha: true, willReadFrequently: true });
+    bufferCtxB = bufferB.getContext('2d', { alpha: true, willReadFrequently: true });
   }
-
-  bufferA.width  = bufferB.width  = width;
+  bufferA.width = bufferB.width = width;
   bufferA.height = bufferB.height = height;
 }
 
-
-// Only log bar changes and major events.
-const BAR_LOG_INTERVAL = 4; // Only log every 4 bars
+const BAR_LOG_INTERVAL = 4;
 function fxLoop(ts = performance.now()) {
   if (!isPlaying) return;
   const now = performance.now() / 1000;
@@ -116,14 +100,13 @@ function fxLoop(ts = performance.now()) {
   for (const fx of enabledOrder) if (effects[fx].active) { effectMap[fx](readCtx, writeCtx, ct, effects[fx]); [readCtx, writeCtx] = [writeCtx, readCtx]; }
   mainCtx.clearRect(0, 0, width, height); mainCtx.drawImage(readCtx.canvas, 0, 0);
 
-  const elapsed = getElapsed(), bar = Math.floor(elapsed.bar);
+  const { bar } = getElapsed();
   if (bar !== lastLoggedBar) {
     if (bar % BAR_LOG_INTERVAL === 0) log(`[FX] Bar ${bar}`);
     lastLoggedBar = bar;
     automations.forEach(a => {
       const key = `${a.effect}_${a.param}`;
       const startBar = a.startSec / barsToSeconds(1), endBar = a.endSec / barsToSeconds(1);
-      // Only log activation/deactivation at bar milestones
       if (!automationActiveState[key] && Math.floor(startBar) === bar) {
         log(`[FX] Effect "${a.effect}" param "${a.param}" ACTIVATED at bar ${bar} (${a.from} → ${a.to})`);
         automationActiveState[key] = true;
@@ -137,21 +120,19 @@ function fxLoop(ts = performance.now()) {
   animationId = requestAnimationFrame(fxLoop);
 }
 
-// EffectMap: No per-frame logs!
 const effectMap = {
-  fade:        (src, dst, t, p) => applyFade(src, dst, t, p),
-  scanLines:   (src, dst, t, p) => applyScanLines(src, dst, t, p),
-  filmGrain:   (src, dst, t, p) => applyFilmGrain(src, dst, t, p),
-  blur:        (src, dst, t, p) => applyBlur(src, dst, t, p),
-  vignette:    (src, dst, t, p) => applyVignette(src, dst, t, p),
-  glitch:      (src, dst, t, p) => applyGlitch(src, dst, t, p),
-  chromaShift: (src, dst, t, p) => applyChromaShift(src, dst, t, p),
-  colourSweep: (src, dst, t, p) => applyColourSweep(src, dst, t, p),
-  pixelate:    (src, dst, t, p) => applyPixelate(src, dst, t, p)
+  fade:        applyFade,
+  scanLines:   applyScanLines,
+  filmGrain:   applyFilmGrain,
+  blur:        applyBlur,
+  vignette:    applyVignette,
+  glitch:      applyGlitch,
+  chromaShift: applyChromaShift,
+  colourSweep: applyColourSweep,
+  pixelate:    applyPixelate
 };
 
-
-// ===== Utilities =====
+// === Utilities ===
 const utils = (() => {
   const p = Array.from({ length: 256 }, () => Math.floor(Math.random() * 256)), pp = [...p, ...p];
   const fade = t => t ** 3 * (t * (t * 6 - 15) + 10);
@@ -183,7 +164,7 @@ const utils = (() => {
   };
 })();
 
-// ===== Effects/Defaults =====
+// === Effects/Defaults ===
 const effectDefaults = {
   fade:        { progress: 0, direction: 1, speed: 1, paused: false, active: false },
   scanLines:   { progress: 0, direction: 1, intensity: 0.4, speed: 1.5, lineWidth: 3, spacing: 6, verticalShift: 0, paused: false, active: false },
@@ -195,12 +176,11 @@ const effectDefaults = {
   colourSweep: { progress: 0, direction: 1, randomize: 1, paused: false, active: false },
   pixelate:    { progress: 0, direction: 1, pixelSize: 1, speed: 1, paused: false, active: false }
 };
-
 const effectKeys = Object.keys(effectDefaults);
 const cloneDefaults = k => structuredClone(effectDefaults[k]);
 const effectParams = {}; effectKeys.forEach(k => effectParams[k] = Object.keys(effectDefaults[k]));
 
-// ===== Colour Sweep State Cache =====
+// === Colour Sweep State Cache ===
 const colourSweepCache = new WeakMap();
 function getColourSweepState(imgData, w, h, randomize) {
   let cached = colourSweepCache.get(imgData);
@@ -213,8 +193,7 @@ function getColourSweepState(imgData, w, h, randomize) {
   return cached;
 }
 
-
-// ===== Effect Functions =====
+// === Effect Functions ===
 function applyFade(src, dst, _, { progress }) {
   dst.clearRect(0, 0, width, height); dst.fillStyle = '#000'; dst.fillRect(0, 0, width, height);
   dst.globalAlpha = utils.clamp(progress, 0, 1); dst.drawImage(src.canvas, 0, 0); dst.globalAlpha = 1;
@@ -227,69 +206,26 @@ function applyScanLines(src, dst, _, p) {
   dst.globalAlpha = 1;
 }
 function applyFilmGrain(src, dst, ct, p) {
-  const cw = width, ch = height;
-
-  // 1. Draw the source (e.g., the blurred image) onto the destination canvas first.
-  //    The pipeline ensures src is the output of the previous effect.
-  //    We clear dst and draw src to ensure we're working on a clean slate for this effect pass.
-  dst.clearRect(0, 0, cw, ch);
-  dst.drawImage(src.canvas, 0, 0);
-
-  // --- Noise Generation (largely the same as your existing code) ---
-  const scale = Math.max(1, p.size ?? 1.2); // Default from your new code
-  const range = 128 * (p.dynamicRange ?? 1);
-  const gw = Math.ceil(cw / scale), gh = Math.ceil(ch / scale);
-
-  // Cache for the noise canvas
+  const cw = width, ch = height, scale = Math.max(1, p.size ?? 1.2), range = 128 * (p.dynamicRange ?? 1), gw = Math.ceil(cw / scale), gh = Math.ceil(ch / scale);
   if (!applyFilmGrain._c || applyFilmGrain._c.gw !== gw || applyFilmGrain._c.gh !== gh) {
     const nc = document.createElement('canvas');
     nc.width = gw; nc.height = gh;
-    applyFilmGrain._c = {
-      nc: nc,
-      nctx: nc.getContext('2d', { willReadFrequently: true }),
-      gw: gw,
-      gh: gh,
-      ls: null // Last speed/time based frame update
-    };
+    applyFilmGrain._c = { nc, nctx: nc.getContext('2d', { willReadFrequently: true }), gw, gh, ls: null };
   }
-
-  const { nc, nctx } = applyFilmGrain._c;
-  // Update noise pattern based on speed and time (ct)
-  // The factor 0.9 is arbitrary, adjust if speed feels off
-  const fs = Math.floor(ct * (p.speed ?? 80) * 0.9); // Default speed from your new code
-
+  const { nc, nctx } = applyFilmGrain._c, fs = Math.floor(ct * (p.speed ?? 80) * 0.9);
   if (applyFilmGrain._c.ls !== fs) {
-    const id = nctx.createImageData(gw, gh);
-    const d = id.data;
+    const id = nctx.createImageData(gw, gh), d = id.data;
     for (let i = 0; i < d.length; i += 4) {
       const noiseVal = 128 + (Math.random() - 0.5) * range * 2;
-      d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, noiseVal)); // Monochrome noise
-      // Opacity of grain itself is controlled by globalAlpha below when drawing.
-      // p.density could influence alpha here if desired, e.g., d[i+3] = 255 * (p.density ?? 1)
-      d[i + 3] = 255;
+      d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, noiseVal)); d[i + 3] = 255;
     }
-    nctx.putImageData(id, 0, 0);
-    applyFilmGrain._c.ls = fs;
+    nctx.putImageData(id, 0, 0); applyFilmGrain._c.ls = fs;
   }
-
-  // --- Apply Grain with "overlay" Blend Mode ---
-  // Set the blend mode for drawing the noise on top of the current dst content (which is src)
-  dst.globalCompositeOperation = "overlay";
-
-  // Set the overall intensity/opacity of the grain layer
-  // Use the 'intensity' parameter from effectDefaults for filmGrain
-  dst.globalAlpha = utils.clamp(p.intensity ?? 1, 0, 1);
-
-  // Draw the (potentially smaller) noise canvas scaled up to cover the destination
-  dst.imageSmoothingEnabled = false; // Keep grain pixelated if upscaled
-  dst.drawImage(nc, 0, 0, gw, gh, 0, 0, cw, ch);
-  dst.imageSmoothingEnabled = true; // Reset for other operations
-
-  // Reset globalAlpha and globalCompositeOperation for subsequent effects in the pipeline
-  dst.globalAlpha = 1;
-  dst.globalCompositeOperation = "source-over"; // Default blend mode
+  dst.clearRect(0, 0, cw, ch); dst.drawImage(src.canvas, 0, 0);
+  dst.globalCompositeOperation = "overlay"; dst.globalAlpha = utils.clamp(p.intensity ?? 1, 0, 1);
+  dst.imageSmoothingEnabled = false; dst.drawImage(nc, 0, 0, gw, gh, 0, 0, cw, ch); dst.imageSmoothingEnabled = true;
+  dst.globalAlpha = 1; dst.globalCompositeOperation = "source-over";
 }
-
 function applyBlur(src, dst, _, { radius }) {
   dst.clearRect(0, 0, width, height); dst.filter = `blur(${radius}px)`; dst.drawImage(src.canvas, 0, 0); dst.filter = 'none';
 }
@@ -336,10 +272,7 @@ function applyPixelate(src, dst, _, p) {
   } else dst.drawImage(src.canvas, 0, 0, width, height);
 }
 
-
-
-
-// ===== App Init & UI =====
+// === App Init & UI ===
 function init() {
   effectKeys.forEach(k => effects[k] = cloneDefaults(k));
   mainCanvas = document.getElementById('main-canvas');
@@ -393,7 +326,7 @@ function drawImage(ctx) {
 function startEffects() { isPlaying = true; startTime = null; timelineCompleteLogged = false; fxLoop(); }
 function stopEffects() {
   isPlaying = false; if (animationId) cancelAnimationFrame(animationId), animationId = null;
-  enabledOrder = []; effectKeys.forEach(k => effects[k] = cloneDefaults(k)); drawImage(mainCtx); updateButtonStates(); testStartTime = null; startTime = null;
+  enabledOrder = []; effectKeys.forEach(k => effects[k] = cloneDefaults(k)); drawImage(mainCtx); updateButtonStates(); startTime = null;
 }
 function createEffectButtons() {
   const btns = document.getElementById('fx-btns'); btns.innerHTML = '';
@@ -417,7 +350,7 @@ function updateButtonStates() {
   });
 }
 
-// ===== Timeline UI & Storage =====
+// === Timeline UI & Storage ===
 function saveTimeline() { localStorage.setItem("fxTimeline", JSON.stringify(effectTimeline)); }
 function createTimelineUI() {
   let panel = document.getElementById('timeline-ui');
@@ -460,8 +393,7 @@ function renderTimelineTable() {
       </tr>`).join('');
 }
 
-
-// ===== Autotest Frame =====
+// === Autotest Frame ===
 function autoTestFrame(ct) {
   if (timelinePlaying) return;
   enabledOrder.forEach(fx => {
@@ -485,48 +417,24 @@ function autoTestFrame(ct) {
   });
 }
 
-// ===== Timeline Helpers & Run Timeline =====
+// === Timeline Helpers & Run Timeline ===
 function getTimelineNameByFn(fn) {
-  // Returns the name as exported in timelines.js
-  for (const [name, f] of Object.entries(timelines)) {
-    if (f === fn) return name;
-  }
+  for (const [name, f] of Object.entries(timelines)) if (f === fn) return name;
   return '(unnamed)';
 }
 
 function runEffectTimeline(timelineArg) {
-  let timeline = timelineArg;
-  let timelineName = "Loaded Timeline";
-
-  // --- Always use manual (UI) timeline if it exists ---
+  let timeline = timelineArg, timelineName = "Loaded Timeline";
   if (!timeline) {
-    if (Array.isArray(effectTimeline) && effectTimeline.length) {
-      timeline = effectTimeline;
-      timelineName = 'Manual UI Timeline (effectTimeline)';
-      log(`[FX] Using manual timeline from UI editor.`);
-    } else if (window.fxTimeline && Array.isArray(window.fxTimeline) && window.fxTimeline.length) {
-      timeline = window.fxTimeline;
-      timelineName = 'User-defined Timeline Array';
-    } else if (typeof window.fxTimelineFunctionId === 'number' && timelineFunctions[window.fxTimelineFunctionId]) {
-      const fn = timelineFunctions[window.fxTimelineFunctionId];
-      timeline = fn();
-      timelineName = `[ID ${window.fxTimelineFunctionId}] ${getTimelineNameByFn(fn)}`;
-      log(`[FX] Using timeline ID: ${window.fxTimelineFunctionId} (${getTimelineNameByFn(fn)})`);
+    if (Array.isArray(effectTimeline) && effectTimeline.length) { timeline = effectTimeline; timelineName = 'Manual UI Timeline (effectTimeline)'; log(`[FX] Using manual timeline from UI editor.`);}
+    else if (window.fxTimeline && Array.isArray(window.fxTimeline) && window.fxTimeline.length) { timeline = window.fxTimeline; timelineName = 'User-defined Timeline Array';}
+    else if (typeof window.fxTimelineFunctionId === 'number' && timelineFunctions[window.fxTimelineFunctionId]) {
+      const fn = timelineFunctions[window.fxTimelineFunctionId]; timeline = fn(); timelineName = `[ID ${window.fxTimelineFunctionId}] ${getTimelineNameByFn(fn)}`; log(`[FX] Using timeline ID: ${window.fxTimelineFunctionId} (${getTimelineNameByFn(fn)})`);
     } else if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function') {
-      timeline = timelines[window.fxTimelineFunctionName]();
-      timelineName = window.fxTimelineFunctionName;
-      log(`[FX] Using timeline function name: ${timelineName}`);
-    } else {
-      timeline = timelines.dramaticRevealTimeline();
-      timelineName = 'dramaticRevealTimeline (default)';
-      log(`[FX] No timeline specified, defaulting to dramaticRevealTimeline.`);
-    }
+      timeline = timelines[window.fxTimelineFunctionName](); timelineName = window.fxTimelineFunctionName; log(`[FX] Using timeline function name: ${timelineName}`);
+    } else { timeline = timelines.dramaticRevealTimeline(); timelineName = 'dramaticRevealTimeline (default)'; log(`[FX] No timeline specified, defaulting to dramaticRevealTimeline.`);}
   }
-
-
   logTimelineDetails(timeline, timelineName);
-
-  // ...rest of your runEffectTimeline as before...
   fxAPI.clearAutomation();
   effectKeys.forEach(k => effects[k].active = false);
   enabledOrder.length = 0;
@@ -544,26 +452,21 @@ function runEffectTimeline(timelineArg) {
   startEffects();
 }
 
-// ===== API =====
-// --- SINGLE source of truth ---
+// === API ===
 window.fxAPI = {
-  setBPM:               v => { bpm = v },
-  getBPM:               () => bpm,
-  setBeatsPerBar:       v => { beatsPerBar = v },
-  getBeatsPerBar:       () => beatsPerBar,
-  schedule:             scheduleAutomation,
+  setBPM: v => { bpm = v },
+  getBPM: () => bpm,
+  setBeatsPerBar: v => { beatsPerBar = v },
+  getBeatsPerBar: () => beatsPerBar,
+  schedule: scheduleAutomation,
   getElapsed,
-  getEffects:           () => structuredClone(effects),
-  setEffect:            (effect, params) =>
-                          Object.assign(effects[effect] ??= cloneDefaults(effect), params),
-  getAutomationQueue:   () => automations.map(a => ({ ...a })),
-  clearAutomation:      () => { automations.length = 0 },
-  reset:                stopEffects,
-  updateLane:           (i, k, v) => { 
-                            effectTimeline[i][k] = /Bar$/.test(k) ? +v : v;
-                            renderTimelineTable();
-                          },
-  removeLane:           i => { effectTimeline.splice(i, 1); renderTimelineTable() }
+  getEffects: () => structuredClone(effects),
+  setEffect: (effect, params) => Object.assign(effects[effect] ??= cloneDefaults(effect), params),
+  getAutomationQueue: () => automations.map(a => ({ ...a })),
+  clearAutomation: () => { automations.length = 0 },
+  reset: stopEffects,
+  updateLane: (i, k, v) => { effectTimeline[i][k] = /Bar$/.test(k) ? +v : v; renderTimelineTable(); },
+  removeLane: i => { effectTimeline.splice(i, 1); renderTimelineTable() }
 };
 
 document.addEventListener('DOMContentLoaded', init, logAvailableTimelines());
