@@ -1,7 +1,7 @@
 // main.js
 
-import * as timelines from './timelines.js';
-import { timelineFunctions } from './timelines.js';
+import * as timelines from './timelinesCombined.js';
+import { timelineFunctions } from './timelinesCombined.js';
 import { utils, effectDefaults, effectKeys, cloneDefaults, effectParams, effectMap } from './effects.js';
 
 const images = window.images ?? [], log = (...a) => console.log('[FXDEMO]', ...a);
@@ -19,11 +19,70 @@ const beatsToSeconds = b => 60 / bpm * b,
       secondsToBeats = s => s * bpm / 60,
       getElapsed = () => { const now = performance.now() / 1000, sec = now - (startTime ?? now); return { sec, beat: secondsToBeats(sec), bar: Math.floor(secondsToBeats(sec) / beatsPerBar) }; };
 
-function getSelectedTimeline() {
-  if (Array.isArray(effectTimeline) && effectTimeline.length) return effectTimeline;
-  if (typeof activeTimelineFn === 'function') return activeTimelineFn();
-  const fn = window.fxTimelineFunctionName;
-  return typeof fn === 'string' && typeof timelines[fn] === 'function' ? timelines[fn]() : timelines.dramaticRevealTimeline();
+// NEW function to handle rhythmic updates for pixelate
+function updatePixelateRhythmic(effectParams, elapsedInfo, currentBpm, currentBeatsPerBar) {
+    const p = effectParams.pixelate; // Convenience
+    if (!p.active || p.syncMode === 'none' || !p.pixelStages || p.pixelStages.length === 0) {
+        return; // Not active, no sync, or no stages to sync to
+    }
+
+    let tickRate = 0; // Ticks per beat
+    switch (p.syncMode) {
+        case 'beat':    tickRate = 1; break;
+        case 'bar':     tickRate = 1 / currentBeatsPerBar; break; // Fractions of a beat if bar is longer
+        case '1/2':     tickRate = 2; break;
+        case '1/4':     tickRate = 4; break;
+        case '1/8':     tickRate = 8; break;
+        case '1/16':    tickRate = 16; break;
+        default: return; // Unknown syncMode
+    }
+
+    // Calculate current tick based on elapsed beats and tickRate
+    // For 'bar' mode, elapsedInfo.bar is more direct
+    let currentTickAbsolute;
+    if (p.syncMode === 'bar') {
+        currentTickAbsolute = Math.floor(elapsedInfo.bar);
+    } else {
+        currentTickAbsolute = Math.floor(elapsedInfo.beat * tickRate);
+    }
+
+    // Initialize _lastTick if it's the first time
+    if (p._lastTick === -1 || typeof p._lastTick === 'undefined') {
+        p._lastTick = currentTickAbsolute;
+        // Set initial pixelSize if behavior suggests it (optional, or rely on default)
+        if (p.behavior === 'sequence' && p.pixelStages.length > 0) {
+            // p.pixelSize = p.pixelStages[p._currentStageIndex]; // Or let it be default until first tick
+        }
+        return;
+    }
+
+    if (currentTickAbsolute > p._lastTick) {
+        // New Tick!
+        p._lastTick = currentTickAbsolute;
+
+        if (p.behavior === 'sequence') {
+            p._currentStageIndex = (p._currentStageIndex + 1) % p.pixelStages.length;
+            p.pixelSize = p.pixelStages[p._currentStageIndex];
+        } else if (p.behavior === 'random') {
+            const randomIndex = utils.randomInt(0, p.pixelStages.length - 1);
+            p.pixelSize = p.pixelStages[randomIndex];
+            p._currentStageIndex = randomIndex; // Store for consistency if needed
+        } else if (p.behavior === 'increase') {
+            // This behavior needs more definition for rhythmic stepping.
+            // For now, let's make it step through like sequence or a defined step.
+            // Option 1: Use pixelStages as steps
+            // p._currentStageIndex = (p._currentStageIndex + 1) % p.pixelStages.length;
+            // p.pixelSize = p.pixelStages[p._currentStageIndex];
+
+            // Option 2: A simple increment (less tied to pixelStages)
+            // This might be better handled by automating 'progress' or a specific 'step' param
+            // For now, let's make it behave like sequence for simplicity
+            p._currentStageIndex = (p._currentStageIndex + 1) % p.pixelStages.length;
+            p.pixelSize = p.pixelStages[p._currentStageIndex];
+            log(`[FX] Pixelate (rhythmic increase) new size: ${p.pixelSize} at beat ${elapsedInfo.beat.toFixed(2)}`);
+        }
+        // Potentially log: log(`[FX] Pixelate tick: ${p.syncMode}, new size: ${p.pixelSize}`);
+    }
 }
 
 const logAvailableTimelines = () =>
@@ -79,9 +138,12 @@ function fxLoop(ts = performance.now()) {
   const now = performance.now() / 1000;
   if (startTime == null) startTime = now;
   const ct = now - startTime;
+  const elapsed = getElapsed(); // Get current bar, beat, sec
+
   ensureBuffers();
   bufferCtxA.clearRect(0, 0, width, height); drawImage(bufferCtxA);
   let readCtx = bufferCtxA, writeCtx = bufferCtxB;
+
   autoTestFrame(ct); processAutomations(ct);
   for (const fx of enabledOrder) if (effects[fx]?.active) { 
     effectMap[fx](readCtx, writeCtx, ct, effects[fx], width, height);

@@ -40,8 +40,31 @@ export const utils = (() => {
     glitch:      { intensity: 0.5, active: false },
     chromaShift: { progress: 0, direction: 1, intensity: 0.3, speed: 1, paused: false, active: false },
     colourSweep: { progress: 0, direction: 1, randomize: 1, color: null, paused: false, active: false, mode: 'reveal', edgeSoftness: 0, brightnessOffset: 0 },
-    pixelate:    { progress: 0, direction: 1, pixelSize: 1, speed: 1, paused: false, active: false }
-  };
+    pixelate: {
+        progress: 0,          // Can still be used for the 'speed up' mode over a longer duration
+        direction: 1,         // For 'speed up' or reversing sequence
+        pixelSize: 1,         // This will be the *current* calculated pixel size
+        speed: 1,             // General speed multiplier for progress
+        paused: false,
+        active: false,
+      
+        // New parameters for rhythmic sync
+        syncMode: 'beat',     // 'none', 'beat', 'bar', '1/4', '1/8', '1/16'
+        bpm: 120,             // Beats per minute
+        timeSignature: [4, 4], // [beatsPerBar, beatUnit (4 = quarter note)]
+        
+        // New parameters for behavior
+        behavior: 'increase',   // 'increase' (speeds up), 'sequence', 'random'
+        pixelStages: [2, 4, 8, 16, 32, 16, 8, 4], // Array of pixel sizes for 'sequence' or 'random'
+        minPixelSize: 1,      // For 'increase' mode
+        maxPixelSize: 64,     // For 'increase' mode
+      
+        // Internal state (prefix with _ or similar if you prefer)
+        _lastSyncTime: 0,     // Timestamp of the last sync event
+        _currentStageIndex: 0,// For 'sequence' mode
+        _lastTick: -1,        // To detect when a new tick occurs
+      }
+      };
   export const effectKeys = Object.keys(effectDefaults);
   export const cloneDefaults = k => structuredClone(effectDefaults[k]);
   export const effectParams = {}; effectKeys.forEach(k => effectParams[k] = Object.keys(effectDefaults[k]));
@@ -287,13 +310,26 @@ export const utils = (() => {
     dst.putImageData(out, 0, 0);
   }
   
-  function applyPixelate(src, dst, ct, p, width, height) {
-    let px = utils.clamp(Math.round(p.pixelSize) || 1, 1, 256); dst.clearRect(0, 0, width, height);
+  function applyPixelate(src, dst, ct, p, width, height) { // ct might not be needed here anymore
+    // p.pixelSize is now calculated by updatePixelateRhythmic
+    let px = utils.clamp(Math.round(p.pixelSize) || 1, 1, Math.max(width, height, 256)); // Clamp to a reasonable max, or image dimension
+    
+    dst.clearRect(0, 0, width, height);
     if (px > 1) {
       dst.imageSmoothingEnabled = false;
-      dst.drawImage(src.canvas, 0, 0, width, height, 0, 0, Math.ceil(width / px), Math.ceil(height / px));
-      dst.drawImage(dst.canvas, 0, 0, Math.ceil(width / px), Math.ceil(height / px), 0, 0, width, height); dst.imageSmoothingEnabled = true;
-    } else dst.drawImage(src.canvas, 0, 0, width, height);
+      
+      const tempCanvasWidth = Math.ceil(width / px);
+      const tempCanvasHeight = Math.ceil(height / px);
+  
+      // Draw original to a small size
+      dst.drawImage(src.canvas, 0, 0, width, height, 0, 0, tempCanvasWidth, tempCanvasHeight);
+      // Draw that small version back up to full size (pixelated)
+      dst.drawImage(dst.canvas, 0, 0, tempCanvasWidth, tempCanvasHeight, 0, 0, width, height);
+      
+      dst.imageSmoothingEnabled = true;
+    } else {
+      dst.drawImage(src.canvas, 0, 0, width, height);
+    }
   }
   
   export const effectMap = {

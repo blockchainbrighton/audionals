@@ -138,15 +138,47 @@ export function filmRevealTimeline() {
   ];
 }
 
-// #9 Spotlight Staggered Layer Timeline
-export function spotlightStaggerTimeline() {
-  return [
-    { effect: "fade", param: "progress", from: 0, to: 0.6, startBar: 0, endBar: 16, easing: "linear" },
-    { effect: "fade", param: "progress", from: 0.6, to: 1, startBar: 16, endBar: 64, easing: "linear" },
-    { effect: "blur", param: "radius", from: 32, to: 0, startBar: 8, endBar: 24, easing: "easeInOut" },
-    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 16, endBar: 48, easing: "linear" },
-    { effect: "vignette", param: "intensity", from: 2, to: 0.4, startBar: 32, endBar: 64, easing: "easeInOut" }
-  ];
+// #9 Spotlight Staggered Layer Timeline **Like Breaths**
+export function sweepingBreathsTimeline() {
+  const timelineEffects = []; // Initialize an empty array for the effects
+
+  // --- Configuration for ColourSweep pulsing ---
+  const pulseHalfDuration = 2; // Duration of one half of the pulse (e.g., 0.1 to 0.3)
+  const maxEndBar = 64;        // The pulsing should not create effects ending after this bar
+  let currentStartBar = 0;     // Start pulsing from bar 0
+  let isSweepingIn = true;     // Flag to alternate between 0.1->0.3 and 0.3->0.1
+
+  // Define the common properties for the sweep effects to reduce repetition
+  const baseSweepProps = {
+    effect: "colourSweep",
+    param: "progress",
+    easing: "easeInOut",
+    randomize: 0, // Ensures an ordered sweep for a distinct edge
+    direction: 1, // Defines the sweep's primary direction
+  };
+
+  // Loop to generate pulse segments
+  while (currentStartBar < maxEndBar) {
+    const nextEndBar = currentStartBar + pulseHalfDuration;
+
+    // Only add the segment if its full duration fits within maxEndBar
+    if (nextEndBar > maxEndBar) {
+      break; // Stop if the next half-pulse would extend beyond maxEndBar
+    }
+
+    timelineEffects.push({
+      ...baseSweepProps,
+      from: isSweepingIn ? 0.08 : 0.3, // Sweep from 10% or 30%
+      to: isSweepingIn ? 0.3 : 0.1,   // Sweep to 30% or 10%
+      startBar: currentStartBar,
+      endBar: nextEndBar,
+    });
+
+    currentStartBar = nextEndBar;   // Move to the start of the next segment
+    isSweepingIn = !isSweepingIn; // Toggle the sweep direction for the next pulse
+  }
+
+  return timelineEffects;
 }
 
 // #10 "Full Shuffle" - Many on/offs, order shifts
@@ -871,7 +903,7 @@ export const timelineFunctions = [
   chromaSweepTimeline,                // 6
   maxComplexityTimeline,              // 7
   filmRevealTimeline,                 // 8
-  spotlightStaggerTimeline,           // 9
+  sweepingBreathsTimeline,           // 9
   fullShuffleTimeline,                // 10
   gentleSweepTimeline,                // 11
   granularExplosionTimeline,          // 12
