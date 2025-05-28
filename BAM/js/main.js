@@ -80,6 +80,11 @@ document.addEventListener('DOMContentLoaded', () => {
         { src: 'audio/KP_VANkit_127_A2.webm', title: 'KP VANkit A2', details: '127 BPM | VANkit', category: 'vankit' },
         { src: 'audio/KP_VANkit_127_A1.webm', title: 'KP VANkit A1', details: '127 BPM | VANkit', category: 'vankit' },
 
+        // === New ATHENSkit loops from screenshot ===
+        { src: 'audio/KP_ATHENSkit_124_A1.webm', title: 'KP ATHENSkit A1', details: '124 BPM | ATHENSkit', category: 'athenskit' },
+        { src: 'audio/KP_ATHENSkit_124_A2.webm', title: 'KP ATHENSkit A2', details: '124 BPM | ATHENSkit', category: 'athenskit' },
+        { src: 'audio/KP_ATHENSkit_124_A3.webm', title: 'KP ATHENSkit A3', details: '124 BPM | ATHENSkit', category: 'athenskit' }
+        
     ];
 
     let wargasmSamples = [
