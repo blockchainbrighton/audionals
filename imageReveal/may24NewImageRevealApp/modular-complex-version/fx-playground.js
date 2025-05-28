@@ -33,7 +33,7 @@ function logTimelineDetails(tl, name = "Loaded Timeline") {
 // === Timing, Automation, and State ===
 let startTime = null, animationId = null, isPlaying = false, timelinePlaying = false;
 let mainCanvas, mainCtx, width, height, image = null, imageLoaded = false, imageError = false;
-let effects = {}, enabledOrder = [], bufferA, bufferB, bufferCtxA, bufferCtxB;
+let effects = {}, enabledOrder = [], bufferA, bufferB, bufferCtxA, bufferCtxB, _blurTempCanvas = null, _blurTempCtx = null; // Added _blurTempCanvas, _blurTempCtx
 let lastLoggedBar = -1, automationActiveState = {}, timelineCompleteLogged = false;
 
 const beatsToSeconds = beats => (60 / bpm) * beats;
@@ -227,7 +227,103 @@ function applyFilmGrain(src, dst, ct, p) {
   dst.globalAlpha = 1; dst.globalCompositeOperation = "source-over";
 }
 function applyBlur(src, dst, _, { radius }) {
-  dst.clearRect(0, 0, width, height); dst.filter = `blur(${radius}px)`; dst.drawImage(src.canvas, 0, 0); dst.filter = 'none';
+  // If radius is negligible, skip the complex padding and blur.
+  // CSS blur(0px) is a no-op. A very small radius might not cause noticeable edge issues.
+  if (radius < 0.1) { // Use a small threshold to determine if blur is effectively off
+    dst.clearRect(0, 0, width, height);
+    // Effects are chained; src.canvas usually holds meaningful data from a previous step.
+    // This check is mostly for robustness, as src.canvas and dst.canvas are distinct in the current pipeline.
+    if (src.canvas !== dst.canvas) {
+        dst.drawImage(src.canvas, 0, 0, width, height);
+    }
+    // Ensure filter is cleared if it was somehow set before and radius became small.
+    if (dst.filter !== 'none') {
+        dst.filter = 'none';
+    }
+    return;
+  }
+
+  // Padding amount: The blur filter samples pixels roughly up to 2-3 times the radius (Gaussian sigma).
+  // We use a factor of 2 for sigma-to-kernel-extent estimation.
+  // Add a small constant (e.g., 2px) for safety margin with small radii or rendering quirks.
+  const padding = Math.max(0, Math.ceil(radius * 2) + 2);
+
+  // If padding calculation results in 0 (e.g., radius was very small but positive, rounded to 0 effective padding),
+  // revert to simpler non-padded blur to avoid creating unnecessary temp canvases.
+  if (padding === 0) {
+      dst.clearRect(0, 0, width, height);
+      dst.filter = `blur(${radius}px)`;
+      if (src.canvas !== dst.canvas) {
+        dst.drawImage(src.canvas, 0, 0, width, height);
+      }
+      dst.filter = 'none';
+      return;
+  }
+
+  const tempWidth = width + 2 * padding;
+  const tempHeight = height + 2 * padding;
+
+  // Manage a temporary canvas for blurring to avoid edge artifacts. Resize only if necessary.
+  if (!_blurTempCanvas || _blurTempCanvas.width !== tempWidth || _blurTempCanvas.height !== tempHeight) {
+    if (!_blurTempCanvas) {
+        _blurTempCanvas = document.createElement('canvas');
+    }
+    _blurTempCanvas.width = tempWidth;
+    _blurTempCanvas.height = tempHeight;
+    _blurTempCtx = _blurTempCanvas.getContext('2d');
+    // console.log(`[FX] Blur: Temp canvas (re)sized to ${tempWidth}x${tempHeight} for radius ${radius}, padding ${padding}`);
+  }
+
+  const tempCtx = _blurTempCtx;
+  const tempCanvas = _blurTempCanvas;
+
+  // Store current smoothing state and disable for sharp pixel replication when stretching edges.
+  const prevSmoothing = tempCtx.imageSmoothingEnabled;
+  tempCtx.imageSmoothingEnabled = false;
+
+  tempCtx.clearRect(0, 0, tempWidth, tempHeight);
+  // Draw main src.canvas into the center of tempCanvas.
+  tempCtx.drawImage(src.canvas, padding, padding, width, height);
+
+  // Replicate edge pixels (clamp to edge method)
+  // Ensure width/height are positive before sampling 1px strips to avoid errors.
+  if (height > 0) { // Top & Bottom edges
+    // Top margin: Draw 1px high strip from top of src.canvas, stretch it to fill padding area.
+    tempCtx.drawImage(src.canvas, 0, 0, width, 1, padding, 0, width, padding);
+    // Bottom margin
+    tempCtx.drawImage(src.canvas, 0, height - 1, width, 1, padding, height + padding, width, padding);
+  }
+  if (width > 0) { // Left & Right edges
+    // Left margin
+    tempCtx.drawImage(src.canvas, 0, 0, 1, height, 0, padding, padding, height);
+    // Right margin
+    tempCtx.drawImage(src.canvas, width - 1, 0, 1, height, width + padding, padding, padding, height);
+  }
+  if (width > 0 && height > 0) { // Corners: Draw 1x1 pixel from src.canvas corners, scale to fill padding x padding.
+    // Top-left corner
+    tempCtx.drawImage(src.canvas, 0, 0, 1, 1, 0, 0, padding, padding);
+    // Top-right corner
+    tempCtx.drawImage(src.canvas, width - 1, 0, 1, 1, width + padding, 0, padding, padding);
+    // Bottom-left corner
+    tempCtx.drawImage(src.canvas, 0, height - 1, 1, 1, 0, height + padding, padding, padding);
+    // Bottom-right corner
+    tempCtx.drawImage(src.canvas, width - 1, height - 1, 1, 1, width + padding, height + padding, padding, padding);
+  }
+  
+  tempCtx.imageSmoothingEnabled = prevSmoothing; // Restore original smoothing state for tempCtx.
+
+  // Clear destination canvas.
+  dst.clearRect(0, 0, width, height);
+  // Apply the blur filter to dst context.
+  dst.filter = `blur(${radius}px)`;
+  
+  // Draw tempCanvas onto dst. The image on tempCanvas effectively starts at (padding, padding).
+  // We draw tempCanvas offset by (-padding, -padding) so that this content aligns with (0,0) of dst.
+  // The blur operation will then sample from tempCanvas correctly, using the padded edges.
+  dst.drawImage(tempCanvas, -padding, -padding, tempWidth, tempHeight);
+  
+  // Reset filter on dst context.
+  dst.filter = 'none';
 }
 function applyVignette(src, dst, _, { intensity, size, progress }) {
   dst.clearRect(0, 0, width, height); dst.drawImage(src.canvas, 0, 0);
