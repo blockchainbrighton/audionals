@@ -228,52 +228,66 @@ function applyScanLines(src, dst, _, p) {
 }
 function applyFilmGrain(src, dst, ct, p) {
   const cw = width, ch = height;
-  // --- Map API params ---
-  const scale = Math.max(1, p.size ?? 2); // << map size param
-  const range = 128 * (p.dynamicRange ?? 1); // << dynamic range
+
+  // 1. Draw the source (e.g., the blurred image) onto the destination canvas first.
+  //    The pipeline ensures src is the output of the previous effect.
+  //    We clear dst and draw src to ensure we're working on a clean slate for this effect pass.
+  dst.clearRect(0, 0, cw, ch);
+  dst.drawImage(src.canvas, 0, 0);
+
+  // --- Noise Generation (largely the same as your existing code) ---
+  const scale = Math.max(1, p.size ?? 1.2); // Default from your new code
+  const range = 128 * (p.dynamicRange ?? 1);
   const gw = Math.ceil(cw / scale), gh = Math.ceil(ch / scale);
+
+  // Cache for the noise canvas
   if (!applyFilmGrain._c || applyFilmGrain._c.gw !== gw || applyFilmGrain._c.gh !== gh) {
-    const nc = document.createElement('canvas'); nc.width = gw; nc.height = gh;
-    applyFilmGrain._c = { nc, nctx: nc.getContext('2d', { willReadFrequently: true }), gw, gh, ls: null, mask: null, mf: -1 };
+    const nc = document.createElement('canvas');
+    nc.width = gw; nc.height = gh;
+    applyFilmGrain._c = {
+      nc: nc,
+      nctx: nc.getContext('2d', { willReadFrequently: true }),
+      gw: gw,
+      gh: gh,
+      ls: null // Last speed/time based frame update
+    };
   }
-  const { nc, nctx } = applyFilmGrain._c, fs = Math.floor(ct * (p.speed ?? 1) * 0.9);
+
+  const { nc, nctx } = applyFilmGrain._c;
+  // Update noise pattern based on speed and time (ct)
+  // The factor 0.9 is arbitrary, adjust if speed feels off
+  const fs = Math.floor(ct * (p.speed ?? 80) * 0.9); // Default speed from your new code
+
   if (applyFilmGrain._c.ls !== fs) {
-    const id = nctx.createImageData(gw, gh), d = id.data;
+    const id = nctx.createImageData(gw, gh);
+    const d = id.data;
     for (let i = 0; i < d.length; i += 4) {
-      // DynamicRange now affects contrast (range)
-      const noise = 128 + (Math.random() - 0.5) * range * 2;
-      d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, noise));
-      // density controls fill/alpha, intensity can also modulate
-      d[i + 3] = Math.max(0, Math.min(255, 128 + 127 * (p.density ?? 1) * (p.intensity ?? 1)));
+      const noiseVal = 128 + (Math.random() - 0.5) * range * 2;
+      d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, noiseVal)); // Monochrome noise
+      // Opacity of grain itself is controlled by globalAlpha below when drawing.
+      // p.density could influence alpha here if desired, e.g., d[i+3] = 255 * (p.density ?? 1)
+      d[i + 3] = 255;
     }
-    nctx.putImageData(id, 0, 0); applyFilmGrain._c.ls = fs;
+    nctx.putImageData(id, 0, 0);
+    applyFilmGrain._c.ls = fs;
   }
-  dst.clearRect(0, 0, cw, ch); dst.drawImage(src.canvas, 0, 0);
 
-  if (applyFilmGrain._c.mf !== fs) {
-    const mc = applyFilmGrain._c.mc || document.createElement('canvas');
-    if (!applyFilmGrain._c.mc) mc.width = cw, mc.height = ch, applyFilmGrain._c.mc = mc;
-    const mctx = mc.getContext('2d'), srcId = src.getImageData(0, 0, cw, ch), mId = mctx.createImageData(cw, ch),
-      sData = srcId.data, dData = mId.data;
-    for (let i = 0; i < sData.length; i += 4)
-      dData[i] = dData[i + 1] = dData[i + 2] = 255, dData[i + 3] = sData[i] + sData[i + 1] + sData[i + 2] > 30 ? 255 : 0;
-    mctx.putImageData(mId, 0, 0); applyFilmGrain._c.mask = mc; applyFilmGrain._c.mf = fs;
-  }
-  const tc = applyFilmGrain._c.tc || document.createElement('canvas');
-  if (!applyFilmGrain._c.tc) tc.width = cw, tc.height = ch, applyFilmGrain._c.tc = tc;
-  const tctx = tc.getContext('2d');
-  tctx.clearRect(0, 0, cw, ch);
+  // --- Apply Grain with "overlay" Blend Mode ---
+  // Set the blend mode for drawing the noise on top of the current dst content (which is src)
+  dst.globalCompositeOperation = "overlay";
 
-  // intensity now maps opacity, but more pronounced
-  tctx.globalAlpha = 0.3 + 0.6 * Math.min(1, p.intensity ?? 1);
-  tctx.imageSmoothingEnabled = false;
-  tctx.drawImage(nc, 0, 0, gw, gh, 0, 0, cw, ch);
-  tctx.imageSmoothingEnabled = true;
-  tctx.globalAlpha = 1;
-  tctx.globalCompositeOperation = "destination-in";
-  tctx.drawImage(applyFilmGrain._c.mask, 0, 0, cw, ch);
-  tctx.globalCompositeOperation = "source-over";
-  dst.drawImage(tc, 0, 0, cw, ch);
+  // Set the overall intensity/opacity of the grain layer
+  // Use the 'intensity' parameter from effectDefaults for filmGrain
+  dst.globalAlpha = utils.clamp(p.intensity ?? 1, 0, 1);
+
+  // Draw the (potentially smaller) noise canvas scaled up to cover the destination
+  dst.imageSmoothingEnabled = false; // Keep grain pixelated if upscaled
+  dst.drawImage(nc, 0, 0, gw, gh, 0, 0, cw, ch);
+  dst.imageSmoothingEnabled = true; // Reset for other operations
+
+  // Reset globalAlpha and globalCompositeOperation for subsequent effects in the pipeline
+  dst.globalAlpha = 1;
+  dst.globalCompositeOperation = "source-over"; // Default blend mode
 }
 
 function applyBlur(src, dst, _, { radius }) {
