@@ -158,17 +158,37 @@ Below are all available effects, their parameters, valid value ranges, and tips 
 
 ---
 
+Certainly! Here is the updated **colourSweep** section for your README in your **original `.md` table formatting**, including all new parameters and concise tips:
+
+---
+
 ### 8. **colourSweep**
 
-| Parameter | Type  | Range      | Description / Tips                                 |
-| --------- | ----- | ---------- | -------------------------------------------------- |
-| progress  | float | 0 → 1      | Progress of the sweep across the image.            |
-| direction | int   | -1, 1      | Sweep forward or backward.                         |
-| randomize | int   | 0, 1       | 1=random sweep; 0=ordered (set in test mode only). |
-| paused    | bool  | true/false | Pause/unpause test.                                |
-| active    | bool  | true/false | Is effect active.                                  |
+| Parameter        | Type       | Range                | Description / Tips                                                     |
+| ---------------- | ---------- | -------------------- | ---------------------------------------------------------------------- |
+| progress         | float      | 0 → 1                | Progress of the sweep across the image.                                |
+| direction        | int        | -1, 1                | Sweep forward or backward.                                             |
+| randomize        | int        | 0, 1                 | 1 = random sweep; 0 = ordered (set in test mode only).                 |
+| color            | string/arr | Any CSS / \[r,g,b,a] | Optional tint color for swept/revealed area.                           |
+| mode             | string     | 'reveal', 'hide'     | `'reveal'` shows as it sweeps (default), `'hide'` erases as it sweeps. |
+| edgeSoftness     | float      | 0 → 1                | Softens sweep edge; 0 = hard, 1 = smooth/gradient.                     |
+| brightnessOffset | float      | -255 → 255           | Shifts sweep to favor darks, mids, or lights.                          |
+| brightnessRange  | array      | [low,high]           | Restrict sweep to pixels within this brightness band (0–255).          |
+| hueRange         | array      | [low,high] (deg)     | Restrict sweep to pixels within this hue band (0–360°).                |
+| paused           | bool       | true/false           | Pause/unpause test/demo animation.                                     |
+| active           | bool       | true/false           | Is effect active.                                                      |
 
-**Tip:** Animate `progress` for a reveal/wipe effect. Use `randomize` for noisy/intriguing reveals.
+**Tips:**
+- Animate `progress` for a reveal or wipe effect.
+- Use `randomize` for noisy or intriguing reveals.
+- `color` enables creative tint wipes.
+- `edgeSoftness` creates natural, organic transitions.
+- Try `mode: 'hide'` for "wiping out" rather than revealing.
+- `brightnessOffset` targets sweep to shadows, midtones, or highlights.
+- **Use `hueRange` to target just reds, blues, or any segment of the spectrum.**
+- **Use `brightnessRange` to independently animate shadows, mids, or highlights.**
+- For multi-band or counter-sweeps, combine multiple lanes with different `hueRange`, `brightnessRange`, and opposing `direction`.
+
 
 ---
 

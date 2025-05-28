@@ -1,5 +1,40 @@
 // timelines.js
 
+/**
+ * Adjusts the startBar and endBar of each effect in a timeline by a speed multiplier.
+ * @param {Array<Object>} timelineData The original timeline array.
+ * @param {number} speedMultiplier The speed multiplier (e.g., 4 for 4x speed).
+ * @returns {Array<Object>} A new timeline array with adjusted durations.
+ */
+export function adjustTimelineSpeed(timelineData, speedMultiplier = 1) {
+  if (speedMultiplier <= 0) {
+    console.warn("Speed multiplier must be greater than 0. Using 1x speed.");
+    speedMultiplier = 1;
+  }
+  if (speedMultiplier === 1) {
+    return timelineData; // No adjustment needed
+  }
+
+  return timelineData.map(effect => {
+    // Ensure startBar and endBar exist before trying to divide
+    const newStartBar = effect.startBar !== undefined ? effect.startBar / speedMultiplier : undefined;
+    const newEndBar = effect.endBar !== undefined ? effect.endBar / speedMultiplier : undefined;
+
+    // Handle cases where duration might become zero or negative if not careful,
+    // though division should maintain proportions.
+    // Clamping to a minimum duration might be needed if issues arise with very small floats.
+    // For now, simple division is usually fine.
+
+    return {
+      ...effect,
+      startBar: newStartBar,
+      endBar: newEndBar,
+    };
+  });
+}
+
+
+// #0 Dramatic Reveal Timeline
 export function dramaticRevealTimeline() {
   return [
     { effect: "fade", param: "progress", from: 0, to: 1, startBar: 0, endBar: 32, easing: "easeInOut" },
@@ -8,6 +43,7 @@ export function dramaticRevealTimeline() {
   ];
 }
 
+// #1 Glitchy Pulse Timeline
 export function glitchyPulseTimeline() {
   return [
     { effect: "glitch", param: "intensity", from: 0, to: 1, startBar: 0, endBar: 32, easing: "easeInOut" },
@@ -15,14 +51,14 @@ export function glitchyPulseTimeline() {
   ];
 }
 
-// Minimalist - Only pixelate fades away
+// #2 Minimal Pixelate Timeline
 export function minimalPixelateTimeline() {
   return [
     { effect: "pixelate", param: "pixelSize", from: 240, to: 1, startBar: 0, endBar: 64, easing: "linear" }
   ];
 }
 
-// Classic Video Reveal
+// #3 Classic Video Reveal (TV Reveal)
 export function tvRevealTimeline() {
   return [
     { effect: "scanLines", param: "intensity", from: 1, to: 0, startBar: 0, endBar: 24, easing: "linear" },
@@ -32,43 +68,40 @@ export function tvRevealTimeline() {
   ];
 }
 
-// Chained Layer Shuffle - Deliberately reorders stacking order every 16 bars
+// #4 Chained Layer Shuffle - Deliberately reorders stacking order every 16 bars
 export function shuffleOrderTimeline() {
   return [
     { effect: "blur", param: "radius", from: 100, to: 20, startBar: 0, endBar: 40, easing: "linear" },
     { effect: "blur", param: "radius", from: 35, to: 0, startBar: 40, endBar: 41, easing: "linear" },
-
     { effect: "pixelate", param: "pixelSize", from: 200, to: 1, startBar: 0, endBar: 44, easing: "linear" },
-    // { effect: "blur", param: "radius", from: 2, to: 8, startBar: 17, endBar: 24, easing: "linear" },
     { effect: "pixelate", param: "pixelSize", from: 100, to: 1, startBar: 1, endBar: 40, easing: "linear" },
     { effect: "glitch", param: "intensity", from: 0.03, to: 0, startBar: 40, endBar: 64, easing: "easeInOut" },
     { effect: "fade", param: "progress", from: 0, to: 1, startBar: 1, endBar: 64, easing: "linear" }
   ];
 }
 
-// "Wave" Reveal - effects come and go in waves every 8 bars
+// #5 "Wave" Reveal - effects come and go in waves every 8 bars
 export function waveSweepTimeline() {
   return [
     ...Array.from({ length: 8 }).flatMap((_, i) => [
-      { effect: "fade", param: "progress", from: (i % 2 === 0 ? 0 : 1), to: (i % 2 === 0 ? 1 : 0), startBar: i * 8, endBar: (i + 1) * 8, easing: "easeInOut" },
+      { effect: "fade", param: "progress", from: i % 2 === 0 ? 0 : 1, to: i % 2 === 0 ? 1 : 0, startBar: i * 8, endBar: (i + 1) * 8, easing: "easeInOut" },
       { effect: "pixelate", param: "pixelSize", from: i % 2 === 0 ? 240 : 1, to: i % 2 === 0 ? 1 : 240, startBar: i * 8, endBar: (i + 1) * 8, easing: "easeInOut" }
     ]),
-    // Ensure final state is fully revealed
-    { effect: "fade", param: "progress", from: 0, to: 1, startBar: 56, endBar: 64, easing: "easeInOut" }, // Assuming last wave might hide it
-    { effect: "pixelate", param: "pixelSize", from: 240, to: 1, startBar: 56, endBar: 64, easing: "easeInOut" } // Assuming last wave might pixelate it
+    { effect: "fade", param: "progress", from: 0, to: 1, startBar: 56, endBar: 64, easing: "easeInOut" },
+    { effect: "pixelate", param: "pixelSize", from: 240, to: 1, startBar: 56, endBar: 64, easing: "easeInOut" }
   ];
 }
 
-// Cinematic Chromatic Unveil
+// #6 Cinematic Chromatic Unveil
 export function chromaSweepTimeline() {
   return [
-    { effect: "fade", param: "progress", from: 0, to: 1, startBar: 0, endBar: 1, easing: "linear" }, // Quick initial fade to make colourSweep visible
-    { effect: "fade", param: "progress", from: 0.1, to: 1, startBar: 1, endBar: 64, easing: "linear" }, // Main fade for image reveal
+    { effect: "fade", param: "progress", from: 0, to: 1, startBar: 0, endBar: 1, easing: "linear" },
+    { effect: "fade", param: "progress", from: 0.1, to: 1, startBar: 1, endBar: 64, easing: "linear" },
     { effect: "pixelate", param: "pixelSize", from: 24, to: 1, startBar: 48, endBar: 64, easing: "linear" },
     { effect: "chromaShift", param: "intensity", from: 1, to: 0.3, startBar: 1, endBar: 60, easing: "easeInOut" },
     { effect: "chromaShift", param: "intensity", from: 0.3, to: 0, startBar: 60, endBar: 64, easing: "easeInOut" },
     { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 64, easing: "linear" },
-    { effect: "blur", param: "radius", from: 64, to: 0, startBar: 0, endBar: 48, easing: "easeInOut" },
+    { effect: "blur", param: "radius", from: 64, to: 0, startBar: 0, endBar: 48, easing: "easeInOut" }
   ];
 }
 
@@ -84,31 +117,30 @@ export function maxComplexityTimeline() {
     { effect: "pixelate", param: "pixelSize", from: 2, to: 64, startBar: 17, endBar: 25, easing: "easeInOut" },
     { effect: "pixelate", param: "pixelSize", from: 64, to: 1, startBar: 25, endBar: 32, easing: "easeInOut" },
     { effect: "blur", param: "radius", from: 4, to: 0, startBar: 33, endBar: 36, easing: "linear" },
-    { effect: "blur", param: "radius", from: 0, to: 8, startBar: 37, endBar: 41, easing: "easeInOut" }, // Temporary re-blur
-    { effect: "blur", param: "radius", from: 8, to: 0, startBar: 41, endBar: 48, easing: "easeInOut" }, // Final de-blur
+    { effect: "blur", param: "radius", from: 0, to: 8, startBar: 37, endBar: 41, easing: "easeInOut" },
+    { effect: "blur", param: "radius", from: 8, to: 0, startBar: 41, endBar: 48, easing: "easeInOut" },
     { effect: "glitch", param: "intensity", from: 0, to: 1, startBar: 24, endBar: 40, easing: "easeInOut" },
     { effect: "glitch", param: "intensity", from: 1, to: 0, startBar: 41, endBar: 44, easing: "easeInOut" },
-    { effect: "fade", param: "progress", from: 1, to: 0, startBar: 57, endBar: 61, easing: "linear" }, // Temporary fade out
-    { effect: "fade", param: "progress", from: 0, to: 1, startBar: 61, endBar: 64, easing: "linear" }, // Final fade in
+    { effect: "fade", param: "progress", from: 1, to: 0, startBar: 57, endBar: 61, easing: "linear" },
+    { effect: "fade", param: "progress", from: 0, to: 1, startBar: 61, endBar: 64, easing: "linear" },
     { effect: "vignette", param: "intensity", from: 2, to: 0.2, startBar: 50, endBar: 64, easing: "linear" }
   ];
 }
 
-// #8 Soft Film Reveal
+// #8 Soft Film Reveal Timeline
 export function filmRevealTimeline() {
   return [
-    { effect: "filmGrain", param: "intensity", from: 1, to: 0.3, startBar: 0, endBar: 64, easing: "linear" }, // Grain persists lightly
+    { effect: "filmGrain", param: "intensity", from: 1, to: 0.3, startBar: 0, endBar: 64, easing: "linear" },
     { effect: "fade", param: "progress", from: 0, to: 1, startBar: 0, endBar: 24, easing: "easeInOut" },
-    { effect: "fade", param: "progress", from: 1, to: 1, startBar: 24, endBar: 64, easing: "linear" }, // Ensure stays visible
+    { effect: "fade", param: "progress", from: 1, to: 1, startBar: 24, endBar: 64, easing: "linear" },
     { effect: "vignette", param: "intensity", from: 2, to: 0.4, startBar: 16, endBar: 40, easing: "easeInOut" },
-    { effect: "vignette", param: "intensity", from: 0.4, to: 0.2, startBar: 40, endBar: 64, easing: "easeInOut" } // Vignette softens further
+    { effect: "vignette", param: "intensity", from: 0.4, to: 0.2, startBar: 40, endBar: 64, easing: "easeInOut" }
   ];
 }
 
-// #9 "Spotlight" Staggered Layer
+// #9 Spotlight Staggered Layer Timeline
 export function spotlightStaggerTimeline() {
   return [
-    // Ensure full fade in by end
     { effect: "fade", param: "progress", from: 0, to: 0.6, startBar: 0, endBar: 16, easing: "linear" },
     { effect: "fade", param: "progress", from: 0.6, to: 1, startBar: 16, endBar: 64, easing: "linear" },
     { effect: "blur", param: "radius", from: 32, to: 0, startBar: 8, endBar: 24, easing: "easeInOut" },
@@ -541,48 +573,349 @@ export function gentleUnveilingTimeline() {
   ];
 }
 
+// #37 Rainbow Sweep Reveal Timeline
+export function rainbowSweepRevealTimeline() {
+  return [
+    { effect: "colourSweep", param: "color", from: "red", to: "blue", startBar: 0, endBar: 16, easing: "linear" },
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 16, easing: "easeInOut" },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.1, to: 0.6, startBar: 0, endBar: 8, easing: "easeInOut" },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.6, to: 0.2, startBar: 8, endBar: 16, easing: "easeInOut" },
+    { effect: "colourSweep", param: "randomize", from: 0, to: 1, startBar: 12, endBar: 16, easing: "linear" }
+  ];
+}
+
+// #38 Sweep & Hide Timeline
+export function sweepAndHideTimeline() {
+  return [
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 12, easing: "linear" },
+    { effect: "colourSweep", param: "mode", from: "reveal", to: "hide", startBar: 12, endBar: 16, easing: "linear" },
+    { effect: "colourSweep", param: "progress", from: 1, to: 0, startBar: 12, endBar: 24, easing: "linear" },
+    { effect: "colourSweep", param: "color", from: null, to: "black", startBar: 12, endBar: 24, easing: "linear" }
+  ];
+}
+
+// #39 Chromatic Noise Wipe Timeline
+export function chromaticNoiseWipeTimeline() {
+  return [
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 8, easing: "linear" },
+    { effect: "colourSweep", param: "randomize", from: 0, to: 1, startBar: 0, endBar: 8, easing: "linear" },
+    { effect: "colourSweep", param: "color", from: "#00ffff", to: "#ff00ff", startBar: 2, endBar: 8, easing: "linear" },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.2, to: 0.7, startBar: 2, endBar: 8, easing: "easeInOut" }
+  ];
+}
+
+// #40 Highlighted Shadows Timeline
+export function highlightedShadowsTimeline() {
+  return [
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 24, easing: "easeInOut" },
+    { effect: "colourSweep", param: "brightnessOffset", from: -150, to: 0, startBar: 0, endBar: 24, easing: "linear" },
+    { effect: "colourSweep", param: "color", from: "#ffe066", to: "#ffe066", startBar: 0, endBar: 24, easing: "linear" },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.5, to: 0.3, startBar: 0, endBar: 24, easing: "linear" }
+  ];
+}
+
+// #41 Ghostly Reveal Timeline **Love this one**
+export function ghostlyRevealTimeline() {
+  return [
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 32, easing: "easeInOut" },
+    { effect: "colourSweep", param: "edgeSoftness", from: 1.0, to: 0.6, startBar: 0, endBar: 32, easing: "easeInOut" },
+    { effect: "colourSweep", param: "color", from: "rgba(200,255,255,0.7)", to: "rgba(255,255,255,0.3)", startBar: 0, endBar: 32, easing: "linear" },
+    { effect: "colourSweep", param: "randomize", from: 1, to: 0, startBar: 24, endBar: 32, easing: "linear" }
+  ];
+}
+
+// #42 Reverse Laser Sweep Timeline ** Also Lovely!** Finishes black though
+export function reverseLaserSweepTimeline() {
+  return [
+    { effect: "colourSweep", param: "direction", from: -1, to: -1, startBar: 0, endBar: 16, easing: "linear" },
+    { effect: "colourSweep", param: "progress", from: 1, to: 0, startBar: 0, endBar: 16, easing: "easeInOut" },
+    { effect: "colourSweep", param: "color", from: "#00ff00", to: "#ff0000", startBar: 0, endBar: 16, easing: "linear" },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.1, to: 0.5, startBar: 0, endBar: 16, easing: "easeInOut" }
+  ];
+}
+
+// #43 Smooth Dream Fade Timeline
+export function smoothDreamFadeTimeline() {
+  return [
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 20, easing: "linear" },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.8, to: 1, startBar: 0, endBar: 20, easing: "linear" },
+    { effect: "colourSweep", param: "color", from: "rgba(250,200,250,0.7)", to: "rgba(255,255,255,0.3)", startBar: 10, endBar: 20, easing: "linear" },
+    { effect: "colourSweep", param: "randomize", from: 1, to: 1, startBar: 0, endBar: 20, easing: "linear" }
+  ];
+}
+
+// #44 Solar Flare Reveal Timeline
+export function solarFlareRevealTimeline() {
+  return [
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 8, easing: "easeInOut" },
+    { effect: "colourSweep", param: "color", from: "#ffe066", to: "#ff6f00", startBar: 0, endBar: 8, easing: "linear" },
+    { effect: "colourSweep", param: "brightnessOffset", from: 60, to: 180, startBar: 0, endBar: 8, easing: "linear" },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.2, to: 0.9, startBar: 0, endBar: 8, easing: "easeInOut" }
+  ];
+}
+
+
+// #45 Neon Grid Wipe Timeline
+export function neonGridWipeTimeline() {
+  return [
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 16, easing: "easeInOut" },
+    { effect: "colourSweep", param: "randomize", from: 0, to: 1, startBar: 8, endBar: 16, easing: "linear" },
+    { effect: "colourSweep", param: "color", from: "#0ff", to: "#f0f", startBar: 0, endBar: 16, easing: "linear" },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.2, to: 0.7, startBar: 0, endBar: 16, easing: "easeInOut" },
+    { effect: "colourSweep", param: "mode", from: "reveal", to: "hide", startBar: 12, endBar: 16, easing: "linear" }
+  ];
+}
+
+
+// #46 Dappled Shadows Timeline
+export function dappledShadowsTimeline() {
+  return [
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 32, easing: "linear" },
+    { effect: "colourSweep", param: "randomize", from: 1, to: 1, startBar: 0, endBar: 32, easing: "linear" },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.7, to: 0.4, startBar: 0, endBar: 32, easing: "easeInOut" },
+    { effect: "colourSweep", param: "color", from: "rgba(60,60,60,0.3)", to: "rgba(0,0,0,0.8)", startBar: 16, endBar: 32, easing: "linear" }
+  ];
+}
+
+
+// #47 Variation 1: "Tidal Echo" - Sweeps forward, then recedes using 'hide' mode ** Does a nice reset at 16 bars **
+export function dappledShadowsTimeline_TidalEcho() {
+  return [
+    // Initial reveal sweep (forward)
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 16, easing: "easeOutQuad" },
+    { effect: "colourSweep", param: "direction", from: 1, to: 1, startBar: 0, endBar: 32 }, // Consistent forward direction for progress
+    { effect: "colourSweep", param: "randomize", from: 1, to: 1, startBar: 0, endBar: 32 },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.8, to: 0.5, startBar: 0, endBar: 16, easing: "easeInOut" },
+    { effect: "colourSweep", param: "color", from: "rgba(50,70,90,0.2)", to: "rgba(20,30,40,0.6)", startBar: 0, endBar: 16, easing: "linear" },
+    { effect: "colourSweep", param: "mode", from: "reveal", to: "reveal", startBar: 0, endBar: 16},
+
+    // Receding sweep (using hide mode)
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 16, endBar: 32, easing: "easeInQuad" }, // Progress 0->1 again, but mode is 'hide'
+    { effect: "colourSweep", param: "mode", from: "hide", to: "hide", startBar: 16, endBar: 32},
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.5, to: 0.8, startBar: 16, endBar: 32, easing: "easeInOut" }, // Softens as it hides
+    { effect: "colourSweep", param: "color", from: "rgba(20,30,40,0.6)", to: "rgba(50,70,90,0.1)", startBar: 16, endBar: 32, easing: "linear" }, // Color fades out
+    { effect: "colourSweep", param: "brightnessOffset", from: 0, to: -30, startBar: 16, endBar: 32, easing: "linear" } // Hides darker areas slightly faster
+  ];
+}
+
+// #48 Variation 2: "Duelling Brightness Waves" - Two sweeps focusing on darks then lights, different directions
+export function dappledShadowsTimeline_DuellingBrightnessWaves() {
+  return [
+    // Shared parameters
+    { effect: "colourSweep", param: "randomize", from: 1, to: 1, startBar: 0, endBar: 32 },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.6, to: 0.6, startBar: 0, endBar: 32 }, // Consistent softness
+
+    // Sweep 1: Dark Focus, Forward (0-24 bars)
+    // To make this distinct, we'll give it a unique "active" phase if this was controllable per sub-effect,
+    // but since all same-named effects operate on one instance, we create illusion with progress timing and brightness.
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 24, easing: "easeInOutSine" },
+    { effect: "colourSweep", param: "direction", from: 1, to: 1, startBar: 0, endBar: 24 },
+    { effect: "colourSweep", param: "color", from: "rgba(10,10,30,0.4)", to: "rgba(0,0,10,0.7)", startBar: 0, endBar: 24, easing: "linear" },
+    { effect: "colourSweep", param: "brightnessOffset", from: -150, to: -50, startBar: 0, endBar: 24, easing: "linear" }, // Stays focused on darker areas
+    { effect: "colourSweep", param: "mode", from: "reveal", to: "reveal", startBar: 0, endBar: 24},
+
+    // Sweep 2: Light Focus, Backward using direction (8-32 bars, slower overall reveal for this aspect)
+    // This will interact with the first sweep.
+    // The key here is that while progress might be 0->1 for both, different 'direction' and 'brightnessOffset'
+    // make them appear as separate phenomena.
+    // We can't truly have two separate colourSweep instances active with different internal states using this structure.
+    // So, the second 'progress' will overwrite the first one. We need a different approach for true dueling sweeps.
+    // Let's adjust: this timeline implies *one* colourSweep effect being animated.
+    // For "duelling", we'd typically need multiple effects or a more complex single effect definition.
+    // Let's reinterpret "duelling" as a single sweep that changes its character dramatically.
+
+    // Re-approach for Variation 2: "Shifting Focus Sweep"
+    // One sweep that changes its target brightness and direction preference mid-way.
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 32, easing: "linear" }, // Full duration sweep
+    { effect: "colourSweep", param: "randomize", from: 1, to: 1, startBar: 0, endBar: 32 },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.7, to: 0.3, startBar: 0, endBar: 32, easing: "easeInOut" },
+    { effect: "colourSweep", param: "color", from: "rgba(10,10,30,0.1)", to: "rgba(150,150,100,0.5)", startBar: 0, endBar: 32, easing: "linear" }, // Blueish to Yellowish
+
+    // Direction shifts from forward to backward by changing the param mid-sweep
+    { effect: "colourSweep", param: "direction", from: 1, to: 1, startBar: 0, endBar: 15 }, // Forward for first half
+    { effect: "colourSweep", param: "direction", from: -1, to: -1, startBar: 16, endBar: 32 }, // Backward for second half
+
+    // Brightness offset shifts from darks to lights
+    { effect: "colourSweep", param: "brightnessOffset", from: -100, to: 100, startBar: 0, endBar: 32, easing: "easeInOutQuad" },
+    { effect: "colourSweep", param: "mode", from: "reveal", to: "reveal", startBar: 0, endBar: 32}
+  ];
+}
+
+
+// #49 Variation 3: "Harmonic Pulse" - WITH BIG DROP AT BAR 16
+export function dappledShadowsTimeline_HarmonicPulse() {
+  return [
+    // === Pre-Drop Phase (0-16 bars) ===
+    // Progress pulsing in
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 8, easing: "easeInOutSine" },
+    // Progress pulsing out, reaching 0 right at the start of bar 16
+    { effect: "colourSweep", param: "progress", from: 1, to: 0, startBar: 8, endBar: 16, easing: "easeInOutSine" },
+
+    // Consistent direction & mode for pre-drop
+    { effect: "colourSweep", param: "direction", from: 1, to: 1, startBar: 0, endBar: 16 },
+    { effect: "colourSweep", param: "mode", from: "reveal", to: "reveal", startBar: 0, endBar: 16 },
+    { effect: "colourSweep", param: "randomize", from: 0, to: 0, startBar: 0, endBar: 16 }, // Ordered pre-drop
+
+    // Edge softness & color evolving pre-drop
+    // Original: { effect: "colourSweep", param: "edgeSoftness", from: 0.5, to: 0.9, startBar: 0, endBar: 32 ...}
+    // We need to segment this so it doesn't conflict with the drop value
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.5, to: 0.7, startBar: 0, endBar: 16, easing: "linear" }, // Gets a bit softer
+    // Original: { effect: "colourSweep", param: "color", from: "rgba(100,50,150,0.3)", to: "rgba(180,100,250,0.6)", startBar: 0, endBar: 32 ...}
+    { effect: "colourSweep", param: "color", from: "rgba(100,50,150,0.3)", to: "rgba(140,75,200,0.45)", startBar: 0, endBar: 16, easing: "linear" }, // Ends pre-drop color
+
+    // Brightness offset oscillating pre-drop
+    { effect: "colourSweep", param: "brightnessOffset", from: -80, to: 80, startBar: 0, endBar: 16, easing: "easeInOutCubic" }, // Ends at 80 (light-focused)
+
+    // === The BIG DROP (Bar 16 for 1 bar duration: effectively startBar 16, endBar 17) ===
+    // Progress slams in very fast
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 16, endBar: 17, easing: "easeOutExpo" }, // Very fast 1-bar reveal
+
+    // Parameters snap for impact during the drop
+    { effect: "colourSweep", param: "direction", from: 1, to: 1, startBar: 16, endBar: 17 },
+    { effect: "colourSweep", param: "mode", from: "reveal", to: "reveal", startBar: 16, endBar: 17 },
+    { effect: "colourSweep", param: "randomize", from: 1, to: 1, startBar: 16, endBar: 17 }, // Switch to random for textured burst
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.1, to: 0.1, startBar: 16, endBar: 17, easing: "linear" }, // Very hard edge for impact
+    { effect: "colourSweep", param: "color", from: "rgba(220,180,255,0.9)", to: "rgba(220,180,255,0.9)", startBar: 16, endBar: 17, easing: "linear" }, // Bright, opaque purple
+    { effect: "colourSweep", param: "brightnessOffset", from: 0, to: 0, startBar: 16, endBar: 17, easing: "linear" }, // Neutral, full sweep for impact
+
+    // === Post-Drop Phase (Bar 17 to Bar 32) ===
+    // Original was: progress 0->1 (16-24), 1->0 (24-32) and brightness 80 -> -80 (16-32)
+    // We've used bar 16-17 for the drop. So, let's adjust the post-drop.
+    // Progress fades out from the drop's full reveal
+    { effect: "colourSweep", param: "progress", from: 1, to: 0, startBar: 17, endBar: 32, easing: "easeInOutSine" }, // Gradual fade out after drop
+
+    // Parameters transition out or continue their modified course
+    { effect: "colourSweep", param: "direction", from: 1, to: 1, startBar: 17, endBar: 32 },
+    { effect: "colourSweep", param: "mode", from: "reveal", to: "reveal", startBar: 17, endBar: 32 },
+    { effect: "colourSweep", param: "randomize", from: 0, to: 0, startBar: 17, endBar: 32 }, // Back to ordered after the burst
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.1, to: 0.9, startBar: 17, endBar: 32, easing: "linear" }, // Soften out after hard hit
+    { effect: "colourSweep", param: "color", from: "rgba(220,180,255,0.9)", to: "rgba(100,50,150,0.2)", startBar: 17, endBar: 32, easing: "linear" }, // Fade color out
+    { effect: "colourSweep", param: "brightnessOffset", from: 0, to: -80, startBar: 17, endBar: 32, easing: "easeInOutCubic" } // Continue brightness oscillation
+  ];
+}
+
+// #50 Variation 4: "Randomized Reveal & Rollback" - Random sweep, then rolls back changing color and softness
+export function dappledShadowsTimeline_RandomizedRollback() {
+  return [
+    // Initial randomized reveal
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: 20, easing: "easeOutExpo" },
+    { effect: "colourSweep", param: "direction", from: 1, to: 1, startBar: 0, endBar: 32 },
+    { effect: "colourSweep", param: "randomize", from: 1, to: 1, startBar: 0, endBar: 32 }, // Always random
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.9, to: 0.4, startBar: 0, endBar: 20, easing: "linear" }, // Becomes sharper
+    { effect: "colourSweep", param: "color", from: "rgba(200,200,200,0.1)", to: "rgba(150,150,150,0.5)", startBar: 0, endBar: 20, easing: "linear" },
+    { effect: "colourSweep", param: "brightnessOffset", from: 50, to: 0, startBar: 0, endBar: 20, easing: "linear" }, // Starts light-focused, then neutral
+    { effect: "colourSweep", param: "mode", from: "reveal", to: "reveal", startBar: 0, endBar: 20},
+
+    // Rollback: Progress from 1 to 0
+    { effect: "colourSweep", param: "progress", from: 1, to: 0, startBar: 20, endBar: 32, easing: "easeInExpo" },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.4, to: 0.7, startBar: 20, endBar: 32, easing: "linear" }, // Softens on rollback
+    { effect: "colourSweep", param: "color", from: "rgba(150,150,150,0.5)", to: "rgba(80,20,20,0.3)", startBar: 20, endBar: 32, easing: "linear" }, // Changes to a receding red tint
+    { effect: "colourSweep", param: "brightnessOffset", from: 0, to: -50, startBar: 20, endBar: 32, easing: "linear" } // Ends dark-focused
+    // mode implicitly stays 'reveal', but since progress goes 1->0, it's a rollback.
+    // Using 'hide' with 0->1 would be another way to achieve a similar visual but from opposite direction if direction was -1.
+  ];
+}
+
+// #51 Variation 5: "Chasing Colors & Brightness" - Sweep changes direction, color, and brightness focus in segments
+export function dappledShadowsTimeline_ChasingColors() {
+  const barSeg1 = 10;
+  const barSeg2 = 20;
+  const barSeg3 = 32;
+
+  return [
+    { effect: "colourSweep", param: "randomize", from: 1, to: 1, startBar: 0, endBar: barSeg3 }, // Random all the way
+    { effect: "colourSweep", param: "mode", from: "reveal", to: "reveal", startBar: 0, endBar: barSeg3},
+
+
+    // Segment 1: Forward, Soft, Dark focus, Cool Color
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: 0, endBar: barSeg1, easing: "easeInQuad" },
+    { effect: "colourSweep", param: "direction", from: 1, to: 1, startBar: 0, endBar: barSeg1 },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.8, to: 0.6, startBar: 0, endBar: barSeg1, easing: "linear" },
+    { effect: "colourSweep", param: "color", from: "rgba(0,50,100,0.2)", to: "rgba(0,80,150,0.5)", startBar: 0, endBar: barSeg1, easing: "linear" },
+    { effect: "colourSweep", param: "brightnessOffset", from: -120, to: -40, startBar: 0, endBar: barSeg1, easing: "linear" },
+
+    // Segment 2: Backward (by direction change), Sharper, Mid focus, Warm Color
+    // Progress continues effectively from where it left off, but direction flips
+    // The 'progress' must reset if we want a new sweep for this segment, or change direction for same sweep
+    // For true segment sweep, progress should reset and 'mode: hide' the old one or use separate effects
+    // Let's make this a continuation but with changed characteristics
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: barSeg1, endBar: barSeg2, easing: "linear" }, // This makes it sweep *again* from 0
+    // To make it appear as if it continues but reverses, we'd actually want progress from 1 to 0 OR progress 0 to 1 with direction -1.
+    // Let's use direction -1 and new progress 0->1.
+    { effect: "colourSweep", param: "direction", from: -1, to: -1, startBar: barSeg1, endBar: barSeg2 },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.6, to: 0.3, startBar: barSeg1, endBar: barSeg2, easing: "linear" },
+    { effect: "colourSweep", param: "color", from: "rgba(180,100,0,0.3)", to: "rgba(220,150,50,0.6)", startBar: barSeg1, endBar: barSeg2, easing: "linear" },
+    { effect: "colourSweep", param: "brightnessOffset", from: 0, to: 50, startBar: barSeg1, endBar: barSeg2, easing: "linear" }, // Shift to mid/lights
+
+    // Segment 3: Forward again, Medium Softness, Light focus, Fading neutral color
+    { effect: "colourSweep", param: "progress", from: 0, to: 1, startBar: barSeg2, endBar: barSeg3, easing: "easeOutQuad" },
+    { effect: "colourSweep", param: "direction", from: 1, to: 1, startBar: barSeg2, endBar: barSeg3 },
+    { effect: "colourSweep", param: "edgeSoftness", from: 0.3, to: 0.7, startBar: barSeg2, endBar: barSeg3, easing: "linear" },
+    { effect: "colourSweep", param: "color", from: "rgba(100,100,100,0.4)", to: "rgba(120,120,120,0.1)", startBar: barSeg2, endBar: barSeg3, easing: "linear" },
+    { effect: "colourSweep", param: "brightnessOffset", from: 50, to: 150, startBar: barSeg2, endBar: barSeg3, easing: "linear" } // Shift to pure lights
+  ];
+}
+
+
+
+
 
 // Export array of timeline functions for numeric ID access:
 export const timelineFunctions = [
-  dramaticRevealTimeline,        // 0
-  glitchyPulseTimeline,          // 1
-  minimalPixelateTimeline,       // 2
-  tvRevealTimeline,              // 3
-  shuffleOrderTimeline,          // 4
-  waveSweepTimeline,             // 5
-  chromaSweepTimeline,           // 6
-  maxComplexityTimeline,         // 7
-  filmRevealTimeline,            // 8
-  spotlightStaggerTimeline,      // 9
-  fullShuffleTimeline,           // 10
-  gentleSweepTimeline,           // 11
-  granularExplosionTimeline,     // 12
-  shockwaveGranularBurstTimeline,// 13
-  grainStormRevealTimeline,      // 14
-  granularSpotlightTimeline,     // 15
-  filmicSurrealRevealTimeline,   // 16
-  // New timelines start here at index 17
-  sunriseGlowTimeline,           // 17
-  systemBootUpTimeline,          // 18
-  dreamyAwakeningTimeline,       // 19
-  vintageProjectorTimeline,      // 20
-  strobeFlashRevealTimeline,     // 21
-  slowBurnPixelTimeline,         // 22
-  chromaticAberrationFocusTimeline, // 23
-  paintSwipeRevealTimeline,      // 24
-  holographicGlitchTimeline,     // 25
-  dataCorruptionRestoreTimeline, // 26
-  noirDetectiveRevealTimeline,   // 27
-  deepDreamUnfoldTimeline,       // 28
-  pencilSketchToPhotoTimeline,   // 29
-  ghostlyApparitionTimeline,     // 30
-  fracturedRealityTimeline,      // 31
-  isolatedFocusPullTimeline,     // 32
-  tvChannelHopTimeline,          // 33
-  microscopicZoomInTimeline,     // 34
-  neonSignFlickerOnTimeline,     // 35
-  gentleUnveilingTimeline        // 36
+  dramaticRevealTimeline,             // 0
+  glitchyPulseTimeline,               // 1
+  minimalPixelateTimeline,            // 2
+  tvRevealTimeline,                   // 3
+  shuffleOrderTimeline,               // 4
+  waveSweepTimeline,                  // 5
+  chromaSweepTimeline,                // 6
+  maxComplexityTimeline,              // 7
+  filmRevealTimeline,                 // 8
+  spotlightStaggerTimeline,           // 9
+  fullShuffleTimeline,                // 10
+  gentleSweepTimeline,                // 11
+  granularExplosionTimeline,          // 12
+  shockwaveGranularBurstTimeline,     // 13
+  grainStormRevealTimeline,           // 14
+  granularSpotlightTimeline,          // 15
+  filmicSurrealRevealTimeline,        // 16
+  sunriseGlowTimeline,                // 17
+  systemBootUpTimeline,               // 18
+  dreamyAwakeningTimeline,            // 19
+  vintageProjectorTimeline,           // 20
+  strobeFlashRevealTimeline,          // 21
+  slowBurnPixelTimeline,              // 22
+  chromaticAberrationFocusTimeline,   // 23
+  paintSwipeRevealTimeline,           // 24
+  holographicGlitchTimeline,          // 25
+  dataCorruptionRestoreTimeline,      // 26
+  noirDetectiveRevealTimeline,        // 27
+  deepDreamUnfoldTimeline,            // 28
+  pencilSketchToPhotoTimeline,        // 29
+  ghostlyApparitionTimeline,          // 30
+  fracturedRealityTimeline,           // 31
+  isolatedFocusPullTimeline,          // 32
+  tvChannelHopTimeline,               // 33
+  microscopicZoomInTimeline,          // 34
+  neonSignFlickerOnTimeline,          // 35
+  gentleUnveilingTimeline,            // 36
+  rainbowSweepRevealTimeline,         // 37
+  sweepAndHideTimeline,               // 38
+  chromaticNoiseWipeTimeline,         // 39
+  highlightedShadowsTimeline,         // 40
+  ghostlyRevealTimeline,              // 41
+  reverseLaserSweepTimeline,          // 42
+  smoothDreamFadeTimeline,            // 43
+  solarFlareRevealTimeline,           // 44
+  neonGridWipeTimeline,               // 45
+  dappledShadowsTimeline,             // 46
+  dappledShadowsTimeline_TidalEcho,   // 47
+  dappledShadowsTimeline_DuellingBrightnessWaves, // 48
+  dappledShadowsTimeline_HarmonicPulse,           // 49
+  dappledShadowsTimeline_RandomizedRollback,      // 50
+  dappledShadowsTimeline_ChasingColors            // 51
 ];
+
 
 
 
@@ -688,15 +1021,25 @@ export const timelineFunctions = [
 
 // ### 8. **colourSweep**
 
-// | Parameter | Type  | Range      | Description / Tips                                 |
-// | --------- | ----- | ---------- | -------------------------------------------------- |
-// | progress  | float | 0 → 1      | Progress of the sweep across the image.            |
-// | direction | int   | -1, 1      | Sweep forward or backward.                         |
-// | randomize | int   | 0, 1       | 1=random sweep; 0=ordered (set in test mode only). |
-// | paused    | bool  | true/false | Pause/unpause test.                                |
-// | active    | bool  | true/false | Is effect active.                                  |
+// | Parameter        | Type       | Range                | Description / Tips                                                     |
+// | ---------------- | ---------- | -------------------- | ---------------------------------------------------------------------- |
+// | progress         | float      | 0 → 1                | Progress of the sweep across the image.                                |
+// | direction        | int        | -1, 1                | Sweep forward or backward.                                             |
+// | randomize        | int        | 0, 1                 | 1 = random sweep; 0 = ordered (set in test mode only).                 |
+// | color            | string/arr | Any CSS / \[r,g,b,a] | Optional tint color for swept/revealed area.                           |
+// | mode             | string     | 'reveal', 'hide'     | `'reveal'` shows as it sweeps (default), `'hide'` erases as it sweeps. |
+// | edgeSoftness     | float      | 0 → 1                | Softens sweep edge; 0 = hard, 1 = smooth/gradient.                     |
+// | brightnessOffset | float      | -255 → 255           | Shifts sweep to favor darks, mids, or lights.                          |
+// | paused           | bool       | true/false           | Pause/unpause test/demo animation.                                     |
+// | active           | bool       | true/false           | Is effect active.                                                      |
 
-// **Tip:** Animate `progress` for a reveal/wipe effect. Use `randomize` for noisy/intriguing reveals.
+// **Tips:**
+// Animate `progress` for a reveal or wipe effect.
+// Use `randomize` for noisy or intriguing reveals.
+// `color` enables creative tint wipes.
+// `edgeSoftness` creates natural, organic transitions.
+// Try `mode: 'hide'` for "wiping out" rather than revealing.
+// `brightnessOffset` targets sweep to shadows, midtones, or highlights.
 
 // ---
 

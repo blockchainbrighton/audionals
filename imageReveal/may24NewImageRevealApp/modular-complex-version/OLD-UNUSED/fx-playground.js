@@ -173,7 +173,7 @@ const effectDefaults = {
   vignette:    { progress: 0, direction: 1, intensity: 1, size: 0.45, paused: false, active: false },
   glitch:      { intensity: 0.5, active: false },
   chromaShift: { progress: 0, direction: 1, intensity: 0.3, speed: 1, paused: false, active: false },
-  colourSweep: { progress: 0, direction: 1, randomize: 1, paused: false, active: false },
+  colourSweep: { progress: 0, direction: 1, randomize: 1, color: null, paused: false, active: false, mode: 'reveal', edgeSoftness: 0, brightnessOffset: 0 },
   pixelate:    { progress: 0, direction: 1, pixelSize: 1, speed: 1, paused: false, active: false }
 };
 const effectKeys = Object.keys(effectDefaults);
@@ -182,15 +182,96 @@ const effectParams = {}; effectKeys.forEach(k => effectParams[k] = Object.keys(e
 
 // === Colour Sweep State Cache ===
 const colourSweepCache = new WeakMap();
-function getColourSweepState(imgData, w, h, randomize) {
+function getColourSweepState(imgData, w, h, randomize, brightnessOffset = 0) {
+  // Cache key includes randomize + brightnessOffset to avoid stale cache
   let cached = colourSweepCache.get(imgData);
-  if (cached && cached.randomize === randomize) return cached;
+  if (cached && cached.randomize === randomize && cached.brightnessOffset === brightnessOffset) return cached;
   const N = w * h, bright = new Float32Array(N), d = imgData.data;
-  for (let i = 0; i < N; i++) bright[i] = Math.min((d[i << 2] + d[(i << 2) + 1] + d[(i << 2) + 2]) / 3 + (randomize ? Math.random() : 0), 255);
+  for (let i = 0; i < N; i++) {
+    bright[i] = Math.min(
+      (d[i << 2] + d[(i << 2) + 1] + d[(i << 2) + 2]) / 3 +
+      (randomize ? Math.random() : 0) +
+      (brightnessOffset || 0),
+      255
+    );
+  }
   const out = new ImageData(new Uint8ClampedArray(d.length), w, h);
-  cached = { randomize, bright, out };
+  cached = { randomize, brightnessOffset, bright, out };
   colourSweepCache.set(imgData, cached);
   return cached;
+}
+
+function applyColourSweep(src, dst, _, p) {
+  const srcImg = src.getImageData(0, 0, width, height),
+        state = getColourSweepState(srcImg, width, height, p.randomize | 0, p.brightnessOffset || 0),
+        pr = utils.clamp(p.progress, 0, 1),
+        fwd = (p.direction | 0) !== 0,
+        thr = (fwd ? pr : 1 - pr) * 255,
+        { bright, out } = state, S = srcImg.data, O = out.data;
+  let tint = null;
+  if (p.color) {
+    if (typeof p.color === 'string') {
+      const temp = document.createElement('canvas').getContext('2d');
+      temp.fillStyle = p.color; temp.fillRect(0, 0, 1, 1);
+      tint = temp.getImageData(0, 0, 1, 1).data;
+    } else if (Array.isArray(p.color)) {
+      tint = p.color;
+    }
+  }
+  // Edge softness: band in brightness units (0-255)
+  const soft = p.edgeSoftness ?? 0;
+  const band = 32 * soft;
+  const isHide = (p.mode === 'hide');
+  for (let i = 0; i < bright.length; i++) {
+    const q = i << 2;
+    // For 'reveal', show where bright <= thr; for 'hide', hide where bright <= thr
+    const show = isHide ? bright[i] > thr : bright[i] <= thr;
+    const dist = isHide ? (bright[i] - thr) : (thr - bright[i]);
+    if (show) {
+      if (band > 0 && dist > 0 && dist < band) {
+        // Blend alpha by proportion within the soft edge band
+        const a = dist / band;
+        if (tint) {
+          O[q]     = (S[q]     + tint[0]) >> 1;
+          O[q + 1] = (S[q + 1] + tint[1]) >> 1;
+          O[q + 2] = (S[q + 2] + tint[2]) >> 1;
+        } else {
+          O[q]     = S[q];
+          O[q + 1] = S[q + 1];
+          O[q + 2] = S[q + 2];
+        }
+        O[q + 3] = S[q + 3] * a;
+      } else {
+        if (tint) {
+          O[q]     = (S[q]     + tint[0]) >> 1;
+          O[q + 1] = (S[q + 1] + tint[1]) >> 1;
+          O[q + 2] = (S[q + 2] + tint[2]) >> 1;
+        } else {
+          O[q]     = S[q];
+          O[q + 1] = S[q + 1];
+          O[q + 2] = S[q + 2];
+        }
+        O[q + 3] = S[q + 3];
+      }
+    } else if (band > 0 && dist < 0 && dist > -band) {
+      // Fade out alpha in soft band for not shown pixels
+      const a = 1 + dist / band; // dist is negative, so this goes 1→0
+      if (tint) {
+        O[q]     = (S[q]     + tint[0]) >> 1;
+        O[q + 1] = (S[q + 1] + tint[1]) >> 1;
+        O[q + 2] = (S[q + 2] + tint[2]) >> 1;
+      } else {
+        O[q]     = S[q];
+        O[q + 1] = S[q + 1];
+        O[q + 2] = S[q + 2];
+      }
+      O[q + 3] = S[q + 3] * a;
+    } else {
+      O[q + 3] = 0;
+    }
+  }
+  dst.clearRect(0, 0, width, height);
+  dst.putImageData(out, 0, 0);
 }
 
 // === Effect Functions ===
@@ -205,27 +286,93 @@ function applyScanLines(src, dst, _, p) {
   for (let y = offset; y < height; y += p.spacing) dst.fillRect(0, y, width, Math.max(1, p.lineWidth));
   dst.globalAlpha = 1;
 }
-function applyFilmGrain(src, dst, ct, p) {
-  const cw = width, ch = height, scale = Math.max(1, p.size ?? 1.2), range = 128 * (p.dynamicRange ?? 1), gw = Math.ceil(cw / scale), gh = Math.ceil(ch / scale);
-  if (!applyFilmGrain._c || applyFilmGrain._c.gw !== gw || applyFilmGrain._c.gh !== gh) {
-    const nc = document.createElement('canvas');
-    nc.width = gw; nc.height = gh;
-    applyFilmGrain._c = { nc, nctx: nc.getContext('2d', { willReadFrequently: true }), gw, gh, ls: null };
-  }
-  const { nc, nctx } = applyFilmGrain._c, fs = Math.floor(ct * (p.speed ?? 80) * 0.9);
-  if (applyFilmGrain._c.ls !== fs) {
-    const id = nctx.createImageData(gw, gh), d = id.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const noiseVal = 128 + (Math.random() - 0.5) * range * 2;
-      d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, noiseVal)); d[i + 3] = 255;
+// Add once, globally:
+let glGrain = null;
+function ensureGLGrain(width, height) {
+  if (glGrain && glGrain.width === width && glGrain.height === height) return glGrain;
+  // Setup WebGL canvas & shader program
+  const canvas = document.createElement('canvas');
+  canvas.width = width; canvas.height = height;
+  const gl = canvas.getContext('webgl');
+  if (!gl) throw new Error('WebGL not supported');
+  // Vertex shader (standard quad)
+  const vertSrc = `
+    attribute vec2 pos; varying vec2 uv;
+    void main() { uv = (pos + 1.0) * 0.5; gl_Position = vec4(pos, 0, 1); }
+  `;
+  // Fragment shader: high-quality grain, animated by time
+  const fragSrc = `
+    precision highp float;
+    varying vec2 uv;
+    uniform float intensity, scale, time, density;
+    float rand(vec2 co) {
+      return fract(sin(dot(co, vec2(12.9898,78.233))) * 43758.5453);
     }
-    nctx.putImageData(id, 0, 0); applyFilmGrain._c.ls = fs;
+    void main() {
+      float g = rand(uv * scale + time);
+      float d = step(1.0 - density, g); // density: 1.0 = full, <1 = more sparse
+      float f = mix(0.5, g, intensity); // intensity blends grain in/out
+      gl_FragColor = vec4(vec3(f * d), 1.0);
+    }
+  `;
+  // Compile program (boilerplate omitted for brevity, see standard WebGL compile utils)
+  function compileShader(gl, src, type) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
   }
-  dst.clearRect(0, 0, cw, ch); dst.drawImage(src.canvas, 0, 0);
-  dst.globalCompositeOperation = "overlay"; dst.globalAlpha = utils.clamp(p.intensity ?? 1, 0, 1);
-  dst.imageSmoothingEnabled = false; dst.drawImage(nc, 0, 0, gw, gh, 0, 0, cw, ch); dst.imageSmoothingEnabled = true;
-  dst.globalAlpha = 1; dst.globalCompositeOperation = "source-over";
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compileShader(gl, vertSrc, gl.VERTEX_SHADER));
+  gl.attachShader(prog, compileShader(gl, fragSrc, gl.FRAGMENT_SHADER));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+
+  // Fullscreen quad
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  const posLoc = gl.getAttribLocation(prog, 'pos');
+  gl.enableVertexAttribArray(posLoc);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+  // Uniform locations
+  const u = {
+    intensity: gl.getUniformLocation(prog, 'intensity'),
+    scale: gl.getUniformLocation(prog, 'scale'),
+    time: gl.getUniformLocation(prog, 'time'),
+    density: gl.getUniformLocation(prog, 'density')
+  };
+  glGrain = { canvas, gl, prog, u, width, height };
+  return glGrain;
 }
+function applyFilmGrain(src, dst, ct, p) {
+  // Use WebGL grain overlay
+  const glG = ensureGLGrain(width, height);
+  const { gl, canvas, u } = glG;
+
+  // Set uniforms
+  gl.viewport(0, 0, width, height);
+  gl.useProgram(glG.prog);
+  gl.uniform1f(u.intensity, utils.clamp(p.intensity ?? 1, 0, 1));
+  gl.uniform1f(u.scale, 10.0 / (p.size ?? 1.2)); // scale up for sharper, smaller grain
+  gl.uniform1f(u.time, (ct * (p.speed ?? 60)) % 1000);
+  gl.uniform1f(u.density, utils.clamp(p.density ?? 1, 0, 1));
+
+  // Draw full quad
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+  // Composite result over src
+  dst.clearRect(0, 0, width, height);
+  dst.drawImage(src.canvas, 0, 0);
+  dst.globalAlpha = utils.clamp(p.intensity ?? 1, 0, 1);
+  dst.globalCompositeOperation = "overlay";
+  dst.drawImage(canvas, 0, 0);
+  dst.globalAlpha = 1;
+  dst.globalCompositeOperation = "source-over";
+}
+
 function applyBlur(src, dst, _, { radius }) {
   // If radius is negligible, skip the complex padding and blur.
   // CSS blur(0px) is a no-op. A very small radius might not cause noticeable edge issues.
@@ -348,17 +495,7 @@ function applyChromaShift(src, dst, _, p) {
   const ph = (p.progress * p.direction * Math.PI * 2) || 0, ox = Math.sin(ph * p.speed) * width * p.intensity, oy = Math.cos(ph * p.speed * .75) * height * p.intensity * .5;
   dst.globalCompositeOperation = 'lighter'; dst.globalAlpha = .8; dst.drawImage(src.canvas, ox, oy); dst.drawImage(src.canvas, -ox, -oy); dst.globalAlpha = 1; dst.globalCompositeOperation = 'source-over';
 }
-function applyColourSweep(src, dst, _, p) {
-  const srcImg = src.getImageData(0, 0, width, height), state = getColourSweepState(srcImg, width, height, p.randomize | 0);
-  let pr = utils.clamp(p.progress, 0, 1), fwd = (p.direction | 0) !== 0; if (!fwd) pr = 1 - pr;
-  const thr = pr * 255, { bright, out } = state, S = srcImg.data, O = out.data;
-  for (let i = 0; i < bright.length; i++) {
-    const q = i << 2;
-    if (bright[i] <= thr) { O[q] = S[q]; O[q + 1] = S[q + 1]; O[q + 2] = S[q + 2]; O[q + 3] = S[q + 3]; }
-    else O[q + 3] = 0;
-  }
-  dst.clearRect(0, 0, width, height); dst.putImageData(out, 0, 0);
-}
+
 function applyPixelate(src, dst, _, p) {
   let px = utils.clamp(Math.round(p.pixelSize) || 1, 1, 256); dst.clearRect(0, 0, width, height);
   if (px > 1) {
@@ -468,6 +605,7 @@ function addTimelineLane() {
   effectTimeline.push({ effect: effectKeys[0], param: effectParams[effectKeys[0]][0], from: 0, to: 1, startBar: 0, endBar: 8, easing: 'linear' });
   renderTimelineTable();
 }
+// === Timeline Table Render ===
 function renderTimelineTable() {
   const tbl = document.getElementById('tl-table');
   tbl.innerHTML = `<tr>
@@ -489,19 +627,71 @@ function renderTimelineTable() {
       </tr>`).join('');
 }
 
-// === Autotest Frame ===
+// === Frame Profiler State ===
+let _fxFrames = 0, _fxLastCheck = performance.now(), _fxLastFps = 60, _fxLastWarn = 0;
+let _fxFrameSkip = 0, _fxAutoThrottle = false, _fxLastFrameTime = 16, _fxMaxFrameTime = 32;
+
+// === Autotest Frame with Monitoring/Throttling ===
 function autoTestFrame(ct) {
   if (timelinePlaying) return;
+  // --- FPS Profiling ---
+  _fxFrames++;
+  const now = performance.now();
+  const delta = now - (_fxLastCheck || now);
+  // Warn if frame time is consistently too high
+  if (_fxFrames % 10 === 0) {
+    const currFps = 1000 / (_fxLastFrameTime || 16);
+    if (currFps < 30 && now - _fxLastWarn > 2000) {
+      log(`[FX] ⚠️ FPS dropped: ~${currFps.toFixed(1)} fps. Consider reducing effect complexity.`);
+      _fxLastWarn = now;
+      // Auto-throttle if needed
+      if (!_fxAutoThrottle && currFps < 25) {
+        _fxAutoThrottle = true;
+        _fxFrameSkip = 1; // Skip every other frame
+        log("[FX] 🚦 Auto-throttle enabled: frame skipping activated.");
+      }
+    } else if (_fxAutoThrottle && currFps > 35) {
+      _fxAutoThrottle = false; _fxFrameSkip = 0;
+      log("[FX] ✅ FPS recovered, auto-throttle off.");
+    }
+  }
+  // --- Frame Skip Logic ---
+  if (_fxAutoThrottle && (_fxFrames % 2 === 1)) return; // Skip this frame
+
+  // --- Standard Effect Animation ---
   enabledOrder.forEach(fx => {
     if (!effects[fx].active) return;
-    let p = effects[fx].progress ?? 0, dir = effects[fx].direction ?? 1, paused = effects[fx].paused, speed = effects[fx].speed ?? 1;
-    if (['fade','scanLines','colourSweep','pixelate','blur','vignette','chromaShift'].includes(fx)) {
-      if (fx === 'scanLines') Object.assign(effects.scanLines, { intensity: 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(ct * 0.8)), lineWidth: 1 + 14 * (0.5 + 0.5 * Math.sin(ct * 1.1)), spacing: 4 + 40 * (0.5 + 0.5 * Math.sin(ct * 0.9 + 1)), verticalShift: 32 * (0.5 + 0.5 * Math.sin(ct * 0.35)), speed: 0.3 + 5 * (0.5 + 0.5 * Math.sin(ct * 0.5)) });
+    let p = effects[fx].progress ?? 0,
+        dir = effects[fx].direction ?? 1,
+        paused = effects[fx].paused,
+        speed = effects[fx].speed ?? 1;
+    if (['fade', 'scanLines', 'colourSweep', 'pixelate', 'blur', 'vignette', 'chromaShift'].includes(fx)) {
+      if (fx === 'scanLines')
+        Object.assign(effects.scanLines, {
+          intensity: 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(ct * 0.8)),
+          lineWidth: 1 + 14 * (0.5 + 0.5 * Math.sin(ct * 1.1)),
+          spacing: 4 + 40 * (0.5 + 0.5 * Math.sin(ct * 0.9 + 1)),
+          verticalShift: 32 * (0.5 + 0.5 * Math.sin(ct * 0.35)),
+          speed: 0.3 + 5 * (0.5 + 0.5 * Math.sin(ct * 0.5))
+        });
       if (fx === 'colourSweep') {
-        if (!paused) { p += (0.2 + 0.8 * Math.sin(ct * 0.4)) * dir * (1 / 60); if (p > 1) { p = 1; dir = -1; } if (p < 0) { p = 0; dir = 1; } }
-        Object.assign(effects.colourSweep, { progress: utils.clamp(p, 0, 1), direction: dir, speed: 0.6 + 1.7 * (0.5 + 0.5 * Math.cos(ct * 0.35)), randomize: (Math.floor(ct / 5) % 2) });
+        if (!paused) {
+          p += (0.2 + 0.8 * Math.sin(ct * 0.4)) * dir * (1 / 60);
+          if (p > 1) { p = 1; dir = -1; }
+          if (p < 0) { p = 0; dir = 1; }
+        }
+        Object.assign(effects.colourSweep, {
+          progress: utils.clamp(p, 0, 1),
+          direction: dir,
+          speed: 0.6 + 1.7 * (0.5 + 0.5 * Math.cos(ct * 0.35)),
+          randomize: (Math.floor(ct / 5) % 2)
+        });
       }
-      if (!paused && fx !== 'colourSweep') { p += 1/5 * dir * speed * (1/60); if (p > 1) { p = 1; dir = -1; } if (p < 0) { p = 0; dir = 1; } }
+      if (!paused && fx !== 'colourSweep') {
+        p += 1 / 5 * dir * speed * (1 / 60);
+        if (p > 1) { p = 1; dir = -1; }
+        if (p < 0) { p = 0; dir = 1; }
+      }
       Object.assign(effects[fx], { progress: utils.clamp(p, 0, 1), direction: dir });
       if (fx === 'fade') effects.fade.progress = p;
       if (fx === 'scanLines') effects.scanLines.progress = p;
@@ -511,6 +701,15 @@ function autoTestFrame(ct) {
       if (fx === 'chromaShift') effects.chromaShift.intensity = 0.35 * p;
     }
   });
+  // Track frame time for profiling
+  _fxLastFrameTime = performance.now() - now;
+  // Update FPS window
+  if (now - _fxLastCheck > 1000) {
+    const fps = _fxFrames / ((now - _fxLastCheck) / 1000);
+    log(`[FX] (FX Loop FPS: ${fps.toFixed(1)} | Last Frame: ${_fxLastFrameTime.toFixed(1)}ms)`);
+    _fxLastFps = fps;
+    _fxLastCheck = now; _fxFrames = 0;
+  }
 }
 
 // === Timeline Helpers & Run Timeline ===
@@ -522,13 +721,29 @@ function getTimelineNameByFn(fn) {
 function runEffectTimeline(timelineArg) {
   let timeline = timelineArg, timelineName = "Loaded Timeline";
   if (!timeline) {
-    if (Array.isArray(effectTimeline) && effectTimeline.length) { timeline = effectTimeline; timelineName = 'Manual UI Timeline (effectTimeline)'; log(`[FX] Using manual timeline from UI editor.`);}
-    else if (window.fxTimeline && Array.isArray(window.fxTimeline) && window.fxTimeline.length) { timeline = window.fxTimeline; timelineName = 'User-defined Timeline Array';}
+    if (Array.isArray(effectTimeline) && effectTimeline.length) {
+      timeline = effectTimeline;
+      timelineName = 'Manual UI Timeline (effectTimeline)';
+      log(`[FX] Using manual timeline from UI editor.`);
+    }
+    else if (window.fxTimeline && Array.isArray(window.fxTimeline) && window.fxTimeline.length) {
+      timeline = window.fxTimeline;
+      timelineName = 'User-defined Timeline Array';
+    }
     else if (typeof window.fxTimelineFunctionId === 'number' && timelineFunctions[window.fxTimelineFunctionId]) {
-      const fn = timelineFunctions[window.fxTimelineFunctionId]; timeline = fn(); timelineName = `[ID ${window.fxTimelineFunctionId}] ${getTimelineNameByFn(fn)}`; log(`[FX] Using timeline ID: ${window.fxTimelineFunctionId} (${getTimelineNameByFn(fn)})`);
+      const fn = timelineFunctions[window.fxTimelineFunctionId];
+      timeline = fn();
+      timelineName = `[ID ${window.fxTimelineFunctionId}] ${getTimelineNameByFn(fn)}`;
+      log(`[FX] Using timeline ID: ${window.fxTimelineFunctionId} (${getTimelineNameByFn(fn)})`);
     } else if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function') {
-      timeline = timelines[window.fxTimelineFunctionName](); timelineName = window.fxTimelineFunctionName; log(`[FX] Using timeline function name: ${timelineName}`);
-    } else { timeline = timelines.dramaticRevealTimeline(); timelineName = 'dramaticRevealTimeline (default)'; log(`[FX] No timeline specified, defaulting to dramaticRevealTimeline.`);}
+      timeline = timelines[window.fxTimelineFunctionName]();
+      timelineName = window.fxTimelineFunctionName;
+      log(`[FX] Using timeline function name: ${timelineName}`);
+    } else {
+      timeline = timelines.dramaticRevealTimeline();
+      timelineName = 'dramaticRevealTimeline (default)';
+      log(`[FX] No timeline specified, defaulting to dramaticRevealTimeline.`);
+    }
   }
   logTimelineDetails(timeline, timelineName);
   fxAPI.clearAutomation();
