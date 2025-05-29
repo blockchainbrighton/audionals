@@ -1,5 +1,8 @@
 // ab-player.js
 
+console.log('[A/B Player] Loading AB Player Version 1.01');
+
+
 /**
  * Creates an A/B comparison player UI with tight sync and looping.
  * @param {Blob} originalBlob
