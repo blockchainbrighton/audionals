@@ -1,6 +1,6 @@
 // ab-player.js
 
-window.AB_PLAYER_VERSION = '1.01';
+window.AB_PLAYER_VERSION = '1.02';
 console.log('[A/B Player] Loading AB Player Version 1.01');
 
 
