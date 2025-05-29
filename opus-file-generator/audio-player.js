@@ -111,7 +111,7 @@ const createAudioPlayer = (blob, mimeType, label) => {
           originalAudioElement.type = selectedFile.type; // Set MIME type
   
           const audioTitle = document.createElement('h3');
-          audioTitle.textContent = 'Original WAV File';
+          audioTitle.textContent = 'Original File';
           audioTitle.style.margin = '0 0 10px 0';
   
           originalAudioContainer.appendChild(audioTitle);
