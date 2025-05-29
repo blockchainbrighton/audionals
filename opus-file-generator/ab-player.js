@@ -1,5 +1,8 @@
 // ab-player.js
 
+console.log('[A/B Player] Loading AB Player Version 1.03');
+
+
 const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convertedMimeType) => {
     const abContainer = document.createElement('div');
     abContainer.className = 'ab-player-container';
