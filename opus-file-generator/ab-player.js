@@ -1,57 +1,53 @@
 // ab-player.js
 
 /**
- * Creates an A/B comparison player UI with improved synchronization and looping.
+ * Creates an A/B comparison player UI with looping functionality.
+ * @param {Blob} originalBlob - The original audio blob.
+ * @param {string} originalMimeType - MIME type of the original audio.
+ * @param {Blob} convertedBlob - The converted audio blob (WebM/Opus).
+ * @param {string} convertedMimeType - MIME type of the converted audio.
+ * @returns {HTMLElement} A div container with the A/B player.
  */
 const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convertedMimeType) => {
     const abContainer = document.createElement('div');
-    // ... (abContainer setup remains the same) ...
     abContainer.className = 'ab-player-container';
     abContainer.style.marginTop = '20px';
     abContainer.style.border = '1px solid #666';
     abContainer.style.padding = '15px';
     abContainer.style.backgroundColor = '#333';
 
-
     const title = document.createElement('h4');
-    // ... (title setup remains the same) ...
     title.textContent = 'A/B Comparison Player';
     title.style.textAlign = 'center';
     title.style.marginBottom = '15px';
     abContainer.appendChild(title);
 
-
     const originalUrl = URL.createObjectURL(originalBlob);
     const convertedUrl = URL.createObjectURL(convertedBlob);
 
-    const MIN_LOOP_DURATION = 1.0;
-    let isLoopingActive = false;
-
-    let masterAudio = null; // To designate one audio as the time source
-    let slaveAudio = null;
-
-    let manualSeekInProgress = false; // Flag for our own syncTime
-    let externalSeekInProgress = false; // Flag for seeks triggered by native controls
-
+    const MIN_LOOP_DURATION = 1.0; // Minimum duration in seconds for looping to occur
+    let isLoopingActive = false;   // State for our custom loop toggle
 
     // --- Create Audio Elements ---
     const audioOriginal = Object.assign(document.createElement('audio'), {
         src: originalUrl,
         controls: true,
-        preload: 'auto', // Changed to 'auto' for potentially better buffering for sync
+        preload: 'metadata',
         style: 'width: 100%; margin-bottom: 5px;'
+        // We'll manage the 'loop' property dynamically
     });
     audioOriginal.type = originalMimeType;
 
     const audioConverted = Object.assign(document.createElement('audio'), {
         src: convertedUrl,
         controls: true,
-        preload: 'auto', // Changed to 'auto'
+        preload: 'metadata',
         style: 'width: 100%;'
+        // We'll manage the 'loop' property dynamically
     });
     audioConverted.type = convertedMimeType;
 
-    // --- Labels and Master Controls (remain largely the same) ---
+    // --- Labels for Players ---
     const labelOriginal = document.createElement('p');
     labelOriginal.textContent = 'A: Original Audio';
     labelOriginal.style.fontWeight = 'bold';
@@ -60,11 +56,11 @@ const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convert
     labelConverted.textContent = 'B: Converted Audio (WebM/Opus)';
     labelConverted.style.fontWeight = 'bold';
 
+    // --- Master Controls ---
     const controlsDiv = document.createElement('div');
-    controlsDiv.className = 'ab-player-master-controls'; // Added class for better CSS targeting
     controlsDiv.style.display = 'flex';
     controlsDiv.style.justifyContent = 'center';
-    controlsDiv.style.alignItems = 'center';
+    controlsDiv.style.alignItems = 'center'; // Align items vertically for better button row
     controlsDiv.style.gap = '10px';
     controlsDiv.style.marginBottom = '15px';
 
@@ -79,56 +75,40 @@ const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convert
     });
     abSwitchBtn.dataset.listeningTo = 'original';
 
-    const loopToggleBtn = Object.assign(document.createElement('button'), {
+    const loopToggleBtn = Object.assign(document.createElement('button'), { // NEW Loop Button
         textContent: '🔁 Loop Off',
         className: 'button-small',
         title: `Enable looping (min duration: ${MIN_LOOP_DURATION}s)`
     });
 
-    controlsDiv.append(masterPlayPauseBtn, abSwitchBtn, loopToggleBtn);
+    controlsDiv.append(masterPlayPauseBtn, abSwitchBtn, loopToggleBtn); // Added loopToggleBtn
 
     // --- Initial State ---
     audioOriginal.muted = false;
     audioConverted.muted = true;
-    masterAudio = audioOriginal; // Designate a default master
-    slaveAudio = audioConverted;
 
-    // --- Core Play/Pause/Seek Logic ---
-    const playBoth = () => {
-        // Ensure they are reasonably close in time before playing
-        if (Math.abs(masterAudio.currentTime - slaveAudio.currentTime) > 0.1) {
-            slaveAudio.currentTime = masterAudio.currentTime;
-        }
-        return Promise.all([audioOriginal.play(), audioConverted.play()]);
-    };
-
-    const pauseBoth = () => {
-        audioOriginal.pause();
-        audioConverted.pause();
-    };
-
+    // --- Event Handlers for Master Controls ---
     masterPlayPauseBtn.onclick = () => {
         if (audioOriginal.paused && audioConverted.paused) {
+            // If at the end and looping is off, reset time before playing
             if ((audioOriginal.ended || audioConverted.ended) && !isLoopingActive) {
                 audioOriginal.currentTime = 0;
                 audioConverted.currentTime = 0;
             }
-            playBoth().catch(e => {
+            Promise.all([audioOriginal.play(), audioConverted.play()]).catch(e => {
                 console.error("Error playing A/B audio:", e);
                 masterPlayPauseBtn.textContent = 'Error';
             });
         } else {
-            pauseBoth();
+            audioOriginal.pause();
+            audioConverted.pause();
         }
     };
 
     abSwitchBtn.onclick = () => {
-        const wasPlaying = !audioOriginal.paused; // Check before muting
         if (abSwitchBtn.dataset.listeningTo === 'original') {
             audioOriginal.muted = true;
             audioConverted.muted = false;
-            masterAudio = audioConverted; // Switch master clock
-            slaveAudio = audioOriginal;
             abSwitchBtn.textContent = 'Listen to A (Original)';
             abSwitchBtn.dataset.listeningTo = 'converted';
             labelOriginal.style.opacity = '0.6';
@@ -136,145 +116,139 @@ const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convert
         } else {
             audioOriginal.muted = false;
             audioConverted.muted = true;
-            masterAudio = audioOriginal; // Switch master clock
-            slaveAudio = audioConverted;
             abSwitchBtn.textContent = 'Listen to B (Converted)';
             abSwitchBtn.dataset.listeningTo = 'original';
             labelOriginal.style.opacity = '1';
             labelConverted.style.opacity = '0.6';
         }
-        // If they were playing, ensure the new master continues driving the slave's time
-        if (wasPlaying && masterAudio && slaveAudio) {
-            if (Math.abs(masterAudio.currentTime - slaveAudio.currentTime) > 0.1) {
-                 slaveAudio.currentTime = masterAudio.currentTime;
-            }
-        }
     };
-    
-    loopToggleBtn.onclick = () => { /* ... (loop toggle logic remains the same) ... */
+
+    loopToggleBtn.onclick = () => { // NEW Loop Button Handler
         isLoopingActive = !isLoopingActive;
-        audioOriginal.loop = isLoopingActive; 
+        audioOriginal.loop = isLoopingActive; // Also set native loop property
         audioConverted.loop = isLoopingActive;
 
         if (isLoopingActive) {
             loopToggleBtn.textContent = '🔁 Loop On';
-            loopToggleBtn.style.backgroundColor = 'var(--accent-operational)'; 
+            loopToggleBtn.style.backgroundColor = 'var(--accent-operational)'; // Indicate active state
             loopToggleBtn.style.color = '#111';
         } else {
             loopToggleBtn.textContent = '🔁 Loop Off';
-            loopToggleBtn.style.backgroundColor = ''; 
+            loopToggleBtn.style.backgroundColor = ''; // Reset to default style
             loopToggleBtn.style.color = '';
         }
+        // If audio ended while loop was off, and now loop is on, and audio is paused at end
         if (isLoopingActive && masterPlayPauseBtn.textContent === '▶️ Play A/B' && (audioOriginal.ended || audioConverted.ended)) {
+             // Optionally, you could auto-play here if desired, or just prepare for next play
              audioOriginal.currentTime = 0;
              audioConverted.currentTime = 0;
         }
     };
 
+    // --- Sync Play/Pause/Ended States ---
+    const syncPlayState = () => {
+        masterPlayPauseBtn.textContent = (audioOriginal.paused && audioConverted.paused) ? '▶️ Play A/B' : '⏸️ Pause A/B';
+    };
 
-    // --- Sync UI State ---
-    const updatePlayPauseButtonUI = () => {
-        // UI button should reflect if *either* is playing, or both are paused
-        if (!audioOriginal.paused || !audioConverted.paused) {
-            masterPlayPauseBtn.textContent = '⏸️ Pause A/B';
+    const handlePlay = (audioElement) => {
+        const otherAudio = audioElement === audioOriginal ? audioConverted : audioOriginal;
+        if (otherAudio.paused) {
+            // If one starts, ensure the other tries to play too, respecting current time
+            if (Math.abs(audioElement.currentTime - otherAudio.currentTime) > 0.2) { // If significantly out of sync
+                otherAudio.currentTime = audioElement.currentTime; // Sync before playing
+            }
+            otherAudio.play().catch(e => console.warn(`Sync play error for ${otherAudio === audioOriginal ? 'original' : 'converted'}:`, e));
+        }
+        syncPlayState();
+    };
+
+    const handlePause = (audioElement) => {
+        const otherAudio = audioElement === audioOriginal ? audioConverted : audioOriginal;
+        if (!otherAudio.paused) {
+            otherAudio.pause();
+        }
+        syncPlayState();
+    };
+
+    audioOriginal.onplay = () => handlePlay(audioOriginal);
+    audioConverted.onplay = () => handlePlay(audioConverted);
+    audioOriginal.onpause = () => handlePause(audioOriginal);
+    audioConverted.onpause = () => handlePause(audioConverted);
+
+    const handleEnded = (endedAudio) => {
+        const otherAudio = endedAudio === audioOriginal ? audioConverted : audioOriginal;
+
+        // Ensure both are marked as paused for the UI
+        if (!endedAudio.paused) endedAudio.pause();
+        if (!otherAudio.paused && otherAudio.duration - otherAudio.currentTime < 0.5) { // If other is also near end
+            otherAudio.pause();
+        }
+        
+        syncPlayState(); // Update button to "Play"
+
+        if (isLoopingActive) {
+            // Check duration before looping
+            const duration = endedAudio.duration; // or Math.min(audioOriginal.duration, audioConverted.duration)
+            if (!isNaN(duration) && duration >= MIN_LOOP_DURATION) {
+                audioOriginal.currentTime = 0;
+                audioConverted.currentTime = 0;
+                // Automatically play again if loop is on
+                // Use a small timeout to allow browser to process 'ended' and 'pause' states
+                setTimeout(() => {
+                    if (masterPlayPauseBtn.textContent !== '⏸️ Pause A/B') { // Only play if master isn't already indicating pause
+                        Promise.all([audioOriginal.play(), audioConverted.play()]).catch(e => {
+                            console.error("Error re-playing A/B audio on loop:", e);
+                        });
+                    }
+                }, 50); // Small delay
+            } else {
+                 console.log(`Looping skipped: audio duration (${duration}s) is less than MIN_LOOP_DURATION (${MIN_LOOP_DURATION}s) or NaN.`);
+                 // Reset currentTime anyway so next manual play starts from beginning
+                 audioOriginal.currentTime = 0;
+                 audioConverted.currentTime = 0;
+            }
         } else {
-            masterPlayPauseBtn.textContent = '▶️ Play A/B';
+            // If not looping, just ensure currentTime is reset for next manual play
+            audioOriginal.currentTime = 0;
+            audioConverted.currentTime = 0;
         }
     };
 
-    // --- Event Handlers for individual audio elements ---
-    [audioOriginal, audioConverted].forEach(audio => {
-        audio.onplay = () => {
-            // If one is played (e.g. by native controls), try to play the other.
-            const other = (audio === audioOriginal) ? audioConverted : audioOriginal;
-            if (other.paused) {
-                if (Math.abs(audio.currentTime - other.currentTime) > 0.1) {
-                    other.currentTime = audio.currentTime;
+    audioOriginal.onended = () => handleEnded(audioOriginal);
+    audioConverted.onended = () => handleEnded(audioConverted);
+
+
+    // --- Sync Seeking (currentTime) ---
+    let isSeeking = false;
+
+    const syncTime = (source, target) => {
+        if (!isSeeking && Math.abs(source.currentTime - target.currentTime) > 0.2) { // Smaller threshold for seeking
+            isSeeking = true;
+            target.currentTime = source.currentTime;
+            // Add a slight delay for the target to potentially buffer/react if it was paused
+            setTimeout(() => {
+                isSeeking = false;
+                // If master play is active, ensure both are playing after seek
+                if (masterPlayPauseBtn.textContent === '⏸️ Pause A/B') {
+                    if (source.paused) source.play().catch(e=>console.warn("Seek-play error src", e));
+                    if (target.paused) target.play().catch(e=>console.warn("Seek-play error target", e));
                 }
-                other.play().catch(e => console.warn("Sync onplay error:", e));
-            }
-            updatePlayPauseButtonUI();
-        };
-
-        audio.onpause = () => {
-            // If one is paused (e.g. by native controls), pause the other *unless* it's at the end and looping.
-            const other = (audio === audioOriginal) ? audioConverted : audioOriginal;
-            if (!other.paused && !(isLoopingActive && other.ended)) {
-                 other.pause();
-            }
-            updatePlayPauseButtonUI();
-        };
-
-        audio.onended = () => {
-            const other = (audio === audioOriginal) ? audioConverted : audioOriginal;
-            // If not already paused (e.g. other track ended first), pause it.
-            if(!audio.paused) audio.pause();
-
-            // If both have ended (or are very close to end) or if only one track exists for sync (hypothetically)
-            if ( (audio.ended && other.ended) || 
-                 (audio.ended && Math.abs(other.duration - other.currentTime) < 0.2) ||
-                 (other.ended && Math.abs(audio.duration - audio.currentTime) < 0.2) ) {
-                
-                updatePlayPauseButtonUI(); // Should show Play button
-
-                if (isLoopingActive) {
-                    const duration = Math.min(audioOriginal.duration, audioConverted.duration);
-                    if (!isNaN(duration) && duration >= MIN_LOOP_DURATION) {
-                        audioOriginal.currentTime = 0;
-                        audioConverted.currentTime = 0;
-                        setTimeout(() => {
-                            playBoth().catch(e => console.error("Error re-playing on loop:", e));
-                        }, 50);
-                    } else {
-                        console.log(`Looping skipped: duration issue.`);
-                        audioOriginal.currentTime = 0;
-                        audioConverted.currentTime = 0;
-                    }
-                } else {
-                    // Ensure times are reset even if not looping for next manual play
-                    audioOriginal.currentTime = 0;
-                    audioConverted.currentTime = 0;
-                }
-            }
-        };
-
-        audio.addEventListener('seeked', () => {
-            if (externalSeekInProgress) return; // Avoid loop if seek was triggered by our sync code
-
-            externalSeekInProgress = true;
-            const other = (audio === audioOriginal) ? audioConverted : audioOriginal;
-            // console.log(`${audio === audioOriginal ? 'Orig' : 'Conv'} seeked to ${audio.currentTime.toFixed(2)}. Syncing other.`);
-            if (Math.abs(audio.currentTime - other.currentTime) > 0.05) { // Tighter threshold for seeked
-                other.currentTime = audio.currentTime;
-            }
-            // If playing, ensure both continue playing
-            if(!audioOriginal.paused || !audioConverted.paused){
-                playBoth().catch(e => console.warn("Error playing after seeked event", e));
-            }
-            setTimeout(() => externalSeekInProgress = false, 50); // Reset flag
-        });
-
-        // TIME UPDATE - The core of tighter sync during playback
-        audio.addEventListener('timeupdate', () => {
-            if (audio !== masterAudio || audio.paused || manualSeekInProgress || externalSeekInProgress) {
-                return; // Only sync from the designated master, if playing, and not during other seek operations
-            }
-
-            const targetTime = masterAudio.currentTime;
-            if (Math.abs(targetTime - slaveAudio.currentTime) > 0.05) { // Threshold for adjustment
-                // console.log(`Timeupdate: Master at ${targetTime.toFixed(3)}, Slave at ${slaveAudio.currentTime.toFixed(3)}. Adjusting.`);
-                manualSeekInProgress = true;
-                slaveAudio.currentTime = targetTime;
-                // The 'seeked' event on slaveAudio might fire here.
-                // We use manualSeekInProgress to prevent slaveAudio's seeked from re-triggering syncTime on master.
-                setTimeout(() => manualSeekInProgress = false, 20); // Short timeout for flag
-            }
-        });
-    });
-
+            }, 50);
+        } else if (isSeeking) {
+            // If already seeking, reset flag after a short timeout if no further immediate seeks
+            setTimeout(() => isSeeking = false, 100);
+        }
+    };
+    
+    // Use 'seeked' for primary sync. 'seeking' can be used too but 'seeked' is after operation completes.
+    audioOriginal.addEventListener('seeked', () => syncTime(audioOriginal, audioConverted));
+    audioConverted.addEventListener('seeked', () => syncTime(audioConverted, audioOriginal));
+    
+    // More aggressive sync on 'timeupdate' can be added but needs careful handling of 'isSeeking'
+    // to avoid performance issues or race conditions, especially if both fire rapidly.
+    // For now, 'seeked' is safer.
 
     // --- Cleanup ---
-    // ... (observer and revokeUrls remain the same) ...
     const observer = new MutationObserver((mutationsList, obs) => {
         for (const mutation of mutationsList) {
             if (mutation.removedNodes) {
@@ -291,14 +265,12 @@ const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convert
     abContainer.revokeUrls = () => {
         URL.revokeObjectURL(originalUrl);
         URL.revokeObjectURL(convertedUrl);
-        audioOriginal.src = ''; 
+        audioOriginal.src = ''; // Release resources
         audioConverted.src = '';
         observer.disconnect();
     };
 
-
     // --- Assemble UI ---
-    // ... (append logic remains the same) ...
     abContainer.append(
         controlsDiv,
         labelOriginal,
@@ -309,7 +281,6 @@ const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convert
 
     labelOriginal.style.opacity = '1';
     labelConverted.style.opacity = '0.6';
-
 
     return abContainer;
 };
