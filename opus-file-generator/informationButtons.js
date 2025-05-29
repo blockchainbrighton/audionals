@@ -112,16 +112,17 @@ const audioFormatInfo = {
          <h2 id="audional-info-title">Generating Audional Art</h2>
          <p>Welcome to the cutting edge where audio meets visual art on the Bitcoin blockchain!</p>
          <p><strong>Audionals</strong> are a unique type of Bitcoin Ordinal that embed audio data directly into the inscription, often paired with a visual element. They represent a historical moment in digital art and music technology.</p>
-         <p><strong>Using this Tool for Audionals:</strong></p>
+         <p><strong>Using this Tool for Generating Audional Artworks:</strong></p>
          <ol>
            <li><strong>Prepare Your Audio:</strong> Start with your audio file (e.g., <code>.wav</code>, <code>.mp3</code>, <code>.flac</code>, <code>.ogg</code>). For the best Audional quality, use a high-quality source file. The tool will convert it to the required format.</li>
            <li><strong>Convert to WebM (Opus):</strong> Use the "Opus Encoding for Audional Inscriptions" section (the main audio converter on this page) to transform your audio file into a <strong>WebM</strong> file using the efficient <strong>Opus</strong> codec.
              <ul>
-                 <li>Choose a bitrate and other Opus settings that balance quality and file size. Lower bitrates (~32-64kbps) are often sufficient for loops and keep inscription costs down, but experiment!</li>
+                 <li>Choose a bitrate and other Opus settings that balance quality and file size. Lower bitrates (~32-64kbps) are often sufficient for loops and keep inscription costs down, but experiment with the various settings to get the best size/cost outcome for your project!</li>
                  <li>The tool will generate the required <strong>Base64 string</strong> for the WebM/Opus audio in the "Audio Base64 Conversion" fieldset.</li>
              </ul>
            </li>
-           <li><strong>Prepare Your Visual (Optional):</strong> Use the "Image to Base64 Converter" section to generate a Base64 string for your cover image (e.g., PNG, JPG, GIF, WEBP). Small dimensions and optimized images are recommended. If you skip this, the Audional will be audio-only.</li>
+           <li><strong>Prepare Your Visual (Optional):</strong> Use the "Image to Base64 Converter" section to generate a Base64 string for your cover image (e.g., PNG, JPG, GIF, WEBP). Small dimensions and optimized images are recommended. 
+           <li>You can also add the URL of an existing image inscription to create a recursive audional HTML file with embedded audio but an inscribed image, loaded recursively.</li>
            <li><strong>Generate the Audional HTML:</strong> Once you have the audio Base64 (and optionally the image Base64):
                <ul>
                  <li>Click the "Generate Clickable HTML Player" button (currently marked as 'coming soon', but this describes the intended flow).</li>
