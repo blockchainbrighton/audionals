@@ -21,7 +21,7 @@ const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convert
         <button id="ab-loop" class="button-small" title="Enable looping (min duration: 1s)">🔁 Loop Off</button>
         <label style="margin-left:10px;display:flex;align-items:center;gap:3px;">
           <span style="font-size:0.92em;">B Offset:</span>
-          <input type="number" id="ab-offset" value="250" min="0" max="2000" step="5" style="width:50px;">
+          <input type="number" id="ab-offset" value="50" min="0" max="2000" step="5" style="width:50px;">
           <span style="font-size:0.92em;">ms</span>
         </label>
       </div>
@@ -52,7 +52,7 @@ const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convert
     // --- State ---
     let isLoop = false, isSeeking = false;
     // Use localStorage to persist last-used offset
-    offsetInput.value = localStorage.getItem('ab_player_offset_ms') || '250';
+    offsetInput.value = localStorage.getItem('ab_player_offset_ms') || '50';
     offsetInput.onchange = () => {
       let v = Math.max(0, Math.min(2000, parseInt(offsetInput.value) || 0));
       offsetInput.value = v;
@@ -68,21 +68,35 @@ const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convert
     switchBtn.textContent = 'Listen to B (Converted)';
     labelA.style.opacity = '1';
     labelB.style.opacity = '0.6';
-  
+    // Initial colors
+    labelA.style.color = '#FFB300';
+    labelB.style.color = '#aaa';
+
+
     // --- Main Controls ---
     playBtn.onclick = () => {
-      // Always tightly resync before play!
       const offset = getOffset();
-      // Clamp so B never starts before 0
-      audioA.currentTime = Math.max(0, audioA.currentTime);
-      audioB.currentTime = Math.max(0, audioA.currentTime + offset);
-      if ((audioA.ended || audioB.ended) && !isLoop) {
+      // If either player is running, pause both
+      if (!audioA.paused || !audioB.paused) {
+        audioA.pause();
+        audioB.pause();
+        playBtn.textContent = '▶️ Play A/B';
+        return;
+      }
+      // Otherwise, start both in sync
+      // (If ended, always restart from 0)
+      if (audioA.ended || audioB.ended || audioA.currentTime >= audioA.duration || audioB.currentTime >= audioB.duration) {
         audioA.currentTime = 0;
         audioB.currentTime = offset;
+      } else {
+        audioA.currentTime = Math.max(0, audioA.currentTime);
+        audioB.currentTime = Math.max(0, audioA.currentTime + offset);
       }
       Promise.all([audioA.play(), audioB.play()])
+        .then(() => { playBtn.textContent = '⏸️ Pause A/B'; })
         .catch(() => { playBtn.textContent = 'Error'; });
     };
+    
   
     switchBtn.onclick = () => {
       const isOriginal = switchBtn.dataset.listeningTo === 'original';
@@ -91,18 +105,30 @@ const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convert
       audioB.muted = !isOriginal;
       switchBtn.textContent = isOriginal ? 'Listen to A (Original)' : 'Listen to B (Converted)';
       switchBtn.dataset.listeningTo = isOriginal ? 'converted' : 'original';
+    
       labelA.style.opacity = isOriginal ? '0.6' : '1';
       labelB.style.opacity = isOriginal ? '1' : '0.6';
+    
+      // Corrected highlight:
+      if (audioA.muted) {
+        labelA.style.color = '#aaa';
+        labelB.style.color = '#FFB300';
+      } else {
+        labelA.style.color = '#FFB300';
+        labelB.style.color = '#aaa';
+      }
+    
       if (!audioA.paused && !audioB.paused) {
         if (!isOriginal) {
-          // Switching to B: B's time = A + offset
           audioB.currentTime = Math.max(0, audioA.currentTime + offset);
         } else {
-          // Switching to A: A's time = B - offset (allow negative for strict sync)
-          audioA.currentTime = Math.max(0, audioB.currentTime - offset);
+          audioA.currentTime = audioB.currentTime - offset;
+          if (audioA.currentTime < 0) audioA.currentTime = 0;
         }
       }
     };
+    
+    
   
     loopBtn.onclick = () => {
       isLoop = !isLoop;
