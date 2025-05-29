@@ -13,70 +13,80 @@ console.log('[A/B Player] Loading AB Player Version 1.01');
  * @returns {HTMLElement}
  */
 const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convertedMimeType) => {
-  const abContainer = document.createElement('div');
-  abContainer.className = 'ab-player-container';
-  Object.assign(abContainer.style, {
-    marginTop: '20px', border: '1px solid #666',
-    padding: '15px', backgroundColor: '#333'
-  });
-
-  abContainer.innerHTML = `
-    <h4 style="text-align:center;margin-bottom:15px;">A/B Comparison Player</h4>
-    <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:15px;">
-      <button id="ab-play" class="button-small">▶️ Play A/B</button>
-      <button id="ab-switch" class="button-small" data-listening-to="original">Listen to B (Converted)</button>
-      <button id="ab-loop" class="button-small" title="Enable looping (min duration: 1s)">🔁 Loop Off</button>
-    </div>
-    <p id="labelA" style="font-weight:bold;opacity:1;">A: Original Audio</p>
-    <audio id="audioA" controls preload="metadata" style="width:100%;margin-bottom:5px;"></audio>
-    <p id="labelB" style="font-weight:bold;opacity:0.6;">B: Converted Audio (WebM/Opus)</p>
-    <audio id="audioB" controls preload="metadata" style="width:100%;"></audio>
-  `;
-
-  // --- Elements ---
-  const audioA = abContainer.querySelector('#audioA');
-  const audioB = abContainer.querySelector('#audioB');
-  const playBtn = abContainer.querySelector('#ab-play');
-  const switchBtn = abContainer.querySelector('#ab-switch');
-  const loopBtn = abContainer.querySelector('#ab-loop');
-  const labelA = abContainer.querySelector('#labelA');
-  const labelB = abContainer.querySelector('#labelB');
-
-  // --- Setup sources and types ---
-  const urlA = URL.createObjectURL(originalBlob);
-  const urlB = URL.createObjectURL(convertedBlob);
-  audioA.src = urlA;
-  audioA.type = originalMimeType;
-  audioB.src = urlB;
-  audioB.type = convertedMimeType;
-
-  // --- State ---
-  let isLoop = false;
-  let isSeeking = false;
-
-  // --- Controls ---
-  playBtn.onclick = () => {
-    if (audioA.paused && audioB.paused) {
-      if ((audioA.ended || audioB.ended) && !isLoop) {
-        audioA.currentTime = 0;
-        audioB.currentTime = 0;
+    const abContainer = document.createElement('div');
+    abContainer.className = 'ab-player-container';
+    Object.assign(abContainer.style, {
+      marginTop: '20px', border: '1px solid #666',
+      padding: '15px', backgroundColor: '#333'
+    });
+  
+    abContainer.innerHTML = `
+      <h4 style="text-align:center;margin-bottom:15px;">A/B Comparison Player</h4>
+      <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:15px;">
+        <button id="ab-play" class="button-small">▶️ Play A/B</button>
+        <button id="ab-switch" class="button-small" data-listening-to="original">Listen to B (Converted)</button>
+        <button id="ab-loop" class="button-small" title="Enable looping (min duration: 1s)">🔁 Loop Off</button>
+      </div>
+      <p id="labelA" style="font-weight:bold;opacity:1;">A: Original Audio</p>
+      <audio id="audioA" controls preload="metadata" style="width:100%;margin-bottom:5px;"></audio>
+      <p id="labelB" style="font-weight:bold;opacity:0.6;">B: Converted Audio (WebM/Opus)</p>
+      <audio id="audioB" controls preload="metadata" style="width:100%;"></audio>
+    `;
+  
+    // --- Elements ---
+    const audioA = abContainer.querySelector('#audioA');
+    const audioB = abContainer.querySelector('#audioB');
+    const playBtn = abContainer.querySelector('#ab-play');
+    const switchBtn = abContainer.querySelector('#ab-switch');
+    const loopBtn = abContainer.querySelector('#ab-loop');
+    const labelA = abContainer.querySelector('#labelA');
+    const labelB = abContainer.querySelector('#labelB');
+  
+    // --- Setup sources and types ---
+    const urlA = URL.createObjectURL(originalBlob);
+    const urlB = URL.createObjectURL(convertedBlob);
+    audioA.src = urlA;
+    audioA.type = originalMimeType;
+    audioB.src = urlB;
+    audioB.type = convertedMimeType;
+  
+    // --- State ---
+    let isLoop = false;
+    let isSeeking = false;
+  
+    // --- Mute state: A active, B muted at first ---
+    audioA.muted = false;
+    audioB.muted = true;
+    switchBtn.dataset.listeningTo = 'original';
+    switchBtn.textContent = 'Listen to B (Converted)';
+    labelA.style.opacity = '1';
+    labelB.style.opacity = '0.6';
+  
+    // --- Controls ---
+    playBtn.onclick = () => {
+      if (audioA.paused && audioB.paused) {
+        if ((audioA.ended || audioB.ended) && !isLoop) {
+          audioA.currentTime = 0;
+          audioB.currentTime = 0;
+        }
+        // Play both (only one will be heard due to muting)
+        Promise.all([audioA.play(), audioB.play()])
+          .catch(() => { playBtn.textContent = 'Error'; });
+      } else {
+        audioA.pause(); audioB.pause();
       }
-      Promise.all([audioA.play(), audioB.play()])
-        .catch(() => { playBtn.textContent = 'Error'; });
-    } else {
-      audioA.pause(); audioB.pause();
-    }
-  };
-
-  switchBtn.onclick = () => {
-    const isOriginal = switchBtn.dataset.listeningTo === 'original';
-    audioA.muted = isOriginal;
-    audioB.muted = !isOriginal;
-    switchBtn.textContent = isOriginal ? 'Listen to A (Original)' : 'Listen to B (Converted)';
-    switchBtn.dataset.listeningTo = isOriginal ? 'converted' : 'original';
-    labelA.style.opacity = isOriginal ? '0.6' : '1';
-    labelB.style.opacity = isOriginal ? '1' : '0.6';
-  };
+    };
+  
+    switchBtn.onclick = () => {
+      const isOriginal = switchBtn.dataset.listeningTo === 'original';
+      // Only one is unmuted at any time
+      audioA.muted = isOriginal;
+      audioB.muted = !isOriginal;
+      switchBtn.textContent = isOriginal ? 'Listen to A (Original)' : 'Listen to B (Converted)';
+      switchBtn.dataset.listeningTo = isOriginal ? 'converted' : 'original';
+      labelA.style.opacity = isOriginal ? '0.6' : '1';
+      labelB.style.opacity = isOriginal ? '1' : '0.6';
+    };
 
   loopBtn.onclick = () => {
     isLoop = !isLoop;
