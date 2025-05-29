@@ -1,12 +1,8 @@
 // ab-player.js
 
 /**
- * Creates a perfect A/B audio comparison UI.
- * Plays ONLY one at a time; instant switch; always in sync; looping and seeking supported.
- * @param {Blob} originalBlob
- * @param {string} originalMimeType
- * @param {Blob} convertedBlob
- * @param {string} convertedMimeType
+ * Seamless A/B player with zero-gap switching.
+ * Only one output is audible at a time; both are always running.
  * @returns {Promise<HTMLElement>}
  */
 const createABPlayerUI = async (originalBlob, originalMimeType, convertedBlob, convertedMimeType) => {
@@ -31,7 +27,7 @@ const createABPlayerUI = async (originalBlob, originalMimeType, convertedBlob, c
       </div>
     `;
   
-    // --- UI Elements ---
+    // UI refs
     const playBtn = abContainer.querySelector('#ab-play');
     const switchBtn = abContainer.querySelector('#ab-switch');
     const loopBtn = abContainer.querySelector('#ab-loop');
@@ -41,7 +37,7 @@ const createABPlayerUI = async (originalBlob, originalMimeType, convertedBlob, c
     const labelA = abContainer.querySelector('#ab-label-a');
     const labelB = abContainer.querySelector('#ab-label-b');
   
-    // --- Web Audio: decode both files ---
+    // Web Audio
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     async function decode(blob) {
       const buf = await blob.arrayBuffer();
@@ -52,30 +48,52 @@ const createABPlayerUI = async (originalBlob, originalMimeType, convertedBlob, c
     durLabel.textContent = duration.toFixed(2);
     seekSlider.max = duration;
   
-    // --- State ---
+    // State
     let isPlaying = false, isLoop = false, listenTo = 'A';
     let startTime = 0, pausedAt = 0, rafId = null;
-    let currentSource = null;
   
-    // Utility: create a new BufferSource for the selected audio, and start at offset
-    function playSource(offset) {
-      if (currentSource) { try { currentSource.stop(); } catch {} }
-      const buf = listenTo === 'A' ? bufA : bufB;
-      const source = audioCtx.createBufferSource();
-      source.buffer = buf;
-      source.loop = isLoop;
-      source.loopStart = 0;
-      source.loopEnd = duration;
-      source.connect(audioCtx.destination);
-      source.start(0, offset);
-      source.onended = handleEnded;
-      currentSource = source;
+    let sourceA = null, sourceB = null, gainA = null, gainB = null;
+  
+    // Set up sources at a given offset
+    function setupSources(offset = 0) {
+      // Stop previous
+      if (sourceA) try { sourceA.stop(); } catch {}
+      if (sourceB) try { sourceB.stop(); } catch {}
+  
+      // Gains
+      gainA = audioCtx.createGain();
+      gainB = audioCtx.createGain();
+      // Only one "up"
+      gainA.gain.value = listenTo === 'A' ? 1 : 0;
+      gainB.gain.value = listenTo === 'B' ? 1 : 0;
+  
+      // Sources
+      sourceA = audioCtx.createBufferSource();
+      sourceB = audioCtx.createBufferSource();
+      sourceA.buffer = bufA;
+      sourceB.buffer = bufB;
+      sourceA.loop = sourceB.loop = isLoop;
+      sourceA.loopStart = sourceB.loopStart = 0;
+      sourceA.loopEnd = sourceB.loopEnd = duration;
+  
+      // Routing
+      sourceA.connect(gainA).connect(audioCtx.destination);
+      sourceB.connect(gainB).connect(audioCtx.destination);
+  
+      // Start both at the same offset
+      sourceA.start(0, offset);
+      sourceB.start(0, offset);
+  
       startTime = audioCtx.currentTime - offset;
+  
+      // End handler for either source
+      sourceA.onended = sourceB.onended = handleEnded;
     }
   
-    function stopSource() {
-      if (currentSource) { try { currentSource.stop(); } catch {} }
-      currentSource = null;
+    function stopSources() {
+      if (sourceA) try { sourceA.stop(); } catch {}
+      if (sourceB) try { sourceB.stop(); } catch {}
+      sourceA = sourceB = gainA = gainB = null;
     }
   
     function getCurrentTime() {
@@ -85,7 +103,7 @@ const createABPlayerUI = async (originalBlob, originalMimeType, convertedBlob, c
     function setCurrentTime(t) {
       pausedAt = Math.max(0, Math.min(duration, +t));
       if (isPlaying) {
-        playSource(pausedAt);
+        setupSources(pausedAt);
       }
       seekSlider.value = pausedAt;
       curLabel.textContent = pausedAt.toFixed(2);
@@ -98,41 +116,40 @@ const createABPlayerUI = async (originalBlob, originalMimeType, convertedBlob, c
       if (t >= duration && !isLoop) {
         isPlaying = false;
         playBtn.textContent = '▶️ Play A/B';
-        stopSource();
+        stopSources();
         cancelAnimationFrame(rafId);
       } else {
         rafId = requestAnimationFrame(updateSlider);
       }
     }
   
-    // --- Event Handlers ---
+    // Playback/loop/seek handlers
     playBtn.onclick = () => {
       if (!isPlaying) {
-        playSource(pausedAt);
+        setupSources(pausedAt);
         isPlaying = true;
         playBtn.textContent = '⏸️ Pause A/B';
         rafId = requestAnimationFrame(updateSlider);
       } else {
         pausedAt = getCurrentTime();
-        stopSource();
+        stopSources();
         isPlaying = false;
         playBtn.textContent = '▶️ Play A/B';
         cancelAnimationFrame(rafId);
       }
     };
   
+    // INSTANT, zero-gap A/B switching: change gain, do not restart sources
     switchBtn.onclick = () => {
-      const old = listenTo;
       listenTo = listenTo === 'A' ? 'B' : 'A';
+      if (gainA && gainB) {
+        gainA.gain.setValueAtTime(listenTo === 'A' ? 1 : 0, audioCtx.currentTime);
+        gainB.gain.setValueAtTime(listenTo === 'B' ? 1 : 0, audioCtx.currentTime);
+      }
       switchBtn.textContent = listenTo === 'A' ? 'Listen to B (Converted)' : 'Listen to A (Original)';
       switchBtn.dataset.listeningTo = listenTo;
       labelA.style.opacity = listenTo === 'A' ? '1' : '0.6';
       labelB.style.opacity = listenTo === 'B' ? '1' : '0.6';
-  
-      // If playing, instantly switch buffer sources at same moment!
-      if (isPlaying) {
-        playSource(getCurrentTime());
-      }
     };
   
     loopBtn.onclick = () => {
@@ -140,8 +157,8 @@ const createABPlayerUI = async (originalBlob, originalMimeType, convertedBlob, c
       loopBtn.textContent = isLoop ? '🔁 Loop On' : '🔁 Loop Off';
       loopBtn.style.backgroundColor = isLoop ? 'var(--accent-operational)' : '';
       loopBtn.style.color = isLoop ? '#111' : '';
-      // If playing, need to rebuild current source to update loop property
-      if (isPlaying) playSource(getCurrentTime());
+      // Need to rebuild sources to update .loop
+      if (isPlaying) setupSources(getCurrentTime());
     };
   
     seekSlider.oninput = e => setCurrentTime(e.target.value);
@@ -151,15 +168,14 @@ const createABPlayerUI = async (originalBlob, originalMimeType, convertedBlob, c
         isPlaying = false;
         playBtn.textContent = '▶️ Play A/B';
         pausedAt = 0;
-        stopSource();
+        stopSources();
         cancelAnimationFrame(rafId);
         setCurrentTime(0);
       }
-      // Looping case handled automatically by buffer source
     }
   
     abContainer.revokeUrls = () => {
-      stopSource();
+      stopSources();
       audioCtx.close();
     };
   
