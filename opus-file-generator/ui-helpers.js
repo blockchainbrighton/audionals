@@ -293,7 +293,15 @@ const updateStatus = (msg, err = false) => {
    */
   const resetConversionOutputUI = () => {
       console.log("Resetting conversion output UI...");
-      if (resultEl) resultEl.innerHTML = ''; 
+
+    if (resultEl) {
+            // Before clearing innerHTML, check for and call manual cleanup on A/B player
+            const abPlayer = resultEl.querySelector('.ab-player-container');
+            if (abPlayer && typeof abPlayer.revokeUrls === 'function') {
+                abPlayer.revokeUrls();
+            }
+            resultEl.innerHTML = ''; // Clear previous player and download link
+        }
       if (base64Container) base64Container.style.display = 'none'; 
       if (base64Result) base64Result.innerHTML = ''; 
       if (base64Output) base64Output.textContent = ''; 
