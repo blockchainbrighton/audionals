@@ -86,21 +86,19 @@ const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convert
   
     switchBtn.onclick = () => {
       const isOriginal = switchBtn.dataset.listeningTo === 'original';
+      const offset = getOffset();
       audioA.muted = isOriginal;
       audioB.muted = !isOriginal;
       switchBtn.textContent = isOriginal ? 'Listen to A (Original)' : 'Listen to B (Converted)';
       switchBtn.dataset.listeningTo = isOriginal ? 'converted' : 'original';
       labelA.style.opacity = isOriginal ? '0.6' : '1';
       labelB.style.opacity = isOriginal ? '1' : '0.6';
-      // Sync positions when switching so they're exactly in alignment
-      const offset = getOffset();
       if (!audioA.paused && !audioB.paused) {
-        // If playing, sync both to the "current logical playhead"
         if (!isOriginal) {
-          // Switch to B: A is at t, B should be at t+offset
+          // Switching to B: B's time = A + offset
           audioB.currentTime = Math.max(0, audioA.currentTime + offset);
         } else {
-          // Switch to A: B is at t, A should be at t-offset (don't go negative)
+          // Switching to A: A's time = B - offset (allow negative for strict sync)
           audioA.currentTime = Math.max(0, audioB.currentTime - offset);
         }
       }
