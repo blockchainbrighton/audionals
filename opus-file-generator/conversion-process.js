@@ -102,23 +102,17 @@ const runConversion = async () => {
                 abPlayerTitle.style.borderTop = '1px dashed var(--border-color)'; // Use CSS variable for consistency
                 abPlayerTitle.style.paddingTop = '15px';
 
-                const abPlayerElement = createABPlayerUI(
-                    selectedFile,          // Original blob
-                    selectedFile.type,     // Original MIME type
-                    convertedAudioBlob,    // Converted blob
-                    mimeType               // Converted MIME type (already determined)
-                );
-
-                if (abPlayerElement) { // Check if element was successfully created
-                    resultEl.append(abPlayerTitle, abPlayerElement); // Append to existing content in resultEl
-                    // If using observer-based cleanup for A/B player and it's attached to the element:
-                    // if (typeof abPlayerElement.startObserving === 'function') {
-                    //     abPlayerElement.startObserving(resultEl);
-                    // }
-                } else {
-                    console.error("Failed to create the A/B player UI element.");
-                }
-
+                createABPlayerUI(
+                    selectedFile,
+                    selectedFile.type,
+                    convertedAudioBlob,
+                    mimeType
+                ).then(abPlayerElement => {
+                    if (abPlayerElement) {
+                        resultEl.append(abPlayerTitle, abPlayerElement);
+                    }
+                });
+                
             } catch (abError) {
                 console.error("Error during A/B player creation or appending:", abError);
                 if (typeof updateStatus === 'function') {
