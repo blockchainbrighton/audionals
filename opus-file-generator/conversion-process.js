@@ -94,39 +94,10 @@ const runConversion = async () => {
             // Relies on audio-player cleanup logic or resetUI functions
         }
   
-        // --- A/B Comparison Player (NEW) ---
-        if (selectedFile && convertedAudioBlob) {
-            try {
-                const abPlayerTitle = document.createElement('h3');
-                abPlayerTitle.textContent = 'A/B Quality Comparison';
-                abPlayerTitle.style.margin = '25px 0 10px 0';
-                abPlayerTitle.style.borderTop = '1px dashed #555';
-                abPlayerTitle.style.paddingTop = '15px';
-
-                const abPlayerElement = createABPlayerUI(
-                    selectedFile,          // Original blob
-                    selectedFile.type,     // Original MIME type
-                    convertedAudioBlob,    // Converted blob
-                    mimeType               // Converted MIME type (already determined)
-                );
-                resultEl.append(abPlayerTitle, abPlayerElement);
-
-                // If using observer-based cleanup for A/B player:
-                // abPlayerElement.startObserving(resultEl);
-            } catch (abError) {
-                console.error("Error creating A/B player:", abError);
-                // Optionally display a message to the user
-            }
-        }
-        // --- END A/B Comparison Player ---
-
-
         updateStatus('Conversion successful! Output ready.');
-
+  
         // --- Base64 Handling ---
         await setupBase64DisplayAndActions(convertedAudioBlob, outputFormat, originalNameBase);
-
-
   
     } catch (e) {
         // Error handling updated in runFFmpegConversion, but keep this generic catch
