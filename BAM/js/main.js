@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log("DOMContentLoaded event fired.");
 
-    const neonRowColors = [ /* ... keep your color array ... */
+    const neonRowColors = [
         'hsl(180, 100%, 50%)', 'hsl(300, 100%, 50%)', 'hsl(120, 100%, 50%)',
         'hsl(60, 100%, 50%)', 'hsl(0, 100%, 50%)', 'hsl(30, 100%, 50%)',
         'hsl(240, 100%, 60%)', 'hsl(330, 100%, 55%)', 'hsl(90, 100%, 50%)',
@@ -83,7 +83,20 @@ document.addEventListener('DOMContentLoaded', () => {
         // === New ATHENSkit loops from screenshot ===
         { src: 'audio/KP_ATHENSkit_124_A1.webm', title: 'KP ATHENSkit A1', details: '124 BPM | ATHENSkit', category: 'athenskit' },
         { src: 'audio/KP_ATHENSkit_124_A2.webm', title: 'KP ATHENSkit A2', details: '124 BPM | ATHENSkit', category: 'athenskit' },
-        { src: 'audio/KP_ATHENSkit_124_A3.webm', title: 'KP ATHENSkit A3', details: '124 BPM | ATHENSkit', category: 'athenskit' }
+        { src: 'audio/KP_ATHENSkit_124_A3.webm', title: 'KP ATHENSkit A3', details: '124 BPM | ATHENSkit', category: 'athenskit' },
+        
+        // === New NOIZEkit loops from screenshot ===
+        { src: 'audio/KP_NOIZEkit_160bpm_A1.webm', title: 'KP NOIZEkit A1', details: '160 BPM | NOIZEkit', category: 'noizekit' },
+        { src: 'audio/KP_NOIZEkit_160bpm_A2.webm', title: 'KP NOIZEkit A2', details: '160 BPM | NOIZEkit', category: 'noizekit' },
+        { src: 'audio/KP_NOIZEkit_160bpm_A3.webm', title: 'KP NOIZEkit A3', details: '160 BPM | NOIZEkit', category: 'noizekit' },
+
+        // === New CRIMkit loops from screenshot ===
+        { src: 'audio/KP_CRIMkit_86bpm_A1.webm', title: 'KP CRIMkit A1', details: '86 BPM | CRIMkit', category: 'crimkit' },
+        { src: 'audio/KP_CRIMkit_86bpm_A2.webm', title: 'KP CRIMkit A2', details: '86 BPM | CRIMkit', category: 'crimkit' },
+        { src: 'audio/KP_CRIMkit_86bpm_A3.webm', title: 'KP CRIMkit A3', details: '86 BPM | CRIMkit', category: 'crimkit' },
+        { src: 'audio/KP_CRIMkit_86bpm_B1.webm', title: 'KP CRIMkit B1', details: '86 BPM | CRIMkit', category: 'crimkit' },
+        { src: 'audio/KP_CRIMkit_86bpm_B2.webm', title: 'KP CRIMkit B2', details: '86 BPM | CRIMkit', category: 'crimkit' },
+        { src: 'audio/KP_CRIMkit_86bpm_B3.webm', title: 'KP CRIMkit B3', details: '86 BPM | CRIMkit', category: 'crimkit' }
         
     ];
 
@@ -124,7 +137,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const variation = titleMatch ? titleMatch[2].trim() : '';
         const bpm = bpmMatch ? parseInt(bpmMatch[1], 10) : 0;
         const groupIdentifier = `${kitName}-${bpm || 'NoBPM'}`;
-        return { kitName, bpm, variation, groupIdentifier };
+
+        let seriesPrefix = '';
+        if (variation) {
+            // Match if variation is like "A", "A1", "A (description)", "A_extra"
+            // Must start with a single uppercase letter.
+            // Followed by: End of string OR a digit OR a space OR an underscore.
+            // This distinguishes "A1" (series A) from "Arp1" (not a series).
+            const seriesMatch = variation.match(/^([A-Z])(?:$|\d|\s|_)/);
+            if (seriesMatch) {
+                seriesPrefix = seriesMatch[1]; // The single uppercase letter
+            }
+        }
+        return { kitName, bpm, variation, groupIdentifier, seriesPrefix };
     }
 
     // Sort KP Loops
@@ -154,8 +179,9 @@ document.addEventListener('DOMContentLoaded', () => {
         gridElement.innerHTML = ''; // Clear previous content
         let previousGroupIdentifier = null;
         let currentRowContainer = null;
-        let rowIndex = 0; // For neon colors, specific to this grid, starts at 0 for each call
+        let rowIndex = 0; 
         let playersAddedThisCall = 0;
+        let previousSeriesPrefixInRow = ''; // Track series within the current row
 
         dataArray.forEach(sample => {
             const currentKeys = getSortKeysFunc(sample);
@@ -168,6 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentRowContainer.style.setProperty('--row-border-color', uniqueColor);
                 gridElement.appendChild(currentRowContainer);
                 previousGroupIdentifier = currentKeys.groupIdentifier;
+                previousSeriesPrefixInRow = ''; // Reset for the new row
                 rowIndex++;
             }
 
@@ -175,6 +202,16 @@ document.addEventListener('DOMContentLoaded', () => {
             card.classList.add('sample-card');
             card.dataset.group = currentKeys.groupIdentifier;
             card.dataset.originalBpm = currentKeys.bpm > 0 ? currentKeys.bpm : '';
+
+            // Add spacing if series changes (e.g., from A-series to B-series)
+            if (previousSeriesPrefixInRow && currentKeys.seriesPrefix && currentKeys.seriesPrefix !== previousSeriesPrefixInRow) {
+                card.style.marginLeft = '20px'; // Add space before this card
+            }
+            
+            if (currentKeys.seriesPrefix) { // Update if current item belongs to a defined series (A, B, etc.)
+                previousSeriesPrefixInRow = currentKeys.seriesPrefix;
+            }
+
 
             if (sample.src) {
                 card.dataset.src = sample.src;

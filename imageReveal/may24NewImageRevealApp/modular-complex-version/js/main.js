@@ -352,10 +352,6 @@ function autoTestFrame(ct) {
   }
 }
 
-function getTimelineNameByFn(fn) {
-  for (const [name, f] of Object.entries(timelines)) if (f === fn) return name;
-  return '(unnamed)';
-}
 function runEffectTimeline(timelineArg) {
   let timeline = timelineArg, timelineName = "Loaded Timeline";
   if (!timeline) {
@@ -365,11 +361,12 @@ function runEffectTimeline(timelineArg) {
     else if (window.fxTimeline && Array.isArray(window.fxTimeline) && window.fxTimeline.length) {
       timeline = window.fxTimeline; timelineName = 'User-defined Timeline Array';
     }
-    else if (typeof window.fxTimelineFunctionId === 'number' && timelineFunctions[window.fxTimelineFunctionId]) {
-      const fn = timelineFunctions[window.fxTimelineFunctionId];
-      timeline = fn(); timelineName = `[ID ${window.fxTimelineFunctionId}] ${getTimelineNameByFn(fn)}`;
-      log(`[FX] Using timeline ID: ${window.fxTimelineFunctionId} (${getTimelineNameByFn(fn)})`);
-    } else if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function') {
+    else if (typeof window.fxTimelineFunctionId === 'number') {
+        timeline = timelines.getTimelineByNumber(window.fxTimelineFunctionId);
+        timelineName = `[ID ${window.fxTimelineFunctionId}]`;
+        log(`[FX] Using timeline ID: ${window.fxTimelineFunctionId}`);
+      }
+       else if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function') {
       timeline = timelines[window.fxTimelineFunctionName](); timelineName = window.fxTimelineFunctionName; log(`[FX] Using timeline function name: ${timelineName}`);
     } else { timeline = timelines.dramaticRevealTimeline(); timelineName = 'dramaticRevealTimeline (default)'; log(`[FX] No timeline specified, defaulting to dramaticRevealTimeline.`);}
   }
