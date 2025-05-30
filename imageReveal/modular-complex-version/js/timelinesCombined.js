@@ -118,7 +118,7 @@ export function dramaticRevealTimeline() {
     ];
   }
   
-  // #6 Cinematic Chromatic Unveil
+  // #6 Cinematic Chromatic Unveil ** This one is nice - Ghostly into chroma Doesn't Finish though **
   export function chromaSweepTimeline() {
     return [
       { effect: "fade", param: "progress", from: 0, to: 1, startBar: 0, endBar: 1, easing: "linear" },
@@ -1046,6 +1046,75 @@ function burstFocusShift() {
   ];
 }
 
+// #XX Bar 9 Grain Explosion Timeline
+export function bar9GrainExplosionTimeline() {
+  return [
+      // --- Base Effects ---
+      // Standard fade in for content visibility
+      { effect: "fade", param: "progress", from: 0, to: 1, startBar: 0, endBar: 4, easing: "easeInOut" },
+
+      // 1. Colour Sweep from bar 0 to bar 16 (Bottom visual layer)
+      {
+          effect: "colourSweep",
+          param: "progress",
+          from: 0,
+          to: 1,
+          startBar: 0,
+          endBar: 32,
+          easing: "linear",
+          color: "rgba(100, 100, 255, 0.3)", // Example: light blueish sweep
+          edgeSoftness: 0.5,
+          direction: 0
+      },
+
+    
+
+      // --- Grain Effect Layer (Top visual layer) ---
+      // Ensure Grain is 0 for the first 4 bars, and remains 0 until the explosion ramp-up.
+      // "Enabled at bar 5" means it's defined, but its value here is 0 until bar 8.
+      {
+          effect: "filmGrain",
+          param: "intensity",
+          from: 0,
+          to: 0,
+          startBar: 0, // Start defining its state from bar 0
+          endBar: 8,   // Keep it at 0 until bar 8
+          easing: "linear"
+      },
+      // Grain explosion: bar 8 to bar 9
+      {
+          effect: "filmGrain",
+          param: "intensity",
+          from: 0,
+          to: 2.0,    // High intensity for explosion
+          startBar: 8,
+          endBar: 9,
+          easing: "easeOutExpo"
+      },
+      // Grain resolves: bar 9 to bar 11
+      {
+          effect: "filmGrain",
+          param: "intensity",
+          from: 2.0,
+          to: 0.1,    // Lingering subtle grain
+          startBar: 9,
+          endBar: 11,
+          easing: "linear"
+      },
+      // Keep subtle grain until the colour sweep ends
+      {
+          effect: "filmGrain",
+          param: "intensity",
+          from: 0.1,
+          to: 0.1,
+          startBar: 11,
+          endBar: 16, // Align with colour sweep end
+          easing: "linear"
+      }
+  ];
+}
+
+
 // === Timeline Export Arrays (public API, 100% compatible) ===
 
 export const timelineFunctions = [
@@ -1069,7 +1138,7 @@ export const timelineFunctions = [
   classicFilmIntro, heartbeatFade, tvStatic, focusPullLoop, chromaPulse, pixelCrunch,
   kaleidoscopeSweep, glitchStorm, dreamyVignette, retroBoot, nightVision, neonFlicker,
   cinematicBars, teleportDisintegrate, scanDance, discoverReveal, dataCorruption,
-  solarFlare, ghostingEcho, burstFocusShift
+  solarFlare, ghostingEcho, burstFocusShift, bar9GrainExplosionTimeline
 ];
 
 

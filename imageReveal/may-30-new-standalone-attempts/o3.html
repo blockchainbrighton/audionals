@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Seed‑Driven 64‑Bar Image Reveal</title>
+<style>
+  :root{
+    color-scheme:dark;
+  }
+  body{
+    font-family:Arial,Helvetica,sans-serif;
+    margin:0; padding:0;
+    background:#111; color:#eee;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100vh;
+  }
+  h1{ font-size:1.4rem; font-weight:600; margin:1.2rem 0 0.4rem; }
+  #controls{
+    margin:0.5rem 0 1rem;
+    display:flex; gap:0.6rem; flex-wrap:wrap; justify-content:center;
+  }
+  input[type="text"],input[type="file"]{
+    background:#222; border:1px solid #444; color:#eee;
+    padding:0.35rem 0.6rem; border-radius:4px; font-size:0.9rem;
+  }
+  button{
+    background:#3498db; color:#fff; border:none; border-radius:4px;
+    padding:0.45rem 0.9rem; font-size:0.9rem; cursor:pointer;
+  }
+  button:disabled{ opacity:0.6; cursor:default; }
+  #status{ margin:0.8rem 0; font-family:monospace; text-align:center; }
+  canvas{ background:#000; border:2px solid #444; width:90vw; height:auto; max-height:60vh; }
+</style>
+</head>
+<body>
+<h1>Seed‑Driven 64‑Bar Image Reveal</h1>
+<div id="controls">
+  <input type="file" id="imageInput" accept="image/*">
+  <input type="text" id="seedInput" placeholder="Enter seed text">
+  <button id="startBtn">Start Reveal</button>
+</div>
+<canvas id="canvas" width="800" height="450"></canvas>
+<div id="status">Awaiting start…</div>
+
+<script>
+(()=>{
+'use strict';
+
+/* ---------- Constants ---------- */
+const DEFAULT_IMG_URL = 'https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0';
+const AUDIO_URL       = window.fxSongUrl || 'opus.webm';
+const BPM             = 104.15;
+const BEATS_PER_BAR   = 4;
+const TOTAL_BARS      = 64;
+const TOTAL_BEATS     = BEATS_PER_BAR * TOTAL_BARS;
+const SECONDS_PER_BEAT= 60 / BPM;
+const TOTAL_DURATION  = TOTAL_BEATS * SECONDS_PER_BEAT; // ≈147.37 s
+
+/* ---------- DOM ---------- */
+const canvas    = document.getElementById('canvas');
+const ctx       = canvas.getContext('2d');
+const imageIn   = document.getElementById('imageInput');
+const seedIn    = document.getElementById('seedInput');
+const startBtn  = document.getElementById('startBtn');
+const statusDiv = document.getElementById('status');
+
+/* ---------- State ---------- */
+let img   = new Image();
+let rng   = ()=>0;            // PRNG stub
+let effects = [];
+let startTime = 0;
+let running = false;
+const audio = new Audio(AUDIO_URL);
+
+/* ---------- PRNG ---------- */
+function strToSeed(str){
+  let h = 1779033703 ^ str.length;
+  for(let i=0;i<str.length;i++){
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return h >>> 0;
+}
+function mulberry32(a){
+  return function(){
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), 1 | t);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------- Effect Class ---------- */
+class Effect{
+  constructor(type,start,end,params={}){
+    this.type=type; this.start=start; this.end=end; this.params=params;
+  }
+  isActive(t){ return t>=this.start && t<=this.end; }
+  progress(t){ return (t-this.start)/(this.end-this.start); }
+}
+
+/* ---------- Timeline Generation ---------- */
+function generateTimeline(){
+  const list=[];
+  const minDur = TOTAL_DURATION*0.10;
+  const maxDur = TOTAL_DURATION*0.25;
+  const types  = ['blur','pixelate','color','glyph'];
+  let t=0;
+  while(t < TOTAL_DURATION*0.7){
+    const type = types[Math.floor(rng()*types.length)];
+    const dur  = minDur + rng()*(maxDur-minDur);
+    const overlap = rng()*minDur*0.5;
+    const start = Math.max(0,t-overlap);
+    const end   = Math.min(start+dur,TOTAL_DURATION);
+    list.push(new Effect(type,start,end));
+    t=end;
+  }
+  // Ensure image fully visible at end
+  list.push(new Effect('fade', Math.max(TOTAL_DURATION*0.75, list[list.length-1].end - minDur), TOTAL_DURATION));
+  return list;
+}
+
+/* ---------- Pixelate Helper ---------- */
+function drawPixelated(ctx,img,w,h,pixel){
+  pixel=Math.max(1,Math.floor(pixel));
+  if(pixel<=1){ ctx.drawImage(img,0,0,w,h); return; }
+  const off = drawPixelated.tmp || (drawPixelated.tmp=document.createElement('canvas'));
+  off.width = Math.ceil(w/pixel);
+  off.height= Math.ceil(h/pixel);
+  const octx = off.getContext('2d');
+  octx.imageSmoothingEnabled=false;
+  octx.clearRect(0,0,off.width,off.height);
+  octx.drawImage(img,0,0,off.width,off.height);
+  ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(off,0,0,off.width,off.height,0,0,w,h);
+  ctx.imageSmoothingEnabled=true;
+}
+
+/* ---------- Render ---------- */
+function render(){
+  if(!running) return;
+  const now = performance.now();
+  const t   = (now-startTime)/1000; // seconds
+  const clamped = Math.min(t,TOTAL_DURATION);
+  const w=canvas.width, h=canvas.height;
+
+  const active = effects.filter(e=>e.isActive(clamped));
+
+  ctx.save();
+  ctx.clearRect(0,0,w,h);
+
+  /* --- Pixelate / Base --- */
+  const pix = active.find(e=>e.type==='pixelate');
+  if(pix){
+    const p  = Math.min(Math.max(pix.progress(clamped),0),1);
+    const px = 40*(1-p)+1; // 40px->1px
+    drawPixelated(ctx,img,w,h,px);
+  }else{
+    ctx.drawImage(img,0,0,w,h);
+  }
+
+  /* --- Filters (blur & grayscale) --- */
+  const filterParts=[];
+  const blur = active.find(e=>e.type==='blur');
+  if(blur){
+    const p = Math.min(Math.max(blur.progress(clamped),0),1);
+    filterParts.push(`blur(${20*(1-p)}px)`);
+  }
+  const col = active.find(e=>e.type==='color');
+  if(col){
+    const p = Math.min(Math.max(col.progress(clamped),0),1);
+    filterParts.push(`grayscale(${(1-p)*100}%)`);
+  }
+  if(filterParts.length){
+    ctx.save();
+    ctx.filter = filterParts.join(' ');
+    ctx.drawImage(canvas,0,0);
+    ctx.restore();
+  }
+
+  /* --- Glyph Overlay --- */
+  const glyph = active.find(e=>e.type==='glyph');
+  if(glyph){
+    const p = Math.min(Math.max(glyph.progress(clamped),0),1);
+    ctx.save();
+    ctx.globalAlpha = (1-p)*0.75;
+    const fs = 30+70*(1-p);
+    ctx.font = `${fs}px monospace`;
+    for(let i=0;i<150;i++){
+      const x = rng()*w, y=rng()*h;
+      const ch = String.fromCharCode(0x30A0 + Math.floor(rng()*96));
+      ctx.fillStyle = `hsl(${rng()*360},60%,50%)`;
+      ctx.fillText(ch,x,y);
+    }
+    ctx.restore();
+  }
+
+  /* --- Fade Overlay --- */
+  const fade = active.find(e=>e.type==='fade');
+  if(fade){
+    const p = Math.min(Math.max(fade.progress(clamped),0),1);
+    ctx.save();
+    ctx.globalAlpha = 1-p;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,w,h);
+    ctx.restore();
+  }
+
+  ctx.restore();
+
+  /* --- Status --- */
+  const beat = clamped/SECONDS_PER_BEAT;
+  const bar  = Math.floor(beat/BEATS_PER_BAR)+1;
+  const pct  = (clamped/TOTAL_DURATION)*100;
+  statusDiv.textContent=`Progress: ${pct.toFixed(1)}% – Bar ${bar}/${TOTAL_BARS} – Active: ${active.map(e=>e.type).join(', ')||'none'}`;
+
+  if(clamped<TOTAL_DURATION){ requestAnimationFrame(render); }
+  else {
+    running=false; startBtn.disabled=false;
+    statusDiv.textContent+=' – Finished!';
+  }
+}
+
+/* ---------- Start Reveal ---------- */
+function startReveal(){
+  const seedStr = seedIn.value || 'default-seed';
+  rng = mulberry32(strToSeed(seedStr));
+  effects = generateTimeline();
+
+  /* Resize canvas to fit */
+  const maxW = window.innerWidth*0.9;
+  const maxH = window.innerHeight*0.6;
+  const ratio = img.naturalWidth/img.naturalHeight;
+  let w=maxW, h=w/ratio;
+  if(h>maxH){ h=maxH; w=h*ratio; }
+  canvas.width=w; canvas.height=h;
+
+  startBtn.disabled=true; running=true;
+  audio.currentTime=0; audio.play().catch(()=>{});
+  startTime=performance.now();
+  requestAnimationFrame(render);
+}
+
+/* ---------- Image Load ---------- */
+function loadImage(src){
+  return new Promise((res,rej)=>{
+    const im=new Image();
+    im.crossOrigin='anonymous';
+    im.onload=()=>res(im);
+    im.onerror=rej;
+    im.src=src;
+  });
+}
+async function init(){
+  img = await loadImage(DEFAULT_IMG_URL);
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  statusDiv.textContent='Ready. Upload image and/or enter seed, then press Start.';
+}
+
+imageIn.addEventListener('change',e=>{
+  if(e.target.files && e.target.files[0]){
+    const file=e.target.files[0];
+    const reader=new FileReader();
+    reader.onload=async ev=>{
+      img = await loadImage(ev.target.result);
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    };
+    reader.readAsDataURL(file);
+  }
+});
+startBtn.addEventListener('click',()=>{ if(!running) startReveal(); });
+window.addEventListener('resize',()=>{ if(!running) ctx.drawImage(img,0,0,canvas.width,canvas.height); });
+
+/* ---------- Boot ---------- */
+init();
+})();
+</script>
+</body>
+</html>

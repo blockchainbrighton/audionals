@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Image Reveal Application</title>
+<style>
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f4f6f8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #333;
+}
+.container {
+    background-color: #fff;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    width: 90%;
+    max-width: 700px;
+}
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: center;
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e0e0e0;
+}
+.controls > div {
+    display: flex;
+    flex-direction: column;
+}
+label {
+    font-weight: 600;
+    margin-bottom: 5px;
+    font-size: 0.9em;
+    color: #555;
+}
+/* Hide the file input as image is now predefined */
+#imageUploadLabel, #imageUpload {
+    display: none;
+}
+input[type="text"], button {
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 0.95em;
+}
+input[type="text"] {
+    min-width: 150px;
+}
+button {
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.2s ease-in-out;
+    align-self: flex-end;
+    height: 40px;
+}
+button:hover {
+    background-color: #0056b3;
+}
+button:disabled {
+    background-color: #aabbcc;
+    cursor: not-allowed;
+}
+#revealCanvas {
+    border: 1px solid #ddd;
+    display: block;
+    background-color: #fff;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+#statusDisplay {
+    margin-top: 15px;
+    font-style: italic;
+    color: #555;
+    min-height: 1.2em;
+    text-align: center;
+    width: 100%;
+}
+audio {
+    margin-top: 15px;
+    width: 100%;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div class="controls">
+        <div>
+            <label id="imageUploadLabel" for="imageUpload">Choose Image:</label>
+            <input type="file" id="imageUpload" accept="image/*">
+        </div>
+        <div>
+            <label for="seedInput">Seed:</label>
+            <input type="text" id="seedInput" value="defaultSeed">
+        </div>
+        <button id="revealButton">Reveal Image</button>
+    </div>
+
+    <canvas id="revealCanvas"></canvas>
+    <audio id="songPlayer" controls></audio>
+    <div id="statusDisplay">Enter a seed and press "Reveal Image" to start.</div>
+</div>
+
+<script>
+// --- START SCRIPT ---
+
+// --- Predefined URLs ---
+const imageURL = "https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0";
+let songUrl = window.fxSongUrl || 'opus.webm'; // Default to 'opus.webm' if fxSongUrl not set
+
+// --- PRNG (Mulberry-32) ---
+function mulberry32(seed) {
+    return function() {
+        let t = seed += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+}
+
+// --- Seed String to Number ---
+function seedToNumber(seedStr) {
+    let hash = 0;
+    if (typeof seedStr !== 'string' || seedStr.length === 0) {
+        return Math.floor(new Date().getTime() * Math.random()) & 0xFFFFFFFF;
+    }
+    for (let i = 0; i < seedStr.length; i++) {
+        const char = seedStr.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0; // Convert to 32bit integer
+    }
+    return hash;
+}
+
+// --- Animation Loop (FrameLoop) ---
+const MAX_TICKS = 64;
+
+class FrameLoop {
+    constructor(engine, statusDisplayId, audioPlayerId) {
+        this.engine = engine;
+        this.currentTick = 0;
+        this.animationFrameId = null;
+        this.statusDisplay = document.getElementById(statusDisplayId);
+        this.audioPlayer = document.getElementById(audioPlayerId);
+        this._boundLoop = this._loop.bind(this);
+    }
+
+    async start() {
+        this.stop();
+        this.currentTick = 0;
+
+        const isEngineReady = await this.engine.isReady();
+        if (!isEngineReady) {
+            if (this.statusDisplay) this.statusDisplay.textContent = "Engine not ready. Image might not be loaded.";
+            return;
+        }
+
+        if (this.audioPlayer && this.audioPlayer.src) {
+            this.audioPlayer.currentTime = 0; // Rewind
+            this.audioPlayer.play().catch(e => console.warn("Audio play failed:", e.message));
+        }
+        this._loop();
+    }
+
+    _loop() {
+        this.currentTick++;
+        this.engine.drawFrame(this.currentTick, MAX_TICKS);
+
+        if (this.statusDisplay) {
+            this.statusDisplay.textContent = `Tick: ${this.currentTick}/${MAX_TICKS}`;
+        }
+
+        if (this.currentTick < MAX_TICKS) {
+            this.animationFrameId = requestAnimationFrame(this._boundLoop);
+        } else {
+            this.engine.finalizeFrame();
+            if (this.statusDisplay) {
+                this.statusDisplay.textContent = `Reveal Complete (Tick: ${this.currentTick}/${MAX_TICKS})`;
+            }
+            const revealButton = document.getElementById('revealButton');
+            if (revealButton) revealButton.disabled = false;
+        }
+    }
+
+    stop() {
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+        if (this.audioPlayer) {
+            this.audioPlayer.pause();
+        }
+        const revealButton = document.getElementById('revealButton');
+        if (revealButton) revealButton.disabled = false;
+    }
+}
+
+// --- Base Effect Class ---
+class BaseEffect {
+    constructor(engine, effectSpecificPrng) {
+        this.engine = engine;
+        this.prng = effectSpecificPrng;
+    }
+    setup() { }
+    apply(targetImageData, sourceImageData, currentTick, maxTicks, globalProgress) { }
+}
+
+// --- Concrete Effect Implementations ---
+class FadeEffect extends BaseEffect {
+    setup() { }
+    apply(targetImageData, sourceImageData, currentTick, maxTicks, globalProgress) {
+        const targetData = targetImageData.data;
+        const sourceData = sourceImageData.data;
+        for (let i = 0; i < targetData.length; i += 4) {
+            targetData[i]   = sourceData[i];
+            targetData[i+1] = sourceData[i+1];
+            targetData[i+2] = sourceData[i+2];
+            // Only apply progressive alpha if globalProgress makes sense here
+            // This FadeEffect becomes primary alpha controller IF included.
+            targetData[i+3] = sourceData[i+3] * globalProgress;
+        }
+    }
+}
+
+class PixelateEffect extends BaseEffect {
+    setup() {
+        this.maxBlockSize = 16 + Math.floor(this.prng() * 48);
+        this.canvasWidth = this.engine.canvas.width;
+        this.canvasHeight = this.engine.canvas.height;
+    }
+    apply(targetImageData, sourceImageData, currentTick, maxTicks, globalProgress) {
+        const invProgress = 1.0 - globalProgress;
+        const blockSize = Math.max(1, Math.floor(1 + invProgress * (this.maxBlockSize - 1)));
+        if (blockSize <= 1) {
+            if (globalProgress >= 1 && targetImageData.data !== sourceImageData.data) {
+                targetImageData.data.set(sourceImageData.data);
+            }
+            return;
+        }
+        const targetData = targetImageData.data;
+        const sourceData = sourceImageData.data;
+        const width = this.canvasWidth;
+        const height = this.canvasHeight;
+        for (let y = 0; y < height; y += blockSize) {
+            for (let x = 0; x < width; x += blockSize) {
+                let rSum = 0, gSum = 0, bSum = 0, aSum = 0, count = 0;
+                for (let py = y; py < Math.min(y + blockSize, height); py++) {
+                    for (let px = x; px < Math.min(x + blockSize, width); px++) {
+                        const idx = (py * width + px) * 4;
+                        rSum += sourceData[idx]; gSum += sourceData[idx+1];
+                        bSum += sourceData[idx+2]; aSum += sourceData[idx+3];
+                        count++;
+                    }
+                }
+                if (count === 0) continue;
+                const avgR = rSum / count, avgG = gSum / count, avgB = bSum / count, avgA = aSum / count;
+                for (let py = y; py < Math.min(y + blockSize, height); py++) {
+                    for (let px = x; px < Math.min(x + blockSize, width); px++) {
+                        const idx = (py * width + px) * 4;
+                        targetData[idx] = avgR; targetData[idx+1] = avgG;
+                        targetData[idx+2] = avgB; targetData[idx+3] = avgA;
+                    }
+                }
+            }
+        }
+    }
+}
+
+class BlurEffect extends BaseEffect {
+    setup() {
+        this.maxKernelSize = 3 + Math.floor(this.prng() * 4) * 2;
+        this.canvasWidth = this.engine.canvas.width;
+        this.canvasHeight = this.engine.canvas.height;
+    }
+    apply(targetImageData, sourceImageData, currentTick, maxTicks, globalProgress) {
+        const invProgress = 1.0 - globalProgress;
+        const kernelSize = Math.max(1, Math.floor(1 + invProgress * (this.maxKernelSize - 1) / 2) * 2 + 1);
+        if (kernelSize <= 1) {
+             if (globalProgress >= 1 && targetImageData.data !== sourceImageData.data) {
+                targetImageData.data.set(sourceImageData.data);
+            }
+            return;
+        }
+        const targetData = targetImageData.data;
+        const sourceData = sourceImageData.data;
+        const width = this.canvasWidth;
+        const height = this.canvasHeight;
+        const halfKernel = Math.floor(kernelSize / 2);
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                let rSum = 0, gSum = 0, bSum = 0, aSum = 0, count = 0;
+                for (let ky = -halfKernel; ky <= halfKernel; ky++) {
+                    for (let kx = -halfKernel; kx <= halfKernel; kx++) {
+                        const sy = Math.max(0, Math.min(height - 1, y + ky));
+                        const sx = Math.max(0, Math.min(width - 1, x + kx));
+                        const sIdx = (sy * width + sx) * 4;
+                        rSum += sourceData[sIdx]; gSum += sourceData[sIdx+1];
+                        bSum += sourceData[sIdx+2]; aSum += sourceData[sIdx+3];
+                        count++;
+                    }
+                }
+                const dIdx = (y * width + x) * 4;
+                targetData[dIdx]   = rSum / count; targetData[dIdx+1] = gSum / count;
+                targetData[dIdx+2] = bSum / count; targetData[dIdx+3] = aSum / count;
+            }
+        }
+    }
+}
+
+class ColorSweepEffect extends BaseEffect {
+    setup() { }
+    apply(targetImageData, sourceImageData, currentTick, maxTicks, globalProgress) {
+        const targetData = targetImageData.data;
+        const sourceData = sourceImageData.data;
+        for (let i = 0; i < sourceData.length; i += 4) {
+            const r = sourceData[i], g = sourceData[i+1], b = sourceData[i+2], a = sourceData[i+3];
+            const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+            targetData[i]   = gray + (r - gray) * globalProgress;
+            targetData[i+1] = gray + (g - gray) * globalProgress;
+            targetData[i+2] = gray + (b - gray) * globalProgress;
+            targetData[i+3] = a;
+        }
+    }
+}
+
+class GlyphEffect extends BaseEffect {
+    setup() {
+        this.baseGlyphSeed = this.prng() * 0xFFFFFFFF;
+        this.glyphColor1_R = Math.floor(this.prng() * 128);
+        this.glyphColor1_G = Math.floor(this.prng() * 128);
+        this.glyphColor1_B = Math.floor(this.prng() * 128);
+        this.glyphColor2_R = Math.floor(this.prng() * 128) + 128;
+        this.glyphColor2_G = Math.floor(this.prng() * 128) + 128;
+        this.glyphColor2_B = Math.floor(this.prng() * 128) + 128;
+        this.canvasWidth = this.engine.canvas.width;
+        this.canvasHeight = this.engine.canvas.height;
+    }
+    pixelHash(x, y, seed) {
+        let h = seed + x * 31 + y * 769;
+        h = (h << 13) ^ h;
+        h = (h * (h * h * 15731 + 789221) + 1376312589);
+        return ((h & 0x7fffffff) / 0x7fffffff);
+    }
+    apply(targetImageData, sourceImageData, currentTick, maxTicks, globalProgress) {
+        const targetData = targetImageData.data;
+        const sourceData = sourceImageData.data;
+        const width = this.canvasWidth;
+        for (let i = 0; i < sourceData.length; i += 4) {
+            const pixelIndex = i / 4;
+            const x = pixelIndex % width;
+            const y = Math.floor(pixelIndex / width);
+            const pixelSpecificRand = this.pixelHash(x, y, this.baseGlyphSeed);
+            if (pixelSpecificRand > globalProgress) {
+                const glyphPatternRand = this.pixelHash(x, y, this.baseGlyphSeed + 1);
+                if (glyphPatternRand > 0.5) {
+                    targetData[i]   = this.glyphColor1_R; targetData[i+1] = this.glyphColor1_G;
+                    targetData[i+2] = this.glyphColor1_B;
+                } else {
+                    targetData[i]   = this.glyphColor2_R; targetData[i+1] = this.glyphColor2_G;
+                    targetData[i+2] = this.glyphColor2_B;
+                }
+                targetData[i+3] = 255;
+            } else {
+                targetData[i]   = sourceData[i]; targetData[i+1] = sourceData[i+1];
+                targetData[i+2] = sourceData[i+2]; targetData[i+3] = sourceData[i+3];
+            }
+        }
+    }
+}
+
+// --- Core Logic (RevealEngine) ---
+class RevealEngine {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        if (!this.canvas) throw new Error("Canvas element not found: " + canvasId);
+        this.mainCtx = this.canvas.getContext('2d');
+        this.originalImageBitmap = null;
+        this.sourceImageData = null;
+        this.renderBufferCanvas = document.createElement('canvas');
+        this.renderBufferCtx = this.renderBufferCanvas.getContext('2d');
+        this.workingImageData = null;
+        this.prng = null;
+        this.activeEffects = [];
+        this.availableEffectClasses = [FadeEffect, PixelateEffect, BlurEffect, ColorSweepEffect, GlyphEffect];
+        if (this.availableEffectClasses.length === 0) console.warn("No effects available!");
+    }
+
+    async loadImage(imageUrlString) { // Modified to accept URL
+        return new Promise((resolve, reject) => {
+            if (!imageUrlString) {
+                reject(new Error("No image URL provided."));
+                return;
+            }
+            const img = new Image();
+            img.crossOrigin = "Anonymous"; // Essential for getImageData with external URLs
+            img.onload = () => {
+                this.originalImageBitmap = img;
+                this.canvas.width = img.width;
+                this.canvas.height = img.height;
+                this.renderBufferCanvas.width = img.width;
+                this.renderBufferCanvas.height = img.height;
+
+                const tempCtx = document.createElement('canvas').getContext('2d');
+                tempCtx.canvas.width = img.width;
+                tempCtx.canvas.height = img.height;
+                tempCtx.drawImage(img, 0, 0);
+                try {
+                    this.sourceImageData = tempCtx.getImageData(0, 0, img.width, img.height);
+                } catch (e) {
+                    console.error("Error getting ImageData (CORS issue?):", e);
+                    reject(new Error("Could not process image. Check CORS policy on the image server or browser console for errors. Image URL: " + imageUrlString));
+                    return;
+                }
+                
+                this.workingImageData = new ImageData(
+                    new Uint8ClampedArray(this.sourceImageData.data),
+                    this.sourceImageData.width,
+                    this.sourceImageData.height
+                );
+                resolve(true);
+            };
+            img.onerror = (err) => reject(new Error("Failed to load image from URL: " + imageUrlString + ". " + (err.message || "")));
+            img.src = imageUrlString;
+        });
+    }
+
+    initializeEffects(seedString) {
+        if (!this.originalImageBitmap) {
+            console.error("Image not loaded before initializing effects.");
+        }
+        const seedNum = seedToNumber(seedString);
+        this.prng = mulberry32(seedNum);
+        this.activeEffects = [];
+        if (this.availableEffectClasses.length === 0) return;
+        const numEffectsToUse = 1 + Math.floor(this.prng() * Math.min(3, this.availableEffectClasses.length));
+        let PinnedEffectClasses = [...this.availableEffectClasses];
+        for (let i = PinnedEffectClasses.length - 1; i > 0; i--) {
+            const j = Math.floor(this.prng() * (i + 1));
+            [PinnedEffectClasses[i], PinnedEffectClasses[j]] = [PinnedEffectClasses[j], PinnedEffectClasses[i]];
+        }
+        for (let i = 0; i < numEffectsToUse; i++) {
+            const EffectClass = PinnedEffectClasses[i];
+            const effectSpecificPrng = mulberry32(Math.floor(this.prng() * 0xFFFFFFFF));
+            const effect = new EffectClass(this, effectSpecificPrng);
+            if (this.originalImageBitmap) effect.setup();
+            this.activeEffects.push(effect);
+        }
+        if (this.activeEffects.length === 0 && this.availableEffectClasses.length > 0) {
+            const EffectClass = this.availableEffectClasses[Math.floor(this.prng() * this.availableEffectClasses.length)];
+            const effect = new EffectClass(this, mulberry32(Math.floor(this.prng() * 0xFFFFFFFF)));
+            if (this.originalImageBitmap) effect.setup();
+            this.activeEffects.push(effect);
+        }
+    }
+
+    async isReady() {
+        return !!this.originalImageBitmap && !!this.sourceImageData && !!this.workingImageData;
+    }
+
+    drawFrame(currentTick, totalTicksInAnimation) {
+        if (!this.originalImageBitmap || !this.sourceImageData || !this.workingImageData) {
+            this.mainCtx.fillStyle = 'black';
+            this.mainCtx.fillRect(0, 0, this.canvas.width || 300, this.canvas.height || 150);
+            return;
+        }
+        const globalProgress = Math.min(1.0, currentTick / totalTicksInAnimation);
+        this.workingImageData.data.set(this.sourceImageData.data);
+        for (const effect of this.activeEffects) {
+            effect.apply(this.workingImageData, this.sourceImageData, currentTick, totalTicksInAnimation, globalProgress);
+        }
+        this.renderBufferCtx.putImageData(this.workingImageData, 0, 0);
+        this.mainCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.mainCtx.globalAlpha = globalProgress;
+        this.mainCtx.drawImage(this.renderBufferCanvas, 0, 0);
+        this.mainCtx.globalAlpha = 1.0;
+    }
+
+    finalizeFrame() {
+        if (!this.originalImageBitmap) return;
+        this.mainCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.mainCtx.globalAlpha = 1.0;
+        this.mainCtx.drawImage(this.originalImageBitmap, 0, 0, this.canvas.width, this.canvas.height);
+    }
+}
+
+// --- Bootstrapping Logic ---
+document.addEventListener('DOMContentLoaded', () => {
+    // File input elements are no longer primary for image selection
+    // const imageUpload = document.getElementById('imageUpload'); 
+    const seedInput = document.getElementById('seedInput');
+    const revealButton = document.getElementById('revealButton');
+    const statusDisplay = document.getElementById('statusDisplay');
+    const audioPlayer = document.getElementById('songPlayer');
+
+    if (!seedInput || !revealButton || !statusDisplay || !audioPlayer) {
+        console.error("Critical UI elements are missing. Application cannot start.");
+        if(statusDisplay) statusDisplay.textContent = "Error: UI elements missing.";
+        return;
+    }
+
+    const engine = new RevealEngine('revealCanvas');
+    const frameLoop = new FrameLoop(engine, 'statusDisplay', 'songPlayer');
+
+    revealButton.addEventListener('click', async () => {
+        const seed = seedInput.value;
+        // File input is not used for loading the image
+        // const file = imageUpload.files[0]; 
+        // if (!file) { ... }
+
+        revealButton.disabled = true;
+        statusDisplay.textContent = "Loading image...";
+        frameLoop.stop();
+
+        if (audioPlayer) { // Set song URL here so it's ready if needed
+            audioPlayer.src = songUrl;
+        }
+
+        try {
+            await engine.loadImage(imageURL); // Load the predefined image URL
+            statusDisplay.textContent = "Image loaded. Initializing effects...";
+            engine.initializeEffects(seed);
+            statusDisplay.textContent = "Starting reveal...";
+            await frameLoop.start();
+        } catch (error) {
+            console.error("Error during reveal setup:", error);
+            statusDisplay.textContent = `Error: ${error.message}`;
+            revealButton.disabled = false;
+        }
+    });
+});
+// --- END SCRIPT ---
+</script>
+</body>
+</html>

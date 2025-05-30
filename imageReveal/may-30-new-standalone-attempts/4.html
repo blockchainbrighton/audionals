@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Seeded Image Reveal FX</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    html, body {
+      background: #111;
+      color: #efefef;
+      font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+      margin: 0; padding: 0;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 600px;
+      margin: 28px auto 0 auto;
+      background: #181818;
+      border-radius: 16px;
+      box-shadow: 0 4px 32px #0006;
+      padding: 2rem 2.5rem 2.5rem 2.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.7rem;
+    }
+    .form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem 1rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .form label {
+      font-weight: 600;
+      margin-right: 0.2em;
+      color: #fff;
+    }
+    .form input[type="text"], .form input[type="file"] {
+      background: #23272f;
+      border: 1px solid #353535;
+      border-radius: 8px;
+      color: #f7f7f7;
+      padding: 7px 14px;
+      font-size: 1rem;
+      margin-right: 0.2em;
+    }
+    .form button {
+      padding: 8px 22px;
+      background: linear-gradient(90deg, #9f8cff 0, #3ed6fa 100%);
+      color: #fff;
+      border: none;
+      border-radius: 9px;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: filter 0.15s;
+      margin-left: 0.3em;
+    }
+    .form button:disabled { filter: grayscale(0.7) brightness(0.7); cursor: not-allowed; }
+    .status {
+      min-height: 42px;
+      font-size: 1.03em;
+      background: #23223a;
+      border-radius: 8px;
+      padding: 0.7em 1.2em;
+      color: #c7f1ff;
+      line-height: 1.7;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+    .canvas-wrap {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #23272f;
+      border-radius: 18px;
+      padding: 12px;
+      min-height: 340px;
+      box-shadow: 0 2px 24px #0005;
+    }
+    canvas {
+      background: #222;
+      max-width: 100%;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px #0002;
+    }
+    @media (max-width: 720px) {
+      .container { max-width: 98vw; padding: 1.1rem; }
+      .canvas-wrap { min-height: 180px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2 style="margin:0 0 0.2em 0;">Seeded Image Reveal FX</h2>
+    <form class="form" id="controls" autocomplete="off">
+      <label>Image: <input type="file" id="imgFile" accept="image/*"></label>
+      <label>Seed: <input type="text" id="seedInput" placeholder="Enter any word or phrase" required></label>
+      <button type="submit" id="startBtn">Start Reveal</button>
+    </form>
+    <div class="status" id="status">Ready.</div>
+    <div class="canvas-wrap"><canvas id="revealCanvas" width="480" height="360"></canvas></div>
+    <audio id="bgSong" style="display:none" preload="auto"></audio>
+    <div style="opacity:0.66; font-size: 0.97em; margin-top:1.2em">
+      <b>Tip:</b> Enter a different seed for a unique reveal, or upload your own image.
+    </div>
+  </div>
+  <script>
+    // --- CONFIGURATION ---
+    const DEFAULT_IMAGE = 'https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0';
+    const DEFAULT_SONG = window.fxSongUrl || 'opus.webm';
+    const CANVAS_W = 480, CANVAS_H = 360;
+    const TEMPO_BPM = 104.15;
+    const BEATS_PER_BAR = 4;
+    const TOTAL_BARS = 64;
+    const FRAMES_PER_SECOND = 60;
+
+    // --- STATE ---
+    let revealActive = false;
+    let animationFrameId = null;
+    let prng = null;
+    let timeline = [];
+    let timelineSeed = '';
+    let effectList = [];
+    let revealStartTime = null;
+    let bgImgBitmap = null;
+    let imgNaturalW = 0, imgNaturalH = 0;
+    let userImgLoaded = false;
+    let revealProgress = 0;
+    let bgAudio = null;
+
+    // --- DOM ---
+    const canvas = document.getElementById('revealCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const form = document.getElementById('controls');
+    const imgFileInput = document.getElementById('imgFile');
+    const seedInput = document.getElementById('seedInput');
+    const startBtn = document.getElementById('startBtn');
+    bgAudio = document.getElementById('bgSong');
+
+    // --- EFFECT DEFINITIONS ---
+    // Every effect: { name, params: [{key, min, max}], canReveal (must be used in timeline), drawFn(ctx, bitmap, progress, params) }
+    const EFFECTS = [
+      // Core progressive reveal effects
+      {
+        name: "fade", canReveal: true,
+        params: [{ key: "from", min: 0, max: 1 }, { key: "to", min: 0, max: 1 }],
+        draw(ctx, bmp, prog, p) {
+          ctx.globalAlpha = lerp(p.from, p.to, prog);
+          ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+          ctx.globalAlpha = 1;
+        }
+      },
+      {
+        name: "pixelate", canReveal: true,
+        params: [{ key: "from", min: 32, max: 1 }, { key: "to", min: 32, max: 1 }],
+        draw(ctx, bmp, prog, p) {
+          // Progressive pixel size
+          let pxSize = Math.max(1, Math.floor(lerp(p.from, p.to, prog)));
+          if (pxSize === 1) {
+            ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+          } else {
+            // Draw at low res, then scale up
+            let tCanvas = document.createElement('canvas');
+            tCanvas.width = Math.ceil(canvas.width / pxSize);
+            tCanvas.height = Math.ceil(canvas.height / pxSize);
+            let tCtx = tCanvas.getContext('2d');
+            tCtx.drawImage(bmp, 0, 0, tCanvas.width, tCanvas.height);
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(tCanvas, 0, 0, tCanvas.width, tCanvas.height, 0, 0, canvas.width, canvas.height);
+            ctx.imageSmoothingEnabled = true;
+          }
+        }
+      },
+      {
+        name: "blur", canReveal: true,
+        params: [{ key: "from", min: 12, max: 0 }, { key: "to", min: 12, max: 0 }],
+        draw(ctx, bmp, prog, p) {
+          let blurVal = Math.max(0, lerp(p.from, p.to, prog));
+          ctx.save();
+          ctx.filter = `blur(${blurVal}px)`;
+          ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+          ctx.restore();
+        }
+      },
+      {
+        name: "colorSweep", canReveal: true,
+        params: [{ key: "from", min: 0, max: 1 }, { key: "to", min: 0, max: 1 }],
+        draw(ctx, bmp, prog, p) {
+          // Desaturate-to-color sweep: grayscale -> color
+          ctx.save();
+          ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+          let sweep = lerp(p.from, p.to, prog);
+          ctx.globalAlpha = 1 - sweep;
+          ctx.globalCompositeOperation = "saturation";
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = "source-over";
+          ctx.restore();
+        }
+      },
+      // Add subtle overlays that resolve/disappear
+      {
+        name: "glyphOverlay", canReveal: false,
+        params: [{ key: "from", min: 1, max: 0 }, { key: "to", min: 1, max: 0 }],
+        draw(ctx, bmp, prog, p) {
+          let alpha = lerp(p.from, p.to, prog) * 0.45;
+          let grid = 11 + Math.floor(8 * Math.abs(Math.sin(prog * Math.PI)));
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = "#80aaff";
+          let glyphSet = ['▲', '■', '◆', '●', '✕', '✚', '✦', '☰', '☷', '✷'];
+          for (let y = 0; y < grid; ++y)
+            for (let x = 0; x < grid; ++x) {
+              let g = glyphSet[(x * 31 + y * 19) % glyphSet.length];
+              ctx.font = `${canvas.width / grid * 0.85}px monospace`;
+              ctx.fillText(g, (x + 0.07) * canvas.width / grid, (y + 0.8) * canvas.height / grid);
+            }
+          ctx.restore();
+        }
+      },
+      {
+        name: "scanline", canReveal: false,
+        params: [{ key: "from", min: 0.2, max: 0 }, { key: "to", min: 0.2, max: 0 }],
+        draw(ctx, bmp, prog, p) {
+          // Vertical scanlines, fading out
+          let alpha = lerp(p.from, p.to, prog) * 0.35;
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          let lines = Math.floor(canvas.height / 4);
+          ctx.fillStyle = "#000";
+          for (let y = 0; y < lines; y += 2) {
+            ctx.fillRect(0, y * 4, canvas.width, 2);
+          }
+          ctx.restore();
+        }
+      },
+      {
+        name: "grain", canReveal: false,
+        params: [{ key: "from", min: 0.5, max: 0 }, { key: "to", min: 0.5, max: 0 }],
+        draw(ctx, bmp, prog, p) {
+          // Add some animated grain/noise, fading out
+          let alpha = lerp(p.from, p.to, prog) * 0.22;
+          let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          for (let i = 0; i < imageData.data.length; i += 4) {
+            let n = (Math.random() - 0.5) * 48 * alpha;
+            imageData.data[i]     = clamp255(imageData.data[i]     + n);
+            imageData.data[i + 1] = clamp255(imageData.data[i + 1] + n);
+            imageData.data[i + 2] = clamp255(imageData.data[i + 2] + n);
+          }
+          ctx.putImageData(imageData, 0, 0);
+        }
+      }
+    ];
+
+    // --- UTILITIES ---
+    function clamp255(v) { return Math.max(0, Math.min(255, v)); }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function prngHash(str) {
+      // xmur3 string -> uint32 seed (Mulberry32 compatible)
+      let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
+      for (let i = 0, k; i < str.length; i++) {
+        k = str.charCodeAt(i);
+        h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+        h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+        h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+        h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+      }
+      h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+      h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+      h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+      h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+      return (h1 ^ h2 ^ h3 ^ h4) >>> 0;
+    }
+    function makeMulberry32(seed) {
+      return function() {
+        let t = (seed += 0x6D2B79F5);
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    function choose(array) {
+      // Use seeded PRNG, fallback to Math.random if not yet seeded
+      let rnd = prng ? prng() : Math.random();
+      return array[Math.floor(rnd * array.length)];
+    }
+    function between(min, max) {
+      let rnd = prng ? prng() : Math.random();
+      return lerp(min, max, rnd);
+    }
+
+    // --- TIMELINE GENERATION ---
+    function generateTimeline(seed) {
+      prng = makeMulberry32(prngHash(seed));
+      timelineSeed = seed;
+      let bars = TOTAL_BARS, tickDur = 1 / bars;
+      let timeline = [];
+
+      // 1. Compose a set of progressive "core" reveal effects that fully reveal the image by the end.
+      let revealFx = EFFECTS.filter(e => e.canReveal);
+      let totalCoreFx = 2 + Math.floor(prng() * (revealFx.length));
+      let coreSequence = [];
+
+      // Each core effect gets a (possibly overlapping) window on the reveal timeline
+      let used = [];
+      let barCursor = 0;
+      let coreBarEnds = [];
+
+      for (let i = 0; i < totalCoreFx; ++i) {
+        let eff = choose(revealFx.filter(fx => !used.includes(fx.name)));
+        used.push(eff.name);
+        // Randomize window length (min 20% of timeline, max 80% - with some overlap)
+        let minLen = Math.ceil(bars * 0.18), maxLen = Math.ceil(bars * 0.36);
+        let len = Math.max(minLen, Math.floor(between(minLen, maxLen)));
+        let start = barCursor;
+        let overlap = Math.floor(between(1, Math.min(6, bars - start - 4)));
+        let end = Math.min(bars, start + len + overlap);
+        if (i === totalCoreFx - 1 || end > bars - 3) end = bars;
+        // Param range for each core effect
+        let params = {};
+        eff.params.forEach(p => {
+          // Reverse some directions for variation
+          params[p.key] = p.key === 'from'
+            ? between(p.min, p.max)
+            : between(p.max, p.min);
+        });
+        coreSequence.push({
+          name: eff.name, fromBar: start, toBar: end, params,
+          canReveal: true
+        });
+        coreBarEnds.push(end);
+        barCursor = Math.max(end - Math.floor(overlap / 2), barCursor + 1);
+      }
+
+      // 2. Interleave and overlap "decorative" effects for creative flavor
+      let decoFx = EFFECTS.filter(e => !e.canReveal);
+      let numDecoFx = 1 + Math.floor(prng() * (decoFx.length + 1));
+      let decoSequence = [];
+      for (let i = 0; i < numDecoFx; ++i) {
+        let eff = choose(decoFx);
+        let winLen = Math.ceil(bars * between(0.22, 0.44));
+        let offset = Math.floor(bars * between(0.01, 0.78));
+        let start = offset, end = Math.min(start + winLen, bars);
+        let params = {};
+        eff.params.forEach(p => {
+          params[p.key] = between(p.min, p.max);
+        });
+        decoSequence.push({
+          name: eff.name, fromBar: start, toBar: end, params,
+          canReveal: false
+        });
+      }
+
+      // 3. Sort all effects by start time
+      let allFx = coreSequence.concat(decoSequence)
+        .sort((a, b) => a.fromBar - b.fromBar);
+
+      // 4. Ensure the final core effect always ends at the very last bar
+      let lastCore = coreSequence[coreSequence.length - 1];
+      if (lastCore && lastCore.toBar < bars) {
+        lastCore.toBar = bars;
+      }
+
+      return allFx;
+    }
+
+    // --- EFFECT PIPELINE ---
+    function getActiveEffects(barF, t) {
+      // Return all effects whose (fromBar <= barF < toBar), plus their local [0-1] progress
+      return timeline.map(eff => {
+        if (barF >= eff.fromBar && barF < eff.toBar) {
+          let localProg = (t - eff.fromBar) / (eff.toBar - eff.fromBar);
+          return { ...eff, prog: clamp01(localProg) };
+        }
+        return null;
+      }).filter(eff => eff);
+    }
+    function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+    // --- IMAGE LOADING ---
+    async function loadImageToBitmap(src) {
+      // Accepts File object or URL
+      return new Promise((resolve, reject) => {
+        let img = new window.Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          imgNaturalW = img.naturalWidth;
+          imgNaturalH = img.naturalHeight;
+          createImageBitmap(img).then(resolve);
+        };
+        img.onerror = reject;
+        if (src instanceof File) {
+          let url = URL.createObjectURL(src);
+          img.src = url;
+        } else {
+          img.src = src;
+        }
+      });
+    }
+
+    // --- AUDIO ---
+    function playAudio() {
+      bgAudio.src = DEFAULT_SONG;
+      bgAudio.volume = 0.85;
+      bgAudio.currentTime = 0;
+      bgAudio.play().catch(() => {});
+    }
+    function stopAudio() {
+      bgAudio.pause();
+      bgAudio.currentTime = 0;
+    }
+
+    // --- MAIN REVEAL LOGIC ---
+    function resetRevealState() {
+      revealActive = false;
+      revealStartTime = null;
+      revealProgress = 0;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+      stopAudio();
+      statusEl.textContent = 'Ready.';
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (bgImgBitmap)
+        ctx.drawImage(bgImgBitmap, 0, 0, canvas.width, canvas.height);
+    }
+
+    function beginReveal(seed) {
+      if (!bgImgBitmap) return;
+      resetRevealState();
+      timeline = generateTimeline(seed);
+      effectList = timeline.map(eff =>
+        `${eff.name} (${Math.round(eff.fromBar)}→${Math.round(eff.toBar)})`).join(", ");
+      statusEl.textContent = `Revealing: [${effectList}]`;
+      revealActive = true;
+      playAudio();
+      revealStartTime = performance.now();
+      animationFrameId = requestAnimationFrame(frameLoop);
+    }
+
+    function frameLoop(now) {
+      // --- Timing ---
+      if (!revealStartTime) revealStartTime = now;
+      let tMs = now - revealStartTime;
+      let totalBeats = TOTAL_BARS * BEATS_PER_BAR;
+      let beatLenSec = 60 / TEMPO_BPM;
+      let totalDurSec = beatLenSec * totalBeats;
+      let t = clamp01(tMs / (totalDurSec * 1000));
+      let barF = t * TOTAL_BARS;
+      revealProgress = t;
+
+      // --- Draw pipeline ---
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Compose all currently-active effects, in order
+      let fxChain = getActiveEffects(barF, barF);
+      // Always at least the last core effect at the very end to ensure full reveal
+      if (t === 1) {
+        let lastCore = timeline.filter(e => e.canReveal).slice(-1)[0];
+        if (lastCore) fxChain = [{ ...lastCore, prog: 1 }];
+      }
+      // Apply pipeline
+      let tmpCanvas = ctx;
+      // Start by drawing the image (with first core effect's params)
+      if (fxChain.length) {
+        // Start with the first core effect
+        let baseFx = fxChain.find(e => e.canReveal) || fxChain[0];
+        let fxDef = EFFECTS.find(e => e.name === baseFx.name);
+        if (fxDef) fxDef.draw(ctx, bgImgBitmap, baseFx.prog, baseFx.params);
+        // Layer others
+        fxChain.filter(e => !e.canReveal).forEach(eff => {
+          let fxDef = EFFECTS.find(fx => fx.name === eff.name);
+          if (fxDef) fxDef.draw(ctx, bgImgBitmap, eff.prog, eff.params);
+        });
+      } else {
+        ctx.drawImage(bgImgBitmap, 0, 0, canvas.width, canvas.height);
+      }
+
+      // --- Status update ---
+      let curBar = Math.floor(barF) + 1;
+      let effectNames = fxChain.map(eff => eff.name).join(", ");
+      statusEl.innerHTML = `
+        <b>Bar:</b> ${Math.min(curBar, TOTAL_BARS)} / ${TOTAL_BARS}<br>
+        <b>Active FX:</b> ${effectNames || 'None'}<br>
+        <b>Seed:</b> <span style="color:#ffe971;">${timelineSeed}</span>
+      `;
+
+      // --- Loop / Finish ---
+      if (t < 1) {
+        animationFrameId = requestAnimationFrame(frameLoop);
+      } else {
+        revealActive = false;
+        statusEl.innerHTML += '<br><b>Reveal complete.</b>';
+        stopAudio();
+      }
+    }
+
+    // --- EVENT HANDLERS ---
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      startBtn.disabled = true;
+      statusEl.textContent = 'Loading...';
+      let seed = (seedInput.value || '').trim();
+      if (!seed) {
+        statusEl.textContent = 'Please enter a seed word or phrase.';
+        startBtn.disabled = false;
+        return;
+      }
+      try {
+        if (userImgLoaded) {
+          // Already loaded!
+          beginReveal(seed);
+        } else {
+          // Try to load default image if not uploaded
+          if (!bgImgBitmap)
+            bgImgBitmap = await loadImageToBitmap(DEFAULT_IMAGE);
+          userImgLoaded = false;
+          beginReveal(seed);
+        }
+      } catch (err) {
+        statusEl.textContent = "Image could not be loaded.";
+        startBtn.disabled = false;
+        return;
+      }
+      startBtn.disabled = false;
+    };
+
+    imgFileInput.onchange = async (e) => {
+      let f = e.target.files && e.target.files[0];
+      if (!f) return;
+      resetRevealState();
+      try {
+        bgImgBitmap = await loadImageToBitmap(f);
+        userImgLoaded = true;
+        ctx.drawImage(bgImgBitmap, 0, 0, canvas.width, canvas.height);
+        statusEl.textContent = `Image loaded. Enter seed and start reveal.`;
+      } catch (err) {
+        statusEl.textContent = 'Image load error.';
+      }
+    };
+
+    // --- INIT ---
+    (async () => {
+      // Preload default image and audio
+      try {
+        bgImgBitmap = await loadImageToBitmap(DEFAULT_IMAGE);
+        ctx.drawImage(bgImgBitmap, 0, 0, canvas.width, canvas.height);
+      } catch {}
+      bgAudio.src = DEFAULT_SONG;
+      bgAudio.load();
+    })();
+
+    // --- Utility: Clamp for progress
+    function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+  </script>
+</body>
+</html>
