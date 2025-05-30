@@ -42,62 +42,62 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- DYNAMIC SAMPLE CARD GENERATION ---
     // =========================================================================
     let sampleData = [
-        { src: 'audio/KP_boomkit_100bpm_A1.webm', title: 'KP Boomkit A1', details: '100 BPM | Boom Bap', category: 'boom-bap' },
-        { src: 'audio/KP_boomkit_100bpm_A2.webm', title: 'KP Boomkit A2', details: '100 BPM | Boom Bap', category: 'boom-bap' },
-        { src: 'audio/KP_boomkit_100bpm_A3.webm', title: 'KP Boomkit A3', details: '100 BPM | Boom Bap', category: 'boom-bap' },
-        { src: 'audio/KP_boomkit_98bpm_A1.webm',  title: 'KP Boomkit A1', details: '98 BPM | Boom Bap', category: 'boom-bap' },
-        { src: 'audio/KP_boomkit_98bpm_A2.webm',  title: 'KP Boomkit A2', details: '98 BPM | Boom Bap', category: 'boom-bap' },
-        { src: 'audio/KP_boomkit_98bpm_A3.webm',  title: 'KP Boomkit A3', details: '98 BPM | Boom Bap', category: 'boom-bap' },
-
-        { src: 'audio/KP_caziokit_129bpm_A.webm', title: 'KP CazioKit A', details: '129 BPM | Breakbeat', category: 'breakbeat' },
-        { src: 'audio/KP_caziokit_129bpm_B.webm', title: 'KP CazioKit B', details: '129 BPM | Breakbeat', category: 'breakbeat' },
-        { src: 'audio/KP_caziokit_129bpm_C.webm', title: 'KP CazioKit C', details: '129 BPM | Breakbeat', category: 'breakbeat' },
-        { src: 'audio/KP_caziokit_129bpm_D.webm', title: 'KP CazioKit D', details: '129 BPM | Breakbeat', category: 'breakbeat' },
-
-        { src: 'audio/KP_caziokit_129bpm_E_8bar.webm', title: 'KP CazioKit E (8 bar)', details: '129 BPM | Breakbeat', category: 'breakbeat' },
-       
         { src: 'audio/KP_ABkit_113bpm_A1.webm', title: 'KP ABkit A1', details: '113 BPM | ABkit', category: 'abkit' },
         { src: 'audio/KP_ABkit_113bpm_A2.webm', title: 'KP ABkit A2', details: '113 BPM | ABkit', category: 'abkit' },
         { src: 'audio/KP_ABkit_113bpm_A3.webm', title: 'KP ABkit A3', details: '113 BPM | ABkit', category: 'abkit' },
-
-
-        { src: 'audio/KP_SwingKit_68bpm_A1.webm', title: 'KP SwingKit A1', details: '68 BPM | Swing', category: 'swing' },
-        { src: 'audio/KP_SwingKit_68bpm_A2.webm', title: 'KP SwingKit A2', details: '68 BPM | Swing', category: 'swing' },
-
-        { src: 'audio/KP_SwingKit_68bpm_PianoPerc.webm', title: 'KP SwingKit PianoPerc', details: '68 BPM | Percussion', category: 'swing' },
-        { src: 'audio/KP_SwingKit_68bpm_SleepSYNTH.webm', title: 'KP SwingKit SleepSYNTH', details: '68 BPM | Synth', category: 'swing' },
-        { src: 'audio/KP_SwingKit_68bpm_WitnessBASS.webm', title: 'KP SwingKit WitnessBASS', details: '68 BPM | Bass', category: 'swing' },
-
-        // === Loops from screenshot ===
-        { src: 'audio/KP_TAPkit_135bpm_B2.webm', title: 'KP TAPkit B2', details: '135 BPM | TAPkit', category: 'tapkit' },
-        { src: 'audio/KP_TAPkit_135bpm_B1.webm', title: 'KP TAPkit B1', details: '135 BPM | TAPkit', category: 'tapkit' },
-        { src: 'audio/KP_TAPkit_135bpm_A3.webm', title: 'KP TAPkit A3', details: '135 BPM | TAPkit', category: 'tapkit' },
-        { src: 'audio/KP_TAPkit_135bpm_A2.webm', title: 'KP TAPkit A2', details: '135 BPM | TAPkit', category: 'tapkit' },
-        { src: 'audio/KP_TAPkit_135bpm_A1.webm', title: 'KP TAPkit A1', details: '135 BPM | TAPkit', category: 'tapkit' },
-
-        { src: 'audio/KP_VANkit_127_A4.webm', title: 'KP VANkit A4', details: '127 BPM | VANkit', category: 'vankit' },
-        { src: 'audio/KP_VANkit_127_A3.webm', title: 'KP VANkit A3', details: '127 BPM | VANkit', category: 'vankit' },
-        { src: 'audio/KP_VANkit_127_A2.webm', title: 'KP VANkit A2', details: '127 BPM | VANkit', category: 'vankit' },
-        { src: 'audio/KP_VANkit_127_A1.webm', title: 'KP VANkit A1', details: '127 BPM | VANkit', category: 'vankit' },
-
-        // === New ATHENSkit loops from screenshot ===
         { src: 'audio/KP_ATHENSkit_124_A1.webm', title: 'KP ATHENSkit A1', details: '124 BPM | ATHENSkit', category: 'athenskit' },
         { src: 'audio/KP_ATHENSkit_124_A2.webm', title: 'KP ATHENSkit A2', details: '124 BPM | ATHENSkit', category: 'athenskit' },
         { src: 'audio/KP_ATHENSkit_124_A3.webm', title: 'KP ATHENSkit A3', details: '124 BPM | ATHENSkit', category: 'athenskit' },
-        
-        // === New NOIZEkit loops from screenshot ===
-        { src: 'audio/KP_NOIZEkit_160bpm_A1.webm', title: 'KP NOIZEkit A1', details: '160 BPM | NOIZEkit', category: 'noizekit' },
-        { src: 'audio/KP_NOIZEkit_160bpm_A2.webm', title: 'KP NOIZEkit A2', details: '160 BPM | NOIZEkit', category: 'noizekit' },
-        { src: 'audio/KP_NOIZEkit_160bpm_A3.webm', title: 'KP NOIZEkit A3', details: '160 BPM | NOIZEkit', category: 'noizekit' },
-
-        // === New CRIMkit loops from screenshot ===
+        { src: 'audio/KP_CRIMkitB_86bpm_B1.webm', title: 'KP CRIMkit B1', details: '86 BPM | CRIMkit', category: 'crimkit' },
+        { src: 'audio/KP_CRIMkitB_86bpm_B2.webm', title: 'KP CRIMkit B2', details: '86 BPM | CRIMkit', category: 'crimkit' },
+        { src: 'audio/KP_CRIMkitB_86bpm_B3.webm', title: 'KP CRIMkit B3', details: '86 BPM | CRIMkit', category: 'crimkit' },
         { src: 'audio/KP_CRIMkit_86bpm_A1.webm', title: 'KP CRIMkit A1', details: '86 BPM | CRIMkit', category: 'crimkit' },
         { src: 'audio/KP_CRIMkit_86bpm_A2.webm', title: 'KP CRIMkit A2', details: '86 BPM | CRIMkit', category: 'crimkit' },
         { src: 'audio/KP_CRIMkit_86bpm_A3.webm', title: 'KP CRIMkit A3', details: '86 BPM | CRIMkit', category: 'crimkit' },
-        { src: 'audio/KP_CRIMkit_86bpm_B1.webm', title: 'KP CRIMkit B1', details: '86 BPM | CRIMkit', category: 'crimkit' },
-        { src: 'audio/KP_CRIMkit_86bpm_B2.webm', title: 'KP CRIMkit B2', details: '86 BPM | CRIMkit', category: 'crimkit' },
-        { src: 'audio/KP_CRIMkit_86bpm_B3.webm', title: 'KP CRIMkit B3', details: '86 BPM | CRIMkit', category: 'crimkit' }
-        
+        { src: 'audio/KP_NAXOUkit_92bpm_A1.webm', title: 'KP NAXOUkit A1', details: '92 BPM | NAXOUkit', category: 'naxoukit' },
+        { src: 'audio/KP_NAXOUkit_92bpm_A2.webm', title: 'KP NAXOUkit A2', details: '92 BPM | NAXOUkit', category: 'naxoukit' },
+        { src: 'audio/KP_NAXOUkit_92bpm_A3.webm', title: 'KP NAXOUkit A3', details: '92 BPM | NAXOUkit', category: 'naxoukit' },
+        { src: 'audio/KP_NOIZEkit_160bpm_A1.webm', title: 'KP NOIZEkit A1', details: '160 BPM | NOIZEkit', category: 'noizekit' },
+        { src: 'audio/KP_NOIZEkit_160bpm_A2.webm', title: 'KP NOIZEkit A2', details: '160 BPM | NOIZEkit', category: 'noizekit' },
+        { src: 'audio/KP_NOIZEkit_160bpm_A3.webm', title: 'KP NOIZEkit A3', details: '160 BPM | NOIZEkit', category: 'noizekit' },
+        { src: 'audio/KP_SUBOOMkit_140bpm_A1.webm', title: 'KP SUBOOMkit A1', details: '140 BPM | SUBOOMkit', category: 'suboomkit' },
+        { src: 'audio/KP_SUBOOMkit_140bpm_A2.webm', title: 'KP SUBOOMkit A2', details: '140 BPM | SUBOOMkit', category: 'suboomkit' },
+        { src: 'audio/KP_SUBOOMkit_140bpm_A3.webm', title: 'KP SUBOOMkit A3', details: '140 BPM | SUBOOMkit', category: 'suboomkit' },
+        { src: 'audio/KP_SwingKit_68bpm_A1.webm', title: 'KP SwingKit A1', details: '68 BPM | Swing', category: 'swing' },
+        { src: 'audio/KP_SwingKit_68bpm_A2.webm', title: 'KP SwingKit A2', details: '68 BPM | Swing', category: 'swing' },
+        { src: 'audio/KP_SwingKit_68bpm_PianoPerc.webm', title: 'KP SwingKit PianoPerc', details: '68 BPM | Percussion', category: 'swing' },
+        { src: 'audio/KP_SwingKit_68bpm_SleepSYNTH.webm', title: 'KP SwingKit SleepSYNTH', details: '68 BPM | Synth', category: 'swing' },
+        { src: 'audio/KP_SwingKit_68bpm_WitnessBASS.webm', title: 'KP SwingKit WitnessBASS', details: '68 BPM | Bass', category: 'swing' },
+        { src: 'audio/KP_TAPkit_135bpm_A1.webm', title: 'KP TAPkit A1', details: '135 BPM | TAPkit', category: 'tapkit' },
+        { src: 'audio/KP_TAPkit_135bpm_A2.webm', title: 'KP TAPkit A2', details: '135 BPM | TAPkit', category: 'tapkit' },
+        { src: 'audio/KP_TAPkit_135bpm_A3.webm', title: 'KP TAPkit A3', details: '135 BPM | TAPkit', category: 'tapkit' },
+        { src: 'audio/KP_TAPkit_135bpm_B1.webm', title: 'KP TAPkit B1', details: '135 BPM | TAPkit', category: 'tapkit' },
+        { src: 'audio/KP_TAPkit_135bpm_B2.webm', title: 'KP TAPkit B2', details: '135 BPM | TAPkit', category: 'tapkit' },
+        { src: 'audio/KP_VANkit_127_A1.webm', title: 'KP VANkit A1', details: '127 BPM | VANkit', category: 'vankit' },
+        { src: 'audio/KP_VANkit_127_A2.webm', title: 'KP VANkit A2', details: '127 BPM | VANkit', category: 'vankit' },
+        { src: 'audio/KP_VANkit_127_A3.webm', title: 'KP VANkit A3', details: '127 BPM | VANkit', category: 'vankit' },
+        { src: 'audio/KP_VANkit_127_A4.webm', title: 'KP VANkit A4', details: '127 BPM | VANkit', category: 'vankit' },
+        { src: 'audio/KP_VARKIZAkit_121_A1.webm', title: 'KP VARKIZAkit A1', details: '121 BPM | VARKIZAkit', category: 'varkizakit' },
+        { src: 'audio/KP_VARKIZAkit_121_A2.webm', title: 'KP VARKIZAkit A2', details: '121 BPM | VARKIZAkit', category: 'varkizakit' },
+        { src: 'audio/KP_VARKIZAkit_121_A3.webm', title: 'KP VARKIZAkit A3', details: '121 BPM | VARKIZAkit', category: 'varkizakit' },
+        { src: 'audio/KP_boomkit_100bpm_A1.webm', title: 'KP Boomkit A1', details: '100 BPM | Boom Bap', category: 'boom-bap' },
+        { src: 'audio/KP_boomkit_100bpm_A2.webm', title: 'KP Boomkit A2', details: '100 BPM | Boom Bap', category: 'boom-bap' },
+        { src: 'audio/KP_boomkit_100bpm_A3.webm', title: 'KP Boomkit A3', details: '100 BPM | Boom Bap', category: 'boom-bap' },
+        { src: 'audio/KP_boomkit_98bpm_A1.webm', title: 'KP Boomkit A1', details: '98 BPM | Boom Bap', category: 'boom-bap' },
+        { src: 'audio/KP_boomkit_98bpm_A2.webm', title: 'KP Boomkit A2', details: '98 BPM | Boom Bap', category: 'boom-bap' },
+        { src: 'audio/KP_boomkit_98bpm_A3.webm', title: 'KP Boomkit A3', details: '98 BPM | Boom Bap', category: 'boom-bap' },
+        { src: 'audio/KP_caziokit_129bpm_A1.webm', title: 'KP CazioKit A1', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+        { src: 'audio/KP_caziokit_129bpm_A2.webm', title: 'KP CazioKit A2', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+        { src: 'audio/KP_caziokit_129bpm_B1.webm', title: 'KP CazioKit B1', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+        { src: 'audio/KP_caziokit_129bpm_B2.webm', title: 'KP CazioKit B2', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+        { src: 'audio/KP_caziokit_129bpm_C1.webm', title: 'KP CazioKit C1', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+        { src: 'audio/KP_caziokit_129bpm_C2.webm', title: 'KP CazioKit C2', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+        { src: 'audio/KP_caziokit_129bpm_D1.webm', title: 'KP CazioKit D1', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+        { src: 'audio/KP_caziokit_129bpm_D2.webm', title: 'KP CazioKit D2', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+        { src: 'audio/KP_caziokit_129bpm_E1.webm', title: 'KP CazioKit E1', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+        { src: 'audio/KP_caziokit_129bpm_E2.webm', title: 'KP CazioKit E2', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+        { src: 'audio/KP_caziokit_129bpm_F1.webm', title: 'KP CazioKit F1', details: '129 BPM | Breakbeat', category: 'breakbeat' },
+        { src: 'audio/KP_caziokit_129bpm_F2.webm', title: 'KP CazioKit F2', details: '129 BPM | Breakbeat', category: 'breakbeat' }
     ];
 
     let wargasmSamples = [
