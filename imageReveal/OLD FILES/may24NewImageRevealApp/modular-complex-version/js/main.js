@@ -311,25 +311,59 @@ function createTimelineUI() {
     panel.id = 'timeline-ui';
     document.body.appendChild(panel);
   }
-  panel.style = 'position:fixed;bottom:0;left:0;width:100%;background:#15162b;border-top:1px solid #2a2960;padding:8px 12px;z-index:30;font-size:15px;color:#dbe4ff;';
-  panel.innerHTML = `<b>Timeline: </b><button id="add-lane">+ Lane</button>
-  <button id="save-timeline">Save</button>
-  <button id="load-timeline">Load</button>
-  <button id="clear-timeline">Clear</button>
-  <span style="font-size:12px;margin-left:20px;">Click image to play timeline.</span>
-  <table id="tl-table" style="width:100%;margin-top:6px"></table>`;
+  // Start collapsed but buttons visible, table hidden via max-height & overflow
+  panel.style = 'position:fixed;bottom:0;left:0;width:100%;background:#15162b;border-top:1px solid #2a2960;padding:8px 12px;z-index:30;font-size:15px;color:#dbe4ff;display:flex;flex-direction:column;align-items:center;max-height:48px;overflow:hidden;transition:max-height 0.3s ease;';
 
-  document.getElementById('add-lane').onclick = addTimelineLane;
+  panel.innerHTML = `
+    <div style="width:100%;display:flex;align-items:center;justify-content:flex-start;user-select:none; margin-bottom:6px;">
+      <button id="toggle-timeline" style="background:#262663;color:#f0f0f0;border:none;border-radius:4px;padding:2px 10px;cursor:pointer;margin-right:12px;transition:background 0.2s;">+</button>
+      <b>Timeline:</b>
+      <button id="add-lane" style="margin-left:12px;">+ Lane</button>
+      <button id="save-timeline" style="margin-left:6px;">Save</button>
+      <button id="load-timeline" style="margin-left:6px;">Load</button>
+      <button id="clear-timeline" style="margin-left:6px;">Clear</button>
+      <span style="font-size:12px;margin-left:20px;">Click image to play timeline.</span>
+    </div>
+    <table id="tl-table" style="width:100%;display:none;"></table>
+  `;
+
+  const toggleBtn = panel.querySelector('#toggle-timeline');
+  const table = panel.querySelector('#tl-table');
+
+  function expandTimeline() {
+    panel.style.maxHeight = '36vh';
+    panel.style.overflow = 'auto';
+    toggleBtn.textContent = '−';
+    table.style.display = 'table';
+  }
+  function collapseTimeline() {
+    panel.style.maxHeight = '48px';
+    panel.style.overflow = 'hidden';
+    toggleBtn.textContent = '+';
+    table.style.display = 'none';
+  }
+
+  toggleBtn.onclick = () => {
+    if (panel.style.maxHeight === '48px') expandTimeline();
+    else collapseTimeline();
+  };
+
+  document.getElementById('add-lane').onclick = () => {
+    expandTimeline();
+    addTimelineLane();
+  };
   document.getElementById('save-timeline').onclick = () => { saveTimeline(); log('Timeline saved.'); };
   document.getElementById('load-timeline').onclick = () => loadTimelineFromFile();
   document.getElementById('clear-timeline').onclick = () => {
     effectTimeline = [];
     renderTimelineTable();
     stopEffects();
+    collapseTimeline();
   };
 
   renderTimelineTable();
 }
+
 
 async function loadTimelineFromFile() {
   const input = document.createElement('input');
@@ -393,6 +427,7 @@ function autoTestFrame(ct) {
   if (timelinePlaying) return;
   _fxFrames++;
   const now = performance.now();
+
   if (_fxFrames % 10 === 0) {
     const currFps = 1000 / (_fxLastFrameTime || 16);
     if (currFps < 30 && now - _fxLastWarn > 2000) {
@@ -426,25 +461,41 @@ function autoTestFrame(ct) {
       }
     }
   }
+
   if (_fxAutoThrottle && (_fxFrames % (_fxFrameSkip + 1))) return;
 
   enabledOrder.forEach(fx => {
     const e = effects[fx];
     if (!e.active) return;
-    let p = e.progress ?? 0, dir = e.direction ?? 1, paused = e.paused, speed = e.speed ?? 1;
+
+    let p = e.progress ?? 0,
+        dir = e.direction ?? 1,
+        paused = e.paused,
+        speed = e.speed ?? 1;
+
     if (['fade', 'scanLines', 'colourSweep', 'pixelate', 'blur', 'vignette', 'chromaShift'].includes(fx)) {
-      if (fx === 'scanLines') Object.assign(effects.scanLines, {
-        intensity: 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(ct * 0.8)),
-        lineWidth: 1 + 14 * (0.5 + 0.5 * Math.sin(ct * 1.1)),
-        spacing: 4 + 40 * (0.5 + 0.5 * Math.sin(ct * 0.9 + 1)),
-        verticalShift: 32 * (0.5 + 0.5 * Math.sin(ct * 0.35)),
-        speed: 0.3 + 5 * (0.5 + 0.5 * Math.sin(ct * 0.5))
-      });
+
+      if (fx === 'scanLines') {
+        Object.assign(effects.scanLines, {
+          intensity: 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(ct * 0.8)),
+          lineWidth: 1 + 14 * (0.5 + 0.5 * Math.sin(ct * 1.1)),
+          spacing: 4 + 40 * (0.5 + 0.5 * Math.sin(ct * 0.9 + 1)),
+          verticalShift: 32 * (0.5 + 0.5 * Math.sin(ct * 0.35)),
+          speed: 0.3 + 5 * (0.5 + 0.5 * Math.sin(ct * 0.5))
+        });
+      }
+
       if (fx === 'colourSweep') {
         if (!paused) {
-          p += (0.2 + 0.8 * Math.sin(ct * 0.4)) * dir * (1 / 60);
-          if (p > 1) { p = 1; dir = -1; }
-          if (p < 0) { p = 0; dir = 1; }
+          // Use cycleDurationBars from defaults or fallback to 4 bars
+          const cycleBars = e.cycleDurationBars ?? 4;
+          const cycleDuration = cycleBars * beatsPerBar * 60 / bpm; // duration in seconds
+          const cyclePos = (ct % cycleDuration) / cycleDuration;    // normalized [0..1] position in cycle
+
+          // Smooth cosine loop between 0 and 1 over cycleDuration
+          p = 0.5 - 0.5 * Math.cos(cyclePos * 2 * Math.PI);
+          if (p > 0.9999) p = 1;
+          dir = 1; // fixed direction for smooth loop
         }
         Object.assign(effects.colourSweep, {
           progress: utils.clamp(p, 0, 1),
@@ -453,13 +504,16 @@ function autoTestFrame(ct) {
           randomize: (Math.floor(ct / 5) % 2)
         });
       }
+
       if (!paused && fx !== 'colourSweep') {
         p += 1 / 5 * dir * speed * (1 / 60);
         if (p > 1) { p = 1; dir = -1; }
         if (p < 0) { p = 0; dir = 1; }
       }
+
       e.progress = utils.clamp(p, 0, 1);
       e.direction = dir;
+
       if (fx === 'fade') effects.fade.progress = p;
       if (fx === 'scanLines') effects.scanLines.progress = p;
       if (fx === 'pixelate') effects.pixelate.pixelSize = 1 + (240 * p);
@@ -468,8 +522,11 @@ function autoTestFrame(ct) {
       if (fx === 'chromaShift') effects.chromaShift.intensity = 0.35 * p;
     }
   });
+
   _fxLastFrameTime = performance.now() - now;
 }
+
+
 
 function runEffectTimeline(tl) {
   let timeline = tl, timelineName = 'Loaded Timeline';

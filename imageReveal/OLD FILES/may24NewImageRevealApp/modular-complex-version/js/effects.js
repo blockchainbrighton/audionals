@@ -34,13 +34,27 @@ export const utils = (() => {
   export const effectDefaults = {
     fade:        { progress: 0, direction: 1, speed: 1, paused: false, active: false },
     scanLines:   { progress: 0, direction: 1, intensity: 0.4, speed: 1.5, lineWidth: 3, spacing: 6, verticalShift: 0, paused: false, active: false },
-    filmGrain:   { intensity: 0.35, size: 0.01, speed: 0.5, density: 1, dynamicRange: 1, lastUpdate: 0, noiseZ: 0, active: false },
+    filmGrain:   { intensity: 0.7, size: 0.01, speed: 0.5, density: 1, dynamicRange: 1, lastUpdate: 0, noiseZ: 0, active: false },
     blur:        { progress: 0, direction: 1, radius: 0, paused: false, active: false },
-    vignette:    { progress: 0, direction: 1, intensity: 1, size: 0.45, paused: false, active: false },
-    glitch:      { intensity: 0.5, active: false },
+    vignette:    { progress: 0, direction: 1, intensity: 0, size: 0.01, paused: false, active: false },
+    // glitch intensity 0 - 500 (0.001 - 0.01 minor wobble glitch, 0.01 - 0.1 wobbly glitch, 0.1 - 1 proper glitch, 1 - 5 fast glitch, 10 - 100 extreme glitch)
+    glitch:      { intensity: 0.01, active: false },
     chromaShift: { progress: 0, direction: 1, intensity: 0, speed: 1, paused: false, active: false },
-    colourSweep: { progress: 0, direction: 1, randomize: 1, color: null, paused: false, active: false, mode: 'reveal', edgeSoftness: 0, brightnessOffset: 0 },
-    pixelate: {
+    
+    colourSweep: {
+      progress: 0,
+      direction: 1,
+      randomize: 0,
+      color: null,
+      paused: false,
+      active: false,
+      mode: 'reveal',
+      edgeSoftness: 0,
+      brightnessOffset: 0,
+      cycleDurationBars: 4,   // NEW: duration of reveal/hide cycle in bars
+    },
+
+        pixelate: {
         progress: 0,          // Can still be used for the 'speed up' mode over a longer duration
         direction: 1,         // For 'speed up' or reversing sequence
         pixelSize: 1,         // This will be the *current* calculated pixel size
