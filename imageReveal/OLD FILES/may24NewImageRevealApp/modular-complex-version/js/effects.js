@@ -34,11 +34,11 @@ export const utils = (() => {
   export const effectDefaults = {
     fade:        { progress: 0, direction: 1, speed: 1, paused: false, active: false },
     scanLines:   { progress: 0, direction: 1, intensity: 0.4, speed: 1.5, lineWidth: 3, spacing: 6, verticalShift: 0, paused: false, active: false },
-    filmGrain:   { intensity: 1, size: 1.2, speed: 80, density: 1, dynamicRange: 1, lastUpdate: 0, noiseZ: 0, active: false },
-    blur:        { progress: 0, direction: 1, radius: 8, paused: false, active: false },
+    filmGrain:   { intensity: 0.35, size: 0.01, speed: 0.5, density: 1, dynamicRange: 1, lastUpdate: 0, noiseZ: 0, active: false },
+    blur:        { progress: 0, direction: 1, radius: 0, paused: false, active: false },
     vignette:    { progress: 0, direction: 1, intensity: 1, size: 0.45, paused: false, active: false },
     glitch:      { intensity: 0.5, active: false },
-    chromaShift: { progress: 0, direction: 1, intensity: 0.3, speed: 1, paused: false, active: false },
+    chromaShift: { progress: 0, direction: 1, intensity: 0, speed: 1, paused: false, active: false },
     colourSweep: { progress: 0, direction: 1, randomize: 1, color: null, paused: false, active: false, mode: 'reveal', edgeSoftness: 0, brightnessOffset: 0 },
     pixelate: {
         progress: 0,          // Can still be used for the 'speed up' mode over a longer duration
@@ -160,20 +160,30 @@ export const utils = (() => {
   }
   
   function applyFilmGrain(src, dst, ct, p, width, height) {
-    const glG = ensureGLGrain(width, height);
+    const grainScale = 0.5; // Render grain at half resolution (adjust for perf)
+    const grainWidth = Math.floor(width * grainScale);
+    const grainHeight = Math.floor(height * grainScale);
+  
+    const glG = ensureGLGrain(grainWidth, grainHeight);
     const { gl, canvas, u } = glG;
-    gl.viewport(0, 0, width, height);
+  
+    gl.viewport(0, 0, grainWidth, grainHeight);
     gl.useProgram(glG.prog);
     gl.uniform1f(u.intensity, utils.clamp(p.intensity ?? 1, 0, 1));
     gl.uniform1f(u.scale, 10.0 / (p.size ?? 1.2));
     gl.uniform1f(u.time, (ct * (p.speed ?? 60)) % 1000);
     gl.uniform1f(u.density, utils.clamp(p.density ?? 1, 0, 1));
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  
     dst.clearRect(0, 0, width, height);
-    dst.drawImage(src.canvas, 0, 0);
+    dst.drawImage(src.canvas, 0, 0, width, height);
+  
     dst.globalAlpha = utils.clamp(p.intensity ?? 1, 0, 1);
     dst.globalCompositeOperation = "overlay";
-    dst.drawImage(canvas, 0, 0);
+  
+    // Draw grain canvas scaled up to full size
+    dst.drawImage(canvas, 0, 0, grainWidth, grainHeight, 0, 0, width, height);
+  
     dst.globalAlpha = 1;
     dst.globalCompositeOperation = "source-over";
   }
