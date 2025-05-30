@@ -49,7 +49,7 @@ export const utils = (() => {
       paused: false,
       active: false,
       mode: 'reveal',
-      edgeSoftness: 0,
+      edgeSoftness: 0, // 0.1 - 1 Nice shiny effect, 2 - 10 colour scroll effect, 20 - 50 nothing left but white.
       brightnessOffset: 0,
       cycleDurationBars: 4,   // NEW: duration of reveal/hide cycle in bars
     },
