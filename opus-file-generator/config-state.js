@@ -3,6 +3,8 @@
 // State variables - these will be accessed and modified globally by other modules
 let ffmpeg = null;
 let selectedFile = null;
+let selectedFiles = []; // New: To store all selected files
+let successfulBatchFiles = []; // NEW: To store { filename: 'name.ext', blob: Blob }
 let fileDuration = null;
 let convertedAudioBlob = null;
 let base64String = null;

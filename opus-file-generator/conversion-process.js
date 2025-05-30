@@ -127,6 +127,157 @@ const runConversion = async () => {
     }
 };
 
+
+const runBatchConversion = async () => {
+    successfulBatchFiles = []; // Clear for a new batch
+
+    if (!ffmpeg || !selectedFiles || selectedFiles.length === 0) {
+        updateStatus('Error: FFmpeg not loaded or no files selected for batch.', true);
+        return;
+    }
+    if (selectedFiles.length <= 1 && batchConvertBtn) {
+        // If only one file, could call runConversion or just disable batch button
+        updateStatus('Batch conversion requires more than one file. Use single convert instead.', false);
+        return;
+    }
+
+    if (convertBtn) convertBtn.disabled = true;
+    if (batchConvertBtn) batchConvertBtn.disabled = true;
+    if (playSampleBtn) playSampleBtn.disabled = true;
+    if (resultEl) resultEl.innerHTML = ''; // Clear single result area
+    if (base64Container) base64Container.style.display = 'none'; // Hide single base64 area
+    if (batchResultEl) batchResultEl.innerHTML = '<h3>Batch Conversion Results:</h3>';
+
+    const outputFormat = document.querySelector('input[name="format"]:checked')?.value || 'webm';
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+        const currentFile = selectedFiles[i];
+        const originalNameBase = getBaseFilename(currentFile.name);
+        const progressId = `file-progress-${i}`;
+
+        updateStatus(`Batch: Processing ${i + 1}/${selectedFiles.length}: ${currentFile.name}`);
+        
+        const fileResultContainer = document.createElement('div');
+        fileResultContainer.className = 'batch-file-result';
+        fileResultContainer.style.borderBottom = '1px solid #eee';
+        fileResultContainer.style.padding = '10px 0';
+        fileResultContainer.style.marginBottom = '10px';
+        
+        const title = document.createElement('h4');
+        title.textContent = `${i+1}. ${currentFile.name}`;
+        fileResultContainer.appendChild(title);
+
+        const currentProgressEl = document.createElement('progress');
+        currentProgressEl.id = progressId;
+        currentProgressEl.value = 0;
+        currentProgressEl.max = 100;
+        currentProgressEl.style.width = '100%';
+        currentProgressEl.style.display = 'none'; // Show when processing starts
+        fileResultContainer.appendChild(currentProgressEl);
+        
+        batchResultEl.appendChild(fileResultContainer);
+
+
+        const inputFilename = `input_batch_${Date.now()}_${i}`; // Unique input name
+        const outputFilename = `output_batch_${Date.now()}_${i}.${outputFormat}`;
+        cleanupFFmpegFS([inputFilename, outputFilename]);
+
+        try {
+            const fileData = await fetchFile(currentFile);
+            ffmpeg.FS('writeFile', inputFilename, fileData);
+
+            // Temporarily override global progress update for this file
+            const originalSetProgress = ffmpeg.setProgress;
+            ffmpeg.setProgress(({ ratio }) => {
+                 currentProgressEl.style.display = 'block';
+                 const percent = Math.max(0, Math.min(100, Math.round(ratio * 100)));
+                 currentProgressEl.value = percent;
+                 if (statusEl) statusEl.textContent = `Status: Converting ${currentFile.name}... (${percent}%)`;
+            });
+
+            const outputData = await runFFmpegConversion(inputFilename, outputFilename, outputFormat);
+            ffmpeg.setProgress(originalSetProgress); // Restore global progress handler
+
+            let mimeType;
+            if (outputFormat === 'mp3') mimeType = 'audio/mpeg';
+            else if (outputFormat === 'opus') mimeType = 'audio/opus'; // Typically in .opus or .ogg
+            else if (outputFormat === 'webm') mimeType = 'audio/webm'; // Opus in WebM
+            else mimeType = 'application/octet-stream';
+
+            const convertedBlob = new Blob([outputData.buffer], { type: mimeType });
+
+            if (!convertedBlob || convertedBlob.size === 0) {
+                throw new Error("Converted audio file is empty or invalid.");
+            }
+            currentProgressEl.style.display = 'none'; // Hide progress after completion
+
+            const successInfo = document.createElement('p');
+            successInfo.textContent = `Converted to ${outputFormat.toUpperCase()}: ${formatBytes(convertedBlob.size)}`;
+            successInfo.style.color = 'green';
+            fileResultContainer.appendChild(successInfo);
+
+            // Simple Player for this file
+            const audioPlayer = createAudioPlayer(convertedBlob, mimeType, `Play ${originalNameBase}`);
+            fileResultContainer.appendChild(audioPlayer);
+
+            // Download Link for Converted File
+            const dlUrl = URL.createObjectURL(convertedBlob);
+            const dlLink = Object.assign(document.createElement('a'), {
+                href: dlUrl, download: `${originalNameBase}.${outputFormat}`,
+                textContent: `Download Converted File`, className: 'button-small',
+                style: 'margin: 5px 5px 5px 0;'
+            });
+            fileResultContainer.appendChild(dlLink);
+            // Optional: dlLink.onclick = () => setTimeout(() => URL.revokeObjectURL(dlUrl), 100);
+            
+            // Store successful file for ZIP download
+            successfulBatchFiles.push({
+                filename: `${originalNameBase}.${outputFormat}`, // e.g., audio1.webm
+                blob: convertedBlob
+            });
+
+            // Base64 TXT Download Link for this file
+            try {
+                updateStatus(`Generating Base64 for ${originalNameBase}...`);
+                // convertBlobToBase64 is async, ensure it's available and awaited
+                const base64Str = await convertBlobToBase64(convertedBlob);
+                const txtBlob = new Blob([base64Str], { type: 'text/plain;charset=utf-8' });
+                const b64DlUrl = URL.createObjectURL(txtBlob);
+                const base64DlLink = Object.assign(document.createElement('a'), {
+                    href: b64DlUrl, download: `${originalNameBase}.${outputFormat}.base64.txt`,
+                    textContent: `Download Base64 TXT (${formatBytes(base64Str.length)})`, className: 'button-small'
+                });
+                fileResultContainer.appendChild(base64DlLink);
+                // Optional: base64DlLink.onclick = () => setTimeout(() => URL.revokeObjectURL(b64DlUrl), 100);
+            } catch (b64Err) {
+                const b64ErrorP = document.createElement('p');
+                b64ErrorP.textContent = `Could not generate Base64: ${b64Err.message}`;
+                b64ErrorP.style.color = 'red';
+                fileResultContainer.appendChild(b64ErrorP);
+            }
+            successCount++;
+        } catch (e) {
+            failCount++;
+            ffmpeg.setProgress(originalSetProgress); // Restore on error too
+            currentProgressEl.style.display = 'none';
+            const errorP = document.createElement('p');
+            errorP.textContent = `Failed to convert ${currentFile.name}: ${e.message}`;
+            errorP.style.color = 'red';
+            fileResultContainer.appendChild(errorP);
+            console.error(`Error converting ${currentFile.name}:`, e);
+        } finally {
+            cleanupFFmpegFS([inputFilename, outputFilename]);
+        }
+         // Small delay between files if desired, or for UI to update
+         // await new Promise(resolve => setTimeout(resolve, 50));
+    } // End of loop
+
+    updateStatus(`Batch conversion finished. ${successCount} successful, ${failCount} failed.`);
+    enableConvertButtonIfNeeded();
+    if (playSampleBtn) playSampleBtn.disabled = !(selectedFiles && selectedFiles.length > 0);
+};
 /**
  * Shows the A/B Quality Comparison player robustly. Handles async or sync A/B modules.
  * If conversion failed, disables B or shows error message in UI.

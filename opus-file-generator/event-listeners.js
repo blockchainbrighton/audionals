@@ -106,6 +106,10 @@ const setupEventListeners = () => {
         console.error("Convert button not found.");
     }
 
+    if (batchConvertBtn) {
+        batchConvertBtn.addEventListener('click', runBatchConversion); // runBatchConversion will be in conversion-process.js
+    }
+
     if (showAudioInfoBtn) {
         showAudioInfoBtn.addEventListener('click', () => {
             if (typeof displayAudioFormatInfo === 'function') displayAudioFormatInfo();
@@ -218,12 +222,20 @@ const initializeUIState = () => {
         enableConvertButtonIfNeeded();
     }
 
+    if (downloadBatchZipBtn) {
+        downloadBatchZipBtn.addEventListener('click', handleDownloadBatchZip); // New handler function
+    }
+
     if (audioInfoContainer) audioInfoContainer.style.display = 'none';
     if (audionalInfoContainer) audionalInfoContainer.style.display = 'none';
     if (metadataModal) metadataModal.classList.add('hidden');
     if (progressEl) progressEl.style.display = 'none';
     if (copyBase64Btn) copyBase64Btn.disabled = true;
     if (downloadBase64Btn) downloadBase64Btn.disabled = true;
+    if (batchConvertBtn) batchConvertBtn.disabled = true;
+    if (downloadBatchZipBtn) downloadBatchZipBtn.disabled = true;
+
+
 
     const convertImageBtn = document.getElementById('convert-image-button');
     const copyImageBtn = document.getElementById('copy-image-base64-button');

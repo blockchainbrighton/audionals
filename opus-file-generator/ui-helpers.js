@@ -33,20 +33,54 @@ const updateStatus = (msg, err = false) => {
       }
   };
   
-  /**
-   * Enables or disables the Convert and Play Sample buttons based on state.
-   */
-  const enableConvertButtonIfNeeded = () => {
+ /**
+ * Enables or disables the Convert, Batch Convert, Batch ZIP Download, and Play Sample buttons based on state.
+ * Also updates the text of the main convert button.
+ */
+const enableConvertButtonIfNeeded = () => {
+    // --- Check prerequisites ---
     const ffmpegReady = typeof ffmpeg !== 'undefined' && ffmpeg !== null;
-    const fileSelected = selectedFile !== null;
+    const anyFileSelected = selectedFiles && selectedFiles.length > 0;
+    const multipleFilesSelected = selectedFiles && selectedFiles.length > 1;
+    const batchFilesReadyForZip = successfulBatchFiles && successfulBatchFiles.length > 0; // NEW
   
-    const convertEnabled = ffmpegReady && fileSelected;
-    const playEnabled = fileSelected;
+    // --- Determine button states ---
+    const playSampleEnabled = anyFileSelected;
+    const singleConvertEnabled = ffmpegReady && anyFileSelected;
+    const batchConvertEnabled = ffmpegReady && multipleFilesSelected;
+    const downloadBatchZipEnabled = batchFilesReadyForZip; // NEW
   
-    if (convertBtn) convertBtn.disabled = !convertEnabled;
-    if (playSampleBtn) playSampleBtn.disabled = !playEnabled;
+    // --- Get current output format for button text ---
+    const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
+    const outputFormatName = selectedFormatRadio ? selectedFormatRadio.value.toUpperCase() : 'WEBM';
   
-    return !convertEnabled;
+    // --- Update "Play Original" button ---
+    if (playSampleBtn) {
+      playSampleBtn.disabled = !playSampleEnabled;
+    }
+  
+    // --- Update "Convert to X" (single file) button ---
+    if (convertBtn) {
+      convertBtn.disabled = !singleConvertEnabled;
+      if (multipleFilesSelected) {
+        convertBtn.textContent = `3. Convert First to ${outputFormatName}`;
+      } else {
+        convertBtn.textContent = `3. Convert to ${outputFormatName}`;
+      }
+    }
+  
+    // --- Update "Batch Convert All" button ---
+    if (batchConvertBtn) {
+      batchConvertBtn.disabled = !batchConvertEnabled;
+    }
+  
+    // --- Update "Download Batch ZIP" button --- NEW ---
+    if (downloadBatchZipBtn) {
+      downloadBatchZipBtn.disabled = !downloadBatchZipEnabled;
+    }
+    // --- END NEW ---
+  
+    return !singleConvertEnabled;
   };
   
   /**
@@ -241,6 +275,9 @@ const updateStatus = (msg, err = false) => {
            progressEl.setAttribute('aria-hidden', 'true');
       }
       if (convertBtn) convertBtn.disabled = true;
+      successfulBatchFiles = []; // Clear stored batch files
+      if (downloadBatchZipBtn) downloadBatchZipBtn.disabled = true;
+
   
       // --- Info Popup Resets ---
       if (audioInfoContainer) audioInfoContainer.style.display = 'none';

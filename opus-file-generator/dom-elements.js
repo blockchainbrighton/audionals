@@ -5,6 +5,9 @@ const statusEl = document.getElementById('status');
 const progressEl = document.getElementById('progress');
 const convertBtn = document.getElementById('convertBtn');
 const fileInput = document.getElementById('fileInput');
+const batchConvertBtn = document.getElementById('batchConvertBtn');
+const downloadBatchZipBtn = document.getElementById('downloadBatchZipBtn'); // NEW
+const batchResultEl = document.getElementById('batchResultEl');
 const resultEl = document.getElementById('result');
 const formatRadios = document.querySelectorAll('input[name="format"]');
 const mp3SettingsDiv = document.getElementById('mp3Settings');

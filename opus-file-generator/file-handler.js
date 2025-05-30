@@ -56,72 +56,49 @@ const getAudioDuration = file => new Promise((resolve, reject) => {
  * @param {Event} e - The change event object.
  */
 const handleFileChange = async (e) => {
-    const file = e.target.files ? e.target.files[0] : null;
+    const files = e.target.files; // This is a FileList
 
-    // Reset everything related to the previous file/conversion
-    // This will also call updateOriginalFileInfoDisplay(null) and updateEstimatedSize()
-    if (typeof resetUIForNewFile === 'function') {
-        resetUIForNewFile();
-    } else {
-        console.warn("resetUIForNewFile function not found.");
-    }
+    resetUIForNewFile(); // This should clear selectedFiles, batchResultEl etc.
 
-    // Clear state variables (some might be redundant if resetUIForNewFile handles them too)
-    selectedFile = null;
-    fileDuration = null;
-    convertedAudioBlob = null;
-    base64String = null;
-    // originalAudioElement is cleared by resetUIForNewFile calling originalAudioContainer.innerHTML = ''
+    selectedFiles = []; // Clear the array
+    selectedFile = null; // Clear single file reference
+    fileDuration = null; // Clear duration (for the first file)
 
-    if (file) {
-        if (!file.type || !file.type.startsWith('audio/')) {
-            updateStatus(`Error: Please select a valid audio file. Selected type: ${file.type || 'unknown'}`, true);
-            if (fileInput) fileInput.value = '';
-            // updateOriginalFileInfoDisplay(null); // Already called by resetUIForNewFile
-            // updateEstimatedSize(); // Already called by resetUIForNewFile
-            enableConvertButtonIfNeeded();
-            return;
+    if (files && files.length > 0) {
+        selectedFiles = Array.from(files); // Convert FileList to Array
+        selectedFile = selectedFiles[0]; // Set the first file for single-file UI operations
+
+        if (selectedFiles.length > 1) {
+            updateStatus(`${selectedFiles.length} files selected. First: ${selectedFile.name}. Ready for batch or single (first file) conversion.`);
+        } else {
+            updateStatus(`File selected: ${selectedFile.name}. Reading duration...`);
         }
-
-        selectedFile = file;
-        updateStatus(`File selected: ${selectedFile.name}. Reading duration...`);
         
-        // Update original file info display immediately
-        if (typeof updateOriginalFileInfoDisplay === 'function') {
-            updateOriginalFileInfoDisplay(selectedFile);
+        updateOriginalFileInfoDisplay(selectedFile); // Display info for the first file
+        
+        if (typeof setupOriginalAudioPlayer === 'function') {
+            // Pass the specific file to setupOriginalAudioPlayer
+            setupOriginalAudioPlayer(selectedFile);
         }
-
-        enableConvertButtonIfNeeded();
 
         try {
+            // Get duration for the first file for UI estimates
             fileDuration = await getAudioDuration(selectedFile);
-            updateStatus(`File ready: ${selectedFile.name} (${fileDuration.toFixed(1)}s)`);
-            
-            if (typeof updateEstimatedSize === 'function') {
-                updateEstimatedSize(); // Update size estimate now we have duration
-            }
-            if (typeof setupOriginalAudioPlayer === 'function') {
-                setupOriginalAudioPlayer();
+            if (selectedFiles.length > 1) {
+                updateStatus(`${selectedFiles.length} files selected. First: ${selectedFile.name} (${fileDuration.toFixed(1)}s).`);
             } else {
-                console.warn("setupOriginalAudioPlayer function not found.");
+                updateStatus(`File ready: ${selectedFile.name} (${fileDuration.toFixed(1)}s)`);
             }
+            if (typeof updateEstimatedSize === 'function') updateEstimatedSize();
         } catch (err) {
-            updateStatus(`Error reading file: ${err}`, true);
-            fileDuration = null;
-            selectedFile = null;
-            if (fileInput) fileInput.value = '';
-            if (typeof updateOriginalFileInfoDisplay === 'function') {
-                updateOriginalFileInfoDisplay(null); // Clear original info on error
-            }
-            if (typeof updateEstimatedSize === 'function') {
-                updateEstimatedSize(); // Reset estimate on error
-            }
+            updateStatus(`Error reading first file: ${err}`, true);
+            fileDuration = null; // Reset duration if first file fails
+            // selectedFile and selectedFiles might still be set, allowing batch for others.
+            // Or clear all:
+            // selectedFile = null; selectedFiles = []; if (fileInput) fileInput.value = '';
         }
     } else {
         updateStatus('No file selected.');
-        // updateOriginalFileInfoDisplay(null); // Handled by resetUIForNewFile if called initially
-        // updateEstimatedSize(); // Handled by resetUIForNewFile
     }
-
-    enableConvertButtonIfNeeded();
+    enableConvertButtonIfNeeded(); // This function now considers selectedFiles.length
 };
