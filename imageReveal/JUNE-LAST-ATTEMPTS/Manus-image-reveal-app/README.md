@@ -1,7 +1,8 @@
 # Music-Synced Image-Reveal Application
 
 **Version:** 1.0.0  
-**Author:** Manus AI  
+**Author:** JIM.BTC 
+
 **License:** MIT  
 **Last Updated:** December 2024
 
