@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Music-Synced Image Reveal - Full Project</title>
+    <style>
+        body { font-family: sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        pre { background: #f8f8f8; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .file { margin-bottom: 30px; border-left: 3px solid #4a6fa5; padding-left: 15px; }
+        h2 { color: #2c3e50; }
+        h3 { color: #4a6fa5; }
+    </style>
+</head>
+<body>
+    <h1>Music-Synced Image Reveal - Complete Project</h1>
+    <p>Copy this entire HTML file, save it with a .html extension, and open it in a browser to run the application.</p>
+
+    <div class="file">
+        <h2>index.html</h2>
+        <pre><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+    &lt;title&gt;Music-Synced Image Reveal&lt;/title&gt;
+    &lt;link rel="stylesheet" href="styles.css"&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;div id="app"&gt;
+        &lt;div class="controls-container"&gt;
+            &lt;div class="input-group"&gt;
+                &lt;label for="image-url"&gt;Image URL:&lt;/label&gt;
+                &lt;input type="url" id="image-url" placeholder="https://example.com/image.jpg" aria-label="Image URL"&gt;
+            &lt;/div&gt;
+            &lt;div class="input-group"&gt;
+                &lt;label for="song-url"&gt;Song URL:&lt;/label&gt;
+                &lt;input type="url" id="song-url" placeholder="https://example.com/song.mp3" aria-label="Song URL"&gt;
+            &lt;/div&gt;
+            &lt;div class="input-group"&gt;
+                &lt;label for="tempo"&gt;Tempo (BPM):&lt;/label&gt;
+                &lt;input type="number" id="tempo" min="1" aria-label="Tempo in BPM"&gt;
+            &lt;/div&gt;
+            &lt;div class="input-group"&gt;
+                &lt;label for="bars"&gt;Number of bars:&lt;/label&gt;
+                &lt;input type="number" id="bars" min="1" value="16" aria-label="Number of bars"&gt;
+            &lt;/div&gt;
+            &lt;div class="input-group"&gt;
+                &lt;label for="seed"&gt;Random seed:&lt;/label&gt;
+                &lt;input type="text" id="seed" aria-label="Random seed"&gt;
+            &lt;/div&gt;
+            &lt;div class="slider-group"&gt;
+                &lt;label for="speed"&gt;Reveal Speed:&lt;/label&gt;
+                &lt;input type="range" id="speed" min="0.1" max="2" step="0.1" value="1" aria-label="Reveal speed"&gt;
+            &lt;/div&gt;
+            &lt;div class="slider-group"&gt;
+                &lt;label for="intensity"&gt;Effect Intensity:&lt;/label&gt;
+                &lt;input type="range" id="intensity" min="0" max="1" step="0.01" value="0.5" aria-label="Effect intensity"&gt;
+            &lt;/div&gt;
+            &lt;div class="button-group"&gt;
+                &lt;button id="start-btn" aria-label="Start"&gt;Start&lt;/button&gt;
+                &lt;button id="pause-btn" disabled aria-label="Pause"&gt;Pause&lt;/button&gt;
+                &lt;button id="reset-btn" disabled aria-label="Reset"&gt;Reset&lt;/button&gt;
+            &lt;/div&gt;
+            &lt;div class="progress-container"&gt;
+                &lt;progress id="progress" value="0" max="100"&gt;&lt;/progress&gt;
+                &lt;span id="progress-text"&gt;0%&lt;/span&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;canvas id="canvas"&gt;&lt;/canvas&gt;
+        &lt;div id="stats" aria-live="polite"&gt;&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;script type="module" src="main.js"&gt;&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>styles.css</h2>
+        <pre><code>:root {
+    --primary: #4a6fa5;
+    --secondary: #6b8cbc;
+    --accent: #ff6b6b;
+    --bg: #1e1e2e;
+    --card-bg: #252536;
+    --text: #e6e6fa;
+    --border: #3a3a4a;
+    --shadow: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] {
+    --primary: #5a86c5;
+    --secondary: #7da3d9;
+    --accent: #ff8e8e;
+    --bg: #f5f5fa;
+    --card-bg: #ffffff;
+    --text: #33334d;
+    --border: #d0d0e0;
+    --shadow: rgba(0, 0, 0, 0.1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.controls-container {
+    padding: 1rem;
+    background: var(--card-bg);
+    box-shadow: 0 4px 12px var(--shadow);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+    z-index: 10;
+}
+
+.input-group, .slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+input[type="url"],
+input[type="number"],
+input[type="text"] {
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 1rem;
+}
+
+input[type="range"] {
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--border);
+    outline: none;
+    -webkit-appearance: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+}
+
+.button-group {
+    display: flex;
+    gap: 0.5rem;
+    align-self: flex-end;
+    grid-column: span 2;
+}
+
+button {
+    padding: 0.75rem 1.5rem;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.2s;
+    flex: 1;
+}
+
+button:hover {
+    background: var(--secondary);
+}
+
+button:disabled {
+    background: var(--border);
+    cursor: not-allowed;
+}
+
+button#pause-btn {
+    background: var(--accent);
+}
+
+.progress-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    grid-column: span 2;
+}
+
+progress {
+    flex: 1;
+    height: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+progress::-webkit-progress-bar {
+    background: var(--border);
+}
+
+progress::-webkit-progress-value {
+    background: var(--primary);
+    transition: width 0.1s;
+}
+
+#canvas {
+    flex: 1;
+    background: black;
+    display: block;
+}
+
+#stats {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: var(--card-bg);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+    .controls-container {
+        grid-template-columns: 1fr;
+    }
+    .button-group, .progress-container {
+        grid-column: span 1;
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>main.js</h2>
+        <pre><code>import { AppController } from './AppController.js';
+
+document.addEventListener('DOMContentLoaded', () => {
+    const app = new AppController();
+    app.init();
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.key === ' ') app.togglePlayback();
+        if (e.key === 'r') app.reset();
+        if (e.key === 'ArrowRight') app.seekForward();
+        if (e.key === 'ArrowLeft') app.seekBackward();
+    });
+});</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>AppController.js</h2>
+        <pre><code>import { CanvasRenderer } from './CanvasRenderer.js';
+import { AudioEngine } from './AudioEngine.js';
+import { EffectScheduler } from './EffectScheduler.js';
+import { PRNG } from './PRNG.js';
+import * as effects from './effects/index.js';
+
+export class AppController {
+    constructor() {
+        this.canvas = document.getElementById('canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.renderer = new CanvasRenderer(this.canvas);
+        this.audioEngine = new AudioEngine();
+        this.effectScheduler = new EffectScheduler();
+        this.prng = new PRNG();
+        
+        // UI Elements
+        this.imageUrlInput = document.getElementById('image-url');
+        this.songUrlInput = document.getElementById('song-url');
+        this.tempoInput = document.getElementById('tempo');
+        this.barsInput = document.getElementById('bars');
+        this.seedInput = document.getElementById('seed');
+        this.speedInput = document.getElementById('speed');
+        this.intensityInput = document.getElementById('intensity');
+        this.startBtn = document.getElementById('start-btn');
+        this.pauseBtn = document.getElementById('pause-btn');
+        this.resetBtn = document.getElementById('reset-btn');
+        this.progressBar = document.getElementById('progress');
+        this.progressText = document.getElementById('progress-text');
+        this.statsEl = document.getElementById('stats');
+        
+        this.state = {
+            isPlaying: false,
+            currentTime: 0,
+            duration: 0,
+            lastFrameTime: 0,
+            fps: 0,
+            effects: []
+        };
+    }
+
+    init() {
+        this.setupEventListeners();
+        this.resizeCanvas();
+        window.addEventListener('resize', () => this.resizeCanvas());
+        this.updateStats();
+    }
+
+    setupEventListeners() {
+        this.startBtn.addEventListener('click', () => this.start());
+        this.pauseBtn.addEventListener('click', () => this.togglePlayback());
+        this.resetBtn.addEventListener('click', () => this.reset());
+        this.speedInput.addEventListener('input', () => this.updateSpeed());
+        this.intensityInput.addEventListener('input', () => this.updateIntensity());
+    }
+
+    async start() {
+        if (!this.validateInputs()) return;
+        
+        try {
+            const seed = this.seedInput.value || Date.now().toString();
+            const bars = parseInt(this.barsInput.value);
+            let tempo = parseFloat(this.tempoInput.value);
+            
+            // Load image
+            await this.renderer.loadImage(this.imageUrlInput.value);
+            
+            // Load and analyze audio
+            await this.audioEngine.load(this.songUrlInput.value);
+            if (!tempo) {
+                tempo = await this.audioEngine.detectBPM();
+                this.tempoInput.value = tempo.toFixed(1);
+            }
+            
+            // Initialize systems
+            this.prng.seed = seed;
+            this.effectScheduler.init(tempo, bars, this.prng);
+            this.state.duration = this.effectScheduler.totalDuration;
+            
+            // Setup playback
+            this.state.isPlaying = true;
+            this.startBtn.disabled = true;
+            this.pauseBtn.disabled = false;
+            this.resetBtn.disabled = false;
+            this.lastFrameTime = performance.now();
+            
+            // Start rendering loop
+            this.audioEngine.play();
+            requestAnimationFrame(this.renderLoop.bind(this));
+        } catch (error) {
+            console.error('Initialization error:', error);
+            alert(`Error: ${error.message}`);
+        }
+    }
+
+    togglePlayback() {
+        this.state.isPlaying = !this.state.isPlaying;
+        this.pauseBtn.textContent = this.state.isPlaying ? 'Pause' : 'Resume';
+        
+        if (this.state.isPlaying) {
+            this.audioEngine.resume();
+            this.lastFrameTime = performance.now();
+            requestAnimationFrame(this.renderLoop.bind(this));
+        } else {
+            this.audioEngine.pause();
+        }
+    }
+
+    reset() {
+        this.state.isPlaying = false;
+        this.state.currentTime = 0;
+        this.audioEngine.stop();
+        this.renderer.clear();
+        this.updateProgress(0);
+        
+        this.startBtn.disabled = false;
+        this.pauseBtn.disabled = true;
+        this.resetBtn.disabled = true;
+        this.pauseBtn.textContent = 'Pause';
+    }
+
+    seekForward() {
+        if (!this.state.isPlaying) return;
+        this.state.currentTime = Math.min(
+            this.state.currentTime + 2, 
+            this.state.duration
+        );
+        this.audioEngine.seek(this.state.currentTime);
+    }
+
+    seekBackward() {
+        if (!this.state.isPlaying) return;
+        this.state.currentTime = Math.max(this.state.currentTime - 2, 0);
+        this.audioEngine.seek(this.state.currentTime);
+    }
+
+    updateSpeed() {
+        this.audioEngine.playbackRate = parseFloat(this.speedInput.value);
+    }
+
+    updateIntensity() {
+        this.renderer.intensity = parseFloat(this.intensityInput.value);
+    }
+
+    resizeCanvas() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight - 
+            document.querySelector('.controls-container').offsetHeight;
+    }
+
+    renderLoop(timestamp) {
+        if (!this.state.isPlaying) return;
+        
+        // Calculate delta time and FPS
+        const deltaTime = (timestamp - this.lastFrameTime) / 1000;
+        this.lastFrameTime = timestamp;
+        this.state.fps = Math.round(1 / deltaTime);
+        
+        // Update current time from audio
+        this.state.currentTime = this.audioEngine.currentTime;
+        const progress = (this.state.currentTime / this.state.duration) * 100;
+        this.updateProgress(progress);
+        
+        // Get active effects for current time
+        const activeEffects = this.effectScheduler.getEffectsForTime(
+            this.state.currentTime
+        );
+        
+        // Render frame with effects
+        this.renderer.renderFrame(activeEffects);
+        
+        // Update performance stats
+        this.updateStats();
+        
+        requestAnimationFrame(this.renderLoop.bind(this));
+    }
+
+    updateProgress(percent) {
+        this.progressBar.value = percent;
+        this.progressText.textContent = `${Math.round(percent)}%`;
+    }
+
+    updateStats() {
+        this.statsEl.textContent = `${this.state.fps} FPS | ${this.state.currentTime.toFixed(1)}s`;
+    }
+
+    validateInputs() {
+        if (!this.imageUrlInput.value) {
+            alert('Please enter an image URL');
+            return false;
+        }
+        if (!this.songUrlInput.value) {
+            alert('Please enter a song URL');
+            return false;
+        }
+        return true;
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>CanvasRenderer.js</h2>
+        <pre><code>import { ImageAnalyzer } from './ImageAnalyzer.js';
+
+export class CanvasRenderer {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.image = null;
+        this.offscreenCanvas = new OffscreenCanvas(1, 1);
+        this.offscreenCtx = this.offscreenCanvas.getContext('2d');
+        this.imageData = null;
+        this.intensity = 0.5;
+        this.imageAnalyzer = new ImageAnalyzer();
+    }
+
+    async loadImage(url) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.onload = () => {
+                this.image = img;
+                this.offscreenCanvas.width = img.width;
+                this.offscreenCanvas.height = img.height;
+                this.offscreenCtx.drawImage(img, 0, 0);
+                this.imageData = this.offscreenCtx.getImageData(
+                    0, 0, img.width, img.height
+                );
+                this.imageAnalyzer.analyze(this.imageData);
+                resolve();
+            };
+            img.onerror = reject;
+            img.src = url;
+        });
+    }
+
+    renderFrame(effects) {
+        if (!this.image) return;
+        
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Calculate dimensions to maintain aspect ratio
+        const scale = Math.min(
+            this.canvas.width / this.image.width,
+            this.canvas.height / this.image.height
+        );
+        const width = this.image.width * scale;
+        const height = this.image.height * scale;
+        const x = (this.canvas.width - width) / 2;
+        const y = (this.canvas.height - height) / 2;
+        
+        // Apply effects to offscreen canvas
+        this.applyEffects(effects);
+        
+        // Draw processed image
+        this.ctx.drawImage(
+            this.offscreenCanvas,
+            0, 0, this.image.width, this.image.height,
+            x, y, width, height
+        );
+    }
+
+    applyEffects(effects) {
+        if (!this.imageData) return;
+        
+        let processedData = new ImageData(
+            new Uint8ClampedArray(this.imageData.data),
+            this.imageData.width,
+            this.imageData.height
+        );
+        
+        // Apply each effect in sequence
+        for (const effect of effects) {
+            if (effect.apply) {
+                processedData = effect.apply(
+                    processedData, 
+                    this.intensity,
+                    this.imageAnalyzer,
+                    this.offscreenCanvas
+                );
+            }
+        }
+        
+        // Update offscreen canvas
+        this.offscreenCtx.putImageData(processedData, 0, 0);
+    }
+
+    clear() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>ImageAnalyzer.js</h2>
+        <pre><code>export class ImageAnalyzer {
+    constructor() {
+        this.brightnessMap = null;
+        this.colorHistogram = null;
+        this.edgeMap = null;
+    }
+
+    analyze(imageData) {
+        this.calculateBrightnessMap(imageData);
+        this.calculateColorHistogram(imageData);
+        this.calculateEdgeMap(imageData);
+    }
+
+    calculateBrightnessMap(imageData) {
+        const { width, height, data } = imageData;
+        this.brightnessMap = new Uint8Array(width * height);
+        
+        for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            this.brightnessMap[j] = (r + g + b) / 3;
+        }
+    }
+
+    calculateColorHistogram(imageData) {
+        const { data } = imageData;
+        this.colorHistogram = {
+            r: new Array(256).fill(0),
+            g: new Array(256).fill(0),
+            b: new Array(256).fill(0)
+        };
+        
+        for (let i = 0; i < data.length; i += 4) {
+            this.colorHistogram.r[data[i]]++;
+            this.colorHistogram.g[data[i + 1]]++;
+            this.colorHistogram.b[data[i + 2]]++;
+        }
+    }
+
+    calculateEdgeMap(imageData) {
+        // Simplified edge detection using Sobel operator
+        const { width, height, data } = imageData;
+        this.edgeMap = new Uint8Array(width * height);
+        const grayscale = new Uint8Array(width * height);
+        
+        // Convert to grayscale
+        for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+            grayscale[j] = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        }
+        
+        // Apply Sobel operator
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                const idx = y * width + x;
+                const gx = 
+                    -grayscale[idx - width - 1] + grayscale[idx - width + 1] +
+                    -2 * grayscale[idx - 1] + 2 * grayscale[idx + 1] +
+                    -grayscale[idx + width - 1] + grayscale[idx + width + 1];
+                
+                const gy = 
+                    grayscale[idx - width - 1] + 2 * grayscale[idx - width] + grayscale[idx - width + 1] +
+                    -grayscale[idx + width - 1] - 2 * grayscale[idx + width] - grayscale[idx + width + 1];
+                
+                this.edgeMap[idx] = Math.min(255, Math.sqrt(gx * gx + gy * gy));
+            }
+        }
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>AudioEngine.js</h2>
+        <pre><code>export class AudioEngine {
+    constructor() {
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.audioBuffer = null;
+        this.source = null;
+        this.analyser = this.audioContext.createAnalyser();
+        this.analyser.fftSize = 2048;
+        this.buffer = new Uint8Array(this.analyser.frequencyBinCount);
+        this.startTime = 0;
+        this.pauseTime = 0;
+        this.playbackRate = 1.0;
+    }
+
+    async load(url) {
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+    }
+
+    async detectBPM() {
+        // Simplified BPM detection (in a real app, use a library like web-audio-beat-detector)
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                resolve(120 + Math.random() * 40); // Random BPM for demo
+            }, 500);
+        });
+    }
+
+    play() {
+        if (!this.audioBuffer) return;
+        
+        this.source = this.audioContext.createBufferSource();
+        this.source.buffer = this.audioBuffer;
+        this.source.playbackRate.value = this.playbackRate;
+        
+        this.source.connect(this.analyser);
+        this.analyser.connect(this.audioContext.destination);
+        
+        if (this.pauseTime) {
+            this.startTime = this.audioContext.currentTime - this.pauseTime;
+            this.source.start(0, this.pauseTime);
+        } else {
+            this.startTime = this.audioContext.currentTime;
+            this.source.start();
+        }
+    }
+
+    pause() {
+        if (!this.source) return;
+        this.pauseTime = this.audioContext.currentTime - this.startTime;
+        this.source.stop();
+        this.source = null;
+    }
+
+    resume() {
+        this.play();
+    }
+
+    stop() {
+        if (this.source) {
+            this.source.stop();
+            this.source = null;
+        }
+        this.startTime = 0;
+        this.pauseTime = 0;
+    }
+
+    seek(time) {
+        this.pauseTime = time;
+        this.stop();
+        this.play();
+    }
+
+    get currentTime() {
+        if (this.source) {
+            return this.audioContext.currentTime - this.startTime;
+        }
+        return this.pauseTime;
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>EffectScheduler.js</h2>
+        <pre><code>import * as effects from './effects/index.js';
+
+export class EffectScheduler {
+    constructor() {
+        this.availableEffects = Object.values(effects).filter(
+            e => e.prototype instanceof effects.EffectBase
+        );
+        this.effectSchedule = [];
+        this.totalDuration = 0;
+    }
+
+    init(tempo, bars, prng) {
+        this.tempo = tempo;
+        this.bars = bars;
+        this.prng = prng;
+        this.totalDuration = (bars * 4 * 60) / tempo; // seconds
+        this.generateSchedule();
+    }
+
+    generateSchedule() {
+        this.effectSchedule = [];
+        const barDuration = 4 * 60 / this.tempo; // seconds per bar
+        const effectsPerBar = 2;
+        
+        for (let bar = 0; bar < this.bars; bar++) {
+            for (let i = 0; i < effectsPerBar; i++) {
+                const start = bar * barDuration + (i * barDuration / effectsPerBar);
+                const end = start + (barDuration / effectsPerBar);
+                const EffectClass = this.pickRandomEffect();
+                const params = this.generateEffectParams(EffectClass);
+                
+                this.effectSchedule.push({
+                    start,
+                    end,
+                    effect: new EffectClass(params)
+                });
+            }
+        }
+    }
+
+    pickRandomEffect() {
+        const index = Math.floor(this.prng.next() * this.availableEffects.length);
+        return this.availableEffects[index];
+    }
+
+    generateEffectParams(EffectClass) {
+        const params = {};
+        if (EffectClass.defaultParams) {
+            Object.keys(EffectClass.defaultParams).forEach(key => {
+                const range = EffectClass.defaultParams[key];
+                params[key] = range[0] + this.prng.next() * (range[1] - range[0]);
+            });
+        }
+        return params;
+    }
+
+    getEffectsForTime(time) {
+        return this.effectSchedule
+            .filter(item => time >= item.start && time < item.end)
+            .map(item => item.effect);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>PRNG.js</h2>
+        <pre><code>// Seeded pseudo-random number generator (Mulberry32)
+export class PRNG {
+    constructor(seed) {
+        this.seed = seed || Date.now();
+    }
+
+    next() {
+        this.seed |= 0;
+        this.seed = this.seed + 0x6D2B79F5 | 0;
+        let t = Math.imul(this.seed, this.seed ^ 0xCA5B);
+        t = t ^ Math.imul(t, this.seed >>> 15);
+        t = t | 0;
+        t = Math.imul(t, this.seed | 1);
+        t ^= t + Math.imul(t ^ 123456, this.seed) | 0;
+        return ((t >>> 0) / 4294967296);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/index.js</h2>
+        <pre><code>export * from './EffectBase.js';
+export * from './VShift.js';
+export * from './Scanlines.js';
+export * from './GaussianBlur.js';
+export * from './Pixelation.js';
+export * from './AlphaFade.js';
+export * from './Glitch.js';
+export * from './ColorSweep.js';
+export * from './BrightnessReveal.js';
+export * from './GlyphReveal.js';
+export * from './RippleDistortion.js';
+export * from './RadialReveal.js';
+export * from './InkDiffusion.js';</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/EffectBase.js</h2>
+        <pre><code>export class EffectBase {
+    constructor(params = {}) {
+        this.params = params;
+    }
+
+    apply(imageData, intensity, imageAnalyzer, canvas) {
+        // To be implemented by subclasses
+        return imageData;
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/VShift.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class VShift extends EffectBase {
+    static defaultParams = {
+        sliceWidth: [5, 20],
+        maxOffset: [10, 50]
+    };
+
+    apply(imageData, intensity, imageAnalyzer) {
+        const { data, width, height } = imageData;
+        const sliceWidth = this.params.sliceWidth;
+        const maxOffset = this.params.maxOffset * intensity;
+        const output = new Uint8ClampedArray(data);
+        
+        for (let y = 0; y < height; y += sliceWidth) {
+            const offset = Math.floor(Math.sin(y / 20) * maxOffset);
+            const targetY = (y + offset + height) % height;
+            
+            for (let x = 0; x < width; x++) {
+                const srcIdx = (y * width + x) * 4;
+                const destIdx = (targetY * width + x) * 4;
+                
+                output[destIdx] = data[srcIdx];
+                output[destIdx + 1] = data[srcIdx + 1];
+                output[destIdx + 2] = data[srcIdx + 2];
+                output[destIdx + 3] = data[srcIdx + 3];
+            }
+        }
+        
+        return new ImageData(output, width, height);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/Scanlines.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class Scanlines extends EffectBase {
+    static defaultParams = {
+        lineWidth: [1, 3],
+        spacing: [2, 5],
+        opacity: [0.2, 0.6]
+    };
+
+    apply(imageData, intensity) {
+        const { data, width, height } = imageData;
+        const output = new Uint8ClampedArray(data);
+        const lineWidth = this.params.lineWidth;
+        const spacing = this.params.spacing;
+        const opacity = this.params.opacity * intensity;
+        
+        for (let y = 0; y < height; y += lineWidth + spacing) {
+            for (let ly = 0; ly < lineWidth; ly++) {
+                const currentY = y + ly;
+                if (currentY >= height) break;
+                
+                for (let x = 0; x < width; x++) {
+                    const idx = (currentY * width + x) * 4;
+                    
+                    output[idx] = data[idx] * (1 - opacity);
+                    output[idx + 1] = data[idx + 1] * (1 - opacity);
+                    output[idx + 2] = data[idx + 2] * (1 - opacity);
+                }
+            }
+        }
+        
+        return new ImageData(output, width, height);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/GaussianBlur.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class GaussianBlur extends EffectBase {
+    static defaultParams = {
+        radius: [2, 8]
+    };
+
+    apply(imageData, intensity) {
+        const radius = Math.floor(this.params.radius * intensity);
+        if (radius < 1) return imageData;
+        
+        const { data, width, height } = imageData;
+        const output = new Uint8ClampedArray(data.length);
+        const weights = this.getGaussianWeights(radius);
+        
+        // Horizontal pass
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                let r = 0, g = 0, b = 0, a = 0, weightSum = 0;
+                
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const nx = Math.max(0, Math.min(width - 1, x + dx));
+                    const weight = weights[dx + radius];
+                    const idx = (y * width + nx) * 4;
+                    
+                    r += data[idx] * weight;
+                    g += data[idx + 1] * weight;
+                    b += data[idx + 2] * weight;
+                    a += data[idx + 3] * weight;
+                    weightSum += weight;
+                }
+                
+                const idx = (y * width + x) * 4;
+                output[idx] = r / weightSum;
+                output[idx + 1] = g / weightSum;
+                output[idx + 2] = b / weightSum;
+                output[idx + 3] = a / weightSum;
+            }
+        }
+        
+        // Vertical pass
+        const finalOutput = new Uint8ClampedArray(data.length);
+        for (let x = 0; x < width; x++) {
+            for (let y = 0; y < height; y++) {
+                let r = 0, g = 0, b = 0, a = 0, weightSum = 0;
+                
+                for (let dy = -radius; dy <= radius; dy++) {
+                    const ny = Math.max(0, Math.min(height - 1, y + dy));
+                    const weight = weights[dy + radius];
+                    const idx = (ny * width + x) * 4;
+                    
+                    r += output[idx] * weight;
+                    g += output[idx + 1] * weight;
+                    b += output[idx + 2] * weight;
+                    a += output[idx + 3] * weight;
+                    weightSum += weight;
+                }
+                
+                const idx = (y * width + x) * 4;
+                finalOutput[idx] = r / weightSum;
+                finalOutput[idx + 1] = g / weightSum;
+                finalOutput[idx + 2] = b / weightSum;
+                finalOutput[idx + 3] = a / weightSum;
+            }
+        }
+        
+        return new ImageData(finalOutput, width, height);
+    }
+
+    getGaussianWeights(radius) {
+        const sigma = radius / 2;
+        const weights = [];
+        let sum = 0;
+        
+        for (let i = -radius; i <= radius; i++) {
+            const weight = Math.exp(-(i * i) / (2 * sigma * sigma));
+            weights.push(weight);
+            sum += weight;
+        }
+        
+        return weights.map(w => w / sum);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/Pixelation.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class Pixelation extends EffectBase {
+    static defaultParams = {
+        pixelSize: [4, 16]
+    };
+
+    apply(imageData, intensity) {
+        const { width, height } = imageData;
+        const pixelSize = Math.max(1, Math.floor(this.params.pixelSize * intensity));
+        if (pixelSize === 1) return imageData;
+        
+        const output = new Uint8ClampedArray(imageData.data);
+        
+        for (let y = 0; y < height; y += pixelSize) {
+            for (let x = 0; x < width; x += pixelSize) {
+                const blockW = Math.min(pixelSize, width - x);
+                const blockH = Math.min(pixelSize, height - y);
+                const avgColor = this.getBlockAverage(imageData, x, y, blockW, blockH);
+                
+                this.fillBlock(output, width, x, y, blockW, blockH, avgColor);
+            }
+        }
+        
+        return new ImageData(output, width, height);
+    }
+
+    getBlockAverage(imageData, x, y, w, h) {
+        const { data, width } = imageData;
+        let r = 0, g = 0, b = 0, count = 0;
+        
+        for (let dy = 0; dy < h; dy++) {
+            for (let dx = 0; dx < w; dx++) {
+                const idx = ((y + dy) * width + (x + dx)) * 4;
+                r += data[idx];
+                g += data[idx + 1];
+                b += data[idx + 2];
+                count++;
+            }
+        }
+        
+        return [
+            Math.round(r / count),
+            Math.round(g / count),
+            Math.round(b / count)
+        ];
+    }
+
+    fillBlock(output, width, x, y, w, h, color) {
+        for (let dy = 0; dy < h; dy++) {
+            for (let dx = 0; dx < w; dx++) {
+                const idx = ((y + dy) * width + (x + dx)) * 4;
+                output[idx] = color[0];
+                output[idx + 1] = color[1];
+                output[idx + 2] = color[2];
+            }
+        }
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/AlphaFade.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class AlphaFade extends EffectBase {
+    static defaultParams = {
+        fadeDirection: ['in', 'out']
+    };
+
+    apply(imageData, intensity) {
+        const { data, width, height } = imageData;
+        const output = new Uint8ClampedArray(data);
+        const isFadeIn = this.params.fadeDirection === 'in';
+        const opacity = isFadeIn ? intensity : 1 - intensity;
+        
+        for (let i = 0; i < data.length; i += 4) {
+            output[i + 3] = data[i + 3] * opacity;
+        }
+        
+        return new ImageData(output, width, height);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/Glitch.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class Glitch extends EffectBase {
+    static defaultParams = {
+        rgbShift: [1, 10],
+        noiseAmount: [0.05, 0.2],
+        scanJitter: [0.5, 3]
+    };
+
+    apply(imageData, intensity) {
+        const { data, width, height } = imageData;
+        const output = new Uint8ClampedArray(data);
+        const rgbShift = Math.floor(this.params.rgbShift * intensity);
+        const noiseAmount = this.params.noiseAmount * intensity;
+        const scanJitter = this.params.scanJitter * intensity;
+        
+        // RGB shift
+        for (let y = 0; y < height; y++) {
+            const shift = Math.floor(Math.sin(y * 0.1) * rgbShift);
+            for (let x = 0; x < width; x++) {
+                const srcIdx = (y * width + x) * 4;
+                const destIdx = (y * width + ((x + shift + width) % width)) * 4;
+                
+                output[destIdx] = data[srcIdx];         // R
+                output[destIdx + 1] = data[srcIdx + 1]; // G
+                output[destIdx + 2] = data[srcIdx + 2]; // B
+            }
+        }
+        
+        // Noise
+        for (let i = 0; i < data.length; i += 4) {
+            if (Math.random() < noiseAmount) {
+                output[i] = Math.random() * 255;
+                output[i + 1] = Math.random() * 255;
+                output[i + 2] = Math.random() * 255;
+            }
+        }
+        
+        // Scanline jitter
+        for (let y = 0; y < height; y++) {
+            if (Math.random() < scanJitter / 100) {
+                const shift = (Math.random() - 0.5) * width * 0.1;
+                for (let x = 0; x < width; x++) {
+                    const srcIdx = (y * width + x) * 4;
+                    const destX = Math.floor((x + shift + width) % width);
+                    const destIdx = (y * width + destX) * 4;
+                    
+                    data[srcIdx] = output[destIdx];
+                    data[srcIdx + 1] = output[destIdx + 1];
+                    data[srcIdx + 2] = output[destIdx + 2];
+                }
+            }
+        }
+        
+        return new ImageData(output, width, height);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/ColorSweep.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class ColorSweep extends EffectBase {
+    static defaultParams = {
+        direction: ['left', 'right', 'top', 'bottom'],
+        hueShift: [30, 180]
+    };
+
+    apply(imageData, intensity) {
+        const { data, width, height } = imageData;
+        const output = new Uint8ClampedArray(data);
+        const direction = this.params.direction;
+        const hueShift = this.params.hueShift * intensity;
+        
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const idx = (y * width + x) * 4;
+                let progress;
+                
+                switch (direction) {
+                    case 'left': progress = x / width; break;
+                    case 'right': progress = 1 - (x / width); break;
+                    case 'top': progress = y / height; break;
+                    case 'bottom': progress = 1 - (y / height); break;
+                    default: progress = (x + y) / (width + height);
+                }
+                
+                const [h, s, l] = this.rgbToHsl(
+                    data[idx], 
+                    data[idx + 1], 
+                    data[idx + 2]
+                );
+                
+                const shiftedH = (h + hueShift * progress) % 360;
+                const [r, g, b] = this.hslToRgb(shiftedH, s, l);
+                
+                output[idx] = r;
+                output[idx + 1] = g;
+                output[idx + 2] = b;
+            }
+        }
+        
+        return new ImageData(output, width, height);
+    }
+
+    rgbToHsl(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s, l = (max + min) / 2;
+        
+        if (max === min) {
+            h = s = 0;
+        } else {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                case g: h = (b - r) / d + 2; break;
+                case b: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+        }
+        
+        return [h * 360, s, l];
+    }
+
+    hslToRgb(h, s, l) {
+        h /= 360;
+        let r, g, b;
+        
+        if (s === 0) {
+            r = g = b = l;
+        } else {
+            const hue2rgb = (p, q, t) => {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1/6) return p + (q - p) * 6 * t;
+                if (t < 1/2) return q;
+                if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                return p;
+            };
+            
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+            r = hue2rgb(p, q, h + 1/3) * 255;
+            g = hue2rgb(p, q, h) * 255;
+            b = hue2rgb(p, q, h - 1/3) * 255;
+        }
+        
+        return [Math.round(r), Math.round(g), Math.round(b)];
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/BrightnessReveal.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class BrightnessReveal extends EffectBase {
+    static defaultParams = {
+        threshold: [0.3, 0.7],
+        invert: [false, true]
+    };
+
+    apply(imageData, intensity, imageAnalyzer) {
+        if (!imageAnalyzer.brightnessMap) return imageData;
+        
+        const { data, width, height } = imageData;
+        const output = new Uint8ClampedArray(data);
+        const threshold = this.params.threshold;
+        const invert = this.params.invert;
+        const revealThreshold = threshold + (intensity * (1 - threshold));
+        
+        for (let i = 0; i < data.length; i += 4) {
+            const pixelIdx = i / 4;
+            const brightness = imageAnalyzer.brightnessMap[pixelIdx] / 255;
+            const shouldReveal = invert 
+                ? brightness < revealThreshold 
+                : brightness > revealThreshold;
+            
+            if (!shouldReveal) {
+                output[i + 3] = 0; // Set alpha to 0
+            }
+        }
+        
+        return new ImageData(output, width, height);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/GlyphReveal.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class GlyphReveal extends EffectBase {
+    static defaultParams = {
+        fontSize: [8, 20],
+        glyphs: ['@', '#', '$', '%', '&', '*', '+', '=', '-', ':', '.', ' ']
+    };
+
+    apply(imageData, intensity, imageAnalyzer, canvas) {
+        const { width, height } = imageData;
+        const ctx = canvas.getContext('2d');
+        const fontSize = Math.max(4, this.params.fontSize * intensity);
+        const glyphs = this.params.glyphs;
+        
+        // Clear and set up context
+        ctx.clearRect(0, 0, width, height);
+        ctx.font = `${fontSize}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // Draw glyphs based on brightness
+        for (let y = fontSize/2; y < height; y += fontSize) {
+            for (let x = fontSize/2; x < width; x += fontSize) {
+                const idx = (Math.floor(y) * width + Math.floor(x)) * 4;
+                const r = imageData.data[idx];
+                const g = imageData.data[idx + 1];
+                const b = imageData.data[idx + 2];
+                const brightness = (r + g + b) / 3 / 255;
+                
+                // Select glyph based on brightness
+                const glyphIdx = Math.floor(brightness * (glyphs.length - 1));
+                const glyph = glyphs[glyphIdx];
+                
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                ctx.fillText(glyph, x, y);
+            }
+        }
+        
+        // Return processed image
+        return ctx.getImageData(0, 0, width, height);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/RippleDistortion.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class RippleDistortion extends EffectBase {
+    static defaultParams = {
+        amplitude: [5, 20],
+        frequency: [0.05, 0.2],
+        speed: [0.5, 2]
+    };
+
+    apply(imageData, intensity) {
+        const { width, height } = imageData;
+        const output = new Uint8ClampedArray(imageData.data.length);
+        const amplitude = this.params.amplitude * intensity;
+        const frequency = this.params.frequency;
+        const time = performance.now() * 0.001 * this.params.speed;
+        
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                // Calculate distortion
+                const dx = Math.sin(y * frequency + time) * amplitude;
+                const dy = Math.cos(x * frequency + time) * amplitude;
+                
+                const srcX = Math.max(0, Math.min(width - 1, x + dx));
+                const srcY = Math.max(0, Math.min(height - 1, y + dy));
+                
+                const srcIdx = (Math.floor(srcY) * width + Math.floor(srcX)) * 4;
+                const destIdx = (y * width + x) * 4;
+                
+                output[destIdx] = imageData.data[srcIdx];
+                output[destIdx + 1] = imageData.data[srcIdx + 1];
+                output[destIdx + 2] = imageData.data[srcIdx + 2];
+                output[destIdx + 3] = imageData.data[srcIdx + 3];
+            }
+        }
+        
+        return new ImageData(output, width, height);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/RadialReveal.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class RadialReveal extends EffectBase {
+    static defaultParams = {
+        centerX: [0.3, 0.7],
+        centerY: [0.3, 0.7],
+        direction: ['out', 'in']
+    };
+
+    apply(imageData, intensity) {
+        const { data, width, height } = imageData;
+        const output = new Uint8ClampedArray(data);
+        const centerX = width * this.params.centerX;
+        const centerY = height * this.params.centerY;
+        const maxRadius = Math.sqrt(width * width + height * height) / 2;
+        const currentRadius = intensity * maxRadius;
+        const isRevealOut = this.params.direction === 'out';
+        
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const idx = (y * width + x) * 4;
+                const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+                const shouldShow = isRevealOut ? dist <= currentRadius : dist >= currentRadius;
+                
+                if (!shouldShow) {
+                    output[idx + 3] = 0; // Set alpha to 0
+                }
+            }
+        }
+        
+        return new ImageData(output, width, height);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>effects/InkDiffusion.js</h2>
+        <pre><code>import { EffectBase } from './EffectBase.js';
+
+export class InkDiffusion extends EffectBase {
+    static defaultParams = {
+        dropCount: [3, 10],
+        maxSize: [0.1, 0.3]
+    };
+
+    apply(imageData, intensity) {
+        const { width, height } = imageData;
+        const output = new Uint8ClampedArray(imageData.data);
+        const dropCount = Math.floor(this.params.dropCount * intensity);
+        const maxSize = width * this.params.maxSize * intensity;
+        
+        // Create ink drops
+        for (let i = 0; i < dropCount; i++) {
+            const centerX = Math.random() * width;
+            const centerY = Math.random() * height;
+            const size = Math.random() * maxSize;
+            
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+                    if (dist <= size) {
+                        const idx = (y * width + x) * 4;
+                        output[idx + 3] = 255; // Reveal pixel
+                    }
+                }
+            }
+        }
+        
+        return new ImageData(output, width, height);
+    }
+}</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>tests/prng.test.js</h2>
+        <pre><code>import { PRNG } from '../PRNG.js';
+
+describe('PRNG', () => {
+    test('produces consistent sequence with same seed', () => {
+        const prng1 = new PRNG(12345);
+        const prng2 = new PRNG(12345);
+        
+        const seq1 = [prng1.next(), prng1.next(), prng1.next()];
+        const seq2 = [prng2.next(), prng2.next(), prng2.next()];
+        
+        expect(seq1).toEqual(seq2);
+    });
+    
+    test('produces different sequences with different seeds', () => {
+        const prng1 = new PRNG(123);
+        const prng2 = new PRNG(456);
+        
+        const seq1 = [prng1.next(), prng1.next(), prng1.next()];
+        const seq2 = [prng2.next(), prng2.next(), prng2.next()];
+        
+        expect(seq1).not.toEqual(seq2);
+    });
+    
+    test('values are within [0, 1) range', () => {
+        const prng = new PRNG();
+        for (let i = 0; i < 1000; i++) {
+            const value = prng.next();
+            expect(value).toBeGreaterThanOrEqual(0);
+            expect(value).toBeLessThan(1);
+        }
+    });
+});</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>tests/scheduler.test.js</h2>
+        <pre><code>import { EffectScheduler } from '../EffectScheduler.js';
+import { PRNG } from '../PRNG.js';
+
+describe('EffectScheduler', () => {
+    test('generates correct number of effects', () => {
+        const scheduler = new EffectScheduler();
+        const prng = new PRNG(123);
+        scheduler.init(120, 16, prng);
+        
+        expect(scheduler.effectSchedule.length).toBe(32); // 16 bars * 2 effects
+    });
+    
+    test('effects have valid time ranges', () => {
+        const scheduler = new EffectScheduler();
+        const prng = new PRNG(123);
+        scheduler.init(120, 8, prng);
+        
+        scheduler.effectSchedule.forEach(effect => {
+            expect(effect.start).toBeGreaterThanOrEqual(0);
+            expect(effect.end).toBeGreaterThan(effect.start);
+            expect(effect.end).toBeLessThanOrEqual(scheduler.totalDuration);
+        });
+    });
+    
+    test('getEffectsForTime returns correct effects', () => {
+        const scheduler = new EffectScheduler();
+        const prng = new PRNG(123);
+        scheduler.init(120, 4, prng);
+        
+        // Each bar is 2 seconds at 120 BPM
+        const time1 = 1.0; // Should be in first bar
+        const time2 = 3.0; // Should be in second bar
+        const time3 = 8.0; // Out of range
+        
+        expect(scheduler.getEffectsForTime(time1).length).toBe(2);
+        expect(scheduler.getEffectsForTime(time2).length).toBe(2);
+        expect(scheduler.getEffectsForTime(time3).length).toBe(0);
+    });
+});</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>tests/glyphReveal.test.js</h2>
+        <pre><code>import { GlyphReveal } from '../effects/GlyphReveal.js';
+
+describe('GlyphReveal', () => {
+    test('applies glyph effect correctly', () => {
+        // Create test image data (2x2 white image)
+        const width = 2, height = 2;
+        const data = new Uint8ClampedArray(width * height * 4);
+        for (let i = 0; i < data.length; i++) {
+            data[i] = 255; // White
+        }
+        const imageData = new ImageData(data, width, height);
+        
+        // Create mock canvas
+        const canvas = new OffscreenCanvas(width, height);
+        
+        // Apply effect
+        const effect = new GlyphReveal({ fontSize: 8 });
+        const result = effect.apply(imageData, 1, null, canvas);
+        
+        // Verify result
+        expect(result).toBeDefined();
+        expect(result.width).toBe(width);
+        expect(result.height).toBe(height);
+    });
+});</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>tests/radialReveal.test.js</h2>
+        <pre><code>import { RadialReveal } from '../effects/RadialReveal.js';
+
+describe('RadialReveal', () => {
+    test('reveals center pixels for outward effect', () => {
+        const width = 4, height = 4;
+        const data = new Uint8ClampedArray(width * height * 4);
+        for (let i = 0; i < data.length; i += 4) {
+            data[i] = 255;     // R
+            data[i + 1] = 0;   // G
+            data[i + 2] = 0;   // B
+            data[i + 3] = 255; // A
+        }
+        const imageData = new ImageData(data, width, height);
+        
+        const effect = new RadialReveal({
+            centerX: 0.5,
+            centerY: 0.5,
+            direction: 'out'
+        });
+        
+        // Apply at 50% intensity
+        const result = effect.apply(imageData, 0.5);
+        
+        // Center pixel should be visible
+        const centerIdx = (2 * width + 2) * 4;
+        expect(result.data[centerIdx + 3]).toBe(255);
+        
+        // Corner pixel should be hidden
+        const cornerIdx = (0 * width + 0) * 4;
+        expect(result.data[cornerIdx + 3]).toBe(0);
+    });
+});</code></pre>
+    </div>
+
+    <div class="file">
+        <h2>tests/inkDiffusion.test.js</h2>
+        <pre><code>import { InkDiffusion } from '../effects/InkDiffusion.js';
+
+describe('InkDiffusion', () => {
+    test('reveals pixels within ink drops', () => {
+        const width = 10, height = 10;
+        const data = new Uint8ClampedArray(width * height * 4);
+        for (let i = 0; i < data.length; i += 4) {
+            data[i + 3] = 0; // Start with all transparent
+        }
+        const imageData = new ImageData(data, width, height);
+        
+        const effect = new InkDiffusion({
+            dropCount: 1,
+            maxSize: 5
+        });
+        
+        // Apply effect
+        const result = effect.apply(imageData, 1);
+        
+        // Count revealed pixels
+        let revealed = 0;
+        for (let i = 3; i < result.data.length; i += 4) {
+            if (result.data[i] === 255) revealed++;
+        }
+        
+        expect(revealed).toBeGreaterThan(0);
+    });
+});</code></pre>
+    </div>
+
+    
