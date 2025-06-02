@@ -1,3 +1,5 @@
+//Love this one!
+
 export function RetroCRTBoot() {
   return [// --- Phase 1: Scanline Fizz & Pixel Form (0-16 bars) ---
 { effect: "fade", param: "progress", from: 0, to: 0.5, startBar: 0, endBar: 16, easing: "linear" },

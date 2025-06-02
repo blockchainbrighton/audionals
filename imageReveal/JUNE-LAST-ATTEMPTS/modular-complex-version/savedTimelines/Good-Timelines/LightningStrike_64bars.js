@@ -1,3 +1,5 @@
+// manually programmed - might need last 48 - 64 bar animations still
+
 export function LightningStrike_64bars() {
   const events = [
       { effect: "fade", param: "progress", from: 0, to: 1, startBar: 0, endBar: 8, easing: "linear" },

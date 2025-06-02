@@ -1,3 +1,5 @@
+// pretty nice
+
 export function SpectrumSpin_64bars() {
   return [
     { effect:"fade", param:"progress", from:0, to:1, startBar:0, endBar:4 },
