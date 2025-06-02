@@ -172,7 +172,8 @@ class CanvasManager {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d', { 
             alpha: false,
-            desynchronized: true 
+            desynchronized: true,
+            willReadFrequently: true 
         });
         
         this.width = 0;
@@ -1386,47 +1387,54 @@ class EffectManager {
 
         // Start new effects based on timing
         this.checkForNewEffects(timingInfo);
-        
-        // Update active effects
-        const currentImageData = new ImageData(
-            new Uint8ClampedArray(this.canvasManager.originalImageData.data),
-            this.canvasManager.originalImageData.width,
-            this.canvasManager.originalImageData.height
-        );
 
+        // Prepare canvas for new frame
+        const ctx = this.canvasManager.ctx;
+        ctx.save();
+
+        // Clear canvas and redraw the original image as base layer
+        ctx.clearRect(0, 0, this.canvasManager.width, this.canvasManager.height);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = "source-over";
+        ctx.putImageData(this.canvasManager.originalImageData, 0, 0);
+
+        // Draw and composite all active effects directly onto the context
+        // Each effect plugin should implement effect.draw(ctx, timingInfo)
         let hasActiveEffects = false;
-        
-        this.activeEffects.forEach((effect, effectId) => {
-            const result = effect.update(timingInfo.currentTime, timingInfo);
-            
-            if (result) {
-                // Blend effect result with current image
-                const blendedData = effect.blendImageData(
-                    currentImageData,
-                    result,
-                    effect.getIntensity(),
-                    effect.parameters.blendMode || 'normal'
-                );
-                currentImageData.data.set(blendedData.data);
-                hasActiveEffects = true;
-            } else {
-                // Effect is no longer active, remove it
+        for (const [effectId, effect] of this.activeEffects.entries()) {
+            if (typeof effect.isActive === 'function' && !effect.isActive(timingInfo.currentTime)) {
                 this.activeEffects.delete(effectId);
+                continue;
             }
-        });
+            if (typeof effect.draw === 'function') {
+                ctx.save();
+                // Set plugin-specific blend mode and alpha if provided
+                if (effect.parameters && effect.parameters.blendMode) {
+                    ctx.globalCompositeOperation = effect.parameters.blendMode;
+                }
+                if (effect.getIntensity) {
+                    ctx.globalAlpha = (typeof effect.getIntensity === 'function') 
+                        ? effect.getIntensity() / 100
+                        : 1;
+                }
+                effect.draw(ctx, timingInfo); // Plugin draws its effect on the main context
+                ctx.restore();
+                hasActiveEffects = true;
+            }
+        }
 
-        // Render final result
-        this.canvasManager.render(currentImageData);
-        
-        // Update performance metrics
+        ctx.restore();
+
+        // Performance monitor and status updates (throttled if needed)
         this.performanceMonitor.update();
-        
-        // Update current effect display
+
+        // Update current effect display (should be throttled in practice for DOM perf)
         this.updateCurrentEffectDisplay();
-        
-        // Update progress
+
+        // Update progress bar (should be throttled in practice for DOM perf)
         this.updateProgress(timingInfo);
     }
+
 
     /**
      * Check for new effects to start
