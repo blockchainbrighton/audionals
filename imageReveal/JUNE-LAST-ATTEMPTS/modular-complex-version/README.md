@@ -234,17 +234,62 @@ You can switch between circular, straight, and multi-angle sweeps by updating yo
 
 ### 9. **pixelate**
 
-| Parameter | Type  | Range      | Description / Tips                      |
-| --------- | ----- | ---------- | --------------------------------------- |
-| progress  | float | 0 → 1      | Used for demo/test.                     |
-| pixelSize | int   | 1 → 240    | Pixel block size: 1=sharp, high=blocky. |
-| speed     | float | >0         | Test/demo speed.                        |
-| paused    | bool  | true/false | Pause/unpause test.                     |
-| active    | bool  | true/false | Is effect active.                       |
+The pixelate effect transforms the image into a mosaic of larger "super-pixels". It now supports rhythmic synchronization for dynamic animations, as well as on-demand generation and caching of specific pixelation levels for performance and flexibility.
 
-**Tip:** Animate `pixelSize` from high to low for “coming into focus” effects.
+| Parameter        | Type             | Range                                             | Description / Tips                                                                                                   |
+|------------------|------------------|---------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `active`         | bool             | `true`/`false`                                    | Enables or disables the pixelate effect.                                                                             |
+| `pixelSize`      | int              | 1 → `maxPixelSize` (or image dim)                 | Current pixel block size. 1=sharp. This value is typically updated by the rhythmic logic or can be set manually if `syncMode` is `none`. |
+| `paused`         | bool             | `true`/`false`                                    | Pauses rhythmic updates or `progress`-based animation of `pixelSize`.                                                  |
+| ---              | ---              | ---                                               | --- **Rhythmic Synchronization** ---                                                                                 |
+| `syncMode`       | string           | `'none'`, `'beat'`, `'bar'`, `'1/4'`, `'1/8'`, `'1/16'` | Mode for synchronizing `pixelSize` changes to musical timing. `'none'` allows manual/`progress` control.           |
+| `bpm`            | float            | > 0                                               | Beats Per Minute, used when `syncMode` is not `'none'`.                                                              |
+| `timeSignature`  | array `[int,int]`| e.g., `[4,4]`, `[3,4]`                            | `[beatsPerBar, beatUnit]`. Used for `'bar'` syncMode and note subdivisions (e.g., 4 means a quarter note gets one beat). |
+| ---              | ---              | ---                                               | --- **Pixel Size Behavior (on sync event)** ---                                                                      |
+| `behavior`       | string           | `'increase'`, `'sequence'`, `'random'`              | Defines how `pixelSize` changes when a `syncMode` event occurs.                                                      |
+| `pixelStages`    | array of int     | e.g., `[2,4,8,16,32,16,8,4]`                      | Array of pixel sizes for `'sequence'` (cycles through) or `'random'` (selects from) behaviors.                     |
+| `minPixelSize`   | int              | >= 1                                              | Minimum pixel size for `'increase'` behavior.                                                                        |
+| `maxPixelSize`   | int              | >= `minPixelSize`                                   | Maximum pixel size for `'increase'` behavior. `pixelSize` will be clamped to this value.                            |
+| ---              | ---              | ---                                               | --- **Manual Control (if `syncMode` is 'none' or for aspects of 'increase')** ---                                    |
+| `progress`       | float            | 0 → 1                                             | Can drive `behavior: 'increase'` over a duration, or be used for direct `pixelSize` control if `syncMode` is `'none'`. |
+| `direction`      | int              | 1 or -1                                           | Direction for `progress`-driven changes (e.g., for `'increase'` behavior).                                            |
+| `speed`          | float            | > 0                                               | General speed multiplier for `progress`-driven changes.                                                              |
+
+#### On-Demand Generation & Caching
+
+Beyond rhythmic animation, you can generate and cache specific pixelated versions of an image. This is useful for optimizing performance or for displaying static pixelated images. These functions are exported from the effects module:
+
+*   **`preRenderPixelatedVersions(srcCtx, params, width, height, [customSizes])`**:
+    *   Pre-renders and caches pixelated images.
+    *   `srcCtx`: The `CanvasRenderingContext2D` of your source image.
+    *   `params`: The pixelate effect parameter object (uses its `pixelStages`, or `minPixelSize`/`maxPixelSize` for 'increase' behavior, to determine which versions to cache).
+    *   `width`, `height`: Dimensions of the source image.
+    *   `[customSizes]` (optional): An array of specific integer pixel sizes to pre-render. If provided, this array is used instead of inferring sizes from `params`.
+    *   **Usage:** Call this after your source image is ready to populate the cache for commonly used `pixelSize` values, improving performance of subsequent `applyPixelate` calls.
+
+*   **`generatePixelatedImage(srcCtx, targetPixelSize, width, height)`**:
+    *   Returns a *new* `HTMLCanvasElement` containing the image pixelated to the `targetPixelSize`.
+    *   If a version with `targetPixelSize` is already cached, a *copy* of the cached canvas is returned.
+    *   If not cached, it's rendered, added to the cache, and then a *copy* of this newly rendered canvas is returned.
+    *   **Usage:** Ideal for getting a specific pixelated version of an image instantly, for example, for a static display or a snapshot.
+
+*   **`clearPixelateCache()`**:
+    *   Empties the internal cache of all pre-rendered pixelated images.
+    *   **Usage:** Call this if your main source image changes significantly (e.g., new video content, user uploads a different image) or if the rendering dimensions change, to ensure the cache doesn't contain stale data.
+
+#### Tips & Examples:
+
+*   **Coming into Focus:** Animate `pixelSize` from a high value (e.g., 64) down to 1.
+    *   Rhythmic: Use `behavior: 'increase'`, `direction: -1`, `minPixelSize: 1`, `maxPixelSize: 64`, and set `syncMode` (e.g., `'beat'`).
+    *   Manual: Set `syncMode: 'none'` and manually tween the `pixelSize` parameter, or use `progress` with `behavior: 'increase'`.
+*   **Rhythmic Pulsing:** Use `behavior: 'sequence'` with `pixelStages: [8, 16, 8]` (or any desired sequence) and `syncMode: 'beat'` (or `'1/4'`, `'1/8'`, etc.) to make the pixelation "pulse" in time with music.
+*   **Performance Boost:** If your effect frequently uses a few specific `pixelSize` values (especially with `behavior: 'sequence'` or `'random'` using `pixelStages`), call `preRenderPixelatedVersions` at startup. The main `applyPixelate` function will then draw these cached images directly, skipping the re-rendering overhead.
+*   **Static Pixelated Thumbnail:** To create a static 16px pixelated version of an image (e.g., for a thumbnail):
+    `const thumbnailCanvas = generatePixelatedImage(sourceCtx, 16, width, height);`
+*   **Dynamic Source Content:** If the underlying source image/video that is being pixelated changes, remember to call `clearPixelateCache()` and then (if desired) `preRenderPixelatedVersions()` again with the new source context to keep the cache fresh.
 
 ---
+
 
 ## Timeline Automation API (Coding Scenes)
 
