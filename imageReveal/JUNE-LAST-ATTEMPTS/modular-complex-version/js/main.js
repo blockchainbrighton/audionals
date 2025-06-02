@@ -188,19 +188,72 @@ function handleResize() {
 }
 
 function loadImage() {
-  if (!images.length) return showError();
-  image = new Image();
-  image.crossOrigin = 'anonymous';
-  image.onload = () => {
-    imageLoaded = true;
-    document.getElementById('loading').style.display = 'none';
-    drawImage(mainCtx);
-    const btns = document.getElementById('fx-btns');
-    btns.style.opacity = '1';
-    createEffectButtons();
-  };
-  image.onerror = () => { imageError = true; showError(); };
-  image.src = images[0];
+  // Helper to load any image URL as an HTMLImageElement (Promise)
+  function loadImg(url) {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  // Handles the compositing if a badge image is set
+  async function prepareMainImage() {
+    try {
+      if (!window.images?.length) throw new Error("No main image set");
+      const mainImg = await loadImg(window.images[0]);
+
+      if (window.badgeImages && window.badgeImages.length && window.badgeImages[0]) {
+        const badgeImg = await loadImg(window.badgeImages[0]);
+        // Compose onto a canvas of main image's aspect ratio (use 1024x1024 or mainImg natural size)
+        const size = 1024;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(mainImg, 0, 0, size, size);
+
+        // Position/sizing: adjust these as needed for your badge
+        const badgeRect = { x: 0.42, y: 0.18, w: 0.17, h: 0.17 };
+        ctx.drawImage(
+          badgeImg,
+          badgeRect.x * size,
+          badgeRect.y * size,
+          badgeRect.w * size,
+          badgeRect.h * size
+        );
+
+        // Create a new Image() from this canvas
+        const merged = new window.Image();
+        merged.crossOrigin = 'anonymous';
+        merged.onload = () => {
+          image = merged;
+          imageLoaded = true;
+          document.getElementById('loading').style.display = 'none';
+          drawImage(mainCtx);
+          document.getElementById('fx-btns').style.opacity = '1';
+          createEffectButtons();
+        };
+        merged.onerror = showError;
+        merged.src = canvas.toDataURL();
+      } else {
+        // No badge, use main image directly
+        image = mainImg;
+        imageLoaded = true;
+        document.getElementById('loading').style.display = 'none';
+        drawImage(mainCtx);
+        document.getElementById('fx-btns').style.opacity = '1';
+        createEffectButtons();
+      }
+    } catch (e) {
+      imageError = true;
+      showError();
+    }
+  }
+
+  // Call the new loader
+  prepareMainImage();
 }
 
 const showError = () => {
