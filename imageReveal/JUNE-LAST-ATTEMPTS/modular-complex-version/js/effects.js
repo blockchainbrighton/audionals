@@ -39,7 +39,7 @@ export const utils = (() => {
     vignette:    { progress: 0, direction: 1, intensity: 0, size: 0.01, paused: false, active: false },
     // glitch intensity 0 - 500 (0.001 - 0.01 minor wobble glitch, 0.01 - 0.1 wobbly glitch, 0.1 - 1 proper glitch, 1 - 5 fast glitch, 10 - 100 extreme glitch)
     glitch:      { intensity: 0.01, active: false },
-    chromaShift: { progress: 0, direction: 1, intensity: 0, speed: 1, paused: false, active: false },
+    chromaShift: { progress: 0, direction: 1, intensity: 0, speed: 1, angle: 0, paused: false, active: false },
     
     colourSweep: {
       progress: 0,
@@ -282,9 +282,21 @@ export const utils = (() => {
   
   function applyChromaShift(src, dst, ct, p, width, height) {
     dst.clearRect(0, 0, width, height);
-    const ph = (p.progress * p.direction * Math.PI * 2) || 0, ox = Math.sin(ph * p.speed) * width * p.intensity, oy = Math.cos(ph * p.speed * .75) * height * p.intensity * .5;
-    dst.globalCompositeOperation = 'lighter'; dst.globalAlpha = .8; dst.drawImage(src.canvas, ox, oy); dst.drawImage(src.canvas, -ox, -oy); dst.globalAlpha = 1; dst.globalCompositeOperation = 'source-over';
+    // If angle is provided (timeline or automation), use it; otherwise use legacy phase
+    const hasAngle = typeof p.angle === 'number' && !isNaN(p.angle);
+    const ph = hasAngle
+      ? p.angle  // Interpret as radians! (timeline: 0 to 2*Math.PI for full circle)
+      : (p.progress * p.direction * Math.PI * 2) || 0;
+    const ox = Math.sin(ph * (p.speed ?? 1)) * width * (p.intensity ?? 0);
+    const oy = Math.cos(ph * ((p.speed ?? 1) * .75)) * height * (p.intensity ?? 0) * .5;
+    dst.globalCompositeOperation = 'lighter'; 
+    dst.globalAlpha = .8; 
+    dst.drawImage(src.canvas, ox, oy); 
+    dst.drawImage(src.canvas, -ox, -oy); 
+    dst.globalAlpha = 1; 
+    dst.globalCompositeOperation = 'source-over';
   }
+  
   
   function applyColourSweep(src, dst, ct, p, width, height) {
     const srcImg = src.getImageData(0, 0, width, height),

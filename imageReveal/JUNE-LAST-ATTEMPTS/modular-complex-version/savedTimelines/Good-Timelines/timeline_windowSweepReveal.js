@@ -1,3 +1,5 @@
+// another great timeline  - doesn't wuite complete to reveal full original image
+
 export function timeline_windowSweepReveal_64bars() {
     return [
       // Start black and pixelated, slowly fade in

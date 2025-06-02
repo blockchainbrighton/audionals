@@ -1,3 +1,4 @@
+// Really  nice timing and mix of effects
 export function timelinePsychedelicRipple_2025_06_02() {
     return [
       // Base visibility

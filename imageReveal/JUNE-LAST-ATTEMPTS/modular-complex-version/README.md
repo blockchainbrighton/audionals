@@ -142,23 +142,63 @@ Below are all available effects, their parameters, valid value ranges, and tips 
 **Tip:** Pulse `intensity` between 0 and 0.8 for dramatic glitch “bursts”.
 
 ---
+Certainly! Here’s a concise, **README-consistent** formatting that sits immediately below your current chromaShift table, keeping with your style, using blockquote for the explanation and a short **“How to Animate Directions”** table for clarity:
 
-### 7. **chromaShift**
-
-| Parameter | Type  | Range      | Description / Tips         |
-| --------- | ----- | ---------- | -------------------------- |
-| progress  | float | 0 → 1      | Animate for demo/test.     |
-| direction | int   | -1, 1      | Forward/backward motion.   |
-| intensity | float | 0 → 0.5    | Amount of RGB separation.  |
-| speed     | float | >0         | How fast the shift cycles. |
-| paused    | bool  | true/false | Pause/unpause demo.        |
-| active    | bool  | true/false | Is effect active.          |
-
-**Tip:** Animate `intensity` and `progress` together for ghostly/psychedelic effects.
 
 ---
 
-Certainly! Here is the updated **colourSweep** section for your README in your **original `.md` table formatting**, including all new parameters and concise tips:
+### 7. **chromaShift**
+
+| Parameter | Type  | Range            | Description / Tips                                                                  |
+| --------- | ----- | ---------------- | ----------------------------------------------------------------------------------- |
+| progress  | float | 0 → 1            | Animate for demo/test (legacy/auto mode).                                           |
+| direction | int   | -1, 1            | Forward/backward motion (legacy/auto mode).                                         |
+| intensity | float | 0 → 0.5+         | Amount of RGB channel separation.                                                   |
+| speed     | float | >0               | How fast the shift cycles/rotates.                                                  |
+| angle     | float | 0 → 2π (radians) | **Absolute phase in radians**. Use for precise circular/axis movement in timelines. |
+| paused    | bool  | true/false       | Pause/unpause demo.                                                                 |
+| active    | bool  | true/false       | Is effect active.                                                                   |
+
+**Tip:** Animate `intensity` and `progress` (or `angle`) together for ghostly/psychedelic effects.
+
+> **How chroma directionality works:**
+>
+> * In **legacy/demo mode**, the visible "direction" and path of the chroma effect is controlled by how you animate the `progress`, `direction`, and `speed` parameters.
+> * For **timeline/automation mode**, use the `angle` parameter for direct control:
+>
+>   * **Circular (full rotation)**: Animate `angle` smoothly from `0` to `2π` (`0` to \~`6.283`) over your chosen time segment.
+>   * **Straight/axis burst**: Animate `angle` between two fixed values (e.g., vertical: `π/2` ↔ `π`, horizontal: `0` ↔ `π/2`) for out-and-back motion.
+>   * **Diagonal**: Animate `angle` from `π/4` to `5π/4` and back for diagonal bursts.
+>
+> You do **not** need to modify effect code—just change your timeline animation logic.
+
+| Style          | How to Animate Parameters | Example Timeline/Logic                                     |
+| -------------- | ------------------------- | ---------------------------------------------------------- |
+| **Circular**   | `angle: 0 → 2π`           | `{ angle: 0 → 6.283 }` over 1 bar for full chroma rotation |
+| **Vertical**   | `angle: π/2 → π → π/2`    | Out and back sweep along vertical axis                     |
+| **Horizontal** | `angle: 0 → π/2 → 0`      | Out and back sweep along horizontal axis                   |
+| **Diagonal**   | `angle: π/4 → 5π/4 → π/4` | Out and back sweep along 45° diagonal                      |
+
+**Pro tip:**
+Get more dramatic or psychedelic by also automating `intensity` and/or `speed` for each chroma burst.
+You can switch between circular, straight, and multi-angle sweeps by updating your timeline events.
+
+---
+
+**Example Timeline:**
+
+```js
+// Vertical out and back burst
+{ effect: "chromaShift", param: "angle", from: Math.PI/2, to: Math.PI, startBar: 18, endBar: 18.5, easing: "linear" },
+{ effect: "chromaShift", param: "angle", from: Math.PI, to: Math.PI/2, startBar: 18.5, endBar: 19, easing: "linear" },
+// Full circular burst
+{ effect: "chromaShift", param: "angle", from: 0, to: 2*Math.PI, startBar: 19, endBar: 20, easing: "linear" }
+```
+
+---
+
+
+
 
 ---
 
