@@ -1,3 +1,4 @@
+// Nice slow like distant lightning
 
 export function reveal_GlitchStormToSerenity_64bars() {
     return [

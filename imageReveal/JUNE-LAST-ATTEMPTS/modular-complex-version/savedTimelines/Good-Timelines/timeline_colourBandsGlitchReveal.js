@@ -1,4 +1,5 @@
-// really great timeline effect only doesn't quite complete to reveal original image
+// really great timeline effect only doesn't quite complete to reveal original image 
+// Lovely - needs a pixel in time version
 
 export function timeline_colourBandsGlitchReveal_64bars() {
     return [

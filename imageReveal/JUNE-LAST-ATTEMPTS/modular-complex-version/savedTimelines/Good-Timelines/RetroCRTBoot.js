@@ -1,4 +1,4 @@
-//Love this one!
+//Love this one! LOVE LOVE LOVE
 
 export function RetroCRTBoot() {
   return [// --- Phase 1: Scanline Fizz & Pixel Form (0-16 bars) ---

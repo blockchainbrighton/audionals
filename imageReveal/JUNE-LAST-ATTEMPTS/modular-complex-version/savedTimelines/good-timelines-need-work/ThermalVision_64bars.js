@@ -1,3 +1,5 @@
+// it's ok
+
 export function ThermalVision_64bars() {
   return [
     { effect:"fade", param:"progress", from:0, to:1, startBar:0, endBar:8 },

@@ -1,3 +1,5 @@
+// Nice - needs pixel models for timed changes
+
 export function StrobeFocus_64bars() {
   return [
     { effect:"fade", param:"progress", from:0, to:1, startBar:0, endBar:6 },

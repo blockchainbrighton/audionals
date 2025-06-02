@@ -1,3 +1,5 @@
+// Fairly slow
+
 export function reveal_GradualAwakening_64bars() {
     return [
       // Ensure image starts fully black and fades in over the full duration
