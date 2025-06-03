@@ -36,8 +36,20 @@ export const effectDefaults = {
   scanLines:   { progress: 0, direction: 1, intensity: 0.4, speed: 1.5, lineWidth: 3, spacing: 6, verticalShift: 0, paused: false, active: false },
   filmGrain:   { intensity: 0.7, size: 0.01, speed: 0.5, density: 1, dynamicRange: 1, lastUpdate: 0, noiseZ: 0, active: false },
   blur:        { progress: 0, direction: 1, radius: 0, paused: false, active: false },
-  vignette:    { progress: 0, direction: 1, intensity: 0, size: 0.01, paused: false, active: false },
-  glitch:      { intensity: 0.01, active: false },
+  vignette:    { progress: 0, direction: 1, intensity: 0, size: 0.45, paused: false, active: false },
+  
+  glitch: {
+    intensity: 0.01,   // Max offset as fraction of width
+    rainbow: 0,     // Rainbow overlay freq 0 - 10 max
+    speed: 0,       // Animate per frame (0=static, 1=fast)
+    angle: 1,         // 0=horizontal, 1=vertical
+    slices: 1,        // 0–1, mapped to 3–14 slices 0.01 3 slices, 0.1 4 slices
+    palette: 'auto',  // Or array of [r,g,b] or palette function
+    spacing: 0,     // 0=all, >0 skips slices for torn effect - removes some slices up to 0.9 - 1 is nothing visible
+    mirror: true,    // not used in horizontal mode
+    active: false
+  },
+  
   chromaShift: { progress: 0, direction: 1, intensity: 0, speed: 1, angle: 0, paused: false, active: false },
   colourSweep: {
     progress: 0, direction: 1, randomize: 0, color: null, paused: false, active: false,
@@ -234,18 +246,70 @@ function applyVignette(src, dst, ct, { intensity, size, progress }, width, heigh
   grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(.5, 'rgba(0,0,0,0)');
   grad.addColorStop(1, `rgba(0,0,0,${intensity * progress})`); dst.fillStyle = grad; dst.fillRect(0, 0, width, height);
 }
-function applyGlitch(src, dst, ct, p, width, height) { /* ... as provided ... */ 
+
+
+
+function applyGlitch(src, dst, ct, p, width, height) {
+  if (!p.active) return dst.drawImage(src.canvas, 0, 0, width, height);
   dst.clearRect(0, 0, width, height);
-  for (let s = utils.randomInt(3, 7), h = height / s, i = 0; i < s; i++) {
-    const y = i * h, ox = utils.random(-width * p.intensity, width * p.intensity);
-    dst.drawImage(src.canvas, 0, y, width, h, ox, y, width, h);
-    if (Math.random() > .5) {
-      dst.globalCompositeOperation = 'lighten';
-      dst.fillStyle = `rgba(${utils.randomInt(0,255)},${utils.randomInt(0,255)},${utils.randomInt(0,255)},0.14)`;
-      dst.fillRect(ox, y, width, h); dst.globalCompositeOperation = 'source-over';
+  dst.save();
+  dst.beginPath();
+  dst.rect(0, 0, width, height);
+  dst.clip();
+
+  // Slices: 3–14 based on p.slices 0–1
+  const S = 3 + Math.round(11 * (p.slices ?? 0.3));
+  const isVertical = (p.angle ?? 0) > 0.5;
+  const t = ct * (p.speed ?? 0);
+
+  // Palette handler
+  const palette = Array.isArray(p.palette) ? () => p.palette[Math.floor(Math.random() * p.palette.length)]
+    : typeof p.palette === "function" ? p.palette
+    : () => [utils.randomInt(0,255), utils.randomInt(0,255), utils.randomInt(0,255)];
+
+  for (let i = 0; i < S; i++) {
+    if (p.spacing && Math.random() < p.spacing) continue;
+
+    if (isVertical) {
+      // Vertical slices: shift along Y axis
+      const w = width / S;
+      const x = i * w;
+      const oy = (utils.random(-1, 1) + Math.sin(t + i * 0.8)) * (p.intensity ?? 0) * height;
+
+      dst.drawImage(src.canvas, x, 0, w, height, x, oy, w, height);
+
+      if ((p.rainbow ?? 0) > 0 && Math.random() < Math.min(1, p.rainbow / 10)) {
+        let [r, g, b] = palette();
+        dst.globalCompositeOperation = 'lighten';
+        dst.fillStyle = `rgba(${r},${g},${b},${0.08 + 0.16 * Math.min(1, p.rainbow/10)})`;
+        dst.fillRect(x, oy, w, height);
+        dst.globalCompositeOperation = 'source-over';
+      }
+    } else {
+      // Horizontal slices: shift along X axis (classic VHS)
+      const h = height / S;
+      const y = i * h;
+      const ox = (utils.random(-1, 1) + Math.sin(t + i * 0.8)) * (p.intensity ?? 0) * width;
+
+      dst.drawImage(src.canvas, 0, y, width, h, ox, y, width, h);
+
+      if ((p.rainbow ?? 0) > 0 && Math.random() < Math.min(1, p.rainbow / 10)) {
+        let [r, g, b] = palette();
+        dst.globalCompositeOperation = 'lighten';
+        dst.fillStyle = `rgba(${r},${g},${b},${0.08 + 0.16 * Math.min(1, p.rainbow/10)})`;
+        dst.fillRect(ox, y, width, h);
+        dst.globalCompositeOperation = 'source-over';
+      }
     }
   }
+  dst.restore();
 }
+
+
+
+
+
+
 function applyChromaShift(src, dst, ct, p, width, height) { /* ... as provided ... */ 
   dst.clearRect(0, 0, width, height);
   const hasAngle = typeof p.angle === 'number' && !isNaN(p.angle);
