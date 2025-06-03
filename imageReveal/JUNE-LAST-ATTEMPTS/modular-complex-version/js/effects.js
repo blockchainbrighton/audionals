@@ -42,7 +42,7 @@ export const effectDefaults = {
     intensity: 0.01,   // Max offset as fraction of width
     rainbow: 0,     // Rainbow overlay freq 0 - 10 max
     speed: 0,       // Animate per frame (0=static, 1=fast)
-    angle: 1,         // 0=horizontal, 1=vertical
+    angle: 0,         // 0=horizontal, 1=vertical
     slices: 1,        // 0–1, mapped to 3–14 slices 0.01 3 slices, 0.1 4 slices
     palette: 'auto',  // Or array of [r,g,b] or palette function
     spacing: 0,     // 0=all, >0 skips slices for torn effect - removes some slices up to 0.9 - 1 is nothing visible

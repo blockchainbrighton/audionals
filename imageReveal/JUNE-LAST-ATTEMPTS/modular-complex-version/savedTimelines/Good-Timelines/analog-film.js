@@ -10,6 +10,7 @@ export function analogFilm_64bars() {
       { effect: "colourSweep", param: "progress", from: 0, to: 0.3, startBar: 0, endBar: 16, direction: 1, edgeSoftness: 0.3 },
       { effect: "colourSweep", param: "progress", from: 0.3, to: 0.6, startBar: 16, endBar: 32, direction: -1, brightnessOffset: 100 },
       { effect: "colourSweep", param: "progress", from: 0.6, to: 1, startBar: 32, endBar: 48, direction: 1, hueRange: [200, 300] }, // Blues/purples
+
   
       // Gradual focus and grain reduction
       { effect: "blur", param: "radius", from: 15, to: 0, startBar: 0, endBar: 24 },
@@ -17,7 +18,24 @@ export function analogFilm_64bars() {
       { effect: "vignette", param: "intensity", from: 1.5, to: 0.4, startBar: 8, endBar: 48 },
   
       // Final clarity
-      { effect: "scanLines", param: "intensity", from: 0.4, to: 0, startBar: 48, endBar: 56 }
+      { effect: "scanLines", param: "intensity", from: 0.4, to: 0, startBar: 48, endBar: 56 },
+
+
+      { effect: "blur", param: "radius", from: 0, to: 50, startBar: 48, endBar: 49 }, 
+      { effect: "blur", param: "radius", from: 50, to: 0, startBar: 49, endBar: 56 }, 
+      { effect: "filmGrain", param: "intensity", from: 0.2, to: 2, startBar: 48.1, endBar: 49 },
+      { effect: "filmGrain", param: "intensity", from: 2, to: 0.2, startBar: 49, endBar: 60 }, 
+
+      // glitches
+      { effect: "glitch", param: "intensity", from: 0, to: 0, startBar: 0, endBar: 16, easing: "easeInOut" }, 
+
+      { effect: "glitch", param: "intensity", from: 0.2, to: 0, startBar: 16, endBar: 16.3, easing: "easeInOut" }, 
+
+      { effect: "glitch", param: "intensity", from: 0.01, to: 0.001, startBar: 49, endBar: 64, easing: "easeInOut" },
+ 
+
+
+
     ];
   }
   

@@ -132,20 +132,55 @@ Below are all available effects, their parameters, valid value ranges, and tips 
 
 ---
 
+
 ### 6. **glitch**
 
-| Parameter | Type  | Range      | Description / Tips               |
-| --------- | ----- | ---------- | -------------------------------- |
-| intensity | float | 0 → 1      | Glitchiness: 0=no effect, 1=max. |
-| active    | bool  | true/false | Is effect active.                |
+| Parameter | Type                  | Range                                           | Description / Tips                                                                   |
+| --------- | --------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------ |
+| intensity | float                 | 0 → 1                                           | Glitch shift amount. 0 = no shift, 1 = maximum possible offset.                      |
+| rainbow   | float                 | 0 → 10                                          | Rainbow overlay flash intensity and frequency. 0 = off, 10 = maximum flashes.        |
+| speed     | float                 | 0 → 1                                           | Animation rate of slice movement (0 = static, 1 = fast).                             |
+| angle     | float                 | 0 or 1                                          | Glitch direction: 0 = horizontal, 1 = vertical.                                      |
+| slices    | float                 | 0 → 1                                           | Number of slices (maps 0 → 3 slices, 1 → 14 slices).                                 |
+| palette   | array/function/string | ‘auto’, array of `[r,g,b]`, or palette function | Colors used for rainbow overlays (`'auto'` = full RGB, or provide your own palette). |
+| spacing   | float                 | 0 → 1                                           | Slice density: 0 = every slice glitches, 1 = almost none (sparse, torn effect).      |
+| mirror    | bool                  | true/false                                      | Reserved for future use (mirrored glitches).                                         |
+| active    | bool                  | true/false                                      | Enable/disable glitch effect.                                                        |
 
-**Tip:** Pulse `intensity` between 0 and 0.8 for dramatic glitch “bursts”.
+> **Tip:** Animate `intensity` and/or `rainbow` in bursts for dramatic digital distortions.
+> Set `angle: 0` for classic VHS-style (horizontal) glitches, or `angle: 1` for vertical scanline tears.
+> For custom rainbow colors, provide `palette` as an array of `[r, g, b]` colors or a palette function.
 
 ---
-Certainly! Here’s a concise, **README-consistent** formatting that sits immediately below your current chromaShift table, keeping with your style, using blockquote for the explanation and a short **“How to Animate Directions”** table for clarity:
 
+**How to Animate Direction:**
+
+| Direction  | angle |
+| ---------- | ----- |
+| Horizontal | 0     |
+| Vertical   | 1     |
 
 ---
+
+**Example Usage:**
+
+```js
+glitch: {
+  intensity: 0.12,
+  rainbow: 4,
+  speed: 0.5,
+  angle: 0,            // horizontal glitch
+  slices: 0.5,
+  palette: 'auto',
+  spacing: 0.1,
+  mirror: false,
+  active: true
+}
+```
+
+---
+
+
 
 ### 7. **chromaShift**
 
