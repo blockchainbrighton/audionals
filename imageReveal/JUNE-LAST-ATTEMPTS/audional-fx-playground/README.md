@@ -25,6 +25,7 @@ audional-fx-playground/
 │   │   ├── EffectManager.js    # Effect lifecycle and ordering
 │   │   ├── EffectImplementations.js # All effect rendering functions
 │   │   └── base/               # Base classes and utilities
+│   │       └── EffectConfig.js # Effect configurations
 │   ├── timeline/               # Timeline and automation system
 │   │   ├── TimelineManager.js  # Timeline execution and management
 │   │   ├── generators/         # Pattern generation functions
@@ -40,8 +41,7 @@ audional-fx-playground/
 │   │   ├── ImageUtils.js       # Image processing utilities
 │   │   └── PerformanceUtils.js # Performance monitoring
 │   ├── config/                 # Configuration management
-│   │   ├── AppConfig.js        # Application settings
-│   │   └── EffectConfig.js     # Effect configurations
+│   │   ├── AppConfig.js        # Application settings                      
 │   └── main.js                 # Application entry point
 ├── assets/                     # Static assets
 ├── docs/                       # Documentation
