@@ -1,10 +1,16 @@
 :root {
   --bg: #1e1e1e;
   --fg: #f5f5f5;
-  --accent: #ff9800;
-  --step-off: #333;
-  --step-on: var(--accent);
-  --step-play: #4caf50;
+  --accent: #ff9800; /* Used for .brand, .add-channel, mute/solo active, trim handles */
+  
+  /* Step Sequencer Colors */
+  --step-off-bg: #333;
+  --step-off-border: rgba(255, 255, 255, 0.12); /* Subtle border for off steps */
+  --step-on-bg: var(--accent);
+  --step-on-border: var(--accent); /* Border matches the ON state background */
+  --step-on-glow: var(--accent);
+  --step-playhead-outline: #4caf50; /* Color for the playhead indicator */
+  --step-bar-marker-color: #555; /* For the 16th note bar lines */
 }
 
 body {
@@ -34,64 +40,149 @@ h1 { font-size:1.3rem; margin:0;}
   height:100px;
   margin:0.5rem 0;
   user-select:none;
-  /* background-color: #000; /* Optional: if canvas is ever transparent */
 }
 .waveform{
   width:100%;
   height:100%;
-  background:#000; /* Ensure canvas background is black */
+  background:#000; 
   display:block;
 }
 
-/* New styles for waveform playhead */
 .waveform-playhead {
   position: absolute;
   top: 0;
-  left: 0; /* Will be updated by JS */
+  left: 0; 
   width: 2px; 
   height: 100%;
-  background-color: var(--step-play); /* Use consistent playhead color, or choose another */
-  pointer-events: none; /* So it doesn't interfere with mouse events on other elements */
-  display: none; /* Hidden by default, JS will show it */
-  z-index: 3; /* Above waveform canvas, below trim handles */
+  background-color: var(--step-playhead-outline); 
+  pointer-events: none; 
+  display: none; 
+  z-index: 3; 
 }
 
-/* Hidden sliders retain keyboard accessibility but don't swallow clicks */
 .trim-slider{
   position:absolute;top:0;left:0;width:100%;height:100%;
   opacity:0;pointer-events:none;
-  z-index: 1; /* Ensure it's below other interactive elements if it ever became visible */
+  z-index: 1; 
 }
 
-/* Visible draggable handles */
 .trim-handle{
   position:absolute;top:0;width:8px;height:100%;
   background:var(--accent);
   cursor:ew-resize;
-  z-index: 4; /* Ensure handles are on top */
+  z-index: 4; 
 }
-.handle-start{left:0;} /* Initial position, JS will update */
-.handle-end{left:calc(100% - 8px);} /* Initial position, JS will update */
-
-/* Hidden sliders retain keyboard accessibility but don't swallow clicks */
-.trim-slider{
-  position:absolute;top:0;left:0;width:100%;height:100%;
-  opacity:0;pointer-events:none;
-}
-
-/* Visible draggable handles */
-.trim-handle{
-  position:absolute;top:0;width:8px;height:100%;
-  background:var(--accent);
-  cursor:ew-resize;
-}
-.handle-start{left:0;}
+.handle-start{left:0;} 
 .handle-end{left:calc(100% - 8px);}
 
-.step-grid{display:grid;grid-template-columns:repeat(64,1fr);gap:2px;}
-.step{width:100%;aspect-ratio:1/1;background:var(--step-off);cursor:pointer;}
-.step.on{background:var(--step-on);}
-.step.playhead{outline:2px solid var(--step-play);}
-.step:nth-child(16n+1){border-left:2px solid #555;}
+
+/* Step Sequencer Grid and Buttons */
+.step-grid {
+  display: grid;
+  grid-template-columns: repeat(64, 1fr);
+  gap: 3px; /* Increased gap for better button separation */
+}
+
+.step {
+  width: 100%;
+  aspect-ratio: 1/1;
+  background-color: var(--step-off-bg);
+  border: 1px solid var(--step-off-border);
+  border-radius: 4px; /* Rounded corners for button look */
+  cursor: pointer;
+  transition: background-color 0.08s ease-in-out, 
+              border-color 0.08s ease-in-out, 
+              box-shadow 0.12s ease-in-out;
+  /* Subtle 3D effect */
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.25), /* Inner top shadow */
+              inset 0 -1px 0px rgba(255, 255, 255, 0.05); /* Inner bottom highlight */
+}
+
+/* Every 4th step, excluding 16th steps */
+.step:nth-child(4n+1):not(:nth-child(16n+1)) {
+  background-color: color-mix(in srgb, var(--step-off-bg) 80%, white 20%);
+  border-color: color-mix(in srgb, var(--step-off-border) 80%, white 20%);
+}
+
+/* Every 16th step (visually brighter - unchanged) */
+.step:nth-child(16n+1) {
+  background-color: color-mix(in srgb, var(--step-off-bg) 25%, white 75%);
+  border-color: color-mix(in srgb, var(--step-off-border) 25%, white 75%);
+}
+
+/* Maintain 'on' color for active steps */
+.step.on,
+.step.on:nth-child(4n+1),
+.step.on:nth-child(16n+1) {
+  background-color: var(--step-on-bg);
+  border-color: var(--step-on-border);
+}
+
+/* Maintain playhead styles for active bar markers */
+.step.playhead:nth-child(16n+1) {
+  outline-color: color-mix(in srgb, var(--step-playhead-outline) 70%, white 30%);
+}
+
+
+.step:hover {
+  background-color: color-mix(in srgb, var(--step-off-bg) 70%, white 30%);
+  border-color: color-mix(in srgb, var(--step-off-border) 60%, white 40%);
+}
+
+.step.on {
+  background-color: var(--step-on-bg);
+  border-color: var(--step-on-border);
+  /* "Light up" effect */
+  box-shadow: 0 0 7px var(--step-on-glow), /* Main glow */
+              0 0 10px rgba(var(--step-on-glow), 0.5), /* Softer, wider glow */
+              inset 0 1px 1px rgba(0, 0, 0, 0.15), /* Inner shadow for depth on active state */
+              inset 0 -1px 1px color-mix(in srgb, var(--step-on-glow) 30%, white 70%, transparent 60%); /* Inner highlight */
+}
+
+.step.playhead {
+  /* Playhead outline should be distinct */
+  outline: 2px solid var(--step-playhead-outline);
+  outline-offset: 1px; /* Small gap between border and outline */
+  /* No box-shadow here directly, relies on .on for glow if active */
+}
+
+/* When a step is ON and is also the PLAYHEAD */
+.step.on.playhead {
+  outline-color: color-mix(in srgb, var(--step-playhead-outline) 70%, white 30%); /* Make outline brighter */
+  /* The box-shadow from .step.on will provide the primary "lit up" effect.
+     Can enhance it if needed, e.g., slightly more intense glow. */
+  box-shadow: 0 0 9px var(--step-on-glow),
+              0 0 15px rgba(var(--step-on-glow), 0.6),
+              inset 0 1px 1px rgba(0, 0, 0, 0.15),
+              inset 0 -1px 1px color-mix(in srgb, var(--step-on-glow) 30%, white 70%, transparent 60%);
+}
+
+
+/* Bar markers (e.g., every 4th or 16th step) */
+.step:nth-child(16n+1) {
+  /* Make the left border distinct for bar marking */
+  /* This will override the default left border of the step */
+  border-left-width: 2px;
+  border-left-color: var(--step-bar-marker-color);
+}
+
+/* Ensure the bar marker remains visible on 'on' steps */
+.step.on:nth-child(16n+1) {
+  border-left-width: 2px; /* Re-assert if needed, though CSS specificity should handle it */
+  border-left-color: var(--step-bar-marker-color); /* Crucial: override .on's border-color for the left side */
+}
+
+/* Ensure the bar marker remains visible on 'playhead' steps (if 'on' state isn't active) */
+.step.playhead:nth-child(16n+1):not(.on) {
+  border-left-width: 2px;
+  border-left-color: var(--step-bar-marker-color);
+}
+
+/* Ensure the bar marker remains visible on 'on' and 'playhead' steps */
+.step.on.playhead:nth-child(16n+1) {
+  border-left-width: 2px;
+  border-left-color: var(--step-bar-marker-color);
+}
+
 
 .add-channel{margin:1rem auto;padding:0.5rem 1rem;font-size:1rem;background:var(--accent);border:none;border-radius:6px;cursor:pointer;color:#000;}
