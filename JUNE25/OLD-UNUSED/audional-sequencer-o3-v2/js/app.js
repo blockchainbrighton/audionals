@@ -1,3 +1,5 @@
+// js/app.js
+
 import State from './state.js';
 import * as UI from './ui.js';
 import { start, stop } from './audioEngine.js';

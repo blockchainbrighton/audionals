@@ -36,7 +36,7 @@ const makeChannel = i => ({
 
 // ---------- INIT ----------
 UI.init(); // This will also set up project name input from State's default
-for (let i = 0; i < 4; i++) State.addChannel(makeChannel(i)); 
+for (let i = 0; i < 16; i++) State.addChannel(makeChannel(i)); 
 
 // ---------- UI EVENTS ----------
 document.getElementById('add-channel-btn').addEventListener('click', () => {
