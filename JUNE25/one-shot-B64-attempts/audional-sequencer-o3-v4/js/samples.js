@@ -39,5 +39,22 @@ export const audionalIDs = [
     { id: 'a72adee5a07200a623c40831ae5979bc7562b542788c3ded35d9e81e39c6014fi0', label: 'Bitcoin Step Melody B, 105BPM' },
     { id: '6a84401579707b76d9b9a77cc461e767f7ea8f08cc0e46dee0d21e5023cdde33i0', label: 'Bitcoin Step Melody J, 105BPM' },
     { id: '83174080310b0ab71c7a725461f3bd9e486bb62727b73134ee2c67f191d9d586i0', label: 'Bitcoin Step Mel Fill 5, 105BPM' },
-    { id: '4f9bed6449d99ef3cbb0fabefac6890c20ef17db2bfe7c07f1386cb43277f220i0', label: 'Bitcoin Step Melody H, 105BPM' }
+    { id: '4f9bed6449d99ef3cbb0fabefac6890c20ef17db2bfe7c07f1386cb43277f220i0', label: 'Bitcoin Step Melody H, 105BPM' },
+
+// OB1 Samples
+    { id: 'https://ordinals.com/content/e7d344ef3098d0889856978c4d2e81ccf2358f7f8b66feecc71e03036c59ad48i0#',label:'OB1 #1 - 808 Kick' },
+    { id: 'https://ordinals.com/content/ef5707e6ecf4d5b6edb4c3a371ca1c57b5d1057c6505ccb5f8bdc8918b0c4d94i0', label: 'OB1 #2 - 808 Snare' },
+    { id: 'https://ordinals.com/content/d030eb3d8bcd68b0ed02b0c67fdb981342eea40b0383814f179a48e76927db93i0', label: 'OB1 #3 - Closed Hat' },
+    { id: 'https://ordinals.com/content/3b7482a832c4f27c32fc1da7cc4249bbbac1cbdfbdb8673079cad0c33486d233i0', label: 'OB1 #4 - 808 Clap' },
+    { id: 'https://ordinals.com/content/5a42d7b2e2fe01e4f31cbad5dd671997f87339d970faaab37f6355c4a2f3be5ai0', label: 'OB1 #5 - Crash' },
+    { id: 'https://ordinals.com/content/ddc1838c1a6a3c45b2c6e19ff278c3b51b0797c3f1339c533370442d23687a68i0', label: 'OB1 #6 - Synth Bass 1' },
+    { id: 'https://ordinals.com/content/91f52a4ca00bb27383ae149f24b605d75ea99df033a6cbb6de2389455233bf51i0', label: 'OB1 #7 - Synth Bass 2' },
+    { id: 'https://ordinals.com/content/1e3c2571e96729153e4b63e2b561d85aec7bc5ba372d293af469a525dfa3ed59i0', label: 'OB1 #8 - Synth Bass 3' },
+    { id: 'https://ordinals.com/content/437868aecce108d49f9b29c2f477987cb5834ffdf639a650335af7f0fdd5e55bi0', label: 'OB1 #9 - Hard Kick' },
+    { id: 'https://ordinals.com/content/3be1f8e37b718f5b9874aecad792504c5822dc8dfc727ad4928594f7725db987i0', label: 'OB1 #10 - Hard Snare' },
+    { id: 'https://ordinals.com/content/1bda678460ef08fb64435b57c9b69fd78fd4556822ccd8e9839b4eb71b3621edi0', label: 'OB1 #11 - Small Click' },
+    { id: 'https://ordinals.com/content/228947e9fc52e44d3a22e84aed7bbaeff08d60c5f925aa6be7e265d210425c28i0', label: 'OB1 #12 - DJ Scratch' },
+    { id: 'https://ordinals.com/content/578aa9d3b29ceceafc659ecee22cb7ef1a063ba5b71474db8fe84949746cdeefi0', label: 'OB1 #13 - Glockenspiel' },
+    { id: 'https://ordinals.com/content/3e5fe7bc10e37a145a75f7ddd71debd9079b05568c5b9c5e6b4de3d959a4c46bi0', label: 'OB1 #14 - Cowbell' },
+    { id: 'https://ordinals.com/content/b77fb3b299477ca55ab2626dbbc12c0d5fa9d4cf51ae00850caae6e36baef745i0', label: 'OB1 #16 - Bass Drop' },
     ];
