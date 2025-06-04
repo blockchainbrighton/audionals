@@ -6,17 +6,17 @@
 import State from './state.js';
 import { loadSample, resolveOrdinalURL } from './utils.js';
 import { audionalIDs } from './samples.js';
-import { ctx, playStartTime } from './audioEngine.js';
+import { ctx, playStartTime } from './audioEngine.js'; // playStartTime might not be directly used here anymore for transport
 
-// For transport animation state:
-let transportAnim = {
-  playing: false,
-  playStartTime: 0,    // ctx.currentTime when play started
-  bpm: 120,
-  stepDuration: 0,     // duration of a 16th note in seconds
-  nextStep: 0,         // index of the next step being scheduled
-  channels: []
-};
+// For transport animation state (potentially remove if not directly used by ui.js for calculations):
+// let transportAnim = {
+//   playing: false,
+//   playStartTime: 0,    // ctx.currentTime when play started
+//   bpm: 120,
+//   stepDuration: 0,     // duration of a 16th note in seconds
+//   nextStep: 0,         // index of the next step being scheduled
+//   channels: []
+// };
 
 
 /* --- Playhead position for auditioning (per channel) --- */
@@ -56,7 +56,7 @@ function render(state) {
       container.append(el);
       wireChannel(el, i);
     }
-    updateChannel(el, ch, state.currentStep, i); // <--- pass i as idx
+    updateChannel(el, ch, state.currentStep, i);
   });
   
 }
@@ -95,14 +95,24 @@ function wireChannel(el, idx) {
     const file = e.target.files[0];
     if (!file) return;
 
-    const { buffer, imageData } = await loadSample(file);
-    State.updateChannel(idx, {
-      buffer,
-      src: null,            // local files can’t be auto-reloaded
-      image: imageData,
-      trimStart: 0,
-      trimEnd: 1
-    });
+    try {
+      const { buffer, imageData } = await loadSample(file);
+      State.updateChannel(idx, {
+        buffer,
+        src: null,            // local files can’t be auto-reloaded
+        image: imageData,
+        trimStart: 0,
+        trimEnd: 1,
+        // Reset playback state for the new sample
+        activePlaybackScheduledTime: null,
+        activePlaybackDuration: null,
+        activePlaybackTrimStart: null,
+        activePlaybackTrimEnd: null,
+      });
+    } catch (err) {
+        alert(`Failed to load sample: ${err.message || err}`);
+        console.error("Error loading sample via file input:", err);
+    }
   });
 
   /* ----------------------------------------------------------------
@@ -136,10 +146,16 @@ function wireChannel(el, idx) {
         src: resolved,
         image: imageData,
         trimStart: 0,
-        trimEnd: 1
+        trimEnd: 1,
+        // Reset playback state for the new sample
+        activePlaybackScheduledTime: null,
+        activePlaybackDuration: null,
+        activePlaybackTrimStart: null,
+        activePlaybackTrimEnd: null,
       });
     } catch (err) {
-      alert(`Failed to load sample: ${err.message}`);
+      alert(`Failed to load sample: ${err.message || err}`);
+      console.error("Error loading sample from URL/Ordinal:", err);
     }
   }
 
@@ -171,50 +187,87 @@ function wireChannel(el, idx) {
   let auditionTimeout = null, longClickFired = false;
 
   // Helper: play section
-  async function audition(buffer, start, end) {
+  async function audition(buffer, startOffset, duration) {
     if (!buffer) return;
-    // Use a throwaway AudioContext for audition (optional: use a global one if you want overlapping)
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const src = ctx.createBufferSource();
+    // Create a new AudioContext for each audition to avoid conflicts
+    // and ensure it closes itself.
+    const auditionCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = auditionCtx.createBufferSource();
     src.buffer = buffer;
-    src.connect(ctx.destination);
-    src.start(0, start, Math.max(end - start, 0.01));
-    src.onended = () => ctx.close();
+    src.connect(auditionCtx.destination);
+    src.start(0, startOffset, Math.max(duration, 0.01)); // Play the calculated duration
+    src.onended = () => {
+        auditionCtx.close().catch(e => console.warn("Error closing audition context:", e));
+    };
   }
 
   // Click behavior: single = play trimmed section; long = play from click pos
   canvas.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
+    const clickXRatio = (e.clientX - rect.left) / rect.width; // 0 to 1, where the click happened
     longClickFired = false;
+    const ch = State.get().channels[idx]; // Get channel data once
+
+    if (!ch || !ch.buffer) return; // No buffer, nothing to audition
+
+    const bufferDuration = ch.buffer.duration;
+    const currentTrimStartRatio = ch.trimStart ?? 0;
+    const currentTrimEndRatio = ch.trimEnd ?? 1;
 
     auditionTimeout = setTimeout(() => {
       longClickFired = true;
-      // Long click: play from position
-      const ch = State.get().channels[idx];
-      if (ch?.buffer) {
-        // Clamp pos within trimmed region
-        const trimStart = ch.trimStart ?? 0;
-        const trimEnd = ch.trimEnd ?? 1;
-        const frac = Math.max(trimStart, Math.min(trimEnd, x));
-        previewPlayheads.set(idx, frac);
-        drawWaveform(canvas, ch.buffer, trimStart, trimEnd, { previewPos: frac });
-        audition(ch.buffer, frac * ch.buffer.duration, trimEnd * ch.buffer.duration);
-        setTimeout(() => { previewPlayheads.delete(idx); drawWaveform(canvas, ch.buffer, trimStart, trimEnd); }, 600);
+      // Long click: play from click position within the current trim region, to the end of the trim region
+      const playStartRatio = Math.max(currentTrimStartRatio, Math.min(currentTrimEndRatio, clickXRatio));
+      const playEndRatio = currentTrimEndRatio;
+      
+      if (playEndRatio > playStartRatio) {
+        const startOffset = playStartRatio * bufferDuration;
+        const durationToPlay = (playEndRatio - playStartRatio) * bufferDuration;
+
+        previewPlayheads.set(idx, playStartRatio);
+        drawWaveform(canvas, ch.buffer, currentTrimStartRatio, currentTrimEndRatio, { previewPos: playStartRatio });
+        audition(ch.buffer, startOffset, durationToPlay);
+        
+        const estimatedVisualDuration = Math.min(durationToPlay * 1000, 2000); // Cap visual feedback
+        setTimeout(() => {
+          previewPlayheads.delete(idx);
+          // Redraw without previewPos only if this specific preview is ending
+          const currentCh = State.get().channels[idx]; // Re-fetch in case state changed
+          if (currentCh) { // Check if channel still exists
+              drawWaveform(canvas, currentCh.buffer, currentCh.trimStart ?? 0, currentCh.trimEnd ?? 1);
+          }
+        }, estimatedVisualDuration + 50); // Add a small buffer
       }
     }, 350); // long press ~350ms
   });
+
   canvas.addEventListener('mouseup', (e) => {
     if (auditionTimeout) clearTimeout(auditionTimeout);
     if (!longClickFired && e.button === 0) {
-      // Short click: play trimmed section
+      // Short click: play entire trimmed section
       const ch = State.get().channels[idx];
       if (ch?.buffer) {
-        previewPlayheads.set(idx, ch.trimStart ?? 0);
-        drawWaveform(canvas, ch.buffer, ch.trimStart ?? 0, ch.trimEnd ?? 1, { previewPos: ch.trimStart ?? 0 });
-        audition(ch.buffer, (ch.trimStart ?? 0) * ch.buffer.duration, (ch.trimEnd ?? 1) * ch.buffer.duration);
-        setTimeout(() => { previewPlayheads.delete(idx); drawWaveform(canvas, ch.buffer, ch.trimStart ?? 0, ch.trimEnd ?? 1); }, 600);
+        const trimStartRatio = ch.trimStart ?? 0;
+        const trimEndRatio = ch.trimEnd ?? 1;
+        
+        if (trimEndRatio > trimStartRatio) {
+            const startOffset = trimStartRatio * ch.buffer.duration;
+            const durationToPlay = (trimEndRatio - trimStartRatio) * ch.buffer.duration;
+
+            previewPlayheads.set(idx, trimStartRatio);
+            drawWaveform(canvas, ch.buffer, trimStartRatio, trimEndRatio, { previewPos: trimStartRatio });
+            audition(ch.buffer, startOffset, durationToPlay);
+
+            const estimatedVisualDuration = Math.min(durationToPlay * 1000, 2000); // Cap visual feedback
+            setTimeout(() => {
+              previewPlayheads.delete(idx);
+              const currentCh = State.get().channels[idx]; // Re-fetch
+              if (currentCh) {
+                  drawWaveform(canvas, currentCh.buffer, currentCh.trimStart ?? 0, currentCh.trimEnd ?? 1);
+              }
+            }, estimatedVisualDuration + 50);
+        }
       }
     }
   });
@@ -225,19 +278,36 @@ function wireChannel(el, idx) {
   hStart.addEventListener('pointerdown', e => beginDrag(e, true));
   hEnd  .addEventListener('pointerdown', e => beginDrag(e, false));
 
-  function beginDrag(event, isStart) {
+  function beginDrag(event, isStartHandle) {
     event.preventDefault();
+    event.target.setPointerCapture(event.pointerId); // Capture pointer for smoother dragging
+
     const { left, width } = wrapper.getBoundingClientRect();
 
     const move = ev => {
       const ratio = Math.min(Math.max((ev.clientX - left) / width, 0), 1);
       const c     = State.get().channels[idx];
-      let s = isStart ? ratio : c.trimStart;
-      let e = isStart ? c.trimEnd : ratio;
-      if (e - s < 0.001) isStart ? (s = e - 0.001) : (e = s + 0.001);
-      State.updateChannel(idx, { trimStart: s, trimEnd: e });
+      let newTrimStart = c.trimStart ?? 0;
+      let newTrimEnd = c.trimEnd ?? 1;
+
+      if (isStartHandle) {
+        newTrimStart = ratio;
+        if (newTrimStart >= newTrimEnd) {
+          newTrimStart = newTrimEnd - 0.001; // Ensure start is always before end
+        }
+      } else {
+        newTrimEnd = ratio;
+        if (newTrimEnd <= newTrimStart) {
+          newTrimEnd = newTrimStart + 0.001; // Ensure end is always after start
+        }
+      }
+      newTrimStart = Math.max(0, newTrimStart);
+      newTrimEnd = Math.min(1, newTrimEnd);
+      
+      State.updateChannel(idx, { trimStart: newTrimStart, trimEnd: newTrimEnd });
     };
     const up = () => {
+      event.target.releasePointerCapture(event.pointerId);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup',    up);
     };
@@ -250,10 +320,6 @@ function wireChannel(el, idx) {
 /*  Per-frame UI update                                                */
 /* ------------------------------------------------------------------ */
 
-// Modify updateChannel to remove the old transportPos calculation that was passed to drawWaveform,
-// as the new div-based playhead will handle this more accurately.
-// The drawWaveform options.transportPos can be removed or repurposed if needed.
-// For now, we'll stop passing it from updateChannel.
 function updateChannel(el, ch, playhead, idx) {
   el.querySelector('.channel-name').value = ch.name;
   el.querySelector('.mute-btn').classList.toggle('active', ch.mute);
@@ -261,13 +327,6 @@ function updateChannel(el, ch, playhead, idx) {
   el.querySelector('.volume-slider').value = ch.volume ?? 0.8;
 
   const currentStep = playhead == null ? -1 : playhead;
-  // const isPlaying = State.get().playing; // Not directly needed for this part anymore
-
-  // Remove transportPos calculation from here as animateTransport will handle the new playhead div
-  // const transportPos = isPlaying && ch.steps[currentStep]
-  //   ? ((ch.trimEnd ?? 1) - (ch.trimStart ?? 0)) * ((currentStep % 64) / 64) + (ch.trimStart ?? 0)
-  //   : null;
-
   const previewPos = previewPlayheads.get(idx) ?? null;
 
   drawWaveform(
@@ -275,12 +334,12 @@ function updateChannel(el, ch, playhead, idx) {
     ch.buffer,
     ch.trimStart ?? 0,
     ch.trimEnd   ?? 1,
-    { previewPos } // Removed transportPos from here
+    { previewPos } 
   );
   el.querySelector('.handle-start').style.left =
-    `calc(${(ch.trimStart ?? 0) * 100}% - 4px)`;
+    `calc(${(ch.trimStart ?? 0) * 100}% - 4px)`; // -4px to center 8px handle
   el.querySelector('.handle-end').style.left =
-    `calc(${(ch.trimEnd   ?? 1) * 100}% - 4px)`;
+    `calc(${(ch.trimEnd   ?? 1) * 100}% - 4px)`; // -4px to center 8px handle
 
   el.querySelectorAll('.step').forEach((cell, i) => {
     cell.classList.toggle('on', ch.steps[i]);
@@ -288,39 +347,60 @@ function updateChannel(el, ch, playhead, idx) {
   });
 }
 
-// Modify drawWaveform to remove the old transportPos drawing logic
 function drawWaveform(canvas, buffer, trimStart, trimEnd, options = {}) {
+  const dpr = window.devicePixelRatio || 1;
+  const canvasWidth = canvas.clientWidth;
+  const canvasHeight = canvas.clientHeight || 100;
+
+  canvas.width = canvasWidth * dpr;
+  canvas.height = canvasHeight * dpr;
+
   const ctx = canvas.getContext('2d');
-  const W   = canvas.width  = canvas.clientWidth;
-  const H   = canvas.height = canvas.clientHeight || 100;
+  ctx.scale(dpr, dpr); // Scale context for HiDPI
+
+  const W = canvasWidth;
+  const H = canvasHeight;
 
   ctx.clearRect(0, 0, W, H);
   if (!buffer) return;
 
   // Draw waveform
-  ctx.strokeStyle = '#4caf50'; // Green for waveform
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--step-play').trim() || '#4caf50'; // Green for waveform
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  const data = buffer.getChannelData(0);
-  const step = Math.ceil(data.length / W);
+  const audioData = buffer.getChannelData(0);
+  const step = Math.ceil(audioData.length / W);
+  const amp = H / 2;
   for (let i = 0; i < W; i++) {
-    const v = data[i * step] || 0;
-    const y = (1 - v) * H / 2;
-    i ? ctx.lineTo(i, y) : ctx.moveTo(0, y);
+    let min = 1.0;
+    let max = -1.0;
+    for (let j = 0; j < step; j++) {
+        const datum = audioData[(i * step) + j];
+        if (datum < min) min = datum;
+        if (datum > max) max = datum;
+    }
+    const yMax = (1 - max) * amp;
+    const yMin = (1 - min) * amp;
+    if (i === 0) {
+        ctx.moveTo(i, yMax);
+        ctx.lineTo(i, yMin); // Draw first vertical line
+    } else {
+        ctx.lineTo(i, yMax);
+        ctx.lineTo(i, yMin);
+    }
   }
   ctx.stroke();
 
   // Shade outside trimmed region
   ctx.fillStyle = 'rgba(0,0,0,.6)';
   ctx.fillRect(0, 0, trimStart * W, H);
-  ctx.fillRect(trimEnd * W, 0, W - trimEnd * W, H);
+  ctx.fillRect(trimEnd * W, 0, W - (trimEnd * W), H);
 
-  // --- REMOVED old transport playhead (step-sequencer related) drawing ---
-  // if (options.transportPos != null) { ... }
 
   // --- Draw audition preview playhead ---
-  if (options.previewPos != null) {
+  if (options.previewPos != null && options.previewPos >= trimStart && options.previewPos <= trimEnd) {
     ctx.save();
-    ctx.strokeStyle = '#80cbc4'; // Light teal for preview
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff9800'; // Accent color for preview
     ctx.lineWidth = 2;
     ctx.setLineDash([4,3]);
     ctx.beginPath();
@@ -333,15 +413,14 @@ function drawWaveform(canvas, buffer, trimStart, trimEnd, options = {}) {
 }
 
 
-// Modify animateTransport for the new precise waveform playhead
 function animateTransport() {
   const state = State.get();
-  const { playing, channels } = state; // Removed bpm, currentStep as they are not directly used for this new playhead logic
+  const { playing, channels } = state;
   const now = ctx.currentTime;
 
   channels.forEach((ch, idx) => {
     const el = container.children[idx];
-    if (!el || !el.waveformPlayheadElement) return; // Ensure element and playhead div exist
+    if (!el || !el.waveformPlayheadElement) return; 
 
     const playheadDiv = el.waveformPlayheadElement;
 
@@ -349,7 +428,7 @@ function animateTransport() {
       const elapsedTime = now - ch.activePlaybackScheduledTime;
 
       if (elapsedTime >= 0 && elapsedTime < ch.activePlaybackDuration) {
-        const progressInSegment = elapsedTime / ch.activePlaybackDuration; // 0 to 1
+        const progressInSegment = elapsedTime / ch.activePlaybackDuration; 
 
         const visualTrimStartPercent = (ch.activePlaybackTrimStart ?? 0) * 100;
         const visualTrimEndPercent = (ch.activePlaybackTrimEnd ?? 1) * 100;
@@ -359,8 +438,8 @@ function animateTransport() {
           const playheadOffsetInSegmentPercent = progressInSegment * visualSegmentWidthPercent;
           let playheadLeftPercent = visualTrimStartPercent + playheadOffsetInSegmentPercent;
           
-          // Clamp to ensure it stays within the visual trimmed region defined at playback time
-          playheadLeftPercent = Math.min(visualTrimEndPercent, Math.max(visualTrimStartPercent, playheadLeftPercent));
+          playheadLeftPercent = Math.min(visualTrimEndPercent - (playheadDiv.offsetWidth / el.querySelector('.waveform-wrapper').offsetWidth * 100) , Math.max(visualTrimStartPercent, playheadLeftPercent));
+
 
           playheadDiv.style.left = `${playheadLeftPercent}%`;
           playheadDiv.style.display = 'block';
@@ -368,32 +447,24 @@ function animateTransport() {
           playheadDiv.style.display = 'none';
         }
       } else {
-        // Sound has finished or not yet started according to its scheduled time vs current time
         playheadDiv.style.display = 'none';
-        // Note: audioEngine's onended will also clear state, leading to this path.
       }
     } else {
-      // Channel not playing or playback state cleared
       playheadDiv.style.display = 'none';
     }
-
-    // The step sequencer playhead (highlighting active step div) is still handled by updateChannel
-    // The drawWaveform call here is for redrawing waveform/trimming if necessary,
-    // but the main playhead is the DIV now.
-    // If drawWaveform is expensive, only call it if ch.buffer/trim changed.
-    // For now, let's assume it's okay or optimize later.
-    // We might not need to call drawWaveform here at all if the waveform itself isn't changing per frame.
-    // The previewPos logic in drawWaveform is for auditioning, not the main transport.
-    // If `updateChannel` is called by State.subscribe, it will handle drawing steps/playhead.
-    // This `animateTransport` focuses SOLELY on the waveform playhead DIV for now.
-    // The `State.subscribe(render)` in `init()` and `render` calling `updateChannel` should handle step playheads.
   });
 
   requestAnimationFrame(animateTransport);
 }
 
 export function init() {
-  State.subscribe(render); // render calls updateChannel, which handles step playheads
-  requestAnimationFrame(animateTransport); // animateTransport handles waveform DIV playheads
+  State.subscribe(render); 
+  requestAnimationFrame(animateTransport); 
+  
+  // Wire up the global Load button
+  document.getElementById('load-btn').addEventListener('click', () => {
+    document.getElementById('load-input').click(); // Programmatically click the hidden file input
+  });
+  
   render(State.get());
 }
