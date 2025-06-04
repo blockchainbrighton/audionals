@@ -40,10 +40,29 @@ function attach(el,idx){
     const buf=await loadSample(f);
     State.updateChannel(idx,{buffer:buf,trimStart:0,trimEnd:1});
   });
-  el.querySelector('.load-url-btn').addEventListener('click',async()=>{
-    const url=el.querySelector('.url-input').value.trim();if(!url)return;
-    try{const buf=await loadSample(url);State.updateChannel(idx,{buffer:buf,trimStart:0,trimEnd:1});}catch(e){alert('Load error');}
+  el.querySelector('.load-url-btn').addEventListener('click', async () => {
+    const raw = el.querySelector('.url-input').value.trim();
+    if (!raw) return;
+  
+    // ── 1. normalise Ordinal IDs or keep as given ──────────
+    const resolved = resolveOrdinalURL(raw);
+  
+    try {
+      // ── 2. fetch & decode ─────────────────────────────────
+      const buf = await loadSample(resolved);
+  
+      // ── 3. store BOTH buffer and src so it reloads later ──
+      State.updateChannel(idx, {
+        buffer: buf,
+        src: resolved,          // <-- critical
+        trimStart: 0,
+        trimEnd: 1
+      });
+    } catch (err) {
+      alert('Failed to load sample: ' + err.message);
+    }
   });
+  
 
   // step grid
   const grid=el.querySelector('.step-grid');
