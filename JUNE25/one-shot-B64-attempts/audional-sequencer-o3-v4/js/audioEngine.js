@@ -1,157 +1,213 @@
-// At the top of audioEngine.js
+// audioEngine.js
 import State from './state.js';
 
 export const ctx = new (window.AudioContext || window.webkitAudioContext)();
+export let playStartTime = 0; 
 
-// Transport info for UI (imported by ui.js)
-export let playStartTime = 0;
-
-let startTime = 0;
+let internalPlayStartTime = 0; 
 let nextStep = 0;
 let timer = null;
-const lookAhead = 0.1;
-const tickMs = 25;
+const lookAhead = 0.1; 
+const tickMs = 25;   
 
-// NEW: Array to hold persistent GainNodes for each channel
 let channelGainNodes = [];
 
-// NEW: Function to setup or re-setup channel gain nodes
+const EQ_BANDS_DEFS = {
+    LOW:  { frequency: 200, type: 'lowshelf' },
+    MID:  { frequency: 1000, type: 'peaking', Q: 1.2 },
+    HIGH: { frequency: 5000, type: 'highshelf' }
+};
+
 function setupChannelAudioNodes(numChannels) {
-    // Ensure we have enough gain nodes
-    while (channelGainNodes.length < numChannels) {
-        const newGainNode = ctx.createGain();
-        newGainNode.connect(ctx.destination); // Connect directly to output for now
-        channelGainNodes.push(newGainNode);
+    if (ctx.state === 'suspended') {
+        ctx.resume().then(() => console.log("AudioContext resumed for node setup."));
     }
-    // If channels were removed (not currently supported by your app, but good practice)
+    while (channelGainNodes.length < numChannels) {
+        const gainNode = ctx.createGain();
+        gainNode.connect(ctx.destination);
+        channelGainNodes.push(gainNode);
+    }
     while (channelGainNodes.length > numChannels) {
         const removedNode = channelGainNodes.pop();
-        if (removedNode) {
-            removedNode.disconnect();
-        }
+        if (removedNode) removedNode.disconnect();
     }
 }
 
-// NEW: Initialize and subscribe to state changes for volume
 function initAudioEngineStateListener() {
     const initialState = State.get();
     setupChannelAudioNodes(initialState.channels.length);
 
-    // Set initial volumes
     initialState.channels.forEach((channel, i) => {
         if (channelGainNodes[i]) {
-            const volume = channel.mute ? 0 : (channel.volume ?? 0.8); // Apply mute here too
-            // Consider solo logic here if needed (more complex, involves other channels)
+            const soloActive = initialState.channels.some(ch => ch.solo);
+            let volume = channel.volume ?? 0.8;
+            if (channel.mute || (soloActive && !channel.solo)) {
+                volume = 0;
+            }
             channelGainNodes[i].gain.setValueAtTime(volume, ctx.currentTime);
         }
     });
 
     State.subscribe((newState, oldState) => {
-        // Check if number of channels changed
         if (newState.channels.length !== channelGainNodes.length) {
             setupChannelAudioNodes(newState.channels.length);
         }
+        const soloActive = newState.channels.some(ch => ch.solo);
+        const oldSoloActive = oldState.channels.some(ch => ch.solo);
 
         newState.channels.forEach((channel, i) => {
             if (channelGainNodes[i]) {
-                const oldChannelState = oldState.channels[i] || {}; // Handle new channels
-                const newVolume = channel.mute ? 0 : (channel.volume ?? 0.8);
-                const oldVolume = oldChannelState.mute ? 0 : (oldChannelState.volume ?? 0.8);
+                const oldCh = oldState.channels[i] || {};
+                let targetVolume = channel.volume ?? 0.8;
+                if (channel.mute || (soloActive && !channel.solo)) {
+                    targetVolume = 0;
+                }
+                
+                // Determine old effective volume for comparison
+                let oldEffectiveVolume = oldCh.volume ?? 0.8;
+                 if (oldCh.mute || (oldSoloActive && !oldCh.solo)) {
+                    oldEffectiveVolume = 0;
+                }
 
-                // Consider solo logic here: if solo is active, other non-soloed channels should be 0.
-                // This gets complex as it depends on the global solo state.
-                // For now, let's keep it simple and handle mute/volume.
-                // If solo is implemented, you'd likely adjust newVolume based on global solo status
-                // and whether this channel 'i' is soloed.
-
-                if (newVolume !== oldVolume) {
-                    channelGainNodes[i].gain.linearRampToValueAtTime(
-                        newVolume,
-                        ctx.currentTime + 0.02 // 20ms ramp
-                    );
+                if (targetVolume !== oldEffectiveVolume || channel.mute !== oldCh.mute || channel.solo !== oldCh.solo || soloActive !== oldSoloActive) {
+                    channelGainNodes[i].gain.linearRampToValueAtTime(targetVolume, ctx.currentTime + 0.02);
                 }
             }
         });
     });
 }
-
-// Call this once, perhaps in your main app.js after State is initialized
-// Or if app.js imports start/stop, audioEngine can self-initialize its listener.
-// For simplicity, let's assume it's called when the module loads or by an init function.
 initAudioEngineStateListener();
 
+let scheduledSourcesInfo = [];
 
-let scheduledSources = [];
-
-function scheduleStep(stepIdx, time) {
+function scheduleStep(stepIdx, scheduledEventTime) {
   const s = State.get();
   s.channels.forEach((ch, channelIndex) => {
-    // Ensure channelGainNode exists for this channelIndex
-    if (!channelGainNodes[channelIndex]) {
-        console.warn(`No gain node for channel ${channelIndex}, skipping.`);
-        // This might happen if a channel was added but setupChannelAudioNodes wasn't updated immediately.
-        // The subscription should handle it, but this is a safeguard.
-        return;
+    if (!channelGainNodes[channelIndex]) return;
+    
+    const bufferToPlay = ch.reverse ? ch.reversedBuffer : ch.buffer;
+    if (!bufferToPlay || !ch.steps[stepIdx]) return;
+
+    const source = ctx.createBufferSource();
+    source.buffer = bufferToPlay;
+    
+    const playbackRate = Math.pow(2, (ch.pitch || 0) / 12);
+    source.playbackRate.value = playbackRate;
+
+    const originalBufferDuration = ch.buffer.duration; // Duration calculation always based on original forward buffer
+    let trimStartRatio = ch.trimStart ?? 0;
+    let trimEndRatio = ch.trimEnd ?? 1;
+
+    let startOffsetOriginal, durationOriginalSegment;
+
+    if (ch.reverse) {
+        // When reversed, the segment is defined by [1-trimEnd, 1-trimStart] on the reversedBuffer
+        startOffsetOriginal = originalBufferDuration * (1.0 - trimEndRatio);
+        durationOriginalSegment = originalBufferDuration * (trimEndRatio - trimStartRatio);
+    } else {
+        startOffsetOriginal = originalBufferDuration * trimStartRatio;
+        durationOriginalSegment = originalBufferDuration * (trimEndRatio - trimStartRatio);
     }
-    if (!ch.buffer || !ch.steps[stepIdx]) return;
+    durationOriginalSegment = Math.max(0.001, durationOriginalSegment);
+    const audibleDurationPitched = durationOriginalSegment / playbackRate;
 
-    const src = ctx.createBufferSource();
-    src.buffer = ch.buffer;
-    src.playbackRate.value = ch.pitch || 1;
+    let currentNode = source;
+    const nodesToCleanThisEvent = [source];
 
-    const bufferDuration = ch.buffer.duration;
-    const trimStartRatio = ch.trimStart ?? 0;
-    const trimEndRatio = ch.trimEnd ?? 1;
+    // HPF
+    if (ch.hpfCutoff > 20) {
+        const hpf = ctx.createBiquadFilter();
+        hpf.type = 'highpass';
+        hpf.frequency.setValueAtTime(ch.hpfCutoff, scheduledEventTime);
+        hpf.Q.setValueAtTime(ch.hpfQ || 0.707, scheduledEventTime);
+        currentNode.connect(hpf); currentNode = hpf; nodesToCleanThisEvent.push(hpf);
+    }
+    // LPF
+    if (ch.lpfCutoff < 20000) {
+        const lpf = ctx.createBiquadFilter();
+        lpf.type = 'lowpass';
+        lpf.frequency.setValueAtTime(ch.lpfCutoff, scheduledEventTime);
+        lpf.Q.setValueAtTime(ch.lpfQ || 0.707, scheduledEventTime);
+        currentNode.connect(lpf); currentNode = lpf; nodesToCleanThisEvent.push(lpf);
+    }
+    // EQ
+    [
+        { gain: ch.eqLowGain, def: EQ_BANDS_DEFS.LOW },
+        { gain: ch.eqMidGain, def: EQ_BANDS_DEFS.MID },
+        { gain: ch.eqHighGain, def: EQ_BANDS_DEFS.HIGH },
+    ].forEach(item => {
+        if (item.gain !== 0) {
+            const eqBand = ctx.createBiquadFilter();
+            eqBand.type = item.def.type;
+            eqBand.frequency.setValueAtTime(item.def.frequency, scheduledEventTime);
+            eqBand.gain.setValueAtTime(item.gain, scheduledEventTime);
+            if (item.def.Q) eqBand.Q.setValueAtTime(item.def.Q, scheduledEventTime);
+            currentNode.connect(eqBand); currentNode = eqBand; nodesToCleanThisEvent.push(eqBand);
+        }
+    });
+    // Segment Gain (Fades)
+    const segmentGain = ctx.createGain();
+    nodesToCleanThisEvent.push(segmentGain);
+    const maxFade = audibleDurationPitched / 2;
+    const fadeInSec = Math.min(ch.fadeInTime || 0, maxFade);
+    const fadeOutSec = Math.min(ch.fadeOutTime || 0, maxFade);
 
-    const offsetSeconds = bufferDuration * trimStartRatio;
-    const durationSeconds = Math.max(bufferDuration * (trimEndRatio - trimStartRatio), 0.001);
-
-    // --- MODIFIED PART ---
-    // Instead of creating a new gain node here, connect to the persistent one
-    // The volume of channelGainNodes[channelIndex] is already being managed by the State subscription
-    src.connect(channelGainNodes[channelIndex]);
-    // The channelGainNodes[channelIndex] is already connected to ctx.destination
-    // --- END MODIFIED PART ---
-
-    src.start(time, offsetSeconds, durationSeconds);
-    scheduledSources.push({ source: src, channelIndex: channelIndex }); // Store channelIndex too
-
+    if (fadeInSec > 0) {
+        segmentGain.gain.setValueAtTime(0, scheduledEventTime);
+        segmentGain.gain.linearRampToValueAtTime(1, scheduledEventTime + fadeInSec);
+    } else {
+        segmentGain.gain.setValueAtTime(1, scheduledEventTime);
+    }
+    if (fadeOutSec > 0) {
+        const fadeOutStartTime = scheduledEventTime + audibleDurationPitched - fadeOutSec;
+        // Ensure fadeOutStartTime is not before fadeIn completion or before current time
+        if (fadeOutStartTime > scheduledEventTime + fadeInSec && fadeOutStartTime > scheduledEventTime) {
+             segmentGain.gain.setValueAtTime(1, fadeOutStartTime); // Hold full volume until fade out starts
+             segmentGain.gain.linearRampToValueAtTime(0, scheduledEventTime + audibleDurationPitched);
+        } else { // If fades overlap significantly or duration is too short, just fade out over the whole segment after potential fade in
+            segmentGain.gain.linearRampToValueAtTime(0, scheduledEventTime + audibleDurationPitched);
+        }
+    }
+    
+    currentNode.connect(segmentGain);
+    segmentGain.connect(channelGainNodes[channelIndex]);
+    source.start(scheduledEventTime, startOffsetOriginal, durationOriginalSegment);
+    
     State.updateChannel(channelIndex, {
-      activePlaybackScheduledTime: time,
-      activePlaybackDuration: durationSeconds,
-      activePlaybackTrimStart: trimStartRatio,
-      activePlaybackTrimEnd: trimEndRatio,
+      activePlaybackScheduledTime: scheduledEventTime,
+      activePlaybackDuration: audibleDurationPitched, 
+      activePlaybackTrimStart: ch.trimStart, // Store the fwd trim used
+      activePlaybackTrimEnd: ch.trimEnd,     // Store the fwd trim used
+      activePlaybackReversed: ch.reverse,    // Store if it was reversed
     });
 
-    src.onended = () => {
-      scheduledSources = scheduledSources.filter(item => item.source !== src);
+    scheduledSourcesInfo.push({ nodes: nodesToCleanThisEvent, scheduledEventTime, channelIndex });
 
+    source.onended = () => {
+      scheduledSourcesInfo = scheduledSourcesInfo.filter(info => info.nodes !== nodesToCleanThisEvent);
+      nodesToCleanThisEvent.forEach(node => { try { node.disconnect(); } catch {} });
       const currentChannelState = State.get().channels[channelIndex];
-      if (currentChannelState && currentChannelState.activePlaybackScheduledTime === time) {
-        State.updateChannel(channelIndex, {
-          activePlaybackScheduledTime: null,
-          activePlaybackDuration: null,
-          activePlaybackTrimStart: null,
-          activePlaybackTrimEnd: null,
-        });
+      if (currentChannelState && currentChannelState.activePlaybackScheduledTime === scheduledEventTime) {
+        const otherActiveSoundsForThisTime = scheduledSourcesInfo.some(info => 
+            info.channelIndex === channelIndex && info.scheduledEventTime === scheduledEventTime);
+        if (!otherActiveSoundsForThisTime) {
+            State.updateChannel(channelIndex, { activePlaybackScheduledTime: null, activePlaybackDuration: null, activePlaybackReversed: null });
+        }
       }
-      // No need to disconnect the channelGainNode here, it's persistent.
-      try { src.disconnect(); } catch {} // Just disconnect the source
     };
   });
 }
 
 function scheduler() {
   const s = State.get();
-  const spb = 60 / s.bpm;
-  const sp16 = spb / 4;
-  const now = ctx.currentTime;
-  while (true) {
-    const stepTime = startTime + nextStep * sp16;
-    if (stepTime > now + lookAhead) break;
-    scheduleStep(nextStep % 64, stepTime);
-    // if (typeof State.update === "function") // Assuming State.update is always a function
-    State.update({ currentStep: nextStep % 64 }); // Removed the typeof check for brevity
+  const secondsPerBeat = 60.0 / s.bpm;
+  const secondsPer16thNote = secondsPerBeat / 4;
+  const currentTime = ctx.currentTime;
+
+  while (internalPlayStartTime + nextStep * secondsPer16thNote < currentTime + lookAhead) {
+    const scheduledEventTime = internalPlayStartTime + nextStep * secondsPer16thNote;
+    scheduleStep(nextStep % 64, scheduledEventTime);
+    State.update({ currentStep: nextStep % 64 });
     nextStep++;
   }
 }
@@ -160,44 +216,38 @@ export function stop() {
   if (!timer) return;
   clearInterval(timer);
   timer = null;
-  const oldState = State.get();
   State.update({ playing: false, currentStep: 0 });
 
-  scheduledSources.forEach(item => {
-    try { item.source.stop(0); } catch {}
-    try { item.source.disconnect(); } catch {}
+  scheduledSourcesInfo.forEach(info => {
+    info.nodes.forEach(node => {
+        if (node instanceof AudioBufferSourceNode) try { node.stop(0); } catch {}
+        try { node.disconnect(); } catch {}
+    });
   });
-  scheduledSources = [];
-  playStartTime = 0;
-  startTime = 0;
+  scheduledSourcesInfo = [];
+  
+  playStartTime = 0; 
+  internalPlayStartTime = 0;
   nextStep = 0;
 
-  oldState.channels.forEach((_ch, channelIndex) => {
+  const currentChannels = State.get().channels;
+  currentChannels.forEach((_ch, channelIndex) => {
     State.updateChannel(channelIndex, {
       activePlaybackScheduledTime: null,
       activePlaybackDuration: null,
-      activePlaybackTrimStart: null,
-      activePlaybackTrimEnd: null,
+      activePlaybackReversed: null
     });
   });
 }
 
 export function start() {
   if (timer) return;
-  ctx.resume().then(() => { // Good practice to resume in a user gesture or ensure it's resumed
-    startTime = ctx.currentTime + 0.03;
-    playStartTime = startTime;
+  ctx.resume().then(() => {
+    internalPlayStartTime = ctx.currentTime + 0.05;
+    playStartTime = internalPlayStartTime;
     nextStep = 0;
     State.update({ playing: true, currentStep: 0 });
     scheduler();
     timer = setInterval(scheduler, tickMs);
   });
 }
-
-// You might need an explicit init function if you want to control
-// when initAudioEngineStateListener is called from app.js,
-// e.g., after the DOM is ready and initial state is loaded.
-// export function init() {
-//   initAudioEngineStateListener();
-// }
-// If so, call audioEngine.init() in your app.js
