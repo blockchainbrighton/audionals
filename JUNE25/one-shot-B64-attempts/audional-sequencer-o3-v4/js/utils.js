@@ -1,60 +1,96 @@
+/***********************************************************************
+ * utils.js - helpers for loading samples from local files, standard
+ *           HTTP URLs, or Bitcoin Ordinal IDs / pages.  Includes a
+ *           fallback that extracts base-64 audio hidden inside HTML or
+ *           JSON files so “mystery” assets still work.
+ ***********************************************************************/
+
 import { ctx } from './audioEngine.js';
+import { extractAudioAndImage } from './fileTypeHandler.js';
+
+/* ------------------------------------------------------------------ */
+/*  Ordinal helpers                                                    */
+/* ------------------------------------------------------------------ */
 
 /**
- * Extract an Ordinals inscription ID from any string.
- * Matches `<64+ hex chars>i<digits>` which is the standard format.
+ * Extract an inscription ID from any string.
+ *   Format:  <64-hex>i<index>   (e.g. 0123…abcd i0)
  */
-function extractOrdinalId(str) {
-  const match = str.match(/([0-9a-fA-F]{64,}i\d+)/);
-  return match ? match[1] : null;
+export function extractOrdinalId(str) {
+  const m = str.match(/([0-9a-fA-F]{64,}i\d+)/);
+  return m ? m[1] : null;
 }
 
 /**
- * Normalize a user‑supplied string (raw ID or URL) into a direct
- * `https://ordinals.com/content/{ID}` link if it looks like a Bitcoin Ordinal.
- * Otherwise, return the original URL unchanged.
+ * Normalise anything the user types (raw ID, ordinals.com URL, ord.io
+ * URL, etc.) into the canonical:
+ *     https://ordinals.com/content/{ID}
+ * If it doesn’t look like an Ordinal, return the original string so
+ * normal URL loading proceeds.
  */
-function resolveOrdinalURL(input) {
-  const idFromRaw = extractOrdinalId(input);
-  if (idFromRaw && !/^https?:\/\//.test(input)) {
-    // Raw ID only
-    return `https://ordinals.com/content/${idFromRaw}`;
+export function resolveOrdinalURL(input) {
+  const id = extractOrdinalId(input);
+  if (id && !/^https?:\/\//.test(input)) {
+    return `https://ordinals.com/content/${id}`;
   }
 
-  // Try to parse as URL
   try {
     const url = new URL(input);
-    // common hosts that embed inscription in the pathname
     if (/(?:ordinals\.com|ord\.io)$/i.test(url.hostname)) {
-      const id = extractOrdinalId(url.pathname);
-      if (id) return `https://ordinals.com/content/${id}`;
+      const idInPath = extractOrdinalId(url.pathname);
+      if (idInPath) return `https://ordinals.com/content/${idInPath}`;
     }
   } catch {
-    /* fallthrough: invalid URL */
+    /* malformed URL → just keep original */
   }
 
-  // Fallback – return untouched
   return input;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Main loader                                                        */
+/* ------------------------------------------------------------------ */
+
 /**
- * Load an audio sample from either a File object or a (possibly
- * Ordinals‑style) URL / ID string. Resolves to an AudioBuffer.
+ * Load a sample from:
+ *   • File object (drag-drop / file input)
+ *   • Normal HTTP/HTTPS URL
+ *   • Raw Ordinal ID or Ordinal page URL
+ *
+ * Returns an object:  { buffer: AudioBuffer, imageData: string|null }
+ * imageData (base-64) is populated only when we discovered an embedded
+ * image in an HTML/JSON wrapper.
  */
 export async function loadSample(source) {
   let arrayBuffer;
+  let imageData = null;
 
+  /* ---------- Local file ---------- */
   if (source instanceof File) {
     arrayBuffer = await source.arrayBuffer();
+
+  /* ---------- Remote fetch ---------- */
   } else {
-    // Treat as string / URL – first normalize
-    const resolved = resolveOrdinalURL(source.trim());
-    const res = await fetch(resolved);
-    if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${resolved}`);
-    arrayBuffer = await res.arrayBuffer();
+    const url      = resolveOrdinalURL(source.trim());
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} while fetching ${url}`);
+    }
+
+    /* Straight-up audio?  Great, we’re done. */
+    if ((response.headers.get('content-type') || '').startsWith('audio')) {
+      arrayBuffer = await response.arrayBuffer();
+
+    /* Otherwise try to sniff HTML / JSON wrappers. */
+    } else {
+      const alt = await extractAudioAndImage(response);
+      if (!alt) throw new Error('No audio stream found in file');
+      arrayBuffer = alt.audioArrayBuffer;
+      imageData   = alt.imageDataUrl;      // may still be null
+    }
   }
 
-  return await ctx.decodeAudioData(arrayBuffer);
+  const buffer = await ctx.decodeAudioData(arrayBuffer);
+  return { buffer, imageData };
 }
-
-export { resolveOrdinalURL };
