@@ -13,7 +13,12 @@ const makeChannel = i => ({
   solo: false,
   pitch: 1,
   trimStart: 0,
-  trimEnd: 1
+  trimEnd: 1,
+  // Add these for waveform playhead animation:
+  activePlaybackScheduledTime: null, // audioContext.currentTime when last sound started
+  activePlaybackDuration: null,      // duration of the last sound segment
+  activePlaybackTrimStart: null,     // trimStart (0-1) at time of playback
+  activePlaybackTrimEnd: null,       // trimEnd (0-1) at time of playback
 });
 
 // ---------- INIT ----------
@@ -42,14 +47,11 @@ document.getElementById('save-btn').addEventListener('click', () => {
   a.click();
 });
 
-// ---------- LOAD ----------
-document.getElementById('load-btn').addEventListener('click', () => {
-  document.getElementById('load-input').click();
-});
-
+/* ---------- LOAD project ---------- */
 document.getElementById('load-input').addEventListener('change', async e => {
   const f = e.target.files[0];
   if (!f) return;
+
   try {
     const obj = JSON.parse(await f.text());
     if (Array.isArray(obj.channels)) {
@@ -57,12 +59,12 @@ document.getElementById('load-input').addEventListener('change', async e => {
     }
     State.update(obj);
 
-    // After state applied, asynchronously fetch buffers for channels with URLs
+    /* Re-fetch any web/Ordinal samples ----------------------------- */
     obj.channels?.forEach((ch, idx) => {
       if (ch.src && typeof ch.src === 'string') {
         loadSample(ch.src)
-          .then(buf => State.updateChannel(idx, { buffer: buf }))
-          .catch(() => console.warn('Failed to reload sample', ch.src));
+          .then(({ buffer }) => State.updateChannel(idx, { buffer }))
+          .catch(() => console.warn('Reload failed:', ch.src));
       }
     });
   } catch {
