@@ -27,23 +27,49 @@ export function resolveOrdinalURL(raw) {
 
 export async function loadSample(source) {
   let arrayBuffer, imageData = null;
+  let url = typeof source === "string" ? source : null;
+
+  // Logging: indicate the source being loaded
+  console.log("[loadSample] Loading sample from:", source);
 
   if (source instanceof File) {
     arrayBuffer = await source.arrayBuffer();
+    console.log("[loadSample] Loaded from local File, size:", arrayBuffer.byteLength);
   } else {
-    const url  = resolveOrdinalURL(String(source).trim());
+    if (!url) url = String(source).trim();
     const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status} – ${url}`);
+    const ct = resp.headers.get('content-type') || '';
+    console.log("[loadSample] HTTP Content-Type:", ct);
 
-    if ((resp.headers.get('content-type') || '').startsWith('audio')) {
+    // Try the original method first (base64, HTML, JSON, etc)
+    if (
+      ct.startsWith('audio/') ||
+      ct === 'application/octet-stream' ||
+      ct === '' ||
+      ct.startsWith('video/') // Some servers may serve Opus as video/webm
+    ) {
+      // "Probably raw audio or video file; try as-is"
       arrayBuffer = await resp.arrayBuffer();
+      console.log(`[loadSample] Fetched arrayBuffer: ${arrayBuffer.byteLength} bytes, attempting to decode as audio`);
     } else {
+      // Try to extract base64 or other embedded audio
       const alt = await extractAudioAndImage(resp);
-      if (!alt) throw new Error('No audio stream found in file');
-      ({ audioArrayBuffer: arrayBuffer, imageDataUrl: imageData } = alt);
+      if (alt && alt.audioArrayBuffer) {
+        arrayBuffer = alt.audioArrayBuffer;
+        imageData = alt.imageDataUrl;
+        console.log(`[loadSample] Extracted base64 audio from file, length: ${arrayBuffer.byteLength} bytes`);
+      } else {
+        throw new Error(`No audio stream found in file (Content-Type: ${ct})`);
+      }
     }
   }
 
-  const buffer = await ctx.decodeAudioData(arrayBuffer);
-  return { buffer, imageData };          // ← ALWAYS an object
+  try {
+    const buffer = await ctx.decodeAudioData(arrayBuffer);
+    console.log("[loadSample] Successfully decoded audio buffer:", buffer);
+    return { buffer, imageData };
+  } catch (err) {
+    console.error("[loadSample] decodeAudioData failed. Buffer byteLength:", arrayBuffer?.byteLength, err);
+    throw new Error("decodeAudioData failed: " + err.message);
+  }
 }
