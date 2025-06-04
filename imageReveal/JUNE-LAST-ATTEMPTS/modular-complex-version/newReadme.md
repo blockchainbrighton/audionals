@@ -1,3 +1,4 @@
+
 # Audional Image FX Playground
 
 *A fully‑modular, programmable playground for rapid prototyping of layered, time‑based image effects.*
@@ -15,17 +16,18 @@
 7. [Progressive Reveal Strategies](#progressive-reveal-strategies)
 8. [Effect Reference](#effect-reference)
 9. [Timeline Automation API](#timeline-automation-api)
-10. [Advanced Developer Notes](#advanced-developer-notes)
-11. [Tips for Power Users](#tips-for-power-users)
-12. [FAQ](#faq)
-13. [Contributing](#contributing)
-14. [License](#license)
+10. [Automating Effect Stack Order](#automating-effect-stack-order)
+11. [Advanced Developer Notes](#advanced-developer-notes)
+12. [Tips for Power Users](#tips-for-power-users)
+13. [FAQ](#faq)
+14. [Contributing](#contributing)
+15. [License](#license)
 
 ---
 
 ## Features
 
-* **Unlimited effect layering** in any order
+* **Unlimited effect layering** in any order—dynamically adjustable
 * **Animate / automate parameters** over bars, beats, or seconds
 * **Visual or code‑based scene programming** (exposed API)
 * **Live‑loop testing** of any single effect or combination
@@ -39,9 +41,10 @@
 1. **Open `index.html` in a browser.**
 2. Click the **test buttons** to demo individual effects or stacks.
 3. Use the **timeline editor** (bottom panel) to program complex sequences:
-   • Add lanes → choose *effect / parameter* → set *from / to*, *duration*, and *easing*.
-   • Click the image to run / pause the timeline.
-   • **Save** or **load** scene automation at any time.
+
+   * Add lanes → choose *effect / parameter* → set *from / to*, *duration*, and *easing*.
+   * Click the image to run / pause the timeline.
+   * **Save** or **load** scene automation at any time.
 
 ---
 
@@ -71,39 +74,26 @@
 
 ## Effect Defaults (source code)
 
-> **Important:** because `active` is `false` by default, an effect never shows until you explicitly enable it in a timeline.
+> **Important:** All effects start as inactive by default (`active: false`). Effects will only render if you activate them explicitly in your timeline.
+
+<details>
+<summary>Show Defaults</summary>
 
 ```js
-// === Effects / Defaults ===
 export const effectDefaults = {
   fade:      { progress: 0, direction: 1, speed: 1, paused: false, active: false },
   scanLines: { progress: 0, direction: 1, intensity: 0.4, speed: 1.5, lineWidth: 3, spacing: 6, verticalShift: 0, paused: false, active: false },
   filmGrain: { intensity: 0.7, size: 0.01, speed: 0.5, density: 1, dynamicRange: 1, lastUpdate: 0, noiseZ: 0, active: false },
   blur:      { progress: 0, direction: 1, radius: 0, paused: false, active: false },
   vignette:  { progress: 0, direction: 1, intensity: 0, size: 0.45, paused: false, active: false },
-
-  glitch: {
-    intensity: 0.01, rainbow: 0, speed: 0, angle: 0, slices: 1,
-    palette: 'auto', spacing: 0, mirror: true, active: false
-  },
-
+  glitch:    { intensity: 0.01, rainbow: 0, speed: 0, angle: 0, slices: 1, palette: 'auto', spacing: 0, mirror: true, active: false },
   chromaShift: { progress: 0, direction: 1, intensity: 0, speed: 1, angle: 0, paused: false, active: false },
-
-  colourSweep: {
-    progress: 0, direction: 1, randomize: 0, color: null, mode: 'reveal',
-    edgeSoftness: 0, brightnessOffset: 0, cycleDurationBars: 4,
-    paused: false, active: false
-  },
-
-  pixelate: {
-    progress: 0, direction: 1, pixelSize: 1, speed: 1, paused: false, active: false,
-    syncMode: 'beat', bpm: 120, timeSignature: [4, 4],
-    behavior: 'increase', pixelStages: [2, 4, 8, 16, 32, 16, 8, 4],
-    minPixelSize: 1, maxPixelSize: 64,
-    _lastSyncTime: 0, _currentStageIndex: 0, _lastTick: -1,
-  }
+  colourSweep: { progress: 0, direction: 1, randomize: 0, color: null, mode: 'reveal', edgeSoftness: 0, brightnessOffset: 0, cycleDurationBars: 4, paused: false, active: false },
+  pixelate:   { progress: 0, direction: 1, pixelSize: 1, speed: 1, paused: false, active: false, syncMode: 'beat', bpm: 120, timeSignature: [4, 4], behavior: 'increase', pixelStages: [2, 4, 8, 16, 32, 16, 8, 4], minPixelSize: 1, maxPixelSize: 64, _lastSyncTime: 0, _currentStageIndex: 0, _lastTick: -1 }
 };
 ```
+
+</details>
 
 ---
 
@@ -119,9 +109,7 @@ When an effect is scheduled to start **after** playback begins, keep it disabled
    fxAPI.schedule({ effect: 'glitch', param: 'active', from: 1, to: 0, start: 12, end: 12, unit: 'bar' });
    ```
 3. **Boolean interpolation**: the engine treats `false` as `0`, `true` as `1`.
-4. **Animate other parameters only while `active` is 1** (see full example below).
-
-*Full example omitted here for brevity—your original code block remains correct.*
+4. **Animate other parameters only while `active` is 1**.
 
 ---
 
@@ -339,15 +327,6 @@ The **pixelate** effect supports rhythmic sync, caching, and manual control.
 |           | `direction`     | int      | -1/1                                               | For `progress`-driven changes.              |
 |           | `speed`         | float    | > 0                                                | General multiplier.                         |
 
-**Helpers**
-
-```js
-preRenderPixelatedVersions(srcCtx, params, width, height [, customSizes])
-generatePixelatedImage(srcCtx, targetPixelSize, width, height)
-clearPixelateCache()
-```
-
-Use these to cache common sizes or produce static thumbnails.
 
 ---
 
@@ -364,6 +343,8 @@ fxAPI.schedule({
 });
 ```
 
+*See full example scene below.*
+
 ### Example scene
 
 ```js
@@ -373,6 +354,50 @@ fxAPI.schedule({ effect:"pixelate", param:"pixelSize", from:240, to:1,   start:0
 fxAPI.schedule({ effect:"blur",     param:"radius",    from:32,  to:0,   start:0,  end:16, unit:"bar" });
 fxAPI.schedule({ effect:"glitch",   param:"intensity", from:0,   to:0.8, start:8,  end:10, unit:"bar", easing:"easeInOut" });
 ```
+
+---
+
+## **Automating Effect Stack Order**
+
+> **New:** You can now *dynamically change the visual stacking order* (render priority) of effects at any point in your timeline.
+
+### Why does order matter?
+
+Effects are composited in a stack. For example, "filmGrain over blur" looks very different than "blur over filmGrain". Dramatic visual changes can be achieved simply by reordering effects in real time.
+
+### How to automate effect order:
+
+* Use the special timeline param: **`moveToTop`**
+* This will instantly move the specified effect to the top of the stack at the specified bar/beat/time.
+
+#### Example: Put `filmGrain` above `blur` at bar 8
+
+```js
+fxAPI.schedule({ effect: "filmGrain", param: "moveToTop", from: 0, to: 1, start: 8, end: 8.01, unit: "bar" });
+```
+
+* At bar 8, `filmGrain` will move on top of all other effects.
+* You can combine this with parameter automation for dramatic transitions.
+
+#### Timeline Lane Example
+
+| Effect    | Param     | From | To  | Start | End  | Easing |
+| --------- | --------- | ---- | --- | ----- | ---- | ------ |
+| fade      | progress  | 0    | 1   | 0     | 1    | linear |
+| filmGrain | intensity | 1.5  | 1.5 | 0     | 16   | linear |
+| blur      | radius    | 0    | 18  | 4     | 6    | linear |
+| blur      | radius    | 18   | 0   | 6     | 8    | linear |
+| filmGrain | moveToTop | 0    | 1   | 8     | 8.01 | linear |
+| blur      | radius    | 0    | 18  | 12    | 14   | linear |
+| blur      | radius    | 18   | 0   | 14    | 16   | linear |
+
+*This will show blur composited over grain at first, then grain will move on top at bar 8.*
+
+#### Notes
+
+* **`moveToTop`** works with any effect. You can chain multiple moves for even more creative order changes.
+* For UI: The Timeline Editor exposes "moveToTop" as a special parameter for each effect. You can program this visually, not just in code.
+* The move is **instant**—the stacking order persists until changed again.
 
 ---
 
@@ -386,13 +411,14 @@ fxAPI.schedule({ effect:"glitch",   param:"intensity", from:0,   to:0.8, start:8
   ```
 * **Rapid prototyping**: edit `effectTimeline` then call `runEffectTimeline()`.
 * **Music sync**: favour `bar` / `beat` units; store timelines as JSON.
+* **Effect order is persistent:** once you move an effect, it remains at the top until another order change occurs.
 * **Hot-swap assets**: reload images or reset the system without page refresh.
 
 ---
 
 ## Tips for Power Users
 
-* **Chain order matters** (`enabledOrder`).
+* **Chain order matters**—now programmable in real time via timeline or code.
 * **Everything is automatable**: UI for speed, code for generative control.
 * **Export timelines**: JSON saved to localStorage – copy it for reuse.
 * **Interactive demoing**: toggle effects live while composing.
@@ -404,8 +430,8 @@ fxAPI.schedule({ effect:"glitch",   param:"intensity", from:0,   to:0.8, start:8
 **Can I automate multiple parameters of one effect?**
 Yes – add multiple lanes (e.g. `blur.radius` **and** `blur.progress`).
 
-**Can I sync effects to musical cues?**
-Yes – use `unit: "bar"` or `"beat"` for BPM-locked timing.
+**Can I automate effect stacking order?**
+Yes – use the `moveToTop` parameter in your timeline or code (see above).
 
 **How do I reset everything?**
 Press **Clear Timeline** or call `fxAPI.clearAutomation()`.
@@ -427,4 +453,6 @@ To add a new effect, extend **`effectDefaults`** and **`effectMap`**, then updat
 
 > **Made for creative coders, VJs, audio/visual hackers, and generative artists.**
 
-```
+---
+
+**This README now documents the new programmable order feature—feel free to adjust the explanatory order or add visuals as needed!**

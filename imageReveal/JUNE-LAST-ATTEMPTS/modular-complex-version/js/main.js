@@ -2,7 +2,7 @@
 
 import * as timelines from './timelinesCombined.js';
 import { timelineFunctions } from './timelinesCombined.js';
-import { utils, effectDefaults, effectKeys, cloneDefaults, effectParams, effectMap } from './effects.js';
+import { utils, effectDefaults, effectKeys, cloneDefaults, effectParams, effectMap, moveEffectToTop, sortEnabledOrder } from './effects.js';
 
 const images = window.images ?? [], log = (...a) => console.log('[FXDEMO]', ...a);
 let bpm = window.fxInitialBPM ?? 120, beatsPerBar = window.fxInitialBeatsPerBar ?? 4,
@@ -72,6 +72,17 @@ function processAutomations(currentSec) {
     let t = (currentSec - a.startSec) / (a.endSec - a.startSec);
     t = Math.min(Math.max(t >= 1 ? (a.done = true, 1) : t, 0), 1);
     if (a.easing === 'easeInOut') t = utils.easeInOut(t);
+
+    // ---- Special handler for moveToTop param ----
+    if (a.param === 'moveToTop') {
+      if (a.to) { // only move when to==1/truthy
+        moveEffectToTop(effects, enabledOrder, a.effect);
+        sortEnabledOrder(effects, enabledOrder);
+      }
+      active = true;
+      continue;
+    }
+    // ---- Normal automation ----
     (effects[a.effect] ??= cloneDefaults(a.effect))[a.param] = a.from + (a.to - a.from) * t;
     active = true;
   }
@@ -301,8 +312,10 @@ function createEffectButtons() {
       if (e.button === 1 || e.ctrlKey) return;
       const idx = enabledOrder.indexOf(fx);
       if (idx !== -1) {
+        // Instead of disabling, move to top (last in array = top render order)
         enabledOrder.splice(idx, 1);
-        effects[fx].active = false;
+        enabledOrder.push(fx);
+        effects[fx].active = true;
       } else {
         enabledOrder.push(fx);
         effects[fx] = cloneDefaults(fx);
