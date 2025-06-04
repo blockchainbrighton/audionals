@@ -1,14 +1,32 @@
 // js/state.js
+
+// Helper function to generate a default project name
+function getDefaultProjectName() {
+  const now = new Date();
+  const year = now.getFullYear().toString().slice(-2); // YY
+  const month = (now.getMonth() + 1).toString().padStart(2, '0'); // MM
+  const day = now.getDate().toString().padStart(2, '0'); // DD
+  const hours = now.getHours().toString().padStart(2, '0'); // HH
+  const minutes = now.getMinutes().toString().padStart(2, '0'); // MM
+  // const seconds = now.getSeconds().toString().padStart(2, '0'); // SS (optional)
+  return `Audional Composition ${year}${month}${day}-${hours}${minutes}`;
+}
+
 const State = (() => {
   const listeners = new Set();
-  let state = { bpm: 120, channels: [], playing: false, currentStep: 0 };
+  let state = { 
+    projectName: getDefaultProjectName(), // Initialize with default name
+    bpm: 120, 
+    channels: [], 
+    playing: false, 
+    currentStep: 0 
+  };
   
-  // Store the previous state to pass to listeners
-  let prevState = { ...state }; // Initialize prevState
+  let prevState = { ...state }; 
 
   const emit = () => {
-    listeners.forEach(l => l(state, prevState)); // Pass current and previous state
-    prevState = { ...state }; // Update prevState for the next emit
+    listeners.forEach(l => l(state, prevState));
+    prevState = { ...state }; 
   };
 
   return {
@@ -18,20 +36,17 @@ const State = (() => {
       return () => listeners.delete(fn);
     },
     update: (patch) => {
-      // prevState is already set from the last emit or initialization
       state = { ...state, ...patch };
       emit();
     },
     updateChannel: (i, patch) => {
-      // prevState is already set
-      const newChannels = [...state.channels]; // Create a new array for channels
+      const newChannels = [...state.channels]; 
       newChannels[i] = { ...state.channels[i], ...patch };
-      state = { ...state, channels: newChannels }; // Update state with the new channels array
+      state = { ...state, channels: newChannels }; 
       emit();
     },
     addChannel: (ch) => {
-      // prevState is already set
-      state = { ...state, channels: [...state.channels, ch] }; // Create new channels array
+      state = { ...state, channels: [...state.channels, ch] }; 
       emit();
     }
   };

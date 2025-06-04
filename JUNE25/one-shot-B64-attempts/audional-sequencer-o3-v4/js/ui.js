@@ -8,7 +8,7 @@ import { loadSample, resolveOrdinalURL } from './utils.js';
 import { audionalIDs } from './samples.js';
 import { ctx } from './audioEngine.js';
 import { renderWaveformToCanvas } from './waveformDisplay.js';
-import { createReversedBuffer } from './app.js'; // Import helper from app.js
+import { createReversedBuffer } from './app.js';
 
 
 const previewPlayheads = new Map(); 
@@ -16,6 +16,7 @@ const mainTransportPlayheadRatios = new Map();
 
 const container = document.getElementById('channels-container');
 const template  = document.getElementById('channel-template');
+let projectNameInput = null; // Will be assigned in init()
 
 function formatHz(value) {
     const val = parseFloat(value);
@@ -24,8 +25,36 @@ function formatHz(value) {
     return Math.round(val).toString();
 }
 
+// Debounce function
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
+
+function renderGlobalUI(state, prevState) {
+    // Project Name
+    if (projectNameInput && (!prevState || state.projectName !== prevState.projectName)) {
+        projectNameInput.value = state.projectName;
+        document.title = state.projectName + " - Audional Sequencer";
+    }
+    // BPM
+    const bpmInput = document.getElementById('bpm-input');
+    if (bpmInput && (!prevState || state.bpm !== prevState.bpm)) {
+        bpmInput.value = state.bpm;
+    }
+}
+
 function render(state, prevState) {
+  renderGlobalUI(state, prevState); // Render global parts like project name
+
+  // Channel rendering logic
   if (!prevState || state.channels.length !== prevState.channels.length) {
+    // Full re-render of channels if count changes
     while (container.children.length > state.channels.length) {
         const oldChild = container.lastChild;
         if (oldChild && oldChild.dataset.channelIndex) {
@@ -46,23 +75,14 @@ function render(state, prevState) {
         updateChannelUI(el, ch, state.currentStep, i);
     });
   } else {
+    // Selective update for existing channels
     state.channels.forEach((ch, i) => {
         const el = container.children[i];
         if (el) {
             const oldCh = prevState.channels[i];
-            // More granular check: update only if relevant parts changed
             if (ch !== oldCh || 
                 state.currentStep !== prevState.currentStep || 
-                state.playing !== prevState.playing ||
-                // Check specific visual properties
-                ch.buffer !== oldCh.buffer || 
-                ch.reversedBuffer !== oldCh.reversedBuffer ||
-                ch.reverse !== oldCh.reverse ||
-                ch.trimStart !== oldCh.trimStart ||
-                ch.trimEnd !== oldCh.trimEnd ||
-                ch.fadeInTime !== oldCh.fadeInTime ||
-                ch.fadeOutTime !== oldCh.fadeOutTime
-            ) {
+                state.playing !== prevState.playing) {
                  updateChannelUI(el, ch, state.currentStep, i);
             }
         }
@@ -115,7 +135,7 @@ function wireChannel(el, idx) {
       const currentChannelState = State.get().channels[idx];
       const reversedBuffer = currentChannelState.reverse && buffer ? await createReversedBuffer(buffer) : null;
       State.updateChannel(idx, { buffer, reversedBuffer, src: resolvedUrl, trimStart: 0, trimEnd: 1, activePlaybackScheduledTime: null });
-      urlInput.value = resolvedUrl; // Update input with resolved URL
+      urlInput.value = resolvedUrl;
     } catch (err) { alert(`Failed to load sample: ${err.message || err}`); console.error(err); }
   }
 
@@ -140,8 +160,6 @@ function wireChannel(el, idx) {
 
   async function auditionSampleLocal(bufferToPlay, startOffsetSeconds, durationSeconds) {
     if (!bufferToPlay || durationSeconds <= 0) return;
-    // For audition, we won't apply all complex FX, just play the raw (or reversed raw) segment.
-    // If you want FX on audition, this part needs to mirror audioEngine's node chain.
     const auditionCtx = new (window.AudioContext || window.webkitAudioContext)();
     const src = auditionCtx.createBufferSource();
     src.buffer = bufferToPlay;
@@ -161,40 +179,36 @@ function wireChannel(el, idx) {
     const bufferToUse = ch.reverse && ch.reversedBuffer ? ch.reversedBuffer : ch.buffer;
     if (!bufferToUse) return;
 
-    const bufferDuration = bufferToUse.duration; // Duration of the buffer being auditioned
-    const { trimStart, trimEnd } = ch; // These are always relative to forward buffer
+    const bufferDuration = bufferToUse.duration; 
+    const { trimStart, trimEnd } = ch; 
 
     auditionTimeout = setTimeout(() => {
       longClickFired = true;
       let playStartRatio, durationToPlaySec;
+      let previewPosOnFwd = trimStart + clickXRatio * (trimEnd - trimStart); // Default for fwd
 
       if (ch.reverse) {
-        // Click on forward waveform, map to reversed segment
-        const clickOnForwardMappedToRevEnd = 1.0 - (trimStart + clickXRatio * (trimEnd - trimStart));
-        const segmentEndInRev = 1.0 - trimStart; // Corresponds to trimStart on forward
-        const segmentStartInRev = 1.0 - trimEnd;  // Corresponds to trimEnd on forward
-
-        playStartRatio = Math.max(segmentStartInRev, Math.min(segmentEndInRev, clickOnForwardMappedToRevEnd));
-        durationToPlaySec = (segmentEndInRev - playStartRatio) * bufferDuration;
-
-        previewPlayheads.set(idx, trimStart + clickXRatio * (trimEnd - trimStart)); // Preview pos on fwd waveform
+        const clickOnForwardMappedToRevBufferStart = (1.0 - trimEnd) + clickXRatio * (trimEnd - trimStart);
+        playStartRatio = clickOnForwardMappedToRevBufferStart;
+        durationToPlaySec = ((1.0 - trimStart) - playStartRatio) * bufferDuration;
+        // Preview position on fwd waveform is where user clicked within selection
       } else {
-        playStartRatio = Math.max(trimStart, Math.min(trimEnd, trimStart + clickXRatio * (trimEnd - trimStart) ));
+        playStartRatio = trimStart + clickXRatio * (trimEnd - trimStart);
         durationToPlaySec = (trimEnd - playStartRatio) * bufferDuration;
-        previewPlayheads.set(idx, playStartRatio);
       }
+      previewPlayheads.set(idx, previewPosOnFwd);
       
       if (durationToPlaySec > 0) {
         const startOffsetSec = playStartRatio * bufferDuration;
-        renderWaveformToCanvas(canvas, ch.buffer, trimStart, trimEnd, { // Always draw fwd buffer
+        renderWaveformToCanvas(canvas, ch.buffer, trimStart, trimEnd, { 
           previewPlayheadRatio: previewPlayheads.get(idx),
           mainPlayheadRatio: mainTransportPlayheadRatios.get(idx),
           fadeInTime: ch.fadeInTime, fadeOutTime: ch.fadeOutTime,
-          isReversed: ch.reverse // Pass reverse state for playhead direction logic
+          isReversed: ch.reverse 
         });
         auditionSampleLocal(bufferToUse, startOffsetSec, durationToPlaySec);
         setTimeout(() => {
-          if (previewPlayheads.get(idx) === (ch.reverse ? (trimStart + clickXRatio * (trimEnd - trimStart)) : playStartRatio) ) {
+          if (previewPlayheads.get(idx) === previewPosOnFwd ) {
             previewPlayheads.delete(idx);
             const currentChState = State.get().channels[idx];
             if (currentChState) {
@@ -224,13 +238,13 @@ function wireChannel(el, idx) {
         let previewPosOnFwdWaveform;
 
         if (ch.reverse) {
-            playStartOffsetSec = (1.0 - trimEnd) * bufferDuration; // Start of segment in reversed buffer
-            previewPosOnFwdWaveform = trimEnd; // Preview appears at the "end" of selection for reverse
+            playStartOffsetSec = (1.0 - trimEnd) * bufferDuration; 
+            previewPosOnFwdWaveform = trimEnd; 
         } else {
             playStartOffsetSec = trimStart * bufferDuration;
             previewPosOnFwdWaveform = trimStart;
         }
-        durationToPlaySec = (trimEnd - trimStart) * bufferDuration; // Duration is same
+        durationToPlaySec = (trimEnd - trimStart) * bufferDuration;
         
         if (durationToPlaySec > 0) {
             previewPlayheads.set(idx, previewPosOnFwdWaveform);
@@ -285,34 +299,29 @@ function wireChannel(el, idx) {
     });
   });
 
-  // Sample FX Controls Wiring
   const fxControls = el.querySelector('.sample-fx-controls');
-  const wireFxControl = (sliderClass, outputClass, stateProp, parser = parseFloat, formatter) => {
+  const wireFxControl = (sliderClass, outputClass, stateProp, parser = parseFloat) => {
     const slider = fxControls.querySelector(`.${sliderClass}`);
-    const output = outputClass ? fxControls.querySelector(`.${outputClass}`) : null;
     slider.addEventListener('input', e => {
       const value = parser(e.target.value);
       State.updateChannel(idx, { [stateProp]: value });
-      // No need to update output here, updateChannelUI will handle it via state subscription
     });
   };
 
   wireFxControl('pitch-slider', 'pitch-value', 'pitch', parseInt);
-  wireFxControl('fade-in-slider', 'fade-in-value', 'fadeInTime', parseFloat, v => v.toFixed(2));
-  wireFxControl('fade-out-slider', 'fade-out-value', 'fadeOutTime', parseFloat, v => v.toFixed(2));
-  wireFxControl('hpf-cutoff-slider', 'hpf-cutoff-value', 'hpfCutoff', parseFloat, formatHz);
-  wireFxControl('lpf-cutoff-slider', 'lpf-cutoff-value', 'lpfCutoff', parseFloat, formatHz);
-  wireFxControl('eq-low-slider', 'eq-low-value', 'eqLowGain', parseFloat);
-  wireFxControl('eq-mid-slider', 'eq-mid-value', 'eqMidGain', parseFloat);
-  wireFxControl('eq-high-slider', 'eq-high-value', 'eqHighGain', parseFloat);
+  wireFxControl('fade-in-slider', 'fade-in-value', 'fadeInTime');
+  wireFxControl('fade-out-slider', 'fade-out-value', 'fadeOutTime');
+  wireFxControl('hpf-cutoff-slider', 'hpf-cutoff-value', 'hpfCutoff');
+  wireFxControl('lpf-cutoff-slider', 'lpf-cutoff-value', 'lpfCutoff');
+  wireFxControl('eq-low-slider', 'eq-low-value', 'eqLowGain');
+  wireFxControl('eq-mid-slider', 'eq-mid-value', 'eqMidGain');
+  wireFxControl('eq-high-slider', 'eq-high-value', 'eqHighGain');
 
-  // Reverse Button
   const reverseBtn = fxControls.querySelector('.reverse-btn');
   reverseBtn.addEventListener('click', async () => {
     const currentChannel = State.get().channels[idx];
     const newReverseState = !currentChannel.reverse;
     let reversedBuffer = currentChannel.reversedBuffer;
-
     if (newReverseState && currentChannel.buffer && !currentChannel.reversedBuffer) {
         reversedBuffer = await createReversedBuffer(currentChannel.buffer);
     }
@@ -322,26 +331,19 @@ function wireChannel(el, idx) {
   el.querySelector('.collapse-btn').addEventListener('click', () => el.classList.toggle('collapsed'));
 }
 
-
 function updateChannelUI(el, ch, playheadStep, idx) {
   el.querySelector('.channel-name').value = ch.name;
   el.querySelector('.channel-fader-bank .mute-btn').classList.toggle('active', ch.mute);
   el.querySelector('.channel-fader-bank .solo-btn').classList.toggle('active', ch.solo);
   el.querySelector('.volume-fader').value = ch.volume;
 
-  // Use the forward buffer for display, even if playing reversed.
-  // The playhead logic in animateTransport will handle visual direction.
   renderWaveformToCanvas(
-    el.querySelector('.waveform'),
-    ch.buffer, // Always display the forward buffer
-    ch.trimStart,
-    ch.trimEnd,
+    el.querySelector('.waveform'), ch.buffer, ch.trimStart, ch.trimEnd,
     { 
       mainPlayheadRatio: mainTransportPlayheadRatios.get(idx),
       previewPlayheadRatio: previewPlayheads.get(idx),
-      fadeInTime: ch.fadeInTime, // Pass fade times for visual representation
-      fadeOutTime: ch.fadeOutTime,
-      isReversed: ch.reverse // Let waveformDisplay know if audio is reversed for playhead
+      fadeInTime: ch.fadeInTime, fadeOutTime: ch.fadeOutTime,
+      isReversed: ch.reverse 
     }
   );
   el.querySelector('.handle-start').style.left = `calc(${ch.trimStart * 100}% - 4px)`;
@@ -354,10 +356,8 @@ function updateChannelUI(el, ch, playheadStep, idx) {
 
   const fxControls = el.querySelector('.sample-fx-controls');
   const updateFxControlDisplay = (sliderClass, outputClass, value, formatter) => {
-    const slider = fxControls.querySelector(`.${sliderClass}`);
-    if (slider) slider.value = value; // Check if slider exists
-    const outputEl = outputClass ? fxControls.querySelector(`.${outputClass}`) : null;
-    if (outputEl) outputEl.textContent = formatter ? formatter(value) : value;
+    fxControls.querySelector(`.${sliderClass}`).value = value;
+    if (outputClass) fxControls.querySelector(`.${outputClass}`).textContent = formatter ? formatter(value) : value;
   };
 
   updateFxControlDisplay('pitch-slider', 'pitch-value', ch.pitch);
@@ -368,7 +368,6 @@ function updateChannelUI(el, ch, playheadStep, idx) {
   updateFxControlDisplay('eq-low-slider', 'eq-low-value', ch.eqLowGain);
   updateFxControlDisplay('eq-mid-slider', 'eq-mid-value', ch.eqMidGain);
   updateFxControlDisplay('eq-high-slider', 'eq-high-value', ch.eqHighGain);
-  
   fxControls.querySelector('.reverse-btn').classList.toggle('active', ch.reverse);
 }
 
@@ -382,54 +381,43 @@ function animateTransport() {
     if (!el) return; 
     
     const canvas = el.querySelector('.waveform');
-    let currentMainPlayheadRatio = null; // This will be ratio on the *forward* buffer
+    let currentMainPlayheadRatio = null;
 
     if (playing && ch.activePlaybackScheduledTime != null && ch.activePlaybackDuration > 0) {
       const elapsedTime = now - ch.activePlaybackScheduledTime;
       if (elapsedTime >= 0 && elapsedTime < ch.activePlaybackDuration) {
         const progressInSegment = elapsedTime / ch.activePlaybackDuration;
-        const segmentStartFwd = ch.activePlaybackTrimStart; // Trim start on fwd buffer
-        const segmentEndFwd = ch.activePlaybackTrimEnd;     // Trim end on fwd buffer
+        const segmentStartFwd = ch.activePlaybackTrimStart; 
+        const segmentEndFwd = ch.activePlaybackTrimEnd;    
         const segmentDurationFwd = segmentEndFwd - segmentStartFwd;
-
         if (segmentDurationFwd > 0) {
-          if (ch.activePlaybackReversed) { // If the sound playing is reversed
-            currentMainPlayheadRatio = segmentEndFwd - (progressInSegment * segmentDurationFwd);
-          } else {
-            currentMainPlayheadRatio = segmentStartFwd + (progressInSegment * segmentDurationFwd);
-          }
+          currentMainPlayheadRatio = ch.activePlaybackReversed ? 
+            (segmentEndFwd - (progressInSegment * segmentDurationFwd)) : 
+            (segmentStartFwd + (progressInSegment * segmentDurationFwd));
         }
       }
     }
     
     const prevRatio = mainTransportPlayheadRatios.get(idx);
     let needsRedraw = false;
-
     if (currentMainPlayheadRatio === null) {
         if (prevRatio !== undefined && prevRatio !== null) { 
-            mainTransportPlayheadRatios.delete(idx);
-            needsRedraw = true;
+            mainTransportPlayheadRatios.delete(idx); needsRedraw = true;
         }
     } else {
-        // Add a small tolerance for floating point comparisons
         if (prevRatio === undefined || Math.abs((prevRatio || 0) - currentMainPlayheadRatio) > 0.0001) {
-            mainTransportPlayheadRatios.set(idx, currentMainPlayheadRatio);
-            needsRedraw = true;
+            mainTransportPlayheadRatios.set(idx, currentMainPlayheadRatio); needsRedraw = true;
         }
     }
     
     if (needsRedraw && canvas.clientWidth > 0 && canvas.clientHeight > 0) {
         renderWaveformToCanvas(
-            canvas,
-            ch.buffer, // Always display forward buffer
-            ch.trimStart,
-            ch.trimEnd,
+            canvas, ch.buffer, ch.trimStart, ch.trimEnd,
             { 
               mainPlayheadRatio: currentMainPlayheadRatio,
               previewPlayheadRatio: previewPlayheads.get(idx),
-              fadeInTime: ch.fadeInTime, 
-              fadeOutTime: ch.fadeOutTime,
-              isReversed: ch.activePlaybackReversed // Use the reverse state at time of playback for playhead
+              fadeInTime: ch.fadeInTime, fadeOutTime: ch.fadeOutTime,
+              isReversed: ch.activePlaybackReversed 
             }
         );
     }
@@ -438,8 +426,13 @@ function animateTransport() {
 }
 
 export function init() {
+  projectNameInput = document.getElementById('project-name-input');
+  projectNameInput.addEventListener('input', debounce(e => {
+    State.update({ projectName: e.target.value || "Untitled Audional Composition" });
+  }, 300)); // Debounce updates to avoid excessive state changes while typing
+
   State.subscribe(render); 
   requestAnimationFrame(animateTransport); 
   document.getElementById('load-btn').addEventListener('click', () => document.getElementById('load-input').click());
-  render(State.get(), null);
+  render(State.get(), null); // Initial render with current state
 }

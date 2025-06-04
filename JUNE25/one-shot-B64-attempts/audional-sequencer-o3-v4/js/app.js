@@ -8,40 +8,34 @@ import { loadSample } from './utils.js';
 const makeChannel = i => ({
   name: `Channel ${i + 1}`,
   steps: Array(64).fill(false),
-  buffer: null,         // Original AudioBuffer
-  reversedBuffer: null, // Reversed AudioBuffer (created on demand)
-  src: null,            // URL or Ordinal ID of the sample
-  volume: 0.8,          // Main channel volume
+  buffer: null,
+  reversedBuffer: null,
+  src: null,
+  volume: 0.8,
   mute: false,
   solo: false,
-  pitch: 0,             // Pitch shift in semitones (0 is original)
-  reverse: false,       // Play sample in reverse
-  trimStart: 0,         // 0.0 to 1.0 (relative to forward buffer)
-  trimEnd: 1,           // 0.0 to 1.0 (relative to forward buffer)
-
-  // Audio Effect Parameters
+  pitch: 0,
+  reverse: false,
+  trimStart: 0,
+  trimEnd: 1,
   hpfCutoff: 20,
   hpfQ: 0.707,
   lpfCutoff: 20000,
   lpfQ: 0.707,
-  
   eqLowGain: 0,
   eqMidGain: 0,
   eqHighGain: 0,
-
   fadeInTime: 0,
   fadeOutTime: 0,
-
-  // Playback state for UI (waveform playhead)
   activePlaybackScheduledTime: null,
   activePlaybackDuration: null,
-  activePlaybackTrimStart: null, // Store the trim used at playback time
-  activePlaybackTrimEnd: null,   // Store the trim used at playback time
-  activePlaybackReversed: false, // Store if playback was reversed for playhead direction
+  activePlaybackTrimStart: null,
+  activePlaybackTrimEnd: null,
+  activePlaybackReversed: false,
 });
 
 // ---------- INIT ----------
-UI.init();
+UI.init(); // This will also set up project name input from State's default
 for (let i = 0; i < 4; i++) State.addChannel(makeChannel(i)); 
 
 // ---------- UI EVENTS ----------
@@ -68,20 +62,29 @@ document.getElementById('bpm-input').addEventListener('blur', e => {
     if (e.target.value === "") {
         const currentBPM = State.get().bpm;
         e.target.value = currentBPM;
+        State.update({ bpm: currentBPM }); // Ensure state is updated if blurred while empty
     }
 });
 
 // ---------- SAVE ----------
+// Helper to sanitize project name for filename
+function sanitizeFilename(name) {
+  return name.replace(/[^a-z0-9\-_\.]/gi, '_').replace(/_{2,}/g, '_');
+}
+
 document.getElementById('save-btn').addEventListener('click', () => {
+  const currentProjectName = State.get().projectName;
+  const filename = sanitizeFilename(currentProjectName || "Audional-Project") + ".json";
+
   const snapshot = { ...State.get() };
   snapshot.channels = snapshot.channels.map(ch => {
-    const { buffer, reversedBuffer, ...rest } = ch; // Exclude buffers
+    const { buffer, reversedBuffer, ...rest } = ch;
     return rest;
   });
   const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `audional-project-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
 });
@@ -94,7 +97,12 @@ document.getElementById('load-input').addEventListener('change', async e => {
 
   try {
     const projectData = JSON.parse(await f.text());
+    
+    // Use loaded project name or default if not present
+    const loadedProjectName = projectData.projectName || `Loaded Project ${new Date().toISOString().slice(0,10)}`;
+
     const sanitizedGlobalState = {
+      projectName: loadedProjectName,
       bpm: projectData.bpm || 120,
       playing: false, 
       currentStep: 0,
@@ -103,15 +111,23 @@ document.getElementById('load-input').addEventListener('change', async e => {
 
     if (Array.isArray(projectData.channels)) {
       sanitizedGlobalState.channels = projectData.channels.map((loadedCh, i) => {
-        const defaultCh = makeChannel(i);
+        const defaultCh = makeChannel(i); // Get a fresh set of defaults
         return {
-          ...defaultCh, // Start with defaults to ensure all new props exist
-          ...loadedCh,  // Override with loaded data
-          buffer: null, // Always clear buffers on load
+          ...defaultCh,
+          ...loadedCh,
+          buffer: null,
           reversedBuffer: null,
-          // Ensure all FX and playback props are reset or correctly defaulted
+          // Explicitly ensure all properties, defaulting if not in loadedCh
+          name: loadedCh.name || defaultCh.name,
+          steps: loadedCh.steps || defaultCh.steps,
+          src: loadedCh.src || defaultCh.src,
+          volume: loadedCh.volume ?? defaultCh.volume,
+          mute: loadedCh.mute ?? defaultCh.mute,
+          solo: loadedCh.solo ?? defaultCh.solo,
           pitch: loadedCh.pitch ?? defaultCh.pitch,
           reverse: loadedCh.reverse ?? defaultCh.reverse,
+          trimStart: loadedCh.trimStart ?? defaultCh.trimStart,
+          trimEnd: loadedCh.trimEnd ?? defaultCh.trimEnd,
           hpfCutoff: loadedCh.hpfCutoff ?? defaultCh.hpfCutoff,
           hpfQ: loadedCh.hpfQ ?? defaultCh.hpfQ,
           lpfCutoff: loadedCh.lpfCutoff ?? defaultCh.lpfCutoff,
@@ -121,28 +137,26 @@ document.getElementById('load-input').addEventListener('change', async e => {
           eqHighGain: loadedCh.eqHighGain ?? defaultCh.eqHighGain,
           fadeInTime: loadedCh.fadeInTime ?? defaultCh.fadeInTime,
           fadeOutTime: loadedCh.fadeOutTime ?? defaultCh.fadeOutTime,
-          activePlaybackScheduledTime: null,
+          activePlaybackScheduledTime: null, // Always reset playback state
           activePlaybackDuration: null,
           activePlaybackTrimStart: null,
           activePlaybackTrimEnd: null,
-          activePlaybackReversed: null,
+          activePlaybackReversed: false,
         };
       });
     }
     
     stop(); 
-    State.update(sanitizedGlobalState);
+    State.update(sanitizedGlobalState); // This will trigger UI update for project name
 
-    // Sequentially load samples to avoid overwhelming the browser/network
     for (let i = 0; i < sanitizedGlobalState.channels.length; i++) {
         const ch = sanitizedGlobalState.channels[i];
         if (ch.src && typeof ch.src === 'string') {
             try {
                 const { buffer } = await loadSample(ch.src);
                 const updatePayload = { buffer };
-                // If reverse was true in the project, create reversed buffer now
                 if (ch.reverse && buffer) {
-                    const rBuf = await createReversedBuffer(buffer); // Assume this helper exists
+                    const rBuf = await createReversedBuffer(buffer);
                     updatePayload.reversedBuffer = rBuf;
                 }
                 State.updateChannel(i, updatePayload);
@@ -151,7 +165,7 @@ document.getElementById('load-input').addEventListener('change', async e => {
             }
         }
     }
-    console.log("Project loaded and samples reloaded (if any).");
+    console.log("Project loaded.");
 
   } catch(err) {
     alert('Invalid project file or error during loading.');
@@ -161,29 +175,31 @@ document.getElementById('load-input').addEventListener('change', async e => {
   }
 });
 
-// Helper function to create a reversed AudioBuffer
-// This should ideally be in utils.js or audioEngine.js if it needs access to ctx
 export async function createReversedBuffer(audioBuffer) {
     if (!audioBuffer) return null;
     const numChannels = audioBuffer.numberOfChannels;
     const length = audioBuffer.length;
     const sampleRate = audioBuffer.sampleRate;
+    
+    // Use OfflineAudioContext for operations that don't need real-time playback
+    // This is more robust than trying to create a buffer directly in the main AudioContext
+    // if we were to do any node-based processing on it before reversing.
+    // For simple data reversal, creating a new AudioBuffer directly is also an option.
+    // However, using OfflineAudioContext keeps a consistent pattern if you later add processing.
 
-    // It's good practice to use an OfflineAudioContext for manipulation
-    // if the main AudioContext (ctx) is not readily available or for cleaner separation.
-    // However, for simplicity, if ctx is global and accessible, we can use it.
-    // If ctx isn't directly available here, pass it as an argument or use OfflineAudioContext.
-    const reversedCtx = new OfflineAudioContext(numChannels, length, sampleRate);
-    const newBuffer = reversedCtx.createBuffer(numChannels, length, sampleRate);
+    // Simplified direct buffer creation for reversal as no nodes are involved:
+    const newReversedBuffer = new AudioBuffer({
+        numberOfChannels: numChannels,
+        length: length,
+        sampleRate: sampleRate
+    });
 
     for (let channel = 0; channel < numChannels; channel++) {
         const inputData = audioBuffer.getChannelData(channel);
-        const outputData = newBuffer.getChannelData(channel);
+        const outputData = newReversedBuffer.getChannelData(channel);
         for (let i = 0; i < length; i++) {
             outputData[i] = inputData[length - 1 - i];
         }
     }
-    return newBuffer; // In a real OfflineAudioContext scenario, you'd .startRendering().then(buffer => ...)
-                      // but since we are manually creating the buffer data, this is fine.
-                      // For future: use OfflineAudioContext.startRendering() if processing through nodes.
+    return newReversedBuffer;
 }
