@@ -6,23 +6,15 @@
 import State from './state.js';
 import { loadSample, resolveOrdinalURL } from './utils.js';
 import { audionalIDs } from './samples.js';
-import { ctx, playStartTime } from './audioEngine.js'; // playStartTime might not be directly used here anymore for transport
-
-// For transport animation state (potentially remove if not directly used by ui.js for calculations):
-// let transportAnim = {
-//   playing: false,
-//   playStartTime: 0,    // ctx.currentTime when play started
-//   bpm: 120,
-//   stepDuration: 0,     // duration of a 16th note in seconds
-//   nextStep: 0,         // index of the next step being scheduled
-//   channels: []
-// };
+import { ctx } from './audioEngine.js'; // playStartTime might not be directly used here anymore for transport
+import { renderWaveformToCanvas } from './waveformDisplay.js'; // IMPORT NEW MODULE
 
 
 /* --- Playhead position for auditioning (per channel) --- */
+const previewPlayheads = new Map(); // idx -> previewPlayheadRatio (0-1 of full buffer)
 
-const previewPlayheads = new Map();
-
+/* --- Main transport playhead visual positions (per channel) --- */
+const mainTransportPlayheadRatios = new Map(); // idx -> mainPlayheadRatio (0-1 of full buffer)
 
 /* ------------------------------------------------------------------ */
 /*  DOM references & initial wiring                                    */
@@ -46,16 +38,29 @@ const template  = document.getElementById('channel-template');
 function render(state) {
   /* Ensure DOM length matches channel array ------------------------- */
   while (container.children.length > state.channels.length) {
-    container.lastChild.remove();
+    const oldChild = container.lastChild;
+    // Clean up maps for removed channel
+    const oldChildIndex = Array.from(container.children).indexOf(oldChild); // This might not be reliable if child is already removed
+                                                                            // Better to use a unique ID if channels can be reordered/deleted individually
+                                                                            // For now, assuming channels are only removed from the end or all at once.
+    if (oldChild && oldChild.dataset.channelIndex) { // Assuming we add data-channel-index
+        const idxToRemove = parseInt(oldChild.dataset.channelIndex, 10);
+        previewPlayheads.delete(idxToRemove);
+        mainTransportPlayheadRatios.delete(idxToRemove);
+    }
+    if (oldChild) oldChild.remove();
   }
 
   state.channels.forEach((ch, i) => {
     let el = container.children[i];
     if (!el) {
       el = template.content.cloneNode(true).firstElementChild;
+      el.dataset.channelIndex = i; // Store index for cleanup if needed
       container.append(el);
       wireChannel(el, i);
     }
+    // Ensure channel index is up-to-date if elements are reused after reordering (not currently supported)
+    // el.dataset.channelIndex = i; 
     updateChannel(el, ch, state.currentStep, i);
   });
   
@@ -70,29 +75,22 @@ function wireChannel(el, idx) {
   el.querySelector('.channel-name')
     .addEventListener('input', e => State.updateChannel(idx, { name: e.target.value }));
 
-  // Mute and Solo buttons are now inside .fader-controls, within .channel-fader-bank
-  el.querySelector('.channel-fader-bank .mute-btn') // CHANGED selector
+  el.querySelector('.channel-fader-bank .mute-btn')
     .addEventListener('click', () => {
       const c = State.get().channels[idx];
       State.updateChannel(idx, { mute: !c.mute });
     });
 
-  el.querySelector('.channel-fader-bank .solo-btn') // CHANGED selector
+  el.querySelector('.channel-fader-bank .solo-btn')
     .addEventListener('click', () => {
       const c = State.get().channels[idx];
       State.updateChannel(idx, { solo: !c.solo });
     });
 
-  // el.querySelector('.volume-slider') // OLD
-  el.querySelector('.volume-fader')    // CHANGED: Use the new class for the vertical fader
+  el.querySelector('.volume-fader')
     .addEventListener('input', e => State.updateChannel(idx, { volume: parseFloat(e.target.value) }));
  
-    // Store reference to the waveform playhead div for this channel
-    el.waveformPlayheadElement = el.querySelector('.waveform-playhead');
-
-  /* ----------------------------------------------------------------
-   * File-chooser handler
-   * ---------------------------------------------------------------- */
+  /* File-chooser handler */
   el.querySelector('.file-input').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -101,11 +99,10 @@ function wireChannel(el, idx) {
       const { buffer, imageData } = await loadSample(file);
       State.updateChannel(idx, {
         buffer,
-        src: null,            // local files can’t be auto-reloaded
+        src: null,
         image: imageData,
         trimStart: 0,
         trimEnd: 1,
-        // Reset playback state for the new sample
         activePlaybackScheduledTime: null,
         activePlaybackDuration: null,
         activePlaybackTrimStart: null,
@@ -117,17 +114,13 @@ function wireChannel(el, idx) {
     }
   });
 
-  /* ----------------------------------------------------------------
-   * URL / Ordinal handler
-   * ---------------------------------------------------------------- */
+  /* URL / Ordinal handler */
   el.querySelector('.load-url-btn').addEventListener('click', () => {
     const raw = el.querySelector('.url-input').value.trim();
     if (raw) loadFromURL(raw);
   });
 
-  /* ----------------------------------------------------------------
-   * Audional preset dropdown
-   * ---------------------------------------------------------------- */
+  /* Audional preset dropdown */
   const picker = document.createElement('select');
   picker.className = 'sample-picker';
   picker.innerHTML =
@@ -138,32 +131,28 @@ function wireChannel(el, idx) {
   });
   el.querySelector('.sample-controls').prepend(picker);
 
- /* helper shared by URL button + preset picker -------------------- */
- async function loadFromURL(raw) {
-  const resolved = resolveOrdinalURL(raw);
-  try {
-    const { buffer, imageData } = await loadSample(resolved);
-    State.updateChannel(idx, {
-      buffer,
-      src: resolved,
-      image: imageData,
-      trimStart: 0,
-      trimEnd: 1,
-      // Reset playback state for the new sample
-      activePlaybackScheduledTime: null,
-      activePlaybackDuration: null,
-      activePlaybackTrimStart: null,
-      activePlaybackTrimEnd: null,
-    });
-  } catch (err) { // ADDED THE OPENING BRACE for the catch block
-    alert(`Failed to load sample: ${err.message || err}`);
-    console.error("Error loading sample from URL/Ordinal:", err);
-  } // The closing brace for catch was already there.
-}
+  async function loadFromURL(raw) {
+    const resolved = resolveOrdinalURL(raw);
+    try {
+      const { buffer, imageData } = await loadSample(resolved);
+      State.updateChannel(idx, {
+        buffer,
+        src: resolved,
+        image: imageData,
+        trimStart: 0,
+        trimEnd: 1,
+        activePlaybackScheduledTime: null,
+        activePlaybackDuration: null,
+        activePlaybackTrimStart: null,
+        activePlaybackTrimEnd: null,
+      });
+    } catch (err) {
+      alert(`Failed to load sample: ${err.message || err}`);
+      console.error("Error loading sample from URL/Ordinal:", err);
+    }
+  }
 
-  /* ----------------------------------------------------------------
-   * Step grid
-   * ---------------------------------------------------------------- */
+  /* Step grid */
   const grid = el.querySelector('.step-grid');
   for (let s = 0; s < 64; s++) {
     const cell = document.createElement('div');
@@ -178,157 +167,157 @@ function wireChannel(el, idx) {
     grid.append(cell);
   }
 
-  /* ----------------------------------------------------------------
-   * Trim handles (pointer drag)
-   * ---------------------------------------------------------------- */
+  /* Trim handles and Waveform Click (Auditioning) */
   const wrapper  = el.querySelector('.waveform-wrapper');
   const hStart   = el.querySelector('.handle-start');
   const hEnd     = el.querySelector('.handle-end');
-
   const canvas = el.querySelector('.waveform');
   let auditionTimeout = null, longClickFired = false;
 
-  // Helper: play section
-  async function audition(buffer, startOffset, duration) {
-    if (!buffer) return;
-    // Create a new AudioContext for each audition to avoid conflicts
-    // and ensure it closes itself.
+  async function auditionSample(buffer, startOffsetSeconds, durationSeconds) {
+    if (!buffer || durationSeconds <= 0) return;
     const auditionCtx = new (window.AudioContext || window.webkitAudioContext)();
     const src = auditionCtx.createBufferSource();
     src.buffer = buffer;
     src.connect(auditionCtx.destination);
-    src.start(0, startOffset, Math.max(duration, 0.01)); // Play the calculated duration
+    src.start(0, startOffsetSeconds, durationSeconds);
     src.onended = () => {
         auditionCtx.close().catch(e => console.warn("Error closing audition context:", e));
     };
   }
 
-  // Click behavior: single = play trimmed section; long = play from click pos
   canvas.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     const rect = canvas.getBoundingClientRect();
-    const clickXRatio = (e.clientX - rect.left) / rect.width; // 0 to 1, where the click happened
+    const clickXRatio = (e.clientX - rect.left) / rect.width; // 0 to 1 of canvas width
     longClickFired = false;
-    const ch = State.get().channels[idx]; // Get channel data once
+    const ch = State.get().channels[idx];
 
-    if (!ch || !ch.buffer) return; // No buffer, nothing to audition
+    if (!ch || !ch.buffer) return;
 
     const bufferDuration = ch.buffer.duration;
-    const currentTrimStartRatio = ch.trimStart ?? 0;
-    const currentTrimEndRatio = ch.trimEnd ?? 1;
+    const currentTrimStart = ch.trimStart ?? 0;
+    const currentTrimEnd = ch.trimEnd ?? 1;
+
+    // The clickXRatio is relative to the canvas. To make it relative to the buffer,
+    // we need to map it based on the currently displayed trim window.
+    // However, for auditioning, clickXRatio is fine as the start point of preview playhead.
+    const playheadPreviewStartRatio = clickXRatio; // This is ratio on canvas, map to buffer if needed for general playhead system.
+                                                 // For this specific audition, it's a ratio of where to START drawing the preview playhead.
 
     auditionTimeout = setTimeout(() => {
       longClickFired = true;
       // Long click: play from click position within the current trim region, to the end of the trim region
-      const playStartRatio = Math.max(currentTrimStartRatio, Math.min(currentTrimEndRatio, clickXRatio));
-      const playEndRatio = currentTrimEndRatio;
+      const playStartRatioInBuffer = Math.max(currentTrimStart, Math.min(currentTrimEnd, currentTrimStart + clickXRatio * (currentTrimEnd - currentTrimStart) ));
+      const playEndRatioInBuffer = currentTrimEnd;
       
-      if (playEndRatio > playStartRatio) {
-        const startOffset = playStartRatio * bufferDuration;
-        const durationToPlay = (playEndRatio - playStartRatio) * bufferDuration;
+      if (playEndRatioInBuffer > playStartRatioInBuffer) {
+        const startOffsetSec = playStartRatioInBuffer * bufferDuration;
+        const durationToPlaySec = (playEndRatioInBuffer - playStartRatioInBuffer) * bufferDuration;
 
-        previewPlayheads.set(idx, playStartRatio);
-        drawWaveform(canvas, ch.buffer, currentTrimStartRatio, currentTrimEndRatio, { previewPos: playStartRatio });
-        audition(ch.buffer, startOffset, durationToPlay);
+        previewPlayheads.set(idx, playStartRatioInBuffer); // Store ratio relative to full buffer
+        renderWaveformToCanvas(canvas, ch.buffer, currentTrimStart, currentTrimEnd, { 
+            previewPlayheadRatio: playStartRatioInBuffer,
+            mainPlayheadRatio: mainTransportPlayheadRatios.get(idx) 
+        });
+        auditionSample(ch.buffer, startOffsetSec, durationToPlaySec);
         
-        const estimatedVisualDuration = Math.min(durationToPlay * 1000, 2000); // Cap visual feedback
+        const estimatedVisualDuration = Math.min(durationToPlaySec * 1000, 2000);
         setTimeout(() => {
-          previewPlayheads.delete(idx);
-          // Redraw without previewPos only if this specific preview is ending
-          const currentCh = State.get().channels[idx]; // Re-fetch in case state changed
-          if (currentCh) { // Check if channel still exists
-              drawWaveform(canvas, currentCh.buffer, currentCh.trimStart ?? 0, currentCh.trimEnd ?? 1);
+          if (previewPlayheads.get(idx) === playStartRatioInBuffer) { // Only clear if it's the same preview
+            previewPlayheads.delete(idx);
+            const currentChState = State.get().channels[idx];
+            if (currentChState) {
+              renderWaveformToCanvas(canvas, currentChState.buffer, currentChState.trimStart ?? 0, currentChState.trimEnd ?? 1, {
+                mainPlayheadRatio: mainTransportPlayheadRatios.get(idx)
+              });
+            }
           }
-        }, estimatedVisualDuration + 50); // Add a small buffer
+        }, estimatedVisualDuration + 50);
       }
-    }, 350); // long press ~350ms
+    }, 350);
   });
 
   canvas.addEventListener('mouseup', (e) => {
     if (auditionTimeout) clearTimeout(auditionTimeout);
     if (!longClickFired && e.button === 0) {
-      // Short click: play entire trimmed section
       const ch = State.get().channels[idx];
       if (ch?.buffer) {
-        const trimStartRatio = ch.trimStart ?? 0;
-        const trimEndRatio = ch.trimEnd ?? 1;
+        const trimStart = ch.trimStart ?? 0;
+        const trimEnd = ch.trimEnd ?? 1;
         
-        if (trimEndRatio > trimStartRatio) {
-            const startOffset = trimStartRatio * ch.buffer.duration;
-            const durationToPlay = (trimEndRatio - trimStartRatio) * ch.buffer.duration;
+        if (trimEnd > trimStart) {
+            const startOffsetSec = trimStart * ch.buffer.duration;
+            const durationToPlaySec = (trimEnd - trimStart) * ch.buffer.duration;
 
-            previewPlayheads.set(idx, trimStartRatio);
-            drawWaveform(canvas, ch.buffer, trimStartRatio, trimEndRatio, { previewPos: trimStartRatio });
-            audition(ch.buffer, startOffset, durationToPlay);
+            previewPlayheads.set(idx, trimStart); // Preview starts at trimStart
+            renderWaveformToCanvas(canvas, ch.buffer, trimStart, trimEnd, { 
+                previewPlayheadRatio: trimStart,
+                mainPlayheadRatio: mainTransportPlayheadRatios.get(idx)
+            });
+            auditionSample(ch.buffer, startOffsetSec, durationToPlaySec);
 
-            const estimatedVisualDuration = Math.min(durationToPlay * 1000, 2000); // Cap visual feedback
+            const estimatedVisualDuration = Math.min(durationToPlaySec * 1000, 2000);
             setTimeout(() => {
-              previewPlayheads.delete(idx);
-              const currentCh = State.get().channels[idx]; // Re-fetch
-              if (currentCh) {
-                  drawWaveform(canvas, currentCh.buffer, currentCh.trimStart ?? 0, currentCh.trimEnd ?? 1);
+              if (previewPlayheads.get(idx) === trimStart) {
+                previewPlayheads.delete(idx);
+                const currentChState = State.get().channels[idx];
+                if (currentChState) {
+                  renderWaveformToCanvas(canvas, currentChState.buffer, currentChState.trimStart ?? 0, currentChState.trimEnd ?? 1, {
+                     mainPlayheadRatio: mainTransportPlayheadRatios.get(idx)
+                  });
+                }
               }
             }, estimatedVisualDuration + 50);
         }
       }
     }
   });
+
   canvas.addEventListener('mouseleave', () => {
     if (auditionTimeout) clearTimeout(auditionTimeout);
   });
 
   hStart.addEventListener('pointerdown', e => beginDrag(e, true));
-  hEnd  .addEventListener('pointerdown', e => beginDrag(e, false));
+  hEnd.addEventListener('pointerdown', e => beginDrag(e, false));
 
   function beginDrag(event, isStartHandle) {
     event.preventDefault();
-    event.target.setPointerCapture(event.pointerId); // Capture pointer for smoother dragging
+    event.target.setPointerCapture(event.pointerId);
 
     const { left, width } = wrapper.getBoundingClientRect();
 
     const move = ev => {
       const ratio = Math.min(Math.max((ev.clientX - left) / width, 0), 1);
-      const c     = State.get().channels[idx];
+      const c = State.get().channels[idx];
       let newTrimStart = c.trimStart ?? 0;
       let newTrimEnd = c.trimEnd ?? 1;
 
       if (isStartHandle) {
         newTrimStart = ratio;
-        if (newTrimStart >= newTrimEnd) {
-          newTrimStart = newTrimEnd - 0.001; // Ensure start is always before end
-        }
+        if (newTrimStart >= newTrimEnd) newTrimStart = Math.max(0, newTrimEnd - 0.001);
       } else {
         newTrimEnd = ratio;
-        if (newTrimEnd <= newTrimStart) {
-          newTrimEnd = newTrimStart + 0.001; // Ensure end is always after start
-        }
+        if (newTrimEnd <= newTrimStart) newTrimEnd = Math.min(1, newTrimStart + 0.001);
       }
-      newTrimStart = Math.max(0, newTrimStart);
-      newTrimEnd = Math.min(1, newTrimEnd);
+      newTrimStart = Math.max(0, Math.min(1, newTrimStart));
+      newTrimEnd = Math.max(0, Math.min(1, newTrimEnd));
       
       State.updateChannel(idx, { trimStart: newTrimStart, trimEnd: newTrimEnd });
     };
     const up = () => {
       event.target.releasePointerCapture(event.pointerId);
       window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup',    up);
+      window.removeEventListener('pointerup', up);
     };
     window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup',    up);
+    window.addEventListener('pointerup', up);
   }
-/* ----------------------------------------------------------------
-   * Collapse/Expand button
-   * ---------------------------------------------------------------- */
-const collapseBtn = el.querySelector('.collapse-btn');
-// const collapsibleContent = el.querySelector('.collapsible-content'); // Not directly needed for display:none via class
 
-// Optional: Default new channels to collapsed state
-// el.classList.add('collapsed'); 
-
-collapseBtn.addEventListener('click', () => {
-  el.classList.toggle('collapsed');
-  // Note: The CSS handles showing/hiding .collapsible-content based on .channel.collapsed
-});
+  const collapseBtn = el.querySelector('.collapse-btn');
+  collapseBtn.addEventListener('click', () => {
+    el.classList.toggle('collapsed');
+  });
 }
 
 
@@ -336,97 +325,31 @@ collapseBtn.addEventListener('click', () => {
 /*  Per-frame UI update                                                */
 /* ------------------------------------------------------------------ */
 
-function updateChannel(el, ch, playhead, idx) {
+function updateChannel(el, ch, playheadStep, idx) {
   el.querySelector('.channel-name').value = ch.name;
   el.querySelector('.channel-fader-bank .mute-btn').classList.toggle('active', ch.mute);
   el.querySelector('.channel-fader-bank .solo-btn').classList.toggle('active', ch.solo);
   el.querySelector('.volume-fader').value = ch.volume ?? 0.8;
 
-
-  const currentStep = playhead == null ? -1 : playhead;
-  const previewPos = previewPlayheads.get(idx) ?? null;
-
-  drawWaveform(
-    el.querySelector('.waveform'),
+  const canvas = el.querySelector('.waveform');
+  renderWaveformToCanvas(
+    canvas,
     ch.buffer,
     ch.trimStart ?? 0,
     ch.trimEnd   ?? 1,
-    { previewPos } 
+    { 
+      mainPlayheadRatio: mainTransportPlayheadRatios.get(idx), // Get current transport playhead
+      previewPlayheadRatio: previewPlayheads.get(idx) // Get current preview playhead
+    }
   );
-  el.querySelector('.handle-start').style.left =
-    `calc(${(ch.trimStart ?? 0) * 100}% - 4px)`; // -4px to center 8px handle
-  el.querySelector('.handle-end').style.left =
-    `calc(${(ch.trimEnd   ?? 1) * 100}% - 4px)`; // -4px to center 8px handle
+
+  el.querySelector('.handle-start').style.left = `calc(${(ch.trimStart ?? 0) * 100}% - 4px)`;
+  el.querySelector('.handle-end').style.left = `calc(${(ch.trimEnd ?? 1) * 100}% - 4px)`;
 
   el.querySelectorAll('.step').forEach((cell, i) => {
     cell.classList.toggle('on', ch.steps[i]);
-    cell.classList.toggle('playhead', i === currentStep);
+    cell.classList.toggle('playhead', i === playheadStep);
   });
-}
-
-function drawWaveform(canvas, buffer, trimStart, trimEnd, options = {}) {
-  const dpr = window.devicePixelRatio || 1;
-  const canvasWidth = canvas.clientWidth;
-  const canvasHeight = canvas.clientHeight || 100;
-
-  canvas.width = canvasWidth * dpr;
-  canvas.height = canvasHeight * dpr;
-
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr); // Scale context for HiDPI
-
-  const W = canvasWidth;
-  const H = canvasHeight;
-
-  ctx.clearRect(0, 0, W, H);
-  if (!buffer) return;
-
-  // Draw waveform
-  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--step-play').trim() || '#4caf50'; // Green for waveform
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  const audioData = buffer.getChannelData(0);
-  const step = Math.ceil(audioData.length / W);
-  const amp = H / 2;
-  for (let i = 0; i < W; i++) {
-    let min = 1.0;
-    let max = -1.0;
-    for (let j = 0; j < step; j++) {
-        const datum = audioData[(i * step) + j];
-        if (datum < min) min = datum;
-        if (datum > max) max = datum;
-    }
-    const yMax = (1 - max) * amp;
-    const yMin = (1 - min) * amp;
-    if (i === 0) {
-        ctx.moveTo(i, yMax);
-        ctx.lineTo(i, yMin); // Draw first vertical line
-    } else {
-        ctx.lineTo(i, yMax);
-        ctx.lineTo(i, yMin);
-    }
-  }
-  ctx.stroke();
-
-  // Shade outside trimmed region
-  ctx.fillStyle = 'rgba(0,0,0,.6)';
-  ctx.fillRect(0, 0, trimStart * W, H);
-  ctx.fillRect(trimEnd * W, 0, W - (trimEnd * W), H);
-
-
-  // --- Draw audition preview playhead ---
-  if (options.previewPos != null && options.previewPos >= trimStart && options.previewPos <= trimEnd) {
-    ctx.save();
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff9800'; // Accent color for preview
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4,3]);
-    ctx.beginPath();
-    ctx.moveTo(options.previewPos * W, 0);
-    ctx.lineTo(options.previewPos * W, H);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-  }
 }
 
 
@@ -437,37 +360,57 @@ function animateTransport() {
 
   channels.forEach((ch, idx) => {
     const el = container.children[idx];
-    if (!el || !el.waveformPlayheadElement) return; 
-
-    const playheadDiv = el.waveformPlayheadElement;
+    if (!el) return; 
+    
+    const canvas = el.querySelector('.waveform');
+    let currentMainPlayheadRatio = null;
 
     if (playing && ch.activePlaybackScheduledTime != null && ch.activePlaybackDuration > 0) {
       const elapsedTime = now - ch.activePlaybackScheduledTime;
 
       if (elapsedTime >= 0 && elapsedTime < ch.activePlaybackDuration) {
         const progressInSegment = elapsedTime / ch.activePlaybackDuration; 
+        const segmentStartRatio = ch.activePlaybackTrimStart ?? 0;
+        const segmentEndRatio = ch.activePlaybackTrimEnd ?? 1;
+        const segmentDurationRatio = segmentEndRatio - segmentStartRatio;
 
-        const visualTrimStartPercent = (ch.activePlaybackTrimStart ?? 0) * 100;
-        const visualTrimEndPercent = (ch.activePlaybackTrimEnd ?? 1) * 100;
-        const visualSegmentWidthPercent = visualTrimEndPercent - visualTrimStartPercent;
-
-        if (visualSegmentWidthPercent > 0) {
-          const playheadOffsetInSegmentPercent = progressInSegment * visualSegmentWidthPercent;
-          let playheadLeftPercent = visualTrimStartPercent + playheadOffsetInSegmentPercent;
-          
-          playheadLeftPercent = Math.min(visualTrimEndPercent - (playheadDiv.offsetWidth / el.querySelector('.waveform-wrapper').offsetWidth * 100) , Math.max(visualTrimStartPercent, playheadLeftPercent));
-
-
-          playheadDiv.style.left = `${playheadLeftPercent}%`;
-          playheadDiv.style.display = 'block';
-        } else {
-          playheadDiv.style.display = 'none';
+        if (segmentDurationRatio > 0) {
+          currentMainPlayheadRatio = segmentStartRatio + (progressInSegment * segmentDurationRatio);
         }
-      } else {
-        playheadDiv.style.display = 'none';
       }
-    } else {
-      playheadDiv.style.display = 'none';
+    }
+    
+    // Update the stored ratio and re-render the waveform for this channel
+    if (mainTransportPlayheadRatios.get(idx) !== currentMainPlayheadRatio) {
+        if (currentMainPlayheadRatio === null) {
+            mainTransportPlayheadRatios.delete(idx);
+        } else {
+            mainTransportPlayheadRatios.set(idx, currentMainPlayheadRatio);
+        }
+        // Call renderWaveformToCanvas directly, as only the main playhead changed
+        renderWaveformToCanvas(
+            canvas,
+            ch.buffer,
+            ch.trimStart ?? 0,
+            ch.trimEnd   ?? 1,
+            { 
+              mainPlayheadRatio: currentMainPlayheadRatio,
+              previewPlayheadRatio: previewPlayheads.get(idx) 
+            }
+        );
+    } else if (currentMainPlayheadRatio === null && mainTransportPlayheadRatios.has(idx)) {
+        // If playback stopped for this channel, remove its playhead ratio and redraw
+        mainTransportPlayheadRatios.delete(idx);
+        renderWaveformToCanvas(
+            canvas,
+            ch.buffer,
+            ch.trimStart ?? 0,
+            ch.trimEnd   ?? 1,
+            { 
+              mainPlayheadRatio: null,
+              previewPlayheadRatio: previewPlayheads.get(idx)
+            }
+        );
     }
   });
 
@@ -478,9 +421,8 @@ export function init() {
   State.subscribe(render); 
   requestAnimationFrame(animateTransport); 
   
-  // Wire up the global Load button
   document.getElementById('load-btn').addEventListener('click', () => {
-    document.getElementById('load-input').click(); // Programmatically click the hidden file input
+    document.getElementById('load-input').click();
   });
   
   render(State.get());
