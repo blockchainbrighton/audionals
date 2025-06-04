@@ -144,8 +144,13 @@ export default class ProjectManager {
      */
     async saveProject(name, format = 'json') {
         if (!this.currentProject) {
-            this.createNewProject(name);
+            this.createNewProject(name ?? 'Untitled Project');
         }
+        
+        if (!name) {
+            name = this.currentProject && this.currentProject.name ? this.currentProject.name : 'Untitled Project';
+        }
+        
 
         console.log(`💾 Saving project: ${name} (${format})`);
 
@@ -484,8 +489,8 @@ export default class ProjectManager {
      * @returns {Promise<Array>} - Sample data array
      */
     async collectSampleData() {
-        const sampleManager = this.getSampleManager();
-        if (!sampleManager) {
+        const SampleManager = this.getSampleManager();
+        if (!SampleManager) {
             return [];
         }
 
@@ -505,7 +510,7 @@ export default class ProjectManager {
 
         // Get metadata for each sample
         for (const url of sampleUrls) {
-            const metadata = sampleManager.getSampleMetadata(url);
+            const metadata = SampleManager.getSampleMetadata(url);
             if (metadata) {
                 samples.push({
                     url: url,
@@ -530,8 +535,8 @@ export default class ProjectManager {
             return;
         }
 
-        const sampleManager = this.getSampleManager();
-        if (!sampleManager) {
+        const SampleManager = this.getSampleManager();
+        if (!SampleManager) {
             console.warn('Sample manager not available, skipping sample loading');
             return;
         }
@@ -540,7 +545,7 @@ export default class ProjectManager {
 
         const loadPromises = projectData.samples.map(async (sampleInfo) => {
             try {
-                await sampleManager.loadFromUrl(sampleInfo.url);
+                await SampleManager.loadFromUrl(sampleInfo.url);
             } catch (error) {
                 console.warn(`Failed to load sample: ${sampleInfo.url}`, error);
             }
@@ -668,7 +673,7 @@ export default class ProjectManager {
      */
     getSampleManager() {
         if (window.AudionalSequencer) {
-            return window.AudionalSequencer.getModule('sampleManager');
+            return window.AudionalSequencer.getModule('SampleManager');
         }
         return null;
     }

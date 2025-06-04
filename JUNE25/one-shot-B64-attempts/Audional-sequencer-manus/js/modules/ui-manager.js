@@ -996,7 +996,7 @@ export default class UIManager {
      */
     getSampleManager() {
         if (window.AudionalSequencer) {
-            return window.AudionalSequencer.getModule('sampleManager');
+            return window.AudionalSequencer.getModule('SampleManager');
         }
         return null;
     }

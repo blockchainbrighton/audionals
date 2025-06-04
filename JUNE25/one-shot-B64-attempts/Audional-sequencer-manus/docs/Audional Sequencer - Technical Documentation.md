@@ -188,17 +188,17 @@ function scheduler() {
 **API**:
 ```javascript
 // Load from file
-await sampleManager.loadFromFile(file);
+await SampleManager.loadFromFile(file);
 
 // Load from URL (including Bitcoin Ordinals)
-await sampleManager.loadFromUrl(url);
+await SampleManager.loadFromUrl(url);
 
 // Generate waveform
-const waveformData = sampleManager.generateWaveform(audioBuffer);
+const waveformData = SampleManager.generateWaveform(audioBuffer);
 
 // Save/load presets
-await sampleManager.savePreset(name, data);
-const preset = await sampleManager.loadPreset(name);
+await SampleManager.savePreset(name, data);
+const preset = await SampleManager.loadPreset(name);
 ```
 
 **Bitcoin Ordinals Integration**:
@@ -468,7 +468,7 @@ class MockAudioContext {
 // Test complete user workflow
 async function testBeatCreation() {
     // 1. Load sample
-    await sampleManager.loadFromFile(testAudioFile);
+    await SampleManager.loadFromFile(testAudioFile);
     
     // 2. Create pattern
     sequencer.toggleStep(0, 0); // Kick on step 1

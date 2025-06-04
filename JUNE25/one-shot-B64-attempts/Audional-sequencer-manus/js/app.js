@@ -173,7 +173,7 @@ class AudionalSequencer {
         const moduleConfigs = [
             { name: 'audioEngine', path: './modules/audio-engine.js', required: true },
             { name: 'sequencer', path: './modules/sequencer.js', required: true },
-            { name: 'sampleManager', path: './modules/sample-manager.js', required: true },
+            { name: 'SampleManager', path: './modules/sample-manager.js', required: true },
             { name: 'uiManager', path: './modules/ui-manager.js', required: true },
             { name: 'projectManager', path: './modules/project-manager.js', required: true }
         ];

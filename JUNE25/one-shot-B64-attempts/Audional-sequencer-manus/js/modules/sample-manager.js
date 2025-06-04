@@ -1,6 +1,7 @@
+// js/modules/sample-manager.js
+
 /**
  * Audional Sequencer - Sample Manager
- * 
  * Handles sample loading, caching, file uploads, and preset management
  */
 
@@ -11,31 +12,31 @@ export default class SampleManager {
     constructor(stateStore, eventBus) {
         this.stateStore = stateStore;
         this.eventBus = eventBus;
-        
+
         // Sample cache and metadata
         this.sampleMetadata = new Map();
         this.loadingPromises = new Map();
-        
+
         // File handling
         this.maxFileSize = 50 * 1024 * 1024; // 50MB
         this.supportedFormats = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'webm'];
-        
+
         // Preset system
         this.presets = new Map();
         this.defaultPresets = [];
-        
+
         // Waveform generation
         this.waveformCache = new Map();
-        
-        // Bind methods
-        this.init = this.init.bind(this);
-        this.loadSample = this.loadSample.bind(this);
-        this.loadFromFile = this.loadFromFile.bind(this);
-        this.loadFromUrl = this.loadFromUrl.bind(this);
-        this.generateWaveform = this.generateWaveform.bind(this);
-        this.createPreset = this.createPreset.bind(this);
-        this.loadPreset = this.loadPreset.bind(this);
-        this.destroy = this.destroy.bind(this);
+
+        // Bind file event handlers as arrow functions for correct `this`
+        this.preventDefaults = (e) => { e.preventDefault(); e.stopPropagation(); };
+        this.highlight = (e) => { document.body.classList.add('drag-over'); };
+        this.unhighlight = (e) => { document.body.classList.remove('drag-over'); };
+        this.handleDrop = async (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            await this.handleFiles(files);
+        };
     }
 
     /**
@@ -44,13 +45,10 @@ export default class SampleManager {
     async init() {
         try {
             console.log('🎵 Initializing Sample Manager...');
-            
             this.setupEventListeners();
             this.setupFileHandlers();
             await this.loadDefaultPresets();
-            
             console.log('✅ Sample Manager initialized successfully');
-            
         } catch (error) {
             console.error('❌ Failed to initialize Sample Manager:', error);
             throw error;
@@ -64,10 +62,8 @@ export default class SampleManager {
         // Handle sample load requests
         this.eventBus.on(EVENTS.SAMPLE_LOAD_REQUESTED, async (data) => {
             const { channelId, source, sourceType } = data;
-            
             try {
                 let sampleData;
-                
                 if (sourceType === 'file') {
                     sampleData = await this.loadFromFile(source);
                 } else if (sourceType === 'url') {
@@ -75,10 +71,7 @@ export default class SampleManager {
                 } else {
                     throw new Error(`Unknown source type: ${sourceType}`);
                 }
-                
-                // Assign sample to channel
                 this.assignSampleToChannel(channelId, sampleData);
-                
             } catch (error) {
                 console.error(`Failed to load sample for channel ${channelId}:`, error);
                 this.eventBus.emit(EVENTS.SAMPLE_LOAD_ERROR, { channelId, error });
@@ -88,7 +81,6 @@ export default class SampleManager {
         // Handle waveform generation requests
         this.eventBus.on(EVENTS.WAVEFORM_REQUESTED, async (data) => {
             const { url, width, height } = data;
-            
             try {
                 const waveformData = await this.generateWaveform(url, width, height);
                 this.eventBus.emit(EVENTS.WAVEFORM_GENERATED, { url, waveformData });
@@ -112,45 +104,12 @@ export default class SampleManager {
         ['dragenter', 'dragover'].forEach(eventName => {
             document.addEventListener(eventName, this.highlight, false);
         });
-
         ['dragleave', 'drop'].forEach(eventName => {
             document.addEventListener(eventName, this.unhighlight, false);
         });
 
         // Handle dropped files
-        document.addEventListener('drop', this.handleDrop.bind(this), false);
-    }
-
-    /**
-     * Prevent default drag behaviors
-     */
-    preventDefaults(e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-
-    /**
-     * Highlight drop area
-     */
-    highlight(e) {
-        document.body.classList.add('drag-over');
-    }
-
-    /**
-     * Remove highlight from drop area
-     */
-    unhighlight(e) {
-        document.body.classList.remove('drag-over');
-    }
-
-    /**
-     * Handle dropped files
-     */
-    async handleDrop(e) {
-        const dt = e.dataTransfer;
-        const files = dt.files;
-        
-        await this.handleFiles(files);
+        document.addEventListener('drop', this.handleDrop, false);
     }
 
     /**
@@ -158,10 +117,9 @@ export default class SampleManager {
      * @param {FileList} files - Selected files
      */
     async handleFiles(files) {
-        const audioFiles = Array.from(files).filter(file => 
+        const audioFiles = Array.from(files).filter(file =>
             isValidAudioFile(file.name) && file.size <= this.maxFileSize
         );
-
         if (audioFiles.length === 0) {
             this.eventBus.emit(EVENTS.ERROR_OCCURRED, {
                 message: 'No valid audio files found. Supported formats: ' + this.supportedFormats.join(', '),
@@ -169,7 +127,6 @@ export default class SampleManager {
             });
             return;
         }
-
         // Load each file
         for (const file of audioFiles) {
             try {
