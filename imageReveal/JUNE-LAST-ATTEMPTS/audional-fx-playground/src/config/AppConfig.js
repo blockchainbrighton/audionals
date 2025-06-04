@@ -1,3 +1,5 @@
+// src/config/AppConfig.js
+
 /**
  * Application Configuration
  * Central configuration for the Audional FX Playground
@@ -37,7 +39,7 @@ export const AppConfig = {
     defaultVolume: 0.8,
     crossOrigin: 'anonymous',
     preload: 'auto',
-    defaultSongUrl: 'opus.webm'
+    defaultSongUrl: './src/audio/files/Opus.webm'
   },
 
   // UI settings
