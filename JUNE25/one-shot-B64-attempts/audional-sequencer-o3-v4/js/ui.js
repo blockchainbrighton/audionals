@@ -316,7 +316,21 @@ function wireChannel(el, idx) {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup',    up);
   }
+/* ----------------------------------------------------------------
+   * Collapse/Expand button
+   * ---------------------------------------------------------------- */
+const collapseBtn = el.querySelector('.collapse-btn');
+// const collapsibleContent = el.querySelector('.collapsible-content'); // Not directly needed for display:none via class
+
+// Optional: Default new channels to collapsed state
+// el.classList.add('collapsed'); 
+
+collapseBtn.addEventListener('click', () => {
+  el.classList.toggle('collapsed');
+  // Note: The CSS handles showing/hiding .collapsible-content based on .channel.collapsed
+});
 }
+
 
 /* ------------------------------------------------------------------ */
 /*  Per-frame UI update                                                */
@@ -324,13 +338,10 @@ function wireChannel(el, idx) {
 
 function updateChannel(el, ch, playhead, idx) {
   el.querySelector('.channel-name').value = ch.name;
+  el.querySelector('.channel-fader-bank .mute-btn').classList.toggle('active', ch.mute);
+  el.querySelector('.channel-fader-bank .solo-btn').classList.toggle('active', ch.solo);
+  el.querySelector('.volume-fader').value = ch.volume ?? 0.8;
 
-  // Mute and Solo buttons are now inside .fader-controls, within .channel-fader-bank
-  el.querySelector('.channel-fader-bank .mute-btn').classList.toggle('active', ch.mute); // CHANGED selector
-  el.querySelector('.channel-fader-bank .solo-btn').classList.toggle('active', ch.solo); // CHANGED selector
-  
-  // el.querySelector('.volume-slider').value = ch.volume ?? 0.8; // OLD
-  el.querySelector('.volume-fader').value = ch.volume ?? 0.8;    // CHANGED: Use the new class
 
   const currentStep = playhead == null ? -1 : playhead;
   const previewPos = previewPlayheads.get(idx) ?? null;
