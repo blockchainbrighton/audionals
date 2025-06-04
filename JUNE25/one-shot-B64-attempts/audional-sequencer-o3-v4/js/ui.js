@@ -70,19 +70,21 @@ function wireChannel(el, idx) {
   el.querySelector('.channel-name')
     .addEventListener('input', e => State.updateChannel(idx, { name: e.target.value }));
 
-  el.querySelector('.mute-btn')
+  // Mute and Solo buttons are now inside .fader-controls, within .channel-fader-bank
+  el.querySelector('.channel-fader-bank .mute-btn') // CHANGED selector
     .addEventListener('click', () => {
       const c = State.get().channels[idx];
       State.updateChannel(idx, { mute: !c.mute });
     });
 
-  el.querySelector('.solo-btn')
+  el.querySelector('.channel-fader-bank .solo-btn') // CHANGED selector
     .addEventListener('click', () => {
       const c = State.get().channels[idx];
       State.updateChannel(idx, { solo: !c.solo });
     });
 
-  el.querySelector('.volume-slider')
+  // el.querySelector('.volume-slider') // OLD
+  el.querySelector('.volume-fader')    // CHANGED: Use the new class for the vertical fader
     .addEventListener('input', e => State.updateChannel(idx, { volume: parseFloat(e.target.value) }));
  
     // Store reference to the waveform playhead div for this channel
@@ -136,28 +138,28 @@ function wireChannel(el, idx) {
   });
   el.querySelector('.sample-controls').prepend(picker);
 
-  /* helper shared by URL button + preset picker -------------------- */
-  async function loadFromURL(raw) {
-    const resolved = resolveOrdinalURL(raw);
-    try {
-      const { buffer, imageData } = await loadSample(resolved);
-      State.updateChannel(idx, {
-        buffer,
-        src: resolved,
-        image: imageData,
-        trimStart: 0,
-        trimEnd: 1,
-        // Reset playback state for the new sample
-        activePlaybackScheduledTime: null,
-        activePlaybackDuration: null,
-        activePlaybackTrimStart: null,
-        activePlaybackTrimEnd: null,
-      });
-    } catch (err) {
-      alert(`Failed to load sample: ${err.message || err}`);
-      console.error("Error loading sample from URL/Ordinal:", err);
-    }
-  }
+ /* helper shared by URL button + preset picker -------------------- */
+ async function loadFromURL(raw) {
+  const resolved = resolveOrdinalURL(raw);
+  try {
+    const { buffer, imageData } = await loadSample(resolved);
+    State.updateChannel(idx, {
+      buffer,
+      src: resolved,
+      image: imageData,
+      trimStart: 0,
+      trimEnd: 1,
+      // Reset playback state for the new sample
+      activePlaybackScheduledTime: null,
+      activePlaybackDuration: null,
+      activePlaybackTrimStart: null,
+      activePlaybackTrimEnd: null,
+    });
+  } catch (err) { // ADDED THE OPENING BRACE for the catch block
+    alert(`Failed to load sample: ${err.message || err}`);
+    console.error("Error loading sample from URL/Ordinal:", err);
+  } // The closing brace for catch was already there.
+}
 
   /* ----------------------------------------------------------------
    * Step grid
@@ -322,9 +324,13 @@ function wireChannel(el, idx) {
 
 function updateChannel(el, ch, playhead, idx) {
   el.querySelector('.channel-name').value = ch.name;
-  el.querySelector('.mute-btn').classList.toggle('active', ch.mute);
-  el.querySelector('.solo-btn').classList.toggle('active', ch.solo);
-  el.querySelector('.volume-slider').value = ch.volume ?? 0.8;
+
+  // Mute and Solo buttons are now inside .fader-controls, within .channel-fader-bank
+  el.querySelector('.channel-fader-bank .mute-btn').classList.toggle('active', ch.mute); // CHANGED selector
+  el.querySelector('.channel-fader-bank .solo-btn').classList.toggle('active', ch.solo); // CHANGED selector
+  
+  // el.querySelector('.volume-slider').value = ch.volume ?? 0.8; // OLD
+  el.querySelector('.volume-fader').value = ch.volume ?? 0.8;    // CHANGED: Use the new class
 
   const currentStep = playhead == null ? -1 : playhead;
   const previewPos = previewPlayheads.get(idx) ?? null;
