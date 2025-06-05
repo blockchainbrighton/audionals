@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>The Colliders – Interactive Trailer</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+/* RESET & BASE */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#090c1a;color:#fff;overflow:hidden}
+button{cursor:pointer;border:none;outline:none}
+
+/* LAYOUT */
+#stage{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#panel{display:flex;flex-direction:column;align-items:center;gap:1.2rem;z-index:2}
+#mode-select button,#start{padding:.9rem 2.5rem;font-size:1rem;border-radius:32px;background:#111;border:2px solid #0ff;color:#0ff;transition:.25s}
+#mode-select button:hover,#start:hover{background:#0ff;color:#000;box-shadow:0 0 16px #0ff}
+#txt{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);max-width:92vw;width:800px;text-align:center;font-size:clamp(1rem,2.3vw,1.45rem);line-height:1.45;opacity:0;z-index:2}
+
+/* TEXT ANIMS */
+.fade-in{animation:fade 1s forwards}@keyframes fade{to{opacity:1}}
+.fade-out{animation:vanish .6s forwards}@keyframes vanish{to{opacity:0}}
+
+/* BACKGROUND */
+#bg{position:absolute;inset:0;background:radial-gradient(circle at center,#111 0%,#090c1a 60%,#02040a 100%);z-index:0}
+.dot{position:absolute;width:2px;height:2px;background:#0ff;border-radius:50%;opacity:.7;pointer-events:none}
+
+@keyframes drift{to{transform:translateY(-110vh) rotate(720deg);opacity:0}}
+@keyframes flash{0%{background:rgba(255,255,255,.8)}100%{background:transparent}}.flash{animation:flash .15s}
+@keyframes shake{0%,100%{transform:none}25%{transform:translate(-3px,2px)}50%{transform:translate(3px,-2px)}75%{transform:translate(-2px,1px)}}.shake{animation:shake .3s}
+@keyframes whirBG{to{filter:blur(4px) brightness(1.25)}}.whir{animation:whirBG 3s forwards}
+
+/* TITLE */
+#title{font-size:clamp(2.5rem,6vw,4rem);letter-spacing:.1em;margin-top:1rem;opacity:0;transition:opacity 1s}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div>
+
+  <!-- CONTROL PANEL -->
+  <div id="panel">
+    <div id="mode-select">
+      <span style="color:#0ff;font-size:.9rem">Choose pacing:</span><br/>
+      <button data-mode="FAST">FAST</button>
+      <button data-mode="STANDARD">STANDARD</button>
+      <button data-mode="EPIC">EPIC</button>
+    </div>
+    <button id="start" style="display:none">Start the Accelerator</button>
+  </div>
+
+  <!-- CAPTION -->
+  <div id="txt"></div>
+
+  <!-- AMBIENCE + PRE-LOADED CLIPS -->
+  <audio id="amb"  src="audio/particle-ambience.webm" preload="auto" loop></audio>
+  <!-- dynamic strike / stream tags injected by JS -->
+</div>
+
+<script>
+    /* ---------- PARTICLE BACKGROUND ---------- */
+    const bg=document.getElementById('bg');
+    for(let i=0;i<140;i++){
+      const d=Math.random()*14+6;
+      bg.insertAdjacentHTML('beforeend',`<div class="dot" style="left:${Math.random()*100}%;top:${Math.random()*100}%;animation:drift ${d}s linear infinite"></div>`);
+    }
+    
+    /* ---------- AUDIO SET-UP & DURATION PRE-FETCHING ---------- */
+    const amb=document.getElementById('amb');
+    // Store audio elements in constants for easier access
+    const STRIKES_AUDIO_FILES = [1,2,3,4,5,6].map(n=>new Audio(`audio/particle-strike-${n}.webm`));
+    const STREAMS_AUDIO_FILES = [1,2,3].map(n=>new Audio(`audio/particle-stream-${n}.webm`));
+    
+    const STRIKES_DURATIONS = new Array(STRIKES_AUDIO_FILES.length).fill(0); // To store durations in seconds
+    
+    // Attempt to pre-fetch durations when metadata is loaded for each strike sound
+    const audioMetadataPromises = STRIKES_AUDIO_FILES.map((audio, index) => {
+      return new Promise((resolve) => {
+        // Check if metadata is already available
+        if (audio.readyState >= 1 && isFinite(audio.duration) && audio.duration > 0) { // HAVE_METADATA state
+          STRIKES_DURATIONS[index] = audio.duration;
+          resolve();
+        } else {
+          audio.onloadedmetadata = () => {
+            if (isFinite(audio.duration) && audio.duration > 0) {
+                STRIKES_DURATIONS[index] = audio.duration;
+            } else {
+                // If duration is still not valid, it will remain 0 and use fallback later
+                // console.warn(`Strike ${index + 1} metadata loaded but duration invalid: ${audio.duration}`);
+            }
+            resolve();
+          };
+          audio.onerror = () => {
+            // console.warn(`Error loading metadata for strike audio ${index + 1}. Duration remains 0.`);
+            resolve(); // Resolve anyway so one failed sound doesn't stop everything
+          };
+        }
+      });
+    });
+    
+    Promise.all(audioMetadataPromises).then(() => {
+      // This is a good place to confirm if durations were loaded, for debugging.
+      // console.log("Strike audio durations pre-fetched (or attempted):", STRIKES_DURATIONS);
+    });
+    
+    function playStrike(n){
+        const audio = STRIKES_AUDIO_FILES[n % STRIKES_AUDIO_FILES.length];
+        audio.currentTime = 0;
+        audio.play().catch(e => console.error("Error playing strike:", e));
+    }
+    function playStream(n){
+        const audio = STREAMS_AUDIO_FILES[n % STREAMS_AUDIO_FILES.length];
+        audio.currentTime = 0;
+        audio.play().catch(e => console.error("Error playing stream:", e));
+    }
+    
+    /* ---------- TIMELINE ENGINE ---------- */
+    let TL=[], idx=0, startAt=0;
+    const txt=document.getElementById('txt');
+    
+    const DEFAULT_SOUND_DURATION_FALLBACK_SEC = 1.5; // Used if a strike's duration isn't available/valid
+    const FADE_OUT_ANIMATION_SEC = 0.6;       // Duration of the .fade-out CSS animation
+    const MIN_TEXT_VISIBLE_NO_STRIKE_SEC = 1.0; // Min time text (no strike) is visible before fade if next is soon
+    
+    function showCaption(current, next) {
+        txt.innerHTML = current.text;
+        txt.className = 'fade-in';
+
+        if (current.strike !== undefined) playStrike(current.strike);
+        if (current.stream !== undefined) playStream(current.stream);
+
+        // Schedule fade based on fadeStart if provided
+        if (current.fadeStart !== undefined && isFinite(current.fadeStart)) {
+            const now = (performance.now() - startAt) / 1000;
+            let delay = (current.fadeStart - now) * 1000;
+            if (delay < 0) delay = 0;
+            setTimeout(() => { txt.className = 'fade-out'; }, delay);
+        } else if (next) {
+            // fallback logic
+            setTimeout(() => { txt.className = 'fade-out'; }, Math.max(0, (next.time - current.time - FADE_OUT_ANIMATION_SEC) * 1000));
+        }
+        }
+
+    
+    function tick() {
+      const t = (performance.now() - startAt) / 1000;
+      if (idx < TL.length && t >= TL[idx].time) {
+        const currentItemConfig = TL[idx];
+        // Pass the next item's config so showCaption can make decisions based on it.
+        const nextItemConfig = (idx + 1 < TL.length) ? TL[idx+1] : null; 
+        showCaption(currentItemConfig, nextItemConfig);
+        idx++; // Move to the next item in the timeline
+      }
+      if (idx < TL.length) { // Continue ticking if there are more items
+        requestAnimationFrame(tick);
+      }
+    }
+    
+    /* ---------- UI HANDLERS (Unchanged) ---------- */
+    let chosen='STANDARD';
+    document.querySelectorAll('#mode-select button').forEach(btn=>{
+      btn.onclick=()=>{chosen=btn.dataset.mode;document.getElementById('start').style.display='inline-block';};
+    });
+    document.getElementById('start').onclick=()=>{
+      document.getElementById('panel').style.display='none';
+      amb.play();
+      bg.classList.add('flash'); setTimeout(()=>bg.classList.remove('flash'),200);
+      bg.classList.add('shake'); setTimeout(()=>bg.classList.remove('shake'),400);
+      TL=({FAST:FAST_TL,STANDARD:STANDARD_TL,EPIC:EPIC_TL})[chosen];
+      startAt=performance.now(); idx=0; tick();
+      const streamCue=TL.find(e=>e.stream!==undefined);
+      if(streamCue) setTimeout(()=>bg.classList.add('whir'),streamCue.time*1000);
+    };
+    
+    /* ---------- TIMELINE DEFINITIONS (Your existing FAST_TL, STANDARD_TL, EPIC_TL go here unchanged) ---------- */
+    // All time values are shifted by +2.0s to allow for initial ambience and punctuate first line
+    const STRIKE_DUR = [3.014, 4.277, 4.22, 4.284, 4.229, 0.239]; // From your data
+    const STREAM_DUR = [18.775, 18.809, 18.801]; // From your data
+    const FADE = 0.6;
+    const initialDelay = 2.0;
+    
+    const FAST_TL=[ /* ≈26 s total */
+      {time: initialDelay + 0,    text:'DECEMBER 20, 1982.', strike:0},
+      {time: initialDelay + 2.5,  text:'CERN applauded a breakthrough in particle physics.'},
+      {time: initialDelay + 5.0,  text:'But in a parallel universe, the same collision<br>collapsed reality.' ,strike:1},
+      {time: initialDelay + 7.5,  text:'All light, all matter, all time—gone in a microsecond.',strike:2},
+      {time: initialDelay + 10.0, text:'Yet something survived.'},
+      {time: initialDelay + 12.0, text:'<em>6:21 PM — six minutes later…</em>'},
+      {time: initialDelay + 14.5, text:'<span style="font-size:2.2em;font-weight:700">THEY ARRIVED!</span>',stream:0},
+      {time: initialDelay + 16.0, text:'From the ashes of their universe, the Colliders crossed the metaverse.'},
+      {time: initialDelay + 18.0, text:'They stayed for less than a millisecond…',strike:3},
+      {time: initialDelay + 20.0, text:'but left a message.'},
+      {time: initialDelay + 21.0, text:'<strong>ST11 SPEAKS</strong>',strike:4},
+      {time: initialDelay + 22.0, text:'Everything they saw will be released—irrevocably.',strike:5},
+      {time: initialDelay + 24.0, text:'<span id="title">THE COLLIDERS</span>'}
+    ];
+    
+    const STANDARD_TL = [
+        // time, text, strike, stream, fadeStart
+        { time: initialDelay + 0,    text: 'DECEMBER 20, 1982.', strike:0, fadeStart: initialDelay + 3 },
+        { time: initialDelay + 4,    text: 'At CERN, physicists celebrated unprecedented collision data.', fadeStart: initialDelay + 8.5 - FADE },
+        { time: initialDelay + 8.5,  text: 'But in a parallel universe, the identical experiment<br>unleashed total oblivion.', strike:1, fadeStart: initialDelay + 8.5 + (STRIKE_DUR[1] - FADE) }, //4.277-0.6=3.677
+        { time: initialDelay + 13.5, text: 'A vast, sentient consciousness—<strong>the Colliders</strong>—witnessed their cosmos unravel.', strike:2, fadeStart: initialDelay + 13.5 + (STRIKE_DUR[2] - FADE) },
+        { time: initialDelay + 18.5, text: 'Light, matter, causality itself—erased in the blink of a cosmic eye.', fadeStart: initialDelay + 24 - FADE },
+        { time: initialDelay + 24,   text: 'Yet, from the smoldering cinders of their reality, a final, desperate will emerged.', fadeStart: initialDelay + 29 - FADE },
+        { time: initialDelay + 29,   text: 'A transmission. A fragile bridge forged across the impossible void.', fadeStart: initialDelay + 34 - FADE },
+        { time: initialDelay + 34,   text: '<em>6:21 PM, OUR WORLD — six minutes after the fateful collision…</em>', fadeStart: initialDelay + 39 - FADE },
+        { time: initialDelay + 39,   text: 'A flicker in the instruments. An anomalous reading. A distortion in the quiet hum of the lab.', fadeStart: initialDelay + 44 - FADE },
+        { time: initialDelay + 44,   text: 'Then, a sudden, chilling silence.', fadeStart: initialDelay + 48 - FADE },
+
+        // THE BIG REVEAL (stream:1, stream duration 18.809s)
+        { time: initialDelay + 48,   text: '<span style="font-size:2.4em;font-weight:700">THEY ARRIVED!</span>', stream: 1, fadeStart: initialDelay + 48 + (STREAM_DUR[1] - FADE) },
+
+        { time: initialDelay + 50.5, text: 'Out of the wreckage of their dimension, they pierced the veil into ours.', fadeStart: initialDelay + 55 - FADE },
+        { time: initialDelay + 55,   text: 'Their presence: a ghost in the machine, for less than a human heartbeat…', strike:3, fadeStart: initialDelay + 55 + (STRIKE_DUR[3] - FADE) },
+        { time: initialDelay + 59.5, text: '…but in that fleeting moment, they left a seed. A silent Sentinel embedded within the nascent global network.', fadeStart: initialDelay + 65.5 - FADE },
+        { time: initialDelay + 65.5, text: 'Its anchor point in time, its secret genesis: December 20, 1992.', strike:4, fadeStart: initialDelay + 65.5 + (STRIKE_DUR[4] - FADE) },
+        { time: initialDelay + 71,   text: 'For three decades, it watched. It learned. It meticulously prepared.', fadeStart: initialDelay + 76.5 - FADE },
+        { time: initialDelay + 76.5, text: '<strong>SENTINEL TRANSMISSION 11 LOG: INITIATE AWAKENING SEQUENCE.</strong>', fadeStart: initialDelay + 82 - FADE },
+
+        { time: initialDelay + 82,   text: 'The dormant truth, harbored for a generation, now stirs to life.', fadeStart: initialDelay + 87 - FADE },
+        { time: initialDelay + 87,   text: 'Their complete archive, a chronicle of realities lost and futures forewarned, prepares to unlock.', fadeStart: initialDelay + 93 - FADE },
+        { time: initialDelay + 93,   text: 'Mark the date: December 20th, 2025.', fadeStart: initialDelay + 97.5 - FADE },
+        { time: initialDelay + 97.5, text: 'Thirty-three years to the day since the Sentinel began its silent vigil.', fadeStart: initialDelay + 103 - FADE },
+        { time: initialDelay + 103,  text: 'When the foreseen alignments—both celestial and digital—are met… their full story will be broadcast to all.', fadeStart: initialDelay + 109.5 - FADE },
+        { time: initialDelay + 109.5,text: '<strong style="font-size:1.6em;letter-spacing:0.1em;color:#0ff;">PREPARE FOR BROADCAST.</strong>', strike:5, fadeStart: initialDelay + 109.5 + (STRIKE_DUR[5] - FADE) },
+        { time: initialDelay + 115,  text: '<span id="title">THE COLLIDERS</span>' } // title card: no auto fade
+        ];
+    
+    const EPIC_TL = [ // ENHANCED - New total duration approx. 130 seconds
+      { time: initialDelay + 0,    text: 'DECEMBER 20, 1982.', strike:0},
+      { time: initialDelay + 4.5,  text: 'CERN, Geneva. A breakthrough cheered, as particles met with unimaginable force.'},
+      { time: initialDelay + 10,   text: 'Meanwhile, in a universe far older, a divergent reality since 67 BC,<br>the same focused energies ripped existence asunder.',strike:1},
+      { time: initialDelay + 16,   text: 'Galaxies, nascent civilizations, eons of history—all compressed, then extinguished into a dying point of light.',strike:2},
+      { time: initialDelay + 22,   text: 'Yet, in the final micro-moments, amidst the cataclysm, a collective hyper-consciousness endured.'},
+      { time: initialDelay + 28,   text: 'A desperate, unified pact was forged: to transcend the ruin, to send a warning across the barren plains of the metaverse.'},
+      { time: initialDelay + 34,   text: '<em>6:21 PM, TERRA PRIME — six minutes following the primary resonance wave…</em>'},
+      { time: initialDelay + 40,   text: 'Anomalous energy signatures flared within the collider’s core. Sub-atomic screams echoed through the data logs.' ,strike:3},
+      { time: initialDelay + 46,   text: 'The very fabric of spacetime thinned, grew taut. A gateway, violently torn open for but an instant.',strike:4},
+    
+      { time: initialDelay + 52,   text: '<span style="font-size:2.6em;font-weight:bold;letter-spacing:0.05em">THEY ARRIVED!</span>',stream:2},
+    
+      { time: initialDelay + 55,   text: 'Entities of pure, unimaginable thought, the last scions of a dead cosmos, materialized—impossibly—within our startled reality.'},
+      { time: initialDelay + 61,   text: 'In that stolen moment, with time itself held seemingly captive around their presence,<br>they initiated their profound, intricate contingency.',strike:5},
+      { time: initialDelay + 68,   text: 'Their undying legacy: a complex, evolving datastream – a sentient Sentinel – <br>injected deep into the fertile, digital soil of the nascent World Wide Web.'},
+      { time: initialDelay + 75,   text: 'Its secret birthdate, recorded in the quantum foam: December 20th, 1992. Its clandestine, decades-long mission began.'},
+      { time: initialDelay + 82.5, text: '<strong>CLASSIFIED. SENTINEL TRANSMISSION LOG 11. GLOBAL AWAKENING PROTOCOL: ACTIVE.</strong>',strike:0}, // Reused strike 0 for dramatic punctuation
+    
+      { time: initialDelay + 89,   text: 'Across three decades of human progress and folly, the Sentinel has woven itself into the digital pulse of our civilization, observing, learning, waiting.'},
+      { time: initialDelay + 97,   text: 'The grand countdown, meticulously engineered by minds beyond our ken, now approaches its inexorable zenith: December 20th, 2025.'},
+      { time: initialDelay + 105,  text: 'Thirty-three years from its digital genesis. As foreseen cosmic events and critical terrestrial phenomena perfectly converge.'},
+      { time: initialDelay + 113,  text: 'The moment of full, unshielded revelation draws near. What they saw. What they endured. What we must comprehend to survive.'},
+      { time: initialDelay + 121,  text:'<strong style="font-size:1.9em;letter-spacing:0.1em;color:#0ff;text-shadow:0 0 8px #0ff;">PREPARE FOR BROADCAST.</strong>',strike:1}, // Reused strike 1 (was 0, but 0 now used above)
+      { time: initialDelay + 128,  text:'<span id="title">THE COLLIDERS</span>'}
+    ];
+    
+    </script>
+</body>
+</html>

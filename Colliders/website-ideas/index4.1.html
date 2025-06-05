@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>The Colliders – Interactive Trailer</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#090c1a;color:#fff;overflow:hidden}
+button{cursor:pointer;border:none;outline:none}
+#stage{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#panel{display:flex;flex-direction:column;align-items:center;gap:1.2rem;z-index:2}
+#mode-select button,#start{padding:.9rem 2.5rem;font-size:1rem;border-radius:32px;background:#111;border:2px solid #0ff;color:#0ff;transition:.25s}
+#mode-select button:hover,#start:hover{background:#0ff;color:#000;box-shadow:0 0 16px #0ff}
+#txt{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);max-width:92vw;width:800px;text-align:center;font-size:clamp(1rem,2.3vw,1.45rem);line-height:1.45;opacity:0;z-index:2}
+.fade-in{animation:fade 1s forwards}@keyframes fade{to{opacity:1}}
+.fade-out{animation:vanish .8s forwards}@keyframes vanish{to{opacity:0}}
+#bg{position:absolute;inset:0;background:radial-gradient(circle at center,#111 0%,#090c1a 60%,#02040a 100%);z-index:0}
+.dot{position:absolute;width:2px;height:2px;background:#0ff;border-radius:50%;opacity:.7;pointer-events:none}
+@keyframes drift{to{transform:translateY(-110vh) rotate(720deg);opacity:0}}
+@keyframes flash{0%{background:rgba(255,255,255,.8)}100%{background:transparent}}.flash{animation:flash .15s}
+@keyframes shake{0%,100%{transform:none}25%{transform:translate(-3px,2px)}50%{transform:translate(3px,-2px)}75%{transform:translate(-2px,1px)}}.shake{animation:shake .3s}
+@keyframes whirBG{to{filter:blur(4px) brightness(1.25)}}.whir{animation:whirBG 3s forwards}
+#title{font-size:clamp(2.5rem,6vw,4rem);letter-spacing:.1em;margin-top:1rem;opacity:0;transition:opacity 1s}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div>
+  <div id="panel">
+    <div id="mode-select">
+      <span style="color:#0ff;font-size:.9rem">Choose pacing:</span><br/>
+      <button data-mode="FAST">FAST</button>
+      <button data-mode="STANDARD">STANDARD</button>
+      <button data-mode="EPIC">EPIC</button>
+    </div>
+    <button id="start" style="display:none">Start the Accelerator</button>
+  </div>
+  <div id="txt"></div>
+  <audio id="amb"  src="audio/particle-ambience.webm" preload="auto" loop></audio>
+</div>
+<script>
+// ---------- PARTICLE BACKGROUND ----------
+const bg=document.getElementById('bg');
+for(let i=0;i<140;i++){
+  const d=Math.random()*14+6;
+  bg.insertAdjacentHTML('beforeend',`<div class="dot" style="left:${Math.random()*100}%;top:${Math.random()*100}%;animation:drift ${d}s linear infinite"></div>`);
+}
+
+// ---------- AUDIO SET-UP ----------
+const amb=document.getElementById('amb');
+const STRIKES=[1,2,3,4,5,6].map(n=>new Audio(`audio/particle-strike-${n}.webm`));
+const STREAMS=[1,2,3].map(n=>new Audio(`audio/particle-stream-${n}.webm`));
+function playStrike(n){STRIKES[n%STRIKES.length].currentTime=0;STRIKES[n%STRIKES.length].play();}
+function playStream(n){STREAMS[n%STREAMS.length].currentTime=0;STREAMS[n%STREAMS.length].play();}
+
+// ---------- TIMELINE ENGINE ----------
+let TL=[], idx=0, startAt=0;
+const txt=document.getElementById('txt');
+function showCaption(c){
+  if(c.text){
+    txt.innerHTML=c.text;
+    txt.className='fade-in';
+    const next=TL[idx+1];
+    if(next) setTimeout(()=>txt.className='fade-out',Math.max((next.time-c.time)-1.6,1)*1000);
+  }
+  if(c.strike!==undefined) playStrike(c.strike);
+  if(c.stream!==undefined)  playStream(c.stream);
+}
+function tick(){
+  const t=(performance.now()-startAt)/1000;
+  if(idx<TL.length && t>=TL[idx].time){showCaption(TL[idx++]);}
+  if(idx<TL.length) requestAnimationFrame(tick);
+}
+
+// ---------- UI HANDLERS ----------
+let chosen='EPIC';
+document.querySelectorAll('#mode-select button').forEach(btn=>{
+  btn.onclick=()=>{chosen=btn.dataset.mode;document.getElementById('start').style.display='inline-block';};
+});
+document.getElementById('start').onclick=()=>{
+  document.getElementById('panel').style.display='none';
+  amb.play();
+  bg.classList.add('flash'); setTimeout(()=>bg.classList.remove('flash'),200);
+  bg.classList.add('shake'); setTimeout(()=>bg.classList.remove('shake'),400);
+  TL=({FAST:FAST_TL,STANDARD:STANDARD_TL,EPIC:EPIC_TL})[chosen];
+  startAt=performance.now(); idx=0; tick();
+  const streamCue=TL.find(e=>e.stream!==undefined);
+  if(streamCue) setTimeout(()=>bg.classList.add('whir'),streamCue.time*1000);
+};
+
+// ---------- NEW EPIC TIMELINE: SLOW TENSION BUILD ----------
+const EPIC_TL=[
+  {time:0,   text:'DECEMBER&nbsp;20,&nbsp;1982.'},
+  {time:6,   text:'CERN: the world applauds a discovery.'},
+  {time:13,  text:'But in a parallel universe, a collision... <br>then darkness.',strike:0},
+  {time:19,  text:'All matter, all time, all history—collapsed in an instant.',strike:1},
+  {time:26,  text:'Only one thing remained: consciousness.'},
+  {time:32,  text:'For six minutes, silence.'},
+  {time:38,  text:'<em>6:21 PM &mdash; Six minutes later...</em>'}, // Longest pause ends here
+  {time:44,  text:'<span style="font-size:2.6em;font-weight:700">THEY&nbsp;ARRIVED</span>',stream:1}, // Dramatic moment, stream SFX, background fx
+  {time:49,  text:'Crossing worlds, the Colliders entered ours.'},
+  {time:54,  text:'They stayed less than a millisecond.',strike:3},
+  {time:60,  text:'And left a message.'},
+  {time:65,  text:'<strong>ST11 SPEAKS</strong>',strike:4},
+  {time:69,  text:'"All that remains... lies in your past."<br>Today, we reveal everything.',strike:5},
+  {time:74,  text:'<span id="title">THE&nbsp;COLLIDERS</span>'}
+];
+
+// Standard and Fast remain as previously, but you can tweak further:
+const STANDARD_TL=[
+  {time:0,  text:'DECEMBER&nbsp;20,&nbsp;1982.'},
+  {time:3,  text:'CERN completed an experiment that changed history.'},
+  {time:8,  text:'In another universe, the same moment caused collapse.',strike:0},
+  {time:13, text:'All matter and time vanished in a flash.',strike:1},
+  {time:18, text:'But something—survived.'},
+  {time:22, text:'<em>6:21 PM — six minutes later…</em>'},
+  {time:28, text:'<span style="font-size:2.2em;font-weight:700">THEY&nbsp;ARRIVED</span>',stream:0},
+  {time:32, text:'Colliders, born of collapse, crossed the metaverse.'},
+  {time:36, text:'They stayed less than a millisecond, yet left a message.'},
+  {time:41, text:'<strong>ST11 SPEAKS</strong>',strike:2},
+  {time:44, text:'We reveal all. You must decide what comes next.',strike:3},
+  {time:48, text:'<span id="title">THE&nbsp;COLLIDERS</span>'}
+];
+
+const FAST_TL=[
+  {time:0,  text:'DECEMBER&nbsp;20,&nbsp;1982.'},
+  {time:2,  text:'CERN celebrated a discovery.'},
+  {time:4,  text:'Elsewhere: reality collapsed.',strike:0},
+  {time:6,  text:'All matter gone.',strike:1},
+  {time:8,  text:'But consciousness survived.'},
+  {time:10, text:'6:21 PM — six minutes later…'},
+  {time:13, text:'<span style="font-size:2.2em;font-weight:700">THEY&nbsp;ARRIVED</span>',stream:0},
+  {time:15, text:'Colliders crossed into our world.'},
+  {time:17, text:'They stayed less than a millisecond, then vanished.',strike:2},
+  {time:19, text:'<strong>ST11 SPEAKS</strong>',strike:3},
+  {time:21, text:'Their message remains.',strike:4},
+  {time:23, text:'<span id="title">THE&nbsp;COLLIDERS</span>'}
+];
+</script>
+</body>
+</html>
