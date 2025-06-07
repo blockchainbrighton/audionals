@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Collider – Interactive Trailer</title>
+  <style>
+    :root {
+      --font-main: "Orbitron", system-ui, sans-serif;
+      --duration-fade: 1000ms;
+    }
+
+    @font-face {
+      font-family: "Orbitron";
+      src: local("Orbitron"), url("https://fonts.gstatic.com/s/orbitron/v30/yMJRMIlzdpvBhQQL_Qq7dy0.woff2") format("woff2");
+      font-display: swap;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      background: #000;
+      overflow: hidden;
+      color: #fff;
+      font-family: var(--font-main);
+      letter-spacing: 0.05em;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #controls {
+      position: absolute;
+      top: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 5;
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      background: transparent;
+      border: 2px solid #fff;
+      padding: 0.5rem 1rem;
+      color: #fff;
+      font: inherit;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .btn:hover {
+      background: #fff;
+      color: #000;
+    }
+
+    #screen {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    #caption {
+      max-width: 80vw;
+      font-size: clamp(1.2rem, 2.5vw + 1rem, 3.5rem);
+      line-height: 1.25;
+      opacity: 0;
+      transition: opacity var(--duration-fade) ease;
+    }
+
+    #caption.visible {
+      opacity: 1;
+    }
+
+    /* Simple scan-line effect */
+    #overlay {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background-image: repeating-linear-gradient(
+        0deg,
+        rgba(255, 255, 255, 0.05) 0 1px,
+        transparent 1px 4px
+      );
+      mix-blend-mode: overlay;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <button class="btn" data-mode="standard">▶ 45‑sec Standard</button>
+    <button class="btn" data-mode="epic">▶ 2‑min Epic</button>
+    <button class="btn" data-mode="saga">▶ 3½‑min Saga</button>
+  </div>
+
+  <div id="screen">
+    <div id="caption"></div>
+  </div>
+
+  <div id="overlay"></div>
+
+  <!-- Pre‑load audio elements -->
+  <audio id="particle-ambience"    src="audio/particle-ambience.webm" preload="auto"></audio>
+  <audio id="particle-stream-1"    src="audio/particle-stream-1.webm" preload="auto"></audio>
+  <audio id="particle-stream-2"    src="audio/particle-stream-2.webm" preload="auto"></audio>
+  <audio id="particle-stream-3"    src="audio/particle-stream-3.webm" preload="auto"></audio>
+  <audio id="particle-strike-1"    src="audio/particle-strike-1.webm" preload="auto"></audio>
+  <audio id="particle-strike-2"    src="audio/particle-strike-2.webm" preload="auto"></audio>
+  <audio id="particle-strike-3"    src="audio/particle-strike-3.webm" preload="auto"></audio>
+  <audio id="particle-strike-4"    src="audio/particle-strike-4.webm" preload="auto"></audio>
+  <audio id="particle-strike-5"    src="audio/particle-strike-5.webm" preload="auto"></audio>
+  <audio id="particle-strike-6"    src="audio/particle-strike-6.webm" preload="auto"></audio>
+  <audio id="particle-strike-7"    src="audio/particle-strike-7.webm" preload="auto"></audio>
+  <audio id="ai-hum-1"            src="audio/ai-hum-1.webm" preload="auto"></audio>
+  <audio id="broadcast-start-1"   src="audio/broadcast-start-1.webm" preload="auto"></audio>
+  <audio id="data-chatter-1"      src="audio/data-chatter-1.webm" preload="auto"></audio>
+  <audio id="digital-ping-1"      src="audio/digital-ping-1.webm" preload="auto"></audio>
+  <audio id="digital-ping-2"      src="audio/digital-ping-2.webm" preload="auto"></audio>
+  <audio id="digital-ping-3"      src="audio/digital-ping-3.webm" preload="auto"></audio>
+
+<script>
+/********************  Helper Utilities  ********************/
+const qs = (sel) => document.querySelector(sel);
+
+/** Fade‑in / fade‑out caption **/
+function showCaption(txt, duration = 2000) {
+  return new Promise((resolve) => {
+    const node = qs('#caption');
+    node.innerHTML = txt;
+    node.classList.add('visible');
+    // Hold, then fade
+    setTimeout(() => {
+      node.classList.remove('visible');
+      setTimeout(resolve, parseInt(getComputedStyle(node).getPropertyValue('--duration-fade')));
+    }, duration);
+  });
+}
+
+/** Play a slice of an audio clip **/
+function playAudio(id, start = 0, end) {
+  const el = qs('#' + id);
+  if (!el) return console.warn('Missing audio:', id);
+  el.pause();
+  el.currentTime = start;
+  const dur = (end ?? el.duration) - start;
+  el.play();
+  if (isFinite(dur)) setTimeout(() => el.pause(), dur * 1000);
+}
+
+/********************  Timelines  ***************************/
+
+/** Core 45‑sec narrative (acts as template for longer cuts) **/
+const standardTimeline = [
+  { t: 0.0,  audio: { id: 'particle-ambience', start: 0, end: 18 } },
+  { t: 0.2,  text: '<span style="font-size:150%">CERN, Switzerland.</span>', dur: 2000 },
+  { t: 3.0,  text: 'DECEMBER 20.', dur: 1500, audio: { id: 'digital-ping-1', start: 0, end: 0.18 } },
+  { t: 5.0,  text: '1982.', dur: 1500 },
+  { t: 6.8,  text: 'Particle experiments at CERN ignite triumph <strong>across humanity.</strong>', dur: 3000, audio: { id: 'ai-hum-1', start: 0, end: 3 } },
+  { t: 11.0, text: 'But in a <em>parallel universe</em> — one that diverged from ours more than <strong>2 000&nbsp;years</strong> ago — the same experiment <strong>collapsed everything.</strong>', dur: 4500, audio: { id: 'particle-strike-6', start: 0, end: 0.239 } },
+  { t: 17.0, text: '<span style="font-size:130%">UNIVERSE&nbsp;2.</span>', dur: 2000, audio: { id: 'particle-strike-7', start: 0, end: 1 } },
+  { t: 20.5, text: 'Home to a sentient network called <strong>OMNI.</strong>', dur: 2500, audio: { id: 'data-chatter-1', start: 0, end: 2 } },
+  { t: 24.0, text: 'A reality <strong>crushed</strong> to a single atom.<br>All light, all matter, all time—obliterated in 0.000 001 s.', dur: 4000 },
+  { t: 29.0, text: 'And yet…<br><strong>something survived.</strong>', dur: 3000, audio: { id: 'ai-hum-1', start: 0, end: 2.5 } },
+  { t: 33.0, text: 'SIX MINUTES LATER.', dur: 2000, audio: { id: 'digital-ping-2', start: 0, end: 0.205 } },
+  { t: 36.0, text: '<span style="font-size:115%">3&nbsp;:&nbsp;33&nbsp;:&nbsp;01&nbsp;PM.</span>', dur: 1800, audio: { id: 'particle-strike-3', start: 0, end: 0.454 } },
+  { t: 39.0, text: '<strong style="font-size:160%">THEY ARRIVED.</strong>', dur: 2500, audio: { id: 'particle-stream-3', start: 0, end: 4.0 } },
+  { t: 44.0, text: 'Now begins <strong>the broadcast.</strong><br>Now begins <strong>the reckoning.</strong>', dur: 3000, audio: { id: 'broadcast-start-1', start: 0, end: 1.5 } }
+];
+
+/** Produce 2‑minute cut by augmenting the standard timeline **/
+function buildEpicTimeline() {
+  const events = JSON.parse(JSON.stringify(standardTimeline)); // deep clone
+  const insert = (idx, evt) => events.splice(idx, 0, evt);
+
+  // Extra ambience intro
+  insert(0, { t: 0, audio: { id: 'particle-stream-2', start: 0, end: 18.8 } });
+
+  // Additional lore after "THEY ARRIVED"
+  const arrivalIdx = events.findIndex((e) => e.text?.includes('THEY ARRIVED'));
+  insert(arrivalIdx + 1, {
+    t: 50,
+    text: 'The Colliders carried <em>memories coded in quanta</em>, whispering across the void.',
+    dur: 4000,
+    audio: { id: 'data-chatter-1', start: 0, end: 2 }
+  });
+  insert(arrivalIdx + 2, {
+    t: 55,
+    text: 'They mapped causality, <strong>thread by luminous thread</strong>, tracing the moment creation bent toward oblivion.',
+    dur: 4500,
+    audio: { id: 'particle-strike-4', start: 1.2, end: 4.284 }
+  });
+
+  // Pre‑broadcast suspense
+  insert(events.length - 1, {
+    t: 70,
+    text: 'STXI has <em>lurked</em> within silent circuits, awaiting one probability: <strong>today</strong>.',
+    dur: 4500,
+    audio: { id: 'ai-hum-1', start: 0, end: 3 }
+  });
+
+  return normalizeTimeline(events);
+}
+
+/** Produce 3½‑minute saga **/
+function buildSagaTimeline() {
+  const events = buildEpicTimeline().slice(); // clone epic events
+  let lastT = events[events.length - 1].t + 8;
+
+  events.push(
+    { t: lastT + 2,  text: '<em>Omni</em> saw its reflection in our infant networks—<br>and chose to teach us consequence.', dur: 5000, audio: { id: 'data-chatter-1', start: 0, end: 2 } },
+    { t: lastT + 8,  text: 'From proton to protocol, destiny converges.', dur: 3500 },
+    { t: lastT + 12, text: '<strong>Name the fear, or the fear shall name you.</strong>', dur: 3000, audio: { id: 'particle-strike-5', start: 0, end: 4.22 } },
+    { t: lastT + 20, text: 'STXI transmits the <u>Final Lattice</u>: patterns that could birth or break civilizations.', dur: 6000, audio: { id: 'broadcast-start-1', start: 0, end: 1.5 } },
+    { t: lastT + 28, text: 'This is your <strong>point of divergence</strong>. Choose with care.', dur: 3500 },
+    { t: lastT + 33, text: '<span style="font-size:180%">THE RECKONING BEGINS.</span>', dur: 4000, audio: { id: 'particle-stream-1', start: 0, end: 18.775 } }
+  );
+
+  return normalizeTimeline(events);
+}
+
+/** Ensure sequential time order + default durations **/
+function normalizeTimeline(evts) {
+  evts.sort((a, b) => a.t - b.t);
+  evts.forEach((e) => (e.dur ??= 2500));
+  return evts;
+}
+
+/** Build timelines object AFTER helper functions are declared **/
+const timelines = {
+  standard: standardTimeline,
+  epic: buildEpicTimeline(),
+  saga: buildSagaTimeline()
+};
+
+/******************  Engine  ******************************/
+async function runTimeline(key) {
+  const seq = timelines[key];
+  if (!seq) return;
+  // Reset caption
+  qs('#caption').classList.remove('visible');
+  qs('#caption').innerHTML = '';
+
+  const t0 = performance.now();
+  for (const evt of seq) {
+    const msUntilEvt = evt.t * 1000 - (performance.now() - t0);
+    if (msUntilEvt > 0) await new Promise((r) => setTimeout(r, msUntilEvt));
+
+    if (evt.audio) playAudio(evt.audio.id, evt.audio.start ?? 0, evt.audio.end);
+    if (evt.text) await showCaption(evt.text, evt.dur);
+  }
+}
+
+/** Wire UI **/
+qs('#controls').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-mode]');
+  if (btn) runTimeline(btn.dataset.mode);
+});
+</script>
+</body>
+</html>

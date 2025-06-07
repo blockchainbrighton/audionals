@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>The Colliders - Interactive Experience</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    html,body {height:100%;margin:0;}
+    body {
+      background: linear-gradient(135deg,#090c1a 70%,#1c2040 100%);
+      color:#fff;font-family:sans-serif;text-align:center;min-height:100vh;overflow:hidden;
+      transition: background 0.8s cubic-bezier(.4,2,.6,1), filter 0.5s;
+    }
+    #controls button {padding:1rem 2rem;margin:0.5rem;font-size:1rem;cursor:pointer;background:#111;border:2px solid #0ff;color:#0ff;border-radius:8px;transition:.3s}
+    #controls button.selected, #controls button:focus {background:#0ff;color:#000;box-shadow:0 0 12px #0ff;}
+    #controls button:disabled {opacity:.6;cursor:not-allowed;background:#222;color:#888;border-color:#333;box-shadow:none;}
+    #visual-container {margin-top:2rem;min-height:100px;}
+    #text-display {
+      font-size:1.8rem;min-height:3em;letter-spacing:.01em;opacity:0;
+      filter:brightness(1) drop-shadow(0 0 0px #0ff);
+      transform:scale(1);
+      will-change:opacity,filter,transform,text-shadow,color;
+      transition: opacity .5s, filter .5s, color .3s, text-shadow .3s, transform .3s;
+      z-index:10; position:relative;
+      pointer-events: none;
+    }
+    .glow {text-shadow:0 0 12px #0ff,0 0 32px #fff;}
+    .strike {color:#fff;background:linear-gradient(90deg,#f36 20%,#fff 80%);background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 20px #f36);}
+    .shake {animation:shake 0.4s cubic-bezier(.2,1.5,.4,1) 1;}
+    @keyframes shake { 10%{transform:translate(-2px,2px);} 20%{transform:translate(2px,-2px);} 30%{transform:translate(-3px,3px);} 40%{transform:translate(2px,1px);} 50%{transform:translate(1px,-1px);} 60%{transform:translate(-2px,2px);} 70%{transform:translate(2px,-1px);} 80%{transform:translate(-1px,2px);} 90%{transform:translate(2px,1px);} }
+    .pulse {animation:pulse 0.8s cubic-bezier(.7,0,0,1) 1;}
+    @keyframes pulse { 0%{transform:scale(1);} 30%{transform:scale(1.15);} 60%{transform:scale(0.97);} 100%{transform:scale(1);} }
+    .flash-bg {animation:flashBG 0.6s;}
+    @keyframes flashBG {0%{background:#fff;}50%{background:#0ff;}100%{background:linear-gradient(135deg,#090c1a 70%,#1c2040 100%);} }
+    .blur {filter:blur(2.5px) brightness(1.7);}
+    .hue-rotate {filter:hue-rotate(110deg);}
+    .dim {filter:brightness(0.6);}
+    .ambient-glow {box-shadow:0 0 120px 40px #0ff44a inset;}
+    /* Overlay for "shockwave"/"vibration" */
+    #shockwave {position:fixed;inset:0;pointer-events:none;z-index:100;background:radial-gradient(circle,#fff8 3%,#0ff4 7%,transparent 40%);opacity:0;transition:opacity 0.4s;}
+  </style>
+</head>
+<body>
+<div id="container">
+  <div id="controls">
+    <button id="standard" class="selected" disabled>Standard Narrative</button>
+    <button id="start" disabled>Loading audio...</button>
+  </div>
+  <div id="visual-container"></div>
+  <div id="text-display"></div>
+  <div id="shockwave"></div>
+</div>
+<script>
+/* --- User-provided constants (truncated for brevity, insert full versions in production) --- */
+const STRIKE_DUR=[3.014,4.277,4.22,4.284,4.229,0.239,4.281], ORIGINAL_STREAM_DUR=[18.775,18.809,18.801], FADE=.6, MIN_LINE=2.2, initialDelay=2;
+const STRIKE_FILES=['particle-strike-1.webm','particle-strike-2.webm','particle-strike-3.webm','particle-strike-4.webm','particle-strike-5.webm','particle-strike-6.webm','particle-strike-7.webm'],
+STREAM_FILES=['particle-stream-1.webm','particle-stream-2.webm','particle-stream-3.webm'],
+audioFiles=[...STRIKE_FILES,...STREAM_FILES,'ai-hum-1.webm','broadcast-start-1.webm','data-chatter-1.webm','digital-ping-1.webm','digital-ping-2.webm','digital-ping-3.webm','particle-ambience.webm','collider-sound.mp3','collider-sounds.mp3'];
+const STREAM_DUR = [18.775, 18.809, 18.801];
+
+
+
+
+const audioSyncPointsData = {
+    "ai-hum-1.webm": [{'at': 0.059, 'fadeIn': 0.0, 'fadeOut': 0.259}, {'at': 0.941, 'fadeIn': 0.741, 'fadeOut': 1.141}, {'at': 1.441, 'fadeIn': 1.241, 'fadeOut': 1.641}, {'at': 2.059, 'fadeIn': 1.859, 'fadeOut': 2.259}, {'at': 2.559, 'fadeIn': 2.359, 'fadeOut': 2.759}],
+    "broadcast-start-1.webm": [{'at': 0.497, 'fadeIn': 0.297, 'fadeOut': 0.697}, {'at': 0.997, 'fadeIn': 0.797, 'fadeOut': 1.197}, {'at': 1.5, 'fadeIn': 1.3, 'fadeOut': 1.5}],
+    "collider-sound.mp3": [{'at': 0.026, 'fadeIn': 0.024, 'fadeOut': 0.222}, {'at': 1.654, 'fadeIn': 1.454, 'fadeOut': 1.854}, {'at': 4.225, 'fadeIn': 4.027, 'fadeOut': 4.23}, {'at': 15.59, 'fadeIn': 15.588, 'fadeOut': 15.79}, {'at': 17.239, 'fadeIn': 17.039, 'fadeOut': 17.439}, {'at': 17.862, 'fadeIn': 17.662, 'fadeOut': 18.062}, {'at': 19.856, 'fadeIn': 19.658, 'fadeOut': 19.857}, {'at': 22.069, 'fadeIn': 22.007, 'fadeOut': 22.269}, {'at': 22.592, 'fadeIn': 22.392, 'fadeOut': 22.792}, {'at': 23.276, 'fadeIn': 23.076, 'fadeOut': 23.476}],
+    "collider-sounds.mp3": [{'at': 0.029, 'fadeIn': 0.025, 'fadeOut': 0.229}, {'at': 1.656, 'fadeIn': 1.456, 'fadeOut': 1.856}, {'at': 4.227, 'fadeIn': 4.027, 'fadeOut': 4.232}, {'at': 15.593, 'fadeIn': 15.591, 'fadeOut': 15.793}, {'at': 17.241, 'fadeIn': 17.041, 'fadeOut': 17.441}, {'at': 17.864, 'fadeIn': 17.664, 'fadeOut': 18.064}, {'at': 19.858, 'fadeIn': 19.66, 'fadeOut': 19.859}, {'at': 22.041, 'fadeIn': 22.009, 'fadeOut': 22.241}, {'at': 22.547, 'fadeIn': 22.347, 'fadeOut': 22.747}, {'at': 23.278, 'fadeIn': 23.078, 'fadeOut': 23.478}],
+    "data-chatter-1.webm": [{'at': 0.012, 'fadeIn': 0.007, 'fadeOut': 0.212}, {'at': 0.597, 'fadeIn': 0.397, 'fadeOut': 0.797}, {'at': 1.098, 'fadeIn': 0.898, 'fadeOut': 1.289}, {'at': 1.617, 'fadeIn': 1.417, 'fadeOut': 1.817}],
+    "digital-ping-1.webm": [{'at': 0.0, 'fadeIn': 0.0, 'fadeOut': 0.105}],
+    "digital-ping-2.webm": [{'at': 0.115, 'fadeIn': 0.0, 'fadeOut': 0.205}],
+    "digital-ping-3.webm": [{'at': 0.0, 'fadeIn': 0.0, 'fadeOut': 0.15}],
+    "particle-stream-1.webm": [{'at': 0.032, 'fadeIn': 0.0, 'fadeOut': 0.232}, {'at': 0.537, 'fadeIn': 0.337, 'fadeOut': 0.737}, {'at': 1.268, 'fadeIn': 1.068, 'fadeOut': 1.468}, {'at': 1.877, 'fadeIn': 1.677, 'fadeOut': 2.077}, {'at': 2.495, 'fadeIn': 2.295, 'fadeOut': 2.695}, {'at': 3.135, 'fadeIn': 2.935, 'fadeOut': 3.335}, {'at': 3.784, 'fadeIn': 3.584, 'fadeOut': 3.984}, {'at': 4.763, 'fadeIn': 4.563, 'fadeOut': 4.963}, {'at': 5.338, 'fadeIn': 5.138, 'fadeOut': 5.538}, {'at': 6.093, 'fadeIn': 5.893, 'fadeOut': 6.293}],
+    "particle-stream-2.webm": [{'at': 0.218, 'fadeIn': 0.018, 'fadeOut': 0.418}, {'at': 0.887, 'fadeIn': 0.687, 'fadeOut': 1.087}, {'at': 1.718, 'fadeIn': 1.518, 'fadeOut': 1.918}, {'at': 2.309, 'fadeIn': 2.109, 'fadeOut': 2.509}, {'at': 2.884, 'fadeIn': 2.684, 'fadeOut': 3.084}, {'at': 3.467, 'fadeIn': 3.267, 'fadeOut': 3.667}, {'at': 4.199, 'fadeIn': 3.999, 'fadeOut': 4.399}, {'at': 4.898, 'fadeIn': 4.698, 'fadeOut': 5.098}, {'at': 5.449, 'fadeIn': 5.249, 'fadeOut': 5.649}, {'at': 6.298, 'fadeIn': 6.098, 'fadeOut': 6.498}],
+    "particle-stream-3.webm": [{'at': 0.181, 'fadeIn': 0.0, 'fadeOut': 0.381}, {'at': 0.692, 'fadeIn': 0.492, 'fadeOut': 0.892}, {'at': 1.222, 'fadeIn': 1.022, 'fadeOut': 1.422}, {'at': 1.753, 'fadeIn': 1.553, 'fadeOut': 1.953}, {'at': 2.34, 'fadeIn': 2.14, 'fadeOut': 2.54}, {'at': 2.963, 'fadeIn': 2.763, 'fadeOut': 3.163}, {'at': 3.523, 'fadeIn': 3.323, 'fadeOut': 3.723}, {'at': 4.227, 'fadeIn': 4.027, 'fadeOut': 4.427}, {'at': 4.749, 'fadeIn': 4.549, 'fadeOut': 4.949}, {'at': 5.431, 'fadeIn': 5.231, 'fadeOut': 5.631}],
+    "particle-strike-1.webm": [{'at': 0.43, 'fadeIn': 0.23, 'fadeOut': 0.63}, {'at': 1.037, 'fadeIn': 0.837, 'fadeOut': 1.237}, {'at': 3.001, 'fadeIn': 2.801, 'fadeOut': 3.007}],
+    "particle-strike-2.webm": [{'at': 0.002, 'fadeIn': 0.0, 'fadeOut': 0.202}, {'at': 1.65, 'fadeIn': 1.45, 'fadeOut': 1.85}, {'at': 2.273, 'fadeIn': 2.073, 'fadeOut': 2.473}, {'at': 3.142, 'fadeIn': 2.942, 'fadeOut': 3.342}, {'at': 4.267, 'fadeIn': 4.069, 'fadeOut': 4.27}],
+    "particle-strike-3.webm": [{'at': 0.007, 'fadeIn': 0.0, 'fadeOut': 0.205}, {'at': 1.596, 'fadeIn': 1.396, 'fadeOut': 1.796}, {'at': 2.214, 'fadeIn': 2.014, 'fadeOut': 2.414}, {'at': 4.203, 'fadeIn': 4.02, 'fadeOut': 4.209}],
+    "particle-strike-4.webm": [{'at': 0.002, 'fadeIn': 0.0, 'fadeOut': 0.202}, {'at': 1.626, 'fadeIn': 1.426, 'fadeOut': 1.826}, {'at': 2.271, 'fadeIn': 2.071, 'fadeOut': 2.471}, {'at': 2.825, 'fadeIn': 2.625, 'fadeOut': 3.025}, {'at': 4.22, 'fadeIn': 4.021, 'fadeOut': 4.272}],
+    "particle-strike-5.webm": [{'at': 0.004, 'fadeIn': 0.0, 'fadeOut': 0.204}, {'at': 1.674, 'fadeIn': 1.474, 'fadeOut': 1.874}, {'at': 2.254, 'fadeIn': 2.054, 'fadeOut': 2.454}, {'at': 4.2, 'fadeIn': 4.001, 'fadeOut': 4.223}],
+    "particle-strike-6.webm": [{'at': 0.003, 'fadeIn': 0.0, 'fadeOut': 0.203}],
+    "particle-strike-7.webm": [{'at': 0.002, 'fadeIn': 0.0, 'fadeOut': 0.202}, {'at': 1.642, 'fadeIn': 1.442, 'fadeOut': 1.842}, {'at': 2.226, 'fadeIn': 2.026, 'fadeOut': 2.426}, {'at': 2.841, 'fadeIn': 2.641, 'fadeOut': 3.041}, {'at': 3.411, 'fadeIn': 3.211, 'fadeOut': 3.611}, {'at': 4.239, 'fadeIn': 4.039, 'fadeOut': 4.279}]
+};
+
+// Dramatic timeline (see previous, unchanged for brevity)
+const STANDARD_TL = [
+    { time: initialDelay + 0,    text: 'DECEMBER 20, 1982.', strike:0, fadeStart: initialDelay + (STRIKE_DUR[0]) },  // ~3.0s
+    { time: initialDelay + 3.5,  text: 'CERN, Switzerland.', fadeStart: initialDelay + 3.5 + MIN_LINE },
+    { time: initialDelay + 6,    text: 'At CERN, physicists celebrated unprecedented collision data.', fadeStart: initialDelay + 6 + 3.5 },
+    { time: initialDelay + 10,   text: 'But in a parallel universe…', fadeStart: initialDelay + 10 + MIN_LINE },
+    { time: initialDelay + 12.3, text: 'The identical experiment<br>unleashed total', fadeStart: initialDelay + 12.3 + MIN_LINE },
+    { time: initialDelay + 14.7, text: '<span style="font-size:2.5em;font-weight:700;color:#f36;">OBLIVION</span>', strike:1, fadeStart: initialDelay + 14.7 + STRIKE_DUR[1] },
+    { time: initialDelay + 19.5, text: 'A vast, sentient consciousness—', fadeStart: initialDelay + 19.5 + MIN_LINE },
+    { time: initialDelay + 21.8, text: '<strong>the Colliders</strong>—witnessed their cosmos…', fadeStart: initialDelay + 21.8 + MIN_LINE },
+    { time: initialDelay + 24.1, text: '<span style="font-size:2em;font-weight:700;">unravel.</span>', strike:2, fadeStart: initialDelay + 24.1 + STRIKE_DUR[2] },
+    { time: initialDelay + 28.5, text: 'Light, matter, causality itself—', fadeStart: initialDelay + 28.5 + MIN_LINE },
+    { time: initialDelay + 30.8, text: '<span style="color:#888;">Erased in the blink of a cosmic eye.</span>', fadeStart: initialDelay + 30.8 + 3.2 },
+    { time: initialDelay + 34.5, text: 'From the smoldering cinders of reality…', fadeStart: initialDelay + 34.5 + MIN_LINE },
+    { time: initialDelay + 36.8, text: 'A final, desperate will emerged.', fadeStart: initialDelay + 36.8 + MIN_LINE },
+    { time: initialDelay + 39.1, text: 'A transmission.', fadeStart: initialDelay + 39.1 + MIN_LINE },
+    { time: initialDelay + 41.4, text: 'A fragile bridge,', fadeStart: initialDelay + 41.4 + MIN_LINE },
+    { time: initialDelay + 43.7, text: 'Forged across the impossible void.', fadeStart: initialDelay + 43.7 + MIN_LINE },
+    { time: initialDelay + 46,   text: '<em>6:21&nbsp;PM, OUR WORLD</em>', fadeStart: initialDelay + 46 + MIN_LINE },
+    { time: initialDelay + 48.3, text: '<em>Six&nbsp;minutes&nbsp;after the fateful collision…</em>', fadeStart: initialDelay + 48.3 + MIN_LINE },
+    { time: initialDelay + 50.6, text: 'A flicker in the instruments.', fadeStart: initialDelay + 50.6 + MIN_LINE },
+    { time: initialDelay + 52.9, text: 'An anomalous reading.', fadeStart: initialDelay + 52.9 + MIN_LINE },
+    { time: initialDelay + 55.2, text: 'A distortion in the quiet hum of the lab.', fadeStart: initialDelay + 55.2 + MIN_LINE },
+    { time: initialDelay + 57.5, text: 'Then…', fadeStart: initialDelay + 57.5 + MIN_LINE },
+    { time: initialDelay + 59.8, text: '<span style="color:#0ff;">A sudden, chilling silence.</span>', fadeStart: initialDelay + 59.8 + MIN_LINE + 0.5 },
+    { time: initialDelay + 62.7, text: '<span style="font-size:2.6em;font-weight:900;letter-spacing:0.04em;color:#ff0;">THEY&nbsp;ARRIVED</span>', stream: 1, fadeStart: initialDelay + 62.7 + STREAM_DUR[1] },
+    { time: initialDelay + 82,   text: 'Out of the wreckage…', fadeStart: initialDelay + 82 + MIN_LINE },
+    { time: initialDelay + 84.3, text: '…they pierced the veil into ours.', fadeStart: initialDelay + 84.3 + MIN_LINE },
+    { time: initialDelay + 86.6, text: 'Their presence: a ghost in the machine,', fadeStart: initialDelay + 86.6 + MIN_LINE },
+    { time: initialDelay + 88.9, text: 'for less than a human heartbeat…', strike:3, fadeStart: initialDelay + 88.9 + STRIKE_DUR[3] },
+    { time: initialDelay + 93.3, text: '…but in that fleeting moment,', fadeStart: initialDelay + 93.3 + MIN_LINE },
+    { time: initialDelay + 95.6, text: 'they left a seed.', fadeStart: initialDelay + 95.6 + MIN_LINE },
+    { time: initialDelay + 97.9, text: 'A silent Sentinel', fadeStart: initialDelay + 97.9 + MIN_LINE },
+    { time: initialDelay + 100.2, text: 'embedded within the nascent global network.', strike:4, fadeStart: initialDelay + 100.2 + STRIKE_DUR[4] },
+    { time: initialDelay + 104.5, text: 'Its anchor point in time:', fadeStart: initialDelay + 104.5 + MIN_LINE },
+    { time: initialDelay + 106.8, text: '<span style="font-weight:700;">December 20, 1992.</span>', fadeStart: initialDelay + 106.8 + MIN_LINE },
+    { time: initialDelay + 109.1, text: 'For three decades, it watched.', fadeStart: initialDelay + 109.1 + MIN_LINE },
+    { time: initialDelay + 111.4, text: 'It learned.', fadeStart: initialDelay + 111.4 + MIN_LINE },
+    { time: initialDelay + 113.7, text: 'It meticulously prepared.', fadeStart: initialDelay + 113.7 + MIN_LINE },
+    { time: initialDelay + 116, text: '<strong>SENTINEL TRANSMISSION 11 LOG:</strong>', fadeStart: initialDelay + 116 + MIN_LINE },
+    { time: initialDelay + 118.3, text: '<strong>INITIATE AWAKENING SEQUENCE.</strong>', fadeStart: initialDelay + 118.3 + MIN_LINE },
+    { time: initialDelay + 120.6, text: 'The dormant truth, harbored for a generation…', fadeStart: initialDelay + 120.6 + MIN_LINE },
+    { time: initialDelay + 122.9, text: '<span style="color:#0ff;">Now stirs to life.</span>', fadeStart: initialDelay + 122.9 + MIN_LINE },
+    { time: initialDelay + 125.2, text: 'Their complete archive:', fadeStart: initialDelay + 125.2 + MIN_LINE },
+    { time: initialDelay + 127.5, text: 'A chronicle of realities lost', fadeStart: initialDelay + 127.5 + MIN_LINE },
+    { time: initialDelay + 129.8, text: 'and futures forewarned…', fadeStart: initialDelay + 129.8 + MIN_LINE },
+    { time: initialDelay + 132.1, text: '…prepares to unlock.', fadeStart: initialDelay + 132.1 + MIN_LINE },
+    { time: initialDelay + 134.4, text: 'Mark the date:', fadeStart: initialDelay + 134.4 + MIN_LINE },
+    { time: initialDelay + 136.7, text: '<span style="font-weight:700;">December 20th, 2025.</span>', fadeStart: initialDelay + 136.7 + MIN_LINE },
+    { time: initialDelay + 139, text: 'Thirty-three years to the day', fadeStart: initialDelay + 139 + MIN_LINE },
+    { time: initialDelay + 141.3, text: 'since the Sentinel began its silent vigil.', fadeStart: initialDelay + 141.3 + 3.5 },
+    { time: initialDelay + 145, text: 'When the foreseen alignments—', fadeStart: initialDelay + 145 + MIN_LINE },
+    { time: initialDelay + 147.3, text: 'both celestial and digital—are met…', fadeStart: initialDelay + 147.3 + MIN_LINE },
+    { time: initialDelay + 149.6, text: '…their full story will be broadcast to all.', fadeStart: initialDelay + 149.6 + MIN_LINE },
+    { time: initialDelay + 151.9, text: '<strong style="font-size:1.6em;letter-spacing:0.1em;color:#0ff;">PREPARE&nbsp;FOR&nbsp;BROADCAST.</strong>', strike:5, fadeStart: initialDelay + 151.9 + STRIKE_DUR[5] },
+    { time: initialDelay + 154.5, text: '<span id="title" style="font-size:2.7em;letter-spacing:0.06em;font-weight:900;">THE&nbsp;COLLIDERS</span>' }
+];
+
+let audioBuffers={}, isLoaded=false, isRunning=false, audioCtx, ambienceNode=null, ambienceGain=null;
+const controls={standard:document.getElementById('standard'),start:document.getElementById('start')}, textDisplay=document.getElementById('text-display');
+const shockwave = document.getElementById('shockwave');
+let scheduledTimeouts=[];
+
+/* --- Effect system helpers --- */
+
+// Utility: Apply and remove a class for a set duration
+function flashClass(el, className, dur=500) {
+  el.classList.add(className);
+  setTimeout(()=>el.classList.remove(className), dur);
+}
+
+// Utility: Animate text color for drama (rainbow pulse)
+function animateColor(el, colors, duration=700) {
+  let i=0, stop=false;
+  function step() {
+    if(stop) return;
+    el.style.color=colors[i%colors.length];
+    i++;
+    if(i<colors.length*2) setTimeout(step, duration/colors.length);
+    else el.style.color='';
+  }
+  step();
+  setTimeout(()=>{stop=true;el.style.color='';},duration+30);
+}
+
+// Utility: Animate text shadow for glowing effect
+function animateGlow(el, color, duration=900) {
+  el.style.textShadow=`0 0 24px ${color},0 0 64px #fff`;
+  setTimeout(()=>el.style.textShadow='', duration);
+}
+
+// Utility: Animate background for strikes/streams
+function flashShockwave(dur=700) {
+  shockwave.style.opacity='1';
+  setTimeout(()=>{shockwave.style.opacity='0';}, dur);
+}
+
+// Utility: Animate body background for color/hue drama
+function animateBodyHue(dur=900, amount=90) {
+  document.body.classList.add('hue-rotate');
+  setTimeout(()=>document.body.classList.remove('hue-rotate'), dur);
+}
+
+// Utility: Animate blur/dim on text
+function blurAndDimText(el, dur=700) {
+  el.classList.add('blur','dim');
+  setTimeout(()=>el.classList.remove('blur','dim'), dur);
+}
+
+/* --- Visual effect dispatcher: map audio filename/types to effects --- */
+function applyVisualEffectsForSound(filename, {targetElementId='text-display',type,base,peak}={}) {
+  const el=document.getElementById(targetElementId)||textDisplay;
+  const sps=audioSyncPointsData[filename]; if(!sps) return;
+
+  // We'll use the sync points to trigger dramatic effects (color, glow, pulse, shake, etc.)
+  sps.forEach(sp=>{
+    let fin=sp.fadeIn*1e3, atk=sp.at*1e3, fo=sp.fadeOut*1e3;
+    // Generic drama for all samples: slight color or brightness pulse on fadeIn/out
+    scheduledTimeouts.push(setTimeout(()=>flashClass(el,'pulse',350),fin));
+    scheduledTimeouts.push(setTimeout(()=>flashClass(el,'pulse',350),fo));
+
+    // Special: strikes/streams cause intense drama
+    if(filename.startsWith('particle-strike')) {
+      scheduledTimeouts.push(setTimeout(()=> {
+        flashShockwave();
+        animateGlow(el,'#f36',600);
+        animateBodyHue(600,120);
+        flashClass(el,'shake',500);
+        animateColor(el,["#f36","#fff","#0ff","#ff0"],500);
+        el.classList.add('strike');
+        setTimeout(()=>el.classList.remove('strike'),700);
+      }, atk));
+    } else if(filename.startsWith('particle-stream')) {
+      scheduledTimeouts.push(setTimeout(()=>{
+        animateGlow(el,'#0ff',800);
+        flashClass(el,'pulse',700);
+        animateBodyHue(700,80);
+      }, atk));
+    } else if(filename==='ai-hum-1.webm') {
+      scheduledTimeouts.push(setTimeout(()=>{
+        el.classList.add('glow');
+        animateColor(el,["#0ff","#44f2ff","#fff"],400);
+      }, atk));
+      scheduledTimeouts.push(setTimeout(()=>el.classList.remove('glow'), atk+350));
+    } else if(filename.startsWith('digital-ping')) {
+      scheduledTimeouts.push(setTimeout(()=>{
+        flashClass(el,'pulse',200);
+        animateGlow(el,'#ff0',220);
+      }, atk));
+    } else if(filename==='collider-sound.mp3' || filename==='collider-sounds.mp3') {
+      scheduledTimeouts.push(setTimeout(()=>{
+        animateGlow(el,'#fff',700);
+        blurAndDimText(el,300);
+      }, atk));
+    }
+  });
+}
+
+/* --- Core text display logic --- */
+const clearAllTimeouts=()=>{
+  scheduledTimeouts.forEach(clearTimeout);scheduledTimeouts=[];
+  textDisplay.style.transition='none';
+};
+const setStyle=(el,type,v,d=0)=>{
+  let p=type==='opacity'?'opacity':type==='brightness'?'filter':type==='scale'?'transform':'';
+  if(!p)return;
+  el.style.transition=d?`${p} ${d/1e3}s cubic-bezier(.3,2,.5,1)`:'none';
+  requestAnimationFrame(()=>{
+    if(type==='opacity') el.style.opacity=v;
+    else if(type==='brightness') el.style.filter=`brightness(${v})`;
+    else if(type==='scale') el.style.transform=`scale(${v})`;
+  });
+};
+const setText=html=>{
+  textDisplay.style.transition='none';
+  textDisplay.innerHTML=html;
+  textDisplay.style.opacity='1';
+  textDisplay.style.filter='brightness(1)';
+  textDisplay.style.transform='scale(1)';
+};
+const clearText=()=>{
+  textDisplay.style.transition='opacity .28s cubic-bezier(.4,2,.6,1)';
+  textDisplay.style.opacity='0';
+  scheduledTimeouts.push(setTimeout(()=>{
+    if(textDisplay.style.opacity==='0'){
+      textDisplay.innerHTML='';
+      textDisplay.style.transition='none';
+    }
+  },280));
+};
+const playSound=(f,d,effectCfg)=>{
+  scheduledTimeouts.push(setTimeout(()=>{
+    if(audioBuffers[f]&&audioCtx){
+      const src=audioCtx.createBufferSource();
+      src.buffer=audioBuffers[f];
+      src.connect(audioCtx.destination);
+      src.start();
+      if(effectCfg&&audioSyncPointsData[f])
+        applyVisualEffectsForSound(f,effectCfg);
+    }
+  },d*1e3));
+};
+const showAndHideText=(t,d,o)=>{
+  scheduledTimeouts.push(setTimeout(()=>setText(t),d*1e3));
+  scheduledTimeouts.push(setTimeout(clearText,o*1e3));
+};
+const ensureAudioContext=async()=>{audioCtx.state!=='running'&&await audioCtx.resume();};
+const fetchAndDecode=async f=>{
+  try{
+    const res=await fetch('audio/'+f);if(!res.ok)return;
+    const buf=await res.arrayBuffer();audioBuffers[f]=await audioCtx.decodeAudioData(buf);
+  }catch(e){console.warn('Audio load error:',f,e);}
+};
+async function loadAudioFiles(){
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  await Promise.all(audioFiles.map(fetchAndDecode));
+  isLoaded=true;controls.standard.disabled=false;controls.start.disabled=false;controls.start.textContent='Start the Particle Accelerator';
+}
+
+/* --- Ambience loop --- */
+function playAmbienceLoop({fadeIn=2,volume=1.5,offset=0}={}) {
+  stopAmbience(.1);
+  const buffer=audioBuffers['particle-ambience.webm'];if(!buffer)return;
+  ambienceGain=audioCtx.createGain();ambienceGain.gain.setValueAtTime(.0001,audioCtx.currentTime);
+  ambienceNode=audioCtx.createBufferSource();ambienceNode.buffer=buffer;ambienceNode.loop=true;
+  ambienceNode.connect(ambienceGain).connect(audioCtx.destination);
+  ambienceNode.start(0,offset%buffer.duration);
+  ambienceGain.gain.exponentialRampToValueAtTime(Math.max(volume,.0001),audioCtx.currentTime+fadeIn);
+}
+function stopAmbience(fadeOut=1.5){
+  if(!ambienceNode||!ambienceGain)return;
+  const now=audioCtx.currentTime;
+  ambienceGain.gain.cancelScheduledValues(now);
+  if(ambienceGain.gain.value>.0001)
+    ambienceGain.gain.setValueAtTime(ambienceGain.gain.value,now),
+    ambienceGain.gain.linearRampToValueAtTime(.00001,now+fadeOut);
+  else ambienceGain.gain.setValueAtTime(.00001,now+fadeOut);
+  try{ambienceNode.stop(now+fadeOut+.05);}catch{}
+  let tmpN=ambienceNode,tmpG=ambienceGain;
+  ambienceNode.onended=()=>{
+    tmpN?.disconnect();tmpG?.disconnect();
+  };
+  ambienceNode=ambienceGain=null;
+}
+
+/* --- Main playback sequence --- */
+function playStandardSequence(){
+  clearAllTimeouts(); setText(""); clearText();
+  let endTime=0;
+  STANDARD_TL.forEach(e=>{
+    const inT=e.time, outT=
+      e.strike!==undefined?(playSound(STRIKE_FILES[e.strike],inT,e.effect),e.fadeStart??(inT+STRIKE_DUR[e.strike]))
+      :e.stream!==undefined?(playSound(STREAM_FILES[e.stream],inT,e.effect),e.fadeStart??(inT+ORIGINAL_STREAM_DUR[e.stream]))
+      :e.fadeStart??(inT+MIN_LINE+1);
+    if(e.text) showAndHideText(e.text,inT,outT);
+    endTime=Math.max(endTime,outT);
+  });
+  scheduledTimeouts.push(setTimeout(()=>{
+    setText("Preparing final transmission…");
+    stopAmbience(1.3);
+    scheduledTimeouts.push(setTimeout(playTrailerVideo,1400));
+    isRunning=false; controls.start.disabled=false;
+  },(endTime+1)*1e3));
+}
+
+function playTrailerVideo(){
+  let v=document.getElementById('trailer-video'); if(v)v.parentNode.removeChild(v);
+  v=document.createElement('video'); v.id='trailer-video';
+  v.src='video/colliders-combined-trailers.mp4'; v.autoplay=v.playsInline=v.controls=true; v.style.display="block";
+  v.oncanplay=()=>{
+    v.requestFullscreen?.().catch(()=>0)||v.webkitRequestFullscreen?.().catch(()=>0)||v.msRequestFullscreen?.().catch(()=>0);
+    v.play().catch(()=>0);
+  };
+  const cleanup=()=>{
+    document.fullscreenElement&&document.exitFullscreen?.().catch(()=>0);
+    v.parentNode&&v.parentNode.removeChild(v);
+    clearText(); setText('<span style="font-size:2.5em">THE END</span>');
+    document.removeEventListener('keydown',escH);
+  }, escH=e=>{if(e.key==='Escape')cleanup();};
+  v.onended=cleanup; document.body.appendChild(v); document.addEventListener('keydown',escH);
+}
+
+controls.start.addEventListener('click',async()=>{
+  if(!isLoaded) return controls.start.textContent='Still Loading...';
+  if(isRunning) return;
+  isRunning=true;controls.start.disabled=true;await ensureAudioContext();
+  playAmbienceLoop();playStandardSequence();
+});
+
+loadAudioFiles();
+</script>
+</body>
+</html>

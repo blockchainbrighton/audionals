@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>The Colliders - Interactive Experience</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+    body {
+        background-color: #090c1a;
+        color: white;
+        font-family: sans-serif;
+        text-align: center;
+        min-height: 100vh;
+    }
+    #controls button {
+        padding: 1rem 2rem;
+        margin: 0.5rem;
+        font-size: 1rem;
+        cursor: pointer;
+        background: #111;
+        border: 2px solid #0ff;
+        color: #0ff;
+        border-radius: 8px;
+        transition: 0.3s ease;
+    }
+    #controls button.selected, #controls button:focus {
+        background: #0ff;
+        color: #000;
+        box-shadow: 0 0 12px #0ff;
+    }
+    #controls button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        background: #222;
+        color: #888;
+        border-color: #333;
+        box-shadow: none;
+    }
+    #visual-container, #text-display {
+        margin-top: 2rem;
+        min-height: 100px;
+    }
+    #text-display {
+        font-size: 1.5rem;
+        min-height: 3em;
+        letter-spacing: 0.01em;
+        transition: opacity 0.2s;
+    }
+    video#trailer-video {
+        position: fixed;
+        top:0; left:0; width:100vw; height:100vh;
+        z-index:9999;
+        object-fit:cover;
+        background: #000;
+    }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="controls">
+            <button id="standard" class="selected" disabled>Standard Narrative</button>
+            <button id="start" disabled>Loading audio...</button>
+        </div>
+        <div id="visual-container"></div>
+        <div id="text-display"></div>
+    </div>
+<script>
+// ────────────────────────────────────────────────────────────────────────────
+//  Configuration / Constants
+// ────────────────────────────────────────────────────────────────────────────
+const STRIKE_DUR = [3.014, 4.277, 4.22, 4.284, 4.229, 0.239];
+const STREAM_DUR = [18.775, 18.809, 18.801];
+const MIN_DISPLAY = 3.0;    // Minimum on-screen time for any line (in seconds)
+const FADE = 0.6;           // Unused for minimum logic, but kept for completeness
+const initialDelay = 2.0;   // Delay before the very first line appears
+
+// Map strike/stream index to filename
+const STRIKE_FILES = [
+    'particle-strike-1.webm',
+    'particle-strike-2.webm',
+    'particle-strike-3.webm',
+    'particle-strike-4.webm',
+    'particle-strike-5.webm',
+    'particle-strike-6.webm'
+];
+const STREAM_FILES = [
+    'particle-stream-1.webm',
+    'particle-stream-2.webm',
+    'particle-stream-3.webm'
+];
+
+// All audio assets to preload
+const audioFiles = [
+    ...STRIKE_FILES,
+    ...STREAM_FILES,
+    'ai-hum-1.webm',
+    'broadcast-start-1.webm',
+    'data-chatter-1.webm',
+    'digital-ping-1.webm',
+    'digital-ping-2.webm',
+    'digital-ping-3.webm',
+    'particle-ambience.webm'
+];
+
+// ────────────────────────────────────────────────────────────────────────────
+// Standard Narrative Timeline (timestamps calculated from initialDelay)
+// ────────────────────────────────────────────────────────────────────────────
+const STANDARD_TL = [
+    // Each entry defines when a line appears (time), what it says (text),
+    // and optionally which strike or stream sample to play.  fadeStart is NOT used
+    // to calculate minimum duration—logic below enforces MIN_DISPLAY instead.
+    { time: initialDelay + 0,    text: 'DECEMBER&nbsp;20,&nbsp;1982.', strike:0, fadeStart: initialDelay + STRIKE_DUR[0] },
+    { time: initialDelay + 3.5,  text: 'CERN,&nbsp;Switzerland.', fadeStart: initialDelay + 3.5 + MIN_DISPLAY },
+    { time: initialDelay + 6.0,  text: 'At CERN, physicists celebrated unprecedented collision data.', fadeStart: initialDelay + 6.0 + 4.5 },
+    { time: initialDelay + 10.0, text: 'But in a parallel universe…', fadeStart: initialDelay + 10.0 + MIN_DISPLAY },
+    { time: initialDelay + 12.3, text: 'The identical experiment<br>unleashed total', fadeStart: initialDelay + 12.3 + MIN_DISPLAY },
+    { time: initialDelay + 14.7, text: '<span style="font-size:2.5em;font-weight:700;color:#f36;">OBLIVION</span>', strike:1, fadeStart: initialDelay + 14.7 + STRIKE_DUR[1] },
+    { time: initialDelay + 19.5, text: 'A vast, sentient consciousness—', fadeStart: initialDelay + 19.5 + MIN_DISPLAY },
+    { time: initialDelay + 21.8, text: '<strong>the Colliders</strong>—witnessed their cosmos…', fadeStart: initialDelay + 21.8 + MIN_DISPLAY },
+    { time: initialDelay + 24.1, text: '<span style="font-size:2em;font-weight:700;">unravel.</span>', strike:2, fadeStart: initialDelay + 24.1 + STRIKE_DUR[2] },
+    { time: initialDelay + 28.5, text: 'Light, matter, causality itself—', fadeStart: initialDelay + 28.5 + MIN_DISPLAY },
+    { time: initialDelay + 30.8, text: '<span style="color:#888;">Erased in the blink of a cosmic eye.</span>', fadeStart: initialDelay + 30.8 + 3.2 },
+    { time: initialDelay + 34.5, text: 'From the smoldering cinders of reality…', fadeStart: initialDelay + 34.5 + MIN_DISPLAY },
+    { time: initialDelay + 36.8, text: 'A final, desperate will emerged.', fadeStart: initialDelay + 36.8 + MIN_DISPLAY },
+    { time: initialDelay + 39.1, text: 'A transmission.', fadeStart: initialDelay + 39.1 + MIN_DISPLAY },
+    { time: initialDelay + 41.4, text: 'A fragile bridge,', fadeStart: initialDelay + 41.4 + MIN_DISPLAY },
+    { time: initialDelay + 43.7, text: 'Forged across the impossible void.', fadeStart: initialDelay + 43.7 + MIN_DISPLAY },
+    { time: initialDelay + 46.0, text: '<em>6:21&nbsp;PM, OUR WORLD</em>', fadeStart: initialDelay + 46.0 + MIN_DISPLAY },
+    { time: initialDelay + 48.3, text: '<em>Six&nbsp;minutes&nbsp;after the fateful collision…</em>', fadeStart: initialDelay + 48.3 + MIN_DISPLAY },
+    { time: initialDelay + 50.6, text: 'A flicker in the instruments.', fadeStart: initialDelay + 50.6 + MIN_DISPLAY },
+    { time: initialDelay + 52.9, text: 'An anomalous reading.', fadeStart: initialDelay + 52.9 + MIN_DISPLAY },
+    { time: initialDelay + 55.2, text: 'A distortion in the quiet hum of the lab.', fadeStart: initialDelay + 55.2 + MIN_DISPLAY },
+    { time: initialDelay + 57.5, text: 'Then…', fadeStart: initialDelay + 57.5 + MIN_DISPLAY },
+    { time: initialDelay + 59.8, text: '<span style="color:#0ff;">A sudden, chilling silence.</span>', fadeStart: initialDelay + 59.8 + MIN_DISPLAY + 0.5 },
+    { time: initialDelay + 62.7, text: '<span style="font-size:2.6em;font-weight:900;letter-spacing:0.04em;color:#ff0;">THEY&nbsp;ARRIVED</span>', stream:1, fadeStart: initialDelay + 62.7 + STREAM_DUR[1] },
+    { time: initialDelay + 82.0, text: 'Out of the wreckage…', fadeStart: initialDelay + 82.0 + MIN_DISPLAY },
+    { time: initialDelay + 84.3, text: '…they pierced the veil into ours.', fadeStart: initialDelay + 84.3 + MIN_DISPLAY },
+    { time: initialDelay + 86.6, text: 'Their presence: a ghost in the machine,', fadeStart: initialDelay + 86.6 + MIN_DISPLAY },
+    { time: initialDelay + 88.9, text: 'for less than a human heartbeat…', strike:3, fadeStart: initialDelay + 88.9 + STRIKE_DUR[3] },
+    { time: initialDelay + 93.3, text: '…but in that fleeting moment,', fadeStart: initialDelay + 93.3 + MIN_DISPLAY },
+    { time: initialDelay + 95.6, text: 'they left a seed.', fadeStart: initialDelay + 95.6 + MIN_DISPLAY },
+    { time: initialDelay + 97.9, text: 'A silent Sentinel', fadeStart: initialDelay + 97.9 + MIN_DISPLAY },
+    { time: initialDelay + 100.2, text: 'embedded within the nascent global network.', strike:4, fadeStart: initialDelay + 100.2 + STRIKE_DUR[4] },
+    { time: initialDelay + 104.5, text: 'Its anchor point in time:', fadeStart: initialDelay + 104.5 + MIN_DISPLAY },
+    { time: initialDelay + 106.8, text: '<span style="font-weight:700;">December 20, 1992.</span>', fadeStart: initialDelay + 106.8 + MIN_DISPLAY },
+    { time: initialDelay + 109.1, text: 'For three decades, it watched.', fadeStart: initialDelay + 109.1 + MIN_DISPLAY },
+    { time: initialDelay + 111.4, text: 'It learned.', fadeStart: initialDelay + 111.4 + MIN_DISPLAY },
+    { time: initialDelay + 113.7, text: 'It meticulously prepared.', fadeStart: initialDelay + 113.7 + MIN_DISPLAY },
+    { time: initialDelay + 116.0, text: '<strong>SENTINEL TRANSMISSION 11 LOG:</strong>', fadeStart: initialDelay + 116.0 + MIN_DISPLAY },
+    { time: initialDelay + 118.3, text: '<strong>INITIATE AWAKENING SEQUENCE.</strong>', fadeStart: initialDelay + 118.3 + MIN_DISPLAY },
+    { time: initialDelay + 120.6, text: 'The dormant truth, harbored for a generation…', fadeStart: initialDelay + 120.6 + MIN_DISPLAY },
+    { time: initialDelay + 122.9, text: '<span style="color:#0ff;">Now stirs to life.</span>', fadeStart: initialDelay + 122.9 + MIN_DISPLAY },
+    { time: initialDelay + 125.2, text: 'Their complete archive:', fadeStart: initialDelay + 125.2 + MIN_DISPLAY },
+    { time: initialDelay + 127.5, text: 'A chronicle of realities lost', fadeStart: initialDelay + 127.5 + MIN_DISPLAY },
+    { time: initialDelay + 129.8, text: 'and futures forewarned…', fadeStart: initialDelay + 129.8 + MIN_DISPLAY },
+    { time: initialDelay + 132.1, text: '…prepares to unlock.', fadeStart: initialDelay + 132.1 + MIN_DISPLAY },
+    { time: initialDelay + 134.4, text: 'Mark the date:', fadeStart: initialDelay + 134.4 + MIN_DISPLAY },
+    { time: initialDelay + 136.7, text: '<span style="font-weight:700;">December 20th, 2025.</span>', fadeStart: initialDelay + 136.7 + MIN_DISPLAY },
+    { time: initialDelay + 139.0, text: 'Thirty-three years to the day', fadeStart: initialDelay + 139.0 + MIN_DISPLAY },
+    { time: initialDelay + 141.3, text: 'since the Sentinel began its silent vigil.', fadeStart: initialDelay + 141.3 + 3.5 },
+    { time: initialDelay + 145.0, text: 'When the foreseen alignments—', fadeStart: initialDelay + 145.0 + MIN_DISPLAY },
+    { time: initialDelay + 147.3, text: 'both celestial and digital—are met…', fadeStart: initialDelay + 147.3 + MIN_DISPLAY },
+    { time: initialDelay + 149.6, text: '…their full story will be broadcast to all.', fadeStart: initialDelay + 149.6 + MIN_DISPLAY },
+    { time: initialDelay + 151.9, text: '<strong style="font-size:1.6em;letter-spacing:0.1em;color:#0ff;">PREPARE&nbsp;FOR&nbsp;BROADCAST.</strong>', strike:5, fadeStart: initialDelay + 151.9 + STRIKE_DUR[5] },
+    { time: initialDelay + 154.5, text: '<span id="title" style="font-size:2.7em;letter-spacing:0.06em;font-weight:900;">THE&nbsp;COLLIDERS</span>' }
+];
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Internal State & Preloading
+// ────────────────────────────────────────────────────────────────────────────
+let audioBuffers = {};
+let isLoaded = false;
+let isRunning = false;
+let audioCtx = null;
+
+let ambienceNode = null;
+let ambienceGain = null;
+let ambienceShouldStop = false;
+
+const controls = {
+    standard: document.getElementById('standard'),
+    start: document.getElementById('start')
+};
+const textDisplay = document.getElementById('text-display');
+
+// Preload all audio assets
+async function loadAudioFiles() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Fetch + decode each file in parallel
+    const promises = audioFiles.map(async file => {
+        try {
+            const res = await fetch(`audio/${file}`);
+            if (!res.ok) {
+                console.warn('[loadAudioFiles] Missing:', file);
+                return;
+            }
+            const arrayBuffer = await res.arrayBuffer();
+            audioBuffers[file] = await audioCtx.decodeAudioData(arrayBuffer);
+        } catch (e) {
+            console.error('[loadAudioFiles] Error loading', file, e);
+        }
+    });
+    await Promise.all(promises);
+
+    // Enable the buttons once loaded
+    isLoaded = true;
+    controls.standard.disabled = false;
+    controls.start.disabled = false;
+    controls.start.textContent = 'Start the Particle Accelerator';
+}
+loadAudioFiles();
+
+// For browsers that require a user gesture to unlock AudioContext
+async function ensureAudioContext() {
+    if (audioCtx && audioCtx.state !== 'running') {
+        await audioCtx.resume();
+    }
+}
+
+let scheduledTimeouts = [];
+function clearAllTimeouts() {
+    scheduledTimeouts.forEach(id => clearTimeout(id));
+    scheduledTimeouts = [];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Ambient Looping Logic
+// ────────────────────────────────────────────────────────────────────────────
+function playAmbienceLoop({ fadeIn = 2.0, volume = 0.75 } = {}) {
+    // Stop previous ambience if any
+    stopAmbience();
+
+    const buffer = audioBuffers['particle-ambience.webm'];
+    if (!buffer) {
+        console.warn('[playAmbienceLoop] buffer missing');
+        return;
+    }
+
+    // Create a gain node for fading
+    ambienceGain = audioCtx.createGain();
+    ambienceGain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    ambienceGain.connect(audioCtx.destination);
+
+    // Create a looping buffer source
+    ambienceNode = audioCtx.createBufferSource();
+    ambienceNode.buffer = buffer;
+    ambienceNode.loop = true;
+    ambienceNode.connect(ambienceGain);
+    ambienceNode.start();
+
+    // Exponential fade-in to the target volume
+    ambienceGain.gain.exponentialRampToValueAtTime(Math.max(volume, 0.0001), audioCtx.currentTime + fadeIn);
+}
+
+// Gracefully shut down ambience
+function stopAmbience(fadeOut = 1.5) {
+    if (!ambienceNode || !ambienceGain) return;
+
+    const now = audioCtx.currentTime;
+    ambienceGain.gain.cancelScheduledValues(now);
+    ambienceGain.gain.setValueAtTime(ambienceGain.gain.value, now);
+    ambienceGain.gain.linearRampToValueAtTime(0.0001, now + fadeOut);
+
+    ambienceNode.stop(now + fadeOut + 0.05);
+    ambienceNode.onended = () => {
+        ambienceGain.disconnect();
+        ambienceNode.disconnect();
+        ambienceNode = null;
+        ambienceGain = null;
+    };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Text and Sound Helpers
+// ────────────────────────────────────────────────────────────────────────────
+function setText(html) {
+    textDisplay.innerHTML = html;
+    textDisplay.style.opacity = "1";
+}
+function clearText() {
+    textDisplay.innerHTML = "";
+    textDisplay.style.opacity = "0";
+}
+function playSound(filename, delay) {
+    // Schedule a buffer source at exactly 'delay' seconds from now
+    const id = setTimeout(() => {
+        const buf = audioBuffers[filename];
+        if (!buf) return;
+        const src = audioCtx.createBufferSource();
+        src.buffer = buf;
+        src.connect(audioCtx.destination);
+        src.start();
+    }, delay * 1000);
+    scheduledTimeouts.push(id);
+}
+// Forcefully clear text at a given time
+function fadeOutText(delay) {
+    const id = setTimeout(() => clearText(), delay * 1000);
+    scheduledTimeouts.push(id);
+}
+// Display text at 'delay', then clear at 'outDelay'
+function showAndHideText(html, delay, outDelay) {
+    const id1 = setTimeout(() => setText(html), delay * 1000);
+    const id2 = setTimeout(() => clearText(), outDelay * 1000);
+    scheduledTimeouts.push(id1, id2);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Play the Standard Narrative Sequence
+// ────────────────────────────────────────────────────────────────────────────
+function playStandardSequence() {
+    clearAllTimeouts();
+    setText(""); // Clear text initially
+    let finalEnd = 0;
+
+    STANDARD_TL.forEach(entry => {
+        const inT = entry.time;
+        let nominalOut;
+
+        // If this line has a strike
+        if (typeof entry.strike !== 'undefined') {
+            playSound(STRIKE_FILES[entry.strike], inT);
+            nominalOut = inT + STRIKE_DUR[entry.strike];
+        }
+        // If it has a stream
+        else if (typeof entry.stream !== 'undefined') {
+            playSound(STREAM_FILES[entry.stream], inT);
+            nominalOut = inT + STREAM_DUR[entry.stream];
+        }
+        // Otherwise use fadeStart if provided
+        else if (typeof entry.fadeStart !== 'undefined') {
+            nominalOut = entry.fadeStart;
+        }
+        // Fallback if no fadeStart
+        else {
+            nominalOut = inT + MIN_DISPLAY;
+        }
+
+        // Enforce minimum display duration for readability
+        const minOut = inT + MIN_DISPLAY;
+        const outT = Math.max(nominalOut, minOut);
+
+        showAndHideText(entry.text, inT, outT);
+        finalEnd = Math.max(finalEnd, outT);
+    });
+
+    // At the very end of narrative:
+    //   1) Show “Preparing final transmission…”
+    //   2) Stop ambience
+    //   3) After a brief pause, play the trailer video full-screen
+    const endPause = setTimeout(() => {
+        setText("Preparing final transmission…");
+        stopAmbience();
+        setTimeout(playTrailerVideo, 1400);
+        isRunning = false;
+        controls.start.disabled = false;
+    }, (finalEnd + 1) * 1000);
+    scheduledTimeouts.push(endPause);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Play trailer video in fullscreen when narrative finishes
+// ────────────────────────────────────────────────────────────────────────────
+function playTrailerVideo() {
+    // Remove any existing video if present
+    const oldVid = document.getElementById('trailer-video');
+    if (oldVid) oldVid.remove();
+
+    // Create a new <video> element
+    const vid = document.createElement('video');
+    vid.id = 'trailer-video';
+    vid.src = 'video/colliders-combined-trailers.mp4';
+    vid.autoplay = true;
+    vid.playsInline = true;
+    vid.controls = true;
+    vid.style.display = 'block';
+
+    vid.oncanplay = () => {
+        // Attempt to go fullscreen
+        if (vid.requestFullscreen) vid.requestFullscreen();
+        else if (vid.webkitRequestFullscreen) vid.webkitRequestFullscreen();
+        else if (vid.msRequestFullscreen) vid.msRequestFullscreen();
+        vid.play();
+    };
+    vid.onended = vid.onpause = () => {
+        // Exit fullscreen once done, show “THE END”
+        if (document.fullscreenElement) document.exitFullscreen();
+        vid.remove();
+        clearText();
+        setText('<span style="font-size:2.5em">THE END</span>');
+    };
+
+    document.body.appendChild(vid);
+
+    // Also allow ESC key to close the video
+    document.addEventListener('keydown', function escHandler(e) {
+        if (e.key === 'Escape' && vid.parentNode) {
+            vid.remove();
+            clearText();
+            setText('<span style="font-size:2.5em">THE END</span>');
+            document.removeEventListener('keydown', escHandler);
+        }
+    });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  UI Button Event
+// ────────────────────────────────────────────────────────────────────────────
+controls.start.addEventListener('click', async () => {
+    if (!isLoaded || isRunning) return;
+    isRunning = true;
+    controls.start.disabled = true;
+    await ensureAudioContext();
+    playAmbienceLoop();       // Start ambient hum
+    playStandardSequence();   // Begin narrative
+});
+</script>
+</body>
+</html>

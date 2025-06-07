@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>The Colliders - Interactive Experience</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-glow-color: #0ff;
+      --accent-color-hot: #f36; /* Magenta/Pink */
+      --accent-color-warn: #ff0; /* Yellow */
+      --background-base: #090c1a;
+      --background-pulse-deep: #001f2f;
+      --background-pulse-intense: #3d0f2b;
+    }
+    body {
+      background: var(--background-base);
+      color: #fff;
+      font-family: 'Orbitron', sans-serif;
+      text-align: center;
+      min-height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      transition: background-color 0.5s ease-in-out;
+    }
+    /* Subtle background details like scanlines */
+    body::before {
+        content: "";
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        z-index: -2; /* Deepest background layer */
+        background:
+            linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+            linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+        background-size: 100% 3px, 7px 100%;
+        pointer-events: none;
+        opacity: 0.7;
+    }
+
+    #controls button {
+      padding:1rem 2rem;margin:0.5rem;font-size:1rem;cursor:pointer;
+      background:#111;border:2px solid var(--primary-glow-color);color:var(--primary-glow-color);
+      border-radius:8px;transition:.3s;font-family: 'Share Tech Mono', monospace;
+    }
+    #controls button.selected, #controls button:focus {
+      background:var(--primary-glow-color);color:#000;box-shadow:0 0 12px var(--primary-glow-color);
+    }
+    #controls button:disabled {
+      opacity:.6;cursor:not-allowed;background:#222;color:#888;border-color:#333;box-shadow:none;
+    }
+
+    /* Visual container for screen-wide effects that don't belong to body directly */
+    #visual-container {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      z-index: -1; /* Behind text-display but over body background/body::before */
+      pointer-events: none;
+      will-change: transform, filter;
+      /* Default transitions if not overridden by JS */
+      transition: transform 0.3s ease-out, filter 0.3s ease-out;
+    }
+
+    #text-display {
+      font-size: 1.8rem; /* Base size */
+      min-height: 3em; /* Accommodate multi-line text */
+      letter-spacing: .02em;
+      opacity: 0;
+      /* filter and transform are fully managed by JS */
+      will-change: opacity, filter, transform, color, font-size, letter-spacing, text-shadow;
+      padding: 20px;
+      /* Subtle default glow, can be overridden */
+      text-shadow: 0 0 5px rgba(0, 255, 255, 0.3), 0 0 10px rgba(0, 255, 255, 0.2);
+      transition: opacity .2s ease-out; /* For clearText's fade out */
+      display: flex; /* For better centering of multi-line content if needed */
+      justify-content: center;
+      align-items: center;
+    }
+    /* Specific styling for words that will be dynamically highlighted by JS */
+    #text-display .impact-word {
+      display: inline-block; /* Allows transforms on a span */
+    }
+    #text-display .color-oblivion { color: var(--accent-color-hot); }
+    #text-display .color-unravel { color: #aaa; } /* Example, will be overridden */
+    #text-display .color-arrived { color: var(--accent-color-warn); }
+    #text-display .color-broadcast { color: var(--primary-glow-color); }
+
+
+    video#trailer-video {position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9999;object-fit:cover;background:#000;}
+  </style>
+</head>
+<body>
+<div id="container">
+  <div id="controls">
+    <button id="standard" class="selected" disabled>Standard Narrative</button>
+    <button id="start" disabled>Loading audio...</button>
+  </div>
+  <div id="visual-container"></div>
+  <div id="text-display"></div>
+</div>
+<script>
+// CONSTANTS (STRIKE_DUR, ORIGINAL_STREAM_DUR, etc. unchanged)
+const STRIKE_DUR=[3.014,4.277,4.22,4.284,4.229,0.239,4.281], ORIGINAL_STREAM_DUR=[18.775,18.809,18.801], FADE=.6, MIN_LINE=2.2, initialDelay=2;
+const STRIKE_FILES=['particle-strike-1.webm','particle-strike-2.webm','particle-strike-3.webm','particle-strike-4.webm','particle-strike-5.webm','particle-strike-6.webm','particle-strike-7.webm'],
+STREAM_FILES=['particle-stream-1.webm','particle-stream-2.webm','particle-stream-3.webm'],
+audioFiles=[...STRIKE_FILES,...STREAM_FILES,'ai-hum-1.webm','broadcast-start-1.webm','data-chatter-1.webm','digital-ping-1.webm','digital-ping-2.webm','digital-ping-3.webm','particle-ambience.webm','collider-sound.mp3','collider-sounds.mp3'];
+const STREAM_DUR = [18.775, 18.809, 18.801];
+
+
+const audioSyncPointsData = { /* ... UNCHANGED ... */
+    "ai-hum-1.webm": [{'at': 0.059, 'fadeIn': 0.0, 'fadeOut': 0.259}, {'at': 0.941, 'fadeIn': 0.741, 'fadeOut': 1.141}, {'at': 1.441, 'fadeIn': 1.241, 'fadeOut': 1.641}, {'at': 2.059, 'fadeIn': 1.859, 'fadeOut': 2.259}, {'at': 2.559, 'fadeIn': 2.359, 'fadeOut': 2.759}],
+    "broadcast-start-1.webm": [{'at': 0.497, 'fadeIn': 0.297, 'fadeOut': 0.697}, {'at': 0.997, 'fadeIn': 0.797, 'fadeOut': 1.197}, {'at': 1.5, 'fadeIn': 1.3, 'fadeOut': 1.5}],
+    "collider-sound.mp3": [{'at': 0.026, 'fadeIn': 0.024, 'fadeOut': 0.222}, {'at': 1.654, 'fadeIn': 1.454, 'fadeOut': 1.854}, {'at': 4.225, 'fadeIn': 4.027, 'fadeOut': 4.23}, {'at': 15.59, 'fadeIn': 15.588, 'fadeOut': 15.79}, {'at': 17.239, 'fadeIn': 17.039, 'fadeOut': 17.439}, {'at': 17.862, 'fadeIn': 17.662, 'fadeOut': 18.062}, {'at': 19.856, 'fadeIn': 19.658, 'fadeOut': 19.857}, {'at': 22.069, 'fadeIn': 22.007, 'fadeOut': 22.269}, {'at': 22.592, 'fadeIn': 22.392, 'fadeOut': 22.792}, {'at': 23.276, 'fadeIn': 23.076, 'fadeOut': 23.476}],
+    "collider-sounds.mp3": [{'at': 0.029, 'fadeIn': 0.025, 'fadeOut': 0.229}, {'at': 1.656, 'fadeIn': 1.456, 'fadeOut': 1.856}, {'at': 4.227, 'fadeIn': 4.027, 'fadeOut': 4.232}, {'at': 15.593, 'fadeIn': 15.591, 'fadeOut': 15.793}, {'at': 17.241, 'fadeIn': 17.041, 'fadeOut': 17.441}, {'at': 17.864, 'fadeIn': 17.664, 'fadeOut': 18.064}, {'at': 19.858, 'fadeIn': 19.66, 'fadeOut': 19.859}, {'at': 22.041, 'fadeIn': 22.009, 'fadeOut': 22.241}, {'at': 22.547, 'fadeIn': 22.347, 'fadeOut': 22.747}, {'at': 23.278, 'fadeIn': 23.078, 'fadeOut': 23.478}],
+    "data-chatter-1.webm": [{'at': 0.012, 'fadeIn': 0.007, 'fadeOut': 0.212}, {'at': 0.597, 'fadeIn': 0.397, 'fadeOut': 0.797}, {'at': 1.098, 'fadeIn': 0.898, 'fadeOut': 1.289}, {'at': 1.617, 'fadeIn': 1.417, 'fadeOut': 1.817}],
+    "digital-ping-1.webm": [{'at': 0.0, 'fadeIn': 0.0, 'fadeOut': 0.105}],
+    "digital-ping-2.webm": [{'at': 0.115, 'fadeIn': 0.0, 'fadeOut': 0.205}],
+    "digital-ping-3.webm": [{'at': 0.0, 'fadeIn': 0.0, 'fadeOut': 0.15}],
+    "particle-stream-1.webm": [{'at': 0.032, 'fadeIn': 0.0, 'fadeOut': 0.232}, {'at': 0.537, 'fadeIn': 0.337, 'fadeOut': 0.737}, {'at': 1.268, 'fadeIn': 1.068, 'fadeOut': 1.468}, {'at': 1.877, 'fadeIn': 1.677, 'fadeOut': 2.077}, {'at': 2.495, 'fadeIn': 2.295, 'fadeOut': 2.695}, {'at': 3.135, 'fadeIn': 2.935, 'fadeOut': 3.335}, {'at': 3.784, 'fadeIn': 3.584, 'fadeOut': 3.984}, {'at': 4.763, 'fadeIn': 4.563, 'fadeOut': 4.963}, {'at': 5.338, 'fadeIn': 5.138, 'fadeOut': 5.538}, {'at': 6.093, 'fadeIn': 5.893, 'fadeOut': 6.293}],
+    "particle-stream-2.webm": [{'at': 0.218, 'fadeIn': 0.018, 'fadeOut': 0.418}, {'at': 0.887, 'fadeIn': 0.687, 'fadeOut': 1.087}, {'at': 1.718, 'fadeIn': 1.518, 'fadeOut': 1.918}, {'at': 2.309, 'fadeIn': 2.109, 'fadeOut': 2.509}, {'at': 2.884, 'fadeIn': 2.684, 'fadeOut': 3.084}, {'at': 3.467, 'fadeIn': 3.267, 'fadeOut': 3.667}, {'at': 4.199, 'fadeIn': 3.999, 'fadeOut': 4.399}, {'at': 4.898, 'fadeIn': 4.698, 'fadeOut': 5.098}, {'at': 5.449, 'fadeIn': 5.249, 'fadeOut': 5.649}, {'at': 6.298, 'fadeIn': 6.098, 'fadeOut': 6.498}],
+    "particle-stream-3.webm": [{'at': 0.181, 'fadeIn': 0.0, 'fadeOut': 0.381}, {'at': 0.692, 'fadeIn': 0.492, 'fadeOut': 0.892}, {'at': 1.222, 'fadeIn': 1.022, 'fadeOut': 1.422}, {'at': 1.753, 'fadeIn': 1.553, 'fadeOut': 1.953}, {'at': 2.34, 'fadeIn': 2.14, 'fadeOut': 2.54}, {'at': 2.963, 'fadeIn': 2.763, 'fadeOut': 3.163}, {'at': 3.523, 'fadeIn': 3.323, 'fadeOut': 3.723}, {'at': 4.227, 'fadeIn': 4.027, 'fadeOut': 4.427}, {'at': 4.749, 'fadeIn': 4.549, 'fadeOut': 4.949}, {'at': 5.431, 'fadeIn': 5.231, 'fadeOut': 5.631}],
+    "particle-strike-1.webm": [{'at': 0.43, 'fadeIn': 0.23, 'fadeOut': 0.63}, {'at': 1.037, 'fadeIn': 0.837, 'fadeOut': 1.237}, {'at': 3.001, 'fadeIn': 2.801, 'fadeOut': 3.007}],
+    "particle-strike-2.webm": [{'at': 0.002, 'fadeIn': 0.0, 'fadeOut': 0.202}, {'at': 1.65, 'fadeIn': 1.45, 'fadeOut': 1.85}, {'at': 2.273, 'fadeIn': 2.073, 'fadeOut': 2.473}, {'at': 3.142, 'fadeIn': 2.942, 'fadeOut': 3.342}, {'at': 4.267, 'fadeIn': 4.069, 'fadeOut': 4.27}],
+    "particle-strike-3.webm": [{'at': 0.007, 'fadeIn': 0.0, 'fadeOut': 0.205}, {'at': 1.596, 'fadeIn': 1.396, 'fadeOut': 1.796}, {'at': 2.214, 'fadeIn': 2.014, 'fadeOut': 2.414}, {'at': 4.203, 'fadeIn': 4.02, 'fadeOut': 4.209}],
+    "particle-strike-4.webm": [{'at': 0.002, 'fadeIn': 0.0, 'fadeOut': 0.202}, {'at': 1.626, 'fadeIn': 1.426, 'fadeOut': 1.826}, {'at': 2.271, 'fadeIn': 2.071, 'fadeOut': 2.471}, {'at': 2.825, 'fadeIn': 2.625, 'fadeOut': 3.025}, {'at': 4.22, 'fadeIn': 4.021, 'fadeOut': 4.272}],
+    "particle-strike-5.webm": [{'at': 0.004, 'fadeIn': 0.0, 'fadeOut': 0.204}, {'at': 1.674, 'fadeIn': 1.474, 'fadeOut': 1.874}, {'at': 2.254, 'fadeIn': 2.054, 'fadeOut': 2.454}, {'at': 4.2, 'fadeIn': 4.001, 'fadeOut': 4.223}],
+    "particle-strike-6.webm": [{'at': 0.003, 'fadeIn': 0.0, 'fadeOut': 0.203}],
+    "particle-strike-7.webm": [{'at': 0.002, 'fadeIn': 0.0, 'fadeOut': 0.202}, {'at': 1.642, 'fadeIn': 1.442, 'fadeOut': 1.842}, {'at': 2.226, 'fadeIn': 2.026, 'fadeOut': 2.426}, {'at': 2.841, 'fadeIn': 2.641, 'fadeOut': 3.041}, {'at': 3.411, 'fadeIn': 3.211, 'fadeOut': 3.611}, {'at': 4.239, 'fadeIn': 4.039, 'fadeOut': 4.279}]
+};
+
+
+const STANDARD_TL = [
+    { time: initialDelay + 0,    text: 'DECEMBER 20, 1982.', strike:0,
+      effect: {
+          targetElementId: 'text-display',
+          containerEffects: [
+              { property: 'filter', subProperty: 'brightness', baseValue: 1, peakValue: 1.6, unit: '' },
+              { property: 'transform', subProperty: 'scale', baseValue: 1, peakValue: 1.05, unit: '' },
+              { property: 'textShadow', baseValue: '0 0 5px rgba(0,255,255,0.3), 0 0 10px rgba(0,255,255,0.2)', peakValue: '0 0 10px var(--primary-glow-color), 0 0 20px var(--primary-glow-color)', unit: ''}
+          ]
+      },
+      fadeStart: initialDelay + (STRIKE_DUR[0])
+    },
+    { time: initialDelay + 3.5,  text: 'CERN, Switzerland.', fadeStart: initialDelay + 3.5 + MIN_LINE },
+    { time: initialDelay + 6,    text: 'At CERN, physicists celebrated unprecedented collision data.', fadeStart: initialDelay + 6 + 3.5 },
+    { time: initialDelay + 10,   text: 'But in a parallel universe…', fadeStart: initialDelay + 10 + MIN_LINE },
+    { time: initialDelay + 12.3, text: 'The identical experiment<br>unleashed total', fadeStart: initialDelay + 12.3 + MIN_LINE },
+    { time: initialDelay + 14.7, text: '<span id="text-oblivion" class="impact-word color-oblivion" style="font-size:2.5em;font-weight:700;">OBLIVION</span>', strike:1,
+      effect: {
+        targetElementId: 'text-oblivion',
+        containerEffects: [
+            { property: 'transform', subProperty: 'scale', baseValue: 1, peakValue: 1.8, unit: '', transitionTimingIn: 'cubic-bezier(0.18, 0.89, 0.32, 1.28)', transitionTimingOut: 'cubic-bezier(0.68, -0.55, 0.27, 1.55)'},
+            { property: 'filter', subProperty: 'blur', baseValue: '0px', peakValue: '2.5px', unit: '' },
+            { property: 'color', baseValue: 'var(--accent-color-hot)', peakValue: '#ffffff', unit: ''},
+            { property: 'textShadow', baseValue: '0 0 8px var(--accent-color-hot), 0 0 15px var(--accent-color-hot)', peakValue: '0 0 20px #fff, 0 0 40px #f0f, 0 0 70px #f0f, 0 0 10px #000', unit: ''} // Added black core for depth
+        ],
+        environmentEffects: [
+            { target: 'body', property: 'backgroundColor', baseValue: 'var(--background-base)', peakValue: 'var(--background-pulse-intense)' },
+            { target: 'visual-container', property: 'transform', subProperty: 'skewX', baseValue: 0, peakValue: -8, unit: 'deg'},
+            { target: 'visual-container', property: 'transform', subProperty: 'scale', baseValue: 1, peakValue: 1.05, unit: ''}
+        ]
+      },
+      fadeStart: initialDelay + 14.7 + STRIKE_DUR[1]
+    },
+    { time: initialDelay + 19.5, text: 'A vast, sentient consciousness—', fadeStart: initialDelay + 19.5 + MIN_LINE },
+    { time: initialDelay + 21.8, text: '<strong>the Colliders</strong>—witnessed their cosmos…', fadeStart: initialDelay + 21.8 + MIN_LINE },
+    { time: initialDelay + 24.1, text: '<span id="text-unravel" class="impact-word color-unravel" style="font-size:2em;font-weight:700;">unravel.</span>', strike:2,
+      effect: {
+        targetElementId: 'text-unravel',
+        containerEffects: [
+            { property: 'transform', subProperty: 'scale', baseValue: 1, peakValue: 0.8, unit: '', transitionTimingOut: 'ease-in-out' }, // Imploding
+            { property: 'filter', subProperty: 'contrast', baseValue: 1, peakValue: 0.5, unit: ''},
+            { property: 'filter', subProperty: 'saturate', baseValue: 1, peakValue: 0.2, unit: ''},
+            { property: 'color', baseValue: '#999', peakValue: '#333', unit: ''},
+            { property: 'letterSpacing', baseValue: '0.01em', peakValue: '-0.05em', unit: ''},
+            { property: 'textShadow', baseValue: '0 0 5px #777', peakValue: '0 0 2px #111', unit: ''}
+        ],
+        environmentEffects: [
+             { target: 'body', property: 'backgroundColor', baseValue: 'var(--background-base)', peakValue: '#05060c' }, // Darken further
+             { target: 'visual-container', property: 'filter', subProperty: 'brightness', baseValue: 1, peakValue: 0.7, unit: ''}
+        ]
+      },
+      fadeStart: initialDelay + 24.1 + STRIKE_DUR[2]
+    },
+    { time: initialDelay + 28.5, text: 'Light, matter, causality itself—', fadeStart: initialDelay + 28.5 + MIN_LINE },
+    { time: initialDelay + 30.8, text: '<span style="color:#888;">Erased in the blink of a cosmic eye.</span>', fadeStart: initialDelay + 30.8 + 3.2 },
+    { time: initialDelay + 34.5, text: 'From the smoldering cinders of reality…', fadeStart: initialDelay + 34.5 + MIN_LINE },
+    { time: initialDelay + 36.8, text: 'A final, desperate will emerged.', fadeStart: initialDelay + 36.8 + MIN_LINE },
+    { time: initialDelay + 39.1, text: 'A transmission.', fadeStart: initialDelay + 39.1 + MIN_LINE },
+    { time: initialDelay + 41.4, text: 'A fragile bridge,', fadeStart: initialDelay + 41.4 + MIN_LINE },
+    { time: initialDelay + 43.7, text: 'Forged across the impossible void.', fadeStart: initialDelay + 43.7 + MIN_LINE },
+    { time: initialDelay + 46,   text: '<em style="font-family: \'Share Tech Mono\', monospace; color: #a0f0f0;">6:21 PM, OUR WORLD</em>', fadeStart: initialDelay + 46 + MIN_LINE },
+    { time: initialDelay + 48.3, text: '<em style="font-family: \'Share Tech Mono\', monospace; color: #a0f0f0;">Six minutes after the fateful collision…</em>', fadeStart: initialDelay + 48.3 + MIN_LINE },
+    { time: initialDelay + 50.6, text: '<span style="font-family: \'Share Tech Mono\', monospace; color: #ff8c00;">A flicker in the instruments.</span>', fadeStart: initialDelay + 50.6 + MIN_LINE },
+    { time: initialDelay + 52.9, text: '<span style="font-family: \'Share Tech Mono\', monospace; color: #ff8c00;">An anomalous reading.</span>', fadeStart: initialDelay + 52.9 + MIN_LINE },
+    { time: initialDelay + 55.2, text: '<span style="font-family: \'Share Tech Mono\', monospace; color: #ff8c00;">A distortion in the quiet hum of the lab.</span>', fadeStart: initialDelay + 55.2 + MIN_LINE },
+    { time: initialDelay + 57.5, text: 'Then…', fadeStart: initialDelay + 57.5 + MIN_LINE },
+    { time: initialDelay + 59.8, text: '<span style="color:var(--primary-glow-color);">A sudden, chilling silence.</span>', fadeStart: initialDelay + 59.8 + MIN_LINE + 0.5 },
+    { time: initialDelay + 62.7, text: '<span id="text-arrived" class="impact-word color-arrived" style="font-size:2.6em;font-weight:900;letter-spacing:0.04em;">THEY ARRIVED</span>', stream: 1, // particle-stream-2.webm
+      effect: {
+        targetElementId: 'text-arrived',
+        containerEffects: [
+            { property: 'transform', subProperty: 'scale', baseValue: 1, peakValue: 1.25, unit: '', transitionTimingIn: 'ease-in', transitionTimingOut: 'ease-out' },
+            { property: 'color', baseValue: 'var(--accent-color-warn)', peakValue: '#ffffff', unit: '' },
+            { property: 'textShadow',
+              baseValue: '0 0 10px var(--accent-color-warn), 0 0 20px var(--accent-color-warn)',
+              peakValue: '0 0 15px #fff, 0 0 30px var(--primary-glow-color), 0 0 50px var(--primary-glow-color)', unit: ''
+            },
+            { property: 'letterSpacing', baseValue: '0.04em', peakValue: '0.12em', unit: '' }
+        ],
+        environmentEffects: [
+            { target: 'body', property: 'backgroundColor', baseValue: 'var(--background-base)', peakValue: 'var(--background-pulse-deep)' },
+            { target: 'visual-container', property: 'filter', subProperty: 'hue-rotate', baseValue: 0, peakValue: 30, unit: 'deg' }
+        ]
+      },
+      fadeStart: initialDelay + 62.7 + STREAM_DUR[1]
+    },
+    { time: initialDelay + 82,   text: 'Out of the wreckage…', fadeStart: initialDelay + 82 + MIN_LINE },
+    { time: initialDelay + 84.3, text: '…they pierced the veil into ours.', fadeStart: initialDelay + 84.3 + MIN_LINE },
+    { time: initialDelay + 86.6, text: 'Their presence: a ghost in the machine,', fadeStart: initialDelay + 86.6 + MIN_LINE },
+    { time: initialDelay + 88.9, text: 'for less than a human heartbeat…', strike:3,
+      effect: { // particle-strike-4.webm
+        targetElementId: 'text-display', // Affect general text container
+         containerEffects: [
+            { property: 'transform', subProperty: 'translateX', baseValue: 0, peakValue: 8, unit: 'px', transitionTimingIn: 'cubic-bezier(0.36, 0.07, 0.19, 0.97)', transitionTimingOut: 'cubic-bezier(0.36, 0.07, 0.19, 0.97)'}, // Quick jitter
+            { property: 'transform', subProperty: 'skewX', baseValue: 0, peakValue: -3, unit: 'deg'},
+            { property: 'filter', subProperty: 'brightness', baseValue: 1, peakValue: 1.3, unit: ''},
+         ],
+         environmentEffects: [
+            { target: 'visual-container', property: 'transform', subProperty: 'skewX', baseValue: 0, peakValue: 2, unit: 'deg'}
+         ]
+      },
+      fadeStart: initialDelay + 88.9 + STRIKE_DUR[3]
+    },
+    { time: initialDelay + 93.3, text: '…but in that fleeting moment,', fadeStart: initialDelay + 93.3 + MIN_LINE },
+    { time: initialDelay + 95.6, text: 'they left a seed.', fadeStart: initialDelay + 95.6 + MIN_LINE },
+    { time: initialDelay + 97.9, text: 'A silent Sentinel', fadeStart: initialDelay + 97.9 + MIN_LINE },
+    { time: initialDelay + 100.2, text: 'embedded within the nascent global network.', strike:4, // particle-strike-5.webm
+        effect: {
+            targetElementId: 'text-display',
+            containerEffects: [
+                { property: 'textShadow', baseValue: '0 0 5px rgba(0,255,255,0.3)', peakValue: '0 0 12px var(--primary-glow-color), 0 0 5px #fff', unit: ''},
+                { property: 'filter', subProperty: 'brightness', baseValue: 1, peakValue: 1.4 }
+            ]
+        },
+        fadeStart: initialDelay + 100.2 + STRIKE_DUR[4]
+    },
+    { time: initialDelay + 104.5, text: 'Its anchor point in time:', fadeStart: initialDelay + 104.5 + MIN_LINE },
+    { time: initialDelay + 106.8, text: '<span style="font-weight:700;">December 20, 1992.</span>', fadeStart: initialDelay + 106.8 + MIN_LINE },
+    { time: initialDelay + 109.1, text: 'For three decades, it watched.', fadeStart: initialDelay + 109.1 + MIN_LINE },
+    { time: initialDelay + 111.4, text: 'It learned.', fadeStart: initialDelay + 111.4 + MIN_LINE },
+    { time: initialDelay + 113.7, text: 'It meticulously prepared.', fadeStart: initialDelay + 113.7 + MIN_LINE },
+    { time: initialDelay + 116, text: '<strong style="font-family: \'Share Tech Mono\', monospace;">SENTINEL TRANSMISSION 11 LOG:</strong>', fadeStart: initialDelay + 116 + MIN_LINE },
+    { time: initialDelay + 118.3, text: '<strong style="font-family: \'Share Tech Mono\', monospace; color: var(--primary-glow-color)">INITIATE AWAKENING SEQUENCE.</strong>', fadeStart: initialDelay + 118.3 + MIN_LINE },
+    { time: initialDelay + 120.6, text: 'The dormant truth, harbored for a generation…', fadeStart: initialDelay + 120.6 + MIN_LINE },
+    { time: initialDelay + 122.9, text: '<span style="color:var(--primary-glow-color);">Now stirs to life.</span>', fadeStart: initialDelay + 122.9 + MIN_LINE },
+    { time: initialDelay + 125.2, text: 'Their complete archive:', fadeStart: initialDelay + 125.2 + MIN_LINE },
+    { time: initialDelay + 127.5, text: 'A chronicle of realities lost', fadeStart: initialDelay + 127.5 + MIN_LINE },
+    { time: initialDelay + 129.8, text: 'and futures forewarned…', fadeStart: initialDelay + 129.8 + MIN_LINE },
+    { time: initialDelay + 132.1, text: '…prepares to unlock.', fadeStart: initialDelay + 132.1 + MIN_LINE },
+    { time: initialDelay + 134.4, text: 'Mark the date:', fadeStart: initialDelay + 134.4 + MIN_LINE },
+    { time: initialDelay + 136.7, text: '<span style="font-weight:700;">December 20th, 2025.</span>', fadeStart: initialDelay + 136.7 + MIN_LINE },
+    { time: initialDelay + 139, text: 'Thirty-three years to the day', fadeStart: initialDelay + 139 + MIN_LINE },
+    { time: initialDelay + 141.3, text: 'since the Sentinel began its silent vigil.', fadeStart: initialDelay + 141.3 + 3.5 },
+    { time: initialDelay + 145, text: 'When the foreseen alignments—', fadeStart: initialDelay + 145 + MIN_LINE },
+    { time: initialDelay + 147.3, text: 'both celestial and digital—are met…', fadeStart: initialDelay + 147.3 + MIN_LINE },
+    { time: initialDelay + 149.6, text: '…their full story will be broadcast to all.', fadeStart: initialDelay + 149.6 + MIN_LINE },
+    { time: initialDelay + 151.9, text: '<strong id="text-broadcast" class="impact-word color-broadcast" style="font-size:1.6em;letter-spacing:0.1em;">PREPARE FOR BROADCAST.</strong>', strike:5, // particle-strike-6.webm (short!)
+      effect: {
+        targetElementId: 'text-broadcast',
+        containerEffects: [
+            { property: 'transform', subProperty: 'scale', baseValue: 1, peakValue: 1.1, unit: ''},
+            { property: 'textShadow',
+              baseValue: '0 0 10px var(--primary-glow-color)',
+              peakValue: '0 0 20px #fff, 0 0 35px var(--primary-glow-color), 0 0 50px var(--primary-glow-color)', unit: ''
+            },
+        ],
+        environmentEffects: [
+            {target: 'body', property: 'filter', subProperty: 'brightness', baseValue:1, peakValue:1.3}
+        ]
+      },
+      fadeStart: initialDelay + 151.9 + STRIKE_DUR[5] + 1.5 // Extra linger for short sound
+    },
+    { time: initialDelay + 154.5, text: '<span id="title" style="font-size:2.7em;letter-spacing:0.06em;font-weight:900;">THE COLLIDERS</span>' }
+];
+
+
+let audioBuffers={}, isLoaded=false, isRunning=false, audioCtx, ambienceNode=null, ambienceGain=null;
+const controls={standard:document.getElementById('standard'),start:document.getElementById('start')}, textDisplay=document.getElementById('text-display');
+let scheduledTimeouts=[];
+
+// --- NEW/MODIFIED JS ---
+const elementStylesStore = new Map();
+const DEFAULT_STYLE_VALUES = {
+    transform: { scale: '1', rotate: '0deg', translateX: '0px', translateY: '0px', skewX: '0deg', skewY: '0deg', /* add more defaults as needed */ },
+    filter: { brightness: '1', blur: '0px', contrast: '1', saturate: '1', 'hue-rotate': '0deg', /* add more defaults as needed */ }
+};
+
+const setStyle = (el, effectConfig, value, duration = 0, timingFunction = 'ease-in-out') => {
+  const { property, subProperty, unit = '' } = effectConfig;
+  if (!el || !property) return;
+
+  if (!elementStylesStore.has(el)) {
+    const initialStyles = {
+        transform: { ...DEFAULT_STYLE_VALUES.transform },
+        filter: { ...DEFAULT_STYLE_VALUES.filter }
+    };
+    elementStylesStore.set(el, initialStyles);
+  }
+  const elStyleState = elementStylesStore.get(el);
+
+  el.style.transition = duration > 0 ? `${property} ${duration / 1000}s ${timingFunction}` : 'none';
+
+  requestAnimationFrame(() => {
+    if (property === 'transform') {
+      elStyleState.transform[subProperty] = `${value}${unit}`;
+      let transformString = "";
+      for (const [key, val] of Object.entries(elStyleState.transform)) {
+        transformString += `${key}(${val}) `;
+      }
+      el.style.transform = transformString.trim();
+    } else if (property === 'filter') {
+      elStyleState.filter[subProperty] = `${value}${unit}`;
+      let filterString = "";
+      for (const [key, val] of Object.entries(elStyleState.filter)) {
+        filterString += `${key}(${val}) `;
+      }
+      el.style.filter = filterString.trim();
+    } else { // Simple properties like color, opacity, textShadow, letterSpacing
+      el.style[property] = `${value}${unit}`;
+    }
+  });
+};
+
+const applyVisualEffectsForSound = (filename, effectConfigCollection) => {
+    const syncPoints = audioSyncPointsData[filename];
+    if (!syncPoints || !effectConfigCollection) return;
+
+    const {
+        targetElementId = 'text-display',
+        containerEffects = [],
+        environmentEffects = []
+    } = effectConfigCollection;
+
+    syncPoints.forEach(sp => {
+        const fadeInTime = sp.fadeIn * 1000;
+        const attackTime = sp.at * 1000; // Peak of the sound event
+        const fadeOutTime = sp.fadeOut * 1000;
+
+        const durationToPeak = Math.max(10, attackTime - fadeInTime); // Ensure min duration for transition
+        const durationFromPeak = Math.max(10, fadeOutTime - attackTime); // Ensure min duration for transition
+
+        // Apply Container Effects
+        if (containerEffects.length > 0) {
+            containerEffects.forEach(effectDef => {
+                const { property, subProperty, unit, baseValue, peakValue, transitionTimingIn = 'ease-out', transitionTimingOut = 'ease-in' } = effectDef;
+                
+                scheduledTimeouts.push(setTimeout(() => {
+                    const currentEl = document.getElementById(targetElementId);
+                    if (currentEl) setStyle(currentEl, { property, subProperty, unit }, peakValue, durationToPeak, transitionTimingIn);
+                }, fadeInTime));
+
+                scheduledTimeouts.push(setTimeout(() => {
+                    const currentEl = document.getElementById(targetElementId);
+                    if (currentEl) setStyle(currentEl, { property, subProperty, unit }, baseValue, durationFromPeak, transitionTimingOut);
+                }, attackTime));
+            });
+        }
+
+        // Apply Environment Effects
+        environmentEffects.forEach(envEffectDef => {
+            const { target, property, subProperty, unit, baseValue, peakValue, transitionTimingIn = 'ease-out', transitionTimingOut = 'ease-in' } = envEffectDef;
+            
+            scheduledTimeouts.push(setTimeout(() => {
+                const targetEl = target === 'body' ? document.body : document.getElementById(target);
+                if (targetEl) setStyle(targetEl, { property, subProperty, unit }, peakValue, durationToPeak, transitionTimingIn);
+            }, fadeInTime));
+
+            scheduledTimeouts.push(setTimeout(() => {
+                const targetEl = target === 'body' ? document.body : document.getElementById(target);
+                if (targetEl) setStyle(targetEl, { property, subProperty, unit }, baseValue, durationFromPeak, transitionTimingOut);
+            }, attackTime));
+        });
+    });
+};
+// --- END OF NEW/MODIFIED JS ---
+
+// --- UNCHANGED JS (clearAllTimeouts, setText, playSound etc. but ensure setStyle old usage is updated if any) ---
+const clearAllTimeouts=_=>{scheduledTimeouts.forEach(clearTimeout);scheduledTimeouts=[];textDisplay.style.transition='none';};
+// old setStyle removed
+
+const setText=html=>{
+  // Reset text-display specific styles that might have been animated if they aren't handled by DEFAULT_STYLE_VALUES + effects
+  // For instance, direct font-size on text-display not via scale
+  textDisplay.style.fontSize = '1.8rem'; // Reset to base font-size
+  textDisplay.style.letterSpacing = '.02em'; // Reset base letter-spacing
+  // Color and textShadow reset might be complex if spans are used extensively, but base styles on text-display are reapplied.
+  textDisplay.style.color = '#fff';
+  textDisplay.style.textShadow = '0 0 5px rgba(0, 255, 255, 0.3), 0 0 10px rgba(0, 255, 255, 0.2)';
+
+
+  // Reset transform and filter using the store and default values for text-display
+  const tdEl = document.getElementById('text-display');
+  if (tdEl) {
+    if (elementStylesStore.has(tdEl)) {
+        elementStylesStore.set(tdEl, {
+            transform: { ...DEFAULT_STYLE_VALUES.transform },
+            filter: { ...DEFAULT_STYLE_VALUES.filter }
+        });
+    }
+    // Apply default transform & filter strings
+    let defaultTransformString = "";
+    for (const [key, val] of Object.entries(DEFAULT_STYLE_VALUES.transform)) { defaultTransformString += `${key}(${val}) `; }
+    tdEl.style.transform = defaultTransformString.trim();
+
+    let defaultFilterString = "";
+    for (const [key, val] of Object.entries(DEFAULT_STYLE_VALUES.filter)) { defaultFilterString += `${key}(${val}) `; }
+    tdEl.style.filter = defaultFilterString.trim();
+  }
+
+  textDisplay.style.transition='none';textDisplay.innerHTML=html;textDisplay.style.opacity='1';
+};
+
+const clearText=_=>{
+  textDisplay.style.transition='opacity .2s ease-out';textDisplay.style.opacity='0';
+  scheduledTimeouts.push(setTimeout(_=>{if(textDisplay.style.opacity==='0'){textDisplay.innerHTML='';textDisplay.style.transition='none';}},200));
+};
+
+const playSound=(f,d,effect)=>{
+  scheduledTimeouts.push(setTimeout(_=>{
+    if(audioBuffers[f]&&audioCtx){
+      const src=audioCtx.createBufferSource();src.buffer=audioBuffers[f];src.connect(audioCtx.destination);src.start();
+      if(effect&&audioSyncPointsData[f])applyVisualEffectsForSound(f,effect);
+    }
+  },d*1e3));
+};
+
+const showAndHideText=(t,d,o)=>{scheduledTimeouts.push(setTimeout(_=>setText(t),d*1e3));scheduledTimeouts.push(setTimeout(clearText,o*1e3));};
+const ensureAudioContext=async()=>{audioCtx.state!=='running'&&await audioCtx.resume();};
+const fetchAndDecode=async f=>{
+  try{
+    const res=await fetch(`audio/${f}`);if(!res.ok)return;
+    const buf=await res.arrayBuffer();audioBuffers[f]=await audioCtx.decodeAudioData(buf);
+  }catch(e){console.warn('Audio load error:',f,e);}
+};
+async function loadAudioFiles(){
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  await Promise.all(audioFiles.map(fetchAndDecode));
+  isLoaded=true;controls.standard.disabled=false;controls.start.disabled=false;controls.start.textContent='Start the Particle Accelerator';
+}
+loadAudioFiles();
+
+function playAmbienceLoop({fadeIn=2,volume=1.5,offset=0}={}) { // Unchanged
+  stopAmbience(.1);
+  const buffer=audioBuffers['particle-ambience.webm'];if(!buffer)return;
+  ambienceGain=audioCtx.createGain();ambienceGain.gain.setValueAtTime(.0001,audioCtx.currentTime);
+  ambienceNode=audioCtx.createBufferSource();ambienceNode.buffer=buffer;ambienceNode.loop=true;
+  ambienceNode.connect(ambienceGain).connect(audioCtx.destination);
+  ambienceNode.start(0,offset%buffer.duration);
+  ambienceGain.gain.exponentialRampToValueAtTime(Math.max(volume,.0001),audioCtx.currentTime+fadeIn);
+}
+function stopAmbience(fadeOut=1.5){ // Unchanged
+  if(!ambienceNode||!ambienceGain)return;
+  const now=audioCtx.currentTime;
+  ambienceGain.gain.cancelScheduledValues(now);
+  if(ambienceGain.gain.value>.0001)ambienceGain.gain.setValueAtTime(ambienceGain.gain.value,now),ambienceGain.gain.linearRampToValueAtTime(.00001,now+fadeOut);
+  else ambienceGain.gain.setValueAtTime(.00001,now+fadeOut);
+  try{ambienceNode.stop(now+fadeOut+.05);}catch{}
+  let tmpN=ambienceNode,tmpG=ambienceGain;
+  ambienceNode.onended=_=>{tmpN?.disconnect();tmpG?.disconnect();};
+  ambienceNode=ambienceGain=null;
+}
+
+function playStandardSequence(){
+  clearAllTimeouts();setText("");clearText(); // setText now also resets styles
+  let endTime=0;
+  STANDARD_TL.forEach(e=>{
+    const inT=e.time, outT=e.strike!==undefined?(playSound(STRIKE_FILES[e.strike],inT,e.effect),e.fadeStart??(inT+STRIKE_DUR[e.strike]))
+    :e.stream!==undefined?(playSound(STREAM_FILES[e.stream],inT,e.effect),e.fadeStart??(inT+ORIGINAL_STREAM_DUR[e.stream]))
+    :e.fadeStart??(inT+MIN_LINE+1);
+    if(e.text)showAndHideText(e.text,inT,outT);endTime=Math.max(endTime,outT);
+  });
+  scheduledTimeouts.push(setTimeout(_=>{
+    setText("Preparing final transmission…");stopAmbience(1.3);
+    scheduledTimeouts.push(setTimeout(playTrailerVideo,1400));
+    isRunning=false;controls.start.disabled=false;
+  },(endTime+1)*1e3));
+}
+function playTrailerVideo(){ // Unchanged
+  let v=document.getElementById('trailer-video');if(v)v.parentNode.removeChild(v);
+  v=document.createElement('video');v.id='trailer-video';
+  v.src='video/colliders-combined-trailers.mp4';v.autoplay=v.playsInline=v.controls=true;v.style.display="block";
+  v.oncanplay=_=>{
+    v.requestFullscreen?.().catch(()=>0)||v.webkitRequestFullscreen?.().catch(()=>0)||v.msRequestFullscreen?.().catch(()=>0);
+    v.play().catch(()=>0);
+  };
+  const cleanup=_=>{
+    document.fullscreenElement&&document.exitFullscreen?.().catch(()=>0);
+    v.parentNode&&v.parentNode.removeChild(v);
+    clearText();setText('<span style="font-size:2.5em">THE END</span>');
+    document.removeEventListener('keydown',escH);
+  }, escH=e=>{if(e.key==='Escape')cleanup();};
+  v.onended=cleanup;document.body.appendChild(v);document.addEventListener('keydown',escH);
+}
+
+controls.start.addEventListener('click',async()=>{ // Unchanged
+  if(!isLoaded)return controls.start.textContent='Still Loading...';
+  if(isRunning)return;
+  isRunning=true;controls.start.disabled=true;await ensureAudioContext();
+  playAmbienceLoop();playStandardSequence();
+});
+</script>
+</body>
+</html>
