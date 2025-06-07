@@ -1,287 +1,197 @@
 /***********************************************************************
- * channelUI.js – Channel-specific UI, wiring, rendering, update logic
+ * channelUI.js – Minimized & Modernized
  ***********************************************************************/
 import State from './state.js';
 import { loadSample, resolveOrdinalURL } from './utils.js';
 import { audionalIDs } from './samples.js';
 import { renderWaveformToCanvas } from './waveformDisplay.js';
-import { createReversedBuffer } from './app.js'; // Assuming app.js exports this
+import { createReversedBuffer } from './app.js';
 import { clamp, auditionSample, setSlider, formatHz } from './uiHelpers.js';
 
 export const previewPlayheads = new Map(), mainTransportPlayheadRatios = new Map(), channelZoomStates = [];
 const MIN_TRIM_SEPARATION = 0.001;
 
 export function updateHandles(el, ch, idx) {
-  const hs = el.querySelector('.handle-start'), he = el.querySelector('.handle-end');
-  const w = hs ? hs.offsetWidth || 8 : 8; // Ensure hs exists before accessing offsetWidth
+  const [hs, he] = [el.querySelector('.handle-start'), el.querySelector('.handle-end')];
+  const w = hs?.offsetWidth || 8;
   if (channelZoomStates[idx]) {
-    if (hs) hs.style.left = '0%';
-    if (he) he.style.left = `calc(100% - ${w}px)`;
+    hs && (hs.style.left = '0%');
+    he && (he.style.left = `calc(100% - ${w}px)`);
   } else {
-    if (hs) hs.style.left = `${ch.trimStart * 100}%`;
-    if (he) he.style.left = `calc(${ch.trimEnd * 100}% - ${w}px)`;
+    hs && (hs.style.left = `${ch.trimStart * 100}%`);
+    he && (he.style.left = `calc(${ch.trimEnd * 100}% - ${w}px)`);
+  }
+}
+
+const _attach = (q, type, fn) => q && q.addEventListener(type, fn);
+
+const _setToggle = (btn, key, idx) =>
+  _attach(btn, 'click', () => State.updateChannel(idx, { [key]: !State.get().channels[idx][key] }));
+
+async function loadFromURL(rawUrl, idx, urlInput) {
+  const resolvedUrl = resolveOrdinalURL(rawUrl);
+  try {
+    const { buffer } = await loadSample(resolvedUrl);
+    const ch = State.get().channels[idx], reversedBuffer =
+      ch.reverse && buffer ? await createReversedBuffer(buffer) : null;
+    State.updateChannel(idx, { buffer, reversedBuffer, src: resolvedUrl, trimStart: 0, trimEnd: 1, activePlaybackScheduledTime: null });
+    urlInput && (urlInput.value = resolvedUrl);
+  } catch (err) {
+    alert(`Failed to load sample: ${err.message || err}`); console.error(err);
+  }
+}
+
+function handleAudition(isLong, xRatio, ch, idx, canvas) {
+  if (!ch?.buffer) return;
+  const buf = ch.reverse && ch.reversedBuffer ? ch.reversedBuffer : ch.buffer;
+  const { trimStart, trimEnd, fadeInTime, fadeOutTime, reverse } = ch;
+  const dur = ch.buffer.duration, r = buf.playbackRate || 1;
+  let off, len, pos;
+  if (isLong) {
+    const click = trimStart + xRatio * (trimEnd - trimStart);
+    off = reverse
+      ? (1.0 - trimEnd + xRatio * (trimEnd - trimStart)) * dur
+      : click * dur;
+    len = reverse
+      ? ((1.0 - click) * dur) / r
+      : ((trimEnd - click) * dur) / r;
+    pos = click;
+  } else {
+    off = reverse ? (1.0 - trimEnd) * dur : trimStart * dur;
+    pos = reverse ? trimEnd : trimStart;
+    len = ((trimEnd - trimStart) * dur) / r;
+  }
+  len = Math.max(0.001, len);
+  if (len > 0) {
+    previewPlayheads.set(idx, pos);
+    renderWaveformToCanvas(canvas, ch.buffer, trimStart, trimEnd, {
+      previewPlayheadRatio: pos, mainPlayheadRatio: mainTransportPlayheadRatios.get(idx),
+      fadeInTime, fadeOutTime, isReversed: reverse, zoomTrim: !!channelZoomStates[idx]
+    });
+    auditionSample(buf, off, len);
+    setTimeout(() => {
+      if (previewPlayheads.get(idx) === pos) {
+        previewPlayheads.delete(idx);
+        const curCh = State.get().channels[idx];
+        curCh && renderWaveformToCanvas(canvas, curCh.buffer, curCh.trimStart, curCh.trimEnd, {
+          mainPlayheadRatio: mainTransportPlayheadRatios.get(idx),
+          fadeInTime: curCh.fadeInTime, fadeOutTime: curCh.fadeOutTime,
+          isReversed: curCh.reverse, zoomTrim: !!channelZoomStates[idx]
+        });
+      }
+    }, Math.min(len * 1000, 2500) + 50);
   }
 }
 
 export function wireChannel(el, idx) {
-  el.querySelector('.channel-name').addEventListener('input', e => State.updateChannel(idx, { name: e.target.value }));
-  el.querySelector('.channel-fader-bank .mute-btn').addEventListener('click', () => State.updateChannel(idx, { mute: !State.get().channels[idx].mute }));
-  el.querySelector('.channel-fader-bank .solo-btn').addEventListener('click', () => State.updateChannel(idx, { solo: !State.get().channels[idx].solo }));
-  el.querySelector('.volume-fader').addEventListener('input', e => State.updateChannel(idx, { volume: +e.target.value }));
+  const ch = State.get().channels[idx];
 
-  // Sample Loading
+  // Name, mute, solo, volume
+  _attach(el.querySelector('.channel-name'), 'input', e => State.updateChannel(idx, { name: e.target.value }));
+  _setToggle(el.querySelector('.channel-fader-bank .mute-btn'), 'mute', idx);
+  _setToggle(el.querySelector('.channel-fader-bank .solo-btn'), 'solo', idx);
+  _attach(el.querySelector('.volume-fader'), 'input', e => State.updateChannel(idx, { volume: +e.target.value }));
+
+  // Sample load: file
   const fileInput = el.querySelector('.file-input');
-  fileInput.addEventListener('change', async e => {
-    const file = e.target.files[0]; if (!file) return;
+  _attach(fileInput, 'change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
     try {
       const { buffer } = await loadSample(file);
-      const currentChannelState = State.get().channels[idx];
-      const reversedBuffer = currentChannelState.reverse && buffer ? await createReversedBuffer(buffer) : null;
+      const ch = State.get().channels[idx];
+      const reversedBuffer = ch.reverse && buffer ? await createReversedBuffer(buffer) : null;
       State.updateChannel(idx, { buffer, reversedBuffer, src: null, trimStart: 0, trimEnd: 1, activePlaybackScheduledTime: null });
     } catch (err) { alert(`Failed to load sample: ${err.message || err}`); console.error(err); }
     finally { fileInput.value = ""; }
   });
 
+  // Sample load: URL & presets
   const urlInput = el.querySelector('.url-input');
-  el.querySelector('.load-url-btn').addEventListener('click', () => {
-    const urlValue = urlInput.value.trim();
-    if (urlValue) loadFromURL(urlValue, idx, urlInput); // Pass idx and urlInput
-  });
+  _attach(el.querySelector('.load-url-btn'), 'click', () => urlInput.value.trim() && loadFromURL(urlInput.value.trim(), idx, urlInput));
   const pickerContainer = el.querySelector('.sample-controls');
-  const samplePicker = Object.assign(document.createElement('select'), {
+  const picker = Object.assign(document.createElement('select'), {
     className: 'sample-picker',
-    innerHTML: '<option value="">— Audional presets —</option>' + audionalIDs.map(o => `<option value="${o.id}">${o.label}</option>`).join('')
+    innerHTML: `<option value="">— Audional presets —</option>${audionalIDs.map(o => `<option value="${o.id}">${o.label}</option>`).join('')}`
   });
-  pickerContainer.insertBefore(samplePicker, urlInput);
-  samplePicker.addEventListener('change', e => {
-    const selectedValue = e.target.value;
-    if (selectedValue) loadFromURL(selectedValue, idx, urlInput); // Pass idx and urlInput
-    e.target.value = ""; // Reset picker
+  pickerContainer.insertBefore(picker, urlInput);
+  _attach(picker, 'change', e => {
+    if (e.target.value) loadFromURL(e.target.value, idx, urlInput);
+    e.target.value = "";
   });
 
-  // Moved loadFromURL outside to be a standalone function if preferred, or keep as nested.
-  // For clarity, let's make it callable with idx and urlInput.
-  async function loadFromURL(rawUrl, channelIndex, urlInputElement) {
-    const resolvedUrl = resolveOrdinalURL(rawUrl);
-    try {
-      const { buffer } = await loadSample(resolvedUrl);
-      const currentChannelState = State.get().channels[channelIndex];
-      const reversedBuffer = currentChannelState.reverse && buffer ? await createReversedBuffer(buffer) : null;
-      State.updateChannel(channelIndex, { buffer, reversedBuffer, src: resolvedUrl, trimStart: 0, trimEnd: 1, activePlaybackScheduledTime: null });
-      if (urlInputElement) urlInputElement.value = resolvedUrl;
-    } catch (err) { alert(`Failed to load sample: ${err.message || err}`); console.error(err); }
-  }
-
-
-  // Step Grid
+  // Step grid
   const grid = el.querySelector('.step-grid');
   for (let s = 0; s < 64; ++s) {
     const cell = document.createElement('div');
     cell.className = 'step';
-    cell.dataset.stepIndex = s; // Store step index for easy identification
-    // Create checkbox inside the cell for better accessibility and state management
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.className = 'step-checkbox'; // For styling and selection
-    checkbox.id = `ch${idx}-step${s}`; // Unique ID
-    
-    const label = document.createElement('label');
-    label.htmlFor = checkbox.id;
-    label.className = 'step-label'; // For styling the clickable area
-
-    cell.append(checkbox, label);
-
-    // Update click handler to toggle checkbox and then state
-    cell.addEventListener('click', (e) => { // Use event target to ensure correct behavior if label/checkbox clicked
-        if (e.target.type === 'checkbox' || e.target.tagName === 'LABEL') {
-            const steps = [...State.get().channels[idx].steps];
-            steps[s] = !steps[s]; // Toggle based on current state
-            State.updateChannel(idx, { steps });
-            // The updateChannelUI will be called by the state subscription,
-            // which will then update the checkbox.checked property.
-        }
+    cell.dataset.stepIndex = s;
+    const cb = Object.assign(document.createElement('input'), { type: 'checkbox', className: 'step-checkbox', id: `ch${idx}-step${s}` });
+    const label = Object.assign(document.createElement('label'), { htmlFor: cb.id, className: 'step-label' });
+    cell.append(cb, label);
+    _attach(cell, 'click', e => {
+      if (e.target.type === 'checkbox' || e.target.tagName === 'LABEL') {
+        const steps = [...State.get().channels[idx].steps];
+        steps[s] = !steps[s]; State.updateChannel(idx, { steps });
+      }
     });
     grid.append(cell);
   }
 
-  // --- Waveform, audition & zoom ---
-  const waveformWrapper = el.querySelector('.waveform-wrapper');
-  const canvas = el.querySelector('.waveform');
-  let auditionTimeout = null;
-  let longClickFired = false;
-  const zoomBtn = waveformWrapper.querySelector('.zoom-btn');
-  channelZoomStates[idx] = channelZoomStates[idx] ?? false; // Ensure it's initialized
-  zoomBtn.classList.toggle('active', channelZoomStates[idx]);
 
+  // Waveform audition & zoom
+  const waveformWrapper = el.querySelector('.waveform-wrapper'), canvas = el.querySelector('.waveform');
+  let auditionTimeout, longClickFired;
+  const zoomBtn = waveformWrapper.querySelector('.zoom-btn');
+  channelZoomStates[idx] ??= false;
+  zoomBtn.classList.toggle('active', channelZoomStates[idx]);
   zoomBtn.onclick = () => {
     channelZoomStates[idx] = !channelZoomStates[idx];
     zoomBtn.classList.toggle('active', channelZoomStates[idx]);
     const ch = State.get().channels[idx];
-    if (ch) { // check if channel exists
-      renderWaveformToCanvas(
-        canvas, ch.buffer, ch.trimStart, ch.trimEnd,
-        {
-          mainPlayheadRatio: mainTransportPlayheadRatios.get(idx),
-          previewPlayheadRatio: previewPlayheads.get(idx),
-          fadeInTime: ch.fadeInTime, fadeOutTime: ch.fadeOutTime,
-          isReversed: ch.reverse, zoomTrim: !!channelZoomStates[idx]
-        }
-      );
-      updateHandles(el, ch, idx);
-    }
+    ch && renderWaveformToCanvas(
+      canvas, ch.buffer, ch.trimStart, ch.trimEnd,
+      { mainPlayheadRatio: mainTransportPlayheadRatios.get(idx), previewPlayheadRatio: previewPlayheads.get(idx), fadeInTime: ch.fadeInTime, fadeOutTime: ch.fadeOutTime, isReversed: ch.reverse, zoomTrim: !!channelZoomStates[idx] }
+    );
+    ch && updateHandles(el, ch, idx);
   };
-
-  // Simplified audition logic (mousedown for long press, click for full sample)
-  const handleAudition = (isLongPress, eventXRatio) => {
-    const ch = State.get().channels[idx];
-    if (!ch?.buffer) return;
-
-    const bufToPlay = ch.reverse && ch.reversedBuffer ? ch.reversedBuffer : ch.buffer;
-    const { trimStart, trimEnd, fadeInTime, fadeOutTime, reverse } = ch;
-    const originalBufferDuration = ch.buffer.duration; // Use original buffer duration for calculations
-
-    let playStartOffsetSeconds, playDurationSeconds, previewPosRatio;
-
-    if (isLongPress) {
-        // Play from click point within trim region to end of trim region
-        const clickPosInTrim = trimStart + eventXRatio * (trimEnd - trimStart);
-        if (reverse) {
-            playStartOffsetSeconds = (1.0 - trimEnd + eventXRatio * (trimEnd - trimStart)) * originalBufferDuration;
-            playDurationSeconds = ((1.0 - clickPosInTrim) * originalBufferDuration) / (bufToPlay.playbackRate || 1); // Consider playbackRate if applying it for audition
-            previewPosRatio = clickPosInTrim;
-        } else {
-            playStartOffsetSeconds = clickPosInTrim * originalBufferDuration;
-            playDurationSeconds = ((trimEnd - clickPosInTrim) * originalBufferDuration) / (bufToPlay.playbackRate || 1);
-            previewPosRatio = clickPosInTrim;
-        }
-    } else {
-        // Play entire trimmed segment
-        if (reverse) {
-            playStartOffsetSeconds = (1.0 - trimEnd) * originalBufferDuration;
-            previewPosRatio = trimEnd; // Preview starts at the effective start of reversed segment
-        } else {
-            playStartOffsetSeconds = trimStart * originalBufferDuration;
-            previewPosRatio = trimStart;
-        }
-        playDurationSeconds = ((trimEnd - trimStart) * originalBufferDuration) / (bufToPlay.playbackRate || 1);
-    }
-    
-    playDurationSeconds = Math.max(0.001, playDurationSeconds);
-
-
-    if (playDurationSeconds > 0) {
-      previewPlayheads.set(idx, previewPosRatio);
-      renderWaveformToCanvas(canvas, ch.buffer, trimStart, trimEnd, {
-        previewPlayheadRatio: previewPosRatio,
-        mainPlayheadRatio: mainTransportPlayheadRatios.get(idx),
-        fadeInTime, fadeOutTime,
-        isReversed: reverse, zoomTrim: !!channelZoomStates[idx]
-      });
-
-      auditionSample(bufToPlay, playStartOffsetSeconds, playDurationSeconds); // auditionSample expects start offset and duration in seconds
-
-      setTimeout(() => {
-        if (previewPlayheads.get(idx) === previewPosRatio) { // Check if it's still the same audition
-          previewPlayheads.delete(idx);
-          const currentCh = State.get().channels[idx];
-          if (currentCh) {
-            renderWaveformToCanvas(canvas, currentCh.buffer, currentCh.trimStart, currentCh.trimEnd, {
-              mainPlayheadRatio: mainTransportPlayheadRatios.get(idx),
-              fadeInTime: currentCh.fadeInTime, fadeOutTime: currentCh.fadeOutTime,
-              isReversed: currentCh.reverse, zoomTrim: !!channelZoomStates[idx]
-            });
-          }
-        }
-      }, Math.min(playDurationSeconds * 1000, 2500) + 50); // Adjusted timeout
-    }
-  };
-  
   canvas.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
-    const rect = canvas.getBoundingClientRect();
-    const xRatio = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+    const rect = canvas.getBoundingClientRect(), xRatio = clamp((e.clientX - rect.left) / rect.width, 0, 1);
     longClickFired = false;
-    auditionTimeout = setTimeout(() => {
-      longClickFired = true;
-      handleAudition(true, xRatio);
-    }, 350); // Long press threshold
+    auditionTimeout = setTimeout(() => { longClickFired = true; handleAudition(true, xRatio, State.get().channels[idx], idx, canvas); }, 350);
   });
-
   canvas.addEventListener('mouseup', e => {
     clearTimeout(auditionTimeout);
-    if (!longClickFired && e.button === 0) {
-      handleAudition(false, 0); // For click, xRatio isn't used for start, plays full trimmed
-    }
+    !longClickFired && e.button === 0 && handleAudition(false, 0, State.get().channels[idx], idx, canvas);
   });
   canvas.addEventListener('mouseleave', () => clearTimeout(auditionTimeout));
 
-
-  // --- Trim handles (drag logic) ---
-  ['.handle-start', '.handle-end'].forEach((sel, isEndHandle) => { // Renamed isEnd to isEndHandle for clarity
+  // Trim handles
+  ['.handle-start', '.handle-end'].forEach((sel, isEnd) => {
     const handle = el.querySelector(sel);
-    if (!handle) return; // Guard if handle doesn't exist
-
+    if (!handle) return;
     handle.addEventListener('pointerdown', e => {
       e.preventDefault(); e.stopPropagation(); handle.setPointerCapture(e.pointerId);
       const waveformRect = waveformWrapper.getBoundingClientRect();
-      const initialChannelState = State.get().channels[idx];
-      const initialTrimStart = initialChannelState.trimStart;
-      const initialTrimEnd = initialChannelState.trimEnd;
-
-      const moveHandler = (ev) => {
+      const { trimStart, trimEnd } = State.get().channels[idx];
+      const moveHandler = ev => {
         if (!waveformRect.width) return;
-        let xRatio = clamp((ev.clientX - waveformRect.left) / waveformRect.width, 0, 1);
-        
-        let newStart = initialTrimStart, newEnd = initialTrimEnd;
-
+        let x = clamp((ev.clientX - waveformRect.left) / waveformRect.width, 0, 1), ns = trimStart, ne = trimEnd;
         if (channelZoomStates[idx]) {
-            // When zoomed, dragging manipulates the underlying full trimStart/trimEnd
-            // but the visual xRatio is relative to the zoomed segment
-            const currentSegmentDuration = initialTrimEnd - initialTrimStart;
-            if (currentSegmentDuration <= MIN_TRIM_SEPARATION / 10 && currentSegmentDuration > 0) { // Avoid division by zero for very small segments
-                // If segment is tiny, allow dragging it as a whole
-                const deltaRatio = xRatio - (isEndHandle ? 1 : 0); // Simplified drag from edge
-                const moveAmount = deltaRatio * 0.05; // Arbitrary small move factor
-                newStart = initialTrimStart + moveAmount;
-                newEnd = initialTrimEnd + moveAmount;
-
-            } else if (currentSegmentDuration > 0) {
-                 if (isEndHandle) {
-                    newEnd = initialTrimStart + xRatio * currentSegmentDuration;
-                } else {
-                    newStart = initialTrimEnd - (1 - xRatio) * currentSegmentDuration;
-                }
-            }
-        } else {
-            // Not zoomed, xRatio directly maps to trim value
-            if (isEndHandle) {
-                newEnd = xRatio;
-            } else {
-                newStart = xRatio;
-            }
-        }
-
-        // Apply constraints
-        if (isEndHandle) {
-            newEnd = Math.max(newStart + MIN_TRIM_SEPARATION, newEnd);
-        } else {
-            newStart = Math.min(newEnd - MIN_TRIM_SEPARATION, newStart);
-        }
-        newStart = clamp(newStart, 0, 1);
-        newEnd = clamp(newEnd, 0, 1);
-
-        // Final check to prevent crossover with extremely small separations
-        if (newEnd < newStart + MIN_TRIM_SEPARATION) {
-            if (isEndHandle) newStart = Math.max(0, newEnd - MIN_TRIM_SEPARATION);
-            else newEnd = Math.min(1, newStart + MIN_TRIM_SEPARATION);
-        }
-        
-        if (!isNaN(newStart) && !isNaN(newEnd)) {
-             State.updateChannel(idx, { trimStart: newStart, trimEnd: newEnd });
-        }
-      };
-
-      const upHandler = () => {
+          const d = trimEnd - trimStart;
+          if (d <= MIN_TRIM_SEPARATION / 10 && d > 0) {
+            const delta = x - (isEnd ? 1 : 0), mv = delta * 0.05;
+            ns += mv; ne += mv;
+          } else if (d > 0) {
+            isEnd ? ne = trimStart + x * d : ns = trimEnd - (1 - x) * d;
+          }
+        } else isEnd ? ne = x : ns = x;
+        isEnd ? ne = Math.max(ns + MIN_TRIM_SEPARATION, ne) : ns = Math.min(ne - MIN_TRIM_SEPARATION, ns);
+        ns = clamp(ns, 0, 1); ne = clamp(ne, 0, 1);
+        if (ne < ns + MIN_TRIM_SEPARATION) isEnd ? ns = Math.max(0, ne - MIN_TRIM_SEPARATION) : ne = Math.min(1, ns + MIN_TRIM_SEPARATION);
+        !isNaN(ns) && !isNaN(ne) && State.updateChannel(idx, { trimStart: ns, trimEnd: ne });
+      }, upHandler = () => {
         handle.releasePointerCapture(e.pointerId);
         window.removeEventListener('pointermove', moveHandler);
         window.removeEventListener('pointerup', upHandler);
@@ -291,102 +201,54 @@ export function wireChannel(el, idx) {
     });
   });
 
-  // --- FX controls ---
-  const fxControlsElement = el.querySelector('.sample-fx-controls'); // Renamed for clarity
+  // FX controls
+  const fx = el.querySelector('.sample-fx-controls');
   [
     ['pitch-slider', 'pitch-value', 'pitch', parseInt],
     ['fade-in-slider', 'fade-in-value', 'fadeInTime'],
     ['fade-out-slider', 'fade-out-value', 'fadeOutTime'],
-    ['hpf-cutoff-slider', 'hpf-cutoff-value', 'hpfCutoff', parseFloat], // Use parseFloat for Hz
-    ['lpf-cutoff-slider', 'lpf-cutoff-value', 'lpfCutoff', parseFloat], // Use parseFloat for Hz
+    ['hpf-cutoff-slider', 'hpf-cutoff-value', 'hpfCutoff', parseFloat],
+    ['lpf-cutoff-slider', 'lpf-cutoff-value', 'lpfCutoff', parseFloat],
     ['eq-low-slider', 'eq-low-value', 'eqLowGain'],
     ['eq-mid-slider', 'eq-mid-value', 'eqMidGain'],
     ['eq-high-slider', 'eq-high-value', 'eqHighGain']
-  ].forEach(([sliderClass, outputClass, propertyName, parserFunc]) => {
-    const slider = fxControlsElement.querySelector(`.${sliderClass}`);
-    if (slider) { // Check if element exists
-      slider.addEventListener('input', e => {
-        const value = parserFunc ? parserFunc(e.target.value) : +e.target.value;
-        State.updateChannel(idx, { [propertyName]: value });
-      });
-    }
+  ].forEach(([s, v, prop, p]) =>
+    _attach(fx.querySelector(`.${s}`), 'input', e => State.updateChannel(idx, { [prop]: p ? p(e.target.value) : +e.target.value }))
+  );
+  const reverseBtn = fx.querySelector('.reverse-btn');
+  reverseBtn && _attach(reverseBtn, 'click', async () => {
+    const ch = State.get().channels[idx], rev = !ch.reverse;
+    let reversedBuffer = ch.reversedBuffer;
+    if (rev && ch.buffer && !ch.reversedBuffer)
+      reversedBuffer = await createReversedBuffer(ch.buffer);
+    State.updateChannel(idx, { reverse: rev, reversedBuffer });
   });
-
-  const reverseBtn = fxControlsElement.querySelector('.reverse-btn');
-  if (reverseBtn) {
-    reverseBtn.addEventListener('click', async () => {
-      const currentChannelState = State.get().channels[idx];
-      const newReverseState = !currentChannelState.reverse;
-      let newReversedBuffer = currentChannelState.reversedBuffer;
-
-      if (newReverseState && currentChannelState.buffer && !currentChannelState.reversedBuffer) {
-        newReversedBuffer = await createReversedBuffer(currentChannelState.buffer);
-      }
-      State.updateChannel(idx, { reverse: newReverseState, reversedBuffer: newReversedBuffer });
-    });
-  }
-  
   const collapseBtn = el.querySelector('.collapse-btn');
-  if (collapseBtn) {
-      collapseBtn.addEventListener('click', () => el.classList.toggle('collapsed'));
-  }
+  collapseBtn && _attach(collapseBtn, 'click', () => el.classList.toggle('collapsed'));
 }
 
-
-// MODIFIED updateChannelUI
 export function updateChannelUI(el, ch, playheadStep, idx, isFullUpdate = true) {
-  // console.time(`channelUI.update_ch${idx}_full:${isFullUpdate}`);
-
-  // Step 1: Update elements that show playhead position or depend on playing state
-  // This part runs regardless of isFullUpdate because playhead is always dynamic
-  const stepCells = el.querySelectorAll('.step'); // Get all step cells once
-  const isPlaying = State.get().playing; // Get playing state
-
-  stepCells.forEach((cell, i) => {
-    // Playhead highlighting
-    if (i === playheadStep && isPlaying) {
-      cell.classList.add('playhead');
-    } else {
-      cell.classList.remove('playhead');
-    }
-
-    // Update step 'on' state (checkbox) only if full update OR if its state mismatches
-    // This assumes checkboxes are used for step state.
-    if (isFullUpdate) { // Only update step on/off visual state during full updates
-        const checkbox = cell.querySelector('.step-checkbox');
-        if (checkbox) {
-            checkbox.checked = ch.steps[i]; // Visually reflect step state
-        } else { // Fallback for div-based steps if not using checkboxes
-            cell.classList.toggle('on', ch.steps[i]);
-        }
+  const steps = el.querySelectorAll('.step'), isPlaying = State.get().playing;
+  steps.forEach((cell, i) => {
+    cell.classList.toggle('playhead', i === playheadStep && isPlaying);
+    if (isFullUpdate) {
+      const cb = cell.querySelector('.step-checkbox');
+      cb ? (cb.checked = ch.steps[i]) : cell.classList.toggle('on', ch.steps[i]);
     }
   });
-
-  // Step 2: Update all other channel properties ONLY if isFullUpdate is true
   if (isFullUpdate) {
     const nameInput = el.querySelector('.channel-name');
-    if (nameInput && nameInput.value !== ch.name) nameInput.value = ch.name;
-
+    nameInput && nameInput.value !== ch.name && (nameInput.value = ch.name);
     el.querySelector('.channel-fader-bank .mute-btn').classList.toggle('active', ch.mute);
     el.querySelector('.channel-fader-bank .solo-btn').classList.toggle('active', ch.solo);
-    
-    const volumeFader = el.querySelector('.volume-fader');
-    if (volumeFader && parseFloat(volumeFader.value) !== ch.volume) volumeFader.value = ch.volume;
-    
+    const vol = el.querySelector('.volume-fader');
+    vol && parseFloat(vol.value) !== ch.volume && (vol.value = ch.volume);
     el.querySelector('.zoom-btn').classList.toggle('active', !!channelZoomStates[idx]);
-
     renderWaveformToCanvas(
       el.querySelector('.waveform'), ch.buffer, ch.trimStart, ch.trimEnd,
-      {
-        mainPlayheadRatio: mainTransportPlayheadRatios.get(idx),
-        previewPlayheadRatio: previewPlayheads.get(idx),
-        fadeInTime: ch.fadeInTime, fadeOutTime: ch.fadeOutTime,
-        isReversed: ch.reverse, // Use ch.reverse for general state, activePlaybackReversed for actual playing sound
-        zoomTrim: !!channelZoomStates[idx]
-      }
+      { mainPlayheadRatio: mainTransportPlayheadRatios.get(idx), previewPlayheadRatio: previewPlayheads.get(idx), fadeInTime: ch.fadeInTime, fadeOutTime: ch.fadeOutTime, isReversed: ch.reverse, zoomTrim: !!channelZoomStates[idx] }
     );
     updateHandles(el, ch, idx);
-
     const fx = el.querySelector('.sample-fx-controls');
     setSlider(fx, 'pitch-slider', ch.pitch, 'pitch-value');
     setSlider(fx, 'fade-in-slider', ch.fadeInTime, 'fade-in-value', v => v.toFixed(2));
@@ -398,5 +260,4 @@ export function updateChannelUI(el, ch, playheadStep, idx, isFullUpdate = true) 
     setSlider(fx, 'eq-high-slider', ch.eqHighGain, 'eq-high-value');
     fx.querySelector('.reverse-btn').classList.toggle('active', ch.reverse);
   }
-  // console.timeEnd(`channelUI.update_ch${idx}_full:${isFullUpdate}`);
 }
