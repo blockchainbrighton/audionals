@@ -7,28 +7,118 @@ import { ctx, channelGainNodes, EQ_BANDS_DEFS } from './audioCore.js';
 export let playStartTime = 0;
 
 let nextStepTime = 0.0;
-// currentStep is managed by the scheduler for its internal logic,
-// but the "displayStep" for the UI will be derived and set in the state.
 let _currentSchedulerStep = 0; // Internal step counter for scheduling logic
 
-let timerId = null;
-const lookAhead = 0.1;     // How far ahead to schedule audio (sec)
-const scheduleAheadTime = 0.2; // How often to call the scheduler (sec)
+// --- Timer Handling State (replaces timerId) ---
+let rafId = null;
+let lastSchedulerTime = 0;
+
+// --- Adaptive Look-Ahead Window ---
+let lookAhead = 0.1;           // Initial value, will adapt
+let scheduleAheadTime = 0.2;   // Will adapt as well
+const MIN_LOOK_AHEAD = 0.05;
+const MAX_LOOK_AHEAD = 0.5;
+const LOOK_AHEAD_ADJUSTMENT_RATE = 0.01;
+let schedulerPerformanceHistory = [];
+
 let scheduledSourcesInfo = [];
 const patternLength = 64;
 
 // Timing debug collections
-let absoluteStep = 0; // Overall step count since play started
-let barCount = 0;     // Count of 16-step bars processed
-
+let absoluteStep = 0;
+let barCount = 0;
 let barScheduledTimes = [];
 let barActualTimes = [];
-
-// Global or in an outer scope for playbackEngine.js
 let expectedSchedulerNextCallPerfTime = 0;
 
-// PrintBarTimingSummary and scheduleStep remain the same as your provided version
-// ... (printBarTimingSummary function - no changes)
+function adjustLookAhead() {
+    if (schedulerPerformanceHistory.length < 10) return;
+    const avg = schedulerPerformanceHistory.reduce((a, b) => a + b, 0) / schedulerPerformanceHistory.length;
+    const max = Math.max(...schedulerPerformanceHistory);
+    // Adjust look-ahead based on performance
+    if (max > lookAhead * 500) {
+        lookAhead = Math.min(lookAhead + LOOK_AHEAD_ADJUSTMENT_RATE, MAX_LOOK_AHEAD);
+    } else if (avg < lookAhead * 100 && lookAhead > MIN_LOOK_AHEAD) {
+        lookAhead = Math.max(lookAhead - LOOK_AHEAD_ADJUSTMENT_RATE, MIN_LOOK_AHEAD);
+    }
+    // Adjust scheduleAheadTime based on lookAhead
+    scheduleAheadTime = Math.max(lookAhead * 2, 0.1);
+    schedulerPerformanceHistory = [];
+}
+
+// --- Updated Scheduler using rAF and adaptive lookAhead ---
+function scheduler(timestamp = performance.now()) {
+    const schedulerEntryTimePerf = performance.now();
+
+    if (expectedSchedulerNextCallPerfTime > 0) {
+        const schedulerCallDelay = schedulerEntryTimePerf - expectedSchedulerNextCallPerfTime;
+        if (Math.abs(schedulerCallDelay) > 1) {
+             console.debug(`[playbackEngine] Scheduler call delay from expected: ${schedulerCallDelay.toFixed(2)} ms. Called at perf_time: ${schedulerEntryTimePerf.toFixed(2)}, Expected around: ${expectedSchedulerNextCallPerfTime.toFixed(2)}`);
+        }
+    }
+
+    const s = State.get();
+    const secondsPer16thNote = 60.0 / s.bpm / 4;
+    const nowCtx = ctx.currentTime;
+    let stepsScheduledThisTick = 0;
+    let schedulingLoopStartTimePerf = performance.now();
+
+    while (nextStepTime < nowCtx + lookAhead) {
+        const barStep = absoluteStep % 16;
+        barScheduledTimes[barStep] = nextStepTime;
+
+        scheduleStep(_currentSchedulerStep, nextStepTime, barStep);
+        stepsScheduledThisTick++;
+
+        nextStepTime += secondsPer16thNote;
+        _currentSchedulerStep = (_currentSchedulerStep + 1) % patternLength;
+        absoluteStep++;
+
+        if (barStep === 15) {
+            const scheduledTimesForCompletedBar = [...barScheduledTimes];
+            const actualTimesForCompletedBar = [...barActualTimes];
+            const barToLog = barCount;
+            setTimeout(() => {
+                printBarTimingSummary(barToLog, scheduledTimesForCompletedBar, actualTimesForCompletedBar);
+            }, 750);
+            barCount++;
+            barScheduledTimes = [];
+            barActualTimes = [];
+        }
+    }
+    const schedulingLoopDurationPerf = performance.now() - schedulingLoopStartTimePerf;
+
+    // UI step calculation/update (unchanged)
+    const displayStep = getCurrentStepFromContextTime(nowCtx, s.bpm);
+    let stateUpdateStartTimePerf = performance.now();
+    State.update({ currentStep: displayStep });
+    let stateUpdateDurationPerf = performance.now() - stateUpdateStartTimePerf;
+
+    // --- Collect scheduler execution time for adaptive lookAhead ---
+    const schedulerTotalExecutionTimePerf = performance.now() - schedulerEntryTimePerf;
+    schedulerPerformanceHistory.push(schedulerTotalExecutionTimePerf);
+
+    if (schedulerPerformanceHistory.length >= 10) {
+        adjustLookAhead();
+    }
+
+    // --- rAF scheduling instead of setTimeout ---
+    if (rafId !== null) {
+        rafId = requestAnimationFrame(scheduler);
+        expectedSchedulerNextCallPerfTime = performance.now() + (scheduleAheadTime * 1000);
+        lastSchedulerTime = timestamp;
+    }
+
+    if (schedulerTotalExecutionTimePerf > 5) {
+        console.warn(
+            `[playbackEngine] Scheduler total execution time: ${schedulerTotalExecutionTimePerf.toFixed(2)} ms. ` +
+            `(Scheduling loop: ${schedulingLoopDurationPerf.toFixed(2)} ms for ${stepsScheduledThisTick} steps; ` +
+            `State.update (for currentStep): ${stateUpdateDurationPerf.toFixed(2)} ms)`
+        );
+    }
+}
+
+
 function printBarTimingSummary(barNumber, scheduledStartTimes, actualStepInfos) {
     console.groupCollapsed(`⏱️ Step timing for Bar ${barNumber + 1} (data captured at end of bar scheduling)`);
     let sumEndDrift = 0;
@@ -73,7 +163,6 @@ function printBarTimingSummary(barNumber, scheduledStartTimes, actualStepInfos) 
     console.groupEnd();
 }
 
-// ... (scheduleStep function - no changes from your provided version)
 function scheduleStep(stepIdx, scheduledEventTime, scheduledStepOfBar) {
     const s = State.get();
     s.channels.forEach((ch, channelIndex) => {
@@ -187,74 +276,6 @@ function scheduleStep(stepIdx, scheduledEventTime, scheduledStepOfBar) {
 }
 
 
-// --- Timer Handling State (replaces timerId) ---
-let rafId = null;
-let lastSchedulerTime = 0;
-
-// --- Updated Scheduler using rAF ---
-function scheduler(timestamp = performance.now()) {
-    const schedulerEntryTimePerf = performance.now();
-
-    if (expectedSchedulerNextCallPerfTime > 0) {
-        const schedulerCallDelay = schedulerEntryTimePerf - expectedSchedulerNextCallPerfTime;
-        if (Math.abs(schedulerCallDelay) > 1) {
-             console.debug(`[playbackEngine] Scheduler call delay from expected: ${schedulerCallDelay.toFixed(2)} ms. Called at perf_time: ${schedulerEntryTimePerf.toFixed(2)}, Expected around: ${expectedSchedulerNextCallPerfTime.toFixed(2)}`);
-        }
-    }
-
-    const s = State.get();
-    const secondsPer16thNote = 60.0 / s.bpm / 4;
-    const nowCtx = ctx.currentTime;
-    let stepsScheduledThisTick = 0;
-    let schedulingLoopStartTimePerf = performance.now();
-
-    while (nextStepTime < nowCtx + lookAhead) {
-        const barStep = absoluteStep % 16;
-        barScheduledTimes[barStep] = nextStepTime;
-
-        scheduleStep(_currentSchedulerStep, nextStepTime, barStep);
-        stepsScheduledThisTick++;
-
-        nextStepTime += secondsPer16thNote;
-        _currentSchedulerStep = (_currentSchedulerStep + 1) % patternLength;
-        absoluteStep++;
-
-        if (barStep === 15) {
-            const scheduledTimesForCompletedBar = [...barScheduledTimes];
-            const actualTimesForCompletedBar = [...barActualTimes];
-            const barToLog = barCount;
-            setTimeout(() => {
-                printBarTimingSummary(barToLog, scheduledTimesForCompletedBar, actualTimesForCompletedBar);
-            }, 750);
-            barCount++;
-            barScheduledTimes = [];
-            barActualTimes = [];
-        }
-    }
-    const schedulingLoopDurationPerf = performance.now() - schedulingLoopStartTimePerf;
-
-    // UI step calculation/update (unchanged)
-    const displayStep = getCurrentStepFromContextTime(nowCtx, s.bpm);
-    let stateUpdateStartTimePerf = performance.now();
-    State.update({ currentStep: displayStep });
-    let stateUpdateDurationPerf = performance.now() - stateUpdateStartTimePerf;
-
-    // --- rAF scheduling instead of setTimeout ---
-    if (rafId !== null) {
-        rafId = requestAnimationFrame(scheduler);
-        expectedSchedulerNextCallPerfTime = performance.now() + (scheduleAheadTime * 1000);
-        lastSchedulerTime = timestamp;
-    }
-
-    const schedulerTotalExecutionTimePerf = performance.now() - schedulerEntryTimePerf;
-    if (schedulerTotalExecutionTimePerf > 5) {
-        console.warn(
-            `[playbackEngine] Scheduler total execution time: ${schedulerTotalExecutionTimePerf.toFixed(2)} ms. ` +
-            `(Scheduling loop: ${schedulingLoopDurationPerf.toFixed(2)} ms for ${stepsScheduledThisTick} steps; ` +
-            `State.update (for currentStep): ${stateUpdateDurationPerf.toFixed(2)} ms)`
-        );
-    }
-}
 
 // Modified to accept nowCtx and bpm to avoid multiple State.get() calls if not needed
 function getCurrentStepFromContextTime(contextTime, bpm) {
