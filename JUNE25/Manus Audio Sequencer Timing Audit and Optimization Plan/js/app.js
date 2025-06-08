@@ -3,7 +3,7 @@
 import State from './state.js';
 import * as UI from './ui.js';
 import { start, stop } from './audioEngine.js';
-import { loadSample } from './utils.js';
+import { loadSample, resolveOrdinalURL } from './utils.js';
 
 const makeChannel = i => ({
   name: `Channel ${i + 1}`,
@@ -98,7 +98,6 @@ document.getElementById('load-input').addEventListener('change', async e => {
   try {
     const projectData = JSON.parse(await f.text());
     
-    // Use loaded project name or default if not present
     const loadedProjectName = projectData.projectName || `Loaded Project ${new Date().toISOString().slice(0,10)}`;
 
     const sanitizedGlobalState = {
@@ -111,16 +110,15 @@ document.getElementById('load-input').addEventListener('change', async e => {
 
     if (Array.isArray(projectData.channels)) {
       sanitizedGlobalState.channels = projectData.channels.map((loadedCh, i) => {
-        const defaultCh = makeChannel(i); // Get a fresh set of defaults
+        const defaultCh = makeChannel(i);
         return {
           ...defaultCh,
           ...loadedCh,
           buffer: null,
           reversedBuffer: null,
-          // Explicitly ensure all properties, defaulting if not in loadedCh
           name: loadedCh.name || defaultCh.name,
           steps: loadedCh.steps || defaultCh.steps,
-          src: loadedCh.src || defaultCh.src,
+          src: loadedCh.src || defaultCh.src, // Keep original src from file
           volume: loadedCh.volume ?? defaultCh.volume,
           mute: loadedCh.mute ?? defaultCh.mute,
           solo: loadedCh.solo ?? defaultCh.solo,
@@ -149,30 +147,61 @@ document.getElementById('load-input').addEventListener('change', async e => {
     stop(); 
     State.update(sanitizedGlobalState); // This will trigger UI update for project name
 
+    // Loop to load samples for each channel
     for (let i = 0; i < sanitizedGlobalState.channels.length; i++) {
-        const ch = sanitizedGlobalState.channels[i];
-        if (ch.src && typeof ch.src === 'string') {
-            try {
-                const { buffer } = await loadSample(ch.src);
-                const updatePayload = { buffer };
-                if (ch.reverse && buffer) {
-                    const rBuf = await createReversedBuffer(buffer);
-                    updatePayload.reversedBuffer = rBuf;
-                }
-                State.updateChannel(i, updatePayload);
-            } catch (err) {
-                console.warn(`Failed to reload sample for channel ${i} (${ch.src}):`, err);
-            }
-        }
-    }
-    console.log("Project loaded.");
+      const ch = sanitizedGlobalState.channels[i];
+      const originalSrcFromFile = ch.src;
 
-  } catch(err) {
-    alert('Invalid project file or error during loading.');
-    console.error("Error loading project:", err);
-  } finally {
-    fileInput.value = "";
+      if (originalSrcFromFile && typeof originalSrcFromFile === 'string') {
+          // Use resolveOrdinalURL from utils.js
+          const resolvedUrl = resolveOrdinalURL(originalSrcFromFile); // <--- KEY CHANGE HERE
+
+          // The original resolveOrdinalURL returns the original string if it can't resolve it
+          // as an Ordinal URL, which is fine for fetch. We just need to ensure it's not null/empty.
+          if (resolvedUrl && resolvedUrl.trim() !== "") {
+              try {
+                  console.log(`[Project Load] Attempting to load sample for channel ${i} from resolved URL: ${resolvedUrl} (Original: ${originalSrcFromFile})`);
+                  // Pass the resolvedUrl to loadSample
+                  const { buffer, imageData } = await loadSample(resolvedUrl); // <--- PASS RESOLVED URL
+
+                  if (!buffer) {
+                       console.warn(`[Project Load] loadSample returned no buffer for channel ${i} (${resolvedUrl})`);
+                       State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile });
+                       continue; 
+                  }
+
+                  // Store originalSrcFromFile in state so saving the project preserves the ID if it was an ID
+                  const updatePayload = { buffer, src: originalSrcFromFile };
+                  if (imageData) updatePayload.imageData = imageData; // If you store imageData in channel state
+
+                  if (ch.reverse && buffer) {
+                      const rBuf = await createReversedBuffer(buffer);
+                      updatePayload.reversedBuffer = rBuf;
+                  }
+                  State.updateChannel(i, updatePayload);
+              } catch (err) {
+                  console.warn(`Failed to reload sample for channel ${i} (Resolved URL: ${resolvedUrl}, Original: ${originalSrcFromFile}):`, err);
+                  State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile });
+              }
+          } else {
+              console.warn(`[Project Load] Could not form a loadable URL for channel ${i}. Original src: "${originalSrcFromFile}"`);
+              State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile });
+          }
+      } else if (originalSrcFromFile) {
+           console.warn(`[Project Load] Channel ${i} has a non-string or empty src:`, originalSrcFromFile);
+           State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile });
+      } else {
+           State.updateChannel(i, { buffer: null, reversedBuffer: null, src: null });
+      }
   }
+  console.log("Project loaded.");
+
+} catch(err) {
+  alert('Invalid project file or error during loading.');
+  console.error("Error loading project:", err);
+} finally {
+  fileInput.value = "";
+}
 });
 
 export async function createReversedBuffer(audioBuffer) {
