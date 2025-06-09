@@ -178,7 +178,7 @@ function scheduler(ts = performance.now()) {
   
   const displayStep = getCurrentStepFromContextTime(nowCtx, s.bpm);
   const stateUpdateStart = performance.now();
-  State.update({ currentStep: displayStep });
+  State.update({ currentStep: displayStep }); // This call will now be faster as UI.render is deferred
   const stateUpdateDur = performance.now() - stateUpdateStart;
 
   const execTime = performance.now() - entryPerf;

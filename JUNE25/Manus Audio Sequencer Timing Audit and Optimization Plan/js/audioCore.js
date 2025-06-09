@@ -103,7 +103,7 @@ function initAudioEngineStateListener() {
         applyChannelVolumes(initialState);
     }
 
-
+    // This subscription will remain synchronous by default as no {defer: true} option is passed.
     State.subscribe((newState, oldState) => {
         if (newState.channels.length !== channelGainNodes.length) {
             setupChannelAudioNodes(newState.channels.length); // This will call _performChannelNodeSetup
