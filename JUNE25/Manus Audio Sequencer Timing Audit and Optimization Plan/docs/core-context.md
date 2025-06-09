@@ -12,31 +12,52 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
 
 ### Files Reviewed:
 - `js/audioCore.js` (Updated version provided by user)
-- `js/audioEngine.js`
+- `js/audioEngine.js` (Updated version provided by user)
 - `js/app.js`
 
 ### Status & Findings (Summary):
-- `AudioContext` is initialized with `latencyHint` and diagnostics. State changes (`onstatechange`) are monitored. (User Implemented Plan Items 2.4, 4.3).
-- `audioEngine.js` acts as a facade.
+- **`audioCore.js`:**
+    - `AudioContext` is initialized with `latencyHint: 'interactive'`.
+    - Comprehensive diagnostic logging for `baseLatency`, `outputLatency`, `sampleRate`, and state changes is now in `audioCore.js`.
+    - The `onstatechange` handler is robustly implemented in `audioCore.js`, checking `State.get().playing` if the context is interrupted/suspended.
+    - Channel audio node setup (`setupChannelAudioNodes`, `_performChannelNodeSetup`) now includes an attempt to `ctx.resume()` if suspended, ensuring nodes are created in an active context.
+    - Volume application (`applyChannelVolumes` and logic within `initAudioEngineStateListener`) is refined:
+        - Uses `setValueAtTime` for immediate changes.
+        - The state subscriber intelligently decides between `linearRampToValueAtTime` (if relevant state like mute, solo, or volume property changes) and `setValueAtTime` (if gain is merely out of sync with target), comparing against the current `gainNode.gain.value`.
+    - (User Implemented Plan Items 2.4, 4.3).
+- **`audioEngine.js`:**
+    - Acts as a facade, re-exporting from `audioCore.js` and `playbackEngine.js`.
+    - `State` import removed as `onstatechange` logic moved to `audioCore.js`.
 - `app.js` correctly orchestrates setup and uses `playbackEngine.start()` (which includes `ctx.resume()`) for play initiation.
 
 ## Phase 2: Playback Engine & Scheduler Logic - Completed Review
 
 ### File Reviewed:
-- `js/playbackEngine.js`
+- `js/playbackEngine.js` (Updated version provided by user)
 
 ### Status & Findings (Summary):
 - Scheduler uses `requestAnimationFrame`. (Plan Item 1.1 Implemented).
-- Adaptive look-ahead logic present. (Plan Item 1.2 Implemented). **Action Point: User to review constants in `adjustLookAhead`.**
-- **Audio Node Pooling (Plan Item 2.1) is NOT YET IMPLEMENTED.** New audio graph created per note – key optimization area.
+- **Adaptive Look-ahead Logic (`adjustLookAhead`):**
+    - Now actively adjusts `lookAhead` based on recent scheduler execution times (`schedulerPerformanceHistory`).
+    - Uses defined constants (`MIN_LOOK_AHEAD`, `MAX_LOOK_AHEAD`, `LOOK_AHEAD_ADJUSTMENT_RATE`, performance thresholds) to make decisions.
+    - This implements a more concrete version of adaptive look-ahead. (Addresses part of Plan Item 1.2).
+- **Audio Node Pooling (Plan Item 2.1) is NOT YET IMPLEMENTED.** New audio graph created per note – remains a key optimization area.
 - Core scheduling uses `AudioContext.currentTime` correctly.
-- Good debugging logs for step timing. (Plan Item 1.4 Partially Addressed).
+- **Enhanced Debugging Logs:**
+    - Scheduler call delay (rAF precision) is logged (`expectedSchedulerNextCallPerfTime`).
+    - Detailed bar-by-bar timing summary (`printBarTimingSummary`) provides insights into scheduled vs. actual sound end times and drift. (Significantly Addresses Plan Item 1.4).
+- **State Update in Scheduler:** `State.update({ currentStep: displayStep });` is still called synchronously within the `scheduler`'s rAF loop. This means state emission and subsequent synchronous UI updates (if not deferred) can still impact scheduler regularity.
+- **Improved Start/Stop Robustness:**
+    - `start()` and `stop()` functions now initialize/reset more state variables consistently (e.g., `absoluteStep`, `barCount`, `barScheduledTimes`, `barActualTimes`, `expectedSchedulerNextCallPerfTime`).
+    - `stop()` now explicitly stops `AudioBufferSourceNode`s before disconnecting.
+- **Minor Code Refinements:** Variable name conflicts resolved (e.g., `s_fade`, `n_node`). Safeguard added for `EQ_BANDS_DEFS` usage.
 - **Web Worker for Scheduler (Plan Item 2.3) is NOT YET IMPLEMENTED.**
 
 ### Recommendations for `js/playbackEngine.js`:
-1.  Critically Review `adjustLookAhead` Logic.
-2.  Prioritize Implementing Audio Node Pooling (Plan Item 2.1).
-3.  Consider Worker Thread for Scheduler (Plan Item 2.3) if main thread contention persists.
+1.  **Monitor `adjustLookAhead` Performance:** Observe the behavior of the new adaptive look-ahead in various scenarios and tune its constants if necessary.
+2.  **Prioritize Implementing Audio Node Pooling (Plan Item 2.1).** This remains critical for reducing per-note overhead.
+3.  Consider Worker Thread for Scheduler (Plan Item 2.3) if main thread contention (e.g., from synchronous UI updates not yet deferred) significantly impacts scheduler performance despite adaptive look-ahead.
+4.  The synchronous `State.update()` call within the scheduler loop should ideally be made asynchronous or its effects on UI rendering deferred (see Plan Item 2.2).
 
 ## Phase 3: Audio Engine Primitives (Sound Generation & Utilities) - Completed Review
 
@@ -60,7 +81,7 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
 *(Carried over from previous review)*
 - Implements a functional publish-subscribe pattern.
 - **`emit()` calls all listeners SYNCHRONOUSLY.**
-- **Refactoring Plan Item 2.2 (Deferred UI Updates via `UIUpdateQueue`) is NOT YET IMPLEMENTED.** This is key to decouple state updates in critical paths (like the scheduler) from potentially slow UI rendering.
+- **Refactoring Plan Item 2.2 (Deferred UI Updates via `UIUpdateQueue`) is NOT YET IMPLEMENTED.** This is key to decouple state updates in critical paths (like the scheduler in `playbackEngine.js` or `animateTransport` in `ui.js`) from potentially slow UI rendering.
 
 ### Status & Findings for `js/ui.js`:
 *(Carried over from previous review)*
@@ -102,7 +123,7 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
     *   Slow `renderWaveformToCanvas` execution:
         1.  Makes UI interactions (trimming, auditioning, sample loading/display) feel sluggish.
         2.  Critically impacts `ui.js#animateTransport`'s ability to maintain a smooth frame rate during playback, as it's called repeatedly for each visible channel. This can lead to janky visual feedback even if audio timing is perfect.
-        3.  If called within the synchronous `State -> UI render` chain due to other state changes, it can block the main thread, potentially delaying other critical operations.
+        3.  If called within the synchronous `State -> UI render` chain due to other state changes, it can block the main thread, potentially delaying other critical operations, including the audio scheduler if it's on the main thread and the UI update is lengthy.
 
 ### Pending Items for Phase 4:
 - Review `js/uiHelpers.js` (to understand `auditionSample` and other helpers).
@@ -114,8 +135,8 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
 
 ## Key Files Identified for Review (informed by user docs):
 - [X] `js/audioCore.js` *(Reviewed, User Updated)*
-- [X] `js/audioEngine.js` *(Reviewed - Facade)*
-- [X] `js/playbackEngine.js` *(Reviewed)*
+- [X] `js/audioEngine.js` *(Reviewed, User Updated)*
+- [X] `js/playbackEngine.js` *(Reviewed, User Updated)*
 - [X] `js/app.js` *(Reviewed)*
 - [X] `js/utils.js` *(Reviewed)*
 - [X] `js/fileTypeHandler.js` *(Reviewed)*
@@ -128,7 +149,7 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
 ## Action Items for User:
 - [X] ~~Review existing project documentation in `docs/`~~.
 - [X] ~~Provide `js/audioCore.js`~~.
-- [X] ~~Confirm/Implement "Optimized AudioContext Configuration"~~. (Status: User updated file).
+- [X] ~~Confirm/Implement "Optimized AudioContext Configuration"~~. (Status: User updated file, confirmed).
 - [X] ~~Provide `js/playbackEngine.js`~~.
 - [X] ~~Provide `js/app.js`~~.
 - [X] ~~Provide `js/utils.js`~~.
@@ -137,7 +158,9 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
 - [X] ~~Provide `js/ui.js`~~.
 - [X] ~~Provide `js/channelUI.js`~~.
 - [X] ~~Provide `js/waveformDisplay.js`~~.
-- [ ] **Address recommendations for `js/playbackEngine.js` (review `adjustLookAhead`, prioritize node pooling - Plan Item 2.1).**
-- [ ] **Strongly consider implementing Refactoring Plan Item 2.2 (Deferred UI Updates) by modifying `state.js` and how `ui.js` subscribes/renders.** This is a high-priority architectural change to decouple UI from state updates.
+- [ ] **Address recommendations for `js/playbackEngine.js`:**
+    - Monitor the performance of the new `adjustLookAhead` logic and tune constants as needed.
+    - **Prioritize implementing Audio Node Pooling (Plan Item 2.1).**
+- [ ] **Strongly consider implementing Refactoring Plan Item 2.2 (Deferred UI Updates) by modifying `state.js` and how `ui.js` subscribes/renders.** This is a high-priority architectural change to decouple UI from state updates, especially important given the synchronous `State.update()` in `playbackEngine.js`.
 - [ ] **Prioritize implementing optimizations for `renderWaveformToCanvas` in `js/waveformDisplay.js` as per Refactoring Plan Item 3.2 (e.g., offscreen canvas caching, debouncing for user interactions).** The performance of this function is critical for UI responsiveness and smooth playback animation.
 - [ ] **Next File Request:** Please provide the content of `js/uiHelpers.js`.
