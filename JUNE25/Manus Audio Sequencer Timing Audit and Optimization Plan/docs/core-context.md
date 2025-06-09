@@ -46,7 +46,7 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
 - **Enhanced Debugging Logs:**
     - Scheduler call delay (rAF precision) is logged (`expectedSchedulerNextCallPerfTime`).
     - Detailed bar-by-bar timing summary (`printBarTimingSummary`) provides insights into scheduled vs. actual sound end times and drift. (Significantly Addresses Plan Item 1.4).
-- **State Update in Scheduler:** `State.update({ currentStep: displayStep });` is still called synchronously within the `scheduler`'s rAF loop. This means state emission and subsequent synchronous UI updates (if not deferred) can still impact scheduler regularity.
+- **State Update in Scheduler:** `State.update({ currentStep: displayStep });` is called within the `scheduler`'s rAF loop. With **Plan Item 2.2 implemented**, this call should now return much faster as the main UI `render()` is deferred.
 - **Improved Start/Stop Robustness:**
     - `start()` and `stop()` functions now initialize/reset more state variables consistently (e.g., `absoluteStep`, `barCount`, `barScheduledTimes`, `barActualTimes`, `expectedSchedulerNextCallPerfTime`).
     - `stop()` now explicitly stops `AudioBufferSourceNode`s before disconnecting.
@@ -56,8 +56,7 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
 ### Recommendations for `js/playbackEngine.js`:
 1.  **Monitor `adjustLookAhead` Performance:** Observe the behavior of the new adaptive look-ahead in various scenarios and tune its constants if necessary.
 2.  **Prioritize Implementing Audio Node Pooling (Plan Item 2.1).** This remains critical for reducing per-note overhead.
-3.  Consider Worker Thread for Scheduler (Plan Item 2.3) if main thread contention (e.g., from synchronous UI updates not yet deferred) significantly impacts scheduler performance despite adaptive look-ahead.
-4.  The synchronous `State.update()` call within the scheduler loop should ideally be made asynchronous or its effects on UI rendering deferred (see Plan Item 2.2).
+3.  Consider Worker Thread for Scheduler (Plan Item 2.3) if main thread contention persists from other sources despite deferred UI updates for `State.update`.
 
 ## Phase 3: Audio Engine Primitives (Sound Generation & Utilities) - Completed Review
 
@@ -72,63 +71,57 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
 ## Phase 4: State Management & UI Impact on Timing - In Progress
 
 ### Files Reviewed:
-- `js/state.js`
-- `js/ui.js`
+- `js/state.js` (Updated by user to implement Plan Item 2.2)
+- `js/ui.js` (Updated by user to work with deferred state updates)
 - `js/channelUI.js`
 - `js/waveformDisplay.js`
 
 ### Status & Findings for `js/state.js`:
-*(Carried over from previous review)*
 - Implements a functional publish-subscribe pattern.
-- **`emit()` calls all listeners SYNCHRONOUSLY.**
-- **Refactoring Plan Item 2.2 (Deferred UI Updates via `UIUpdateQueue`) is NOT YET IMPLEMENTED.** This is key to decouple state updates in critical paths (like the scheduler in `playbackEngine.js` or `animateTransport` in `ui.js`) from potentially slow UI rendering.
+- **Refactoring Plan Item 2.2 (Deferred UI Updates via `UIUpdateQueue`) IS NOW IMPLEMENTED.**
+    - `subscribe` method now accepts an options object (`{ defer: true }`).
+    - `emit` distinguishes between synchronous and deferred listeners.
+    - Deferred listeners are added to a `uiUpdateQueue` and processed via `requestAnimationFrame` (`processUIUpdateQueue`).
+    - `_prevStateForCurrentUIBatch` logic ensures consistent `prevState` for batched UI updates.
+- This change decouples state updates from immediate, potentially slow UI rendering for listeners that opt-in.
 
 ### Status & Findings for `js/ui.js`:
-*(Carried over from previous review)*
-- **`State.subscribe(render)` creates a synchronous link between state changes and the main `render` function.**
-- The cost of `render` depends heavily on `updateChannelUI` (from `channelUI.js`).
-- `animateTransport` runs in a separate `rAF` loop for playheads. Its performance (UI frame rate during playback) depends on `renderWaveformToCanvas` (from `waveformDisplay.js`) because `animateTransport` triggers state changes (`currentPlayheadPosition`) that lead to `ui.js#render`, which in turn calls `channelUI.js#updateChannelUI`. For the waveform playhead to update, `updateChannelUI` must use its `isFullUpdate=true` path (or a similar mechanism) to invoke `renderWaveformToCanvas`.
-- **Refactoring Plan Item 2.2 (Deferred UI Updates) is highly relevant to `render`.**
-- **Refactoring Plan Item 3.2 (Optimized Canvas Rendering) is relevant to `animateTransport` (via `renderWaveformToCanvas`) and other UI updates involving waveforms.**
+- The main `render` function is now subscribed to `State` with `{ defer: true }`, meaning its execution is deferred via `requestAnimationFrame`. This directly addresses a key recommendation.
+- The `render()` function and `updateAllChannels()` logic remain largely the same, but their invocation is now asynchronous relative to the `State.update()` calls that trigger them.
+- **`animateTransport` Loop:**
+    - Still runs its own `requestAnimationFrame` loop.
+    - **Still calls `renderWaveformToCanvas` for each visible channel on every frame.** This remains a significant performance consideration, as `renderWaveformToCanvas` currently redraws the entire waveform from scratch.
+    - **Issue reported by user:** Audio playback affected by scrolling. This strongly indicates that the per-frame cost of `renderWaveformToCanvas` in `animateTransport` is high enough to impact the main thread's ability to service the audio thread, especially when scrolling changes the rendering workload.
+- **Refactoring Plan Item 3.2 (Optimized Canvas Rendering, e.g., waveform caching) is highly relevant and now the most critical next step for `animateTransport`'s performance and reducing its impact on audio playback.**
 
 ### Status & Findings for `js/channelUI.js`:
 *(Carried over from previous review, with minor clarifications)*
-- **Responsibilities:** Manages individual channel UI elements, event wiring, and calls `renderWaveformToCanvas` for display.
+- **Responsibilities:** Manages individual channel UI elements, event wiring, and calls `renderWaveformToCanvas` for display (typically for full updates or user interactions like trim/zoom).
 - **Key Observations & Performance Implications:**
-    - Event handling for trim handles, auditioning, and zoom changes directly or indirectly (via `State` update -> `ui.js#render` -> `updateChannelUI(isFullUpdate=true)`) calls `renderWaveformToCanvas`. Responsiveness of these interactions is tied to `renderWaveformToCanvas` performance.
-    - `updateChannelUI`'s `isFullUpdate` flag is important. The `isFullUpdate=false` path (used for step sequencer playhead updates) is fast and *does not* call `renderWaveformToCanvas`.
-    - However, any state change that requires updating the waveform appearance (e.g., trim, fades, sample change, or the main transport playhead via `animateTransport`'s state updates) will lead to `renderWaveformToCanvas` being called, likely through the `isFullUpdate=true` path of `updateChannelUI`.
-- **Conclusion for `js/channelUI.js`:** The file itself is well-structured. Performance hinges on the synchronous `State -> UI render` pipeline and the cost of `renderWaveformToCanvas`.
+    - Event handling for trim handles, auditioning, and zoom changes directly or indirectly (via `State` update -> deferred `ui.js#render` -> `updateChannelUI(isFullUpdate=true)`) calls `renderWaveformToCanvas`.
+    - With deferred updates, the initial state change will be fast. The subsequent UI update (including `renderWaveformToCanvas`) will happen in an rAF callback. Responsiveness of these interactions still depends on `renderWaveformToCanvas` performance.
+    - The `isFullUpdate=false` path (used for step sequencer playhead updates) in `updateChannelUI` is fast.
+- **Conclusion for `js/channelUI.js`:** The file itself is well-structured. Performance now hinges more directly on the cost of `renderWaveformToCanvas` when it's called.
 
 ### Status & Findings for `js/waveformDisplay.js`:
-- **Functionality:** Renders audio waveforms, trim regions (shaded or zoomed), fade-in/out cues, and playheads to a 2D canvas. Called by `channelUI.js` (for full updates, auditions, zoom) and is essential for `ui.js#animateTransport` to display the main transport playhead on waveforms.
-- **Drawing Process:**
-    - Handles DPR, clears/resizes canvas, retrieves audio data.
-    - Uses a `stepSize` to sample audio data for the canvas width, finding min/max values per vertical slice.
-    - Draws waveform path, trim shades, fade gradients, and playhead lines.
-    - `zoomTrim` option correctly focuses rendering.
-- **Performance Considerations:**
-    - **Synchronous Execution:** Blocks the main thread during execution. Its duration directly impacts UI responsiveness and animation smoothness.
-    - **Data Iteration:** Iterates over the relevant portion of `audioData`. Cost increases with buffer length and canvas width.
-    - **Frequent Calls:**
-        - User interactions (trimming, auditioning, zoom) trigger re-renders. Rapid dragging of trim handles can cause many calls.
-        - **Crucially, `ui.js#animateTransport` (during playback) updates `currentPlayheadPosition` in the state via `rAF`. This state change triggers `ui.js#render`, which calls `channelUI.js#updateChannelUI`. For the waveform's playhead to move, `updateChannelUI` effectively needs to use a path that calls `renderWaveformToCanvas` for each visible channel on each animation frame.** This makes `renderWaveformToCanvas` performance paramount for smooth playback animation.
+- **Functionality:** Renders audio waveforms, trim regions, fade-in/out cues, and playheads to a 2D canvas.
+- **Performance Considerations (Still Critical):**
+    - **Synchronous Execution:** Blocks the main thread during execution.
+    - **Data Iteration:** Iterates over the relevant portion of `audioData`.
+    - **Frequent Calls by `animateTransport`:** This is the primary bottleneck causing the reported scrolling issue. Each call re-renders the entire waveform path.
 - **Relevance to Refactoring Plan Item 3.2 (Optimized Canvas Rendering):**
-    - This function is the primary target for these optimizations.
-    - **Potential Optimizations (currently not implemented):**
-        *   **Caching/Offscreen Canvas:** Render static parts (waveform itself for a given trim) to an offscreen canvas. Overlay dynamic elements (playheads, fades if interactive). Highly beneficial if buffer/trim is static while playheads move.
-        *   **Debouncing/Throttling:** For calls from rapid user input (e.g., trim handle dragging), ensure rendering isn't on *every* event.
-        *   **Optimized Data Sampling/Drawing:** Further review if min/max calculation or drawing routines can be faster (e.g., using integer coordinates after scaling, minimizing context state changes).
+    - This function is the primary target for implementing waveform caching (offscreen canvas).
+    - **Caching/Offscreen Canvas:** IS NOT YET IMPLEMENTED. This is the key to solving the scrolling/playback issue.
+    - Debouncing/throttling for user interactions (trimming, zoom) might still be useful *in addition* to caching, to prevent excessive cache *re-generations* during rapid dragging.
 - **Impact on Overall Timing:**
-    *   Slow `renderWaveformToCanvas` execution:
-        1.  Makes UI interactions (trimming, auditioning, sample loading/display) feel sluggish.
-        2.  Critically impacts `ui.js#animateTransport`'s ability to maintain a smooth frame rate during playback, as it's called repeatedly for each visible channel. This can lead to janky visual feedback even if audio timing is perfect.
-        3.  If called within the synchronous `State -> UI render` chain due to other state changes, it can block the main thread, potentially delaying other critical operations, including the audio scheduler if it's on the main thread and the UI update is lengthy.
+    *   Slow `renderWaveformToCanvas` execution, especially when called repeatedly by `animateTransport`:
+        1.  Makes UI interactions (trimming, auditioning) feel sluggish during the actual canvas redraw phase (even if the initial state update was fast).
+        2.  **Critically impacts `ui.js#animateTransport`'s ability to maintain a smooth frame rate and, more importantly, can starve the main thread, leading to audio glitches/stutters, especially during scrolling.**
+        3.  The deferred update system helps the *caller* of `State.update` (like `playbackEngine`), but the *cost of the UI work itself* if high can still impact overall system responsiveness and audio.
 
 ### Pending Items for Phase 4:
 - Review `js/uiHelpers.js` (to understand `auditionSample` and other helpers).
-- Implementation of Refactoring Plan Item 2.2 (Deferred UI Updates).
-- **Active consideration and implementation of Refactoring Plan Item 3.2 (Optimized Canvas Rendering for `js/waveformDisplay.js`).**
+- **Active consideration and URGENT implementation of Refactoring Plan Item 3.2 (Optimized Canvas Rendering for `js/waveformDisplay.js` - specifically waveform caching).** This is now the highest priority to address the user-reported audio issues during UI interaction (scrolling).
 
 ## Phase 5: Synthesis & Final Recommendations
 *Pending...*
@@ -140,8 +133,8 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
 - [X] `js/app.js` *(Reviewed)*
 - [X] `js/utils.js` *(Reviewed)*
 - [X] `js/fileTypeHandler.js` *(Reviewed)*
-- [X] `js/state.js` *(Reviewed)*
-- [X] `js/ui.js` *(Reviewed)*
+- [X] `js/state.js` *(Reviewed, User Updated with Plan 2.2)*
+- [X] `js/ui.js` *(Reviewed, User Updated for Plan 2.2)*
 - [X] `js/channelUI.js` *(Reviewed)*
 - [X] `js/waveformDisplay.js` *(Reviewed)*
 - [ ] `js/uiHelpers.js` *(Next)*
@@ -149,7 +142,7 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
 ## Action Items for User:
 - [X] ~~Review existing project documentation in `docs/`~~.
 - [X] ~~Provide `js/audioCore.js`~~.
-- [X] ~~Confirm/Implement "Optimized AudioContext Configuration"~~. (Status: User updated file, confirmed).
+- [X] ~~Confirm/Implement "Optimized AudioContext Configuration"~~.
 - [X] ~~Provide `js/playbackEngine.js`~~.
 - [X] ~~Provide `js/app.js`~~.
 - [X] ~~Provide `js/utils.js`~~.
@@ -158,9 +151,9 @@ Achieve robust and perceptually perfect timing for the Audional Sequencer, addre
 - [X] ~~Provide `js/ui.js`~~.
 - [X] ~~Provide `js/channelUI.js`~~.
 - [X] ~~Provide `js/waveformDisplay.js`~~.
+- [X] Implement Refactoring Plan Item 2.2 (Deferred UI Updates). *(Status: Implemented in `state.js` and `ui.js`)*
 - [ ] **Address recommendations for `js/playbackEngine.js`:**
-    - Monitor the performance of the new `adjustLookAhead` logic and tune constants as needed.
+    - Monitor the performance of the new `adjustLookAhead` logic.
     - **Prioritize implementing Audio Node Pooling (Plan Item 2.1).**
-- [ ] **Strongly consider implementing Refactoring Plan Item 2.2 (Deferred UI Updates) by modifying `state.js` and how `ui.js` subscribes/renders.** This is a high-priority architectural change to decouple UI from state updates, especially important given the synchronous `State.update()` in `playbackEngine.js`.
-- [ ] **Prioritize implementing optimizations for `renderWaveformToCanvas` in `js/waveformDisplay.js` as per Refactoring Plan Item 3.2 (e.g., offscreen canvas caching, debouncing for user interactions).** The performance of this function is critical for UI responsiveness and smooth playback animation.
-- [ ] **Next File Request:** Please provide the content of `js/uiHelpers.js`.
+- [ ] **URGENT: Prioritize implementing optimizations for `renderWaveformToCanvas` in `js/waveformDisplay.js` as per Refactoring Plan Item 3.2 (specifically, offscreen canvas caching for static waveform paths).** This is critical to resolve audio playback issues during UI interactions like scrolling.
+- [ ] **Next File Request:** Please provide the content of `js/uiHelpers.js` (can be reviewed in parallel or after waveform caching).
