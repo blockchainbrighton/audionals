@@ -66,45 +66,49 @@ The architecture emphasizes a clear separation of concerns, with distinct module
     -   Audio logic (scheduling, processing) is distinct from UI rendering logic.
     -   Data management (state) is separate from its presentation (UI).
 
+
 ---
 
 ## 3. Project Structure
+
+```
 /
-├── index.html # Main application page with channel template
+├── index.html                # Main application page with channel template
 ├── css/
-│ ├── 01_variables.css # CSS custom properties for theming
-│ ├── 02_base.css # Base HTML element styling
-│ ├── 03_header.css # Header and global controls
-│ ├── 04_layout.css # Main page layout
-│ ├── 05_channel.css # Channel strip styling
-│ ├── 06_sample-waveform.css# Waveform display and trim handles
-│ ├── 07_fx-controls.css # FX parameter sliders and buttons
-│ ├── 08_fader.css # Volume fader styling
-│ ├── 09_step-grid.css # Step sequencer grid
-│ └── 10_buttons.css # General button styling
+│   ├── 01_variables.css      # CSS custom properties for theming
+│   ├── 02_base.css           # Base HTML element styling
+│   ├── 03_header.css         # Header and global controls
+│   ├── 04_layout.css         # Main page layout
+│   ├── 05_channel.css        # Channel strip styling
+│   ├── 06_sample-waveform.css# Waveform display and trim handles
+│   ├── 07_fx-controls.css    # FX parameter sliders and buttons
+│   ├── 08_fader.css          # Volume fader styling
+│   ├── 09_step-grid.css      # Step sequencer grid
+│   └── 10_buttons.css        # General button styling
 │
 ├── js/
-│ ├── app.js # Main application setup, project save/load orchestration
-│ ├── state.js # Centralized application state management
-│ │
-│ ├── audioEngine.js # Facade for the audio engine subsystem
-│ ├── audioCore.js # Core Web Audio API setup, AudioContext, channel gain nodes
-│ ├── playbackEngine.js # Sequencer logic, step scheduling, audio FX, transport control
-│ │
-│ ├── ui.js # Main UI orchestrator, global UI elements, state subscriber for rendering
-│ ├── channelUI.js # Manages DOM creation, event wiring, and updates for individual channel strips, including waveform cache logic
-│ ├── uiHelpers.js # Utility functions for UI (formatting, debouncing, etc.)
-│ ├── waveformDisplay.js # Renders audio waveforms, trim, fades, playheads to canvas; includes path generation
-│ │
-│ ├── utils.js # General utility functions (sample loading from various sources, URL/Ordinal ID resolution)
-│ ├── fileTypeHandler.js # Logic for extracting audio from various file types/formats (e.g., base64 from HTML)
-│ ├── samples.js # Predefined list of Audional/Ordinal sample IDs and labels
+│   ├── app.js                # Main application setup, project save/load orchestration
+│   ├── state.js              # Centralized application state management
+│   │
+│   ├── audioEngine.js        # Facade for the audio engine subsystem
+│   ├── audioCore.js          # Core Web Audio API setup, AudioContext, channel gain nodes
+│   ├── playbackEngine.js     # Sequencer logic, step scheduling, audio FX, transport control
+│   │
+│   ├── ui.js                 # Main UI orchestrator, global UI elements, state subscriber for rendering
+│   ├── channelUI.js          # Manages DOM creation, event wiring, and updates for individual channel strips, including waveform cache logic
+│   ├── uiHelpers.js          # Utility functions for UI (formatting, debouncing, etc.)
+│   ├── waveformDisplay.js    # Renders audio waveforms, trim, fades, playheads to canvas; includes path generation
+│   │
+│   ├── utils.js              # General utility functions (sample loading from various sources, URL/Ordinal ID resolution)
+│   ├── fileTypeHandler.js    # Logic for extracting audio from various file types/formats (e.g., base64 from HTML)
+│   ├── samples.js            # Predefined list of Audional/Ordinal sample IDs and labels
 │
-├── docs/ # Project documentation
-│ └── README.md # This developer guide
+├── docs/                     # Project documentation
+│   └── README.md             # This developer guide
+│
 └── ... (other assets like html-modules, json-files)
+```
 
----
 
 ## 4. Core Data Structures
 
