@@ -145,7 +145,7 @@ function scheduler(ts = performance.now()) {
     const delay = entryPerf - expectedSchedulerNextCallPerfTime;
     // Log if rAF call was significantly early or late based on scheduleAheadTime
     if (Math.abs(delay) > 1) { // Only log if delay is more than 1ms
-        console.debug(`[playbackEngine] Scheduler call delay from expected: ${delay.toFixed(2)} ms (expected by: ${scheduleAheadTime*1000}ms)`);
+        // console.debug(`[playbackEngine] Scheduler call delay from expected: ${delay.toFixed(2)} ms (expected by: ${scheduleAheadTime*1000}ms)`);
     }
   }
 

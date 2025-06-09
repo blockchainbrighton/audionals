@@ -1,101 +1,211 @@
 /***********************************************************************
- * ui.js – Minimized & Modernized
+ * ui.js – Minimized & Modernized (with ReferenceError fix)
  ***********************************************************************/
 import State from './state.js';
 import { ctx } from './audioEngine.js';
 import { renderWaveformToCanvas } from './waveformDisplay.js';
 import { debounce } from './uiHelpers.js'; // Assuming uiHelpers.js exists and exports debounce
-import { wireChannel, updateChannelUI, previewPlayheads, mainTransportPlayheadRatios, channelZoomStates } from './channelUI.js';
+import { 
+    wireChannel, 
+    updateChannelUI, 
+    previewPlayheads, 
+    mainTransportPlayheadRatios, 
+    channelZoomStates, 
+    getChannelWaveformImage, 
+    invalidateAllWaveformCaches,
+    DEBUG_CACHE // Import DEBUG_CACHE to use it for conditional logging
+    // visibleChannelIndices // Will be imported if IntersectionObserver is implemented
+} from './channelUI.js'; 
 
 const container = document.getElementById('channels-container');
 const template = document.getElementById('channel-template');
 let projectNameInput = null;
 
-// --- Helper: update all channel UIs, full/partial as needed
-const updateAllChannels = (channels, prevChannels, step, playChanged, full = false) => {
+// --- Helper: update all channel UIs, full/partial as needed ---
+// Added stepActuallyChanged boolean parameter
+const updateAllChannels = (channels, prevChannels, currentGlobalStep, playActuallyDidChange, stepActuallyDidChange, fullPass = false) => {
   channels.forEach((ch, i) => {
     const el = container.children[i];
-    if (full || ch !== prevChannels[i]) updateChannelUI(el, ch, step, i, true);
-    else if (playChanged) updateChannelUI(el, ch, step, i, false);
+    if (el) { // Ensure element exists
+        if (fullPass) { 
+            updateChannelUI(el, ch, currentGlobalStep, i, true); // true for isFullRenderPass
+        } else if (playActuallyDidChange || stepActuallyDidChange) { // Use the passed booleans
+            // For a light update, pass the current channel state and the specific step.
+            // updateChannelUI with isFullRenderPass=false will only update step lights.
+            updateChannelUI(el, ch, currentGlobalStep, i, false); 
+        }
+    }
   });
 };
 
-// --- Global/project UI rendering
+// --- Global/project UI rendering ---
 const renderGlobalUI = (s, ps) => {
   if (projectNameInput && (!ps || s.projectName !== ps.projectName)) {
     projectNameInput.value = s.projectName;
     document.title = s.projectName + " - Audional Sequencer";
   }
   const bpmInput = document.getElementById('bpm-input');
-  bpmInput && (!ps || s.bpm !== ps.bpm) && (bpmInput.value = s.bpm);
+  if (bpmInput && (!ps || s.bpm !== ps.bpm)) {
+    bpmInput.value = s.bpm;
+  }
 };
 
-// --- Main render logic
+// --- Main render logic ---
 function render(s, ps) {
-  // s is the current state, ps is the previous state
-  // This function is now called deferred via requestAnimationFrame
   renderGlobalUI(s, ps);
-  const prevCh = ps?.channels ?? [], lenChanged = !ps || s.channels.length !== prevCh.length,
-        stepChanged = !ps || s.currentStep !== ps.currentStep,
-        playChanged = !ps || s.playing !== ps.playing;
-  if (lenChanged) {
-    while (container.children.length > s.channels.length) {
-      const old = container.lastChild;
-      if (old?.dataset.channelIndex) {
-        const idx = +old.dataset.channelIndex;
+  const prevChannelsState = ps?.channels ?? []; // Use a different name to avoid confusion
+  const currentChannelsState = s.channels;
+
+  const lengthDidChange = !ps || currentChannelsState.length !== prevChannelsState.length;
+  
+  // Define these booleans based on global state changes
+  const stepActuallyDidChange = !ps || s.currentStep !== ps.currentStep;
+  const playActuallyDidChange = !ps || s.playing !== ps.playing;
+
+  if (lengthDidChange) {
+    invalidateAllWaveformCaches("Channel length changed"); 
+
+    while (container.children.length > currentChannelsState.length) {
+      const oldElement = container.lastChild;
+      if (oldElement?.dataset.channelIndex) {
+        const idx = +oldElement.dataset.channelIndex;
         previewPlayheads.delete(idx);
         mainTransportPlayheadRatios.delete(idx);
+        // channelZoomStates might need cleanup if tied to index strictly and channels are removed from middle
       }
-      old?.remove();
+      oldElement?.remove();
     }
-    s.channels.forEach((ch, i) => {
+    currentChannelsState.forEach((ch, i) => {
       let el = container.children[i];
       if (!el) {
         el = template.content.firstElementChild.cloneNode(true);
-        el.dataset.channelIndex = i;
+        el.dataset.channelIndex = String(i); 
         container.append(el);
-        wireChannel(el, i);
+        wireChannel(el, i); 
       }
-      updateChannelUI(el, ch, s.currentStep, i, true);
+      updateChannelUI(el, ch, s.currentStep, i, true); 
     });
   } else {
-    const anyChanged = s.channels.some((ch, i) => ch !== prevCh[i]);
-    if (anyChanged) updateAllChannels(s.channels, prevCh, s.currentStep, playChanged, true); // Made full update true if any channel data changed
-    else if (stepChanged || playChanged) updateAllChannels(s.channels, prevCh, s.currentStep, playChanged, false); // Kept playChanged for partial update
+    // Length hasn't changed
+    let anyChannelDataRequiresFullUpdate = false;
+    currentChannelsState.forEach((currentCh, i) => {
+        const prevCh = prevChannelsState[i];
+        if (prevCh && currentCh !== prevCh) { // Object identity changed for this channel
+            let propertiesTriggeringFullUpdateChanged = false;
+            for (const key in currentCh) {
+                if (Object.prototype.hasOwnProperty.call(currentCh, key) && 
+                    (!prevCh || currentCh[key] !== prevCh[key])) {
+                    
+                    const dynamicKeysIgnoredForFullUpdate = [
+                        'activePlaybackScheduledTime', 
+                        'activePlaybackDuration', 
+                        'activePlaybackTrimStart', 
+                        'activePlaybackTrimEnd', 
+                        'activePlaybackReversed'
+                        // 'currentStep' is handled globally, not a per-channel property causing full DOM refresh
+                    ];
+
+                    if (!dynamicKeysIgnoredForFullUpdate.includes(key)) {
+                        propertiesTriggeringFullUpdateChanged = true;
+                        if (DEBUG_CACHE) { // Use imported DEBUG_CACHE
+                            if (key === 'buffer' || key === 'reversedBuffer') {
+                                if (currentCh[key] !== prevCh[key]) { // Should always be true if currentCh !== prevCh due to buffer
+                                     console.log(`[UI Render Debug - Full Update Trigger] Ch ${i} data changed: ${key} (object identity)`);
+                                }
+                            } else if (key === 'steps') {
+                                if (JSON.stringify(currentCh[key]) !== JSON.stringify(prevCh[key])) {
+                                    console.log(`[UI Render Debug - Full Update Trigger] Ch ${i} data changed: ${key}`);
+                                }
+                            } else {
+                               console.log(`[UI Render Debug - Full Update Trigger] Ch ${i} data changed: ${key}, From:`, prevCh?.[key], "To:", currentCh[key]);
+                            }
+                        }
+                        break; 
+                    } else {
+                         if (DEBUG_CACHE && currentCh[key] !== prevCh?.[key]) {
+                             // console.log(`[UI Render Debug - Dynamic Key] Ch ${i} data changed: ${key}, From:`, prevCh?.[key], "To:", currentCh[key]);
+                         }
+                    }
+                }
+            }
+            if (propertiesTriggeringFullUpdateChanged) {
+                anyChannelDataRequiresFullUpdate = true;
+            }
+        }
+    });
+
+    if (anyChannelDataRequiresFullUpdate) {
+        if (DEBUG_CACHE) {
+            console.log("[UI Render] Full update for channels triggered by significant data change(s).");
+        }
+        updateAllChannels(currentChannelsState, prevChannelsState, s.currentStep, playActuallyDidChange, stepActuallyDidChange, true); 
+    } else if (stepActuallyDidChange || playActuallyDidChange) {
+        if (DEBUG_CACHE) {
+            console.log("[UI Render] Light update triggered by step/play state change.");
+        }
+        updateAllChannels(currentChannelsState, prevChannelsState, s.currentStep, playActuallyDidChange, stepActuallyDidChange, false);
+    }
   }
 }
 
 // --- Animate transport playheads/waveforms ---
 function animateTransport() {
-  const { playing, channels } = State.get(), now = ctx.currentTime;
+  const { playing, channels } = State.get();
+  const now = ctx.currentTime; 
+
+  // TODO: Implement IntersectionObserver and iterate over `visibleChannelIndices`
   channels.forEach((ch, idx) => {
-    const el = container.children[idx], canvas = el?.querySelector('.waveform');
-    let curRatio = null;
+    const el = container.children[idx];
+    const canvas = el?.querySelector('.waveform');
+
+    if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) {
+      if (mainTransportPlayheadRatios.has(idx)) mainTransportPlayheadRatios.delete(idx);
+      return; 
+    }
+
+    let currentPlayheadBufferRatio = null; 
     if (playing && ch.activePlaybackScheduledTime != null && ch.activePlaybackDuration > 0) {
-      const elapsed = now - ch.activePlaybackScheduledTime,
-            segDur = ch.activePlaybackTrimEnd - ch.activePlaybackTrimStart;
-      if (elapsed >= 0 && elapsed < ch.activePlaybackDuration && segDur > 0) {
-        const prog = elapsed / ch.activePlaybackDuration;
-        curRatio = ch.activePlaybackReversed
-          ? ch.activePlaybackTrimEnd - prog * segDur
-          : ch.activePlaybackTrimStart + prog * segDur;
+      const elapsedSinceScheduled = now - ch.activePlaybackScheduledTime;
+      const progressRatioInAudibleSegment = elapsedSinceScheduled / ch.activePlaybackDuration;
+
+      if (progressRatioInAudibleSegment >= 0 && progressRatioInAudibleSegment < 1) {
+        const trimStart = ch.activePlaybackTrimStart ?? ch.trimStart ?? 0; // Fallback to general trim if active not set
+        const trimEnd = ch.activePlaybackTrimEnd ?? ch.trimEnd ?? 1;
+        const trimmedSegmentDurationRatioInFullBuffer = trimEnd - trimStart;
+
+        if (trimmedSegmentDurationRatioInFullBuffer > 0) { 
+            if (ch.activePlaybackReversed) {
+              currentPlayheadBufferRatio = trimEnd - (progressRatioInAudibleSegment * trimmedSegmentDurationRatioInFullBuffer);
+            } else {
+              currentPlayheadBufferRatio = trimStart + (progressRatioInAudibleSegment * trimmedSegmentDurationRatioInFullBuffer);
+            }
+            currentPlayheadBufferRatio = Math.max(0, Math.min(1, currentPlayheadBufferRatio));
+        }
       }
     }
-    const prevRatio = mainTransportPlayheadRatios.get(idx);
-    const redraw = curRatio == null ? prevRatio != null : prevRatio == null || Math.abs((prevRatio || 0) - curRatio) > 0.0001;
-    
-    if (curRatio == null && prevRatio != null) mainTransportPlayheadRatios.delete(idx);
-    if (curRatio != null && (prevRatio == null || Math.abs((prevRatio || 0) - curRatio) > 0.0001)) mainTransportPlayheadRatios.set(idx, curRatio);
-    
-    if (redraw && canvas?.clientWidth && canvas?.clientHeight)
-      renderWaveformToCanvas(canvas, ch.buffer, ch.trimStart, ch.trimEnd, {
-        mainPlayheadRatio: curRatio,
-        previewPlayheadRatio: previewPlayheads.get(idx),
-        fadeInTime: ch.fadeInTime,
-        fadeOutTime: ch.fadeOutTime,
-        isReversed: ch.activePlaybackReversed, // Ensure this reflects actual playback reversal
-        zoomTrim: !!channelZoomStates[idx]
-      });
+
+    const previousPlayheadBufferRatio = mainTransportPlayheadRatios.get(idx);
+    const playheadMovedSignificantly = currentPlayheadBufferRatio == null 
+        ? previousPlayheadBufferRatio != null 
+        : previousPlayheadBufferRatio == null || Math.abs((previousPlayheadBufferRatio || 0) - currentPlayheadBufferRatio) > 0.0001;
+
+    if (playheadMovedSignificantly) {
+        if (currentPlayheadBufferRatio == null) {
+            mainTransportPlayheadRatios.delete(idx);
+        } else {
+            mainTransportPlayheadRatios.set(idx, currentPlayheadBufferRatio);
+        }
+
+        const cachedImage = getChannelWaveformImage(idx, ch, canvas); 
+        renderWaveformToCanvas(canvas, ch.buffer, ch.trimStart, ch.trimEnd, { 
+            cachedWaveformImage: cachedImage,
+            mainPlayheadRatio: currentPlayheadBufferRatio,
+            previewPlayheadRatio: previewPlayheads.get(idx),
+            fadeInTime: ch.fadeInTime,
+            fadeOutTime: ch.fadeOutTime,
+            zoomTrim: !!channelZoomStates[idx]
+        });
+    }
   });
   requestAnimationFrame(animateTransport);
 }
@@ -103,23 +213,20 @@ function animateTransport() {
 // --- Entry point ---
 export function init() {
   projectNameInput = document.getElementById('project-name-input');
-  projectNameInput.addEventListener('input',
-    debounce(e => State.update({ projectName: e.target.value || "Untitled Audional Composition" }), 300));
+  if (projectNameInput) {
+    projectNameInput.addEventListener('input',
+      debounce(e => State.update({ projectName: e.target.value || "Untitled Audional Composition" }), 300));
+  }
   
-  // Subscribe the main render function with the defer option
   State.subscribe(render, { defer: true }); 
   
-  // Initial render call still needed, will also be effectively deferred if state emit happens before first rAF
-  // Or, to be explicit, we can call render with current state and null previous state.
-  // The first call to render should populate the UI based on initial state.
-  // Since State.subscribe now defers, the very first render also gets deferred if an emit happens before its rAF.
-  // To ensure UI is drawn on startup, we can call render directly once, or ensure initial emit from State is handled.
-  // The current State implementation will call emit if any update happens.
-  // Let's call render once synchronously for initial setup if needed, or rely on an initial state emit.
-  // Given the new deferred nature, if State.get() is up-to-date, this is fine:
-  render(State.get(), null); // Render initial state (this call itself won't be deferred by State manager)
+  render(State.get(), null); 
 
-  requestAnimationFrame(animateTransport);
-  document.getElementById('load-btn').addEventListener('click', () =>
-    document.getElementById('load-input').click());
+  requestAnimationFrame(animateTransport); 
+  
+  const loadButton = document.getElementById('load-btn');
+  const loadInput = document.getElementById('load-input');
+  if (loadButton && loadInput) {
+    loadButton.addEventListener('click', () => loadInput.click());
+  }
 }
