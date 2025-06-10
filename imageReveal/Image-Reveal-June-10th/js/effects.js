@@ -1,19 +1,13 @@
 // js/effects.js
-
-// ============================================================================
+// ─────────────────────────────────────────────
 // Shared math helpers
-// ============================================================================
-import {
-  clamp,
-  random,
-  randomInt,
-  easeInOut
-} from './utils/math.js';
+// ─────────────────────────────────────────────
+import { clamp, random, randomInt, easeInOut } from './utils/math.js';
 
-// ============================================================================
-// === Utilities ===
+// ─────────────────────────────────────────────
+// Utilities (Perlin noise + math re-exports)
+// ─────────────────────────────────────────────
 export const utils = (() => {
-  // Perlin noise constants
   const p  = Array.from({ length: 256 }, () => Math.floor(Math.random() * 256));
   const pp = [...p, ...p];
 
@@ -22,7 +16,7 @@ export const utils = (() => {
   const grad = (h, x, y, z) => {
     const u = h < 8 ? x : y,
           v = h < 4 ? y : (h === 12 || h === 14 ? x : z);
-    return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+    return ((h & 1) ? -u : u) + ((h & 2) ? -v : v);
   };
 
   const noise = (x, y, z) => {
@@ -36,12 +30,12 @@ export const utils = (() => {
 
     return lerp(
       lerp(
-        lerp(grad(pp[AA], x, y, z),     grad(pp[BA], x - 1, y, z),     u),
-        lerp(grad(pp[AB], x, y - 1, z), grad(pp[BB], x - 1, y - 1, z), u),
+        lerp(grad(pp[AA],     x,     y,   z), grad(pp[BA], x - 1, y,   z), u),
+        lerp(grad(pp[AB],     x, y - 1,   z), grad(pp[BB], x - 1, y - 1, z), u),
         v
       ),
       lerp(
-        lerp(grad(pp[AA + 1], x, y, z - 1),   grad(pp[BA + 1], x - 1, y, z - 1),   u),
+        lerp(grad(pp[AA + 1], x,     y, z - 1), grad(pp[BA + 1], x - 1, y, z - 1), u),
         lerp(grad(pp[AB + 1], x, y - 1, z - 1), grad(pp[BB + 1], x - 1, y - 1, z - 1), u),
         v
       ),
@@ -49,41 +43,29 @@ export const utils = (() => {
     );
   };
 
-  return {
-    lerp,
-    clamp,
-    random,
-    randomInt,
-    easeInOut,
-    noise
-  };
+  return { lerp, clamp, random, randomInt, easeInOut, noise };
 })();
 
-// ============================================================================
-// === Effects / Defaults  (unchanged below) ===
-//  ...  <<< KEEP THE REST OF THIS FILE AS-IS >>> ...
-
-
-// === Effects/Defaults ===
-export const effectDefaults = {
-  fade:        { progress: 0, direction: 1, speed: 1, paused: false, active: false },
-  scanLines:   { progress: 0, direction: 1, intensity: 0.4, speed: 1.5, lineWidth: 3, spacing: 6, verticalShift: 0, paused: false, active: false },
-  filmGrain:   { intensity: 0.7, size: 0.01, speed: 0.5, density: 1, dynamicRange: 1, lastUpdate: 0, noiseZ: 0, active: false },
-  blur:        { progress: 0, direction: 1, radius: 0, paused: false, active: false },
-  vignette:    { progress: 0, direction: 1, intensity: 0, size: 0.45, paused: false, active: false },
-  glitch:      { intensity: 0.01, rainbow: 0, speed: 0, angle: 0, slices: 1, palette: 'auto', spacing: 0, mirror: true, active: false },
-  chromaShift: { progress: 0, direction: 1, intensity: 0, speed: 1, angle: 0, paused: false, active: false },
-  colourSweep: { progress: 0, direction: 1, randomize: 0, color: null, paused: false, active: false, mode: 'reveal', edgeSoftness: 0, brightnessOffset: 0, cycleDurationBars: 4 },
-  pixelate:    { progress: 0, direction: 1, pixelSize: 1, speed: 1, paused: false, active: false, syncMode: 'beat', bpm: 120, timeSignature: [4,4], behavior: 'increase', pixelStages: [2,4,8,16,32,16,8,4], minPixelSize: 1, maxPixelSize: 64, _lastSyncTime: 0, _currentStageIndex: 0, _lastTick: -1 }
-};
-export const effectKeys = Object.keys(effectDefaults);
-export const cloneDefaults = k => structuredClone(effectDefaults[k]);
+// ─────────────────────────────────────────────
+// Effect defaults & helpers (unchanged)
+// ─────────────────────────────────────────────
+export const effectDefaults = Object.freeze({
+  fade        : { progress: 0, direction: 1, speed: 1, paused: false, active: false },
+  scanLines   : { progress: 0, direction: 1, intensity: .4, speed: 1.5, lineWidth: 3, spacing: 6, verticalShift: 0, paused: false, active: false },
+  filmGrain   : { intensity: .7, size: .01, speed: .5, density: 1, dynamicRange: 1, lastUpdate: 0, noiseZ: 0, active: false },
+  blur        : { progress: 0, direction: 1, radius: 0, paused: false, active: false },
+  vignette    : { progress: 0, direction: 1, intensity: 0, size: .45, paused: false, active: false },
+  glitch      : { intensity: .01, rainbow: 0, speed: 0, angle: 0, slices: 1, palette: 'auto', spacing: 0, mirror: true, active: false },
+  chromaShift : { progress: 0, direction: 1, intensity: 0, speed: 1, angle: 0, paused: false, active: false },
+  colourSweep : { progress: 0, direction: 1, randomize: 0, color: null, paused: false, active: false, mode: 'reveal', edgeSoftness: 0, brightnessOffset: 0, cycleDurationBars: 4 },
+  pixelate    : { progress: 0, direction: 1, pixelSize: 1, speed: 1, paused: false, active: false, syncMode: 'beat', bpm: 120, timeSignature: [4,4], behavior: 'increase', pixelStages: [2,4,8,16,32,16,8,4], minPixelSize: 1, maxPixelSize: 64, _currentStageIndex: 0, _lastTick: -1 }
+});
+export const effectKeys   = Object.keys(effectDefaults);
+export const cloneDefaults= k => structuredClone(effectDefaults[k]);
 export const effectParams = Object.fromEntries(effectKeys.map(k => [k, Object.keys(effectDefaults[k])]));
 
-// === Global default order, editable by user/app ===
-export const effectOrder = [
-  "fade", "pixelate", "scanLines", "vignette", "blur", "chromaShift", "colourSweep", "filmGrain", "glitch"
-];
+export const effectOrder = [ 'fade','pixelate','scanLines','vignette','blur','chromaShift','colourSweep','filmGrain','glitch' ];
+
 
 // === Order API ===
 export function moveEffectToTop(effects, enabledOrder, fx) {
@@ -103,6 +85,7 @@ export function sortEnabledOrder(effects, enabledOrder) {
     return ao - bo;
   });
 }
+
 export const timelineOrderAPI = { moveEffectToTop, resetEffectOrder, sortEnabledOrder, effectOrder };
 
 // === Effect-specific module-level state ===
