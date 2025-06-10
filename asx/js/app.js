@@ -53,13 +53,12 @@ async function applyProjectData(projectData, sourceDescription = "Loaded Project
         const defaultCh = makeChannel(i);
         return {
           ...defaultCh,
-          ...loadedCh, // Apply loaded channel data over defaults
-          buffer: null, // Always reset buffer references
+          ...loadedCh,
+          buffer: null,
           reversedBuffer: null,
-          // Ensure all properties from makeChannel are present, falling back to defaults if missing in loadedCh
           name: loadedCh.name || defaultCh.name,
           steps: loadedCh.steps && loadedCh.steps.length === 64 ? loadedCh.steps : defaultCh.steps,
-          src: loadedCh.src || null, // Keep original src, or null if not present
+          src: loadedCh.src || null,
           volume: loadedCh.volume ?? defaultCh.volume,
           mute: loadedCh.mute ?? defaultCh.mute,
           solo: loadedCh.solo ?? defaultCh.solo,
@@ -76,7 +75,6 @@ async function applyProjectData(projectData, sourceDescription = "Loaded Project
           eqHighGain: loadedCh.eqHighGain ?? defaultCh.eqHighGain,
           fadeInTime: loadedCh.fadeInTime ?? defaultCh.fadeInTime,
           fadeOutTime: loadedCh.fadeOutTime ?? defaultCh.fadeOutTime,
-          // Reset active playback state
           activePlaybackScheduledTime: null,
           activePlaybackDuration: null,
           activePlaybackTrimStart: null,
@@ -87,9 +85,8 @@ async function applyProjectData(projectData, sourceDescription = "Loaded Project
     }
 
     stop();
-    State.update(sanitizedGlobalState); // This will trigger UI updates
+    State.update(sanitizedGlobalState);
 
-    // Loop to load samples for each channel
     for (let i = 0; i < sanitizedGlobalState.channels.length; i++) {
       const ch = sanitizedGlobalState.channels[i];
       const originalSrcFromFile = ch.src;
@@ -127,7 +124,6 @@ async function applyProjectData(projectData, sourceDescription = "Loaded Project
            console.warn(`[Project Load] Channel ${i} has a non-string or empty src:`, originalSrcFromFile);
            State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile });
       } else {
-           // Channel has no src defined, ensure it's cleared
            State.updateChannel(i, { buffer: null, reversedBuffer: null, src: null });
       }
     }
@@ -143,7 +139,6 @@ async function applyProjectData(projectData, sourceDescription = "Loaded Project
 // ---------- INIT ----------
 UI.init();
 for (let i = 0; i < 16; i++) State.addChannel(makeChannel(i));
-// Call to populate presets dropdown during initialization
 populatePresetDropdown();
 
 
@@ -154,11 +149,9 @@ document.getElementById('add-channel-btn').addEventListener('click', () => {
 document.getElementById('play-btn').addEventListener('click', start);
 document.getElementById('stop-btn').addEventListener('click', stop);
 
-// Event listener for the "Load File" button to trigger file input
 document.getElementById('load-btn').addEventListener('click', () => {
   document.getElementById('load-input').click();
 });
-
 
 document.getElementById('bpm-input').addEventListener('input', e => {
   const rawValue = e.target.value;
@@ -193,7 +186,7 @@ document.getElementById('save-btn').addEventListener('click', () => {
   const snapshot = { ...State.get() };
   snapshot.channels = snapshot.channels.map(ch => {
     const { buffer, reversedBuffer, activePlaybackScheduledTime, activePlaybackDuration, activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed, ...rest } = ch;
-    return rest; // Only save serializable data
+    return rest;
   });
   const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -212,16 +205,11 @@ document.getElementById('load-input').addEventListener('change', async e => {
   try {
     const projectJsonString = await f.text();
     const projectData = JSON.parse(projectJsonString);
-    await applyProjectData(projectData, f.name); // Use the refactored function
+    await applyProjectData(projectData, f.name);
   } catch(err) {
-    // Error already handled by applyProjectData, but this provides a generic fallback.
-    // To avoid double alerts, applyProjectData's alert might be sufficient.
-    // Or, make applyProjectData throw specific errors to be caught here for tailored messages.
-    // For now, this specific alert can be commented if applyProjectData's is preferred.
-    // alert('Invalid project file or error during loading.');
     console.error("Error loading project from file input:", err);
   } finally {
-    fileInput.value = ""; // Reset file input
+    fileInput.value = "";
   }
 });
 
@@ -230,13 +218,13 @@ document.getElementById('load-input').addEventListener('change', async e => {
 async function populatePresetDropdown() {
   const selectElement = document.getElementById('preset-select');
   const loadPresetButton = document.getElementById('load-preset-btn');
-  selectElement.innerHTML = ''; // Clear existing options
+  selectElement.innerHTML = ''; 
+  loadPresetButton.classList.remove('needs-attention'); // Remove flash on populate
 
   let placeholderText = 'Load Preset...';
   let presetsAvailable = false;
 
   try {
-    // Path is relative to index.html
     const response = await fetch('./json-files/presets.json');
     if (!response.ok) {
       console.error('Failed to load presets.json:', response.statusText);
@@ -262,20 +250,17 @@ async function populatePresetDropdown() {
             console.warn('Skipping invalid preset entry:', preset);
         }
       });
-      // Check if any valid presets were actually added
       if (selectElement.options.length > 0) {
           presetsAvailable = true;
-          placeholderText = 'Select a Preset'; // Update placeholder if presets are loaded
+          placeholderText = 'Select a Preset';
       } else {
           placeholderText = 'No valid presets found';
       }
     }
   } catch (error) {
-    // Avoid double logging if error is 'Failed to load manifest' or 'Invalid presets format'
     if (error.message !== 'Failed to load manifest' && error.message !== 'Invalid presets format') {
         console.error('Error fetching or parsing presets.json:', error);
     }
-    // placeholderText would have been set by the specific error condition or remains default
      if (placeholderText === 'Load Preset...') placeholderText = 'Error loading presets';
   } finally {
     const placeholderOption = document.createElement('option');
@@ -286,18 +271,35 @@ async function populatePresetDropdown() {
     selectElement.insertBefore(placeholderOption, selectElement.firstChild);
 
     loadPresetButton.disabled = !presetsAvailable;
+    if (!presetsAvailable) { // Ensure no flashing if button is disabled
+        loadPresetButton.classList.remove('needs-attention');
+    }
   }
 }
 
+// Event listener for when a preset is selected in the dropdown
+document.getElementById('preset-select').addEventListener('change', (e) => {
+  const loadPresetButton = document.getElementById('load-preset-btn');
+  if (e.target.value && e.target.value !== "" && !loadPresetButton.disabled) { 
+    // A valid preset is selected AND button is not disabled
+    loadPresetButton.classList.add('needs-attention');
+  } else {
+    loadPresetButton.classList.remove('needs-attention');
+  }
+});
+
 document.getElementById('load-preset-btn').addEventListener('click', async () => {
   const selectElement = document.getElementById('preset-select');
+  const loadPresetButton = document.getElementById('load-preset-btn');
   const presetFilename = selectElement.value;
 
-  if (!presetFilename) { // Handles if the placeholder "Load Preset..." is selected
+  loadPresetButton.classList.remove('needs-attention'); // Stop flashing once clicked
+
+  if (!presetFilename) {
     return;
   }
 
-  const presetPath = `./json-files/${presetFilename}`; // Path relative to index.html
+  const presetPath = `./json-files/${presetFilename}`;
   try {
     const response = await fetch(presetPath);
     if (!response.ok) {
@@ -306,18 +308,22 @@ document.getElementById('load-preset-btn').addEventListener('click', async () =>
     const projectData = await response.json();
     const friendlyPresetName = selectElement.options[selectElement.selectedIndex].text;
     await applyProjectData(projectData, friendlyPresetName);
+
+    // Reset dropdown to placeholder after successful load
+    if (selectElement.options.length > 0 && selectElement.options[0].disabled) {
+        selectElement.selectedIndex = 0;
+    }
+
   } catch (err) {
-    // Error already handled by applyProjectData for content errors.
-    // This catch is more for fetch errors or if projectData is not JSON.
     alert(`Error loading preset file: ${presetFilename}. Ensure it's a valid JSON project.`);
     console.error("Error loading preset:", err);
+    // If load fails but a preset is still selected, re-add flash (optional, can be annoying)
+    // if (selectElement.value && selectElement.value !== "") {
+    //   loadPresetButton.classList.add('needs-attention');
+    // }
   }
 });
 
-
-// ---------- UTILITY (createReversedBuffer already exists) ----------
-// export async function createReversedBuffer(audioBuffer) { ... }
-// (make sure createReversedBuffer is correctly defined as in your original file)
 
 export async function createReversedBuffer(audioBuffer) {
     if (!audioBuffer) return null;
