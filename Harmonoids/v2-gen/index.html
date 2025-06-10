@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harmonoids - Musical Lemmings Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; /* Prevent scrollbars from canvas resize jitter */
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex; /* For centering canvas, if needed */
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #gameCanvas {
+            border: 2px solid #333;
+            background: linear-gradient(to bottom, #87CEEB 0%, #98FB98 30%, #F0E68C 60%, #8B4513 100%);
+            cursor: crosshair;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+            /* Dimensions will be set by JS */
+        }
+        
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.8), rgba(30, 30, 30, 0.9));
+            padding: 15px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            max-height: calc(100vh - 20px); /* Prevent UI from overflowing */
+            overflow-y: auto; /* Allow scrolling if content is too much */
+        }
+        
+        .button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            color: white;
+            padding: 10px 15px; /* Slightly smaller padding */
+            margin: 5px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px; /* Slightly smaller font */
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            display: block; /* Make buttons stack vertically */
+            width: calc(100% - 10px); /* Full width within padding */
+            box-sizing: border-box;
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+            background: linear-gradient(135deg, #5a6fd8, #6a42a0);
+        }
+        
+        .button:active {
+            transform: translateY(0);
+        }
+        
+        .button:disabled {
+            background: linear-gradient(135deg, #777, #999); /* Darker disabled state */
+            color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        #stats {
+            margin-top: 10px;
+            font-size: 12px; /* Smaller font for stats */
+            line-height: 1.5;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+            padding: 4px 8px;
+            background: rgba(255, 255, 255, 0.05); /* Subtler background */
+            border-radius: 5px;
+        }
+        
+        .stat-value {
+            font-weight: bold;
+            color: #FFD700;
+        }
+        
+        .controls-section {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15); /* Subtler border */
+        }
+        .controls-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .section-title {
+            font-size: 11px; /* Smaller section title */
+            color: #BBB; /* Lighter color for title */
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px; /* Less spacing */
+            font-weight: 500;
+        }
+
+        .button-group {
+            display: flex;
+            flex-wrap: wrap; /* Allow buttons to wrap if not enough space */
+        }
+        .button-group .button {
+            flex: 1 1 45%; /* Allow 2 buttons per row, adjust as needed */
+            min-width: 120px; /* Minimum width for buttons in a group */
+        }
+
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui">
+            <div class="controls-section">
+                <div class="section-title">Game Control</div>
+                <button class="button" id="startBtn">Start Game</button>
+                <button class="button" id="audioToggleBtn">Audio: ON</button>
+                <button class="button" id="dropModeToggleBtn">Mode: Procession</button>
+                <button class="button" id="dropHarmonoidBtn" disabled>Drop Harmonoid</button>
+            </div>
+
+            <div class="controls-section">
+                <div class="section-title">Harmonoid Abilities</div>
+                <div class="button-group">
+                    <button class="button" id="pitchUpBtn" disabled>Pitch Up</button>
+                    <button class="button" id="pitchDownBtn" disabled>Pitch Down</button>
+                </div>
+                <div class="button-group">
+                    <button class="button" id="tempoUpBtn" disabled>Speed Up</button>
+                    <button class="button" id="tempoDownBtn" disabled>Slow Down</button>
+                </div>
+                 <div class="button-group">
+                    <button class="button" id="muteBtn" disabled>Mute/Unmute</button>
+                    <button class="button" id="soloBtn" disabled>Solo/Unsolo</button>
+                </div>
+            </div>
+
+            <div class="controls-section">
+                <div class="section-title">Environment Abilities</div>
+                 <button class="button" id="createResonanceFieldBtn" disabled>Create Resonance Field</button>
+                 <!-- Add other environment abilities here -->
+            </div>
+
+            <div id="stats" class="controls-section">
+                <div class="section-title">Statistics</div>
+                <div class="stat-item">
+                    <span>Harmonoids:</span>
+                    <span class="stat-value" id="harmonoidCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Saved:</span>
+                    <span class="stat-value" id="savedCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Lost:</span>
+                    <span class="stat-value" id="lostCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Selected:</span>
+                    <span class="stat-value" id="selectedCount">0</span>
+                </div>
+                 <div class="stat-item">
+                    <span>Target Chord:</span>
+                    <span class="stat-value" id="targetChordDisplay">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="audio.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
