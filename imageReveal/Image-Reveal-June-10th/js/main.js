@@ -1,7 +1,6 @@
 // main.js
 
 import * as timelines from './timelinesCombined.js';
-import { timelineFunctions } from './timelinesCombined.js';
 import { utils, effectDefaults, effectKeys, cloneDefaults, effectParams, effectMap, moveEffectToTop, sortEnabledOrder } from './effects.js';
 
 const images = window.images ?? [], log = (...a) => console.log('[FXDEMO]', ...a);
@@ -22,27 +21,7 @@ const beatsToSec = b => 60 / bpm * b,
         return { sec, beat: secToBeats(sec), bar: Math.floor(secToBeats(sec) / beatsPerBar) };
       };
 
-function updatePixelateRhythmic(p, elapsed) {
-  if (!p.active || p.syncMode === 'none' || !p.pixelStages?.length) return;
-  const tickRates = { beat: 1, bar: 1 / beatsPerBar, '1/2': 2, '1/4': 4, '1/8': 8, '1/16': 16 };
-  const tickRate = tickRates[p.syncMode];
-  if (!tickRate) return;
 
-  const currentTick = p.syncMode === 'bar' ? Math.floor(elapsed.bar) : Math.floor(elapsed.beat * tickRate);
-  if (p._lastTick === undefined || p._lastTick === -1) { p._lastTick = currentTick; return; }
-  if (currentTick <= p._lastTick) return;
-
-  p._lastTick = currentTick;
-  if (p.behavior === 'sequence' || p.behavior === 'increase') {
-    p._currentStageIndex = (p._currentStageIndex + 1) % p.pixelStages.length;
-    p.pixelSize = p.pixelStages[p._currentStageIndex];
-    if (p.behavior === 'increase') log(`[FX] Pixelate (rhythmic increase) new size: ${p.pixelSize} at beat ${elapsed.beat.toFixed(2)}`);
-  } else if (p.behavior === 'random') {
-    const idx = utils.randomInt(0, p.pixelStages.length - 1);
-    p.pixelSize = p.pixelStages[idx];
-    p._currentStageIndex = idx;
-  }
-}
 
 const logAvailableTimelines = () =>
   Object.entries(timelines)
@@ -502,109 +481,121 @@ function renderTimelineTable() {
   }).join('');
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Optimised dev-only test frame helper
+// • Runs only in dev/debug builds (skipped in production)
+// • Removes duplicate _fxFrames++ increment
+// • Updates _fxLastFps for correct auto-throttle heuristics
+// ─────────────────────────────────────────────────────────────────────────────
 function autoTestFrame(ct) {
-  if (timelinePlaying) return;
-  _fxFrames++;
+  // Guard: skip completely in production unless window.FX_DEBUG is truthy
+  const DEV =
+    (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') ||
+    !!window.FX_DEBUG;
+  if (!DEV || timelinePlaying) return;
+
   const now = performance.now();
 
+  // Every 10th frame check FPS and adjust throttle
   if (_fxFrames % 10 === 0) {
     const currFps = 1000 / (_fxLastFrameTime || 16);
+    _fxLastFps = currFps;                    // ← record for later heuristics
+
     if (currFps < 30 && now - _fxLastWarn > 2000) {
       log(`[FX] ⚠️ FPS dropped: ~${currFps.toFixed(1)} fps. Consider reducing effect complexity.`);
       _fxLastWarn = now;
-      if (_fxAutoThrottle) {
-        if (effects.filmGrain?.active) {
-          if (_fxLastFps < 25) {
-            Object.assign(effects.filmGrain, { intensity: 0.2, density: 0.5, speed: 0.3 });
-          } else {
-            Object.assign(effects.filmGrain, { intensity: 0.4, density: 1, speed: 0.5 });
-          }
-        }
+
+      // Dev-time filmGrain auto-tweak
+      if (_fxAutoThrottle && effects.filmGrain?.active) {
+        Object.assign(
+          effects.filmGrain,
+          currFps < 25
+            ? { intensity: 0.2, density: 0.5, speed: 0.3 }
+            : { intensity: 0.4, density: 1,   speed: 0.5 }
+        );
       }
+
+      // Enable / step up frame-skipping throttle
       if (!_fxAutoThrottle && currFps < 25) {
         _fxAutoThrottle = true;
         _fxFrameSkip = 1;
-        log("[FX] 🚦 Auto-throttle enabled: frame skipping activated.");
+        log('[FX] 🚦 Auto-throttle enabled: frame skipping activated.');
       } else if (_fxAutoThrottle && _fxFrameSkip < 4) {
         _fxFrameSkip++;
         log(`[FX] 🚦 Increasing frame skip to ${_fxFrameSkip}`);
       }
-    } else if (_fxAutoThrottle && currFps > 35) {
+    }
+    // Recover when FPS bounces back
+    else if (_fxAutoThrottle && currFps > 35) {
       if (_fxFrameSkip > 0) {
         _fxFrameSkip--;
         log(`[FX] ✅ Reducing frame skip to ${_fxFrameSkip}`);
       }
       if (_fxFrameSkip === 0) {
         _fxAutoThrottle = false;
-        log("[FX] ✅ FPS recovered, auto-throttle off.");
+        log('[FX] ✅ FPS recovered, auto-throttle off.');
       }
     }
   }
 
+  // Respect current frame-skip setting
   if (_fxAutoThrottle && (_fxFrames % (_fxFrameSkip + 1))) return;
 
+  // Lightweight parameter oscillation for certain effects
   enabledOrder.forEach(fx => {
     const e = effects[fx];
     if (!e.active) return;
 
     let p = e.progress ?? 0,
         dir = e.direction ?? 1,
-        paused = e.paused,
         speed = e.speed ?? 1;
 
-    if (['fade', 'scanLines', 'colourSweep', 'pixelate', 'blur', 'vignette', 'chromaShift'].includes(fx)) {
+    if (e.paused) return;
 
-      if (fx === 'scanLines') {
+    switch (fx) {
+      case 'scanLines':
         Object.assign(effects.scanLines, {
           intensity: 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(ct * 0.8)),
           lineWidth: 1 + 14 * (0.5 + 0.5 * Math.sin(ct * 1.1)),
-          spacing: 4 + 40 * (0.5 + 0.5 * Math.sin(ct * 0.9 + 1)),
+          spacing:   4 + 40 * (0.5 + 0.5 * Math.sin(ct * 0.9 + 1)),
           verticalShift: 32 * (0.5 + 0.5 * Math.sin(ct * 0.35)),
           speed: 0.3 + 5 * (0.5 + 0.5 * Math.sin(ct * 0.5))
         });
-      }
+        break;
 
-      if (fx === 'colourSweep') {
-        if (!paused) {
-          // Use cycleDurationBars from defaults or fallback to 4 bars
-          const cycleBars = e.cycleDurationBars ?? 4;
-          const cycleDuration = cycleBars * beatsPerBar * 60 / bpm; // duration in seconds
-          const cyclePos = (ct % cycleDuration) / cycleDuration;    // normalized [0..1] position in cycle
-
-          // Smooth cosine loop between 0 and 1 over cycleDuration
-          p = 0.5 - 0.5 * Math.cos(cyclePos * 2 * Math.PI);
-          if (p > 0.9999) p = 1;
-          dir = 1; // fixed direction for smooth loop
-        }
+      case 'colourSweep': {
+        const cycleBars   = e.cycleDurationBars ?? 4;
+        const cycleSecs   = cycleBars * beatsPerBar * 60 / bpm;
+        const cyclePos    = (ct % cycleSecs) / cycleSecs;
+        p   = 0.5 - 0.5 * Math.cos(cyclePos * 2 * Math.PI); // 0→1 cosine loop
+        dir = 1;
         Object.assign(effects.colourSweep, {
           progress: utils.clamp(p, 0, 1),
           direction: dir,
           speed: 0.6 + 1.7 * (0.5 + 0.5 * Math.cos(ct * 0.35)),
           randomize: (Math.floor(ct / 5) % 2)
         });
+        break;
       }
 
-      if (!paused && fx !== 'colourSweep') {
-        p += 1 / 5 * dir * speed * (1 / 60);
+      default: {
+        p += (dir * speed) / 300;             // ≈ 1 / 5 / 60 simplification
         if (p > 1) { p = 1; dir = -1; }
         if (p < 0) { p = 0; dir = 1; }
+        e.progress  = utils.clamp(p, 0, 1);
+        e.direction = dir;
+
+        if (fx === 'fade')        effects.fade.progress           = p;
+        if (fx === 'pixelate')    effects.pixelate.pixelSize      = 1 + 240 * p;
+        if (fx === 'blur')        effects.blur.radius             = 32 * p;
+        if (fx === 'vignette')    effects.vignette.intensity      = 1.5 * p;
+        if (fx === 'chromaShift') effects.chromaShift.intensity   = 0.35 * p;
       }
-
-      e.progress = utils.clamp(p, 0, 1);
-      e.direction = dir;
-
-      if (fx === 'fade') effects.fade.progress = p;
-      if (fx === 'scanLines') effects.scanLines.progress = p;
-      if (fx === 'pixelate') effects.pixelate.pixelSize = 1 + (240 * p);
-      if (fx === 'blur') effects.blur.radius = 32 * p;
-      if (fx === 'vignette') effects.vignette.intensity = 1.5 * p;
-      if (fx === 'chromaShift') effects.chromaShift.intensity = 0.35 * p;
     }
   });
 
-  _fxLastFrameTime = performance.now() - now;
+  _fxLastFrameTime = performance.now() - now; // track cost for next FPS calc
 }
-
 
 
 function runEffectTimeline(tl) {

@@ -1,3 +1,4 @@
+// effects.js
 // === Utilities ===
 export const utils = (() => {
   const p = Array.from({length:256},()=>Math.floor(Math.random()*256)), pp=[...p,...p];
