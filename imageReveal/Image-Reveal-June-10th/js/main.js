@@ -1,7 +1,34 @@
 // main.js
-
 import * as timelines from './timelinesCombined.js';
-import { utils, effectDefaults, effectKeys, cloneDefaults, effectParams, effectMap, moveEffectToTop, sortEnabledOrder } from './effects.js';
+import {
+  utils,
+  effectDefaults,
+  effectKeys,
+  cloneDefaults,
+  effectParams,
+  effectMap,
+  moveEffectToTop,
+  sortEnabledOrder
+} from './effects.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared helpers
+// ─────────────────────────────────────────────────────────────────────────────
+import {
+  beatsToSec as _beatsToSec,
+  barsToSec  as _barsToSec,
+  secToBeats as _secToBeats
+} from './utils/time.js';
+import { loadImg } from './utils/dom.js';
+
+// BPM / time-signature can change at runtime → wrap converters
+const beatsToSec = beats => _beatsToSec(beats, bpm);
+const barsToSec  = bars  => _barsToSec(bars, bpm, beatsPerBar);
+const secToBeats = sec   => _secToBeats(sec, bpm);
+const getElapsed = () => {
+  const now = performance.now() / 1000, sec = now - (startTime ?? now);
+  return { sec, beat: secToBeats(sec), bar: Math.floor(secToBeats(sec) / beatsPerBar) };
+};
 
 const images = window.images ?? [], log = (...a) => console.log('[FXDEMO]', ...a);
 let bpm = window.fxInitialBPM ?? 120, beatsPerBar = window.fxInitialBeatsPerBar ?? 4,
@@ -13,13 +40,8 @@ let bpm = window.fxInitialBPM ?? 120, beatsPerBar = window.fxInitialBeatsPerBar 
     automations = [];
 let _fxFrames = 0, _fxLastCheck = performance.now(), _fxLastFps = 60, _fxLastWarn = 0, _fxFrameSkip = 0, _fxAutoThrottle = false, _fxLastFrameTime = 16;
 
-const beatsToSec = b => 60 / bpm * b,
-      barsToSec = b => beatsToSec(b * beatsPerBar),
-      secToBeats = s => s * bpm / 60,
-      getElapsed = () => {
-        const now = performance.now() / 1000, sec = now - (startTime ?? now);
-        return { sec, beat: secToBeats(sec), bar: Math.floor(secToBeats(sec) / beatsPerBar) };
-      };
+
+
 
 
 
