@@ -1,35 +1,68 @@
-// effects.js
+// js/effects.js
+
+// ============================================================================
+// Shared math helpers
+// ============================================================================
+import {
+  clamp,
+  random,
+  randomInt,
+  easeInOut
+} from './utils/math.js';
+
+// ============================================================================
 // === Utilities ===
 export const utils = (() => {
-  const p = Array.from({length:256},()=>Math.floor(Math.random()*256)), pp=[...p,...p];
+  // Perlin noise constants
+  const p  = Array.from({ length: 256 }, () => Math.floor(Math.random() * 256));
+  const pp = [...p, ...p];
+
   const fade = t => t ** 3 * (t * (t * 6 - 15) + 10);
   const lerp = (a, b, t) => a + t * (b - a);
   const grad = (h, x, y, z) => {
-    const u = h < 8 ? x : y, v = h < 4 ? y : (h === 12 || h === 14 ? x : z);
+    const u = h < 8 ? x : y,
+          v = h < 4 ? y : (h === 12 || h === 14 ? x : z);
     return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
   };
+
+  const noise = (x, y, z) => {
+    const X = Math.floor(x) & 255,
+          Y = Math.floor(y) & 255,
+          Z = Math.floor(z) & 255;
+    x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
+    const u = fade(x), v = fade(y), w = fade(z),
+          A = pp[X] + Y,  AA = pp[A] + Z,  AB = pp[A + 1] + Z,
+          B = pp[X + 1] + Y, BA = pp[B] + Z, BB = pp[B + 1] + Z;
+
+    return lerp(
+      lerp(
+        lerp(grad(pp[AA], x, y, z),     grad(pp[BA], x - 1, y, z),     u),
+        lerp(grad(pp[AB], x, y - 1, z), grad(pp[BB], x - 1, y - 1, z), u),
+        v
+      ),
+      lerp(
+        lerp(grad(pp[AA + 1], x, y, z - 1),   grad(pp[BA + 1], x - 1, y, z - 1),   u),
+        lerp(grad(pp[AB + 1], x, y - 1, z - 1), grad(pp[BB + 1], x - 1, y - 1, z - 1), u),
+        v
+      ),
+      w
+    );
+  };
+
   return {
     lerp,
-    clamp: (v, min, max) => Math.max(min, Math.min(max, v)),
-    random: (min, max) => Math.random() * (max - min) + min,
-    randomInt: (min, max) => Math.floor(Math.random() * (max - min + 1)) + min,
-    easeInOut: t => t < .5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2 / 2),
-    noise: (x, y, z) => {
-      const X = Math.floor(x) & 255, Y = Math.floor(y) & 255, Z = Math.floor(z) & 255;
-      x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
-      const u = fade(x), v = fade(y), w = fade(z),
-        A = pp[X] + Y, AA = pp[A] + Z, AB = pp[A + 1] + Z,
-        B = pp[X + 1] + Y, BA = pp[B] + Z, BB = pp[B + 1] + Z;
-      return lerp(
-        lerp(
-          lerp(grad(pp[AA], x, y, z), grad(pp[BA], x - 1, y, z), u),
-          lerp(grad(pp[AB], x, y - 1, z), grad(pp[BB], x - 1, y - 1, z), u), v),
-        lerp(
-          lerp(grad(pp[AA + 1], x, y, z - 1), grad(pp[BA + 1], x - 1, y, z - 1), u),
-          lerp(grad(pp[AB + 1], x, y - 1, z - 1), grad(pp[BB + 1], x - 1, y - 1, z - 1), u), v), w);
-    }
+    clamp,
+    random,
+    randomInt,
+    easeInOut,
+    noise
   };
 })();
+
+// ============================================================================
+// === Effects / Defaults  (unchanged below) ===
+//  ...  <<< KEEP THE REST OF THIS FILE AS-IS >>> ...
+
 
 // === Effects/Defaults ===
 export const effectDefaults = {
