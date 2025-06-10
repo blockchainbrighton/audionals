@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ordinals Audio Inspector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; background: #f9fafb; color: #111; }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+    button { cursor: pointer; padding: 0.6rem 1rem; border: none; border-radius: 0.5rem; background: #2563eb; color: #fff; font-size: 1rem; transition: background 0.2s; }
+    button:hover { background: #1e4fd7; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e5e7eb; text-align: left; }
+    th { background: #f3f4f6; font-weight: 600; }
+    #log { margin-top: 1rem; font-family: monospace; white-space: pre-line; background: #f3f4f6; padding: 0.75rem; border-radius: 0.5rem; height: 8rem; overflow-y: auto; }
+    .tag { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 0.25rem; background: #d1d5db; font-size: 0.75rem; margin-left: 0.25rem; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0f172a; color: #f1f5f9; }
+      table { color: inherit; }
+      th { background: #1e293b; }
+      #log { background: #1e293b; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Ordinals Audio Inspector <span class="tag">stand-alone</span></h1>
+  <p>This page fetches each inscription’s base64 audio, decodes it with <code>AudioContext</code>, and prints duration, sample-rate, channel-count, and more. All work happens client-side; nothing is uploaded.</p>
+
+  <button id="runBtn">Run Analysis</button>
+  <button id="dlBtn" disabled>Download CSV</button>
+  <div id="log"></div>
+
+  <table id="resultTable" hidden>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Label</th>
+        <th>Duration (s)</th>
+        <th>Sample-rate (Hz)</th>
+        <th>Channels</th>
+        <th>Bytes</th>
+        <th>Type</th>
+        <th>Peak</th>
+        <th>RMS</th>
+        <th>Silence %</th>
+        <th>DC Offset</th>
+        <th>Bit Depth (est.)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+<script>
+/* ----------------------------------------
+   Data: List of samples (Ordinals IDs)
+-----------------------------------------*/
+const samples = [
+  { id: '6d962189218b836cf33e2dc1adbc981e90242aa395f0868178773065f76f144ei0', label: 'Audional Sample #1, 125 BPM' },
+  { id: '0b8eff3f39f4095d0f129bb8dd75f29159f8725c7e66046bf41f70ebb9f60d93i0', label: 'Melophonic Bass + Kick, 125 BPM' },
+  { id: '6c01b1214fc4d4016d683380d066849e6bc645276b102604c098bd35fd77f791i0', label: 'Melophonic Snare' },
+  { id: '6d8be8186e63b4557e51edd66184a567bc6f5f9f5ba4bb34ba8c67e652c1934ei0', label: 'Neil Armstrong "One small step …"' },
+  { id: '3364803cb3032ce95f4138a214c15a9b36dcb70f574a477f27615d448e1cdeb8i0', label: '8-Bit Drum Loop, 105 BPM' },
+  { id: '43efcebb84113c6df56bf5b8a455685c043492de9f5635d4108c4211c1f6841fi0', label: 'Pump It' },
+  { id: 'fef956676f3cbd6019a03d75c1a4a295c25b33653644b8f6ebde387971f9a677i0', label: 'Wobble Bass, 125 BPM' },
+  { id: 'c41587924f9d93d01cb71ca925fd664d6e50f1ac8e3c975d5e1e1f1bb0ff11b3i0', label: 'Audional Jim' },
+  { id: 'a511d79317efac68fea3b14070bebe208aefde07ce1c55d6f4cfe42e8273cbdbi0', label: 'Denim Avengers Kick' },
+  { id: '5b2dc7be28ad70c233b06d0ba23888aa38eb8711c24f8462d2774ac5fb7e7212i0', label: 'Denim Avengers Kick' },
+  { id: 'a511d79317efac68fea3b14070bebe208aefde07ce1c55d6f4cfe42e8273cbdbi0', label: 'Denim Avengers Tom' },
+  { id: 'fb0e5e0b512ad0caf2b0ebed011d2d29aa670ce48f3c147cfc9e633d963f369bi0', label: 'Denim Avengers "cheese HUUH"' },
+  { id: '4d73f49620b708e098a59b9c7d5a40bd0c14057d4b803e2f8842d183708ed8a5i0', label: 'Denim Avengers "I Like Cheese"' },
+  { id: '752bd66406185690c6f14311060785170df91a887b42740e1dde27e5fbf351cbi0', label: 'Denim Avengers MS-10 woop' },
+  { id: '8fa54ad2d9e297c79b225eff67a481ebc8682dacf4fe9dbf5b692a60b237c163i0', label: 'Entertainment — Quiet Loop' },
+  { id: 'c6decce29948ea64df9a24e689340c5907b6da207d74d13973fc5ca4dd3bd80ai0', label: 'Bitcoin Step Melody G, 105 BPM' },
+  { id: 'e9885c35376ae95dd291bb02075b0763fb3e655d51dc981984130b8366a6d3c8i0', label: 'Bitcoin Step Fill 2, 105 BPM' },
+  { id: '34e73ef718034a3c0fdeba53899a2af8ee7771f252c419ab63cd13b0a39f6b10i0', label: 'Bitcoin Step Fill 1, 105 BPM' },
+  { id: '435c5c22eaf0c1791e09cb46d56ce942eb312372376abf5b5420200b1424ff7fi0', label: 'Bitcoin Step Melody E, 105 BPM' },
+  { id: 'ccf99852fb85d63b5f65124fe506b08c11eb400a7b1da75cd3e0c9538fc49977i0', label: 'Bitcoin Step Drum Beat, 105 BPM' },
+  { id: 'ef8fdd599beee731e06aba4a9ed02d9c7bfe62147b27f6b6deaf22c8c067ab11i0', label: 'Bitcoin Step Melody A, 105 BPM' },
+  { id: '187a8c18ebfe07c18aea0e86cd99b3100474c1c53f56f02ee096723f1a35ce70i0', label: 'Bitcoin Step Crash, 105 BPM' },
+  { id: '2b6b23199eae0760ee26650a0cc02c49b94fc8fd1f519a95417f0f8478246610i0', label: 'Bitcoin Step Melody M, 105 BPM' },
+  { id: '474f2b0aab9020757826b168ce58725871fd2abb26c6ca805de4b07e314416d1i0', label: 'Bitcoin Step Outro Fill 1, 105 BPM' },
+  { id: '1aa69c9d3b451ab3b584dba57ba6d6fedc6e9cb3df6830b9da270e84e51ea72di0', label: 'Bitcoin Step Melody L, 105 BPM' },
+  { id: '81f9e6afc38b8c647d4ea258c29f13b81f6c1a2d40afd9c0a385d03126b4d11di0', label: 'Bitcoin Step Melody F, 105 BPM' },
+  { id: '4c40da69e783cfa96d2900bd15622c1ea60ad31e8ce9459cec13d155f39c463fi0', label: 'Bitcoin Step Intro Fill 1, 105 BPM' },
+  { id: '695368ae1092c0633ef959dc795ddb90691648e43f560240d96da0e2753a0a08i0', label: 'Bitcoin Step Melody O, 105 BPM' },
+  { id: 'd4ce1d1e80e90378d8fc49fd7e0e24e7f2310b2f5eb95d0c2318c47b6c9cd645i0', label: 'Bitcoin Step Melody K, 105 BPM' },
+  { id: 'e4cb3caff3b4a5192adf0f2ab5cd9da378bacfbafce56c3d4fb678a313607970i0', label: 'Bitcoin Step Melody I, 105 BPM' },
+  { id: '898cba6dc32faab5be09f13092b7500b13eb22f1e7b3d604c8e6e47b0becd139i0', label: 'Bitcoin Step Melody C, 105 BPM' },
+  { id: 'ed13d5389ae6273839342698b6d5bd3342c51eb472f32b8306e60f8e1e903ce8i0', label: 'Bitcoin Step Fill 3, 105 BPM' },
+  { id: 'b0fb7f9eb0fe6c368a8d140b1117234431da0cd8725e9f78e6573bb7f0f61dadi0', label: 'Bitcoin Step Melody N, 105 BPM' },
+  { id: '0e38f29c76b29e471f5f0022a5e98f9ae64b5b1d8f25673f85e02851daf22526i0', label: 'Bitcoin Step Fill 4, 105 BPM' },
+  { id: '244c785d6df173f8425d654cfc6d2b006c7bb47a605c7de576ed87022e42c7dfi0', label: 'Bitcoin Step Melody D, 105 BPM' },
+  { id: 'a72adee5a07200a623c40831ae5979bc7562b542788c3ded35d9e81e39c6014fi0', label: 'Bitcoin Step Melody B, 105 BPM' },
+  { id: '6a84401579707b76d9b9a77cc461e767f7ea8f08cc0e46dee0d21e5023cdde33i0', label: 'Bitcoin Step Melody J, 105 BPM' },
+  { id: '83174080310b0ab71c7a725461f3bd9e486bb62727b73134ee2c67f191d9d586i0', label: 'Bitcoin Step Fill 5, 105 BPM' },
+  { id: '4f9bed6449d99ef3cbb0fabefac6890c20ef17db2bfe7c07f1386cb43277f220i0', label: 'Bitcoin Step Melody H, 105 BPM' }
+];
+
+/* ----------------------------------------
+   Helpers
+-----------------------------------------*/
+const logDiv = document.getElementById('log');
+const tbody = document.querySelector('#resultTable tbody');
+const table = document.getElementById('resultTable');
+const dlBtn = document.getElementById('dlBtn');
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+const csvRows = [['label','duration_s','sampleRate_Hz','channels','bytes','type','peak','rms','silence_pct','dc_offset','bit_depth_est']];
+
+function log(msg) {
+  logDiv.textContent += msg + '\n';
+  logDiv.scrollTop = logDiv.scrollHeight;
+}
+
+function base64ToArrayBuffer(base64) {
+  const binary = atob(base64);
+  const len = binary.length;
+  const buffer = new Uint8Array(len);
+  for (let i = 0; i < len; i++) buffer[i] = binary.charCodeAt(i);
+  return buffer.buffer;
+}
+
+async function fetchBase64(id) {
+  const url = `https://ordinals.com/content/${id}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+  let text = await res.text();
+  try {
+    const js = JSON.parse(text);
+    text = js.audio || js.base64 || Object.values(js).find(v => typeof v === 'string' && v.length > 1000);
+  } catch {/* plain base64 */}
+  if (!text) throw new Error('No base64 payload');
+  return text.replace(/^data:audio\/\w+;base64,/, '');
+}
+
+function analyzeBuffer(audioBuffer) {
+  const chs = audioBuffer.numberOfChannels;
+  const len = audioBuffer.length;
+  const peaks = [];
+  const rms = [];
+  const dc = [];
+  const silence = [];
+  let min = 1, max = -1;
+  const silenceThreshold = 0.0025;
+  for (let c = 0; c < chs; ++c) {
+    const d = audioBuffer.getChannelData(c);
+    let sumSq = 0, sum = 0, chPeak = 0, chZeros = 0, chMin = 1, chMax = -1;
+    for (let i = 0; i < len; ++i) {
+      const v = d[i];
+      sum += v;
+      sumSq += v * v;
+      if (Math.abs(v) > chPeak) chPeak = Math.abs(v);
+      if (Math.abs(v) < silenceThreshold) chZeros++;
+      if (v < chMin) chMin = v;
+      if (v > chMax) chMax = v;
+    }
+    peaks[c] = chPeak;
+    rms[c] = Math.sqrt(sumSq / len);
+    dc[c] = sum / len;
+    silence[c] = (chZeros / len * 100).toFixed(1);
+    if (chMin < min) min = chMin;
+    if (chMax > max) max = chMax;
+  }
+  // Guess bit depth from value range
+  let bitDepth = 16;
+  if (min >= -1 && max <= 1) {
+    let allInt16 = true;
+    for (let c = 0; c < chs; ++c) {
+      const d = audioBuffer.getChannelData(c);
+      for (let i = 0; i < d.length; i += 5000) {
+        if (Math.abs(Math.round(d[i] * 32767) - d[i] * 32767) > 1e-3) { allInt16 = false; break; }
+      }
+      if (!allInt16) break;
+    }
+    bitDepth = allInt16 ? 16 : 32;
+  }
+  return {
+    peaks, rms, dc, silence,
+    min: min.toFixed(3), max: max.toFixed(3),
+    bitDepth,
+    type: chs === 1 ? "mono" : (chs === 2 ? "stereo" : `multi(${chs})`)
+  };
+}
+
+async function analyse(sample, idx) {
+  log(`▶ ${sample.label}`);
+  const b64 = await fetchBase64(sample.id);
+  const bytes = b64.length * 0.75; // rough estimate
+  const audioBuffer = await ctx.decodeAudioData(base64ToArrayBuffer(b64));
+  const meta = analyzeBuffer(audioBuffer);
+
+  const row = document.createElement('tr');
+  row.innerHTML =
+    `<td>${idx+1}</td><td>${sample.label}</td>` +
+    `<td>${audioBuffer.duration.toFixed(3)}</td>` +
+    `<td>${audioBuffer.sampleRate}</td>` +
+    `<td>${audioBuffer.numberOfChannels}</td>` +
+    `<td>${bytes.toLocaleString()}</td>` +
+    `<td>${meta.type}</td>` +
+    `<td>${meta.peaks.map(v=>v.toFixed(3)).join('/')}</td>` +
+    `<td>${meta.rms.map(v=>v.toFixed(4)).join('/')}</td>` +
+    `<td>${meta.silence.join('/')}</td>` +
+    `<td>${meta.dc.map(v=>v.toFixed(5)).join('/')}</td>` +
+    `<td>${meta.bitDepth}</td>`;
+  tbody.appendChild(row);
+
+  csvRows.push([
+    sample.label,
+    audioBuffer.duration.toFixed(3),
+    audioBuffer.sampleRate,
+    audioBuffer.numberOfChannels,
+    bytes,
+    meta.type,
+    meta.peaks.map(v=>v.toFixed(3)).join('/'),
+    meta.rms.map(v=>v.toFixed(4)).join('/'),
+    meta.silence.join('/'),
+    meta.dc.map(v=>v.toFixed(5)).join('/'),
+    meta.bitDepth
+  ]);
+}
+
+function downloadCSV() {
+  const csv = csvRows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'ordinals-audio-summary.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('runBtn').addEventListener('click', async function () {
+  this.disabled = true;
+  dlBtn.disabled = true;
+  log('Starting…');
+  table.hidden = false;
+  try {
+    for (let i = 0; i < samples.length; i++) {
+      await analyse(samples[i], i);
+    }
+    log('✔ Complete');
+    dlBtn.disabled = false;
+  } catch (err) {
+    console.error(err);
+    log('❌ ' + err.message);
+  }
+});
+
+dlBtn.addEventListener('click', downloadCSV);
+</script>
+</body>
+</html>
