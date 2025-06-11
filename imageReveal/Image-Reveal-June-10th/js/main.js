@@ -189,18 +189,54 @@ function drawImage(ctx) {
 
 // ───────────── FX control ─────────────
 function startEffects() {
-  isPlaying = true; startTime = null; timelineCompleteLogged = false; fxLoop();
+  isPlaying = true;
+  startTime = null;
+  timelineCompleteLogged = false;
+  fxLoop();
+
+  // Start shrinking the title text animation when effects start
+  if (window.animateTitleOnPlay) window.animateTitleOnPlay();
 }
+
 function stopEffects() {
-  isPlaying = false; animationId && cancelAnimationFrame(animationId); animationId = null; enabledOrder.length = 0;
-  effectKeys.forEach(k => effects[k] = cloneDefaults(k)); drawImage(mainCtx); updateButtonStates();
+  isPlaying = false;
+  if (animationId) cancelAnimationFrame(animationId);
+  animationId = null;
+  enabledOrder.length = 0;
+  effectKeys.forEach(k => effects[k] = cloneDefaults(k));
+  drawImage(mainCtx);
+  updateButtonStates();
+
+  // Reset the title text animation when effects stop
+  if (window.resetTitleText) window.resetTitleText();
 }
-function handleCanvasClick() { if (!imageError) timelinePlaying ? stopTimeline() : playTimeline(); }
-function playTimeline() { timelinePlaying = true; runEffectTimeline(); window.playback?.play?.(); }
+
+function handleCanvasClick() {
+  if (!imageError) timelinePlaying ? stopTimeline() : playTimeline();
+}
+
+function playTimeline() {
+  timelinePlaying = true;
+  runEffectTimeline();
+  window.playback?.play?.();
+
+  // Also start title text animation here for safety/redundancy
+  if (window.animateTitleOnPlay) window.animateTitleOnPlay();
+}
+
 function stopTimeline() {
-  timelinePlaying = false; stopEffects(); fxAPI.clearAutomation();
-  Object.values(effects).forEach(e => e.active = false); enabledOrder.length = 0; updateButtonStates(); window.playback?.stop?.();
+  timelinePlaying = false;
+  stopEffects();
+  fxAPI.clearAutomation();
+  Object.values(effects).forEach(e => e.active = false);
+  enabledOrder.length = 0;
+  updateButtonStates();
+  window.playback?.stop?.();
+
+  // Reset title text on timeline stop
+  if (window.resetTitleText) window.resetTitleText();
 }
+
 
 // ───────────── FX buttons ─────────────
 function createEffectButtons() {
