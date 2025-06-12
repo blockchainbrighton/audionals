@@ -172,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const btn = document.createElement('button');
         btn.classList.add('play-pause-btn');
-        btn.tabIndex = -1;
+        btn.tabIndex = -1; // Keep if click is on card, or remove if button is main target
         btn.setAttribute('aria-label', `Play/Pause ${s.title ?? 'sample'}`);
         const icon = document.createElement('i');
         icon.classList.add('fas', 'fa-play');
@@ -315,8 +315,9 @@ document.addEventListener('DOMContentLoaded', () => {
         c.style.display = show ? '' : 'none';
       });
     }));
-    document.querySelector('.category-filter button[data-category="all"]')?.click();
-  } else console.log('No category filter buttons found.');
+   // Ensure one is active by default if needed
+        // document.querySelector('.category-filter button[data-category="all"]')?.click();
+      } else console.log('No category filter buttons found for KP Loops section.');
 
   // --- Retro Screen Flicker ---
   const screen = document.querySelector('.computer-screen');
@@ -371,6 +372,81 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     })();
     return ps.audioPromise;
+  }
+
+  // =========================================================================
+    // --- PRELOAD ALL SAMPLES ---
+    // =========================================================================
+    async function preloadAllSamples() {
+      if (!audioContext) {
+          console.warn("Preload: AudioContext not available. Cannot preload audio data.");
+          // Display a general message to the user that audio might not work or require interaction
+          // For example, update a status element on the page.
+          return;
+      }
+      // If AudioContext is suspended, it still can be used for decodeAudioData.
+      // It will need to be resumed by user interaction for playback.
+
+      console.log("Preloading all audio samples...");
+      const promises = [];
+      loopPlayers.forEach((ps, card) => {
+          if (ps.src && !ps.audioBuffer && !ps.audioPromise) { // Only if not already loaded or loading
+              ps.isLoading = true;
+              ps.button.disabled = true; // Disable button while preloading this specific sample
+              ps.indicator.style.display = 'inline';
+              ps.indicator.textContent = 'Loading...';
+              card.classList.add('loading');
+              card.classList.remove('audio-error'); // Clear previous error state
+
+              const promise = fetchAndDecodeAudio(ps)
+                  .catch(err => {
+                      // Error is logged by fetchAndDecodeAudio
+                      card.classList.add('audio-error');
+                      ps.indicator.textContent = 'Load Error';
+                      // Button will be re-enabled in finally, or remains disabled if no recovery
+                  })
+                  .finally(() => {
+                      ps.isLoading = false;
+                      card.classList.remove('loading');
+                      // Only re-enable button if loading was successful or if we allow retrying on error
+                      if (!ps.loadError) {
+                         ps.button.disabled = false;
+                         if (ps.indicator.textContent !== 'Load Error') { // Check again in case error happened
+                           ps.indicator.style.display = 'none';
+                         }
+                      } else {
+                         // Keep button disabled or enable it to allow retry, depending on desired UX
+                         // For now, let's keep it disabled if there was a load error during preload.
+                         // User can try clicking later, playLoop will attempt to load again.
+                         // Actually, let's re-enable it so playLoop can try again.
+                         ps.button.disabled = false;
+                      }
+                  });
+              promises.push(promise);
+          }
+      });
+
+      // Optional: Wait for all preloading to complete or handle errors collectively
+      try {
+          await Promise.allSettled(promises);
+          console.log("All sample preloading attempts finished.");
+      } catch (e) {
+          console.error("An unexpected error occurred during the preload batch:", e);
+      }
+      // You could update a global loading indicator here
+  }
+
+  // Call preload after populating loopPlayers
+  if (audioContext) { // Only attempt to preload if AudioContext was successfully initialized
+      preloadAllSamples().then(() => {
+          console.log("Initial audio preload process complete.");
+          // You could hide a global "Loading all audio..." message here
+      }).catch(err => {
+          console.error("Error during preloadAllSamples:", err);
+      });
+  } else {
+      console.warn("AudioContext not initialized, skipping audio preload.");
+      // Potentially show a message to user about audio features being unavailable
   }
 
   /**
@@ -442,187 +518,297 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // --- Playback Functions ---
-  async function playLoop(card, {quantizeStart = false, shiftKey = false} = {}) {
+  async function playLoop(card, { quantizeStart = false, shiftKey = false } = {}) {
     const ps = loopPlayers.get(card);
-    if (!ps || ps.isPlaying || !audioContext || audioContext.state !== 'running') {
-      if (audioContext && audioContext.state !== 'running') console.warn(`playLoop: AudioContext not running (state: ${audioContext.state}).`);
-      else if (!ps) console.warn('playLoop: No playerState for card.');
-      else if (ps.isPlaying) console.warn(`playLoop: Already playing ${ps.src}.`);
-      return;
+    if (!ps || !audioContext) { // Removed ps.isPlaying check here, will be handled by stop/start logic
+        if (!ps) console.warn('playLoop: No playerState for card.');
+        if (!audioContext) console.warn('playLoop: AudioContext not available.');
+        return;
     }
+    
+    // If AudioContext is suspended, try to resume it. This is key for first click.
+    if (audioContext.state === 'suspended') {
+        try {
+            await audioContext.resume();
+            console.log('AudioContext resumed successfully.');
+        } catch (err) {
+            console.error('Failed to resume AudioContext:', err);
+            alert('Could not activate audio. Please try interacting with the page again.');
+            return;
+        }
+    }
+    if (audioContext.state !== 'running') {
+         console.warn(`playLoop: AudioContext not running (state: ${audioContext.state}).`);
+         alert('Audio system is not ready. Please try again.');
+         return;
+    }
+
+    if (ps.isPlaying) { // If already playing, this call might be to stop it (handled by click handler)
+        // Or if it's a new intent to play (e.g. after soloing changes), this function will restart it.
+        // For now, let's assume if ps.isPlaying, the click handler should have called stopLoop.
+        // This can be revisited if complex play/restart logic is needed here.
+        console.log(`playLoop: ${ps.src} is already marked as playing. If this is unexpected, check click handler logic.`);
+        return;
+    }
+
     ps.isLoading = true;
     ps.button.disabled = true;
     ps.indicator.style.display = 'inline';
+    ps.indicator.textContent = 'Loading...'; // Reset from potential "Load Error"
     card.classList.add('loading');
     card.classList.remove('audio-error');
 
     try {
-      if (!ps.audioBuffer) await fetchAndDecodeAudio(ps);
-
-      const now = audioContext.currentTime;
-      let startTime = now;
-
-      const rate = quantizeEnabled && ps.originalBPM && globalTargetBPM
-        ? globalTargetBPM / ps.originalBPM
-        : 1;
-
-      if (quantizeEnabled && quantizeStart && shiftKey) {
-        if (!quantizeReferenceTime) {
-          quantizeReferenceTime = now;
+        if (!ps.audioBuffer) {
+            console.log(`playLoop: AudioBuffer not found for ${ps.src}, attempting to load...`);
+            await fetchAndDecodeAudio(ps); // This will use existing promise if preload is in progress
         }
-        startTime = getNextQuantizedStartTime(globalTargetBPM, now, quantizeReferenceTime, 75);
-      }
-
-      const src = audioContext.createBufferSource();
-      src.buffer = ps.audioBuffer;
-      src.loop = true;
-      src.playbackRate.value = rate;
-
-      const gain = audioContext.createGain();
-      ps.gainNode = gain;
-
-      if (isSoloActive && soloedCard !== card) {
-        gain.gain.value = 0;
-        ps.isMutedDueToSolo = true;
-        console.log(`PLAYLOOP (SOLO): Muted ${ps.src}`);
-      } else {
-        gain.gain.value = 1;
-        ps.isMutedDueToSolo = false;
-      }
-
-      src.connect(gain);
-      gain.connect(audioContext.destination);
-
-      src.onended = () => {
-        if (ps.sourceNode === src) {
-          const wasPlaying = ps.isPlaying, wasSoloed = isSoloActive && soloedCard === card;
-          ps.isPlaying = false;
-          ps.sourceNode = null;
-          ps.gainNode?.disconnect();
-          ps.gainNode = null;
-          ps.isMutedDueToSolo = false;
-          ps.startTime = null;
-          if (wasPlaying && wasSoloed) deactivateSolo();
-          else {
-            updateButtonUI(card, ps, false);
-            card.classList.remove('playing', 'muted-by-solo', 'soloed');
-          }
-          // Reset quantizeReferenceTime if no loops playing
-          if (getNumberPlayingLoops() === 0) quantizeReferenceTime = null;
+        // Ensure buffer is truly available after attempt
+        if (!ps.audioBuffer) {
+             throw new Error(`Failed to load audio buffer for ${ps.src} even after attempt.`);
         }
-      };
 
-      src.start(startTime);
-      ps.sourceNode = src;
-      ps.isPlaying = true;
-      ps.loadError = null;
-      ps.startTime = startTime;
 
-      // If this is the earliest loop, update quantizeReferenceTime
-      const earliestStart = getEarliestStartTime();
-      if (!quantizeReferenceTime || startTime < quantizeReferenceTime) {
-        quantizeReferenceTime = startTime;
-      } else if (!quantizeReferenceTime) {
-        quantizeReferenceTime = startTime;
-      }
+        const now = audioContext.currentTime;
+        let startTime = now;
 
-      updateButtonUI(card, ps, true);
-      card.classList.add('playing');
-      console.log(`playLoop: Started ${ps.src} at ${startTime.toFixed(3)} (now ${now.toFixed(3)})`);
+        const rate = quantizeEnabled && ps.originalBPM && globalTargetBPM
+            ? globalTargetBPM / ps.originalBPM
+            : 1;
+
+        if (quantizeEnabled && quantizeStart && shiftKey) { // quantizeStart implies we want synced start
+            if (getNumberPlayingLoops() === 0 || !quantizeReferenceTime) { // If it's the first loop or ref time is lost
+                quantizeReferenceTime = now; // Set reference time to now for the first loop
+                console.log(`Quantize: New reference time set to ${quantizeReferenceTime.toFixed(3)} for ${ps.src}`);
+                // For the very first quantized loop, start it immediately or with minimal delay.
+                // The getNextQuantizedStartTime might push it too far if 'now' is the reference.
+                // Let's allow a small delay for the first one if necessary.
+                startTime = now + 0.020; // Start with a tiny delay to ensure setup
+            } else {
+                 startTime = getNextQuantizedStartTime(globalTargetBPM, now, quantizeReferenceTime, 75);
+            }
+            console.log(`Quantize: ${ps.src} target BPM ${globalTargetBPM}, original BPM ${ps.originalBPM}, rate ${rate.toFixed(2)}. Scheduled: ${startTime.toFixed(3)}, Ref: ${quantizeReferenceTime?.toFixed(3)}`);
+        }
+
+
+        const src = audioContext.createBufferSource();
+        src.buffer = ps.audioBuffer;
+        src.loop = true;
+        src.playbackRate.value = rate;
+
+        const gain = audioContext.createGain();
+        ps.gainNode = gain;
+
+        if (isSoloActive && soloedCard !== card) {
+            gain.gain.value = 0;
+            ps.isMutedDueToSolo = true;
+        } else {
+            gain.gain.value = 1;
+            ps.isMutedDueToSolo = false;
+        }
+
+        src.connect(gain);
+        gain.connect(audioContext.destination);
+
+        src.onended = () => {
+            // Check if this specific sourceNode instance is the one we are tracking
+            if (ps.sourceNode === src) {
+                const wasPlaying = ps.isPlaying;
+                const wasSoloedAndThisCard = isSoloActive && soloedCard === card;
+
+                ps.isPlaying = false;
+                ps.sourceNode = null;
+                if (ps.gainNode) { // Check if gainNode still exists
+                   ps.gainNode.disconnect();
+                   ps.gainNode = null;
+                }
+                ps.isMutedDueToSolo = false;
+                ps.startTime = null; // Clear start time
+
+                // If the loop that ended was the soloed one, deactivate solo mode.
+                if (wasPlaying && wasSoloedAndThisCard) {
+                    console.log(`Loop ended for soloed card ${ps.src}, deactivating solo.`);
+                    deactivateSolo(); // This will also update UI for all cards
+                } else {
+                    // Otherwise, just update UI for this card
+                    updateButtonUI(card, ps, false);
+                    card.classList.remove('playing', 'muted-by-solo', 'soloed');
+                }
+                
+                if (getNumberPlayingLoops() === 0) {
+                    console.log("All loops stopped, resetting quantizeReferenceTime.");
+                    quantizeReferenceTime = null;
+                }
+            }
+        };
+
+        src.start(startTime);
+        ps.sourceNode = src;
+        ps.isPlaying = true;
+        ps.loadError = null; // Clear any previous load error since playback is successful
+        ps.startTime = startTime;
+
+
+        // Update quantizeReferenceTime if this is the new earliest starting loop
+        // or if it's the very first loop being played.
+        const earliestKnownStartTime = getEarliestStartTime();
+        if (quantizeEnabled && shiftKey) { // Only adjust reference for quantized loops
+            if (getNumberPlayingLoops() === 1 && startTime === ps.startTime) { // If this is the ONLY playing loop
+                quantizeReferenceTime = startTime;
+                 console.log(`Quantize: Reference time updated to this loop's start: ${quantizeReferenceTime.toFixed(3)} for ${ps.src}`);
+            } else if (earliestKnownStartTime !== null && earliestKnownStartTime < (quantizeReferenceTime || Infinity)) {
+                quantizeReferenceTime = earliestKnownStartTime;
+                console.log(`Quantize: Reference time synced to earliest start: ${quantizeReferenceTime.toFixed(3)}`);
+            }
+        }
+
+
+        updateButtonUI(card, ps, true);
+        card.classList.add('playing');
+        if (isSoloActive && soloedCard === card) card.classList.add('soloed');
+        console.log(`playLoop: Started ${ps.src} at ${startTime.toFixed(3)} (context time ${now.toFixed(3)})`);
 
     } catch (err) {
-      console.error(`playLoop error: ${ps.src}`, err);
-      ps.loadError = err;
-      ps.isPlaying = false;
-      ps.audioBuffer = null;
-      ps.audioPromise = null;
-      ps.sourceNode = null;
-      ps.gainNode?.disconnect();
-      ps.gainNode = null;
-      ps.isMutedDueToSolo = false;
-      ps.startTime = null;
-      updateButtonUI(card, ps, false);
-      alert(`Could not load/play "${ps.src.split('/').pop()}". Error: ${err.message}`);
-      card.classList.add('audio-error');
-    } finally {
-      ps.isLoading = false;
-      card.classList.remove('loading');
-      if (ps.indicator && ps.indicator.textContent !== 'Load Error') ps.indicator.style.display = 'none';
-      ps.button.disabled = false;
-    }
-  }
-
-  function stopLoop(card) {
-    const ps = loopPlayers.get(card);
-    if (ps?.isPlaying && ps.sourceNode) {
-      try {
-        ps.sourceNode.stop(0);
-      } catch (e) {
-        if (ps.sourceNode) ps.sourceNode.onended = null;
+        console.error(`playLoop error for ${ps.src}:`, err);
+        ps.loadError = err;
         ps.isPlaying = false;
-        ps.sourceNode = null;
-        ps.gainNode?.disconnect();
-        ps.gainNode = null;
+        // Don't nullify audioBuffer if it exists but some other error occurred during play
+        // ps.audioBuffer = null; // Only if decoding/fetch was the issue
+        ps.audioPromise = null; // Allow retry of fetching if that was the stage of failure
+        
+        if (ps.sourceNode) { // Clean up if sourceNode was created before error
+            ps.sourceNode.onended = null; // Prevent onended from firing
+            try { ps.sourceNode.stop(); } catch(e_stop) { /* ignore */ }
+            ps.sourceNode = null;
+        }
+        if (ps.gainNode) {
+            ps.gainNode.disconnect();
+            ps.gainNode = null;
+        }
         ps.isMutedDueToSolo = false;
         ps.startTime = null;
+
+        updateButtonUI(card, ps, false);
+        alert(`Could not load/play "${ps.src.split('/').pop()}". Error: ${err.message}`);
+        card.classList.add('audio-error');
+        ps.indicator.textContent = 'Play Error'; // Or 'Load Error'
+        ps.indicator.style.display = 'inline';
+
+    } finally {
+        ps.isLoading = false;
+        card.classList.remove('loading');
+        if (ps.indicator && ps.indicator.textContent === 'Loading...') { // Only hide if it's still "Loading..."
+             ps.indicator.style.display = 'none';
+        }
+        ps.button.disabled = false; // Always re-enable button after attempt
+    }
+}
+
+
+function stopLoop(card) {
+    const ps = loopPlayers.get(card);
+    if (ps?.sourceNode) { // Check sourceNode directly as isPlaying might be set false by onended first
+        console.log(`stopLoop: Stopping ${ps.src}`);
+        try {
+            ps.sourceNode.onended = null; // Prevent onended logic if we are manually stopping
+            ps.sourceNode.stop(0);
+            // ps.sourceNode.disconnect(); // Source node disconnects itself after stop usually
+        } catch (e) {
+            console.warn(`Error stopping node for ${ps.src}: ${e.message}. Already stopped?`);
+        }
+        ps.sourceNode = null; // Important to clear it
+    }
+
+    if (ps) { // Ensure ps exists
+        const wasSoloedAndThisCard = isSoloActive && soloedCard === card;
+        ps.isPlaying = false;
+        if (ps.gainNode) {
+            ps.gainNode.disconnect();
+            ps.gainNode = null;
+        }
+        ps.isMutedDueToSolo = false;
+        ps.startTime = null;
+
         updateButtonUI(card, ps, false);
         card.classList.remove('playing', 'soloed', 'muted-by-solo');
-      }
+
+        if (wasSoloedAndThisCard) {
+            console.log(`stopLoop: Soloed loop ${ps.src} stopped, deactivating solo.`);
+            deactivateSolo();
+        }
     }
-    ps.isPlaying = false;
-    ps.sourceNode = null;
-    ps.startTime = null;
-    ps.gainNode?.disconnect();
-    ps.gainNode = null;
-    ps.isMutedDueToSolo = false;
-    updateButtonUI(card, ps, false);
-    card.classList.remove('playing', 'soloed', 'muted-by-solo');
+    
+    if (getNumberPlayingLoops() === 0) {
+        console.log("All loops stopped, resetting quantizeReferenceTime.");
+        quantizeReferenceTime = null;
+    }
+}
 
-    if (getNumberPlayingLoops() === 0) quantizeReferenceTime = null;
-  }
+// ... (stopAllLoops, activateSolo, deactivateSolo, updateButtonUI - keep mostly as is, but review for consistency with new stopLoop) ...
 
-  const stopAllLoops = exceptCard => {
+const stopAllLoops = exceptCard => {
     loopPlayers.forEach((ps, card) => {
-      if (card !== exceptCard && ps.isPlaying) stopLoop(card);
+      if (card !== exceptCard && (ps.isPlaying || ps.sourceNode)) { // Check sourceNode too
+         stopLoop(card);
+      }
     });
-  };
+};
 
-  // --- Solo Logic ---
-  function activateSolo(card, ps) {
-    if (!audioContext || !ps.isPlaying || !ps.gainNode) return console.warn('SOLO: Cannot activate.');
+function activateSolo(card, ps) {
+    if (!audioContext || !ps.isPlaying || !ps.gainNode) {
+        console.warn(`SOLO: Cannot activate solo for ${ps.src}. Playing: ${ps.isPlaying}, GainNode: ${!!ps.gainNode}`);
+        return;
+    }
     console.log(`SOLO: Activating ${ps.src}`);
     isSoloActive = true; soloedCard = card;
+
+    // Ensure this card's gain is 1
+    ps.gainNode.gain.cancelScheduledValues(audioContext.currentTime);
     ps.gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.015);
     ps.isMutedDueToSolo = false;
+    card.classList.remove('muted-by-solo');
+    card.classList.add('soloed');
+
     loopPlayers.forEach((oPs, oCard) => {
       if (oCard !== card && oPs.isPlaying && oPs.gainNode) {
+        oPs.gainNode.gain.cancelScheduledValues(audioContext.currentTime);
         oPs.gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.015);
         oPs.isMutedDueToSolo = true;
         oCard.classList.add('muted-by-solo');
+        oCard.classList.remove('soloed');
         console.log(`SOLO: Muting ${oPs.src}`);
-      } else if (oCard === card) oCard.classList.remove('muted-by-solo');
+      }
     });
-    card.classList.add('soloed');
-    updateButtonUI(card, ps, true);
-  }
+    updateButtonUI(card, ps, true); // Update soloed card's button
+}
 
-  function deactivateSolo() {
+function deactivateSolo() {
     if (!audioContext || !isSoloActive) return;
     console.log('SOLO: Deactivating solo.');
-    isSoloActive = false; const prevSolo = soloedCard; soloedCard = null;
+    const previouslySoloedCard = soloedCard;
+    isSoloActive = false; soloedCard = null;
+
     loopPlayers.forEach((ps, card) => {
-      if (ps.isMutedDueToSolo && ps.gainNode && ps.isPlaying) {
+      if (ps.gainNode && ps.isPlaying) { // Only adjust gain if playing and has gain node
+        ps.gainNode.gain.cancelScheduledValues(audioContext.currentTime);
         ps.gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.015);
         console.log(`SOLO: Unmuting ${ps.src}`);
       }
       ps.isMutedDueToSolo = false;
       card.classList.remove('muted-by-solo', 'soloed');
-      updateButtonUI(card, ps, ps.isPlaying);
+      updateButtonUI(card, ps, ps.isPlaying); // Update UI for all cards
     });
-  }
 
-  // --- Update UI ---
-  function updateButtonUI(card, ps, playing) {
+    // Ensure the button of the previously soloed card is correctly updated if it's no longer playing
+    if (previouslySoloedCard) {
+        const prevSoloPs = loopPlayers.get(previouslySoloedCard);
+        if (prevSoloPs) {
+            updateButtonUI(previouslySoloedCard, prevSoloPs, prevSoloPs.isPlaying);
+        }
+    }
+}
+
+function updateButtonUI(card, ps, playing) {
     if (!card || !ps?.button) return;
     const btn = ps.button, icon = ps.icon;
     const title = card.querySelector('h3')?.textContent.trim() ?? ps.src.split('/').pop();
@@ -632,49 +818,106 @@ document.addEventListener('DOMContentLoaded', () => {
     } else btn.textContent = playing ? 'Pause' : 'Play';
     btn.setAttribute('aria-label', `${playing ? 'Pause' : 'Play'} ${title}`);
     card.classList.toggle('playing', playing);
-  }
 
-  // --- Setup click handlers ---
-  loopPlayers.forEach((ps, card) => {
-    card.addEventListener('click', async e => {
-      if (!audioContext) return alert('Audio playback unavailable.');
-
-      const altShift = e.altKey && e.shiftKey && !e.ctrlKey,
-            shiftOnly = e.shiftKey && !e.altKey && !e.ctrlKey,
-            normalClick = !e.shiftKey && !e.altKey && !e.ctrlKey;
-
-      console.log(`CLICK: ${ps.src}. Alt:${e.altKey}, Shift:${e.shiftKey}, Ctrl:${e.ctrlKey}. Solo:${isSoloActive}. Playing:${ps.isPlaying}`);
-
-      if (ps.isLoading) return console.log('Still loading, please wait.');
-      if (ps.loadError && !ps.audioBuffer) return alert(`Error playing sample: ${ps.loadError.message}`);
-
-      if (audioContext.state === 'suspended') {
-        try { await audioContext.resume(); }
-        catch { return alert('Could not activate audio playback.'); }
-      }
-      if (audioContext.state !== 'running') return alert('Audio system not ready.');
-
-      if (altShift) {
-        if (!isSoloActive) {
-          if (ps.isPlaying) activateSolo(card, ps);
-          else { await playLoop(card); ps.isPlaying && activateSolo(card, ps); }
-        } else if (soloedCard === card) deactivateSolo();
-        else {
-          deactivateSolo();
-          if (ps.isPlaying) activateSolo(card, ps);
-          else { await playLoop(card); ps.isPlaying && activateSolo(card, ps); }
+    // Explicitly handle soloed/muted classes here too for robustness
+    if (playing) {
+        if (isSoloActive) {
+            card.classList.toggle('soloed', soloedCard === card);
+            card.classList.toggle('muted-by-solo', soloedCard !== card);
+        } else {
+            card.classList.remove('soloed', 'muted-by-solo');
         }
-        return;
-      }
-      if ((normalClick || shiftOnly) && isSoloActive && soloedCard !== card) deactivateSolo();
+    } else {
+        card.classList.remove('soloed', 'muted-by-solo');
+    }
+}
 
-      if (ps.isPlaying) stopLoop(card);
-      else {
-        if (normalClick) stopAllLoops(card);
-        await playLoop(card, { quantizeStart: quantizeEnabled && shiftOnly, shiftKey: shiftOnly });
-      }
+
+// --- Setup click handlers ---
+loopPlayers.forEach((ps, card) => {
+    card.addEventListener('click', async e => {
+        if (!audioContext && !ps.src) { // If card is a placeholder and no audio context
+             alert('Audio playback unavailable, and this is a placeholder sample.');
+             return;
+        }
+        if (!audioContext && ps.src) { // If card has audio but no context yet
+             alert('Audio playback system not initialized. Please ensure your browser supports Web Audio API.');
+             return;
+        }
+         if (!ps.src) { // Placeholder card
+            console.log("Clicked on a placeholder card.");
+            return;
+        }
+
+
+        // Attempt to resume AudioContext on ANY relevant click if suspended
+        if (audioContext.state === 'suspended') {
+            try {
+                await audioContext.resume();
+                console.log('AudioContext resumed on click.');
+            } catch (err) {
+                console.error('Failed to resume AudioContext on click:', err);
+                alert('Could not activate audio playback. Please try again or refresh the page.');
+                return;
+            }
+        }
+        // Double check after attempt
+        if (audioContext.state !== 'running') {
+             alert('Audio system is not ready. Please try clicking again.');
+             return;
+        }
+
+
+        const altShift = e.altKey && e.shiftKey && !e.ctrlKey,
+              shiftOnly = e.shiftKey && !e.altKey && !e.ctrlKey,
+              normalClick = !e.shiftKey && !e.altKey && !e.ctrlKey;
+
+        console.log(`CLICK: ${ps.src}. Alt:${e.altKey}, Shift:${e.shiftKey}, Ctrl:${e.ctrlKey}. SoloActive:${isSoloActive}. CardPlaying:${ps.isPlaying}`);
+
+        if (ps.isLoading && !ps.audioBuffer) { // If still genuinely loading (not just a state flag)
+             console.log(`Still loading ${ps.src}, please wait.`);
+             return;
+        }
+        if (ps.loadError && !ps.audioBuffer) { // If there was a load error and no buffer
+             alert(`Cannot play ${ps.src.split('/').pop()}: Previous load attempt failed. Trying again...`);
+             // playLoop will attempt to re-fetch.
+        }
+
+
+        if (altShift) { // Solo toggle logic
+            if (!isSoloActive) { // No solo active, going to solo this one
+                if (!ps.isPlaying) await playLoop(card); // Start it if not playing
+                if (ps.isPlaying) activateSolo(card, ps); // Then solo it
+            } else { // Solo is active
+                if (soloedCard === card) { // Clicked on the currently soloed card
+                    deactivateSolo(); // Unsolo it
+                    // Optional: stop it too? Current Prodigy SPD behavior is to keep it playing.
+                    // stopLoop(card); // Uncomment to stop it when unsoloing by clicking itself
+                } else { // Clicked on a different card while solo is active
+                    // Deactivate current solo, then play and solo the new one
+                    deactivateSolo();
+                    if (!ps.isPlaying) await playLoop(card);
+                    if (ps.isPlaying) activateSolo(card, ps);
+                }
+            }
+        } else { // Not Alt+Shift (normal click or Shift+click)
+            if (isSoloActive && soloedCard !== card) { // If solo is active on *another* card
+                deactivateSolo(); // Deactivate solo first
+            }
+
+            if (ps.isPlaying) {
+                stopLoop(card);
+            } else {
+                if (normalClick) {
+                    stopAllLoops(card); // Stop others for a normal click
+                }
+                // For both normalClick and shiftOnly, play the loop.
+                // Quantization is handled inside playLoop based on quantizeStart & shiftKey
+                await playLoop(card, { quantizeStart: quantizeEnabled && shiftOnly, shiftKey: shiftOnly });
+            }
+        }
     });
-  });
+});
 
-  console.log('End of DOMContentLoaded script execution.');
+console.log('End of DOMContentLoaded script execution.');
 });
