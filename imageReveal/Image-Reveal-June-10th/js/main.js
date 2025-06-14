@@ -30,36 +30,50 @@ let effectTimeline = window.fxTimeline ?? [],
 
 const effects = {}, enabledOrder = [], automations = [], automationActiveState = {};
 
+let initialTimelineLoaded = false; // To prevent multiple loads
+
 // Hotkey State
 const hotkeySequence = ['j', 'i', 'm', 'b', 't', 'c'];
 let currentHotkeyBuffer = [];
 let hotkeyTimer = null;
 const HOTKEY_TIMEOUT_MS = 3000;
-let uiElementsVisible = true;
+// --- MODIFICATION: Initialize UI as hidden ---
+let uiElementsVisible = false; // Set to false to start hidden
+// --- END MODIFICATION ---
 
 
 // ───────────── UI Visibility & Hotkeys ─────────────
 
-function toggleUiElementsVisibility() {
-  uiElementsVisible = !uiElementsVisible;
+function toggleUiElementsVisibility(forceState) {
+  // If forceState is boolean, use it. Otherwise, toggle.
+  const shouldBeVisible = typeof forceState === 'boolean' ? forceState : !uiElementsVisible;
+
+  if (uiElementsVisible === shouldBeVisible && typeof forceState !== 'boolean') {
+    // If not forcing and state is already as desired, do nothing (relevant for initial call)
+    // Actually, we always want to apply the style if we call this.
+  }
+
+  uiElementsVisible = shouldBeVisible;
   const displayStyle = uiElementsVisible ? 'flex' : 'none';
 
   const fxBtns = document.getElementById('fx-btns');
   const timelineEditor = document.getElementById('timeline-editor');
 
   if (fxBtns) {
-    fxBtns.style.display = displayStyle; // Assumes 'flex' is its default from CSS
+    fxBtns.style.display = displayStyle;
   }
   if (timelineEditor) {
-    timelineEditor.style.display = displayStyle; // Assumes 'flex' is its default from inline style
+    timelineEditor.style.display = displayStyle;
   }
-  log(`[FX] UI Elements ${uiElementsVisible ? 'shown' : 'hidden'} via hotkey.`);
+  // Only log if it's an actual toggle, not an initial setup
+  if (typeof forceState !== 'boolean' || forceState !== uiElementsVisible) {
+      log(`[FX] UI Elements ${uiElementsVisible ? 'shown' : 'hidden'}.`);
+  }
 }
 
 function handleGlobalKeyDown(event) {
   const key = event.key.toLowerCase();
 
-  // If typing in an input field, ignore hotkeys
   if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT' || event.target.tagName === 'TEXTAREA') {
     return;
   }
@@ -97,7 +111,8 @@ function handleGlobalKeyDown(event) {
         hotkeyTimer = null;
     }
   } else if (currentHotkeyBuffer.length === hotkeySequence.length) {
-    toggleUiElementsVisibility();
+    // For hotkey, we always toggle the current state
+    toggleUiElementsVisibility(); // This will flip the current uiElementsVisible
     currentHotkeyBuffer = [];
     if (hotkeyTimer) {
       clearTimeout(hotkeyTimer);
@@ -210,7 +225,17 @@ function init() {
   mainCtx = mainCanvas.getContext('2d', { alpha: false });
   window.addEventListener('resize', handleResize);
   mainCanvas.addEventListener('click', handleCanvasClick);
-  handleResize(); loadImage(); createTimelineUI(); log('App initialised.');
+  handleResize();
+  loadImage(); // This eventually calls createEffectButtons
+  createTimelineUI(); // Creates the timeline editor
+
+  // --- MODIFICATION: Apply initial UI visibility state ---
+  // Call toggleUiElementsVisibility with the desired initial state (which is uiElementsVisible)
+  // This ensures the DOM elements are set to display:none if uiElementsVisible is false
+  toggleUiElementsVisibility(uiElementsVisible);
+  // --- END MODIFICATION ---
+
+  log('App initialised.');
 }
 
 function handleResize() {
@@ -291,25 +316,107 @@ function handleCanvasClick() {
   if (!imageError) timelinePlaying ? stopTimeline() : playTimeline();
 }
 
-function playTimeline() {
-  timelinePlaying = true;
-  runEffectTimeline();
-  window.playback?.play?.();
+// Modify playTimeline to be async and await runEffectTimeline
+async function playTimeline() {
+  if (timelinePlaying) return; // Prevent re-entry if already playing a timeline
 
-  if (window.animateTitleOnPlay) window.animateTitleOnPlay();
+  timelinePlaying = true; // Set this early
+  await runEffectTimeline(); // runEffectTimeline will set up and call startEffects
+
+  // Only call playback.play if a timeline was actually started by runEffectTimeline
+  if (isPlaying) { // isPlaying is set by startEffects inside runEffectTimeline
+      window.playback?.play?.();
+      if (window.animateTitleOnPlay) window.animateTitleOnPlay();
+  } else {
+      // If isPlaying is false, it means runEffectTimeline bailed (e.g., no timeline found)
+      // So, we should reset timelinePlaying state.
+      timelinePlaying = false;
+  }
 }
 
 function stopTimeline() {
-  timelinePlaying = false;
-  stopEffects();
-  fxAPI.clearAutomation();
-  Object.values(effects).forEach(e => e.active = false);
-  enabledOrder.length = 0;
+  timelinePlaying = false; // Reset this first
+  stopEffects(); // This stops the loop, clears automations from fxAPI, resets effects
+  // fxAPI.clearAutomation(); // stopEffects should ideally handle this or fxAPI.reset does
+  // Object.values(effects).forEach(e => e.active = false); // Done by stopEffects
+  // enabledOrder.length = 0; // Done by stopEffects
   updateButtonStates();
   window.playback?.stop?.();
-
   if (window.resetTitleText) window.resetTitleText();
 }
+
+// ───────────── App bootstrap ─────────────
+document.addEventListener('DOMContentLoaded', () => { // Keep this NOT async if no initial await needed
+  init(); // Your existing init: sets up canvas, loads image, creates UI etc.
+  logAvailableTimelines();
+  window.addEventListener('keydown', handleGlobalKeyDown); // For hotkeys
+
+  // --- इंSURE NO AUTOPLAY LOGIC IS ACTIVE HERE ---
+  // // Example of what to REMOVE/COMMENT OUT if it was there:
+  // if (window.fxTimelineUrl && !timelinePlaying && !initialTimelineLoaded) {
+  //   log('[FX] Autoplaying timeline from URL on load. (NOW DISABLED)');
+  //   // await playTimeline(); // DO NOT CALL THIS HERE FOR CLICK-ONLY START
+  // }
+  // --- END OF AUTOPLAY REMOVAL ---
+});
+
+
+// // --- AUTOPLAY LOGIC (Optional - if you want it to play on load) ---
+// // Ensure this is the version you want for DOMContentLoaded
+// document.addEventListener('DOMContentLoaded', async () => {
+//   init();
+//   logAvailableTimelines();
+//   window.addEventListener('keydown', handleGlobalKeyDown);
+
+//   // Autoplay if fxTimelineUrl is set and no timeline is currently playing
+//   if (window.fxTimelineUrl && !timelinePlaying && !initialTimelineLoaded) {
+//     log('[FX] Autoplaying timeline from URL on load.');
+//     await playTimeline(); // Await the playTimeline call
+//   }
+// });
+// // --- END AUTOPLAY LOGIC ---
+
+
+// Also, the initial call to playTimeline if you want it to autoplay on load,
+// or the first click, needs to be aware of this.
+// For now, handleCanvasClick will call the async playTimeline.
+// If you want it to auto-play on load with this fetched timeline,
+// you would call playTimeline() (or a modified version) after init() in DOMContentLoaded.
+
+// Example: Autoplay on load if fxTimelineUrl is set
+// Add this to your DOMContentLoaded listener in main.js
+// document.addEventListener('DOMContentLoaded', async () => { // make async
+//   init();
+//   logAvailableTimelines();
+//   window.addEventListener('keydown', handleGlobalKeyDown);
+//   if (window.fxTimelineUrl) { // If a URL is specified for initial load
+//     log('[FX] Autoplaying timeline from URL on load.');
+//     handleCanvasClick(); // This will trigger playTimeline, which is now async
+//   }
+// });
+// Or, more directly:
+// document.addEventListener('DOMContentLoaded', async () => {
+//   init();
+//   logAvailableTimelines();
+//   window.addEventListener('keydown', handleGlobalKeyDown);
+//   if (window.fxTimelineUrl && !timelinePlaying) {
+//     log('[FX] Autoplaying timeline from URL on load.');
+//     playTimeline(); // Call it directly
+//   }
+// });
+
+
+// function stopTimeline() {
+//   timelinePlaying = false;
+//   stopEffects();
+//   fxAPI.clearAutomation();
+//   Object.values(effects).forEach(e => e.active = false);
+//   enabledOrder.length = 0;
+//   updateButtonStates();
+//   window.playback?.stop?.();
+
+//   if (window.resetTitleText) window.resetTitleText();
+// }
 
 
 // ───────────── FX buttons ─────────────
@@ -540,57 +647,164 @@ function renderTimelineTable() {
   `).join('') + `</tbody>`;
 }
 
-// ───────────── Timeline runner ─────────────
-function runEffectTimeline(tl) {
-  let timeline = tl, timelineName = 'Loaded Timeline';
-  if (!timeline || timeline.length === 0) { // Added length check
-    if (effectTimeline?.length) { timeline = effectTimeline; timelineName = 'Manual UI Timeline'; }
-    else if (window.fxTimeline?.length) { timeline = window.fxTimeline; timelineName = 'User-defined Timeline Array'; }
-    else if (typeof window.fxTimelineFunctionId === 'number') {
-      const func = timelines.getTimelineByNumber(window.fxTimelineFunctionId);
-      if (typeof func === 'function') timeline = func(); else timeline = [];
-      timelineName = `[ID ${window.fxTimelineFunctionId}]`;
-    } else if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function') {
-      timeline = timelines[window.fxTimelineFunctionName](); timelineName = window.fxTimelineFunctionName;
+// NEW Helper function to fetch and process a timeline JS file
+async function fetchAndProcessTimelineJS(url) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch timeline: ${response.statusText} (${url})`);
+    }
+    const text = await response.text();
+    // This is a simplified loader. For complex modules or security, consider more robust methods.
+    // It assumes the JS file defines a function or an array and makes it available (e.g., assigns to a known var or returns from an IIFE).
+    // Let's assume the file exports a function that returns the timeline array,
+    // or directly defines an array. We will try to extract the primary exported function/array.
+    const m = text.match(/(?:export\s+)?function\s+(\w+)\s*\(\s*\)\s*{/m) ||
+              text.match(/const\s+(\w+)\s*=\s*\(\s*\)\s*=>\s*{/m) ||
+              text.match(/(?:export\s+)?const\s+(\w+)\s*=\s*\[/m); // For const arrayName = [...]
+
+    if (m && m[1]) {
+      const name = m[1];
+      // Remove 'export' to make it a simple declaration
+      const jsCode = text.replace(/export\s+(function|const)/g, '$1');
+      // Create a function that executes the code and returns the timeline
+      // This is safer than eval but still executes arbitrary code from the URL.
+      const loaderFunc = new Function(`${jsCode}; return (typeof ${name} === 'function' ? ${name}() : ${name});`);
+      const timelineData = loaderFunc();
+      if (Array.isArray(timelineData)) {
+        return timelineData;
+      } else {
+        throw new Error(`Timeline data from ${url} (extracted as '${name}') is not an array.`);
+      }
     } else {
-      const defaultFunc = timelines.dramaticRevealTimeline; // Assuming this exists
-      if (typeof defaultFunc === 'function') timeline = defaultFunc(); else timeline = [];
-      timelineName = 'dramaticRevealTimeline (default)';
+      // Fallback: try to execute the whole script and see if it populates window.fxTimeline
+      // This is less ideal and more prone to issues.
+      log(`[FX] Could not find a clear export in ${url}. Attempting to execute and check window.fxTimeline.`);
+      const scriptEl = document.createElement('script');
+      scriptEl.textContent = text;
+      document.head.appendChild(scriptEl); // Execute the script
+      document.head.removeChild(scriptEl); // Clean up
+      if (Array.isArray(window.fxTimeline)) { // Check if the script populated window.fxTimeline
+        const loadedTimeline = [...window.fxTimeline]; // Copy it
+        delete window.fxTimeline; // Clear the global to avoid confusion later
+        return loadedTimeline;
+      }
+      throw new Error(`Could not extract timeline from ${url}. No recognized export pattern or window.fxTimeline population found.`);
+    }
+  } catch (e) {
+    log(`[FX] Error loading timeline from URL ${url}:`, e);
+    console.error(`[FX] Error loading timeline from URL ${url}:`, e);
+    return null; // Return null on error
+  }
+}
+
+// ───────────── Timeline runner ─────────────
+// Modify runEffectTimeline
+async function runEffectTimeline(tl) {
+  let timelineToUse = tl; // Use a local variable to determine the final timeline
+  let timelineNameToLog = 'Provided Timeline';
+
+  // 1. Prioritize explicitly passed timeline (tl)
+  if (timelineToUse && timelineToUse.length > 0) {
+    // log(`[FX] Using explicitly passed timeline.`);
+    // timelineNameToLog is already 'Provided Timeline' or can be set if tl has a name property
+  }
+  // 2. If no explicit timeline, try fetching from URL (once)
+  else if (window.fxTimelineUrl && !initialTimelineLoaded) {
+    log(`[FX] Attempting to load timeline from URL: ${window.fxTimelineUrl}`);
+    const fetchedTimeline = await fetchAndProcessTimelineJS(window.fxTimelineUrl);
+    if (fetchedTimeline && fetchedTimeline.length > 0) {
+      timelineToUse = fetchedTimeline;
+      timelineNameToLog = `URL: ${window.fxTimelineUrl.split('/').pop()}`;
+      effectTimeline = [...fetchedTimeline]; // Update global UI timeline state
+      initialTimelineLoaded = true; // Mark as fetched and processed
+      renderTimelineTable();
+    } else {
+      log(`[FX] Failed to load or empty timeline from URL.`);
+      // Proceed to other fallbacks without setting initialTimelineLoaded if fetch failed
     }
   }
-  if (!timeline || timeline.length === 0) { // Second check after attempting to load
-    log(`[FX] No timeline to run for ${timelineName}.`);
-    stopEffects(); // Stop if no timeline is found or it's empty
-    return;
+  // 3. If still no timeline, try global effectTimeline (from UI or previous load)
+  else if (effectTimeline && effectTimeline.length > 0) {
+    // This branch will be hit if fxTimelineUrl was already processed (initialTimelineLoaded = true)
+    // or if fxTimelineUrl was never set, but the UI has a timeline.
+    timelineToUse = effectTimeline;
+    timelineNameToLog = 'Manual UI Timeline';
+    // log(`[FX] Using current UI timeline.`);
+  }
+  // 4. Fallback to other window properties or default timelines
+  else {
+    if (window.fxTimeline && window.fxTimeline.length > 0) {
+      timelineToUse = window.fxTimeline;
+      timelineNameToLog = 'User-defined window.fxTimeline Array';
+    } else if (typeof window.fxTimelineFunctionId === 'number') {
+      const func = timelines.getTimelineByNumber(window.fxTimelineFunctionId);
+      timelineToUse = (typeof func === 'function') ? func() : [];
+      timelineNameToLog = `[ID ${window.fxTimelineFunctionId}]`;
+    } else if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function') {
+      timelineToUse = timelines[window.fxTimelineFunctionName]();
+      timelineNameToLog = window.fxTimelineFunctionName;
+    } else {
+      const defaultFunc = timelines.dramaticRevealTimeline;
+      timelineToUse = (typeof defaultFunc === 'function') ? defaultFunc() : [];
+      timelineNameToLog = 'dramaticRevealTimeline (default)';
+    }
   }
 
-  logTimelineDetails(timeline, timelineName); fxAPI.clearAutomation();
-  effectKeys.forEach(k => { if(effects[k]) effects[k].active = false; }); // Check if effect exists
-  enabledOrder.length = 0;
+  // --- Actual Execution ---
+  if (!timelineToUse || timelineToUse.length === 0) {
+    log(`[FX] No valid timeline to run for ${timelineNameToLog}. Image might remain static.`);
+    // If isPlaying is true, we might want to stop effects, but playTimeline sets isPlaying.
+    // Let's ensure effects are reset if we bail here.
+    if (isPlaying) { // If play was initiated but no timeline found
+        stopEffects(); // This will reset effects and isPlaying
+        timelinePlaying = false; // also ensure this is reset
+    }
+    return; // Exit if no timeline
+  }
+
+  logTimelineDetails(timelineToUse, timelineNameToLog);
+  fxAPI.clearAutomation(); // Clear previous automations
   
-  const coerce = v => {
+  // Reset effects states before applying new timeline
+  effectKeys.forEach(k => {
+    if (effects[k]) {
+      Object.assign(effects[k], cloneDefaults(k)); // Reset to defaults
+      effects[k].active = false; // Ensure marked inactive initially
+    } else {
+      effects[k] = cloneDefaults(k);
+    }
+  });
+  enabledOrder.length = 0; // Clear render order
+
+  const coerce = v => { /* ... (coerce function from your previous version) ... */
     if (typeof v === 'string') {
         if (!isNaN(parseFloat(v)) && isFinite(v)) return parseFloat(v);
-        // Try to parse as array if it looks like one, e.g., "1,2,3"
         if (v.includes(',')) return v.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
     }
-    return v; // Return as is (could be number, boolean, array already)
+    return v;
   };
 
-  timeline.forEach(lane => {
+  timelineToUse.forEach(lane => {
     fxAPI.schedule({
       effect: lane.effect, param: lane.param,
       from: coerce(lane.from), to: coerce(lane.to),
-      start: +lane.startBar || 0, end: +lane.endBar || 4, // Default values
+      start: +lane.startBar || 0, end: +lane.endBar || 4,
       unit: lane.unit || 'bar', easing: lane.easing || 'linear'
     });
+    // Ensure effect object exists and mark active
     if (!effects[lane.effect]) effects[lane.effect] = cloneDefaults(lane.effect);
     effects[lane.effect].active = true;
-    if (!enabledOrder.includes(lane.effect)) enabledOrder.push(lane.effect);
+    if (!enabledOrder.includes(lane.effect)) {
+      enabledOrder.push(lane.effect);
+    }
   });
-  sortEnabledOrder(effects, enabledOrder); // Sort once after all effects are added
-  startEffects();
+
+  sortEnabledOrder(effects, enabledOrder); // Sort based on .order or default
+  startEffects(); // This sets isPlaying = true and starts the loop
 }
+
+
 
 // ───────────── FPS/Auto-throttle & test frame ─────────────
 function autoTestFrame(ct) {
