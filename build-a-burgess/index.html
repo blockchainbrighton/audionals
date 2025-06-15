@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BURGESS Poster Designer</title>
 <style>
-/* (Keep your CSS unchanged, it’s already solid!) */
+/* Your CSS unchanged, paste as above! */
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
@@ -188,7 +188,7 @@ body {
     </div>
 </div>
 <script>
-// === CONFIG ===
+// === CONFIG & RENDER CODE UNCHANGED (as above) ===
 const BACKGROUND_BASES = [
   { base: 'album_collage', label: 'Album Collage' },
   { base: 'dressing_room', label: 'Dressing Room' },
@@ -196,8 +196,6 @@ const BACKGROUND_BASES = [
 ];
 const CHARACTER_BASES = [
   { base: 'BURGESS', label: 'Burgess' },
-  // { base: 'JIMMY', label: 'Jimmy' },
-  // Add more character bases as needed
 ];
 const TEXT_BASES = [
   { base: 'BurgessText', label: 'Original' },
@@ -206,7 +204,6 @@ const TEXT_BASES = [
   { base: 'burgess_neon', label: 'Neon' },
   { base: 'burgess_graffiti', label: 'Graffiti' }
 ];
-// Simulates image existence for static demo; update for your own files
 function imageExists(file) {
   const existing = [
     // Backgrounds
@@ -250,12 +247,9 @@ function renderOptionGrid(panelId, bases, selected, onClick) {
     if (!variants.length) return;
     const currIndex = selected[item.base]?.index ?? 0;
     const currVariant = variants[currIndex % variants.length] ?? variants[0];
-
     const div = document.createElement('div');
     div.className = 'option-item' + (selected.selectedBase === item.base ? ' selected' : '');
     div.style.position = 'relative';
-
-    // LEFT ARROW
     if (variants.length > 1) {
       const prevBtn = document.createElement('button');
       prevBtn.innerHTML = '◀';
@@ -268,7 +262,6 @@ function renderOptionGrid(panelId, bases, selected, onClick) {
       };
       div.appendChild(prevBtn);
     }
-    // Image
     const imgDiv = document.createElement('div');
     imgDiv.style.width = '100%';
     imgDiv.style.height = (panelId === 'backgrounds-options' ? '80px' : '60px');
@@ -283,8 +276,6 @@ function renderOptionGrid(panelId, bases, selected, onClick) {
     img.style.maxWidth = '100%';
     imgDiv.appendChild(img);
     div.appendChild(imgDiv);
-
-    // RIGHT ARROW
     if (variants.length > 1) {
       const nextBtn = document.createElement('button');
       nextBtn.innerHTML = '▶';
@@ -297,12 +288,10 @@ function renderOptionGrid(panelId, bases, selected, onClick) {
       };
       div.appendChild(nextBtn);
     }
-    // Label
     const label = document.createElement('div');
     label.className = 'option-label';
     label.innerText = item.label + (variants.length > 1 ? ` (${currIndex+1}/${variants.length})` : '');
     div.appendChild(label);
-
     div.onclick = () => {
       selected.selectedBase = item.base;
       selected[item.base] = selected[item.base] || {index: 0};
@@ -312,8 +301,6 @@ function renderOptionGrid(panelId, bases, selected, onClick) {
     grid.appendChild(div);
   });
 }
-
-// === INIT and state ===
 const backgroundsState = {selectedBase: BACKGROUND_BASES[0].base};
 BACKGROUND_BASES.forEach(b => backgroundsState[b.base] = {index: 0});
 const characterState = {selectedBase: CHARACTER_BASES[0].base};
@@ -329,7 +316,6 @@ function setCharacter(base, variantFile) {
 function setText(base, variantFile) {
   document.getElementById('text').src = variantFile;
 }
-// Initial render
 document.addEventListener('DOMContentLoaded', () => {
   renderOptionGrid('backgrounds-options', BACKGROUND_BASES, backgroundsState, setBackground);
   renderOptionGrid('character-options', CHARACTER_BASES, characterState, setCharacter);
@@ -340,7 +326,6 @@ document.addEventListener('DOMContentLoaded', () => {
   setCharacter(CHARACTER_BASES[0].base, charVariants[0]);
   const textVariants = findImageVariants(TEXT_BASES[0].base);
   setText(TEXT_BASES[0].base, textVariants[0]);
-  // Enable drag & resize
   enableDragAndResize();
 });
 function switchTab(tabName) {
@@ -348,61 +333,57 @@ function switchTab(tabName) {
   event.target.classList.add('active');
   document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
   document.getElementById(tabName + '-panel').classList.add('active');
+  // --- Update draggable states immediately after tab switch
+  setTimeout(() => enableDragAndResize(), 20); // Re-bind drag handlers
 }
-// ==== Drag/Resize Logic ====
+// === Drag/Resize Logic, with tab-based drag filtering ===
 function enableDragAndResize() {
-  let isDragging = false, currentElement = null, startX, startY, startLeft, startTop;
+  // Remove any old handlers for cleanliness
   const character = document.getElementById('character');
   const text = document.getElementById('text');
-  [character, text].forEach(element => {
-    element.onmousedown = startDrag;
-    element.ontouchstart = startDrag;
-  });
-  document.onmousemove = drag;
-  document.ontouchmove = drag;
-  document.onmouseup = stopDrag;
-  document.ontouchend = stopDrag;
-  function startDrag(e) {
+  character.onmousedown = null; character.ontouchstart = null;
+  text.onmousedown = null; text.ontouchstart = null;
+  // Only activate drag for the right element based on the tab
+  let dragTarget = null;
+  if (document.getElementById('character-panel').classList.contains('active')) dragTarget = character;
+  else if (document.getElementById('text-panel').classList.contains('active')) dragTarget = text;
+  // Don't enable drag if Backgrounds tab is active
+  if (!dragTarget) return;
+  // Only this element is draggable
+  let isDragging = false, startX = 0, startY = 0, offsetX = 0, offsetY = 0;
+  dragTarget.onmousedown = dragTarget.ontouchstart = function(e) {
     isDragging = true;
-    currentElement = e.target;
-    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+    // Get pointer within element (no jump to top left!)
+    const elemRect = dragTarget.getBoundingClientRect();
+    const clientX = (e.touches ? e.touches[0].clientX : e.clientX);
+    const clientY = (e.touches ? e.touches[0].clientY : e.clientY);
+    offsetX = ((clientX - elemRect.left) / elemRect.width) * 100;
+    offsetY = ((clientY - elemRect.top) / elemRect.height) * 100;
     startX = clientX;
     startY = clientY;
-    const rect = currentElement.getBoundingClientRect();
-    const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-    startLeft = ((rect.left - canvasRect.left) / canvasRect.width) * 100;
-    startTop = ((rect.top - canvasRect.top) / canvasRect.height) * 100;
     // Raise z-index on drag
-    if (currentElement.id === 'character') currentElement.style.zIndex = '1000';
-    else if (currentElement.id === 'text') currentElement.style.zIndex = '999';
+    dragTarget.style.zIndex = (dragTarget.id === 'character') ? '1000' : '999';
+    // Attach move handlers
+    document.onmousemove = document.ontouchmove = function(e) {
+      if (!isDragging) return;
+      const moveX = (e.touches ? e.touches[0].clientX : e.clientX);
+      const moveY = (e.touches ? e.touches[0].clientY : e.clientY);
+      const canvas = document.getElementById('canvas');
+      const canvasRect = canvas.getBoundingClientRect();
+      const leftPercent = Math.max(0, Math.min(100, ((moveX - canvasRect.left) / canvasRect.width) * 100 - offsetX));
+      const topPercent = Math.max(0, Math.min(100, ((moveY - canvasRect.top) / canvasRect.height) * 100 - offsetY));
+      dragTarget.style.left = leftPercent + '%';
+      dragTarget.style.top = topPercent + '%';
+      e.preventDefault();
+    };
+    document.onmouseup = document.ontouchend = function() {
+      dragTarget.style.zIndex = (dragTarget.id === 'character') ? '2' : '1';
+      isDragging = false;
+      document.onmousemove = document.ontouchmove = null;
+      document.onmouseup = document.ontouchend = null;
+    };
     e.preventDefault();
-  }
-  function drag(e) {
-    if (!isDragging || !currentElement) return;
-    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-    if (clientX === undefined || clientY === undefined) return;
-    const deltaX = clientX - startX;
-    const deltaY = clientY - startY;
-    const canvas = document.getElementById('canvas');
-    const canvasRect = canvas.getBoundingClientRect();
-    // compute new left/top as %
-    const elem = currentElement;
-    const leftPercent = Math.max(0, Math.min(100, startLeft + (deltaX / canvasRect.width) * 100));
-    const topPercent = Math.max(0, Math.min(100, startTop + (deltaY / canvasRect.height) * 100));
-    elem.style.left = leftPercent + '%';
-    elem.style.top = topPercent + '%';
-    e.preventDefault();
-  }
-  function stopDrag() {
-    if (currentElement) {
-      if (currentElement.id === 'character') currentElement.style.zIndex = '2';
-      else if (currentElement.id === 'text') currentElement.style.zIndex = '1';
-    }
-    isDragging = false;
-    currentElement = null;
-  }
+  };
 }
 function updateCharacterSize(value) {
   const character = document.getElementById('character');
@@ -445,8 +426,6 @@ function downloadPoster() {
     background.crossOrigin = 'anonymous';
     background.onload = function() {
       ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
-
-      // --- DRAW TEXT FIRST (z-index:1), THEN CHARACTER (z-index:2) ---
       const text = document.getElementById('text');
       const textImg = new Image();
       textImg.crossOrigin = 'anonymous';
@@ -458,8 +437,6 @@ function downloadPoster() {
         const textWidth = (textRect.width / canvasRect.width) * canvas.width;
         const textHeight = (textRect.height / canvasRect.height) * canvas.height;
         ctx.drawImage(textImg, textX, textY, textWidth, textHeight);
-
-        // Now draw the character image (on top)
         const character = document.getElementById('character');
         const characterImg = new Image();
         characterImg.crossOrigin = 'anonymous';
@@ -470,8 +447,6 @@ function downloadPoster() {
           const charWidth = (charRect.width / canvasRect.width) * canvas.width;
           const charHeight = (charRect.height / canvasRect.height) * canvas.height;
           ctx.drawImage(characterImg, charX, charY, charWidth, charHeight);
-
-          // Trigger download
           const link = document.createElement('a');
           link.download = 'burgess-poster.png';
           link.href = canvas.toDataURL();
