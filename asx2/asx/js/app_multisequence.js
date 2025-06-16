@@ -53,7 +53,6 @@ export async function createReversedBuffer(buffer) {
   for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
     const originalData = buffer.getChannelData(channel);
     const reversedData = reversedBuffer.getChannelData(channel);
-    
     for (let i = 0; i < originalData.length; i++) {
       reversedData[i] = originalData[originalData.length - 1 - i];
     }
@@ -207,16 +206,17 @@ async function initializeMultiSequence() {
   // Initialize sequence manager with current state
   SequenceManager.init();
   
-  // Initialize sequence UI in the main container
-  const mainContainer = document.querySelector('main');
-  if (mainContainer) {
-    SequenceUI.init(mainContainer);
+  // Mount SequenceUI inside the header controls
+  const seqControls = document.getElementById('sequence-controls');
+  if (seqControls) {
+    SequenceUI.init(seqControls);
   } else {
-    console.warn('Main container not found, initializing sequence UI in body');
+    // Fallback (should not be needed)
+    console.warn('Sequence controls header container not found, mounting SequenceUI in body.');
     SequenceUI.init(document.body);
   }
   
-  console.log('Multi-sequence system initialized');
+  console.log('Multi-sequence system initialized (UI in header)');
 }
 
 // ---------- INIT ----------
@@ -227,7 +227,6 @@ window.addEventListener('DOMContentLoaded', () => {
     initializeMultiSequence();
   });
 });
-
 
 // ---------- UI EVENTS ----------
 document.getElementById('add-channel-btn').addEventListener('click', () => {
