@@ -1,3 +1,5 @@
+
+
 // js/app.js
 
 import State from './state.js';
@@ -32,6 +34,7 @@ const makeChannel = i => ({
   activePlaybackTrimStart: null,
   activePlaybackTrimEnd: null,
   activePlaybackReversed: false,
+  // imageData is not part of initial makeChannel, it's added on load
 });
 
 
@@ -80,6 +83,7 @@ async function applyProjectData(projectData, sourceDescription = "Loaded Project
           activePlaybackTrimStart: null,
           activePlaybackTrimEnd: null,
           activePlaybackReversed: false,
+          imageData: loadedCh.imageData || null, // Preserve imageData if present, else null
         };
       });
     }
@@ -100,12 +104,13 @@ async function applyProjectData(projectData, sourceDescription = "Loaded Project
 
                   if (!buffer) {
                        console.warn(`[Project Load] loadSample returned no buffer for channel ${i} (${resolvedUrl})`);
-                       State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile });
+                       State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile, imageData: ch.imageData }); // retain existing imageData if new load fails
                        continue;
                   }
 
                   const updatePayload = { buffer, src: originalSrcFromFile };
-                  if (imageData) updatePayload.imageData = imageData;
+                  // imageData from loadSample should override existing if successfully loaded
+                  updatePayload.imageData = imageData || ch.imageData; // Prefer new, fallback to existing
 
                   if (ch.reverse && buffer) {
                       const rBuf = await createReversedBuffer(buffer);
@@ -114,17 +119,17 @@ async function applyProjectData(projectData, sourceDescription = "Loaded Project
                   State.updateChannel(i, updatePayload);
               } catch (err) {
                   console.warn(`Failed to reload sample for channel ${i} (Resolved URL: ${resolvedUrl}, Original: ${originalSrcFromFile}):`, err);
-                  State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile });
+                  State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile, imageData: ch.imageData }); // retain existing imageData
               }
           } else {
               console.warn(`[Project Load] Could not form a loadable URL for channel ${i}. Original src: "${originalSrcFromFile}"`);
-              State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile });
+              State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile, imageData: ch.imageData }); // retain existing
           }
       } else if (originalSrcFromFile) {
            console.warn(`[Project Load] Channel ${i} has a non-string or empty src:`, originalSrcFromFile);
-           State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile });
+           State.updateChannel(i, { buffer: null, reversedBuffer: null, src: originalSrcFromFile, imageData: ch.imageData }); // retain existing
       } else {
-           State.updateChannel(i, { buffer: null, reversedBuffer: null, src: null });
+           State.updateChannel(i, { buffer: null, reversedBuffer: null, src: null, imageData: null }); // Clear if no src
       }
     }
     console.log(`${sourceDescription} loaded successfully.`);
@@ -135,14 +140,52 @@ async function applyProjectData(projectData, sourceDescription = "Loaded Project
   }
 }
 
+function createBlankProjectData(name = "New Project", numChannels = 16) {
+  const channels = [];
+  for (let i = 0; i < numChannels; i++) {
+    const fullChannel = makeChannel(i);
+    const { buffer, reversedBuffer, activePlaybackScheduledTime, activePlaybackDuration, activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed, ...serializableChannel } = fullChannel;
+    channels.push({...serializableChannel, imageData: null }); // Ensure imageData is null for blank channels
+  }
+  return {
+    projectName: name,
+    bpm: 120,
+    channels: channels
+  };
+}
+
+async function initializeApp() {
+  const defaultPresetFilename = 'classic-house-bass-arp.json';
+  const defaultPresetPath = `./json-files/${defaultPresetFilename}`;
+  let projectDataToLoad;
+  let sourceDescription;
+
+  try {
+    console.log(`Attempting to auto-load default preset: ${defaultPresetFilename}`);
+    const response = await fetch(defaultPresetPath);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch default preset: ${response.statusText} (path: ${defaultPresetPath})`);
+    }
+    projectDataToLoad = await response.json();
+    sourceDescription = projectDataToLoad.projectName || "Default: Classic House Bass Arp";
+    console.log(`Default preset "${defaultPresetFilename}" will be loaded.`);
+  } catch (err) {
+    console.warn(`Could not auto-load default preset "${defaultPresetFilename}". Initializing with a blank project. Error:`, err);
+    projectDataToLoad = createBlankProjectData("New Project (Blank)", 16);
+    sourceDescription = "Blank Project";
+  }
+
+  await applyProjectData(projectDataToLoad, sourceDescription);
+}
 
 // ---------- INIT ----------
 UI.init();
-for (let i = 0; i < 16; i++) State.addChannel(makeChannel(i));
 populatePresetDropdown();
+initializeApp();
 
 
 // ---------- UI EVENTS ----------
+// ... (other UI event listeners like add-channel, play, stop, bpm, etc. remain the same) ...
 document.getElementById('add-channel-btn').addEventListener('click', () => {
   State.addChannel(makeChannel(State.get().channels.length));
 });
@@ -170,7 +213,6 @@ document.getElementById('bpm-input').addEventListener('blur', e => {
     if (e.target.value === "") {
         const currentBPM = State.get().bpm;
         e.target.value = currentBPM;
-        State.update({ bpm: currentBPM });
     }
 });
 
@@ -185,8 +227,8 @@ document.getElementById('save-btn').addEventListener('click', () => {
 
   const snapshot = { ...State.get() };
   snapshot.channels = snapshot.channels.map(ch => {
-    const { buffer, reversedBuffer, activePlaybackScheduledTime, activePlaybackDuration, activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed, ...rest } = ch;
-    return rest;
+    const { buffer, reversedBuffer, activePlaybackScheduledTime, activePlaybackDuration, activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed, imageData, ...rest } = ch;
+    return {...rest, imageData: imageData || null}; // Ensure imageData is preserved if it exists, else null
   });
   const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -208,6 +250,7 @@ document.getElementById('load-input').addEventListener('change', async e => {
     await applyProjectData(projectData, f.name);
   } catch(err) {
     console.error("Error loading project from file input:", err);
+    alert(`Error loading project: ${f.name}. Invalid JSON or file format.`);
   } finally {
     fileInput.value = "";
   }
@@ -215,11 +258,12 @@ document.getElementById('load-input').addEventListener('change', async e => {
 
 
 // ---------- PRESET LOADING ----------
+// ... (populatePresetDropdown and its event listeners remain the same) ...
 async function populatePresetDropdown() {
   const selectElement = document.getElementById('preset-select');
   const loadPresetButton = document.getElementById('load-preset-btn');
   selectElement.innerHTML = ''; 
-  loadPresetButton.classList.remove('needs-attention'); // Remove flash on populate
+  loadPresetButton.classList.remove('needs-attention'); 
 
   let placeholderText = 'Load Preset...';
   let presetsAvailable = false;
@@ -271,17 +315,15 @@ async function populatePresetDropdown() {
     selectElement.insertBefore(placeholderOption, selectElement.firstChild);
 
     loadPresetButton.disabled = !presetsAvailable;
-    if (!presetsAvailable) { // Ensure no flashing if button is disabled
+    if (!presetsAvailable) { 
         loadPresetButton.classList.remove('needs-attention');
     }
   }
 }
 
-// Event listener for when a preset is selected in the dropdown
 document.getElementById('preset-select').addEventListener('change', (e) => {
   const loadPresetButton = document.getElementById('load-preset-btn');
   if (e.target.value && e.target.value !== "" && !loadPresetButton.disabled) { 
-    // A valid preset is selected AND button is not disabled
     loadPresetButton.classList.add('needs-attention');
   } else {
     loadPresetButton.classList.remove('needs-attention');
@@ -293,7 +335,7 @@ document.getElementById('load-preset-btn').addEventListener('click', async () =>
   const loadPresetButton = document.getElementById('load-preset-btn');
   const presetFilename = selectElement.value;
 
-  loadPresetButton.classList.remove('needs-attention'); // Stop flashing once clicked
+  loadPresetButton.classList.remove('needs-attention'); 
 
   if (!presetFilename) {
     return;
@@ -309,7 +351,6 @@ document.getElementById('load-preset-btn').addEventListener('click', async () =>
     const friendlyPresetName = selectElement.options[selectElement.selectedIndex].text;
     await applyProjectData(projectData, friendlyPresetName);
 
-    // Reset dropdown to placeholder after successful load
     if (selectElement.options.length > 0 && selectElement.options[0].disabled) {
         selectElement.selectedIndex = 0;
     }
@@ -317,12 +358,194 @@ document.getElementById('load-preset-btn').addEventListener('click', async () =>
   } catch (err) {
     alert(`Error loading preset file: ${presetFilename}. Ensure it's a valid JSON project.`);
     console.error("Error loading preset:", err);
-    // If load fails but a preset is still selected, re-add flash (optional, can be annoying)
-    // if (selectElement.value && selectElement.value !== "") {
-    //   loadPresetButton.classList.add('needs-attention');
-    // }
   }
 });
+
+// --- MODAL FOR CLEAR OPTIONS ---
+let clearModalElement = null;
+
+function ensureModalStyles() {
+    if (document.getElementById('clear-modal-styles')) return;
+
+    const styleSheet = document.createElement("style");
+    styleSheet.id = 'clear-modal-styles';
+    styleSheet.type = "text/css";
+    styleSheet.innerText = `
+        .btn-modal { 
+            padding: 10px 15px; 
+            font-size: 1em; 
+            border: 1px solid var(--color-border, #555); 
+            background-color: var(--color-button-bg, #444); 
+            color: var(--color-button-text, #fff); 
+            border-radius: 4px; 
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 100%; /* Make buttons full width within their container */
+            margin-bottom: 8px; /* Add some space between stacked buttons */
+        }
+        .btn-modal:last-child {
+            margin-bottom: 0;
+        }
+        .btn-modal:hover { background-color: var(--color-button-hover-bg, #666); }
+        .btn-modal-cancel { 
+            background-color: var(--color-button-secondary-bg, #6c757d); 
+        }
+        .btn-modal-cancel:hover { 
+            background-color: var(--color-button-secondary-hover-bg, #5a6268); 
+        }
+        #clear-options-modal-content input[type="number"] {
+            padding: 8px;
+            margin-top: 5px;
+            margin-bottom: 15px; /* Space before next button */
+            border: 1px solid var(--color-border, #555);
+            border-radius: 4px;
+            background-color: var(--color-input-bg, #333);
+            color: var(--color-input-text, #fff);
+            width: 80px; 
+            text-align: center;
+        }
+    `;
+    document.head.appendChild(styleSheet);
+}
+
+
+function showClearOptionsModal() {
+  ensureModalStyles(); // Ensure styles are present
+
+  if (!clearModalElement) {
+    clearModalElement = document.createElement('div');
+    clearModalElement.id = 'clear-options-modal';
+    clearModalElement.style.position = 'fixed';
+    clearModalElement.style.top = '0';
+    clearModalElement.style.left = '0';
+    clearModalElement.style.width = '100%';
+    clearModalElement.style.height = '100%';
+    clearModalElement.style.backgroundColor = 'rgba(0,0,0,0.75)';
+    clearModalElement.style.display = 'flex';
+    clearModalElement.style.justifyContent = 'center';
+    clearModalElement.style.alignItems = 'center';
+    clearModalElement.style.zIndex = '1050'; // High z-index
+
+    const modalContentHTML = `
+      <div id="clear-options-modal-content" style="background: var(--color-panel-bg, #333); color: var(--color-text-primary, #fff); padding: 20px 25px; border-radius: 8px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.5); border: 1px solid var(--color-border-dark, #222); min-width: 300px; max-width: 90vw;">
+        <h3 style="margin-top:0; margin-bottom:15px; font-size: 1.3em;">Clear Options</h3>
+        <p style="margin-bottom:20px; font-size: 0.95em;">What would you like to clear?</p>
+        <div id="clear-options-buttons" style="display: flex; flex-direction: column; gap: 0px;">
+          <button id="clear-modal-all" class="btn-modal">Clear Entire Project</button>
+          <button id="clear-modal-channel" class="btn-modal">Clear a Specific Channel</button>
+          <button id="clear-modal-cancel" class="btn-modal btn-modal-cancel">Cancel</button>
+        </div>
+        <div id="clear-channel-input-container" style="display:none; margin-top:15px;">
+            <label for="clear-channel-number-input" style="display:block; margin-bottom:5px; font-size:0.9em;">Enter Channel Number (1-${State.get().channels.length}):</label>
+            <input type="number" id="clear-channel-number-input" min="1" max="${State.get().channels.length}" />
+            <button id="clear-modal-confirm-channel" class="btn-modal">Confirm Clear Channel</button>
+        </div>
+      </div>
+    `;
+    clearModalElement.innerHTML = modalContentHTML;
+    document.body.appendChild(clearModalElement);
+
+    clearModalElement.querySelector('#clear-modal-all').addEventListener('click', () => {
+      hideClearOptionsModal();
+      if (confirm("Are you sure you want to clear the ENTIRE project? This action cannot be undone.")) {
+        clearEntireProject();
+      }
+    });
+
+    const clearChannelButton = clearModalElement.querySelector('#clear-modal-channel');
+    const clearOptionsButtons = clearModalElement.querySelector('#clear-options-buttons');
+    const channelInputContainer = clearModalElement.querySelector('#clear-channel-input-container');
+    const channelNumberInput = clearModalElement.querySelector('#clear-channel-number-input');
+
+    clearChannelButton.addEventListener('click', () => {
+        // Show input field for channel number
+        clearOptionsButtons.style.display = 'none';
+        channelInputContainer.style.display = 'block';
+        channelNumberInput.value = ''; // Clear previous input
+        channelNumberInput.focus();
+    });
+    
+    clearModalElement.querySelector('#clear-modal-confirm-channel').addEventListener('click', () => {
+        const channelNumStr = channelNumberInput.value;
+        const channelCount = State.get().channels.length;
+        if (channelNumStr !== null && channelNumStr !== "") {
+            const channelNum = parseInt(channelNumStr, 10);
+            if (!isNaN(channelNum) && channelNum >= 1 && channelNum <= channelCount) {
+                hideClearOptionsModal(); // Hide modal before confirm
+                if (confirm(`Are you sure you want to clear all settings and audio for Channel ${channelNum}?`)) {
+                    clearSpecificChannelUI(channelNum - 1); // Convert to 0-based index
+                }
+            } else {
+                alert(`Invalid channel number. Please enter a number between 1 and ${channelCount}.`);
+                channelNumberInput.focus();
+            }
+        } else {
+             alert(`Please enter a channel number.`);
+             channelNumberInput.focus();
+        }
+    });
+
+    clearModalElement.querySelector('#clear-modal-cancel').addEventListener('click', () => {
+      hideClearOptionsModal();
+    });
+  }
+  // Reset modal to initial state if reopened
+  clearModalElement.querySelector('#clear-options-buttons').style.display = 'flex';
+  clearModalElement.querySelector('#clear-channel-input-container').style.display = 'none';
+  clearModalElement.querySelector('#clear-channel-number-input').max = State.get().channels.length;
+  const label = clearModalElement.querySelector('label[for="clear-channel-number-input"]');
+  if (label) label.textContent = `Enter Channel Number (1-${State.get().channels.length}):`;
+
+
+  clearModalElement.style.display = 'flex';
+}
+
+function hideClearOptionsModal() {
+  if (clearModalElement) {
+    clearModalElement.style.display = 'none';
+  }
+}
+
+function clearEntireProject() {
+  const blankProject = createBlankProjectData("New Project (Cleared)", State.get().channels.length || 16); // Use current channel count or default
+  applyProjectData(blankProject, "Cleared Project").then(() => {
+    const presetSelect = document.getElementById('preset-select');
+    if (presetSelect.options.length > 0 && presetSelect.options[0].disabled) {
+      presetSelect.selectedIndex = 0;
+    }
+    document.getElementById('load-preset-btn').classList.remove('needs-attention');
+    console.log("Entire project cleared.");
+  }).catch(err => {
+    console.error("Error while clearing entire project:", err);
+    alert("An error occurred while clearing the project.");
+  });
+}
+
+function clearSpecificChannelUI(channelIndex) {
+  const channels = State.get().channels;
+  if (channelIndex < 0 || channelIndex >= channels.length) {
+    console.error("Invalid channel index for clearSpecificChannelUI:", channelIndex);
+    alert("Error: Invalid channel index specified.");
+    return;
+  }
+
+  const freshChannelState = makeChannel(channelIndex); // Get a default state for this channel index
+  
+  const updatePayload = {
+    ...freshChannelState, // Spread all default values from makeChannel
+    buffer: null,         // Explicitly nullify runtime/loaded data
+    reversedBuffer: null,
+    src: null,
+    imageData: null       // Crucial to clear existing waveform image data
+  };
+
+  State.updateChannel(channelIndex, updatePayload);
+  console.log(`Channel ${channelIndex + 1} has been reset to defaults.`);
+  // UI update is handled by State.updateChannel via observers
+}
+
+// Update the event listener for the main "Clear" button
+document.getElementById('clear-project-btn').addEventListener('click', showClearOptionsModal);
 
 
 export async function createReversedBuffer(audioBuffer) {
