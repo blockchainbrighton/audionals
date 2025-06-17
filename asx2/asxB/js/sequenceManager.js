@@ -1,334 +1,134 @@
-// js/sequenceManager.js
-
-/**
- * Multi-Sequence Manager
- * 
- * This module manages multiple sequences/patterns while maintaining compatibility
- * with the existing single-sequence state system. It acts as a layer above the
- * current State module, allowing users to switch between different sequences.
- */
-
+// js/sequenceManager.js (2025 Refactor: Minimal, DRY, Drop-in)
 import State from './state.js';
-import { rehydrateAllChannelBuffers } from './utils.js'; // <-- Add this import
-
+import { rehydrateAllChannelBuffers } from './utils.js';
 
 const SequenceManager = (() => {
-  // Internal state for managing multiple sequences
-  let sequences = [];
-  let currentSequenceIndex = 0;
-  let maxSequences = 8; // Default maximum number of sequences
-  
-  // Listeners for sequence changes
+  let sequences = [], currentSequenceIndex = 0, maxSequences = 8;
   const listeners = new Set();
-  
-  // Initialize with a default sequence
-  const init = () => {
-    if (sequences.length === 0) {
-      // Create first sequence from current state or default
-      const currentState = State.get();
-      sequences.push({
-        id: generateSequenceId(),
-        name: 'Sequence 1',
-        data: { ...currentState },
-        created: Date.now(),
-        modified: Date.now()
-      });
-    }
-  };
-  
-  // Generate unique sequence ID
-  const generateSequenceId = () => {
-    return 'seq_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  };
-  
-  // Get current sequence info
-  const getCurrentSequence = () => {
-    if (sequences.length === 0) init();
-    return sequences[currentSequenceIndex] || sequences[0];
-  };
-  
-  // Get all sequences metadata (without full data)
-  const getSequencesInfo = () => {
-    return sequences.map((seq, index) => ({
-      id: seq.id,
-      name: seq.name,
-      index,
-      created: seq.created,
-      modified: seq.modified,
-      isCurrent: index === currentSequenceIndex
-    }));
-  };
-  
-  // Switch to a different sequence
-  const switchToSequence = async (index) => { // <-- Make async
-    if (index < 0 || index >= sequences.length) {
-      console.warn('Invalid sequence index:', index);
-      return false;
-    }
 
-    // Save current state to current sequence before switching
-    saveCurrentStateToSequence();
+  // --- Shared helpers ---
+  const now = () => Date.now();
+  const warn = (msg, ...a) => (console.warn(msg, ...a), false);
+  const validateIndex = i => i >= 0 && i < sequences.length;
+  const generateId = () => `seq_${now()}_${Math.random().toString(36).slice(2,9)}`;
+  const blankData = () => ({ ...State.get(), channels: State.get().channels.map(ch => ({ ...ch })) });
+  const emit = () => listeners.forEach(cb => { try { cb({
+    sequences: sequences.map((s, i) => ({ id: s.id, name: s.name, index: i, created: s.created, modified: s.modified, isCurrent: i === currentSequenceIndex })),
+    currentIndex: currentSequenceIndex,
+    currentSequence: sequences[currentSequenceIndex] || sequences[0],
+    maxSequences
+  }); } catch(e) { console.error('Error in sequence manager listener:', e); } });
+  const saveCurrent = () => sequences.length && (sequences[currentSequenceIndex] = { ...sequences[currentSequenceIndex], data: { ...State.get() }, modified: now() });
 
-    // Switch to new sequence
-    currentSequenceIndex = index;
-    const targetSequence = sequences[currentSequenceIndex];
+  // --- Core API ---
+  const init = () => sequences.length || sequences.push({ id: generateId(), name: 'Sequence 1', data: { ...State.get() }, created: now(), modified: now() });
+  const getCurrentSequence = () => (sequences.length || init(), sequences[currentSequenceIndex] || sequences[0]);
+  const getSequencesInfo = () => sequences.map((s, i) => ({ id: s.id, name: s.name, index: i, created: s.created, modified: s.modified, isCurrent: i === currentSequenceIndex }));
 
-    // Load the target sequence data into State
-    State.update(targetSequence.data);
+  const switchToSequence = async i => validateIndex(i)
+    ? (saveCurrent(), currentSequenceIndex = i, State.update(sequences[i].data), await rehydrateAllChannelBuffers(sequences[i].data.channels), emit(), true)
+    : warn('Invalid sequence index:', i);
 
-    // *** NEW: Rehydrate channel buffers ***
-    await rehydrateAllChannelBuffers(targetSequence.data.channels);
+  const addSequence = async (name, copyFromCurrent = false) => sequences.length >= maxSequences
+    ? warn('Maximum number of sequences reached:', maxSequences)
+    : (saveCurrent(),
+       sequences.push({
+         id: generateId(),
+         name: name || `Sequence ${sequences.length + 1}`,
+         data: copyFromCurrent ? { ...State.get() } : blankData(),
+         created: now(),
+         modified: now()
+       }),
+       currentSequenceIndex = sequences.length - 1,
+       State.update(sequences.at(-1).data),
+       await rehydrateAllChannelBuffers(sequences.at(-1).data.channels),
+       emit(), true);
 
-    // Notify listeners
-    emit();
+  const removeSequence = async i => sequences.length <= 1
+    ? warn('Cannot remove the last sequence')
+    : !validateIndex(i)
+      ? warn('Invalid sequence index for removal:', i)
+      : (sequences.splice(i,1),
+         currentSequenceIndex = Math.min(currentSequenceIndex, sequences.length - 1),
+         State.update(sequences[currentSequenceIndex].data),
+         await rehydrateAllChannelBuffers(sequences[currentSequenceIndex].data.channels),
+         emit(), true);
 
-    return true;
-  };
-  
-  // Save current State to the current sequence
-  const saveCurrentStateToSequence = () => {
-    if (sequences.length === 0) init();
-    
-    const currentState = State.get();
-    sequences[currentSequenceIndex] = {
-      ...sequences[currentSequenceIndex],
-      data: { ...currentState },
-      modified: Date.now()
-    };
-  };
-  
-  // Add a new sequence
-  const addSequence = async (name = null, copyFromCurrent = false) => { // <-- Make async
-    if (sequences.length >= maxSequences) {
-      console.warn('Maximum number of sequences reached:', maxSequences);
-      return false;
-    }
+  const renameSequence = (i, newName) => !validateIndex(i)
+    ? warn('Invalid sequence index for rename:', i)
+    : (sequences[i] = { ...sequences[i], name: newName, modified: now() }, emit(), true);
 
-    // Save current state before adding new sequence
-    saveCurrentStateToSequence();
+  const duplicateSequence = i => sequences.length >= maxSequences
+    ? warn('Maximum number of sequences reached:', maxSequences)
+    : !validateIndex(i)
+      ? warn('Invalid sequence index for duplication:', i)
+      : (sequences.push({
+          id: generateId(),
+          name: sequences[i].name + ' Copy',
+          data: { ...sequences[i].data },
+          created: now(),
+          modified: now()
+        }), emit(), true);
 
-    let newSequenceData;
-    if (copyFromCurrent) {
-      newSequenceData = { ...State.get() };
-    } else {
-      newSequenceData = createBlankSequenceData();
-    }
-
-    const newSequence = {
-      id: generateSequenceId(),
-      name: name || `Sequence ${sequences.length + 1}`,
-      data: newSequenceData,
-      created: Date.now(),
-      modified: Date.now()
-    };
-
-    sequences.push(newSequence);
-
-    // Switch to the new sequence
-    currentSequenceIndex = sequences.length - 1;
-    State.update(newSequenceData);
-
-    // *** NEW: Rehydrate channel buffers ***
-    await rehydrateAllChannelBuffers(newSequenceData.channels);
-
-    emit();
-    return true;
-  };
-
-  // Remove a sequence
-  const removeSequence = async (index) => { // <-- Make async
-    if (sequences.length <= 1) {
-      console.warn('Cannot remove the last sequence');
-      return false;
-    }
-
-    if (index < 0 || index >= sequences.length) {
-      console.warn('Invalid sequence index for removal:', index);
-      return false;
-    }
-
-    sequences.splice(index, 1);
-
-    // Adjust current index if necessary
-    if (currentSequenceIndex >= sequences.length) {
-      currentSequenceIndex = sequences.length - 1;
-    } else if (currentSequenceIndex > index) {
-      currentSequenceIndex--;
-    }
-
-    // Load current sequence
-    State.update(sequences[currentSequenceIndex].data);
-
-    // *** NEW: Rehydrate channel buffers ***
-    await rehydrateAllChannelBuffers(sequences[currentSequenceIndex].data.channels);
-
-    emit();
-    return true;
-  };
-
-  // Rename a sequence
-  const renameSequence = (index, newName) => {
-    if (index < 0 || index >= sequences.length) {
-      console.warn('Invalid sequence index for rename:', index);
-      return false;
-    }
-    
-    sequences[index] = {
-      ...sequences[index],
-      name: newName,
-      modified: Date.now()
-    };
-    
-    emit();
-    return true;
-  };
-  
-  // Duplicate a sequence
-  const duplicateSequence = (index) => {
-    if (sequences.length >= maxSequences) {
-      console.warn('Maximum number of sequences reached:', maxSequences);
-      return false;
-    }
-    
-    if (index < 0 || index >= sequences.length) {
-      console.warn('Invalid sequence index for duplication:', index);
-      return false;
-    }
-    
-    const sourceSequence = sequences[index];
-    const newSequence = {
-      id: generateSequenceId(),
-      name: sourceSequence.name + ' Copy',
-      data: { ...sourceSequence.data },
-      created: Date.now(),
-      modified: Date.now()
-    };
-    
-    sequences.push(newSequence);
-    emit();
-    return true;
-  };
-
-  // Import sequences from saved data
-  const importSequences = async (data) => { // <-- Make async
+  const importSequences = async data => {
     try {
       if (data.type === 'multi-sequence' && Array.isArray(data.sequences)) {
-        // Multi-sequence format
         sequences = data.sequences.map(seq => ({
-          id: seq.id || generateSequenceId(),
+          id: seq.id || generateId(),
           name: seq.name || 'Imported Sequence',
           data: seq.data,
-          created: seq.created || Date.now(),
-          modified: seq.modified || Date.now()
+          created: seq.created || now(),
+          modified: seq.modified || now()
         }));
-
-        currentSequenceIndex = Math.min(data.currentSequenceIndex || 0, sequences.length - 1);
-        maxSequences = data.maxSequences || 8;
+        currentSequenceIndex = Math.min(data.currentSequenceIndex ?? 0, sequences.length - 1);
+        maxSequences = data.maxSequences ?? 8;
       } else {
-        // Single sequence format - convert to multi-sequence
         sequences = [{
-          id: generateSequenceId(),
+          id: generateId(),
           name: data.projectName || 'Imported Sequence',
-          data: data,
-          created: Date.now(),
-          modified: Date.now()
+          data,
+          created: now(),
+          modified: now()
         }];
         currentSequenceIndex = 0;
       }
-
-      // Load current sequence
-      if (sequences.length > 0) {
+      if (sequences.length) {
         State.update(sequences[currentSequenceIndex].data);
-        // *** NEW: Rehydrate channel buffers ***
         await rehydrateAllChannelBuffers(sequences[currentSequenceIndex].data.channels);
       }
-
       emit();
       return true;
-    } catch (error) {
-      console.error('Error importing sequences:', error);
-      return false;
-    }
+    } catch (e) { console.error('Error importing sequences:', e); return false; }
   };
 
-  // Export all sequences for saving
-  const exportAllSequences = () => {
-    // Save current state first
-    saveCurrentStateToSequence();
-    
-    return {
-      version: '1.0',
-      type: 'multi-sequence',
-      sequences: sequences.map(seq => ({
-        id: seq.id,
-        name: seq.name,
-        created: seq.created,
-        modified: seq.modified,
-        data: {
-          ...seq.data,
-          // Remove non-serializable properties
-          channels: seq.data.channels.map(ch => {
-            const { buffer, reversedBuffer, activePlaybackScheduledTime, 
-                    activePlaybackDuration, activePlaybackTrimStart, 
-                    activePlaybackTrimEnd, activePlaybackReversed, ...rest } = ch;
-            return { ...rest, imageData: rest.imageData || null };
-          })
-        }
-      })),
-      currentSequenceIndex,
-      maxSequences
-    };
-  };
-  
-  // Navigation helpers
-  const goToNextSequence = () => {
-    const nextIndex = (currentSequenceIndex + 1) % sequences.length;
-    return switchToSequence(nextIndex);
-  };
-  
-  const goToPreviousSequence = () => {
-    const prevIndex = currentSequenceIndex === 0 ? sequences.length - 1 : currentSequenceIndex - 1;
-    return switchToSequence(prevIndex);
-  };
-  
-  // Event system
-  const subscribe = (callback) => {
-    listeners.add(callback);
-    return () => listeners.delete(callback);
-  };
-  
-  const emit = () => {
-    const sequenceInfo = {
-      sequences: getSequencesInfo(),
-      currentIndex: currentSequenceIndex,
-      currentSequence: getCurrentSequence(),
-      maxSequences
-    };
-    
-    listeners.forEach(callback => {
-      try {
-        callback(sequenceInfo);
-      } catch (error) {
-        console.error('Error in sequence manager listener:', error);
+  const exportAllSequences = () => (saveCurrent(), {
+    version: '1.0',
+    type: 'multi-sequence',
+    sequences: sequences.map(seq => ({
+      id: seq.id, name: seq.name, created: seq.created, modified: seq.modified,
+      data: {
+        ...seq.data,
+        channels: seq.data.channels.map(ch => {
+          const { buffer, reversedBuffer, activePlaybackScheduledTime, activePlaybackDuration,
+            activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed, ...rest } = ch;
+          return { ...rest, imageData: rest.imageData ?? null };
+        })
       }
-    });
-  };
-  
-  // Public API (return only async versions for updated methods)
+    })),
+    currentSequenceIndex,
+    maxSequences
+  });
+
+  // --- Navigation & Event API ---
+  const goToNextSequence = () => switchToSequence((currentSequenceIndex + 1) % sequences.length);
+  const goToPreviousSequence = () => switchToSequence(currentSequenceIndex === 0 ? sequences.length - 1 : currentSequenceIndex - 1);
+  const subscribe = cb => (listeners.add(cb), () => listeners.delete(cb));
+
+  // --- Public API ---
   return {
-    init,
-    getCurrentSequence,
-    getSequencesInfo,
-    switchToSequence,
-    addSequence,
-    removeSequence,
-    renameSequence,
-    duplicateSequence,
-    exportAllSequences,
-    importSequences,
-    goToNextSequence,
-    goToPreviousSequence,
-    subscribe,
+    init, getCurrentSequence, getSequencesInfo, switchToSequence,
+    addSequence, removeSequence, renameSequence, duplicateSequence,
+    exportAllSequences, importSequences, goToNextSequence, goToPreviousSequence, subscribe,
     get currentIndex() { return currentSequenceIndex; },
     get sequenceCount() { return sequences.length; },
     get maxSequences() { return maxSequences; },
