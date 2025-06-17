@@ -8,7 +8,7 @@ import SequenceManager from './sequenceManager.js';
 import SequenceUI from './sequenceUI.js';
 import MultiSequenceSaveLoad from './multiSequenceSaveLoad.js';
 
-const makeChannel = i => ({
+export const makeChannel = i => ({
   name: `Channel ${i + 1}`,
   steps: Array(64).fill(false),
   buffer: null, reversedBuffer: null, src: null, volume: 0.8, mute: false, solo: false, pitch: 0,

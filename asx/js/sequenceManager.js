@@ -2,9 +2,10 @@
 // js/sequenceManager.js (2025 Refactor: Minimal, DRY, Drop-in)
 import State from './state.js';
 import { rehydrateAllChannelBuffers } from './utils.js';
+import { makeChannel } from './app_multisequence.js';
 
 const SequenceManager = (() => {
-  let sequences = [], currentSequenceIndex = 0, maxSequences = 8;
+  let sequences = [], currentSequenceIndex = 0, maxSequences = 128;
   const listeners = new Set();
 
   // --- Shared helpers ---

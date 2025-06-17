@@ -1,10 +1,12 @@
 /***********************************************************************
- * ui.js – Minimized & Modernized (with ReferenceError fix)
+ * ui.js – Minimized & Modernized
+ * With Global Active Audio Aware Transport Animation
  ***********************************************************************/
 import State from './state.js';
-import { ctx } from './audioEngine.js';
+import { ctx } from './audioEngine.js'; // Base AudioContext
+import { globalActiveAudio, clamp } from './playbackEngine.js'; // Import global tracker
 import { renderWaveformToCanvas } from './waveformDisplay.js';
-import { debounce } from './uiHelpers.js'; // Assuming uiHelpers.js exists and exports debounce
+import { debounce } from './uiHelpers.js';
 import { 
     wireChannel, 
     updateChannelUI, 
@@ -13,6 +15,7 @@ import {
     channelZoomStates, 
     getChannelWaveformImage, 
     invalidateAllWaveformCaches,
+    invalidateChannelWaveformCache, // Make sure this is exported if used here
     DEBUG_CACHE
 } from './channelUI.js'; 
 
@@ -20,7 +23,6 @@ const container = document.getElementById('channels-container');
 const template = document.getElementById('channel-template');
 let projectNameInput = null;
 
-// --- Helper: update all channel UIs ---
 const updateAllChannels = (channels, prevChannels, currentGlobalStep, playActuallyDidChange, stepActuallyDidChange, fullPass = false) => {
   channels.forEach((ch, i) => {
     const el = container.children[i];
@@ -34,9 +36,7 @@ const updateAllChannels = (channels, prevChannels, currentGlobalStep, playActual
   });
 };
 
-// --- Global/project UI rendering ---
 const renderGlobalUI = (s, ps) => {
-  // Always check if input is defined
   if (projectNameInput && (!ps || s.projectName !== ps.projectName)) {
     projectNameInput.value = s.projectName;
     document.title = `${s.projectName} - Audional Sequencer`;
@@ -45,16 +45,13 @@ const renderGlobalUI = (s, ps) => {
   if (bpmInput && (!ps || s.bpm !== ps.bpm)) {
     bpmInput.value = s.bpm;
   }
-  const playbackModeBtn = document.getElementById('playback-mode-btn'); // Get it each time or cache it in init
+  const playbackModeBtn = document.getElementById('playback-mode-btn');
   if (playbackModeBtn && (!ps || s.playbackMode !== ps.playbackMode)) {
     playbackModeBtn.textContent = `Mode: ${s.playbackMode === 'continuous' ? 'Continuous' : 'Single'}`;
-    // playbackModeBtn.classList.toggle('active-continuous-mode', s.playbackMode === 'continuous');
   }
 };
 
-// --- Main render logic ---
 function render(s, ps) {
-  // If init() hasn't run, projectNameInput may still be null. That's fine, we guard everywhere.
   renderGlobalUI(s, ps);
   const prevChannelsState = ps?.channels ?? [];
   const currentChannelsState = s.channels;
@@ -64,14 +61,12 @@ function render(s, ps) {
   const playActuallyDidChange = !ps || s.playing !== ps.playing;
 
   if (lengthDidChange) {
-    invalidateAllWaveformCaches("Channel length changed");
-
+    invalidateAllWaveformCaches("Channel count changed in UI render");
     while (container.children.length > currentChannelsState.length) {
       const oldElement = container.lastChild;
       if (oldElement?.dataset.channelIndex) {
         const idx = +oldElement.dataset.channelIndex;
-        previewPlayheads.delete(idx);
-        mainTransportPlayheadRatios.delete(idx);
+        previewPlayheads.delete(idx); mainTransportPlayheadRatios.delete(idx);
       }
       oldElement?.remove();
     }
@@ -94,28 +89,21 @@ function render(s, ps) {
         for (const key in currentCh) {
           if (Object.prototype.hasOwnProperty.call(currentCh, key) && (!prevCh || currentCh[key] !== prevCh[key])) {
             const ignoredKeys = [
-              'activePlaybackScheduledTime', 
-              'activePlaybackDuration', 
-              'activePlaybackTrimStart', 
-              'activePlaybackTrimEnd', 
-              'activePlaybackReversed'
+              'activePlaybackScheduledTime', 'activePlaybackDuration', 
+              'activePlaybackTrimStart', 'activePlaybackTrimEnd', 'activePlaybackReversed'
             ];
             if (!ignoredKeys.includes(key)) {
               fullUpdateNeeded = true;
-              if (DEBUG_CACHE) {
-                if (key === 'buffer' || key === 'reversedBuffer') {
-                  if (currentCh[key] !== prevCh[key]) {
-                    console.log(`[UI Render Debug] Channel ${i} changed key "${key}" (buffer identity)`);
-                  }
-                } else if (key === 'steps') {
-                  if (JSON.stringify(currentCh[key]) !== JSON.stringify(prevCh[key])) {
-                    console.log(`[UI Render Debug] Channel ${i} changed key "steps"`);
-                  }
-                } else {
-                  console.log(`[UI Render Debug] Channel ${i} changed key "${key}" from`, prevCh[key], 'to', currentCh[key]);
-                }
+              if (DEBUG_CACHE && key === 'buffer' && currentCh[key] !== prevCh[key]) {
+                  console.log(`[UI Render Debug] Channel ${i} buffer identity changed. Invalidating cache.`);
+                  invalidateChannelWaveformCache(i, "Buffer identity changed in main render");
+              } else if (DEBUG_CACHE && (key === 'trimStart' || key === 'trimEnd') && currentCh[key] !== prevCh[key]) {
+                  console.log(`[UI Render Debug] Channel ${i} trim changed for key "${key}". Invalidating cache.`);
+                  invalidateChannelWaveformCache(i, `Trim changed for ${key} in main render`);
+              } else if (DEBUG_CACHE) {
+                  // console.log(`[UI Render Debug] Channel ${i} changed key "${key}" from`, prevCh[key], 'to', currentCh[key]);
               }
-              break;
+              // No break here, allow logging all changed keys if DEBUG_CACHE is on
             }
           }
         }
@@ -124,78 +112,135 @@ function render(s, ps) {
     });
 
     if (anyChannelDataRequiresFullUpdate) {
-      if (DEBUG_CACHE) console.log("[UI Render] Full update triggered");
+      if (DEBUG_CACHE) console.log("[UI Render] Full update triggered due to deep channel data change.");
       updateAllChannels(currentChannelsState, prevChannelsState, s.currentStep, playActuallyDidChange, stepActuallyDidChange, true);
     } else if (stepActuallyDidChange || playActuallyDidChange) {
-      if (DEBUG_CACHE) console.log("[UI Render] Light update triggered");
+      if (DEBUG_CACHE) console.log("[UI Render] Light update triggered due to step or play state change.");
       updateAllChannels(currentChannelsState, prevChannelsState, s.currentStep, playActuallyDidChange, stepActuallyDidChange, false);
     }
   }
 }
 
-// --- Animate transport playheads/waveforms ---
 function animateTransport() {
-  const { playing, channels } = State.get();
-  const now = ctx.currentTime;
+  const currentGlobalState = State.get();
+  const { channels, playing } = currentGlobalState;
+  const audioContextTimeNow = ctx.currentTime;
 
-  channels.forEach((ch, idx) => {
-    const el = container.children[idx];
-    const canvas = el?.querySelector('.waveform');
+  channels.forEach((currentSeqChannelConfig, channelIdx) => {
+    const channelElement = container.children[channelIdx];
+    const canvasElement = channelElement?.querySelector('.waveform');
 
-    if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) {
-      mainTransportPlayheadRatios.delete(idx);
+    if (!canvasElement || canvasElement.clientWidth === 0 || canvasElement.clientHeight === 0) {
+      mainTransportPlayheadRatios.delete(channelIdx);
       return;
     }
 
-    let currentPlayheadBufferRatio = null;
-    if (playing && ch.activePlaybackScheduledTime != null && ch.activePlaybackDuration > 0) {
-      const elapsed = now - ch.activePlaybackScheduledTime;
-      const progress = elapsed / ch.activePlaybackDuration;
+    let playheadInfo = {
+        bufferRatio: null,
+        bufferForDisplay: currentSeqChannelConfig.buffer,
+        trimStartForDisplay: currentSeqChannelConfig.trimStart,
+        trimEndForDisplay: currentSeqChannelConfig.trimEnd,
+        isReversedForDisplay: currentSeqChannelConfig.reverse,
+        fadeInForDisplay: currentSeqChannelConfig.fadeInTime,
+        fadeOutForDisplay: currentSeqChannelConfig.fadeOutTime,
+    };
 
-      if (progress >= 0 && progress < 1) {
-        const trimStart = ch.activePlaybackTrimStart ?? ch.trimStart ?? 0;
-        const trimEnd = ch.activePlaybackTrimEnd ?? ch.trimEnd ?? 1;
-        const trimmedDuration = trimEnd - trimStart;
+    const globallyPlayingInstance = globalActiveAudio.find(
+      sound => sound.channelIndex === channelIdx &&
+               audioContextTimeNow >= sound.audioContextStartTime &&
+               audioContextTimeNow < sound.audioContextStartTime + sound.audioContextDuration
+    );
 
-        if (trimmedDuration > 0) {
-          if (ch.activePlaybackReversed) {
-            currentPlayheadBufferRatio = trimEnd - (progress * trimmedDuration);
-          } else {
-            currentPlayheadBufferRatio = trimStart + (progress * trimmedDuration);
-          }
-          currentPlayheadBufferRatio = Math.max(0, Math.min(1, currentPlayheadBufferRatio));
+    if (playing && globallyPlayingInstance) {
+        const elapsed = audioContextTimeNow - globallyPlayingInstance.audioContextStartTime;
+        const progress = elapsed / globallyPlayingInstance.audioContextDuration;
+
+        const { sampleTrimStartRatio, sampleTrimEndRatio, isReversed: instanceIsReversed,
+                sampleBufferIdentity, instanceFadeInTime, instanceFadeOutTime } = globallyPlayingInstance;
+        const trimmedDurationRatio = sampleTrimEndRatio - sampleTrimStartRatio;
+
+        if (trimmedDurationRatio > 0 && progress >= 0 && progress < 1) {
+            playheadInfo.bufferRatio = instanceIsReversed
+                ? sampleTrimEndRatio - (progress * trimmedDurationRatio)
+                : sampleTrimStartRatio + (progress * trimmedDurationRatio);
+            playheadInfo.bufferRatio = clamp(playheadInfo.bufferRatio, 0, 1);
         }
-      }
+        
+        playheadInfo.bufferForDisplay = sampleBufferIdentity;
+        playheadInfo.trimStartForDisplay = sampleTrimStartRatio;
+        playheadInfo.trimEndForDisplay = sampleTrimEndRatio;
+        playheadInfo.isReversedForDisplay = instanceIsReversed;
+        playheadInfo.fadeInForDisplay = instanceFadeInTime;
+        playheadInfo.fadeOutForDisplay = instanceFadeOutTime;
+
+    } else if (playing && currentSeqChannelConfig.activePlaybackScheduledTime != null && currentSeqChannelConfig.activePlaybackDuration > 0) {
+        // Fallback for notes triggered and contained within the current sequence's display
+        const elapsed = audioContextTimeNow - currentSeqChannelConfig.activePlaybackScheduledTime;
+        const progress = elapsed / currentSeqChannelConfig.activePlaybackDuration;
+
+        if (progress >= 0 && progress < 1) {
+            const { activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed } = currentSeqChannelConfig;
+            const trimStart = activePlaybackTrimStart ?? currentSeqChannelConfig.trimStart ?? 0;
+            const trimEnd = activePlaybackTrimEnd ?? currentSeqChannelConfig.trimEnd ?? 1;
+            const isReversed = activePlaybackReversed ?? currentSeqChannelConfig.reverse;
+            const trimmedDuration = trimEnd - trimStart;
+
+            if (trimmedDuration > 0) {
+                playheadInfo.bufferRatio = isReversed
+                    ? trimEnd - (progress * trimmedDuration)
+                    : trimStart + (progress * trimmedDuration);
+                playheadInfo.bufferRatio = clamp(playheadInfo.bufferRatio, 0, 1);
+            }
+            // Properties for display are already set from currentSeqChannelConfig by default initialisation of playheadInfo
+        }
     }
 
-    const prevRatio = mainTransportPlayheadRatios.get(idx);
-    const movedSignificantly = currentPlayheadBufferRatio == null
-      ? prevRatio != null
-      : prevRatio == null || Math.abs((prevRatio || 0) - currentPlayheadBufferRatio) > 0.0001;
+    const previousPlayheadRatio = mainTransportPlayheadRatios.get(channelIdx);
+    const newPlayheadRatio = playheadInfo.bufferRatio;
 
-    if (movedSignificantly) {
-      if (currentPlayheadBufferRatio == null) {
-        mainTransportPlayheadRatios.delete(idx);
+    const playheadMovedSignificantly = newPlayheadRatio == null
+      ? previousPlayheadRatio != null
+      : previousPlayheadRatio == null || Math.abs((previousPlayheadRatio || 0) - newPlayheadRatio) > 0.0001;
+    
+    // Force redraw if a global sound is active, to ensure the correct waveform image is used,
+    // or if the playhead moved significantly.
+    if (playheadMovedSignificantly || (playing && globallyPlayingInstance)) {
+      if (newPlayheadRatio == null) {
+        mainTransportPlayheadRatios.delete(channelIdx);
       } else {
-        mainTransportPlayheadRatios.set(idx, currentPlayheadBufferRatio);
+        mainTransportPlayheadRatios.set(channelIdx, newPlayheadRatio);
       }
 
-      const cachedImage = getChannelWaveformImage(idx, ch, canvas);
-      renderWaveformToCanvas(canvas, ch.buffer, ch.trimStart, ch.trimEnd, {
-        cachedWaveformImage: cachedImage,
-        mainPlayheadRatio: currentPlayheadBufferRatio,
-        previewPlayheadRatio: previewPlayheads.get(idx),
-        fadeInTime: ch.fadeInTime,
-        fadeOutTime: ch.fadeOutTime,
-        zoomTrim: !!channelZoomStates[idx]
-      });
+      // Prepare a config object that getChannelWaveformImage can use.
+      // This config reflects the sound that is *actually playing* if a global one is active.
+      const configForWaveformImage = {
+          buffer: playheadInfo.bufferForDisplay,
+          trimStart: playheadInfo.trimStartForDisplay,
+          trimEnd: playheadInfo.trimEndForDisplay,
+          // getChannelWaveformImage primarily uses these for the cache key and drawing
+      };
+      
+      const waveformImageToRender = getChannelWaveformImage(channelIdx, configForWaveformImage, canvasElement);
+
+      renderWaveformToCanvas(canvasElement, 
+        playheadInfo.bufferForDisplay,       // Actual buffer to display
+        playheadInfo.trimStartForDisplay,    // Its trim settings
+        playheadInfo.trimEndForDisplay,
+        {
+          cachedWaveformImage: waveformImageToRender,
+          mainPlayheadRatio: playheadInfo.bufferRatio, // Calculated playhead position
+          previewPlayheadRatio: previewPlayheads.get(channelIdx),
+          fadeInTime: playheadInfo.fadeInForDisplay,    // Actual fades for this sound
+          fadeOutTime: playheadInfo.fadeOutForDisplay,
+          isReversed: playheadInfo.isReversedForDisplay,// Actual reverse state
+          zoomTrim: !!channelZoomStates[channelIdx]     // UI zoom state
+        });
     }
   });
 
   requestAnimationFrame(animateTransport);
 }
 
-// --- Entry point ---
 export function init() {
   projectNameInput = document.getElementById('project-name-input');
   if (projectNameInput) {
@@ -204,9 +249,9 @@ export function init() {
   }
 
   State.subscribe(render, { defer: true });
-  render(State.get(), null);
+  render(State.get(), null); // Initial render
 
-  requestAnimationFrame(animateTransport);
+  requestAnimationFrame(animateTransport); // Start waveform animation loop
 
   const loadButton = document.getElementById('load-btn');
   const loadInput = document.getElementById('load-input');
