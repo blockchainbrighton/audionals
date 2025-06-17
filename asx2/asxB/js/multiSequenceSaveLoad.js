@@ -1,7 +1,8 @@
 // js/multiSequenceSaveLoad.js
 import SequenceManager from './sequenceManager.js';
+import State from './state.js';
 
-const $ = (s, d = document) => d.querySelector(s), $$ = (s, d = document) => [...d.querySelectorAll(s)];
+const $ = (s, d = document) => d.querySelector(s);
 const sanitizeFilename = name => name.replace(/[^a-z0-9\-_.]/gi, '_').replace(/_{2,}/g, '_');
 const downloadFile = (blob, filename) => {
   const a = document.createElement('a');
@@ -13,35 +14,46 @@ const downloadFile = (blob, filename) => {
   URL.revokeObjectURL(a.href);
 };
 const isMultiSequenceFile = d => d?.type === 'multi-sequence' && Array.isArray(d.sequences) && d.version;
+const safe = fn => (...a) => { try { return fn(...a); } catch (e) { console.error(e); return false; } };
 
-const safe = fn => (...a) => {
-  try { return fn(...a); } catch (e) { console.error(e); return false; }
-};
+// Always returns a project name (from State), falls back to current sequence name, then default.
+const getProjectNameForFilename = () =>
+  (State.get().projectName && State.get().projectName.trim()) ||
+  SequenceManager.getCurrentSequence().name ||
+  'Multi-Sequence-Project';
 
+// --- Save/Export ---
 const saveMultiSequenceProject = safe(() => {
   const data = SequenceManager.exportAllSequences();
-  const name = SequenceManager.getCurrentSequence().name || 'Multi-Sequence-Project';
-  downloadFile(new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'}), sanitizeFilename(name) + '_multi.json');
+  const name = getProjectNameForFilename();
+  downloadFile(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
+    sanitizeFilename(name) + '_multi.json');
   return true;
 });
 
 const saveSingleSequence = safe((sequenceIndex = null) => {
-  const idx = sequenceIndex ?? SequenceManager.currentIndex, seqs = SequenceManager.getSequencesInfo();
+  const idx = sequenceIndex ?? SequenceManager.currentIndex,
+    seqs = SequenceManager.getSequencesInfo();
   if (idx < 0 || idx >= seqs.length) throw new Error('Invalid sequence index');
   const seq = SequenceManager._getSequences()[idx], d = seq.data;
-  const cleanChannels = d.channels.map(ch => {
-    const { buffer, reversedBuffer, activePlaybackScheduledTime, activePlaybackDuration, activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed, ...rest } = ch;
-    return { ...rest, imageData: rest.imageData ?? null };
-  });
+  const cleanChannels = d.channels.map(({ buffer, reversedBuffer, activePlaybackScheduledTime, activePlaybackDuration, activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed, ...rest }) => ({
+    ...rest, imageData: rest.imageData ?? null
+  }));
   const out = { ...d, channels: cleanChannels };
-  downloadFile(new Blob([JSON.stringify(out, null, 2)], {type: 'application/json'}), sanitizeFilename(seq.name || 'Sequence') + '.json');
+  const projName = getProjectNameForFilename();
+  const seqName = seq.name && seq.name !== projName ? `_${seq.name}` : '';
+  downloadFile(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }),
+    sanitizeFilename(projName + seqName) + '.json');
   return true;
 });
 
+// --- Load/Import ---
 const loadProject = async file => {
   try {
     const data = JSON.parse(await file.text());
-    return isMultiSequenceFile(data) ? await loadMultiSequenceProject(data, file.name) : await loadSingleSequenceProject(data, file.name);
+    return isMultiSequenceFile(data)
+      ? await loadMultiSequenceProject(data, file.name)
+      : await loadSingleSequenceProject(data, file.name);
   } catch (e) {
     console.error('Error loading project:', e);
     throw new Error(`Failed to load project: ${e.message}`);
@@ -87,6 +99,7 @@ const importSequence = safe(async file => {
   return { success: true, name };
 });
 
+// --- UI Save Dialog ---
 const getSaveOptions = () => {
   const info = SequenceManager.getSequencesInfo();
   return {
@@ -124,7 +137,7 @@ const createSaveModal = opts => {
   modal.querySelector('#save-cancel-btn').onclick = () => overlay.dispatchEvent(new CustomEvent('save-cancelled'));
   modal.querySelector('#save-confirm-btn').onclick = () => {
     const type = modal.querySelector('input[name="save-type"]:checked').value;
-    overlay.dispatchEvent(new CustomEvent('save-complete', {detail: {type, success: type === 'multi' ? saveMultiSequenceProject() : saveSingleSequence()}}));
+    overlay.dispatchEvent(new CustomEvent('save-complete', { detail: { type, success: type === 'multi' ? saveMultiSequenceProject() : saveSingleSequence() } }));
   };
   overlay.onclick = e => { if (e.target === overlay) overlay.dispatchEvent(new CustomEvent('save-cancelled')); };
   overlay.appendChild(modal);

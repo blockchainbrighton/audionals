@@ -137,7 +137,7 @@ const add = (id, ev, cb) => $(id).addEventListener(ev, cb);
 add('add-channel-btn', 'click', () => State.addChannel(makeChannel(State.get().channels.length)));
 add('play-btn', 'click', start);
 add('stop-btn', 'click', stop);
-add('load-btn', 'click', () => $('load-input').click());
+// add('load-btn', 'click', () => $('load-input').click());
 add('bpm-input', 'input', e => {
   let v = parseInt(e.target.value, 10);
   v = isNaN(v) && e.target.value !== "" ? State.get().bpm : isNaN(v) ? null : Math.min(Math.max(v, 1), 420);
@@ -177,7 +177,10 @@ add('load-input', 'change', async e => {
     else if (r.type === 'single-sequence-converted') showNotification('Single sequence loaded and converted to multi-sequence format');
   } catch (err) {
     alert(`Error loading project: ${f.name}. ${err.message}`);
-  } finally { e.target.value = ""; }
+  } finally {
+    // ALWAYS clear the value here
+    e.target.value = "";
+  }
 });
 
 // PRESET DROPDOWN
