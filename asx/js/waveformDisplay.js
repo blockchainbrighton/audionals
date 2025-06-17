@@ -1,264 +1,151 @@
 // js/waveformDisplay.js
 
-/**
- * Generates an image (on an in-memory canvas) of the static waveform path.
- * @param {AudioBuffer} bufferToDisplay - The audio buffer to visualize (ALWAYS THE FORWARD BUFFER).
- * @param {number} trimStartRatio - The start of the trim region (0.0 to 1.0 of buffer).
- * @param {number} trimEndRatio - The end of the trim region (0.0 to 1.0 of buffer).
- * @param {object} options - Drawing options.
- * @param {boolean} options.zoomTrim - Whether to zoom into the trimmed area.
- * @param {number} targetCanvasWidth - The width of the target visible canvas.
- * @param {number} targetCanvasHeight - The height of the target visible canvas.
- * @param {number} dpr - Device Pixel Ratio.
- * @param {string} waveformColor - The color for the waveform path.
- * @returns {HTMLCanvasElement | null} An in-memory canvas element containing the waveform path, or null if error.
- */
+const getStyle = (k, d) =>
+  (getComputedStyle(document.documentElement).getPropertyValue(k).trim() || d);
+
+const waveformColor = () => getStyle('--step-play', '#4caf50'),
+  mainPlayheadColor = () => getStyle('--step-playhead-outline', '#4caf50'),
+  previewPlayheadColor = () => getStyle('--accent', '#ff9800'),
+  trimShadeColor = 'rgba(0,0,0,0.6)',
+  fadeOverlayColor = 'rgba(0,0,0,0.3)';
+
+// Map [0,1] buffer ratio to canvas X (zoom aware)
+const mapBufferRatioToCanvasX = (bufferRatio, viewStartRatio, viewRangeRatio, W) =>
+  (viewRangeRatio > 1e-5 && bufferRatio >= viewStartRatio && bufferRatio <= viewStartRatio + viewRangeRatio)
+    ? ((bufferRatio - viewStartRatio) / viewRangeRatio) * W : null;
+
+// Min/max of audio data over [from,to)
+const minMax = (audioData, from, to) => {
+  let min = 1, max = -1;
+  for (let i = from; i < to; ++i) {
+    const v = audioData[i];
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  return [min === 1 && max === -1 ? 0 : min, min === 1 && max === -1 ? 0 : max];
+};
+
+// Generate an image (canvas) of static waveform path
 export function generateWaveformPathImage(
-  bufferToDisplay,
-  trimStartRatio,
-  trimEndRatio,
-  options = {},
-  targetCanvasWidth,
-  targetCanvasHeight,
-  dpr,
-  waveformColor
+  bufferToDisplay, trimStartRatio, trimEndRatio, options = {},
+  targetCanvasWidth, targetCanvasHeight, dpr, color
 ) {
-  const { zoomTrim = false } = options;
-
-  const offscreenCanvas = document.createElement('canvas');
-  offscreenCanvas.width = targetCanvasWidth * dpr;
-  offscreenCanvas.height = targetCanvasHeight * dpr;
-  const ctx = offscreenCanvas.getContext('2d');
+  if (!bufferToDisplay || typeof bufferToDisplay.getChannelData !== 'function') return null;
+  const { zoomTrim = false } = options,
+    W = targetCanvasWidth, H = targetCanvasHeight,
+    audioData = bufferToDisplay.getChannelData(0),
+    L = audioData.length,
+    [viewStart, viewEnd] = zoomTrim && trimEndRatio > trimStartRatio
+      ? [Math.floor(trimStartRatio * L), Math.floor(trimEndRatio * L)]
+      : [0, L],
+    n = viewEnd - viewStart;
+  const c = document.createElement('canvas');
+  c.width = W * dpr, c.height = H * dpr;
+  const ctx = c.getContext('2d');
   if (!ctx) return null;
-
   ctx.scale(dpr, dpr);
-  const W = targetCanvasWidth;
-  const H = targetCanvasHeight;
-
-  const audioData = bufferToDisplay.getChannelData(0);
-  let viewStartSample = 0;
-  let viewEndSample = audioData.length;
-
-  if (zoomTrim && trimEndRatio > trimStartRatio) {
-      viewStartSample = Math.floor(trimStartRatio * audioData.length);
-      viewEndSample = Math.floor(trimEndRatio * audioData.length);
-  }
-  
-  const viewLengthSamples = viewEndSample - viewStartSample;
-  if (viewLengthSamples <= 0) { // No valid range to draw
-      ctx.clearRect(0,0,W,H); // Ensure canvas is blank
-      return offscreenCanvas;
-  }
-
-  const samplesPerPixel = viewLengthSamples / W;
-  const amp = H / 2;
-
-  ctx.strokeStyle = waveformColor;
+  ctx.strokeStyle = color;
   ctx.lineWidth = 1;
   ctx.beginPath();
-
-  for (let x = 0; x < W; x++) {
-      const C_PIXELS_TO_SKIP = 0.5; // Optimisation for dense waveforms, number of pixels to average before drawing a vertical line
-      if (x > 0 && x < W -1  && x % (C_PIXELS_TO_SKIP +1) !== 0) {
-          continue;
-      }
-      const startSampleInView = Math.floor(x * samplesPerPixel);
-      const endSampleInView = Math.floor((x + 1) * samplesPerPixel);
-      
-      let min = 1.0, max = -1.0;
-
-      for (let i = startSampleInView; i < endSampleInView; i++) {
-          const sampleIdx = viewStartSample + i;
-          if (sampleIdx >= viewEndSample || sampleIdx < viewStartSample) continue; 
-          
-          const datum = audioData[sampleIdx];
-          if (datum === undefined) continue;
-          if (datum < min) min = datum;
-          if (datum > max) max = datum;
-      }
-      if (min === 1.0 && max === -1.0) { // No data points found for this pixel, or all undefined
-           min = 0; max = 0; 
-      }
-
-      const yMax = (1 - max) * amp;
-      const yMin = (1 - min) * amp;
-
-      if (x === 0) {
-          ctx.moveTo(x, yMax);
-          if (yMin !== yMax) ctx.lineTo(x, yMin);
-      } else {
-          ctx.lineTo(x, yMax);
-          if (yMin !== yMax) ctx.lineTo(x, yMin);
-      }
+  const samplesPerPixel = n / W, amp = H / 2;
+  for (let x = 0; x < W; ++x) {
+    if (x && x < W - 1 && x % 1.5 !== 0) continue;
+    const a = Math.floor(x * samplesPerPixel),
+      b = Math.floor((x + 1) * samplesPerPixel),
+      [min, max] = minMax(audioData, viewStart + a, Math.min(viewStart + b, viewEnd));
+    const yMax = (1 - max) * amp, yMin = (1 - min) * amp;
+    x === 0 ? ctx.moveTo(x, yMax) : ctx.lineTo(x, yMax);
+    if (yMin !== yMax) ctx.lineTo(x, yMin);
   }
   ctx.stroke();
-  return offscreenCanvas;
+  return c;
 }
 
-
-/**
-* Draws the waveform, trimmed regions, fades, and playheads onto a canvas.
-* Can use a pre-rendered waveform path image for performance.
-* @param {HTMLCanvasElement} canvas - The canvas element to draw on.
-* @param {AudioBuffer | null} bufferToDisplay - The audio buffer (ALWAYS THE FORWARD BUFFER). Used for duration/fade calculations.
-* @param {number} trimStartRatio - The start of the trim region (0.0 to 1.0 of buffer).
-* @param {number} trimEndRatio - The end of the trim region (0.0 to 1.0 of buffer).
-* @param {object} [options={}] - Optional drawing parameters.
-* @param {HTMLCanvasElement | null} [options.cachedWaveformImage=null] - Pre-rendered waveform path.
-* @param {number | null} [options.mainPlayheadRatio=null]
-* @param {number | null} [options.previewPlayheadRatio=null]
-* @param {number} [options.fadeInTime=0]
-* @param {number} [options.fadeOutTime=0]
-* @param {boolean} [options.isReversed=false] - Affects playhead interpretation.
-* @param {boolean} [options.zoomTrim=false]
-*/
+// Draws waveform, trim, fades, and playheads onto a canvas
 export function renderWaveformToCanvas(
   canvas, bufferToDisplay, trimStartRatio, trimEndRatio, options = {}
 ) {
+  if (!canvas) return;
   const {
     cachedWaveformImage = null,
     mainPlayheadRatio = null,
     previewPlayheadRatio = null,
     fadeInTime = 0,
     fadeOutTime = 0,
-    // isReversed = false, // Not directly used for drawing path, but affects playhead logic if needed here
     zoomTrim = false
-  } = options;
-
-  const dpr = window.devicePixelRatio || 1;
-  const canvasWidth = canvas.clientWidth;
-  const canvasHeight = canvas.clientHeight || 100;
-
-  if (canvasWidth === 0 || canvasHeight === 0) return;
-
-  // Adjust canvas size if necessary
-  if (canvas.width !== canvasWidth * dpr || canvas.height !== canvasHeight * dpr) {
-      canvas.width = canvasWidth * dpr;
-      canvas.height = canvasHeight * dpr;
-  }
-
+  } = options,
+    dpr = window.devicePixelRatio || 1,
+    W = canvas.clientWidth,
+    H = canvas.clientHeight || 100;
+  if (!W || !H) return;
+  if (canvas.width !== W * dpr || canvas.height !== H * dpr)
+    canvas.width = W * dpr, canvas.height = H * dpr;
   const ctx = canvas.getContext('2d');
-  ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform before scaling
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.scale(dpr, dpr);
-  const W = canvasWidth;
-  const H = canvasHeight;
   ctx.clearRect(0, 0, W, H);
 
-  const style = getComputedStyle(document.documentElement);
-  const waveformColor = style.getPropertyValue('--step-play').trim() || '#4caf50';
-  const trimShadeColor = 'rgba(0,0,0,0.6)';
-  const mainPlayheadColor = style.getPropertyValue('--step-playhead-outline').trim() || '#4caf50';
-  const previewPlayheadColor = style.getPropertyValue('--accent').trim() || '#ff9800';
-  const fadeOverlayColor = 'rgba(0,0,0,0.3)';
+  // 1. Waveform
+  let img = cachedWaveformImage;
+  if (!img && bufferToDisplay && typeof bufferToDisplay.getChannelData === 'function')
+    img = generateWaveformPathImage(
+      bufferToDisplay, trimStartRatio, trimEndRatio,
+      { zoomTrim }, W, H, dpr, waveformColor()
+    );
+  if (img) ctx.drawImage(img, 0, 0, W, H);
 
-  // 1. Draw Waveform Path
-  let pathImageToDraw = cachedWaveformImage;
-  if (!pathImageToDraw && bufferToDisplay) {
-      // If no cached image, generate it now (for direct calls e.g. from updateChannelUI full render)
-      pathImageToDraw = generateWaveformPathImage(
-          bufferToDisplay, trimStartRatio, trimEndRatio,
-          { zoomTrim }, // Pass relevant options for path generation
-          W, H, dpr, waveformColor
-      );
-  }
-
-  if (pathImageToDraw) {
-      ctx.drawImage(pathImageToDraw, 0, 0, W, H);
-  }
-
-  // Continue only if bufferToDisplay is valid for drawing overlays
-  if (!bufferToDisplay) return;
-
-  // 2. Shade outside trimmed region (only when not zoomed)
-  if (!zoomTrim) {
+  // 2. Trim shade
+  if (bufferToDisplay && typeof bufferToDisplay.getChannelData === 'function' && !zoomTrim) {
     ctx.fillStyle = trimShadeColor;
-    const trimStartXVisual = trimStartRatio * W;
-    const trimEndXVisual = trimEndRatio * W;
-    ctx.fillRect(0, 0, trimStartXVisual, H);
-    ctx.fillRect(trimEndXVisual, 0, W - trimEndXVisual, H);
+    ctx.fillRect(0, 0, trimStartRatio * W, H);
+    ctx.fillRect(trimEndRatio * W, 0, W - trimEndRatio * W, H);
   }
 
-  // 3. Visual Fades
-  const bufferDuration = bufferToDisplay.duration;
-  // selectedSegmentDurationSec is the duration of the audio segment currently *selected by trim handles*
-  let selectedSegmentDurationSec = (trimEndRatio - trimStartRatio) * bufferDuration;
-  
-  // Determine the drawing start/end points on the canvas for the selected segment
-  let drawRegionStartXOnCanvas = 0;
-  let drawRegionWidthOnCanvas = W;
-
-  if (!zoomTrim) {
-    drawRegionStartXOnCanvas = trimStartRatio * W;
-    drawRegionWidthOnCanvas = (trimEndRatio - trimStartRatio) * W;
-  }
-
-  if (selectedSegmentDurationSec > 0.00001 && drawRegionWidthOnCanvas > 0) {
-    if (fadeInTime > 0) {
-      const fadeInDurationRatioInSegment = Math.min(fadeInTime / selectedSegmentDurationSec, 1.0);
-      const fadeInWidthPx = fadeInDurationRatioInSegment * drawRegionWidthOnCanvas;
-      const gradEndX = drawRegionStartXOnCanvas + fadeInWidthPx;
-      if (gradEndX > drawRegionStartXOnCanvas) { // Ensure positive width for gradient
-          const fadeInGradient = ctx.createLinearGradient(drawRegionStartXOnCanvas, 0, gradEndX, 0);
-          fadeInGradient.addColorStop(0, fadeOverlayColor);
-          fadeInGradient.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.fillStyle = fadeInGradient;
-          ctx.fillRect(drawRegionStartXOnCanvas, 0, fadeInWidthPx, H);
+  // 3. Fades
+  if (bufferToDisplay && typeof bufferToDisplay.getChannelData === 'function') {
+    const D = bufferToDisplay.duration,
+      seg = (trimEndRatio - trimStartRatio) * D,
+      [drawStartX, drawW] = zoomTrim ? [0, W] : [trimStartRatio * W, (trimEndRatio - trimStartRatio) * W];
+    if (seg > 1e-5 && drawW > 0) {
+      if (fadeInTime > 0) {
+        const fadeW = Math.min(fadeInTime / seg, 1) * drawW,
+          grad = ctx.createLinearGradient(drawStartX, 0, drawStartX + fadeW, 0);
+        grad.addColorStop(0, fadeOverlayColor);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(drawStartX, 0, fadeW, H);
       }
-    }
-    if (fadeOutTime > 0) {
-      const fadeOutDurationRatioInSegment = Math.min(fadeOutTime / selectedSegmentDurationSec, 1.0);
-      const fadeOutWidthPx = fadeOutDurationRatioInSegment * drawRegionWidthOnCanvas;
-      const gradStartX = (drawRegionStartXOnCanvas + drawRegionWidthOnCanvas) - fadeOutWidthPx;
-       if (gradStartX < (drawRegionStartXOnCanvas + drawRegionWidthOnCanvas) ) { // Ensure positive width
-          const fadeOutGradient = ctx.createLinearGradient(gradStartX, 0, drawRegionStartXOnCanvas + drawRegionWidthOnCanvas, 0);
-          fadeOutGradient.addColorStop(0, 'rgba(0,0,0,0)');
-          fadeOutGradient.addColorStop(1, fadeOverlayColor);
-          ctx.fillStyle = fadeOutGradient;
-          ctx.fillRect(gradStartX, 0, fadeOutWidthPx, H);
+      if (fadeOutTime > 0) {
+        const fadeW = Math.min(fadeOutTime / seg, 1) * drawW,
+          gradStartX = drawStartX + drawW - fadeW,
+          grad = ctx.createLinearGradient(gradStartX, 0, drawStartX + drawW, 0);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, fadeOverlayColor);
+        ctx.fillStyle = grad;
+        ctx.fillRect(gradStartX, 0, fadeW, H);
       }
     }
   }
 
-  // 4. Draw playheads
-  // Ratios are relative to the full buffer. Map them to the current view (zoomed or full).
-  const viewStartRatio = zoomTrim ? trimStartRatio : 0;
-  const viewEndRatio = zoomTrim ? trimEndRatio : 1;
-  const viewRangeRatio = viewEndRatio - viewStartRatio;
-
-  function mapBufferRatioToCanvasX(bufferRatio) {
-      if (viewRangeRatio <= 0.00001) return null; // Avoid division by zero or tiny range
-      if (bufferRatio < viewStartRatio || bufferRatio > viewEndRatio) return null; 
-      const normalizedPositionInView = (bufferRatio - viewStartRatio) / viewRangeRatio;
-      return normalizedPositionInView * W;
-  }
-    
-  // Main playhead
-  if (mainPlayheadRatio !== null) {
-    const playheadX = mapBufferRatioToCanvasX(mainPlayheadRatio);
-    if (playheadX !== null) {
-      ctx.save();
-      ctx.strokeStyle = mainPlayheadColor;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(playheadX, 0);
-      ctx.lineTo(playheadX, H);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-  // Preview playhead
-  if (previewPlayheadRatio !== null) {
-    const playheadX = mapBufferRatioToCanvasX(previewPlayheadRatio);
-    if (playheadX !== null) {
-      ctx.save();
-      ctx.strokeStyle = previewPlayheadColor;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      ctx.moveTo(playheadX, 0);
-      ctx.lineTo(playheadX, H);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
+  // 4. Playheads
+  if (!bufferToDisplay || typeof bufferToDisplay.getChannelData !== 'function') return;
+  const viewStartRatio = zoomTrim ? trimStartRatio : 0,
+    viewRangeRatio = zoomTrim ? trimEndRatio - trimStartRatio : 1;
+  const drawPlayhead = (ratio, color, dash) => {
+    const x = mapBufferRatioToCanvasX(ratio, viewStartRatio, viewRangeRatio, W);
+    if (x === null) return;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    if (dash) ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+    ctx.stroke();
+    ctx.restore();
+  };
+  if (mainPlayheadRatio !== null)
+    drawPlayhead(mainPlayheadRatio, mainPlayheadColor(), false);
+  if (previewPlayheadRatio !== null)
+    drawPlayhead(previewPlayheadRatio, previewPlayheadColor(), true);
 }

@@ -1,568 +1,217 @@
 /***********************************************************************
- * channelUI.js – Optimized for Waveform Caching & Debugging
+ * channelUI.js – Optimized & Minified
  ***********************************************************************/
 import State from './state.js';
 import { loadSample, resolveOrdinalURL } from './utils.js';
 import { audionalIDs } from './samples.js';
 import { renderWaveformToCanvas, generateWaveformPathImage } from './waveformDisplay.js';
-import { createReversedBuffer } from './app.js';
+import { createReversedBuffer } from './app_multisequence.js';
 import { clamp, auditionSample, setSlider, formatHz } from './uiHelpers.js';
 
-export const previewPlayheads = new Map();
-export const mainTransportPlayheadRatios = new Map();
-export const channelZoomStates = []; // Initialize as an array
-const MIN_TRIM_SEPARATION = 0.001;
+export const previewPlayheads = new Map(), mainTransportPlayheadRatios = new Map(), channelZoomStates = [];
+const MIN_TRIM_SEPARATION = 1e-3, waveformImageCache = new Map();
+export const DEBUG_CACHE = true;const _attach = (el, ev, fn) => el && el.addEventListener(ev, fn);
+const _setToggle = (btn, key, idx) => _attach(btn, 'click', () => State.updateChannel(idx, { [key]: !State.get().channels[idx][key] }));
 
-// --- Debug Flags ---
-export const DEBUG_CACHE = true; 
-
-// --- Waveform Cache Management ---
-const waveformImageCache = new Map(); 
-
-function generateCacheKey(trimStart, trimEnd, canvasWidth, canvasHeight, zoomTrim, dpr) {
-    const qWidth = Math.round(canvasWidth); 
-    const qHeight = Math.round(canvasHeight);
-    return `w${qWidth}_h${qHeight}_ts${trimStart.toFixed(6)}_te${trimEnd.toFixed(6)}_z${zoomTrim}_dpr${dpr.toFixed(2)}`;
-}
-
-export function getChannelWaveformImage(channelIndex, channelData, canvasElement) {
-    const dpr = window.devicePixelRatio || 1;
-    const canvasWidth = canvasElement.clientWidth;
-    const canvasHeight = canvasElement.clientHeight;
-    const currentZoomState = !!channelZoomStates[channelIndex];
-
-    if (!channelData.buffer || canvasWidth === 0 || canvasHeight === 0) {
-        if (waveformImageCache.has(channelIndex)) {
-            if (DEBUG_CACHE) console.log(`[Cache] Ch ${channelIndex}: Invalidate (no buffer/dims) in getChannelWaveformImage`);
-            invalidateChannelWaveformCache(channelIndex, "No buffer or zero dimensions in getChannelWaveformImage");
-        }
-        return null;
+const genCacheKey = (ts, te, w, h, z, d) => `w${Math.round(w)}_h${Math.round(h)}_ts${ts.toFixed(6)}_te${te.toFixed(6)}_z${z}_dpr${d.toFixed(2)}`;
+export const invalidateChannelWaveformCache = (idx, r = "Generic invalidation") => {
+  DEBUG_CACHE && console.log(`[Cache Invalidate] Ch ${idx} triggered. Reason: ${r}.`); waveformImageCache.delete(idx);
+};
+export const invalidateAllWaveformCaches = (r = "Generic full invalidation") => {
+  DEBUG_CACHE && console.log(`[Cache Invalidate] ALL triggered. Reason: ${r}.`);
+  waveformImageCache.forEach((_, idx) => { DEBUG_CACHE && waveformImageCache.has(idx) && console.log(`[Cache Invalidate]   - Ch ${idx} (part of ALL)`); waveformImageCache.delete(idx); });
+};
+export function getChannelWaveformImage(idx, ch, c) {
+    const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight, z = !!channelZoomStates[idx];
+    // If no buffer or dimensions, clean up cache and return null (don't log errors)
+    if (!ch.buffer || !w || !h) {
+      if (waveformImageCache.has(idx) && DEBUG_CACHE)
+        console.log(`[Cache] Ch ${idx}: Invalidate (no buffer/dims) in getChannelWaveformImage`);
+      invalidateChannelWaveformCache(idx, "No buffer or zero dimensions");
+      return null;
     }
-
-    const newCacheKey = generateCacheKey(
-        channelData.trimStart, channelData.trimEnd,
-        canvasWidth, canvasHeight, currentZoomState, dpr
+    const k = genCacheKey(ch.trimStart, ch.trimEnd, w, h, z, dpr),
+      cached = waveformImageCache.get(idx);
+    // Cache HIT
+    if (
+      cached &&
+      cached.bufferIdentity === ch.buffer &&
+      cached.cacheKey === k &&
+      cached.image &&
+      cached.dpr === dpr
+    ) {
+      DEBUG_CACHE && console.log(`[Cache] Ch ${idx}: HIT. Key: ${k}`);
+      return cached.image;
+    }
+    // Cache MISS: Only verbose log, not error
+    DEBUG_CACHE && (
+      cached
+        ? console.log(`[Cache] Ch ${idx}: MISS (${["bufferIdentity", "cacheKey", "image", "dpr"]
+          .map(f => cached[f] !== { bufferIdentity: ch.buffer, cacheKey: k, image: true, dpr }[f] && f)
+          .filter(Boolean).join(", ")}). Regenerating. Old Key: ${cached.cacheKey}, New Key: ${k}`)
+        : console.log(`[Cache] Ch ${idx}: MISS (no entry). New Key: ${k}`)
     );
-
-    const cachedEntry = waveformImageCache.get(channelIndex);
-
-    if (cachedEntry &&
-        cachedEntry.bufferIdentity === channelData.buffer &&
-        cachedEntry.cacheKey === newCacheKey &&
-        cachedEntry.image &&
-        cachedEntry.dpr === dpr) {
-        if (DEBUG_CACHE) console.log(`[Cache] Ch ${channelIndex}: HIT. Key: ${newCacheKey}`);
-        return cachedEntry.image;
-    }
-
-    if (DEBUG_CACHE) {
-        if (!cachedEntry) {
-            console.log(`[Cache] Ch ${channelIndex}: MISS (no entry). New Key: ${newCacheKey}`);
-        } else {
-            let missReason = [];
-            if (cachedEntry.bufferIdentity !== channelData.buffer) missReason.push("bufferIdentity mismatch");
-            if (cachedEntry.cacheKey !== newCacheKey) missReason.push(`cacheKey mismatch (old: ${cachedEntry.cacheKey}, new: ${newCacheKey})`);
-            if (!cachedEntry.image) missReason.push("no image in cache");
-            if (cachedEntry.dpr !== dpr) missReason.push(`DPR mismatch (old: ${cachedEntry.dpr}, new: ${dpr})`);
-            console.log(`[Cache] Ch ${channelIndex}: MISS (${missReason.join(', ')}). Regenerating. Old Key: ${cachedEntry.cacheKey}, New Key: ${newCacheKey}`);
-        }
-    }
-    
-    const style = getComputedStyle(document.documentElement);
-    const waveformColor = style.getPropertyValue('--step-play').trim() || '#4caf50';
-
-    const newImage = generateWaveformPathImage(
-        channelData.buffer,
-        channelData.trimStart,
-        channelData.trimEnd,
-        { zoomTrim: currentZoomState },
-        canvasWidth,
-        canvasHeight,
-        dpr,
-        waveformColor
-    );
-
-    if (newImage) {
-        waveformImageCache.set(channelIndex, {
-            image: newImage,
-            cacheKey: newCacheKey,
-            bufferIdentity: channelData.buffer,
-            dpr: dpr
-        });
-        if (DEBUG_CACHE) console.log(`[Cache] Ch ${channelIndex}: Generated & Stored. Key: ${newCacheKey}`);
+    const color = getComputedStyle(document.documentElement).getPropertyValue('--step-play').trim() || '#4caf50',
+      img = generateWaveformPathImage(ch.buffer, ch.trimStart, ch.trimEnd, { zoomTrim: z }, w, h, dpr, color);
+    // Only log a warning if there *should* be a buffer but image generation fails (rare)
+    if (img) {
+      waveformImageCache.set(idx, { image: img, cacheKey: k, bufferIdentity: ch.buffer, dpr });
+      DEBUG_CACHE && console.log(`[Cache] Ch ${idx}: Generated & Stored. Key: ${k}`);
+      return img;
     } else {
-        if (DEBUG_CACHE) console.error(`[Cache] Ch ${channelIndex}: FAILED to generate image.`);
+      // Only log an error if a buffer exists but image could not be generated (should be rare)
+      DEBUG_CACHE && ch.buffer && typeof ch.buffer.getChannelData === 'function'
+        && console.warn(`[Cache] Ch ${idx}: Buffer present but FAILED to generate image.`);
+      return null;
     }
-    return newImage;
-}
-
-export function invalidateChannelWaveformCache(channelIndex, reason = "Generic invalidation") {
-    if (DEBUG_CACHE) console.log(`[Cache Invalidate] Ch ${channelIndex} triggered. Reason: ${reason}.`);
-    waveformImageCache.delete(channelIndex);
-}
-
-export function invalidateAllWaveformCaches(reason = "Generic full invalidation") {
-    if (DEBUG_CACHE) console.log(`[Cache Invalidate] ALL triggered. Reason: ${reason}.`);
-    waveformImageCache.forEach((_entry, channelIndex) => {
-        if (DEBUG_CACHE && waveformImageCache.has(channelIndex)) console.log(`[Cache Invalidate]   - Ch ${channelIndex} (part of ALL)`);
-        waveformImageCache.delete(channelIndex);
-    });
-}
-
+  }
+  
 export function updateHandles(el, ch, idx) {
-  const handleStart = el.querySelector('.handle-start');
-  const handleEnd = el.querySelector('.handle-end');
-  if (!handleStart || !handleEnd) return;
-
-  const handleWidth = handleStart.offsetWidth || 8; 
-  const isZoomActive = !!channelZoomStates[idx];
-  
-  handleStart.style.left = isZoomActive ? '0%' : `${ch.trimStart * 100}%`;
-  handleEnd.style.left = isZoomActive ? `calc(100% - ${handleWidth}px)` : `calc(${ch.trimEnd * 100}% - ${handleWidth}px)`;
+  const [hStart, hEnd] = [el.querySelector('.handle-start'), el.querySelector('.handle-end')];
+  if (!hStart || !hEnd) return; const hw = hStart.offsetWidth || 8, z = !!channelZoomStates[idx];
+  hStart.style.left = z ? '0%' : `${ch.trimStart * 100}%`;
+  hEnd.style.left = z ? `calc(100% - ${hw}px)` : `calc(${ch.trimEnd * 100}% - ${hw}px)`;
 }
-
-const _attach = (element, eventType, handlerFn) => {
-    if (element) {
-        element.addEventListener(eventType, handlerFn);
-    }
+const loadFromURL = async (rawUrl, idx, urlInput) => {
+  const u = resolveOrdinalURL(rawUrl); try {
+    const { buffer, imageData } = await loadSample(u), ch = State.get().channels[idx];
+    invalidateChannelWaveformCache(idx, "Sample loaded from URL");
+    const reversedBuffer = ch.reverse && buffer ? await createReversedBuffer(buffer) : null;
+    State.updateChannel(idx, { buffer, reversedBuffer, src: u, imageData: imageData || null, trimStart: 0, trimEnd: 1, activePlaybackScheduledTime: null });
+    urlInput && (urlInput.value = u);
+  } catch (e) { alert(`Failed to load sample from URL: ${e.message || e}`); console.error(e); }
 };
-
-const _setToggle = (buttonElement, stateKey, channelIndex) => {
-  _attach(buttonElement, 'click', () => {
-    const currentChannelState = State.get().channels[channelIndex];
-    State.updateChannel(channelIndex, { [stateKey]: !currentChannelState[stateKey] });
-  });
+const handleAudition = (long, xRatio, ch, idx, c) => {
+  if (!ch?.buffer || !c) return;
+  const { buffer, reversedBuffer, trimStart, trimEnd, fadeInTime, fadeOutTime, reverse, pitch = 0 } = ch, srcBuf = reverse && reversedBuffer ? reversedBuffer : buffer, rate = 2 ** (pitch / 12);
+  let startRatio = long ? xRatio : 0, durRatio = long ? 1 - xRatio : 1, fullDur = trimEnd - trimStart; if (fullDur <= 0) return;
+  let offsetRatio = reverse ? (((1 - trimEnd) + (startRatio * fullDur)) * buffer.duration) / srcBuf.duration : trimStart + (startRatio * fullDur), durInBuf = durRatio * fullDur, tOffset = offsetRatio * srcBuf.duration, tDur = durInBuf * buffer.duration, audible = tDur / rate;
+  if (audible <= 0.001) return;
+  const playheadRatio = reverse ? trimEnd - (startRatio * fullDur) : trimStart + (startRatio * fullDur);
+  previewPlayheads.set(idx, playheadRatio);
+  const img = getChannelWaveformImage(idx, ch, c);
+  renderWaveformToCanvas(c, ch.buffer, trimStart, trimEnd, { cachedWaveformImage: img, previewPlayheadRatio: playheadRatio, mainPlayheadRatio: mainTransportPlayheadRatios.get(idx), fadeInTime, fadeOutTime, isReversed: reverse, zoomTrim: !!channelZoomStates[idx] });
+  auditionSample(srcBuf, tOffset, audible);
+  setTimeout(() => { if (previewPlayheads.get(idx) === playheadRatio) { previewPlayheads.delete(idx); const st = State.get().channels[idx]; st && c.clientWidth > 0 && renderWaveformToCanvas(c, st.buffer, st.trimStart, st.trimEnd, { cachedWaveformImage: getChannelWaveformImage(idx, st, c), mainPlayheadRatio: mainTransportPlayheadRatios.get(idx), fadeInTime: st.fadeInTime, fadeOutTime: st.fadeOutTime, isReversed: st.reverse, zoomTrim: !!channelZoomStates[idx] }); } }, Math.min(audible * 1000, 2500) + 50);
 };
-
-async function loadFromURL(rawUrl, channelIndex, urlInputElement) {
-  const resolvedUrl = resolveOrdinalURL(rawUrl);
-  try {
-    const { buffer, imageData } = await loadSample(resolvedUrl); // Assuming loadSample now also returns imageData
-    const currentChannelState = State.get().channels[channelIndex];
-    invalidateChannelWaveformCache(channelIndex, "Sample loaded from URL"); 
-    
-    const reversedBuffer = currentChannelState.reverse && buffer ? await createReversedBuffer(buffer) : null;
-    
-    State.updateChannel(channelIndex, { 
-        buffer, 
-        reversedBuffer, 
-        src: resolvedUrl, // Store resolved URL as src
-        imageData: imageData || null, // Use new or existing
-        trimStart: 0, 
-        trimEnd: 1, 
-        activePlaybackScheduledTime: null 
-    });
-
-    if (urlInputElement) urlInputElement.value = resolvedUrl; // Update input field with resolved URL
-  } catch (err) {
-    alert(`Failed to load sample from URL: ${err.message || err}`); 
-    console.error(err);
-  }
-}
-
-function handleAudition(isLongClick, xRatioInCanvas, channelState, channelIndex, canvasElement) {
-  if (!channelState?.buffer || !canvasElement) return;
-
-  const { buffer, reversedBuffer, trimStart, trimEnd, fadeInTime, fadeOutTime, reverse, pitch = 0 } = channelState;
-  const sourceBufferForAudition = reverse && reversedBuffer ? reversedBuffer : buffer;
-  const effectivePlaybackRate = Math.pow(2, pitch / 12);
-
-  let auditionStartRatioInTrimmedSegment, durationRatioOfTrimmedSegment;
-
-  if (isLongClick) { 
-    auditionStartRatioInTrimmedSegment = xRatioInCanvas; 
-    durationRatioOfTrimmedSegment = 1 - auditionStartRatioInTrimmedSegment;
-  } else { 
-    auditionStartRatioInTrimmedSegment = 0;
-    durationRatioOfTrimmedSegment = 1;
-  }
-
-  const fullTrimmedSegmentDurationRatio = trimEnd - trimStart;
-  if (fullTrimmedSegmentDurationRatio <= 0) return;
-
-  let offsetRatioInFullSourceBuffer;
-  const durationRatioInFullSourceBuffer = durationRatioOfTrimmedSegment * fullTrimmedSegmentDurationRatio;
-
-  if (channelState.reverse) { 
-      const auditionStartInBufferTime = ((1 - trimEnd) + (auditionStartRatioInTrimmedSegment * fullTrimmedSegmentDurationRatio)) * buffer.duration;
-      offsetRatioInFullSourceBuffer = auditionStartInBufferTime / sourceBufferForAudition.duration; 
-  } else { 
-      offsetRatioInFullSourceBuffer = trimStart + (auditionStartRatioInTrimmedSegment * fullTrimmedSegmentDurationRatio);
-  }
-  
-  const bufferTimeOffsetSeconds = offsetRatioInFullSourceBuffer * sourceBufferForAudition.duration;
-  const bufferTimeDurationSeconds = durationRatioInFullSourceBuffer * buffer.duration; 
-  const audibleDurationSeconds = bufferTimeDurationSeconds / effectivePlaybackRate;
-
-  if (audibleDurationSeconds <= 0.001) return;
-
-  const playheadMarkerPositionRatio = reverse
-    ? trimEnd - (auditionStartRatioInTrimmedSegment * fullTrimmedSegmentDurationRatio)
-    : trimStart + (auditionStartRatioInTrimmedSegment * fullTrimmedSegmentDurationRatio);
-  
-  previewPlayheads.set(channelIndex, playheadMarkerPositionRatio);
-  
-  const cachedPathImage = getChannelWaveformImage(channelIndex, channelState, canvasElement);
-  renderWaveformToCanvas(canvasElement, channelState.buffer, trimStart, trimEnd, {
-    cachedWaveformImage: cachedPathImage,
-    previewPlayheadRatio: playheadMarkerPositionRatio, 
-    mainPlayheadRatio: mainTransportPlayheadRatios.get(channelIndex),
-    fadeInTime, fadeOutTime, isReversed: reverse, zoomTrim: !!channelZoomStates[channelIndex]
-  });
-
-  auditionSample(sourceBufferForAudition, bufferTimeOffsetSeconds, audibleDurationSeconds);
-  
-  setTimeout(() => {
-    if (previewPlayheads.get(channelIndex) === playheadMarkerPositionRatio) {
-      previewPlayheads.delete(channelIndex);
-      const currentChannelState = State.get().channels[channelIndex]; // Get fresh state
-      if (currentChannelState && canvasElement.clientWidth > 0) {
-        const freshCachedPathImage = getChannelWaveformImage(channelIndex, currentChannelState, canvasElement);
-        renderWaveformToCanvas(canvasElement, currentChannelState.buffer, currentChannelState.trimStart, currentChannelState.trimEnd, {
-          cachedWaveformImage: freshCachedPathImage,
-          mainPlayheadRatio: mainTransportPlayheadRatios.get(channelIndex),
-          fadeInTime: currentChannelState.fadeInTime, 
-          fadeOutTime: currentChannelState.fadeOutTime,
-          isReversed: currentChannelState.reverse, 
-          zoomTrim: !!channelZoomStates[channelIndex]
-        });
-      }
-    }
-  }, Math.min(audibleDurationSeconds * 1000, 2500) + 50);
-}
-
-export function wireChannel(channelElement, channelIndex) {
-  _attach(channelElement.querySelector('.channel-name'), 'input', e => State.updateChannel(channelIndex, { name: e.target.value }));
-  _setToggle(channelElement.querySelector('.channel-fader-bank .mute-btn'), 'mute', channelIndex);
-  _setToggle(channelElement.querySelector('.channel-fader-bank .solo-btn'), 'solo', channelIndex);
-  _attach(channelElement.querySelector('.volume-fader'), 'input', e => State.updateChannel(channelIndex, { volume: +e.target.value }));
-
-  const fileInputElement = channelElement.querySelector('.file-input');
-  _attach(fileInputElement, 'change', async e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+export function wireChannel(el, idx) {
+  _attach(el.querySelector('.channel-name'), 'input', e => State.updateChannel(idx, { name: e.target.value }));
+  _setToggle(el.querySelector('.channel-fader-bank .mute-btn'), 'mute', idx);
+  _setToggle(el.querySelector('.channel-fader-bank .solo-btn'), 'solo', idx);
+  _attach(el.querySelector('.volume-fader'), 'input', e => State.updateChannel(idx, { volume: +e.target.value }));
+  const fileIn = el.querySelector('.file-input');
+  _attach(fileIn, 'change', async e => {
+    const f = e.target.files?.[0]; if (!f) return;
     try {
-      const { buffer, imageData } = await loadSample(file);
-      const currentChannelState = State.get().channels[channelIndex];
-      invalidateChannelWaveformCache(channelIndex, "Sample loaded from file input");
-      const reversedBuffer = currentChannelState.reverse && buffer ? await createReversedBuffer(buffer) : null;
-      State.updateChannel(channelIndex, { 
-          buffer, 
-          reversedBuffer, 
-          src: file.name, // Use file name as src identifier for local files
-          imageData: imageData || null,
-          trimStart: 0, 
-          trimEnd: 1, 
-          activePlaybackScheduledTime: null 
-      });
-    } catch (err) { 
-        alert(`Failed to load sample: ${err.message || err}`); 
-        console.error(err); 
-    } finally { 
-        if (fileInputElement) fileInputElement.value = ""; // Clear file input
-    }
+      const { buffer, imageData } = await loadSample(f), ch = State.get().channels[idx];
+      invalidateChannelWaveformCache(idx, "Sample loaded from file input");
+      const reversedBuffer = ch.reverse && buffer ? await createReversedBuffer(buffer) : null;
+      State.updateChannel(idx, { buffer, reversedBuffer, src: f.name, imageData: imageData || null, trimStart: 0, trimEnd: 1, activePlaybackScheduledTime: null });
+    } catch (err) { alert(`Failed to load sample: ${err.message || err}`); console.error(err); } finally { fileIn && (fileIn.value = ""); }
   });
-
-  const urlInputElement = channelElement.querySelector('.url-input');
-  _attach(channelElement.querySelector('.load-url-btn'), 'click', () => {
-    if (urlInputElement && urlInputElement.value.trim()) {
-        loadFromURL(urlInputElement.value.trim(), channelIndex, urlInputElement);
-    }
-  });
-
-  const sampleControlsContainer = channelElement.querySelector('.sample-controls');
-  if (sampleControlsContainer && urlInputElement) {
+  const urlInput = el.querySelector('.url-input');
+  _attach(el.querySelector('.load-url-btn'), 'click', () => urlInput && urlInput.value.trim() && loadFromURL(urlInput.value.trim(), idx, urlInput));
+  const sc = el.querySelector('.sample-controls');
+  if (sc && urlInput) {
     const presetPicker = Object.assign(document.createElement('select'), {
-        className: 'sample-picker',
-        innerHTML: `<option value="">— Audional presets —</option>${audionalIDs.map(o => `<option value="${o.id}">${o.label}</option>`).join('')}`
+      className: 'sample-picker',
+      innerHTML: `<option value="">— Audional presets —</option>${audionalIDs.map(o => `<option value="${o.id}">${o.label}</option>`).join('')}`
     });
-    sampleControlsContainer.insertBefore(presetPicker, urlInputElement); 
-    _attach(presetPicker, 'change', e => {
-        if (e.target.value) loadFromURL(e.target.value, channelIndex, urlInputElement);
-        e.target.value = ""; 
-    });
+    sc.insertBefore(presetPicker, urlInput);
+    _attach(presetPicker, 'change', e => { e.target.value && loadFromURL(e.target.value, idx, urlInput); e.target.value = ""; });
   }
-
-  const stepGridElement = channelElement.querySelector('.step-grid');
-  if (stepGridElement) {
-    for (let stepIndex = 0; stepIndex < 64; ++stepIndex) {
-        const stepCell = document.createElement('div');
-        stepCell.className = 'step';
-        stepCell.dataset.stepIndex = String(stepIndex);
-        
-        const checkbox = Object.assign(document.createElement('input'), { 
-            type: 'checkbox', 
-            className: 'step-checkbox', 
-            id: `ch${channelIndex}-step${stepIndex}` 
-        });
-        const label = Object.assign(document.createElement('label'), { 
-            htmlFor: checkbox.id, 
-            className: 'step-label' 
-        });
-        
-        stepCell.append(checkbox, label);
-        
-        _attach(stepCell, 'click', (e) => {
-            // Allow click on cell to toggle, not just checkbox (which is hidden)
-            // if (e.target.type === 'checkbox' || e.target.tagName === 'LABEL') { // Old logic
-            // }
-            const currentSteps = [...State.get().channels[channelIndex].steps];
-            currentSteps[stepIndex] = !currentSteps[stepIndex];
-            State.updateChannel(channelIndex, { steps: currentSteps });
-        });
-        stepGridElement.append(stepCell);
-    }
+  const sg = el.querySelector('.step-grid');
+  if (sg) for (let i = 0; i < 64; ++i) {
+    const cell = document.createElement('div'); cell.className = 'step'; cell.dataset.stepIndex = String(i);
+    const cb = Object.assign(document.createElement('input'), { type: 'checkbox', className: 'step-checkbox', id: `ch${idx}-step${i}` });
+    const lab = Object.assign(document.createElement('label'), { htmlFor: cb.id, className: 'step-label' });
+    cell.append(cb, lab);
+    _attach(cell, 'click', () => { const st = [...State.get().channels[idx].steps]; st[i] = !st[i]; State.updateChannel(idx, { steps: st }); });
+    sg.append(cell);
   }
-
-  const waveformWrapper = channelElement.querySelector('.waveform-wrapper');
-  const canvasElement = channelElement.querySelector('.waveform');
-  if (waveformWrapper && canvasElement) {
-    let auditionTimeoutId, longClickFired = false;
-    const zoomButton = waveformWrapper.querySelector('.zoom-btn');
-    
-    // Initialize zoom state for new channels if not already set
-    if (channelZoomStates[channelIndex] === undefined) {
-        channelZoomStates[channelIndex] = false;
-    }
-    if (zoomButton) {
-        zoomButton.classList.toggle('active', channelZoomStates[channelIndex]);
-        zoomButton.onclick = () => {
-            channelZoomStates[channelIndex] = !channelZoomStates[channelIndex];
-            zoomButton.classList.toggle('active', channelZoomStates[channelIndex]);
-            invalidateChannelWaveformCache(channelIndex, "Zoom button clicked");
-            
-            const currentChannelState = State.get().channels[channelIndex];
-            if (currentChannelState && canvasElement.clientWidth > 0) {
-                const cachedPathImage = getChannelWaveformImage(channelIndex, currentChannelState, canvasElement);
-                renderWaveformToCanvas(canvasElement, currentChannelState.buffer, currentChannelState.trimStart, currentChannelState.trimEnd, { 
-                    cachedWaveformImage: cachedPathImage, 
-                    mainPlayheadRatio: mainTransportPlayheadRatios.get(channelIndex), 
-                    previewPlayheadRatio: previewPlayheads.get(channelIndex), 
-                    fadeInTime: currentChannelState.fadeInTime, 
-                    fadeOutTime: currentChannelState.fadeOutTime, 
-                    isReversed: currentChannelState.reverse, 
-                    zoomTrim: channelZoomStates[channelIndex] 
-                });
-            }
-            if (currentChannelState) updateHandles(channelElement, currentChannelState, channelIndex);
-        };
-    }
-
-    canvasElement.addEventListener('mousedown', e => {
-        if (e.button !== 0) return; // Only main click
-        const rect = canvasElement.getBoundingClientRect();
-        const xRatioInCanvas = clamp((e.clientX - rect.left) / rect.width, 0, 1);
-        longClickFired = false;
-        auditionTimeoutId = setTimeout(() => {
-            longClickFired = true;
-            handleAudition(true, xRatioInCanvas, State.get().channels[channelIndex], channelIndex, canvasElement);
-        }, 350);
+  const wfw = el.querySelector('.waveform-wrapper'), c = el.querySelector('.waveform');
+  if (wfw && c) {
+    let auditionT, longClick = false, zBtn = wfw.querySelector('.zoom-btn');
+    channelZoomStates[idx] ??= false;
+    zBtn && (zBtn.classList.toggle('active', channelZoomStates[idx]), zBtn.onclick = () => {
+      channelZoomStates[idx] = !channelZoomStates[idx]; zBtn.classList.toggle('active', channelZoomStates[idx]); invalidateChannelWaveformCache(idx, "Zoom button clicked");
+      const ch = State.get().channels[idx]; ch && c.clientWidth > 0 && renderWaveformToCanvas(c, ch.buffer, ch.trimStart, ch.trimEnd, { cachedWaveformImage: getChannelWaveformImage(idx, ch, c), mainPlayheadRatio: mainTransportPlayheadRatios.get(idx), previewPlayheadRatio: previewPlayheads.get(idx), fadeInTime: ch.fadeInTime, fadeOutTime: ch.fadeOutTime, isReversed: ch.reverse, zoomTrim: channelZoomStates[idx] }); ch && updateHandles(el, ch, idx);
     });
-    canvasElement.addEventListener('mouseup', e => {
-        clearTimeout(auditionTimeoutId);
-        if (!longClickFired && e.button === 0) {
-            handleAudition(false, 0, State.get().channels[channelIndex], channelIndex, canvasElement); 
-        }
-    });
-    canvasElement.addEventListener('mouseleave', () => clearTimeout(auditionTimeoutId));
+    c.addEventListener('mousedown', e => { if (e.button !== 0) return; const rect = c.getBoundingClientRect(), x = clamp((e.clientX - rect.left) / rect.width, 0, 1); longClick = false; auditionT = setTimeout(() => { longClick = true; handleAudition(true, x, State.get().channels[idx], idx, c); }, 350); });
+    c.addEventListener('mouseup', e => { clearTimeout(auditionT); !longClick && e.button === 0 && handleAudition(false, 0, State.get().channels[idx], idx, c); });
+    c.addEventListener('mouseleave', () => clearTimeout(auditionT));
   }
-  
-  ['.handle-start', '.handle-end'].forEach((selector, isEndHandle) => {
-    const handleElement = channelElement.querySelector(selector);
-    if (!handleElement || !waveformWrapper) return;
-
-    handleElement.addEventListener('pointerdown', e => {
-      e.preventDefault(); 
-      e.stopPropagation(); 
-      handleElement.setPointerCapture(e.pointerId);
-      
-      const waveformRect = waveformWrapper.getBoundingClientRect();
-      let initialTrimStart = State.get().channels[channelIndex].trimStart;
-      let initialTrimEnd = State.get().channels[channelIndex].trimEnd;
-
-      const moveHandler = (moveEvent) => {
-        if (!waveformRect.width) return;
-        let xRatioInWaveform = clamp((moveEvent.clientX - waveformRect.left) / waveformRect.width, 0, 1);
-        
-        let newTrimStart = initialTrimStart;
-        let newTrimEnd = initialTrimEnd;
-
-        if (channelZoomStates[channelIndex]) { 
-            const visibleDurationRatio = initialTrimEnd - initialTrimStart;
-            if (visibleDurationRatio <= 0) return; 
-
-            if (isEndHandle) { 
-                newTrimEnd = initialTrimStart + xRatioInWaveform * visibleDurationRatio;
-            } else { 
-                newTrimStart = initialTrimEnd - (1 - xRatioInWaveform) * visibleDurationRatio;
-            }
-        } else { 
-            if (isEndHandle) newTrimEnd = xRatioInWaveform;
-            else newTrimStart = xRatioInWaveform;
-        }
-
-        newTrimStart = clamp(newTrimStart, 0, 1);
-        newTrimEnd = clamp(newTrimEnd, 0, 1);
-
-        if (isEndHandle) {
-            newTrimEnd = Math.max(newTrimStart + MIN_TRIM_SEPARATION, newTrimEnd);
-        } else {
-            newTrimStart = Math.min(newTrimEnd - MIN_TRIM_SEPARATION, newTrimStart);
-        }
-        newTrimStart = clamp(newTrimStart, 0, 1); 
-        newTrimEnd = clamp(newTrimEnd, 0, 1);
-
-        const currentChannelState = State.get().channels[channelIndex];
-        if ((Math.abs(newTrimStart - currentChannelState.trimStart) > 0.00001 || Math.abs(newTrimEnd - currentChannelState.trimEnd) > 0.00001)) {
-             if(!isNaN(newTrimStart) && !isNaN(newTrimEnd)) {
-                State.updateChannel(channelIndex, { trimStart: newTrimStart, trimEnd: newTrimEnd });
-                // The updateHandles call is now handled by the state subscription in ui.js -> render -> updateChannelUI
-             }
-        }
+  ['.handle-start', '.handle-end'].forEach((sel, isEnd) => {
+    const he = el.querySelector(sel), wfw = el.querySelector('.waveform-wrapper');
+    if (!he || !wfw) return;
+    he.addEventListener('pointerdown', e => {
+      e.preventDefault(); e.stopPropagation(); he.setPointerCapture(e.pointerId);
+      const wfR = wfw.getBoundingClientRect(), chInit = State.get().channels[idx], s0 = chInit.trimStart, e0 = chInit.trimEnd;
+      const move = me => {
+        if (!wfR.width) return;
+        let xr = clamp((me.clientX - wfR.left) / wfR.width, 0, 1), ns = s0, ne = e0;
+        if (channelZoomStates[idx]) {
+          const vis = e0 - s0; if (vis <= 0) return;
+          isEnd ? ne = s0 + xr * vis : ns = e0 - (1 - xr) * vis;
+        } else { isEnd ? ne = xr : ns = xr; }
+        ns = clamp(ns, 0, 1), ne = clamp(ne, 0, 1);
+        isEnd ? ne = Math.max(ns + MIN_TRIM_SEPARATION, ne) : ns = Math.min(ne - MIN_TRIM_SEPARATION, ns);
+        ns = clamp(ns, 0, 1), ne = clamp(ne, 0, 1);
+        const ch = State.get().channels[idx];
+        (Math.abs(ns - ch.trimStart) > 1e-5 || Math.abs(ne - ch.trimEnd) > 1e-5) && !isNaN(ns) && !isNaN(ne) && State.updateChannel(idx, { trimStart: ns, trimEnd: ne });
       };
-
-      const upHandler = () => {
-        handleElement.releasePointerCapture(e.pointerId);
-        window.removeEventListener('pointermove', moveHandler);
-        window.removeEventListener('pointerup', upHandler);
-        
-        // Final render after drag ensures the cache is updated with the final trim values.
-        invalidateChannelWaveformCache(channelIndex, "Trim handle drag finished");
-        const finalChannelState = State.get().channels[channelIndex]; 
-        if (finalChannelState && canvasElement && canvasElement.clientWidth > 0) {
-            const cachedImage = getChannelWaveformImage(channelIndex, finalChannelState, canvasElement);
-            renderWaveformToCanvas(canvasElement, finalChannelState.buffer, finalChannelState.trimStart, finalChannelState.trimEnd, { 
-                cachedWaveformImage: cachedImage, 
-                mainPlayheadRatio: mainTransportPlayheadRatios.get(channelIndex), 
-                previewPlayheadRatio: previewPlayheads.get(channelIndex), 
-                fadeInTime: finalChannelState.fadeInTime, 
-                fadeOutTime: finalChannelState.fadeOutTime, 
-                isReversed: finalChannelState.reverse, 
-                zoomTrim: !!channelZoomStates[channelIndex] 
-            });
-            updateHandles(channelElement, finalChannelState, channelIndex); 
-        }
+      const up = () => {
+        he.releasePointerCapture(e.pointerId); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+        invalidateChannelWaveformCache(idx, "Trim handle drag finished");
+        const ch = State.get().channels[idx], c = el.querySelector('.waveform');
+        ch && c && c.clientWidth > 0 && renderWaveformToCanvas(c, ch.buffer, ch.trimStart, ch.trimEnd, { cachedWaveformImage: getChannelWaveformImage(idx, ch, c), mainPlayheadRatio: mainTransportPlayheadRatios.get(idx), previewPlayheadRatio: previewPlayheads.get(idx), fadeInTime: ch.fadeInTime, fadeOutTime: ch.fadeOutTime, isReversed: ch.reverse, zoomTrim: !!channelZoomStates[idx] }); updateHandles(el, ch, idx);
       };
-      window.addEventListener('pointermove', moveHandler);
-      window.addEventListener('pointerup', upHandler);
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
     });
   });
-
-  const fxControlsContainer = channelElement.querySelector('.sample-fx-controls');
-  if (fxControlsContainer) {
+  const fx = el.querySelector('.sample-fx-controls');
+  if (fx) {
     [
-        ['pitch-slider', 'pitch-value', 'pitch', parseInt],
-        ['fade-in-slider', 'fade-in-value', 'fadeInTime', parseFloat], // Ensure float for fades
-        ['fade-out-slider', 'fade-out-value', 'fadeOutTime', parseFloat], // Ensure float for fades
-        ['hpf-cutoff-slider', 'hpf-cutoff-value', 'hpfCutoff', parseFloat],
-        ['lpf-cutoff-slider', 'lpf-cutoff-value', 'lpfCutoff', parseFloat],
-        ['eq-low-slider', 'eq-low-value', 'eqLowGain', parseInt], // EQs are typically int dB
-        ['eq-mid-slider', 'eq-mid-value', 'eqMidGain', parseInt],
-        ['eq-high-slider', 'eq-high-value', 'eqHighGain', parseInt]
-    ].forEach(([sliderClass, _valueClassIgnored, propertyName, parserFunc]) => {
-        const sliderElement = fxControlsContainer.querySelector(`.${sliderClass}`);
-        if (sliderElement) {
-            _attach(sliderElement, 'input', e => {
-                const value = parserFunc ? parserFunc(e.target.value) : +e.target.value;
-                State.updateChannel(channelIndex, { [propertyName]: value });
-                // No need to manually call invalidateChannelWaveformCache for fades/EQ/filters unless they change the *visual* path.
-                // Waveform path caching is about the visual shape from trim/zoom. FX are audio-only.
-                // Fades *are* visual, and updateChannelUI will re-render the canvas if it's a full pass.
-            });
-        }
+      ['pitch-slider', 'pitch-value', 'pitch', parseInt],
+      ['fade-in-slider', 'fade-in-value', 'fadeInTime', parseFloat],
+      ['fade-out-slider', 'fade-out-value', 'fadeOutTime', parseFloat],
+      ['hpf-cutoff-slider', 'hpf-cutoff-value', 'hpfCutoff', parseFloat],
+      ['lpf-cutoff-slider', 'lpf-cutoff-value', 'lpfCutoff', parseFloat],
+      ['eq-low-slider', 'eq-low-value', 'eqLowGain', parseInt],
+      ['eq-mid-slider', 'eq-mid-value', 'eqMidGain', parseInt],
+      ['eq-high-slider', 'eq-high-value', 'eqHighGain', parseInt]
+    ].forEach(([sc, , p, pf]) => _attach(fx.querySelector(`.${sc}`), 'input', e => State.updateChannel(idx, { [p]: pf ? pf(e.target.value) : +e.target.value })));
+    const revBtn = fx.querySelector('.reverse-btn');
+    revBtn && _attach(revBtn, 'click', async () => {
+      const ch = State.get().channels[idx], newRev = !ch.reverse;
+      let revBuf = ch.reversedBuffer;
+      if (newRev && ch.buffer && !ch.reversedBuffer) revBuf = await createReversedBuffer(ch.buffer);
+      invalidateChannelWaveformCache(idx, "Reverse toggled");
+      State.updateChannel(idx, { reverse: newRev, reversedBuffer: revBuf });
     });
-    const reverseButton = fxControlsContainer.querySelector('.reverse-btn');
-    if (reverseButton) {
-        _attach(reverseButton, 'click', async () => {
-            const currentChannelState = State.get().channels[channelIndex];
-            const newReverseState = !currentChannelState.reverse;
-            let newReversedBuffer = currentChannelState.reversedBuffer;
-
-            if (newReverseState && currentChannelState.buffer && !currentChannelState.reversedBuffer) {
-                newReversedBuffer = await createReversedBuffer(currentChannelState.buffer);
-            }
-            invalidateChannelWaveformCache(channelIndex, "Reverse toggled"); // Waveform might flip visually
-            State.updateChannel(channelIndex, { reverse: newReverseState, reversedBuffer: newReversedBuffer });
-        });
-    }
   }
-  const collapseButton = channelElement.querySelector('.collapse-btn');
-  if (collapseButton) {
-      _attach(collapseButton, 'click', () => channelElement.classList.toggle('collapsed'));
-  }
+  const collapseBtn = el.querySelector('.collapse-btn');
+  collapseBtn && _attach(collapseBtn, 'click', () => el.classList.toggle('collapsed'));
 }
-
-
-export function updateChannelUI(channelElement, channelState, playheadStep, channelIndex, isFullRenderPass) {
-    const stepElements = channelElement.querySelectorAll('.step');
-    const isPlaying = State.get().playing; 
-
-    // Update playhead and "on" state for each step
-    stepElements.forEach((stepCell, stepIdx) => {
-        // Always update playhead based on current logic
-        stepCell.classList.toggle('playhead', stepIdx === playheadStep && isPlaying);
-        
-        // Always manage the .on class on the parent .step div for visual styling
-        stepCell.classList.toggle('on', channelState.steps[stepIdx]);
-
-        // If it's a full render pass, also ensure the hidden checkbox state is in sync
-        if (isFullRenderPass) { 
-            const checkbox = stepCell.querySelector('.step-checkbox');
-            if (checkbox && checkbox.checked !== channelState.steps[stepIdx]) {
-                checkbox.checked = channelState.steps[stepIdx];
-            }
-        }
-    });
-    
-    // Update other UI elements only if it's a full render pass
-    if (isFullRenderPass) {
-        const nameInputElement = channelElement.querySelector('.channel-name');
-        if (nameInputElement && nameInputElement.value !== channelState.name) {
-            nameInputElement.value = channelState.name;
-        }
-
-        channelElement.querySelector('.channel-fader-bank .mute-btn')?.classList.toggle('active', channelState.mute);
-        channelElement.querySelector('.channel-fader-bank .solo-btn')?.classList.toggle('active', channelState.solo);
-        
-        const volumeSlider = channelElement.querySelector('.volume-fader');
-        if (volumeSlider && parseFloat(volumeSlider.value) !== channelState.volume) {
-            volumeSlider.value = channelState.volume;
-        }
-        
-        channelElement.querySelector('.zoom-btn')?.classList.toggle('active', !!channelZoomStates[channelIndex]);
-        
-        const fxControlsContainer = channelElement.querySelector('.sample-fx-controls');
-        if (fxControlsContainer) {
-            setSlider(fxControlsContainer, 'pitch-slider', channelState.pitch, 'pitch-value');
-            setSlider(fxControlsContainer, 'fade-in-slider', channelState.fadeInTime, 'fade-in-value', v => v.toFixed(2));
-            setSlider(fxControlsContainer, 'fade-out-slider', channelState.fadeOutTime, 'fade-out-value', v => v.toFixed(2));
-            setSlider(fxControlsContainer, 'hpf-cutoff-slider', channelState.hpfCutoff, 'hpf-cutoff-value', formatHz);
-            setSlider(fxControlsContainer, 'lpf-cutoff-slider', channelState.lpfCutoff, 'lpf-cutoff-value', formatHz);
-            setSlider(fxControlsContainer, 'eq-low-slider', channelState.eqLowGain, 'eq-low-value');
-            setSlider(fxControlsContainer, 'eq-mid-slider', channelState.eqMidGain, 'eq-mid-value');
-            setSlider(fxControlsContainer, 'eq-high-slider', channelState.eqHighGain, 'eq-high-value');
-            fxControlsContainer.querySelector('.reverse-btn')?.classList.toggle('active', channelState.reverse);
-        }
-        
-        updateHandles(channelElement, channelState, channelIndex); 
-
-        const canvasElement = channelElement.querySelector('.waveform');
-        if (canvasElement && canvasElement.clientWidth > 0 && canvasElement.clientHeight > 0) {
-            const cachedPathImage = getChannelWaveformImage(channelIndex, channelState, canvasElement);
-            renderWaveformToCanvas(
-              canvasElement, channelState.buffer, channelState.trimStart, channelState.trimEnd,
-              { 
-                cachedWaveformImage: cachedPathImage, 
-                mainPlayheadRatio: mainTransportPlayheadRatios.get(channelIndex), 
-                previewPlayheadRatio: previewPlayheads.get(channelIndex), 
-                fadeInTime: channelState.fadeInTime, 
-                fadeOutTime: channelState.fadeOutTime, 
-                isReversed: channelState.reverse, 
-                zoomTrim: !!channelZoomStates[channelIndex] 
-              }
-            );
-        }
-    }
-    // If !isFullRenderPass, only step cell's .on and .playhead classes are updated.
-    // Waveform canvas updates (for moving playhead) are handled by animateTransport in ui.js.
+export function updateChannelUI(el, ch, phStep, idx, full) {
+  const steps = el.querySelectorAll('.step'), playing = State.get().playing;
+  steps.forEach((cell, i) => {
+    cell.classList.toggle('playhead', i === phStep && playing);
+    cell.classList.toggle('on', ch.steps[i]);
+    if (full) { const cb = cell.querySelector('.step-checkbox'); cb && (cb.checked !== ch.steps[i]) && (cb.checked = ch.steps[i]); }
+  });
+  if (full) {
+    const nameEl = el.querySelector('.channel-name');
+    nameEl && nameEl.value !== ch.name && (nameEl.value = ch.name);
+    el.querySelector('.channel-fader-bank .mute-btn')?.classList.toggle('active', ch.mute);
+    el.querySelector('.channel-fader-bank .solo-btn')?.classList.toggle('active', ch.solo);
+    const volSlider = el.querySelector('.volume-fader');
+    volSlider && parseFloat(volSlider.value) !== ch.volume && (volSlider.value = ch.volume);
+    el.querySelector('.zoom-btn')?.classList.toggle('active', !!channelZoomStates[idx]);
+    const fx = el.querySelector('.sample-fx-controls');
+    fx && (setSlider(fx, 'pitch-slider', ch.pitch, 'pitch-value'), setSlider(fx, 'fade-in-slider', ch.fadeInTime, 'fade-in-value', v => v.toFixed(2)), setSlider(fx, 'fade-out-slider', ch.fadeOutTime, 'fade-out-value', v => v.toFixed(2)), setSlider(fx, 'hpf-cutoff-slider', ch.hpfCutoff, 'hpf-cutoff-value', formatHz), setSlider(fx, 'lpf-cutoff-slider', ch.lpfCutoff, 'lpf-cutoff-value', formatHz), setSlider(fx, 'eq-low-slider', ch.eqLowGain, 'eq-low-value'), setSlider(fx, 'eq-mid-slider', ch.eqMidGain, 'eq-mid-value'), setSlider(fx, 'eq-high-slider', ch.eqHighGain, 'eq-high-value'), fx.querySelector('.reverse-btn')?.classList.toggle('active', ch.reverse));
+    updateHandles(el, ch, idx);
+    const c = el.querySelector('.waveform');
+    c && c.clientWidth > 0 && c.clientHeight > 0 && renderWaveformToCanvas(c, ch.buffer, ch.trimStart, ch.trimEnd, { cachedWaveformImage: getChannelWaveformImage(idx, ch, c), mainPlayheadRatio: mainTransportPlayheadRatios.get(idx), previewPlayheadRatio: previewPlayheads.get(idx), fadeInTime: ch.fadeInTime, fadeOutTime: ch.fadeOutTime, isReversed: ch.reverse, zoomTrim: !!channelZoomStates[idx] });
+  }
 }
