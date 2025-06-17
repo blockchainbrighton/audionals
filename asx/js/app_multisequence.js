@@ -123,15 +123,48 @@ async function initializeMultiSequence() {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-  UI.init();
+  UI.init(); // UI.init should subscribe to State for its elements if needed
   populatePresetDropdown();
   await initializeApp();
   initializeMultiSequence();
+
+  // Initialize and handle playback mode button
+  const playbackModeBtn = $('playback-mode-btn');
+  if (playbackModeBtn) {
+    playbackModeBtn.addEventListener('click', () => {
+      const currentMode = State.get().playbackMode || 'single';
+      const nextMode = currentMode === 'single' ? 'continuous' : 'single';
+      State.update({ playbackMode: nextMode });
+    });
+
+    // Update button text based on initial state and on changes
+    const updatePlaybackModeButton = (mode) => {
+      playbackModeBtn.textContent = `Mode: ${mode === 'continuous' ? 'Continuous' : 'Single'}`;
+      // Optional: Add a class for styling active continuous mode
+      // playbackModeBtn.classList.toggle('active-continuous-mode', mode === 'continuous');
+    };
+    
+    // Initial update
+    updatePlaybackModeButton(State.get().playbackMode);
+
+    // Subscribe to state changes specifically for this button
+    // This is a more direct way if UI.js doesn't handle this specific button.
+    // If UI.js has a general render that covers all global controls, this might be redundant or better placed there.
+    State.subscribe((newState, prevState) => {
+      if (!prevState || newState.playbackMode !== prevState.playbackMode) {
+        updatePlaybackModeButton(newState.playbackMode);
+      }
+    });
+  }
 });
 
 // UI event wiring helpers
 const $ = id => document.getElementById(id);
-const add = (id, ev, cb) => $(id).addEventListener(ev, cb);
+const add = (id, ev, cb) => {
+    const el = $(id);
+    if (el) el.addEventListener(ev, cb);
+    else console.warn(`Element with ID '${id}' not found for event binding.`); // Added a warning
+};
 
 // UI EVENTS
 add('add-channel-btn', 'click', () => State.addChannel(makeChannel(State.get().channels.length)));

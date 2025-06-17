@@ -20,7 +20,8 @@ const State = (() => {
     bpm: 120, 
     channels: [], 
     playing: false, 
-    currentStep: 0 
+    currentStep: 0,
+    playbackMode: 'single' // <<< ADD THIS LINE: 'single' or 'continuous'
   };
   
   // prevState holds the state *before* the current update cycle that triggers an emit.

@@ -45,6 +45,11 @@ const renderGlobalUI = (s, ps) => {
   if (bpmInput && (!ps || s.bpm !== ps.bpm)) {
     bpmInput.value = s.bpm;
   }
+  const playbackModeBtn = document.getElementById('playback-mode-btn'); // Get it each time or cache it in init
+  if (playbackModeBtn && (!ps || s.playbackMode !== ps.playbackMode)) {
+    playbackModeBtn.textContent = `Mode: ${s.playbackMode === 'continuous' ? 'Continuous' : 'Single'}`;
+    // playbackModeBtn.classList.toggle('active-continuous-mode', s.playbackMode === 'continuous');
+  }
 };
 
 // --- Main render logic ---
