@@ -208,7 +208,7 @@ const SequenceManager = (() => {
           modified: seq.modified || now()
         }));
         currentSequenceIndex = Math.min(data.currentSequenceIndex ?? 0, sequences.length - 1);
-        maxSequences = data.maxSequences ?? 8;
+        maxSequences = data.maxSequences ?? 128;
       } else { // Single sequence project
         sequences = [{
           id: generateId(),
