@@ -22,15 +22,50 @@ export const invalidateAllWaveformCaches = (r = "Generic full invalidation") => 
   waveformImageCache.forEach((_, idx) => { DEBUG_CACHE && waveformImageCache.has(idx) && console.log(`[Cache Invalidate]   - Ch ${idx} (part of ALL)`); waveformImageCache.delete(idx); });
 };
 export function getChannelWaveformImage(idx, ch, c) {
-  const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight, z = !!channelZoomStates[idx];
-  if (!ch.buffer || !w || !h) { waveformImageCache.has(idx) && DEBUG_CACHE && console.log(`[Cache] Ch ${idx}: Invalidate (no buffer/dims) in getChannelWaveformImage`); invalidateChannelWaveformCache(idx, "No buffer or zero dimensions"); return null; }
-  const k = genCacheKey(ch.trimStart, ch.trimEnd, w, h, z, dpr), cached = waveformImageCache.get(idx);
-  if (cached && cached.bufferIdentity === ch.buffer && cached.cacheKey === k && cached.image && cached.dpr === dpr) { DEBUG_CACHE && console.log(`[Cache] Ch ${idx}: HIT. Key: ${k}`); return cached.image; }
-  DEBUG_CACHE && (cached ? console.log(`[Cache] Ch ${idx}: MISS (${["bufferIdentity", "cacheKey", "image", "dpr"].map(f => cached[f] !== {bufferIdentity:ch.buffer,cacheKey:k,image:true,dpr:dpr}[f] && f).filter(Boolean).join(", ")}). Regenerating. Old Key: ${cached.cacheKey}, New Key: ${k}`) : console.log(`[Cache] Ch ${idx}: MISS (no entry). New Key: ${k}`));
-  const color = getComputedStyle(document.documentElement).getPropertyValue('--step-play').trim() || '#4caf50', img = generateWaveformPathImage(ch.buffer, ch.trimStart, ch.trimEnd, { zoomTrim: z }, w, h, dpr, color);
-  img && waveformImageCache.set(idx, { image: img, cacheKey: k, bufferIdentity: ch.buffer, dpr }); DEBUG_CACHE && img ? console.log(`[Cache] Ch ${idx}: Generated & Stored. Key: ${k}`) : img || console.error(`[Cache] Ch ${idx}: FAILED to generate image.`);
-  return img;
-}
+    const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight, z = !!channelZoomStates[idx];
+    // If no buffer or dimensions, clean up cache and return null (don't log errors)
+    if (!ch.buffer || !w || !h) {
+      if (waveformImageCache.has(idx) && DEBUG_CACHE)
+        console.log(`[Cache] Ch ${idx}: Invalidate (no buffer/dims) in getChannelWaveformImage`);
+      invalidateChannelWaveformCache(idx, "No buffer or zero dimensions");
+      return null;
+    }
+    const k = genCacheKey(ch.trimStart, ch.trimEnd, w, h, z, dpr),
+      cached = waveformImageCache.get(idx);
+    // Cache HIT
+    if (
+      cached &&
+      cached.bufferIdentity === ch.buffer &&
+      cached.cacheKey === k &&
+      cached.image &&
+      cached.dpr === dpr
+    ) {
+      DEBUG_CACHE && console.log(`[Cache] Ch ${idx}: HIT. Key: ${k}`);
+      return cached.image;
+    }
+    // Cache MISS: Only verbose log, not error
+    DEBUG_CACHE && (
+      cached
+        ? console.log(`[Cache] Ch ${idx}: MISS (${["bufferIdentity", "cacheKey", "image", "dpr"]
+          .map(f => cached[f] !== { bufferIdentity: ch.buffer, cacheKey: k, image: true, dpr }[f] && f)
+          .filter(Boolean).join(", ")}). Regenerating. Old Key: ${cached.cacheKey}, New Key: ${k}`)
+        : console.log(`[Cache] Ch ${idx}: MISS (no entry). New Key: ${k}`)
+    );
+    const color = getComputedStyle(document.documentElement).getPropertyValue('--step-play').trim() || '#4caf50',
+      img = generateWaveformPathImage(ch.buffer, ch.trimStart, ch.trimEnd, { zoomTrim: z }, w, h, dpr, color);
+    // Only log a warning if there *should* be a buffer but image generation fails (rare)
+    if (img) {
+      waveformImageCache.set(idx, { image: img, cacheKey: k, bufferIdentity: ch.buffer, dpr });
+      DEBUG_CACHE && console.log(`[Cache] Ch ${idx}: Generated & Stored. Key: ${k}`);
+      return img;
+    } else {
+      // Only log an error if a buffer exists but image could not be generated (should be rare)
+      DEBUG_CACHE && ch.buffer && typeof ch.buffer.getChannelData === 'function'
+        && console.warn(`[Cache] Ch ${idx}: Buffer present but FAILED to generate image.`);
+      return null;
+    }
+  }
+  
 export function updateHandles(el, ch, idx) {
   const [hStart, hEnd] = [el.querySelector('.handle-start'), el.querySelector('.handle-end')];
   if (!hStart || !hEnd) return; const hw = hStart.offsetWidth || 8, z = !!channelZoomStates[idx];

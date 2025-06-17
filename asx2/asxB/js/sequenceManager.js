@@ -105,19 +105,16 @@ const SequenceManager = (() => {
     version: '1.0',
     type: 'multi-sequence',
     sequences: sequences.map(seq => ({
-      id: seq.id, name: seq.name, created: seq.created, modified: seq.modified,
-      data: {
-        ...seq.data,
-        channels: seq.data.channels.map(ch => {
-          const { buffer, reversedBuffer, activePlaybackScheduledTime, activePlaybackDuration,
-            activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed, ...rest } = ch;
-          return { ...rest, imageData: rest.imageData ?? null };
-        })
-      }
+      id: seq.id,
+      name: seq.name,
+      created: seq.created,
+      modified: seq.modified,
+      data: { ...seq.data }  // <-- no stripBase64Fields here
     })),
     currentSequenceIndex,
     maxSequences
   });
+  
 
   // --- Navigation & Event API ---
   const goToNextSequence = () => switchToSequence((currentSequenceIndex + 1) % sequences.length);

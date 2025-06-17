@@ -2,6 +2,23 @@
 import SequenceManager from './sequenceManager.js';
 import State from './state.js';
 
+// Helper to strip any base64 or imageData from objects recursively
+// Remove base64/inline imageData and all other data URLs recursively
+const stripBase64Fields = obj => {
+  if (Array.isArray(obj)) return obj.map(stripBase64Fields);
+  if (obj && typeof obj === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      // Skip any keys known to store base64 or data URIs
+      if (k === 'imageData') continue;
+      if (typeof v === 'string' && v.startsWith('data:')) continue;
+      out[k] = stripBase64Fields(v);
+    }
+    return out;
+  }
+  return obj;
+};
+
 const $ = (s, d = document) => d.querySelector(s);
 const sanitizeFilename = name => name.replace(/[^a-z0-9\-_.]/gi, '_').replace(/_{2,}/g, '_');
 const downloadFile = (blob, filename) => {
@@ -16,7 +33,6 @@ const downloadFile = (blob, filename) => {
 const isMultiSequenceFile = d => d?.type === 'multi-sequence' && Array.isArray(d.sequences) && d.version;
 const safe = fn => (...a) => { try { return fn(...a); } catch (e) { console.error(e); return false; } };
 
-// Always returns a project name (from State), falls back to current sequence name, then default.
 const getProjectNameForFilename = () =>
   (State.get().projectName && State.get().projectName.trim()) ||
   SequenceManager.getCurrentSequence().name ||
@@ -25,25 +41,40 @@ const getProjectNameForFilename = () =>
 // --- Save/Export ---
 const saveMultiSequenceProject = safe(() => {
   const data = SequenceManager.exportAllSequences();
+  // Walk through each sequence, strip base64/imageData from channels
+  if (Array.isArray(data.sequences)) {
+    data.sequences = data.sequences.map(seq => ({
+      ...seq,
+      data: {
+        ...seq.data,
+        channels: Array.isArray(seq.data.channels)
+          ? seq.data.channels.map(stripBase64Fields)
+          : []
+      }
+    }));
+  }
   const name = getProjectNameForFilename();
-  downloadFile(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
-    sanitizeFilename(name) + '_multi.json');
+  downloadFile(
+    new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
+    sanitizeFilename(name) + '_multi.json'
+  );
   return true;
 });
 
 const saveSingleSequence = safe((sequenceIndex = null) => {
-  const idx = sequenceIndex ?? SequenceManager.currentIndex,
-    seqs = SequenceManager.getSequencesInfo();
+  const idx = sequenceIndex ?? SequenceManager.currentIndex;
+  const seqs = SequenceManager.getSequencesInfo();
   if (idx < 0 || idx >= seqs.length) throw new Error('Invalid sequence index');
-  const seq = SequenceManager._getSequences()[idx], d = seq.data;
-  const cleanChannels = d.channels.map(({ buffer, reversedBuffer, activePlaybackScheduledTime, activePlaybackDuration, activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed, ...rest }) => ({
-    ...rest, imageData: rest.imageData ?? null
-  }));
+  const seq = SequenceManager._getSequences()[idx];
+  const d = seq.data;
+  const cleanChannels = Array.isArray(d.channels) ? d.channels.map(stripBase64Fields) : [];
   const out = { ...d, channels: cleanChannels };
   const projName = getProjectNameForFilename();
   const seqName = seq.name && seq.name !== projName ? `_${seq.name}` : '';
-  downloadFile(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }),
-    sanitizeFilename(projName + seqName) + '.json');
+  downloadFile(
+    new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }),
+    sanitizeFilename(projName + seqName) + '.json'
+  );
   return true;
 });
 
@@ -93,7 +124,8 @@ const importSequence = safe(async file => {
   if (isMultiSequenceFile(d)) throw new Error('Cannot import multi-sequence file as single sequence');
   const name = d.projectName || file.name.replace('.json', '');
   if (!SequenceManager.addSequence(name, false)) throw new Error('Failed to add new sequence');
-  const idx = SequenceManager.currentIndex, seqs = SequenceManager._getSequences();
+  const idx = SequenceManager.currentIndex;
+  const seqs = SequenceManager._getSequences();
   seqs[idx].data = d;
   SequenceManager.switchToSequence(idx);
   return { success: true, name };
@@ -112,9 +144,17 @@ const getSaveOptions = () => {
 
 const createSaveModal = opts => {
   const overlay = document.createElement('div');
-  overlay.style.cssText = `position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:10000;`;
+  overlay.style.cssText = `
+    position:fixed;top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,.7);display:flex;
+    align-items:center;justify-content:center;z-index:10000;`;
   const modal = document.createElement('div');
-  modal.style.cssText = `background:var(--color-bg-dark,#2a2a2a);border:1px solid var(--color-border,#555);border-radius:6px;padding:20px;min-width:400px;box-shadow:0 10px 30px rgba(0,0,0,.5);color:var(--color-text,#fff);`;
+  modal.style.cssText = `
+    background:var(--color-bg-dark,#2a2a2a);
+    border:1px solid var(--color-border,#555);
+    border-radius:6px;padding:20px;min-width:400px;
+    box-shadow:0 10px 30px rgba(0,0,0,.5);
+    color:var(--color-text,#fff);`;
   modal.innerHTML = `
     <h3 style="margin:0 0 20px 0;font-size:18px;">Save Project</h3>
     <div style="margin-bottom:20px;">
@@ -134,10 +174,13 @@ const createSaveModal = opts => {
       <button id="save-confirm-btn" style="padding:8px 16px;border:1px solid #007acc;background:#007acc;color:#fff;border-radius:3px;cursor:pointer;">Save</button>
     </div>
   `;
-  modal.querySelector('#save-cancel-btn').onclick = () => overlay.dispatchEvent(new CustomEvent('save-cancelled'));
+  modal.querySelector('#save-cancel-btn').onclick = () =>
+    overlay.dispatchEvent(new CustomEvent('save-cancelled'));
   modal.querySelector('#save-confirm-btn').onclick = () => {
     const type = modal.querySelector('input[name="save-type"]:checked').value;
-    overlay.dispatchEvent(new CustomEvent('save-complete', { detail: { type, success: type === 'multi' ? saveMultiSequenceProject() : saveSingleSequence() } }));
+    overlay.dispatchEvent(new CustomEvent('save-complete', {
+      detail: { type, success: type === 'multi' ? saveMultiSequenceProject() : saveSingleSequence() }
+    }));
   };
   overlay.onclick = e => { if (e.target === overlay) overlay.dispatchEvent(new CustomEvent('save-cancelled')); };
   overlay.appendChild(modal);
