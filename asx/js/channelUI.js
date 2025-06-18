@@ -190,8 +190,46 @@ export function wireChannel(el, idx) {
       State.updateChannel(idx, { reverse: newRev, reversedBuffer: revBuf });
     });
   }
-  const collapseBtn = el.querySelector('.collapse-btn');
-  collapseBtn && _attach(collapseBtn, 'click', () => el.classList.toggle('collapsed'));
+/* --- collapse / expand --------------------------------------------- */
+const collapseBtn = el.querySelector('.collapse-btn');
+if (collapseBtn) {
+  _attach(collapseBtn, 'click', () => toggleChannelCollapse(el, idx));
+}
+
+/**
+ * Toggle a channel’s collapsed state and (re-)render its waveform when expanded.
+ * @param {HTMLElement} channelEl
+ * @param {number}      idx       Channel index in State
+ */
+function toggleChannelCollapse(channelEl, idx) {
+  const body = channelEl.querySelector('.collapsible-content');
+  const collapsed = channelEl.classList.toggle('collapsed');
+  if (body) body.hidden = collapsed;
+
+  // if we’ve just expanded → draw waveform immediately
+  if (!collapsed) {
+    const ch = State.get().channels[idx];
+    const canvas = channelEl.querySelector('.waveform');
+    if (canvas && canvas.clientWidth > 0 && canvas.clientHeight > 0) {
+      renderWaveformToCanvas(
+        canvas,
+        ch.buffer,
+        ch.trimStart,
+        ch.trimEnd,
+        {
+          cachedWaveformImage: getChannelWaveformImage(idx, ch, canvas),
+          mainPlayheadRatio:   mainTransportPlayheadRatios.get(idx),
+          previewPlayheadRatio: previewPlayheads.get(idx),
+          fadeInTime:  ch.fadeInTime,
+          fadeOutTime: ch.fadeOutTime,
+          isReversed:  ch.reverse,
+          zoomTrim:    !!channelZoomStates[idx]
+        }
+      );
+    }
+  }
+}
+
 }
 export function updateChannelUI(el, ch, phStep, idx, full) {
   const steps = el.querySelectorAll('.step'), playing = State.get().playing;
