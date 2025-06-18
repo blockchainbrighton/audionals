@@ -232,29 +232,44 @@ const SequenceManager = (() => {
     return true;
   };
 
-  const duplicateSequence = async i => {
+  const duplicateSequence = async (i, newName = null) => {
     if (sequences.length >= maxSequences) return warn('Maximum number of sequences reached:', maxSequences);
     if (!validateIndex(i)) return warn('Invalid sequence index for duplication:', i);
     
-    saveCurrent(); // Ensure current sequence data is up-to-date if duplicating current
+    saveCurrent(); 
     const sourceSequenceData = sequences[i].data;
+    const sourceSequenceName = sequences[i].name;
+
+    const finalName = (typeof newName === 'string' && newName.trim()) 
+                      ? newName.trim() 
+                      : `${sourceSequenceName} Copy`;
 
     const newSequenceData = {
         ...sourceSequenceData,
         channels: sourceSequenceData.channels.map(ch => ({
             ...ch,
-            steps: ch.steps ? [...ch.steps] : Array(64).fill(false) // Deep copy steps
+            steps: ch.steps ? [...ch.steps] : Array(64).fill(false) 
         }))
-    }; // Channel names are already global.
+    }; 
 
     sequences.push({
       id: generateId(),
-      name: sequences[i].name + ' Copy',
+      name: finalName, // Use the determined finalName
       data: newSequenceData,
       created: now(),
       modified: now()
     });
-    emit();
+    
+    // Optional: Switch to the newly duplicated sequence
+    // currentSequenceIndex = sequences.length - 1;
+    // const currentSeqData = sequences.at(-1).data;
+    // State.update({ 
+    //     ...currentSeqData,
+    //     channels: currentSeqData.channels.map(ch => ({...ch}))
+    // });
+    // await rehydrateAllChannelBuffers(currentSeqData.channels);
+    
+    emit(); // Emit will update UI with the new sequence list
     return true;
   };
 
