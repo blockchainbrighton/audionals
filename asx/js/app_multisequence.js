@@ -163,19 +163,60 @@ const $ = id => document.getElementById(id);
 const add = (id, ev, cb) => {
     const el = $(id);
     if (el) el.addEventListener(ev, cb);
-    else console.warn(`Element with ID '${id}' not found for event binding.`); // Added a warning
+    else console.warn(`Element with ID '${id}' not found for event binding.`);
 };
 
 // UI EVENTS
 add('add-channel-btn', 'click', () => State.addChannel(makeChannel(State.get().channels.length)));
 add('play-btn', 'click', start);
 add('stop-btn', 'click', stop);
-// add('load-btn', 'click', () => $('load-input').click());
+
 add('bpm-input', 'input', e => {
-  let v = parseInt(e.target.value, 10);
-  v = isNaN(v) && e.target.value !== "" ? State.get().bpm : isNaN(v) ? null : Math.min(Math.max(v, 1), 420);
-  if (v !== null) { e.target.value = v; State.update({ bpm: v }); }
+  let rawValue = e.target.value;
+  let v = parseFloat(rawValue);
+
+  // If parsing fails but input is not empty (e.g., "120."), keep trying, but don't update state yet.
+  // If it's clearly not a number (e.g. "abc"), or empty, handle it.
+  if (isNaN(v)) {
+    if (rawValue.trim() === "" || !/^[0-9]*\.?[0-9]*$/.test(rawValue)) { // Allow empty or partially valid float
+        // If it's invalid beyond a partial float, revert or handle as error
+        // For now, we don't update State, allowing user to continue typing.
+        // If it was "abc", it won't update state. If it was "120.", it won't update yet.
+        return; 
+    }
+    // If it's a partial float like "120." or just ".", parseFloat might return NaN or the integer part.
+    // We let the blur event handle final validation if it's still partial.
+  }
+
+  // If we have a valid number from parseFloat
+  if (!isNaN(v)) {
+    v = Math.min(Math.max(v, 1), 420); // Clamp
+    // No need to format toFixed(2) here before updating state, store the precise float.
+    State.update({ bpm: v });
+    // Optionally, you could reformat the input field value here as they type,
+    // but it can be disruptive. Better to do it on blur.
+    // e.target.value = v.toFixed(2); // Example of immediate reformat - might be annoying
+  }
 });
+
+add('bpm-input', 'blur', e => {
+  let v = parseFloat(e.target.value);
+  if (isNaN(v) || v < 1 || v > 420) {
+    // If invalid or out of range on blur, revert to state's BPM
+    const stateBPM = State.get().bpm;
+    e.target.value = stateBPM.toFixed(2); // Format to 2 decimal places
+    State.update({ bpm: stateBPM }); // Ensure state is consistent if it was a bad parse before
+  } else {
+    // Valid number, format it to two decimal places in the input
+    // and ensure state also has this potentially clamped/parsed value precisely
+    v = Math.min(Math.max(v, 1), 420); // Re-clamp just in case
+    e.target.value = v.toFixed(2);
+    if (State.get().bpm !== v) { // Only update state if it's different after parsing & clamping
+        State.update({ bpm: v });
+    }
+  }
+});
+
 add('bpm-input', 'blur', e => { if (!e.target.value) e.target.value = State.get().bpm; });
 
 // ENHANCED SAVE

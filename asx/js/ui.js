@@ -43,13 +43,15 @@ const renderGlobalUI = (s, ps) => {
   }
   const bpmInput = document.getElementById('bpm-input');
   if (bpmInput && (!ps || s.bpm !== ps.bpm)) {
-    bpmInput.value = s.bpm;
+    // When state.bpm changes, update the input field and format to 2 decimal places
+    bpmInput.value = s.bpm.toFixed(2);
   }
   const playbackModeBtn = document.getElementById('playback-mode-btn');
   if (playbackModeBtn && (!ps || s.playbackMode !== ps.playbackMode)) {
     playbackModeBtn.textContent = `Mode: ${s.playbackMode === 'continuous' ? 'Continuous' : 'Single'}`;
   }
 };
+
 
 function render(s, ps) {
   renderGlobalUI(s, ps);
