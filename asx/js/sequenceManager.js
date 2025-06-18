@@ -1,121 +1,190 @@
-
-// js/sequenceManager.js (2025 Refactor: Minimal, DRY, Drop-in)
+// js/sequenceManager.js (Refactored for Global Channel Names)
 import State from './state.js';
 import { rehydrateAllChannelBuffers } from './utils.js';
-import { makeChannel } from './app_multisequence.js';
+import { makeChannel } from './app_multisequence.js'; // Assuming makeChannel(index) creates a base channel object
 
 const SequenceManager = (() => {
   let sequences = [], currentSequenceIndex = 0, maxSequences = 128;
+  let globalChannelNames = []; // NEW: Store global channel names
   const listeners = new Set();
+
+  const DEFAULT_CHANNEL_COUNT = 16; // Default number of channels if not otherwise specified
 
   // --- Shared helpers ---
   const now = () => Date.now();
   const warn = (msg, ...a) => (console.warn(msg, ...a), false);
   const validateIndex = i => i >= 0 && i < sequences.length;
   const generateId = () => `seq_${now()}_${Math.random().toString(36).slice(2,9)}`;
-  
-  // Modified blankData to not carry over playing/currentStep from current global state
-  // It should represent a truly blank sequence state for those fields.
+  // Placeholder for getDefaultProjectName if not available globally via import
+  const getDefaultProjectName = () => 'My Project';
+
+
+  // --- Global Channel Name Management ---
+  const initializeGlobalChannelNames = (count, namesToUse = null) => {
+    const numChannels = count > 0 ? count : DEFAULT_CHANNEL_COUNT;
+    const newGlobalNames = [];
+    for (let i = 0; i < numChannels; i++) {
+      let name = `Channel ${i + 1}`;
+      if (namesToUse && i < namesToUse.length && typeof namesToUse[i] === 'string' && namesToUse[i].trim()) {
+        name = namesToUse[i].trim();
+      }
+      newGlobalNames.push(name);
+    }
+    globalChannelNames = newGlobalNames;
+  };
+
+  const applyGlobalChannelNamesToSequenceData = (sequenceData) => {
+    if (sequenceData && sequenceData.channels && Array.isArray(sequenceData.channels)) {
+      sequenceData.channels.forEach((channel, index) => {
+        if (channel && index < globalChannelNames.length) { // Check against globalChannelNames length
+          channel.name = globalChannelNames[index];
+        } else if (channel) {
+          // Fallback if globalChannelNames is somehow shorter (should not happen with consistent channel counts)
+          channel.name = channel.name || `Channel ${index + 1}`;
+        }
+      });
+      // Ensure sequenceData.channels length matches globalChannelNames.length if desynced
+      // This is a more complex operation (add/remove channels) and is out of scope for just naming.
+      // Assumes channel counts are kept consistent by other logic.
+    }
+  };
+
+  const synchronizeAllSequenceChannelNames = () => {
+    sequences.forEach(seq => {
+      applyGlobalChannelNamesToSequenceData(seq.data);
+    });
+    
+    const currentSeq = sequences[currentSequenceIndex];
+    if (currentSeq && currentSeq.data && currentSeq.data.channels) {
+        // Update State with the channels (which now have global names)
+        // Pass a new array of new channel objects for reactivity
+        State.update({ channels: currentSeq.data.channels.map(ch => ({...ch})) });
+    }
+  };
+
   const blankData = () => {
     const currentGlobalState = State.get();
-    return { 
-      ...currentGlobalState, // gets bpm, playbackMode, projectName (if desired)
-      channels: currentGlobalState.channels.map(ch => ({ ...ch })), 
-      playing: false, // Default for a "blank" sequence data representation
-      currentStep: 0  // Default for a "blank" sequence data representation
+    const channelCount = globalChannelNames.length > 0 ? globalChannelNames.length : (currentGlobalState.channels?.length || DEFAULT_CHANNEL_COUNT);
+
+    return {
+      projectName: currentGlobalState.projectName,
+      bpm: currentGlobalState.bpm,
+      channels: Array.from({ length: channelCount }, (_, k) => {
+        const {
+          steps: _steps, src: _src, imageData: _imageData, name: _name,
+          buffer, reversedBuffer, activePlaybackScheduledTime, activePlaybackDuration,
+          activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed,
+          ...restOfMakeChannel 
+        } = makeChannel(k);
+
+        return {
+          ...restOfMakeChannel,
+          name: globalChannelNames[k] || `Channel ${k + 1}`,
+          steps: Array(64).fill(false),
+          src: null,
+          imageData: null,
+        };
+      }),
+      playing: false,
+      currentStep: 0,
+      playbackMode: currentGlobalState.playbackMode
     };
   };
 
   const emit = () => listeners.forEach(cb => { try { cb({
     sequences: sequences.map((s, i) => ({ id: s.id, name: s.name, index: i, created: s.created, modified: s.modified, isCurrent: i === currentSequenceIndex })),
     currentIndex: currentSequenceIndex,
-    currentSequence: sequences[currentSequenceIndex] || sequences[0],
+    currentSequence: sequences[currentSequenceIndex] || (sequences.length > 0 ? sequences[0] : undefined),
     maxSequences
   }); } catch(e) { console.error('Error in sequence manager listener:', e); } });
   
-  // Save current global state into the sequence data structure
   const saveCurrent = () => {
     if (sequences.length > 0 && validateIndex(currentSequenceIndex)) {
         const globalStateSnapshot = State.get();
-        sequences[currentSequenceIndex] = { 
-            ...sequences[currentSequenceIndex], 
-            data: { ...globalStateSnapshot }, // Save the entire current global state
-            modified: now() 
+        sequences[currentSequenceIndex].data = { 
+            ...globalStateSnapshot,
+            // Ensure channels are a deep enough copy, and names are correct (though they should be)
+            channels: globalStateSnapshot.channels.map(ch => ({...ch}))
         };
+        sequences[currentSequenceIndex].modified = now();
     }
   };
-
 
   // --- Core API ---
   const init = () => {
+    const initialGlobalState = State.get();
+    const initialChannelCount = initialGlobalState.channels?.length || DEFAULT_CHANNEL_COUNT;
+
+    // Initialize globalChannelNames ONLY if they haven't been populated yet (e.g., by an import call before init)
+    if (globalChannelNames.length === 0) {
+        const namesFromInitialState = initialGlobalState.channels?.map(ch => ch.name).filter(name => typeof name === 'string' && name.trim());
+        initializeGlobalChannelNames(initialChannelCount, (namesFromInitialState?.length === initialChannelCount) ? namesFromInitialState : null);
+    }
+
     if (sequences.length === 0) {
-        const initialState = State.get(); // Get the initial global state
+        const newSeqData = { ...initialGlobalState };
+        applyGlobalChannelNamesToSequenceData(newSeqData); // Ensure its channels use global names
+
         sequences.push({ 
             id: generateId(), 
             name: 'Sequence 1', 
-            data: { ...initialState }, // Store a copy of the initial global state
+            data: newSeqData,
             created: now(), 
             modified: now() 
         });
+        currentSequenceIndex = 0;
     }
+    
+    // Ensure all sequences (freshly created or from a prior import) and State are synced with globalChannelNames
+    synchronizeAllSequenceChannelNames();
+    emit();
   };
 
-  const getCurrentSequence = () => (sequences.length || init(), sequences[currentSequenceIndex] || sequences[0]);
+  const getCurrentSequence = () => {
+    // If accessed early, ensure init has run. This guard helps if other modules access SM before app fully bootstraps.
+    if (sequences.length === 0 && globalChannelNames.length === 0) {
+        init();
+    }
+    return sequences[currentSequenceIndex] || (sequences.length > 0 ? sequences[0] : null);
+  };
   const getSequencesInfo = () => sequences.map((s, i) => ({ id: s.id, name: s.name, index: i, created: s.created, modified: s.modified, isCurrent: i === currentSequenceIndex }));
 
   const switchToSequence = async i => {
     if (!validateIndex(i)) return warn('Invalid sequence index:', i);
-    
-    saveCurrent(); // Save the current global state (including playing, currentStep) into the outgoing sequence's data
+    saveCurrent(); 
     
     currentSequenceIndex = i;
     const newSequenceData = sequences[i].data;
-    const currentGlobalPlayingState = State.get().playing; // Preserve current global playing state
-    // const currentGlobalPlaybackMode = State.get().playbackMode; // Preserve current global playback mode
-    // currentStep will be reset by the playbackEngine for the new sequence anyway.
+    // newSequenceData.channels should already have global names due to synchronization.
 
-    // Update state with new sequence's channels, bpm, name, etc.,
-    // but preserve the global `playing` state and let `playbackEngine` handle `currentStep`.
-    // Explicitly do NOT load playing/currentStep from sequence data during a continuous switch.
     State.update({
       projectName: newSequenceData.projectName,
       bpm: newSequenceData.bpm,
-      channels: newSequenceData.channels, // This is the main part to load
-      // playbackMode: newSequenceData.playbackMode || currentGlobalPlaybackMode, // Or always keep global one
-      // --- IMPORTANT: Do NOT update 'playing' or 'currentStep' from newSequenceData here ---
-      // 'playing' should remain as it is globally.
-      // 'currentStep' will be managed by playbackEngine.
+      channels: newSequenceData.channels.map(ch => ({...ch})), // Pass copy to State
+      // playbackMode: newSequenceData.playbackMode (handled by original logic)
     });
 
-    await rehydrateAllChannelBuffers(newSequenceData.channels); // Pass the specific channels to rehydrate
-    emit(); // Notify SequenceUI and other listeners about the sequence change
+    await rehydrateAllChannelBuffers(newSequenceData.channels);
+    emit();
     return true;
   };
 
   const addSequence = async (name, copyFromCurrent = false) => {
     if (sequences.length >= maxSequences) return warn('Maximum number of sequences reached:', maxSequences);
-    
-    saveCurrent(); // Save current global state to current sequence data
+    saveCurrent(); 
     
     let newSequenceData;
     if (copyFromCurrent) {
-        newSequenceData = { ...State.get() }; // Copy current global state
-    } else {
-        // Create truly blank data, but keep some global things like project name, playbackMode.
-        // `blankData()` needs to be context-aware or State.get() needs to be carefully merged.
         const currentGlobalState = State.get();
-        newSequenceData = {
-            projectName: currentGlobalState.projectName,
-            bpm: currentGlobalState.bpm, // Or a default like 120
-            channels: Array.from({ length: currentGlobalState.channels.length || 16 }, (_, k) => { // Use makeChannel
-                const { buffer, reversedBuffer, activePlaybackScheduledTime, activePlaybackDuration,
-                        activePlaybackTrimStart, activePlaybackTrimEnd, activePlaybackReversed, src, imageData, ...restOfMakeChannel } = makeChannel(k);
-                return { ...restOfMakeChannel, steps: Array(64).fill(false), src: null, imageData: null }; // Ensure steps are blank
-            }),
-            playing: false, // Default for a new sequence's data
-            currentStep: 0, // Default for a new sequence's data
-            playbackMode: currentGlobalState.playbackMode // Inherit global playback mode
-        };
+        newSequenceData = { 
+            ...currentGlobalState, 
+            channels: currentGlobalState.channels.map(ch => ({
+                ...ch, 
+                steps: ch.steps ? [...ch.steps] : Array(64).fill(false) // Deep copy steps
+            }))
+        }; // Names are already global from State.get()
+    } else {
+        newSequenceData = blankData(); // blankData now uses globalChannelNames
     }
 
     sequences.push({
@@ -127,11 +196,13 @@ const SequenceManager = (() => {
     });
     
     currentSequenceIndex = sequences.length - 1;
-    // When adding a new sequence, we update the global state to reflect this new one.
-    // Here, it's appropriate to load its 'playing' and 'currentStep' (which should be false/0).
-    State.update({ ...sequences.at(-1).data }); 
+    const currentSeqData = sequences.at(-1).data;
+    State.update({ 
+        ...currentSeqData,
+        channels: currentSeqData.channels.map(ch => ({...ch})) // Pass copy
+    }); 
     
-    await rehydrateAllChannelBuffers(sequences.at(-1).data.channels);
+    await rehydrateAllChannelBuffers(currentSeqData.channels);
     emit();
     return true;
   };
@@ -141,49 +212,45 @@ const SequenceManager = (() => {
     if (!validateIndex(i)) return warn('Invalid sequence index for removal:', i);
     
     sequences.splice(i,1);
-    currentSequenceIndex = Math.min(currentSequenceIndex, sequences.length - 1);
+    currentSequenceIndex = Math.max(0, Math.min(currentSequenceIndex, sequences.length - 1));
     
-    // Load the state of the new current sequence
-    State.update({ ...sequences[currentSequenceIndex].data }); 
-    await rehydrateAllChannelBuffers(sequences[currentSequenceIndex].data.channels);
+    const currentSeqData = sequences[currentSequenceIndex].data;
+    State.update({ 
+        ...currentSeqData,
+        channels: currentSeqData.channels.map(ch => ({...ch})) // Pass copy
+    }); 
+    await rehydrateAllChannelBuffers(currentSeqData.channels);
     emit();
     return true;
   };
 
-  const renameSequence = (i, newName) => {
+  const renameSequence = (i, newName) => { // Renames the SEQUENCE, not channels
     if (!validateIndex(i)) return warn('Invalid sequence index for rename:', i);
-    sequences[i] = { ...sequences[i], name: newName, modified: now() };
-    // If renaming the current sequence, update the project name in State if it's tied to sequence name
-    if (i === currentSequenceIndex) {
-        // This depends on how projectName is handled. If it can be different from seq name, only emit.
-        // If State.projectName should reflect current sequence name (if State.projectName was using old name):
-        // State.update({ projectName: newName }); // This might be too aggressive.
-    }
+    sequences[i].name = newName;
+    sequences[i].modified = now();
     emit();
     return true;
   };
 
-  const duplicateSequence = i => {
+  const duplicateSequence = async i => {
     if (sequences.length >= maxSequences) return warn('Maximum number of sequences reached:', maxSequences);
     if (!validateIndex(i)) return warn('Invalid sequence index for duplication:', i);
     
-    // The sequence being duplicated might be the current one, or another.
-    // If it's another one, its `data` is what we want.
-    // If it's the current one, its `data` might not yet reflect the latest global State (if saveCurrent wasn't just called).
-    // To be safe, if duplicating current, use a fresh snapshot of global state.
-    // Otherwise, use the stored data of the sequence at index `i`.
-    let dataToDuplicate;
-    if (i === currentSequenceIndex) {
-        saveCurrent(); // Ensure current sequence data is up-to-date with global state
-        dataToDuplicate = { ...sequences[i].data }; // Now it's safe to use
-    } else {
-        dataToDuplicate = { ...sequences[i].data };
-    }
+    saveCurrent(); // Ensure current sequence data is up-to-date if duplicating current
+    const sourceSequenceData = sequences[i].data;
+
+    const newSequenceData = {
+        ...sourceSequenceData,
+        channels: sourceSequenceData.channels.map(ch => ({
+            ...ch,
+            steps: ch.steps ? [...ch.steps] : Array(64).fill(false) // Deep copy steps
+        }))
+    }; // Channel names are already global.
 
     sequences.push({
       id: generateId(),
       name: sequences[i].name + ' Copy',
-      data: dataToDuplicate, // Use the prepared data
+      data: newSequenceData,
       created: now(),
       modified: now()
     });
@@ -193,77 +260,130 @@ const SequenceManager = (() => {
 
   const importSequences = async data => {
     try {
-      const wasPlaying = State.get().playing;
-      const currentGlobalStepBeforeImport = State.get().currentStep;
       const currentGlobalPlaybackMode = State.get().playbackMode;
-      // Keep the existing global project name temporarily, we'll decide what to do with it.
       const existingGlobalProjectName = State.get().projectName;
-  
-      let importedProjectName; // To store the project name from the file
-  
+      let importedProjectName;
+      let tempRawSequences = []; // To hold {name, data (raw), id, created, modified}
+
+      // 1. Establish globalChannelNames from import data or defaults
+      if (data.globalChannelNames && Array.isArray(data.globalChannelNames) && data.globalChannelNames.length > 0) {
+        initializeGlobalChannelNames(data.globalChannelNames.length, data.globalChannelNames);
+      } else {
+        let firstSeqChannels = null;
+        if (data.type === 'multi-sequence' && data.sequences?.[0]?.data?.channels) {
+            firstSeqChannels = data.sequences[0].data.channels;
+        } else if (!data.type && data.channels) { // Single sequence old format (data IS the project state)
+            firstSeqChannels = data.channels;
+        }
+        const derivedChannelCount = firstSeqChannels?.length || globalChannelNames.length || DEFAULT_CHANNEL_COUNT;
+        const namesFromFirstSeq = firstSeqChannels?.map(ch => ch.name);
+        initializeGlobalChannelNames(derivedChannelCount, namesFromFirstSeq);
+      }
+
+      // 2. Prepare sequence structures from import data (without final name sync yet)
       if (data.type === 'multi-sequence' && Array.isArray(data.sequences)) {
-        sequences = data.sequences.map(seq => ({
+        tempRawSequences = data.sequences.map(seq => ({
           id: seq.id || generateId(),
-          name: seq.name || 'Imported Sequence', // Keep names from multi-sequence file
-          data: seq.data,
+          name: seq.name || 'Imported Sequence',
+          data: { // Deep copy essential parts like channels and steps
+            ...seq.data,
+            channels: (seq.data.channels || []).map(ch => ({
+                ...ch,
+                steps: ch.steps ? [...ch.steps] : Array(64).fill(false)
+            }))
+          },
           created: seq.created || now(),
           modified: seq.modified || now()
         }));
-        currentSequenceIndex = Math.min(data.currentSequenceIndex ?? 0, sequences.length - 1);
+        currentSequenceIndex = Math.max(0, Math.min(data.currentSequenceIndex ?? 0, tempRawSequences.length - 1));
         maxSequences = data.maxSequences ?? 128;
-        // For multi-sequence, the projectName in the *first sequence's data* usually dictates the overall project name
-        importedProjectName = sequences[currentSequenceIndex]?.data?.projectName || existingGlobalProjectName;
-      } else { // Single sequence project (or old format)
-        importedProjectName = data.projectName || getDefaultProjectName(); // Get project name from data, or make one up
-        sequences = [{
+        importedProjectName = tempRawSequences[currentSequenceIndex]?.data?.projectName || existingGlobalProjectName;
+      } else { // Single sequence project (old format)
+        importedProjectName = data.projectName || getDefaultProjectName();
+        tempRawSequences = [{
           id: generateId(),
-          name: 'Sequence 1', // <<< CHANGE: Always name the first sequence "Sequence 1"
-          data: { ...data, projectName: importedProjectName }, // Ensure the imported data (now sequence data) also has the correct project name
+          name: data.name || 'Sequence 1', // Use original name if it was a named single sequence
+          data: {
+            ...data, // bpm, etc.
+            channels: (data.channels || []).map(ch => ({ // Deep copy channels/steps
+                ...ch,
+                steps: ch.steps ? [...ch.steps] : Array(64).fill(false)
+            })),
+            projectName: importedProjectName 
+          },
           created: now(),
           modified: now()
         }];
         currentSequenceIndex = 0;
       }
-  
-      if (sequences.length) {
-        const newCurrentSeqData = sequences[currentSequenceIndex].data;
+      sequences = tempRawSequences;
+
+      // 3. Synchronize all imported sequences' channel names with globalChannelNames
+      // This also updates State for the current sequence.
+      synchronizeAllSequenceChannelNames(); 
+
+      // 4. Finalize state update for the new current sequence
+      if (sequences.length > 0) {
+        const newCurrentSeqData = sequences[currentSequenceIndex].data; // Data now has globally named channels
         State.update({ 
-            ...newCurrentSeqData, // Load BPM, channels etc. from the sequence data
-            projectName: importedProjectName, // <<<< ENSURE THIS IS SET
-            playbackMode: newCurrentSeqData.playbackMode || currentGlobalPlaybackMode
+            ...newCurrentSeqData, // This loads BPM, globally-named channels etc.
+            projectName: importedProjectName,
+            playbackMode: newCurrentSeqData.playbackMode || currentGlobalPlaybackMode,
+            // playing/currentStep are intentionally not loaded from sequence data to maintain continuity if playing.
         });
         await rehydrateAllChannelBuffers(newCurrentSeqData.channels);
       } else {
-        // If import results in no sequences, reset to a default blank state
-        const defaultProjectName = getDefaultProjectName(); // Use a generic default
-        const blank = blankData(); // This blankData should not determine projectName
-        sequences.push({ id: generateId(), name: 'Sequence 1', data: { ...blank, projectName: defaultProjectName }, created: now(), modified: now()});
+        const defaultPName = getDefaultProjectName();
+        initializeGlobalChannelNames(DEFAULT_CHANNEL_COUNT); // Reset global names to default
+        const blankSeqData = blankData(); // Uses new global names
+        sequences.push({ id: generateId(), name: 'Sequence 1', data: { ...blankSeqData, projectName: defaultPName }, created: now(), modified: now()});
         currentSequenceIndex = 0;
-        State.update({...blank, projectName: defaultProjectName}); // Update global state
+        State.update({...sequences[0].data, projectName: defaultPName, channels: sequences[0].data.channels.map(ch => ({...ch})) });
+        await rehydrateAllChannelBuffers(sequences[0].data.channels);
       }
       emit();
       return true;
     } catch (e) { console.error('Error importing sequences:', e); return false; }
   };
 
-
   const exportAllSequences = () => {
-    saveCurrent(); // Ensure the currently active global state is saved to its sequence slot
+    saveCurrent(); 
     return {
-        version: '1.0',
+        version: '1.1', // Incremented due to globalChannelNames
         type: 'multi-sequence',
+        globalChannelNames: [...globalChannelNames], 
         sequences: sequences.map(seq => ({
-        id: seq.id,
-        name: seq.name,
-        created: seq.created,
-        modified: seq.modified,
-        data: { ...seq.data } 
+          id: seq.id,
+          name: seq.name,
+          created: seq.created,
+          modified: seq.modified,
+          data: { // Deep copy data for export
+            ...seq.data,
+            channels: seq.data.channels.map(ch => ({
+                ...ch,
+                steps: ch.steps ? [...ch.steps] : Array(64).fill(false)
+            }))
+          }
         })),
         currentSequenceIndex,
         maxSequences
     };
   };
   
+  const updateGlobalChannelName = (channelIndex, newName) => {
+    if (channelIndex < 0 || channelIndex >= globalChannelNames.length) {
+      return warn('Invalid channel index for renaming:', channelIndex, 'Max index:', globalChannelNames.length - 1);
+    }
+    const trimmedName = typeof newName === 'string' ? newName.trim() : '';
+    if (trimmedName === '') {
+        return warn('New channel name cannot be empty.');
+    }
+
+    globalChannelNames[channelIndex] = trimmedName;
+    synchronizeAllSequenceChannelNames(); // Propagates to all sequences and updates State's current channels
+    emit(); // Notify listeners (e.g., UI for sequence list) as State change might not cover all SM listeners
+    return true;
+  };
 
   // --- Navigation & Event API ---
   const goToNextSequence = () => switchToSequence((currentSequenceIndex + 1) % sequences.length);
@@ -275,10 +395,12 @@ const SequenceManager = (() => {
     init, getCurrentSequence, getSequencesInfo, switchToSequence,
     addSequence, removeSequence, renameSequence, duplicateSequence,
     exportAllSequences, importSequences, goToNextSequence, goToPreviousSequence, subscribe,
+    updateGlobalChannelName, // Exposed new function
+    getGlobalChannelNames: () => [...globalChannelNames], // Getter for global names (returns a copy)
     get currentIndex() { return currentSequenceIndex; },
     get sequenceCount() { return sequences.length; },
     get maxSequences() { return maxSequences; },
-    _getSequences: () => sequences // For internal access if absolutely needed (like MultiSequenceSaveLoad)
+    // _getSequences: () => sequences // Expose for specific internal/debug needs if necessary
   };
 })();
 
