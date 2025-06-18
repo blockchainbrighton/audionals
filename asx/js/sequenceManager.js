@@ -193,54 +193,53 @@ const SequenceManager = (() => {
 
   const importSequences = async data => {
     try {
-      // Preserve current global playing and currentStep before overwriting sequences
       const wasPlaying = State.get().playing;
       const currentGlobalStepBeforeImport = State.get().currentStep;
       const currentGlobalPlaybackMode = State.get().playbackMode;
-
-
+      // Keep the existing global project name temporarily, we'll decide what to do with it.
+      const existingGlobalProjectName = State.get().projectName;
+  
+      let importedProjectName; // To store the project name from the file
+  
       if (data.type === 'multi-sequence' && Array.isArray(data.sequences)) {
         sequences = data.sequences.map(seq => ({
           id: seq.id || generateId(),
-          name: seq.name || 'Imported Sequence',
-          data: seq.data, // seq.data contains its own 'playing' and 'currentStep'
+          name: seq.name || 'Imported Sequence', // Keep names from multi-sequence file
+          data: seq.data,
           created: seq.created || now(),
           modified: seq.modified || now()
         }));
         currentSequenceIndex = Math.min(data.currentSequenceIndex ?? 0, sequences.length - 1);
         maxSequences = data.maxSequences ?? 128;
-      } else { // Single sequence project
+        // For multi-sequence, the projectName in the *first sequence's data* usually dictates the overall project name
+        importedProjectName = sequences[currentSequenceIndex]?.data?.projectName || existingGlobalProjectName;
+      } else { // Single sequence project (or old format)
+        importedProjectName = data.projectName || getDefaultProjectName(); // Get project name from data, or make one up
         sequences = [{
           id: generateId(),
-          name: data.projectName || 'Imported Sequence',
-          data, // data is the single sequence's state, including its 'playing' and 'currentStep'
+          name: 'Sequence 1', // <<< CHANGE: Always name the first sequence "Sequence 1"
+          data: { ...data, projectName: importedProjectName }, // Ensure the imported data (now sequence data) also has the correct project name
           created: now(),
           modified: now()
         }];
         currentSequenceIndex = 0;
       }
-
+  
       if (sequences.length) {
         const newCurrentSeqData = sequences[currentSequenceIndex].data;
-        // When importing, we typically want to load the project as it was saved,
-        // including its saved BPM, channels, project name, etc.
-        // However, we might want to override the saved 'playing' state if the app was already playing.
-        // For simplicity now, load everything from the new sequence data.
         State.update({ 
-            ...newCurrentSeqData,
-            // Optionally, decide if 'playing' should be preserved or taken from file:
-            // playing: wasPlaying, // or newCurrentSeqData.playing
-            // currentStep: newCurrentSeqData.playing ? newCurrentSeqData.currentStep : 0, // or currentGlobalStepBeforeImport if wasPlaying
-            playbackMode: newCurrentSeqData.playbackMode || currentGlobalPlaybackMode // Prefer file's, fallback to global
+            ...newCurrentSeqData, // Load BPM, channels etc. from the sequence data
+            projectName: importedProjectName, // <<<< ENSURE THIS IS SET
+            playbackMode: newCurrentSeqData.playbackMode || currentGlobalPlaybackMode
         });
         await rehydrateAllChannelBuffers(newCurrentSeqData.channels);
       } else {
-        // If import results in no sequences (e.g. invalid file format not caught earlier)
-        // reset to a default blank state.
-        const blank = blankData(); // This now considers global state for some fields.
-        sequences.push({ id: generateId(), name: 'Sequence 1', data: blank, created: now(), modified: now()});
+        // If import results in no sequences, reset to a default blank state
+        const defaultProjectName = getDefaultProjectName(); // Use a generic default
+        const blank = blankData(); // This blankData should not determine projectName
+        sequences.push({ id: generateId(), name: 'Sequence 1', data: { ...blank, projectName: defaultProjectName }, created: now(), modified: now()});
         currentSequenceIndex = 0;
-        State.update({...blank});
+        State.update({...blank, projectName: defaultProjectName}); // Update global state
       }
       emit();
       return true;
