@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Audional Image FX Playground</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{
+      background:#121212;
+      color:#f0f0f0;
+      font-family:Arial,sans-serif;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      height:100vh;
+      position:relative;
+    }
+    #canvas-container {
+      position: relative;
+      width: 80vh;
+      height: 80vh;
+      max-width: 80vw;
+      max-height: 80vh;
+      cursor: pointer;
+      background-color: #000000;
+    }
+    #canvas-frame {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      border: 2px solid #000000;
+      border-radius: 4px;
+      box-sizing: border-box;
+      overflow: hidden;
+      box-shadow: none;
+    }
+    canvas#main-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #badge-area {
+      position: absolute;
+      left: 42%;
+      top: 18%;
+      width: 17%;
+      height: 17%;
+      pointer-events: none;
+      z-index: 1;
+      display: none;
+    }
+    #badge-area img#badge-image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .fx-btns {
+      display: flex;
+      /* gap: 12px; REMOVE or REDUCE gap if space is very tight */
+      gap: 3px; /* Reduced gap for better fit */
+      justify-content: center; /* Or space-around / space-between if preferred */
+      align-items: center;
+      position: relative;
+      margin-top: 12px;
+      z-index: 2;
+      /* flex-wrap: wrap; REMOVE THIS to force single row */
+      flex-wrap: nowrap; /* ADD THIS to prevent wrapping */
+      overflow-x: auto; /* Optional: allow horizontal scrolling if buttons still overflow (e.g., too many buttons or min-width set on them) */
+                        /* If you truly want them to shrink to fit no matter what, remove this and ensure buttons can shrink */
+      width: 100%; /* Ensure the container takes the width of its parent */
+      max-width: 80vh; /* This was your original max-width, ensure it matches canvas container behavior */
+    }
+    .fx-btn{
+      padding: 5px 8px; /* Slightly reduce horizontal padding */
+      background:linear-gradient(135deg,#6e8efb,#a777e3);
+      color:#fff; border:none; border-radius:4px;
+      font-size: 10px; /* Slightly reduce font size */
+      cursor:pointer; opacity:.93; transition:.2s; box-shadow:0 4px 6px #0002;
+
+      /* Allow buttons to shrink and grow as needed */
+      flex-shrink: 1;
+      flex-grow: 1; /* Allows them to grow to fill space if fewer buttons */
+      flex-basis: 0; /* Important for proper shrinking/growing distribution */
+      min-width: 0; /* Crucial to allow shrinking below default content size */
+      text-align: center; /* Ensure text is centered if button shrinks a lot */
+      white-space: nowrap; /* Prevent button text from wrapping */
+      overflow: hidden;    /* Hide text that overflows the button */
+      text-overflow: ellipsis; /* Show ... if text is too long */
+    }
+    .fx-btn:hover{
+      background:linear-gradient(135deg,#5d7df9,#9666d6);
+      transform:translateY(-2px)
+    }
+    .fx-btn.active{
+      background:linear-gradient(135deg,#3a4ca2,#7d3ed7)!important;
+      box-shadow:0 4px 18px #4416; opacity:1
+    }
+    .fx-btn:disabled{opacity:.4;cursor:default}
+    #timeline-editor{
+      position:fixed; left:0; right:0; bottom:0; z-index:1;
+      background:rgba(18,18,18,.97);
+      border-top:1px solid #282848;
+      padding:10px 24px 16px 24px;
+      min-height:48px; max-height:36vh; overflow:auto;
+      box-shadow: 0 -4px 12px #0009;
+      display:flex; flex-direction:column; align-items:center;
+    }
+    #timeline-editor label, #timeline-editor select, #timeline-editor input, #timeline-editor button{
+      margin:0 3px; font-size:14px;
+    }
+    #timeline-editor button{
+      padding:3px 12px; background:#262663;
+      color:#f0f0f0; border:none; border-radius:4px;
+      margin-left:8px; cursor:pointer; transition:.2s;
+    }
+    #timeline-editor button:hover{ background:#44449f }
+    #error-message,#loading{
+      position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+      font-size:18px;text-align:center
+    }
+    #error-message{color:#f55;display:none}
+    #loading{color:#f0f0f0}
+
+    /* --- DYNAMIC TITLE STYLES --- */
+    #dynamicTitleText {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 8vw; /* default large size */
+      font-weight: bold;
+      color: #2196f3;
+      text-shadow: 0 6px 24px #111b, 0 1px 1px #000b;
+      z-index: 9999;
+      pointer-events: none;
+      transition:
+        font-size 10s cubic-bezier(0.77,0,0.175,1),
+        opacity 1.2s cubic-bezier(0.77,0,0.175,1);
+      opacity: 1;
+      user-select: none;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <body>
+    <div id="canvas-container">
+      <div id="canvas-frame">
+        <canvas id="main-canvas"></canvas>
+      </div>
+      <div id="badge-area">
+        <img id="badge-image" src="" alt="Badge" />
+      </div>
+      <div id="loading">Loading image...</div>
+      <div id="error-message">Failed to load image. Please check the URL.</div>
+    </div>
+    <div class="fx-btns" id="fx-btns"></div>
+  
+    <!-- Define title text and animation config early -->
+    <script>
+      window.titleText = "";
+      window.secondaryTitleText = "";
+      window.titleTextAnimationDuration = 10000; // 10 seconds in ms
+  
+      // --- ADD THIS LINE ---
+      window.fxTimelineUrl = "./savedTimelines/Good-Timelines/timeline_colourBandsGlitchReveal.js";
+      // --- END OF ADDITION ---
+  
+    </script>
+  <!-- The animated title text is inserted by JS below -->
+
+  <!-- Dynamic Title Text logic in a separate module -->
+  <script type="module">
+    function createDynamicTitle() {
+      let t = document.getElementById('dynamicTitleText');
+      if (t) return t;
+      t = document.createElement('div');
+      t.id = 'dynamicTitleText';
+      t.textContent = window.titleText || '';
+      t.style.opacity = '1';
+      document.body.appendChild(t);
+      return t;
+    }
+  
+    function animateTitleOnPlay() {
+      const t = createDynamicTitle();
+      t.textContent = window.secondaryTitleText || '';
+  
+      // Set smooth font-size and opacity transition both to animation duration (default 10s)
+      const duration = window.titleTextAnimationDuration || 10000;
+      t.style.transition = `font-size ${duration}ms cubic-bezier(0.77,0,0.175,1), opacity ${duration}ms linear`;
+  
+      // Trigger reflow to restart transition
+      t.offsetHeight;
+  
+      // Shrink font-size smoothly and fade out to 0 opacity
+      t.style.fontSize = '1.5vw';
+      t.style.opacity = '0';
+    }
+  
+    function resetTitleText() {
+      const t = createDynamicTitle();
+  
+      // Disable transition for instant reset
+      t.style.transition = 'none';
+  
+      // Reset to default text and size instantly, fully visible
+      t.textContent = window.titleText || '';
+      t.style.fontSize = '8vw';
+      t.style.opacity = '1';
+  
+      // Force reflow to apply immediately
+      t.offsetHeight;
+  
+      // Re-enable transition for next animation
+      const duration = window.titleTextAnimationDuration || 10000;
+      t.style.transition = `font-size ${duration}ms cubic-bezier(0.77,0,0.175,1), opacity ${duration}ms linear`;
+    }
+  
+    document.addEventListener('DOMContentLoaded', () => {
+      createDynamicTitle();
+    });
+  
+    window.animateTitleOnPlay = animateTitleOnPlay;
+    window.resetTitleText = resetTitleText;
+  </script>
+  
+
+
+  <!-- Your original preload and badge-image logic (unchanged) -->
+  <script type="module">
+    window.images = [
+      "https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"
+    ];
+    window.badgeImages = [
+      "https://ordinals.com/content/fba6c1abe4c6d7e8f654da1fe6550e4110c6c3b5c4899cb91ad9ef88dbed96eci0"
+    ];
+    window.fxInitialBPM = 104.15;
+    window.fxInitialBeatsPerBar = 4;
+    window.fxTimelineFunctionId = 68;
+
+    function composePFPWithBadge(pfpImage, badgeImage, badgeRect = { x: 0.42, y: 0.18, w: 0.17, h: 0.17 }) {
+      const size = 1024;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(pfpImage, 0, 0, size, size);
+      if (badgeImage) {
+        ctx.drawImage(
+          badgeImage,
+          badgeRect.x * size,
+          badgeRect.y * size,
+          badgeRect.w * size,
+          badgeRect.h * size
+        );
+      }
+      return canvas.toDataURL();
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      const badgeArea = document.getElementById('badge-area');
+      if (window.badgeImages && Array.isArray(window.badgeImages) && window.badgeImages[0] && window.badgeImages[0].trim()) {
+        badgeArea.style.display = 'none';
+        const pfpUrl = window.images[0];
+        const badgeUrl = window.badgeImages[0];
+        const pfpImg = new window.Image();
+        const badgeImg = new window.Image();
+        pfpImg.crossOrigin = badgeImg.crossOrigin = 'anonymous';
+        let loaded = 0;
+        pfpImg.onload = () => { loaded++; if (loaded === 2) finish(); };
+        badgeImg.onload = () => { loaded++; if (loaded === 2) finish(); };
+        pfpImg.onerror = badgeImg.onerror = () => { loaded = 99; if (window.__fxInit) window.__fxInit(); };
+        pfpImg.src = pfpUrl;
+        badgeImg.src = badgeUrl;
+        function finish() {
+          window.images[0] = composePFPWithBadge(pfpImg, badgeImg, { x: 0.42, y: 0.18, w: 0.17, h: 0.17 });
+          if (window.__fxInit) window.__fxInit();
+        }
+      } else {
+        badgeArea.style.display = 'none';
+        if (window.__fxInit) window.__fxInit();
+      }
+    });
+  </script>
+  <!-- Your app’s main logic -->
+  <script type="module">
+    import './js/main.js'; // must expose window.__fxInit = init
+    import playback from './js/playback.js';
+    window.playback = playback;
+
+    // HOOKS: Insert these into your app’s effect start/stop logic:
+    // Make sure these lines are added at the appropriate places:
+    //
+    // → When playback starts (e.g. in playTimeline):
+    //     window.animateTitleOnPlay();
+    //
+    // → When playback stops or is reset (e.g. in stopTimeline):
+    //     window.resetTitleText();
+    //
+    // Example with your play/stop:
+    // function playTimeline() {
+    //   timelinePlaying = true; runEffectTimeline(); window.playback?.play?.();
+    //   window.animateTitleOnPlay();
+    // }
+    // function stopTimeline() {
+    //   timelinePlaying = false; stopEffects(); fxAPI.clearAutomation();
+    //   Object.values(effects).forEach(e => e.active = false); enabledOrder.length = 0; updateButtonStates(); window.playback?.stop?.();
+    //   window.resetTitleText();
+    // }
+
+  </script>
+</body>
+</html>
