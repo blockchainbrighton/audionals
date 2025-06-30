@@ -1,6 +1,6 @@
 // playback.js
 let audio, loaded = false, loading = false;
-let songUrl = window.fxSongUrl || 'opus.webm';
+let songUrl = window.fxSongUrl || './media/opus.webm';
 
 function loadAudio() {
   if (audio || loading) return;
