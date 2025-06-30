@@ -144,8 +144,8 @@ More IDS that might need updates to work:
 Chordinal #1
 aa43e0a7d229f460c6f9310e938ae8ec50a26f5b09df1f6d801d9e8a8741afc3i0
 
-
-
+<!-- 
+NO NO FACE - THIS MEANS - NO OB1s - 
 15 OB1s
 https://magiceden.io/ordinals/marketplace/ordinalbased1s
 
@@ -169,4 +169,4 @@ https://magiceden.io/ordinals/marketplace/ordinalbased1s
 14 - 3e5fe7bc10e37a145a75f7ddd71debd9079b05568c5b9c5e6b4de3d959a4c46bi0 - [https://ordinals.com/content/3e5fe7bc10e37a145a75f7ddd71debd9079b05568c5b9c5e6b4de3d959a4c46bi0](https://ordinals.com/content/3e5fe7bc10e37a145a75f7ddd71debd9079b05568c5b9c5e6b4de3d959a4c46bi0)  
 15 - b77fb3b299477ca55ab2626dbbc12c0d5fa9d4cf51ae00850caae6e36baef745i0 - [https://ordinals.com/content/b77fb3b299477ca55ab2626dbbc12c0d5fa9d4cf51ae00850caae6e36baef745i0](https://ordinals.com/content/b77fb3b299477ca55ab2626dbbc12c0d5fa9d4cf51ae00850caae6e36baef745i0)  
 
-
+ -->
