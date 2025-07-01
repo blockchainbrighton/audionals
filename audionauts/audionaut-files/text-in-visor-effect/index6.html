@@ -2,185 +2,123 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Audionaut HUD Visor Text - Seed Enhanced</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Audionaut - Full Effect with Audio</title>
   <style>
-    html,body{
-      margin:0;padding:0;width:100%;height:100%;
-      background:#000;overflow:hidden;
-      display:flex;align-items:center;justify-content:center
+    /* --- Base Setup --- */
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{
+      background:#121212;
+      color:#f0f0f0;
+      font-family:Arial,sans-serif;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      height:100vh;
+      position:relative;
     }
-    canvas{max-width:80vmin;max-height:80vmin;width:100%;height:auto;display:block}
-  </style>
+
+    /* --- Core Container & Frame --- */
+    #canvas-container {
+      position: relative;
+      width: 80vh;
+      height: 80vh;
+      max-width: 80vw;
+      max-height: 80vh;
+      cursor: pointer;
+    }
+    #canvas-frame {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      /* ✅ KEY FIX: Removed "overflow: hidden" and "border" which were clipping the oversized helmet */
+    }
+
+    /* --- STACKED VISUAL LAYERS --- */
+    #canvas-frame > canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    canvas#main-canvas { z-index: 1; }
+    canvas#hud-canvas {
+      z-index: 2;
+      pointer-events: none;
+    }
+    
+    #helmet-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 115%;
+      height: 115%;
+      transform: translate(-50%, -50%);
+      object-fit: contain; 
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    /* --- UI & Utility (unchanged) --- */
+    .fx-btns{display:none;gap:3px;justify-content:center;align-items:center;position:relative;margin-top:12px;z-index:10;flex-wrap:nowrap;overflow-x:auto;width:100%;max-width:80vh}
+    #timeline-editor{display:none;position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(18,18,18,.97);border-top:1px solid #282848;padding:10px 24px 16px 24px;min-height:48px;max-height:36vh;overflow:auto;box-shadow:0 -4px 12px #0009;}
+    #dynamicTitleText{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font-size:2vw;font-weight:bold;color:#2196f3;text-shadow:0 6px 24px #111b,0 1px 1px #000b;z-index:9999;pointer-events:none;transition:font-size 10s cubic-bezier(0.77,0,0.175,1),opacity 1.2s cubic-bezier(0.77,0,0.175,1);opacity:1;user-select:none;}
+    #error-message,#loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;text-align:center; z-index: 100;}
+    #error-message{color:#f55;display:none}
+    #loading{color:#f0f0f0}
+</style>
 </head>
 <body>
-<canvas id="c"></canvas>
 
-<script>
-(() => {
-  // --- SEED SELECTION ---
-  // Change this value from 1 to 9 to see different effects!
-  const SEED = 9;
-  // 1-standard, 2-red on noise, 3-glitching binary, 4-fast large party, 5-nice slow dimmed glitch, 
-  // 6-LOVE THIS soundwave-like display, 7-deep curve slow purple, 8-fast yellow large, 9-very hard to see, might be nice effect
-  // -----------------------
+  <div id="canvas-container">
+    <div id="canvas-frame">
+      <canvas id="main-canvas"></canvas>
+      <canvas id="hud-canvas"></canvas>
+      <img id="helmet-overlay" src="./media/NewHelmet.png" alt="Space Helmet Overlay"/>
+    </div>
+    <div id="loading">Loading assets...</div>
+    <div id="error-message" style="display:none;">Failed to load assets.</div>
+  </div>
 
+  <div class="fx-btns" id="fx-btns"></div>
+  <div id="timeline-editor"></div>
 
-  // Base configuration holds the defaults
-  const BASE_CFG = {
-    fontSize : 28,
-    step     : 16,
-    speed    : 80,
-    color    : 'rgba(0,255,255,.25)',
-    font     : '"Courier New", monospace',
-    depth    : 0.25,
-    // RESTORED: These values define the visor area relative to the helmet image.
-    // You may need to tweak these to fit NewHelmet.png perfectly.
-    // x: % from left, y: % from top, w: % width, h: % height
-    visorRel : {x:0.18, y:0.34, w:0.64, h:0.32},
-    text     : '🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 '
-  };
-
-  // Seed-specific configurations to override the base settings
-  const SEED_CONFIGS = [
-    { /* Seed 1: Classic */ },
-    { text: '⚠️ DANGER // HULL BREACH IMMINENT // EVACUATE ⚠️ ', color: 'rgba(255, 0, 0, 0.7)', speed: 180, fontSize: 26, flashing: true },
-    { text: '01011001 11010010 01110111 00101101 10011100 01000011 ', color: 'rgba(0, 255, 80, 0.4)', font: '"Fira Code", monospace', speed: 100, step: 22, glitch: 0.8 },
-    { text: '🎉🥳 DANCE DANCE DANCE 💃🕺 MUSIC BLAST 🎶🔊 ', speed: 250, step: 32, fontSize: 34, rainbow: true },
-    { text: '...is anybody out there...? ...can you hear me...? ...static...', color: 'rgba(200, 220, 255, 0.15)', speed: 30, fontSize: 22, glitch: 1.5 },
-    { text: '___/\______/\______/\______/\______/\___ ', color: 'rgba(255, 60, 60, 0.3)', speed: 90, pulse: true },
-    { text: '🌌 SCANNING SECTOR 7G... ANOMALY DETECTED... 👽... 🛰️ ', color: 'rgba(180, 120, 255, 0.3)', speed: 25, fontSize: 24, depth: 0.4 },
-    { text: 'SYSTEMS NOMINAL ✅ ALL CLEAR ✅ GOLD STANDARD PROTOCOL ENGAGED ', color: 'rgba(255, 215, 0, 0.4)', font: '"Times New Roman", serif', speed: 60 },
-    { text: '............................................', color: 'rgba(100, 100, 100, 0.1)', speed: 15, depth: 0.1, step: 10, fontSize: 40 }
-  ];
-
-  const chosenSeed = SEED_CONFIGS[ (SEED - 1) % SEED_CONFIGS.length ] || {};
-  const CFG = { ...BASE_CFG, ...chosenSeed };
-
-  const cvs    = document.getElementById('c'),
-        ctx    = cvs.getContext('2d', {alpha:true}),
-        noise  = document.createElement('canvas'),
-        nCtx   = noise.getContext('2d'),
-        helmet = new Image(), // RESTORED: Image object for the helmet
-        chars  = [...CFG.text],
-        geom   = {helmet:{}, visor:{}}; // RESTORED: Geometry for helmet and visor
-
-  let last = performance.now(),
-      pxOffset = 0,
-      charShift = 0;
-
-  // --- IMAGE LOADING ---
-  // Set the source to your local file
-  helmet.src = 'images/NewHelmet.png';
-
-  addEventListener('resize', resize);
-  // CRITICAL: Wait for the image to load before calculating sizes and starting the animation.
-  helmet.onload = () => {
-    resize();
-    requestAnimationFrame(loop);
-  };
-  // ---------------------
-
-  function resize () {
-    const dpr  = devicePixelRatio||1,
-          size = Math.min(innerWidth,innerHeight)*.8;
-
-    cvs.width = cvs.height = size*dpr;
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-
-    // Don't calculate geometry if the image isn't loaded yet.
-    if (!helmet.naturalWidth) return;
+  <!-- Configuration for main.js and playback.js -->
+  <script>
+    window.images = ["https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
+    window.badgeImages = ["https://ordinals.com/content/72389b804f1f673caf52fea6e8f0733058b5605c879bea1938aa680f67fbe141i0"];
     
-    // RESTORED: Calculate helmet geometry based on the loaded image's aspect ratio
-    const s = size / Math.max(helmet.naturalWidth, helmet.naturalHeight);
-    Object.assign(geom.helmet,{
-      w:helmet.naturalWidth*s,
-      h:helmet.naturalHeight*s,
-      x:(size-helmet.naturalWidth*s)/2,
-      y:(size-helmet.naturalHeight*s)/2
-    });
+    /* ✅ ADD THIS LINE FOR AUDIO */
+    window.fxSongUrl = "./media/Opus.webm";
 
-    // RESTORED: Calculate visor geometry based on the helmet's new size and relative coordinates
-    const vr = CFG.visorRel;
-    Object.assign(geom.visor,{
-      w:geom.helmet.w*vr.w,
-      h:geom.helmet.h*vr.h,
-      x:geom.helmet.x+geom.helmet.w*vr.x,
-      y:geom.helmet.y+geom.helmet.h*vr.y
-    });
+    window.titleText = "AUDIONAUT";
+    window.secondaryTitleText = "ENGAGING WARP DRIVE";
+    window.titleTextAnimationDuration = 10000;
+    window.fxInitialBPM = 104.15;
+    window.fxInitialBeatsPerBar = 4;
+    window.fxTimelineFunctionId = 68;
+    window.fxTimelineUrl = "./timelines/timeline_colourBandsGlitchReveal.js";
+  </script>
 
-    noise.width  = geom.visor.w;
-    noise.height = geom.visor.h;
-  }
+  <!-- Dynamic Title Logic (Inline) -->
+  <script type="module">
+    function createDynamicTitle(){let t=document.getElementById("dynamicTitleText");if(t)return t;t=document.createElement("div"),t.id="dynamicTitleText",t.textContent=window.titleText||"",t.style.opacity="1",document.body.appendChild(t);return t}function animateTitleOnPlay(){const t=createDynamicTitle();t.textContent=window.secondaryTitleText||"";const e=window.titleTextAnimationDuration||1e4;t.style.transition=`font-size ${e}ms cubic-bezier(0.77,0,0.175,1), opacity ${e}ms linear`,t.offsetHeight,t.style.fontSize="1.5vw",t.style.opacity="0"}function resetTitleText(){const t=createDynamicTitle();t.style.transition="none",t.textContent=window.titleText||"",t.style.fontSize="2vw",t.style.opacity="1",t.offsetHeight;const e=window.titleTextAnimationDuration||1e4;t.style.transition=`font-size ${e}ms cubic-bezier(0.77,0,0.175,1), opacity ${e}ms linear`}document.addEventListener("DOMContentLoaded",(()=>{createDynamicTitle()})),window.animateTitleOnPlay=animateTitleOnPlay,window.resetTitleText=resetTitleText;
+  </script>
 
-  const curve = (x,w,d) => d*(1-4*((x/w)-.5)**2);
+  <!-- Main App Logic & Audio -->
+  <script type="module" src="./js/main.js"></script>
+  <script type="module">
+    import playback from './js/playback.js';
+    window.playback = playback; // <-- This makes the module globally accessible
+  </script>
+  <!-- Module for Self-Animating HUD Visor Text -->
+  <script type="module">
+    const SEED=6,BASE_CFG={fontSize:28,step:16,speed:80,color:"rgba(0,255,255,.25)",font:'"Courier New", monospace',depth:.25,visorRel:{x:.18,y:.34,w:.64,h:.32},text:"🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 "},SEED_CONFIGS=[{},{text:"⚠️ DANGER // HULL BREACH IMMINENT // EVACUATE ⚠️ ",color:"rgba(255, 0, 0, 0.7)",speed:180,fontSize:26,flashing:!0},{text:"01011001 11010010 01110111 00101101 10011100 01000011 ",color:"rgba(0, 255, 80, 0.4)",font:'"Fira Code", monospace',speed:100,step:22,glitch:.8},{text:"🎉🥳 DANCE DANCE DANCE 💃🕺 MUSIC BLAST 🎶🔊 ",speed:250,step:32,fontSize:34,rainbow:!0},{text:"...is anybody out there...? ...can you hear me...? ...static...",color:"rgba(200, 220, 255, 0.15)",speed:30,fontSize:22,glitch:1.5},{text:"___/\\______/\\______/\\______/\\______/\\___ ",color:"rgba(255, 60, 60, 0.3)",speed:90,pulse:!0},{text:"🌌 SCANNING SECTOR 7G... ANOMALY DETECTED... 👽... 🛰️ ",color:"rgba(180, 120, 255, 0.3)",speed:25,fontSize:24,depth:.4},{text:"SYSTEMS NOMINAL ✅ ALL CLEAR ✅ GOLD STANDARD PROTOCOL ENGAGED ",color:"rgba(255, 215, 0, 0.4)",font:'"Times New Roman", serif',speed:60},{text:"............................................",color:"rgba(100, 100, 100, 0.1)",speed:15,depth:.1,step:10,fontSize:40}],chosenSeed=SEED_CONFIGS[(SEED-1)%SEED_CONFIGS.length]||{},CFG={...BASE_CFG,...chosenSeed},cvs=document.getElementById("hud-canvas"),ctx=cvs.getContext("2d",{alpha:!0}),noise=document.createElement("canvas"),nCtx=noise.getContext("2d",{willReadFrequently:!0}),helmet=document.getElementById("helmet-overlay"),chars=[...CFG.text],geom={helmet:{},visor:{}};let last=performance.now(),pxOffset=0,charShift=0;const startAnimation=()=>{resize(),requestAnimationFrame(loop)};helmet.complete?startAnimation():(helmet.addEventListener("load",startAnimation),helmet.addEventListener("error",(()=>console.error("HUD failed: Helmet image couldn't load."))));window.addEventListener("resize",resize);function resize(){const t=cvs.parentElement;if(!t)return;const e=devicePixelRatio||1,o=t.clientWidth;cvs.width=cvs.height=o*e,cvs.style.width=cvs.style.height=`${o}px`,ctx.setTransform(e,0,0,e,0,0);const n=helmet.getBoundingClientRect(),i=t.getBoundingClientRect();Object.assign(geom.helmet,{w:n.width,h:n.height,x:n.left-i.left,y:n.top-i.top});const a=CFG.visorRel;Object.assign(geom.visor,{w:geom.helmet.w*a.w,h:geom.helmet.h*a.h,x:geom.helmet.x+geom.helmet.w*a.x,y:geom.helmet.y+geom.helmet.h*a.y}),noise.width=geom.visor.w,noise.height=geom.visor.h}const curve=(t,e,o)=>o*(1-4*(t/e-.5)**2);function grain(){const{width:t,height:e}=noise,o=nCtx.getImageData(0,0,t,e),n=CFG.flashing?40:18;for(let t=0;t<o.data.length;t+=4)o.data[t]=o.data[t+1]=o.data[t+2]=255*Math.random()|0,o.data[t+3]=n;nCtx.putImageData(o,0,0)}function loop(t){const e=(t-last)/1e3;last=t,pxOffset+=CFG.speed*e,pxOffset>=CFG.step&&(charShift=(charShift+((pxOffset/CFG.step)|0))%chars.length,pxOffset-=((pxOffset/CFG.step)|0)*CFG.step),ctx.clearRect(0,0,cvs.width,cvs.height);const o=geom.visor;ctx.save(),ctx.beginPath(),ctx.ellipse(o.x+o.w/2,o.y+o.h/2,o.w/2,o.h/2,0,0,2*Math.PI),ctx.clip(),ctx.font=`${CFG.fontSize}px ${CFG.font}`,ctx.textAlign="center",ctx.textBaseline="middle",ctx.fillStyle=CFG.color,ctx.filter="blur(.6px)",CFG.flashing&&(ctx.globalAlpha=Math.sin(t/150)>0?1:.2),CFG.pulse&&(ctx.globalAlpha=.6+.4*Math.sin(t/300));const n=o.h*CFG.depth,i=o.w/CFG.step+2;for(let e=-1;e<i;e++){const s=chars[(e+charShift+chars.length)%chars.length],r=o.x+o.w-e*CFG.step+pxOffset;let l=o.y+o.h/2+curve(e*CFG.step-pxOffset,o.w,n);CFG.glitch&&Math.random()>.95&&(l+=(Math.random()-.5)*CFG.fontSize*CFG.glitch),CFG.rainbow&&(ctx.fillStyle=`hsla(${(t/20+10*e)%360}, 100%, 70%, 0.6)`),ctx.fillText(s,r,l)}ctx.globalAlpha=1,ctx.fillStyle=CFG.color,ctx.filter="none",grain(),ctx.drawImage(noise,o.x,o.y),ctx.restore(),requestAnimationFrame(loop)}
+  </script>
 
-  function grain () {
-    const {width:w,height:h} = noise,
-          id = nCtx.getImageData(0,0,w,h);
-    const grainIntensity = CFG.flashing ? 40 : 18;
-    for (let i=0;i<id.data.length;i+=4){
-      const v = Math.random()*255|0;
-      id.data[i]=id.data[i+1]=id.data[i+2]=v;
-      id.data[i+3]=grainIntensity;
-    }
-    nCtx.putImageData(id,0,0);
-  }
-
-  function loop (now) {
-    const dt = (now - last) / 1000;
-    last = now;
-
-    pxOffset += CFG.speed * dt;
-    if (pxOffset >= CFG.step) {
-      const n = (pxOffset / CFG.step) | 0;
-      charShift = (charShift + n) % chars.length;
-      pxOffset -= n * CFG.step;
-    }
-
-    ctx.clearRect(0,0,cvs.width,cvs.height);
-
-    // 1. Draw visor content (text + grain), CLIPPED to visor shape
-    const v = geom.visor;
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(v.x+v.w/2, v.y+v.h/2, v.w/2, v.h/2, 0, 0, 2*Math.PI);
-    ctx.clip();
-
-    ctx.font = `${CFG.fontSize}px ${CFG.font}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = CFG.color;
-    ctx.filter = 'blur(.6px)';
-
-    if (CFG.flashing) ctx.globalAlpha = Math.sin(now / 150) > 0 ? 1 : 0.2;
-    if (CFG.pulse) ctx.globalAlpha = 0.6 + (Math.sin(now / 300) * 0.4);
-
-    const depth = v.h * CFG.depth, slots = v.w / CFG.step + 2;
-    for (let j=-1; j<slots; j++){
-      const ch = chars[(j + charShift + chars.length) % chars.length];
-      const x  = v.x + v.w - j * CFG.step + pxOffset;
-      let y  = v.y + v.h/2 + curve(j*CFG.step - pxOffset, v.w, depth);
-      
-      if (CFG.glitch && Math.random() > 0.95) y += (Math.random() - 0.5) * CFG.fontSize * CFG.glitch;
-      if (CFG.rainbow) ctx.fillStyle = `hsla(${(now / 20 + j * 10) % 360}, 100%, 70%, 0.6)`;
-      
-      ctx.fillText(ch, x, y);
-    }
-    
-    ctx.globalAlpha = 1.0;
-    ctx.fillStyle = CFG.color;
-    ctx.filter = 'none';
-    grain();
-    ctx.drawImage(noise,v.x,v.y);
-    ctx.restore();
-
-    // 2. RESTORED: Draw helmet ON TOP of everything else
-    const h = geom.helmet;
-    ctx.drawImage(helmet, h.x, h.y, h.w, h.h);
-
-    requestAnimationFrame(loop);
-  }
-})();
-</script>
 </body>
 </html>
