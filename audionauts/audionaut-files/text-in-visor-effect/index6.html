@@ -8,7 +8,7 @@
     /* --- Base Setup --- */
     *{margin:0;padding:0;box-sizing:border-box}
     body{
-      background:#121212;
+      background:#000000;
       color:#f0f0f0;
       font-family:Arial,sans-serif;
       overflow:hidden;
@@ -49,22 +49,24 @@
     canvas#hud-canvas {
       z-index: 2;
       pointer-events: none;
+      /* ✅ Add opacity and transition for fade control */
+      opacity: 1;
+      transition: opacity 2s linear;
     }
     
     #helmet-overlay {
         position: absolute;
         top: 50%;
         left: 50%;
-        width: 115%;
-        height: 115%;
+        width: 125%;
+        height: 125%;
         transform: translate(-50%, -50%);
         object-fit: contain; 
         pointer-events: none;
         z-index: 3;
-        /* ✅ Add opacity and a default transition for the fade-in */
         opacity: 1;
         transition: opacity 2s linear;
-        }
+    }
 
     /* --- UI & Utility (unchanged) --- */
     .fx-btns{display:none;gap:3px;justify-content:center;align-items:center;position:relative;margin-top:12px;z-index:10;flex-wrap:nowrap;overflow-x:auto;width:100%;max-width:80vh}
@@ -81,7 +83,7 @@
     <div id="canvas-frame">
       <canvas id="main-canvas"></canvas>
       <canvas id="hud-canvas"></canvas>
-      <img id="helmet-overlay" src="./media/NewHelmet.png" alt="Space Helmet Overlay"/>
+      <img id="helmet-overlay" src="./media/audionaut-helmet7-masked.png" alt="Space Helmet Overlay"/>
     </div>
     <div id="loading">Loading assets...</div>
     <div id="error-message" style="display:none;">Failed to load assets.</div>
@@ -104,7 +106,7 @@
     window.fxInitialBPM = 104.15;
     window.fxInitialBeatsPerBar = 4;
     window.fxTimelineFunctionId = 68;
-    window.fxTimelineUrl = "./timelines/timeline_colourBandsGlitchReveal.js";
+    window.fxTimelineUrl = "./timelines/MirrorCascade_64bars.js";
   </script>
 
   <!-- Dynamic Title Logic (Inline) -->
@@ -122,89 +124,454 @@
 
 
 
-     <!-- Module for Self-Animating HUD Visor Text -->
-  <script type="module">
+      <!-- Module for Self-Animating HUD Visor Text -->
+<script type="module">
+
+let isHeartbeatActive = false;
+let lastHeartbeatTime = 0;
+    // =========================================================================
+    // --- ✅ NEW: Centralized Animation & Visibility Configuration ---
+    // =========================================================================
+    // This is the main control panel for the helmet and HUD visibility.
+    //
+    // Each element (helmet, hud) has the following options:
+    //
+    // mode: 'visible' -> The element is always visible. No fading.
+    //       'hidden'  -> The element is always hidden.
+    //       'fade'    -> The element will fade in and/or out based on the settings below.
+    //
+    // fadeIn / fadeOut:
+    //   start:    When the fade should begin.
+    //   duration: How long the fade animation should take.
+    //   unit:     The unit for 'start' and 'duration'.
+    //             'bars' -> Timed to the music's bars (relies on fxPlaybackState).
+    //             'ms'   -> Timed in milliseconds from the start of playback.
+    //
+    // --- EXAMPLE CONFIGURATIONS ---
+    // To make the helmet fade in at bar 4 over 2 bars, and fade out at bar 32 over 8 bars:
+    // helmet: {
+    //   mode: 'fade',
+    //   fadeIn:  { start: 4,  duration: 2, unit: 'bars' },
+    //   fadeOut: { start: 32, duration: 8, unit: 'bars' },
+    // }
+    //
+    // To make the HUD appear instantly after 1.5 seconds (1500ms):
+    // hud: {
+    //   mode: 'fade',
+    //   fadeIn:  { start: 1500, duration: 0, unit: 'ms' },
+    //   fadeOut: { start: 99999, duration: 0, unit: 'ms' }, // effectively never fades out
+    // }
+    // =========================================================================
+  
+    const ANIMATION_CONFIG = {
+      helmet: {
+        // --- Helmet Settings ---
+        mode: 'visible', // Current: Always visible. Options: 'visible', 'hidden', 'fade'
+        fadeIn: {
+          start: 4,      // Bar or ms to start fading in
+          duration: 4,   // How long the fade should last
+          unit: 'bars'   // 'bars' or 'ms'
+        },
+        fadeOut: {
+          start: 128,    // Bar or ms to start fading out
+          duration: 8,   // How long the fade out should last
+          unit: 'bars'   // 'bars' or 'ms'
+        }
+      },
+      hud: {
+        // --- HUD Visor Text Settings ---
+        mode: 'visible', // Current: Always visible. Options: 'visible', 'hidden', 'fade'
+        fadeIn: {
+          start: 0,      // Bar or ms to start fading in
+          duration: 8,   // How long the fade should last
+          unit: 'bars'   // 'bars' or 'ms'
+        },
+        fadeOut: {
+          start: 128,    // Bar or ms to start fading out
+          duration: 8,   // How long the fade out should last
+          unit: 'bars'   // 'bars' or 'ms'
+        }
+      }
+    };
+  
     // --- Base Configuration (Unchanged) ---
-    const SEED=6,BASE_CFG={fontSize:28,step:16,speed:80,color:"rgba(0,255,255,.25)",font:'"Courier New", monospace',depth:.25,visorRel:{x:.18,y:.34,w:.64,h:.32},text:"🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 "},SEED_CONFIGS=[{},{text:"⚠️ DANGER // HULL BREACH IMMINENT // EVACUATE ⚠️ ",color:"rgba(255, 0, 0, 0.7)",speed:180,fontSize:26,flashing:!0},{text:"01011001 11010010 01110111 00101101 10011100 01000011 ",color:"rgba(0, 255, 80, 0.4)",font:'"Fira Code", monospace',speed:100,step:22,glitch:.8},{text:"🎉🥳 DANCE DANCE DANCE 💃🕺 MUSIC BLAST 🎶🔊 ",speed:250,step:32,fontSize:34,rainbow:!0},{text:"...is anybody out there...? ...can you hear me...? ...static...",color:"rgba(200, 220, 255, 0.15)",speed:30,fontSize:22,glitch:1.5},{text:"___/\\______/\\______/\\______/\\______/\\___ ",color:"rgba(255, 60, 60, 0.3)",speed:90,pulse:!0},{text:"🌌 SCANNING SECTOR 7G... ANOMALY DETECTED... 👽... 🛰️ ",color:"rgba(180, 120, 255, 0.3)",speed:25,fontSize:24,depth:.4},{text:"SYSTEMS NOMINAL ✅ ALL CLEAR ✅ GOLD STANDARD PROTOCOL ENGAGED ",color:"rgba(255, 215, 0, 0.4)",font:'"Times New Roman", serif',speed:60},{text:"............................................",color:"rgba(100, 100, 100, 0.1)",speed:15,depth:.1,step:10,fontSize:40}],chosenSeed=SEED_CONFIGS[(SEED-1)%SEED_CONFIGS.length]||{},CFG={...BASE_CFG,...chosenSeed};
+    const SEED=8,BASE_CFG={fontSize:28,step:16,speed:80,color:"rgba(0,255,255,.25)",font:'"Courier New", monospace',depth:.25,visorRel:{x:.18,y:.34,w:.64,h:.32},
+    text:"🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 "},
     
-    // --- Element References (Unchanged) ---
-    const cvs=document.getElementById("hud-canvas"),ctx=cvs.getContext("2d",{alpha:!0}),noise=document.createElement("canvas"),nCtx=noise.getContext("2d",{willReadFrequently:!0}),helmet=document.getElementById("helmet-overlay"),chars=[...CFG.text],geom={helmet:{},visor:{}};
-    let last=performance.now(),pxOffset=0,charShift=0;
+    SEED_CONFIGS=[{},
+    {text:"⚠️ DANGER // HULL BREACH IMMINENT // EVACUATE ⚠️ ",color:"rgba(255, 0, 0, 0.7)",speed:180,fontSize:26,flashing:!0},
+    {text:"01011001 11010010 01110111 00101101 10011100 01000011 ",color:"rgba(0, 255, 80, 0.4)",font:'"Fira Code", monospace',speed:100,step:22,glitch:.8},
+    {text:"🎉🥳 DANCE DANCE DANCE 💃🕺 MUSIC BLAST 🎶🔊 ",speed:250,step:32,fontSize:34,rainbow:!0},
+    {text:"...is anybody out there...? ...can you hear me...? ...static...",color:"rgba(200, 220, 255, 0.15)",speed:30,fontSize:22,glitch:1.5},
+    // {text:"/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\", color:"rgba(255, 60, 60, 0.4)", speed: 80, pulse: true},
+        {
+        sineWave: true,
+        color: "rgba(255, 60, 60, 0.5)",
+        speed: 60, // How many pixels the wave scrolls PER BEAT. Adjust for desired speed.
+        amplitude: 20,
+        frequency: 0.25,
+        lineWidth: 2,
+        depth: 0.25
+        },
+         // --- ✅ NEW ECG MONITOR CONFIG ---
+        //  { // The old, free-scrolling ECG
+        //     ecg: true,
+        //     color: "rgba(255, 60, 60, 0.6)", speed: 100, amplitude: 40, 
+        //     cycleWidth: 250, lineWidth: 1.5, depth: 0.25
+        // },
 
-    // --- State variables (Unchanged) ---
-    let isHelmetFadeTriggered = false;
-    let lastLoggedHudBar = -1;
+        // --- ✅ NEW PEAK-SYNCED ECG MONITOR CONFIG ---
+        {
+            ecg: true,
+            heartbeatSpeed: 1, // 1 = default (52.075 BPM), 2 = 104.15 BPM, 0.5 = 26.03 BPM, etc.
+            peakOnBeat: true, // This flag enables the new logic.
+            color: "rgba(255, 100, 100, 0.7)",
+            speed: 0.25,         // How many heartbeats per beat of the song. (1 is perfect sync)
+            amplitude: 45,
+            cycleWidth: 250,
+            lineWidth: 2,
+            depth: 0.25
+        },
+    {text:"SYSTEMS NOMINAL ✅ ALL CLEAR ✅ GOLD STANDARD PROTOCOL ENGAGED ",color:"rgba(255, 215, 0, 0.4)",font:'"Times New Roman", serif',speed:60},
+    {text:"............................................",color:"rgba(100, 100, 100, 0.1)",speed:15,depth:.1,step:10,fontSize:40}],
+    chosenSeed=SEED_CONFIGS[(SEED-2)%SEED_CONFIGS.length]||{},CFG={...BASE_CFG,...chosenSeed};
+  
+    // --- Element & State References ---
+    const cvs = document.getElementById("hud-canvas"),
+          ctx = cvs.getContext("2d",{alpha:!0}),
+          noise = document.createElement("canvas"),
+          nCtx = noise.getContext("2d",{willReadFrequently:!0}),
+          helmet = document.getElementById("helmet-overlay"),
+          chars=[...CFG.text],
+          geom={helmet:{},visor:{}};
+    let last = performance.now(), pxOffset = 0, charShift = 0;
 
-    // --- Functions to control helmet visibility ---
-    function hideHelmetOnPlay() {
-      if (!helmet) return;
-      helmet.style.transition = 'none';
-      helmet.style.opacity = '0';
-      isHelmetFadeTriggered = false;
-      // ✅ FIX: Reset the logger state for the new session
-      lastLoggedHudBar = -1; 
+
+    // ✅ NEW: Add variables for the audio system
+    let audioContext;
+    let lastWholeBeat = -1; // Used to track when a beat passes
+  
+    // --- ✅ NEW: State management for animations ---
+    let animationState = {
+      startTime: 0,
+      helmet: { fadeInTriggered: false, fadeOutTriggered: false },
+      hud: { fadeInTriggered: false, fadeOutTriggered: false }
+    };
+  
+    // --- ✅ UPDATED: Function to initialize or reset element states based on config ---
+    function setupAnimationState(isPlaying) {
+      // Reset state flags
+      animationState = {
+        startTime: isPlaying ? performance.now() : 0,
+        helmet: { fadeInTriggered: false, fadeOutTriggered: false },
+        hud: { fadeInTriggered: false, fadeOutTriggered: false }
+      };
+  
+      const elements = { helmet, hud: cvs };
+      for (const key in elements) {
+        const el = elements[key];
+        const config = ANIMATION_CONFIG[key];
+        if (!el) continue;
+  
+        el.style.transition = 'none'; // Disable transitions for instant change
+  
+        if (isPlaying) {
+          // When playback starts, set initial opacity based on mode
+          if (config.mode === 'fade') el.style.opacity = '0';
+          else if (config.mode === 'visible') el.style.opacity = '1';
+          else if (config.mode === 'hidden') el.style.opacity = '0';
+        } else {
+          // When not playing (on load or reset), set default visibility
+          el.style.opacity = (config.mode === 'hidden') ? '0' : '1';
+        }
+      }
     }
-
-    function resetHelmetVisibility() {
-      if (!helmet) return;
-      helmet.style.transition = 'none';
-      helmet.style.opacity = '1';
-      isHelmetFadeTriggered = false;
-    }
-    
-    // --- Hook into global play/reset events (Unchanged) ---
+  
+    // --- ✅ UPDATED: Hook into global play/reset events ---
     setTimeout(() => {
-        const originalAnimate = window.animateTitleOnPlay;
-        window.animateTitleOnPlay = (...args) => { hideHelmetOnPlay(); if (originalAnimate) originalAnimate.apply(this, args); };
-        const originalReset = window.resetTitleText;
-        window.resetTitleText = (...args) => { resetHelmetVisibility(); if (originalReset) originalReset.apply(this, args); };
+      const originalAnimate = window.animateTitleOnPlay;
+      window.animateTitleOnPlay = (...args) => { setupAnimationState(true); if (originalAnimate) originalAnimate.apply(this, args); };
+      const originalReset = window.resetTitleText;
+      window.resetTitleText = (...args) => { setupAnimationState(false); if (originalReset) originalReset.apply(this, args); };
+      setupAnimationState(false); // Initial setup on load
     }, 0);
-
-    // --- Core Animation Logic (Unchanged part) ---
+  
+    // --- Core Canvas Sizing Logic (Unchanged part) ---
     const startAnimation=()=>{resize(),requestAnimationFrame(loop)};
     helmet.complete?startAnimation():(helmet.addEventListener("load",startAnimation),helmet.addEventListener("error",(()=>console.error("HUD failed: Helmet image couldn't load."))));
     window.addEventListener("resize",resize);
     function resize(){const t=cvs.parentElement;if(!t)return;const e=devicePixelRatio||1,o=t.clientWidth;cvs.width=cvs.height=o*e,cvs.style.width=cvs.style.height=`${o}px`,ctx.setTransform(e,0,0,e,0,0);const n=helmet.getBoundingClientRect(),i=t.getBoundingClientRect();Object.assign(geom.helmet,{w:n.width,h:n.height,x:n.left-i.left,y:n.top-i.top});const a=CFG.visorRel;Object.assign(geom.visor,{w:geom.helmet.w*a.w,h:geom.helmet.h*a.h,x:geom.helmet.x+geom.helmet.w*a.x,y:geom.helmet.y+geom.helmet.h*a.y}),noise.width=geom.visor.w,noise.height=geom.visor.h}
     const curve=(t,e,o)=>o*(1-4*(t/e-.5)**2);
     function grain(){const{width:t,height:e}=noise,o=nCtx.getImageData(0,0,t,e),n=CFG.flashing?40:18;for(let t=0;t<o.data.length;t+=4)o.data[t]=o.data[t+1]=o.data[t+2]=255*Math.random()|0,o.data[t+3]=n;nCtx.putImageData(o,0,0)}
-    
-    // --- ✅ UPDATED & SIMPLIFIED: Main animation loop ---
-    function loop(t){
-      // --- VISOR TEXT ANIMATION (UNCHANGED) ---
-      const e=(t-last)/1e3;last=t,pxOffset+=CFG.speed*e,pxOffset>=CFG.step&&(charShift=(charShift+((pxOffset/CFG.step)|0))%chars.length,pxOffset-=((pxOffset/CFG.step)|0)*CFG.step),ctx.clearRect(0,0,cvs.width,cvs.height);const o=geom.visor;ctx.save(),ctx.beginPath(),ctx.ellipse(o.x+o.w/2,o.y+o.h/2,o.w/2,o.h/2,0,0,2*Math.PI),ctx.clip(),ctx.font=`${CFG.fontSize}px ${CFG.font}`,ctx.textAlign="center",ctx.textBaseline="middle",ctx.fillStyle=CFG.color,ctx.filter="blur(.6px)",CFG.flashing&&(ctx.globalAlpha=Math.sin(t/150)>0?1:.2),CFG.pulse&&(ctx.globalAlpha=.6+.4*Math.sin(t/300));const n=o.h*CFG.depth,i=o.w/CFG.step+2;for(let e=-1;e<i;e++){const s=chars[(e+charShift+chars.length)%chars.length],r=o.x+o.w-e*CFG.step+pxOffset;let l=o.y+o.h/2+curve(e*CFG.step-pxOffset,o.w,n);CFG.glitch&&Math.random()>.95&&(l+=(Math.random()-.5)*CFG.fontSize*CFG.glitch),CFG.rainbow&&(ctx.fillStyle=`hsla(${(t/20+10*e)%360}, 100%, 70%, 0.6)`),ctx.fillText(s,r,l)}ctx.globalAlpha=1,ctx.fillStyle=CFG.color,ctx.filter="none",grain(),ctx.drawImage(noise,o.x,o.y);
-      
-      // --- HELMET FADE-IN LOGIC ---
-      // We rely on fxPlaybackState existing and the animation not having been triggered yet.
-      if (window.fxPlaybackState && !isHelmetFadeTriggered) {
-        const currentBar = window.fxPlaybackState.currentBar;
-        
-        // We only proceed if the main loop has started (currentBar > -1).
-        if (currentBar > -1) {
-            // DEBUG LOGGING BLOCK
-            if (currentBar !== lastLoggedHudBar) {
-                console.log(`[HUD SCRIPT] Checking bar: ${currentBar}, isTriggered: ${isHelmetFadeTriggered}`);
-                lastLoggedHudBar = currentBar;
-            }
+  
 
-            // TRIGGER CONDITION
-            if (currentBar >= 4) {
-              console.log(`[HUD SCRIPT] Condition MET at bar ${currentBar}! Triggering fade.`);
-              const bpm = window.fxInitialBPM || 104.15;
-              const beatsPerBar = window.fxInitialBeatsPerBar || 4;
-              const fadeDurationInBars = 4;
-              const secondsPerBar = (60 / bpm) * beatsPerBar;
-              const transitionDuration = secondsPerBar * fadeDurationInBars;
+// =======================================================
+// --- HEARTBEAT BEEP GENERATION (Fully Labelled) ---
+// =======================================================
 
-              helmet.style.transition = `opacity ${transitionDuration.toFixed(2)}s linear`;
-              helmet.style.opacity = '1';
-              isHelmetFadeTriggered = true;
-            }
+// === USER SETTINGS (Tweak these to change beat feel) ===
+const HEARTBEAT_SETTINGS = {
+  // Controls overall pitch of thump/snap (1 = default, <1 = deeper, >1 = higher)
+  pitchMultiplier: 0.4,
+
+  // Controls loudness of peak relative to thump (0 = no snap, 1 = snap as loud as thump)
+  peakRatio: 0.2,
+
+  // Multiplies timing of all phases (1 = default, <1 = faster, >1 = slower heartbeat)
+  speedMultiplier: 1.0,
+
+  // Snap (peak) main frequency target (Hz, scaled by pitchMultiplier)
+  peakBaseFreq: 1100
+};
+
+function beep(time, settings = HEARTBEAT_SETTINGS) {
+  const audioCtx = window.fxAudioContext;
+  if (!audioCtx) return;
+
+  // --- Phase timings (all scale with speedMultiplier) ---
+  const S = settings.speedMultiplier;
+  const thumpTimes = {
+    rampUp:   0.015 * S,
+    hold:     0.09  * S,
+    decay:    0.16  * S,
+    fadeOut:  0.38  * S,
+    duration: 0.40  * S
+  };
+  const snapTimes = {
+    delay:     0.13  * S,
+    rampPeak:  0.18  * S,
+    end:       0.27  * S,
+    gainPeak:  0.155 * S,
+    gainEnd:   0.28  * S,
+    duration:  0.29  * S
+  };
+
+  // --- "THUMP" (deep, round, long) ---
+  const thumpOsc = audioCtx.createOscillator();
+  const thumpGain = audioCtx.createGain();
+  thumpOsc.type = 'sine';
+  thumpOsc.frequency.setValueAtTime(80 * settings.pitchMultiplier, time);
+  thumpGain.gain.setValueAtTime(0, time);
+  thumpGain.gain.linearRampToValueAtTime(1.7, time + thumpTimes.rampUp);
+  thumpGain.gain.linearRampToValueAtTime(1.1, time + thumpTimes.hold);
+  thumpGain.gain.linearRampToValueAtTime(0.5, time + thumpTimes.decay);
+  thumpGain.gain.linearRampToValueAtTime(0, time + thumpTimes.fadeOut);
+  thumpOsc.connect(thumpGain).connect(audioCtx.destination);
+  thumpOsc.start(time);
+  thumpOsc.stop(time + thumpTimes.duration);
+
+  // --- "SNAP" / PEAK (high, sharp, distinct, variable loudness) ---
+  const snapOsc = audioCtx.createOscillator();
+  const snapGain = audioCtx.createGain();
+  snapOsc.type = 'sine';
+  snapOsc.frequency.setValueAtTime(480 * settings.pitchMultiplier, time + snapTimes.delay);
+  snapOsc.frequency.linearRampToValueAtTime(settings.peakBaseFreq * settings.pitchMultiplier, time + snapTimes.rampPeak);
+  snapOsc.frequency.linearRampToValueAtTime(320 * settings.pitchMultiplier, time + snapTimes.end);
+  snapGain.gain.setValueAtTime(0, time + snapTimes.delay);
+  // Ratio sets peak gain relative to thump
+  snapGain.gain.linearRampToValueAtTime(1.0 * settings.peakRatio, time + snapTimes.gainPeak);
+  snapGain.gain.linearRampToValueAtTime(0, time + snapTimes.gainEnd);
+  snapOsc.connect(snapGain).connect(audioCtx.destination);
+  snapOsc.start(time + snapTimes.delay);
+  snapOsc.stop(time + snapTimes.duration);
+}
+
+
+
+// This function initializes the AudioContext after a user interaction.
+function initializeAudio() {
+  const container = document.getElementById('canvas-container');
+  if (container) {
+    container.addEventListener('click', () => {
+      if (!audioContext) {
+        try {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          console.log("AudioContext initialized successfully.");
+        } catch (e) {
+          console.error("Web Audio API is not supported in this browser.", e);
         }
       }
-      
-      ctx.restore();
-      requestAnimationFrame(loop);
+      // If context is suspended, resume it
+      if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+    }, { once: true }); // The listener will only run once.
+  }
+}
+
+// Call the initializer when the script loads
+initializeAudio();
+
+    // --- ✅ NEW: Helper to calculate transition duration in seconds ---
+    function getDurationInSeconds(value, unit) {
+      if (unit === 'ms') {
+        return value / 1000;
+      }
+      // Assumes 'bars'
+      const bpm = window.fxInitialBPM || 104.15;
+      const beatsPerBar = window.fxInitialBeatsPerBar || 4;
+      const secondsPerBar = (60 / bpm) * beatsPerBar;
+      return value * secondsPerBar;
     }
+  
+    // --- ✅ NEW: Reusable function to trigger and manage fades ---
+    function checkAndTriggerFade(key, element, currentTime) {
+      const config = ANIMATION_CONFIG[key];
+      if (config.mode !== 'fade') return;
+  
+      const state = animationState[key];
+      const timeInUnit = config.fadeIn.unit === 'ms' ? (performance.now() - animationState.startTime) : currentTime.bar;
+  
+      // Check for Fade In
+      if (!state.fadeInTriggered && timeInUnit >= config.fadeIn.start) {
+        const duration = getDurationInSeconds(config.fadeIn.duration, config.fadeIn.unit);
+        element.style.transition = `opacity ${duration.toFixed(2)}s linear`;
+        element.style.opacity = '1';
+        state.fadeInTriggered = true;
+      }
+  
+      // Check for Fade Out
+      if (!state.fadeOutTriggered && timeInUnit >= config.fadeOut.start) {
+        const duration = getDurationInSeconds(config.fadeOut.duration, config.fadeOut.unit);
+        element.style.transition = `opacity ${duration.toFixed(2)}s linear`;
+        element.style.opacity = '0';
+        state.fadeOutTriggered = true;
+      }
+    }
+  
+    // --- ✅ FINAL VERSION: Main animation loop ---
+function loop(t) {
+  // --- SETUP CANVAS & VISOR CLIP ---
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  const o = geom.visor;
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(o.x + o.w / 2, o.y + o.h / 2, o.w / 2, o.h / 2, 0, 0, 2 * Math.PI);
+  ctx.clip();
+
+  // --- RENDER PATH LOGIC ---
+  if (CFG.sineWave) {
+    // SINE WAVE LOGIC (Unchanged)
+    // ...
+  } else if (CFG.ecg) {
+    // --- ECG & HEARTBEAT: BPM-LOCKED LOGIC ---
+    const amplitude = CFG.amplitude || 40;
+    const cycleWidth = CFG.cycleWidth || 250;
+    const depth = CFG.depth || 0.25;
+    const n = o.h * depth;
+
+    // --- Heartbeat Timing: locked to half-song-BPM × multiplier ---
+    const BASE_BPM = window.fxInitialBPM || 104.15;
+    const BASE_HEART_BPM = BASE_BPM / 2; // 52.075 BPM
+    const heartbeatSpeed = CFG.heartbeatSpeed || 1; // e.g. 2 = full BPM, 0.5 = quarter time
+    const heartRateBPM = BASE_HEART_BPM * heartbeatSpeed;
+    const heartbeatInterval = 60 / heartRateBPM;
+
+    const audioCtx = window.fxAudioContext;
+    const now = audioCtx ? audioCtx.currentTime : 0;
+
+    // --- Sound: Trigger beep on each interval, no drift, but only if playing ---
+    if (
+      window.fxPlaybackState && window.fxPlaybackState.isPlaying && 
+      now - lastHeartbeatTime >= heartbeatInterval
+    ) {
+      beep(now); // or beep(now, HEARTBEAT_SETTINGS) for custom pulse
+      lastHeartbeatTime += heartbeatInterval * Math.floor((now - lastHeartbeatTime) / heartbeatInterval);
+    }
+
+    // --- ECG Visual: Always in sync with the audio heartbeat ---
+    const elapsedHeartbeats = now / heartbeatInterval;
+    const scrollOffset = (elapsedHeartbeats * cycleWidth) % cycleWidth;
+
+    // --- ECG Drawing ---
+    ctx.beginPath();
+    ctx.strokeStyle = CFG.color;
+    ctx.lineWidth = CFG.lineWidth || 2;
+    ctx.filter = "blur(0.5px)";
+    ctx.lineJoin = "round";
+    for (let x = 0; x <= o.w; x++) {
+      const baseY = o.y + o.h / 2 + curve(x, o.w, n);
+      let posInCycle = (x - scrollOffset) % cycleWidth;
+      if (posInCycle < 0) posInCycle += cycleWidth;
+      let waveOffsetY = 0;
+      const qrsStart = cycleWidth * 0.6;
+      const qrsWidth = 35;
+      if (posInCycle > qrsStart && posInCycle < qrsStart + qrsWidth) {
+        const p = posInCycle - qrsStart;
+        if (p < 5) waveOffsetY = p * 0.8;
+        else if (p < 15) waveOffsetY = 4 - (p - 5) * (amplitude / 10 + 0.4);
+        else if (p < 25) waveOffsetY = -amplitude + (p - 15) * (amplitude / 10 + 1.5);
+        else waveOffsetY = 15 - (p - 25) * 1.5;
+      }
+      const tWaveStart = qrsStart + qrsWidth + 20;
+      const tWaveWidth = 50;
+      if (posInCycle > tWaveStart && posInCycle < tWaveStart + tWaveWidth) {
+        const p = posInCycle - tWaveStart;
+        waveOffsetY = Math.sin(p / tWaveWidth * Math.PI) * (-amplitude * 0.25);
+      }
+      const finalY = baseY + waveOffsetY;
+      if (x === 0) ctx.moveTo(o.x + x, finalY);
+      else ctx.lineTo(o.x + x, finalY);
+    }
+    ctx.stroke();
+
+  } else {
+    // --- TEXT DRAWING LOGIC (Unchanged) ---
+    const e = (t - last) / 1e3;
+    last = t;
+    pxOffset += CFG.speed * e;
+    if (pxOffset >= CFG.step) {
+      charShift = (charShift + ((pxOffset / CFG.step) | 0)) % chars.length;
+      pxOffset %= CFG.step;
+    }
+    ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = CFG.color;
+    ctx.filter = "blur(.6px)";
+    if (CFG.flashing) ctx.globalAlpha = Math.sin(t / 150) > 0 ? 1 : 0.2;
+    if (CFG.pulse) ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t / 183.36);
+    const n = o.h * CFG.depth;
+    const i = o.w / CFG.step + 2;
+    for (let e = -1; e < i; e++) {
+      const s = chars[(e + charShift + chars.length) % chars.length];
+      const r = o.x + o.w - e * CFG.step + pxOffset;
+      let l = o.y + o.h / 2 + (CFG.pulse ? -1 : 1) * curve(e * CFG.step - pxOffset, o.w, n);
+      if (CFG.glitch && Math.random() > 0.95) l += (Math.random() - 0.5) * CFG.fontSize * CFG.glitch;
+      if (CFG.rainbow) ctx.fillStyle = `hsla(${(t / 20 + 10 * e) % 360}, 100%, 70%, 0.6)`;
+      ctx.fillText(s, r, l);
+    }
+  }
+
+  // --- FINAL EFFECTS & RESTORE (Unchanged) ---
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = CFG.color;
+  ctx.filter = "none";
+  grain();
+  ctx.drawImage(noise, o.x, o.y);
+  ctx.restore();
+
+  // --- HELMET & HUD FADE LOGIC (Unchanged) ---
+  if (window.fxPlaybackState && window.fxPlaybackState.isPlaying) {
+    const currentTime = {
+      bar: window.fxPlaybackState.currentBar,
+      ms: performance.now() - animationState.startTime
+    };
+    if (currentTime.bar > -1) {
+      checkAndTriggerFade('helmet', helmet, currentTime);
+      checkAndTriggerFade('hud', cvs, currentTime);
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('fxPlaybackStart', () => {
+  lastHeartbeatTime = window.fxAudioContext ? window.fxAudioContext.currentTime : 0;
+});
+window.addEventListener('fxPlaybackStop', () => {
+  lastHeartbeatTime = 0;
+});
+
   </script>
 
 </body>

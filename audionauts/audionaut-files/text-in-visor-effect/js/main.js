@@ -11,6 +11,8 @@ import {
   secToBeats as _secToBeats
 } from './utils/time.js';
 import { loadImg } from './utils/dom.js';
+let audioContext = null; // ✅ ADD THIS LINE AT THE TOP WITH THE OTHER STATE VARIABLES
+window.fxPlaybackState = { currentBar: -1, isPlaying: false }; // Add isPlaying!
 
 // ───────────── State & Setup ─────────────
 let bpm = window.fxInitialBPM ?? 120, beatsPerBar = window.fxInitialBeatsPerBar ?? 4;
@@ -192,8 +194,9 @@ function fxLoop() {
   if (startTime == null) startTime = now;
   const elapsedTime = now - startTime, elapsed = getElapsed();
 
-  // ✅ ADD THIS LINE to update the shared state for other modules to use.
+  // ✅ UPDATE THE SHARED STATE with both bar and beat information.
   window.fxPlaybackState.currentBar = elapsed.bar;
+  window.fxPlaybackState.currentBeat = elapsed.beat; // ✅ ADD THIS LINE
 
   ensureBuffers();
   bufferCtxA.clearRect(0, 0, width, height); drawImage(bufferCtxA);
@@ -319,34 +322,53 @@ function stopEffects() {
 }
 
 function handleCanvasClick() {
+  // ✅ ADD THIS BLOCK TO CREATE AND UNLOCK THE MASTER AUDIO CONTEXT
+  if (!audioContext) {
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      // Expose it globally so other modules (like the HUD) can find it.
+      window.fxAudioContext = audioContext;
+      log('[FX] Master AudioContext created.');
+    } catch(e) {
+      console.error("Web Audio API is not supported in this browser.", e);
+      return; // Stop if audio is not supported
+    }
+  }
+  // If the context was created but is suspended, a user click will resume it.
+  if (audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
+  // --- END OF NEW BLOCK ---
+
   if (!imageError) timelinePlaying ? stopTimeline() : playTimeline();
 }
 
-// Modify playTimeline to be async and await runEffectTimeline
+
+// --- Start Timeline & Signal Global State ---
 async function playTimeline() {
-  if (timelinePlaying) return; // Prevent re-entry if already playing a timeline
+  if (timelinePlaying) return; // Prevent re-entry
 
-  timelinePlaying = true; // Set this early
-  await runEffectTimeline(); // runEffectTimeline will set up and call startEffects
+  timelinePlaying = true;
+  await runEffectTimeline(); // Call the *actual* timeline runner
 
-  // Only call playback.play if a timeline was actually started by runEffectTimeline
-  if (isPlaying) { // isPlaying is set by startEffects inside runEffectTimeline
-      window.playback?.play?.();
-      if (window.animateTitleOnPlay) window.animateTitleOnPlay();
+  if (isPlaying) {
+    window.fxPlaybackState.isPlaying = true;
+    window.dispatchEvent(new Event('fxPlaybackStart'));
+    window.playback?.play?.();
   } else {
-      // If isPlaying is false, it means runEffectTimeline bailed (e.g., no timeline found)
-      // So, we should reset timelinePlaying state.
-      timelinePlaying = false;
+    timelinePlaying = false;
+    window.fxPlaybackState.isPlaying = false;
+    window.dispatchEvent(new Event('fxPlaybackStop'));
   }
 }
 
+// --- Stop Timeline & Signal Global State ---
 function stopTimeline() {
-  timelinePlaying = false; // Reset this first
-  stopEffects(); // This stops the loop, clears automations from fxAPI, resets effects
-  // fxAPI.clearAutomation(); // stopEffects should ideally handle this or fxAPI.reset does
-  // Object.values(effects).forEach(e => e.active = false); // Done by stopEffects
-  // enabledOrder.length = 0; // Done by stopEffects
+  timelinePlaying = false;
+  stopEffects();
   updateButtonStates();
+  window.fxPlaybackState.isPlaying = false;
+  window.dispatchEvent(new Event('fxPlaybackStop'));
   window.playback?.stop?.();
   if (window.resetTitleText) window.resetTitleText();
 }
