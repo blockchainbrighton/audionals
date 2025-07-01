@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Audionaut HUD Visor Text - Seeded Effects</title>
+  <style>
+    html,body{
+      margin:0;padding:0;width:100%;height:100%;
+      background:#000;overflow:hidden;
+      display:flex;align-items:center;justify-content:center
+    }
+    canvas{max-width:80vmin;max-height:80vmin;width:100%;height:auto;display:block}
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<script>
+(() => {
+  // --- SEED MENU ---
+  // Change this number from 1 to 9 to see different effects!
+  const ACTIVE_SEED = 8; 
+
+  // 1-standard, 2-Red Alert, 3-Glitch mode, 4-emoji mode, 5-slow plain mode, 
+  // 6- slow hard to read mode, 7-Settings Values Mode, 8-simple large text mode  
+  // --- END SEED MENU ---
+
+  // <<< NEW: Seed configurations
+  const SEEDS = [
+    // Seed 1: Classic Audionaut
+    {
+      text: '🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 ',
+      color: 'rgba(0,255,255,.25)',
+      font: '"Courier New", monospace',
+      fontSize: 28,
+      speed: 80,
+    },
+    // Seed 2: Red Alert / Emergency
+    {
+      text: '⚠️ WARNING: HULL INTEGRITY CRITICAL ⚠️ SYSTEM FAILURE IMMINENT ',
+      color: 'rgba(255, 0, 0, 0.7)',
+      font: '"Impact", "Arial Black", sans-serif',
+      fontSize: 26,
+      speed: 150,
+      flashing: { speed: 150 } // Flashing speed in ms
+    },
+    // Seed 3: Glitched / Corrupted Data
+    {
+      text: 'D4T4 C0RR%PT!0N... SYS_REB##T... ▓▒░ SYNC LOST ▓▒░ ',
+      color: 'rgba(255, 190, 0, 0.5)',
+      font: '"Monaco", "Lucida Console", monospace',
+      fontSize: 30,
+      speed: 60,
+      jitter: { amount: 2.5 } // Jitter amount in pixels
+    },
+    // Seed 4: Emoji Party
+    {
+      text: '🚀🪐⭐👾👽🛸✨💖😂👍💯🔥 ',
+      color: 'rgba(255, 0, 255, 0.6)',
+      font: '"Segoe UI Emoji", "Apple Color Emoji", sans-serif',
+      fontSize: 40,
+      speed: 100,
+      depth: 0.35
+    },
+    // Seed 5: System Boot Sequence
+    {
+      text: 'BIOS v4.2... MEM CHECK... OK. SENSORS... OK. LIFE SUPPORT... ONLINE. NAVCOM... BOOTING... ',
+      color: 'rgba(50, 255, 50, 0.4)',
+      font: '"Courier New", monospace',
+      fontSize: 22,
+      speed: 40,
+      depth: 0.1, // Flatter text
+    },
+    // Seed 6: Stealth Mode
+    {
+      text: '....STEALTH MODE ENGAGED....LOW POWER....SILENT RUNNING....',
+      color: 'rgba(100, 100, 255, 0.15)',
+      font: '"Arial Narrow", sans-serif',
+      fontSize: 24,
+      speed: 25,
+      blur: 1.5 // Extra blur
+    },
+    // Seed 7: Scientific Data Stream
+    {
+      text: 'ATMOS: 0.02% O2 | GRAV: 1.1G | TEMP: -150C | RADS: 3.14 mSv/h | ',
+      color: 'rgba(220, 220, 220, 0.3)',
+      font: '"Helvetica", "Arial", sans-serif',
+      fontSize: 20,
+      speed: 120,
+    },
+    // Seed 8: Cosmic Wisdom
+    {
+      text: 'WE ARE ALL MADE OF STARDUST... EXPLORING THE ECHOES OF THE BIG BANG... ✨',
+      color: 'rgba(220, 180, 255, 0.3)',
+      font: '"Georgia", serif',
+      fontSize: 25,
+      speed: 30,
+      blur: 0.2,
+      depth: 0.3
+    },
+    // Seed 9: Pirate Transmission
+    {
+      text: 'YO HO HO... TARGET ACQUIRED... PREPARING TO BOARD... 🏴‍☠️💰💎 ',
+      color: 'rgba(255, 80, 0, 0.6)',
+      font: '"Courier New", monospace',
+      fontSize: 28,
+      speed: 90,
+      jitter: { amount: 1.0 }
+    }
+  ];
+
+  // <<< MODIFIED: Default config is now a fallback
+  const DEFAULT_CFG = {
+    fontSize : 28,
+    step     : 16,
+    speed    : 80,
+    color    : 'rgba(0,255,255,.25)',
+    font     : '"Courier New", monospace',
+    depth    : 0.25,
+    blur     : 0.6,
+    visorRel : {x:.18,y:.34,w:.64,h:.32},
+    text     : 'DEFAULT TEXT'
+  };
+  
+  // <<< NEW: Merge default config with the selected seed's config
+  const CFG = Object.assign({}, DEFAULT_CFG, SEEDS[ACTIVE_SEED - 1]);
+
+  const cvs   = document.getElementById('c'),
+        ctx   = cvs.getContext('2d', {alpha:true}),
+        noise = document.createElement('canvas'),
+        nCtx  = noise.getContext('2d'),
+        helmet = new Image(),
+        chars  = [...CFG.text], // <<< MODIFIED: Uses the new CFG text
+        geom   = {helmet:{}, visor:{}};
+
+  let last = performance.now(),
+      pxOffset = 0,
+      charShift = 0;
+
+  helmet.src = './images/audionaut-helmet7.png';
+  addEventListener('resize', resize);
+  helmet.onload = () => { resize(); requestAnimationFrame(loop); };
+
+  function resize () {
+    const dpr  = devicePixelRatio||1,
+          size = Math.min(innerWidth,innerHeight)*.8;
+    cvs.width = cvs.height = size*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    if (!helmet.naturalWidth) return;
+    const s = size / Math.max(helmet.naturalWidth,helmet.naturalHeight);
+    Object.assign(geom.helmet,{
+      w:helmet.naturalWidth*s, h:helmet.naturalHeight*s,
+      x:(size-helmet.naturalWidth*s)/2, y:(size-helmet.naturalHeight*s)/2
+    });
+    const vr = CFG.visorRel;
+    Object.assign(geom.visor,{
+      w:geom.helmet.w*vr.w, h:geom.helmet.h*vr.h,
+      x:geom.helmet.x+geom.helmet.w*vr.x, y:geom.helmet.y+geom.helmet.w*vr.y
+    });
+    noise.width  = geom.visor.w;
+    noise.height = geom.visor.h;
+  }
+
+  const curve = (x,w,d) => d*(1-4*((x/w)-.5)**2);
+
+  function grain () {
+    const {width:w,height:h} = noise,
+          id = nCtx.getImageData(0,0,w,h);
+    for (let i=0;i<id.data.length;i+=4){
+      const v = Math.random()*255|0;
+      id.data[i]=id.data[i+1]=id.data[i+2]=v;
+      id.data[i+3]=18;
+    }
+    nCtx.putImageData(id,0,0);
+  }
+
+  function loop (now) {
+    const dt = (now - last) / 1000;
+    last = now;
+    pxOffset += CFG.speed * dt;
+    if (pxOffset >= CFG.step) {
+      const n = (pxOffset / CFG.step) | 0;
+      charShift = (charShift + n) % chars.length;
+      pxOffset -= n * CFG.step;
+    }
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+
+    // 1. Draw visor content, clipped
+    const v = geom.visor;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(v.x+v.w/2, v.y+v.h/2, v.w/2, v.h/2, 0, 0, 2*Math.PI);
+    ctx.clip();
+    
+    // <<< MODIFIED: Dynamic styling from CFG
+    ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    let currentFillStyle = CFG.color;
+    // <<< NEW: Flashing effect handler
+    if (CFG.flashing) {
+      const flashAlpha = (Math.sin(now / CFG.flashing.speed) + 1) / 2; // Oscillates between 0 and 1
+      // Re-builds the rgba color string with the new alpha
+      currentFillStyle = CFG.color.replace(/, [\d\.]+\)$/, `, ${flashAlpha.toFixed(2)})`);
+    }
+    ctx.fillStyle = currentFillStyle;
+    
+    // <<< MODIFIED: Use configurable blur
+    ctx.filter = `blur(${CFG.blur}px)`;
+
+    const depth = v.h * CFG.depth,
+          slots = v.w / CFG.step + 2;
+          
+    for (let j=-1; j<slots; j++){
+      const ch = chars[(j + charShift + chars.length) % chars.length];
+      let x  = v.x + v.w - j * CFG.step + pxOffset;
+      let y  = v.y + v.h/2 + curve(j*CFG.step - pxOffset, v.w, depth);
+
+      // <<< NEW: Jitter effect handler
+      if (CFG.jitter) {
+        x += (Math.random() - 0.5) * CFG.jitter.amount;
+        y += (Math.random() - 0.5) * CFG.jitter.amount;
+      }
+      
+      ctx.fillText(ch, x, y);
+    }
+
+    ctx.filter = 'none';
+    grain();
+    ctx.drawImage(noise,v.x,v.y);
+    ctx.restore();
+
+    // 2. Draw helmet on top
+    const h = geom.helmet;
+    ctx.drawImage(helmet,h.x,h.y,h.w,h.h);
+
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+</body>
+</html>

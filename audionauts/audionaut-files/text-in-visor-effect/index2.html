@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Audionaut HUD Visor Text</title>
+  <style>
+    html,body{
+      margin:0;padding:0;width:100%;height:100%;
+      background:#000;overflow:hidden;
+      display:flex;align-items:center;justify-content:center
+    }
+    canvas{max-width:80vmin;max-height:80vmin;width:100%;height:auto;display:block}
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+(() => {
+  // ========================
+  // SEED SYSTEM SETUP
+  // ========================
+  // Set this at top to pick the HUD
+  const SEED = 8; // 0..8, change to try each mode
+
+  // Nine unique HUD modes:
+  const SEEDS = [
+    // 0: Default cyan HUD
+    {
+      fontSize: 28, step: 16, speed: 80,
+      color: 'rgba(0,255,255,.25)', font: '"Courier New", monospace',
+      text: '🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 '
+    },
+    // 1: Matrix mode, green bold, code rain
+    {
+      fontSize: 26, step: 18, speed: 55,
+      color: 'rgba(0,255,64,.33)', font: 'bold 700 22px "Consolas", monospace',
+      text: '🟩 SYSTEM ONLINE – CODE: 101010 AUDIONAUT 🟩 ',
+      extra: { matrix: true }
+    },
+    // 2: Retro magenta 80s, pixel font, neon
+    {
+      fontSize: 24, step: 15, speed: 90,
+      color: 'rgba(255,0,224,0.38)', font: '"Press Start 2P", monospace',
+      text: '👾 1987 NEON ZONE 🚦 ★ SYNTHWAVE ★ 🕹️ ',
+      extra: { shadow: '#ff00ff' }
+    },
+    // 3: Flashing red ALERT, bold, wide font
+    {
+      fontSize: 32, step: 21, speed: 75,
+      color: 'rgba(255,24,24,0.74)', font: '"Arial Black", Arial, sans-serif',
+      text: '⚠️ ALERT: HULL BREACH DETECTED! ⚠️ ',
+      extra: { flash: true }
+    },
+    // 4: Grey minimal tech, small, fast
+    {
+      fontSize: 17, step: 11, speed: 155,
+      color: 'rgba(190,190,190,.22)', font: '"Fira Mono", monospace',
+      text: 'SYSCHK// Audio buffer: OK | VISOR CAL: 94% | STANDBY '
+    },
+    // 5: NASA style, blue/white
+    {
+      fontSize: 27, step: 16, speed: 70,
+      color: 'rgba(80,170,255,.33)', font: '"Orbitron", sans-serif',
+      text: '🛰️ NASA FLIGHT: AU-2112 – STATUS: ALL SYSTEMS GO 🌎 ',
+      extra: { shadow: '#fff' }
+    },
+    // 6: Emoji storm, yellow text, bigger step
+    {
+      fontSize: 25, step: 22, speed: 85,
+      color: 'rgba(255,220,20,0.41)', font: '"Segoe UI Emoji", "Apple Color Emoji", sans-serif',
+      text: '😺😼😸😹😻🐱🐾🌟🚀✨👽 '
+    },
+    // 7: Glitch – pink, font randomizes, jitter
+    {
+      fontSize: 28, step: 16, speed: 70,
+      color: 'rgba(255,40,210,.30)', font: '"JetBrains Mono", monospace',
+      text: 'ERROR // DATA // GLITCH // SYNC LOST // 🕳️ ',
+      extra: { glitch: true }
+    },
+    // 8: Emergency strobe, flashing red/yellow, urgent text
+    {
+      fontSize: 30, step: 20, speed: 60,
+      color: 'rgba(255,0,0,0.8)', font: '"Arial Black", Arial, sans-serif',
+      text: '🚨 EMERGENCY! AIRLOCK COMPROMISED 🚨 ',
+      extra: { strobe: true }
+    }
+  ];
+
+  // Merge seed config with base defaults (so any omitted props fallback)
+  const BASE = {
+    fontSize : 28,
+    step     : 16,
+    speed    : 80,
+    color    : 'rgba(0,255,255,.25)',
+    font     : '"Courier New", monospace',
+    depth    : 0.25,
+    visorRel : {x:.18,y:.34,w:.64,h:.32},
+    text     : '🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 ',
+    extra    : {}
+  };
+  // Assign selected config
+  const CFG = Object.assign({}, BASE, SEEDS[SEED], {
+    visorRel: SEEDS[SEED].visorRel || BASE.visorRel,
+    extra: Object.assign({}, BASE.extra, SEEDS[SEED].extra)
+  });
+
+  // ============================
+  // Main Program - Unchanged logic from your version, except a few effect hooks below
+  // ============================
+  const cvs   = document.getElementById('c'),
+        ctx   = cvs.getContext('2d', {alpha:true}),
+        noise = document.createElement('canvas'),
+        nCtx  = noise.getContext('2d'),
+        helmet = new Image(),
+        chars  = [...CFG.text],
+        geom   = {helmet:{}, visor:{}};
+
+  let last = performance.now(),
+      pxOffset = 0,
+      charShift = 0,
+      flashOn = true; // For flashing/strobe
+
+  // Load image and setup
+  helmet.src = './images/audionaut-helmet7.png'; // adjust path as needed
+  addEventListener('resize', resize);
+  helmet.onload = () => { resize(); requestAnimationFrame(loop); };
+
+  function resize () {
+    const dpr  = devicePixelRatio||1,
+          size = Math.min(innerWidth,innerHeight)*.8;
+    cvs.width = cvs.height = size*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    if (!helmet.naturalWidth) return;
+    const s = size / Math.max(helmet.naturalWidth,helmet.naturalHeight);
+    Object.assign(geom.helmet,{
+      w:helmet.naturalWidth*s,
+      h:helmet.naturalHeight*s,
+      x:(size-helmet.naturalWidth*s)/2,
+      y:(size-helmet.naturalHeight*s)/2
+    });
+    const vr = CFG.visorRel;
+    Object.assign(geom.visor,{
+      w:geom.helmet.w*vr.w,
+      h:geom.helmet.h*vr.h,
+      x:geom.helmet.x+geom.helmet.w*vr.x,
+      y:geom.helmet.y+geom.helmet.h*vr.y
+    });
+    noise.width  = geom.visor.w;
+    noise.height = geom.visor.h;
+  }
+
+  const curve = (x,w,d) => d*(1-4*((x/w)-.5)**2);
+
+  function grain () {
+    const {width:w,height:h} = noise,
+          id = nCtx.getImageData(0,0,w,h);
+    for (let i=0;i<id.data.length;i+=4){
+      const v = Math.random()*255|0;
+      id.data[i]=id.data[i+1]=id.data[i+2]=v;
+      id.data[i+3]=18;
+    }
+    nCtx.putImageData(id,0,0);
+  }
+
+  // ========================
+  // Main Animation Loop – ONLY MODIFIED to support flashing, glitch, strobe, shadow, matrix
+  // ========================
+  function loop (now) {
+    const dt = (now - last) / 1000;
+    last = now;
+
+    // Special effect: Flashing or Strobe
+    if (CFG.extra.flash || CFG.extra.strobe) {
+      // Toggle on/off at ~2Hz or 3Hz
+      if (Math.floor(now/400) % 2 === 0) flashOn = true;
+      else flashOn = false;
+    }
+
+    pxOffset += CFG.speed * dt;
+    if (pxOffset >= CFG.step) {
+      const n = (pxOffset / CFG.step) | 0;
+      charShift = (charShift + n) % chars.length;
+      pxOffset -= n * CFG.step;
+    }
+
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+
+    // 1. Draw visor content (text + grain), CLIPPED to visor shape
+    const v = geom.visor;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(v.x+v.w/2, v.y+v.h/2, v.w/2, v.h/2, 0, 0, 2*Math.PI);
+    ctx.clip();
+
+    // --- TEXT EFFECTS ---
+    // Font, size, color
+    ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Shadow effect for certain seeds
+    if (CFG.extra.shadow) {
+      ctx.shadowColor = CFG.extra.shadow;
+      ctx.shadowBlur = 10;
+    } else {
+      ctx.shadowBlur = 0;
+    }
+
+    // Color logic (flashing or strobe override)
+    if ((CFG.extra.flash && !flashOn) || (CFG.extra.strobe && !flashOn)) {
+      ctx.globalAlpha = 0.09;
+    } else {
+      ctx.globalAlpha = 1;
+    }
+    if (CFG.extra.strobe) {
+      // Alternate red/yellow per frame
+      ctx.fillStyle = (Math.floor(now/100)%2 === 0) ? 'rgba(255,0,0,0.86)' : 'rgba(255,220,0,0.75)';
+    } else {
+      ctx.fillStyle = CFG.color;
+    }
+
+    // Blur for default look
+    ctx.filter = 'blur(.6px)';
+
+    const depth = v.h * CFG.depth,
+          slots = v.w / CFG.step + 2;
+    for (let j=-1; j<slots; j++){
+      let ch = chars[(j + charShift + chars.length) % chars.length];
+      let x  = v.x + v.w - j * CFG.step + pxOffset;
+      let y  = v.y + v.h/2 + curve(j*CFG.step - pxOffset, v.w, depth);
+
+      // Glitch effect (random jitter on x/y per frame)
+      if (CFG.extra.glitch && Math.random() > 0.6) {
+        x += (Math.random() - 0.5) * 8;
+        y += (Math.random() - 0.5) * 6;
+        // Randomly change case or character for glitch
+        if (Math.random() > 0.92) ch = String.fromCharCode(33 + Math.random() * 94 | 0);
+      }
+      // Matrix effect: fade trailing chars
+      if (CFG.extra.matrix) {
+        let fade = 0.45 + 0.45 * Math.sin((now/220) + j);
+        ctx.globalAlpha = fade;
+      }
+      ctx.fillText(ch, x, y);
+      ctx.globalAlpha = 1; // restore after fade
+    }
+
+    ctx.filter = 'none';
+    ctx.shadowBlur = 0;
+
+    grain();
+    ctx.drawImage(noise,v.x,v.y);
+    ctx.restore();
+
+    // 2. Draw helmet ON TOP of visor/text
+    const h = geom.helmet;
+    ctx.drawImage(helmet,h.x,h.y,h.w,h.h);
+
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+<!--
+Fonts for 'Press Start 2P' and 'Orbitron' (retro/NASA) if you want to use them:
+<link href="https://fonts.googleapis.com/css?family=Press+Start+2P|Orbitron:700&display=swap" rel="stylesheet">
+-->
+</body>
+</html>

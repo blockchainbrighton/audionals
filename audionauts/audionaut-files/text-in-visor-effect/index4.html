@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Audionaut HUD Visor Text - Enhanced Seed Menu</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      max-width: 80vmin;
+      max-height: 80vmin;
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<script>
+(() => {
+  // -------- SEED MENU CONFIGURATION --------
+  const PRESETS = [
+    // 0: Default cyan scroll
+    { text: '🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 ', color: 'rgba(0,255,255,0.25)', font: '"Courier New", monospace', fontSize: 28, speed: 80, depth: 0.25, effect: 'none' },
+    // 1: Emoji Rain
+    { text: '🌌🔭🪐🌕✨🌟🚀🛰️👾', color: 'rgba(255,200,0,0.5)', font: '"Segoe UI Emoji", sans-serif', fontSize: 36, speed: 120, depth: 0.4, effect: 'emojiRain' },
+    // 2: Emergency alert (flashing red)
+    { text: '!!! EMERGENCY OXYGEN LOW !!!', color: 'rgba(255,0,0,0.8)', font: '"Impact", sans-serif', fontSize: 42, speed: 100, depth: 0.2, effect: 'flash' },
+    // 3: Binary Matrix
+    { text: Array(200).fill().map(_ => Math.random() < 0.5 ? '0' : '1').join(''), color: 'rgba(0,255,70,0.3)', font: '"Lucida Console", monospace', fontSize: 24, speed: 60, depth: 0.3, effect: 'matrix' },
+    // 4: Sci-fi wave (rainbow gradient)
+    { text: '…SYSTEM ONLINE…CALIBRATING…', color: null, font: '"Verdana", sans-serif', fontSize: 30, speed: 90, depth: 0.25, effect: 'rainbowWave' },
+    // 5: Retro green phosphor
+    { text: '▌▌▌▌▌▌ DEBUG MODE ACTIVE ▌▌▌▌▌▌', color: 'rgba(0,255,0,0.2)', font: '"Press Start 2P", monospace', fontSize: 20, speed: 50, depth: 0.2, effect: 'scanline' },
+    // 6: Neon pulse
+    { text: '⚡ NEON GRID ▓▓▓ ░░░ ⚡', color: 'rgba(255,0,255,0.6)', font: '"Arial Black", sans-serif', fontSize: 34, speed: 70, depth: 0.3, effect: 'pulse' },
+    // 7: Stealth mode
+    { text: '…stealth protocol engaged…', color: 'rgba(255,255,255,0.05)', font: '"Courier New", monospace', fontSize: 28, speed: 40, depth: 0.1, effect: 'none' },
+    // 8: Diagnostic dump (hex codes)
+    { text: Array.from({length: 100}, (_, i) => i.toString(16).padStart(2, '0')).join(' '), color: 'rgba(100,100,255,0.3)', font: '"Courier New", monospace', fontSize: 22, speed: 110, depth: 0.3, effect: 'glitch' }
+  ];
+
+  let currentSeed = 8;
+  //0- standard, 1-nice emoji scroll, 2-emergency red, 3-nice binary, 4-error, 5-debug mode, 
+  // 6-very nice pink mode, 7-hard to read mode, 8-double char keys.
+
+  // Core configuration (overridden by presets)
+  const CFG = {
+    fontSize: 28,
+    step: 16,
+    speed: 80,
+    color: 'rgba(0,255,255,0.25)',
+    font: '"Courier New", monospace',
+    depth: 0.25,
+    visorRel: { x: 0.18, y: 0.34, w: 0.64, h: 0.32 },
+    text: ''
+  };
+
+  // declare chars before use
+  const chars = [];
+
+  function applyPreset(seed) {
+    const p = PRESETS[seed];
+    Object.assign(CFG, {
+      text: p.text,
+      color: p.color,
+      font: p.font,
+      fontSize: p.fontSize,
+      speed: p.speed,
+      depth: p.depth
+    });
+    CFG.effect = p.effect;
+
+    chars.length = 0;
+    chars.push(...CFG.text);
+  }
+
+  // initial apply
+  applyPreset(currentSeed);
+  window.addEventListener('keydown', e => {
+    if (e.key >= '0' && e.key <= '8') {
+      currentSeed = +e.key;
+      applyPreset(currentSeed);
+    }
+  });
+
+  const cvs    = document.getElementById('c'),
+        ctx    = cvs.getContext('2d', { alpha: true }),
+        noise  = document.createElement('canvas'),
+        nCtx   = noise.getContext('2d'),
+        helmet = new Image(),
+        geom   = { helmet: {}, visor: {} };
+
+  let last = performance.now(), pxOffset = 0, charShift = 0;
+
+  helmet.src = './images/audionaut-helmet7.png';
+  addEventListener('resize', resize);
+  helmet.onload = () => { resize(); requestAnimationFrame(loop); };
+
+  function resize() {
+    const dpr  = devicePixelRatio || 1,
+          size = Math.min(innerWidth, innerHeight) * 0.8;
+
+    cvs.width  = cvs.height = size * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    if (!helmet.naturalWidth) return;
+    const s = size / Math.max(helmet.naturalWidth, helmet.naturalHeight);
+
+    Object.assign(geom.helmet, {
+      w: helmet.naturalWidth * s,
+      h: helmet.naturalHeight * s,
+      x: (size - helmet.naturalWidth * s) / 2,
+      y: (size - helmet.naturalHeight * s) / 2
+    });
+
+    const vr = CFG.visorRel;
+    Object.assign(geom.visor, {
+      w: geom.helmet.w * vr.w,
+      h: geom.helmet.h * vr.h,
+      x: geom.helmet.x + geom.helmet.w * vr.x,
+      y: geom.helmet.y + geom.helmet.h * vr.y
+    });
+
+    noise.width  = geom.visor.w;
+    noise.height = geom.visor.h;
+  }
+
+  const curve = (x, w, d) => d * (1 - 4 * ((x / w) - 0.5) ** 2);
+
+  function grain() {
+    const { width: w, height: h } = noise,
+          id = nCtx.getImageData(0, 0, w, h);
+
+    for (let i = 0; i < id.data.length; i += 4) {
+      const v = Math.random() * 255 | 0;
+      id.data[i] = id.data[i + 1] = id.data[i + 2] = v;
+      id.data[i + 3] = 18;
+    }
+    nCtx.putImageData(id, 0, 0);
+  }
+
+  function loop(now) {
+    const dt = (now - last) / 1000;
+    last = now;
+
+    pxOffset += CFG.speed * dt;
+    if (pxOffset >= CFG.step) {
+      const n = (pxOffset / CFG.step) | 0;
+      charShift = (charShift + n) % chars.length;
+      pxOffset -= n * CFG.step;
+    }
+
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+    const v = geom.visor;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(v.x + v.w/2, v.y + v.h/2, v.w/2, v.h/2, 0, 0, 2 * Math.PI);
+    ctx.clip();
+
+    ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.filter = 'blur(.6px)';
+
+    const t = now / 1000;
+    switch (CFG.effect) {
+      case 'flash': {
+        const on = Math.sin(t * 10) > 0;
+        ctx.fillStyle = on ? CFG.color : 'rgba(0,0,0,0)';
+        break;
+      }
+      case 'pulse': {
+        const a = 0.6 + 0.2 * Math.sin(t * 5);
+        ctx.fillStyle = CFG.color.replace(/,([\d\.]+)\)/, `,${a.toFixed(2)})`);
+        break;
+      }
+      case 'rainbowWave': {
+        const grad = ctx.createLinearGradient(v.x, 0, v.x + v.w, 0);
+        ['red','orange','yellow','green','blue','indigo','violet'].forEach((clr,i) => {
+          grad.addColorStop(i/6 + 0.1 * Math.sin(t*2 + i), clr);
+        });
+        ctx.fillStyle = grad;
+        break;
+      }
+      default:
+        ctx.fillStyle = CFG.color || 'white';
+    }
+
+    const depth = v.h * CFG.depth,
+          slots = v.w / CFG.step + 2;
+    for (let j = -1; j < slots; j++) {
+      if (CFG.effect === 'matrix' && Math.random() < 0.02) pxOffset += CFG.step * 2;
+
+      const ch = chars[(j + charShift + chars.length) % chars.length],
+            x  = v.x + v.w - j * CFG.step + pxOffset,
+            y  = v.y + v.h/2 + curve(j * CFG.step - pxOffset, v.w, depth);
+      ctx.fillText(ch, x, y);
+    }
+
+    ctx.filter = 'none';
+    grain();
+    ctx.drawImage(noise, v.x, v.y);
+    ctx.restore();
+
+    const h = geom.helmet;
+    ctx.drawImage(helmet, h.x, h.y, h.w, h.h);
+
+    requestAnimationFrame(loop);
+  }
+
+  addEventListener('resize', resize);
+  helmet.onload = () => { resize(); requestAnimationFrame(loop); };
+})();
+</script>
+</body>
+</html>

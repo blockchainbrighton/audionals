@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Audionaut HUD Visor Text - Seed Enhanced</title>
+  <style>
+    html,body{
+      margin:0;padding:0;width:100%;height:100%;
+      background:#000;overflow:hidden;
+      display:flex;align-items:center;justify-content:center
+    }
+    canvas{max-width:80vmin;max-height:80vmin;width:100%;height:auto;display:block}
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<script>
+(() => {
+  // --- SEED SELECTION ---
+  // Change this value from 1 to 9 to see different effects!
+  const SEED = 9;
+  // 1-standard, 2-red on noise, 3-glitching binary, 4-fast large party, 5-nice slow dimmed glitch, 
+  // 6-LOVE THIS soundwave-like display, 7-deep curve slow purple, 8-fast yellow large, 9-very hard to see, might be nice effect
+  // -----------------------
+
+
+  // Base configuration holds the defaults
+  const BASE_CFG = {
+    fontSize : 28,
+    step     : 16,
+    speed    : 80,
+    color    : 'rgba(0,255,255,.25)',
+    font     : '"Courier New", monospace',
+    depth    : 0.25,
+    // RESTORED: These values define the visor area relative to the helmet image.
+    // You may need to tweak these to fit NewHelmet.png perfectly.
+    // x: % from left, y: % from top, w: % width, h: % height
+    visorRel : {x:0.18, y:0.34, w:0.64, h:0.32},
+    text     : '🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 '
+  };
+
+  // Seed-specific configurations to override the base settings
+  const SEED_CONFIGS = [
+    { /* Seed 1: Classic */ },
+    { text: '⚠️ DANGER // HULL BREACH IMMINENT // EVACUATE ⚠️ ', color: 'rgba(255, 0, 0, 0.7)', speed: 180, fontSize: 26, flashing: true },
+    { text: '01011001 11010010 01110111 00101101 10011100 01000011 ', color: 'rgba(0, 255, 80, 0.4)', font: '"Fira Code", monospace', speed: 100, step: 22, glitch: 0.8 },
+    { text: '🎉🥳 DANCE DANCE DANCE 💃🕺 MUSIC BLAST 🎶🔊 ', speed: 250, step: 32, fontSize: 34, rainbow: true },
+    { text: '...is anybody out there...? ...can you hear me...? ...static...', color: 'rgba(200, 220, 255, 0.15)', speed: 30, fontSize: 22, glitch: 1.5 },
+    { text: '___/\______/\______/\______/\______/\___ ', color: 'rgba(255, 60, 60, 0.3)', speed: 90, pulse: true },
+    { text: '🌌 SCANNING SECTOR 7G... ANOMALY DETECTED... 👽... 🛰️ ', color: 'rgba(180, 120, 255, 0.3)', speed: 25, fontSize: 24, depth: 0.4 },
+    { text: 'SYSTEMS NOMINAL ✅ ALL CLEAR ✅ GOLD STANDARD PROTOCOL ENGAGED ', color: 'rgba(255, 215, 0, 0.4)', font: '"Times New Roman", serif', speed: 60 },
+    { text: '............................................', color: 'rgba(100, 100, 100, 0.1)', speed: 15, depth: 0.1, step: 10, fontSize: 40 }
+  ];
+
+  const chosenSeed = SEED_CONFIGS[ (SEED - 1) % SEED_CONFIGS.length ] || {};
+  const CFG = { ...BASE_CFG, ...chosenSeed };
+
+  const cvs    = document.getElementById('c'),
+        ctx    = cvs.getContext('2d', {alpha:true}),
+        noise  = document.createElement('canvas'),
+        nCtx   = noise.getContext('2d'),
+        helmet = new Image(), // RESTORED: Image object for the helmet
+        chars  = [...CFG.text],
+        geom   = {helmet:{}, visor:{}}; // RESTORED: Geometry for helmet and visor
+
+  let last = performance.now(),
+      pxOffset = 0,
+      charShift = 0;
+
+  // --- IMAGE LOADING ---
+  // Set the source to your local file
+  helmet.src = 'images/NewHelmet.png';
+
+  addEventListener('resize', resize);
+  // CRITICAL: Wait for the image to load before calculating sizes and starting the animation.
+  helmet.onload = () => {
+    resize();
+    requestAnimationFrame(loop);
+  };
+  // ---------------------
+
+  function resize () {
+    const dpr  = devicePixelRatio||1,
+          size = Math.min(innerWidth,innerHeight)*.8;
+
+    cvs.width = cvs.height = size*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    // Don't calculate geometry if the image isn't loaded yet.
+    if (!helmet.naturalWidth) return;
+    
+    // RESTORED: Calculate helmet geometry based on the loaded image's aspect ratio
+    const s = size / Math.max(helmet.naturalWidth, helmet.naturalHeight);
+    Object.assign(geom.helmet,{
+      w:helmet.naturalWidth*s,
+      h:helmet.naturalHeight*s,
+      x:(size-helmet.naturalWidth*s)/2,
+      y:(size-helmet.naturalHeight*s)/2
+    });
+
+    // RESTORED: Calculate visor geometry based on the helmet's new size and relative coordinates
+    const vr = CFG.visorRel;
+    Object.assign(geom.visor,{
+      w:geom.helmet.w*vr.w,
+      h:geom.helmet.h*vr.h,
+      x:geom.helmet.x+geom.helmet.w*vr.x,
+      y:geom.helmet.y+geom.helmet.h*vr.y
+    });
+
+    noise.width  = geom.visor.w;
+    noise.height = geom.visor.h;
+  }
+
+  const curve = (x,w,d) => d*(1-4*((x/w)-.5)**2);
+
+  function grain () {
+    const {width:w,height:h} = noise,
+          id = nCtx.getImageData(0,0,w,h);
+    const grainIntensity = CFG.flashing ? 40 : 18;
+    for (let i=0;i<id.data.length;i+=4){
+      const v = Math.random()*255|0;
+      id.data[i]=id.data[i+1]=id.data[i+2]=v;
+      id.data[i+3]=grainIntensity;
+    }
+    nCtx.putImageData(id,0,0);
+  }
+
+  function loop (now) {
+    const dt = (now - last) / 1000;
+    last = now;
+
+    pxOffset += CFG.speed * dt;
+    if (pxOffset >= CFG.step) {
+      const n = (pxOffset / CFG.step) | 0;
+      charShift = (charShift + n) % chars.length;
+      pxOffset -= n * CFG.step;
+    }
+
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+
+    // 1. Draw visor content (text + grain), CLIPPED to visor shape
+    const v = geom.visor;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(v.x+v.w/2, v.y+v.h/2, v.w/2, v.h/2, 0, 0, 2*Math.PI);
+    ctx.clip();
+
+    ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = CFG.color;
+    ctx.filter = 'blur(.6px)';
+
+    if (CFG.flashing) ctx.globalAlpha = Math.sin(now / 150) > 0 ? 1 : 0.2;
+    if (CFG.pulse) ctx.globalAlpha = 0.6 + (Math.sin(now / 300) * 0.4);
+
+    const depth = v.h * CFG.depth, slots = v.w / CFG.step + 2;
+    for (let j=-1; j<slots; j++){
+      const ch = chars[(j + charShift + chars.length) % chars.length];
+      const x  = v.x + v.w - j * CFG.step + pxOffset;
+      let y  = v.y + v.h/2 + curve(j*CFG.step - pxOffset, v.w, depth);
+      
+      if (CFG.glitch && Math.random() > 0.95) y += (Math.random() - 0.5) * CFG.fontSize * CFG.glitch;
+      if (CFG.rainbow) ctx.fillStyle = `hsla(${(now / 20 + j * 10) % 360}, 100%, 70%, 0.6)`;
+      
+      ctx.fillText(ch, x, y);
+    }
+    
+    ctx.globalAlpha = 1.0;
+    ctx.fillStyle = CFG.color;
+    ctx.filter = 'none';
+    grain();
+    ctx.drawImage(noise,v.x,v.y);
+    ctx.restore();
+
+    // 2. RESTORED: Draw helmet ON TOP of everything else
+    const h = geom.helmet;
+    ctx.drawImage(helmet, h.x, h.y, h.w, h.h);
+
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+</body>
+</html>

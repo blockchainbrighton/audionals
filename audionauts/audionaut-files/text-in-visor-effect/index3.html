@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Audionaut HUD Visor Text – Seed Menu Edition</title>
+
+  <!-- Optional Google Font for the emergency seed (Orbitron) -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600&display=swap" rel="stylesheet" />
+
+  <style>
+    html,body{
+      margin:0;padding:0;width:100%;height:100%;
+      background:#000;overflow:hidden;
+      display:flex;align-items:center;justify-content:center
+    }
+    canvas{max-width:80vmin;max-height:80vmin;width:100%;height:auto;display:block}
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<script>
+(() => {
+  /* ------------------------------------------------------------------
+     1. BASE CONFIG – these values may be overridden by individual seeds
+  ------------------------------------------------------------------ */
+  const CFG = {
+    fontSize : 28,
+    step     : 16,
+    speed    : 80,
+    color    : 'rgba(0,255,255,.25)',
+    font     : '"Courier New", monospace',
+    depth    : 0.25,
+    visorRel : {x:.18,y:.34,w:.64,h:.32},
+    text     : '🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 ',
+    effect   : 'scroll'          // default renderer
+  };
+
+  /* ------------------------------------------------------------------
+     2. SEED MENU – pick SEED = 0 … 8 to preview nine distinct HUD modes
+  ------------------------------------------------------------------ */
+  const SEED = 1;   // <—— change this number to switch HUD personality
+
+  const SEEDS = [
+    /* 0 – Default cyan scrolling ticker ---------------------- */
+    {overrides:{
+        text  : '🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 ',
+        color : 'rgba(0,255,255,.25)',
+        effect: 'scroll'
+    }},
+    /* 1 – EMERGENCY flashing red alert ----------------------- */
+    {overrides:{
+        text     : '⚠️  EMERGENCY: O₂ LEVEL CRITICAL  ⚠️',
+        fontSize : 36,
+        font     : '"Orbitron", sans-serif',
+        effect   : 'flash'
+    }},
+    /* 2 – First-Contact green “matrix drizzle” --------------- */
+    {overrides:{
+        text     : '👽 FIRST CONTACT PROTOCOL INITIATED  ',
+        color    : 'rgba(0,255,0,.30)',
+        speed    : 40,
+        effect   : 'matrix'
+    }},
+    /* 3 – Rainbow rave ticker -------------------------------- */
+    {overrides:{
+        text     : '🎉 SYNESTHESIA MODE – FEEL THE COLOR 🎶 ',
+        speed    : 120,
+        effect   : 'rainbow'
+    }},
+    /* 4 – Solar-flare orange pulse --------------------------- */
+    {overrides:{
+        text     : '☀️  SOLAR FLARE INBOUND – SEEK SHELTER',
+        color    : 'rgba(255,140,0,.35)',
+        depth    : 0.35,
+        effect   : 'pulse'
+    }},
+    /* 5 – Magenta glitch static ------------------------------ */
+    {overrides:{
+        text     : 'GL!TCH SIGNAL // REBOOT COMM LINK  ///',
+        color    : 'rgba(255,0,255,.35)',
+        effect   : 'glitch'
+    }},
+    /* 6 – Calm blue breathing message ------------------------ */
+    {overrides:{
+        text     : '💤  CRYO-SLEEP PROTOCOL ACTIVE…',
+        color    : 'rgba(0,180,255,.20)',
+        speed    : 20,
+        effect   : 'breath'
+    }},
+    /* 7 – Bold white mission brief --------------------------- */
+    {overrides:{
+        text     : 'MISSION BRIEF: ORBITAL SAMPLE RETRIEVAL',
+        color    : 'rgba(255,255,255,.28)',
+        fontSize : 30,
+        font     : '"Courier New", monospace',
+        effect   : 'scroll'
+    }},
+    /* 8 – Purple neon synthwave ------------------------------ */
+    {overrides:{
+        text     : '🎶 SYNTHWAVE DRIVE ENGAGED 🎶',
+        color    : 'rgba(180,0,255,.30)',
+        speed    : 90,
+        effect   : 'neon'
+    }},
+  ];
+
+  /* Apply seed overrides and sync char array ----------------- */
+  Object.assign(CFG, SEEDS[SEED].overrides);
+  CFG.chars = [...CFG.text];
+
+  /* ------------------------------------------------------------------
+     3. CANVAS & GEOMETRY SETUP
+  ------------------------------------------------------------------ */
+  const cvs   = document.getElementById('c'),
+        ctx   = cvs.getContext('2d', {alpha:true}),
+        noise = document.createElement('canvas'),
+        nCtx  = noise.getContext('2d'),
+        helmet = new Image(),
+        geom   = {helmet:{}, visor:{}};
+
+  let last = performance.now(),
+      pxOffset = 0,
+      charShift = 0;
+
+  helmet.src = './images/audionaut-helmet7.png';   // make sure to supply this PNG
+  addEventListener('resize', resize);
+  helmet.onload = () => { resize(); requestAnimationFrame(loop); };
+
+  function resize () {
+    const dpr  = devicePixelRatio||1,
+          size = Math.min(innerWidth,innerHeight)*.8;
+
+    cvs.width = cvs.height = size*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    if (!helmet.naturalWidth) return;
+    const s = size / Math.max(helmet.naturalWidth,helmet.naturalHeight);
+
+    Object.assign(geom.helmet,{
+      w:helmet.naturalWidth*s,
+      h:helmet.naturalHeight*s,
+      x:(size-helmet.naturalWidth*s)/2,
+      y:(size-helmet.naturalHeight*s)/2
+    });
+
+    const vr = CFG.visorRel;
+    Object.assign(geom.visor,{
+      w:geom.helmet.w*vr.w,
+      h:geom.helmet.h*vr.h,
+      x:geom.helmet.x+geom.helmet.w*vr.x,
+      y:geom.helmet.y+geom.helmet.h*vr.y
+    });
+
+    noise.width  = geom.visor.w;
+    noise.height = geom.visor.h;
+  }
+
+  /* ------------------------------------------------------------------
+     4. UTILITY HELPERS
+  ------------------------------------------------------------------ */
+  const curve = (x,w,d) => d*(1-4*((x/w)-.5)**2);
+
+  function grain () {
+    const {width:w,height:h} = noise,
+          id = nCtx.getImageData(0,0,w,h);
+
+    for (let i=0;i<id.data.length;i+=4){
+      const v = Math.random()*255|0;
+      id.data[i]=id.data[i+1]=id.data[i+2]=v;
+      id.data[i+3]=18;
+    }
+    nCtx.putImageData(id,0,0);
+  }
+
+  /* ------------------------------------------------------------------
+     5. VISOR RENDERERS – one per effect keyword
+  ------------------------------------------------------------------ */
+  const visorRenderers = {
+    /* 0 & 7: vanilla scroll ---------------------------------- */
+    scroll(ctx, v){
+      ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = CFG.color;
+      ctx.filter = 'blur(.6px)';
+
+      const depth = v.h * CFG.depth,
+            slots = v.w / CFG.step + 2;
+
+      for (let j=-1; j<slots; j++){
+        const ch = CFG.chars[(j + charShift + CFG.chars.length) % CFG.chars.length];
+        const x  = v.x + v.w - j * CFG.step + pxOffset;
+        const y  = v.y + v.h/2 + curve(j*CFG.step - pxOffset, v.w, depth);
+        ctx.fillText(ch, x, y);
+      }
+      ctx.filter = 'none';
+    },
+
+    /* 1: flashing static line -------------------------------- */
+    flash(ctx, v, now){
+      ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const phase = (now % 600 < 300);   // 300 ms on / off
+      ctx.fillStyle = phase ? 'rgba(255,0,0,.85)' : 'rgba(120,0,0,.05)';
+      ctx.fillText(CFG.text, v.x + v.w/2, v.y + v.h/2);
+    },
+
+    /* 2: matrix drizzle -------------------------------------- */
+    matrix(ctx, v){
+      ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const cols = Math.floor(v.w / CFG.step);
+      for (let c=0; c<cols; c++){
+        const x = v.x + c*CFG.step + CFG.step/2;
+        const y = v.y + ((charShift + c*7) % Math.floor(v.h/CFG.step))*CFG.step;
+        ctx.fillStyle = 'rgba(0,255,0,.15)';
+        ctx.fillText(CFG.chars[(charShift + c) % CFG.chars.length], x, y);
+        ctx.fillStyle = 'rgba(0,255,0,.9)';
+        ctx.fillText(CFG.chars[(charShift + c) % CFG.chars.length], x, y-CFG.step);
+      }
+    },
+
+    /* 3: rainbow scroll -------------------------------------- */
+    rainbow(ctx, v){
+      ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const depth = v.h * CFG.depth,
+            slots = v.w / CFG.step + 2;
+
+      for (let j=-1; j<slots; j++){
+        const idx = (j + charShift + CFG.chars.length) % CFG.chars.length;
+        const hue = (idx*23 + Date.now()/20) % 360;
+        ctx.fillStyle = `hsla(${hue}, 100%, 60%, .6)`;
+        const x  = v.x + v.w - j * CFG.step + pxOffset;
+        const y  = v.y + v.h/2 + curve(j*CFG.step - pxOffset, v.w, depth);
+        ctx.fillText(CFG.chars[idx], x, y);
+      }
+    },
+
+    /* 4: pulsing center message ------------------------------ */
+    pulse(ctx, v, now){
+      const scale = 1 + 0.06 * Math.sin(now/250);
+      ctx.save();
+      ctx.translate(v.x + v.w/2, v.y + v.h/2);
+      ctx.scale(scale, scale);
+      ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = CFG.color;
+      ctx.fillText(CFG.text, 0, 0);
+      ctx.restore();
+    },
+
+    /* 5: glitch ticker --------------------------------------- */
+    glitch(ctx, v){
+      ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = CFG.color;
+
+      const depth = v.h * CFG.depth,
+            slots = v.w / CFG.step + 2;
+
+      for (let j=-1; j<slots; j++){
+        const chIdx = (j + charShift + CFG.chars.length) % CFG.chars.length;
+        const x  = v.x + v.w - j * CFG.step + pxOffset
+                 + (Math.random()<.04 ? (Math.random()*6-3) : 0); // jitter
+        const y  = v.y + v.h/2
+                 + curve(j*CFG.step - pxOffset, v.w, depth)
+                 + (Math.random()<.04 ? (Math.random()*6-3) : 0); // jitter
+        ctx.globalAlpha = Math.random()<.03 ? .2 : 1;
+        ctx.fillText(CFG.chars[chIdx], x, y);
+        ctx.globalAlpha = 1;
+      }
+    },
+
+    /* 6: breathing fade -------------------------------------- */
+    breath(ctx, v, now){
+      const alpha = 0.25 + 0.25*Math.sin(now/1000);
+      ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = `rgba(0,180,255,${alpha})`;
+      ctx.fillText(CFG.text, v.x + v.w/2, v.y + v.h/2);
+    },
+
+    /* 8: neon ticker with outer-glow ------------------------- */
+    neon(ctx, v){
+      ctx.font = `${CFG.fontSize}px ${CFG.font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = CFG.color;
+      ctx.shadowColor = 'rgba(180,0,255,.8)';
+      ctx.shadowBlur  = 12;
+
+      const depth = v.h * CFG.depth,
+            slots = v.w / CFG.step + 2;
+
+      for (let j=-1; j<slots; j++){
+        const ch = CFG.chars[(j + charShift + CFG.chars.length) % CFG.chars.length];
+        const x  = v.x + v.w - j * CFG.step + pxOffset;
+        const y  = v.y + v.h/2 + curve(j*CFG.step - pxOffset, v.w, depth);
+        ctx.fillText(ch, x, y);
+      }
+      ctx.shadowBlur = 0;
+    }
+  };
+
+  /* ------------------------------------------------------------------
+     6. MAIN LOOP – uses seed-selected renderer
+  ------------------------------------------------------------------ */
+  function loop (now) {
+    const dt = (now - last) / 1000;
+    last = now;
+
+    /* scrolling bookkeeping (shared by several effects) */
+    pxOffset += CFG.speed * dt;
+    if (pxOffset >= CFG.step) {
+      const n = (pxOffset / CFG.step) | 0;
+      charShift = (charShift + n) % CFG.chars.length;
+      pxOffset -= n * CFG.step;
+    }
+
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+
+    /* -------- visor clipping begin -------- */
+    const v = geom.visor;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(v.x+v.w/2, v.y+v.h/2, v.w/2, v.h/2, 0, 0, 2*Math.PI);
+    ctx.clip();
+
+    /* seed-chosen renderer */
+    visorRenderers[CFG.effect](ctx, v, now);
+
+    /* add static grain */
+    grain();
+    ctx.drawImage(noise,v.x,v.y);
+    ctx.restore();
+    /* -------- visor clipping end ---------- */
+
+    /* helmet always on top */
+    const h = geom.helmet;
+    ctx.drawImage(helmet,h.x,h.y,h.w,h.h);
+
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+</body>
+</html>
