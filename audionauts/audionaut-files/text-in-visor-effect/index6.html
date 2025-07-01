@@ -52,16 +52,19 @@
     }
     
     #helmet-overlay {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 115%;
-      height: 115%;
-      transform: translate(-50%, -50%);
-      object-fit: contain; 
-      pointer-events: none;
-      z-index: 3;
-    }
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 115%;
+        height: 115%;
+        transform: translate(-50%, -50%);
+        object-fit: contain; 
+        pointer-events: none;
+        z-index: 3;
+        /* ✅ Add opacity and a default transition for the fade-in */
+        opacity: 1;
+        transition: opacity 2s linear;
+        }
 
     /* --- UI & Utility (unchanged) --- */
     .fx-btns{display:none;gap:3px;justify-content:center;align-items:center;position:relative;margin-top:12px;z-index:10;flex-wrap:nowrap;overflow-x:auto;width:100%;max-width:80vh}
@@ -115,9 +118,93 @@
     import playback from './js/playback.js';
     window.playback = playback; // <-- This makes the module globally accessible
   </script>
-  <!-- Module for Self-Animating HUD Visor Text -->
+
+
+
+
+     <!-- Module for Self-Animating HUD Visor Text -->
   <script type="module">
-    const SEED=6,BASE_CFG={fontSize:28,step:16,speed:80,color:"rgba(0,255,255,.25)",font:'"Courier New", monospace',depth:.25,visorRel:{x:.18,y:.34,w:.64,h:.32},text:"🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 "},SEED_CONFIGS=[{},{text:"⚠️ DANGER // HULL BREACH IMMINENT // EVACUATE ⚠️ ",color:"rgba(255, 0, 0, 0.7)",speed:180,fontSize:26,flashing:!0},{text:"01011001 11010010 01110111 00101101 10011100 01000011 ",color:"rgba(0, 255, 80, 0.4)",font:'"Fira Code", monospace',speed:100,step:22,glitch:.8},{text:"🎉🥳 DANCE DANCE DANCE 💃🕺 MUSIC BLAST 🎶🔊 ",speed:250,step:32,fontSize:34,rainbow:!0},{text:"...is anybody out there...? ...can you hear me...? ...static...",color:"rgba(200, 220, 255, 0.15)",speed:30,fontSize:22,glitch:1.5},{text:"___/\\______/\\______/\\______/\\______/\\___ ",color:"rgba(255, 60, 60, 0.3)",speed:90,pulse:!0},{text:"🌌 SCANNING SECTOR 7G... ANOMALY DETECTED... 👽... 🛰️ ",color:"rgba(180, 120, 255, 0.3)",speed:25,fontSize:24,depth:.4},{text:"SYSTEMS NOMINAL ✅ ALL CLEAR ✅ GOLD STANDARD PROTOCOL ENGAGED ",color:"rgba(255, 215, 0, 0.4)",font:'"Times New Roman", serif',speed:60},{text:"............................................",color:"rgba(100, 100, 100, 0.1)",speed:15,depth:.1,step:10,fontSize:40}],chosenSeed=SEED_CONFIGS[(SEED-1)%SEED_CONFIGS.length]||{},CFG={...BASE_CFG,...chosenSeed},cvs=document.getElementById("hud-canvas"),ctx=cvs.getContext("2d",{alpha:!0}),noise=document.createElement("canvas"),nCtx=noise.getContext("2d",{willReadFrequently:!0}),helmet=document.getElementById("helmet-overlay"),chars=[...CFG.text],geom={helmet:{},visor:{}};let last=performance.now(),pxOffset=0,charShift=0;const startAnimation=()=>{resize(),requestAnimationFrame(loop)};helmet.complete?startAnimation():(helmet.addEventListener("load",startAnimation),helmet.addEventListener("error",(()=>console.error("HUD failed: Helmet image couldn't load."))));window.addEventListener("resize",resize);function resize(){const t=cvs.parentElement;if(!t)return;const e=devicePixelRatio||1,o=t.clientWidth;cvs.width=cvs.height=o*e,cvs.style.width=cvs.style.height=`${o}px`,ctx.setTransform(e,0,0,e,0,0);const n=helmet.getBoundingClientRect(),i=t.getBoundingClientRect();Object.assign(geom.helmet,{w:n.width,h:n.height,x:n.left-i.left,y:n.top-i.top});const a=CFG.visorRel;Object.assign(geom.visor,{w:geom.helmet.w*a.w,h:geom.helmet.h*a.h,x:geom.helmet.x+geom.helmet.w*a.x,y:geom.helmet.y+geom.helmet.h*a.y}),noise.width=geom.visor.w,noise.height=geom.visor.h}const curve=(t,e,o)=>o*(1-4*(t/e-.5)**2);function grain(){const{width:t,height:e}=noise,o=nCtx.getImageData(0,0,t,e),n=CFG.flashing?40:18;for(let t=0;t<o.data.length;t+=4)o.data[t]=o.data[t+1]=o.data[t+2]=255*Math.random()|0,o.data[t+3]=n;nCtx.putImageData(o,0,0)}function loop(t){const e=(t-last)/1e3;last=t,pxOffset+=CFG.speed*e,pxOffset>=CFG.step&&(charShift=(charShift+((pxOffset/CFG.step)|0))%chars.length,pxOffset-=((pxOffset/CFG.step)|0)*CFG.step),ctx.clearRect(0,0,cvs.width,cvs.height);const o=geom.visor;ctx.save(),ctx.beginPath(),ctx.ellipse(o.x+o.w/2,o.y+o.h/2,o.w/2,o.h/2,0,0,2*Math.PI),ctx.clip(),ctx.font=`${CFG.fontSize}px ${CFG.font}`,ctx.textAlign="center",ctx.textBaseline="middle",ctx.fillStyle=CFG.color,ctx.filter="blur(.6px)",CFG.flashing&&(ctx.globalAlpha=Math.sin(t/150)>0?1:.2),CFG.pulse&&(ctx.globalAlpha=.6+.4*Math.sin(t/300));const n=o.h*CFG.depth,i=o.w/CFG.step+2;for(let e=-1;e<i;e++){const s=chars[(e+charShift+chars.length)%chars.length],r=o.x+o.w-e*CFG.step+pxOffset;let l=o.y+o.h/2+curve(e*CFG.step-pxOffset,o.w,n);CFG.glitch&&Math.random()>.95&&(l+=(Math.random()-.5)*CFG.fontSize*CFG.glitch),CFG.rainbow&&(ctx.fillStyle=`hsla(${(t/20+10*e)%360}, 100%, 70%, 0.6)`),ctx.fillText(s,r,l)}ctx.globalAlpha=1,ctx.fillStyle=CFG.color,ctx.filter="none",grain(),ctx.drawImage(noise,o.x,o.y),ctx.restore(),requestAnimationFrame(loop)}
+    // --- Base Configuration (Unchanged) ---
+    const SEED=6,BASE_CFG={fontSize:28,step:16,speed:80,color:"rgba(0,255,255,.25)",font:'"Courier New", monospace',depth:.25,visorRel:{x:.18,y:.34,w:.64,h:.32},text:"🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 "},SEED_CONFIGS=[{},{text:"⚠️ DANGER // HULL BREACH IMMINENT // EVACUATE ⚠️ ",color:"rgba(255, 0, 0, 0.7)",speed:180,fontSize:26,flashing:!0},{text:"01011001 11010010 01110111 00101101 10011100 01000011 ",color:"rgba(0, 255, 80, 0.4)",font:'"Fira Code", monospace',speed:100,step:22,glitch:.8},{text:"🎉🥳 DANCE DANCE DANCE 💃🕺 MUSIC BLAST 🎶🔊 ",speed:250,step:32,fontSize:34,rainbow:!0},{text:"...is anybody out there...? ...can you hear me...? ...static...",color:"rgba(200, 220, 255, 0.15)",speed:30,fontSize:22,glitch:1.5},{text:"___/\\______/\\______/\\______/\\______/\\___ ",color:"rgba(255, 60, 60, 0.3)",speed:90,pulse:!0},{text:"🌌 SCANNING SECTOR 7G... ANOMALY DETECTED... 👽... 🛰️ ",color:"rgba(180, 120, 255, 0.3)",speed:25,fontSize:24,depth:.4},{text:"SYSTEMS NOMINAL ✅ ALL CLEAR ✅ GOLD STANDARD PROTOCOL ENGAGED ",color:"rgba(255, 215, 0, 0.4)",font:'"Times New Roman", serif',speed:60},{text:"............................................",color:"rgba(100, 100, 100, 0.1)",speed:15,depth:.1,step:10,fontSize:40}],chosenSeed=SEED_CONFIGS[(SEED-1)%SEED_CONFIGS.length]||{},CFG={...BASE_CFG,...chosenSeed};
+    
+    // --- Element References (Unchanged) ---
+    const cvs=document.getElementById("hud-canvas"),ctx=cvs.getContext("2d",{alpha:!0}),noise=document.createElement("canvas"),nCtx=noise.getContext("2d",{willReadFrequently:!0}),helmet=document.getElementById("helmet-overlay"),chars=[...CFG.text],geom={helmet:{},visor:{}};
+    let last=performance.now(),pxOffset=0,charShift=0;
+
+    // --- State variables (Unchanged) ---
+    let isHelmetFadeTriggered = false;
+    let lastLoggedHudBar = -1;
+
+    // --- Functions to control helmet visibility ---
+    function hideHelmetOnPlay() {
+      if (!helmet) return;
+      helmet.style.transition = 'none';
+      helmet.style.opacity = '0';
+      isHelmetFadeTriggered = false;
+      // ✅ FIX: Reset the logger state for the new session
+      lastLoggedHudBar = -1; 
+    }
+
+    function resetHelmetVisibility() {
+      if (!helmet) return;
+      helmet.style.transition = 'none';
+      helmet.style.opacity = '1';
+      isHelmetFadeTriggered = false;
+    }
+    
+    // --- Hook into global play/reset events (Unchanged) ---
+    setTimeout(() => {
+        const originalAnimate = window.animateTitleOnPlay;
+        window.animateTitleOnPlay = (...args) => { hideHelmetOnPlay(); if (originalAnimate) originalAnimate.apply(this, args); };
+        const originalReset = window.resetTitleText;
+        window.resetTitleText = (...args) => { resetHelmetVisibility(); if (originalReset) originalReset.apply(this, args); };
+    }, 0);
+
+    // --- Core Animation Logic (Unchanged part) ---
+    const startAnimation=()=>{resize(),requestAnimationFrame(loop)};
+    helmet.complete?startAnimation():(helmet.addEventListener("load",startAnimation),helmet.addEventListener("error",(()=>console.error("HUD failed: Helmet image couldn't load."))));
+    window.addEventListener("resize",resize);
+    function resize(){const t=cvs.parentElement;if(!t)return;const e=devicePixelRatio||1,o=t.clientWidth;cvs.width=cvs.height=o*e,cvs.style.width=cvs.style.height=`${o}px`,ctx.setTransform(e,0,0,e,0,0);const n=helmet.getBoundingClientRect(),i=t.getBoundingClientRect();Object.assign(geom.helmet,{w:n.width,h:n.height,x:n.left-i.left,y:n.top-i.top});const a=CFG.visorRel;Object.assign(geom.visor,{w:geom.helmet.w*a.w,h:geom.helmet.h*a.h,x:geom.helmet.x+geom.helmet.w*a.x,y:geom.helmet.y+geom.helmet.h*a.y}),noise.width=geom.visor.w,noise.height=geom.visor.h}
+    const curve=(t,e,o)=>o*(1-4*(t/e-.5)**2);
+    function grain(){const{width:t,height:e}=noise,o=nCtx.getImageData(0,0,t,e),n=CFG.flashing?40:18;for(let t=0;t<o.data.length;t+=4)o.data[t]=o.data[t+1]=o.data[t+2]=255*Math.random()|0,o.data[t+3]=n;nCtx.putImageData(o,0,0)}
+    
+    // --- ✅ UPDATED & SIMPLIFIED: Main animation loop ---
+    function loop(t){
+      // --- VISOR TEXT ANIMATION (UNCHANGED) ---
+      const e=(t-last)/1e3;last=t,pxOffset+=CFG.speed*e,pxOffset>=CFG.step&&(charShift=(charShift+((pxOffset/CFG.step)|0))%chars.length,pxOffset-=((pxOffset/CFG.step)|0)*CFG.step),ctx.clearRect(0,0,cvs.width,cvs.height);const o=geom.visor;ctx.save(),ctx.beginPath(),ctx.ellipse(o.x+o.w/2,o.y+o.h/2,o.w/2,o.h/2,0,0,2*Math.PI),ctx.clip(),ctx.font=`${CFG.fontSize}px ${CFG.font}`,ctx.textAlign="center",ctx.textBaseline="middle",ctx.fillStyle=CFG.color,ctx.filter="blur(.6px)",CFG.flashing&&(ctx.globalAlpha=Math.sin(t/150)>0?1:.2),CFG.pulse&&(ctx.globalAlpha=.6+.4*Math.sin(t/300));const n=o.h*CFG.depth,i=o.w/CFG.step+2;for(let e=-1;e<i;e++){const s=chars[(e+charShift+chars.length)%chars.length],r=o.x+o.w-e*CFG.step+pxOffset;let l=o.y+o.h/2+curve(e*CFG.step-pxOffset,o.w,n);CFG.glitch&&Math.random()>.95&&(l+=(Math.random()-.5)*CFG.fontSize*CFG.glitch),CFG.rainbow&&(ctx.fillStyle=`hsla(${(t/20+10*e)%360}, 100%, 70%, 0.6)`),ctx.fillText(s,r,l)}ctx.globalAlpha=1,ctx.fillStyle=CFG.color,ctx.filter="none",grain(),ctx.drawImage(noise,o.x,o.y);
+      
+      // --- HELMET FADE-IN LOGIC ---
+      // We rely on fxPlaybackState existing and the animation not having been triggered yet.
+      if (window.fxPlaybackState && !isHelmetFadeTriggered) {
+        const currentBar = window.fxPlaybackState.currentBar;
+        
+        // We only proceed if the main loop has started (currentBar > -1).
+        if (currentBar > -1) {
+            // DEBUG LOGGING BLOCK
+            if (currentBar !== lastLoggedHudBar) {
+                console.log(`[HUD SCRIPT] Checking bar: ${currentBar}, isTriggered: ${isHelmetFadeTriggered}`);
+                lastLoggedHudBar = currentBar;
+            }
+
+            // TRIGGER CONDITION
+            if (currentBar >= 4) {
+              console.log(`[HUD SCRIPT] Condition MET at bar ${currentBar}! Triggering fade.`);
+              const bpm = window.fxInitialBPM || 104.15;
+              const beatsPerBar = window.fxInitialBeatsPerBar || 4;
+              const fadeDurationInBars = 4;
+              const secondsPerBar = (60 / bpm) * beatsPerBar;
+              const transitionDuration = secondsPerBar * fadeDurationInBars;
+
+              helmet.style.transition = `opacity ${transitionDuration.toFixed(2)}s linear`;
+              helmet.style.opacity = '1';
+              isHelmetFadeTriggered = true;
+            }
+        }
+      }
+      
+      ctx.restore();
+      requestAnimationFrame(loop);
+    }
   </script>
 
 </body>

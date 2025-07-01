@@ -41,8 +41,8 @@ let hotkeyTimer = null;
 const HOTKEY_TIMEOUT_MS = 3000;
 // --- MODIFICATION: Initialize UI as hidden ---
 let uiElementsVisible = false; // Set to false to start hidden
-// --- END MODIFICATION ---
 
+window.fxPlaybackState = { currentBar: -1 }; // Add this line
 
 // ───────────── UI Visibility & Hotkeys ─────────────
 
@@ -191,6 +191,10 @@ function fxLoop() {
   const now = performance.now() / 1000;
   if (startTime == null) startTime = now;
   const elapsedTime = now - startTime, elapsed = getElapsed();
+
+  // ✅ ADD THIS LINE to update the shared state for other modules to use.
+  window.fxPlaybackState.currentBar = elapsed.bar;
+
   ensureBuffers();
   bufferCtxA.clearRect(0, 0, width, height); drawImage(bufferCtxA);
   let readCtx = bufferCtxA, writeCtx = bufferCtxB;
