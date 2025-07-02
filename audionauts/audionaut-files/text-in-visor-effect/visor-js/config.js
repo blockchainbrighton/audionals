@@ -5,7 +5,7 @@ export const ANIMATION_CONFIG = {
 };
 
   
-  export const SEED = 1;
+  export const SEED = 6;
   
   export const BASE_CFG = {
     fontSize: 28,
