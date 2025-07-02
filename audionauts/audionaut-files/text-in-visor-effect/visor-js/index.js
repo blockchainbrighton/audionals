@@ -52,10 +52,15 @@ function boot() {
   window.addEventListener('fxPlaybackStart', () => {
     lastHeartbeatTimeRef.value = window.fxAudioContext ? window.fxAudioContext.currentTime : 0;
     PLAYBACK_STATE.running = true;
+    ANIMATION_CONFIG.hud.mode = 'visible';                // <== Show HUD
+    setupAnimationState(true, animationState, helmet, cvs); // <== Update styles
   });
+  
   window.addEventListener('fxPlaybackStop', () => {
     lastHeartbeatTimeRef.value = 0;
     PLAYBACK_STATE.running = false;
+    ANIMATION_CONFIG.hud.mode = 'hidden';                // <== Hide HUD
+    setupAnimationState(false, animationState, helmet, cvs); // <== Update styles
     clearVisor();
   });
 
