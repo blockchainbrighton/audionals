@@ -1,7 +1,7 @@
 // visor-js/seedConfigs.js
 
 const D_FONT = '"Arial", sans-serif', D_COLOR = "rgba(0,255,255,0.33)", D_STEP = 28;
-const autoSpeed = (step, chars, bar = 9.22, div = 1) => step * chars / (bar / div);
+const autoSpeed = (step, chars, bar = 9.22*2, div = 1) => step * chars / (bar / div);
 
 const genBin = len => Array(len).fill().map(() => Math.random() < 0.5 ? "0" : "1").join('');
 const genHex = len => Array.from({length: len}, (_, i) => i.toString(16).padStart(2, '0')).join(' ');
@@ -26,26 +26,26 @@ const SEED_CONFIGS = [
   {
     name: "**Rainbow Rave Anthem**",
     text: "⛓️ UNCHAIN 🪩 THE 🪩 SOUND 🎶 RETAKE 🪩 THE 🪩 FEED  ", fontSize: 34, step: 36,
-    speed: 40, rainbow: true, depth: 0.2
+    speed: 40, rainbow: true, depth: 0.1
   },
   // 4: Encrypted Whispers
   {
     name: "**Encrypted Whispers**",
     text: "...gatekeeper static fading... pros reclaiming stems... hold the swing...",
     color: "rgba(200,220,255,0.15)", fontSize: 22, step: 24,
-    speed: autoSpeed(24, 70), glitch: 1.5, depth: 0.2
+    speed: autoSpeed(24, 70), glitch: 1.5, depth: 0.1
   },
   // 5: Sonic Freedom Wave (sine)
   {
     name: "**Sonic Freedom Wave**",
     sineWave: true, color: "rgba(255,60,60,0.5)", fontSize: 20, step: 22,
-    speed: autoSpeed(22, 10, 9.22, 2), amplitude: 20, frequency: 0.25, lineWidth: 2, depth: 0.2
+    speed: autoSpeed(22, 10, 9.22, 2), amplitude: 20, frequency: 0.25, lineWidth: 2, depth: 0.1
   },
   // 6: ECG – Beat of Revolution
   {
     name: "**ECG – Beat of Revolution**",
     ecg: true, heartbeatSpeed: 0.5, peakOnBeat: true, color: "rgba(255,100,100,0.7)",
-    speed: 0.25, amplitude: 45, cycleWidth: 250, lineWidth: 2, depth: 0.2
+    speed: 0.25, amplitude: 45, cycleWidth: 250, lineWidth: 2, depth: 0.1
   },
   // 7: Golden Block Confirmed
   {
@@ -59,67 +59,67 @@ const SEED_CONFIGS = [
     name: "**Minimal Pulse**",
     text: "::::::::::::::::::::::::::::::::::::::::::::::::",
     color: "rgba(100,100,100,0.1)", fontSize: 40, step: 42,
-    speed: autoSpeed(42, 48), depth: 0.2
+    speed: autoSpeed(42, 48), depth: 0.1
   },
   // 9: Audionaut Dispatch
   {
     name: "**Audionaut Dispatch**",
     text: "🚀 AUDIONAUT // PRO NODE ONLINE – OWN YOUR MIX 🎧 ",
     color: "rgba(0,255,255,0.25)", font: '"Courier New", monospace', fontSize: 28, step: 30,
-    speed: 78, depth: 0.2, effect: "none"
+    speed: 78, depth: 0.1, effect: "none"
   },
   // 10: Celestial Harmony Rain
   {
     name: "**Celestial Harmony Rain**",
     text: "🌌🔗🎧💎🎼🪐🚀🎶✨", fontSize: 36, step: 40, speed: autoSpeed(40, 9, 9.22, 2),
-    color: "rgba(255,200,0,0.5)", font: '"Segoe UI Emoji", sans-serif', depth: 0.2, effect: "emojiRain"
+    color: "rgba(255,200,0,0.5)", font: '"Segoe UI Emoji", sans-serif', depth: 0.1, effect: "emojiRain"
   },
   // 11: Critical Rhythm Warning
   {
     name: "**Critical Rhythm Warning**",
     text: "!!! WARNING // ROYALTY FLOW CRITICAL !!!",
-    color: "rgba(255,0,0,0.8)", font: '"Impact", sans-serif', fontSize: 42, step: 46,
-    speed: autoSpeed(46, 40), depth: 0.2, effect: "flash"
+    color: "rgba(255,0,0,0.8)", font: '"Impact", sans-serif', fontSize: 32, step: 46,
+    speed: 60, depth: 0.1, effect: "flash"
   },
   // 12: Random Ledger Stream
   {
     name: "**Random Ledger Stream**",
     text: genBin(200), color: "rgba(0,255,70,0.3)", font: '"Lucida Console", monospace',
-    fontSize: 24, step: 26, speed: autoSpeed(26, 200), depth: 0.2, effect: "matrix"
+    fontSize: 24, step: 26, speed: autoSpeed(26, 200), depth: 0.1, effect: "matrix"
   },
   // 13: Blockbeat Calibration
   {
     name: "**Blockbeat Calibration**",
     text: "…CALIBRATING PRO RIGHTS… DISTRIBUTION NODES PURGED…",
     font: '"Verdana", sans-serif', fontSize: 30, step: 34,
-    speed: autoSpeed(34, 59), depth: 0.2, effect: "rainbowWave"
+    speed: 60, depth: 0.1, effect: "rainbowWave"
   },
   // 14: Legacy System Debug
   {
     name: "**Legacy System Debug**",
     text: "▌▌▌▌▌▌ DISMANTLING GATEKEEPERS ▌▌▌▌▌▌",
     color: "rgba(0,255,0,0.2)", font: '"Press Start 2P", monospace', fontSize: 20, step: 22,
-    speed: autoSpeed(22, 46), depth: 0.2, effect: "scanline"
+    speed: 60, depth: 0.1, effect: "scanline"
   },
   // 15: Neon Refrain
   {
     name: "**Neon Refrain**",
     text: "⚡ DIRECT-TO-CHAIN // NO MIDDLEMEN ⚡",
     color: "rgba(255,0,255,0.6)", font: '"Arial Black", sans-serif', fontSize: 25, step: 27,
-    speed: autoSpeed(27, 38), depth: 0.2, effect: "pulse"
+    speed: autoSpeed(27, 38), depth: 0.1, effect: "pulse"
   },
   // 16: Stealth Sync
   {
     name: "**Stealth Sync**",
     text: "…satellite link secured… royalties rerouted…",
     color: "rgba(255,255,255,0.05)", font: '"Courier New", monospace', fontSize: 28, step: 30,
-    speed: autoSpeed(30, 50), depth: 0.2, effect: "none"
+    speed: autoSpeed(30, 50), depth: 0.1, effect: "none"
   },
   // 17: Diagnostic Dump
   {
     name: "**Diagnostic Dump**",
     text: genHex(100), color: "rgba(100,100,255,0.3)", font: '"Courier New", monospace',
-    fontSize: 32, step: 34, speed: autoSpeed(34, 299), depth: 0.2, effect: "glitch"
+    fontSize: 32, step: 34, speed: autoSpeed(34, 299), depth: 0.1, effect: "glitch"
   },
   // 18: Matrix Override
   {
@@ -139,21 +139,21 @@ const SEED_CONFIGS = [
   {
     name: "**Redline Burn**",
     text: "⚠️ LEGACY CONTRACTS FOUND // AUTO-BURN START ⚠️ ", fontSize: 32, step: 36,
-    speed: autoSpeed(36, 48), color: "rgba(255,24,24,0.8)", font: '"Arial Black", Arial, sans-serif',
+    speed: 60, color: "rgba(255,24,24,0.8)", font: '"Arial Black", Arial, sans-serif',
     extra: { flash: true }
   },
   // 21: Mission – BlockRocket
   {
     name: "**Mission – BlockRocket**",
     text: "🛰️ BLOCKROCKET ENGAGED – LAUNCHING PRO PAYLOAD 🌌 ", fontSize: 27, step: 29,
-    speed: autoSpeed(29, 51), color: "rgba(80,170,255,.33)", font: '"Orbitron", sans-serif',
+    speed: 60, color: "rgba(80,170,255,.33)", font: '"Orbitron", sans-serif',
     extra: { shadow: "#ffffff" }
   },
   // 22: Signal Jam
   {
     name: "**Signal Jam**",
     text: "↯ DRM STATIC NULLIFIED ↯ CHANNEL RESTORED ", fontSize: 28, step: 30,
-    speed: autoSpeed(30, 40), color: "rgba(255,40,210,.30)", font: '"JetBrains Mono", monospace',
+    speed: 60, color: "rgba(255,40,210,.30)", font: '"JetBrains Mono", monospace',
     extra: { glitch: true }
   },
   // 23: Airlock Pulse
@@ -189,7 +189,7 @@ const SEED_CONFIGS = [
     name: "**Spectral Sync**",
     text: "…multi-chain ghosts in tune…", fontSize: 28, step: 30,
     speed: autoSpeed(30, 30), color: "rgba(255,255,255,0.25)", font: '"Courier New", monospace',
-    effect: "fade", depth: 0.2
+    effect: "fade", depth: 0.1
   },
   // 28: Neon Node Flux
   {

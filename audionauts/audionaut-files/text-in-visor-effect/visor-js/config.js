@@ -5,7 +5,7 @@ export const ANIMATION_CONFIG = {
 };
 
   
-  export const SEED = 10;
+  export const SEED = 6;
   
   export const BASE_CFG = {
     fontSize: 28,
@@ -13,7 +13,7 @@ export const ANIMATION_CONFIG = {
     speed: 80,
     color: "rgba(0,255,255,.25)",
     font: '"Courier New", monospace',
-    depth: .25,
+    depth: .1,
     visorRel: { x: .18, y: .21, w: .64, h: .50 },
     text: "🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 "
   };
