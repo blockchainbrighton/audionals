@@ -214,7 +214,7 @@ window.resetTitleText    = resetTitleText;
       helmet:{mode:'visible',fadeIn:{start:4,duration:4,unit:'bars'},fadeOut:{start:128,duration:8,unit:'bars'}},
       hud:{mode:'visible',fadeIn:{start:0,duration:8,unit:'bars'},fadeOut:{start:128,duration:8,unit:'bars'}}
     };
-    const SEED=9,BASE_CFG={fontSize:28,step:16,speed:80,color:"rgba(0,255,255,.25)",font:'"Courier New", monospace',depth:.25,visorRel:{x:.18,y:.34,w:.64,h:.32},text:"🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 "};
+    const SEED=1,BASE_CFG={fontSize:28,step:16,speed:80,color:"rgba(0,255,255,.25)",font:'"Courier New", monospace',depth:.25,visorRel:{x:.18,y:.21,w:.64,h:.50},text:"🚀 AUDIONAUT #001 – ON-CHAIN SOUND EXPLORER 🎧 "};
     
     
 // HUD display configurations for rebel AudioNauts blazing a trail into Web3.
@@ -255,12 +255,14 @@ const SEED_CONFIGS = [
   // 3: Rainbow Rave Anthem
   {
     name: "**Rainbow Rave Anthem**",
-    text: "🎉🚀 UNCHAIN YOUR PRO SOUND 🎶🪩 RETAKE THE FEED 🌈✨ ",
+    text: "⛓️ UNCHAIN 🪩 THE 🪩 SOUND 🎶 RETAKE 🪩 THE 🪩 FEED  ",
     fontSize: 34,
     step: 36,
     // char count: 48
-    speed: 36 * 48 / 9.22, // ≈ 187
-    rainbow: true
+    speed: 40,
+    rainbow: true,
+    depth: 0.2
+
   },
 
   // 4: Encrypted Whispers
@@ -272,7 +274,9 @@ const SEED_CONFIGS = [
     step: 24,
     // char count: 70
     speed: 24 * 70 / 9.22, // ≈ 182
-    glitch: 1.5
+    glitch: 1.5,
+    depth: 0.25
+
   },
 
   // 5: Sonic Freedom Wave (sine)
@@ -294,7 +298,7 @@ const SEED_CONFIGS = [
   {
     name: "**ECG – Beat of Revolution**",
     ecg: true,
-    heartbeatSpeed: 4,
+    heartbeatSpeed: 0.5,
     peakOnBeat: true,
     color: "rgba(255, 100, 100, 0.7)",
     speed: 0.25, // ignored for ECG effect
@@ -670,7 +674,35 @@ export default SEED_CONFIGS;
       noise.width=geom.visor.w,noise.height=geom.visor.h
     };
     const curve=(t,e,o)=>o*(1-4*(t/e-.5)**2);
-    const grain=()=>{const{width:t,height:e}=noise,o=nCtx.getImageData(0,0,t,e),n=CFG.flashing?40:18;for(let t=0;t<o.data.length;t+=4)o.data[t]=o.data[t+1]=o.data[t+2]=255*Math.random()|0,o.data[t+3]=n;nCtx.putImageData(o,0,0)};
+
+
+const grain = () => {
+  // Get ellipse/visor size
+  const { w, h } = geom.visor;
+  // Set the offscreen noise canvas size to match visor size
+  noise.width = w;
+  noise.height = h;
+
+  // Fill with noise
+  const o = nCtx.getImageData(0, 0, w, h);
+  const alpha = CFG.flashing ? 25 : 12; // Softer, less visible noise
+  for (let i = 0; i < o.data.length; i += 4) {
+    const gray = Math.random() * 255 | 0;
+    o.data[i] = o.data[i + 1] = o.data[i + 2] = gray;
+    o.data[i + 3] = alpha;
+  }
+  nCtx.putImageData(o, 0, 0);
+
+  // Create an elliptical mask
+  nCtx.save();
+  nCtx.globalCompositeOperation = "destination-in";
+  nCtx.beginPath();
+  nCtx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, 2 * Math.PI);
+  nCtx.fill();
+  nCtx.restore();
+};
+    
+    
     const startAnimation=()=>{resize(),requestAnimationFrame(loop)};
     helmet.complete?startAnimation():(helmet.addEventListener("load",startAnimation),helmet.addEventListener("error",()=>console.error("HUD failed: Helmet image couldn't load.")));
     window.addEventListener("resize",resize);
@@ -816,7 +848,7 @@ export default SEED_CONFIGS;
   ctx.fillStyle = CFG.color;
   ctx.filter = "none";
   grain();
-  ctx.drawImage(noise, o.x, o.y);
+  ctx.drawImage(noise, o.x, o.y, geom.visor.w, geom.visor.h);
   ctx.restore();
 
   // --- Fade-in/fade-out logic ---
