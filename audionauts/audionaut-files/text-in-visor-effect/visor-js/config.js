@@ -1,11 +1,11 @@
 // visor-js/config.js
 export const ANIMATION_CONFIG = {
   helmet: { mode: 'visible', fadeIn: { start: 4, duration: 4, unit: 'bars' }, fadeOut: { start: 128, duration: 8, unit: 'bars' } },
-  hud:    { mode: 'hidden',  fadeIn: { start: 0, duration: 8, unit: 'bars' }, fadeOut: { start: 128, duration: 8, unit: 'bars' } }
+  hud:    { mode: 'hidden',  fadeIn: { start: 60, duration: 8, unit: 'bars' }, fadeOut: { start: 128, duration: 8, unit: 'bars' } }
 };
 
   
-  export const SEED = 6;
+  export const SEED = 5;
   
   export const BASE_CFG = {
     fontSize: 28,
