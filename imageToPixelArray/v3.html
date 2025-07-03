@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Enhanced Image to Pixel Art</title>
+    <!-- 1. ADDED RgbQuant.js library for color quantization -->
+    <script src="https://unpkg.com/rgbquant@1.1.2/rgbquant.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #container {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(64, 1fr);
+            grid-template-rows: repeat(64, 1fr);
+            width: 640px;
+            height: 640px;
+            border: 1px solid #333;
+        }
+        .cell {
+            /* Removed border from individual cells for a cleaner look */
+        }
+
+        #controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        #buttons, #color-palette-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 5px;
+        }
+        
+        #color-palette-container {
+            width: 400px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            min-height: 50px;
+        }
+
+        .color-swatch {
+            width: 30px;
+            height: 30px;
+            border: 2px solid #fff;
+            cursor: pointer;
+            box-shadow: 0 0 0 1px #888;
+        }
+
+        .color-swatch.selected {
+             border-color: #000;
+             transform: scale(1.2);
+        }
+
+        #arrayDataOutput {
+            width: 400px;
+            height: 200px;
+        }
+
+        button {
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Enhanced Image to Pixel Art</h1>
+    <div id="container">
+        <div id="grid"></div>
+        <div id="controls">
+             <textarea id="arrayDataOutput" rows="10" cols="50" readonly></textarea>
+             <h4>Color Palette</h4>
+             <div id="color-palette-container"></div>
+        </div>
+    </div>
+    
+    <div id="buttons">
+        <input type="file" id="imageUpload" accept="image/*">
+        <!-- The "Process Image" button is now handled by the file input's change event -->
+        <button id="clearCanvas">Clear Canvas</button>
+        <button id="copyArrayData">Copy RLE Data</button>
+        <button id="undoButton">Undo</button>
+    </div>
+
+    <script>
+        // 2. The palette is now a dynamic variable, not a constant.
+        let palette = [];
+        let selectedColorIndex = 0; // Default to the first color in the palette
+        let isPainting = false;
+        const gridHistory = [];
+
+        const grid = document.getElementById('grid');
+        const colorPaletteContainer = document.getElementById('color-palette-container');
+
+        /**
+         * Finds the index of a given RGB color in the current dynamic palette.
+         * Uses Euclidean distance for the closest match.
+         */
+        function findClosestPaletteIndex(r, g, b) {
+            let minDistanceSquared = Infinity;
+            let paletteIndex = 0;
+
+            for (let i = 0; i < palette.length; i++) {
+                // The palette now stores arrays like [r, g, b]
+                const [pr, pg, pb] = palette[i];
+                const distanceSquared = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2;
+                if (distanceSquared < minDistanceSquared) {
+                    minDistanceSquared = distanceSquared;
+                    paletteIndex = i;
+                }
+            }
+            return paletteIndex;
+        }
+        
+        /**
+         * Draws the pixel art grid based on a 2D array of palette indices.
+         */
+        function drawImage(pixelArray) {
+            grid.innerHTML = ''; // Clear the grid
+
+            for (let row = 0; row < 64; row++) {
+                for (let col = 0; col < 64; col++) {
+                    const div = document.createElement('div');
+                    div.className = 'cell';
+                    const colorIndex = pixelArray[row][col];
+                    const [r, g, b] = palette[colorIndex];
+                    div.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+
+                    // Add event listeners for painting
+                    div.addEventListener('mousedown', (e) => {
+                        isPainting = true;
+                        e.preventDefault(); // Prevent text selection while dragging
+                        const [r, g, b] = palette[selectedColorIndex];
+                        div.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+                    });
+                    div.addEventListener('mouseover', () => {
+                        if (isPainting) {
+                            const [r, g, b] = palette[selectedColorIndex];
+                            div.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+                        }
+                    });
+                    div.addEventListener('mouseup', () => {
+                        if (isPainting) {
+                            saveGridToHistory();
+                        }
+                        isPainting = false;
+                    });
+
+                    grid.appendChild(div);
+                }
+            }
+             // Stop painting if mouse leaves the grid area
+            grid.addEventListener('mouseleave', () => {
+                if(isPainting) {
+                    saveGridToHistory();
+                }
+                isPainting = false;
+            });
+        }
+        
+        /**
+         * 3. MAJOR ENHANCEMENT: This function now dynamically generates a palette
+         * and maps the image to it using the RgbQuant library.
+         */
+        function imageToPixelArray(imageSrc, callback) {
+            let img = new Image();
+            img.crossOrigin = "Anonymous"; // Enable cross-origin for external images if needed
+            img.src = imageSrc;
+            img.onload = function() {
+                // --- RgbQuant.js Usage ---
+                const opts = {
+                    colors: 16, // Desired number of colors in the palette
+                    method: 2, // 1=web-safe, 2=K-Means color quantization
+                    boxSize: [64, 64],
+                    boxPxls: 2,
+                    initColors: 4096,
+                };
+                
+                const quant = new RgbQuant(opts);
+                quant.sample(this); // Analyze the image
+                
+                // Get the generated palette as an array of [r,g,b] arrays
+                const generatedPalette = quant.palette(true); 
+                
+                // Reduce the image to a buffer of palette indices
+                const indexedData = quant.reduce(this);
+
+                // --- Update App State ---
+                palette = generatedPalette; // Set the global palette
+
+                let pixelArray = [];
+                for (let row = 0; row < 64; row++) {
+                    pixelArray[row] = [];
+                    for (let col = 0; col < 64; col++) {
+                        // The RgbQuant library outputs a flat array of indices,
+                        // so we calculate the position.
+                        let index = (row * 64 + col);
+                        pixelArray[row][col] = indexedData[index];
+                    }
+                }
+
+                callback(pixelArray);
+            };
+            img.onerror = () => {
+                alert("Failed to load the image. Please try another one.");
+            }
+        }
+
+        /**
+         * 4. ENHANCEMENT: Re-creates the color swatch buttons based on the new palette.
+         */
+        function createColorButtons() {
+            colorPaletteContainer.innerHTML = ''; // Clear old swatches
+            palette.forEach((color, index) => {
+                let swatch = document.createElement('div');
+                swatch.className = 'color-swatch';
+                const [r, g, b] = color;
+                swatch.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+                
+                if (index === selectedColorIndex) {
+                    swatch.classList.add('selected');
+                }
+
+                swatch.onclick = () => {
+                    selectedColorIndex = index;
+                    // Update selection visual
+                    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+                    swatch.classList.add('selected');
+                };
+                colorPaletteContainer.appendChild(swatch);
+            });
+        }
+
+        function saveGridToHistory() {
+            const cells = grid.getElementsByClassName('cell');
+            let gridState = [];
+            
+            for (let i = 0; i < cells.length; i++) {
+                const cellColor = cells[i].style.backgroundColor;
+                const [r, g, b] = cellColor.match(/\d+/g).map(Number);
+                gridState.push(findClosestPaletteIndex(r, g, b));
+            }
+            gridHistory.push(gridState);
+        }
+        
+        function restoreFromHistory(state) {
+             const cells = grid.getElementsByClassName('cell');
+             for (let i = 0; i < cells.length; i++) {
+                const [r, g, b] = palette[state[i]];
+                cells[i].style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+            }
+        }
+
+        function processNewImage(imageSrc) {
+            imageToPixelArray(imageSrc, pixelArray => {
+                gridHistory.length = 0; // Clear history for new image
+                selectedColorIndex = 0; // Reset selected color
+                drawImage(pixelArray);
+                createColorButtons();
+                saveGridToHistory();  // Save the initial state to history
+            });
+        }
+        
+        // --- Event Listeners ---
+        
+        document.getElementById('imageUpload').addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onloadend = () => processNewImage(reader.result);
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('undoButton').addEventListener('click', () => {
+            if (gridHistory.length > 1) {
+                gridHistory.pop(); // Remove current state
+                const previousState = gridHistory[gridHistory.length - 1];
+                restoreFromHistory(previousState);
+            }
+        });
+
+        document.getElementById('clearCanvas').addEventListener('click', () => {
+            const cells = grid.getElementsByClassName('cell');
+            // Use the first color of the palette as the background "clear" color
+            const [r,g,b] = palette.length > 0 ? palette[0] : [255,255,255]; 
+            for(let i=0; i<cells.length; i++){
+                cells[i].style.backgroundColor = `rgb(${r},${g},${b})`;
+            }
+            saveGridToHistory();
+        });
+
+        document.getElementById('copyArrayData').addEventListener('click', function() {
+            const arrayDataOutput = document.getElementById('arrayDataOutput');
+            const cells = grid.getElementsByClassName('cell');
+            if (cells.length === 0) {
+                alert("Grid is empty!");
+                return;
+            }
+
+            const pixelArray = [];
+            for (let i = 0; i < cells.length; i++) {
+                const cellColor = cells[i].style.backgroundColor;
+                const [r, g, b] = cellColor.match(/\d+/g).map(Number);
+                pixelArray.push(findClosestPaletteIndex(r, g, b));
+            }
+
+            // Run-length encoding (RLE)
+            let rleArray = [];
+            if (pixelArray.length > 0) {
+                let lastColor = pixelArray[0];
+                let count = 1;
+                for(let i = 1; i < pixelArray.length; i++) {
+                    if(pixelArray[i] === lastColor) {
+                        count++;
+                    } else {
+                        rleArray.push([lastColor.toString(16), count]);
+                        lastColor = pixelArray[i];
+                        count = 1;
+                    }
+                }
+                rleArray.push([lastColor.toString(16), count]);
+            }
+
+            const rleString = rleArray.map(([color, count]) => `${color}:${count}`).join(',');
+            
+            const paletteString = palette.map(color => {
+                const [r, g, b] = color;
+                return ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+            }).join(',');
+
+            const outputString = `${paletteString};${rleString};64`;
+
+            arrayDataOutput.value = outputString;
+            arrayDataOutput.select();
+            document.execCommand('copy');
+            alert('Compressed RLE data copied to clipboard!');
+        });
+        
+        // Initial state
+        function init() {
+            const initialPixelArray = Array(64).fill(0).map(() => Array(64).fill(0));
+            palette = [[255,255,255], [0,0,0]]; // Default simple palette
+            selectedColorIndex = 1;
+            drawImage(initialPixelArray);
+            createColorButtons();
+            saveGridToHistory();
+        }
+
+        init();
+
+    </script>
+</body>
+</html>

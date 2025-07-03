@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Image → Pixel-Art 64 × 64</title>
+  <style>
+    *{box-sizing:border-box;font-family:sans-serif}
+    body{
+      display:flex;flex-direction:column;align-items:center;
+      padding:1rem;gap:1rem
+    }
+    #container{
+      display:flex;align-items:flex-start;gap:1rem
+    }
+    #grid{
+      display:grid;
+      grid-template-columns:repeat(64,1fr);
+      grid-template-rows:repeat(64,1fr);
+      width:640px;height:640px
+    }
+    .cell{border:1px solid #000}
+    #arrayDataOutput{width:400px;height:400px;resize:vertical}
+    #buttons{display:flex;flex-wrap:wrap;gap:.5rem;max-width:740px}
+    #buttons button,#buttons input[type=file]{margin:0}
+    .paletteBtn{width:24px;height:24px;border:1px solid #000;padding:0;cursor:pointer}
+    #undoButton{min-width:60px}
+  </style>
+</head>
+<body>
+
+  <div id="container">
+    <div id="grid"></div>
+    <textarea id="arrayDataOutput" readonly></textarea>
+  </div>
+
+  <div id="buttons">
+    <input type="file" id="imageUpload" accept="image/*">
+    <button id="processImage">Process Image</button>
+    <button id="clearCanvas">Clear Canvas</button>
+    <button id="copyArrayData">Copy Array Data</button>
+  </div>
+
+  <script>
+  /* ------------------------------------------------------------------ *
+   *                        GLOBAL STATE / CONSTANTS                    *
+   * ------------------------------------------------------------------ */
+  let palette = [];                      // dynamically generated
+  const gridHistory = [];
+  let selectedColorIndex = 0;
+  let isPainting = false;
+
+  /* ------------------------------------------------------------------ *
+   *                   PERCEPTUAL COLOUR MATH (Lab ΔE)                  *
+   * ------------------------------------------------------------------ */
+  function rgbToXyz(r,g,b){
+    r/=255;g/=255;b/=255;
+    r=r>0.04045?Math.pow((r+0.055)/1.055,2.4):r/12.92;
+    g=g>0.04045?Math.pow((g+0.055)/1.055,2.4):g/12.92;
+    b=b>0.04045?Math.pow((b+0.055)/1.055,2.4):b/12.92;
+    return{
+      x:(r*0.4124+g*0.3576+b*0.1805)*100,
+      y:(r*0.2126+g*0.7152+b*0.0722)*100,
+      z:(r*0.0193+g*0.1192+b*0.9505)*100
+    };
+  }
+  function xyzToLab({x,y,z}){
+    const REF={x:95.047,y:100,z:108.883};
+    const f=t=>t>0.008856?Math.cbrt(t):(7.787*t)+(16/116);
+    const fx=f(x/REF.x), fy=f(y/REF.y), fz=f(z/REF.z);
+    return{L:(116*fy)-16,a:500*(fx-fy),b:200*(fy-fz)};
+  }
+  function deltaE(c1,c2){
+    return Math.sqrt(
+      (c1.L-c2.L)**2+(c1.a-c2.a)**2+(c1.b-c2.b)**2
+    );
+  }
+
+  /* ------------------------------------------------------------------ *
+   *               SIMPLE K-MEANS TO EXTRACT A PALETTE                  *
+   * ------------------------------------------------------------------ */
+  function extractPalette(imgData,numColours=32,maxIter=10){
+    const px=[];
+    for(let i=0;i<imgData.length;i+=4){
+      if(imgData[i+3]<32)continue;                 // ignore near-transparent
+      px.push([imgData[i],imgData[i+1],imgData[i+2]]);
+    }
+    const centres=[];
+    while(centres.length<numColours&&px.length){
+      const idx=Math.floor(Math.random()*px.length);
+      centres.push(px[idx]);
+      px.splice(idx,1);
+    }
+    for(let iter=0;iter<maxIter;iter++){
+      const clusters=Array.from({length:centres.length},()=>[]);
+      px.forEach(rgb=>{
+        let best=0,bestDist=Infinity;
+        centres.forEach((c,ci)=>{
+          const d=(rgb[0]-c[0])**2+(rgb[1]-c[1])**2+(rgb[2]-c[2])**2;
+          if(d<bestDist){bestDist=d;best=ci;}
+        });
+        clusters[best].push(rgb);
+      });
+      clusters.forEach((cl,ci)=>{
+        if(!cl.length)return;
+        const sum=cl.reduce((a,p)=>[a[0]+p[0],a[1]+p[1],a[2]+p[2]],[0,0,0]);
+        centres[ci]=sum.map(v=>Math.round(v/cl.length));
+      });
+    }
+    return centres.map(c=>`rgb(${c[0]},${c[1]},${c[2]})`);
+  }
+
+  /* ------------------------------------------------------------------ *
+   *               CLOSEST-COLOUR LOOK-UP  (Lab distance)               *
+   * ------------------------------------------------------------------ */
+  function rgbToPaletteIndex(r,g,b){
+    const lab1=xyzToLab(rgbToXyz(r,g,b));
+    let best=0,min=Infinity;
+    for(let i=0;i<palette.length;i++){
+      const [pr,pg,pb]=palette[i].match(/\d+/g).map(Number);
+      const lab2=xyzToLab(rgbToXyz(pr,pg,pb));
+      const d=deltaE(lab1,lab2);
+      if(d<min){min=d;best=i;}
+    }
+    return best;
+  }
+
+  /* ------------------------------------------------------------------ *
+   *                           UI HELPERS                               *
+   * ------------------------------------------------------------------ */
+  function createColorButtons(){
+    const btnDiv=document.getElementById('buttons');
+    btnDiv.querySelectorAll('.paletteBtn').forEach(b=>b.remove());
+    palette.forEach((c,i)=>{
+      const b=document.createElement('button');
+      b.className='paletteBtn';
+      b.style.backgroundColor=c;
+      b.onclick=()=>{selectedColorIndex=i;};
+      btnDiv.appendChild(b);
+    });
+    if(!document.getElementById('undoButton')){
+      const undo=document.createElement('button');
+      undo.id='undoButton';undo.textContent='Undo';
+      undo.onclick=()=>{
+        if(gridHistory.length>1){
+          gridHistory.pop();
+          const prev=gridHistory[gridHistory.length-1];
+          [...document.getElementsByClassName('cell')].forEach((c,idx)=>{
+            c.style.backgroundColor=palette[prev[idx]];
+          });
+        }
+      };
+      btnDiv.appendChild(undo);
+    }
+  }
+
+  function saveGridToHistory(){
+    const cells=[...document.getElementById('grid').children];
+    const getIdx=clr=>palette.findIndex(p=>p===clr);
+    gridHistory.push(cells.map(c=>getIdx(c.style.backgroundColor)));
+  }
+
+  /* ------------------------------------------------------------------ *
+   *                        DRAWING / GRID                              *
+   * ------------------------------------------------------------------ */
+  function drawImage(pixelArray){
+    const grid=document.getElementById('grid');
+    grid.innerHTML='';
+    for(let r=0;r<64;r++){
+      for(let c=0;c<64;c++){
+        const div=document.createElement('div');
+        div.className='cell';
+        div.style.backgroundColor=palette[pixelArray[r][c]];
+        div.addEventListener('mousedown',()=>{
+          div.style.backgroundColor=palette[selectedColorIndex];
+          isPainting=true;saveGridToHistory();
+        });
+        div.addEventListener('mouseover',()=>{
+          if(isPainting){
+            div.style.backgroundColor=palette[selectedColorIndex];
+            saveGridToHistory();
+          }
+        });
+        grid.appendChild(div);
+      }
+    }
+  }
+
+  document.addEventListener('mouseup',()=>{isPainting=false;});
+
+  /* ------------------------------------------------------------------ *
+   *                      IMAGE  →  PIXEL ARRAY                         *
+   * ------------------------------------------------------------------ */
+  function imageToPixelArray(src,cb,paletteSize=32){
+    const img=new Image();
+    img.src=src;img.crossOrigin='Anonymous';
+    img.onload=function(){
+      const cvs=document.createElement('canvas');
+      cvs.width=64;cvs.height=64;
+      const ctx=cvs.getContext('2d');
+      const scale=Math.min(64/this.width,64/this.height);
+      const dx=(64-this.width*scale)/2;
+      const dy=(64-this.height*scale)/2;
+      ctx.drawImage(this,dx,dy,this.width*scale,this.height*scale);
+      const data=ctx.getImageData(0,0,64,64).data;
+
+      palette=extractPalette(data,paletteSize);
+      createColorButtons();
+
+      const arr=Array.from({length:64},()=>Array(64).fill(0));
+      for(let r=0;r<64;r++){
+        for(let c=0;c<64;c++){
+          const i=(r*64+c)*4;
+          arr[r][c]=rgbToPaletteIndex(data[i],data[i+1],data[i+2]);
+        }
+      }
+      cb(arr);
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
+   *                         INITIALISATION                             *
+   * ------------------------------------------------------------------ */
+  function init(imgSrc){
+    imageToPixelArray(imgSrc,pix=>{
+      drawImage(pix);
+      saveGridToHistory();
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   *                        BUTTON  HANDLERS                            *
+   * ------------------------------------------------------------------ */
+  document.getElementById('processImage').onclick=()=>{
+    const file=document.getElementById('imageUpload').files[0];
+    if(!file)return;
+    const rd=new FileReader();
+    rd.onloadend=()=>{init(rd.result);};
+    rd.readAsDataURL(file);
+  };
+
+  document.getElementById('clearCanvas').onclick=()=>{
+    const cells=[...document.getElementById('grid').children];
+    cells.forEach(c=>c.style.backgroundColor=palette[0]||'rgb(255,255,255)');
+    saveGridToHistory();
+  };
+
+  document.getElementById('copyArrayData').onclick=()=>{
+    const parse=c=>c.match(/\d+/g).map(Number);
+    const cells=[...document.getElementById('grid').children];
+    const pix=cells.map(c=>{
+      const rgb=parse(c.style.backgroundColor);
+      return palette.findIndex(p=>parse(p).every((v,i)=>v===rgb[i]));
+    });
+
+    /* --- RLE compress --- */
+    const rle=[];let last=pix[0],count=1;
+    for(let i=1;i<pix.length;i++){
+      if(pix[i]===last)count++;
+      else{rle.push([last.toString(16),count]);last=pix[i];count=1;}
+    }rle.push([last.toString(16),count]);
+
+    const palStr=palette.map(p=>{
+      const [r,g,b]=parse(p);
+      return ((r<<16)|(g<<8)|b).toString(16).padStart(6,'0');
+    }).join(',');
+
+    const out=`${palStr};${rle.map(([c,n])=>c+':'+n).join(',')};64`;
+    const ta=document.getElementById('arrayDataOutput');
+    ta.value=out;ta.select();document.execCommand('copy');
+    alert('Compressed array data copied to clipboard!');
+  };
+
+  /* ------------------------------------------------------------------ *
+   *                 START WITH A BLANK WHITE GRID                      *
+   * ------------------------------------------------------------------ */
+  palette=['rgb(255,255,255)','rgb(0,0,0)'];   // temp starter palette
+  createColorButtons();
+  drawImage(Array.from({length:64},()=>Array(64).fill(0)));
+  saveGridToHistory();
+
+  </script>
+</body>
+</html>

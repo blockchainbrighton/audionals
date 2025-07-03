@@ -44,15 +44,13 @@
 
 ## 4 Badge taxonomy & usage rules
 
-### 4·1 Common badges (now **5**)
+### 4·1 Common badges (now **3**)
 
 | Name                           | Pixel‑friendly? | Rationale                                          |
 | ------------------------------ | --------------- | -------------------------------------------------- |
 | Original Audionals Inscription | ✓               | Project provenance.                                |
 | BAM LOGO                       | ✓               | Brand anchor.                                      |
-| gym.btc                        | ✓               | Community shout‑out.                               |
-| proto.audinal                  | ✓               | References the *Bitcoin Audinal Matrix* prototype. |
-| 1UP                            | ✓               | Gaming nod & rarity meme.                          |
+| jim.btc                        | ✓               | Creator of Audionals protocol.                     |
 
 > **Frequency**: 21 timelines × 6 helmets = **126** sightings per common badge → 630 total.
 
@@ -82,7 +80,7 @@ Distribution is enforced *within each timeline tier* so star‑tier rarity and h
 
 ## 6 Pixel‑helmet design guidelines (new)
 
-* **Base inscription slot (chin‑strap)** – Fits up to 4 px‑wide glyphs: e.g. `BAM`, `₿`, `A`, `1UP`.
+* **Base inscription slot (chin‑strap)** – Fits up to 4 px‑wide glyphs: e.g. `BAM`, `₿`, `A`.
 * **Crown emboss** – 5×5 px area on top ridge; recommended icons: `₿`, stylised `A`, hash‐symbol `#`.
 * **Palette** – 4‑shade ramp per metal (inspired by NES sprite limits) for authenticity & lightweight files.
 * **Easter‑egg mapping** – Rare drop (<1 %) that swaps the centre ear‑cup pixel to *rainbow* (ties to Rainbow badge).

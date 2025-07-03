@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pixel Art Maker – Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Font & basic reset -->
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      /* --- Design Tokens -------------------------------------------------- */
+      --sidebar-width: 240px;
+      --radius: 10px;
+      --color-border: #d0d5e0;
+      --color-primary: #105fe0;
+      --color-primary-light: #5d8cff;
+      --color-accent: #36d3aa;
+      --color-danger: #a23b4a;
+      --font-family: "Inter", system-ui, sans-serif;
+      --grid-max: 640px;            /* clamps grid size on large screens */
+    }
+
+    /* --- Global reset ---------------------------------------------------- */
+    *,*::before,*::after{box-sizing:border-box;}
+    html,body{height:100%;margin:0;}
+    body{
+      display:flex;flex-direction:column;min-width:900px;min-height:650px;
+      font-family:var(--font-family);background:#f4f6fb;color:#333;
+    }
+
+    /* --- Layout ---------------------------------------------------------- */
+    #mainLayout{flex:1;display:flex;}
+
+    #leftColumn{
+      flex:0 0 var(--sidebar-width);
+      display:flex;flex-direction:column;gap:1rem;
+      padding:1rem .75rem;background:#fff;border-right:1px solid var(--color-border);
+    }
+
+    #rightColumn{
+      flex:1;display:flex;flex-direction:column;align-items:center;gap:1rem;
+      padding:1rem 1.5rem;overflow:auto;
+    }
+
+    /* --- Re‑usable button component ------------------------------------- */
+    .btn{
+      display:inline-flex;align-items:center;justify-content:center;
+      padding:.5rem 1rem;font-weight:600;font-size:1rem;
+      border-radius:var(--radius);border:1.8px solid transparent;
+      background:#fff;cursor:pointer;transition:background .15s,box-shadow .15s;
+    }
+    .btn:active{transform:translateY(1px);} /* subtle press effect */
+    .btn-primary{background:var(--color-primary);color:#fff;}
+    .btn-outline{border-color:var(--color-primary);color:var(--color-primary);background:#fafcfe;}
+    .btn-danger{border-color:var(--color-danger);color:var(--color-danger);background:#fafcfe;}
+
+    /* latch toggle active state */
+    #latchToggle.on{background:var(--color-accent);border-color:#0c8b67;color:#fff;}
+
+    /* --- Palette --------------------------------------------------------- */
+    #paletteRow{display:flex;flex-wrap:wrap;gap:.5rem;}
+    .paletteColorBtn{
+      width:34px;height:34px;border-radius:8px;border:2px solid #888;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .paletteColorBtn.selected{border-color:var(--color-primary);box-shadow:0 0 0 2px var(--color-primary-light);}    .paletteColorBtn.transparent{background:repeating-linear-gradient(45deg,#ddd 0 8px,#fff 8px 16px);border-style:dashed;}
+
+    /* --- User colour rows ------------------------------------------------ */
+    .userColorRow{display:flex;align-items:center;gap:.25rem;font-size:.9rem;}
+
+    /* --- Grid ------------------------------------------------------------ */
+    #gridBox,#grid{width:min(var(--grid-max),60vmin);height:min(var(--grid-max),60vmin);}    #grid{display:grid;grid-template-columns:repeat(64,1fr);grid-template-rows:repeat(64,1fr);}    .cell{border:1px solid #f4f7fc;background-clip:padding-box;}
+
+    /* --- Responsive tweaks ---------------------------------------------- */
+    @media(max-width:1200px){:root{--sidebar-width:200px;}}
+  </style>
+</head>
+<body>
+  <div id="mainLayout">
+    <!-- -------- Sidebar -------------------------------------------------- -->
+    <aside id="leftColumn">
+      <h2 style="margin:0 0 .5rem 0;font-size:1rem;">Palette</h2>
+      <div id="paletteRow"></div>
+
+      <section id="userColorsBlock"></section>
+
+      <button id="latchToggle" class="btn btn-outline">Latch: Off</button>
+      <button id="undoBtn" class="btn btn-danger">Undo</button>
+    </aside>
+
+    <!-- -------- Main content -------------------------------------------- -->
+    <main id="rightColumn">
+      <div id="topRow" style="display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;">
+        <input type="file" id="imageUpload" accept="image/*">
+        <button id="clearCanvas" class="btn btn-outline">Clear</button>
+        <button id="saveProject" class="btn btn-outline">Save Project</button>
+        <button id="loadProjectBtn" class="btn btn-outline">Load Project</button>
+        <input type="file" id="projectLoader" accept=".pxproj,.json" hidden>
+      </div>
+
+      <div id="gridBox"><div id="grid"></div></div>
+
+      <section id="arrayDataBlock" style="width:100%;max-width:720px;display:flex;flex-direction:column;gap:.5rem;">
+        <label for="arrayDataOutput" style="font-weight:600;">Pixel Array Data:</label>
+        <textarea id="arrayDataOutput" readonly style="width:100%;height:130px;font-family:'JetBrains Mono','Menlo',monospace;border:1.2px solid #ccc;border-radius:5px;resize:none;"></textarea>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+          <button id="arrayCopyBtn"   class="btn btn-outline" style="min-width:130px;">Copy Array</button>
+          <button id="downloadPNG"   class="btn btn-outline" style="min-width:130px;">Download PNG</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+
+  <script>
+    /* =====================================================================
+       1. DATA STRUCTURES & GLOBAL STATE
+    ===================================================================== */
+    const SIZE = 64, MAX_UNDO = 100;
+    let palette=[[0,0,0,0]], userColors=Array(5).fill("#ffd700"),
+        gridArray=Array.from({length:SIZE},_=>Array(SIZE).fill(0)),
+        originalArray=Array.from({length:SIZE},_=>Array(SIZE).fill(0)),
+        gridHistory=[], undoPointer=-1, mouseDown=false, latchMode=false, selectedColorIndex=0,
+        cellElems=Array.from({length:SIZE},_=>Array(SIZE));
+    
+    const $=s=>document.querySelector(s), cloneGrid=g=>g.map(r=>[...r]);
+    const setLatchUI=()=>{$('#latchToggle').classList.toggle('on',latchMode);$('#latchToggle').textContent=latchMode?'Latch: On':'Latch: Off'}
+    
+    /* =====================================================================
+       2. INITIALIZATION
+    ===================================================================== */
+    document.addEventListener("DOMContentLoaded",()=>{
+      buildGrid(); setupUserColorsUI(); createColorButtons(); drawGrid(); pushUndo();
+    });
+    
+    /* =====================================================================
+       3. UTILS
+    ===================================================================== */
+    const hexToRgbArr=h=>[0,2,4].map(i=>parseInt(h.slice(1+i,3+i),16));
+    
+    /* =====================================================================
+       4. UNDO STACK
+    ===================================================================== */
+    function pushUndo(){
+      if(gridHistory.length>MAX_UNDO)gridHistory.shift(),undoPointer--;
+      gridHistory=gridHistory.slice(0,undoPointer+1);
+      gridHistory.push(cloneGrid(gridArray));
+      undoPointer=gridHistory.length-1;
+    }
+    function undo(){
+      if(undoPointer<=0)return;
+      undoPointer--;
+      gridArray=cloneGrid(gridHistory[undoPointer]);
+      drawGrid();
+    }
+    
+    /* =====================================================================
+       5. GRID DOM & PAINTING
+    ===================================================================== */
+    function buildGrid(){
+      const grid=$('#grid'); grid.innerHTML='';
+      for(let row=0;row<SIZE;row++)for(let col=0;col<SIZE;col++){
+        const div=document.createElement('div');
+        div.className='cell'; cellElems[row][col]=div;
+        div.onmousedown=e=>{
+          mouseDown=true;
+          gridArray[row][col]=e.button===2?originalArray[row][col]??0:selectedColorIndex;
+          repaintCell(row,col); pushUndo(); e.preventDefault();
+        };
+        div.onmouseover=()=>{if(mouseDown&&latchMode){gridArray[row][col]=selectedColorIndex;repaintCell(row,col);}};
+        div.onmouseup=()=>mouseDown=false;
+        div.oncontextmenu=e=>{
+          gridArray[row][col]=originalArray[row][col]??0; repaintCell(row,col); pushUndo(); e.preventDefault();
+        };
+        grid.appendChild(div);
+      }
+      document.addEventListener('mouseup',()=>mouseDown=false);
+    }
+    const repaintCell=(r,c)=>{
+      const idx=gridArray[r][c],col=palette[idx];
+      cellElems[r][c].style.backgroundColor=idx===0?'rgba(0,0,0,0)':`rgb(${col[0]},${col[1]},${col[2]})`;
+    }
+    function drawGrid(){for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++)repaintCell(r,c);updateArrayDisplay();}
+    
+    /* =====================================================================
+       6. PALETTE & USER COLORS
+    ===================================================================== */
+    function createColorButtons(){
+      const row=$('#paletteRow'); row.innerHTML='';
+      palette.forEach((c,i)=>{
+        const btn=document.createElement('button');
+        btn.className='paletteColorBtn'+(i===selectedColorIndex?' selected':'')+(i===0?' transparent':'');
+        btn.style.backgroundColor=i===0?'rgba(0,0,0,0)':`rgb(${c[0]},${c[1]},${c[2]})`;
+        btn.title=i===0?'Transparent Pixel':`Palette ${i}`;
+        btn.innerHTML=i===0?'<span style="font-size:1.2em;">⌀</span>':'';
+        btn.onclick=()=>{selectedColorIndex=i;createColorButtons();};
+        row.appendChild(btn);
+      });
+    }
+    function setupUserColorsUI(){
+      const div=$('#userColorsBlock'); div.innerHTML='<strong>User Palette Colors:</strong>';
+      userColors.forEach((hex,i)=>{
+        const row=document.createElement('div'); row.className='userColorRow';
+        row.innerHTML=`<label for=userColor${i}>Color ${i+1}: </label>`;
+        const input=document.createElement('input');input.type='color';input.value=hex;input.id=`userColor${i}`;
+        const btn=document.createElement('button');btn.textContent='Set';
+        input.oninput=btn.onclick=()=>setUserColor(i,input.value);
+        row.append(input,btn); div.appendChild(row);
+      });
+    }
+    function setUserColor(i,hex){
+      userColors[i]=hex; palette[1+i]=hexToRgbArr(hex);
+      createColorButtons(); drawGrid();
+    }
+    
+    /* =====================================================================
+       7. LATCH MODE TOGGLE & UNDO BUTTON
+    ===================================================================== */
+    $('#latchToggle').onclick=function(){latchMode=!latchMode;setLatchUI();};
+
+    // THIS IS THE FIX: Connect the undo button to the undo function
+    $('#undoBtn').onclick = undo;
+    
+    /* =====================================================================
+       8. SAVE & LOAD PROJECT
+    ===================================================================== */
+    const serialiseProject=()=>JSON.stringify({version:1,palette,userColors,gridArray,originalArray,latchMode});
+    function saveProject(){
+      const blob=new Blob([serialiseProject()],{type:'application/json'}),
+            a=document.createElement('a'),
+            ts=new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
+      a.href=URL.createObjectURL(blob);a.download=`pixelart-${ts}.pxproj`;a.click();URL.revokeObjectURL(a.href);
+    }
+    function loadProject(json){
+      try{
+        const d=JSON.parse(json);
+        if(!d.gridArray||!d.palette)throw'Invalid project file';
+        palette=d.palette; userColors=d.userColors; gridArray=d.gridArray;
+        originalArray=d.originalArray||cloneGrid(gridArray); latchMode=!!d.latchMode;
+        setLatchUI(); setupUserColorsUI(); createColorButtons(); drawGrid(); pushUndo();
+      }catch(e){alert('Could not load project: '+e);}
+    }
+    $('#saveProject').onclick=saveProject;
+    $('#loadProjectBtn').onclick=()=>$('#projectLoader').click();
+    $('#projectLoader').onchange=e=>{
+      const f=e.target.files[0];if(!f)return;
+      const r=new FileReader();r.onload=evt=>loadProject(evt.target.result);r.readAsText(f);e.target.value='';
+    };
+
+    
+/* =====================================================================
+       9.  EXISTING FUNCTIONS (UNCHANGED) ----------------------------------
+       The following are copied unchanged except where noted for clarity.
+       · quantize()
+       · updatePaletteFromImage()
+       · image upload processing
+       · rgbToPaletteIndex()
+       · updateArrayDisplay()
+       · downloadPNG()
+       · clearCanvas()
+    ===================================================================== */
+
+    // --- Quantize (unchanged) --------------------------------------------
+    function quantize(pixels, n = 16) {
+      let clusters = [], centroids = [];
+      for (let i = 0; i < n; i++) centroids.push(pixels[Math.floor(Math.random() * pixels.length)] || [0,0,0]), clusters.push([]);
+      let change = true;
+      for (let iter = 0; iter < 8 && change; iter++) {
+        clusters.forEach(c => c.length = 0);
+        for (let p of pixels) {
+          let min = 1e9, idx = 0;
+          centroids.forEach((c, i) => {
+            let d = (p[0]-c[0])**2 + (p[1]-c[1])**2 + (p[2]-c[2])**2;
+            if (d < min) min = d, idx = i;
+          });
+          clusters[idx].push(p);
+        }
+        change = false;
+        centroids = clusters.map((cl, i) => {
+          if (!cl.length) return centroids[i];
+          let avg = cl.reduce((a,b) => [a[0]+b[0],a[1]+b[1],a[2]+b[2]], [0,0,0]).map(x=>Math.round(x/cl.length));
+          if (!centroids[i].every((v,d)=>v===avg[d])) change=true;
+          return avg;
+        });
+      }
+      return centroids;
+    }
+
+    // --- Palette & image upload helpers (unchanged) ----------------------
+    function updatePaletteFromImage(pixels) {
+      let imgCols = quantize(pixels, 15);
+      palette = [[0,0,0,0], ...imgCols];
+      userColors.forEach((hex,i)=>{ if(hex) palette[1 + i] = hexToRgbArr(hex); });
+      createColorButtons();
+    }
+
+    function rgbToPaletteIndex(r, g, b, a=255) {
+      if(a<40) return 0;
+      let min = 1e9, idx = 1;
+      for(let i=1;i<palette.length;i++) {
+        let c = palette[i], d = (r-c[0])**2+(g-c[1])**2+(b-c[2])**2;
+        if(d<min) min=d, idx=i;
+      }
+      return idx;
+    }
+
+    // --- Image upload processing (unchanged) -----------------------------
+    $('#imageUpload').onchange = function(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      const r = new FileReader();
+      r.onloadend = () => {
+        const img = new Image(); img.src = r.result; img.crossOrigin = 'Anonymous';
+        img.onload = function() {
+          const canvas = document.createElement('canvas'); canvas.width = SIZE; canvas.height = SIZE;
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, SIZE, SIZE);
+          ctx.drawImage(img, 0, 0, SIZE, SIZE);
+          const data = ctx.getImageData(0,0,SIZE,SIZE).data, pixels = [];
+          for (let i=0;i<SIZE*SIZE;i++) { const o=i*4; if (data[o+3]>40) pixels.push([data[o],data[o+1],data[o+2]]); }
+          updatePaletteFromImage(pixels);
+          for (let row=0; row<SIZE; row++) for (let col=0; col<SIZE; col++) {
+            const idx=(row*SIZE+col)*4, r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];
+            const pi = rgbToPaletteIndex(r,g,b,a);
+            gridArray[row][col] = pi;
+            originalArray[row][col] = pi;
+          }
+          drawGrid();
+          pushUndo();
+        };
+      };
+      r.readAsDataURL(file);
+    };
+
+    // --- Array data display & copy (unchanged) ---------------------------
+    function updateArrayDisplay() {
+      const flat = gridArray.flat();
+      const paletteString = palette.map(c=>c.length===4?"00":c.map(x=>x.toString(16).padStart(2,'0')).join('')).join(',');
+      const rle = [];
+      let last = flat[0], count = 1;
+      for (let i=1;i<flat.length;i++)
+        flat[i]===last ? count++ : (rle.push([last.toString(16),count]), last=flat[i], count=1);
+      rle.push([last.toString(16),count]);
+      $('#arrayDataOutput').value = `${paletteString};${rle.map(([c,n])=>c+':'+n).join(',')};${SIZE}`;
+    }
+
+    $('#arrayCopyBtn').onclick = () => { $('#arrayDataOutput').select(); document.execCommand('copy'); };
+
+    // --- Download PNG (unchanged) ---------------------------------------
+    $('#downloadPNG').onclick = function() {
+      const canvas = document.createElement('canvas'); canvas.width = SIZE; canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      const imgData = ctx.createImageData(SIZE,SIZE);
+      for(let row=0; row<SIZE; row++) for(let col=0; col<SIZE; col++) {
+        const i = (row*SIZE+col)*4, idx = gridArray[row][col], c = palette[idx];
+        if(idx === 0) { imgData.data[i+3] = 0; }
+        else { imgData.data[i] = c[0]; imgData.data[i+1] = c[1]; imgData.data[i+2] = c[2]; imgData.data[i+3] = 255; }
+      }
+      ctx.putImageData(imgData,0,0);
+      const link = document.createElement('a');
+      link.download = 'pixelart.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    };
+
+    // --- Clear canvas (unchanged) ----------------------------------------
+    $('#clearCanvas').onclick = () => {
+      gridArray = Array(SIZE).fill().map(()=>Array(SIZE).fill(0));
+      originalArray = Array(SIZE).fill().map(()=>Array(SIZE).fill(0));
+      drawGrid();
+      pushUndo();
+    };
+
+    /* =====================================================================
+       10.  CONTEXT MENU SUPPRESSION (global) ------------------------------
+    ===================================================================== */
+    document.addEventListener('contextmenu', e => e.preventDefault());
+  </script>
+</body>
+</html>
