@@ -80,7 +80,7 @@ To align with the new goal that **only about 10 % of all helmets are high‑fi
 
 Distribution is enforced *within each timeline tier* so star‑tier rarity and helmet rarity remain orthogonal.
 
-## 6 Pixel‑helmet design guidelines (new) Pixel‑helmet design guidelines (new) Pixel‑helmet design guidelines (new) Pixel‑helmet design guidelines (new) Pixel‑helmet design guidelines (new) Pixel‑helmet design guidelines (new)
+## 6 Pixel‑helmet design guidelines (new)
 
 * **Base inscription slot (chin‑strap)** – Fits up to 4 px‑wide glyphs: e.g. `BAM`, `₿`, `A`, `1UP`.
 * **Crown emboss** – 5×5 px area on top ridge; recommended icons: `₿`, stylised `A`, hash‐symbol `#`.
