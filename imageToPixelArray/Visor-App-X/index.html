@@ -1,0 +1,484 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive Programmable Visor Simulator</title>
+<style>
+:root {
+    --glow-color: rgba(0, 200, 255, 1);
+    --glow-color-transparent: rgba(0, 200, 255, 0.7);
+    --bg-color: #1a1a1a;
+    --visor-bg-color: rgba(0, 200, 255, 0.12);
+    --text-color: #e0e0e0;
+    --control-bg: #23292f;
+    --accent: #20e0aa;
+}
+*,*:before,*:after { box-sizing: border-box; }
+body, html { height: 100%; margin: 0; padding: 0; background: var(--bg-color); color: var(--text-color); font-family: 'Segoe UI', 'Lucida Console', Monaco, monospace; }
+#app-container { display: flex; flex-direction: column; height: 100vh; }
+#controls {
+    padding: 15px 10px;
+    background: var(--control-bg);
+    border-bottom: 2px solid #444;
+    display: flex; flex-wrap: wrap; gap: 18px; justify-content: center;
+}
+.control-group {
+    display: flex; flex-direction: column; gap: 7px;
+    padding: 14px 12px 10px 12px;
+    border: 1px solid #3a4044;
+    border-radius: 8px;
+    min-width: 180px; background: rgba(28,36,40,0.68);
+}
+.control-group legend {
+    font-weight: bold; color: var(--accent); padding: 0 5px; margin-left: -5px;
+    font-size: 1.1em; margin-bottom: 3px;
+}
+.control-row {
+    display: flex; align-items: center; gap: 8px; justify-content: space-between;
+}
+.control-row label { font-size: 0.99em; flex: 0 0 80px;}
+input[type="text"], input[type="file"], select, button, input[type="number"] {
+    background: #272c30; color: var(--text-color);
+    border: 1px solid #505e60;
+    border-radius: 4px; padding: 7px; width: 100%;
+    margin-top: 3px; font-family: inherit;
+}
+button {
+    background: var(--glow-color); color: #000; font-weight: bold; cursor: pointer;
+    border: none; border-radius: 4px; padding: 7px 14px;
+    margin-top: 5px;
+    transition: background 0.18s;
+}
+button:hover { background: #fff; color: #105b6d; }
+input[type="range"] { width: 100px; margin-left: 7px;}
+input[type="color"] { border: none; width: 32px; height: 32px; background: transparent; cursor: pointer;}
+#display-area {
+    flex-grow: 1;
+    display: flex; justify-content: center; align-items: center;
+    padding: 25px 0 0 0;
+    background: linear-gradient(180deg, #212931 60%, #1a1a1a 100%);
+    perspective: 1200px;
+}
+#visor {
+    width: 700px; height: 180px; border-radius: 44px 44px 70px 70px / 28px;
+    position: relative; overflow: hidden;
+    background: var(--visor-bg-color);
+    border: 2.5px solid var(--glow-color-transparent);
+    box-shadow: 0 0 35px var(--glow-color-transparent), inset 0 0 28px rgba(0,200,255,0.16);
+    transition: transform 0.17s, border-radius 0.22s, width 0.22s, height 0.22s;
+    min-width: 220px; min-height: 60px;
+}
+#visor-content {
+    position: absolute; left: 0; top: 0;
+    width: 100%; height: 100%;
+    color: var(--glow-color);
+    font-size: 48px; font-weight: bold;
+    text-shadow: 0 0 11px var(--glow-color), 0 0 18px var(--glow-color-transparent);
+    white-space: nowrap; display: flex; align-items: center; justify-content: center;
+    pointer-events: none; user-select: none;
+    transition: color 0.2s, text-shadow 0.2s, filter 0.17s;
+    z-index: 1;
+}
+#visor-content.glitch { animation: glitch 0.29s infinite linear; }
+@keyframes glitch {
+    0%   { filter: hue-rotate(0deg) blur(0.5px);}
+    19%  { filter: hue-rotate(12deg) blur(1.4px);}
+    40%  { filter: hue-rotate(-13deg) blur(1.1px);}
+    60%  { filter: hue-rotate(18deg) blur(0.7px);}
+    75%  { filter: hue-rotate(-10deg) blur(2.1px);}
+    100% { filter: hue-rotate(0deg) blur(0.5px);}
+}
+#visor-content.blink { animation: blink 0.7s steps(1, end) infinite alternate; }
+@keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.23; } 100% { opacity: 1; } }
+#visor-content.typewriter { border-right: 4px solid var(--accent); overflow: hidden; animation: none !important; }
+#visor-content:not(.glow) { text-shadow: none; }
+#visor-img {
+    position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    object-fit: contain; z-index: 0; pointer-events: none;
+    filter: drop-shadow(0 0 32px var(--glow-color-transparent));
+    background: transparent;
+    transition: filter 0.18s;
+}
+/* curved-text SVG */
+#visor-svg { position:absolute; left:0; top:0; pointer-events:none; z-index:1; }
+#visor-svg text { text-shadow: 0 0 11px var(--glow-color), 0 0 18px var(--glow-color-transparent); }
+
+.preset-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+.preset-btn {
+    padding: 4px 8px; font-size: 0.96em;
+    border: 1px solid #444; border-radius: 4px; cursor: pointer;
+    background: #212f38; color: #80fff0;
+    transition: background 0.16s;
+}
+.preset-btn:hover { background: var(--glow-color); color: #222;}
+@media (max-width: 900px) {
+    #visor { width: 96vw !important; height: 24vw !important; font-size: 4vw;}
+    #display-area { padding: 7px;}
+}
+</style>
+</head>
+<body>
+<div id="app-container">
+    <!-- Controls -->
+    <div id="controls">
+        <!-- Visor Shape -->
+        <fieldset class="control-group">
+            <legend>Visor Shape</legend>
+            <div class="control-row"><label for="width-slider">Width</label><input type="range" id="width-slider" min="220" max="1400" value="700"></div>
+            <div class="control-row"><label for="height-slider">Height</label><input type="range" id="height-slider" min="40" max="400" value="180"></div>
+            <div class="control-row"><label for="radius-slider">Corner</label><input type="range" id="radius-slider" min="0" max="200" value="44"></div>
+            <div class="control-row"><label for="curvature-slider">Tilt&nbsp;Y</label><input type="range" id="curvature-slider" min="-60" max="60" value="0"></div>
+            <div class="control-row"><label for="tiltX-slider">Tilt&nbsp;X</label><input type="range" id="tiltX-slider" min="-60" max="60" value="0"></div>
+            <div class="control-row"><label for="arc-slider">Arc</label><input type="range" id="arc-slider" min="-150" max="150" value="0"></div>
+        </fieldset>
+        <!-- Colors -->
+        <fieldset class="control-group">
+            <legend>Colors</legend>
+            <div class="control-row"><label for="visor-color">Visor</label><input type="color" id="visor-color" value="#00c8ff"></div>
+            <div class="control-row"><label for="text-color">Text</label><input type="color" id="text-color" value="#00e8ff"></div>
+            <div class="control-row"><label for="bg-color">BG</label><input type="color" id="bg-color" value="#1a1a1a"></div>
+        </fieldset>
+        <!-- Text Controls -->
+        <fieldset class="control-group">
+            <legend>Display Text</legend>
+            <input type="text" id="text-input" maxlength="60" placeholder="Enter visor text...">
+            <div class="control-row"><label for="font-select">Font</label>
+                <select id="font-select">
+                    <option value="'Lucida Console', Monaco, monospace">Monospace</option>
+                    <option value="'Segoe UI', Verdana, sans-serif">Segoe UI</option>
+                    <option value="'Orbitron', Arial, sans-serif">Orbitron</option>
+                    <option value="'Courier New', Courier, monospace">Courier</option>
+                    <option value="'Share Tech Mono', monospace">Share Tech Mono</option>
+                </select>
+            </div>
+            <div class="control-row"><label for="font-size">Size</label><input type="number" id="font-size" min="12" max="120" value="48" style="width:54px"></div>
+            <div class="preset-list">
+                <span class="preset-btn" data-preset="SYSTEM ONLINE">SYSTEM ONLINE</span>
+                <span class="preset-btn" data-preset="READY">READY</span>
+                <span class="preset-btn" data-preset="DANGER">DANGER</span>
+                <span class="preset-btn" data-preset="DATA STREAM">DATA STREAM</span>
+                <span class="preset-btn" data-preset="CHECK VITALS">CHECK VITALS</span>
+            </div>
+            <button id="apply-content-btn">Apply Text</button>
+        </fieldset>
+        <!-- Image Control -->
+        <fieldset class="control-group">
+            <legend>Image Overlay</legend>
+            <input type="file" id="image-input" accept="image/*">
+            <button id="remove-img-btn" style="margin-top: 3px;">Remove Image</button>
+        </fieldset>
+        <!-- Animation & FX -->
+        <fieldset class="control-group">
+            <legend>Animation & FX</legend>
+            <div class="control-row"><label for="direction-select">Scroll</label>
+                <select id="direction-select">
+                    <option value="None" selected>None</option>
+                    <option value="Left">Left</option>
+                    <option value="Right">Right</option>
+                    <option value="Up">Up</option>
+                    <option value="Down">Down</option>
+                </select>
+            </div>
+            <div class="control-row"><label for="speed-slider">Speed</label><input type="range" id="speed-slider" min="0" max="12" value="2" step="0.1"></div>
+            <div class="control-row">
+                <button id="glitch-btn">Glitch</button>
+                <button id="blink-btn">Blink</button>
+                <button id="tw-btn">Typewriter</button>
+                <button id="glow-btn">Glow</button>
+                <button id="reset-fx-btn">Reset FX</button>
+            </div>
+        </fieldset>
+        <!-- Save/Load -->
+        <fieldset class="control-group">
+            <legend>Save/Load</legend>
+            <button id="save-btn">Save Design</button>
+            <input type="file" id="load-input" accept=".json">
+        </fieldset>
+    </div>
+    <!-- Visor Display -->
+    <div id="display-area">
+        <div id="visor">
+            <!-- curved text SVG -->
+            <svg id="visor-svg" width="100%" height="100%" viewBox="0 0 700 180" preserveAspectRatio="none" style="display:none;">
+                <defs><path id="text-path" d="M0 90 Q350 90 700 90"></path></defs>
+                <text id="svg-text" text-anchor="middle" dominant-baseline="middle" fill="currentColor">
+                    <textPath href="#text-path" startOffset="50%">SYSTEM ONLINE</textPath>
+                </text>
+            </svg>
+
+            <div id="visor-content">SYSTEM ONLINE</div>
+            <img id="visor-img" style="display:none;" />
+        </div>
+    </div>
+</div>
+<!-- GOOGLE FONTS for Demo -->
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- Element Shortcuts ---
+    const $ = id => document.getElementById(id),
+        visor = $('visor'), visorContent = $('visor-content'),
+        visorImg = $('visor-img'),
+        widthS = $('width-slider'), heightS = $('height-slider'),
+        radiusS = $('radius-slider'), curveS = $('curvature-slider'),
+        tiltXS = $('tiltX-slider'), arcS = $('arc-slider'),
+        visorColorI = $('visor-color'), textColorI = $('text-color'),
+        bgColorI = $('bg-color'), fontSel = $('font-select'),
+        fontSizeI = $('font-size'),
+        textI = $('text-input'), applyBtn = $('apply-content-btn'),
+        imgI = $('image-input'), removeImgBtn = $('remove-img-btn'),
+        dirSel = $('direction-select'), speedS = $('speed-slider'),
+        glitchBtn = $('glitch-btn'), blinkBtn = $('blink-btn'),
+        twBtn = $('tw-btn'), glowBtn = $('glow-btn'), resetFxBtn = $('reset-fx-btn'),
+        saveBtn = $('save-btn'), loadInput = $('load-input'),
+        svg = $('visor-svg'), textPath = $('text-path'),
+        svgText = $('svg-text'), svgTP = svgText.querySelector('textPath');
+
+    // --- State ---
+    let dir = dirSel.value, speed = +speedS.value, x = 0, y = 0, twActive = false, twTimeout = null;
+
+    // --- Presets ---
+    document.querySelectorAll('.preset-btn').forEach(btn =>
+        btn.addEventListener('click', () => {
+            textI.value = btn.dataset.preset;
+            applyBtn.click();
+        })
+    );
+
+    // --- SVG Path / Curved Text ---
+    function updateSVGPath() {
+        const w   = visor.clientWidth,
+              h   = visor.clientHeight,
+              arc = +arcS.value;
+
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        textPath.setAttribute('d', `M0 ${h/2} Q ${w/2} ${h/2 - arc} ${w} ${h/2}`);
+
+        svgText.style.fontFamily = fontSel.value;
+        svgText.setAttribute('font-size', fontSizeI.value);
+        svgText.style.fill = textColorI.value;
+        svgTP.textContent  = textI.value || visorContent.textContent;
+
+        const curved = arc !== 0;
+        svg.style.display = curved ? '' : 'none';
+        visorContent.style.display =
+            curved ? 'none' : (visorImg.style.display === 'none' ? 'flex' : 'none');
+    }
+
+    // --- Visor Shape/Colors ---
+    const setVisorStyle = () => {
+        Object.assign(visor.style, {
+            width:        `${widthS.value}px`,
+            height:       `${heightS.value}px`,
+            borderRadius: `${radiusS.value}px`,
+            transform:
+                `rotateX(${tiltXS.value}deg) rotateY(${curveS.value}deg)`,
+            background: visorImg.style.display === 'none' ?
+                `linear-gradient(180deg, ${visorColorI.value}20 60%, #1a1a1a 100%)`
+                : 'transparent'
+        });
+        document.body.style.background = bgColorI.value;
+        updateSVGPath();
+    };
+    [widthS, heightS, radiusS, curveS, tiltXS, arcS, visorColorI, bgColorI]
+        .forEach(e => e.addEventListener('input', setVisorStyle));
+
+    // --- Text Appearance ---
+    function setTextStyle() {
+        visorContent.style.fontFamily = fontSel.value;
+        visorContent.style.fontSize   = `${fontSizeI.value}px`;
+        visorContent.style.color      = textColorI.value;
+        visorContent.style.textShadow = visorContent.classList.contains('glow')
+            ? `0 0 13px ${textColorI.value}bb, 0 0 26px ${textColorI.value}77`
+            : '';
+
+        svgText.style.fontFamily = fontSel.value;
+        svgText.setAttribute('font-size', fontSizeI.value);
+        svgText.style.fill = textColorI.value;
+    }
+    [fontSel, fontSizeI, textColorI].forEach(e =>
+        e.addEventListener('input', () => { setTextStyle(); updateSVGPath(); })
+    );
+
+    // --- Apply Content (Text) ---
+    applyBtn.addEventListener('click', () => {
+        setContent(textI.value);
+    });
+
+    // --- Set Content ---
+    function setContent(txt) {
+        resetFX();
+        if (twActive) clearTimeout(twTimeout);
+
+        visorContent.innerHTML = txt;
+        svgTP.textContent      = txt;
+
+        visorImg.style.display     = 'none';
+        visorContent.style.display = arcS.value === '0' ? 'flex' : 'none';
+
+        setTextStyle();
+        resetContentPos();
+        updateSVGPath();
+    }
+
+    // --- Image Upload/Display ---
+    imgI.addEventListener('change', e => {
+        const f = e.target.files[0];
+        if (!f) return;
+        const r = new FileReader();
+        r.onload = e2 => {
+            visorContent.style.display = 'none';
+            svg.style.display = 'none';
+            visorImg.src = e2.target.result;
+            visorImg.style.display = '';
+        };
+        r.readAsDataURL(f);
+    });
+    removeImgBtn.addEventListener('click', () => {
+        visorImg.src = '';
+        visorImg.style.display = 'none';
+        updateSVGPath();
+    });
+
+    // --- Animation Direction & Speed ---
+    dirSel.addEventListener('change', e => { dir = e.target.value; resetContentPos(); });
+    speedS.addEventListener('input', e => speed = +e.target.value);
+
+    // --- Reset Content Position for Animation ---
+    function resetContentPos() {
+        const w = visor.clientWidth, cw = visorContent.scrollWidth,
+              h = visor.clientHeight, ch = visorContent.scrollHeight;
+        let cx = (w - cw) / 2, cy = (h - ch) / 2;
+        if (dir === 'Left')   cx = w;
+        if (dir === 'Right')  cx = -cw;
+        if (dir === 'Up')     cy = h;
+        if (dir === 'Down')   cy = -ch;
+        x = cx; y = cy;
+        visorContent.style.transform = `translate(${x}px,${y}px)`;
+    }
+
+    // --- Animation Loop ---
+    (function loop() {
+        if (visorContent.style.display !== 'none' && dir !== 'None' && speed > 0) {
+            const w = visor.clientWidth, cw = visorContent.scrollWidth,
+                  h = visor.clientHeight, ch = visorContent.scrollHeight;
+            if (dir === 'Left')   { x -= speed; if (x < -cw) x = w; }
+            if (dir === 'Right')  { x += speed; if (x > w) x = -cw; }
+            if (dir === 'Up')     { y -= speed; if (y < -ch) y = h; }
+            if (dir === 'Down')   { y += speed; if (y > h) y = -ch; }
+            visorContent.style.transform = `translate(${x}px,${y}px)`;
+        }
+        requestAnimationFrame(loop);
+    })();
+
+    // --- FX: Glitch, Blink, Typewriter, Glow ---
+    function resetFX() {
+        visorContent.classList.remove('glitch', 'blink', 'typewriter', 'glow');
+        setTextStyle();
+        if (twActive) clearTimeout(twTimeout);
+        twActive = false;
+    }
+    glitchBtn.addEventListener('click', () => {
+        resetFX(); visorContent.classList.add('glitch');
+    });
+    blinkBtn.addEventListener('click', () => {
+        resetFX(); visorContent.classList.add('blink');
+    });
+    twBtn.addEventListener('click', () => {
+        resetFX(); typewriterEffect(textI.value);
+    });
+    glowBtn.addEventListener('click', () => {
+        visorContent.classList.toggle('glow');
+        setTextStyle();
+    });
+    resetFxBtn.addEventListener('click', resetFX);
+
+    // --- Typewriter Effect ---
+    function typewriterEffect(str) {
+        resetFX();
+        visorContent.classList.add('typewriter');
+        visorContent.innerHTML = '';
+        let i = 0;
+        twActive = true;
+        function nextChar() {
+            visorContent.innerHTML = str.slice(0, i) + '<span style="opacity:0">_</span>';
+            i++;
+            if (i <= str.length && twActive) twTimeout = setTimeout(nextChar, 44);
+            else { visorContent.innerHTML = str; visorContent.classList.remove('typewriter'); twActive = false; }
+        }
+        nextChar();
+    }
+
+    // --- Save / Load (JSON) ---
+    saveBtn.addEventListener('click', () => {
+        const data = {
+            width:  widthS.value,  height: heightS.value,
+            radius: radiusS.value,
+            curveY: curveS.value,
+            curveX: tiltXS.value,
+            arc:    arcS.value,
+
+            visorColor: visorColorI.value, textColor: textColorI.value, bgColor: bgColorI.value,
+            font: fontSel.value, fontSize: fontSizeI.value,
+            text: textI.value, fx: Array.from(visorContent.classList),
+            img: visorImg.style.display === '' ? visorImg.src : null,
+            anim: { dir, speed }
+        };
+        const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'visor_design.json'; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 9000);
+    });
+    loadInput.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const r = new FileReader();
+        r.onload = e2 => {
+            try {
+                const d = JSON.parse(e2.target.result);
+                widthS.value  = d.width;  heightS.value = d.height; radiusS.value = d.radius;
+                curveS.value  = d.curveY ?? 0;
+                tiltXS.value  = d.curveX ?? 0;
+                arcS.value    = d.arc    ?? 0;
+
+                visorColorI.value = d.visorColor || '#00c8ff';
+                textColorI.value  = d.textColor || '#00e8ff';
+                bgColorI.value    = d.bgColor  || '#1a1a1a';
+                fontSel.value     = d.font     || fontSel.value;
+                fontSizeI.value   = d.fontSize || 48;
+                textI.value       = d.text     || '';
+
+                setVisorStyle(); setTextStyle();
+                setContent(d.text || '');
+                if (d.fx) { resetFX(); d.fx.forEach(fx => visorContent.classList.add(fx)); }
+
+                if (d.img) {
+                    visorImg.src = d.img; visorImg.style.display = '';
+                    visorContent.style.display = 'none'; svg.style.display = 'none';
+                } else {
+                    visorImg.style.display = 'none';
+                    updateSVGPath();
+                }
+                dirSel.value = d.anim?.dir ?? 'None';
+                speedS.value = d.anim?.speed ?? 2;
+                dir = dirSel.value; speed = +speedS.value;
+                resetContentPos();
+            } catch (e) { alert('Invalid design file'); }
+        };
+        r.readAsText(file);
+    });
+
+    // --- Init ---
+    setVisorStyle();
+    setTextStyle();
+    resetContentPos();
+    updateSVGPath();
+});
+</script>
+</body>
+</html>
+
