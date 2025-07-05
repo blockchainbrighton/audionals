@@ -154,3 +154,46 @@ More IDS that might need updates to work:
 
 Chordinal #1
 aa43e0a7d229f460c6f9310e938ae8ec50a26f5b09df1f6d801d9e8a8741afc3i0
+
+
+
+
+
+
+
+
+First “Audinal” https://ordinals.com/inscription/7d058415fb8b6d35fddd375208648254bcb0e4e470b4b25da3dac32d8b04b935i0
+
+2nd Basic Sequencer Inscription: https://ordinals.com/inscription/09e0b0c471a6a89c1385c67016e5e6a97f6a6df38207c2d79da67cadf0774368i0
+
+First synth:  https://ordinals.com/content/598a448d0e134e90855e6fba03d7b2e2610423f185ba513d3c1a8022a9d0d591i0
+
+
+First Audional Song with old engine: https://ordinals.com/content/cea4d582a419e6c7561af335ed08b6b47384d6f2c25d0f682c3019c7f2a305e4i0
+
+
+
+
+
+
+Original Audional Sequencer Inscription (You can load any of the original json files above into this inscribed sequencer):https://ordinals.com/content/ade52434daf0667a061da2307b74ab7c217b46b1e8bc0d8d649c35b203ee16d6i0
+
+
+
+New HTML Format OB1 Collection: https://magiceden.io/ordinals/marketplace/ordinalbased1s
+
+The infinite Ordinal Remix Inscription (10 quadrillion seed drive remixes):https://ordinals.com/inscription/a5e9d3fe0cb8e3378e478b2c2ae1f222d01536f069ce4d42ac2c9b7989b74a75i0?query=4812983677467584
+
+
+First New Engine Song Format with generative visualiser:https://ordinals.com/content/a449a3401142ce6118e13106dcaf61b7d17fb3cfadf26a5079154f9cca1862b7i0
+
+New Engine Song Format with static artwork (wait for loading then click image):https://gamma.io/inscription/9c04932d96d505fd30ed29308665b31565e9ff6955f2ffe559b47d036faddb0bi0
+
+
+
+
+First Opus test:
+https://ordinals.com/inscription/8e00109f37672c8d9b75becdc6135c751a1be0189cc6e836f7637c2642480ea3i0
+
+
+
