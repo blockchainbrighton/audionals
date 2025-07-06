@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Code-Only Astronaut Helmet</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fafafa;
+    }
+    .container {
+      width: 400px;
+    }
+    svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <svg viewBox="0 0 512 512"
+         xmlns="http://www.w3.org/2000/svg"
+         xmlns:xlink="http://www.w3.org/1999/xlink">
+
+      <defs>
+        <!-- Main shell gradient -->
+        <linearGradient id="shellGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%"   stop-color="#6CD4FF"/>
+          <stop offset="60%"  stop-color="#0A4D8C"/>
+          <stop offset="100%" stop-color="#00264F"/>
+        </linearGradient>
+
+        <!-- Top-dome highlight -->
+        <radialGradient id="highlightGrad" cx="0.4" cy="0.2" r="0.5">
+          <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.6"/>
+          <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+        </radialGradient>
+
+        <!-- Side reflections -->
+        <radialGradient id="sideGradLeft" cx="0.25" cy="0.5" r="0.3">
+          <stop offset="0%"   stop-color="#AEEFFF" stop-opacity="0.5"/>
+          <stop offset="100%" stop-color="#AEEFFF" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="sideGradRight" cx="0.75" cy="0.5" r="0.3">
+          <stop offset="0%"   stop-color="#4FBFFF" stop-opacity="0.5"/>
+          <stop offset="100%" stop-color="#4FBFFF" stop-opacity="0"/>
+        </radialGradient>
+
+        <!-- Mask to clip noise inside shell but outside visor -->
+        <mask id="helmetMask">
+          <!-- start with black (hide everything) -->
+          <rect width="512" height="512" fill="black"/>
+          <!-- reveal the shell area -->
+          <path d="M256 16
+                   C150 16 64 100 64 208
+                   L64 304
+                   C64 412 150 496 256 496
+                   C362 496 448 412 448 304
+                   L448 208
+                   C448 100 362 16 256 16
+                   Z"
+                fill="white"/>
+          <!-- cut out the visor hole -->
+          <ellipse cx="256" cy="280" rx="140" ry="120" fill="black"/>
+        </mask>
+      </defs>
+
+      <!-- 1) Outer shell -->
+      <path id="helmetShell"
+            d="M256 16
+               C150 16 64 100 64 208
+               L64 304
+               C64 412 150 496 256 496
+               C362 496 448 412 448 304
+               L448 208
+               C448 100 362 16 256 16
+               Z"
+            fill="url(#shellGrad)"
+            stroke="#000A1F"
+            stroke-width="8"/>
+
+      <!-- 2) Highlights -->
+      <path d="M256 16
+               C150 16 64 100 64 208
+               L64 304
+               C64 412 150 496 256 496
+               C362 496 448 412 448 304
+               L448 208
+               C448 100 362 16 256 16
+               Z"
+            fill="url(#highlightGrad)"
+            style="mix-blend-mode:screen;"/>
+
+      <circle cx="128" cy="256" r="96"
+              fill="url(#sideGradLeft)"
+              style="mix-blend-mode:screen;"/>
+
+      <circle cx="384" cy="256" r="96"
+              fill="url(#sideGradRight)"
+              style="mix-blend-mode:screen;"/>
+
+      <!-- 3) Visor hole -->
+      <ellipse cx="256" cy="280" rx="140" ry="120" fill="#FFFFFF"/>
+
+      <!-- 4) Noise overlay (will be wired up by JS) -->
+      <image id="noiseOverlay"
+             x="0" y="0"
+             width="512" height="512"
+             xlink:href=""
+             mask="url(#helmetMask)"
+             opacity="0.2"
+             style="mix-blend-mode:overlay; filter: blur(0.5px);"
+             preserveAspectRatio="none"/>
+    </svg>
+  </div>
+
+  <script>
+    (function() {
+      const size = 512;
+      // 1) Build a noise canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const imgData = ctx.createImageData(size, size);
+      const d = imgData.data;
+
+      // 2) Fill it with random gray + low alpha
+      for (let i = 0; i < d.length; i += 4) {
+        const v = Math.random() * 255;
+        d[i]   = v;
+        d[i+1] = v;
+        d[i+2] = v;
+        d[i+3] = 20;    // about 8% opacity
+      }
+      ctx.putImageData(imgData, 0, 0);
+
+      // 3) Inject into the SVG <image>
+      const xlinkNS = 'http://www.w3.org/1999/xlink';
+      const noiseEl = document.getElementById('noiseOverlay');
+      noiseEl.setAttributeNS(xlinkNS, 'href', canvas.toDataURL());
+    })();
+  </script>
+</body>
+</html>

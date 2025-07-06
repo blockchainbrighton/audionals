@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Audionauts</title>
+  <style>
+    /* --- Base Setup --- */
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{
+      background:#000000;
+      color:#f0f0f0;
+      font-family:Arial,sans-serif;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      height:100vh;
+      position:relative;
+    }
+
+    /* --- Core Container & Frame --- */
+    #canvas-container {
+      position: relative;
+      width: 80vh;
+      height: 80vh;
+      max-width: 80vw;
+      max-height: 80vh;
+      cursor: pointer;
+    }
+    #canvas-frame {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      /* ✅ KEY FIX: Removed "overflow: hidden" and "border" which were clipping the oversized helmet */
+    }
+
+    /* --- STACKED VISUAL LAYERS --- */
+    #canvas-frame > canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    canvas#main-canvas { z-index: 1; }
+    canvas#hud-canvas {
+      z-index: 2;
+      pointer-events: none;
+      /* ✅ Add opacity and transition for fade control */
+      opacity: 1;
+      transition: opacity 2s linear;
+    }
+    
+    #helmet-overlay {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 125%;
+        height: 125%;
+        transform: translate(-50%, -50%);
+        object-fit: contain; 
+        pointer-events: none;
+        z-index: 3;
+        opacity: 1;
+        transition: opacity 2s linear;
+    }
+
+    /* --- UI & Utility (unchanged) --- */
+    .fx-btns{display:none;gap:3px;justify-content:center;align-items:center;position:relative;margin-top:12px;z-index:10;flex-wrap:nowrap;overflow-x:auto;width:100%;max-width:80vh}
+    #timeline-editor{display:none;position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(18,18,18,.97);border-top:1px solid #282848;padding:10px 24px 16px 24px;min-height:48px;max-height:36vh;overflow:auto;box-shadow:0 -4px 12px #0009;}
+    #dynamicTitleText {
+        position: fixed;
+        left: 50%;
+        top: 48%;                /* Move up! Adjust to taste (e.g. 32%–40%) */
+        transform: translate(-50%,-50%);
+        font-size: 1.5vw;
+        font-weight: bold;
+        color: #ff8800;
+        text-shadow: 0 6px 24px #111b,0 1px 1px #000b;
+        z-index: 9999;
+        pointer-events: none;
+        transition: font-size 10s cubic-bezier(0.77,0,0.175,1),opacity 1.2s cubic-bezier(0.77,0,0.175,1);
+        opacity: 1;
+        user-select: none;
+        }    
+    #error-message,#loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;text-align:center; z-index: 100;}
+    #error-message{color:#f55;display:none}
+    #loading{color:#f0f0f0}
+
+    /* Ensures pixel art stays sharp when upscaled */
+    img, canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges; /* fallback for Safari/older browsers */
+    }
+</style>
+</head>
+<body>
+
+  <div id="canvas-container">
+    <div id="canvas-frame">
+      <canvas id="main-canvas"></canvas>
+      <canvas id="hud-canvas"></canvas>
+      <img id="helmet-overlay" src="./media/BAM.png" alt="Space Helmet Overlay"/>
+    </div>
+    <div id="loading">Loading assets...</div>
+    <div id="error-message" style="display:none;">Failed to load assets.</div>
+  </div>
+
+  <div class="fx-btns" id="fx-btns"></div>
+  <div id="timeline-editor"></div>
+
+  <!-- Configuration for main.js and playback.js -->
+  <script>
+    window.images = ["https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0"];
+    window.badgeImages = ["https://ordinals.com/content/09b4bbb0337af857d9afa934205fb820bb704596a00f2e7f5bb37195853eee32i0"];
+    
+    /* ✅ ADD THIS LINE FOR AUDIO */
+    window.fxSongUrl = "./media/Opus.webm";
+
+    window.titleText = "A";
+    window.secondaryTitleText = "B";
+    window.titleTextAnimationDuration = 10000;
+    window.fxInitialBPM = 104.15;
+    window.fxInitialBeatsPerBar = 4;
+    window.fxTimelineFunctionId = 68;
+    window.fxTimelineUrl = "./29-timelines/spectral-solidity.js";
+  </script>
+
+  <!-- Dynamic Title Logic (Inline) -->
+  <script type="module">
+/**
+ * Return the dynamic-title element, creating it if it doesn’t exist yet.
+ * @returns {HTMLDivElement}
+ */
+ function createDynamicTitle() {
+  const existing = document.getElementById('dynamicTitleText');
+  if (existing) return existing;
+
+  const div = document.createElement('div');
+  div.id = 'dynamicTitleText';
+  div.textContent = window.titleText || '';
+  div.style.opacity = '1';
+
+  document.body.appendChild(div);
+  return div;
+}
+
+/**
+ * Shrink and fade the title when playback starts.
+ */
+function animateTitleOnPlay() {
+  const title = createDynamicTitle();
+
+  title.textContent = window.secondaryTitleText || '';
+  const duration = window.titleTextAnimationDuration || 10_000; // default: 10 s
+
+  // Force a reflow so the transition applies
+  title.offsetHeight;
+
+  title.style.transition = `
+    font-size ${duration}ms cubic-bezier(0.77, 0, 0.175, 1),
+    opacity   ${duration}ms linear
+  `;
+  title.style.fontSize = '1.5vw';
+  title.style.opacity  = '0';
+}
+
+/**
+ * Restore the original title and reset its size & opacity.
+ */
+function resetTitleText() {
+  const title = createDynamicTitle();
+
+  title.style.transition = 'none';
+  title.textContent = window.titleText || '';
+  title.style.fontSize = '1.5vw';
+  title.style.opacity  = '1';
+
+  // Force a reflow before re-enabling the transition
+  title.offsetHeight;
+
+  const duration = window.titleTextAnimationDuration || 10_000;
+  title.style.transition = `
+    font-size ${duration}ms cubic-bezier(0.77, 0, 0.175, 1),
+    opacity   ${duration}ms linear
+  `;
+}
+
+/* ------------------------------------------------------------------ */
+/* Initialise and expose helpers                                      */
+/* ------------------------------------------------------------------ */
+
+document.addEventListener('DOMContentLoaded', () => {
+  createDynamicTitle();
+});
+
+window.animateTitleOnPlay = animateTitleOnPlay;
+window.resetTitleText    = resetTitleText;
+  </script>
+
+  <!-- Main App Logic & Audio -->
+  <script type="module" src="./js/main.js"></script>
+  <script type="module">
+    import playback from './js/playback.js';
+    window.playback = playback; // <-- This makes the module globally accessible
+  </script>
+
+
+
+
+<script type="module" src="./UNIFIEDJS.js"></script>
+
+</body>
+</html>
