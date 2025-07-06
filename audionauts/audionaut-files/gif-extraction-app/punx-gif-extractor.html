@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Local GIF Frame‑Extractor (WebCodecs + Hash Audit)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body  { margin:0; font-family:system-ui,sans-serif; }
+    #grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(128px,1fr));
+            gap:.75rem; padding:1rem; }
+    #grid img{ width:100%; height:auto; cursor:pointer; border-radius:.5rem; }
+    #modal{ display:grid; place-items:center; position:fixed; inset:0;
+            background:rgba(0,0,0,.6); visibility:hidden; }
+    #modal.show{ visibility:visible; }
+    #modal img{ max-width:90vw; max-height:90vh; border-radius:.5rem;
+                box-shadow:0 4px 20px #0008; }
+    #dl{ margin-top:.5rem; padding:.5rem 1.25rem; font-weight:600; border:0;
+         border-radius:.5rem; background:#fff; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div id="grid" aria-live="polite"></div>
+
+  <div id="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div style="text-align:center">
+      <img alt="selected frame" />
+      <br><button id="dl">Download PNG</button>
+    </div>
+  </div>
+
+  <!-- 🍥 pre‑computed hashes; declare before the module so it is global -->
+  <script src="punx-hashes.js"></script>
+
+  <!-- Main extractor module -->
+  <script type="module">
+  (async () => {
+    /* ---------- capability check ---------- */
+    if (!('ImageDecoder' in window) ||
+        !(await ImageDecoder.isTypeSupported('image/gif'))){
+      document.body.innerHTML = '<p style="padding:1rem;font:16px/1.4 system-ui">WebCodecs <code>ImageDecoder</code> for GIF is unavailable.</p>';
+      return;
+    }
+
+    const GIF_URL = 'punx.gif';
+    const grid    = document.getElementById('grid');
+    const modal   = document.getElementById('modal');
+    const bigImg  = modal.querySelector('img');
+    const dlBtn   = document.getElementById('dl');
+
+    /* ---------- helpers ---------- */
+    async function canvasToBlob(canvas){
+      if (canvas.convertToBlob){
+        try { return await canvas.convertToBlob({type:'image/png'}); }
+        catch(e){ console.warn('convertToBlob failed, using toBlob()', e); }
+      }
+      return new Promise((res, rej) =>
+        canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png'));
+    }
+
+    function arrayBufferToHex(buf){
+      return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+
+    async function hashBuffer(buf){
+      const digest = await crypto.subtle.digest('SHA-256', buf);
+      return arrayBufferToHex(digest);
+    }
+
+    /* ---------- fetch + decode ---------- */
+    const buffer  = await (await fetch(GIF_URL)).arrayBuffer();
+    const decoder = new ImageDecoder({data: buffer, type: 'image/gif'});
+    await decoder.tracks.ready;
+    const { frameCount } = decoder.tracks.selectedTrack;
+
+    const hashes = [];
+
+    for (let i = 0; i < frameCount; ++i) {
+      const { image } = await decoder.decode({ frameIndex: i });
+
+      const canvas = document.createElement('canvas');
+      canvas.width  = image.displayWidth;
+      canvas.height = image.displayHeight;
+      canvas.getContext('2d').drawImage(image, 0, 0);
+      image.close();
+
+      const blob     = await canvasToBlob(canvas);
+      const buf      = await blob.arrayBuffer();
+      const hexHash  = await hashBuffer(buf);
+      hashes.push(hexHash);
+
+      const url = URL.createObjectURL(blob);
+      const thumb = Object.assign(new Image(), {
+        src: url,
+        alt: `frame-${i}`,
+        onclick: () => showFrame(url, i)
+      });
+      grid.appendChild(thumb);
+    }
+
+    /* ---------- integrity check ---------- */
+    const expected = typeof punx_hashes !== 'undefined' ? punx_hashes : [];
+    const ok = expected.length === hashes.length && hashes.every((h, i) => h === expected[i]);
+
+    if (ok){
+      console.info('✅ Frame integrity verified.');
+    } else {
+      console.error('❌ Frame integrity check failed!', { expected, actual: hashes });
+      alert('Frame integrity check FAILED — frames may be corrupt or out of order.');
+    }
+
+    /* ---------- modal helpers ---------- */
+    function showFrame(src, index){
+      bigImg.src = src;
+      bigImg.alt = `frame-${index}`;
+      dlBtn.onclick = () => {
+        const a = document.createElement('a');
+        a.href = src; a.download = `frame-${index}.png`; a.click();
+      };
+      modal.classList.add('show');
+      modal.onclick = e => e.target === modal && hide();
+      addEventListener('keyup', escClose);
+    }
+    function hide(){ modal.classList.remove('show'); removeEventListener('keyup', escClose); }
+    function escClose(e){ if (e.key === 'Escape') hide(); }
+  })();
+  </script>
+</body>
+</html>
