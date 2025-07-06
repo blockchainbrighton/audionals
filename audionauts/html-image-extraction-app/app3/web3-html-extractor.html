@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ordinals HTML Snapshooter (On-Chain Compatible)</title>
+  <style>
+    body { background: #181b20; color: #e0e4ee; font-family: 'Segoe UI', Arial, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 2em; }
+    input, button { font-size: 1em; margin: 0.5em; background: #222; color: #fff; border: 1px solid #444; border-radius: 6px; padding: 0.5em 1em;}
+    #status, #base64 { margin-top: 1em; }
+    #snapshot { margin-top: 1em; border: 2px solid #444; border-radius: 12px; background: #20242b; }
+    iframe { display: none; }
+    textarea { width: 360px; height: 6em; margin-top: 1em; background: #191b21; color: #d5d7e0; border-radius: 6px; border: 1px solid #444;}
+  </style>
+</head>
+<body>
+  <h2>HTML to Image Snapshooter</h2>
+  <input id="url" type="text" style="width:360px"
+         value="https://ordinals.com/content/09e0b0c471a6a89c1385c67016e5e6a97f6a6df38207c2d79da67cadf0774368i0"
+         placeholder="Paste Ordinals URL or ID">
+  <button onclick="process()">Process</button>
+  <div id="status"></div>
+  <iframe id="frame"></iframe>
+  <canvas id="snapshot" width="360" height="360"></canvas>
+  <textarea id="base64" readonly placeholder="Base64 result will appear here"></textarea>
+  <script>
+    function toContentPath(input) {
+    // Try to find the last 64+ hex chars (the inscription ID)
+    const match = (input||"").match(/([0-9a-f]{64,})$/i);
+    return match ? `/content/${match[1]}` : "";
+    }
+
+    async function process() {
+      const status = document.getElementById('status');
+      const inp = document.getElementById('url').value.trim();
+      const path = toContentPath(inp);
+
+      status.textContent = `Fetching: ${path}`;
+      document.getElementById('base64').value = "";
+      const canvas = document.getElementById('snapshot');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      try {
+        const res = await fetch(path);
+        if (!res.ok) throw new Error(`HTTP ${res.status} (${res.statusText})`);
+        const html = await res.text();
+
+        status.textContent = "Fetched: " + html.slice(0, 500); // first 500 chars for debugging
+        console.log("Fetched HTML:", html);         
+
+        // Render HTML in hidden iframe for DOM parsing
+        const frame = document.getElementById('frame');
+        frame.onload = () => {
+          setTimeout(() => {
+            try {
+              const doc = frame.contentDocument;
+              const body = doc.body;
+              const w = Math.max(360, body.scrollWidth);
+              const h = Math.max(360, body.scrollHeight);
+              // Create SVG with foreignObject
+              const data = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+                  <foreignObject width="100%" height="100%">
+                    ${new XMLSerializer().serializeToString(body)}
+                  </foreignObject>
+                </svg>
+              `;
+              const img = new window.Image();
+              img.onload = () => {
+                canvas.width = w; canvas.height = h;
+                ctx.clearRect(0,0,w,h);
+                ctx.drawImage(img,0,0);
+                const base64 = canvas.toDataURL();
+                document.getElementById('base64').value = base64;
+                status.textContent = "Success! Image generated.";
+              };
+              img.onerror = e => {
+                status.textContent = "Image render error (SVG may not be supported by all browsers).";
+              };
+              img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(data);
+            } catch (e) {
+              status.textContent = "Snapshot error: " + e;
+            }
+          }, 100); // wait for iframe DOM
+        };
+        frame.srcdoc = html;
+      } catch (err) {
+        status.textContent = "Fetch error: " + err;
+      }
+    }
+  </script>
+</body>
+</html>

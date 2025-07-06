@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deterministic Video Frame Extractor & Verifier</title>
+<style>
+body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Fira Sans","Droid Sans","Helvetica Neue",sans-serif; padding: 20px; line-height: 1.6;}
+#controls{margin:20px 0;}
+#start-button,#rerun-button{padding:10px 18px; font-size:1.1em; cursor:pointer; border-radius:8px; border:1px solid #ccc;}
+#start-button{background:#007bff; color:#fff; border-color:#007bff;}
+#results-container{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;border-top:1px solid #eee;padding-top:20px;}
+#results-container img{max-width:100px; border:1px solid #ddd; border-radius:4px;}
+#status{font-weight:bold;}
+.report-card{border:1px solid #ddd;border-radius:8px;margin-top:20px;padding:15px;background:#f9f9f9;}
+.report-card legend{font-weight:bold;font-size:1.2em;padding:0 10px;}
+.report-card p{margin:5px 0;}
+.report-card .success{color:#28a745;font-weight:bold;}
+.report-card .failure{color:#dc3545;font-weight:bold;}
+.report-card details{margin-top:10px;}
+.report-card summary{cursor:pointer;font-weight:bold;}
+.report-card pre{background:#eee;padding:10px;border-radius:4px;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;}
+</style>
+</head>
+<body>
+<h1>Deterministic Unique Frame Extractor & Verifier</h1>
+<p>Click the button below to load the video from the Ordinals URL and start the analysis. You can then re-run the extraction to verify deterministic results.</p>
+<div id="controls">
+  <button id="start-button">Load Video & Run First Extraction</button>
+  <button id="rerun-button" style="display:none;">Re-run Extraction to Verify Determinism</button>
+</div>
+<p id="status">Status: Ready.</p>
+<div id="reports"></div>
+<div id="results-container"></div>
+<script>
+const VIDEO_URL = 'https://ordinals.com/content/c2beb99dbc32188e56ea2ca3750c99a6ce9145892678473b51802ce680cb5f16i0';
+let currentVideoBlob = null, executionHistory = [];
+const resultsContainer = document.getElementById('results-container'),
+      reportsContainer = document.getElementById('reports'),
+      statusEl = document.getElementById('status'),
+      startButton = document.getElementById('start-button'),
+      rerunButton = document.getElementById('rerun-button');
+
+const digestToHex = buffer => [...new Uint8Array(buffer)].map(b=>b.toString(16).padStart(2,0)).join('');
+const el = (tag, props = {}, ...children) => Object.assign(document.createElement(tag), props, children.length && {innerHTML: children[0] || ''});
+
+async function processVideoForUniqueFrames(videoBlob) {
+  return new Promise((resolve, reject) => {
+    const videoUrl = URL.createObjectURL(videoBlob),
+          video = el('video', {muted:true,playsInline:true}),
+          seenHashes = new Set, uniqueFramesData = [], uniqueHashesInOrder = [];
+    let chain = Promise.resolve(), start;
+    const [hashCanvas, hashCtx] = [el('canvas', {width:32, height:32}), null];
+    hashCanvas.getContext && (hashCanvas.getContext('2d', {willReadFrequently:true}));
+    const hashCtx2 = hashCanvas.getContext('2d', {willReadFrequently:true});
+    const processFrame = () => {
+      chain = chain.then(async () => {
+        hashCtx2.drawImage(video, 0, 0, 32, 32);
+        const data = hashCtx2.getImageData(0,0,32,32).data;
+        const hash = digestToHex(await crypto.subtle.digest('SHA-256', data));
+        if (!seenHashes.has(hash)) {
+          seenHashes.add(hash); uniqueHashesInOrder.push(hash);
+          const frameC = el('canvas', {width:video.videoWidth, height:video.videoHeight});
+          frameC.getContext('2d').drawImage(video,0,0);
+          uniqueFramesData.push(frameC.toDataURL('image/jpeg',0.8));
+          statusEl.innerText = `Status: Found ${uniqueFramesData.length} unique frames...`;
+        }
+      });
+      !video.ended && video.requestVideoFrameCallback(processFrame);
+    };
+    video.addEventListener('loadedmetadata', () => {
+      start = performance.now();
+      statusEl.innerText = `Status: Processing video (Pipelined, Run #${executionHistory.length+1})...`;
+      video.requestVideoFrameCallback(processFrame); video.play();
+    });
+    video.addEventListener('ended', async () => {
+      await chain; URL.revokeObjectURL(videoUrl);
+      resolve({frames: uniqueFramesData, hashes: uniqueHashesInOrder, duration: +(performance.now()-start).toFixed(2)});
+    });
+    video.addEventListener('error', () => reject(new Error('Error processing video.')));
+    video.src = videoUrl;
+  });
+}
+function generateAndDisplayReport(result) {
+  const runNumber = executionHistory.length + 1,
+        prevRun = executionHistory.at(-1),
+        isInternallyConsistent = result.hashes.length === new Set(result.hashes).size,
+        areHashesIdentical = runNumber > 1 && JSON.stringify(result.hashes) === JSON.stringify(prevRun.hashes),
+        determinismStatus = runNumber === 1 ? 'First Run' :
+          areHashesIdentical ? '<span class="success">PASSED: Consistent with previous run.</span>' :
+            '<span class="failure">FAILED: Inconsistent with previous run!</span>';
+  executionHistory.push({hashes: result.hashes});
+  reportsContainer.prepend(el('fieldset', {className:'report-card'}, `
+    <legend>Run #${runNumber} Report</legend>
+    <p><strong>Unique Frames Found:</strong> ${result.hashes.length}</p>
+    <p><strong>Processing Time:</strong> ${result.duration} ms</p>
+    <p><strong>Internal Consistency Check:</strong> ${isInternallyConsistent ? '<span class="success">PASSED</span>' : '<span class="failure">FAILED</span>'}</p>
+    <p><strong>Determinism Check:</strong> ${determinismStatus}</p>
+    <details><summary>View ${result.hashes.length} Hashes (in order)</summary>
+    <pre>${JSON.stringify(result.hashes,null,2)}</pre></details>
+  `));
+}
+async function runExtraction(videoBlob) {
+  resultsContainer.innerHTML = ''; rerunButton.disabled = startButton.disabled = true;
+  try {
+    const result = await processVideoForUniqueFrames(videoBlob);
+    statusEl.innerText = `Success! Run #${executionHistory.length+1} complete. Found ${result.frames.length} unique frames.`;
+    result.frames.forEach(durl => resultsContainer.appendChild(el('img', {src: durl})));
+    generateAndDisplayReport(result);
+    rerunButton.style.display = 'inline-block';
+  } catch (error) {
+    statusEl.innerText = `Error: ${error.message}`; console.error(error);
+  } finally { rerunButton.disabled = startButton.disabled = false; }
+}
+startButton.onclick = async () => {
+  executionHistory = []; reportsContainer.innerHTML = resultsContainer.innerHTML = ''; rerunButton.style.display = 'none';
+  statusEl.innerText = 'Status: Fetching video from URL...'; startButton.disabled = true;
+  try {
+    const r = await fetch(VIDEO_URL);
+    if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+    currentVideoBlob = await r.blob();
+    statusEl.innerText = 'Status: Video downloaded. Starting first extraction...';
+    await runExtraction(currentVideoBlob);
+  } catch (e) {
+    statusEl.innerText = `Failed to fetch video: ${e.message}. Check browser console for CORS errors.`; console.error("Fetch Error:", e);
+  } finally { startButton.disabled = false; }
+};
+rerunButton.onclick = () => currentVideoBlob ? runExtraction(currentVideoBlob)
+  : statusEl.innerText = 'Error: No video data available to re-run. Please load first.';
+</script>
+</body>
+</html>

@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Universal Image & HTML Snapshot to Base64</title>
+  <title>Multi-Method HTML/Image Snapshot Batch Tester</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     body {
@@ -24,7 +23,7 @@
       padding: 2em;
       box-shadow: 0 8px 32px #0008;
       width: 100%;
-      max-width: 600px;
+      max-width: 820px;
       display: flex;
       flex-direction: column;
       align-items: stretch;
@@ -52,15 +51,33 @@
       box-shadow: 0 2px 8px #0002;
       cursor: pointer;
       transition: background .13s;
+      margin-bottom: 0.8em;
     }
-    button:hover { background: #24a87b; }
-    .img-section, .base64-section {
+    .batch-results {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2em;
+      justify-content: center;
+      align-items: flex-start;
+      margin-top: 2em;
+    }
+    .result-block {
       background: #161a24;
       padding: 1em;
       border-radius: 10px;
       box-shadow: 0 2px 12px #0003;
+      width: 320px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
-    img {
+    .result-block label {
+      margin-bottom: 0.2em;
+      font-weight: bold;
+      color: #39e5a2;
+      font-size: 1em;
+    }
+    .result-block img {
       max-width: 256px;
       max-height: 256px;
       margin: 0.6em 0;
@@ -69,25 +86,18 @@
       background: #191e23;
       display: block;
     }
-    textarea {
+    .result-block textarea {
       width: 100%;
-      min-height: 60px;
-      font-size: 0.98em;
+      min-height: 32px;
+      font-size: 0.92em;
       background: #151a20;
       color: #c0f7e8;
       border-radius: 7px;
       border: 1px solid #29343d;
       margin-top: 0.5em;
       resize: vertical;
-      padding: 0.8em;
+      padding: 0.6em;
       box-sizing: border-box;
-    }
-    label {
-      display: block;
-      margin-bottom: 0.2em;
-      font-weight: bold;
-      color: #39e5a2;
-      font-size: 1.02em;
     }
     .loader {
       border: 3px solid #1a2230;
@@ -98,191 +108,220 @@
       margin: 1em auto;
     }
     @keyframes spin { 100% { transform: rotate(360deg); } }
+    .err { color: #e43f66 }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
   <div class="container">
-    <label for="inputURL">Enter Image or HTML URL</label>
-    <input type="text" id="inputURL" placeholder="Paste image or HTML file URL... (or data URI)">
-    <button id="processBtn">Process & Generate Base64</button>
+    <label for="inputURL">Enter Image or HTML URL/String</label>
+    <input type="text" id="inputURL" placeholder="Paste image, HTML URL, or raw HTML...">
+    <button id="processBtn">Batch Snapshot & Compare Methods</button>
     <div id="status" style="text-align:center;min-height:2em"></div>
-    <div class="img-section" id="imgSection" style="display:none">
-      <label>Preview (from Base64):</label>
-      <img id="resultImg" alt="Base64 Preview"/>
-    </div>
-    <div class="base64-section" id="base64Section" style="display:none">
-      <label>Base64 (PNG):</label>
-      <textarea id="base64Output" readonly></textarea>
-      <button id="copyBtn">Copy Base64</button>
-    </div>
+    <div class="batch-results" id="batchResults"></div>
   </div>
-<script>
-const processBtn = document.getElementById('processBtn');
-const inputURL = document.getElementById('inputURL');
-const imgSection = document.getElementById('imgSection');
-const base64Section = document.getElementById('base64Section');
-const resultImg = document.getElementById('resultImg');
-const base64Output = document.getElementById('base64Output');
-const status = document.getElementById('status');
-const copyBtn = document.getElementById('copyBtn');
 
-function showLoader(msg = "Processing...") {
-  status.innerHTML = `<span class="loader"></span><br>${msg}`;
-}
-function showStatus(msg, error=false) {
-  status.innerHTML = `<span style="color:${error?'#e43f66':'#36d3aa'}">${msg}</span>`;
-}
-async function fetchText(url) {
-  const r = await fetch(url, {mode:'cors'});
-  return await r.text();
-}
-function isHtmlString(s) {
-  return /<html|<body|<!doctype/i.test(s) || (s.trim().startsWith('<') && s.includes('</'));
-}
-function isImageUrl(url) {
-  return /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?.*)?$/i.test(url) ||
-    url.startsWith('data:image/');
-}
-async function renderHTMLtoImage(htmlString, squareSize = 1024) {
-  return new Promise(resolve => {
-    const iframe = document.createElement('iframe');
-    iframe.style = 'position:absolute;left:-9999px;top:-9999px;visibility:hidden;z-index:-1;';
-    document.body.appendChild(iframe);
-    iframe.onload = () => {
-      // Let browser layout the content
-      setTimeout(() => {
-        const doc = iframe.contentDocument;
-        const body = doc.body;
-        // Measure content size
-        const w = Math.max(body.scrollWidth, body.offsetWidth, body.clientWidth);
-        const h = Math.max(body.scrollHeight, body.offsetHeight, body.clientHeight);
-        iframe.width = w;
-        iframe.height = h;
-        iframe.style.width = w + "px";
-        iframe.style.height = h + "px";
-        // Now render with html2canvas at this size
-        html2canvas(body, {
-          backgroundColor: null,
-          logging: false,
-          useCORS: true,
-          width: w,
-          height: h,
-          windowWidth: w,
-          windowHeight: h
-        }).then(origCanvas => {
-          // Create a square canvas and center the capture on it
-          const size = Math.max(squareSize, w, h);
-          const sqCanvas = document.createElement('canvas');
-          sqCanvas.width = sqCanvas.height = size;
-          const ctx = sqCanvas.getContext('2d');
-          ctx.fillStyle = "#181b20";
-          ctx.fillRect(0,0,size,size);
-          ctx.drawImage(
-            origCanvas,
-            (size-w)/2, (size-h)/2, w, h
-          );
-          document.body.removeChild(iframe);
-          resolve(sqCanvas);
-        }).catch(() => {
-          document.body.removeChild(iframe);
-          resolve(null);
-        });
-      }, 400);
-    };
-    iframe.srcdoc = htmlString;
-  });
-}
-async function imageUrlToCanvas(url, squareSize=1024) {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = function() {
-      const size = Math.max(squareSize, img.naturalWidth, img.naturalHeight);
-      const c = document.createElement('canvas');
-      c.width = c.height = size;
-      const ctx = c.getContext('2d');
+  <script>
+    const processBtn = document.getElementById('processBtn');
+    const inputURL = document.getElementById('inputURL');
+    const status = document.getElementById('status');
+    const batchResults = document.getElementById('batchResults');
+
+    function showLoader(msg = "Processing...") {
+      status.innerHTML = `<span class="loader"></span><br>${msg}`;
+    }
+    function showStatus(msg, error=false) {
+      status.innerHTML = `<span class="${error?'err':''}">${msg}</span>`;
+    }
+    function isHtmlString(s) {
+      return /<html|<body|<!doctype/i.test(s) || (s.trim().startsWith('<') && s.includes('</'));
+    }
+    function isImageUrl(url) {
+      return /\.(gif|png|jpg|jpeg|webp|bmp|svg)(\?.*)?$/i.test(url) ||
+        url.startsWith('data:image/');
+    }
+    async function fetchText(url) {
+      const r = await fetch(url, {mode:'cors'});
+      return await r.text();
+    }
+    // Method 1: Default html2canvas viewport capture
+    async function html2canvasViewport(htmlString) {
+      return new Promise(resolve => {
+        const iframe = document.createElement('iframe');
+        iframe.style = 'width:512px;height:512px;position:absolute;left:-9999px;top:-9999px;visibility:hidden;z-index:-1;';
+        document.body.appendChild(iframe);
+        iframe.onload = () => {
+          setTimeout(() => {
+            html2canvas(iframe.contentDocument.body, {
+              backgroundColor: null,
+              logging: false,
+              useCORS: true
+            }).then(canvas => {
+              document.body.removeChild(iframe);
+              resolve(canvas);
+            }).catch(() => {
+              document.body.removeChild(iframe);
+              resolve(null);
+            });
+          }, 300);
+        };
+        iframe.srcdoc = htmlString;
+      });
+    }
+    // Method 2: Full body scrollWidth/scrollHeight capture, no resizing
+    async function html2canvasFullBody(htmlString) {
+      return new Promise(resolve => {
+        const iframe = document.createElement('iframe');
+        iframe.style = 'position:absolute;left:-9999px;top:-9999px;visibility:hidden;z-index:-1;';
+        document.body.appendChild(iframe);
+        iframe.onload = () => {
+          setTimeout(() => {
+            const doc = iframe.contentDocument;
+            const body = doc.body;
+            const w = Math.max(body.scrollWidth, body.offsetWidth, body.clientWidth);
+            const h = Math.max(body.scrollHeight, body.offsetHeight, body.clientHeight);
+            iframe.width = w; iframe.height = h;
+            iframe.style.width = w + "px";
+            iframe.style.height = h + "px";
+            html2canvas(body, {
+              backgroundColor: null,
+              logging: false,
+              useCORS: true,
+              width: w,
+              height: h,
+              windowWidth: w,
+              windowHeight: h
+            }).then(canvas => {
+              document.body.removeChild(iframe);
+              resolve(canvas);
+            }).catch(() => {
+              document.body.removeChild(iframe);
+              resolve(null);
+            });
+          }, 350);
+        };
+        iframe.srcdoc = htmlString;
+      });
+    }
+    // Method 3: Centered in a fixed square canvas, real size, not scaled
+    async function html2canvasSquareCenter(htmlString, squareSize = 1024) {
+      const bodyCanvas = await html2canvasFullBody(htmlString);
+      if (!bodyCanvas) return null;
+      const w = bodyCanvas.width, h = bodyCanvas.height, size = Math.max(squareSize, w, h);
+      const sqCanvas = document.createElement('canvas');
+      sqCanvas.width = sqCanvas.height = size;
+      const ctx = sqCanvas.getContext('2d');
       ctx.fillStyle = "#181b20";
       ctx.fillRect(0,0,size,size);
-      ctx.drawImage(
-        img,
-        (size-img.naturalWidth)/2,
-        (size-img.naturalHeight)/2,
-        img.naturalWidth,
-        img.naturalHeight
-      );
-      resolve(c);
-    };
-    img.onerror = e => reject('Image could not be loaded');
-    img.src = url;
-  });
-}
-async function gifUrlToCanvas(url, squareSize=1024) {
-  // Just grabs the first frame of any GIF
-  return await imageUrlToCanvas(url, squareSize);
-}
-async function processInput(url) {
-  imgSection.style.display = 'none';
-  base64Section.style.display = 'none';
-  resultImg.src = '';
-  base64Output.value = '';
-  showLoader();
-
-  let canvas = null;
-  try {
-    // 1. Is it a data: URL or a .html file or a live HTML string?
-    if (url.startsWith('data:text/html') || url.endsWith('.html')) {
-      let html = url.startsWith('data:text/html') ? decodeURIComponent(url.split(',')[1]) : await fetchText(url);
-      canvas = await renderHTMLtoImage(html);
-      if (!canvas) throw new Error("Couldn't render HTML.");
-    } else if (isHtmlString(url)) {
-      canvas = await renderHTMLtoImage(url);
-      if (!canvas) throw new Error("Couldn't render HTML.");
-    } else if (isImageUrl(url)) {
-      if (url.match(/\.gif/i)) {
-        canvas = await gifUrlToCanvas(url);
-      } else {
-        canvas = await imageUrlToCanvas(url);
-      }
-    } else {
-      let possibleHtml = '';
-      try { possibleHtml = await fetchText(url); } catch {}
-      if (isHtmlString(possibleHtml)) {
-        canvas = await renderHTMLtoImage(possibleHtml);
-        if (!canvas) throw new Error("Couldn't render HTML.");
-      } else {
-        throw new Error('Unknown or unsupported file type');
-      }
+      ctx.drawImage(bodyCanvas, (size-w)/2, (size-h)/2);
+      return sqCanvas;
     }
-    if (!canvas) throw new Error('Canvas could not be created.');
-    // 2. Convert to base64 (PNG)
-    const base64 = canvas.toDataURL('image/png');
-    // 3. Display base64 and image
-    resultImg.src = base64;
-    base64Output.value = base64;
-    imgSection.style.display = 'block';
-    base64Section.style.display = 'block';
-    showStatus('Done. Image displayed below. Base64 output ready.');
-  } catch (err) {
-    showStatus(`Error: ${err.message||err}`, true);
-  }
-}
-processBtn.onclick = () => {
-  let url = inputURL.value.trim();
-  if (!url) {
-    showStatus('Please enter a valid URL or HTML string.', true);
-    return;
-  }
-  processInput(url);
-};
-copyBtn.onclick = () => {
-  base64Output.select();
-  document.execCommand('copy');
-  showStatus('Base64 copied to clipboard!');
-};
-inputURL.addEventListener('keydown', e => {
-  if (e.key === 'Enter') processBtn.click();
-});
-</script>
+    // Method 4: Stretch to fill square canvas (scales/distorts)
+    async function html2canvasSquareScaled(htmlString, squareSize = 1024) {
+      const bodyCanvas = await html2canvasFullBody(htmlString);
+      if (!bodyCanvas) return null;
+      const sqCanvas = document.createElement('canvas');
+      sqCanvas.width = sqCanvas.height = squareSize;
+      const ctx = sqCanvas.getContext('2d');
+      ctx.fillStyle = "#181b20";
+      ctx.fillRect(0,0,squareSize,squareSize);
+      ctx.drawImage(bodyCanvas, 0, 0, squareSize, squareSize);
+      return sqCanvas;
+    }
+
+    // Main batch processor
+    async function batchProcess(htmlString) {
+      batchResults.innerHTML = '';
+      showLoader("Rendering all methods...");
+      // Method 1
+      let canvases = [];
+      try {
+        canvases = await Promise.all([
+          html2canvasViewport(htmlString),
+          html2canvasFullBody(htmlString),
+          html2canvasSquareCenter(htmlString, 1024),
+          html2canvasSquareScaled(htmlString, 1024),
+        ]);
+      } catch (e) { showStatus('Error during batch rendering', true); return; }
+      const methodNames = [
+        "Viewport (default)",
+        "Full Body (actual size)",
+        "Square Centered (padded)",
+        "Square Scaled (stretched)"
+      ];
+      let hasResult = false;
+      canvases.forEach((c, i) => {
+        if (!c) return;
+        hasResult = true;
+        const dataUrl = c.toDataURL('image/png');
+        const div = document.createElement('div');
+        div.className = "result-block";
+        div.innerHTML = `
+          <label>${methodNames[i]}</label>
+          <img src="${dataUrl}">
+          <textarea readonly>${dataUrl}</textarea>
+        `;
+        batchResults.appendChild(div);
+      });
+      showStatus(hasResult ? 'Batch complete. Compare the results below.' : 'No image generated. Check input.', !hasResult);
+    }
+
+    // ---- App flow ----
+    processBtn.onclick = async () => {
+      let val = inputURL.value.trim();
+      batchResults.innerHTML = '';
+      if (!val) { showStatus('Enter a valid image URL, HTML URL, or HTML string.', true); return; }
+      // Determine if we need to fetch remote HTML
+      let htmlString = val;
+      if (!isHtmlString(val) && !isImageUrl(val)) {
+        // Maybe a remote HTML page
+        try {
+          htmlString = await fetchText(val);
+        } catch (e) {
+          showStatus('Unable to fetch remote HTML. Try pasting the HTML source.', true); return;
+        }
+      }
+      if (isImageUrl(val)) {
+        // Direct image mode: just center on a square and display all methods as the same
+        let img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function() {
+          let w = img.naturalWidth, h = img.naturalHeight, size = Math.max(1024, w, h);
+          // (a) Centered in square
+          let c1 = document.createElement('canvas');
+          c1.width = c1.height = size;
+          let ctx1 = c1.getContext('2d');
+          ctx1.fillStyle = "#181b20";
+          ctx1.fillRect(0,0,size,size);
+          ctx1.drawImage(img, (size-w)/2, (size-h)/2);
+          // (b) Stretched to square
+          let c2 = document.createElement('canvas');
+          c2.width = c2.height = 1024;
+          let ctx2 = c2.getContext('2d');
+          ctx2.fillStyle = "#181b20";
+          ctx2.fillRect(0,0,1024,1024);
+          ctx2.drawImage(img, 0, 0, 1024, 1024);
+          // Present
+          batchResults.innerHTML = '';
+          [["Centered in Square", c1], ["Stretched to Square", c2]].forEach(([title, cnv]) => {
+            const dataUrl = cnv.toDataURL('image/png');
+            const div = document.createElement('div');
+            div.className = "result-block";
+            div.innerHTML = `<label>${title}</label><img src="${dataUrl}"><textarea readonly>${dataUrl}</textarea>`;
+            batchResults.appendChild(div);
+          });
+          showStatus('Image batch complete.');
+        };
+        img.onerror = () => { showStatus('Could not load image.', true); }
+        img.src = val;
+        return;
+      }
+      batchProcess(htmlString);
+    };
+
+    inputURL.addEventListener('keydown', e => {
+      if (e.key === 'Enter') processBtn.click();
+    });
+  </script>
 </body>
 </html>

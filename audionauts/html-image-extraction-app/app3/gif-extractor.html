@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GIF Frame Extractor & Base64 Converter</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { background: #111; color: #fff; font-family: ui-monospace,monospace; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; }
+    .output { margin: 1.5em 0; }
+    img { border: 2px solid #333; background: #222; margin-top: 8px; }
+    textarea { width: 320px; height: 90px; margin-top: 12px; background: #23232a; color: #f3f3f7; border: 1px solid #444; font-size: 12px; }
+    input[type="text"] { width: 340px; background: #222; color: #fff; border: 1px solid #444; font-size: 14px; padding: 6px 8px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h2>GIF Frame to Base64 Extractor</h2>
+  <p style="opacity:.7;">Extract a frame from a GIF (from URL), convert to Base64, and display.</p>
+  <input type="text" id="gifUrl" value="https://ordinals.com/content/c9d39d2aef6f2f3d744b2e8e5aab9fb11ba65274e8d19aef777c21f264426b71i0">
+  <button id="go">Extract Frame</button>
+  <div class="output" id="result"></div>
+  <script>
+    const frameToExtract = 0, $ = s => document.querySelector(s);
+
+    $('#go').onclick = async () => {
+      const url = $('#gifUrl').value.trim(), result = $('#result');
+      if (!url) return result.textContent = "Please enter a GIF URL.";
+      result.textContent = "Fetching GIF...";
+      try {
+        const blob = await (await fetch(url)).blob(), buf = await blob.arrayBuffer();
+        const parseGIFFrames = buf => {
+          const b = new Uint8Array(buf);
+          let p = 0, frames = [], width = b[6] + (b[7] << 8), height = b[8] + (b[9] << 8);
+          while (p < b.length)
+            if (b[p] === 0x21 && b[p + 1] === 0xF9) {
+              let gce = p, img = p += 8;
+              if (b[p] === 0x2C) {
+                const x = b[p + 1] + (b[p + 2] << 8), y = b[p + 3] + (b[p + 4] << 8),
+                  w = b[p + 5] + (b[p + 6] << 8), h = b[p + 7] + (b[p + 8] << 8);
+                let e = p + 10, end = e + 1;
+                while (end < b.length && b[end] !== 0) end += b[end] + 1;
+                frames.push({ start: gce, imgStart: img, end: ++end, x, y, w, h });
+                p = end; continue;
+              }
+            } else p++;
+          if (!frames.length) frames.push({ start: 0, end: b.length, x: 0, y: 0, w: width, h: height });
+          return frames;
+        };
+        const frames = parseGIFFrames(buf), idx = Math.max(0, Math.min(frameToExtract, frames.length - 1)), { w, h } = frames[idx];
+        if (!frames.length) return void (result.textContent = "Couldn't parse GIF frames!");
+        const img = new Image();
+        img.src = URL.createObjectURL(blob);
+        img.onload = () => {
+          const canvas = Object.assign(document.createElement('canvas'), { width: w, height: h }),
+            ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const base64 = canvas.toDataURL('image/png');
+          result.innerHTML = `<strong>Extracted Frame (${w}x${h}):</strong><br>
+            <img src="${base64}" width="${w}" height="${h}"><br>
+            <strong>Base64:</strong>
+            <textarea readonly>${base64}</textarea>`;
+        };
+        img.onerror = () => { result.textContent = "Failed to load GIF as image!"; };
+      } catch (e) {
+        result.textContent = "Error fetching or parsing GIF: " + e;
+      }
+    };
+  </script>
+</body>
+</html>

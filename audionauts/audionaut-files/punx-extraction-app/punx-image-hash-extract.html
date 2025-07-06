@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deterministic Frame Extractor & Order Verifier</title>
+<style>
+body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Fira Sans","Droid Sans","Helvetica Neue",sans-serif; padding: 20px; line-height: 1.6;}
+#controls{margin:20px 0;}
+#start-button,#rerun-button,#export-button{padding:10px 18px; font-size:1.1em; cursor:pointer; border-radius:8px; border:1px solid #ccc;}
+#start-button{background:#007bff; color:#fff; border-color:#007bff;}
+#results-container{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;border-top:1px solid #eee;padding-top:20px;}
+#results-container img{max-width:100px; border:1px solid #ddd; border-radius:4px;}
+#status{font-weight:bold;}
+.report-card{border:1px solid #ddd;border-radius:8px;margin-top:20px;padding:15px;background:#f9f9f9;}
+.report-card legend{font-weight:bold;font-size:1.2em;padding:0 10px;}
+.report-card p{margin:5px 0;}
+.report-card .success{color:#28a745;font-weight:bold;}
+.report-card .failure{color:#dc3545;font-weight:bold;}
+.report-card details{margin-top:10px;}
+.report-card summary{cursor:pointer;font-weight:bold;}
+.report-card pre{background:#eee;padding:10px;border-radius:4px;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;}
+</style>
+</head>
+<body>
+<h1>Deterministic Frame Extractor & Order Verifier</h1>
+<p>
+  <strong>117 hash-locked extraction:</strong> Each run fills more slots. Reports confirm which hashes are filled and whether order is 100% deterministic.<br>
+  If any are missing, rerun extraction; all run results appear below.
+</p>
+<div id="controls">
+  <button id="start-button">Load Video & Extract</button>
+  <button id="rerun-button" style="display:none;">Re-run Extraction</button>
+  <button id="export-button" style="display:none;">Export All Images (when filled)</button>
+</div>
+<p id="status">Status: Ready.</p>
+<div id="reports"></div>
+<div id="results-container"></div>
+<script>
+const VIDEO_URL = 'https://ordinals.com/content/c2beb99dbc32188e56ea2ca3750c99a6ce9145892678473b51802ce680cb5f16i0';
+
+// LOCKED HASHES –– insert your exact hash array below:
+const LOCKED_HASHES = [
+  "8f0033b5ed524d970d8f30da3485234c4b31939322e1608fdfad4442ac99098b",
+  "f9caaa42e916f3d55979da2ab3d190c52d4a0046268bb4ee359e79f3d7bb3a74",
+  "d3aca4c1ce42ece05f99be83030fe031b950375de9cc68ba1955c441927f6708",
+  "842ef9751ad798d3bb823aad0697738bbdd4022206dd65ec7c037e360a0f498e",
+  "11c51f34b0224d01a2ff99274497509561340fc32c1a3200cfa3ee96e8f873a3",
+  "38574e245fb50c728b5309fd3c756f3aba78386e3053e7db0b864146dd76a2cf",
+  "a9e37f92e04437c45e4a4807467374085b99527b162e26f5fdfd43464e568984",
+  "c45943dd2350e6bcd1aa42599617bdfa13fa4e953e0cf45a5d2c1fe70ba17fda",
+  "b7904f6cb304627180915580d0fbaf53ae67060edc55badd7fbcc0ee2f42f5e5",
+  "44b9b9c3fed566e707e6ed751cee373206c1fabb936d7006d1777f6f797ad461",
+  "4b5ac37f3b807e24fb580a2beae052cba658da4eee25603f1194bd3a305ee3e3",
+  "d4bcc77a5e97deab58896a60f30939a2a0a58c173f01c3c250517844c522455e",
+  "12c9012ece61ac2dfd2cedd17143b3dd29c127029f793b9efdf5374732958584",
+  "3d57169bad2c7cbc7e293617775edb1487884c6a9534332d3e78766664511d27",
+  "d6daf28da1d2d50d31678646f42df61e86908e4bd5139ef6fd106ecbaf7c702d",
+  "43122fd369798d051dd92edb1fd3c54337deea82222e7c4bf4cb3a2a5d8225f9",
+  "0b23e9fc54a9008dbc39331172c8d442fbd30e324efe71876a5135b869e27501",
+  "036e720d69bfb27a933fc8c5bc0f2b14433e74260d4fb33e6298930a63f6e3a3",
+  "89b3520c728c3878e360b841ba05c92d4a66a4ec0114fb306a5501206f51e066",
+  "9c6d6aa1eb3dc8136227f36c1da7e118e93acc98244a028b8dfefac271fc5dc6",
+  "5e63aad81851897411df93b60259680d642e2e3eff197a40c1f7a230f1b9aab8",
+  "fbd6f6c3c4fe664f4fa9ce7187083c0bc9fc9b73e738d31150505d4478c612c8",
+  "efec48cff15ac4277ad9a3a33b6771ab4c9a41dd0ed185534e27ec7a6a5307d9",
+  "7d79c7933d58194506278839d0102ca39e086107444860d998ae5f5946da2513",
+  "e5b0a3e215d8b5b7eefe32d4f81889ba3bae1901b9b73c16254ddde8ad23dd88",
+  "a6f7f0f633b5ab0cf6cd8045fdaa9ba2d7d51c750dd46052764bb4fd7bf8ab93",
+  "03e114da3c9ad6950bae9477e17afdd6dc2635100952f0754aa28e1ace0ec785",
+  "09c84a83329b7dcf1a17a37bb877b885cbc1a5539a55a16f0f450e2bba69e264",
+  "78cb5995f26db35d57e5dfcf20f6f7e2f0bc6629bdb53a6a2c84dabb91973d39",
+  "436098fb389dae9726ac3f773b981b12d5f319915de320f7d9c953b201fa9750",
+  "abdfbcbd5481a137a887d5e42a85b02e4ed0e6a3c39b4946a99bb0aa19e8df91",
+  "f2e30c10b090c50679003d57d937194a20f23d939ab3a960138a3cb46aafcfdf",
+  "8af20e8e4d7afc3a1915edc5d0642a99cc096e5f3c35e79fc3e29b0ca7c3ef64",
+  "d57bc19533d83e7844d0638a0307947529bdc3be5f052b39c04e14f87b05a84c",
+  "b421e6737acebd187faf9bff3019edd27b8c22e6a9d154eef9642717b488822b",
+  "f1ee0f0f22f3632e4e1044b5d6413719c1b580ef501a82643e1e1b7ef7de50f2",
+  "34938bfe367b8b335cc3d83ae6869e1057cccb9426400c66dbaa068eb448ba6f",
+  "272ee16bdd803253244d054138660b3380fcd8a25ff3d9164fa9a2172705e78e",
+  "913e3c3fa781d4af14bb7bd68cf9c144a280e24989102b443ab6a0e42a67234f",
+  "924ee8cef526fe5c48e49d3d7b3e601865d134aa8e008dc6f68050b12f977a60",
+  "3f8d23845fa9ab3a6a8598b906bb769f5527bef7f11c48176fb536471ac2142d",
+  "a7f579257f59876021ff1a81cf3c652d89b59f8fecb645897be74d9d687d9552",
+  "ffc48dd3dc7ec7f6952971b50586ea6d3db85ef7b90344855ffc47c9a8ff34ae",
+  "172ba67fc37637718ef57bb16731522319258d564f3ad08c24ff9ccb6b2252c9",
+  "2813b871474c15caca65cd095894438d162af2e3cac4a5b49534958c33c7a72e",
+  "0ceb852ee08a8f7ead4865bf5cfe6dfd39db85e1b14a16748375ce8c2b4239b4",
+  "afbf00971ef16727430a3146460127865a2460e2c4ac8c929c0fbf9fafad7539",
+  "99c438e21392d18680bfd73648a6cfe98badf85ebe0a4b416a20683132721a3a",
+  "5f94dfd3e45364e7033e2d726848a0eed444a418fcab5b0cf2a3489a2483d490",
+  "1671c97d8c3bca6ee9326142163beb1b5427abf35f3a978f752554c220b579ee",
+  "d6ef1b3c7a8cac972c24aba1955304d333bd016311c5df15757fbeda723086d9",
+  "cb69f865b2d75f057117cb550736ea52d3e6dd0065a8c2cffe66e0c0bbbcc7f5",
+  "f76279dbdbefcfaee3674a5d5821d32dfce7bec69a62b689a892e61f9aa4cc26",
+  "824afdac65c481d1f5ffbe93b1db8fb13562a1194b53f8d6343257fb4ac72368",
+  "99aa3e90cbebf075b8b426f10d0a25b51b2545195d3dfa8d3526cd2f651e0bae",
+  "3d6f0216f0486f66829cf223c459209e1d2b5cabad719bbcff9dafde8b14841a",
+  "83d963a0714ffe38176b7a1d97b0c01cdfd4d1f6f856c60814a38b2555746329",
+  "9e5a3a9a896830bce3efd9f298849e11b36818c903e3ccc169c67f8600078541",
+  "60f4bc2c471c9aebd5d62c5c32d52a9058c365491a37307a8a2ee5ca326c20cc",
+  "a22c00bdcc25daf71adc83afbb494dcc956a3a07d6f45e3e22a079db13d9e24b",
+  "be935b73e20662190db12d26142b47bb21a7df998ec94403174fb54693182921",
+  "637ba90defb894b14dee6dda9c404df437868ad05056f025928d2f6879638f35",
+  "fbb88543747e0d9c45defedff24418b68862af7beead885e272d00b58b554061",
+  "df5920f5ff58c7c68faaaf6ee5cadb535025931292097d095e6c8dae3f087403",
+  "9877dfbde713a7ec368045eb849394fb6dad730c4ece4577c7aa068e1d7c9566",
+  "54f785c7ed9482106a119cd09cfdc8994b21939aa92b9e7085f3b3e0fa44aecc",
+  "aed0d6bd3a90c366f1cf506df2fc4ed2fac27177beddbf95545f7a4fbd21c5c5",
+  "13df08525ecd46e96a3649268b43d497fbdf136d73eb2b5d9f1a1bd78f037bc3",
+  "60d9b6688d2d0d7f8383db8c00614f72da40b9719b9fe18b2152b76b10c53b27",
+  "85e66eaee76427db8b88f4cf47d4c5911d455d153be0e26a55ecd6726aa77942",
+  "25c2b615c659e94dc4c5e1bf73443025228eb10124ae63e9da5de1b37e3af404",
+  "e976882d08c37c362807ad57e9b4f6c72660530aa8e0e8686c3ad45b7ba7cb2f",
+  "cca6cb0d9076d460c3cc8febbdfa388dee79dc67cbfb260de11f022d0eb5a576",
+  "3a2c347bd98657f88533e10b314311852cacd265c2005ea83a63736a6547b4c1",
+  "a46fa27595a74dc7ec7f9bcd83b98fe59745dbf508d7020d5605897bf5a84a38",
+  "4260f2510ca38900927bc8aa00f64aca5a6fe44ae98a7b3638573c280e7729be",
+  "0871cad331ceb140e50dd2531525e42530cbcf8901c5906d2afc9ef7dfb0f5eb",
+  "9ccab34eb3d2a439f33d2ac8a846aa9cffb743891e83de646d6b43d7481a9cda",
+  "17ffbd9caed4f157a939eaaf189739bd25961a1f7ea76adde5402f32e311b11f",
+  "6df0059006d9144641b48b2b9b88763681c0181261bb472a08add2167c91e2a7",
+  "838f3d40a0d22e6c4b9860cfccace94d70d5c678b6fef7045546b0e63381320b",
+  "054cdfe7685bca11f27bb0f227f7b2c815cba8293ab2cf191d13f7f4a3ca245b",
+  "3515f043ba3667d3b125ceec235c7ef96b8d492ceab1161be8b4d0f59ecfe82f",
+  "8ecb3245fb32c5ba97511ba38b7f29447d707ae5fbb4cd345e9960a89f97f517",
+  "0200ee2df4b4fd42cebd9ba367a6e80de81ce4d7164e3dba4731703769775e57",
+  "43ea7210ae50ab0c8094b78f38d40bfbee3e2cc62acde3cce20e231e9a1399a9",
+  "1a5da2db17d1160bd12d7c22c6dea3b87611cf531ffd28d093a280213bd29c9d",
+  "ef8873d402073106afc21907bfdf60f895d54eca0b8a51c2b1032d799be8c57b",
+  "59d439c3727e931a8697bef5e3797e072268aced5c21dc64ddcbdfbceca66cee",
+  "51a3099d77b40435add434d30c9bf32b60a2b7d072e89ed9c0555cacb3fb7016",
+  "9c67d076d705a74111595dfc97726d2f423b995992f0b66ae9574b8272372204",
+  "d7a3a9e12495322a8fb1332b1e3884b21c709a28a3998738199c3d093f900e0a",
+  "12694ce11e106be5b3ed1953a15d17c1b936f7939dfe9aa7b80e4624506eb1c4",
+  "bd199caacca873fd1a2fca8f112190a5f6864c11cb31b8ccd74b7d01c76a0862",
+  "344f16da594fa298b04703f79bc038f27df7024d0364ac958c710e6ee67ebae4",
+  "a2b75a5c62263d97a121479c160c1a42a81fa0da4861e54e48768a81151ac355",
+  "56963d585a79069897aae3bd98361ec9f9cfc42881284c7907cb37bfde34edce",
+  "55c8acaca03f9f23d81f001fd6de86438ebe1fb32a4be40c4d11b470212418a0",
+  "e3fa7ef4090d2263a1a2e3ee8cc5701dd287c90d3dd3d0a514259116402607d7",
+  "548d3b1a7b450ae3b1049270c8abfe02e094a3d5595248e36e342619b2b6b2a5",
+  "ec5be8797a0b191fb3b6f8c91ebeea0d367690df46655b6918b5b75f5764b42e",
+  "3e645d6332c9cb2ee8987627083f9969a05abae8984feda2edb89f2b879a9190",
+  "abef0ae8eda7be715796358a27a6a766d3917cb387434566d8e377fada0d1c75",
+  "ca90c5135c08f881aca5ab8a4b03fdc7637f37961112aabe0cc435388ed53fbd",
+  "4bf6dc73ceb40feb1573bdb7655799d719c01fbe1d5cae6839a83fa4c7b4260a",
+  "723aff71b6bdd6d36b97037dee3d8049f9dfa89491eac90dbdc5373ed5167206",
+  "c68cebb1927ff17c5fd57b51af08b04b625e584109e530aa6c2d23ccbd386c64",
+  "bc14a97765cf1195ebe5d868a072b922078098e08948a8284376d741ff4c80a5",
+  "2947dee345763adea49aab5736f50b71dc0c6fffaa7c4f4bb631de45b4d495c2",
+  "cdf9ff47aa09ebd65b0e888d332dfe4630bbdd65daee4a856db1d78643f15ffc",
+  "356d644fda3395a66b021cea9b80215bee67af502c54fc38faadb13e7884817a",
+  "45e2da317896413b18119f188a3d0ad07071d80a1aea53c21d438902d56a1dd5",
+  "5bf94cfb028cf4fd1a95cf08b701a67c302bc9bf589edbc612af74734c4ed157",
+  "6696f8f303d4ac1a8dbf7a901bdc8b84b4e3887ff94482ae9dc3f5006a843c11",
+  "797f5e4ecbefdf8e89280389067d0db35e785652611bd2a89868d27c9d4583d1",
+  "9d30683d203b27cd0f0bf45f171f4bd67c13da15624a237547a9d29cebde555e",
+  "18016eb784d7d78de26974f357a62089ecc1e9bd28ed573bea04a78c69480bbb"
+];
+
+let lockedFrames = Array(LOCKED_HASHES.length).fill(null);
+let currentVideoBlob = null, isProcessing = false;
+let extractionRuns = 0;
+let sequenceHistory = []; // <-- stores all hash sequences for order reporting
+
+const resultsContainer = document.getElementById('results-container');
+const reportsContainer = document.getElementById('reports');
+const statusEl = document.getElementById('status');
+const startButton = document.getElementById('start-button');
+const rerunButton = document.getElementById('rerun-button');
+const exportButton = document.getElementById('export-button');
+
+const digestToHex = buffer => Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+const el = (tag, props = {}, ...children) => { const e=document.createElement(tag); Object.assign(e,props); e.append(...children); return e; };
+
+async function processVideoForUniqueFrames(videoBlob) {
+  return new Promise((resolve, reject) => {
+    const videoUrl = URL.createObjectURL(videoBlob);
+    const video = el('video', { muted: true, playsInline: true });
+    if (!('requestVideoFrameCallback' in video)) {
+      URL.revokeObjectURL(videoUrl); return reject(new Error('Your browser does not support requestVideoFrameCallback.'));
+    }
+    const seenHashes = new Set(), uniqueFramesData = [], uniqueHashesInOrder = [];
+    const hashCanvas = el('canvas', { width: 32, height: 32 });
+    const hashCtx = hashCanvas.getContext('2d', { willReadFrequently: true });
+    if (!hashCtx) { URL.revokeObjectURL(videoUrl); return reject(new Error('Could not create 2D canvas context.')); }
+    let processingChain = Promise.resolve(), startTime;
+
+    const processFrame = () => {
+      processingChain = processingChain.then(async () => {
+        hashCtx.drawImage(video, 0, 0, 32, 32);
+        const imageData = hashCtx.getImageData(0, 0, 32, 32).data;
+        const hash = digestToHex(await crypto.subtle.digest('SHA-256', imageData));
+        if (!seenHashes.has(hash)) {
+          seenHashes.add(hash); uniqueHashesInOrder.push(hash);
+          const frameCanvas = el('canvas', { width: video.videoWidth, height: video.videoHeight });
+          frameCanvas.getContext('2d').drawImage(video, 0, 0);
+          uniqueFramesData.push({hash, data: frameCanvas.toDataURL('image/jpeg', 0.8)});
+          statusEl.innerText = `Status: Found ${uniqueFramesData.length} unique frames...`;
+        }
+      }).catch(err => { console.error("Error during frame processing:", err); reject(err); });
+      if (!video.ended) video.requestVideoFrameCallback(processFrame);
+    };
+
+    video.addEventListener('loadedmetadata', () => { startTime = performance.now(); statusEl.innerText = `Processing video...`; video.requestVideoFrameCallback(processFrame); video.play(); });
+    video.addEventListener('ended', async () => { await processingChain; URL.revokeObjectURL(videoUrl); resolve({
+      frames: uniqueFramesData, hashes: uniqueHashesInOrder, duration: +(performance.now() - startTime).toFixed(2)
+    }); });
+    video.addEventListener('error', (e) => { URL.revokeObjectURL(videoUrl); reject(new Error(`Video error: ${video.error?.message||'Unknown error'}`)); });
+    video.src = videoUrl;
+  });
+}
+
+function fillLockedFrames(runFrames) {
+  let found = 0;
+  // Map: hash → data for this run
+  const hashToData = Object.fromEntries(runFrames.map(f => [f.hash, f.data]));
+  for (let i = 0; i < LOCKED_HASHES.length; ++i) {
+    if (!lockedFrames[i] && hashToData[LOCKED_HASHES[i]]) {
+      lockedFrames[i] = hashToData[LOCKED_HASHES[i]];
+      found++;
+    }
+  }
+  return found;
+}
+
+function showMissingIndices() {
+  const missing = LOCKED_HASHES.map((h,i) => lockedFrames[i] ? null : i).filter(i=>i!==null);
+  return { missing, count: missing.length };
+}
+
+function showLockedResults() {
+  resultsContainer.innerHTML = '';
+  for (let i = 0; i < LOCKED_HASHES.length; ++i) {
+    const dataUrl = lockedFrames[i];
+    if (dataUrl) resultsContainer.appendChild(el('img', {src: dataUrl, title: `Pos ${i}`}));
+    else resultsContainer.appendChild(el('div', {style:'width:100px;height:75px;border:2px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:16px;'}, `${i}`));
+  }
+}
+
+function reportSequenceConsistency() {
+  if (sequenceHistory.length < 2) return '';
+  // Report for every pair of runs: do their hash orders match, slot by slot (for filled)?
+  let reportHtml = `<h3>Hash Order Consistency Across ${sequenceHistory.length} Runs</h3>`;
+  const filledIndices = LOCKED_HASHES.map((_,i) => lockedFrames[i] ? i : null).filter(i=>i!==null);
+  for (let i = 1; i < sequenceHistory.length; ++i) {
+    const prev = sequenceHistory[i-1], curr = sequenceHistory[i];
+    let allMatch = true, diffs = [];
+    filledIndices.forEach(idx => {
+      if (prev[idx] !== curr[idx]) { allMatch = false; diffs.push(idx); }
+    });
+    reportHtml += `<div style="margin-bottom:8px"><strong>Run ${i} vs Run ${i+1}:</strong> ${allMatch
+      ? `<span class="success">Order MATCH</span>`
+      : `<span class="failure">Order DIFF at [${diffs.join(', ')}]</span>`}</div>`;
+  }
+  // Final summary table (hashes for all runs for filled slots)
+  if (filledIndices.length) {
+    reportHtml += `<details><summary style="cursor:pointer">Show all filled hash orders per run</summary><pre>`;
+    for (let i = 0; i < sequenceHistory.length; ++i) {
+      const arr = filledIndices.map(idx=>sequenceHistory[i][idx]).join(', ');
+      reportHtml += `Run ${i+1}: [${arr}]\n`;
+    }
+    reportHtml += `</pre></details>`;
+  }
+  return reportHtml;
+}
+
+async function runExtraction(videoBlob) {
+  if (isProcessing) return;
+  isProcessing = true;
+  statusEl.innerText = 'Status: Processing video...';
+  rerunButton.disabled = true; startButton.disabled = true; exportButton.style.display = 'none';
+  try {
+    const result = await processVideoForUniqueFrames(videoBlob);
+    extractionRuns++;
+    // Per-run: save canonical hash order in the current run (or '' if not found)
+    const thisRunHashes = LOCKED_HASHES.map(h =>
+      result.frames.find(f=>f.hash===h)?.hash || '');
+    sequenceHistory.push(thisRunHashes);
+
+    const foundThisRun = fillLockedFrames(result.frames);
+    const {missing, count} = showMissingIndices();
+    showLockedResults();
+    statusEl.innerHTML = `Extraction run #${extractionRuns}.<br>
+      ${lockedFrames.filter(Boolean).length} / ${LOCKED_HASHES.length} positions filled. ${foundThisRun} filled this run.<br>
+      ${count>0 ? `<span style="color:#dc3545">Still missing: ${count} [${missing.join(', ')}]</span>` :
+      `<span style="color:#28a745">All filled!</span>`}`;
+
+    // Reporting: multi-run order checking
+    reportsContainer.innerHTML = reportSequenceConsistency();
+    if (count === 0) exportButton.style.display = 'inline-block';
+    rerunButton.style.display = 'inline-block';
+  } catch (error) {
+    statusEl.innerText = `Error: ${error.message}`; console.error(error);
+  } finally {
+    rerunButton.disabled = startButton.disabled = false;
+    isProcessing = false;
+  }
+}
+
+startButton.onclick = async () => {
+  if (isProcessing) return;
+  reportsContainer.innerHTML = '';
+  resultsContainer.innerHTML = '';
+  rerunButton.style.display = exportButton.style.display = 'none';
+  extractionRuns = 0; sequenceHistory = [];
+  lockedFrames = Array(LOCKED_HASHES.length).fill(null);
+  statusEl.innerText = 'Status: Fetching video from URL...';
+  isProcessing = true; startButton.disabled = true;
+  try {
+    const response = await fetch(VIDEO_URL);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    currentVideoBlob = await response.blob();
+    isProcessing = false;
+    await runExtraction(currentVideoBlob);
+  } catch (e) {
+    statusEl.innerText = `Failed to fetch video: ${e.message}. Check browser console for CORS errors.`;
+    console.error("Fetch Error:", e);
+    isProcessing = false; startButton.disabled = false;
+  }
+};
+rerunButton.onclick = () => currentVideoBlob ? runExtraction(currentVideoBlob)
+  : statusEl.innerText = 'Error: No video loaded. Please load first.';
+
+exportButton.onclick = () => {
+  if (!lockedFrames.every(Boolean)) return;
+  // Download as zip if desired, or just log. For demo: show a prompt with all base64.
+  const imgs = lockedFrames.map((d,i) => `<img src="${d}" title="${i}" style="max-width:200px;max-height:120px">`).join('\n');
+  const w = window.open(); w.document.write(imgs);
+};
+
+</script>
+</body>
+</html>

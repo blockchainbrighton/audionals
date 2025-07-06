@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Deterministic MP4 Image Extractor (By Timecode, Comparison-Ready)</title>
+  <style>
+    body { background: #181b20; color: #e0e4ee; font-family: sans-serif; text-align: center; padding: 2em; }
+    #controls { margin-bottom: 16px; }
+    #frames { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; transition: transform 0.2s; }
+    .framebox { position: relative; background: #111; border-radius: 8px; box-shadow: 0 2px 16px #0007; }
+    .framebox img { display: block; max-width: 200px; max-height: 150px; border-radius: 6px; cursor: zoom-in; transition: box-shadow 0.15s; }
+    .framebox .idx { position: absolute; left: 7px; top: 7px; font-size: 13px; background: #202c; padding: 2px 7px; border-radius: 4px; color: #fff; }
+    #zoomVal { font-size: 1.1em; margin: 0 14px; }
+    button { background: #272934; color: #fff; border: 1px solid #444; border-radius: 5px; padding: 7px 18px; font-size: 16px; margin: 0 2px; cursor: pointer;}
+    #zoomOverlay {
+      display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100vw; height: 100vh;
+      background: rgba(24,27,32,0.63); align-items: center; justify-content: center;
+      transition: background 0.18s;
+    }
+    #zoomOverlay.active { display: flex; }
+    #zoomOverlay .zoomWrap {
+      position: relative; display: flex; flex-direction: column; align-items: center;
+    }
+    #zoomOverlay img {
+      max-width: 84vw; max-height: 84vh;
+      border-radius: 12px; box-shadow: 0 0 55px #000a;
+      cursor: zoom-out; background: #181b20;
+      transition: box-shadow 0.15s;
+      margin-bottom: 12px;
+    }
+    #zoomOverlay .label {
+      margin-bottom: 8px; font-size: 1.11em;
+      background: #202c; color: #fff; padding: 7px 18px; border-radius: 7px; opacity: 0.96; pointer-events: none;
+      box-shadow: 0 2px 10px #0004;
+    }
+    #timecodes-list {
+      font-family: ui-monospace,monospace;
+      font-size: 15px;
+      background: #23293a;
+      color: #fff;
+      border-radius: 7px;
+      padding: 10px 18px;
+      margin-bottom: 22px;
+      max-width: 830px;
+      overflow-x: auto;
+      text-align: left;
+      white-space: pre-wrap;
+    }
+    #report {
+      background: #1b222e; color: #e9eefe; border-radius: 7px;
+      font-family: ui-monospace,monospace; font-size: 15px;
+      margin: 18px auto 8px; padding: 13px 17px; max-width: 920px; text-align: left;
+      box-shadow: 0 1px 14px #0002;
+    }
+    #rerun { margin-bottom: 18px; }
+    .ok { color: #9be69b; }
+    .err { color: #ff6666; }
+    .warn { color: #ffd04f; }
+  </style>
+</head>
+<body>
+  <h2>MP4 Frame Extractor – By Timecode, Determinism Checker</h2>
+  <div id="controls">
+    <button id="zoomIn">Zoom In</button>
+    <span id="zoomVal">100%</span>
+    <button id="zoomOut">Zoom Out</button>
+    <button id="zoomReset">Reset Zoom</button>
+    <button id="rerun">Rerun Extraction</button>
+  </div>
+  <div id="timecodes-list"></div>
+  <div id="status">Loading video and extracting images…</div>
+  <div id="report"></div>
+  <div id="frames"></div>
+  <div id="zoomOverlay" tabindex="-1">
+    <div class="zoomWrap">
+      <span class="label"></span>
+      <img src="">
+    </div>
+  </div>
+  <script>
+    // ==== CONFIG ====
+    const TIMECODES = [
+      0.00, 0.08, 0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64, 0.72,
+      0.80, 0.88, 0.96, 1.04, 1.12, 1.20, 1.28, 1.36, 1.44, 1.52,
+      1.60, 1.68, 1.76, 1.84, 1.92, 2.00, 2.08, 2.16, 2.24, 2.32,
+      2.40, 2.48, 2.56, 2.64, 2.72, 2.80, 2.88, 2.96, 3.04, 3.12,
+      3.20, 3.28, 3.36, 3.44, 3.52, 3.60, 3.68, 3.76, 3.84, 3.92,
+      4.00, 4.08, 4.16, 4.24, 4.32, 4.40, 4.48, 4.56, 4.64, 4.72,
+      4.80, 4.88, 4.96, 5.04, 5.12, 5.20, 5.28, 5.36, 5.44, 5.52,
+      5.60, 5.68, 5.76
+    ];
+    const MP4_URL = "https://ordinals.com/content/c2beb99dbc32188e56ea2ca3750c99a6ce9145892678473b51802ce680cb5f16i0";
+    // ==== END CONFIG ====
+    const framesDiv = document.getElementById('frames');
+    const status = document.getElementById('status');
+    const timecodesList = document.getElementById('timecodes-list');
+    const reportDiv = document.getElementById('report');
+    const rerunBtn = document.getElementById('rerun');
+    let zoom = 1;
+    let runCount = 0;
+    let baselineHashes = null;
+    let allRuns = []; // Store all runs in session (reset on reload)
+    window._allRuns = allRuns; // for debug/inspection
+
+    function updateZoom() {
+      framesDiv.style.transform = `scale(${zoom})`;
+      document.getElementById('zoomVal').textContent = Math.round(zoom*100) + "%";
+    }
+    document.getElementById('zoomIn').onclick = () => { zoom = Math.min(3, zoom+0.15); updateZoom(); };
+    document.getElementById('zoomOut').onclick = () => { zoom = Math.max(0.3, zoom-0.15); updateZoom(); };
+    document.getElementById('zoomReset').onclick = () => { zoom = 1; updateZoom(); };
+    framesDiv.addEventListener('wheel', e => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        zoom += (e.deltaY < 0 ? 0.1 : -0.1);
+        zoom = Math.max(0.3, Math.min(zoom, 3));
+        updateZoom();
+      }
+    });
+
+    // Overlay zoom logic
+    const zoomOverlay = document.getElementById('zoomOverlay');
+    const zoomOverlayImg = zoomOverlay.querySelector('img');
+    const zoomOverlayLabel = zoomOverlay.querySelector('.label');
+    let zoomedIndex = -1;
+    let cachedDataUrls = [];
+
+    function showZoomed(idx) {
+      if (idx < 0 || idx >= cachedDataUrls.length) return;
+      zoomedIndex = idx;
+      zoomOverlayImg.src = cachedDataUrls[idx];
+      zoomOverlayLabel.textContent = `#${idx+1} | Time: ${TIMECODES[idx].toFixed(3)}s`;
+      zoomOverlay.classList.add('active');
+      zoomOverlay.focus();
+    }
+    function closeZoomed() {
+      zoomOverlay.classList.remove('active');
+      zoomedIndex = -1;
+    }
+    framesDiv.onclick = e => {
+      if (e.target.tagName === 'IMG') {
+        const imgs = Array.from(framesDiv.querySelectorAll('.framebox img'));
+        const idx = imgs.indexOf(e.target);
+        showZoomed(idx);
+      }
+    };
+    zoomOverlay.onclick = e => { if (e.target === zoomOverlay) closeZoomed(); };
+    document.addEventListener('keydown', e => {
+      if (zoomOverlay.classList.contains('active')) {
+        if (e.key === "ArrowLeft" && zoomedIndex > 0) { showZoomed(zoomedIndex-1); e.preventDefault(); }
+        if (e.key === "ArrowRight" && zoomedIndex < cachedDataUrls.length-1) { showZoomed(zoomedIndex+1); e.preventDefault(); }
+        if (e.key === "Escape") { closeZoomed(); e.preventDefault(); }
+      }
+    });
+
+    // Show the current list of timecodes (for copy/edit convenience)
+    function updateTimecodeListDisplay() {
+      timecodesList.textContent = 'Current timecodes used:\n[\n  ' + TIMECODES.map(t=>t.toFixed(3)).join(', ') + '\n]';
+    }
+    updateTimecodeListDisplay();
+
+    // Simple 32-bit FNV-1a hash for base64 strings (fast, collision-resistant for this use)
+    function hashStrFnv1a(str) {
+      let h=0x811c9dc5;
+      for (let i=0,l=str.length;i<l;i++) {
+        h^=str.charCodeAt(i);
+        h += (h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24);
+      }
+      return ("00000000"+(h>>>0).toString(16)).slice(-8);
+    }
+
+    async function extractTimecodeFrames() {
+      status.textContent = "Loading video metadata…";
+      framesDiv.innerHTML = "";
+      cachedDataUrls = [];
+      const video = Object.assign(document.createElement('video'), {
+        crossOrigin: "anonymous", src: MP4_URL, preload: "auto", muted: true
+      });
+      let duration = 0;
+      await new Promise((resolve, reject) => {
+        video.onloadedmetadata = () => {
+          duration = video.duration;
+          resolve();
+        };
+        video.onerror = () => reject("Failed to load video.");
+      });
+
+      let hashes = [];
+      for (let i = 0; i < TIMECODES.length; i++) {
+        const t = TIMECODES[i];
+        if (t > duration) continue;
+        status.textContent = `Extracting ${i+1} / ${TIMECODES.length} (Time: ${t.toFixed(3)}s)…`;
+        await new Promise(resolve => {
+          video.onseeked = () => {
+            setTimeout(() => {
+              const [w, h] = [video.videoWidth, video.videoHeight];
+              const canvas = Object.assign(document.createElement('canvas'), { width: w, height: h });
+              canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+              const dataUrl = canvas.toDataURL('image/png');
+              cachedDataUrls.push(dataUrl);
+              const hash = hashStrFnv1a(dataUrl);
+              hashes.push(hash);
+              // Compose and append frame
+              const box = document.createElement('div');
+              box.className = 'framebox';
+              box.innerHTML = `<span class="idx">${i+1}<br>${t.toFixed(3)}s<br><span style="font-size:11px;opacity:0.85">${hash}</span></span><img src="${dataUrl}" draggable="false" loading="lazy">`;
+              framesDiv.appendChild(box);
+              resolve();
+            }, 18);
+          };
+          video.currentTime = t;
+        });
+      }
+      status.textContent = `✅ Done! Displayed ${cachedDataUrls.length} frames.`;
+      processHashes(hashes);
+    }
+
+    function processHashes(hashes) {
+      runCount++;
+      allRuns.push(hashes);
+
+      // --- Duplicate detection within this run ---
+      let duplicates = [];
+      let hashMap = {};
+      for (let i=0; i<hashes.length; ++i) {
+        if (hashMap[hashes[i]]) {
+          duplicates.push(i);
+        } else {
+          hashMap[hashes[i]] = true;
+        }
+      }
+
+      // --- Comparison to baseline (first run) ---
+      let msg = [`<b>Image Hash Consistency Report</b> (Run <b>${runCount}</b>)`];
+      msg.push(`Frames: ${hashes.length}, Unique hashes: ${Object.keys(hashMap).length}`);
+      if (duplicates.length) {
+        msg.push(`<span class="warn">WARNING: ${duplicates.length} duplicate images detected within this run at positions: ${duplicates.map(i=>'#'+(i+1)).join(', ')}</span>`);
+      } else {
+        msg.push(`<span class="ok">No duplicates within this run.</span>`);
+      }
+      if (allRuns.length === 1) {
+        msg.push(`<span class="ok">First run, baseline hashes saved.</span>`);
+      } else {
+        let last = allRuns[allRuns.length-2];
+        let mismatches = [];
+        for (let i=0; i<hashes.length; ++i) {
+          if (hashes[i] !== last[i]) mismatches.push(i);
+        }
+        if (!mismatches.length) {
+          msg.push(`<span class="ok">All hashes matched previous run: fully deterministic.</span>`);
+        } else {
+          msg.push(`<span class="err">${mismatches.length} mismatches with previous run at: ${mismatches.map(i=>'#'+(i+1)).join(', ')}</span>`);
+        }
+      }
+      // Show hashes for user inspection if needed
+      msg.push(`<hr><b>Frame Hashes:</b><br><span style="font-size:13px;word-break:break-all;">[${hashes.join(', ')}]</span>`);
+      reportDiv.innerHTML = msg.join("<br>");
+    }
+
+    rerunBtn.onclick = extractTimecodeFrames;
+
+    // Initial extract on load
+    extractTimecodeFrames();
+  </script>
+</body>
+</html>

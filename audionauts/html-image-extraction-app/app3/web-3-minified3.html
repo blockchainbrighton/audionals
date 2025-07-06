@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="UTF-8">
+<title>Ordinals Inscription Snapshot Tool</title>
+<style>
+    body {
+        background: #181b20;
+        color: #e0e4ee;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 2em;
+        margin: 0;
+    }
+    h2 { text-align: center; }
+    .container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        max-width: 420px;
+    }
+    button, input {
+        font-size: 1em;
+        margin: 0.5em;
+        background: #2a2d33;
+        color: #e0e4ee;
+        border: 1px solid #444;
+        border-radius: 6px;
+        padding: 0.5em 1em;
+        width: 100%;
+        box-sizing: border-box; /* Ensures padding doesn't affect width */
+    }
+    button { cursor: pointer; }
+    button:hover { background: #3a3d43; }
+    button:disabled { background: #222; color: #555; cursor: not-allowed; }
+    iframe, #snapshot-image {
+        margin-top: 1em;
+        width: 380px;
+        height: 400px;
+        border: 2px solid #444;
+        border-radius: 12px;
+        background: #20242b;
+    }
+    #snapshot-image { display: none; }
+    #status-text { min-height: 1.2em; text-align: center; }
+    #base64-output {
+        width: 100%;
+        margin-top: 1em;
+        font-size: 0.9em;
+        word-wrap: break-word;
+        resize: vertical;
+    }
+</style>
+
+<div class="container">
+    <h2>Inscription Snapshot Tool</h2>
+    <input id="inscription-id-input" value="09e0b0c471a6a89c1385c67016e5e6a97f6a6df38207c2d79da67cadf0774368i0">
+    <button id="load-button">Load Inscription</button>
+    <div id="status-text"></div>
+
+    <!-- The captured image will be displayed here for verification -->
+    <img id="snapshot-image">
+
+    <!-- The remote content is loaded here -->
+    <iframe id="content-frame" sandbox="allow-scripts allow-same-origin"></iframe>
+
+    <textarea id="base64-output" rows="5" readonly placeholder="Base64 output will appear here..."></textarea>
+    <button id="capture-button">Create Snapshot (PNG)</button>
+</div>
+
+<script>
+    // This script is self-contained and uses no external libraries.
+    // It is designed to work correctly when served from an Ordinals-aware domain.
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- 1. DOM Element References ---
+        // Get all elements once for efficiency and clarity.
+        const idInput = document.getElementById('inscription-id-input');
+        const loadButton = document.getElementById('load-button');
+        const statusText = document.getElementById('status-text');
+        const contentFrame = document.getElementById('content-frame');
+        const snapshotImage = document.getElementById('snapshot-image');
+        const base64Output = document.getElementById('base64-output');
+        const captureButton = document.getElementById('capture-button');
+
+        // --- 2. Core Functions ---
+
+        /**
+         * Parses an inscription ID and returns a relative content path.
+         * @param {string} id - The inscription ID string.
+         * @returns {string} The relative path, e.g., "/content/..." or empty string if invalid.
+         */
+        function getInscriptionPath(id) {
+            const match = (id || "").match(/([0-9a-f]{64}i\d+)$/i);
+            return match ? `/content/${match[1]}` : "";
+        }
+
+        /**
+         * Fetches inscription content and loads it into the iframe.
+         * This uses a relative path, which is a same-origin request in an Ordinals environment.
+         */
+        async function loadInscription() {
+            const path = getInscriptionPath(idInput.value.trim());
+            if (!path) {
+                statusText.textContent = "Error: Invalid Inscription ID format.";
+                return;
+            }
+
+            statusText.textContent = `Fetching ${path}...`;
+            loadButton.disabled = true;
+            captureButton.disabled = true;
+
+            try {
+                const response = await fetch(path);
+                if (!response.ok) {
+                    throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+                }
+                const html = await response.text();
+                // Using srcdoc is the standard way to load dynamic HTML into an iframe.
+                contentFrame.srcdoc = html;
+                statusText.textContent = "Content loaded successfully.";
+            } catch (error) {
+                statusText.textContent = `Fetch Failed: ${error.message}. (This is expected on local file systems).`;
+            } finally {
+                loadButton.disabled = false;
+                captureButton.disabled = false;
+            }
+        }
+        
+        /**
+         * Creates a snapshot of the iframe's content by rendering it to a canvas.
+         * @returns {Promise<string>} A promise that resolves with the PNG data as a Base64 string.
+         */
+        async function createSnapshot() {
+            return new Promise((resolve, reject) => {
+                const doc = contentFrame.contentDocument;
+
+                if (!doc || !doc.body || doc.body.innerHTML.trim() === "") {
+                    return reject(new Error("Cannot capture: Iframe content is not loaded or is empty."));
+                }
+                
+                const w = contentFrame.clientWidth;
+                const h = contentFrame.clientHeight;
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                
+                // Get the full, live HTML from the iframe's document.
+                const html = doc.documentElement.outerHTML;
+
+                // The Magic: Wrap the HTML in an SVG <foreignObject>.
+                // This creates a valid SVG image in memory that the browser can render.
+                // The data: URL inherits the origin of this script, so it's not a cross-origin resource.
+                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+                               <foreignObject width="100%" height="100%">
+                                 <div xmlns="http://www.w3.org/1999/xhtml" style="width: 100%; height: 100%;">${html}</div>
+                               </foreignObject>
+                             </svg>`;
+
+                const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+                
+                const img = new Image();
+                img.onload = () => {
+                    // Draw the rendered SVG image onto the canvas.
+                    ctx.drawImage(img, 0, 0, w, h);
+                    // Export the canvas content as a PNG data URL.
+                    resolve(canvas.toDataURL("image/png"));
+                };
+                img.onerror = () => {
+                    reject(new Error("Failed to render the SVG snapshot image. The content may have cross-origin restrictions."));
+                };
+                img.src = dataUrl;
+            });
+        }
+        
+        // --- 3. Event Listeners ---
+
+        loadButton.addEventListener('click', loadInscription);
+
+        captureButton.addEventListener('click', async () => {
+            statusText.textContent = "Creating snapshot...";
+            captureButton.disabled = true;
+            try {
+                const base64data = await createSnapshot();
+                snapshotImage.src = base64data;
+                snapshotImage.style.display = 'block';
+                base64Output.value = base64data;
+                statusText.textContent = "Snapshot created successfully!";
+            } catch (error) {
+                statusText.textContent = `Capture Error: ${error.message}`;
+                snapshotImage.style.display = 'none';
+            } finally {
+                captureButton.disabled = false;
+            }
+        });
+
+        // --- 4. Initial Load ---
+        // Automatically load the default inscription when the page opens.
+        loadInscription();
+    });
+</script>
+</html>

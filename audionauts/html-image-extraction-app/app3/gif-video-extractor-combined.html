@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Unified GIF/MP4 Frame Extractor to Base64</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { background: #181b20; color: #e0e4ee; font-family: ui-monospace,monospace; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; }
+    h2 { margin-top: 2em; }
+    .row { margin-bottom: 1em; }
+    input[type="text"], input[type="number"] { width: 330px; background: #222; color: #fff; border: 1px solid #444; font-size: 14px; padding: 6px 8px; border-radius: 4px;}
+    button { padding: 7px 22px; border-radius: 4px; background: #23232a; color: #fff; border: 1px solid #333; cursor: pointer; margin-left: 8px; }
+    .output { margin: 2em 0; width: 100%; max-width: 480px; }
+    img { border: 2px solid #333; background: #222; margin: 12px 0; border-radius: 8px; max-width: 99%; }
+    textarea { width: 99%; min-height: 110px; background: #23232a; color: #f3f3f7; border: 1px solid #444; font-size: 13px; margin-top: 8px; border-radius: 6px;}
+    label { font-size: 14px; opacity: 0.75; }
+    #status { margin-top: 1em; }
+  </style>
+</head>
+<body>
+  <h2>Unified GIF/MP4 Frame Extractor to Base64 PNG</h2>
+  <div class="row">
+    <label>
+      <input type="radio" name="mediatype" id="gifRadio" value="gif" checked>
+      GIF
+    </label>
+    <label style="margin-left:20px;">
+      <input type="radio" name="mediatype" id="mp4Radio" value="mp4">
+      MP4
+    </label>
+  </div>
+  <div class="row">
+    <input id="mediaUrl" type="text" placeholder="Enter GIF or MP4 URL" value="https://ordinals.com/content/e9e5f4862c1e486d07b4bb91c5b85edf8d044e0c0cdd1b235959be8bd49355d6i0">
+  </div>
+  <div class="row" id="frameRow" style="display:none;">
+    <label>Frame number: <input type="number" id="frameNum" min="1" value="1" style="width:80px;"></label>
+  </div>
+  <div class="row">
+    <button id="extractBtn">Extract Frame</button>
+  </div>
+  <div class="output" id="output"></div>
+  <div id="status"></div>
+  <script>
+    // ========== UI HANDLING ==========
+    const $ = s => document.querySelector(s);
+    const gifRadio = $('#gifRadio'), mp4Radio = $('#mp4Radio'), frameRow = $('#frameRow');
+    gifRadio.onchange = mp4Radio.onchange = () => frameRow.style.display = mp4Radio.checked ? "" : "none";
+
+    // ========== CONFIG ==========
+    const DEFAULT_FRAME = 1;
+
+    // ========== MAIN ==========
+    $('#extractBtn').onclick = async () => {
+      const url = $('#mediaUrl').value.trim(), type = mp4Radio.checked ? "mp4" : "gif";
+      $('#output').innerHTML = '';
+      $('#status').textContent = 'Processing...';
+      if (!url) return $('#status').textContent = "Please enter a URL.";
+
+      if (type === "gif") {
+        extractGIFFrame(url);
+      } else {
+        let frameNumber = parseInt($('#frameNum').value, 10);
+        if (isNaN(frameNumber) || frameNumber < 1) frameNumber = DEFAULT_FRAME;
+        extractMP4Frame(url, frameNumber);
+      }
+    };
+
+    // ========== GIF FRAME EXTRACT ==========
+    function extractGIFFrame(url) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = url + (url.includes('?') ? '&' : '?') + 'cbust=' + Date.now();
+      img.onerror = () => $('#status').textContent = "Error loading GIF image. Try another GIF or ensure CORS is allowed.";
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        const dataUrl = canvas.toDataURL('image/png');
+        const base64 = dataUrl.split(',')[1];
+        $('#output').innerHTML = `<strong>Extracted GIF 1st Frame (${img.width}x${img.height}):</strong><br>
+          <img src="${dataUrl}" width="340"><br>
+          <strong>Base64 PNG:</strong>
+          <textarea readonly>${base64}</textarea>`;
+        $('#status').textContent = "Done!";
+      };
+    }
+
+    // ========== MP4 FRAME EXTRACT ==========
+    function extractMP4Frame(url, frameNumber) {
+      $('#output').innerHTML = '';
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.src = url;
+      video.preload = 'auto';
+      video.muted = true;
+
+      // Will get time per frame after loadedmetadata
+      video.addEventListener('error', () => $('#status').textContent = "Error loading or decoding video.");
+      video.addEventListener('loadedmetadata', () => {
+        let fps = video.frameRate || 25; // Default fallback
+        if (video.getVideoPlaybackQuality) {
+          // Some browsers expose more accurate FPS
+          const quality = video.getVideoPlaybackQuality();
+          if (quality && quality.totalVideoFrames && video.duration)
+            fps = Math.max(fps, quality.totalVideoFrames / video.duration);
+        }
+        let frameCount = Math.floor(video.duration * fps);
+        let frame = Math.min(Math.max(1, frameNumber), frameCount); // clamp
+        let time = (frame - 1) / fps + 0.001; // seek just after previous frame
+        video.currentTime = time;
+      });
+
+      video.addEventListener('seeked', () => {
+        // Draw frame to canvas
+        const [w, h] = [video.videoWidth, video.videoHeight];
+        const canvas = Object.assign(document.createElement('canvas'), { width: w, height: h });
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, w, h);
+        const base64 = canvas.toDataURL('image/png');
+        $('#output').innerHTML = `<strong>Extracted MP4 Frame (${w}x${h}):</strong><br>
+          <img src="${base64}" style="max-width:99%;"><br>
+          <strong>Base64 PNG:</strong>
+          <textarea readonly>${base64.split(',')[1]}</textarea>`;
+        $('#status').textContent = "Done!";
+      });
+    }
+
+    // ===== Initial state
+    if (mp4Radio.checked) frameRow.style.display = "";
+    else frameRow.style.display = "none";
+  </script>
+</body>
+</html>

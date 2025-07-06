@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GIF Frame Stepper (Vanilla JS, Arrow Keys)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { background: #111; color: #fff; font-family: ui-monospace,monospace; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; }
+    input[type="text"] { width: 380px; background: #191a20; color: #fff; border-radius: 4px; border: 1px solid #333; font-size: 15px; padding: 7px 10px; margin-bottom: 10px; }
+    button { padding: 7px 20px; border-radius: 4px; background: #222; color: #fff; border: 1px solid #333; cursor: pointer; margin-left: 8px; }
+    .output { margin: 2em 0; }
+    img { border: 2px solid #333; background: #222; margin: 12px 0; }
+    textarea { width: 380px; height: 120px; background: #23232a; color: #f3f3f7; border: 1px solid #444; font-size: 12px; margin-top: 8px; border-radius: 6px;}
+    .controls { margin: 1em 0 0; }
+  </style>
+</head>
+<body>
+  <h2>GIF Frame Stepper & Base64 Extractor</h2>
+  <div>
+    <input id="gifUrl" type="text" value="https://ordinals.com/content/c9d39d2aef6f2f3d744b2e8e5aab9fb11ba65274e8d19aef777c21f264426b71i0" />
+    <button id="process">Load GIF</button>
+  </div>
+  <div class="controls">
+    <span>← Prev</span> <b>|</b> <span>Next →</span>
+  </div>
+  <div class="output" id="output"></div>
+  <script>
+    // Minimal GIF decoder (using browser, animated GIF -> frames via offscreen canvas)
+    const $ = s => document.querySelector(s);
+    let frames = [], cur = 0;
+
+    function showFrame(idx) {
+      if (!frames[idx]) return;
+      const {canvas, base64} = frames[idx];
+      $('#output').innerHTML = `
+        <strong>Frame ${idx+1} / ${frames.length} (${canvas.width}x${canvas.height}):</strong><br>
+        <img src="${canvas.toDataURL('image/png')}" width="340"><br>
+        <strong>Base64 PNG (copy this):</strong>
+        <textarea readonly>${base64}</textarea>
+      `;
+    }
+
+    // Buffer all frames using the browser's GIF animation playback
+    function processGif() {
+      frames = [];
+      cur = 0;
+      $('#output').innerHTML = 'Processing...';
+      const url = $('#gifUrl').value.trim();
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = url + (url.includes('?') ? '&' : '?') + 'cbust=' + Date.now();
+      img.onerror = () => $('#output').innerHTML = "Error loading GIF image. Try another GIF or ensure CORS is allowed.";
+      img.onload = () => {
+        // Make an <img> and an <canvas>
+        const gif = document.createElement('img');
+        gif.src = img.src;
+        // Trick: Play the GIF in an <img>, snapshot each frame with a timer
+        // Step 1: Draw initial frame to canvas
+        const w = img.width, h = img.height;
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        let lastData, frameCount = 0, done = false;
+
+        // Helper: draw and grab base64
+        function snapFrame() {
+          ctx.clearRect(0,0,w,h);
+          ctx.drawImage(gif, 0, 0, w, h);
+          let data = ctx.getImageData(0,0,w,h).data.join(',');
+          if (lastData === data) return false; // No new frame
+          lastData = data;
+          let dataUrl = canvas.toDataURL('image/png');
+          frames.push({
+            canvas: (() => {
+              let c = document.createElement('canvas');
+              c.width = w; c.height = h;
+              c.getContext('2d').drawImage(gif, 0, 0, w, h);
+              return c;
+            })(),
+            base64: dataUrl.split(',')[1]
+          });
+          frameCount++;
+          return true;
+        }
+
+        // Step 2: Rapidly advance through GIF, snapshotting each unique frame (simulate animation)
+        let anim = 0, maxFrames = 32;
+        gif.onload = () => { // <img> is already loaded
+          function step() {
+            if (frameCount >= maxFrames) done = true;
+            if (done) {
+              showFrame(cur = 0);
+              return;
+            }
+            let gotNew = snapFrame();
+            if (!gotNew) {
+              // Finished cycling frames
+              done = true;
+              showFrame(cur = 0);
+              return;
+            }
+            // Trick: to advance frame, we force the GIF <img> to "animate" by resetting src
+            setTimeout(step, 80); // Slight delay per frame
+          }
+          step();
+        };
+        gif.onerror = () => $('#output').innerHTML = "Error loading GIF image.";
+        // Append the GIF <img> (hidden) to body to trigger animation in browser (not visible)
+        gif.style.position = 'absolute'; gif.style.left = '-9999px'; document.body.appendChild(gif);
+      };
+    }
+
+    // Keyboard navigation
+    window.addEventListener('keydown', e => {
+      if (!frames.length) return;
+      if (e.key === 'ArrowRight') {
+        cur = (cur + 1) % frames.length;
+        showFrame(cur);
+      }
+      if (e.key === 'ArrowLeft') {
+        cur = (cur - 1 + frames.length) % frames.length;
+        showFrame(cur);
+      }
+    });
+
+    $('#process').onclick = processGif;
+    window.onload = processGif;
+  </script>
+</body>
+</html>
