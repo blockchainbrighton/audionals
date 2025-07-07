@@ -5,6 +5,8 @@ import * as pixelText from './pixelText.js';
 import * as pixelUI from './pixelUI.js';
 import * as scrollLayer from './scrollLayer.js';
 import { refreshPresetList } from './presetLoader.js';
+import { bamPixelCoordinates } from './drawBam.js'; // <-- ADD THIS LINE
+
 
 // --- UI & DOM ---
 // (If you have global $ in pixelUI, use it, else define here)
@@ -13,6 +15,9 @@ const $ = pixelUI.$;
 // --- GRID / APP INIT ---
 function init() {
   let isDrawing = false; // Flag to track if the mouse is down
+  let isBamVisible = false; // <-- ADD: State for the BAM toggle
+  let bamBackup = {};       // <-- ADD: To store pixels under the BAM text
+
 
   // UI builders
   // Set up initial drawing and state
@@ -33,6 +38,13 @@ function init() {
     pixelUI.drawGrid();
     core.pushUndo();
     pixelUI.updateArrayDisplay();
+  
+    // --- ADD THIS RESET LOGIC ---
+    isBamVisible = false;
+    bamBackup = {};
+    const bamBtn = $('#AddBamBtn');
+    bamBtn.textContent = 'Add BAM';
+    bamBtn.classList.remove('on');
   };
 
   // Add event listeners to the document to reliably track mouse state
@@ -52,6 +64,42 @@ function init() {
     }
   });
 
+  // In init(), add this new event handler
+$('#AddBamBtn').onclick = function () {
+  const bamBtn = this; // `this` refers to the button
+  const colorIndex = 1; // Use color index 1 (usually black)
+
+  if (isBamVisible) {
+    // --- TURN BAM OFF: Restore original pixels ---
+    for (const key in bamBackup) {
+      const [y, x] = key.split(',').map(Number);
+      core.gridArray[y][x] = bamBackup[key];
+    }
+    bamBackup = {}; // Clear the backup
+    bamBtn.textContent = 'Add BAM';
+    bamBtn.classList.remove('on'); // Assumes 'on' class makes it look active
+  } else {
+    // --- TURN BAM ON: Backup existing pixels and draw ---
+    bamBackup = {}; // Ensure backup is clear before starting
+    bamPixelCoordinates.forEach(([x, y]) => {
+      if (y >= 0 && y < core.SIZE && x >= 0 && x < core.SIZE) {
+        // Backup the original pixel color
+        const key = `${y},${x}`;
+        bamBackup[key] = core.gridArray[y][x];
+        // Draw the new pixel
+        core.gridArray[y][x] = colorIndex;
+      }
+    });
+    bamBtn.textContent = 'Remove BAM';
+    bamBtn.classList.add('on');
+  }
+
+  // Flip the state and update the canvas
+  isBamVisible = !isBamVisible;
+  pixelUI.drawGrid();
+  core.pushUndo();
+  pixelUI.updateArrayDisplay();
+};
 
  // In your $('#latchToggle').onclick, after updating the button:
   $('#latchToggle').onclick = () => {
@@ -90,6 +138,13 @@ function init() {
       pixelUI.createColorButtons();
       pixelUI.drawGrid();
       core.pushUndo();
+    
+      // --- ADD THIS RESET LOGIC ---
+      isBamVisible = false;
+      bamBackup = {};
+      const bamBtn = $('#AddBamBtn');
+      bamBtn.textContent = 'Add BAM';
+      bamBtn.classList.remove('on');
     };
     r.readAsText(f);
     e.target.value = '';

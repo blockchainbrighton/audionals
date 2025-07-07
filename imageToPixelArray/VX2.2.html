@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pixel Art Maker – Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --sidebar-width: 240px; --radius: 10px; --color-border: #d0d5e0;
+      --color-primary: #105fe0; --color-primary-light: #5d8cff; --color-accent: #36d3aa;
+      --color-danger: #a23b4a; --font-family: "Inter", system-ui, sans-serif; --grid-max: 640px;
+    }
+    *,*::before,*::after{box-sizing:border-box;}
+    html,body{height:100%;margin:0;}
+    body{display:flex;flex-direction:column;min-width:900px;min-height:650px;
+      font-family:var(--font-family);background:#f4f6fb;color:#333;}
+    #mainLayout{flex:1;display:flex;}
+    #leftColumn{flex:0 0 var(--sidebar-width);display:flex;flex-direction:column;gap:1rem;
+      padding:1rem .75rem;background:#fff;border-right:1px solid var(--color-border);}
+    #rightColumn{flex:1;display:flex;flex-direction:column;align-items:center;gap:1rem;
+      padding:1rem 1.5rem;overflow:auto;}
+    .btn{display:inline-flex;align-items:center;justify-content:center;
+      padding:.5rem 1rem;font-weight:600;font-size:1rem;
+      border-radius:var(--radius);border:1.8px solid transparent;
+      background:#fff;cursor:pointer;transition:background .15s,box-shadow .15s;}
+    .btn:active{transform:translateY(1px);}
+    .btn-primary{background:var(--color-primary);color:#fff;}
+    .btn-outline{border-color:var(--color-primary);color:var(--color-primary);background:#fafcfe;}
+    .btn-danger{border-color:var(--color-danger);color:var(--color-danger);background:#fafcfe;}
+    #latchToggle.on, #drawBamBtn.on {background:var(--color-accent);border-color:#0c8b67;color:#fff;}
+    #paletteRow{display:flex;flex-wrap:wrap;gap:.5rem;}
+    .paletteColorBtn{width:34px;height:34px;border-radius:8px;border:2px solid #888;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;}
+    .paletteColorBtn.selected{border-color:var(--color-primary);box-shadow:0 0 0 2px var(--color-primary-light);}
+    .paletteColorBtn.transparent{background:repeating-linear-gradient(45deg,#ddd 0 8px,#fff 8px 16px);border-style:dashed;}
+    .userColorRow{display:flex;align-items:center;gap:.25rem;font-size:.9rem;}
+    #gridBox {
+      width:min(var(--grid-max),60vmin);height:min(var(--grid-max),60vmin);
+      position:relative; display:block;
+    }
+    .pixel-layer {
+      position:absolute; left:0; top:0; width:100%; height:100%;
+      display:grid; grid-template-columns:repeat(64,1fr); grid-template-rows:repeat(64,1fr);
+      pointer-events:none;
+    }
+    #grid { z-index:3; pointer-events:auto; }
+    #scrollLayer { z-index:2; }
+    .cell,.scroll-cell {
+      width:100%; height:100%; border:1px solid #f4f7fc; background-clip:padding-box;
+      position:relative;
+    }
+    .scroll-cell { pointer-events:none; }
+    [data-size].selected{background:var(--color-primary);color:#fff;}
+    @media(max-width:1200px){:root{--sidebar-width:200px;}}
+  </style>
+</head>
+<body>
+  <div id="editorWrap" style="
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    min-height: 100vh; width: 100vw; margin: 0; padding: 0;
+  ">
+    <!-- Controls Toolbar -->
+    <div id="topToolbar" style="
+      display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .4rem; align-items: center; justify-content: center;
+      width: 100%; max-width: 720px;
+    ">
+      <input type="file" id="imageUpload" accept="image/*">
+      <button id="clearCanvas" class="btn btn-outline">Clear</button>
+      <button id="saveProject" class="btn btn-outline">Save Project</button>
+      <button id="loadProjectBtn" class="btn btn-outline">Load Project</button>
+      <input type="file" id="projectLoader" accept=".pxproj,.json" hidden>
+      <button id="latchToggle" class="btn btn-outline">Latch: Off</button>
+      <button id="undoBtn" class="btn btn-danger">Undo</button>
+      <button id="loadArrayBtn" class="btn btn-outline">Load Array</button>
+      <button id="drawBamBtn" class="btn btn-outline">Draw Bam</button>
+      <input type="file" id="arrayLoader" hidden>
+    </div>
+
+    <!-- Main Square Layout: [Palette | Grid | LetterBank] -->
+    <div id="mainSquare" style="
+      display: flex; flex-direction: row; align-items: flex-start; justify-content: center;
+      width: 100%; max-width: 720px; min-height: 660px; background: none;
+    ">
+      <!-- Left: Palette/Colors (tight vertical) -->
+      <div id="paletteCol" style="display: flex; flex-direction: column; align-items: center; gap: .3rem; margin-right: .6rem;">
+        <div id="paletteRow" style="display: flex; flex-direction: column; gap: .33rem;"></div>
+        <div id="userColorsBlock"></div>
+        <div id="letterColorBlock" style="margin-top: .7rem;">
+          <strong style="font-size:.88em;">Letter Colour:</strong>
+          <div id="letterColorRow" style="display:flex;flex-direction:column;gap:.18rem;margin:.22rem 0;"></div>
+        </div>
+      </div>
+
+      <!-- Center: Grid -->
+      <div style="display: flex; flex-direction: column; align-items: center;">
+        <div id="gridBox" style="width: 480px; height: 480px; position: relative; margin-bottom: .3rem;">
+          <div id="scrollLayer" class="pixel-layer"></div>
+          <div id="grid" class="pixel-layer"></div>
+        </div>
+        <!-- Mini controls: text size, place/scroll, etc -->
+        <div id="textControls" style="display: flex; align-items: center; gap: .4rem; margin: .1rem 0 .15rem 0;">
+          <label>Size:</label>
+          <button type="button" class="btn btn-outline" data-size="2">S</button>
+          <button type="button" class="btn btn-outline selected" data-size="3">M</button>
+          <button type="button" class="btn btn-outline" data-size="4">L</button>
+          <input type="range" id="textSizeSlider" min="0.15" max="14" step="0.05" value="3" style="width:70px;">
+          <span id="textSizeValue" style="width:26px;display:inline-block;text-align:center;">3</span>
+          <input type="text" id="textInput" maxlength="32" placeholder="Type text…" style="width:94px;">
+          <button id="placeText" class="btn btn-primary">Place</button>
+          <button id="scrollText" class="btn btn-outline">Scroll</button>
+          <input type="range" id="scrollSpeed" min="40" max="400" value="120" style="width:50px;" title="Scroll Speed (ms)">
+        </div>
+      </div>
+
+      <!-- Right: Letter Bank (vertical) -->
+      <div id="letterBankCol" style="
+        display: flex; flex-direction: column; align-items: center; gap: .3rem; margin-left: .6rem;
+        max-height: 480px; overflow-y: auto;
+      ">
+        <strong style="font-size:.92em; margin-bottom:.22rem;">Letter Bank:</strong>
+        <div id="letterBankRow" style="
+          display: flex; flex-direction: column; flex-wrap: wrap; gap: .17rem; align-items: flex-start;
+          max-height: 420px; overflow-y: auto;
+        "></div>
+      </div>
+    </div>
+
+    <!-- Array Data Output (always below) -->
+    <section id="arrayDataBlock" style="
+      width: 100%; max-width: 700px; display: flex; flex-direction: column; gap: .25rem; margin-top: .6rem; align-items: center;
+    ">
+    <button id="saveArrayRTF" class="btn btn-outline" style="min-width:110px;">Save Array (RTF)</button>
+
+      <label for="arrayDataOutput" style="font-weight:600;">Pixel Array Data:</label>
+      <textarea id="arrayDataOutput" readonly style="
+        width: 100%; height: 92px; font-family:'JetBrains Mono','Menlo',monospace; border:1.2px solid #ccc;
+        border-radius:5px; resize: none; background: #fff; font-size: 1em;
+      "></textarea>
+      <div style="display: flex; gap: .45rem; flex-wrap: wrap; justify-content: center;">
+        <button id="arrayCopyBtn" class="btn btn-outline" style="min-width:110px;">Copy Array</button>
+        <button id="downloadPNG" class="btn btn-outline" style="min-width:110px;">Download PNG</button>
+        <button id="downloadSVG" class="btn btn-outline" style="min-width:100px;">Download SVG</button>
+      </div>
+    </section>
+  </div>
+</body>
+
+
+  <script type="module">
+    // --- Pixel Font: (no changes except whitespace minimization) ---
+    export const pixelFont = {
+      "A":["01110","10001","10001","11111","10001","10001","10001"],
+      "B":["11110","10001","10001","11110","10001","10001","11110"],
+      "C":["01110","10001","10000","10000","10000","10001","01110"],
+      "D":["11110","10001","10001","10001","10001","10001","11110"],
+      "E":["11111","10000","10000","11110","10000","10000","11111"],
+      "F":["11111","10000","10000","11110","10000","10000","10000"],
+      "G":["01110","10001","10000","10111","10001","10001","01111"],
+      "H":["10001","10001","10001","11111","10001","10001","10001"],
+      "I":["111","010","010","010","010","010","111"],
+      "J":["00111","00010","00010","00010","10010","10010","01100"],
+      "K":["10001","10010","10100","11000","10100","10010","10001"],
+      "L":["10000","10000","10000","10000","10000","10000","11111"],
+      "M":["10001","11011","10101","10101","10001","10001","10001"],
+      "N":["10001","10001","11001","10101","10011","10001","10001"],
+      "O":["01110","10001","10001","10001","10001","10001","01110"],
+      "P":["11110","10001","10001","11110","10000","10000","10000"],
+      "Q":["01110","10001","10001","10001","10101","10010","01101"],
+      "R":["11110","10001","10001","11110","10100","10010","10001"],
+      "S":["01111","10000","10000","01110","00001","00001","11110"],
+      "T":["11111","00100","00100","00100","00100","00100","00100"],
+      "U":["10001","10001","10001","10001","10001","10001","01110"],
+      "V":["10001","10001","10001","10001","10001","01010","00100"],
+      "W":["10001","10001","10001","10101","10101","11011","10001"],
+      "X":["10001","10001","01010","00100","01010","10001","10001"],
+      "Y":["10001","10001","10001","01010","00100","00100","00100"],
+      "Z":["11111","00001","00010","00100","01000","10000","11111"],
+      "0":["01110","10001","10011","10101","11001","10001","01110"],
+      "1":["010","110","010","010","010","010","111"],
+      "2":["01110","10001","00001","00010","00100","01000","11111"],
+      "3":["11110","00001","00001","01110","00001","00001","11110"],
+      "4":["00010","00110","01010","10010","11111","00010","00010"],
+      "5":["11111","10000","10000","11110","00001","00001","11110"],
+      "6":["01110","10000","10000","11110","10001","10001","01110"],
+      "7":["11111","00001","00010","00100","01000","10000","10000"],
+      "8":["01110","10001","10001","01110","10001","10001","01110"],
+      "9":["01110","10001","10001","01111","00001","00001","01110"],
+      " ":["00000","00000","00000","00000","00000","00000","00000"],
+      ".":["00000","00000","00000","00000","00000","01100","01100"],
+      "-":["00000","00000","00000","01110","00000","00000","00000"]
+    };
+    export const FONT_W = 5, FONT_H = 7;
+    window.pixelFont = pixelFont;
+    window.FONT_W = FONT_W;
+    window.FONT_H = FONT_H;
+    </script>
+    
+    <script>
+      const SIZE=64,MAX_UNDO=100,FONT_W=5,FONT_H=7,visorTop=19,visorBot=46,visorLeft=13,visorRight=50,visorOffsetY=-3;
+      const $=s=>document.querySelector(s),clone=g=>g.map(r=>[...r]);
+      let palette=[[0,0,0,0]],userColors=Array(5).fill("#ffd700"),
+        gridArray=Array.from({length:SIZE},()=>Array(SIZE).fill(0)),
+        originalArray=Array.from({length:SIZE},()=>Array(SIZE).fill(0)),
+        gridHistory=[],undoPointer=-1,mouseDown=false,latchMode=false,selectedColorIndex=0,
+        cellElems=Array.from({length:SIZE},()=>Array(SIZE)),scrollCells=[],scrollInterval=null,
+        LETTER_SCALE=3,letterScale=3,letterColorHex="#105fe0",
+        isBamDrawn=false,bamOriginalPixels={};
+      
+      // --- START: Integrated "BAM" module data ---
+      const bamPixelCoordinates = [
+          // Letter 'B'
+          [23, 56], [23, 57], [23, 58], [23, 59], [23, 60],
+          [24, 56], [24, 58], [24, 60],
+          [25, 56], [25, 58], [25, 60],
+          [26, 57], [26, 59],
+        
+          // Period after 'B'
+          [28, 60],
+        
+          // Letter 'A'
+          [31, 56], [32, 56],
+          [30, 57], [33, 57],
+          [31, 59], [32, 59],
+          [30, 59], [33, 59],
+          [30, 60], [33, 60],
+        
+          // Period after 'A'
+          [35, 60],
+        
+          // Letter 'M'
+          [37, 56], [41, 56],
+          [37, 57], [38, 57], [40, 57], [41, 57],
+          [37, 58], [39, 58], [41, 58],
+          [37, 59], [41, 59],
+          [37, 60], [41, 60],
+        
+          // Period after 'M'
+          [43, 60],
+      ];
+      // --- END: Integrated "BAM" module data ---
+
+      // Helpers
+      const cellBg=(i,col)=>i===0?'rgba(0,0,0,0)':`rgb(${col[0]},${col[1]},${col[2]})`,
+        hexToRgbArr=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)),
+        clearArr=arr=>arr.forEach(a=>a.fill(0)),
+        createBtn=(cls,txt,fn)=>Object.assign(document.createElement('button'),{className:cls,innerHTML:txt,onclick:fn}),
+        pushUndo=()=>{
+          if(gridHistory.length>MAX_UNDO)gridHistory.shift(),undoPointer--;
+          gridHistory=gridHistory.slice(0,undoPointer+1);
+          gridHistory.push(clone(gridArray));undoPointer=gridHistory.length-1;
+        },
+        undo=()=>{
+          if(undoPointer<=0)return;
+          undoPointer--;gridArray=clone(gridHistory[undoPointer]);
+          drawGrid();updateArrayDisplay();
+        };
+      // UI
+      $('#clearCanvas').onclick=()=>{clearArr(gridArray);clearArr(originalArray);drawGrid();pushUndo();updateArrayDisplay();};
+      const repaintCell=(r,c)=>{const idx=gridArray[r][c],col=palette[idx];cellElems[r][c].style.backgroundColor=cellBg(idx,col)},
+        drawGrid=()=>{for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++)repaintCell(r,c);updateArrayDisplay();},
+        setLatchUI=()=>{$('#latchToggle').classList.toggle('on',latchMode);$('#latchToggle').textContent=latchMode?'Latch: On':'Latch: Off';},
+        updateTextSizeControls=val=>{
+          letterScale=+val;$('#textSizeValue').textContent=val;
+          document.querySelectorAll('[data-size]').forEach(btn=>btn.classList.toggle('selected',+btn.dataset.size===+val));
+          $('#textSizeSlider').value=val;
+        };
+      document.querySelectorAll('[data-size]').forEach(btn=>btn.onclick=()=>updateTextSizeControls(btn.dataset.size));
+      $('#textSizeSlider').oninput=e=>updateTextSizeControls(e.target.value);
+      updateTextSizeControls(letterScale);
+      $('#placeText').onclick=()=>{stopScrollTextLayer();const text=$('#textInput').value.trim();if(text)insertLetter(text,letterScale);};
+      $('#scrollText').onclick=function(){
+        if(scrollInterval){stopScrollTextLayer();this.textContent="Scroll";}
+        else{
+          const text=$('#textInput').value.trim();
+          if(!text)return;
+          this.textContent="Stop";
+          startScrollTextLayer(text,letterScale,+$('#scrollSpeed').value,letterColorHex);
+        }
+      };
+      // Scroll Layer
+      function initScrollLayer(){
+        const sl=$('#scrollLayer');sl.innerHTML='';scrollCells=[];
+        for(let r=0;r<SIZE;r++){let row=[];for(let c=0;c<SIZE;c++){const div=document.createElement('div');div.className='scroll-cell';sl.appendChild(div);row.push(div);}scrollCells.push(row);}
+      }
+      const clearScrollLayer=()=>scrollCells.forEach(row=>row.forEach(cell=>cell.style.backgroundColor='rgba(0,0,0,0)'));
+      function renderScrollToLayer(buf,frame=0){
+        clearScrollLayer();
+        const h=visorBot-visorTop+1,w=visorRight-visorLeft+1;
+        for(let r=0;r<h;r++)for(let c=0;c<w;c++)
+          if(buf[r]?.[frame+c])scrollCells[visorTop+r][visorLeft+c].style.backgroundColor=buf[r][frame+c];
+      }
+      function makeTextColorBuffer(text,scale,hex){
+        scale=Math.max(0.15,scale);
+        const glyphs=[...text.toUpperCase()].map(ch=>window.pixelFont[ch]||window.pixelFont[' ']);
+        const visorH=visorBot-visorTop+1,visorW=visorRight-visorLeft+1;
+        const glyphW=FONT_W*scale,glyphH=FONT_H*scale,space=scale,fullW=glyphs.length*(glyphW+space)-space;
+        const bufferW=Math.max(1,Math.ceil(visorW+fullW+2*space));
+        const buf=Array.from({length:visorH},()=>Array(bufferW).fill(null));
+        let x=visorW+Math.round(space),y=Math.round((visorH-glyphH)/2)+visorOffsetY;
+        glyphs.forEach(glyph=>{
+          for(let gr=0;gr<FONT_H;gr++)for(let gc=0;gc<FONT_W;gc++)if(glyph[gr][gc]==='1'){
+            const px=x+Math.round(gc*scale),py=y+Math.round(gr*scale),fillW=Math.max(1,Math.round(scale)),fillH=Math.max(1,Math.round(scale));
+            for(let dx=0;dx<fillW;dx++)for(let dy=0;dy<fillH;dy++){
+              const gx=py+dy,gy=px+dx;
+              if(gx>=0&&gx<visorH&&gy>=0&&gy<bufferW)buf[gx][gy]=hex;
+            }
+          }
+          x+=glyphW+space;
+        });
+        return buf;
+      }
+      function startScrollTextLayer(text,scale,speed,hex){
+        if(scrollInterval)stopScrollTextLayer();
+        const buf=makeTextColorBuffer(text,scale,hex);
+        let frame=0,maxFrame=buf[0].length-(visorRight-visorLeft+1);
+        scrollInterval=setInterval(()=>{
+          renderScrollToLayer(buf,frame);
+          frame=(frame+1)%maxFrame;
+        },speed);
+      }
+      function stopScrollTextLayer(){if(scrollInterval)clearInterval(scrollInterval),scrollInterval=null;clearScrollLayer();}
+      // Grid Logic & UI
+      function buildGrid(){
+        const grid=$('#grid');grid.innerHTML='';
+        for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+          const div=document.createElement('div');div.className='cell';cellElems[r][c]=div;
+          div.onmousedown=e=>{
+            mouseDown=true;
+            gridArray[r][c]=e.button===2?originalArray[r][c]??0:selectedColorIndex;
+            repaintCell(r,c);pushUndo();updateArrayDisplay();
+            e.preventDefault();
+          };
+          div.onmouseover=()=>{if(mouseDown&&latchMode){gridArray[r][c]=selectedColorIndex;repaintCell(r,c);updateArrayDisplay();}};
+          div.onmouseup=()=>mouseDown=false;
+          div.oncontextmenu=e=>{
+            gridArray[r][c]=originalArray[r][c]??0;repaintCell(r,c);pushUndo();updateArrayDisplay();e.preventDefault();
+          };
+          grid.appendChild(div);
+        }
+        document.addEventListener('mouseup',()=>mouseDown=false);
+      }
+      function createColorButtons(){
+        const row=$('#paletteRow');row.innerHTML='';
+        palette.forEach((c,i)=>{
+          const btn=createBtn(
+            'paletteColorBtn'+(i===selectedColorIndex?' selected':'')+(i===0?' transparent':''),
+            i===0?'<span style="font-size:1.2em;">⌀</span>':'',
+            ()=>{selectedColorIndex=i;createColorButtons();}
+          );
+          btn.style.backgroundColor=cellBg(i,c);
+          btn.title=i===0?'Transparent Pixel':`Palette ${i}`;
+          row.appendChild(btn);
+        });
+      }
+      function setupUserColorsUI(){
+        const div=$('#userColorsBlock');div.innerHTML='<strong>User Palette Colors:</strong>';
+        userColors.forEach((hex,i)=>{
+          const row=document.createElement('div');row.className='userColorRow';
+          row.innerHTML=`<label for=userColor${i}>Color ${i+1}: </label>`;
+          const input=Object.assign(document.createElement('input'),{type:'color',value:hex,id:`userColor${i}`}),
+            btn=createBtn('','Set',()=>setUserColor(i,input.value));
+          input.oninput=btn.onclick=()=>setUserColor(i,input.value);
+          row.append(input,btn);div.appendChild(row);
+        });
+      }
+      const setUserColor=(i,hex)=>{userColors[i]=hex;palette[1+i]=hexToRgbArr(hex);createColorButtons();drawGrid();};
+      // Save/Load
+      const serialiseProject=()=>JSON.stringify({version:1,palette,userColors,gridArray,originalArray,latchMode}),
+        saveProject=()=>{
+          const blob=new Blob([serialiseProject()],{type:'application/json'}),
+            a=document.createElement('a'),
+            ts=new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
+          a.href=URL.createObjectURL(blob);a.download=`pixelart-${ts}.pxproj`;a.click();URL.revokeObjectURL(a.href);
+        },
+        loadProject=json=>{
+          try{
+            const d=JSON.parse(json);
+            if(!d.gridArray||!d.palette)throw'Invalid project file';
+            palette=d.palette;userColors=d.userColors;gridArray=d.gridArray;
+            originalArray=d.originalArray||clone(gridArray);latchMode=!!d.latchMode;
+            setLatchUI();setupUserColorsUI();createColorButtons();drawGrid();pushUndo();
+          }catch(e){alert('Could not load project: '+e);}
+        };
+      // Quantization & Palette
+      function quantize(pixels,n=16){
+        let clusters=[],centroids=[];for(let i=0;i<n;i++)centroids.push(pixels[Math.floor(Math.random()*pixels.length)]||[0,0,0]),clusters.push([]);
+        let change=true;for(let iter=0;iter<8&&change;iter++){
+          clusters.forEach(c=>c.length=0);
+          for(const p of pixels){
+            let min=1e9,idx=0;
+            centroids.forEach((c,i)=>{const d=(p[0]-c[0])**2+(p[1]-c[1])**2+(p[2]-c[2])**2;if(d<min)min=d,idx=i;});
+            clusters[idx].push(p);
+          }
+          change=false;
+          centroids=clusters.map((cl,i)=>{
+            if(!cl.length)return centroids[i];
+            const avg=cl.reduce((a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],[0,0,0]).map(x=>Math.round(x/cl.length));
+            if(!centroids[i].every((v,d)=>v===avg[d]))change=true;
+            return avg;
+          });
+        }
+        return centroids;
+      }
+      const updatePaletteFromImage=pixels=>{
+        let imgCols=quantize(pixels,15);
+        palette=[[0,0,0,0],...imgCols];
+        userColors.forEach((hex,i)=>hex&&(palette[1+i]=hexToRgbArr(hex)));
+        createColorButtons();
+      },
+        rgbToPaletteIndex=(r,g,b,a=255)=>{
+          if(a<40)return 0;
+          let min=1e9,idx=1;
+          for(let i=1;i<palette.length;i++){
+            let c=palette[i],d=(r-c[0])**2+(g-c[1])**2+(b-c[2])**2;
+            if(d<min)min=d,idx=i;
+          }
+          return idx;
+        };
+      // Image Loading
+      $('#imageUpload').onchange=evt=>{
+        const file=evt.target.files[0];if(!file)return;
+        const r=new FileReader();
+        r.onloadend=()=>{
+          const img=new Image();img.src=r.result;img.crossOrigin='Anonymous';
+          img.onload=()=>{
+            const canvas=document.createElement('canvas');canvas.width=SIZE;canvas.height=SIZE;
+            const ctx=canvas.getContext('2d');ctx.clearRect(0,0,SIZE,SIZE);
+            ctx.drawImage(img,0,0,SIZE,SIZE);
+            const data=ctx.getImageData(0,0,SIZE,SIZE).data,pixels=[];
+            for(let i=0;i<SIZE*SIZE;i++){const o=i*4;if(data[o+3]>40)pixels.push([data[o],data[o+1],data[o+2]]);}
+            updatePaletteFromImage(pixels);
+            for(let row=0;row<SIZE;row++)for(let col=0;col<SIZE;col++){
+              const idx=(row*SIZE+col)*4,r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3],pi=rgbToPaletteIndex(r,g,b,a);
+              gridArray[row][col]=pi;originalArray[row][col]=pi;
+            }
+            drawGrid();pushUndo();
+          };
+        };r.readAsDataURL(file);
+      };
+      // Array Display & Export
+      const updateArrayDisplay=()=>{
+        const flat=gridArray.flat(),paletteString=palette.map(c=>c.length===4?"00":c.map(x=>x.toString(16).padStart(2,'0')).join('')).join(','),
+          rle=[],last=flat[0],count=1;let l=last,c=count;
+        for(let i=1;i<flat.length;i++)flat[i]===l?c++:(rle.push([l.toString(16),c]),l=flat[i],c=1);
+        rle.push([l.toString(16),c]);
+        $('#arrayDataOutput').value=`${paletteString};${rle.map(([a,n])=>a+':'+n).join(',')};${SIZE}`;
+      };
+      $('#arrayCopyBtn').onclick=()=>{$('#arrayDataOutput').select();document.execCommand('copy');};
+      $('#downloadPNG').onclick=()=>{
+        const canvas=document.createElement('canvas');canvas.width=SIZE;canvas.height=SIZE;
+        const ctx=canvas.getContext('2d'),imgData=ctx.createImageData(SIZE,SIZE);
+        for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+          const i=(r*SIZE+c)*4,idx=gridArray[r][c],col=palette[idx];
+          if(idx===0)imgData.data[i+3]=0;
+          else imgData.data[i]=col[0],imgData.data[i+1]=col[1],imgData.data[i+2]=col[2],imgData.data[i+3]=255;
+        }
+        ctx.putImageData(imgData,0,0);
+        const link=document.createElement('a');
+        link.download='pixelart.png';link.href=canvas.toDataURL('image/png');link.click();
+      };
+      $('#downloadSVG').onclick=()=>{
+        let svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" shape-rendering="crispEdges" style="background:none">`;
+        for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
+          const idx=gridArray[y][x],c=palette[idx];
+          if(idx)svg+=`<rect x="${x}" y="${y}" width="1" height="1" fill="rgb(${c[0]},${c[1]},${c[2]})"/>`;
+        }
+        svg+='</svg>';
+        const blob=new Blob([svg],{type:'image/svg+xml'}),link=document.createElement('a');
+        link.download='pixelart.svg';link.href=URL.createObjectURL(blob);link.click();URL.revokeObjectURL(link.href);
+      };
+      document.addEventListener('contextmenu',e=>e.preventDefault());
+      
+      // --- START: New functions for "BAM" button ---
+      function getBlackColorIndex() {
+          // Check for existing black [0,0,0]
+          let blackIndex = palette.findIndex(c => c.length === 3 && c[0] === 0 && c[1] === 0 && c[2] === 0);
+          if (blackIndex !== -1) {
+              return blackIndex;
+          }
+          // Add black if not found and update UI
+          palette.push([0, 0, 0]);
+          createColorButtons(); 
+          return palette.length - 1;
+      }
+
+      function toggleBam() {
+          const drawBamBtn = $('#drawBamBtn');
+          if (isBamDrawn) {
+              // --- CLEAR BAM ---
+              for (const [x, y] of bamPixelCoordinates) {
+                  // The coordinates are [col, row], so access gridArray as [y][x]
+                  if (gridArray[y]?.[x] !== undefined) {
+                       const key = `${y},${x}`;
+                       gridArray[y][x] = bamOriginalPixels[key] ?? 0; // Restore or default to transparent
+                  }
+              }
+              bamOriginalPixels = {}; // Clear storage
+              isBamDrawn = false;
+              drawBamBtn.textContent = 'Draw Bam';
+              drawBamBtn.classList.remove('on');
+          } else {
+              // --- DRAW BAM ---
+              const blackIndex = getBlackColorIndex();
+              bamOriginalPixels = {}; // Reset before drawing
+
+              for (const [x, y] of bamPixelCoordinates) {
+                  if (gridArray[y]?.[x] !== undefined) {
+                      const key = `${y},${x}`;
+                      bamOriginalPixels[key] = gridArray[y][x]; // Save original pixel
+                      gridArray[y][x] = blackIndex; // Draw with black
+                  }
+              }
+              isBamDrawn = true;
+              drawBamBtn.textContent = 'Clear Bam';
+              drawBamBtn.classList.add('on');
+          }
+          drawGrid(); 
+          pushUndo();
+      }
+      // --- END: New functions for "BAM" button ---
+
+      // Letters & Bank
+      function buildLetterColorSelector(){
+        const row=document.getElementById('letterColorRow');
+        row.innerHTML='';
+        const input=document.createElement('input');
+        input.type='color';input.value=letterColorHex;
+        input.style.width=input.style.height='36px';input.style.border='2.5px solid var(--color-primary)';
+        input.style.borderRadius='8px';input.title="Letter Colour";
+        input.oninput=e=>{letterColorHex=e.target.value;};
+        row.appendChild(input);
+      }
+      function insertLetter(text,scale=letterScale){
+        scale=Math.max(0.15,scale);
+        if(!text||!window.pixelFont)return;
+        const glyphs=[...text.toUpperCase()].map(ch=>pixelFont[ch]||pixelFont[' ']);
+        if(glyphs.some(g=>!g))return;
+        const visorW=visorRight-visorLeft+1,visorH=visorBot-visorTop+1,
+          glyphW=FONT_W*scale,glyphH=FONT_H*scale,wordW=glyphs.length*glyphW+(glyphs.length-1)*scale,
+          startCol=visorLeft+Math.round((visorW-wordW)/2),startRow=visorTop+Math.round((visorH-glyphH)/2)+visorOffsetY,
+          rgb=hexToRgbArr(letterColorHex);
+        let idx=palette.findIndex(c=>c[0]===rgb[0]&&c[1]===rgb[1]&&c[2]===rgb[2]);
+        if(idx===-1){palette.push(rgb);idx=palette.length-1;createColorButtons();}
+        glyphs.forEach((glyph,l)=>{
+          for(let gr=0;gr<FONT_H;gr++)for(let gc=0;gc<FONT_W;gc++){
+            if(glyph[gr][gc]!=='1')continue;
+            const px=startCol+Math.round(l*(glyphW+scale)+gc*scale),py=startRow+Math.round(gr*scale),
+              fillW=Math.max(1,Math.round(scale)),fillH=Math.max(1,Math.round(scale));
+            for(let dx=0;dx<fillW;dx++)for(let dy=0;dy<fillH;dy++){
+              const gx=px+dx,gy=py+dy;
+              if(gridArray[gy]?.[gx]!==undefined)gridArray[gy][gx]=idx;
+            }
+          }
+        });
+        drawGrid();pushUndo();
+      }
+      function buildLetterBank(){
+        const row=document.getElementById('letterBankRow');row.innerHTML='';
+        if(!window.pixelFont)return;
+        Object.keys(pixelFont).forEach(ch=>{
+          const btn=document.createElement('button');
+          btn.className='btn btn-outline';btn.style.fontFamily='monospace';btn.style.fontSize='1.1em';
+          btn.style.width=btn.style.height='32px';btn.textContent=ch;btn.title=`Insert "${ch}" (centered, large)`;
+          btn.onclick=()=>insertLetter(ch);
+          row.appendChild(btn);
+        });
+        const input=document.createElement('input');
+        input.type='text';input.maxLength=32;input.placeholder='Type...';
+        input.style.width='64px';input.style.marginLeft='4px';
+        input.onchange=()=>{insertLetter(input.value);input.value='';};
+        row.appendChild(input);
+      }
+      // UI HANDLERS
+      $('#latchToggle').onclick=()=>{latchMode=!latchMode;setLatchUI();};
+      $('#undoBtn').onclick=undo;
+      $('#saveProject').onclick=saveProject;
+      $('#loadProjectBtn').onclick=()=>$('#projectLoader').click();
+      $('#projectLoader').onchange=e=>{
+        const f=e.target.files[0];if(!f)return;
+        const r=new FileReader();r.onload=evt=>loadProject(evt.target.result);r.readAsText(f);e.target.value='';
+      };
+      document.addEventListener("DOMContentLoaded",()=>{
+        buildGrid();setupUserColorsUI();createColorButtons();buildLetterBank();buildLetterColorSelector();drawGrid();pushUndo();initScrollLayer();
+        $('#scrollSpeed').oninput=function(){if(scrollInterval){stopScrollTextLayer();$('#scrollText').textContent="Scroll";}};
+        document.getElementById('letterColorRow').addEventListener('input',e=>{if(e.target.type==='color')letterColorHex=e.target.value;});
+        window.addEventListener('beforeunload',stopScrollTextLayer);
+        $('#drawBamBtn').onclick = toggleBam; // Add listener for the new button
+      });
+      window.insertLetter=insertLetter;
+      // Array load/save enhancements
+      $('#loadArrayBtn').onclick=()=>$('#arrayLoader').click();
+      $('#arrayLoader').onchange=e=>{
+        const file=e.target.files[0];
+        if(!file)return;
+        const r=new FileReader();
+        r.onload=evt=>{
+          try{loadArrayFromText(evt.target.result);}catch(e){alert('Could not load array: '+e);}
+          e.target.value='';
+        };
+        r.readAsText(file);
+      };
+      $('#saveArrayRTF').onclick=function(){
+        const arr=$('#arrayDataOutput').value.trim();
+        if(!arr)return alert('No array data to save!');
+        const rtf=`{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\fnil\\fcharset0 Consolas;}}\\fs20\\f0 ${arr.replace(/[\n\r]+/g,'\\line ')} }`;
+        const blob=new Blob([rtf],{type:"application/rtf"});
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(blob);a.download='pixelart-array.rtf';a.click();URL.revokeObjectURL(a.href);
+      };
+      // Robust array loader for TXT/RTF/HTML
+      function loadArrayFromText(text){
+        try{
+          const dataRegex=/([0-9a-f,]+;[0-9a-f,:]+;[0-9]+)/i,match=text.match(dataRegex);
+          if(!match||!match[0])throw new Error("Could not find valid pixel array data in the file. Please ensure the data is in the format 'palette;rle_string;size'.");
+          const extractedData=match[0],parts=extractedData.trim().split(';');
+          if(parts.length<3||!parts[0]||!parts[1]||!parts[2])throw new Error("Invalid array format. Expected 'palette;rle_data;size'.");
+          const paletteString=parts[0],rleString=parts[1],sz=+parts[2],hex6=/^[0-9a-f]{6}$/i;
+          const palArr=paletteString.split(',').map(s=>{
+            const t=s.trim();if(t==="00")return [0,0,0,0];
+            if(hex6.test(t))return [parseInt(t.slice(0,2),16),parseInt(t.slice(2,4),16),parseInt(t.slice(4,6),16)];
+            console.warn(`Invalid color string "${t}" in palette. Substituting magenta.`);return [255,0,255];
+          });
+          let arr=Array.from({length:sz},()=>Array(sz).fill(0)),
+            rle=rleString.split(',').map(x=>{const[v,n]=x.split(':'),val=parseInt(v,16),num=parseInt(n,10);if(isNaN(val)||isNaN(num))throw new Error(`Malformed RLE pair: ${x}`);return [val,num];}),
+            flat=[];for(let[val,len]of rle)for(let i=0;i<len;i++)flat.push(val);
+          if(flat.length!==sz*sz)console.warn(`Pixel data length (${flat.length}) does not match grid size (${sz*sz}). The canvas may be incomplete.`);
+          for(let r=0,i=0;r<sz;r++)for(let c=0;c<sz;c++,i++)arr[r][c]=flat[i]??0;
+          if(sz!==SIZE)console.error(`Loaded array size (${sz}x${sz}) does not match hardcoded grid size (${SIZE}x${SIZE}). The application currently does not support dynamic grid resizing. The data will be loaded, but display may be incorrect.`);
+          palette=palArr;gridArray=clone(arr);originalArray=clone(arr);
+          userColors=palette.slice(1,6).map(rgb=>(!rgb||rgb.length<3)?"#000000":'#'+rgb.map(c=>c.toString(16).padStart(2,'0')).join(''));
+          setupUserColorsUI();createColorButtons();drawGrid();pushUndo();console.log(`Successfully loaded ${sz}x${sz} array.`);
+        }catch(e){
+          alert('Could not load array: '+e.message);
+          console.error("Array loading failed:",e);
+        }
+      }
+      </script>
+</body>
+</html>
