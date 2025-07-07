@@ -54,6 +54,12 @@ export function toggleColorVisibility(index) {
     }
   }
 
+  // Toggles the latch mode on/off and returns the new state.
+export function toggleLatchMode() {
+    latchMode = !latchMode;
+    return latchMode;
+  }
+
   
 
 export function pushUndo() {

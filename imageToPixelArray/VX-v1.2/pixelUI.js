@@ -20,21 +20,76 @@ export function drawGrid() {
   updateArrayDisplay();
 }
 export function buildGrid() {
-  const grid = $('#grid'); grid.innerHTML = '';
-  for(let r=0;r<core.SIZE;r++) for(let c=0;c<core.SIZE;c++) {
-    const div=document.createElement('div'); div.className='cell'; cellElems[r][c]=div;
-    div.onmousedown=e=>{
-      // Reading core.selectedColorIndex here is perfectly fine.
-      core.gridArray[r][c]=e.button===2?core.originalArray[r][c]??0:core.selectedColorIndex;
-      repaintCell(r,c); core.pushUndo(); updateArrayDisplay(); e.preventDefault();
+    const grid = $('#grid');
+    grid.innerHTML = '';
+    let isDrawing = false;
+
+    // A single, reliable mouseup listener on the window or document is often best
+    // to catch cases where the user releases the button outside the grid.
+    window.addEventListener('mouseup', () => {
+        if (isDrawing && core.latchMode) {
+            core.pushUndo();
+        }
+        isDrawing = false;
+    });
+
+    // We only need one mousedown listener on the parent grid.
+    grid.onmousedown = (e) => {
+        // Check if a cell was actually clicked and which mouse button was used.
+        if (e.target.classList.contains('cell')) {
+            isDrawing = true;
+            // Get the coordinates we stored on the element.
+            const { r, c } = e.target.dataset;
+            const row = parseInt(r, 10);
+            const col = parseInt(c, 10);
+
+            // Determine color and draw the pixel immediately.
+            const color = e.button === 2 ? core.originalArray[row][col] ?? 0 : core.selectedColorIndex;
+            if (core.gridArray[row][col] !== color) {
+                core.gridArray[row][col] = color;
+                repaintCell(row, col);
+            }
+            
+            // For single clicks (latch off), push undo immediately.
+            if (!core.latchMode) {
+                core.pushUndo();
+            }
+            e.preventDefault();
+        }
     };
-    div.onmouseover=()=>{};
-    div.oncontextmenu=e=>{
-      core.gridArray[r][c]=core.originalArray[r][c]??0; repaintCell(r,c); core.pushUndo(); updateArrayDisplay(); e.preventDefault();
+
+    // The mouseover should also be on the parent grid for efficiency.
+    grid.onmouseover = (e) => {
+        if (isDrawing && core.latchMode && e.target.classList.contains('cell')) {
+            const { r, c } = e.target.dataset;
+            const row = parseInt(r, 10);
+            const col = parseInt(c, 10);
+            
+            // For drag-drawing, we typically use the primary color.
+            const color = core.selectedColorIndex;
+            if (core.gridArray[row][col] !== color) {
+                core.gridArray[row][col] = color;
+                repaintCell(row, col);
+            }
+        }
     };
-    grid.appendChild(div);
-  }
-  document.addEventListener('mouseup',()=>{});
+    
+    // Prevent the default right-click menu on the entire grid.
+    grid.oncontextmenu = e => e.preventDefault();
+    
+    // Loop to create the cell elements.
+    for (let r = 0; r < core.SIZE; r++) {
+      for (let c = 0; c < core.SIZE; c++) {
+        const div = document.createElement('div');
+        div.className = 'cell';
+        // --- KEY CHANGE: Store coordinates on the element using data-* attributes ---
+        div.dataset.r = r;
+        div.dataset.c = c;
+        
+        cellElems[r][c] = div;
+        grid.appendChild(div);
+      }
+    }
 }
 
 export function createColorButtons() {

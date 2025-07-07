@@ -12,9 +12,11 @@ const $ = pixelUI.$;
 
 // --- GRID / APP INIT ---
 function init() {
+  let isDrawing = false; // Flag to track if the mouse is down
+
   // UI builders
-  pixelUI.buildGrid();
-  scrollLayer.initScrollLayer();
+  // Set up initial drawing and state
+  pixelUI.buildGrid(); // We pass the drawing flag functions to the grid builder  scrollLayer.initScrollLayer();
   pixelUI.setupUserColorsUI();
   pixelUI.createColorButtons();
   // (Optional) pixelUI.buildLetterBank(); // if you modularize this
@@ -33,9 +35,34 @@ function init() {
     pixelUI.updateArrayDisplay();
   };
 
+  // Add event listeners to the document to reliably track mouse state
+  document.addEventListener('mousedown', (e) => {
+    // Only start drawing if the left mouse button is clicked
+    if (e.button === 0) {
+      isDrawing = true;
+    }
+  });
+  document.addEventListener('mouseup', () => {
+    // Stop drawing when any mouse button is released
+    isDrawing = false;
+    // This is also a good place to push an undo state after a drag-draw action
+    // to avoid flooding the undo history. We'll check if latch mode was on.
+    if (core.latchMode) {
+      core.pushUndo();
+    }
+  });
+
+
+ // In your $('#latchToggle').onclick, after updating the button:
   $('#latchToggle').onclick = () => {
-    core.latchMode = !core.latchMode;
-    // Implement latch mode UI toggle if needed
+    const isLatchOn = core.toggleLatchMode();
+    const latchButton = $('#latchToggle');
+    latchButton.textContent = `Latch: ${isLatchOn ? 'On' : 'Off'}`;
+    latchButton.classList.toggle('on', isLatchOn);
+    // When turning latch mode OFF, ensure the drawing flag is reset.
+    if (!isLatchOn) {
+        isDrawing = false;
+    }
   };
 
   $('#undoBtn').onclick = () => {
