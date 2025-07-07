@@ -1,6 +1,7 @@
 // pixelCore.js
 export const SIZE = 64, MAX_UNDO = 100, FONT_W = 5, FONT_H = 7, visorTop = 19, visorBot = 46, visorLeft = 13, visorRight = 50, visorOffsetY = -3;
 export let palette = [[0,0,0,0]];
+export let colorVisibility = []; // <-- ADD THIS LINE
 export let userColors = Array(5).fill("#ffd700");
 export let gridArray = Array.from({length: SIZE}, () => Array(SIZE).fill(0));
 export let originalArray = Array.from({length: SIZE}, () => Array(SIZE).fill(0));
@@ -38,6 +39,16 @@ export const rgbToPaletteIndex = (r,g,b,a=255) => {
   }
   return idx;
 };
+
+// --- ADD a new function to toggle visibility ---
+export function toggleColorVisibility(index) {
+    if (colorVisibility[index] !== undefined) {
+      colorVisibility[index] = !colorVisibility[index];
+    }
+  }
+
+  
+
 export function pushUndo() {
   if (gridHistory.length > MAX_UNDO) gridHistory.shift(), undoPointer--;
   gridHistory = gridHistory.slice(0, undoPointer+1);
@@ -51,11 +62,28 @@ export function popUndo() {
 export function serialiseProject() {
   return JSON.stringify({version:1, palette, userColors, gridArray, originalArray, latchMode});
 }
-export function loadProjectObj(obj) {
-  palette = obj.palette; userColors = obj.userColors;
-  gridArray = obj.gridArray; originalArray = obj.originalArray || clone(gridArray);
-  latchMode = !!obj.latchMode;
-}
+// --- ADD THIS NEW EXPORTED FUNCTION ---
+// This function will be called by the UI to ensure the visibility array is valid.
+export function syncColorVisibility() {
+    // If the arrays are out of sync, reset the visibility array.
+    // This can happen on initial load or if the palette is changed dynamically.
+    if (colorVisibility.length !== palette.length) {
+      colorVisibility = Array(palette.length).fill(true);
+    }
+  }
+  
+  export function loadProjectObj(obj) {
+    palette = obj.palette; 
+    userColors = obj.userColors;
+    gridArray = obj.gridArray;
+    originalArray = obj.originalArray || clone(gridArray);
+    latchMode = !!obj.latchMode;
+    // This is correct as it's inside its own module.
+    // We'll just call our new function for consistency.
+    syncColorVisibility();
+  }
+  
+
 export function setUserColor(i, hex) {
   userColors[i] = hex; palette[1+i] = hexToRgbArr(hex);
 }
@@ -93,7 +121,9 @@ export function loadArrayFromText(text) {
       for (let r = 0, i = 0; r < sz; r++) for (let c = 0; c < sz; c++, i++) arr[r][c] = flat[i] ?? 0;
       if (sz !== SIZE)
         console.error(`Loaded array size (${sz}x${sz}) does not match hardcoded grid size (${SIZE}x${SIZE}). The application currently does not support dynamic grid resizing. The data will be loaded, but display may be incorrect.`);
+      // After successfully creating the new palette and grid:
       palette = palArr;
+      syncColorVisibility();
       gridArray = clone(arr);
       originalArray = clone(arr);
       userColors = palette.slice(1, 6).map(rgb =>

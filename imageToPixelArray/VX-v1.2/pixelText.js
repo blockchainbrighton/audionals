@@ -12,8 +12,12 @@ export function insertLetter(text, scale=core.letterScale) {
     startCol=core.visorLeft+Math.round((visorW-wordW)/2),
     startRow=core.visorTop+Math.round((visorH-glyphH)/2)+core.visorOffsetY,
     rgb=core.hexToRgbArr(core.letterColorHex);
-  let idx=core.palette.findIndex(c=>c[0]===rgb[0]&&c[1]===rgb[1]&&c[2]===rgb[2]);
-  if (idx===-1) { core.palette.push(rgb); idx = core.palette.length-1; }
+    let idx=core.palette.findIndex(c=>c[0]===rgb[0]&&c[1]===rgb[1]&&c[2]===rgb[2]);
+    if (idx===-1) { 
+      core.palette.push(rgb);
+      core.colorVisibility.push(true); // <-- ADD THIS LINE to keep arrays in sync
+      idx = core.palette.length-1; 
+    }
   glyphs.forEach((glyph,l)=>{
     for(let gr=0;gr<core.FONT_H;gr++)for(let gc=0;gc<core.FONT_W;gc++){
       if(glyph[gr][gc]!=='1')continue;
