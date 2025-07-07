@@ -47,6 +47,13 @@ export function toggleColorVisibility(index) {
     }
   }
 
+  export function setSelectedColorIndex(index) {
+    // We can add a little validation to make sure the index is valid
+    if (typeof index === 'number' && index >= 0 && index < palette.length) {
+      selectedColorIndex = index;
+    }
+  }
+
   
 
 export function pushUndo() {

@@ -8,15 +8,13 @@ export const $ = s => document.querySelector(s);
 
 export function repaintCell(r,c) {
     const idx = core.gridArray[r][c];
-    // If the color is hidden (and it's not the transparent 'color 0'), draw nothing.
     if (!core.colorVisibility[idx]) {
       cellElems[r][c].style.backgroundColor = 'rgba(0,0,0,0)';
     } else {
-      // Otherwise, draw as normal.
       const col = core.palette[idx];
       cellElems[r][c].style.backgroundColor = core.cellBg(idx, col);
     }
-  }
+}
 export function drawGrid() {
   for(let r=0;r<core.SIZE;r++) for(let c=0;c<core.SIZE;c++) repaintCell(r,c);
   updateArrayDisplay();
@@ -26,10 +24,11 @@ export function buildGrid() {
   for(let r=0;r<core.SIZE;r++) for(let c=0;c<core.SIZE;c++) {
     const div=document.createElement('div'); div.className='cell'; cellElems[r][c]=div;
     div.onmousedown=e=>{
+      // Reading core.selectedColorIndex here is perfectly fine.
       core.gridArray[r][c]=e.button===2?core.originalArray[r][c]??0:core.selectedColorIndex;
       repaintCell(r,c); core.pushUndo(); updateArrayDisplay(); e.preventDefault();
     };
-    div.onmouseover=()=>{}; // Latch mode omitted for brevity
+    div.onmouseover=()=>{};
     div.oncontextmenu=e=>{
       core.gridArray[r][c]=core.originalArray[r][c]??0; repaintCell(r,c); core.pushUndo(); updateArrayDisplay(); e.preventDefault();
     };
@@ -42,11 +41,9 @@ export function createColorButtons() {
     const row = $('#paletteRow');
     row.innerHTML = '';
     
-    // --- FIX: Call the manager function from core instead of assigning directly ---
     core.syncColorVisibility();
   
     core.palette.forEach((c, i) => {
-      // Create a container for the button and its toggle
       const container = document.createElement('div');
       container.style.display = 'flex';
       container.style.alignItems = 'center';
@@ -57,24 +54,25 @@ export function createColorButtons() {
       btn.innerHTML = i === 0 ? '<span style="font-size:1.2em;">⌀</span>' : '';
       btn.style.backgroundColor = core.cellBg(i, c);
       btn.title = i === 0 ? 'Transparent Pixel (Cannot be hidden)' : `Palette ${i}`;
+      
+      // --- FIX: Use the new setter function to change the state ---
       btn.onclick = () => { 
-        core.selectedColorIndex = i; 
-        createColorButtons(); 
+        core.setSelectedColorIndex(i); // Call the manager function
+        createColorButtons();         // Redraw the UI to show the selection
       };
   
       container.appendChild(btn);
   
-      // Add a visibility toggle checkbox for every color except transparent (index 0)
       if (i > 0) {
         const toggle = document.createElement('input');
         toggle.type = 'checkbox';
-        toggle.checked = core.colorVisibility[i]; // Reading the value is fine
+        toggle.checked = core.colorVisibility[i];
         toggle.title = 'Toggle color visibility';
         toggle.style.cursor = 'pointer';
         toggle.onclick = (e) => {
-          e.stopPropagation(); // Prevent the click from bubbling
-          core.toggleColorVisibility(i); // This mutates the array, which is also fine
-          drawGrid(); // Redraw the entire grid to show/hide pixels
+          e.stopPropagation();
+          core.toggleColorVisibility(i);
+          drawGrid();
         };
         container.appendChild(toggle);
       }
@@ -83,12 +81,14 @@ export function createColorButtons() {
     });
 }
 
+// ... the rest of pixelUI.js remains the same ...
+
 export function setupUserColorsUI() {
   const div = $('#userColorsBlock');
   div.innerHTML = '<strong>User Palette Colors:</strong>';
   
   core.userColors.forEach((hex, i) => {
-    const paletteIndex = 1 + i; // User colors start at index 1 in the main palette
+    const paletteIndex = 1 + i;
 
     const row = document.createElement('div');
     row.className = 'userColorRow';
@@ -100,17 +100,15 @@ export function setupUserColorsUI() {
 
     const setColorAndUpdate = () => {
       core.setUserColor(i, input.value);
-      createColorButtons(); // Re-create main palette to reflect the change
-      drawGrid(); // Redraw the grid with the new color
+      createColorButtons();
+      drawGrid();
     };
 
     btn.onclick = setColorAndUpdate;
     input.oninput = setColorAndUpdate;
 
-    // Add visibility toggle
     const toggle = document.createElement('input');
     toggle.type = 'checkbox';
-    // Check against the master visibility array
     toggle.checked = core.colorVisibility[paletteIndex] ?? true;
     toggle.title = 'Toggle color visibility';
     toggle.style.cursor = 'pointer';
