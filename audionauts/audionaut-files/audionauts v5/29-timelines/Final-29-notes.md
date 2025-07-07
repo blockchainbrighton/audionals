@@ -44,3 +44,7 @@
 | spectral-solidity.js                 | Slow Flow - UGLY END                                           |
 | timeline\_colourBandsGlitchReveal.js | Nice pixel/vshift - UGLY END                                   |
 | timeline\_windowSweepReveal.js       | Love this noise and colour - UGLY END                          |
+
+
+analog film ✔️ 
+CrystalBloomTimed  ✔️ 
