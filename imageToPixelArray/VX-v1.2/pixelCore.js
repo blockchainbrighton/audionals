@@ -60,6 +60,41 @@ export function toggleLatchMode() {
     return latchMode;
   }
 
+  // --- ADD THIS NEW EXPORTED FUNCTION ---
+/**
+ * Returns a new grid array where any pixels corresponding to a hidden color
+ * (as defined in colorVisibility) are replaced with the transparent index (0).
+ * This is used for generating output like the array string or downloadable files.
+ */
+export function getVisibleGrid() {
+    // Create a new grid by cloning the original to avoid modifying it.
+    const visibleGrid = clone(gridArray);
+  
+    // Find all color indexes that are currently hidden.
+    const hiddenIndexes = [];
+    colorVisibility.forEach((isVisible, index) => {
+      if (!isVisible) {
+        hiddenIndexes.push(index);
+      }
+    });
+  
+    // If no colors are hidden, we can return the clone immediately.
+    if (hiddenIndexes.length === 0) {
+      return visibleGrid;
+    }
+  
+    // Loop through the grid and replace any hidden color pixels with transparent (0).
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        if (hiddenIndexes.includes(visibleGrid[r][c])) {
+          visibleGrid[r][c] = 0; // Set to transparent
+        }
+      }
+    }
+  
+    return visibleGrid;
+  }
+
   
 
 export function pushUndo() {

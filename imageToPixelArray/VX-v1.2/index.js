@@ -146,7 +146,76 @@ function init() {
     URL.revokeObjectURL(a.href);
   };
 
-  // More event handlers as needed for palette, PNG, SVG, etc.
+  $('#downloadPNG').onclick = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = core.SIZE;
+    canvas.height = core.SIZE;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(core.SIZE, core.SIZE);
+  
+    // --- 1. Get the filtered grid first ---
+    const visibleGrid = core.getVisibleGrid();
+  
+    for (let r = 0; r < core.SIZE; r++) {
+      for (let c = 0; c < core.SIZE; c++) {
+        const pixelArrayIndex = (r * core.SIZE + c) * 4;
+        
+        // --- 2. Use the filtered grid data ---
+        const colorIndex = visibleGrid[r][c];
+        const colorRgb = core.palette[colorIndex];
+  
+        // --- 3. The logic is now much simpler ---
+        // If the index is 0, it's transparent. Otherwise, it's a visible color.
+        if (colorIndex === 0) {
+          imgData.data[pixelArrayIndex + 3] = 0; // Alpha
+        } else {
+          imgData.data[pixelArrayIndex] = colorRgb[0];     // R
+          imgData.data[pixelArrayIndex + 1] = colorRgb[1]; // G
+          imgData.data[pixelArrayIndex + 2] = colorRgb[2]; // B
+          imgData.data[pixelArrayIndex + 3] = 255;         // Alpha
+        }
+      }
+    }
+  
+    ctx.putImageData(imgData, 0, 0);
+  
+    const link = document.createElement('a');
+    link.download = 'pixelart.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+  
+  $('#downloadSVG').onclick = () => {
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${core.SIZE}" height="${core.SIZE}" shape-rendering="crispEdges">`;
+  
+    // --- 1. Get the filtered grid first ---
+    const visibleGrid = core.getVisibleGrid();
+  
+    for (let y = 0; y < core.SIZE; y++) {
+      for (let x = 0; x < core.SIZE; x++) {
+        // --- 2. Use the filtered grid data ---
+        const colorIndex = visibleGrid[y][x];
+  
+        // --- 3. The logic is now much simpler ---
+        // If the index is not 0, it's a visible color that should be in the SVG.
+        if (colorIndex > 0) {
+          const colorRgb = core.palette[colorIndex];
+          svg += `<rect x="${x}" y="${y}" width="1" height="1" fill="rgb(${colorRgb[0]},${colorRgb[1]},${colorRgb[2]})"/>`;
+        }
+      }
+    }
+    
+    svg += '</svg>';
+  
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const link = document.createElement('a');
+    link.download = 'pixelart.svg';
+    link.href = URL.createObjectURL(blob);
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+  
+  
   // See your previous index.js for anything not moved to a module.
 
   // For preset loader: hook up array handler

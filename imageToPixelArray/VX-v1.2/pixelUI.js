@@ -181,10 +181,17 @@ export function setupUserColorsUI() {
 }
 
 export function updateArrayDisplay() {
-  const flat=core.gridArray.flat(),paletteString=core.palette.map(c=>c.length===4?"00":c.map(x=>x.toString(16).padStart(2,'0')).join('')).join(','),
-    rle=[],last=flat[0],count=1;
-  let l=last,c=count;
-  for(let i=1;i<flat.length;i++)flat[i]===l?c++:(rle.push([l.toString(16),c]),l=flat[i],c=1);
-  rle.push([l.toString(16),c]);
-  $('#arrayDataOutput').value=`${paletteString};${rle.map(([a,n])=>a+':'+n).join(',')};${core.SIZE}`;
-}
+    // --- FIX: Use the new getVisibleGrid() to generate the array string ---
+    const visibleGrid = core.getVisibleGrid();
+    const flat = visibleGrid.flat();
+    
+    const paletteString = core.palette.map(c => c.length === 4 ? "00" : c.map(x => x.toString(16).padStart(2, '0')).join('')).join(',');
+    
+    let rle = [], l = flat[0], c = 1;
+    for (let i = 1; i < flat.length; i++) {
+      flat[i] === l ? c++ : (rle.push([l.toString(16), c]), l = flat[i], c = 1);
+    }
+    rle.push([l.toString(16), c]);
+    
+    $('#arrayDataOutput').value = `${paletteString};${rle.map(([a, n]) => a + ':' + n).join(',')};${core.SIZE}`;
+  }
