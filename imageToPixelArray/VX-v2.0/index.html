@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pixel Art Maker – Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --sidebar-width: 240px; --radius: 10px; --color-border: #d0d5e0;
+      --color-primary: #105fe0; --color-primary-light: #5d8cff; --color-accent: #36d3aa;
+      --color-danger: #a23b4a; --font-family: "Inter", system-ui, sans-serif; --grid-max: 640px;
+    }
+    *,*::before,*::after{box-sizing:border-box;}
+    html,body{height:100%;margin:0;}
+    body{display:flex;flex-direction:column;min-width:900px;min-height:650px;
+      font-family:var(--font-family);background:#f4f6fb;color:#333;}
+    #mainLayout{flex:1;display:flex;}
+    #leftColumn{flex:0 0 var(--sidebar-width);display:flex;flex-direction:column;gap:1rem;
+      padding:1rem .75rem;background:#fff;border-right:1px solid var(--color-border);}
+    #rightColumn{flex:1;display:flex;flex-direction:column;align-items:center;gap:1rem;
+      padding:1rem 1.5rem;overflow:auto;}
+    .btn{display:inline-flex;align-items:center;justify-content:center;
+      padding:.5rem 1rem;font-weight:600;font-size:1rem;
+      border-radius:var(--radius);border:1.8px solid transparent;
+      background:#fff;cursor:pointer;transition:background .15s,box-shadow .15s;}
+    .btn:active{transform:translateY(1px);}
+    .btn-primary{background:var(--color-primary);color:#fff;}
+    .btn-outline{border-color:var(--color-primary);color:var(--color-primary);background:#fafcfe;}
+    .btn-danger{border-color:var(--color-danger);color:var(--color-danger);background:#fafcfe;}
+    #latchToggle.on{background:var(--color-accent);border-color:#0c8b67;color:#fff;}
+    #paletteRow{display:flex;flex-wrap:wrap;gap:.5rem;}
+    .paletteColorBtn{width:34px;height:34px;border-radius:8px;border:2px solid #888;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;}
+    .paletteColorBtn.selected{border-color:var(--color-primary);box-shadow:0 0 0 2px var(--color-primary-light);}
+    .paletteColorBtn.transparent{background:repeating-linear-gradient(45deg,#ddd 0 8px,#fff 8px 16px);border-style:dashed;}
+    .userColorRow{display:flex;align-items:center;gap:.25rem;font-size:.9rem;}
+    #gridBox {
+      width:min(var(--grid-max),60vmin);height:min(var(--grid-max),60vmin);
+      position:relative; display:block;
+    }
+    .pixel-layer {
+      position:absolute; left:0; top:0; width:100%; height:100%;
+      display:grid; grid-template-columns:repeat(64,1fr); grid-template-rows:repeat(64,1fr);
+      pointer-events:none;
+    }
+    #grid { z-index:3; pointer-events:auto; }
+    #scrollLayer { z-index:2; }
+    .cell,.scroll-cell {
+      width:100%; height:100%; border:1px solid #f4f7fc; background-clip:padding-box;
+      position:relative;
+    }
+    .scroll-cell { pointer-events:none; }
+    [data-size].selected{background:var(--color-primary);color:#fff;}
+    @media(max-width:1200px){:root{--sidebar-width:200px;}}
+  </style>
+</head>
+<body>
+  <div id="editorWrap" style="
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    min-height: 100vh; width: 100vw; margin: 0; padding: 0;
+  ">
+    <!-- Controls Toolbar -->
+    <div id="topToolbar" style="
+      display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .4rem; align-items: center; justify-content: center;
+      width: 100%; max-width: 720px;
+    ">
+      <input type="file" id="imageUpload" accept="image/*">
+      <button id="clearCanvas" class="btn btn-outline">Clear</button>
+      <button id="saveProject" class="btn btn-outline">Save Project</button>
+      <button id="loadProjectBtn" class="btn btn-outline">Load Project</button>
+      <input type="file" id="projectLoader" accept=".pxproj,.json" hidden>
+      <button id="latchToggle" class="btn btn-outline">Latch: Off</button>
+      <button id="undoBtn" class="btn btn-danger">Undo</button>
+      <button id="loadArrayBtn" class="btn btn-outline">Load Array</button>
+      <button id="AddBamBtn" class="btn btn-outline">Add BAM</button>
+
+      <input type="file" id="arrayLoader" hidden>
+    </div>
+
+    <!-- Preset Loader UI -->
+    <div id="presetLoaderUI" style="display: flex; align-items: center; gap: 0.5rem;">
+        <span style="font-weight:600;">Presets:</span>
+        <button id="presetPrev" class="btn btn-outline" title="Previous Preset">&#8592;</button>
+        <span id="presetName" style="min-width:120px;display:inline-block;text-align:center;"></span>
+        <button id="presetNext" class="btn btn-outline" title="Next Preset">&#8594;</button>
+        <button id="presetLoad" class="btn btn-primary">Load</button>
+    </div>
+  
+
+    <!-- Main Square Layout: [Palette | Grid | LetterBank] -->
+    <div id="mainSquare" style="
+      display: flex; flex-direction: row; align-items: flex-start; justify-content: center;
+      width: 100%; max-width: 720px; min-height: 660px; background: none;
+    ">
+      <!-- Left: Palette/Colors (tight vertical) -->
+      <div id="paletteCol" style="display: flex; flex-direction: column; align-items: center; gap: .3rem; margin-right: .6rem;">
+        <div id="paletteRow" style="display: flex; flex-direction: column; gap: .33rem;"></div>
+        <div id="userColorsBlock"></div>
+        <div id="letterColorBlock" style="margin-top: .7rem;">
+          <strong style="font-size:.88em;">Letter Colour:</strong>
+          <div id="letterColorRow" style="display:flex;flex-direction:column;gap:.18rem;margin:.22rem 0;"></div>
+        </div>
+      </div>
+
+      <!-- Center: Grid -->
+      <div style="display: flex; flex-direction: column; align-items: center;">
+        <div id="gridBox" style="width: 480px; height: 480px; position: relative; margin-bottom: .3rem;">
+          <div id="scrollLayer" class="pixel-layer"></div>
+          <div id="grid" class="pixel-layer"></div>
+        </div>
+        <!-- Mini controls: text size, place/scroll, etc -->
+        <div id="textControls" style="display: flex; align-items: center; gap: .4rem; margin: .1rem 0 .15rem 0;">
+          <label>Size:</label>
+          <button type="button" class="btn btn-outline" data-size="2">S</button>
+          <button type="button" class="btn btn-outline selected" data-size="3">M</button>
+          <button type="button" class="btn btn-outline" data-size="4">L</button>
+          <input type="range" id="textSizeSlider" min="0.15" max="14" step="0.05" value="3" style="width:70px;">
+          <span id="textSizeValue" style="width:26px;display:inline-block;text-align:center;">3</span>
+          <input type="text" id="textInput" maxlength="32" placeholder="Type text…" style="width:94px;">
+          <button id="placeText" class="btn btn-primary">Place</button>
+          <button id="scrollText" class="btn btn-outline">Scroll</button>
+          <input type="range" id="scrollSpeed" min="40" max="400" value="120" style="width:50px;" title="Scroll Speed (ms)">
+        </div>
+      </div>
+
+      <!-- Right: Letter Bank (vertical) -->
+      <div id="letterBankCol" style="
+        display: flex; flex-direction: column; align-items: center; gap: .3rem; margin-left: .6rem;
+        max-height: 480px; overflow-y: auto;
+      ">
+        <strong style="font-size:.92em; margin-bottom:.22rem;">Letter Bank:</strong>
+        <div id="letterBankRow" style="
+          display: flex; flex-direction: column; flex-wrap: wrap; gap: .17rem; align-items: flex-start;
+          max-height: 420px; overflow-y: auto;
+        "></div>
+      </div>
+    </div>
+
+    <!-- Array Data Output (always below) -->
+    <section id="arrayDataBlock" style="
+      width: 100%; max-width: 700px; display: flex; flex-direction: column; gap: .25rem; margin-top: .6rem; align-items: center;
+    ">
+    <button id="saveArrayRTF" class="btn btn-outline" style="min-width:110px;">Save Array (RTF)</button>
+
+      <label for="arrayDataOutput" style="font-weight:600;">Pixel Array Data:</label>
+      <textarea id="arrayDataOutput" readonly style="
+        width: 100%; height: 92px; font-family:'JetBrains Mono','Menlo',monospace; border:1.2px solid #ccc;
+        border-radius:5px; resize: none; background: #fff; font-size: 1em;
+      "></textarea>
+      <div style="display: flex; gap: .45rem; flex-wrap: wrap; justify-content: center;">
+        <button id="arrayCopyBtn" class="btn btn-outline" style="min-width:110px;">Copy Array</button>
+        <button id="downloadPNG" class="btn btn-outline" style="min-width:110px;">Download PNG</button>
+        <button id="downloadSVG" class="btn btn-outline" style="min-width:100px;">Download SVG</button>
+      </div>
+    </section>
+  </div>
+</body>
+
+
+  <script type="module">
+    // --- Pixel Font: (no changes except whitespace minimization) ---
+    export const pixelFont = {
+      "A":["01110","10001","10001","11111","10001","10001","10001"],
+      "B":["11110","10001","10001","11110","10001","10001","11110"],
+      "C":["01110","10001","10000","10000","10000","10001","01110"],
+      "D":["11110","10001","10001","10001","10001","10001","11110"],
+      "E":["11111","10000","10000","11110","10000","10000","11111"],
+      "F":["11111","10000","10000","11110","10000","10000","10000"],
+      "G":["01110","10001","10000","10111","10001","10001","01111"],
+      "H":["10001","10001","10001","11111","10001","10001","10001"],
+      "I":["111","010","010","010","010","010","111"],
+      "J":["00111","00010","00010","00010","10010","10010","01100"],
+      "K":["10001","10010","10100","11000","10100","10010","10001"],
+      "L":["10000","10000","10000","10000","10000","10000","11111"],
+      "M":["10001","11011","10101","10101","10001","10001","10001"],
+      "N":["10001","10001","11001","10101","10011","10001","10001"],
+      "O":["01110","10001","10001","10001","10001","10001","01110"],
+      "P":["11110","10001","10001","11110","10000","10000","10000"],
+      "Q":["01110","10001","10001","10001","10101","10010","01101"],
+      "R":["11110","10001","10001","11110","10100","10010","10001"],
+      "S":["01111","10000","10000","01110","00001","00001","11110"],
+      "T":["11111","00100","00100","00100","00100","00100","00100"],
+      "U":["10001","10001","10001","10001","10001","10001","01110"],
+      "V":["10001","10001","10001","10001","10001","01010","00100"],
+      "W":["10001","10001","10001","10101","10101","11011","10001"],
+      "X":["10001","10001","01010","00100","01010","10001","10001"],
+      "Y":["10001","10001","10001","01010","00100","00100","00100"],
+      "Z":["11111","00001","00010","00100","01000","10000","11111"],
+      "0":["01110","10001","10011","10101","11001","10001","01110"],
+      "1":["010","110","010","010","010","010","111"],
+      "2":["01110","10001","00001","00010","00100","01000","11111"],
+      "3":["11110","00001","00001","01110","00001","00001","11110"],
+      "4":["00010","00110","01010","10010","11111","00010","00010"],
+      "5":["11111","10000","10000","11110","00001","00001","11110"],
+      "6":["01110","10000","10000","11110","10001","10001","01110"],
+      "7":["11111","00001","00010","00100","01000","10000","10000"],
+      "8":["01110","10001","10001","01110","10001","10001","01110"],
+      "9":["01110","10001","10001","01111","00001","00001","01110"],
+      " ":["00000","00000","00000","00000","00000","00000","00000"],
+      ".":["00000","00000","00000","00000","00000","01100","01100"],
+      "-":["00000","00000","00000","01110","00000","00000","00000"]
+    };
+    export const FONT_W = 5, FONT_H = 7;
+    window.pixelFont = pixelFont;
+    window.FONT_W = FONT_W;
+    window.FONT_H = FONT_H;
+    </script>
+
+
+<script type="module" src="./index.js"></script>
