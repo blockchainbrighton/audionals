@@ -92,93 +92,99 @@ export function buildGrid() {
     }
 }
 
+// Palette color button rendering: one container, direct children, grid-friendly
 export function createColorButtons() {
-    const row = $('#paletteRow');
-    row.innerHTML = '';
-    
-    core.syncColorVisibility();
-  
-    core.palette.forEach((c, i) => {
-      const container = document.createElement('div');
-      container.style.display = 'flex';
-      container.style.alignItems = 'center';
-      container.style.gap = '4px';
-  
-      const btn = document.createElement('button');
-      btn.className = 'paletteColorBtn' + (i === core.selectedColorIndex ? ' selected' : '') + (i === 0 ? ' transparent' : '');
-      btn.innerHTML = i === 0 ? '<span style="font-size:1.2em;">⌀</span>' : '';
-      btn.style.backgroundColor = core.cellBg(i, c);
-      btn.title = i === 0 ? 'Transparent Pixel (Cannot be hidden)' : `Palette ${i}`;
-      
-      // --- FIX: Use the new setter function to change the state ---
-      btn.onclick = () => { 
-        core.setSelectedColorIndex(i); // Call the manager function
-        createColorButtons();         // Redraw the UI to show the selection
+  const paletteContainer = document.querySelector('.palette-container');
+  paletteContainer.innerHTML = '';
+  core.syncColorVisibility();
+
+  core.palette.forEach((c, i) => {
+    // Button: main palette color button
+    const btn = document.createElement('button');
+    btn.className = [
+      'paletteColorBtn',
+      i === core.selectedColorIndex ? 'selected' : '',
+      i === 0 ? 'transparent' : ''
+    ].join(' ');
+    btn.style.backgroundColor = core.cellBg(i, c);
+    btn.title = i === 0 ? 'Transparent Pixel (Cannot be hidden)' : `Palette ${i}`;
+    btn.innerHTML = i === 0
+      ? '<span style="font-size:1.2em;">⌀</span>'
+      : '';
+
+    btn.onclick = () => {
+      core.setSelectedColorIndex(i);
+      createColorButtons();
+    };
+
+    // Optional: Add color visibility toggle as overlay
+    if (i > 0) {
+      const toggle = document.createElement('input');
+      toggle.type = 'checkbox';
+      toggle.checked = core.colorVisibility[i];
+      toggle.title = 'Toggle color visibility';
+      toggle.className = 'paletteVisibilityToggle';
+      toggle.onclick = (e) => {
+        e.stopPropagation();
+        core.toggleColorVisibility(i);
+        drawGrid();
       };
-  
-      container.appendChild(btn);
-  
-      if (i > 0) {
-        const toggle = document.createElement('input');
-        toggle.type = 'checkbox';
-        toggle.checked = core.colorVisibility[i];
-        toggle.title = 'Toggle color visibility';
-        toggle.style.cursor = 'pointer';
-        toggle.onclick = (e) => {
-          e.stopPropagation();
-          core.toggleColorVisibility(i);
-          drawGrid();
-        };
-        container.appendChild(toggle);
-      }
-      
-      row.appendChild(container);
-    });
+      btn.appendChild(toggle);
+    }
+
+    paletteContainer.appendChild(btn);
+  });
 }
 
-// ... the rest of pixelUI.js remains the same ...
-
+// User color settings: more compact, single row per color, flex layout
 export function setupUserColorsUI() {
-  const div = $('#userColorsBlock');
+  const div = document.getElementById('userColorsBlock');
   div.innerHTML = '<strong>User Palette Colors:</strong>';
-  
   core.userColors.forEach((hex, i) => {
     const paletteIndex = 1 + i;
-
     const row = document.createElement('div');
     row.className = 'userColorRow';
-    row.innerHTML = `<label for=userColor${i}>Color ${i + 1}: </label>`;
-    
-    const input = Object.assign(document.createElement('input'), { type: 'color', value: hex, id: `userColor${i}` });
+
+    // Color label
+    row.innerHTML = `<label for="userColor${i}">Color ${i + 1}:</label>`;
+
+    // Color input
+    const input = document.createElement('input');
+    input.type = 'color';
+    input.value = hex;
+    input.id = `userColor${i}`;
+    input.oninput = setColorAndUpdate;
+
+    // Set button
     const btn = document.createElement('button');
     btn.innerText = 'Set';
+    btn.onclick = setColorAndUpdate;
 
-    const setColorAndUpdate = () => {
+    function setColorAndUpdate() {
       core.setUserColor(i, input.value);
       createColorButtons();
       drawGrid();
-    };
+    }
 
-    btn.onclick = setColorAndUpdate;
-    input.oninput = setColorAndUpdate;
-
+    // Visibility toggle
     const toggle = document.createElement('input');
     toggle.type = 'checkbox';
     toggle.checked = core.colorVisibility[paletteIndex] ?? true;
     toggle.title = 'Toggle color visibility';
-    toggle.style.cursor = 'pointer';
-    toggle.style.marginLeft = 'auto';
+    toggle.className = 'userColorVisibilityToggle';
     toggle.onclick = (e) => {
       e.stopPropagation();
       core.toggleColorVisibility(paletteIndex);
       drawGrid();
-      createColorButtons(); 
+      createColorButtons();
     };
-    
+
+    // Build row
     row.append(input, btn, toggle);
     div.appendChild(row);
   });
 }
+
 
 export function updateArrayDisplay() {
     // --- FIX: Use the new getVisibleGrid() to generate the array string ---
