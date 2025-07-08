@@ -119,24 +119,28 @@ Colliders
 
 ---
 
-**PUNX?** GIFs - May need update to work
+**PUNX?** 
+
+MP4 - Needs mp4 extrator module
 
 # 512517 - PUNX LOGO HI-RES - [https://ordinals.com/content/c2beb99dbc32188e56ea2ca3750c99a6ce9145892678473b51802ce680cb5f16i0](https://ordinals.com/content/c2beb99dbc32188e56ea2ca3750c99a6ce9145892678473b51802ce680cb5f16i0)
 
+
+GIFs Needs gif extrator module
 # 641577 - PUNX LOGO PIXEL RES - [https://ordinals.com/content/c9d39d2aef6f2f3d744b2e8e5aab9fb11ba65274e8d19aef777c21f264426b71i0](https://ordinals.com/content/c9d39d2aef6f2f3d744b2e8e5aab9fb11ba65274e8d19aef777c21f264426b71i0)
 
 # 457885 - PUNX #1 - [https://ordinals.com/content/4e38c53382a55659ef518fe9385f807fc5b827fe99f0854ff0d2a22a0a78b175i0](https://ordinals.com/content/4e38c53382a55659ef518fe9385f807fc5b827fe99f0854ff0d2a22a0a78b175i0)
 
 
-**Solemn - All Animations - Might need work**
+**Solemn - All AVIF** 
 [https://ordinals.com/content/2c762a593dc60bcd92169b07de5a60d588a94819d165178ca317d45e4eeb2b11i0](https://ordinals.com/content/2c762a593dc60bcd92169b07de5a60d588a94819d165178ca317d45e4eeb2b11i0)
 [https://ordinals.com/content/3ff701e8197231883785902d1076ffa747b28f951a0dbe2445ba2690df134575i0](https://ordinals.com/content/3ff701e8197231883785902d1076ffa747b28f951a0dbe2445ba2690df134575i0)
 [https://ordinals.com/content/810350843b5011b0cd78ebf2134fb7df751f584d1c5eeaf578d214adb020b329i0](https://ordinals.com/content/810350843b5011b0cd78ebf2134fb7df751f584d1c5eeaf578d214adb020b329i0)
 [https://ordinals.com/content/566ac7f4fe8cc5e41513f2e15aa376eb77d0883dc211a64f249e5145746957b0i0](https://ordinals.com/content/566ac7f4fe8cc5e41513f2e15aa376eb77d0883dc211a64f249e5145746957b0i0)
 
 ---
-
-
+**Solemn with Sound** - Javascript - Needs a module
+[https://ordinals.com/content/7e9b5d9d0a202a53a9ab9d22381ee442567f7dfe44f8b8dbaaccd027827e9a20i0](https://ordinals.com/content/7e9b5d9d0a202a53a9ab9d22381ee442567f7dfe44f8b8dbaaccd027827e9a20i0)
 
 ---
 
@@ -196,4 +200,34 @@ First Opus test:
 https://ordinals.com/inscription/8e00109f37672c8d9b75becdc6135c751a1be0189cc6e836f7637c2642480ea3i0
 
 
+
+
+
+ALL MY PERSONAL LINKS
+
+view-source:https://ordinals.com/content/7e9b5d9d0a202a53a9ab9d22381ee442567f7dfe44f8b8dbaaccd027827e9a20i0 - Solemn - Javascript
+view-source:https://ordinals.com/content/90a883d2c513c6f6b5947c1e22377424b59efb94df623f7c0a369ebd68fd711ei0 - 695621.bitmap - Text
+view-source:https://ordinals.com/content/4c855ca90eec57477c89259b19a12c28b29085be9595d2748e672e7a23ecf629i0 - Counterfeit Culture - Javascript
+view-source:https://ordinals.com/content/b1d64a7b6d48efc0bb40e17ee4cbe0e5a66731b0309c4b50d56d394bcd53a3f0i462 - Pandemonium - HTML
+view-source:https://ordinals.com/content/b3c391c8ee203d906e3c361b35877dd5f0c52a177779552dca1a5fbb58da3098i903 - ZEROTH? Flowers - HTML
+view-source:https://ordinals.com/content/dab039fc98582d53ca3955b8fd43f90d8301cb8e987d08577d57a353a96b6e05i0 - Pandemonium - ?? cant view source
+view-source:https://ordinals.com/content/db949a0393a802be0af5c2884bf9ff6db9ea878a9182a34260ec938d55e89152i0 - Solemn?? - HTML
+view-source:https://ordinals.com/content/7e294227d103e35fe64837956cef42ae82bd915d459ccb2eecf5c14968b83c03i0 - Maybe Astral Arkitekt? - HTML
+view-source:https://ordinals.com/content/14e545d3ec2923851569a6cf88baf72b4c90cf40b6029f340c55ef97c75000e2i0 - Melophonic - Entertainment - Need to relink to Hiro version if used
+view-source:https://ordinals.com/content/64cdcae0cdc81c615845b9771247e6848f24a4cc29a2af969deb68fce651bfdfi0 - audional 2.0 click - Non-recursive HTML
+view-source:https://ordinals.com/content/96cfd02e2ec9123e5767a8092a863e8779b5083921c612f48fd5c817cab72360i0 - jim.bit - text
+view-source:https://ordinals.com/content/c542a6c792391e61a6e2c77ce2bb821c696bc2866413757ff7fd05b1b35dc5c2i0 - AUDIONALRUNES - text
+view-source:https://ordinals.com/content/939ac96cab5d808d7c12914ff77a8b4b8e98aadef73241c8f7b8c839b7f8006fi0 - SQYZYXYZSQYZY - text
+view-source:https://ordinals.com/content/c4ff3e1c58987722bdd89a348036f00e0ca7d39b96ba09421d258c0c16808223i0 - audionals.bit - text
+view-source:https://ordinals.com/content/db49e03ce89eb233976998d44e199c4d63c261809869ac190ae2303f3ddb38e5i0 - jim.ob1 - text
+view-source:https://ordinals.com/content/449bf49f5b7b62e547c6f914badf9e20d5d035897194520d432b7dd5069ee569i0 - Free Ross - Recursive HTML - Artwork available
+view-source:https://ordinals.com/content/49072382fa6330629aa52a25c630250fc410673222ca9defef1a76d882e39fe7i0 - I Love Cheese - Recursive HTML - Use Text Font
+view-source:https://ordinals.com/content/52e654ce734a39af6fb00f2f27c7febdb1d3138c1865b95d17eda6da97d3eec8i0 - BLiX - Recursive HTML
+view-source:https://ordinals.com/content/7842bb6f3e6a6b0d62e089c5121f96d28e3bd34412db1d7573c15e9b838bc0e5i0 - FREEDOM - Recursive HTML - Use Text Font
+view-source:https://ordinals.com/content/2234cbb4a1fb117d9a2ca472dbf48ac1c31822df068a78b10d06d1c43d0986b6i0 - Recursive HTML - Find artwork?
+view-source:https://ordinals.com/content/a5e9d3fe0cb8e3378e478b2c2ae1f222d01536f069ce4d42ac2c9b7989b74a75i0 - Infinite Ordinal - Recursive HTML
+view-source:https://ordinals.com/content/35d1893b7140e0f353b17fde44e1fb1ce1d355ffe9a480427a28b391d9d1bebfi0 - Audional Player - Recursive HTML
+view-source:https://ordinals.com/content/7f0c16a7520f590653bc020d41fe017aaecc73aaa5b1ad60705ce591dff5f846i0 - Tone JS - recursive HTML
+
+view-source:https://ordinals.com/content/1c3361ebbb51e87d41ca155866cb6b3795999a80c636aa447690f31ea657f0abi0 - Bot 1T5 - non-recursive html
 
