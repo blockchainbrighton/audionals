@@ -1,7 +1,9 @@
 // scrollLayer.js
 
 import { visorTop, visorBot, visorLeft, visorRight, visorOffsetY, SIZE, FONT_W, FONT_H } from './pixelCore.js';
-const $ = s => document.querySelector(s);
+import { $ } from './utils.js';
+
+
 let scrollCells = [];
 
 export function initScrollLayer() {

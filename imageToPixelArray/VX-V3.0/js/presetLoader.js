@@ -1,12 +1,11 @@
 // --- START OF FILE presetLoader.js ---
 import { handlePresetArray } from './arrayHandler.js';
+import { $ } from './utils.js';
 
-const presetDir = './helmet-arrays/', presetFiles = [], 
-  prevBtn = document.getElementById('presetPrev'),
-  nextBtn = document.getElementById('presetNext'),
-  nameSpan = document.getElementById('presetName'),
-  loadBtn = document.getElementById('presetLoad');
+const presetDir = './helmet-arrays/', presetFiles = [];
 let currentIdx = 0;
+
+const prevBtn = $('#presetPrev'), nextBtn = $('#presetNext'), nameSpan = $('#presetName'), loadBtn = $('#presetLoad');
 
 async function loadPresetList() {
   try {
@@ -45,5 +44,6 @@ nextBtn.onclick = () => { if (currentIdx < presetFiles.length - 1) currentIdx++,
 loadBtn.onclick = loadCurrentPreset;
 export function refreshPresetList() { loadPresetList(); }
 loadPresetList();
+
 
 // --- END OF FILE presetLoader.js ---

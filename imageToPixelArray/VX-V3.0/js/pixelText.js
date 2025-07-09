@@ -1,6 +1,7 @@
 // pixelText.js
 import * as core from './pixelCore.js';
 import { repaintCell, drawGrid } from './pixelUI.js';
+import { hexToRgbArr } from './utils.js';
 
 export function insertLetter(text, scale = core.letterScale) {
   scale = Math.max(0.15, scale);
@@ -12,7 +13,7 @@ export function insertLetter(text, scale = core.letterScale) {
     wordW = glyphs.length * glyphW + (glyphs.length - 1) * scale,
     startCol = core.visorLeft + Math.round((visorW - wordW) / 2),
     startRow = core.visorTop + Math.round((visorH - glyphH) / 2) + core.visorOffsetY,
-    rgb = core.hexToRgbArr(core.letterColorHex);
+    rgb = hexToRgbArr(core.letterColorHex);
   let idx = core.palette.findIndex(c => c[0] === rgb[0] && c[1] === rgb[1] && c[2] === rgb[2]);
   if (idx === -1) {
     core.palette.push(rgb);
@@ -29,4 +30,3 @@ export function insertLetter(text, scale = core.letterScale) {
   drawGrid();
   core.pushUndo();
 }
-

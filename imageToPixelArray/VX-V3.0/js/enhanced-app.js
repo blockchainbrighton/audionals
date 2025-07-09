@@ -6,6 +6,7 @@ import * as pixelUI from './pixelUI.js';
 import * as scrollLayer from './scrollLayer.js';
 import { refreshPresetList } from './presetLoader.js';
 import { bamPixelCoordinates } from './drawBam.js';
+import { $ } from './utils.js';
 
 // Enhanced state management [unchanged]
 const enhancedState = {
@@ -21,7 +22,6 @@ const enhancedState = {
   }
 };
 
-const $ = pixelUI.$;
 
 // Enhanced grid building with layer support [unchanged]
 function buildEnhancedGrid() {

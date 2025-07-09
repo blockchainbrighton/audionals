@@ -1,4 +1,9 @@
 // --- START OF FILE pixelCore.js (REWRITTEN) ---
+import { cellBg, hexToRgbArr, cloneGrid, clearGrid } from './utils.js';
+
+// Use cloneGrid, clearGrid, cellBg, hexToRgbArr where previously defined
+export const clone = cloneGrid;
+export const clearArr = clearGrid;
 
 // --- Core State Variables ---
 export let SIZE = 64,
@@ -17,11 +22,6 @@ export let SIZE = 64,
 // --- Constants ---
 export const MAX_UNDO=100, FONT_W=5, FONT_H=7, visorTop=19, visorBot=46, visorLeft=13, visorRight=50, visorOffsetY=-3;
 
-// --- Utility Functions ---
-export const clone = g => g.map(r=>[...r]);
-export const cellBg = (i,col) => i===0?'rgba(0,0,0,0)':`rgb(${col[0]},${col[1]},${col[2]})`;
-export const hexToRgbArr = h => [1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
-export const clearArr = arr => arr.forEach(a=>a.fill(0));
 
 // --- State Modifiers ---
 export function loadCoreState(newState) {

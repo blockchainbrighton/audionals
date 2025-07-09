@@ -1,16 +1,15 @@
 // pixelUI.js
 
 import * as core from './pixelCore.js';
+import { cellBg, flattenGrid, $ } from './utils.js';
 
 export let cellElems = Array.from({ length: core.SIZE }, () => Array(core.SIZE)), scrollCells = [], scrollInterval = null;
-
-export const $ = s => document.querySelector(s);
 
 export function repaintCell(r, c) {
   const idx = core.gridArray[r][c];
   cellElems[r][c].style.backgroundColor = !core.colorVisibility[idx]
     ? 'rgba(0,0,0,0)'
-    : core.cellBg(idx, core.palette[idx]);
+    : cellBg(idx, core.palette[idx]);
 }
 
 export function drawGrid() {
@@ -63,7 +62,7 @@ export function createColorButtons() {
       i === core.selectedColorIndex ? 'selected' : '',
       i === 0 ? 'transparent' : ''
     ].join(' ');
-    btn.style.backgroundColor = core.cellBg(i, c);
+    btn.style.backgroundColor = cellBg(i, c);
     btn.title = i === 0 ? 'Transparent Pixel (Cannot be hidden)' : `Palette ${i}`;
     btn.innerHTML = i === 0 ? '<span style="font-size:1.2em;">⌀</span>' : '';
     btn.onclick = () => { core.setSelectedColorIndex(i); createColorButtons(); };
@@ -106,7 +105,7 @@ export function setupUserColorsUI() {
 
 export function updateArrayDisplay() {
   const visibleGrid = core.getVisibleGrid();
-  const flat = visibleGrid.flat();
+  const flat = flattenGrid(visibleGrid);
   const paletteString = core.palette.map(c => c.length === 4 ? "00" : c.map(x => x.toString(16).padStart(2, '0')).join('')).join(',');
   let rle = [], l = flat[0], c = 1;
   for (let i = 1; i < flat.length; i++) flat[i] === l ? c++ : (rle.push([l.toString(16), c]), l = flat[i], c = 1);
