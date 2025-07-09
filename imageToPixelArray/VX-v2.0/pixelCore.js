@@ -53,6 +53,38 @@ export function loadCoreState(newState) {
   );
 }
 
+/**
+ * Returns the run-length encoded (RLE) pixel data string
+ * for the current gridArray, matching the preset file format.
+ * Each run is encoded as: value:count (in hex:decimal), comma-separated, ending with ;
+ */
+export function getRLEString() {
+  const grid = gridArray; // Use direct reference, not core.gridArray
+  const size = SIZE;      // Use direct reference
+
+  let output = [];
+  let last = null, count = 0;
+
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const val = grid[r][c];
+      if (last === null) {
+        last = val;
+        count = 1;
+      } else if (val === last) {
+        count++;
+      } else {
+        output.push(last.toString(16) + ':' + count);
+        last = val;
+        count = 1;
+      }
+    }
+  }
+  if (last !== null) output.push(last.toString(16) + ':' + count);
+
+  return output.join(',') + ';';
+}
+
 export function toggleColorVisibility(index) {
   if (colorVisibility[index] !== undefined) {
     colorVisibility[index] = !colorVisibility[index];

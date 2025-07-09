@@ -3,6 +3,7 @@
 import * as core from './pixelCore.js';
 import * as pixelUI from './pixelUI.js';
 
+
 function log(...args) {
   console.log('[arrayHandler]', ...args);
 }
@@ -111,5 +112,56 @@ export function handlePresetArray(rtfText, fileName) {
 
   log(`Preset loaded and rendered: ${fileName}`);
 }
+
+export function exportArrayAsRTF(filename = "exported-pixelart.rtf") {
+    // 1. Get palette hexes, as in your presets
+    // Convert palette array [[0,0,0,0],[255,255,196],...] into "00,ffffc4,..."
+    const paletteHex = core.palette.map(rgb => {
+      // Transparent/blank color
+      if (!rgb || rgb.length < 3 || (rgb[0] === 0 && rgb[1] === 0 && rgb[2] === 0)) return "00";
+      // Otherwise, to 6-digit hex
+      return rgb.slice(0, 3).map(x => x.toString(16).padStart(2, "0")).join("");
+    }).join(",") + ";";
+  
+    // 2. Get compressed RLE pixel data string
+    const rleData = core.getRLEString(); // Should include trailing ;
+  
+    // 3. Grid size (usually 64)
+    const gridSize = String(core.SIZE);
+  
+    // 4. Build RTF content, matching your header exactly
+    const rtfHeader =
+  `{\\rtf1\\ansi\\ansicpg1252\\cocoartf1671\\cocoasubrtf600
+  {\\fonttbl\\f0\\fswiss\\fcharset0 Helvetica;}
+  {\\colortbl;\\red255\\green255\\blue255;}
+  {\\*\\expandedcolortbl;;}
+  \\paperw11900\\paperh16840\\margl1440\\margr1440\\vieww10800\\viewh8400\\viewkind0
+  \\pard\\tx566\\tx1133\\tx1700\\tx2267\\tx2834\\tx3401\\pardirnatural\\partightenfactor0
+  
+  \\f0\\fs24 \\cf0
+  `;
+  
+    const rtfBody = [
+      paletteHex,
+      rleData,
+      gridSize
+    ].join('\n');
+  
+    const rtfFooter = '\n}';
+  
+    const rtfContent = rtfHeader + rtfBody + rtfFooter;
+  
+    // 5. Save as file (UTF-8)
+    const blob = new Blob([rtfContent], { type: "application/rtf" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    }, 1500);
+  }
 
 // --- END OF FILE arrayHandler.js (REWRITTEN) ---
