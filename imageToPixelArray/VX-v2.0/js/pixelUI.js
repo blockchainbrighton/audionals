@@ -1,5 +1,3 @@
-// pixelUI.js
-
 import * as core from './pixelCore.js';
 
 export let cellElems = Array.from({length:core.SIZE},()=>Array(core.SIZE)), scrollCells=[], scrollInterval=null;
@@ -95,6 +93,7 @@ export function buildGrid() {
 // Palette color button rendering: one container, direct children, grid-friendly
 export function createColorButtons() {
   const paletteContainer = document.querySelector('.palette-container');
+  if (!paletteContainer) return; // Defensive check
   paletteContainer.innerHTML = '';
   core.syncColorVisibility();
 
@@ -139,6 +138,13 @@ export function createColorButtons() {
 // User color settings: more compact, single row per color, flex layout
 export function setupUserColorsUI() {
   const div = document.getElementById('userColorsBlock');
+  // --- FIX ---
+  // Check if the target element exists before attempting to modify it.
+  if (!div) {
+    console.warn("Element with ID 'userColorsBlock' not found. Skipping user colors UI setup.");
+    return; // Exit the function gracefully to prevent a crash.
+  }
+  // --- END FIX ---
   div.innerHTML = '<strong>User Palette Colors:</strong>';
   core.userColors.forEach((hex, i) => {
     const paletteIndex = 1 + i;
