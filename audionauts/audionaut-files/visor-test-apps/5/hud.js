@@ -317,21 +317,42 @@ class HUDManager {
     toggleLoop() { this.isLooping = !this.isLooping; this.updatePlaybackControls(); }
     toggleShuffle() { this.isShuffle = !this.isShuffle; this.updatePlaybackControls(); }
 
+    // --- PLAYLIST, PRESET, & GENERATION METHODS ---
+
+    /**
+     * Generates a new, randomized playlist of a variable length (35-100 scenes).
+     * Each scene is created by randomly selecting an asset and a line of commentary.
+     * @param {object} filters - Optional filters to apply, e.g., { collection: 'PUNX' }.
+     */
     generatePlaylistFromLibrary(filters = {}) {
-        console.log('Generating playlist with filters:', filters);
+        console.log('Generating new random playlist with filters:', filters);
         this.stop();
-        const newPlaylist = [];
-        let filteredAssets = assetLibrary;
 
-        if (filters.collection) filteredAssets = assetLibrary.filter(a => a.collection === filters.collection);
-        if (filters.rarity) filteredAssets = assetLibrary.filter(a => a.rarity === filters.rarity);
+        // First, create the pool of assets to draw from based on filters.
+        let assetPool = assetLibrary;
+        if (filters.collection) {
+            assetPool = assetLibrary.filter(a => a.collection === filters.collection);
+        }
+        if (filters.rarity) {
+            assetPool = assetLibrary.filter(a => a.rarity === filters.rarity);
+        }
 
-        if (filteredAssets.length === 0) {
+        if (assetPool.length === 0) {
             alert('No assets found matching the filter criteria.');
             return;
         }
 
-        filteredAssets.forEach((asset, index) => {
+        const newPlaylist = [];
+        // 1. Determine a random length for the new playlist.
+        const minLength = 35;
+        const maxLength = 100;
+        const playlistLength = Math.floor(Math.random() * (maxLength - minLength + 1)) + minLength;
+
+        // 2. Loop for the determined length, creating a random scene each time.
+        for (let i = 0; i < playlistLength; i++) {
+            // 3. Select a random asset from the pool.
+            const asset = assetPool[Math.floor(Math.random() * assetPool.length)];
+
             const sceneName = `${asset.collection} - ${asset.name}`;
             let layerType = asset.type;
             if (['gif', 'avif'].includes(asset.type)) layerType = 'image';
@@ -339,23 +360,34 @@ class HUDManager {
             let layerContent = asset.url;
             if (asset.type === 'text') layerContent = `[Text from ${asset.id}]\n${asset.name}`;
 
-            let chosenComment = `Rarity: ${asset.rarity}`;
+            // 4. Select a random line of commentary for the chosen asset.
+            let chosenComment = `Rarity: ${asset.rarity}`; // Default fallback.
             if (asset.commentary && asset.commentary.length > 0) {
-                chosenComment = asset.commentary[index % asset.commentary.length];
+                const randomIndex = Math.floor(Math.random() * asset.commentary.length);
+                chosenComment = asset.commentary[randomIndex];
             }
             const infoLayerContent = `[${asset.collection}] // ${asset.rarity}\n${chosenComment}`;
 
+            // 5. Push the newly composed random scene to the playlist.
             newPlaylist.push({
-                id: `gen_${asset.id}_${index}`, name: sceneName, duration: 7000,
+                id: `gen_${asset.id}_${i}`, // Use loop index 'i' to ensure uniqueness
+                name: sceneName,
+                duration: 7000,
                 layers: [{
-                    id: `gen_layer_${asset.id}`, name: asset.name, type: layerType, content: layerContent,
+                    id: `gen_layer_${asset.id}_${i}`,
+                    name: asset.name,
+                    type: layerType,
+                    content: layerContent,
                     style: {
                         x: 10, y: 10, width: 80, height: 75, opacity: 1, fontSize: 4, color: '#00ffd0', textAlign: 'center',
                         transitionIn: 'fade', transitionOut: 'fade', transitionDuration: 0.8,
                         animation: 'none', animationDuration: 8, filter: { blur: 0, brightness: 1, contrast: 1, saturate: 1, hue: 0 }
                     }
                 }, {
-                    id: `gen_info_layer_${asset.id}`, name: 'Info Text', type: 'text', content: infoLayerContent,
+                    id: `gen_info_layer_${asset.id}_${i}`,
+                    name: 'Info Text',
+                    type: 'text',
+                    content: infoLayerContent,
                     style: {
                         x: 5, y: 88, width: 90, height: 12, opacity: 0.9, fontSize: 3.5, color: '#fca311', textAlign: 'left',
                         transitionIn: 'slide-up', transitionOut: 'slide-down', transitionDuration: 0.5,
@@ -363,14 +395,15 @@ class HUDManager {
                     }
                 }]
             });
-        });
+        }
 
+        // Finally, update the application state with the new playlist.
         this.playlist = newPlaylist;
         this.currentSceneIndex = -1;
         this.activeEditingSceneId = null;
         this.activeEditingLayerId = null;
         this.renderAll();
-        alert(`Generated a new showcase with ${newPlaylist.length} scenes!`);
+        alert(`Generated a new random showcase with ${newPlaylist.length} scenes!`);
     }
 
     clearPlaylist() {
