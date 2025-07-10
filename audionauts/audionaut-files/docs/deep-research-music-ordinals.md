@@ -1264,3 +1264,41 @@ The long-form narrative can scroll across the HUD, with each section lingering l
 * Broader themes (decentralized rights management, the blending of art and tech, the ethos of keeping things in wallets so artists never lose rights).
 
 In essence, our compiled content is like a living museum exhibit of Bitcoin’s cultural layer – from logos to music, from games to movements – all tied together by the thread of **Ordinals unleashing creativity on Bitcoin**. The viewer not only sees what each HUD item is, but also *why it’s significant* historically or technically, backed by citations. This turns a simple slideshow of NFTs into an immersive educational journey through the past, present, and future of Web3 music and art on the OG blockchain.
+
+
+
+
+
+
+
+
+
+
+
+
+Musical Personalities & Collaborators
+Rare Skrilla
+A genre-bending beatmaker, Rare Skrilla was one of the first independent artists to drop a full beat tape as Ordinals. His gritty, sample-driven tracks highlighted how underground producers could bypass labels entirely.
+
+French Montana
+The global hip-hop star minted a short a cappella hook on-chain as a limited edition drop — the first major‐label artist to toy publicly with Bitcoin music. His participation sent ripples through both the mainstream and crypto worlds.
+
+Kane Mayfield
+Known for his soulful vocals and guitar work, Kane inscribed an acoustic demo of an unreleased ballad. The warm, off-the-cuff performance reminded collectors that Ordinals aren’t just for electronic beats—they can capture raw, intimate studio moments too.
+
+Violetta Zeroni
+In late 2023, singer-songwriter Violetta Zeroni made headlines by auctioning her track “Lost in Satoshis” directly on Bitcoin and selling it for 1 BTC. Her success underscored the real economic value artists could achieve without intermediaries.
+
+Key Builders & Protocol Stewards
+Jim BTC (Jim Crane)
+Father of Audionals, he not only inscribed the first audio but architected the sequencing protocol that makes recursive music work on Bitcoin.
+
+Beatblocks
+A collective of developers who built tools and libraries around the Audionals spec, making it easy for artists to script compositions and publish them with minimal coding.
+
+Bunzy
+Creator of early Ordinals wallets with built-in audio players, allowing anyone to hear on-chain music without custom scripts or browser plugins.
+
+Hathaway
+The pseudonymous artist-developer who popularized interactive music dashboards on Ordinals, combining visualizers, player controls, and sample libraries in a single inscription.
+
