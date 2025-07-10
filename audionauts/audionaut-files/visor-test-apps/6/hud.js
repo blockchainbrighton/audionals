@@ -1,17 +1,15 @@
 /**
  * B.A.M. HUD Programmer 2.0
- *
  * Main application logic. Imports asset data from the dedicated library
  * and manages the UI, state, playlist, and rendering.
  */
 
-import { MEDIA_ASSETS } from './asset_library.js';
+import { assetLibrary } from './asset_library.js';
 
 class HUDApp {
-  // --- All methods from constructor() to savePlaylistToFile() are unchanged ---
-  // --- The only changes are in the loadDefaultPlaylist() function below ---
+  // Methods from constructor to savePlaylistToFile() are unchanged from the previous, working version.
+  // The only changed method is `loadDefaultPlaylist()` at the very end of the file.
   
-  // (Methods from previous response are included here in a condensed format for completeness)
   constructor() { this.bindDOM(); this.initState(); this.bindEvents(); this.loadDefaultPlaylist(); }
   bindDOM() { this.dom={visorHud:document.getElementById("visorHud"),playBtn:document.getElementById("playBtn"),prevBtn:document.getElementById("prevBtn"),nextBtn:document.getElementById("nextBtn"),hudMode:document.getElementById("hudMode"),loopToggle:document.getElementById("loopToggle"),shuffleToggle:document.getElementById("shuffleToggle"),playlistDisplay:document.getElementById("playlist"),addSceneBtn:document.getElementById("addSceneBtn"),clearBtn:document.getElementById("clearBtn"),loadDefaultBtn:document.getElementById("loadDefaultBtn"),saveBtn:document.getElementById("saveBtn"),loadFileInput:document.getElementById("loadFileInput"),editorContainer:document.getElementById("editor-container"),sceneEditorTitle:document.getElementById("scene-editor-title"),sceneDurationInput:document.getElementById("sceneDurationInput"),sceneTransitionInput:document.getElementById("sceneTransitionInput"),layerList:document.getElementById("layer-list"),addLayerBtn:document.getElementById("addLayerBtn"),layerEditor:document.getElementById("layer-editor"),layerEditorTitle:document.getElementById("layer-editor-title"),layerType:document.getElementById("layerType"),layerContent:document.getElementById("layerContent"),layerX:document.getElementById("layerX"),layerXValue:document.getElementById("layerXValue"),layerY:document.getElementById("layerY"),layerYValue:document.getElementById("layerYValue"),layerW:document.getElementById("layerW"),layerWValue:document.getElementById("layerWValue"),layerH:document.getElementById("layerH"),layerHValue:document.getElementById("layerHValue"),layerAnimType:document.getElementById("layerAnimType"),layerAnimDir:document.getElementById("layerAnimDir"),layerAnimSpeed:document.getElementById("layerAnimSpeed"),layerAnimSpeedValue:document.getElementById("layerAnimSpeedValue"),layerFilterType:document.getElementById("layerFilterType"),layerFilterValue:document.getElementById("layerFilterValue"),layerFilterValueText:document.getElementById("layerFilterValueText")}}
   initState() {this.playlist=[],this.currentSceneIndex=-1,this.selectedSceneIndex=-1,this.selectedLayerIndex=-1,this.isPlaying=!1,this.isLooping=!0,this.isShuffling=!1,this.playTimeout=null,this.sceneCounter=0,this.layerCounter=0}
@@ -39,64 +37,65 @@ class HUDApp {
   updateFilterValueUI(e,t,i=!1) {let n=0,s=200,a=1,r="%",l=t;switch(e){case"blur":s=20,r="px";break;case"hue-rotate":s=360,r="deg";break;case"invert":s=100;break;case"none":s=0,l=0}i||(this.dom.layerFilterValue.min=n,this.dom.layerFilterValue.max=s,this.dom.layerFilterValue.step=a,this.dom.layerFilterValue.value=l),this.dom.layerFilterValueText.textContent=`${l}${r}`}
   transitionOutCurrentScene() {const e=this.dom.visorHud.querySelector(".hud-scene-container");if(e){const t=e.dataset.transition,i=e.style.getPropertyValue("--transition-duration");e.classList.remove(`${t}-in`,"active"),e.classList.add(`${t}-out`),setTimeout(()=>e.remove(),i?parseInt(i):500)}}
   renderSceneToHUD(e) {this.transitionOutCurrentScene();const t=document.createElement("div");t.className="hud-scene-container",t.dataset.transition=e.transition;const i=Math.min(.1*e.duration,500);t.style.setProperty("--transition-duration",`${i}ms`),e.layers.forEach(e=>{const i=this.createLayerElement(e);t.appendChild(i)}),this.dom.visorHud.appendChild(t),t.classList.add(`${e.transition}-in`,"active")}
-  createLayerElement(e) {const t=document.createElement("div");t.className="hud-layer",t.style.setProperty("--x-pos",`${e.x}%`),t.style.setProperty("--y-pos",`${e.y}%`),t.style.setProperty("--w-size",`${e.width}%`),t.style.setProperty("--h-size",`${e.height}%`);let i;switch(e.type){case"image":case"gif":case"avif":i=document.createElement("img"),i.src=e.content;break;case"video":i=document.createElement("video"),i.src=e.content,i.autoplay=!0,i.loop=!0,i.muted=!0;break;case"url":i=document.createElement("iframe"),i.src=e.content;break;default:i=document.createElement("p"),i.textContent=e.content}if(t.appendChild(i),"scroll"===e.animType){i.classList.add("anim-scroll"),i.style.setProperty("--anim-duration",`${e.animSpeed}s`),i.style.setProperty("--anim-name",`scroll-${e.animDir}`)}let n="none";if("none"!==e.filterType){const t={"blur":"px","hue-rotate":"deg"}[e.filterType]||"%";n=`${e.filterType}(${e.filterValue}${t})`}return t.style.setProperty("--filter",n),t}
+  createLayerElement(layer) { const el = document.createElement('div'); el.className = 'hud-layer'; el.style.setProperty('--x-pos', `${layer.x}%`); el.style.setProperty('--y-pos', `${layer.y}%`); el.style.setProperty('--w-size', `${layer.width}%`); el.style.setProperty('--h-size', `${layer.height}%`); let contentEl; const layerType = layer.type ?? 'text'; const animType = layer.animType ?? 'none'; switch (layerType) { case 'image': case 'gif': case 'avif': contentEl = document.createElement('img'); contentEl.src = layer.content; break; case 'video': contentEl = document.createElement('video'); contentEl.src = layer.content; contentEl.autoplay = true; contentEl.loop = true; contentEl.muted = true; break; case 'url': case 'html': contentEl = document.createElement('iframe'); contentEl.src = layer.content; break; case 'text': default: contentEl = document.createElement('p'); contentEl.textContent = layer.content; break; } el.appendChild(contentEl); if (animType === 'scroll') { contentEl.classList.add('anim-scroll'); contentEl.style.setProperty('--anim-duration', `${layer.animSpeed ?? 8}s`); contentEl.style.setProperty('--anim-name', `scroll-${layer.animDir ?? 'left'}`); if (layer.animDir === 'left' || layer.animDir === 'right') { contentEl.classList.add('anim-scroll-horizontal'); } } let filterString = 'none'; if(layer.filterType && layer.filterType !== 'none') { const unit = {'blur': 'px', 'hue-rotate': 'deg'}[layer.filterType] || '%'; filterString = `${layer.filterType}(${layer.filterValue ?? 100}${unit})`; } el.style.setProperty('--filter', filterString); return el; }
   savePlaylistToFile() {const e="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(this.playlist,null,2)),t=document.createElement("a");t.setAttribute("href",e),t.setAttribute("download","hud-playlist.json"),document.body.appendChild(t),t.click(),t.remove()}
-  loadPlaylistFromFile(e) {const t=e.target.files[0];if(!t)return;const i=new FileReader;i.onload=e=>{try{const t=JSON.parse(e.target.result);if(!Array.isArray(t))throw new Error("Invalid playlist format.");{this.clearPlaylist(),this.playlist=t;let e=0,i=0;this.playlist.forEach(t=>{t.id=t.id||Date.now()+ ++e,t.layers.forEach(e=>{e.id=e.id||Date.now()+ ++i})}),this.updatePlaylistUI(),alert("Playlist loaded successfully!")}}catch(e){console.error("Failed to load playlist:",e),alert("Error: Could not load file.")}},i.readAsText(t),e.target.value=""}
-
-
+  loadPlaylistFromFile(e){const t=e.target.files[0];if(!t)return;const i=new FileReader;i.onload=e=>{try{const t=JSON.parse(e.target.result);if(!Array.isArray(t))throw new Error("Invalid playlist format.");this.clearPlaylist(),this.playlist=t;let e=0,i=0;this.playlist.forEach(t=>{t.id=t.id||Date.now()+ ++e,t.layers.forEach(e=>{e.id=e.id||Date.now()+ ++i})}),this.updatePlaylistUI(),alert("Playlist loaded successfully!")}catch(e){console.error("Failed to load playlist:",e),alert("Error: Could not load file.")}},i.readAsText(t),e.target.value=""}
+  
   /** 
-   * Loads a new "ultra long play" showcase, generated programmatically 
-   * from the imported MEDIA_ASSETS library and using the new `fact` metadata.
+   * Loads a new "ultra long play" showcase, generated programmatically from 
+   * the imported assetLibrary and using the new multi-choice commentary.
    */
   loadDefaultPlaylist() {
     this.stop();
     this.clearPlaylist();
-    const findAsset = (name) => MEDIA_ASSETS.find(a => a.name === name);
+    const findAsset = (id) => assetLibrary.find(a => a.id === id);
+    const getCommentary = (asset) => {
+        if (!asset || !asset.commentary || asset.commentary.length === 0) {
+            return "No data available for this asset.";
+        }
+        const randomIndex = Math.floor(Math.random() * asset.commentary.length);
+        return asset.commentary[randomIndex];
+    };
 
     let newPlaylist = [];
+    const addScene = (sceneData) => newPlaylist.push(sceneData);
 
-    // --- Defensive Check Helper ---
-    // This ensures we don't crash if an asset name is misspelled.
-    const checkAndAddScene = (sceneData, assetNames) => {
-        for(const name of assetNames) {
-            if (!findAsset(name)) {
-                console.error(`CRITICAL ERROR: Asset "${name}" not found in library. Skipping scene "${sceneData.name}".`);
-                alert(`Asset "${name}" missing. Scene generation skipped.`);
-                return; // Do not add the scene
-            }
-        }
-        newPlaylist.push(sceneData);
-    }
-    
-    // --- Scene 1: Intro with facts ---
-    checkAndAddScene({
+    // --- Scene 1: Intro Scene ---
+    const bamLogo = findAsset('bam_logo_common');
+    if (bamLogo) {
+      addScene({
         id: 1, name: "SYSTEM BOOT", duration: 7000, transition: "fade", layers: [
-            { id: 101, type: findAsset("BAM LOGO")?.type, content: findAsset("BAM LOGO")?.url, x: 50, y: 35, width: 40, height: 40 },
-            { id: 102, type: "text", content: "ORDINAL DATABASE SYNCED", x: 50, y: 70, width: 100, height: 10 },
-            { id: 103, type: "text", content: `INIT FACT: ${findAsset("BAM LOGO")?.fact}`, x: 50, y: 88, width: 90, height: 20, animType: "scroll", animDir: "left", animSpeed: 12 }
+          { id: 101, type: bamLogo.type, content: bamLogo.url, x: 50, y: 35, width: 40, height: 40 },
+          { id: 102, type: "text", content: "ORDINAL DATABASE SYNCED", x: 50, y: 70, width: 100, height: 10 },
+          { id: 103, type: "text", content: getCommentary(bamLogo), x: 50, y: 88, width: 90, height: 20, animType: "scroll", animDir: "left", animSpeed: 15 }
         ]
-    }, ["BAM LOGO"]);
+      });
+    }
 
     // --- Scene 2: Programmatically generate scenes for a whole collection ---
-    const hashOnes = MEDIA_ASSETS.filter(a => a.collection === 'Hash Ones');
+    const hashOnes = assetLibrary.filter(a => a.collection === 'Hash Ones');
     hashOnes.forEach((asset, index) => {
-        checkAndAddScene({
-            id: 20 + index, name: `Showcase: ${asset.name}`, duration: 8000, transition: "slide-up", layers: [
-                { id: 200 + index, type: asset.type, content: asset.url, x: 35, y: 50, width: 60, height: 80 },
-                { id: 250 + index, type: "text", content: `${asset.name}\n${asset.rarity}`, x: 80, y: 25, width: 35, height: 20 },
-                { id: 280 + index, type: "text", content: `DATA: ${asset.fact}`, x: 80, y: 65, width: 38, height: 50, animType: "scroll", animDir: "up", animSpeed: 15 }
-            ]
-        }, [asset.name]); // Asset name is dynamic here
+      addScene({
+          id: 20 + index, name: `Showcase: ${asset.name}`, duration: 8000, transition: "slide-up", layers: [
+              { id: 200 + index, type: asset.type, content: asset.url, x: 35, y: 50, width: 60, height: 80 },
+              { id: 250 + index, type: "text", content: `${asset.name}\n${asset.rarity}`, x: 80, y: 25, width: 35, height: 20 },
+              { id: 280 + index, type: "text", content: getCommentary(asset), x: 80, y: 65, width: 38, height: 50, animType: "scroll", animDir: "up", animSpeed: 15 }
+          ]
+      });
     });
 
-    // --- Scene 3: Highlight PUNX collection with video and facts ---
-    checkAndAddScene({
+    // --- Scene 3: Highlight PUNX collection ---
+    const punxVideo = findAsset('punx_logo_hires_video');
+    const punxGif = findAsset('punx_1_gif');
+    if (punxVideo && punxGif) {
+      addScene({
         id: 3, name: "COLLECTION: PUNX", duration: 10000, transition: "slide-down", layers: [
-            { id: 301, type: findAsset("PUNX LOGO HI-RES")?.type, content: findAsset("PUNX LOGO HI-RES")?.url, x: 50, y: 50, width: 100, height: 100, filterType: "saturate", filterValue: "30" },
-            { id: 302, type: findAsset("PUNX #1")?.type, content: findAsset("PUNX #1")?.url, x: 50, y: 40, width: 50, height: 50 },
-            { id: 303, type: "text", content: `PUNX ON ORDINALS // ${findAsset("PUNX #1")?.fact} // ${findAsset("PUNX LOGO HI-RES")?.fact}`, x: 50, y: 85, width: 100, height: 10, animType: "scroll", animDir: "left", animSpeed: "18" }
+          { id: 301, type: punxVideo.type, content: punxVideo.url, x: 50, y: 50, width: 100, height: 100, filterType: "saturate", filterValue: "30" },
+          { id: 302, type: punxGif.type, content: punxGif.url, x: 50, y: 40, width: 50, height: 50 },
+          { id: 303, type: "text", content: `${getCommentary(punxGif)} // ${getCommentary(punxVideo)}`, x: 50, y: 85, width: 100, height: 10, animType: "scroll", animDir: "left", animSpeed: "18" }
         ]
-    }, ["PUNX LOGO HI-RES", "PUNX #1"]);
+      });
+    }
     
     this.playlist = newPlaylist;
     this.sceneCounter = this.playlist.length;

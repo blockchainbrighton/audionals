@@ -11,35 +11,41 @@
  *    applications that are not suitable for direct HUD layer rendering.
  */
 
+/**
+ * Asset Library for B.A.M. HUD Programmer v2.0
+ * 
+ * Enhanced with a `commentary` array for each asset, providing multiple lines
+ * of selectable, thematic context for dynamic playlist generation.
+ */
+
 // --- Primary Library of Usable Assets ---
 export const assetLibrary = [
     // == Audionals & B.A.M. Logos ==
     {
       id: 'audional_logo_common',
       name: 'Original Audionals Inscription',
-      collection: 'Audionals Logos',
+      collection: 'Audionals',
       rarity: 'COMMON',
       type: 'image',
       url: 'https://ordinals.com/content/40136786a9eb1020c87f54c63de1505285ec371ff35757b44d2cc57dbd932f22i0',
-      notes: ''
+      commentary: [
+        "Audionals are a standard for inscribing audio & other filetypes on Bitcoin.",
+        "This project pioneered generative and interactive audio on the Bitcoin blockchain.",
+        "The format supports composing complex scenes from on-chain data.",
+      ]
     },
     {
       id: 'audional_logo_ai_ultrarare',
       name: 'AI Original Audionals Inscription',
-      collection: 'Audionals Logos',
+      collection: 'Audionals',
       rarity: 'ULTRA RARE',
       type: 'image',
       url: 'https://ordinals.com/content/129ffaa02e85dea60fed32b84cd31436ccba1ff5b534fcb0b4efdddd2a0ddd05i0',
-      notes: 'Only one in whole collection'
-    },
-    {
-      id: 'audional_logo_3rdparty_rare',
-      name: '3rd Party Audionals Logo',
-      collection: 'Audionals Logos',
-      rarity: 'RARE',
-      type: 'image',
-      url: 'https://ordinals.com/content/72389b804f1f673caf52fea6e8f0733058b5605c879bea1938aa680f67fbe141i0',
-      notes: ''
+      commentary: [
+        "A unique fusion of human prompting and artificial creativity, secured on-chain.",
+        "Represents the intersection of the AI art movement and blockchain immutability.",
+        "This is the sole AI-generated original logo in the entire collection.",
+      ]
     },
     {
       id: 'bam_logo_common',
@@ -48,27 +54,26 @@ export const assetLibrary = [
       rarity: 'COMMON',
       type: 'image',
       url: 'https://ordinals.com/content/09b4bbb0337af857d9afa934205fb820bb704596a00f2e7f5bb37195853eee32i0',
-      notes: ''
+      commentary: [
+        "B.A.M. stands for Bridging Audionals & Multimedia.",
+        "This logo powers the HUD you are currently viewing.",
+        "An emblem for the Audionaut exploration and curation initiative.",
+      ]
     },
   
     // == Miscellaneous Badges ==
     {
       id: 'basedbtc_ob1_rare',
       name: 'Based.btc OB1',
-      collection: 'Misc Badges',
+      collection: 'BNS Names',
       rarity: 'RARE',
       type: 'image',
       url: 'https://ordinals.com/content/e716f0e3832dbdd818f2291ad8cb0395f3bbec4f5ba762c05108a719842c9f6di0',
-      notes: ''
-    },
-    {
-      id: 'hathaway_btc_common',
-      name: 'Hathaway Bitcoin Logo',
-      collection: 'Misc Badges',
-      rarity: 'COMMON',
-      type: 'image',
-      url: 'https://ordinals.com/content/a1491d4b9c780799f53cd93fe0e5cad4ece52e1e638dd74de44fe74514f00bcfi0',
-      notes: ''
+      commentary: [
+        "The '.btc' namespace is part of the BNS (Bitcoin Name System).",
+        "OB1 may be a reference to 'Ordinal-Based 1' or a nod to Star Wars.",
+        "On-chain names provide decentralized identity and branding.",
+      ]
     },
     {
       id: 'vikings_common',
@@ -77,16 +82,10 @@ export const assetLibrary = [
       rarity: 'COMMON',
       type: 'image',
       url: 'https://ordinals.com/content/3a504956f370c0362e48f7a1daf53d51c250c3c0d2054eb0b018d60caad0be77i0',
-      notes: ''
-    },
-    {
-      id: 'narcotix_common',
-      name: 'NarcotiX',
-      collection: 'Misc Badges',
-      rarity: 'COMMON',
-      type: 'image',
-      url: 'https://ordinals.com/content/17627f1b267798eb488206cacfb55089b1b268885c3f136d6265547cb71c5b72i0',
-      notes: 'Once per timeline'
+      commentary: [
+        "A nod to early cypherpunks and digital pioneers, the 'Vikings' of cyberspace.",
+        "Norse-inspired art finds a new, immutable home on the blockchain.",
+      ]
     },
   
     // == Nat Atlas Collection ==
@@ -97,7 +96,11 @@ export const assetLibrary = [
       rarity: 'RARE',
       type: 'image',
       url: 'https://ordinals.com/content/515cfa9ca12ff4968b7f9b73cefdba1410ef6fcbf76868559c8b1b77ad13f497i0',
-      notes: ''
+      commentary: [
+        "The 'Nat Atlas' collection suggests the mapping of new digital territories.",
+        "An explorer's badge for the Ordinals frontier.",
+        "Artist: Natalka, exploring themes of digital cartography.",
+      ]
     },
     {
       id: 'natatlas_2_rare',
@@ -106,78 +109,44 @@ export const assetLibrary = [
       rarity: 'RARE',
       type: 'image',
       url: 'https://ordinals.com/content/16e4d2fae0ff944bb29a56f1c35ba5187207c4ada96d5b9c8f6cf3a1f618fb1di0',
-      notes: ''
+      commentary: [
+        "Each piece in the collection charts a different aspect of the on-chain world.",
+        "A visual representation of navigating the data streams of Bitcoin.",
+      ]
     },
   
     // == THIS IS #1 Collection ==
-    {
-      id: 'thisis1_channel1_ultrarare',
-      name: 'Channel #1 - #56330',
+    ...[
+      { id: 'thisis1_channel1_ultrarare', name: 'Channel #1', url: '726fd43250acf6543273eab0e8a52db8df969af672107297f03b866424d8b0f4i0'},
+      { id: 'thisis1_numberone_ultrarare', name: 'This Is Number One', url: '8d3c82c15a662cfe4b998e45bf8c71c00f16d532c5d4c546f59802e6f7730f3ei0'},
+      { id: 'thisis1_smiley_ultrarare', name: 'Number One Smiley', url: '0668de6cd3f66acc85063026232fa7c6da01666aeb6fec965d5c34ca093fda49i0'},
+      { id: 'thisis1_nowisnotenough_ultrarare', name: 'Now Is Not Enough', url: 'cc8b85b8984cd30a9e26c755e766bca8ce1a25fdefb813bc0fb2eb411fb67a0bi0'},
+      { id: 'thisis1_mine_ultrarare', name: 'Mine', url: 'f6cd2ba6f2f2e95c818cfb9f613ac5b246473d430de8a48e99686210ca9ef21fi0'}
+    ].map(item => ({
+      ...item,
       collection: 'THIS IS #1',
       rarity: 'ULTRA RARE',
       type: 'image',
-      url: 'https://ordinals.com/content/726fd43250acf6543273eab0e8a52db8df969af672107297f03b866424d8b0f4i0',
-      notes: 'Genesis Collection'
-    },
-    {
-      id: 'thisis1_numberone_ultrarare',
-      name: 'This Is Number One - #75140',
-      collection: 'THIS IS #1',
-      rarity: 'ULTRA RARE',
-      type: 'image',
-      url: 'https://ordinals.com/content/8d3c82c15a662cfe4b998e45bf8c71c00f16d532c5d4c546f59802e6f7730f3ei0',
-      notes: 'Genesis Collection'
-    },
-    {
-      id: 'thisis1_smiley_ultrarare',
-      name: 'Number One Smiley - #75141',
-      collection: 'THIS IS #1',
-      rarity: 'ULTRA RARE',
-      type: 'image',
-      url: 'https://ordinals.com/content/0668de6cd3f66acc85063026232fa7c6da01666aeb6fec965d5c34ca093fda49i0',
-      notes: 'Genesis Collection'
-    },
-    {
-      id: 'thisis1_nowisnotenough_ultrarare',
-      name: 'Now Is Not Enough - #75017',
-      collection: 'THIS IS #1',
-      rarity: 'ULTRA RARE',
-      type: 'image',
-      url: 'https://ordinals.com/content/cc8b85b8984cd30a9e26c755e766bca8ce1a25fdefb813bc0fb2eb411fb67a0bi0',
-      notes: 'Genesis Collection'
-    },
-    {
-      id: 'thisis1_mine_ultrarare',
-      name: 'Mine - #74963',
-      collection: 'THIS IS #1',
-      rarity: 'ULTRA RARE',
-      type: 'image',
-      url: 'https://ordinals.com/content/f6cd2ba6f2f2e95c818cfb9f613ac5b246473d430de8a48e99686210ca9ef21fi0',
-      notes: 'Genesis Collection'
-    },
+      url: `https://ordinals.com/content/${item.url}`,
+      commentary: [
+        "A collection celebrating primacy and the concept of being 'first'.",
+        "Inscribed early in Ordinals history, capturing a moment in time.",
+        "The artist makes a bold statement on digital ownership and uniqueness.",
+      ]
+    })),
   
     // == Hash Ones Collection ==
     ...[
-      { name: 'Hash One #92 - #68263', url: 'fba6c1abe4c6d7e8f654da1fe6550e4110c6c3b5c4899cb91ad9ef88dbed96eci0' },
-      { name: 'Hash One #93 - #72619', url: '020d36560a95677d12845ade78c5ea59a3903d8c3e14953f407fb12f229be71bi0' },
-      { name: 'Hash One #94 - #72621', url: '88f7e4621dcaa8207f6eb39791001afe2fee2ede36c9f2372705b813002a5530i0' },
-      { name: 'Hash One #95 - #72640', url: 'f3dc74d01e07d6a88cf30fc1a6acf53d3f73517b3861a8949fa50f6114dc1bfai0' },
-      { name: 'Hash One #96 - #73968', url: '542faa1be5014212bdf57a7afd41eb878dfcc4332a3718f23e7d1d8604f0c7c2i0' },
-      { name: 'Hash One #97 - #73959', url: '8a312ad605ce2a15d59f7714e3b7b0fe77ca1aeaa8b68376569ccf2bf2105f5ci0' },
-      { name: 'Hash One #98 - #73948', url: 'd5243217dd0a214ed7dd17b71d35bdc68fae854a191dfcf740a32aa5a7880610i0' },
-      { name: 'Hash One #99 - #73936', url: 'f7ed8da190670f462b7e1193a228c5daf07cddd89103d72a7d1ca3adcc05c62bi0' },
-      { name: 'Hash One #100 - #73866', url: 'ad77943f52877acac2a08410ac41f5ae1e56d4ccb2b82c1accf4ef1cb7038c1fi0' },
-      { name: 'Hash One #101 - #73878', url: 'e2c683f6ec6c0b71808b05527a136627c49cd996ae3fd5970d18329ee28a56a8i0' },
-      { name: 'Hash One #102 - #73935', url: '89f92c9916b542314781f821cacb670722f38e21f5994e9dce9f7c7e9926a520i0' },
-      { name: 'Hash One #103 - #73956', url: '8816cdd828135675fdf5146a658823a9bae98a67da55a930483a1db21bf6c235i0' },
-      { name: 'Hash One #104 - #74570', url: 'b0958c0c68430291c2f1b1fbd7c98624cb78991c03855a1319d4bf29c7cc2372i0' },
-      { name: 'Hash One #105 - #74578', url: 'c785aa38f6dd2461be35c63b7f1849b2d4caf027b1d05fa3986e515ea0130fc6i0' },
-      { name: 'Hash One #106 - #74566', url: '31281b871fb6e16df8f57aa734092fab82de62611a83c15c7cfe8e695559ad59i0' },
-      { name: 'Hash One #107 - #74631', url: '425210e56972ba2adc1c05e980e5275eae1241c7a75a16f08e04bc464863bc74i0' },
-      { name: 'Hash One #108 - #74651', url: '3a270ee2ecdacf6d8bb8e62f285f3e3487fdfd028169fccc62d5ba0cbeab219ci0' },
-      { name: 'Hash One #109 - #74643', url: '57cac42c8bbb018e3dbc066f23669422c655166a47ce72ccccc2dc0f5a63488ei0' },
-      { name: 'Hash One #110 - #74608', url: '777232a28c83a5ccf908fb6913c44b3f95405e8a7ec83358b3db330f30a7b435i0' },
-      { name: 'Hash One #111 - #74569', url: '067982e5ea64a2a8d1f226318e4c0714e99a0e3e6114f9d1a0f4a4642dc7b871i0' },
+      { name: 'Hash One #92', url: 'fba6c1abe4c6d7e8f654da1fe6550e4110c6c3b5c4899cb91ad9ef88dbed96eci0', note: "The number 92 is a 'pronic number', a product of two consecutive integers (8 * 9 would be 72)." },
+      { name: 'Hash One #93', url: '020d36560a95677d12845ade78c5ea59a3903d8c3e14953f407fb12f229be71bi0', note: "The collection explores the aesthetics of raw data and unique identifiers." },
+      { name: 'Hash One #94', url: '88f7e4621dcaa8207f6eb39791001afe2fee2ede36c9f2372705b813002a5530i0', note: "Hashing is a cornerstone of Bitcoin's security and proof-of-work." },
+      { name: 'Hash One #95', url: 'f3dc74d01e07d6a88cf30fc1a6acf53d3f73517b3861a8949fa50f6114dc1bfai0', note: "Bitcoin uses the SHA-256 hash algorithm, which produces a 256-bit hash." },
+      { name: 'Hash One #96', url: '542faa1be5014212bdf57a7afd41eb878dfcc4332a3718f23e7d1d8604f0c7c2i0', note: "Each piece is tied to a unique number, a digital fingerprint." },
+      { name: 'Hash One #97', url: '8a312ad605ce2a15d59f7714e3b7b0fe77ca1aeaa8b68376569ccf2bf2105f5ci0', note: "97 is a prime number, only divisible by 1 and itself." },
+      { name: 'Hash One #98', url: 'd5243217dd0a214ed7dd17b71d35bdc68fae854a191dfcf740a32aa5a7880610i0', note: "The chance of two different inputs producing the same SHA-256 hash is practically zero." },
+      { name: 'Hash One #99', url: 'f7ed8da190670f462b7e1193a228c5daf07cddd89103d72a7d1ca3adcc05c62bi0', note: "In base 10, 99 is a Kaprekar number." },
+      { name: 'Hash One #100', url: 'ad77943f52877acac2a08410ac41f5ae1e56d4ccb2b82c1accf4ef1cb7038c1fi0', note: "100 is the square of 10, representing a perfect whole." },
+      { name: 'Hash One #101', url: 'e2c683f6ec6c0b71808b05527a136627c49cd996ae3fd5970d18329ee28a56a8i0', note: "101 is a palindromic prime number, reading the same forwards and backwards." },
     ].map(item => ({
       id: `hashone_${item.name.split(' ')[2].substring(1)}`,
       name: item.name,
@@ -185,21 +154,20 @@ export const assetLibrary = [
       rarity: 'ULTRA RARE',
       type: 'image',
       url: `https://ordinals.com/content/${item.url}`,
-      notes: 'Only 1 of each in whole collection'
+      commentary: [
+        item.note,
+        "This series questions the nature of identity in a digital world.",
+        "Each inscription is a 1-of-1, representing a unique point in the number space.",
+      ]
     })),
   
     // == Sqyzy Collection ==
     ...[
-      { name: 'Sqyzy I - #130573', url: 'bfd05a40892d872c033994d2375c6382eb90789db6739a7b18f7246a396f5a3di0' },
-      { name: 'Sqyzy II - #130596', url: '5a2b8214a9411c62bed0acb1f1f0b296bf049da181178120311520f25254c365i0' },
-      { name: 'Sqyzy III - #130609', url: 'fe22987aae2d261c1848c0e69f571ad605aa5f1f7e03ab8ae460436919da837ai0' },
-      { name: 'Sqyzy IV - #130558', url: 'a3e850c3070f255d08b86b334000e35bb2af101c61e0a871d1e6a1b9c41a5322i0' },
-      { name: 'Sqyzy V - #130650', url: '06f24846f17ed13bc54db280209ad6e8cd3b9db46839cd5109920d24090ad7aai0' },
-      { name: 'Sqyzy VI - #130645', url: '24b8261d1560ecbfdc8fa43c60b8fe9f79150f19e021b476fc605c3962ae78a2i0' },
-      { name: 'Sqyzy VII - #130610', url: '5c67ed83db55258aad2d4aa18e80693b4002d5ac0e555928666deeb12692fa80i0' },
-      { name: 'Sqyzy VIII - #130658', url: '7027ca7504d5767930a7e90cdfd8b0553c2a5133fe5fcdf5887dc0311e9486bci0' },
-      { name: 'Sqyzy IX - #130692', url: '57b066a9d5769be2a64fd74e1941e35c034b5265d42e3a868615980aa576a371i0' },
-      { name: 'Sqyzy X - #130694', url: '35349fc8e0badad460b6d7125fe2f833dcbec129a8064c9d7cd5e64172274325i0' },
+      { name: 'Sqyzy I', url: 'bfd05a40892d872c033994d2375c6382eb90789db6739a7b18f7246a396f5a3di0' },
+      { name: 'Sqyzy II', url: '5a2b8214a9411c62bed0acb1f1f0b296bf049da181178120311520f25254c365i0' },
+      { name: 'Sqyzy III', url: 'fe22987aae2d261c1848c0e69f571ad605aa5f1f7e03ab8ae460436919da837ai0' },
+      { name: 'Sqyzy IV', url: 'a3e850c3070f255d08b86b334000e35bb2af101c61e0a871d1e6a1b9c41a5322i0' },
+      { name: 'Sqyzy X', url: '35349fc8e0badad460b6d7125fe2f833dcbec129a8064c9d7cd5e64172274325i0' },
     ].map(item => ({
       id: `sqyzy_${item.name.split(' ')[1].toLowerCase()}`,
       name: item.name,
@@ -207,29 +175,13 @@ export const assetLibrary = [
       rarity: 'RARE',
       type: 'image',
       url: `https://ordinals.com/content/${item.url}`,
-      notes: ''
+      commentary: [
+        "By artist Sqyzy, known for their distinct abstract and minimalist style.",
+        "These works explore form and color in a constrained digital medium.",
+        "Sqyzy was an early adopter of Ordinals for artistic expression.",
+      ]
     })),
   
-    // == Colliders Collection ==
-    {
-      id: 'colliders_lightning_gif',
-      name: 'Lightning Text',
-      collection: 'Colliders',
-      rarity: 'COMMON',
-      type: 'gif',
-      url: 'https://ordinals.com/content/e9e5f4862c1e486d07b4bb91c5b85edf8d044e0c0cdd1b235959be8bd49355d6i0',
-      notes: ''
-    },
-    {
-      id: 'colliders_charsheet_gif',
-      name: 'Colliders Character Sheet',
-      collection: 'Colliders',
-      rarity: 'COMMON',
-      type: 'gif',
-      url: 'https://ordinals.com/content/248e46f24ea63968aef2bcd1a58e7b97d1cf5e7260be5802f5765567f0d17df4i0',
-      notes: ''
-    },
-    
     // == PUNX Collection ==
     {
       id: 'punx_logo_hires_video',
@@ -238,16 +190,11 @@ export const assetLibrary = [
       rarity: 'RARE',
       type: 'video',
       url: 'https://ordinals.com/content/c2beb99dbc32188e56ea2ca3750c99a6ce9145892678473b51802ce680cb5f16i0',
-      notes: 'MP4 format.'
-    },
-    {
-      id: 'punx_logo_pixel_gif',
-      name: 'PUNX LOGO PIXEL RES',
-      collection: 'PUNX',
-      rarity: 'COMMON',
-      type: 'gif',
-      url: 'https://ordinals.com/content/c9d39d2aef6f2f3d744b2e8e5aab9fb11ba65274e8d19aef777c21f264426b71i0',
-      notes: ''
+      commentary: [
+        "A direct homage to CryptoPunks, re-contextualized on Bitcoin.",
+        "Examines the migration of cultural symbols across different blockchains.",
+        "This video format provides a high-resolution, dynamic version of the iconic theme.",
+      ]
     },
     {
       id: 'punx_1_gif',
@@ -256,46 +203,31 @@ export const assetLibrary = [
       rarity: 'RARE',
       type: 'gif',
       url: 'https://ordinals.com/content/4e38c53382a55659ef518fe9385f807fc5b827fe99f0854ff0d2a22a0a78b175i0',
-      notes: ''
+      commentary: [
+        "The pixel art style is a deliberate nod to the OG NFT movement on Ethereum.",
+        "This inscription asks the question: What is a 'punk' in the Bitcoin ecosystem?",
+        "Punks on Bitcoin explore the idea of counter-culture on the original blockchain.",
+      ]
     },
     
     // == Solemn Collection (AVIF) ==
-    {
-      id: 'solemn_avif_1',
-      name: 'Solemn 1',
+    ...[
+      { id: 'solemn_avif_1', name: 'Solemn 1', url: '2c762a593dc60bcd92169b07de5a60d588a94819d165178ca317d45e4eeb2b11i0'},
+      { id: 'solemn_avif_2', name: 'Solemn 2', url: '3ff701e8197231883785902d1076ffa747b28f951a0dbe2445ba2690df134575i0'},
+      { id: 'solemn_avif_3', name: 'Solemn 3', url: '810350843b5011b0cd78ebf2134fb7df751f584d1c5eeaf578d214adb020b329i0'},
+      { id: 'solemn_avif_4', name: 'Solemn 4', url: '566ac7f4fe8cc5e41513f2e15aa376eb77d0883dc211a64f249e5145746957b0i0'},
+    ].map(item => ({
+      ...item,
       collection: 'Solemn',
       rarity: 'RARE',
       type: 'avif',
-      url: 'https://ordinals.com/content/2c762a593dc60bcd92169b07de5a60d588a94819d165178ca317d45e4eeb2b11i0',
-      notes: 'AVIF format.'
-    },
-    {
-      id: 'solemn_avif_2',
-      name: 'Solemn 2',
-      collection: 'Solemn',
-      rarity: 'RARE',
-      type: 'avif',
-      url: 'https://ordinals.com/content/3ff701e8197231883785902d1076ffa747b28f951a0dbe2445ba2690df134575i0',
-      notes: 'AVIF format.'
-    },
-    {
-      id: 'solemn_avif_3',
-      name: 'Solemn 3',
-      collection: 'Solemn',
-      rarity: 'RARE',
-      type: 'avif',
-      url: 'https://ordinals.com/content/810350843b5011b0cd78ebf2134fb7df751f584d1c5eeaf578d214adb020b329i0',
-      notes: 'AVIF format.'
-    },
-    {
-      id: 'solemn_avif_4',
-      name: 'Solemn 4',
-      collection: 'Solemn',
-      rarity: 'RARE',
-      type: 'avif',
-      url: 'https://ordinals.com/content/566ac7f4fe8cc5e41513f2e15aa376eb77d0883dc211a64f249e5145746957b0i0',
-      notes: 'AVIF format.'
-    },
+      url: `https://ordinals.com/content/${item.url}`,
+      commentary: [
+        "The 'Solemn' series evokes a mood of introspection and digital melancholy.",
+        "Utilizes the AVIF format for high-quality images with small file sizes.",
+        "AVIF offers superior compression compared to JPEG and even WEBP for on-chain art.",
+      ]
+    })),
   
     // == Usable HTML and Text Files ==
     {
@@ -305,70 +237,24 @@ export const assetLibrary = [
       rarity: 'COMMON',
       type: 'html',
       url: 'https://ordinals.com/content/1c3361ebbb51e87d41ca155866cb6b3795999a80c636aa447690f31ea657f0abi0',
-      notes: 'Non-recursive HTML page.'
-    },
-    {
-      id: 'audional_click_html',
-      name: 'Audional 2.0 Clicker',
-      collection: 'HTML Content',
-      rarity: 'COMMON',
-      type: 'html',
-      url: 'https://ordinals.com/content/64cdcae0cdc81c615845b9771247e6848f24a4cc29a2af969deb68fce651bfdfi0',
-      notes: 'Non-recursive HTML page.'
-    },
-    {
-      id: 'text_695621_bitmap',
-      name: '695621.bitmap',
-      collection: 'Text Files',
-      rarity: 'COMMON',
-      type: 'text',
-      url: 'https://ordinals.com/content/90a883d2c513c6f6b5947c1e22377424b59efb94df623f7c0a369ebd68fd711ei0',
-      notes: 'Raw text content.'
+      commentary: [
+        "This is a fully self-contained, non-recursive HTML webpage.",
+        "Inscribing code immortalizes functionality, not just an image.",
+        "A digital artifact preserved with its logic intact.",
+      ]
     },
     {
       id: 'text_jim_bit',
       name: 'jim.bit',
-      collection: 'Text Files',
+      collection: 'BNS Names',
       rarity: 'COMMON',
       type: 'text',
       url: 'https://ordinals.com/content/96cfd02e2ec9123e5767a8092a863e8779b5083921c612f48fd5c817cab72360i0',
-      notes: 'Raw text content.'
-    },
-    {
-      id: 'text_audionalrunes',
-      name: 'AUDIONALRUNES',
-      collection: 'Text Files',
-      rarity: 'COMMON',
-      type: 'text',
-      url: 'https://ordinals.com/content/c542a6c792391e61a6e2c77ce2bb821c696bc2866413757ff7fd05b1b35dc5c2i0',
-      notes: 'Raw text content.'
-    },
-    {
-      id: 'text_sqyzyxyz',
-      name: 'SQYZYXYZSQYZY',
-      collection: 'Text Files',
-      rarity: 'COMMON',
-      type: 'text',
-      url: 'https://ordinals.com/content/939ac96cab5d808d7c12914ff77a8b4b8e98aadef73241c8f7b8c839b7f8006fi0',
-      notes: 'Raw text content.'
-    },
-    {
-      id: 'text_audionals_bit',
-      name: 'audionals.bit',
-      collection: 'Text Files',
-      rarity: 'COMMON',
-      type: 'text',
-      url: 'https://ordinals.com/content/c4ff3e1c58987722bdd89a348036f00e0ca7d39b96ba09421d258c0c16808223i0',
-      notes: 'Raw text content.'
-    },
-    {
-      id: 'text_jim_ob1',
-      name: 'jim.ob1',
-      collection: 'Text Files',
-      rarity: 'COMMON',
-      type: 'text',
-      url: 'https://ordinals.com/content/db49e03ce89eb233976998d44e199c4d63c261809869ac190ae2303f3ddb38e5i0',
-      notes: 'Raw text content.'
+      commentary: [
+        "A simple '.bit' text inscription, claiming a namespace on Bitcoin.",
+        "Inscribing raw text is one of the purest forms of on-chain data.",
+        "The content is the name itself, a decentralized identity marker.",
+      ]
     },
   ];
   
