@@ -1,0 +1,304 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MS-10 Web Emulator</title>
+<style>
+    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#222;color:#eee;user-select:none}
+    #panel{background:#333;width:1000px;margin:40px auto;padding:20px;border-radius:6px;box-shadow:0 0 10px #000}
+    h2{margin:0 0 10px 0;font-size:18px}
+    .section{display:flex;gap:20px;margin-bottom:20px}
+    .column{flex:1;background:#222;padding:15px;border-radius:4px}
+    .knob,.slider{display:flex;flex-direction:column;align-items:center;margin-bottom:12px}
+    label{font-size:12px;margin-bottom:4px}
+    input[type=range]{width:100%;margin:0}
+    .knob input[type=range]{-webkit-appearance:none;width:50px;height:50px;border-radius:50%;background:radial-gradient(#666,#333);outline:none;cursor:pointer;transform:rotate(-90deg)}
+    .knob input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;margin-top:-8px}
+    #patchbay{display:grid;grid-template-columns:repeat(8,1fr);gap:8px}
+    .jack{width:20px;height:20px;border-radius:50%;background:#555;cursor:pointer;border:2px solid #222}
+    .jack.active{background:#0f0}
+    #piano{display:flex;justify-content:center;margin-top:20px}
+    .key{width:40px;height:120px;background:#fff;border:1px solid #000;box-sizing:border-box;cursor:pointer;position:relative}
+    .key.black{background:#000;width:24px;height:80px;margin-left:-12px;margin-right:-12px;z-index:2}
+    .key.active{background:#0f0}
+    #panicBtn{background:#b00;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;margin-left:10px}
+    #panicBtn:hover{background:#d00}
+</style>
+</head>
+<body>
+<div id="panel">
+    <h2>Korg MS-10 Web Emulator <button id="panicBtn">PANIC</button></h2>
+
+    <div class="section">
+        <!-- VCO -->
+        <div class="column">
+            <h2>VCO</h2>
+            <div class="knob">
+                <label>PW</label>
+                <input type="range" id="vcoPW" min="0" max="100" value="50">
+            </div>
+            <div class="knob">
+                <label>Pitch</label>
+                <input type="range" id="vcoPitch" min="0" max="1200" value="440">
+            </div>
+            <div>
+                <label>Waveform</label>
+                <select id="vcoWave">
+                    <option value="sawtooth">Saw</option>
+                    <option value="square">Square</option>
+                </select>
+            </div>
+            <div>
+                <label>Octave ±</label>
+                <input type="range" id="octave" min="-3" max="3" step="1" value="0">
+                <span id="octDisp">0</span>
+            </div>
+        </div>
+
+        <!-- VCF -->
+        <div class="column">
+            <h2>VCF</h2>
+            <div class="knob">
+                <label>Cutoff</label>
+                <input type="range" id="vcfCutoff" min="100" max="4000" value="800">
+            </div>
+            <div class="knob">
+                <label>Resonance</label>
+                <input type="range" id="vcfRes" min="0" max="30" value="5">
+            </div>
+        </div>
+
+        <!-- EG -->
+        <div class="column">
+            <h2>EG (ADSR)</h2>
+            <div class="slider"><label>A</label><input type="range" id="egA" min="0" max="2" step="0.01" value="0.1"></div>
+            <div class="slider"><label>D</label><input type="range" id="egD" min="0" max="2" step="0.01" value="0.2"></div>
+            <div class="slider"><label>S</label><input type="range" id="egS" min="0" max="1" step="0.01" value="0.5"></div>
+            <div class="slider"><label>R</label><input type="range" id="egR" min="0" max="3" step="0.01" value="0.5"></div>
+        </div>
+
+        <!-- LFO -->
+        <div class="column">
+            <h2>LFO</h2>
+            <div class="knob">
+                <label>Rate</label>
+                <input type="range" id="lfoRate" min="0.1" max="20" step="0.1" value="5">
+            </div>
+            <div class="knob">
+                <label>Amount</label>
+                <input type="range" id="lfoAmount" min="0" max="1000" value="0">
+            </div>
+            <div>
+                <label>Target</label>
+                <select id="lfoDest">
+                    <option value="pitch">Pitch</option>
+                    <option value="filter">Filter</option>
+                    <option value="pw">PW</option>
+                </select>
+            </div>
+            <div>
+                <label>Waveform</label>
+                <select id="lfoWave">
+                    <option value="sine">Sine</option>
+                    <option value="square">Square</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Patchbay -->
+    <div class="column">
+        <h2>Patchbay (click to toggle)</h2>
+        <div id="patchbay"></div>
+    </div>
+
+    <!-- Preset -->
+    <div class="column">
+        <h2>Preset</h2>
+        <button id="saveBtn">Save</button>
+        <button id="loadBtn">Load</button>
+    </div>
+
+    <!-- Piano -->
+    <div id="piano"></div>
+</div>
+
+<script>
+/* ---------- Audio Context ---------- */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const masterGain = audioCtx.createGain();
+masterGain.gain.value = 0.3;
+masterGain.connect(audioCtx.destination);
+
+/* ---------- UI Refs ---------- */
+const els = {};
+['vcoPW','vcoPitch','vcoWave','vcfCutoff','vcfRes',
+ 'egA','egD','egS','egR','lfoRate','lfoAmount','lfoDest','lfoWave','octave']
+    .forEach(id=>els[id]=document.getElementById(id));
+const octDisp=document.getElementById('octDisp');
+
+/* ---------- Piano ---------- */
+const pianoEl = document.getElementById('piano');
+const whiteNotes = ['C','D','E','F','G','A','B'];
+const blackMap = {C:'C#',D:'D#',F:'F#',G:'G#',A:'A#'};
+const keys = [];
+const keyFreq = n => 440*Math.pow(2,(n-69)/12);
+
+function createKeys(){
+    for(let oct=0;oct<2;oct++){
+        whiteNotes.forEach((note,i)=>{
+            const key=document.createElement('div');
+            key.className='key';
+            key.dataset.midi = oct*12+i+60;
+            pianoEl.appendChild(key);
+            keys.push(key);
+
+            if(blackMap[note]){
+                const bk=document.createElement('div');
+                bk.className='key black';
+                bk.dataset.midi = oct*12+i+61;
+                pianoEl.appendChild(bk);
+                keys.push(bk);
+            }
+        });
+    }
+}
+createKeys();
+
+/* ---------- Octave ---------- */
+let octaveShift=0;
+els.octave.addEventListener('input',e=>{
+    octaveShift=+e.target.value;
+    octDisp.textContent=octaveShift;
+});
+
+/* ---------- All-voices keeper ---------- */
+const voices=new Map();
+
+/* ---------- Synth Voice ---------- */
+function startNote(midi){
+    if(voices.has(midi)) return;
+    const freq = keyFreq(midi+octaveShift*12);
+
+    const osc = audioCtx.createOscillator();
+    osc.type = els.vcoWave.value;
+    osc.frequency.value = freq;
+    if(els.vcoWave.value==='square'){
+        osc.width = (els.vcoPW.value)/100;
+    }
+
+    const vcf = audioCtx.createBiquadFilter();
+    vcf.type='lowpass';
+    vcf.frequency.value = +els.vcfCutoff.value;
+    vcf.Q.value = +els.vcfRes.value;
+
+    const vca = audioCtx.createGain();
+    vca.gain.value = 0;
+
+    /* ADSR envelope */
+    const now = audioCtx.currentTime;
+    const a=+els.egA.value, d=+els.egD.value, s=+els.egS.value, r=+els.egR.value;
+    vca.gain.setValueAtTime(0,now);
+    vca.gain.linearRampToValueAtTime(1,now+a);
+    vca.gain.linearRampToValueAtTime(s,now+a+d);
+
+    /* LFO */
+    const lfo = audioCtx.createOscillator();
+    const lfoGain = audioCtx.createGain();
+    lfo.type = els.lfoWave.value;
+    lfo.frequency.value = +els.lfoRate.value;
+    lfoGain.gain.value = +els.lfoAmount.value;
+
+    const dest = els.lfoDest.value;
+    if(dest==='pitch') lfo.connect(lfoGain).connect(osc.frequency);
+    else if(dest==='filter') lfo.connect(lfoGain).connect(vcf.frequency);
+    else if(dest==='pw' && els.vcoWave.value==='square') lfo.connect(lfoGain).connect(osc);
+
+    osc.connect(vcf).connect(vca).connect(masterGain);
+    [osc,lfo].forEach(n=>n.start());
+    voices.set(midi,{nodes:[osc,vcf,vca,lfo,lfoGain],vca,release:r});
+}
+
+function stopNote(midi){
+    const v=voices.get(midi);
+    if(!v) return;
+    const {vca,release}=v;
+    const now=audioCtx.currentTime;
+    vca.gain.cancelScheduledValues(now);
+    vca.gain.setValueAtTime(vca.gain.value,now);
+    vca.gain.linearRampToValueAtTime(0,now+release);
+    setTimeout(()=>{
+        v.nodes.forEach(n=>n.stop?.());
+        v.nodes.forEach(n=>n.disconnect?.());
+        voices.delete(midi);
+    },(release+0.1)*1000);
+}
+
+/* ---------- Panic ---------- */
+function panic(){
+    voices.forEach((v,midi)=>{
+        v.nodes.forEach(n=>n.stop?.());
+        v.nodes.forEach(n=>n.disconnect?.());
+    });
+    voices.clear();
+    keys.forEach(k=>k.classList.remove('active'));
+}
+document.getElementById('panicBtn').addEventListener('click',panic);
+
+/* ---------- UI Events ---------- */
+keys.forEach(key=>{
+    ['mousedown','touchstart'].forEach(ev=>key.addEventListener(ev,e=>{
+        e.preventDefault();
+        key.classList.add('active');
+        startNote(+key.dataset.midi);
+    }));
+    ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>key.addEventListener(ev,e=>{
+        key.classList.remove('active');
+        stopNote(+key.dataset.midi);
+    }));
+});
+
+/* Keyboard mapping */
+const kbMap={
+    z:60,x:62,c:64,v:65,b:67,n:69,m:71,
+    s:61,d:63,g:66,h:68,j:70,
+    q:72,w:74,e:76,r:77,t:79,y:81,u:83,
+    '2':73,'3':75,'5':78,'6':80,'7':82
+};
+const kbPressed={};
+document.addEventListener('keydown',e=>{
+    if(!kbMap[e.key] || kbPressed[e.key]) return;
+    kbPressed[e.key]=true;
+    const midi=kbMap[e.key]+octaveShift*12;
+    startNote(midi);
+    keys.find(k=>+k.dataset.midi===midi)?.classList.add('active');
+});
+document.addEventListener('keyup',e=>{
+    if(!kbMap[e.key]) return;
+    kbPressed[e.key]=false;
+    const midi=kbMap[e.key]+octaveShift*12;
+    stopNote(midi);
+    keys.find(k=>+k.dataset.midi===midi)?.classList.remove('active');
+});
+
+/* ---------- Parameter updates ---------- */
+Object.values(els).forEach(el=>el.addEventListener('input',()=>{
+    /* live updates can be added here */
+}));
+
+/* ---------- Preset Save/Load ---------- */
+document.getElementById('saveBtn').addEventListener('click',()=>{
+    const p={};
+    Object.keys(els).forEach(k=>p[k]=els[k].value);
+    localStorage.setItem('ms10preset',JSON.stringify(p));
+});
+document.getElementById('loadBtn').addEventListener('click',()=>{
+    const p=JSON.parse(localStorage.getItem('ms10preset')||'{}');
+    Object.keys(p).forEach(k=>{ if(els[k]) els[k].value=p[k]; });
+    octaveShift=+els.octave.value;
+    octDisp.textContent=octaveShift;
+});
+</script>
+</body>
+</html>

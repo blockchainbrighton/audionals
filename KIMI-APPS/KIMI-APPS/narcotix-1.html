@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NarcotiX: System City</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0a0a;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            color: #0ff;
+        }
+        
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+            border: 2px solid #f0f;
+        }
+        
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border: 1px solid #0ff;
+            font-size: 12px;
+            max-width: 200px;
+        }
+        
+        #minimap {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 150px;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid #f0f;
+        }
+        
+        #missionLog {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border: 1px solid #0ff;
+            font-size: 12px;
+            max-width: 300px;
+        }
+        
+        .neon {
+            text-shadow: 0 0 5px #0ff, 0 0 10px #0ff, 0 0 15px #0ff;
+        }
+        
+        .magenta {
+            color: #f0f;
+            text-shadow: 0 0 5px #f0f, 0 0 10px #f0f;
+        }
+        
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        button {
+            background: transparent;
+            border: 2px solid #f0f;
+            color: #0ff;
+            padding: 10px 20px;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #f0f;
+            color: #000;
+            box-shadow: 0 0 20px #f0f;
+        }
+    </style>
+</head>
+<body>
+    <div id="startScreen">
+        <h1 class="neon" style="font-size: 48px; margin-bottom: 20px;">NARCOTIX</h1>
+        <h2 class="magenta">SYSTEM CITY</h2>
+        <p style="margin: 20px; text-align: center;">Navigate the digital underworld.<br>Trade virtual experiences.<br>Escape the SysOps.</p>
+        <button onclick="startGame()">ENTER SYSTEM</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+    <div id="hud">
+        <div class="neon">COMPOUNDS: <span id="compounds">100</span></div>
+        <div class="magenta">TRACE LEVEL: <span id="traceLevel">0</span></div>
+        <div>PILLS: <span id="pills">0</span></div>
+        <div>HEALTH: <span id="health">100</span></div>
+    </div>
+    <canvas id="minimap"></canvas>
+    <div id="missionLog">
+        <div class="neon">ACTIVE MISSION:</div>
+        <div id="currentMission">None</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const minimap = document.getElementById('minimap');
+        const minimapCtx = minimap.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        // Game state
+        let gameStarted = false;
+        let camera = { x: 0, y: 0 };
+        let player = {
+            x: 400,
+            y: 300,
+            vx: 0,
+            vy: 0,
+            speed: 2,
+            health: 100,
+            compounds: 100,
+            pills: 0,
+            traceLevel: 0,
+            upgrades: {
+                speed: 1,
+                hacking: 1,
+                negotiation: 1
+            }
+        };
+        
+        // City map (2000x2000)
+        const citySize = 2000;
+        const sectors = [
+            { name: "Neon Alley", x: 200, y: 200, w: 400, h: 300, color: "#ff00ff33" },
+            { name: "The Stack", x: 800, y: 100, w: 300, h: 400, color: "#00ffff33" },
+            { name: "Crypto Commons", x: 1200, y: 600, w: 500, h: 400, color: "#ffff0033" },
+            { name: "SysOp HQ", x: 1400, y: 1400, w: 400, h: 400, color: "#ff000033" }
+        ];
+        
+        // Game objects
+        let npcs = [];
+        let police = [];
+        let buildings = [];
+        let pills = [];
+        let particles = [];
+        
+        // Mission system
+        let activeMission = null;
+        let missionTimer = 0;
+        let missionState = 'none'; // 'none', 'active', 'completed', 'failed'
+        
+        // Input handling
+        const keys = {};
+        
+        // Initialize game objects
+        function initGame() {
+            // Generate NPCs
+            for (let i = 0; i < 20; i++) {
+                npcs.push({
+                    x: Math.random() * citySize,
+                    y: Math.random() * citySize,
+                    type: Math.random() < 0.3 ? 'dealer' : 'pedestrian',
+                    vx: 0,
+                    vy: 0,
+                    color: Math.random() < 0.3 ? '#f0f' : '#0ff',
+                    target: null,
+                    cooldown: 0
+                });
+            }
+            
+            // Generate police
+            for (let i = 0; i < 5; i++) {
+                police.push({
+                    x: Math.random() * citySize,
+                    y: Math.random() * citySize,
+                    vx: 0,
+                    vy: 0,
+                    chasing: null,
+                    speed: 1.5
+                });
+            }
+            
+            // Generate pills
+            for (let i = 0; i < 10; i++) {
+                pills.push({
+                    x: Math.random() * citySize,
+                    y: Math.random() * citySize,
+                    type: Math.floor(Math.random() * 3),
+                    color: ['#f0f', '#0ff', '#ff0'][Math.floor(Math.random() * 3)]
+                });
+            }
+            
+            // Generate buildings
+            for (let i = 0; i < 50; i++) {
+                buildings.push({
+                    x: Math.random() * citySize,
+                    y: Math.random() * citySize,
+                    w: 50 + Math.random() * 100,
+                    h: 50 + Math.random() * 100,
+                    color: '#111'
+                });
+            }
+            
+            // Generate initial mission
+            generateMission();
+        }
+        
+        function generateMission() {
+            if (missionState === 'active') return;
+            
+            const missionTypes = [
+                {
+                    type: 'delivery',
+                    description: 'Deliver pill to Neon Alley',
+                    target: { x: 400, y: 350 },
+                    reward: 50,
+                    time: 300
+                },
+                {
+                    type: 'collect',
+                    description: 'Collect 3 pills from Crypto Commons',
+                    target: { x: 1400, y: 800 },
+                    reward: 75,
+                    time: 400
+                },
+                {
+                    type: 'escape',
+                    description: 'Escape SysOp patrol in The Stack',
+                    target: { x: 950, y: 300 },
+                    reward: 100,
+                    time: 200
+                }
+            ];
+            
+            activeMission = missionTypes[Math.floor(Math.random() * missionTypes.length)];
+            missionTimer = activeMission.time;
+            missionState = 'active';
+            document.getElementById('currentMission').textContent = activeMission.description;
+        }
+        
+        function startGame() {
+            document.getElementById('startScreen').style.display = 'none';
+            gameStarted = true;
+            initGame();
+            gameLoop();
+        }
+        
+        // Input handling
+        window.addEventListener('keydown', (e) => keys[e.key] = true);
+        window.addEventListener('keyup', (e) => keys[e.key] = false);
+        
+        function handleInput() {
+            player.vx = 0;
+            player.vy = 0;
+            
+            if (keys['ArrowUp'] || keys['w']) player.vy = -player.speed * player.upgrades.speed;
+            if (keys['ArrowDown'] || keys['s']) player.vy = player.speed * player.upgrades.speed;
+            if (keys['ArrowLeft'] || keys['a']) player.vx = -player.speed * player.upgrades.speed;
+            if (keys['ArrowRight'] || keys['d']) player.vx = player.speed * player.upgrades.speed;
+            
+            // Boost
+            if (keys['Shift'] && player.compounds > 0) {
+                player.vx *= 1.5;
+                player.vy *= 1.5;
+                player.compounds -= 0.5;
+            }
+        }
+        
+        function update() {
+            if (!gameStarted) return;
+            
+            handleInput();
+            
+            // Update player
+            player.x = Math.max(0, Math.min(citySize, player.x + player.vx));
+            player.y = Math.max(0, Math.min(citySize, player.y + player.vy));
+            
+            // Update camera
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+            
+            // Update NPCs
+            npcs.forEach(npc => {
+                if (npc.cooldown > 0) npc.cooldown--;
+                
+                // Simple AI
+                if (Math.random() < 0.02) {
+                    npc.vx = (Math.random() - 0.5) * 2;
+                    npc.vy = (Math.random() - 0.5) * 2;
+                }
+                
+                npc.x = Math.max(0, Math.min(citySize, npc.x + npc.vx));
+                npc.y = Math.max(0, Math.min(citySize, npc.y + npc.vy));
+                
+                // Interaction with player
+                const dist = Math.hypot(npc.x - player.x, npc.y - player.y);
+                if (dist < 30 && npc.cooldown === 0 && npc.type === 'dealer') {
+                    if (player.pills > 0 && Math.random() < 0.5) {
+                        player.pills--;
+                        player.compounds += 25;
+                        npc.cooldown = 60;
+                        createParticles(npc.x, npc.y, '#0ff');
+                    }
+                }
+            });
+            
+            // Update police
+            police.forEach(cop => {
+                if (player.traceLevel > 0) {
+                    const dist = Math.hypot(cop.x - player.x, cop.y - player.y);
+                    if (dist < 200) {
+                        // Chase player
+                        const angle = Math.atan2(player.y - cop.y, player.x - cop.x);
+                        cop.vx = Math.cos(angle) * cop.speed * (1 + player.traceLevel * 0.2);
+                        cop.vy = Math.sin(angle) * cop.speed * (1 + player.traceLevel * 0.2);
+                        cop.chasing = true;
+                    }
+                }
+                
+                cop.x = Math.max(0, Math.min(citySize, cop.x + cop.vx));
+                cop.y = Math.max(0, Math.min(citySize, cop.y + cop.vy));
+                
+                // Catch player
+                const dist = Math.hypot(cop.x - player.x, cop.y - player.y);
+                if (dist < 20) {
+                    player.traceLevel++;
+                    player.health -= 10;
+                    cop.x = Math.random() * citySize;
+                    cop.y = Math.random() * citySize;
+                    createParticles(player.x, player.y, '#f00');
+                }
+            });
+            
+            // Update pills
+            pills.forEach((pill, index) => {
+                const dist = Math.hypot(pill.x - player.x, pill.y - player.y);
+                if (dist < 20) {
+                    player.pills++;
+                    pills.splice(index, 1);
+                    createParticles(pill.x, pill.y, pill.color);
+                }
+            });
+            
+            // Update missions
+            if (missionState === 'active' && activeMission) {
+                missionTimer--;
+                
+                // Check mission completion
+                if (activeMission.type === 'delivery') {
+                    const dist = Math.hypot(activeMission.target.x - player.x, activeMission.target.y - player.y);
+                    if (dist < 50) {
+                        player.compounds += activeMission.reward;
+                        missionState = 'completed';
+                        document.getElementById('currentMission').textContent = 'Mission complete!';
+                        setTimeout(() => {
+                            missionState = 'none';
+                            generateMission();
+                        }, 2000);
+                    }
+                } else if (activeMission.type === 'collect') {
+                    if (player.pills >= 3) {
+                        player.pills -= 3;
+                        player.compounds += activeMission.reward;
+                        missionState = 'completed';
+                        document.getElementById('currentMission').textContent = 'Mission complete!';
+                        setTimeout(() => {
+                            missionState = 'none';
+                            generateMission();
+                        }, 2000);
+                    }
+                }
+                
+                // Check mission timeout
+                if (missionTimer <= 0 && missionState === 'active') {
+                    missionState = 'failed';
+                    player.traceLevel++;
+                    document.getElementById('currentMission').textContent = 'Mission failed!';
+                    setTimeout(() => {
+                        missionState = 'none';
+                        generateMission();
+                    }, 2000);
+                }
+            }
+            
+            // Update particles
+            particles = particles.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                return p.life > 0;
+            });
+            
+            // Regenerate pills
+            if (Math.random() < 0.01 && pills.length < 10) {
+                pills.push({
+                    x: Math.random() * citySize,
+                    y: Math.random() * citySize,
+                    type: Math.floor(Math.random() * 3),
+                    color: ['#f0f', '#0ff', '#ff0'][Math.floor(Math.random() * 3)]
+                });
+            }
+            
+            // Update HUD
+            document.getElementById('compounds').textContent = Math.floor(player.compounds);
+            document.getElementById('traceLevel').textContent = player.traceLevel;
+            document.getElementById('pills').textContent = player.pills;
+            document.getElementById('health').textContent = player.health;
+            
+            // Decay trace level
+            if (player.traceLevel > 0 && Math.random() < 0.001) {
+                player.traceLevel--;
+            }
+            
+            // Check health
+            if (player.health <= 0) {
+                player.health = 100;
+                player.traceLevel = 0;
+                player.x = 400;
+                player.y = 300;
+                missionState = 'failed';
+                document.getElementById('currentMission').textContent = 'System reset!';
+                setTimeout(() => {
+                    missionState = 'none';
+                    generateMission();
+                }, 2000);
+            }
+        }
+        
+        function draw() {
+            if (!gameStarted) return;
+            
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Save context
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+            
+            // Draw city grid
+            ctx.strokeStyle = '#111';
+            for (let x = 0; x < citySize; x += 100) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, citySize);
+                ctx.stroke();
+            }
+            for (let y = 0; y < citySize; y += 100) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(citySize, y);
+                ctx.stroke();
+            }
+            
+            // Draw sectors
+            sectors.forEach(sector => {
+                ctx.fillStyle = sector.color;
+                ctx.fillRect(sector.x, sector.y, sector.w, sector.h);
+                ctx.strokeStyle = sector.color.replace('33', 'ff');
+                ctx.strokeRect(sector.x, sector.y, sector.w, sector.h);
+                
+                ctx.fillStyle = '#fff';
+                ctx.font = '12px Courier';
+                ctx.fillText(sector.name, sector.x + 10, sector.y + 20);
+            });
+            
+            // Draw buildings
+            buildings.forEach(building => {
+                ctx.fillStyle = building.color;
+                ctx.fillRect(building.x, building.y, building.w, building.h);
+                ctx.strokeStyle = '#333';
+                ctx.strokeRect(building.x, building.y, building.w, building.h);
+            });
+            
+            // Draw pills
+            pills.forEach(pill => {
+                ctx.fillStyle = pill.color;
+                ctx.beginPath();
+                ctx.arc(pill.x, pill.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.stroke();
+            });
+            
+            // Draw NPCs
+            npcs.forEach(npc => {
+                ctx.fillStyle = npc.color;
+                ctx.fillRect(npc.x - 5, npc.y - 5, 10, 10);
+                if (npc.type === 'dealer') {
+                    ctx.strokeStyle = '#fff';
+                    ctx.strokeRect(npc.x - 5, npc.y - 5, 10, 10);
+                }
+            });
+            
+            // Draw police
+            police.forEach(cop => {
+                ctx.fillStyle = '#f00';
+                ctx.beginPath();
+                ctx.arc(cop.x, cop.y, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.stroke();
+                
+                if (cop.chasing) {
+                    ctx.strokeStyle = '#f00';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(cop.x, cop.y, 30, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.lineWidth = 1;
+                }
+            });
+            
+            // Draw player
+            ctx.fillStyle = '#0ff';
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.stroke();
+            
+            // Draw mission target
+            if (missionState === 'active' && activeMission && activeMission.target) {
+                ctx.strokeStyle = '#ff0';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(activeMission.target.x, activeMission.target.y, 20, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.lineWidth = 1;
+            }
+            
+            // Draw particles
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life / 30;
+                ctx.fillRect(p.x, p.y, 3, 3);
+                ctx.globalAlpha = 1;
+            });
+            
+            // Restore context
+            ctx.restore();
+            
+            // Draw minimap
+            drawMinimap();
+        }
+        
+        function drawMinimap() {
+            minimapCtx.fillStyle = '#000';
+            minimapCtx.fillRect(0, 0, 150, 150);
+            
+            const scale = 150 / citySize;
+            
+            // Draw player
+            minimapCtx.fillStyle = '#0ff';
+            minimapCtx.fillRect(player.x * scale - 2, player.y * scale - 2, 4, 4);
+            
+            // Draw NPCs
+            npcs.forEach(npc => {
+                minimapCtx.fillStyle = npc.type === 'dealer' ? '#f0f' : '#0ff';
+                minimapCtx.fillRect(npc.x * scale, npc.y * scale, 2, 2);
+            });
+            
+            // Draw police
+            police.forEach(cop => {
+                minimapCtx.fillStyle = '#f00';
+                minimapCtx.fillRect(cop.x * scale, cop.y * scale, 2, 2);
+            });
+            
+            // Draw sectors
+            sectors.forEach(sector => {
+                minimapCtx.strokeStyle = sector.color.replace('33', 'ff');
+                minimapCtx.strokeRect(sector.x * scale, sector.y * scale, sector.w * scale, sector.h * scale);
+            });
+        }
+        
+        function createParticles(x, y, color) {
+            for (let i = 0; i < 10; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 4,
+                    vy: (Math.random() - 0.5) * 4,
+                    color: color,
+                    life: 30
+                });
+            }
+        }
+        
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Resize handling
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>

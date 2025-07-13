@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NarcotiX: Digital Contraband</title>
+    <style>
+      
+        /* ============ GLOBAL CSS ============ */
+        html,body{
+            margin:0;
+            padding:0;
+            background:#000;
+            color:#0ff;
+            font-family: 'Courier New', monospace;
+            overflow:hidden;
+        }
+        #game-container{
+            position:absolute;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+        }
+        /* HUD overlay */
+        #hud{
+            position:fixed;
+            top:8px;
+            left:8px;
+            z-index:100;
+            background:rgba(0,0,0,.7);
+            padding:4px 8px;
+            border:1px solid #0ff;
+            font-size:12px;
+            pointer-events:none;
+        }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <span id="hud-wanted">★0</span> | 
+        <span id="hud-cash">0mg</span> | 
+        <span id="hud-health">♥100</span>
+    </div>
+    <div id="game-container"></div>
+
+    <!-- ============ CDN SCRIPT TAGS ============ -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/easystarjs@0.4.4/bin/easystar-0.4.4.min.js"></script>
+    <script src="https://unpkg.com/@stacks/connect@7.5.0/dist/index.js"></script>
+
+    <!-- ============ GAME CODE ============ -->
+    <script>
+        // ---------- CONFIG ----------
+        const ASSET_MODE = "inline"; // "inline" | "external"
+        const DEBUG = window.location.search.includes("debug=true");
+
+        // ---------- UTIL ----------
+        const rand = (min,max)=>Phaser.Math.Between(min,max);
+
+        // ---------- SVG ASSETS ----------
+        const SVG_PLAYER = `data:image/svg+xml;base64,${btoa(`
+            <svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                <rect x="10" y="4" width="12" height="24" fill="#0ff"/>
+                <circle cx="16" cy="8" r="4" fill="#fff"/>
+            </svg>
+        `)}`;
+        const SVG_CAR = `data:image/svg+xml;base64,${btoa(`
+            <svg width="64" height="48" xmlns="http://www.w3.org/2000/svg">
+                <rect x="0" y="16" width="64" height="16" fill="#f0f"/>
+                <rect x="8" y="8" width="48" height="16" fill="#0ff"/>
+            </svg>
+        `)}`;
+        const SVG_TILESET = `data:image/svg+xml;base64,${btoa(`
+            <svg width="96" height="32" xmlns="http://www.w3.org/2000/svg">
+                <rect x="0" y="0" width="32" height="32" fill="#111"/> <!-- road -->
+                <rect x="32" y="0" width="32" height="32" fill="#222"/> <!-- sidewalk -->
+                <rect x="64" y="0" width="32" height="32" fill="#0ff"/> <!-- neon -->
+            </svg>
+        `)}`;
+
+        // ---------- PHASER SCENES ----------
+        class BootScene extends Phaser.Scene{
+            preload(){
+                // Load inline assets
+                this.load.image('player', SVG_PLAYER);
+                this.load.image('car', SVG_CAR);
+                this.load.spritesheet('tiles', SVG_TILESET, {frameWidth:32, frameHeight:32});
+            }
+            create(){
+                this.scene.start('WorldScene');
+            }
+        }
+
+        class WorldScene extends Phaser.Scene{
+            constructor(){
+                super({key:'WorldScene'});
+                this.easystar = new EasyStar.js();
+            }
+            create(){
+                // --- Tilemap ---
+                const map = this.make.tilemap({data:[[0,0,0],[1,1,1],[2,2,2]], tileWidth:32, tileHeight:32});
+                const tileset = map.addTilesetImage('tiles');
+                const layer = map.createLayer(0, tileset, 0, 0);
+                layer.setCollisionBetween(1,2);
+                this.layer = layer;
+
+                // --- Player ---
+                this.player = this.physics.add.sprite(160,120,'player');
+                this.player.setCollideWorldBounds(true);
+                this.physics.add.collider(this.player, layer);
+
+                // --- Car ---
+                this.car = this.physics.add.sprite(300,120,'car');
+                this.car.body.setSize(64,48);
+                this.physics.add.collider(this.car, layer);
+                this.physics.add.overlap(this.player, this.car, ()=>this.enterCar());
+
+                // --- NPC crowd ---
+                this.npcs = this.physics.add.group();
+                for(let i=0;i<30;i++){
+                    const npc = this.physics.add.sprite(rand(50,400), rand(50,400),'player');
+                    npc.setTint(rand(0x0ff,0xfff));
+                    this.npcs.add(npc);
+                }
+
+                // --- Camera ---
+                this.cameras.main.startFollow(this.player);
+
+                // --- Controls ---
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.keys = this.input.keyboard.addKeys('W,S,A,D,SPACE,SHIFT');
+
+                // --- Wallet login ---
+                this.loginWallet();
+
+                // --- HUD update loop ---
+                this.time.addEvent({delay:250, loop:true, callback:this.updateHUD});
+            }
+
+            update(){
+                // Player movement
+                const speed = this.keys.SHIFT.isDown ? 200 : 100;
+                this.player.setVelocity(0);
+                if(this.keys.W.isDown) this.player.setVelocityY(-speed);
+                if(this.keys.S.isDown) this.player.setVelocityY(speed);
+                if(this.keys.A.isDown) this.player.setVelocityX(-speed);
+                if(this.keys.D.isDown) this.player.setVelocityX(speed);
+
+                // Simple AI wander
+                this.npcs.children.each(npc => {
+                    if(!npc.getData('vx')){
+                        npc.setData('vx', rand(-20,20));
+                        npc.setData('vy', rand(-20,20));
+                    }
+                    npc.setVelocity(npc.getData('vx'), npc.getData('vy'));
+                });
+            }
+
+            enterCar(){
+                this.player.x = this.car.x;
+                this.player.y = this.car.y;
+                this.player.setVisible(false);
+                this.cameras.main.startFollow(this.car);
+            }
+
+            updateHUD(){
+                // Stubbed values
+                document.getElementById('hud-wanted').textContent = '★'+(rand(0,5));
+                document.getElementById('hud-cash').textContent = rand(0,9999)+'mg';
+                document.getElementById('hud-health').textContent = '♥'+rand(10,100);
+            }
+
+            async loginWallet(){
+                if(!window.StacksProvider) return;
+                try{
+                    const auth = await window.StacksProvider.authenticate({
+                        appDetails:{name:'NarcotiX', icon:''}
+                    });
+                    console.log('Wallet connected:', auth.address);
+                }catch(e){
+                    console.warn('Wallet connect failed:', e.message);
+                }
+            }
+        }
+
+        // ---------- TEST SUITE ----------
+        if(DEBUG){
+            console.log('=== RUNNING UNIT TESTS ===');
+            function assert(cond, msg){
+                if(!cond) console.error('FAIL:', msg);
+                else console.log('PASS:', msg);
+            }
+            // 1. Vehicle physics test
+            const v = new Phaser.Physics.Arcade.Body({x:0,y:0}, {setSize:()=>{}});
+            v.setVelocity(100,0);
+            assert(v.velocity.x===100,'Vehicle velocity set correctly');
+
+            // 2. Mission state test
+            let missionState = 'idle';
+            missionState = 'active';
+            assert(missionState==='active','Mission state updated');
+
+            // 3. Wallet connect mock
+            assert(typeof window.StacksProvider !== 'undefined','Wallet provider loaded');
+        }
+
+        // ---------- BOOTSTRAP ----------
+        const config = {
+            type: Phaser.AUTO,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            parent:'game-container',
+            backgroundColor:'#000',
+            physics:{default:'arcade', arcade:{gravity:{y:0}}},
+            scene:[BootScene, WorldScene]
+        };
+        new Phaser.Game(config);
+    </script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NARCOTIX: OVERDOSE CITY – Browser Prototype</title>
+<style>
+    body{margin:0;background:#000;color:#0ff;font-family:"Courier New",monospace;overflow:hidden}
+    #crt{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:multiply;
+         background:repeating-linear-gradient(0deg,rgba(0,0,0,.15) 0 1px,transparent 1px 2px);animation:roll 6s linear infinite}
+    @keyframes roll{from{transform:translateY(0)}to{transform:translateY(10px)}}
+    #ui{position:absolute;top:4px;left:4px;font-size:10px;text-shadow:0 0 4px #f0f}
+    #map{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#222;border:2px solid #0ff;
+         image-rendering:pixelated;cursor:none}
+</style>
+</head>
+<body>
+<canvas id="map" width="320" height="240"></canvas>
+<div id="crt"></div>
+<div id="ui">
+    <div>💊 mg: <span id="mg">0</span></div>
+    <div>⭐ heat: <span id="heat">0</span></div>
+    <div>👤 district: <span id="zone">GreyGrid</span></div>
+    <div>Hold TAB for pill wheel</div>
+</div>
+
+<script>
+/* -------------------------------------------------
+   NARCOTIX: OVERDOSE CITY – 2D PROTOTYPE
+   320×240 top-down single-player slice
+   ------------------------------------------------- */
+
+const cvs = document.getElementById('map');
+const ctx = cvs.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* ---------- CONSTANTS ---------- */
+const TILE = 16;
+const MAP_W = 64;        // 1024/16
+const MAP_H = 64;
+const ZONES = {
+    GreyGrid:{x:0,   y:0,   w:16, h:16},
+    StashAlley:{x:16, y:0,   w:16, h:16},
+    XLounge:{x:0,    y:16,  w:16, h:16},
+    DeadZone:{x:16,   y:16,  w:16, h:16}
+};
+
+/* ---------- INPUT ---------- */
+const keys = {};
+onkeydown = e => keys[e.code] = true;
+onkeyup   = e => keys[e.code] = false;
+
+/* ---------- GAME STATE ---------- */
+let state = {
+    player:{
+        x:128, y:128,
+        rot:0,
+        vx:0, vy:0,
+        inCar:false,
+        carId:null
+    },
+    cars:[
+        {id:0,x:160,y:160,w:28,h:18,rot:0,color:'#f0f',driver:null}
+    ],
+    pills:[
+        {x:200,y:120,type:'joy',color:'#ff00ff'}
+    ],
+    cops:[],
+    heat:0,
+    mg:0,
+    pillWheel:false
+};
+
+/* ---------- MAP TILES (simple) ---------- */
+const world = new Uint8Array(MAP_W*MAP_H); // 0=road,1=wall,2=water
+for(let i=0;i<world.length;i++){
+    const x=i%MAP_W, y=i/MAP_W|0;
+    world[i]=(x%10<1||y%10<1)?1:0; // grid roads
+}
+
+/* ---------- UTILS ---------- */
+function tileAt(tx,ty){
+    return world[tx+ty*MAP_W]||0;
+}
+function zoneAt(px,py){
+    for(const [name,z] of Object.entries(ZONES)){
+        if(px>=z.x*TILE && px<(z.x+z.w)*TILE &&
+           py>=z.y*TILE && py<(z.y+z.h)*TILE) return name;
+    }
+    return 'Void';
+}
+
+/* ---------- DRAW ---------- */
+function draw(){
+    // clear
+    ctx.fillStyle='#111';
+    ctx.fillRect(0,0,cvs.width,cvs.height);
+
+    // camera follow player
+    const camX = state.player.x - cvs.width/2;
+    const camY = state.player.y - cvs.height/2;
+    ctx.save();
+    ctx.translate(-camX,-camY);
+
+    // draw world
+    for(let y=0;y<MAP_H;y++){
+        for(let x=0;x<MAP_W;x++){
+            const t=tileAt(x,y);
+            ctx.fillStyle=t===0?'#222':t===1?'#0ff':'#003';
+            ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
+        }
+    }
+
+    // draw pills
+    state.pills.forEach(p=>{
+        ctx.fillStyle=p.color;
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,4,0,Math.PI*2);
+        ctx.fill();
+    });
+
+    // draw cars
+    state.cars.forEach(car=>{
+        ctx.save();
+        ctx.translate(car.x,car.y);
+        ctx.rotate(car.rot);
+        ctx.fillStyle=car.color;
+        ctx.fillRect(-car.w/2,-car.h/2,car.w,car.h);
+        ctx.restore();
+    });
+
+    // draw player
+    ctx.save();
+    ctx.translate(state.player.x,state.player.y);
+    ctx.rotate(state.player.rot);
+    ctx.fillStyle='#fff';
+    if(state.player.inCar){
+        // player hidden when inside
+    }else{
+        ctx.fillRect(-4,-4,8,8);
+    }
+    ctx.restore();
+
+    ctx.restore();
+
+    // pill wheel
+    if(state.pillWheel){
+        ctx.save();
+        ctx.translate(cvs.width/2,cvs.height/2);
+        ctx.strokeStyle='#f0f';
+        ctx.lineWidth=2;
+        ctx.beginPath();
+        ctx.arc(0,0,40,0,Math.PI*2);
+        ctx.stroke();
+        ctx.fillStyle='#fff';
+        ctx.fillText('JOY',-10,-50);
+        ctx.restore();
+    }
+}
+
+/* ---------- UPDATE ---------- */
+function update(dt){
+    const p = state.player;
+    let dx=0, dy=0;
+
+    // movement
+    if(keys['KeyW']||keys['ArrowUp'])    dy-=1;
+    if(keys['KeyS']||keys['ArrowDown'])  dy+=1;
+    if(keys['KeyA']||keys['ArrowLeft'])  dx-=1;
+    if(keys['KeyD']||keys['ArrowRight']) dx+=1;
+
+    if(state.player.inCar){
+        const car = state.cars.find(c=>c.id===p.carId);
+        if(car){
+            car.rot = Math.atan2(dy,dx);
+            car.x += Math.cos(car.rot)*2*dt;
+            car.y += Math.sin(car.rot)*2*dt;
+            p.x = car.x;
+            p.y = car.y;
+        }
+    }else{
+        p.x += dx*1.5*dt;
+        p.y += dy*1.5*dt;
+    }
+
+    // car enter/exit
+    if(keys['KeyE'] && !keys.ePressed){
+        keys.ePressed=true;
+        if(state.player.inCar){
+            state.player.inCar=false;
+            state.player.carId=null;
+        }else{
+            // find nearest car
+            const car = state.cars.find(c=>Math.hypot(c.x-p.x,c.y-p.y)<20);
+            if(car){ state.player.inCar=true; state.player.carId=car.id; }
+        }
+    }
+    if(!keys['KeyE']) keys.ePressed=false;
+
+    // pill wheel
+    state.pillWheel = !!keys['Tab'];
+
+    // collect pill
+    state.pills = state.pills.filter(pill=>{
+        if(Math.hypot(pill.x-p.x,pill.y-p.y)<8){
+            state.mg += 10;
+            return false;
+        }
+        return true;
+    });
+
+    // heat
+    if(Math.random()<0.001) state.heat++;
+
+    // ui
+    document.getElementById('mg').textContent=state.mg;
+    document.getElementById('heat').textContent=state.heat;
+    document.getElementById('zone').textContent=zoneAt(p.x,p.y);
+}
+
+/* ---------- LOOP ---------- */
+let last=performance.now();
+function loop(now){
+    update((now-last)/16);
+    draw();
+    last=now;
+    requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

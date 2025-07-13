@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NARCOTIX: OVERDOSE CITY</title>
+<style>
+    html,body{margin:0;background:#000;font-family:monospace;color:#0ff}
+    canvas{border:2px solid #0ff;image-rendering:pixelated;cursor:none}
+    #ui{position:absolute;top:4px;left:4px;font-size:10px;line-height:12px}
+    #stashUI{position:absolute;top:4px;right:4px;font-size:10px;text-align:right}
+</style>
+</head>
+<body>
+<canvas id="c" width="320" height="240"></canvas>
+<div id="ui">
+    <div id="fps">FPS: --</div>
+    <div id="heat">HEAT: 0 ★</div>
+    <div id="boost">BOOST: --</div>
+</div>
+<div id="stashUI">
+    <div id="pills">PILLS: 0</div>
+    <div id="mg">+0 mg/day</div>
+</div>
+
+<script>
+/* ---------- CONFIG ---------- */
+const TILE = 16, W=c.width, H=c.height, ctx=c.getContext("2d");
+ctx.imageSmoothingEnabled=false;
+
+/* ---------- SAVE / LOAD ---------- */
+const SAVE_KEY="narcotix_save";
+function loadSave(){
+    const s=localStorage[SAVE_KEY];
+    if(!s) return {pills:3,mg:0};     // starter pack
+    return JSON.parse(s);
+}
+function saveSave(obj){
+    localStorage[SAVE_KEY]=JSON.stringify(obj);
+}
+let save=loadSave();
+
+/* ---------- INPUT ---------- */
+const keys={};
+onkeydown=e=>keys[e.code]=true;
+onkeyup=e=>keys[e.code]=false;
+
+/* ---------- MAP ---------- */
+const MAP = [
+"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+"W                              W",
+"W     C                        W",
+"W         PPP                  W",
+"W   PPP             P          W",
+"W                  P           W",
+"W  P        PPPP               W",
+"W                              W",
+"W                P             W",
+"W    PPP                       W",
+"W           P                  W",
+"W                              W",
+"W  P                           W",
+"W        PPP                   W",
+"W                              W",
+"W                              W",
+"W   PPP                        W",
+"W                     P        W",
+"W                              W",
+"W      PPP                     W",
+"W                              C",
+"W                              W",
+"W PPP                          W",
+"W               PPP            W",
+"W                              W",
+"W                              W",
+"W                              W",
+"W PPP                          W",
+"W                              W",
+"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"
+].map(r => r.split(""));
+const MAP_W = MAP[0].length, MAP_H = MAP.length;
+
+/* ---------- CAMERA ---------- */
+let camX=0,camY=0;
+function centerCam(x,y){
+    camX=x-W/2;
+    camY=y-H/2;
+}
+
+/* ---------- PLAYER ---------- */
+const player={
+    x:TILE*4, y:TILE*4,
+    vx:0,vy:0,
+    speed:1.5,
+    w:TILE, h:TILE,
+    boost:null, boostT:0,
+    inCar:false
+};
+const car={
+    x:TILE*5, y:TILE*5,
+    vx:0,vy:0,
+    speed:2.2,
+    w:TILE*2, h:TILE*2
+};
+
+/* ---------- COPS ---------- */
+const cops=[];
+function spawnCop(){
+    if(cops.length>=3+Math.floor(heat/2)) return;
+    let rx,ry;
+    do{
+        rx=Math.random()*MAP_W*TILE;
+        ry=Math.random()*MAP_H*TILE;
+    }while(Math.hypot(rx-player.x,ry-player.y)<200);
+    cops.push({x:rx,y:ry,vx:0,vy:0,speed:1,target:null, w:TILE*1.5,h:TILE*1.5});
+}
+
+/* ---------- WORLD OBJECTS ---------- */
+const pills=[];   // {x,y}
+function spawnPill(){
+    if(pills.length>=5) return;
+    let rx,ry;
+    do{
+        rx=Math.random()*MAP_W*TILE;
+        ry=Math.random()*MAP_H*TILE;
+    }while(MAP[Math.floor(ry/TILE)][Math.floor(rx/TILE)]==="W");
+    pills.push({x:rx,y:ry});
+}
+function collectPill(px,py){
+    for(let i=pills.length-1;i>=0;i--){
+        const p=pills[i];
+        if(Math.hypot(px-p.x,py-p.y)<TILE){
+            pills.splice(i,1);
+            save.pills++;
+            saveSave(save);
+            return true;
+        }
+    }
+    return false;
+}
+
+/* ---------- HEAT ---------- */
+let heat=0;
+function addHeat(n){
+    heat=Math.max(0,heat+n);
+}
+
+/* ---------- GAME LOOP ---------- */
+let last=0, fps=0,frames=0,fpsTicker=0;
+function gameLoop(ts){
+    if(!last) last=ts;
+    const dt=Math.min((ts-last)/16,3);
+    last=ts;
+    frames++;
+    if(ts-fpsTicker>1000){ fps=frames; frames=0; fpsTicker=ts; }
+
+    update(dt);
+    render();
+    requestAnimationFrame(gameLoop);
+}
+
+function update(dt){
+    /* --- PLAYER / CAR --- */
+    let obj = player.inCar?car:player;
+    let spd = player.inCar?car.speed:player.speed;
+
+    let dx=0,dy=0;
+    if(keys["ArrowUp"]) dy=-1;
+    if(keys["ArrowDown"]) dy=1;
+    if(keys["ArrowLeft"]) dx=-1;
+    if(keys["ArrowRight"]) dx=1;
+    const len = Math.hypot(dx,dy)||1;
+    dx/=len; dy/=len;
+    obj.vx=dx*spd;
+    obj.vy=dy*spd;
+
+    obj.x+=obj.vx*dt;
+    obj.y+=obj.vy*dt;
+
+    /* collision walls */
+    const gx=Math.floor(obj.x/TILE), gy=Math.floor(obj.y/TILE);
+    if(gx<0||gy<0||gx>=MAP_W||gy>=MAP_H||MAP[gy][gx]==="W"){
+        obj.x-=obj.vx*dt;
+        obj.y-=obj.vy*dt;
+    }
+
+    /* enter/exit car */
+    if(keys["KeyE"] && !keys._e){
+        keys._e=true;
+        if(player.inCar && Math.hypot(player.x-car.x,player.y-car.y)<TILE*2){
+            player.inCar=false;
+            player.x=car.x;player.y=car.y+TILE;
+        }else if(!player.inCar && Math.hypot(player.x-car.x,player.y-car.y)<TILE*2){
+            player.inCar=true;
+        }
+    }
+    if(!keys["KeyE"]) keys._e=false;
+
+    centerCam(obj.x,obj.y);
+
+    /* pill pickup */
+    if(!player.inCar && collectPill(player.x,player.y)){
+        player.boost="RUSH"; player.boostT=300;
+        addHeat(1);
+    }
+
+    /* boost timer */
+    if(player.boostT>0) player.boostT-=dt;
+    else player.boost=null;
+
+    /* cops */
+    if(Math.random()<0.008+heat*0.002) spawnCop();
+    cops.forEach(c=>{
+        const tx=obj.x, ty=obj.y;
+        const ang=Math.atan2(ty-c.y,tx-c.x);
+        c.vx=Math.cos(ang)*c.speed;
+        c.vy=Math.sin(ang)*c.speed;
+        c.x+=c.vx*dt; c.y+=c.vy*dt;
+        if(Math.hypot(c.x-obj.x,c.y-obj.y)<TILE){
+            // busted
+            heat=Math.max(0,heat-2);
+            obj.x=TILE*4; obj.y=TILE*4;
+            cops.length=0;
+        }
+    });
+
+    /* world spawns */
+    if(Math.random()<0.01) spawnPill();
+
+    /* compound ticker (once per 24h) */
+    const now=Date.now();
+    if(!save.lastTick) save.lastTick=now;
+    const day=24*3600*1000;
+    if(now-save.lastTick>day){
+        const gain=save.pills;
+        save.mg+=gain;
+        save.lastTick=now;
+        saveSave(save);
+    }
+}
+
+function render(){
+    ctx.fillStyle="#000";
+    ctx.fillRect(0,0,W,H);
+
+    /* map */
+    ctx.fillStyle="#222";
+    for(let y=0;y<MAP_H;y++){
+        for(let x=0;x<MAP_W;x++){
+            if(MAP[y][x]==="W"){
+                ctx.fillRect(x*TILE-camX,y*TILE-camY,TILE,TILE);
+            }
+            if(MAP[y][x]==="C"){
+                ctx.fillStyle="#0ff3";
+                ctx.fillRect(x*TILE-camX,y*TILE-camY,TILE,TILE);
+                ctx.fillStyle="#222";
+            }
+        }
+    }
+
+    /* pills */
+    ctx.fillStyle="#f0f";
+    pills.forEach(p=>{
+        ctx.beginPath();
+        ctx.arc(p.x-camX,p.y-camY,TILE/3,0,Math.PI*2);
+        ctx.fill();
+    });
+
+    /* car */
+    ctx.fillStyle="#0ff";
+    ctx.fillRect(car.x-car.w/2-camX,car.y-car.h/2-camY,car.w,car.h);
+    if(player.inCar){
+        ctx.fillStyle="#000";
+        ctx.fillRect(car.x-car.w/2+2-camX,car.y-car.h/2+2-camY,car.w-4,car.h-4);
+    }
+
+    /* player */
+    if(!player.inCar){
+        ctx.fillStyle="#fff";
+        ctx.fillRect(player.x-player.w/2-camX,player.y-player.h/2-camY,player.w,player.h);
+        if(player.boost){
+            ctx.fillStyle="#f0f8";
+            ctx.fillRect(player.x-player.w/2-2-camX,player.y-player.h/2-2-camY,player.w+4,player.h+4);
+        }
+    }
+
+    /* cops */
+    ctx.fillStyle="#f00";
+    cops.forEach(c=>{
+        ctx.fillRect(c.x-c.w/2-camX,c.y-c.h/2-camY,c.w,c.h);
+    });
+
+    /* UI */
+    fpsEl.textContent=`FPS: ${fps}`;
+    heatEl.textContent=`HEAT: ${heat} ${"★".repeat(Math.min(5,heat))}`;
+    boostEl.textContent=`BOOST: ${player.boost||"--"}`;
+    pillsEl.textContent=`PILLS: ${save.pills}`;
+    mgEl.textContent=`+${save.pills} mg/day`;
+}
+
+/* ---------- INIT ---------- */
+const fpsEl=document.getElementById("fps");
+const heatEl=document.getElementById("heat");
+const boostEl=document.getElementById("boost");
+const pillsEl=document.getElementById("pills");
+const mgEl=document.getElementById("mg");
+
+// starter pills
+for(let i=0;i<3;i++) spawnPill();
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

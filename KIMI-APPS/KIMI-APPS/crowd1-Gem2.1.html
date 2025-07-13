@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>3D Crowd Collector Game - Three.js</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    html,body{margin:0;height:100%;background:#222;color:#eee;font-family:sans-serif; overflow: hidden;}
+    #info{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.5);padding:8px 12px;border-radius:4px;font-size:14px;pointer-events:none; z-index: 10;}
+    #instructions{position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,.5);padding:8px 12px;border-radius:4px;font-size:13px;pointer-events:none; max-width: 250px; z-index: 10;}
+    button{position:absolute;top:10px;right:10px;padding:6px 12px;border:none;border-radius:4px;background:#0af;color:#fff;cursor:pointer; z-index: 10;}
+  </style>
+</head>
+<body>
+  <!-- Instructions will be dynamically inserted here by JS -->
+  <div id="info">Collect all the gems! 0 / 10</div>
+  <div id="instructions">
+    <b>Controls:</b><br>
+    <b>W, A, S, D</b> - Move Player<br>
+    <b>Mouse Drag</b> - Orbit Camera<br>
+    <b>Mouse Wheel</b> - Zoom<br>
+    <b>Right-Click Drag</b> - Pan Camera
+  </div>
+  <button id="resetBtn">Restart Game</button>
+
+  <!--
+    CORRECTION: Switched to esm.sh which is CORS-friendly for local files.
+    Also fixed the typo in the "three/addons/" path.
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://esm.sh/three@0.160.0",
+      "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    /* ---------- Globals ---------- */
+    let scene, camera, renderer, controls;
+    let player, playerSpeed = 4;
+    const keys = { w: false, a: false, s: false, d: false };
+    
+    const sandboxSize = 20;
+    const crowd = [];
+    const collectibles = [];
+    let score = 0, totalCollectibles = 10;
+    const clock = new THREE.Clock();
+
+    /* ---------- Main ---------- */
+    init();
+    animate();
+
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x88ccee);
+      scene.fog = new THREE.Fog(0x88ccee, 15, 40);
+
+      camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 100);
+      camera.position.set(0, 10, 15);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.shadowMap.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.minDistance = 3;
+      controls.maxDistance = 40;
+      controls.enablePan = true; // Keep pan enabled
+
+      /* Lighting */
+      const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+      sun.position.set(10, 20, 10);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      sun.shadow.camera.left = -sandboxSize/2 - 2;
+      sun.shadow.camera.right = sandboxSize/2 + 2;
+      sun.shadow.camera.top = sandboxSize/2 + 2;
+      sun.shadow.camera.bottom = -sandboxSize/2 - 2;
+      scene.add(sun, new THREE.AmbientLight(0x666666));
+
+      /* Ground */
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(sandboxSize, sandboxSize),
+        new THREE.MeshStandardMaterial({ color: 0xddbb77, roughness: 1 })
+      );
+      ground.rotation.x = -Math.PI/2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      /* Walls */
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 });
+      const wallGeo = new THREE.BoxGeometry(sandboxSize, 2, 0.5);
+      ['N','S','E','W'].forEach(side=>{
+        const w = new THREE.Mesh(wallGeo, wallMat);
+        w.castShadow = w.receiveShadow = true;
+        if(side==='N'){ w.position.set(0,1,-sandboxSize/2); }
+        if(side==='S'){ w.position.set(0,1, sandboxSize/2); }
+        if(side==='E'){ w.rotation.y=Math.PI/2; w.position.set( sandboxSize/2,1,0); }
+        if(side==='W'){ w.rotation.y=Math.PI/2; w.position.set(-sandboxSize/2,1,0); }
+        scene.add(w);
+      });
+
+      /* Decorations */
+      addBench( 5, -5);
+      addBench(-5,  5);
+      addTree( 6, 6);
+      addTree(-6, -6);
+
+      createPlayer();
+      startGame(); // Replaces initial spawnCrowd call
+
+      // Event Listeners
+      document.getElementById('resetBtn').addEventListener('click', startGame);
+      window.addEventListener('keydown', (e) => (keys[e.key.toLowerCase()] = true));
+      window.addEventListener('keyup', (e) => (keys[e.key.toLowerCase()] = false));
+      window.addEventListener('resize', onWindowResize);
+    }
+    
+    function startGame() {
+        // Reset player position
+        player.position.set(0, 0, 0);
+        // Reset crowd and collectibles
+        spawnCrowd();
+        spawnCollectibles();
+        // Reset Score
+        score = 0;
+        updateUI();
+    }
+
+    function createPlayer() {
+        player = createPerson({shirt: 0x0099ff, pants: 0x222222}); // Blue shirt for player
+        player.position.set(0,0,0);
+        scene.add(player);
+    }
+
+    function spawnCrowd() {
+      // Clear existing crowd
+      crowd.forEach(agent => scene.remove(agent.mesh));
+      crowd.length = 0;
+      
+      const count = 8 + Math.floor(Math.random()*8);
+      for(let i=0;i<count;i++){
+        const person = createPerson({});
+        person.position.set(
+          (Math.random()-0.5)*(sandboxSize-2),
+          0,
+          (Math.random()-0.5)*(sandboxSize-2)
+        );
+        scene.add(person);
+        crowd.push({
+          mesh: person,
+          speed: 0.8 + Math.random()*0.6,
+          dir: new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(),
+          nextAction: Math.random()*5,
+          paused: false,
+          idleTime: 0
+        });
+      }
+    }
+
+    function spawnCollectibles() {
+        // Clear existing collectibles
+        collectibles.forEach(c => scene.remove(c));
+        collectibles.length = 0;
+
+        const gemGeo = new THREE.IcosahedronGeometry(0.25, 0);
+        const gemMat = new THREE.MeshStandardMaterial({ 
+            color: 0xffdd00, 
+            emissive: 0xffaa00, // Makes it glow
+            emissiveIntensity: 1,
+            metalness: 0.8,
+            roughness: 0.2
+        });
+
+        for (let i = 0; i < totalCollectibles; i++) {
+            const gem = new THREE.Mesh(gemGeo, gemMat);
+            gem.castShadow = true;
+            gem.position.set(
+                (Math.random() - 0.5) * (sandboxSize - 3),
+                0.75,
+                (Math.random() - 0.5) * (sandboxSize - 3)
+            );
+            scene.add(gem);
+            collectibles.push(gem);
+        }
+    }
+
+    function createPerson({ skin, shirt, pants }) {
+      const group = new THREE.Group();
+      const skinColor = skin || new THREE.Color().setHSL(Math.random(),0.6,0.55);
+      const shirtColor = shirt || new THREE.Color().setHSL(Math.random(),0.8,0.6);
+      const pantsColor = pants || new THREE.Color().setHSL(Math.random(),0.7,0.35);
+
+      const body = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.25,1,4,8),
+        new THREE.MeshStandardMaterial({ color: shirtColor })
+      );
+      body.position.y=0.9; body.castShadow=true;
+      group.add(body);
+
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25,16,16),
+        new THREE.MeshStandardMaterial({ color: skinColor })
+      );
+      head.position.y=1.7; head.castShadow=true;
+      group.add(head);
+
+      const legGeo = new THREE.CapsuleGeometry(0.1,0.7,4,8);
+      const legL = new THREE.Mesh(legGeo, new THREE.MeshStandardMaterial({ color: pantsColor }));
+      legL.position.set(0.15,0.35,0); legL.castShadow=true; group.add(legL);
+      const legR = legL.clone(); legR.position.x=-0.15; group.add(legR);
+
+      return group;
+    }
+
+    function updatePlayer(delta) {
+        const moveDirection = new THREE.Vector3();
+        
+        // Get camera's forward and right vectors, flattened to the ground plane
+        const cameraForward = new THREE.Vector3();
+        camera.getWorldDirection(cameraForward);
+        cameraForward.y = 0;
+        cameraForward.normalize();
+        
+        const cameraRight = new THREE.Vector3().crossVectors(camera.up, cameraForward).negate();
+        
+        if (keys.w) moveDirection.add(cameraForward);
+        if (keys.s) moveDirection.sub(cameraForward);
+        if (keys.a) moveDirection.add(cameraRight);
+        if (keys.d) moveDirection.sub(cameraRight);
+
+        if (moveDirection.lengthSq() > 0) {
+            moveDirection.normalize();
+            player.position.addScaledVector(moveDirection, playerSpeed * delta);
+            
+            // Clamp player position to stay within walls
+            const margin = 0.5;
+            player.position.x = Math.max(-sandboxSize/2 + margin, Math.min(sandboxSize/2 - margin, player.position.x));
+            player.position.z = Math.max(-sandboxSize/2 + margin, Math.min(sandboxSize/2 - margin, player.position.z));
+
+            player.lookAt(player.position.clone().add(moveDirection));
+        }
+
+        // Make camera follow player
+        controls.target.copy(player.position);
+    }
+    
+    function updateCrowd(delta) {
+      const avoidanceRadius = 1.2; // Increased radius for better avoidance
+      const slowDown = 0.02;
+
+      crowd.forEach(agent=>{
+        if(agent.paused){
+          agent.idleTime -= delta;
+          if(agent.idleTime <= 0){ agent.paused=false; agent.dir=new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(); }
+          return;
+        }
+
+        agent.nextAction -= delta;
+        if(agent.nextAction <= 0){
+          agent.paused=true;
+          agent.idleTime = 1 + Math.random()*2;
+          agent.nextAction = 3 + Math.random()*5;
+          return;
+        }
+
+        let avoidance = new THREE.Vector3();
+        
+        // Avoid other agents
+        crowd.forEach(other=>{
+          if(other===agent) return;
+          const diff = new THREE.Vector3().subVectors(agent.mesh.position,other.mesh.position);
+          if(diff.lengthSq() < avoidanceRadius*avoidanceRadius) avoidance.add(diff.normalize());
+        });
+        
+        // NEW: Avoid the player
+        const diffToPlayer = new THREE.Vector3().subVectors(agent.mesh.position, player.position);
+        if (diffToPlayer.lengthSq() < (avoidanceRadius * 1.5)**2) { // Wider berth for player
+             avoidance.add(diffToPlayer.normalize());
+        }
+
+        const margin = 1;
+        const pos = agent.mesh.position;
+        if(pos.x > sandboxSize/2-margin) avoidance.x -=1;
+        if(pos.x < -sandboxSize/2+margin) avoidance.x +=1;
+        if(pos.z > sandboxSize/2-margin) avoidance.z -=1;
+        if(pos.z < -sandboxSize/2+margin) avoidance.z +=1;
+
+        if(avoidance.lengthSq() > 0) agent.dir.lerp(avoidance.normalize(),0.1);
+        else agent.dir.lerp(new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(),slowDown);
+        agent.dir.normalize();
+
+        agent.mesh.position.addScaledVector(agent.dir,agent.speed*delta);
+        agent.mesh.lookAt(agent.mesh.position.clone().add(agent.dir));
+      });
+    }
+
+    function updateCollectibles(delta) {
+        collectibles.forEach(gem => {
+            gem.rotation.y += 1.5 * delta;
+            gem.rotation.x += 1.0 * delta;
+        });
+    }
+
+    function checkCollisions() {
+        if (collectibles.length === 0) return;
+
+        const collectRadius = 0.75; // How close player needs to be
+        for (let i = collectibles.length - 1; i >= 0; i--) {
+            const gem = collectibles[i];
+            const distance = player.position.distanceTo(gem.position);
+            if (distance < collectRadius) {
+                scene.remove(gem);
+                collectibles.splice(i, 1);
+                score++;
+                updateUI();
+            }
+        }
+    }
+
+    function updateUI() {
+        const info = document.getElementById('info');
+        if (score === totalCollectibles) {
+            info.textContent = `You Win! You collected all ${totalCollectibles} gems!`;
+        } else {
+            info.textContent = `Collect the gems! ${score} / ${totalCollectibles}`;
+        }
+    }
+
+    function addBench(x,z){
+      const seat = new THREE.Mesh(
+        new THREE.BoxGeometry(2,0.1,0.6),
+        new THREE.MeshStandardMaterial({ color: 0x663300 })
+      );
+      seat.position.set(x,0.3,z); seat.castShadow=seat.receiveShadow=true; scene.add(seat);
+      const back = seat.clone(); back.position.y=0.7; back.scale.y=4; back.rotation.x=-Math.PI/12; scene.add(back);
+    }
+
+    function addTree(x,z){
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2,0.3,2,8),
+        new THREE.MeshStandardMaterial({ color: 0x663300 })
+      );
+      trunk.position.set(x,1,z); trunk.castShadow=trunk.receiveShadow=true; scene.add(trunk);
+      const foliage = new THREE.Mesh(
+        new THREE.SphereGeometry(1.2,12,12),
+        new THREE.MeshStandardMaterial({ color: 0x228833 })
+      );
+      foliage.position.set(x,3,z); foliage.castShadow=foliage.receiveShadow=true; scene.add(foliage);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      
+      updatePlayer(delta);
+      updateCrowd(delta);
+      updateCollectibles(delta);
+      checkCollisions();
+
+      controls.update();
+      renderer.render(scene,camera);
+    }
+
+    function onWindowResize(){
+      camera.aspect = innerWidth/innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth,innerHeight);
+    }
+  </script>
+</body>
+</html>

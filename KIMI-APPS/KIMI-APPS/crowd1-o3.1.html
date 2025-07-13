@@ -1,0 +1,405 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Crowd Tag – Three.js</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    html,body{margin:0;height:100%;background:#222;color:#eee;font-family:sans-serif}
+    #info{
+      position:absolute;top:10px;left:10px;
+      background:rgba(0,0,0,.4);padding:8px 12px;border-radius:4px;
+      font-size:13px;pointer-events:none
+    }
+    button{
+      position:absolute;top:10px;right:10px;
+      padding:6px 12px;border:none;border-radius:4px;
+      background:#0af;color:#fff;cursor:pointer
+    }
+
+    /* ---------- HUD ---------- */
+    #hud{
+      position:absolute;top:10px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,.45);padding:6px 14px;border-radius:4px;
+      font-size:14px;text-align:center;line-height:1.35
+    }
+    #hud div{margin:2px 0}
+    #hud kbd{
+      background:#555;padding:1px 4px;border-radius:3px;
+      font-family:inherit
+    }
+    .game-over{color:#ff6666;font-weight:700}
+  </style>
+</head>
+
+<body>
+  <div id="info">3D Crowd Tag – drag to rotate / zoom, right-click pan</div>
+  <button id="resetBtn">Reset / Randomize</button>
+
+  <!-- Heads-up display -->
+  <div id="hud">
+    <div id="score">Score: 0</div>
+    <div id="timer">Time: 60</div>
+    <div id="instructions">
+      <strong>Controls:</strong> W&nbsp;A&nbsp;S&nbsp;D / ←&nbsp;↑&nbsp;↓&nbsp;→ to move<br/>
+      Tag a by­stander to score.<br/>
+      Press <kbd>R</kbd> or the button to restart
+    </div>
+  </div>
+
+  <!-- Import map for bare-module specifiers -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    /* ---------- Globals ---------- */
+    let scene, camera, renderer, controls;
+    const sandboxSize = 20;
+    const crowd = [];
+    let player;
+    const keys = {};
+    let score = 0;
+    let timeLeft = 60;
+    const playerSpeed = 5;
+    let instructionsEl;
+    const clock = new THREE.Clock();
+
+    /* ---------- Main ---------- */
+    init();
+    animate();
+
+    /* ---------- Initialisation ---------- */
+    function init() {
+      /* Scene & camera */
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x88ccee);
+      scene.fog = new THREE.Fog(0x88ccee, 15, 40);
+
+      camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+      camera.position.set(15, 15, 15);
+
+      /* Renderer */
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.shadowMap.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      /* Orbit controls */
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.minDistance = 5;
+      controls.maxDistance = 40;
+
+      /* Lighting */
+      const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+      sun.position.set(10, 20, 10);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      sun.shadow.camera.left = -20;
+      sun.shadow.camera.right = 20;
+      sun.shadow.camera.top = 20;
+      sun.shadow.camera.bottom = -20;
+      scene.add(sun, new THREE.AmbientLight(0x666666));
+
+      /* Ground */
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(sandboxSize, sandboxSize),
+        new THREE.MeshStandardMaterial({ color: 0xddbb77, roughness: 1 })
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      /* Walls */
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 });
+      const wallGeo = new THREE.BoxGeometry(sandboxSize, 2, 0.5);
+      ['N', 'S', 'E', 'W'].forEach(side => {
+        const w = new THREE.Mesh(wallGeo, wallMat);
+        w.castShadow = w.receiveShadow = true;
+        if (side === 'N') { w.position.set(0, 1, -sandboxSize / 2); }
+        if (side === 'S') { w.position.set(0, 1, sandboxSize / 2); }
+        if (side === 'E') { w.rotation.y = Math.PI / 2; w.position.set(sandboxSize / 2, 1, 0); }
+        if (side === 'W') { w.rotation.y = Math.PI / 2; w.position.set(-sandboxSize / 2, 1, 0); }
+        scene.add(w);
+      });
+
+      /* Decorations */
+      addBench( 5, -5);
+      addBench(-5,  5);
+      addTree( 6,  6);
+      addTree(-6, -6);
+
+      /* Gameplay */
+      spawnCrowd();
+      player = createPlayer();
+
+      instructionsEl = document.getElementById('instructions');
+
+      /* UI Events */
+      document.getElementById('resetBtn').addEventListener('click', resetGame);
+      window.addEventListener('resize', onResize);
+      window.addEventListener('keydown', onKeyDown);
+      window.addEventListener('keyup',   onKeyUp);
+    }
+
+    /* ---------- Crowd ---------- */
+    function spawnCrowd() {
+      crowd.length = 0;
+      // remove old NPC meshes
+      scene.children.filter(c => c.userData.isHuman && !c.userData.isPlayer)
+                    .forEach(c => scene.remove(c));
+      const count = 8 + Math.floor(Math.random() * 8);
+      for (let i = 0; i < count; i++) {
+        const person = createPerson();
+        person.position.set(
+          (Math.random() - 0.5) * (sandboxSize - 2),
+          0,
+          (Math.random() - 0.5) * (sandboxSize - 2)
+        );
+        scene.add(person);
+        crowd.push({
+          mesh: person,
+          speed: 0.8 + Math.random() * 0.6,
+          dir: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
+          nextAction: Math.random() * 5,
+          paused: false,
+          idleTime: 0
+        });
+      }
+    }
+
+    function updateCrowd(delta) {
+      const avoidanceRadius = 0.9;
+      const slowDown = 0.02;
+
+      crowd.forEach(agent => {
+        if (agent.paused) {
+          agent.idleTime -= delta;
+          if (agent.idleTime <= 0) {
+            agent.paused = false;
+            agent.dir = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+          }
+          return;
+        }
+
+        agent.nextAction -= delta;
+        if (agent.nextAction <= 0) {
+          agent.paused = true;
+          agent.idleTime = 1 + Math.random() * 2;
+          agent.nextAction = 3 + Math.random() * 5;
+          return;
+        }
+
+        /* Avoid other NPCs */
+        let avoidance = new THREE.Vector3();
+        crowd.forEach(other => {
+          if (other === agent) return;
+          const diff = new THREE.Vector3().subVectors(agent.mesh.position, other.mesh.position);
+          if (diff.lengthSq() < avoidanceRadius * avoidanceRadius) avoidance.add(diff.normalize());
+        });
+
+        /* Avoid walls */
+        const margin = 1;
+        const pos = agent.mesh.position;
+        if (pos.x >  sandboxSize / 2 - margin) avoidance.x -= 1;
+        if (pos.x < -sandboxSize / 2 + margin) avoidance.x += 1;
+        if (pos.z >  sandboxSize / 2 - margin) avoidance.z -= 1;
+        if (pos.z < -sandboxSize / 2 + margin) avoidance.z += 1;
+
+        if (avoidance.lengthSq() > 0) {
+          agent.dir.lerp(avoidance.normalize(), 0.1);
+        } else {
+          // gentle random drift
+          agent.dir.lerp(new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(), slowDown);
+        }
+        agent.dir.normalize();
+
+        agent.mesh.position.addScaledVector(agent.dir, agent.speed * delta);
+        agent.mesh.lookAt(agent.mesh.position.clone().add(agent.dir));
+      });
+    }
+
+    /* ---------- Player ---------- */
+    function createPlayer() {
+      const p = createPerson();
+      // make shirt bright red so it stands out
+      p.children[0].material = p.children[0].material.clone();
+      p.children[0].material.color.set(0xff3333);
+      p.userData.isPlayer = true;
+      scene.add(p);
+      return p;
+    }
+
+    function updatePlayer(delta) {
+      const dir = new THREE.Vector3(
+        (keys['KeyA'] || keys['ArrowLeft']  ? -1 : 0) +
+        (keys['KeyD'] || keys['ArrowRight'] ?  1 : 0),
+        0,
+        (keys['KeyW'] || keys['ArrowUp']    ? -1 : 0) +
+        (keys['KeyS'] || keys['ArrowDown']  ?  1 : 0)
+      );
+
+      if (dir.lengthSq()) {
+        dir.normalize();
+        player.position.addScaledVector(dir, playerSpeed * delta);
+        player.lookAt(player.position.clone().add(dir));
+      }
+
+      /* Contain within walls */
+      player.position.x = THREE.MathUtils.clamp(player.position.x, -sandboxSize / 2 + 0.5, sandboxSize / 2 - 0.5);
+      player.position.z = THREE.MathUtils.clamp(player.position.z, -sandboxSize / 2 + 0.5, sandboxSize / 2 - 0.5);
+    }
+
+    function handleCollisions() {
+      crowd.forEach(agent => {
+        if (agent.mesh.position.distanceToSquared(player.position) < 0.36) { // ~0.6 m radius
+          score++;
+          document.getElementById('score').textContent = `Score: ${score}`;
+          // teleport NPC to a random spot
+          agent.mesh.position.set(
+            (Math.random() - 0.5) * (sandboxSize - 2),
+            0,
+            (Math.random() - 0.5) * (sandboxSize - 2)
+          );
+        }
+      });
+    }
+
+    /* ---------- Reusable geometry ---------- */
+    function createPerson() {
+      const group = new THREE.Group();
+      const skin  = new THREE.Color().setHSL(Math.random(), 0.6, 0.55);
+      const shirt = new THREE.Color().setHSL(Math.random(), 0.8, 0.6);
+      const pants = new THREE.Color().setHSL(Math.random(), 0.7, 0.35);
+
+      const body = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.25, 1, 4, 8),
+        new THREE.MeshStandardMaterial({ color: shirt })
+      );
+      body.position.y = 0.9;
+      body.castShadow = true;
+      group.add(body);
+
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 16, 16),
+        new THREE.MeshStandardMaterial({ color: skin })
+      );
+      head.position.y = 1.7;
+      head.castShadow = true;
+      group.add(head);
+
+      const legGeo = new THREE.CapsuleGeometry(0.1, 0.7, 4, 8);
+      const legL = new THREE.Mesh(legGeo, new THREE.MeshStandardMaterial({ color: pants }));
+      legL.position.set(0.15, 0.35, 0);
+      legL.castShadow = true;
+      group.add(legL);
+      const legR = legL.clone();
+      legR.position.x = -0.15;
+      group.add(legR);
+
+      group.userData.isHuman = true;
+      return group;
+    }
+
+    function addBench(x, z) {
+      const seat = new THREE.Mesh(
+        new THREE.BoxGeometry(2, 0.1, 0.6),
+        new THREE.MeshStandardMaterial({ color: 0x663300 })
+      );
+      seat.position.set(x, 0.3, z);
+      seat.castShadow = seat.receiveShadow = true;
+      scene.add(seat);
+
+      const back = seat.clone();
+      back.position.y = 0.7;
+      back.scale.y = 4;
+      back.rotation.x = -Math.PI / 12;
+      scene.add(back);
+    }
+
+    function addTree(x, z) {
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.3, 2, 8),
+        new THREE.MeshStandardMaterial({ color: 0x663300 })
+      );
+      trunk.position.set(x, 1, z);
+      trunk.castShadow = trunk.receiveShadow = true;
+      scene.add(trunk);
+
+      const foliage = new THREE.Mesh(
+        new THREE.SphereGeometry(1.2, 12, 12),
+        new THREE.MeshStandardMaterial({ color: 0x228833 })
+      );
+      foliage.position.set(x, 3, z);
+      foliage.castShadow = foliage.receiveShadow = true;
+      scene.add(foliage);
+    }
+
+    /* ---------- Animation loop ---------- */
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+
+      if (timeLeft > 0) {
+        timeLeft -= delta;
+        updateCrowd(delta);
+        updatePlayer(delta);
+        handleCollisions();
+
+        if (timeLeft <= 0) {
+          timeLeft = 0;
+          instructionsEl.innerHTML =
+            `<strong>Game Over</strong><br/>Final Score: ${score}<br/>Press <kbd>R</kbd> to play again`;
+          instructionsEl.classList.add('game-over');
+        }
+        document.getElementById('timer').textContent = `Time: ${Math.ceil(timeLeft)}`;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    /* ---------- Event handlers ---------- */
+    function onResize() {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    }
+
+    function onKeyDown(e) {
+      keys[e.code] = true;
+      if (e.code === 'KeyR') resetGame();
+    }
+
+    function onKeyUp(e) {
+      keys[e.code] = false;
+    }
+
+    /* ---------- Game reset ---------- */
+    function resetGame() {
+      score    = 0;
+      timeLeft = 60;
+      document.getElementById('score').textContent = 'Score: 0';
+      document.getElementById('timer').textContent = 'Time: 60';
+      instructionsEl.classList.remove('game-over');
+      instructionsEl.innerHTML =
+        '<strong>Controls:</strong> W&nbsp;A&nbsp;S&nbsp;D / ←&nbsp;↑&nbsp;↓&nbsp;→ to move<br/>' +
+        'Tag a by­stander to score.<br/>Press <kbd>R</kbd> or the button to restart';
+
+      spawnCrowd();         // new NPCs
+      player.position.set(0, 0, 0);
+    }
+  </script>
+</body>
+</html>
+

@@ -1,0 +1,179 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Crowd Sandbox</title>
+  <style>
+    body { margin: 0; overflow: hidden; background:#000; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<script type="module">
+/*  3D Crowd Sandbox
+    A single-file browser demo using Three.js
+    10 stylized humanoids wander inside a textured sandbox.
+    Drag mouse to orbit the camera, scroll to zoom.
+*/
+import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
+import { OrbitControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/OrbitControls.js';
+
+// ---------- Scene & Camera ----------
+const scene   = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb); // sky
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(0, 20, 30);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+new OrbitControls(camera, renderer.domElement);
+
+// ---------- Lighting ----------
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(5, 15, 10);
+scene.add(dirLight);
+
+// ---------- Sandbox ----------
+const GROUND_SIZE = 25;
+const TEXTURE_URL = 'https://threejs.org/examples/textures/terrain/grasslight-big.jpg';
+const texLoader   = new THREE.TextureLoader();
+const groundTex   = texLoader.load(TEXTURE_URL);
+groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
+groundTex.repeat.set(6,6);
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE),
+  new THREE.MeshStandardMaterial({ map: groundTex })
+);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+// Invisible walls for physics at ±half-size
+const WALL_LIMIT = GROUND_SIZE/2 - 0.5;
+
+// ---------- Crowd ----------
+const AGENT_COUNT = 12;
+const agents = [];
+
+// Helper: create a stylised humanoid
+// ---------- Stylised Humanoid ----------
+function makeHuman(color) {
+  const group = new THREE.Group();
+
+  // Materials
+  const bodyMat = new THREE.MeshStandardMaterial({ color });
+  const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac });
+
+  // Head
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 16), headMat);
+  head.position.y = 2.2;
+  group.add(head);
+
+  // Body (cylinder)
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.45, 0.45, 1.6, 12),
+    bodyMat
+  );
+  body.position.y = 1.2;
+  group.add(body);
+
+  // Legs (cylinders)
+  const legGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.9, 8);
+  const leftLeg  = new THREE.Mesh(legGeo, bodyMat);
+  const rightLeg = new THREE.Mesh(legGeo, bodyMat);
+  leftLeg.position.set(0.25, 0.3, 0);
+  rightLeg.position.set(-0.25, 0.3, 0);
+  group.add(leftLeg, rightLeg);
+
+  return group;
+}
+
+// Spawn agents
+const COLORS = [0xff4500, 0x1e90ff, 0x32cd32, 0xffd700, 0x9932cc, 0xff69b4];
+for (let i = 0; i < AGENT_COUNT; i++) {
+  const color = COLORS[i % COLORS.length];
+  const mesh  = makeHuman(color);
+  mesh.position.set(
+    (Math.random()-0.5)*GROUND_SIZE*0.8,
+    0,
+    (Math.random()-0.5)*GROUND_SIZE*0.8
+  );
+  scene.add(mesh);
+
+  agents.push({
+    mesh,
+    velocity: new THREE.Vector3(
+      Math.random()*2-1,
+      0,
+      Math.random()*2-1
+    ).normalize(),
+    speed: 0.03 + Math.random()*0.04,
+    personalSpace: 1.2 + Math.random()*0.5,
+    wobblePhase: Math.random()*Math.PI*2,
+    wobbleSpeed: 0.05 + Math.random()*0.05
+  });
+}
+
+// ---------- Animation ----------
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+
+  agents.forEach(a => {
+    // Wandering steering
+    let steer = new THREE.Vector3();
+    // Random change in direction
+    if (Math.random() < 0.01) {
+      a.velocity.x += (Math.random()-0.5)*0.3;
+      a.velocity.z += (Math.random()-0.5)*0.3;
+    }
+    steer.add(a.velocity);
+
+    // Avoid walls
+    const pos = a.mesh.position;
+    if (Math.abs(pos.x) > WALL_LIMIT-1) a.velocity.x *= -1;
+    if (Math.abs(pos.z) > WALL_LIMIT-1) a.velocity.z *= -1;
+
+    // Avoid other agents (simple separation)
+    agents.forEach(other => {
+      if (other === a) return;
+      const d = pos.distanceTo(other.mesh.position);
+      if (d < a.personalSpace) {
+        const push = pos.clone().sub(other.mesh.position).normalize().multiplyScalar(0.05);
+        steer.add(push);
+      }
+    });
+
+    // Normalize & apply
+    steer.normalize();
+    a.velocity.copy(steer);
+    pos.addScaledVector(a.velocity, a.speed);
+
+    // Keep within bounds
+    pos.x = THREE.MathUtils.clamp(pos.x, -WALL_LIMIT, WALL_LIMIT);
+    pos.z = THREE.MathUtils.clamp(pos.z, -WALL_LIMIT, WALL_LIMIT);
+
+    // Face direction
+    a.mesh.lookAt(pos.clone().add(a.velocity));
+
+    // Bobbing walk animation
+    a.wobblePhase += a.wobbleSpeed;
+    a.mesh.position.y = 0.1*Math.abs(Math.sin(a.wobblePhase));
+  });
+
+  renderer.render(scene, camera);
+}
+animate();
+
+// ---------- Resize ----------
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
+```

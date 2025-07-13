@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>3D Crowd Sandbox Game</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    html,body{margin:0;height:100%;background:#222;color:#eee;font-family:sans-serif}
+    #info{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.6);padding:8px 12px;border-radius:4px;font-size:13px;pointer-events:none;z-index:2;}
+    #instructions{position:absolute;top:0;left:0;right:0;background:rgba(16,16,24,.85);padding:14px 24px 10px 24px;font-size:15px;z-index:3;line-height:1.6;border-bottom:2px solid #0af;}
+    #hud{position:absolute;bottom:18px;left:0;right:0;text-align:center;font-size:18px;font-weight:bold;letter-spacing:2px;z-index:5;}
+    button{position:absolute;top:10px;right:10px;padding:6px 12px;border:none;border-radius:4px;background:#0af;color:#fff;cursor:pointer;z-index:10;}
+  </style>
+</head>
+<body>
+  <div id="instructions">
+    <b>3D Crowd Sandbox – Tag Game</b><br>
+    <ul style="margin:6px 0 0 16px;padding:0">
+      <li>Move your player: <b>WASD</b> or <b>Arrow Keys</b></li>
+      <li>Tag as many crowd members as possible within <b>60 seconds</b></li>
+      <li>Touch others to tag (they turn <span style="color:#e44">red</span> and freeze)</li>
+      <li><b>Score</b> and <b>time</b> shown below. Press <b>Reset</b> to play again.</li>
+    </ul>
+  </div>
+  <div id="info">Drag to rotate/zoom, right-click pan</div>
+  <div id="hud"></div>
+  <button id="resetBtn">Reset / Randomize</button>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    /* ---------- Globals ---------- */
+    let scene, camera, renderer, controls;
+    const sandboxSize = 20;
+    const crowd = [];
+    let player = null, playerObj = null, playerSpeed = 8, keys = {};
+    let gameActive = false, score = 0, timer = 60, lastTime = 0, gameOver = false;
+    const clock = new THREE.Clock();
+
+    /* ---------- Main ---------- */
+    init();
+    startGame();
+    animate();
+
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x88ccee);
+      scene.fog = new THREE.Fog(0x88ccee, 15, 40);
+
+      camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 100);
+      camera.position.set(15, 15, 15);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.shadowMap.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.minDistance = 5;
+      controls.maxDistance = 40;
+
+      /* Lighting */
+      const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+      sun.position.set(10, 20, 10);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      sun.shadow.camera.left = -20;
+      sun.shadow.camera.right = 20;
+      sun.shadow.camera.top = 20;
+      sun.shadow.camera.bottom = -20;
+      scene.add(sun, new THREE.AmbientLight(0x666666));
+
+      /* Ground */
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(sandboxSize, sandboxSize),
+        new THREE.MeshStandardMaterial({ color: 0xddbb77, roughness: 1 })
+      );
+      ground.rotation.x = -Math.PI/2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      /* Walls */
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 });
+      const wallGeo = new THREE.BoxGeometry(sandboxSize, 2, 0.5);
+      ['N','S','E','W'].forEach(side=>{
+        const w = new THREE.Mesh(wallGeo, wallMat);
+        w.castShadow = w.receiveShadow = true;
+        if(side==='N'){ w.position.set(0,1,-sandboxSize/2); }
+        if(side==='S'){ w.position.set(0,1, sandboxSize/2); }
+        if(side==='E'){ w.rotation.y=Math.PI/2; w.position.set( sandboxSize/2,1,0); }
+        if(side==='W'){ w.rotation.y=Math.PI/2; w.position.set(-sandboxSize/2,1,0); }
+        scene.add(w);
+      });
+
+      /* Decorations */
+      addBench( 5, -5);
+      addBench(-5,  5);
+      addTree( 6, 6);
+      addTree(-6, -6);
+
+      document.getElementById('resetBtn').addEventListener('click', startGame);
+
+      // Controls
+      window.addEventListener('keydown', e=>{ keys[e.key.toLowerCase()] = true; });
+      window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+
+      window.addEventListener('resize',()=>{
+        camera.aspect = innerWidth/innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth,innerHeight);
+      });
+    }
+
+    function startGame() {
+      // Remove existing crowd and player
+      crowd.length = 0;
+      player = null;
+      playerObj = null;
+      lastTime = performance.now();
+      gameActive = true;
+      gameOver = false;
+      score = 0;
+      timer = 60;
+      // Remove all humans
+      scene.children.filter(c=>c.userData.isHuman).forEach(c=>scene.remove(c));
+      // Spawn AI crowd (10-16)
+      const count = 10 + Math.floor(Math.random()*7);
+      for(let i=0;i<count;i++){
+        const mesh = createPerson();
+        mesh.position.set(
+          (Math.random()-0.5)*(sandboxSize-2),
+          0,
+          (Math.random()-0.5)*(sandboxSize-2)
+        );
+        scene.add(mesh);
+        crowd.push({
+          mesh,
+          speed: 0.7 + Math.random()*0.6,
+          dir: new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(),
+          nextAction: Math.random()*5,
+          paused: false,
+          idleTime: 0,
+          tagged: false
+        });
+      }
+      // Spawn player (unique color)
+      playerObj = createPerson(true);
+      playerObj.position.set(0,0,0);
+      scene.add(playerObj);
+      player = {
+        mesh: playerObj,
+        speed: playerSpeed,
+        dir: new THREE.Vector3(0,0,1)
+      };
+    }
+
+    function createPerson(isPlayer=false) {
+      const group = new THREE.Group();
+      // Random colors for crowd, fixed bright blue for player
+      const skin = isPlayer ? new THREE.Color(0xfdeedb) : new THREE.Color().setHSL(Math.random(),0.6,0.55);
+      const shirt = isPlayer ? new THREE.Color(0x2299ff) : new THREE.Color().setHSL(Math.random(),0.8,0.6);
+      const pants = isPlayer ? new THREE.Color(0x222266) : new THREE.Color().setHSL(Math.random(),0.7,0.35);
+
+      const body = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.25,1,4,8),
+        new THREE.MeshStandardMaterial({ color: shirt })
+      );
+      body.position.y=0.9; body.castShadow=true;
+      group.add(body);
+
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25,16,16),
+        new THREE.MeshStandardMaterial({ color: skin })
+      );
+      head.position.y=1.7; head.castShadow=true;
+      group.add(head);
+
+      const legGeo = new THREE.CapsuleGeometry(0.1,0.7,4,8);
+      const legL = new THREE.Mesh(legGeo, new THREE.MeshStandardMaterial({ color: pants }));
+      legL.position.set(0.15,0.35,0); legL.castShadow=true; group.add(legL);
+      const legR = legL.clone(); legR.position.x=-0.15; group.add(legR);
+
+      group.userData.isHuman = true;
+      if(isPlayer) group.userData.isPlayer = true;
+      return group;
+    }
+
+    function updateCrowd(delta) {
+      const avoidanceRadius = 0.9;
+      const slowDown = 0.02;
+      // Move AI crowd
+      crowd.forEach(agent=>{
+        if(agent.tagged) return;
+        if(agent.paused){
+          agent.idleTime -= delta;
+          if(agent.idleTime <= 0){ agent.paused=false; agent.dir=new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(); }
+          return;
+        }
+        agent.nextAction -= delta;
+        if(agent.nextAction <= 0){
+          agent.paused=true;
+          agent.idleTime = 1 + Math.random()*2;
+          agent.nextAction = 3 + Math.random()*5;
+          return;
+        }
+        let avoidance = new THREE.Vector3();
+        crowd.forEach(other=>{
+          if(other===agent || other.tagged) return;
+          const diff = new THREE.Vector3().subVectors(agent.mesh.position,other.mesh.position);
+          if(diff.lengthSq() < avoidanceRadius*avoidanceRadius) avoidance.add(diff.normalize());
+        });
+        // Walls
+        const margin = 1;
+        const pos = agent.mesh.position;
+        if(pos.x > sandboxSize/2-margin) avoidance.x -=1;
+        if(pos.x < -sandboxSize/2+margin) avoidance.x +=1;
+        if(pos.z > sandboxSize/2-margin) avoidance.z -=1;
+        if(pos.z < -sandboxSize/2+margin) avoidance.z +=1;
+        if(avoidance.lengthSq() > 0) agent.dir.lerp(avoidance.normalize(),0.1);
+        else agent.dir.lerp(new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(),slowDown);
+        agent.dir.normalize();
+        agent.mesh.position.addScaledVector(agent.dir,agent.speed*delta);
+        agent.mesh.lookAt(agent.mesh.position.clone().add(agent.dir));
+      });
+    }
+
+    function updatePlayer(delta) {
+      if(!player) return;
+      // WASD or arrow keys for movement
+      let move = new THREE.Vector3();
+      if(keys['w']||keys['arrowup']) move.z -= 1;
+      if(keys['s']||keys['arrowdown']) move.z += 1;
+      if(keys['a']||keys['arrowleft']) move.x -= 1;
+      if(keys['d']||keys['arrowright']) move.x += 1;
+      if(move.lengthSq()>0) {
+        move.normalize();
+        player.dir.lerp(move, 0.3);
+      }
+      // Keep in sandbox
+      const pos = player.mesh.position;
+      const margin = 0.6;
+      let next = pos.clone().addScaledVector(player.dir, player.speed*delta);
+      next.x = Math.max(-sandboxSize/2+margin, Math.min(sandboxSize/2-margin, next.x));
+      next.z = Math.max(-sandboxSize/2+margin, Math.min(sandboxSize/2-margin, next.z));
+      player.mesh.position.copy(next);
+      player.mesh.lookAt(player.mesh.position.clone().add(player.dir));
+    }
+
+    function checkTagging() {
+      // Tag any crowd members within collision radius
+      const playerPos = player.mesh.position;
+      crowd.forEach(agent=>{
+        if(agent.tagged) return;
+        if(agent.mesh.position.distanceTo(playerPos) < 0.55) {
+          agent.tagged = true;
+          // Make tagged person red and shrink slightly
+          agent.mesh.children.forEach(m=>{
+            if(m.material) m.material.color.set(0xdd2222);
+          });
+          agent.mesh.scale.set(0.93,0.93,0.93);
+          score++;
+        }
+      });
+    }
+
+    function updateHUD() {
+      const hud = document.getElementById('hud');
+      hud.innerHTML = gameOver
+        ? `<span style="color:#0af;">Game Over!</span> Final Score: <b>${score}</b>`
+        : `Score: <b>${score}</b> &nbsp; | &nbsp; Time Left: <b>${Math.max(0, Math.ceil(timer))}s</b>`;
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.045);
+      if(gameActive && !gameOver){
+        updatePlayer(delta);
+        updateCrowd(delta);
+        checkTagging();
+        // Timer
+        timer -= delta;
+        if(timer <= 0){
+          timer = 0;
+          gameActive = false;
+          gameOver = true;
+        }
+        updateHUD();
+      } else {
+        updateHUD();
+      }
+      controls.update();
+      renderer.render(scene,camera);
+    }
+
+    function addBench(x,z){
+      const seat = new THREE.Mesh(
+        new THREE.BoxGeometry(2,0.1,0.6),
+        new THREE.MeshStandardMaterial({ color: 0x663300 })
+      );
+      seat.position.set(x,0.3,z); seat.castShadow=seat.receiveShadow=true; scene.add(seat);
+      const back = seat.clone(); back.position.y=0.7; back.scale.y=4; back.rotation.x=-Math.PI/12; scene.add(back);
+    }
+
+    function addTree(x,z){
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2,0.3,2,8),
+        new THREE.MeshStandardMaterial({ color: 0x663300 })
+      );
+      trunk.position.set(x,1,z); trunk.castShadow=trunk.receiveShadow=true; scene.add(trunk);
+      const foliage = new THREE.Mesh(
+        new THREE.SphereGeometry(1.2,12,12),
+        new THREE.MeshStandardMaterial({ color: 0x228833 })
+      );
+      foliage.position.set(x,3,z); foliage.castShadow=foliage.receiveShadow=true; scene.add(foliage);
+    }
+  </script>
+</body>
+</html>

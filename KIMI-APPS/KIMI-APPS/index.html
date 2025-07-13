@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>VanillaJS Soft-Synth</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  :root { --bg:#1e1e1e; --panel:#2d2d30; --accent:#00bcd4; }
+  body{margin:0;font-family:system-ui;background:var(--bg);color:#eee}
+  h3{margin:.3em 0}
+  #app{display:flex;flex-wrap:wrap;gap:.5em;padding:.5em}
+  .panel{flex:1 1 260px;background:var(--panel);border-radius:6px;padding:.7em}
+  .row{display:flex;gap:.5em;flex-wrap:wrap;align-items:center}
+  .col{display:flex;flex-direction:column;gap:.3em}
+  label{font-size:.8em}
+  input[type=range]{width:100%}
+  select,button,input[type=file]{padding:.3em;border-radius:4px;border:none}
+  button{background:var(--accent);color:#000;font-weight:600}
+  #keyboard{user-select:none;display:flex;position:relative;height:110px;overflow-x:auto}
+  .key{flex:1 0 28px;border:1px solid #444;background:#333;border-radius:0 0 4px 4px;
+       text-align:center;line-height:160px;font-size:.7em;cursor:pointer}
+  .key.active{background:var(--accent)}
+  .key[data-accidental]{background:#222;flex:0 0 18px;height:70px;
+                        margin:0 -9px;z-index:2;color:#aaa;line-height:110px}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Oscillators -->
+  <div class="panel">
+    <h3>Osc 1</h3>
+    <div class="col">
+      <label>Wave
+        <select data-param="osc1.type">
+          <option>sine</option><option>square</option><option>sawtooth</option><option>triangle</option><option>noise</option>
+        </select>
+      </label>
+      <label>Octave <input type="range" data-param="osc1.oct" min="-2" max="2" step="1" value="0"/></label>
+      <label>Detune ¢ <input type="range" data-param="osc1.detune" min="-50" max="50" value="0"/></label>
+      <label>Level <input type="range" data-param="osc1.gain" min="0" max="1" step=".01" value=".6"/></label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Osc 2</h3>
+    <div class="col">
+      <label>Wave
+        <select data-param="osc2.type">
+          <option>sine</option><option selected>square</option><option>sawtooth</option><option>triangle</option><option>noise</option>
+        </select>
+      </label>
+      <label>Octave <input type="range" data-param="osc2.oct" min="-2" max="2" step="1" value="-1"/></label>
+      <label>Detune ¢ <input type="range" data-param="osc2.detune" min="-50" max="50" value="5"/></label>
+      <label>Level <input type="range" data-param="osc2.gain" min="0" max="1" step=".01" value=".4"/></label>
+    </div>
+  </div>
+
+  <!-- Filter -->
+  <div class="panel">
+    <h3>Filter</h3>
+    <div class="col">
+      <label>Type
+        <select data-param="filter.type">
+          <option>lowpass</option><option>bandpass</option><option>highpass</option>
+        </select>
+      </label>
+      <label>Cutoff <input type="range" data-param="filter.freq" min="50" max="8000" value="1200"/></label>
+      <label>Res <input type="range" data-param="filter.q" min="0" max="30" value="1"/></label>
+      <label>Env Amt <input type="range" data-param="filter.envAmt" min="0" max="1" step=".01" value=".7"/></label>
+      <label>Key Track <input type="range" data-param="filter.keyTrack" min="0" max="1" step=".01" value=".2"/></label>
+    </div>
+  </div>
+
+  <!-- Envelopes -->
+  <div class="panel">
+    <h3>Amp / Filter ADSR</h3>
+    <div class="row">
+      <div class="col"><label>A<input type="range" data-param="ampEnv.a" min="0" max="3" step=".01" value=".01"/></label></div>
+      <div class="col"><label>D<input type="range" data-param="ampEnv.d" min="0" max="3" step=".01" value=".3"/></label></div>
+      <div class="col"><label>S<input type="range" data-param="ampEnv.s" min="0" max="1" step=".01" value=".6"/></label></div>
+      <div class="col"><label>R<input type="range" data-param="ampEnv.r" min="0" max="5" step=".01" value=".5"/></label></div>
+    </div>
+    <div class="row">
+      <div class="col"><label>Filter A<input type="range" data-param="filterEnv.a" min="0" max="3" step=".01" value=".01"/></label></div>
+      <div class="col"><label>D<input type="range" data-param="filterEnv.d" min="0" max="3" step=".01" value=".4"/></label></div>
+      <div class="col"><label>S<input type="range" data-param="filterEnv.s" min="0" max="1" step=".01" value=".3"/></label></div>
+      <div class="col"><label>R<input type="range" data-param="filterEnv.r" min="0" max="5" step=".01" value=".4"/></label></div>
+    </div>
+  </div>
+
+  <!-- LFO -->
+  <div class="panel">
+    <h3>LFO</h3>
+    <div class="col">
+      <label>Wave
+        <select data-param="lfo.type">
+          <option>sine</option><option>square</option><option>sawtooth</option><option>triangle</option>
+        </select>
+      </label>
+      <label>Rate Hz <input type="range" data-param="lfo.rate" min="0.1" max="20" step=".1" value="4"/></label>
+      <label>Amount <input type="range" data-param="lfo.amount" min="0" max="1" step=".01" value="0"/></label>
+      <label>Dest
+        <select data-param="lfo.dest">
+          <option value="none">off</option><option value="pitch">pitch</option><option value="cutoff">filter</option><option value="amp">amp</option>
+        </select>
+      </label>
+    </div>
+  </div>
+  <!-- Arpeggiator / Sequencer -->
+  <div class="panel">
+    <h3>Arpeggiator / 32-Step Sequencer</h3>
+    <div class="row">
+      <label>Mode
+        <select data-param="arp.mode">
+          <option>up</option><option>down</option><option>updown</option>
+          <option>random</option><option>chord</option><option>manual</option>
+        </select>
+      </label>
+      <label>Rate
+        <select data-param="arp.rate">
+          <option value="1/64">1/64</option><option value="1/32">1/32</option>
+          <option value="1/16">1/16</option><option value="1/8">1/8</option>
+          <option value="1/4">1/4</option><option value="1/2">1/2</option>
+          <option value="1">1/1</option>
+        </select>
+      </label>
+      <label>Swing %<input type="range" data-param="arp.swing" min="0" max="75" value="0"/></label>
+      <label>Octave Range<input type="range" data-param="arp.octaves" min="1" max="4" step="1" value="1"/></label>
+      <label>Gate %<input type="range" data-param="arp.gate" min="5" max="100" value="80"/></label>
+      <label><input type="checkbox" data-param="arp.latch"/> Latch</label>
+    </div>
+
+    <!-- Mini step editor -->
+    <div id="stepGrid" style="display:grid;grid-template-columns:repeat(16,1fr);gap:2px;margin-top:.5em;font-size:.7em"></div>
+    <button id="clearSeq">Clear Seq</button>
+    <button id="randSeq">Random</button>
+  </div>
+
+  <!-- Keyboard -->
+  <div class="panel" style="flex-basis:100%">
+    <button id="panic">Panic (All Notes Off)</button>
+    <div id="keyboard"></div>
+  </div>
+
+  <!-- Preset I/O -->
+  <div class="panel">
+    <h3>Preset</h3>
+    <div class="row">
+      <button id="savePreset">Save JSON</button>
+      <input type="file" id="loadPreset" accept=".json" />
+    </div>
+  </div>
+</div>
+
+<script>
+/* --------------------  INIT AUDIO  -------------------- */
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+const masterGain = ctx.createGain();
+masterGain.gain.value = 0.25;
+masterGain.connect(ctx.destination);
+
+/* --------------------  PATCH STATE  -------------------- */
+let patch = {
+  osc1:{type:'sine', oct:0, detune:0, gain:0.6},
+  osc2:{type:'square', oct:-1, detune:5, gain:0.4},
+  filter:{type:'lowpass', freq:1200, q:1, envAmt:0.7, keyTrack:.2},
+  ampEnv:{a:.01,d:.3,s:.6,r:.5},
+  filterEnv:{a:.01,d:.4,s:.3,r:.4},
+  lfo:{type:'sine', rate:4, amount:0, dest:'none'}
+};
+
+/* --------------------  VOICE CLASS  -------------------- */
+class Voice {
+  constructor(note){
+    this.note = note;
+    this.freq = 440*Math.pow(2,(note-69)/12);
+    this.active = true;
+
+    // Oscillators
+    this.osc1 = ctx.createOscillator();
+    this.osc2 = ctx.createOscillator();
+    [this.osc1,this.osc2].forEach(o=>o.type='sine');
+    this.osc1Gain = ctx.createGain();
+    this.osc2Gain = ctx.createGain();
+
+    // Filter
+    this.filter = ctx.createBiquadFilter();
+    this.filterEnv = ctx.createGain();
+    this.filter.connect(this.filterEnv);
+    this.filterEnv.connect(masterGain);
+
+    // Mixer
+    this.osc1.connect(this.osc1Gain);
+    this.osc2.connect(this.osc2Gain);
+    this.osc1Gain.connect(this.filter);
+    this.osc2Gain.connect(this.filter);
+
+    // LFO
+    this.lfo = ctx.createOscillator();
+    this.lfoGain = ctx.createGain();
+    this.lfo.connect(this.lfoGain);
+    this.lfo.start();
+
+    // Amp envelope
+    this.ampEnv = ctx.createGain();
+    this.filterEnv.gain.value = 0;
+    this.ampEnv.gain.value = 0;
+    this.filter.connect(this.ampEnv);
+    this.ampEnv.connect(masterGain);
+
+    this.updatePatch(); // set initial params
+    this.start();
+  }
+
+  updatePatch(){
+    const p = patch;
+    // Osc settings
+    this.osc1.type = p.osc1.type;
+    this.osc2.type = p.osc2.type;
+    const det1 = p.osc1.detune + (p.lfo.dest==='pitch' ? lfoAmount() : 0);
+    const det2 = p.osc2.detune + (p.lfo.dest==='pitch' ? lfoAmount() : 0);
+    this.osc1.detune.setValueAtTime(det1,ctx.currentTime);
+    this.osc2.detune.setValueAtTime(det2,ctx.currentTime);
+    this.osc1Gain.gain.setValueAtTime(p.osc1.gain,ctx.currentTime);
+    this.osc2Gain.gain.setValueAtTime(p.osc2.gain,ctx.currentTime);
+
+    // Frequency
+    const base = this.freq * Math.pow(2,p.osc1.oct) * Math.pow(2,p.osc2.oct/2);
+    this.osc1.frequency.setValueAtTime(base,ctx.currentTime);
+    this.osc2.frequency.setValueAtTime(base * Math.pow(2,p.osc2.oct),ctx.currentTime);
+
+    // Filter
+    this.filter.type = p.filter.type;
+    const cutoff = p.filter.freq * (1 + p.filter.keyTrack*(this.note-60)/60);
+    const modulated = cutoff * (1 + p.filter.envAmt*this.filterEnv.gain.value);
+    if(p.lfo.dest==='cutoff'){
+      this.filter.frequency.setValueAtTime(modulated + lfoAmount()*2000,ctx.currentTime);
+    }else{
+      this.filter.frequency.setValueAtTime(modulated,ctx.currentTime);
+    }
+    this.filter.Q.setValueAtTime(p.filter.q,ctx.currentTime);
+
+    // LFO
+    this.lfo.type = p.lfo.type;
+    this.lfo.frequency.setValueAtTime(p.lfo.rate,ctx.currentTime);
+    this.lfoGain.gain.setValueAtTime(p.lfo.amount,ctx.currentTime);
+  }
+
+  start(){
+    const now = ctx.currentTime;
+    const a = patch.ampEnv;
+    const f = patch.filterEnv;
+    this.ampEnv.gain.cancelScheduledValues(now);
+    this.ampEnv.gain.setValueAtTime(0,now);
+    this.ampEnv.gain.linearRampToValueAtTime(1,now+a.a);
+    this.ampEnv.gain.linearRampToValueAtTime(a.s,now+a.a+a.d);
+    this.filterEnv.gain.cancelScheduledValues(now);
+    this.filterEnv.gain.setValueAtTime(0,now);
+    this.filterEnv.gain.linearRampToValueAtTime(1,now+f.a);
+    this.filterEnv.gain.linearRampToValueAtTime(f.s,now+f.a+f.d);
+    this.osc1.start(now);
+    this.osc2.start(now);
+  }
+
+  release(){
+    if(!this.active) return;
+    this.active=false;
+    const now = ctx.currentTime;
+    const a = patch.ampEnv;
+    const f = patch.filterEnv;
+    this.ampEnv.gain.cancelScheduledValues(now);
+    this.ampEnv.gain.setValueAtTime(this.ampEnv.gain.value, now);
+    this.ampEnv.gain.linearRampToValueAtTime(0, now+a.r);
+    this.filterEnv.gain.cancelScheduledValues(now);
+    this.filterEnv.gain.setValueAtTime(this.filterEnv.gain.value, now);
+    this.filterEnv.gain.linearRampToValueAtTime(0, now+f.r);
+    setTimeout(()=>this.dispose(), (Math.max(a.r,f.r)+.1)*1000);
+  }
+
+  dispose(){
+    [this.osc1,this.osc2,this.lfo].forEach(o=>o.stop());
+    [this.osc1,this.osc2,this.osc1Gain,this.osc2Gain,this.filter,
+     this.ampEnv,this.filterEnv,this.lfo,this.lfoGain].forEach(n=>n.disconnect());
+  }
+}
+
+function lfoAmount(){
+  return Math.sin(ctx.currentTime*patch.lfo.rate*Math.PI*2)*patch.lfo.amount;
+}
+
+
+/* ----------  ARP / SEQUENCER STATE  ---------- */
+patch.arp = {
+  mode:'up',
+  rate:'1/16',
+  swing:0,
+  octaves:1,
+  gate:80,
+  latch:false,
+  steps:Array.from({length:32},(_,i)=>({
+    note:null, vel:100, gate:80, octave:0, prob:100, tie:false
+  }))
+};
+
+/* ----------  ARP ENGINE  ---------- */
+let arpNotes = [];          // held keys
+let arpIndex = 0;
+let arpDir   = 1;
+let arpStepT = 0;
+let arpTimer = null;
+
+function rateToMs(rate){
+  const map = {'1/64':62.5,'1/32':125,'1/16':250,'1/8':500,'1/4':1000,'1/2':2000,'1/1':4000};
+  return map[rate] || 250;
+}
+
+function nextArpNote(){
+  if(arpNotes.length===0) return null;
+  const {mode, octaves, steps} = patch.arp;
+  let note=null, vel=100, gate=patch.arp.gate;
+
+  if(mode==='manual'){               // step sequencer
+    const s = steps[arpIndex];
+    if(s && s.note!==null && Math.random()*100 < s.prob){
+      note = s.note + s.octave*12;
+      vel  = s.vel;
+      gate = s.gate;
+    }
+    arpIndex = (arpIndex+1) % steps.length;
+  } else {                           // classic arp
+    const octave = Math.floor(arpIndex / arpNotes.length) % octaves;
+    let idx = 0;
+    switch(mode){
+      case 'up':    idx = arpIndex % arpNotes.length; break;
+      case 'down':  idx = arpNotes.length-1 - (arpIndex % arpNotes.length); break;
+      case 'updown':
+        idx = (arpDir===1) ? (arpIndex % (arpNotes.length*2-2)) : (arpNotes.length*2-2 - (arpIndex % (arpNotes.length*2-2)));
+        break;
+      case 'random':idx = Math.floor(Math.random()*arpNotes.length); break;
+      case 'chord': idx = 0; note=arpNotes.map(n=>n); break;
+    }
+    if(mode==='updown' && arpIndex % (arpNotes.length-1)===0 && arpIndex>0) arpDir*=-1;
+    note = (mode==='chord') ? note : arpNotes[idx] + octave*12;
+    arpIndex = (arpIndex+1) % (arpNotes.length*octaves*(mode==='updown'?2:1));
+  }
+  return {note, vel, gate};
+}
+
+function scheduleArp(){
+  if(arpTimer) clearTimeout(arpTimer);
+  if(arpNotes.length===0) return;
+  const {note, vel, gate} = nextArpNote() || {};
+  if(note!==null){
+    if(Array.isArray(note)) note.forEach(n=>noteOn(n,vel/127));
+    else noteOn(note, vel/127);
+    const len = rateToMs(patch.arp.rate) * (gate/100);
+    arpTimer = setTimeout(()=>{
+      if(Array.isArray(note)) note.forEach(n=>noteOff(n));
+      else noteOff(note);
+      const swingDelay = (arpStepT % 2) ? patch.arp.swing/100 * rateToMs(patch.arp.rate)/2 : 0;
+      arpTimer = setTimeout(scheduleArp, rateToMs(patch.arp.rate) + swingDelay);
+      arpStepT++;
+    }, len);
+  } else {
+    arpTimer = setTimeout(scheduleArp, rateToMs(patch.arp.rate));
+  }
+}
+
+/* ----------  KEY HANDLING WITH LATCH  ---------- */
+const origNoteOn = noteOn, origNoteOff = noteOff;
+noteOn = (n,vel)=>{
+  origNoteOn(n,vel);
+  if(!patch.arp.steps.some(s=>s.note===n)) arpNotes.push(n);
+  if(!arpTimer) scheduleArp();
+};
+noteOff = (n)=>{
+  if(!patch.arp.latch){
+    origNoteOff(n);
+    arpNotes = arpNotes.filter(k=>k!==n);
+    if(arpNotes.length===0){ clearTimeout(arpTimer); arpTimer=null; arpIndex=0; }
+  }
+};
+
+/* ----------  STEP EDITOR UI  ---------- */
+const stepGrid = document.getElementById('stepGrid');
+function renderSteps(){
+  stepGrid.innerHTML='';
+  patch.arp.steps.forEach((s,i)=>{
+    const cell = document.createElement('div');
+    cell.style.background = s.note!==null ? '#0ff':'#333';
+    cell.style.borderRadius='2px'; cell.style.padding='4px';
+    cell.style.cursor='pointer';
+    cell.textContent = s.note!==null ? KEYMAP[s.note%12] : '-';
+    cell.title=`Step ${i+1} ${s.note!==null ? KEYMAP[s.note%12]+s.octave : ''}`;
+    cell.onclick = ()=>toggleStep(i);
+    stepGrid.appendChild(cell);
+  });
+}
+function toggleStep(i){
+  const s = patch.arp.steps[i];
+  s.note = (s.note===null) ? 60 : null; // middle C as default
+  renderSteps();
+}
+document.getElementById('clearSeq').onclick = ()=>{
+  patch.arp.steps.forEach(s=>s.note=null);
+  renderSteps();
+};
+document.getElementById('randSeq').onclick = ()=>{
+  patch.arp.steps.forEach(s=>{
+    s.note = Math.random()<.6 ? 60+Math.floor(Math.random()*12) : null;
+  });
+  renderSteps();
+};
+renderSteps();
+
+/* ----------  ARP PARAM BINDINGS  ---------- */
+document.querySelectorAll('[data-param^="arp."]').forEach(el=>{
+  const path = el.dataset.param.split('.');
+  let val = path.reduce((o,k)=>o[k],patch);
+  if(el.type==='checkbox') el.checked = val;
+  else el.value = val;
+  el.addEventListener('input',e=>{
+    const v = el.type==='checkbox' ? el.checked : (el.type==='range'?parseFloat(el.value):el.value);
+    path.reduce((o,k,i)=>i===path.length-1?(o[k]=v):o[k],patch);
+    if(path[1]==='mode' || path[1]==='rate'){ clearTimeout(arpTimer); scheduleArp(); }
+  });
+});
+
+/* --------------------  VOICE MANAGER  -------------------- */
+const voices = new Map();
+function noteOn(n,vel=1){
+  if(!ctx.state==='running') ctx.resume();
+  if(voices.has(n)) return;
+  voices.set(n, new Voice(n));
+}
+function noteOff(n){
+  const v = voices.get(n);
+  if(v){ v.release(); voices.delete(n); }
+}
+
+/* --------------------  UI BINDINGS  -------------------- */
+document.querySelectorAll('[data-param]').forEach(el=>{
+  const path = el.dataset.param.split('.');
+  let val = path.reduce((o,k)=>o[k],patch);
+  if(el.type==='range') el.value = val;
+  else el.value = val;
+  el.addEventListener('input',e=>{
+    const v = (el.type==='range')?parseFloat(el.value):el.value;
+    path.reduce((o,k,i)=>i===path.length-1?(o[k]=v):o[k],patch);
+    voices.forEach(voice=>voice.updatePatch());
+  });
+});
+
+
+
+/* --------------------  KEYBOARD  -------------------- */
+const keyboard = document.getElementById('keyboard');
+const KEYMAP = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const baseOct = 4;
+for(let i=0;i<12;i++){
+  const key = document.createElement('div');
+  key.className='key';
+  key.dataset.note = baseOct*12+i;
+  key.textContent = KEYMAP[i%12];
+  if(KEYMAP[i%12].includes('#')) key.dataset.accidental='';
+  key.addEventListener('mousedown',()=>noteOn(key.dataset.note));
+  key.addEventListener('mouseup',()=>noteOff(key.dataset.note));
+  key.addEventListener('mouseleave',()=>noteOff(key.dataset.note));
+  keyboard.appendChild(key);
+}
+
+/* --------------------  PANIC  -------------------- */
+document.getElementById('panic').onclick = () => {
+  voices.forEach(v=>v.release());
+  voices.clear();
+};
+
+/* --------------------  MIDI  -------------------- */
+if(navigator.requestMIDIAccess){
+  navigator.requestMIDIAccess().then(acc=>{
+    acc.inputs.forEach(inp=>{
+      inp.onmidimessage = ({data})=>{
+        const [cmd,n,vel] = data;
+        if(cmd===144 && vel>0) noteOn(n,vel/127);
+        else if(cmd===128 || (cmd===144 && vel===0)) noteOff(n);
+      };
+    });
+  });
+}
+
+/* --------------------  PRESET SAVE / LOAD  -------------------- */
+document.getElementById('savePreset').onclick = ()=>{
+  const blob = new Blob([JSON.stringify(patch,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='synth-preset.json';
+  a.click();
+};
+document.getElementById('loadPreset').addEventListener('change',e=>{
+  const file=e.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload = ()=>{
+    Object.assign(patch,JSON.parse(reader.result));
+    document.querySelectorAll('[data-param]').forEach(el=>{
+      const path = el.dataset.param.split('.');
+      const val = path.reduce((o,k)=>o[k],patch);
+      el.value = val;
+    });
+    voices.forEach(v=>v.updatePatch());
+  };
+  reader.readAsText(file);
+});
+</script>
+</body>
+</html>
