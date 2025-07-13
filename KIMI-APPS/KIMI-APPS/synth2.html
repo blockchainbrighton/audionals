@@ -167,349 +167,190 @@ button:hover{background:var(--accent)}
 </div>
 
 <script>
-// ---------- STATE ----------
-const patch = {
-  osc1:{type:'sine',octave:0,detune:0,gain:.7},
-  osc2:{type:'square',octave:0,detune:0,gain:.3},
-  filter:{type:'lowpass',cutoff:2000,q:1,env:.3,track:.2},
-  ampEnv:{attack:.01,decay:.3,sustain:.7,release:.5},
-  filterEnv:{attack:.05,decay:.2,sustain:.5,release:.4},
-  lfo:{wave:'sine',rate:4,amount:0,dest:'off'},
-  arp:{mode:'up',rate:16,bpm:120,swing:0,oct:1,gate:80,latch:false},
-  steps: Array(32).fill(false).map((_,i)=>({active:false,note:60+i%12}))
-};
-
-// ---------- AUDIO ----------
-const c = new (window.AudioContext||webkitAudioContext)();
-const voices = new Map();
-const activeNotes = new Set();
-let nextId = 0;
-
-class Voice{
-  constructor(note,velocity=1){
-    this.id = ++nextId;
-    this.note = note;
-    this.freq = 440*Math.pow(2,(note-69)/12);
-
-    this.osc1 = c.createOscillator();
-    this.osc2 = c.createOscillator();
-    this.oscGain1 = c.createGain();
-    this.oscGain2 = c.createGain();
-    this.updateOsc(patch.osc1,this.osc1,this.oscGain1);
-    this.updateOsc(patch.osc2,this.osc2,this.oscGain2);
-    this.oscGain1.gain.value = patch.osc1.gain * velocity;
-    this.oscGain2.gain.value = patch.osc2.gain * velocity;
-
-    this.filter = c.createBiquadFilter();
-    this.updateFilter();
-
-    this.lfo = c.createOscillator();
-    this.lfoGain = c.createGain();
-    this.updateLFO();
-
-    this.ampEnv = c.createGain();
-    this.filterEnv = c.createGain();
-    this.updateEnvelopes();
-
-    this.osc1.connect(this.oscGain1);
-    this.osc2.connect(this.oscGain2);
-    this.oscGain1.connect(this.filter);
-    this.oscGain2.connect(this.filter);
-    this.filter.connect(this.ampEnv);
-    this.ampEnv.connect(c.destination);
-
-    this.lfo.connect(this.lfoGain);
-    this.lfo.start();
-    this.osc1.start();
-    this.osc2.start();
-    this.trigger();
-  }
-
-  updateOsc(cfg,osc,gain){
-    osc.type = cfg.type;
-    osc.frequency.value = this.freq * Math.pow(2,cfg.octave) * Math.pow(2,cfg.detune/1200);
-    gain.gain.value = cfg.gain;
-  }
-  updateFilter(){
-    const f = patch.filter;
-    this.filter.type = f.type;
-    const base = f.cutoff;
-    const keyTrack = f.track*(this.note-60)/60;
-    this.filterCutoff = base*(1+keyTrack);
-    this.filter.frequency.value = this.filterCutoff;
-    this.filter.Q.value = f.q;
-  }
-  updateLFO(){
-    const l = patch.lfo;
-    this.lfo.type = l.wave;
-    this.lfo.frequency.value = l.rate;
-    this.lfoGain.gain.value = l.amount;
-    this.lfoGain.disconnect();
-    switch(l.dest){
-      case 'pitch':
-        this.lfoGain.connect(this.osc1.frequency);
-        this.lfoGain.connect(this.osc2.frequency);
-        break;
-      case 'filter':
-        this.lfoGain.connect(this.filter.frequency);
-        break;
-      case 'amp':
-        this.lfoGain.connect(this.ampEnv.gain);
-        break;
-    }
-  }
-  updateEnvelopes(){
-    const ae = patch.ampEnv;
-    const fe = patch.filterEnv;
-    this.ampEnv.gain.cancelScheduledValues(c.currentTime);
-    this.ampEnv.gain.setValueAtTime(0,c.currentTime);
-    this.filterEnv.gain.cancelScheduledValues(c.currentTime);
-    this.filterEnv.gain.setValueAtTime(0,c.currentTime);
-  }
-  trigger(){
-    const now = c.currentTime;
-    const ae = patch.ampEnv;
-    const fe = patch.filterEnv;
-    this.ampEnv.gain.cancelScheduledValues(now);
-    this.ampEnv.gain.setValueAtTime(0,now);
-    this.ampEnv.gain.linearRampToValueAtTime(1,now+ae.attack);
-    this.ampEnv.gain.linearRampToValueAtTime(ae.sustain,now+ae.attack+ae.decay);
-
-    const filterStart = this.filterCutoff;
-    const filterPeak = filterStart + patch.filter.env * 8000;
-    this.filter.frequency.cancelScheduledValues(now);
-    this.filter.frequency.setValueAtTime(filterStart,now);
-    this.filter.frequency.linearRampToValueAtTime(filterPeak,now+fe.attack);
-    this.filter.frequency.linearRampToValueAtTime(filterStart+(filterPeak-filterStart)*fe.sustain,now+fe.attack+fe.decay);
-  }
-  release(){
-    const now = c.currentTime;
-    const ae = patch.ampEnv;
-    const fe = patch.filterEnv;
-    const g = this.ampEnv.gain.value;
-    this.ampEnv.gain.cancelScheduledValues(now);
-    this.ampEnv.gain.setValueAtTime(g,now);
-    this.ampEnv.gain.linearRampToValueAtTime(0,now+ae.release);
-
-    const f = this.filter.frequency.value;
-    this.filter.frequency.cancelScheduledValues(now);
-    this.filter.frequency.setValueAtTime(f,now);
-    this.filter.frequency.linearRampToValueAtTime(0,now+fe.release);
-
-    setTimeout(()=>this.kill(), (ae.release+fe.release)*1000+100);
-  }
-  kill(){
-    this.osc1.stop();
-    this.osc2.stop();
-    this.lfo.stop();
-    voices.delete(this.id);
-  }
-}
-
-// ---------- UI BINDING ----------
-const bindings = document.querySelectorAll('[data-param]');
-bindings.forEach(el=>{
-  const path = el.dataset.param.split('.');
-  const key = path.pop();
-  const obj = path.reduce((o,k)=>o[k],patch);
-  el.value = obj[key];
-  el.addEventListener('input', e=>{
-    obj[key] = el.type==='checkbox'?el.checked:parseFloat(el.value)||el.value;
-    updateAll();
-  });
-});
-function updateAll(){
-  voices.forEach(v=>{
-    v.updateOsc(patch.osc1,v.osc1,v.oscGain1);
-    v.updateOsc(patch.osc2,v.osc2,v.oscGain2);
-    v.updateFilter();
-    v.updateEnvelopes();
-    v.updateLFO();
-  });
-}
-
-// ---------- KEYBOARD ----------
-const kbd = document.getElementById('keyboard');
-const WHITE = [60,62,64,65,67,69,71,72,74,76,77,79,81,83,84];
-const BLACK = [61,63,66,68,70,73,75,78,80,82];
-WHITE.forEach(n=>addKey(n,false));
-BLACK.forEach(n=>addKey(n,true));
-function addKey(note,black){
-  const k = document.createElement('div');
-  k.className = 'key'+(black?' black':'');
-  k.dataset.note = note;
-  k.textContent = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][note%12]+Math.floor(note/12-1);
-  k.addEventListener('mousedown', e=>noteOn(note));
-  k.addEventListener('mouseup', e=>noteOff(note));
-  k.addEventListener('mouseleave', e=>noteOff(note));
-  kbd.appendChild(k);
-}
-function noteOn(n,vel=1){
-  if(activeNotes.has(n)) return;
-  activeNotes.add(n);
-  const v = new Voice(n,vel);
-  voices.set(n,v);
-  highlightKey(n,true);
-}
-function noteOff(n){
-  if(!activeNotes.has(n)) return;
-  activeNotes.delete(n);
-  voices.get(n)?.release();
-  highlightKey(n,false);
-}
-function highlightKey(n,on){
-  document.querySelector(`.key[data-note="${n}"]`)?.classList.toggle('active',on);
-}
-
-// ---------- LOOK-AHEAD SCHEDULER ----------
-let arpNotes   = [];
-let arpIndex   = 0;
-let arpDir     = 1;
-let arpRunning = false;
-let nextNoteTime = 0;          // in Web-Audio clock
-const scheduleAhead = 0.025;   // 25 ms look-ahead
-let timerID;
-
-function schedule() {
-  while (nextNoteTime < c.currentTime + scheduleAhead && arpRunning) {
-    const swing = (arpIndex % 2 === 1) ? patch.arp.swing / 100 : 0;
-    const stepTime = nextNoteTime + (60 / patch.arp.bpm / patch.arp.rate) * swing;
-
-    let note = null;
-    switch (patch.arp.mode) {
-      case 'manual':
-        if (patch.steps[arpIndex].active) note = patch.steps[arpIndex].note;
-        break;
-      case 'up':
-        note = arpNotes[arpIndex % arpNotes.length];
-        break;
-      case 'down':
-        note = arpNotes[arpNotes.length - 1 - (arpIndex % arpNotes.length)];
-        break;
-      case 'updown':
-        note = arpNotes[arpIndex];
-        arpIndex += arpDir;
-        if (arpIndex <= 0 || arpIndex >= arpNotes.length - 1) arpDir *= -1;
-        break;
-      case 'random':
-        note = arpNotes[Math.floor(Math.random() * arpNotes.length)];
-        break;
-      case 'chord':
-        arpNotes.forEach(n => noteOn(n));
-        break;
-    }
-
-    if (note !== null && patch.arp.mode !== 'chord') {
-      const gate = patch.arp.gate / 100;
-      const dur  = (60 / patch.arp.bpm / patch.arp.rate) * gate;
-      noteOn(note);
-      setTimeout(() => noteOff(note), dur * 1000);
-    }
-
-    nextNoteTime += 60 / patch.arp.bpm / patch.arp.rate;
-    if (patch.arp.mode !== 'updown') arpIndex = (arpIndex + 1) % (patch.arp.mode === 'manual' ? 32 : arpNotes.length);
-  }
-  if (arpRunning) timerID = setTimeout(schedule, 10);
-}
-
-// ---------- CONTROL ----------
-const arpBtn = document.getElementById('arpToggle');
-const bpmLbl = document.getElementById('bpmDisplay');
-
-document.querySelector('[data-param="arp.bpm"]').addEventListener('input', e => {
-  patch.arp.bpm = +e.target.value;
-  bpmLbl.textContent = patch.arp.bpm;
-});
-
-arpBtn.addEventListener('click', () => {
-  arpRunning = !arpRunning;
-  arpBtn.textContent = arpRunning ? 'Stop' : 'Start';
-
-  if (arpRunning) {
-    if (patch.arp.mode !== 'manual') {
-      arpNotes = [];
-      activeNotes.clear();
-      patch.steps.forEach(s => {
-        if (s.active) arpNotes.push(s.note);
-      });
-      arpNotes.forEach(n => activeNotes.add(n));
-    }
-    nextNoteTime = c.currentTime;
-    schedule();
-  } else {
-    clearTimeout(timerID);
-    [...activeNotes].forEach(n => noteOff(n));
-  }
-});
-
-// ---------- STEP EDITOR ----------
-const stepDiv = document.getElementById('steps');
-for(let i=0;i<32;i++){
-  const s = document.createElement('div');
-  s.className='step';
-  s.textContent = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][i%12];
-  s.addEventListener('click',()=>{
-    patch.steps[i].active = !patch.steps[i].active;
-    s.classList.toggle('on',patch.steps[i].active);
-  });
-  stepDiv.appendChild(s);
-}
-document.getElementById('randomSteps').onclick = ()=>{
-  patch.steps.forEach((s,i)=>{s.active=Math.random()>.7;s.note=60+i%12});
-  stepDiv.querySelectorAll('.step').forEach((el,i)=>el.classList.toggle('on',patch.steps[i].active));
-};
-document.getElementById('clearSteps').onclick = ()=>{
-  patch.steps.forEach(s=>s.active=false);
-  stepDiv.querySelectorAll('.step').forEach(el=>el.classList.remove('on'));
-};
-
-// ---------- PRESET IO ----------
-document.getElementById('savePreset').onclick = ()=>{
-  const blob = new Blob([JSON.stringify(patch)],{type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'preset.json';
-  a.click();
-};
-document.getElementById('loadPreset').addEventListener('change', e=>{
-  const file=e.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = ()=>{
-    const data = JSON.parse(reader.result);
-    Object.assign(patch,data);
-    bindings.forEach(el=>{
-      const path = el.dataset.param.split('.');
-      const key = path.pop();
-      const obj = path.reduce((o,k)=>o[k],patch);
-      el.value = obj[key];
-      if(el.type==='checkbox') el.checked = obj[key];
-    });
-    updateAll();
-    bpmLbl.textContent = patch.arp.bpm;
+  /* --- CONSTANTS --- */
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'],
+    WHITE = [60,62,64,65,67,69,71,72,74,76,77,79,81,83,84],
+    BLACK = [61,63,66,68,70,73,75,78,80,82];
+  const c = new (window.AudioContext||webkitAudioContext)(), voices = new Map(), activeNotes = new Set();
+  let nextId=0, arpNotes=[], arpIndex=0, arpDir=1, arpRunning=0, nextNoteTime=0, timerID;
+  const patch = {
+    osc1:{type:'sine',octave:0,detune:0,gain:.7}, osc2:{type:'square',octave:0,detune:0,gain:.3},
+    filter:{type:'lowpass',cutoff:2000,q:1,env:.3,track:.2},
+    ampEnv:{attack:.01,decay:.3,sustain:.7,release:.5}, filterEnv:{attack:.05,decay:.2,sustain:.5,release:.4},
+    lfo:{wave:'sine',rate:4,amount:0,dest:'off'}, arp:{mode:'up',rate:16,bpm:120,swing:0,oct:1,gate:80,latch:false},
+    steps: Array.from({length:32},(_,i)=>({active:0,note:60+i%12}))
   };
-  reader.readAsText(file);
-});
-
-// ---------- PANIC ----------
-document.getElementById('panic').onclick = ()=>{
-  voices.forEach(v=>v.kill());
-  activeNotes.clear();
-  document.querySelectorAll('.key.active').forEach(k=>k.classList.remove('active'));
-};
-
-// ---------- MIDI ----------
-if(navigator.requestMIDIAccess){
-  navigator.requestMIDIAccess().then(access=>{
+  
+  /* --- HELPERS --- */
+  const getPath = (obj, path) => path.reduce((o,k)=>o[k], obj),
+    updateParam = el => {
+      const path = el.dataset.param.split('.'), key = path.pop(), obj = getPath(patch, path);
+      el.value = obj[key]; if(el.type==='checkbox') el.checked=obj[key];
+      el.addEventListener('input', e=>{obj[key]=el.type==='checkbox'?el.checked:+el.value||el.value; updateAll();});
+    },
+    setKeysUI = () => document.querySelectorAll('.key.active').forEach(k=>k.classList.remove('active')),
+    setStepsUI = () => stepDiv.querySelectorAll('.step').forEach((el,i)=>el.classList.toggle('on',patch.steps[i].active)),
+    noteLabel = n => NOTE_NAMES[n%12]+(Math.floor(n/12)-1);
+  
+  /* --- VOICE --- */
+  class Voice {
+    constructor(note, velocity=1) {
+      this.id=++nextId; this.note=note; this.freq=440*Math.pow(2,(note-69)/12);
+      this.osc1=c.createOscillator(); this.osc2=c.createOscillator();
+      this.oscGain1=c.createGain(); this.oscGain2=c.createGain();
+      this.filter=c.createBiquadFilter(); this.lfo=c.createOscillator(); this.lfoGain=c.createGain();
+      this.ampEnv=c.createGain(); this.filterEnv=c.createGain();
+      this.updateOsc(patch.osc1, this.osc1, this.oscGain1, velocity);
+      this.updateOsc(patch.osc2, this.osc2, this.oscGain2, velocity);
+      this.updateFilter(); this.updateLFO(); this.updateEnvelopes();
+      [this.osc1,this.osc2].forEach((o,i)=>o.connect([this.oscGain1,this.oscGain2][i]));
+      this.oscGain1.connect(this.filter); this.oscGain2.connect(this.filter);
+      this.filter.connect(this.ampEnv); this.ampEnv.connect(c.destination);
+      this.lfo.connect(this.lfoGain); [this.lfo,this.osc1,this.osc2].forEach(o=>o.start());
+      this.trigger();
+    }
+    updateOsc(cfg, osc, gain, velocity=1) {
+      osc.type=cfg.type; osc.frequency.value=this.freq*Math.pow(2,cfg.octave)*Math.pow(2,cfg.detune/1200);
+      gain.gain.value=cfg.gain*velocity;
+    }
+    updateFilter() {
+      let f=patch.filter, base=f.cutoff, keyTrack=f.track*(this.note-60)/60;
+      this.filter.type=f.type; this.filterCutoff=base*(1+keyTrack);
+      this.filter.frequency.value=this.filterCutoff; this.filter.Q.value=f.q;
+    }
+    updateLFO() {
+      let l=patch.lfo;
+      this.lfo.type=l.wave; this.lfo.frequency.value=l.rate; this.lfoGain.gain.value=l.amount; this.lfoGain.disconnect();
+      if(l.dest==='pitch') [this.osc1.frequency,this.osc2.frequency].forEach(f=>this.lfoGain.connect(f));
+      else if(l.dest==='filter') this.lfoGain.connect(this.filter.frequency);
+      else if(l.dest==='amp') this.lfoGain.connect(this.ampEnv.gain);
+    }
+    updateEnvelopes() {
+      [this.ampEnv.gain,this.filterEnv.gain].forEach(g=>{g.cancelScheduledValues(c.currentTime);g.setValueAtTime(0,c.currentTime);});
+    }
+    trigger() {
+      const now=c.currentTime, ae=patch.ampEnv, fe=patch.filterEnv;
+      this.ampEnv.gain.cancelScheduledValues(now);
+      this.ampEnv.gain.setValueAtTime(0,now);
+      this.ampEnv.gain.linearRampToValueAtTime(1,now+ae.attack);
+      this.ampEnv.gain.linearRampToValueAtTime(ae.sustain,now+ae.attack+ae.decay);
+      const fs=this.filterCutoff, fp=fs+patch.filter.env*8000;
+      this.filter.frequency.cancelScheduledValues(now);
+      this.filter.frequency.setValueAtTime(fs,now);
+      this.filter.frequency.linearRampToValueAtTime(fp,now+fe.attack);
+      this.filter.frequency.linearRampToValueAtTime(fs+(fp-fs)*fe.sustain,now+fe.attack+fe.decay);
+    }
+    release() {
+      const now=c.currentTime, ae=patch.ampEnv, fe=patch.filterEnv, g=this.ampEnv.gain.value, f=this.filter.frequency.value;
+      this.ampEnv.gain.cancelScheduledValues(now);
+      this.ampEnv.gain.setValueAtTime(g,now);
+      this.ampEnv.gain.linearRampToValueAtTime(0,now+ae.release);
+      this.filter.frequency.cancelScheduledValues(now);
+      this.filter.frequency.setValueAtTime(f,now);
+      this.filter.frequency.linearRampToValueAtTime(0,now+fe.release);
+      setTimeout(()=>this.kill(), (ae.release+fe.release)*1000+100);
+    }
+    kill() {
+      [this.osc1,this.osc2,this.lfo].forEach(o=>o.stop()); voices.delete(this.id);
+    }
+  }
+  
+  /* --- UI BINDINGS --- */
+  document.querySelectorAll('[data-param]').forEach(updateParam);
+  function updateAll(){voices.forEach(v=>{v.updateOsc(patch.osc1,v.osc1,v.oscGain1);v.updateOsc(patch.osc2,v.osc2,v.oscGain2);v.updateFilter();v.updateEnvelopes();v.updateLFO();});}
+  
+  /* --- KEYBOARD --- */
+  const kbd=document.getElementById('keyboard');
+  [...WHITE.map(n=>[n,0]),...BLACK.map(n=>[n,1])].forEach(([note,black])=>{
+    const k=document.createElement('div');
+    k.className='key'+(black?' black':''); k.dataset.note=note; k.textContent=noteLabel(note);
+    ['mousedown','mouseup','mouseleave'].forEach(evt=>k.addEventListener(evt,()=>evt==='mousedown'?noteOn(note):noteOff(note)));
+    kbd.appendChild(k);
+  });
+  function noteOn(n,vel=1){if(activeNotes.has(n))return;activeNotes.add(n);voices.set(n,new Voice(n,vel));highlightKey(n,1);}
+  function noteOff(n){if(!activeNotes.has(n))return;activeNotes.delete(n);voices.get(n)?.release();highlightKey(n,0);}
+  function highlightKey(n,on){document.querySelector(`.key[data-note="${n}"]`)?.classList.toggle('active',on);}
+  
+  /* --- ARP SCHEDULER --- */
+  function schedule() {
+    while(nextNoteTime<c.currentTime+0.025&&arpRunning){
+      const swing=arpIndex%2?patch.arp.swing/100:0, stepTime=nextNoteTime+(60/patch.arp.bpm/patch.arp.rate)*swing;
+      let note=null, mode=patch.arp.mode;
+      if(mode==='manual')patch.steps[arpIndex].active&&(note=patch.steps[arpIndex].note);
+      else if(mode==='up')note=arpNotes[arpIndex%arpNotes.length];
+      else if(mode==='down')note=arpNotes[arpNotes.length-1-(arpIndex%arpNotes.length)];
+      else if(mode==='updown'){note=arpNotes[arpIndex];arpIndex+=arpDir;if(arpIndex<=0||arpIndex>=arpNotes.length-1)arpDir*=-1;}
+      else if(mode==='random')note=arpNotes[Math.floor(Math.random()*arpNotes.length)];
+      else if(mode==='chord')arpNotes.forEach(n=>noteOn(n));
+      if(note!==null&&mode!=='chord'){
+        const gate=patch.arp.gate/100,dur=(60/patch.arp.bpm/patch.arp.rate)*gate;
+        noteOn(note); setTimeout(()=>noteOff(note),dur*1000);
+      }
+      nextNoteTime+=60/patch.arp.bpm/patch.arp.rate;
+      if(mode!=='updown')arpIndex=(arpIndex+1)%((mode==='manual')?32:arpNotes.length);
+    }
+    if(arpRunning)timerID=setTimeout(schedule,10);
+  }
+  
+  /* --- CONTROL --- */
+  const arpBtn=document.getElementById('arpToggle'), bpmLbl=document.getElementById('bpmDisplay');
+  document.querySelector('[data-param="arp.bpm"]').addEventListener('input',e=>{
+    patch.arp.bpm=+e.target.value; bpmLbl.textContent=patch.arp.bpm;
+  });
+  arpBtn.addEventListener('click',()=>{
+    arpRunning^=1; arpBtn.textContent=arpRunning?'Stop':'Start';
+    if(arpRunning){
+      if(patch.arp.mode!=='manual'){arpNotes=[];activeNotes.clear();patch.steps.forEach(s=>s.active&&arpNotes.push(s.note));arpNotes.forEach(n=>activeNotes.add(n));}
+      nextNoteTime=c.currentTime; schedule();
+    }else{clearTimeout(timerID);[...activeNotes].forEach(n=>noteOff(n));}
+  });
+  
+  /* --- STEP EDITOR --- */
+  const stepDiv=document.getElementById('steps');
+  for(let i=0;i<32;i++){
+    const s=document.createElement('div');
+    s.className='step'; s.textContent=NOTE_NAMES[i%12];
+    s.addEventListener('click',()=>{patch.steps[i].active^=1;s.classList.toggle('on',patch.steps[i].active);});
+    stepDiv.appendChild(s);
+  }
+  document.getElementById('randomSteps').onclick=()=>{
+    patch.steps.forEach((s,i)=>{s.active=Math.random()>.7;s.note=60+i%12;}); setStepsUI();
+  };
+  document.getElementById('clearSteps').onclick=()=>{
+    patch.steps.forEach(s=>s.active=0); setStepsUI();
+  };
+  
+  /* --- PRESET IO --- */
+  document.getElementById('savePreset').onclick=()=>{
+    const a=document.createElement('a'),blob=new Blob([JSON.stringify(patch)],{type:'application/json'});
+    a.href=URL.createObjectURL(blob); a.download='preset.json'; a.click();
+  };
+  document.getElementById('loadPreset').addEventListener('change',e=>{
+    const file=e.target.files[0]; if(!file)return;
+    const r=new FileReader();
+    r.onload=()=>{
+      Object.assign(patch,JSON.parse(r.result));
+      document.querySelectorAll('[data-param]').forEach(updateParam);
+      updateAll(); bpmLbl.textContent=patch.arp.bpm;
+    }; r.readAsText(file);
+  });
+  
+  /* --- PANIC --- */
+  document.getElementById('panic').onclick=()=>{
+    voices.forEach(v=>v.kill()); activeNotes.clear(); setKeysUI();
+  };
+  
+  /* --- MIDI --- */
+  navigator.requestMIDIAccess?.().then(access=>{
     access.inputs.forEach(input=>{
-      input.onmidimessage = e=>{
-        const [cmd,note,vel] = e.data;
-        if(cmd===144 && vel>0) noteOn(note,vel/127);
-        else if(cmd===128 || (cmd===144 && vel===0)) noteOff(note);
+      input.onmidimessage=e=>{
+        const[cmd,note,vel]=e.data;
+        if(cmd===144&&vel>0)noteOn(note,vel/127);
+        else if(cmd===128||(cmd===144&&vel===0))noteOff(note);
       };
     });
   });
-}
-</script>
+  </script>
+  
 </body>
 </html>
