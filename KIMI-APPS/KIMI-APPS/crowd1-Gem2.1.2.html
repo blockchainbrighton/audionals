@@ -2,75 +2,41 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <title>3D Crowd Game - Multiple Modes</title>
+  <title>Enhanced Crowd Collector Game – Three.js</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <style>
-    html,body{margin:0;height:100%;background:#222;color:#eee;font-family:sans-serif; overflow: hidden;}
-    #info{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.5);padding:8px 12px;border-radius:4px;font-size:14px;pointer-events:none; z-index: 10;}
-    #instructions{position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,.5);padding:8px 12px;border-radius:4px;font-size:13px;pointer-events:none; max-width: 250px; z-index: 10;}
-    .btn-container{position:absolute;top:10px;right:10px;z-index:10;display:flex;gap:8px;}
-    button{padding:6px 12px;border:none;border-radius:4px;background:#0af;color:#fff;cursor:pointer;}
-    /* ENHANCEMENT: Styles for the game mode selection screen */
-    #gameModeSelect {
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.7); display: flex; align-items: center;
-      justify-content: center; z-index: 20;
-    }
-    #gameModePanel {
-      background: #333; padding: 20px 30px; border-radius: 8px; text-align: center;
-    }
-    #gameModePanel h2 { margin-top: 0; }
-    #gameModePanel .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
-    #gameModePanel button { position: static; width: 100%; padding: 12px; font-size: 14px; }
-    #gameModePanel p { font-size: 12px; color: #aaa; margin: 5px 0 0; text-align: left;}
+    html,body{margin:0;height:100%;background:#222;color:#eee;font-family:sans-serif;overflow:hidden;}
+    #info{position:absolute;top:50px;left:10px;background:rgba(0,0,0,.5);padding:8px 12px;border-radius:4px;font-size:14px;pointer-events:none;z-index:10;width:250px;}
+    #instructions{position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,.5);padding:8px 12px;border-radius:4px;font-size:13px;pointer-events:none;max-width:250px;z-index:10;}
+    #game-controls{position:absolute;top:10px;right:10px;z-index:10;display:flex;gap:5px;}
+    button{padding:6px 12px;border:none;border-radius:4px;background:#333;color:#fff;cursor:pointer;}
+    button.restart{background:#c20;}
+    button.active{background:#0af;}
   </style>
 </head>
 <body>
-  <!-- ENHANCEMENT: Game Mode Selection UI -->
-  <div id="gameModeSelect">
-    <div id="gameModePanel">
-      <h2>Select a Game Mode</h2>
-      <div class="modes">
-        <div>
-          <button id="modeClassic">Classic Collector</button>
-          <p>Collect all the gems.</p>
-        </div>
-        <div>
-          <button id="modeTimeAttack">Time Attack</button>
-          <p>Collect all gems in 60 seconds.</p>
-        </div>
-        <div>
-          <button id="modePiedPiper">Pied Piper</button>
-          <p>Gather all the people into your following.</p>
-        </div>
-        <div>
-          <button id="modeStealth">Stealth Heist</button>
-          <p>Collect gems, but don't get touched!</p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="info">Select a game mode to begin!</div>
+  <div id="info">Select a game mode to start!</div>
   <div id="instructions">
     <b>Controls:</b><br>
-    <b>W, A, S, D</b> or <b>Arrow Keys</b> - Move<br>
-    <b>Mouse Drag</b> - Orbit Camera<br>
-    <b>Mouse Wheel</b> - Zoom<br>
-    <b>Right-Click Drag</b> - Pan Camera
+    <b>W, A, S, D</b> or <b>Arrow Keys</b> – Move<br>
+    <b>Mouse Drag</b> – Orbit Camera<br>
+    <b>Mouse Wheel</b> – Zoom<br>
+    <b>Right-Click Drag</b> – Pan Camera
   </div>
-  <!-- ENHANCEMENT: Button container for multiple buttons -->
-  <div class="btn-container">
-    <button id="resetBtn">Restart</button>
-    <button id="changeModeBtn">Change Mode</button>
+  <div id="game-controls">
+    <button class="mode-btn" data-mode="classic">Classic</button>
+    <button class="mode-btn" data-mode="stealth">Stealth</button>
+    <button class="mode-btn" data-mode="chase">Chase</button>
+    <button class="mode-btn" data-mode="guardian">Guardian</button>
+    <button class="mode-btn" data-mode="blackout">Blackout</button>
+    <button id="resetBtn" class="restart">Restart</button>
   </div>
-
 
   <script type="importmap">
   {
     "imports": {
-      "three": "https://esm.sh/three@0.160.0",
-      "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
     }
   }
   </script>
@@ -82,22 +48,23 @@
     /* ---------- Globals ---------- */
     let scene, camera, renderer, controls;
     let player, playerSpeed = 4;
-    const keys = { w: false, a: false, s: false, d: false };
-    
+    const keys = { w:false, a:false, s:false, d:false };
     const sandboxSize = 20;
-    const crowd = [];
-    const collectibles = [];
-    let score = 0, totalCollectibles = 10;
+    const crowd = [], collectibles = [];
+    let score = 0, totalCollectibles = 10, MODE = null;
     const clock = new THREE.Clock();
+    let originalAmbient, sunLight, carried;
 
-    // ENHANCEMENT: Game State variables
-    let currentGameMode = '';
-    let gameOver = true; // Game starts in a "game over" state until a mode is chosen
-    let gameTimer = 0;
-    const TIMER_SECONDS = 60;
+    /* ---------- Mode handlers ---------- */
+    const MODES = {
+      classic  : {label:'Classic',  color:0xffdd00, setup:setupClassic},
+      stealth  : {label:'Stealth',  color:0xff4466, setup:setupStealth},
+      chase    : {label:'Chase',    color:0x00ffaa, setup:setupChase},
+      guardian : {label:'Guardian', color:0x44aaff, setup:setupGuardian},
+      blackout : {label:'Blackout', color:0x222222, setup:setupBlackout}
+    };
 
-
-    /* ---------- Main ---------- */
+    /* ---------- Init ---------- */
     init();
     animate();
 
@@ -107,446 +74,268 @@
       scene.fog = new THREE.Fog(0x88ccee, 15, 40);
 
       camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 100);
-      camera.position.set(0, 10, 15);
+      camera.position.set(0,10,15);
 
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer = new THREE.WebGLRenderer({ antialias:true });
       renderer.setSize(innerWidth, innerHeight);
       renderer.shadowMap.enabled = true;
       document.body.appendChild(renderer.domElement);
 
       controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
-      controls.minDistance = 3;
-      controls.maxDistance = 40;
-      controls.enablePan = true;
+      controls.minDistance = 3; controls.maxDistance = 40; controls.enablePan = true;
 
       /* Lighting */
-      const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-      sun.position.set(10, 20, 10);
-      sun.castShadow = true;
-      sun.shadow.mapSize.set(2048, 2048);
-      sun.shadow.camera.left = -sandboxSize/2 - 2;
-      sun.shadow.camera.right = sandboxSize/2 + 2;
-      sun.shadow.camera.top = sandboxSize/2 + 2;
-      sun.shadow.camera.bottom = -sandboxSize/2 - 2;
-      scene.add(sun, new THREE.AmbientLight(0x666666));
+      sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      sunLight.position.set(10,20,10); sunLight.castShadow = true;
+      sunLight.shadow.mapSize.set(2048,2048);
+      sunLight.shadow.camera.left   = -sandboxSize/2-2;
+      sunLight.shadow.camera.right  =  sandboxSize/2+2;
+      sunLight.shadow.camera.top    =  sandboxSize/2+2;
+      sunLight.shadow.camera.bottom = -sandboxSize/2-2;
+      originalAmbient = new THREE.AmbientLight(0x666666);
+      scene.add(sunLight, originalAmbient);
 
       /* Ground */
       const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(sandboxSize, sandboxSize),
-        new THREE.MeshStandardMaterial({ color: 0xddbb77, roughness: 1 })
+        new THREE.MeshStandardMaterial({ color:0xddbb77, roughness:1 })
       );
-      ground.rotation.x = -Math.PI/2;
-      ground.receiveShadow = true;
+      ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
       scene.add(ground);
 
-      /* Walls & Decorations */
       createEnvironment();
       createPlayer();
-      // startGame(); // Will be called after mode selection
+      spawnCrowd();
 
-      // Event Listeners
-      document.getElementById('resetBtn').addEventListener('click', () => {
-        if (currentGameMode) startGame();
-      });
-      // ENHANCEMENT: Listener to show mode selection
-      document.getElementById('changeModeBtn').addEventListener('click', showModeSelection);
-      
-      // ENHANCEMENT: Mode selection button listeners
-      document.getElementById('modeClassic').addEventListener('click', () => selectMode('classic'));
-      document.getElementById('modeTimeAttack').addEventListener('click', () => selectMode('time_attack'));
-      document.getElementById('modePiedPiper').addEventListener('click', () => selectMode('pied_piper'));
-      document.getElementById('modeStealth').addEventListener('click', () => selectMode('stealth'));
-
+      /* UI listeners */
+      document.querySelectorAll('.mode-btn').forEach(btn =>
+        btn.addEventListener('click', () => startMode(btn.dataset.mode))
+      );
+      document.getElementById('resetBtn').addEventListener('click', () => startMode(MODE));
       window.addEventListener('keydown', handleKeyDown);
-      window.addEventListener('keyup', handleKeyUp);
-      window.addEventListener('resize', onWindowResize);
-    }
-    
-    // ENHANCEMENT: Show the mode selection screen
-    function showModeSelection() {
-        document.getElementById('gameModeSelect').style.display = 'flex';
-        gameOver = true;
-    }
-    
-    // ENHANCEMENT: Function to handle mode selection
-    function selectMode(mode) {
-        currentGameMode = mode;
-        document.getElementById('gameModeSelect').style.display = 'none';
-        startGame();
+      window.addEventListener('keyup',   handleKeyUp);
+      window.addEventListener('resize',  onWindowResize);
     }
 
-    function createEnvironment() {
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 });
-        const wallGeo = new THREE.BoxGeometry(sandboxSize, 2, 0.5);
-        ['N','S','E','W'].forEach(side=>{
-            const w = new THREE.Mesh(wallGeo, wallMat);
-            w.castShadow = w.receiveShadow = true;
-            if(side==='N'){ w.position.set(0,1,-sandboxSize/2); }
-            if(side==='S'){ w.position.set(0,1, sandboxSize/2); }
-            if(side==='E'){ w.rotation.y=Math.PI/2; w.position.set( sandboxSize/2,1,0); }
-            if(side==='W'){ w.rotation.y=Math.PI/2; w.position.set(-sandboxSize/2,1,0); }
-            scene.add(w);
-        });
-        addBench( 5, -5);
-        addBench(-5,  5);
-        addTree( 6, 6);
-        addTree(-6, -6);
+    /* ---------- Mode-specific setups ---------- */
+    function startMode(mode) {
+      MODE = mode;
+      resetGame();
+      MODES[mode].setup();
     }
-    
-    // ENHANCEMENT: startGame is now a dispatcher for different game modes
-    function startGame() {
-        gameOver = false;
-        score = 0;
-        player.position.set(0, 0, 0);
-        player.visible = true;
-        controls.target.copy(player.position);
+    function resetGame() {
+      // Restore lighting
+      originalAmbient.intensity = 0.6;
+      sunLight.intensity = 1.2;
 
-        // Clear previous game entities
-        crowd.forEach(agent => scene.remove(agent.mesh));
-        crowd.length = 0;
-        collectibles.forEach(c => scene.remove(c));
-        collectibles.length = 0;
-        
-        // Setup based on current mode
-        switch(currentGameMode) {
-            case 'classic':
-            case 'stealth':
-                totalCollectibles = 10;
-                spawnCollectibles();
-                spawnCrowd();
-                break;
-            case 'time_attack':
-                totalCollectibles = 15; // More gems for a challenge
-                gameTimer = TIMER_SECONDS;
-                spawnCollectibles();
-                spawnCrowd();
-                break;
-            case 'pied_piper':
-                totalCollectibles = 0; // No gems in this mode
-                spawnCrowd(15); // Spawn more people
-                break;
-        }
+      // Reset player
+      player.position.set(0,0,0);
+      playerSpeed = 4;
 
-        updateUI();
-    }
-    
-    function handleKeyDown(event) {
-        switch (event.key.toLowerCase()) {
-            case 'w': case 'arrowup':    keys.w = true; break;
-            case 'a': case 'arrowleft':  keys.a = true; break;
-            case 's': case 'arrowdown':  keys.s = true; break;
-            case 'd': case 'arrowright': keys.d = true; break;
-        }
-    }
-    
-    function handleKeyUp(event) {
-        switch (event.key.toLowerCase()) {
-            case 'w': case 'arrowup':    keys.w = false; break;
-            case 'a': case 'arrowleft':  keys.a = false; break;
-            case 's': case 'arrowdown':  keys.s = false; break;
-            case 'd': case 'arrowright': keys.d = false; break;
-        }
+      // Clear old NPCs/gems
+      crowd.forEach(a => scene.remove(a.mesh)); crowd.length = 0;
+      collectibles.forEach(c => scene.remove(c)); collectibles.length = 0;
+
+      spawnCrowd();
+      score = 0;
+      carried = null;
     }
 
-    function createPlayer() {
-        player = createPerson({shirt: 0x0099ff, pants: 0x222222});
-        player.position.set(0,0,0);
-        scene.add(player);
+    function setupClassic()  { totalCollectibles = 10; spawnCollectibles(); updateUI(); }
+    function setupStealth()  {
+      totalCollectibles = 8; playerSpeed = 3.5; spawnCollectibles();
+      document.getElementById('info').textContent = 'Stealth – avoid NPC sight!';
     }
-
-    function spawnCrowd(count = 8 + Math.floor(Math.random()*8)) {
-      for(let i=0;i<count;i++){
-        const person = createPerson({});
-        person.position.set(
-          (Math.random()-0.5)*(sandboxSize-2),
-          0,
-          (Math.random()-0.5)*(sandboxSize-2)
-        );
-        scene.add(person);
-        crowd.push({
-          mesh: person,
-          speed: 0.8 + Math.random()*0.6,
-          dir: new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(),
-          nextAction: Math.random()*5,
-          paused: false,
-          idleTime: 0,
-          isFollower: false // ENHANCEMENT: State for Pied Piper mode
-        });
+    function setupChase() {
+      totalCollectibles = 1; spawnCollectibles();
+      if (crowd.length) {
+        const c = crowd[0];
+        c.isChaser = true; c.speed = 4.5;
+        c.mesh.children[0].material.color.set(0xff0000);
       }
+      document.getElementById('info').textContent = 'Grab the gem and survive!';
+    }
+    function setupGuardian() {
+      totalCollectibles = 0;
+      const target = crowd[Math.floor(Math.random()*crowd.length)];
+      target.isEscort = true;
+      target.mesh.children[0].material.color.set(0x00ff00);
+      carried = target;
+      document.getElementById('info').textContent = 'Escort the green NPC to the North wall!';
+    }
+    function setupBlackout() {
+      totalCollectibles = 10; spawnCollectibles();
+      originalAmbient.intensity = 0.1;
+      sunLight.intensity = 0.2;
+      document.getElementById('info').textContent = 'Blackout – find glowing gems!';
     }
 
-    function spawnCollectibles() {
-        const gemGeo = new THREE.IcosahedronGeometry(0.25, 0);
-        const gemMat = new THREE.MeshStandardMaterial({ 
-            color: 0xffdd00, emissive: 0xffaa00, emissiveIntensity: 1,
-            metalness: 0.8, roughness: 0.2
-        });
-
-        for (let i = 0; i < totalCollectibles; i++) {
-            const gem = new THREE.Mesh(gemGeo, gemMat);
-            gem.castShadow = true;
-            gem.position.set(
-                (Math.random() - 0.5) * (sandboxSize - 3), 0.75,
-                (Math.random() - 0.5) * (sandboxSize - 3)
-            );
-            scene.add(gem);
-            collectibles.push(gem);
-        }
+    /* ---------- Helpers ---------- */
+    function createEnvironment() { /* same as original */
+      const wallMat = new THREE.MeshStandardMaterial({ color:0x888888, roughness:0.8 });
+      const wallGeo = new THREE.BoxGeometry(sandboxSize,2,0.5);
+      ['N','S','E','W'].forEach(side=>{
+        const w = new THREE.Mesh(wallGeo, wallMat); w.castShadow=w.receiveShadow=true;
+        if(side==='N') w.position.set(0,1,-sandboxSize/2);
+        if(side==='S') w.position.set(0,1, sandboxSize/2);
+        if(side==='E'){ w.rotation.y=Math.PI/2; w.position.set( sandboxSize/2,1,0); }
+        if(side==='W'){ w.rotation.y=Math.PI/2; w.position.set(-sandboxSize/2,1,0); }
+        scene.add(w);
+      });
+      addBench( 5,-5); addBench(-5,5); addTree( 6,6); addTree(-6,-6);
     }
-
-    function createPerson({ skin, shirt, pants }) {
+    function addBench(x,z){
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(2,0.1,0.6), new THREE.MeshStandardMaterial({ color:0x663300 }));
+      seat.position.set(x,0.3,z); seat.castShadow=seat.receiveShadow=true; scene.add(seat);
+      const back = seat.clone(); back.position.y=0.7; back.scale.y=4; back.rotation.x=-Math.PI/12; scene.add(back);
+    }
+    function addTree(x,z){
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.3,2,8), new THREE.MeshStandardMaterial({ color:0x663300 }));
+      trunk.position.set(x,1,z); trunk.castShadow=trunk.receiveShadow=true; scene.add(trunk);
+      const foliage = new THREE.Mesh(new THREE.SphereGeometry(1.2,12,12), new THREE.MeshStandardMaterial({ color:0x228833 }));
+      foliage.position.set(x,3,z); foliage.castShadow=foliage.receiveShadow=true; scene.add(foliage);
+    }
+    function createPlayer() {
+      player = createPerson({shirt:0x0099ff, pants:0x222222}); player.position.set(0,0,0); scene.add(player);
+    }
+    function createPerson({skin, shirt, pants}) {
       const group = new THREE.Group();
       const skinColor = skin || new THREE.Color().setHSL(Math.random(),0.6,0.55);
       const shirtColor = shirt || new THREE.Color().setHSL(Math.random(),0.8,0.6);
       const pantsColor = pants || new THREE.Color().setHSL(Math.random(),0.7,0.35);
-
-      const bodyMat = new THREE.MeshStandardMaterial({ color: shirtColor });
-      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.25,1,4,8), bodyMat);
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.25,1,4,8), new THREE.MeshStandardMaterial({ color:shirtColor }));
       body.position.y=0.9; body.castShadow=true; group.add(body);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.25,16,16), new THREE.MeshStandardMaterial({ color: skinColor }));
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.25,16,16), new THREE.MeshStandardMaterial({ color:skinColor }));
       head.position.y=1.7; head.castShadow=true; group.add(head);
       const legGeo = new THREE.CapsuleGeometry(0.1,0.7,4,8);
-      const legL = new THREE.Mesh(legGeo, new THREE.MeshStandardMaterial({ color: pantsColor }));
+      const legL = new THREE.Mesh(legGeo, new THREE.MeshStandardMaterial({ color:pantsColor }));
       legL.position.set(0.15,0.35,0); legL.castShadow=true; group.add(legL);
       const legR = legL.clone(); legR.position.x=-0.15; group.add(legR);
-      
-      // ENHANCEMENT: Store material on group for easy color changes
-      group.userData.bodyMat = bodyMat; 
+      group.userData.bodyMat = body.material; // for quick colour changes
       return group;
     }
-
-    function updatePlayer(delta) {
-        const moveDirection = new THREE.Vector3();
-        const cameraForward = new THREE.Vector3();
-        camera.getWorldDirection(cameraForward);
-        cameraForward.y = 0;
-        cameraForward.normalize();
-        const cameraRight = new THREE.Vector3().crossVectors(camera.up, cameraForward).negate();
-        
-        if (keys.w) moveDirection.add(cameraForward);
-        if (keys.s) moveDirection.sub(cameraForward);
-        if (keys.a) moveDirection.sub(cameraRight);
-        if (keys.d) moveDirection.add(cameraRight);
-
-        if (moveDirection.lengthSq() > 0) {
-            moveDirection.normalize();
-            player.position.addScaledVector(moveDirection, playerSpeed * delta);
-            
-            const margin = 0.5;
-            player.position.x = Math.max(-sandboxSize/2 + margin, Math.min(sandboxSize/2 - margin, player.position.x));
-            player.position.z = Math.max(-sandboxSize/2 + margin, Math.min(sandboxSize/2 - margin, player.position.z));
-
-            player.lookAt(player.position.clone().add(moveDirection));
-        }
-        controls.target.copy(player.position);
-    }
-    
-    function updateCrowd(delta) {
-      const avoidanceRadius = 1.2;
-      const slowDown = 0.02;
-
-      crowd.forEach((agent, index) => {
-        // ENHANCEMENT: Pied Piper follower logic
-        if (agent.isFollower) {
-            const followDistance = 1.5 + (index % 5) * 0.5; // Stagger followers
-            const targetPos = player.position.clone().add(
-                new THREE.Vector3().subVectors(agent.mesh.position, player.position).normalize().multiplyScalar(followDistance)
-            );
-            agent.mesh.position.lerp(targetPos, 0.05);
-            agent.mesh.lookAt(player.position);
-            return;
-        }
-
-        if(agent.paused){
-          agent.idleTime -= delta;
-          if(agent.idleTime <= 0){ agent.paused=false; agent.dir=new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(); }
-          return;
-        }
-
-        agent.nextAction -= delta;
-        if(agent.nextAction <= 0){
-          agent.paused=true;
-          agent.idleTime = 1 + Math.random()*2;
-          agent.nextAction = 3 + Math.random()*5;
-          return;
-        }
-
-        let avoidance = new THREE.Vector3();
-        crowd.forEach(other=>{
-          if(other===agent) return;
-          const diff = new THREE.Vector3().subVectors(agent.mesh.position,other.mesh.position);
-          if(diff.lengthSq() < avoidanceRadius*avoidanceRadius) avoidance.add(diff.normalize());
+    function spawnCrowd(count = 8 + Math.floor(Math.random()*8)) {
+      for(let i=0;i<count;i++){
+        const person=createPerson({}); person.position.set(
+          (Math.random()-0.5)*(sandboxSize-2), 0, (Math.random()-0.5)*(sandboxSize-2));
+        scene.add(person);
+        crowd.push({
+          mesh:person, speed:0.8+Math.random()*0.6,
+          dir:new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(),
+          nextAction:Math.random()*5, paused:false, idleTime:0
         });
-        
-        // Crowd avoids player only if they are not followers
-        if (!agent.isFollower) {
-            const diffToPlayer = new THREE.Vector3().subVectors(agent.mesh.position, player.position);
-            if (diffToPlayer.lengthSq() < (avoidanceRadius * 1.5)**2) {
-                avoidance.add(diffToPlayer.normalize());
-            }
-        }
-
-        const margin = 1;
-        const pos = agent.mesh.position;
-        if(pos.x > sandboxSize/2-margin) avoidance.x -=1;
-        if(pos.x < -sandboxSize/2+margin) avoidance.x +=1;
-        if(pos.z > sandboxSize/2-margin) avoidance.z -=1;
-        if(pos.z < -sandboxSize/2+margin) avoidance.z +=1;
-
-        if(avoidance.lengthSq() > 0) agent.dir.lerp(avoidance.normalize(),0.1);
-        else agent.dir.lerp(new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(),slowDown);
-        agent.dir.normalize();
-
-        agent.mesh.position.addScaledVector(agent.dir,agent.speed*delta);
-        agent.mesh.lookAt(agent.mesh.position.clone().add(agent.dir));
+      }
+    }
+    function spawnCollectibles() {
+      const gemGeo=new THREE.IcosahedronGeometry(0.25,0);
+      const gemMat=new THREE.MeshStandardMaterial({
+        color:MODES[MODE]?.color||0xffdd00,
+        emissive:MODES[MODE]?.color||0xffaa00,
+        emissiveIntensity:MODE==='blackout'?2:1,
+        metalness:0.8,roughness:0.2
       });
+      for(let i=0;i<totalCollectibles;i++){
+        const gem=new THREE.Mesh(gemGeo,gemMat);
+        gem.castShadow=true;
+        gem.position.set(
+          (Math.random()-0.5)*(sandboxSize-3),0.75,(Math.random()-0.5)*(sandboxSize-3));
+        scene.add(gem); collectibles.push(gem);
+      }
+    }
+    function updateUI(text){
+      document.getElementById('info').textContent=text;
+    }
+    function handleKeyDown(e){
+      switch(e.key.toLowerCase()){
+        case 'w':case'arrowup':keys.w=true;break;
+        case 'a':case'arrowleft':keys.a=true;break;
+        case 's':case'arrowdown':keys.s=true;break;
+        case 'd':case'arrowright':keys.d=true;break;
+      }
+    }
+    function handleKeyUp(e){
+      switch(e.key.toLowerCase()){
+        case 'w':case'arrowup':keys.w=false;break;
+        case 'a':case'arrowleft':keys.a=false;break;
+        case 's':case'arrowdown':keys.s=false;break;
+        case 'd':case'arrowright':keys.d=false;break;
+      }
+    }
+    function onWindowResize(){
+      camera.aspect=innerWidth/innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth,innerHeight);
     }
 
-    function updateCollectibles(delta) {
-        collectibles.forEach(gem => {
-            gem.rotation.y += 1.5 * delta;
-            gem.rotation.x += 1.0 * delta;
-        });
-    }
-
-    // ENHANCEMENT: Collision logic is now mode-dependent
-    function checkCollisions() {
-        const playerPos2D = new THREE.Vector2(player.position.x, player.position.z);
-        const collectRadiusSq = 0.75 * 0.75;
-        
-        switch(currentGameMode) {
-            case 'classic':
-            case 'time_attack':
-                if (collectibles.length === 0) return;
-                for (let i = collectibles.length - 1; i >= 0; i--) {
-                    const gem = collectibles[i];
-                    const gemPos2D = new THREE.Vector2(gem.position.x, gem.position.z);
-                    if (playerPos2D.distanceToSquared(gemPos2D) < collectRadiusSq) {
-                        scene.remove(gem);
-                        collectibles.splice(i, 1);
-                        score++;
-                        updateUI();
-                        if (score === totalCollectibles) endGame(true, `You collected all ${totalCollectibles} gems!`);
-                    }
-                }
-                break;
-            
-            case 'stealth':
-                // Check gem collection
-                for (let i = collectibles.length - 1; i >= 0; i--) {
-                    const gem = collectibles[i];
-                    const gemPos2D = new THREE.Vector2(gem.position.x, gem.position.z);
-                    if (playerPos2D.distanceToSquared(gemPos2D) < collectRadiusSq) {
-                        scene.remove(gem);
-                        collectibles.splice(i, 1);
-                        score++;
-                        updateUI();
-                        if (score === totalCollectibles) endGame(true, `Heist successful! You stole all ${totalCollectibles} gems!`);
-                    }
-                }
-                // Check being caught by crowd
-                for (const agent of crowd) {
-                    const agentPos2D = new THREE.Vector2(agent.mesh.position.x, agent.mesh.position.z);
-                    if (playerPos2D.distanceToSquared(agentPos2D) < collectRadiusSq) {
-                        endGame(false, "You were caught! Heist failed.");
-                        return;
-                    }
-                }
-                break;
-            
-            case 'pied_piper':
-                // Check converting crowd members
-                for (const agent of crowd) {
-                    if (agent.isFollower) continue;
-                    const agentPos2D = new THREE.Vector2(agent.mesh.position.x, agent.mesh.position.z);
-                    if (playerPos2D.distanceToSquared(agentPos2D) < collectRadiusSq) {
-                        agent.isFollower = true;
-                        // Change their shirt color to match player's
-                        agent.mesh.userData.bodyMat.color.set(0x0099ff);
-                        score++;
-                        updateUI();
-                        if (score === crowd.length) endGame(true, `Everyone is following you! You are the true leader!`);
-                    }
-                }
-                break;
-        }
-    }
-
-    // ENHANCEMENT: Centralized UI update function
-    function updateUI() {
-        if (gameOver) return;
-        const info = document.getElementById('info');
-        
-        switch(currentGameMode) {
-            case 'classic':
-                info.textContent = `Collect the gems! ${score} / ${totalCollectibles}`;
-                break;
-            case 'time_attack':
-                info.textContent = `Gems: ${score}/${totalCollectibles} | Time Left: ${gameTimer.toFixed(1)}s`;
-                break;
-            case 'pied_piper':
-                info.textContent = `Followers: ${score} / ${crowd.length}`;
-                break;
-            case 'stealth':
-                info.textContent = `Gems Stolen: ${score} / ${totalCollectibles} (Avoid the guards!)`;
-                break;
-        }
-    }
-
-    // ENHANCEMENT: Centralized function to handle win/loss states
-    function endGame(isWin, message) {
-        gameOver = true;
-        document.getElementById('info').textContent = message;
-        if (!isWin) {
-            // e.g., Make player disappear or fall over on loss
-            player.visible = false;
-        }
-    }
-
-    function addBench(x,z){
-      const seat = new THREE.Mesh(new THREE.BoxGeometry(2,0.1,0.6), new THREE.MeshStandardMaterial({ color: 0x663300 }));
-      seat.position.set(x,0.3,z); seat.castShadow=seat.receiveShadow=true; scene.add(seat);
-      const back = seat.clone(); back.position.y=0.7; back.scale.y=4; back.rotation.x=-Math.PI/12; scene.add(back);
-    }
-
-    function addTree(x,z){
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.3,2,8), new THREE.MeshStandardMaterial({ color: 0x663300 }));
-      trunk.position.set(x,1,z); trunk.castShadow=trunk.receiveShadow=true; scene.add(trunk);
-      const foliage = new THREE.Mesh(new THREE.SphereGeometry(1.2,12,12), new THREE.MeshStandardMaterial({ color: 0x228833 }));
-      foliage.position.set(x,3,z); foliage.castShadow=foliage.receiveShadow=true; scene.add(foliage);
-    }
-
+    /* ---------- Game loop ---------- */
     function animate() {
       requestAnimationFrame(animate);
-      const delta = clock.getDelta();
-      
-      // ENHANCEMENT: Only run game logic if not game over
-      if (!gameOver) {
-          updatePlayer(delta);
-          updateCrowd(delta);
-          updateCollectibles(delta);
-          checkCollisions();
+      const delta=clock.getDelta();
 
-          // ENHANCEMENT: Timer logic for Time Attack mode
-          if (currentGameMode === 'time_attack') {
-              gameTimer -= delta;
-              if (gameTimer <= 0) {
-                  gameTimer = 0;
-                  endGame(false, `Time's up! You only collected ${score} gems.`);
-              }
-              updateUI();
-          }
-      }
-
+      updatePlayer(delta);
+      updateCrowd(delta);
+      updateCollectibles(delta);
+      checkCollisions();
+      checkWinConditions();
       controls.update();
       renderer.render(scene,camera);
     }
 
-    function onWindowResize(){
-      camera.aspect = innerWidth/innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(innerWidth,innerHeight);
+    function updatePlayer(delta){
+      const move=new THREE.Vector3();
+      const fwd=new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y=0; fwd.normalize();
+      const right=new THREE.Vector3().crossVectors(camera.up,fwd).negate();
+
+      if(keys.w) move.add(fwd); if(keys.s) move.sub(fwd);
+      if(keys.a) move.sub(right); if(keys.d) move.add(right);
+
+      if(move.lengthSq()>0){
+        move.normalize();
+        player.position.addScaledVector(move,playerSpeed*delta);
+        player.position.x=Math.max(-sandboxSize/2+0.5,Math.min(sandboxSize/2-0.5,player.position.x));
+        player.position.z=Math.max(-sandboxSize/2+0.5,Math.min(sandboxSize/2-0.5,player.position.z));
+        player.lookAt(player.position.clone().add(move));
+      }
+      controls.target.copy(player.position);
+    }
+    function updateCrowd(delta){
+      const avoidR=1.2, slow=0.02;
+      crowd.forEach(a=>{
+        if(a.paused){a.idleTime-=delta;if(a.idleTime<=0){a.paused=false;a.dir=new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize();}return;}
+        a.nextAction-=delta;if(a.nextAction<=0){a.paused=true;a.idleTime=1+Math.random()*2;a.nextAction=3+Math.random()*5;return;}
+        let avoid=new THREE.Vector3();
+        crowd.forEach(o=>{if(o!==a){const d=new THREE.Vector3().subVectors(a.mesh.position,o.mesh.position);if(d.lengthSq()<avoidR*avoidR)avoid.add(d.normalize());}});
+        const dP=new THREE.Vector3().subVectors(a.mesh.position,player.position);if(dP.lengthSq()<2.25)avoid.add(dP.normalize());
+        const m=1;if(a.mesh.position.x> sandboxSize/2-m)avoid.x-=1;if(a.mesh.position.x<-sandboxSize/2+m)avoid.x+=1;
+        if(a.mesh.position.z> sandboxSize/2-m)avoid.z-=1;if(a.mesh.position.z<-sandboxSize/2+m)avoid.z+=1;
+        if(avoid.lengthSq()>0)a.dir.lerp(avoid.normalize(),0.1);else a.dir.lerp(new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(),slow);
+        a.dir.normalize();a.mesh.position.addScaledVector(a.dir,a.speed*delta);a.mesh.lookAt(a.mesh.position.clone().add(a.dir));
+      });
+    }
+    function updateCollectibles(delta){
+      collectibles.forEach(g=>{g.rotation.y+=1.5*delta; g.rotation.x+=1*delta;});
+    }
+    function checkCollisions(){
+      const r2=0.75*0.75;
+      for(let i=collectibles.length-1;i>=0;i--){
+        const g=collectibles[i];
+        if(new THREE.Vector2(g.position.x,g.position.z).distanceToSquared(new THREE.Vector2(player.position.x,player.position.z))<r2){
+          scene.remove(g);collectibles.splice(i,1);score++;
+          updateUI(`${score}/${totalCollectibles} collected`);
+        }
+      }
+    }
+    function checkWinConditions(){
+      let msg='';
+      switch(MODE){
+        case 'classic' : if(score===totalCollectibles) msg='Classic complete!'; break;
+        case 'stealth' : if(score===totalCollectibles) msg='Stealth master!'; break;
+        case 'chase'   : if(collectibles.length===0) msg='Escaped the chaser!'; break;
+        case 'guardian': if(carried&&Math.abs(carried.mesh.position.z+sandboxSize/2)<1) msg='Escort success!'; break;
+        case 'blackout': if(score===totalCollectibles){resetLighting();msg='Blackout cleared!';} break;
+      }
+      if(msg){alert(msg);startMode(MODE);} // restart same mode
     }
   </script>
 </body>
