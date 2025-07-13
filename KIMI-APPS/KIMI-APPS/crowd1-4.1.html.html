@@ -103,339 +103,282 @@
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-
+    
     /* ---------- Globals ---------- */
     let scene, camera, renderer, controls;
-    const sandboxSize = 25;
-    const clock = new THREE.Clock();
+    const sandboxSize = 25, clock = new THREE.Clock();
     let player;
     const crowd = [];
-    const moveKeys = {
-      forward: false,
-      backward: false,
-      left: false,
-      right: false
-    };
+    const moveKeys = { forward:0, backward:0, left:0, right:0 };
     let gameActive = false;
-    const score = { caught: 0, total: 0 };
+    const score = { caught:0, total:0 };
     const scoreEl = document.getElementById('score');
     const winMsgEl = document.getElementById('win-message');
     const playerShirtColor = new THREE.Color(0x0088ff);
+    
 
-    init();
-    animate();
+    const clamp = (v,min,max) => Math.max(min,Math.min(max,v));
+    const randomDir = () => new THREE.Vector3(Math.random()-.5,0,Math.random()-.5).normalize();
+    const clearArray = arr => arr.splice(0,arr.length);
+    function forDirections(fn) {
+      [ ['w','arrowup','forward'],
+        ['a','arrowleft','left'],
+        ['s','arrowdown','backward'],
+        ['d','arrowright','right']
+      ].forEach(([c1,c2,name])=>{
+        fn(c1,name); fn(c2,name);
+      });
+    }
 
+    /* ---------- Entry ---------- */
+    init(); animate();
+    
+    
+    /* ---------- Init ---------- */
     function init() {
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x88ccee);
       scene.fog = new THREE.Fog(0x88ccee, 20, 50);
-
+    
       camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 100);
       camera.position.set(0, 15, 20);
-
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+    
+      renderer = new THREE.WebGLRenderer({ antialias: 1 });
       renderer.setSize(innerWidth, innerHeight);
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.shadowMap.enabled = true;
+      renderer.setPixelRatio(devicePixelRatio);
+      renderer.shadowMap.enabled = 1;
       document.body.appendChild(renderer.domElement);
-
+    
       controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.minDistance = 5;
-      controls.maxDistance = 40;
-      controls.maxPolarAngle = Math.PI / 2.1;
-      controls.enablePan = true;
-      
-      /* Lighting */
+      Object.assign(controls, {
+        enableDamping:1, minDistance:5, maxDistance:40,
+        maxPolarAngle:Math.PI/2.1, enablePan:1
+      });
+    
+      // Lighting
       const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-      sun.position.set(10, 20, 10);
-      sun.castShadow = true;
-      sun.shadow.mapSize.set(2048, 2048);
-      sun.shadow.camera.left = -sandboxSize/2;
-      sun.shadow.camera.right = sandboxSize/2;
-      sun.shadow.camera.top = sandboxSize/2;
-      sun.shadow.camera.bottom = -sandboxSize/2;
+      sun.position.set(10,20,10); sun.castShadow=1;
+      sun.shadow.mapSize.set(2048,2048);
+      Object.assign(sun.shadow.camera, {
+        left:-sandboxSize/2, right:sandboxSize/2,
+        top:sandboxSize/2, bottom:-sandboxSize/2
+      });
       scene.add(sun, new THREE.AmbientLight(0x666666));
-
-      /* Ground */
+    
+      // Ground
       const ground = new THREE.Mesh(
-        new THREE.PlaneGeometry(sandboxSize, sandboxSize),
-        new THREE.MeshStandardMaterial({ color: 0xddbb77, roughness: 1 })
+        new THREE.PlaneGeometry(sandboxSize,sandboxSize),
+        new THREE.MeshStandardMaterial({color:0xddbb77, roughness:1})
       );
-      ground.rotation.x = -Math.PI/2;
-      ground.receiveShadow = true;
-      scene.add(ground);
-
-      /* Walls */
-      const wallMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 });
-      const wallGeo = new THREE.BoxGeometry(sandboxSize, 2, 0.5);
+      ground.rotation.x = -Math.PI/2; ground.receiveShadow = 1; scene.add(ground);
+    
+      // Walls
+      const wallMat = new THREE.MeshStandardMaterial({color:0x888888, roughness:.8});
+      const wallGeo = new THREE.BoxGeometry(sandboxSize,2,.5);
       ['N','S','E','W'].forEach(side=>{
         const w = new THREE.Mesh(wallGeo, wallMat);
-        w.castShadow = w.receiveShadow = true;
-        if(side==='N'){ w.position.set(0,1,-sandboxSize/2); }
-        if(side==='S'){ w.position.set(0,1, sandboxSize/2); }
-        if(side==='E'){ w.rotation.y=Math.PI/2; w.position.set( sandboxSize/2,1,0); }
-        if(side==='W'){ w.rotation.y=Math.PI/2; w.position.set(-sandboxSize/2,1,0); }
+        w.castShadow = w.receiveShadow = 1;
+        if(side==='N') w.position.set(0,1,-sandboxSize/2);
+        if(side==='S') w.position.set(0,1, sandboxSize/2);
+        if(side==='E'){ w.rotation.y=Math.PI/2; w.position.set(sandboxSize/2,1,0);}
+        if(side==='W'){ w.rotation.y=Math.PI/2; w.position.set(-sandboxSize/2,1,0);}
         scene.add(w);
       });
-
-      /* Decorations */
-      addBench( 8, -5); addBench( 8, 5);
-      addBench(-8,  8); addBench(-5, -8);
-      addTree( 7, 7); addTree( 7, -9);
-      addTree(-9, -4); addTree(-4, 9);
-      
-      // Initialize player first, then crowd
+    
+      // Decorations
+      [ [8,-5],[8,5],[-8,8],[-5,-8] ].forEach(([x,z])=>addBench(x,z));
+      [ [7,7],[7,-9],[-9,-4],[-4,9] ].forEach(([x,z])=>addTree(x,z));
+    
       createPlayer();
       spawnNewGame();
-      
+    
       document.getElementById('resetBtn').addEventListener('click', spawnNewGame);
-
-      // Keyboard handling – support WASD and arrow keys, case-insensitive
-      window.addEventListener('keydown', e => {
-        switch(e.key.toLowerCase()) {
-          case 'w':
-          case 'arrowup':
-            moveKeys.forward = true;
-            break;
-          case 'a':
-          case 'arrowleft':
-            moveKeys.left = true;
-            break;
-          case 's':
-          case 'arrowdown':
-            moveKeys.backward = true;
-            break;
-          case 'd':
-          case 'arrowright':
-            moveKeys.right = true;
-            break;
-        }
+    
+      // Unified keyboard handler
+      window.addEventListener('keydown', e=>{
+        forDirections((k,name)=>{ if(e.key.toLowerCase()===k) moveKeys[name]=1; });
       });
-      window.addEventListener('keyup', e => {
-        switch(e.key.toLowerCase()) {
-          case 'w':
-          case 'arrowup':
-            moveKeys.forward = false;
-            break;
-          case 'a':
-          case 'arrowleft':
-            moveKeys.left = false;
-            break;
-          case 's':
-          case 'arrowdown':
-            moveKeys.backward = false;
-            break;
-          case 'd':
-          case 'arrowright':
-            moveKeys.right = false;
-            break;
-        }
+      window.addEventListener('keyup', e=>{
+        forDirections((k,name)=>{ if(e.key.toLowerCase()===k) moveKeys[name]=0; });
       });
     }
     
-    function createPlayer(){
-        const playerMesh = createPerson(playerShirtColor);
-        playerMesh.position.set(0,0,5);
-        scene.add(playerMesh);
-        player = {
-            mesh: playerMesh,
-            speed: 4,
-            velocity: new THREE.Vector3()
-        };
+    /* ---------- Entities ---------- */
+    function createPlayer() {
+      const mesh = createPerson(playerShirtColor);
+      mesh.position.set(0,0,5);
+      scene.add(mesh);
+      player = { mesh, speed:4, velocity:new THREE.Vector3() };
     }
     
+    function createPerson(shirtColor) {
+      const group = new THREE.Group();
+      const skin = new THREE.Color().setHSL(Math.random(),.6,.55);
+      const shirt = shirtColor||new THREE.Color().setHSL(Math.random(),.8,.6);
+      const pants = new THREE.Color().setHSL(Math.random(),.7,.35);
+    
+      const body = new THREE.Mesh(
+        new THREE.CapsuleGeometry(.25,1,4,8),
+        new THREE.MeshStandardMaterial({color:shirt})
+      ); body.name="body"; body.position.y=.9; body.castShadow=1; group.add(body);
+    
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(.25,16,16),
+        new THREE.MeshStandardMaterial({color:skin})
+      ); head.position.y=1.7; head.castShadow=1; group.add(head);
+    
+      const legGeo = new THREE.CapsuleGeometry(.1,.7,4,8);
+      const legL = new THREE.Mesh(legGeo,new THREE.MeshStandardMaterial({color:pants}));
+      legL.position.set(.15,.35,0); legL.castShadow=1; group.add(legL);
+      const legR = legL.clone(); legR.position.x=-.15; group.add(legR);
+    
+      return group;
+    }
+    
+    /* ---------- Game ---------- */
     function spawnNewGame() {
-      // Reset score and game state
       score.caught = 0;
       score.total = 10 + Math.floor(Math.random()*10);
-      gameActive = true;
+      gameActive = 1;
       winMsgEl.style.display = 'none';
-
-      // Clear existing crowd
-      crowd.forEach(agent => scene.remove(agent.mesh));
-      crowd.length = 0;
-      
-      // Spawn new crowd
-      for(let i = 0; i < score.total; i++){
-        const personMesh = createPerson();
-        personMesh.position.set(
-          (Math.random()-0.5)*(sandboxSize-4),
-          0,
-          (Math.random()-0.5)*(sandboxSize-4)
+    
+      // Clear crowd, respawn
+      crowd.forEach(a=>scene.remove(a.mesh)); clearArray(crowd);
+    
+      for(let i=0;i<score.total;i++){
+        const mesh = createPerson();
+        mesh.position.set(
+          (Math.random()-.5)*(sandboxSize-4), 0, (Math.random()-.5)*(sandboxSize-4)
         );
-        scene.add(personMesh);
+        scene.add(mesh);
         crowd.push({
-          mesh: personMesh,
-          speed: 0.8 + Math.random()*0.6,
-          dir: new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(),
-          nextAction: Math.random()*5,
-          paused: false,
-          idleTime: 0,
-          isCaught: false
+          mesh, speed:.8+Math.random()*.6, dir:randomDir(),
+          nextAction:Math.random()*5, paused:0, idleTime:0, isCaught:0
         });
       }
-      
-      // Reset player position
-      player.mesh.position.set(0, 0, (sandboxSize/2) - 2);
-      
+      player.mesh.position.set(0,0,sandboxSize/2-2);
       updateScoreboard();
     }
     
     function updateScoreboard() {
-        scoreEl.textContent = `Caught: ${score.caught} / ${score.total}`;
-        if(score.caught === score.total) {
-            gameActive = false;
-            winMsgEl.style.display = 'block';
-        }
-    }
-
-    function createPerson(shirtColor) {
-      const group = new THREE.Group();
-      const skin = new THREE.Color().setHSL(Math.random(),0.6,0.55);
-      const shirt = shirtColor || new THREE.Color().setHSL(Math.random(),0.8,0.6);
-      const pants = new THREE.Color().setHSL(Math.random(),0.7,0.35);
-
-      const body = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.25,1,4,8),
-        new THREE.MeshStandardMaterial({ color: shirt })
-      );
-      body.name = "body";
-      body.position.y=0.9; body.castShadow=true;
-      group.add(body);
-
-      const head = new THREE.Mesh(
-        new THREE.SphereGeometry(0.25,16,16),
-        new THREE.MeshStandardMaterial({ color: skin })
-      );
-      head.position.y=1.7; head.castShadow=true;
-      group.add(head);
-
-      const legGeo = new THREE.CapsuleGeometry(0.1,0.7,4,8);
-      const legL = new THREE.Mesh(legGeo, new THREE.MeshStandardMaterial({ color: pants }));
-      legL.position.set(0.15,0.35,0); legL.castShadow=true; group.add(legL);
-      const legR = legL.clone(); legR.position.x=-0.15; group.add(legR);
-      
-      return group;
-    }
-
-    function updatePlayer(delta) {
-      if (!gameActive) {
-        player.velocity.set(0,0,0);
-        return;
-      };
-
-      const moveDirection = new THREE.Vector3();
-      // Camera-relative movement
-      const cameraForward = new THREE.Vector3();
-      camera.getWorldDirection(cameraForward);
-      cameraForward.y = 0;
-      cameraForward.normalize();
-      // Use non-negated right vector
-      const cameraRight = new THREE.Vector3().crossVectors(cameraForward, camera.up).normalize();
-
-      if (moveKeys.forward) moveDirection.add(cameraForward);
-      if (moveKeys.backward) moveDirection.sub(cameraForward);
-      if (moveKeys.left) moveDirection.sub(cameraRight);   // <-- WAS: add, now sub
-      if (moveKeys.right) moveDirection.add(cameraRight);  // <-- WAS: sub, now add
-
-      if (moveDirection.lengthSq() > 0) {
-        moveDirection.normalize();
-        player.mesh.lookAt(player.mesh.position.clone().add(moveDirection));
+      scoreEl.textContent = `Caught: ${score.caught} / ${score.total}`;
+      if(score.caught===score.total){
+        gameActive=0;
+        winMsgEl.style.display='block';
       }
-
-      player.velocity.copy(moveDirection).multiplyScalar(player.speed);
+    }
+    
+    /* ---------- Update Loops ---------- */
+    function updatePlayer(delta) {
+      if (!gameActive) return player.velocity.set(0,0,0);
+    
+      // Camera-relative WASD/arrow movement
+      const move = new THREE.Vector3();
+      const camF = new THREE.Vector3(); camera.getWorldDirection(camF); camF.y=0; camF.normalize();
+      const camR = new THREE.Vector3().crossVectors(camF, camera.up).normalize();
+    
+      if(moveKeys.forward) move.add(camF);
+      if(moveKeys.backward) move.sub(camF);
+      if(moveKeys.left) move.sub(camR);
+      if(moveKeys.right) move.add(camR);
+    
+      if(move.lengthSq()){
+        move.normalize();
+        player.mesh.lookAt(player.mesh.position.clone().add(move));
+      }
+      player.velocity.copy(move).multiplyScalar(player.speed);
       player.mesh.position.addScaledVector(player.velocity, delta);
-
-      // Wall collision
-      const margin = 1;
-      player.mesh.position.x = Math.max(-sandboxSize/2 + margin, Math.min(sandboxSize/2 - margin, player.mesh.position.x));
-      player.mesh.position.z = Math.max(-sandboxSize/2 + margin, Math.min(sandboxSize/2 - margin, player.mesh.position.z));
-      
-      // --- Tagging Gameplay ---
-      const tagRadius = 1.0;
-      crowd.forEach(agent => {
-        if (!agent.isCaught && player.mesh.position.distanceTo(agent.mesh.position) < tagRadius) {
-          agent.isCaught = true;
-          agent.paused = true;
-          const body = agent.mesh.getObjectByName("body");
-          if (body) body.material.color.copy(playerShirtColor);
-          score.caught++;
-          updateScoreboard();
+    
+      // Clamp to sandbox
+      const m=1, pos=player.mesh.position;
+      pos.x = clamp(pos.x,-sandboxSize/2+m,sandboxSize/2-m);
+      pos.z = clamp(pos.z,-sandboxSize/2+m,sandboxSize/2-m);
+    
+      // Tag crowd
+      const tagR=1.0;
+      crowd.forEach(a=>{
+        if(!a.isCaught && pos.distanceTo(a.mesh.position)<tagR){
+          a.isCaught=a.paused=1; const body=a.mesh.getObjectByName("body");
+          if(body) body.material.color.copy(playerShirtColor);
+          score.caught++; updateScoreboard();
         }
       });
     }
-
+    
     function updateCrowd(delta) {
-      const avoidanceRadius = 1.2;
-      const slowDown = 0.02;
-
+      const avoidR=1.2, slow=.02, m=1;
       crowd.forEach(agent=>{
-        if (agent.isCaught) return;
+        if(agent.isCaught) return;
         if(agent.paused){
-          agent.idleTime -= delta;
-          if(agent.idleTime <= 0){ agent.paused=false; agent.dir=new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(); }
+          agent.idleTime-=delta;
+          if(agent.idleTime<=0) { agent.paused=0; agent.dir=randomDir(); }
           return;
         }
-        agent.nextAction -= delta;
-        if(agent.nextAction <= 0){
-          agent.paused=true;
-          agent.idleTime = 1 + Math.random()*2;
-          agent.nextAction = 3 + Math.random()*5;
-          return;
+        agent.nextAction-=delta;
+        if(agent.nextAction<=0){
+          agent.paused=1; agent.idleTime=1+Math.random()*2; agent.nextAction=3+Math.random()*5; return;
         }
         let avoidance = new THREE.Vector3();
-        // Avoid other agents
         crowd.forEach(other=>{
           if(other===agent) return;
-          const diff = new THREE.Vector3().subVectors(agent.mesh.position,other.mesh.position);
-          if(diff.lengthSq() < avoidanceRadius*avoidanceRadius) avoidance.add(diff.normalize());
+          const d = new THREE.Vector3().subVectors(agent.mesh.position,other.mesh.position);
+          if(d.lengthSq()<avoidR*avoidR) avoidance.add(d.normalize());
         });
         // Avoid player
-        const diffToPlayer = new THREE.Vector3().subVectors(agent.mesh.position, player.mesh.position);
-        if(diffToPlayer.lengthSq() < (avoidanceRadius * 2)**2) avoidance.add(diffToPlayer.normalize());
-        const margin = 1;
-        const pos = agent.mesh.position;
-        if(pos.x > sandboxSize/2-margin) avoidance.x -=1;
-        if(pos.x < -sandboxSize/2+margin) avoidance.x +=1;
-        if(pos.z > sandboxSize/2-margin) avoidance.z -=1;
-        if(pos.z < -sandboxSize/2+margin) avoidance.z +=1;
-        if(avoidance.lengthSq() > 0) agent.dir.lerp(avoidance.normalize(),0.1);
-        else agent.dir.lerp(new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5).normalize(),slowDown);
+        const dP = new THREE.Vector3().subVectors(agent.mesh.position, player.mesh.position);
+        if(dP.lengthSq()<(avoidR*2)**2) avoidance.add(dP.normalize());
+        // Wall avoid
+        const pos=agent.mesh.position;
+        if(pos.x > sandboxSize/2-m) avoidance.x-=1;
+        if(pos.x < -sandboxSize/2+m) avoidance.x+=1;
+        if(pos.z > sandboxSize/2-m) avoidance.z-=1;
+        if(pos.z < -sandboxSize/2+m) avoidance.z+=1;
+        // Steer
+        avoidance.lengthSq()
+          ? agent.dir.lerp(avoidance.normalize(),.1)
+          : agent.dir.lerp(randomDir(),slow);
         agent.dir.normalize();
         agent.mesh.position.addScaledVector(agent.dir,agent.speed*delta);
         agent.mesh.lookAt(agent.mesh.position.clone().add(agent.dir));
       });
     }
-
+    
+    /* ---------- Deco ---------- */
     function addBench(x,z){
-      const seat = new THREE.Mesh( new THREE.BoxGeometry(2.5,0.1,0.6), new THREE.MeshStandardMaterial({ color: 0x663300 }) );
-      seat.position.set(x,0.3,z); seat.castShadow=seat.receiveShadow=true; scene.add(seat);
-      const back = seat.clone(); back.position.y=0.7; back.scale.y=4; back.rotation.x=-Math.PI/12; scene.add(back);
+      const seat = new THREE.Mesh(
+        new THREE.BoxGeometry(2.5,.1,.6), new THREE.MeshStandardMaterial({color:0x663300})
+      );
+      seat.position.set(x,.3,z); seat.castShadow=seat.receiveShadow=1; scene.add(seat);
+      const back = seat.clone(); back.position.y=.7; back.scale.y=4; back.rotation.x=-Math.PI/12; scene.add(back);
     }
     function addTree(x,z){
-      const trunk = new THREE.Mesh( new THREE.CylinderGeometry(0.2,0.3,2,8), new THREE.MeshStandardMaterial({ color: 0x663300 }) );
-      trunk.position.set(x,1,z); trunk.castShadow=trunk.receiveShadow=true; scene.add(trunk);
-      const foliage = new THREE.Mesh( new THREE.SphereGeometry(1.2,12,12), new THREE.MeshStandardMaterial({ color: 0x228833 }) );
-      foliage.position.set(x,3,z); foliage.castShadow=foliage.receiveShadow=true; scene.add(foliage);
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(.2,.3,2,8), new THREE.MeshStandardMaterial({color:0x663300})
+      );
+      trunk.position.set(x,1,z); trunk.castShadow=trunk.receiveShadow=1; scene.add(trunk);
+      const foliage = new THREE.Mesh(
+        new THREE.SphereGeometry(1.2,12,12), new THREE.MeshStandardMaterial({color:0x228833})
+      );
+      foliage.position.set(x,3,z); foliage.castShadow=foliage.receiveShadow=1; scene.add(foliage);
     }
-
+    
+    /* ---------- Main loop ---------- */
     function animate() {
       requestAnimationFrame(animate);
       const delta = clock.getDelta();
       updatePlayer(delta);
       updateCrowd(delta);
-      // Make camera smoothly follow the player
-      if (player) controls.target.lerp(player.mesh.position, 0.1);
+      if(player) controls.target.lerp(player.mesh.position,.1);
       controls.update();
       renderer.render(scene,camera);
     }
-
+    
     window.addEventListener('resize',()=>{
       camera.aspect = innerWidth/innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(innerWidth,innerHeight);
     });
-  </script>
+    </script>
+    
 </body>
 </html>
