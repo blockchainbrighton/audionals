@@ -1,0 +1,485 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Web1 Step Sequencer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    /* ====== GLOBAL RESET ====== */
+    *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Arial,sans-serif;}
+    body{background:#111;color:#eee;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+    button{background:#222;border:1px solid #444;color:#eee;padding:4px 8px;border-radius:4px;cursor:pointer}
+    button:hover{background:#333}
+    label{font-size:0.75rem}
+    /* ====== LAYOUT ====== */
+    #topBar{display:flex;align-items:center;gap:8px;padding:8px;background:#1a1a1a;border-bottom:1px solid #333;flex-wrap:wrap}
+    #transport button{font-weight:bold}
+    #channelList{flex:1;overflow-y:auto;padding:8px;background:#0a0a0a;border-right:1px solid #333}
+    #patternView{flex:2;display:flex;flex-direction:column;background:#0f0f0f;position:relative}
+    #canvasContainer{flex:1;overflow:auto}
+    canvas{background:#121212}
+    .channelRow{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+    .channelRow input[type=range]{width:80px}
+    .channelRow input[type=checkbox]{margin-left:6px}
+  </style>
+</head>
+<body>
+  <!-- ========================== TOP BAR ========================== -->
+  <div id="topBar">
+    <div id="transport">
+      <button id="playBtn">▶</button>
+      <button id="stopBtn">⏹</button>
+      <button id="pauseBtn">⏸</button>
+    </div>
+    <label>BPM
+      <input id="bpmInput" type="number" min="60" max="200" value="120" style="width:60px">
+    </label>
+    <label>Swing
+      <input id="swingInput" type="range" min="0" max="100" value="0">
+    </label>
+    <button id="addChannelBtn">+ Channel</button>
+    <button id="saveBtn">Save</button>
+    <button id="loadBtn">Load</button>
+    <input id="fileInput" type="file" accept=".json,.bin" style="display:none">
+  </div>
+
+  <!-- ========================== MAIN LAYOUT ========================== -->
+  <div style="display:flex;flex:1;overflow:hidden">
+    <!-- Channel list -->
+    <div id="channelList"></div>
+    <!-- Pattern view -->
+    <div id="patternView">
+      <div id="canvasContainer">
+        <canvas id="gridCanvas" width="800" height="400"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== LIBRARY SCRIPTS (via CDN) ====== -->
+  <script src="https://cdn.jsdelivr.net/npm/msgpack-lite@0.1.26/dist/msgpack.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
+
+  <!-- ====== MAIN APP SCRIPT ====== -->
+  <script type="module">
+/* =============================================================================
+   Web1 Step Sequencer – Single-File MVP
+   ============================================================================= */
+
+/* ------------------------------------------------------------------
+   Global State
+   ------------------------------------------------------------------ */
+const State = {
+  bpm: 120,
+  swing: 0,
+  channels: [],
+  patterns: {},
+  arrangement: {sections:[]},
+  playState: 'stopped',
+  step: 0,
+  selectedChannelIndex: 0,
+  undoStack: [],
+  redoStack: []
+};
+
+/* ------------------------------------------------------------------
+   Audio Engine (Tone.js)
+   ------------------------------------------------------------------ */
+Tone.Transport.bpm.value = State.bpm;
+Tone.Transport.swing = 0;
+
+const audioEngine = {
+  init() {
+    Tone.start();
+    Tone.Transport.scheduleRepeat((time) => {
+      const step = Math.floor(Tone.Transport.seconds * State.bpm / 60 * 4) % 16;
+      State.step = step;
+      // trigger notes
+      State.channels.forEach((ch, idx) => {
+        if (ch.muted) return;
+        const pat = State.patterns[idx] || [];
+        if (pat[step]) {
+          ch.player?.start(time);
+        }
+      });
+    }, '16n');
+  },
+  play() { Tone.Transport.start(); },
+  pause() { Tone.Transport.pause(); },
+  stop() { Tone.Transport.stop(); State.step = 0; },
+  setBpm(b) { Tone.Transport.bpm.value = b; },
+  setSwing(s) { Tone.Transport.swing = s / 100; }
+};
+
+/* ------------------------------------------------------------------
+   Serialization Agent (msgpack-lite)
+   ------------------------------------------------------------------ */
+const serialize = () => msgpack.encode(State);
+const deserialize = (bin) => Object.assign(State, msgpack.decode(bin));
+
+function saveToFile() {
+  const bin = serialize();
+  const blob = new Blob([bin], {type:'application/octet-stream'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'song.bin'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function loadFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => deserialize(new Uint8Array(e.target.result));
+  reader.readAsArrayBuffer(file);
+}
+
+/* ------------------------------------------------------------------
+   UI Agent
+   ------------------------------------------------------------------ */
+const ui = {
+  channelListEl: document.getElementById('channelList'),
+  canvas: document.getElementById('gridCanvas'),
+  ctx: document.getElementById('gridCanvas').getContext('2d'),
+  cellW: 40,
+  cellH: 30,
+  init() {
+    this.canvas.width = 16 * this.cellW;
+    this.canvas.height = 16 * this.cellH;
+    this.canvas.addEventListener('click', (e)=>{
+      const rect = this.canvas.getBoundingClientRect();
+      const col = Math.floor((e.clientX - rect.left) / this.cellW);
+      const row = Math.floor((e.clientY - rect.top) / this.cellH);
+      if (State.channels[row]) {
+        const pat = State.patterns[row] || (State.patterns[row] = new Array(16).fill(0));
+        pat[col] = pat[col] ? 0 : 1;
+        this.draw();
+      }
+    });
+    this.drawLoop();
+  },
+  drawLoop() {
+    this.draw();
+    requestAnimationFrame(()=>this.drawLoop());
+  },
+  draw() {
+    const {ctx, cellW, cellH} = this;
+    ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
+    ctx.fillStyle = '#222';
+    for (let c=0;c<16;c++) {
+      ctx.fillRect(c*cellW,0,1,this.canvas.height);
+    }
+    for (let r=0;r<State.channels.length;r++) {
+      ctx.fillRect(0,r*cellH,this.canvas.width,1);
+      const pat = State.patterns[r] || [];
+      for (let c=0;c<16;c++) {
+        ctx.fillStyle = pat[c] ? '#0f0' : (c === State.step ? '#555' : '#111');
+        ctx.fillRect(c*cellW+1, r*cellH+1, cellW-1, cellH-1);
+      }
+    }
+  },
+  renderChannels() {
+    this.channelListEl.innerHTML = '';
+    State.channels.forEach((ch, idx) => {
+      const row = document.createElement('div');
+      row.className = 'channelRow';
+      row.innerHTML = `
+        <span style="width:80px">${ch.name}</span>
+        <input type="range" class="vol" min="0" max="1" step="0.01" value="${ch.volume}">
+        <input type="checkbox" class="mute" ${ch.muted?'checked':''}>M
+        <input type="checkbox" class="solo" ${ch.solo?'checked':''}>S
+        <button class="del">🗑</button>
+      `;
+      row.querySelector('.vol').addEventListener('input', (e)=>{
+        ch.volume = parseFloat(e.target.value);
+        if (ch.player) ch.player.volume.value = Tone.gainToDb(ch.volume);
+      });
+      row.querySelector('.mute').addEventListener('change', (e)=>{
+        ch.muted = e.target.checked;
+      });
+      row.querySelector('.solo').addEventListener('change', (e)=>{
+        ch.solo = e.target.checked;
+      });
+      row.querySelector('.del').addEventListener('click', ()=>{
+        State.channels.splice(idx,1);
+        delete State.patterns[idx];
+        this.renderChannels();
+      });
+      this.channelListEl.appendChild(row);
+    });
+  }
+};
+
+
+/* ------------------------------------------------------------------
+   Loader Agent – Ordinal / base64 / raw audio
+------------------------------------------------------------------ */
+const loader = {
+  async loadSample(src) {
+    // 1. If it looks like an Audional JSON inscription
+    if (src.match(/^\/content\/[a-f0-9]{64}i0$/i) || src.startsWith('https://ordinals.com/content/')) {
+      const url = src.startsWith('http') ? src : `https://ordinals.com${src}`;
+      const res = await fetch(url);
+      const json = await res.json();
+      // base64 dataURI -> Tone.Player
+      return new Tone.Player(json.audioData).toDestination();
+    }
+
+    // 2. Otherwise treat as plain audio URL
+    return new Tone.Player(src).toDestination();
+  }
+};
+
+/* ------------------------------------------------------------------
+   Controller
+   ------------------------------------------------------------------ */
+   async function addChannel(name = 'Kick', cid = 'https://ordinals.com/content/e7d344ef3098d0889856978c4d2e81ccf2358f7f8b66feecc71e03036c59ad48i0') {
+    const ch = { name, volume: 1, muted: false, solo: false, cid };
+    try {
+        const { audioData } = await extractAudioFromAnySource(cid, name);
+        const blob = new Blob([audioData], { type: 'audio/mpeg' }); // mime sniff later
+        const url = URL.createObjectURL(blob);
+        ch.player = new Tone.Player(url).toDestination();
+        ch.player.volume.value = Tone.gainToDb(1);
+    } catch (err) {
+        console.error('Failed to load sample:', err);
+    }
+    State.channels.push(ch);
+    ui.renderChannels();
+    }
+
+document.getElementById('playBtn').onclick = () => { audioEngine.play(); };
+document.getElementById('pauseBtn').onclick = () => { audioEngine.pause(); };
+document.getElementById('stopBtn').onclick = () => { audioEngine.stop(); };
+document.getElementById('bpmInput').oninput = (e) => {
+  State.bpm = parseInt(e.target.value);
+  audioEngine.setBpm(State.bpm);
+};
+document.getElementById('swingInput').oninput = (e) => {
+  State.swing = parseInt(e.target.value);
+  audioEngine.setSwing(State.swing);
+};
+document.getElementById('addChannelBtn').onclick = () => addChannel(`Ch ${State.channels.length+1}`);
+document.getElementById('saveBtn').onclick = saveToFile;
+document.getElementById('loadBtn').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange = (e) => e.target.files[0] && loadFromFile(e.target.files[0]);
+
+/*****************************************************************
+ * Universal Audio Extractor – handles JSON, raw audio, or HTML
+ ****************************************************************/
+ async function extractAudioFromAnySource(url, sampleName = '') {
+  const base64ToArrayBuffer = b64 => Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(res.statusText);
+
+  const ct = res.headers.get('Content-Type') || '';
+  const text = await res.text();
+
+  // 1. JSON-wrapped base64
+  if (ct.includes('application/json')) {
+    const json = JSON.parse(text);
+    const b64 = json.audioData?.split(',').pop();
+    if (!b64) throw new Error('No base64 in JSON');
+    return {
+      audioData: base64ToArrayBuffer(b64),
+      sampleName: sampleName || json.filename || 'JSON Sample',
+      format: 'json-audioData',
+      contentType: 'audio/auto'
+    };
+  }
+
+  // 2. Raw audio
+  if (ct.startsWith('audio/')) {
+    return {
+      audioData: await res.arrayBuffer(),
+      sampleName: sampleName || 'Raw Sample',
+      format: 'audio-raw',
+      contentType: ct
+    };
+  }
+
+  // 3. HTML page – scrape <audio src="...">
+  const audioMatch = text.match(/<audio[^>]+src=["']([^"']+)["']/i);
+  if (audioMatch) {
+    // Could be relative or absolute
+    const src = new URL(audioMatch[1], url).href;
+    return await extractAudioFromAnySource(src, sampleName);
+  }
+
+  // 4. HTML page – base64 data: URI inside <source> or <audio>
+  const dataMatch = text.match(/src=["']data:audio\/[^;]+;base64,([^"']+)["']/i);
+  if (dataMatch) {
+    return {
+      audioData: base64ToArrayBuffer(dataMatch[1]),
+      sampleName: sampleName || 'HTML Sample',
+      format: 'html-data',
+      contentType: 'audio/auto'
+    };
+  }
+
+  throw new Error('Unsupported format');
+}
+
+/*****************************************************************
+ * OG Audional Sample List & Dropdown
+ ****************************************************************/
+
+ // New Dropdown for Og Audional sample inscriptions
+const ogSampleUrls = [
+    { value: 'https://ordinals.com/content/e7d344ef3098d0889856978c4d2e81ccf2358f7f8b66feecc71e03036c59ad48i0#', text:'OB1 #1 - 808 Kick' },
+    { value: 'https://ordinals.com/content/ef5707e6ecf4d5b6edb4c3a371ca1c57b5d1057c6505ccb5f8bdc8918b0c4d94i0',text: 'OB1 #2 - 808 Snare' },
+    { value: 'https://ordinals.com/content/d030eb3d8bcd68b0ed02b0c67fdb981342eea40b0383814f179a48e76927db93i0',text: 'OB1 #3 - Closed Hat' },
+    { value: 'https://ordinals.com/content/3b7482a832c4f27c32fc1da7cc4249bbbac1cbdfbdb8673079cad0c33486d233i0',text: 'OB1 #4 - 808 Clap'  },
+    { value: 'https://ordinals.com/content/5a42d7b2e2fe01e4f31cbad5dd671997f87339d970faaab37f6355c4a2f3be5ai0',text: 'OB1 #5 - Crash' },
+    { value: 'https://ordinals.com/content/ddc1838c1a6a3c45b2c6e19ff278c3b51b0797c3f1339c533370442d23687a68i0',text: 'OB1 #6 - Synth Bass 1' },
+    { value: 'https://ordinals.com/content/91f52a4ca00bb27383ae149f24b605d75ea99df033a6cbb6de2389455233bf51i0',text: 'OB1 #7 - Synth Bass 2' },
+    { value: 'https://ordinals.com/content/1e3c2571e96729153e4b63e2b561d85aec7bc5ba372d293af469a525dfa3ed59i0',text: 'OB1 #8 - Synth Bass 3' },
+    { value: 'https://ordinals.com/content/437868aecce108d49f9b29c2f477987cb5834ffdf639a650335af7f0fdd5e55bi0',text: 'OB1 #9 - Hard Kick'},
+    { value: 'https://ordinals.com/content/3be1f8e37b718f5b9874aecad792504c5822dc8dfc727ad4928594f7725db987i0',text: 'OB1 #10 - Hard Snare' },
+    { value: 'https://ordinals.com/content/1bda678460ef08fb64435b57c9b69fd78fd4556822ccd8e9839b4eb71b3621edi0',text: 'OB1 #11 - Small Click' },
+    { value: 'https://ordinals.com/content/228947e9fc52e44d3a22e84aed7bbaeff08d60c5f925aa6be7e265d210425c28i0',text: 'OB1 #12 - DJ Scratch' },
+    { value: 'https://ordinals.com/content/578aa9d3b29ceceafc659ecee22cb7ef1a063ba5b71474db8fe84949746cdeefi0',text: 'OB1 #13 - Glockenspiel' },
+    { value: 'https://ordinals.com/content/3e5fe7bc10e37a145a75f7ddd71debd9079b05568c5b9c5e6b4de3d959a4c46bi0',text: 'OB1 #14 - Cowbell' },
+    { value: 'https://ordinals.com/content/b77fb3b299477ca55ab2626dbbc12c0d5fa9d4cf51ae00850caae6e36baef745i0',text: 'OB1 #16 - Bass Drop' },
+
+
+
+    { value: 'https://ordinals.com/content/752bd66406185690c6f14311060785170df91a887b42740e1dde27e5fbf351cbi0#', text: 'MS10 Woop.mp3' },
+    { value: 'https://ordinals.com/content/6d962189218b836cf33e2dc1adbc981e90242aa395f0868178773065f76f144ei0', text: 'audinalSample#1' },
+    { value: 'https://ordinals.com/content/0b8eff3f39f4095d0f129bb8dd75f29159f8725c7e66046bf41f70ebb9f60d93i0', text: 'melophonicSynthBassSample1' },
+    { value: 'https://ordinals.com/content/6d8be8186e63b4557e51edd66184a567bc6f5f9f5ba4bb34ba8c67e652c1934ei0', text: 'Step for man.mp3' },
+    { value: 'https://ordinals.com/content/6c01b1214fc4d4016d683380d066849e6bc645276b102604c098bd35fd77f791i0', text: 'melophonic_Snare_1.mp3' },
+    { value: 'https://ordinals.com/content/43efcebb84113c6df56bf5b8a455685c043492de9f5635d4108c4211c1f6841fi0', text: 'PumpIt_COLOR.mp3' },
+    { value: 'https://ordinals.com/content/3364803cb3032ce95f4138a214c15a9b36dcb70f574a477f27615d448e1cdeb8i0', text: 'Drums 8 bit beat - 2.429 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/fef956676f3cbd6019a03d75c1a4a295c25b33653644b8f6ebde387971f9a677i0', text: 'wobble-bass.mp3' },
+    { value: 'https://ordinals.com/content/8fa54ad2d9e297c79b225eff67a481ebc8682dacf4fe9dbf5b692a60b237c163i0', text: 'Entertainment - Quiet Loop (2) (1).mp3' },
+    { value: 'https://ordinals.com/content/695368ae1092c0633ef959dc795ddb90691648e43f560240d96da0e2753a0a08i0', text: 'Melody O  - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/d4ce1d1e80e90378d8fc49fd7e0e24e7f2310b2f5eb95d0c2318c47b6c9cd645i0', text: 'Melody K - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/e4cb3caff3b4a5192adf0f2ab5cd9da378bacfbafce56c3d4fb678a313607970i0', text: 'Melody I - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/898cba6dc32faab5be09f13092b7500b13eb22f1e7b3d604c8e6e47b0becd139i0', text: 'Melody C-MP3 - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/ed13d5389ae6273839342698b6d5bd3342c51eb472f32b8306e60f8e1e903ce8i0', text: 'Mel Fill 3 - 2.429 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/c41587924f9d93d01cb71ca925fd664d6e50f1ac8e3c975d5e1e1f1bb0ff11b3i0', text: 'Audional-Jim.mp3' },
+    { value: 'https://ordinals.com/content/b0fb7f9eb0fe6c368a8d140b1117234431da0cd8725e9f78e6573bb7f0f61dadi0', text: 'Melody N  - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/0e38f29c76b29e471f5f0022a5e98f9ae64b5b1d8f25673f85e02851daf22526i0', text: 'Mel Fill 4 - 2.429 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/244c785d6df173f8425d654cfc6d2b006c7bb47a605c7de576ed87022e42c7dfi0', text: 'Melody D - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/a72adee5a07200a623c40831ae5979bc7562b542788c3ded35d9e81e39c6014fi0', text: 'Melody B-MP3 - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/6a84401579707b76d9b9a77cc461e767f7ea8f08cc0e46dee0d21e5023cdde33i0', text: 'Melody J - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/c6decce29948ea64df9a24e689340c5907b6da207d74d13973fc5ca4dd3bd80ai0', text: 'Melody G - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/83174080310b0ab71c7a725461f3bd9e486bb62727b73134ee2c67f191d9d586i0', text: 'Mel Fill 5 - 2.429 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/4f9bed6449d99ef3cbb0fabefac6890c20ef17db2bfe7c07f1386cb43277f220i0', text: 'Melody H - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/e9885c35376ae95dd291bb02075b0763fb3e655d51dc981984130b8366a6d3c8i0', text: 'Mel Fill 2 - 2.429 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/34e73ef718034a3c0fdeba53899a2af8ee7771f252c419ab63cd13b0a39f6b10i0', text: 'Mel Fill 1 - 2.429 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/435c5c22eaf0c1791e09cb46d56ce942eb312372376abf5b5420200b1424ff7fi0', text: 'Melody E - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/ccf99852fb85d63b5f65124fe506b08c11eb400a7b1da75cd3e0c9538fc49977i0', text: 'Drums Beat - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/ef8fdd599beee731e06aba4a9ed02d9c7bfe62147b27f6b6deaf22c8c067ab11i0', text: 'Melody A-MP3 - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/187a8c18ebfe07c18aea0e86cd99b3100474c1c53f56f02ee096723f1a35ce70i0', text: 'Drums Crash  - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/2b6b23199eae0760ee26650a0cc02c49b94fc8fd1f519a95417f0f8478246610i0', text: 'Melody M  - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/474f2b0aab9020757826b168ce58725871fd2abb26c6ca805de4b07e314416d1i0', text: 'Outro Fill 1 - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/1aa69c9d3b451ab3b584dba57ba6d6fedc6e9cb3df6830b9da270e84e51ea72di0', text: 'Melody L - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/81f9e6afc38b8c647d4ea258c29f13b81f6c1a2d40afd9c0a385d03126b4d11di0', text: 'Melody F - 1.254 - Bitcoin Step - Longstreet.btc.mp3' },
+    { value: 'https://ordinals.com/content/4c40da69e783cfa96d2900bd15622c1ea60ad31e8ce9459cec13d155f39c463fi0', text: 'Intro Fill 1 - 1.254 - Bitcoin Step - Longstreet.btc.mp3' }
+];
+
+
+/*****************************************************************
+ * Add OG Sample Selector to the UI
+ ****************************************************************/
+ function buildSampleSelect() {
+  const sel = document.createElement('select');
+  sel.id = 'ogSamples';
+  const def = document.createElement('option');
+  def.disabled = true; def.selected = true; def.textContent = 'Pick OG sample…';
+  sel.appendChild(def);
+  ogSampleUrls.forEach(({ value, text }) => {
+    const opt = document.createElement('option');
+    opt.value = value; opt.textContent = text;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', e => {
+    if (e.target.value) addChannel('OG ' + e.target.selectedOptions[0].textContent, e.target.value);
+    sel.selectedIndex = 0; // reset
+  });
+  document.getElementById('topBar').appendChild(sel);
+}
+
+buildSampleSelect();
+
+
+
+/* ------------------------------------------------------------------
+   Bootstrap
+   ------------------------------------------------------------------ */
+audioEngine.init();
+ui.init();
+
+  </script>
+
+  <!-- ========================== ARCHITECTURE DIAGRAM (inline SVG) ========================== -->
+  <svg width="0" height="0">
+    <defs>
+      <g id="arch">
+        <rect x="10" y="10" width="780" height="580" fill="#1a1a1a" stroke="#444"/>
+        <text x="400" y="35" text-anchor="middle" fill="#eee" font-size="20">Web1 Architecture</text>
+        <!-- Agents -->
+        <rect x="50" y="60" width="120" height="40" fill="#333" stroke="#666"/>
+        <text x="110" y="85" text-anchor="middle" fill="#eee" font-size="12">UI Agent</text>
+
+        <rect x="50" y="120" width="120" height="40" fill="#333" stroke="#666"/>
+        <text x="110" y="145" text-anchor="middle" fill="#eee" font-size="12">Audio Agent</text>
+
+        <rect x="50" y="180" width="120" height="40" fill="#333" stroke="#666"/>
+        <text x="110" y="205" text-anchor="middle" fill="#eee" font-size="12">Loader Agent</text>
+
+        <rect x="50" y="240" width="120" height="40" fill="#333" stroke="#666"/>
+        <text x="110" y="265" text-anchor="middle" fill="#eee" font-size="12">Serialize Agent</text>
+
+        <rect x="50" y="300" width="120" height="40" fill="#333" stroke="#666"/>
+        <text x="110" y="325" text-anchor="middle" fill="#eee" font-size="12">State Manager</text>
+
+        <rect x="50" y="360" width="120" height="40" fill="#333" stroke="#666"/>
+        <text x="110" y="385" text-anchor="middle" fill="#eee" font-size="12">Arch Agent</text>
+
+        <!-- Event Bus -->
+        <line x1="180" y1="80" x2="320" y2="80" stroke="#555"/>
+        <line x1="180" y1="140" x2="320" y2="140" stroke="#555"/>
+        <line x1="180" y1="200" x2="320" y2="200" stroke="#555"/>
+        <line x1="180" y1="260" x2="320" y2="260" stroke="#555"/>
+        <line x1="180" y1="320" x2="320" y2="320" stroke="#555"/>
+        <line x1="180" y1="380" x2="320" y2="380" stroke="#555"/>
+
+        <rect x="320" y="60" width="120" height="360" fill="#222" stroke="#555"/>
+        <text x="380" y="250" text-anchor="middle" fill="#eee" font-size="14">Event Bus</text>
+
+        <!-- External -->
+        <rect x="480" y="120" width="120" height="40" fill="#222" stroke="#666"/>
+        <text x="540" y="145" text-anchor="middle" fill="#eee" font-size="12">IPFS/HTTP</text>
+
+        <rect x="480" y="200" width="120" height="40" fill="#222" stroke="#666"/>
+        <text x="540" y="225" text-anchor="middle" fill="#eee" font-size="12">Tone.js</text>
+
+        <rect x="480" y="280" width="120" height="40" fill="#222" stroke="#666"/>
+        <text x="540" y="305" text-anchor="middle" fill="#eee" font-size="12">MsgPack</text>
+
+        <!-- Arrows -->
+        <line x1="440" y1="140" x2="480" y2="140" stroke="#555" marker-end="url(#arrow)"/>
+        <line x1="440" y1="220" x2="480" y2="220" stroke="#555" marker-end="url(#arrow)"/>
+        <line x1="440" y1="300" x2="480" y2="300" stroke="#555" marker-end="url(#arrow)"/>
+        <defs>
+          <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <polygon points="0 0 6 3 0 6" fill="#555"/>
+          </marker>
+        </defs>
+      </g>
+    </defs>
+  </svg>
+
+  <!-- ========================== TECH-STACK RATIONALE (HTML COMMENT) ========================== -->
+  <!--
+  Tech-Stack Rationale (MVP)
+  1. Tone.js – battle-tested Web-Audio scheduler, polyfills older browsers, easy sample playback.
+  2. msgpack-lite – tiny (<20 kB) MessagePack encoder/decoder; CBOR/JSON-BinPack would work too.
+  3. Vanilla JS – no build step, single file, smallest footprint, maximum control.
+  4. Canvas – fast custom grid, avoids DOM thrash at 60 fps.
+  5. Web Workers – future: AudioEngineAgent can be moved off-main-thread via Tone.js Offline for rendering.
+  -->
+</body>
+</html>

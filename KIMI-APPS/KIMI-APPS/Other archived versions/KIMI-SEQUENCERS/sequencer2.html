@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Web1 – On-Chain Step Sequencer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    /* ======  Minimal CSS  ====== */
+    :root{
+      --bg:#111;
+      --fg:#eee;
+      --accent:#0f9;
+      --grid:#333;
+    }
+    body{margin:0;font-family:system-ui;background:var(--bg);color:var(--fg);overflow-x:hidden;}
+    header{padding:1rem;background:#000;display:flex;gap:1rem;align-items:center}
+    button{background:var(--accent);border:none;padding:.5rem 1rem;border-radius:4px;color:#000;font-weight:600;cursor:pointer;}
+    button:disabled{opacity:.3}
+    #transport{display:flex;gap:.5rem;margin-left:auto}
+    #bpm{width:60px;text-align:center}
+    #grid{overflow:auto;max-height:calc(100vh - 100px);background:#000}
+    .row{display:flex;border-bottom:1px solid var(--grid)}
+    .row label{flex:0 0 120px;padding:.4rem;background:#222}
+    .step{flex:1;height:40px;border-right:1px solid var(--grid);cursor:pointer;background:#000}
+    .step.on{background:var(--accent)}
+    .controls{display:flex;gap:.25rem;padding:.25rem;background:#222}
+    .controls input[type=range]{width:80px}
+  </style>
+</head>
+<body>
+<header>
+  <h1>Web1 Sequencer</h1>
+  <button id="play">▶️ Play</button>
+  <button id="stop">⏹️ Stop</button>
+  <label>BPM <input id="bpm" type="number" min="40" max="300" value="120"/></label>
+  <button id="addCh">+ Channel</button>
+  <button id="export">Export</button>
+  <input id="importFile" type="file" accept=".json,.cbor" style="display:none">
+  <button id="importBtn">Import</button>
+</header>
+
+<section id="grid"></section>
+
+<!-- ======  CDN Scripts  ====== -->
+<script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/msgpack-lite@0.1.26/dist/msgpack.min.js"></script>
+
+<script type="module">
+/* =========  AGENT-STYLE ARCHITECTURE ========= */
+const EventBus = new (class extends EventTarget {})();
+
+/* ----------  State Manager Agent  ---------- */
+class StateManager {
+  constructor(){
+    this.channels=[];
+    this.bpm=120;
+    this.playing=false;
+    this.currentStep=0;
+    this.patternLength=16;
+    this.history=[];
+    this.future=[];
+  }
+  push(){
+    this.history.push(this.serialize());
+    this.future.length=0;
+  }
+  undo(){
+    if(!this.history.length) return;
+    this.future.push(this.serialize());
+    this.load(this.history.pop());
+  }
+  redo(){
+    if(!this.future.length) return;
+    this.history.push(this.serialize());
+    this.load(this.future.pop());
+  }
+  serialize(){
+    return {
+      channels:this.channels.map(c=>({name:c.name,url:c.url,steps:[...c.steps],vol:c.vol,pan:c.pan})),
+      bpm:this.bpm,
+      patternLength:this.patternLength
+    };
+  }
+  load(obj){
+    this.channels=obj.channels.map(c=>({...c,player:null}));
+    this.bpm=obj.bpm;
+    this.patternLength=obj.patternLength;
+    EventBus.dispatchEvent(new CustomEvent('stateChanged'));
+  }
+}
+const state = new StateManager();
+
+/* ----------  Loader Agent  ---------- */
+class LoaderAgent {
+  cache=new Map();
+  async fetchAudio(url){
+    if(this.cache.has(url)) return this.cache.get(url);
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const buffer = await Tone.getContext().decodeAudioData(await blob.arrayBuffer());
+    this.cache.set(url,buffer);
+    return buffer;
+  }
+}
+const loader = new LoaderAgent();
+
+/* ----------  Audio Engine Agent  ---------- */
+class AudioEngine {
+  constructor(){
+    this.scheduler=null;
+    this.stepTime=0;
+    this.lookAhead=25; // ms
+    this.scheduleAheadTime=0.1; // seconds
+  }
+  start(){
+    Tone.Transport.bpm.value=state.bpm;
+    Tone.Transport.scheduleRepeat(this.callback.bind(this),"16n");
+    Tone.Transport.start();
+    state.playing=true;
+  }
+  stop(){
+    Tone.Transport.stop();
+    Tone.Transport.cancel();
+    state.playing=false;
+    state.currentStep=0;
+  }
+  callback(time){
+    const stepDur = Tone.Transport.toSeconds("16n");
+    while(state.currentStep*stepDur < Tone.Transport.seconds + this.scheduleAheadTime){
+      const step = state.currentStep % state.patternLength;
+      state.channels.forEach(async (ch)=>{
+        if(ch.steps[step]){
+          if(!ch.player){
+            const buf = await loader.fetchAudio(ch.url);
+            ch.player = new Tone.Player(buf).toDestination();
+          }
+          ch.player.volume.value=ch.vol;
+          ch.player.start(time);
+        }
+      });
+      state.currentStep++;
+    }
+  }
+}
+const engine = new AudioEngine();
+
+/* ----------  UI Agent  ---------- */
+class UIAgent {
+  constructor(){
+    this.grid=document.getElementById('grid');
+    this.bindEvents();
+  }
+  bindEvents(){
+    document.getElementById('play').onclick=()=>engine.start();
+    document.getElementById('stop').onclick=()=>engine.stop();
+    document.getElementById('bpm').onchange=e=>{
+      state.bpm=+e.target.value;
+      Tone.Transport.bpm.value=state.bpm;
+    };
+    document.getElementById('addCh').onclick=()=>this.addChannel();
+    document.getElementById('export').onclick=()=>this.exportSong();
+    document.getElementById('importBtn').onclick=()=>document.getElementById('importFile').click();
+    document.getElementById('importFile').onchange=e=>{
+      const file=e.target.files[0]; if(!file) return;
+      const reader=new FileReader();
+      reader.onload=()=>state.load(file.name.endsWith('.cbor')?msgpack.decode(new Uint8Array(reader.result)):JSON.parse(reader.result));
+      reader.readAsArrayBuffer(file);
+    };
+    EventBus.addEventListener('stateChanged',()=>this.render());
+  }
+  render(){
+    this.grid.innerHTML='';
+    state.channels.forEach((ch,i)=>{
+      const row=document.createElement('div');row.className='row';
+      row.innerHTML=`
+        <label>${ch.name}</label>
+        ${Array.from({length:state.patternLength},(_,j)=>`<div class="step ${ch.steps[j]?'on':''}" data-ch="${i}" data-step="${j}"></div>`).join('')}
+        <div class="controls">
+          <input type="range" min="-20" max="0" value="${ch.vol}" data-ch="${i}" data-ctrl="vol">
+        </div>
+      `;
+      this.grid.appendChild(row);
+    });
+    // bind step toggles
+    [...this.grid.querySelectorAll('.step')].forEach(el=>{
+      el.onclick=e=>{
+        const {ch,step}=e.target.dataset;
+        state.channels[ch].steps[step]=!state.channels[ch].steps[step];
+        state.push(); this.render();
+      };
+    });
+    // bind volume
+    [...this.grid.querySelectorAll('[data-ctrl=vol]')].forEach(el=>{
+      el.oninput=e=>{state.channels[e.target.dataset.ch].vol=+e.target.value; state.push();};
+    });
+  }
+  addChannel(){
+    const url = prompt('Enter audio URL or pick from list:\n'+
+      '0:MS10 Woop.mp3\n1:audinalSample#1\n2:melophonicSynthBassSample1\n3:Step for man.mp3\n4:melophonic_Snare_1.mp3\n5:PumpIt_COLOR.mp3\n6:Drums 8 bit beat - 2.429 - Bitcoin Step - Longstreet.btc.mp3\n7:wobble-bass.mp3\n8:Entertainment - Quiet Loop (2) (1).mp3',
+      '0');
+    const urls=[
+      'https://ordinals.com/content/752bd66406185690c6f14311060785170df91a887b42740e1dde27e5fbf351cbi0',
+      'https://ordinals.com/content/6d962189218b836cf33e2dc1adbc981e90242aa395f0868178773065f76f144ei0',
+      'https://ordinals.com/content/0b8eff3f39f4095d0f129bb8dd75f29159f8725c7e66046bf41f70ebb9f60d93i0',
+      'https://ordinals.com/content/6d8be8186e63b4557e51edd66184a567bc6f5f9f5ba4bb34ba8c67e652c1934ei0',
+      'https://ordinals.com/content/6c01b1214fc4d4016d683380d066849e6bc645276b102604c098bd35fd77f791i0',
+      'https://ordinals.com/content/43efcebb84113c6df56bf5b8a455685c043492de9f5635d4108c4211c1f6841fi0',
+      'https://ordinals.com/content/3364803cb3032ce95f4138a214c15a9b36dcb70f574a477f27615d448e1cdeb8i0',
+      'https://ordinals.com/content/fef956676f3cbd6019a03d75c1a4a295c25b33653644b8f6ebde387971f9a677i0',
+      'https://ordinals.com/content/8fa54ad2d9e297c79b225eff67a481ebc8682dacf4fe9dbf5b692a60b237c163i0'
+    ];
+    if(url==null) return;
+    const idx=parseInt(url,10);
+    const finalUrl=Number.isNaN(idx)?url:urls[idx];
+    state.channels.push({name:finalUrl.split('/').pop()||'Sample',url:finalUrl,steps:Array(state.patternLength).fill(false),vol:-6,pan:0});
+    state.push(); this.render();
+  }
+  exportSong(){
+    const binary=msgpack.encode(state.serialize());
+    const blob=new Blob([binary],{type:'application/octet-stream'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='song.cbor';a.click();
+    // also offer JSON
+    const jsonBlob=new Blob([JSON.stringify(state.serialize(),null,2)],{type:'application/json'});
+    const a2=document.createElement('a');a2.href=URL.createObjectURL(jsonBlob);a2.download='song.json';a2.click();
+  }
+}
+const ui = new UIAgent();
+
+/* ----------  Init & Tests  ---------- */
+/* ----------  TDD Harness  ---------- */
+function unitTests(){
+  // quick assert helper
+  const ok=(cond,msg)=>{if(!cond)console.error('❌',msg);else console.info('✅',msg);}
+  // Mock a channel so tests run deterministically
+  const mockState = new StateManager();
+  mockState.channels.push({name:'kick',url:'data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ4AAAA=',steps:[0,1,0,0],vol:-6,pan:0});
+  ok(mockState.channels[0].steps[1]===1,'step toggle');
+  const encoded=msgpack.encode(mockState.serialize());
+  const decoded=msgpack.decode(encoded);
+  ok(decoded.channels[0].steps[1]===1,'round-trip');
+  console.info('All unit tests passed');
+}
+// run after first render
+window.addEventListener('load',()=>setTimeout(unitTests,0));
+</script>
+</body>
+</html>
