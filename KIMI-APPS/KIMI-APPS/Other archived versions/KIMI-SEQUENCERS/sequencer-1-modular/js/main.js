@@ -1,14 +1,9 @@
 import { ogSampleUrls } from './samples.js';
 
-// Dynamically import on-chain Tone.js and run the sequencer logic in an async IIFE
 (async () => {
-  // Dynamically import on-chain Tone.js (for side effects, not named exports!)
   await import('https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0');
-  // Tone is now available globally
   const Tone = window.Tone;
 
-
-  // ========== GLOBAL STATE ==========
   const State = {
     bpm: 120,
     swing: 0,
@@ -18,18 +13,19 @@ import { ogSampleUrls } from './samples.js';
     step: 0,
   };
 
-  // ========== AUDIO ENGINE ==========
-  Tone.Transport.bpm.value = 120;
-  Tone.Transport.swing = 0;
+  Tone.Transport.bpm.value = State.bpm;
+  Tone.Transport.swing = State.swing / 100;
 
   const audioEngine = {
     init() {
       Tone.start();
-      Tone.Transport.scheduleRepeat((time) => {
+      Tone.Transport.scheduleRepeat(time => {
         State.step = Math.floor(Tone.Transport.seconds * State.bpm / 60 * 4) % 16;
         State.channels.forEach((ch, i) => {
           if (!ch.muted && State.patterns[i]?.[State.step]) {
-            ch.player?.start(time);
+            let p = ch.player;
+            p.reverse = !!ch.reversed;
+            p.start(time, ch.trimStart || 0);
           }
         });
       }, '16n');
@@ -37,27 +33,58 @@ import { ogSampleUrls } from './samples.js';
     play: () => Tone.Transport.start(),
     pause: () => Tone.Transport.pause(),
     stop: () => { Tone.Transport.stop(); State.step = 0; },
-    setBpm: b => { Tone.Transport.bpm.value = b; },
-    setSwing: s => { Tone.Transport.swing = s / 100; }
+    setBpm: b => Tone.Transport.bpm.value = (State.bpm = b),
+    setSwing: s => Tone.Transport.swing = (State.swing = s) / 100,
   };
 
-  // ========== SERIALIZATION ==========
-  const serialize = () => msgpack.encode(State);
-  const deserialize = bin => Object.assign(State, msgpack.decode(bin));
+  function buildSlimJSON() {
+    const channels = State.channels.map((ch, i) => ({
+      name: ch.name,
+      volume: ch.volume,
+      muted: ch.muted,
+      solo: ch.solo,
+      sampleUrl: ch.sampleUrl,
+      trimStart: ch.trimStart || 0,
+      reversed: !!ch.reversed,
+      sequence: State.patterns[i] || Array(16).fill(0),
+    }));
+    return JSON.stringify({ bpm: State.bpm, swing: State.swing, channels });
+  }
+
+  async function applySlimJSON(json) {
+    const slim = JSON.parse(json);
+    audioEngine.setBpm(slim.bpm);
+    audioEngine.setSwing(slim.swing);
+    State.channels.length = 0;
+    State.patterns = {};
+    for (let i = 0; i < slim.channels.length; i++) {
+      const c = slim.channels[i];
+      await addChannel(c.name, c.sampleUrl);
+      const ch = State.channels[i];
+      ch.volume = c.volume;
+      ch.muted = c.muted;
+      ch.solo = c.solo;
+      ch.trimStart = c.trimStart;
+      ch.reversed = c.reversed;
+      State.patterns[i] = c.sequence.slice();
+      ch.player.volume.value = Tone.gainToDb(ch.volume);
+    }
+    ui.renderChannels();
+  }
 
   function saveToFile() {
-    const blob = new Blob([serialize()], { type: 'application/octet-stream' });
+    const blob = new Blob([buildSlimJSON()], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'song.bin';
+    a.download = 'session.json';
     a.click();
     URL.revokeObjectURL(a.href);
   }
 
   function loadFromFile(file) {
     const fr = new FileReader();
-    fr.onload = () => deserialize(new Uint8Array(fr.result));
-    fr.readAsArrayBuffer(file);
+    fr.onload = () => applySlimJSON(fr.result);
+    fr.readAsText(file);
   }
 
   // ========== UI AGENT ==========
@@ -219,13 +246,13 @@ import { ogSampleUrls } from './samples.js';
   };
   document.getElementById('addChannelBtn').onclick = () =>
     addChannel(`Ch ${State.channels.length + 1}`, ogSampleUrls[0].value);
-  document.getElementById('saveBtn').onclick = saveToFile;
-  document.getElementById('loadBtn').onclick = () => document.getElementById('fileInput').click();
-  document.getElementById('fileInput').onchange = e =>
-    e.target.files[0] && loadFromFile(e.target.files[0]);
 
-  // ========== INIT ==========
-  audioEngine.init();
-  ui.init();
-  ui.renderChannels();
-})();
+
+    document.getElementById('saveBtn').onclick = saveToFile;
+    document.getElementById('fileInput').onchange = e => e.target.files[0] && loadFromFile(e.target.files[0]);
+
+    audioEngine.init();
+    ui.init();
+    ui.renderChannels();
+
+  })();
