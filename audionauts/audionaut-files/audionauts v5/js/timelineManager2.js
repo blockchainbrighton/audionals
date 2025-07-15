@@ -1,47 +1,30 @@
-/* timelineManager.js
-   Browser-only dynamic loader (≈ 60 LoC)
-   ----------------------------------------------------------
-   - OLD: import('../29-timelines/<stem>.js')
-   - NEW: parse a short recipe string on the fly
-*/
+/* timelineManager2.js  – JSON-first loader */
 
 /* ------------------------------------------------------------------ */
-/* 1.  OLD-MODE: list every file you still want to load dynamically   */
+/* 1.  Static list of names (used only for fallback or console list)  */
 /* ------------------------------------------------------------------ */
 const fileStems = [
-    'dramaticRevealTimeline',
-    'cyberpunkGlitch_64bars',
-    'analog-film',
-    'CrystalBloomTimed',
-    'DeepDream_64bars',
-    'FractalFocus_64bars',
-    'GlitchBloom',
-    'GlitchWaves_64bars',
-    'GraffitiGlow_64bars',
-    'HighlightFlash_64bars',
-    'IridescentWave_64bars',
-    'manualTimeline1',
-    'manualTimeline2',
-    'manualtimeline3',
-    'multiband-bright',
-    'NeonShards',
-    'NoirWindow',
-    'pixel-dust',
-    'PsychedelicRipple',
-    'ReverseWipe',
-    'rgbShatter_64bars',
-    'SequentialHueBands',
-    'ShadowLift_64bars',
-    'SpectrumSpin_64bars',
-    'StarlitReveal',
-    'StrobeFocus_64bars',
-    'SunriseReveal',
-    'timeline_colourBandsGlitchReveal',
-    'timeline_windowSweepReveal',
+    'dramaticRevealTimeline','cyberpunkGlitch_64bars','analog-film','CrystalBloomTimed',
+    'DeepDream_64bars','FractalFocus_64bars','GlitchBloom','GlitchWaves_64bars',
+    'GraffitiGlow_64bars','HighlightFlash_64bars','IridescentWave_64bars',
+    'manualTimeline1','manualTimeline2','manualtimeline3','multiband-bright',
+    'NeonShards','NoirWindow','pixel-dust','PsychedelicRipple','ReverseWipe',
+    'rgbShatter_64bars','SequentialHueBands','ShadowLift_64bars','SpectrumSpin_64bars',
+    'StarlitReveal','StrobeFocus_64bars','SunriseReveal',
+    'timeline_colourBandsGlitchReveal','timeline_windowSweepReveal'
   ];
   
   /* ------------------------------------------------------------------ */
-  /* 2.  NEW-MODE: effect-code map + parser (tiny)                      */
+  /* 2.  One-time fetch & cache of recipes.json                          */
+  /* ------------------------------------------------------------------ */
+  let recipes = null;           // will hold { name: 'recipeString', ... }
+  const recipesPromise = fetch('./timeline-recipes/recipes.json')
+    .then(r => r.ok ? r.json() : Promise.reject('recipes.json not found'))
+    .then(obj => (recipes = obj))
+    .catch(() => (recipes = {}));   // empty object → fallback to .js
+  
+  /* ------------------------------------------------------------------ */
+  /* 3.  Effect-code map + parser                                       */
   /* ------------------------------------------------------------------ */
   const MAP = {
     F:  { effect: 'fade',        param: 'progress' },
@@ -55,7 +38,6 @@ const fileStems = [
     C:  { effect: 'colourSweep', param: 'progress' },
   };
   
-  /** Turn a condensed string into a full timeline array */
   export function timelineFrom(recipe) {
     return recipe.split(',').flatMap(token => {
       const m = token.match(
@@ -84,50 +66,52 @@ const fileStems = [
   }
   
   /* ------------------------------------------------------------------ */
-  /* 3.  Dynamic file loader (unchanged)                                */
+  /* 4.  Legacy dynamic import fallback (only if JSON missing)          */
   /* ------------------------------------------------------------------ */
-  const _cache = Object.create(null);
-  async function _load(stem) {
-    if (_cache[stem]) return _cache[stem];
-    const mod = await import(`../29-timelines/${stem}.js`);
+  const _jsCache = Object.create(null);
+  async function _loadLegacy(stem) {
+    if (_jsCache[stem]) return _jsCache[stem];
+    const mod = await import(`./${stem}.js`);
     const fn =
       typeof mod.default === 'function' ? mod.default :
       Array.isArray(mod.default)        ? () => mod.default :
       Object.values(mod).find(v => typeof v === 'function') || (() => []);
-    _cache[stem] = fn;
+    _jsCache[stem] = fn;
     return fn;
   }
   
   /* ------------------------------------------------------------------ */
-  /* 4.  PUBLIC API – backward-compatible                               */
+  /* 5.  Public API                                                     */
   /* ------------------------------------------------------------------ */
   
-  /* 4a. byName() – async load a legacy module */
-  export async function byName(name) { return _load(name); }
+  /* 5a. Async byName – JSON first, legacy second */
+  export async function byName(stem) {
+    await recipesPromise;               // wait until recipes.json is loaded
+    if (recipes[stem]) return () => timelineFrom(recipes[stem]);
+    return _loadLegacy(stem);           // fallback to .js
+  }
   
-  /* 4b. getTimelineByNumber() – sync wrapper around byName */
+  /* 5b. getTimelineByNumber – wraps byName */
   export function getTimelineByNumber(n = 0) {
     const stem = fileStems[n] || fileStems[0];
     let realFn = null;
     return (...args) =>
       realFn
         ? realFn(...args)
-        : _load(stem).then(fn => (realFn = fn)(...args));
+        : byName(stem).then(fn => (realFn = fn)(...args));
   }
   
-  /* 4c. byRecipe() – NEW: decode a recipe string immediately */
+  /* 5c. Direct recipe helper */
   export const byRecipe = timelineFrom;
   
-  /* 4d. Legacy placeholder so logAvailableTimelines() still works */
+  /* 5d. Legacy console list (static) */
   export const dramaticRevealTimeline = () => {
     console.warn('[FX] dramaticRevealTimeline loader hasn’t run yet.');
     return [];
   };
-  
-  /* 4e. list of all *legacy* names for console inspection */
   export const availableTimelineNames = [...fileStems];
   
-  /* 4f. default export */
+  /* 5e. default export */
   export default {
     dramaticRevealTimeline,
     getTimelineByNumber,
