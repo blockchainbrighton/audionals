@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Web1 64-Step Melody Sequencer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --rowH: 42px; --cellW: 12px; --steps: 64; }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:system-ui,Arial,Helvetica,sans-serif; }
+  body { background:#111; color:#eee; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  button { background:#222; border:1px solid #444; color:#eee; padding:4px 8px; border-radius:4px; cursor:pointer; }
+  button:hover { background:#333; }
+  label { font-size:.75rem; }
+  #topBar { display:flex; align-items:center; gap:8px; padding:8px; background:#1a1a1a; border-bottom:1px solid #333; flex-wrap:wrap; }
+  #transport button { font-weight:bold; }
+  #channelList { flex:1; overflow-y:auto; background:#0a0a0a; border-right:1px solid #333; }
+  /* Each channel row – single line */
+  .channelRow {
+    display:grid;
+    grid-template-columns: 140px 120px 80px 24px 24px 24px repeat(var(--steps), var(--cellW));
+    align-items:center;
+    height:var(--rowH);
+    gap:4px;
+    border-bottom:1px solid #222;
+  }
+  .channelRow span.name { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:.7rem; }
+  canvas.miniWave { height:30px; width:120px; background:#000; cursor:pointer; }
+  .channelRow input[type="range"] { width:70px; }
+  .step { width:var(--cellW); height:var(--rowH); border-right:1px solid #222; cursor:pointer; }
+  .step.on { background:#0f0; }
+  .step.playhead { outline:1px solid #fff; }
+</style>
+</head>
+<body>
+
+<!-- ===== TOP BAR ===== -->
+<div id="topBar">
+  <div id="transport">
+    <button id="playBtn">▶</button><button id="stopBtn">⏹</button><button id="pauseBtn">⏸</button>
+  </div>
+  <label>BPM <input id="bpmInput" type="number" min="60" max="200" value="120" style="width:60px"></label>
+  <label>Swing <input id="swingInput" type="range" min="0" max="100" value="0"></label>
+  <button id="addChannelBtn">+ Channel</button>
+  <button id="genBtn">🎲 Generate</button>
+  <button id="saveBtn">Save</button>
+  <button id="loadBtn">Load</button>
+  <input id="fileInput" type="file" accept=".json" style="display:none">
+</div>
+
+<!-- ===== CHANNEL LIST ===== -->
+<div id="channelList"></div>
+
+<script type="module">
+/*****************************************************************
+ * 1.  CONFIG CONSTANTS
+ *****************************************************************/
+const STEPS   = 64;
+const Key     = { root: 60, scale: [0, 2, 4, 5, 7, 9, 11] }; // C pentatonic
+const Families = {
+  kick:[0,8], snare:[1,9], clap:[3], hat:[2], crash:[4],
+  bass:[5,6,7,16], bell:[11,12,13], other:[14,15]
+};
+/*****************************************************************
+ * SAMPLE LIST – every entry can carry an optional .note and other metadata
+ ****************************************************************/
+ const ogSampleUrls = [
+  {
+    value: 'https://ordinals.com/content/e7d344ef3098d0889856978c4d2e81ccf2358f7f8b66feecc71e03036c59ad48i0',
+    text: 'OB1 #1 - 808 Kick',
+    duration: 0.85,
+    audible: 0.78,
+    peak: -0.2,
+    rms: -14,
+    pitch: null,
+    notes: 'Deep, boomy, classic 808 kick'
+  },
+  {
+    value: 'https://ordinals.com/content/ef5707e6ecf4d5b6edb4c3a371ca1c57b5d1057c6505ccb5f8bdc8918b0c4d94i0',
+    text: 'OB1 #2 - 808 Snare',
+    duration: 0.68,
+    audible: 0.64,
+    peak: -0.3,
+    rms: -15,
+    pitch: null,
+    notes: 'Snappy, moderate tail'
+  },
+  {
+    value: 'https://ordinals.com/content/d030eb3d8bcd68b0ed02b0c67fdb981342eea40b0383814f179a48e76927db93i0',
+    text: 'OB1 #3 - Closed Hat',
+    duration: 0.13,
+    audible: 0.11,
+    peak: -0.5,
+    rms: -23,
+    pitch: null,
+    notes: 'Short, metallic'
+  },
+  {
+    value: 'https://ordinals.com/content/3b7482a832c4f27c32fc1da7cc4249bbbac1cbdfbdb8673079cad0c33486d233i0',
+    text: 'OB1 #4 - 808 Clap',
+    duration: 0.43,
+    audible: 0.37,
+    peak: -0.2,
+    rms: -16,
+    pitch: null,
+    notes: 'Wide, spread attack'
+  },
+  {
+    value: 'https://ordinals.com/content/5a42d7b2e2fe01e4f31cbad5dd671997f87339d970faaab37f6355c4a2f3be5ai0',
+    text: 'OB1 #5 - Crash',
+    duration: 1.55,
+    audible: 1.48,
+    peak: -0.3,
+    rms: -18,
+    pitch: null,
+    notes: 'Long, bright, slow decay'
+  },
+  {
+    value: 'https://ordinals.com/content/ddc1838c1a6a3c45b2c6e19ff278c3b51b0797c3f1339c533370442d23687a68i0',
+    text: 'OB1 #6 - Synth Bass 1 - Note = F4',
+    duration: 0.85,
+    audible: 0.83,
+    peak: -0.1,
+    rms: -12,
+    pitch: 'F4',
+    notes: 'Short, punchy synth bass'
+  },
+  {
+    value: 'https://ordinals.com/content/91f52a4ca00bb27383ae149f24b605d75ea99df033a6cbb6de2389455233bf51i0',
+    text: 'OB1 #7 - Synth Bass 2 - Note = A4',
+    duration: 0.87,
+    audible: 0.84,
+    peak: -0.2,
+    rms: -13,
+    pitch: 'A4',
+    notes: 'Slightly longer decay'
+  },
+  {
+    value: 'https://ordinals.com/content/1e3c2571e96729153e4b63e2b561d85aec7bc5ba372d293af469a525dfa3ed59i0',
+    text: 'OB1 #8 - Synth Bass 3 - Note = D2',
+    duration: 0.92,
+    audible: 0.90,
+    peak: -0.2,
+    rms: -13,
+    pitch: 'D2',
+    notes: 'Deep, slow attack, round decay'
+  },
+  {
+    value: 'https://ordinals.com/content/437868aecce108d49f9b29c2f477987cb5834ffdf639a650335af7f0fdd5e55bi0',
+    text: 'OB1 #9 - Hard Kick',
+    duration: 0.70,
+    audible: 0.67,
+    peak: -0.2,
+    rms: -12,
+    pitch: null,
+    notes: 'Fast, aggressive punch'
+  },
+  {
+    value: 'https://ordinals.com/content/3be1f8e37b718f5b9874aecad792504c5822dc8dfc727ad4928594f7725db987i0',
+    text: 'OB1 #10 - Hard Snare',
+    duration: 0.55,
+    audible: 0.52,
+    peak: -0.3,
+    rms: -14,
+    pitch: null,
+    notes: 'Snappy, short, sharp attack'
+  },
+  {
+    value: 'https://ordinals.com/content/1bda678460ef08fb64435b57c9b69fd78fd4556822ccd8e9839b4eb71b3621edi0',
+    text: 'OB1 #11 - Small Click',
+    duration: 0.08,
+    audible: 0.07,
+    peak: -1.0,
+    rms: -32,
+    pitch: null,
+    notes: 'Very short, percussive'
+  },
+  {
+    value: 'https://ordinals.com/content/578aa9d3b29ceceafc659ecee22cb7ef1a063ba5b71474db8fe84949746cdeefi0',
+    text: 'OB1 #13 - Glockenspiel - Note = E5',
+    duration: 0.75,
+    audible: 0.74,
+    peak: -0.2,
+    rms: -18,
+    pitch: 'E5',
+    notes: 'Clear, pitched, bell-like'
+  },
+  {
+    value: 'https://ordinals.com/content/3e5fe7bc10e37a145a75f7ddd71debd9079b05568c5b9c5e6b4de3d959a4c46bi0',
+    text: 'OB1 #14 - Cowbell - Note = A#5',
+    duration: 0.31,
+    audible: 0.30,
+    peak: -0.2,
+    rms: -18,
+    pitch: 'A#5',
+    notes: 'Metallic, short, pitched'
+  },
+  {
+    value: 'https://ordinals.com/content/752bd66406185690c6f14311060785170df91a887b42740e1dde27e5fbf351cbi0#',
+    text: 'MS10 Woop.mp3',
+    duration: 1.02,
+    audible: 0.99,
+    peak: -0.4,
+    rms: -16,
+    pitch: null,
+    notes: 'Synth gliss, analog character'
+  },
+  {
+    value: 'https://ordinals.com/content/6c01b1214fc4d4016d683380d066849e6bc645276b102604c098bd35fd77f791i0',
+    text: 'melophonic_Snare_1.mp3',
+    duration: 0.68,
+    audible: 0.65,
+    peak: -0.3,
+    rms: -15,
+    pitch: null,
+    notes: 'Snare, soft attack'
+  },
+  {
+    value: 'https://ordinals.com/content/43efcebb84113c6df56bf5b8a455685c043492de9f5635d4108c4211c1f6841fi0',
+    text: 'PumpIt_COLOR.mp3',
+    duration: 2.50,
+    audible: 2.48,
+    peak: -0.2,
+    rms: -13,
+    pitch: null,
+    notes: 'Full phrase, multi-instrumental'
+  },
+  {
+    value: 'https://ordinals.com/content/fef956676f3cbd6019a03d75c1a4a295c25b33653644b8f6ebde387971f9a677i0',
+    text: 'wobble-bass.mp3 - Note = C#1',
+    duration: 1.25,
+    audible: 1.22,
+    peak: -0.3,
+    rms: -13,
+    pitch: 'C#1',
+    notes: 'LFO-modulated, deep bass'
+  }
+];
+
+/*****************************************************************
+ * 3.  NOTE <-> RATE HELPERS
+ *****************************************************************/
+ const noteToFreq = (note) =>
+  440 * Math.pow(2, (note - 69) / 12);
+const noteToMidi = (noteStr) => {
+  const m = noteStr.match(/^([A-G]#?)(\d)$/i);
+  const map = {C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11};
+  return map[m[1].toUpperCase()] + 12 * (+m[2]);
+};
+const midiToNote = (m) => {
+  const n = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  return n[m % 12] + Math.floor(m / 12);
+};
+
+/*****************************************************************
+ * 4.  STATE
+ *****************************************************************/
+const State = { bpm:120, swing:0, channels:[], patterns:{}, step:0 };
+
+/*****************************************************************
+ * 5.  TONE.JS BOOT
+ *****************************************************************/
+let Tone;
+import('https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0')
+  .then(() => { Tone = window.Tone; boot(); });
+
+function boot () {
+  Tone.Transport.bpm.value = State.bpm;
+  Tone.Transport.swing = State.swing / 100;
+
+  Tone.Transport.scheduleRepeat(onStep, '16n');
+}
+
+function onStep (time) {
+  State.step = Math.floor(Tone.Transport.seconds * State.bpm / 60 * 4) % STEPS;
+
+  State.channels.forEach((ch, chIdx) => {
+    const pat = State.patterns[chIdx];
+    if (!pat || ch.muted || !ch.player) return;
+
+    const stepInfo = pat[State.step];
+    if (!stepInfo) return;                       // nothing to play
+
+    /*  stepInfo is either:
+        – 1  (old format)  -> plain drum hit at base pitch
+        – {note:60}        -> pitched sample
+    */
+    let midiNote = null, rate = 1;
+    if (typeof stepInfo === 'object') midiNote = stepInfo.note;
+    else if (stepInfo === 1) midiNote = ch.baseNote || null;
+
+    if (midiNote !== null) {
+      const base = ch.baseNote ? noteToMidi(ch.baseNote) : 60;
+      rate = noteToFreq(midiNote) / noteToFreq(base);
+    }
+
+    ch.player.playbackRate = rate * (ch.speed || 1);
+    ch.player.start(time,
+      ch.trimStart || 0,
+      (ch.trimEnd || ch.player.buffer.duration) - (ch.trimStart || 0));
+  });
+}
+
+/*****************************************************************
+ * 6.  LOADER (unchanged)
+ *****************************************************************/
+const loader = {
+  async loadSample(src){
+    const isOrd = /^\/content\/[a-f0-9]{64}i0$/i.test(src) || src.startsWith('https://ordinals.com/content/');
+    const url = isOrd && !src.startsWith('http') ? `https://ordinals.com${src}` : src;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error(res.statusText);
+    const ct = res.headers.get('Content-Type') || '';
+    if(ct.includes('application/json')){ const {audioData}=await res.json(); return new Tone.Player(audioData).toDestination(); }
+    if(ct.startsWith('audio/')){ const blob=await res.blob(); return new Tone.Player(URL.createObjectURL(blob)).toDestination(); }
+    const html=await res.text();
+    const m=html.match(/<audio[^>]+src=["']([^"']+)["']/i) || html.match(/src=["'](data:audio\/[^"']+)["']/i);
+    if(m) return this.loadSample(m[1].startsWith('data:')?m[1]:new URL(m[1],url).href);
+    throw new Error('Unsupported');
+  }
+};
+
+/*****************************************************************
+ * 7.  UI (unchanged except pattern format)
+ *****************************************************************/
+const ui = {
+  listEl: document.getElementById('channelList'),
+  renderChannels () {
+    this.listEl.replaceChildren(...State.channels.map((ch, chIdx) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'channelRow';
+      wrap.innerHTML = `
+        <span class="name" title="${ch.name}">${ch.name}</span>
+        <canvas class="miniWave" width="120" height="30"></canvas>
+        <input class="vol" type="range" min="0" max="1" step="0.01" value="${ch.volume}">
+        <label><input type="checkbox" class="mute" ${ch.muted ? 'checked' : ''}>M</label>
+        <label><input type="checkbox" class="solo" ${ch.solo ? 'checked' : ''}>S</label>
+        ${Array.from({length:STEPS},(_,i)=>`<div class="step ${(State.patterns[chIdx]?.[i]?'on':'')}" data-step="${i}"></div>`).join('')}
+      `;
+
+      wrap.querySelectorAll('.step').forEach(el => {
+        el.onclick = () => {
+          const pat = (State.patterns[chIdx] ||= Array(STEPS).fill(0));
+          const old = pat[+el.dataset.step];
+          if (old) {
+            pat[+el.dataset.step] = 0;
+          } else {
+            /* drum samples -> 1, pitched -> default note */
+            const isPitched = Families.bass.concat(Families.bell).some(idx => ogSampleUrls[idx] && ogSampleUrls[idx].pitch);
+            pat[+el.dataset.step] = isPitched ? {note:Key.root} : 1;
+          }
+          el.classList.toggle('on');
+        };
+      });
+
+      wrap.querySelector('.vol').oninput = e => {
+        ch.volume = +e.target.value;
+        if (ch.player) ch.player.volume.value = Tone.gainToDb(ch.volume);
+      };
+      ['mute', 'solo'].forEach(k => {
+        wrap.querySelector(`.${k}`).onchange = e => ch[k] = e.target.checked;
+      });
+      wrap.querySelector('.miniWave').onclick = () => editChannel(chIdx);
+      return wrap;
+    }));
+  },
+  drawPlayhead () {
+    document.querySelectorAll('.step.playhead').forEach(el => el.classList.remove('playhead'));
+    document.querySelectorAll(`.step[data-step="${State.step}"]`).forEach(el => el.classList.add('playhead'));
+  }
+};
+
+/*****************************************************************
+ * EDITOR MODAL
+ ****************************************************************/
+function editChannel(idx){
+  const ch=State.channels[idx];
+  if(!ch.player?.buffer) return;
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center';
+  modal.innerHTML=`
+    <div style="background:#111;color:#0f0;font-family:mono;padding:20px;border-radius:8px;width:90vw;max-width:800px">
+      <h3>Edit ${ch.name}</h3>
+      <canvas id="trimCanvas" width="760" height="120" style="background:#000;width:100%"></canvas><br>
+      <label>Speed: <input id="speedRange" type="range" min=".25" max="4" step=".01" value="${ch.speed||1}"></label>
+      <span id="speedVal">${(ch.speed||1).toFixed(2)}</span><br>
+      <label>Gain: <input id="gainRange" type="range" min="-24" max="6" step=".1" value="${ch.gain||0}"></label>
+      <span id="gainVal">${(ch.gain||0).toFixed(1)} dB</span><br>
+      <label><input id="revChk" type="checkbox" ${ch.reversed?'checked':''}> Reverse</label><br>
+      <button id="closeModal">Close</button>
+    </div>`;
+  document.body.appendChild(modal);
+  const tc=document.getElementById('trimCanvas'), tx=tc.getContext('2d');
+  let dragging=null;
+  const drawTrim=()=>{
+    const d=ch.player.buffer.getChannelData(0), w=tc.width, h=tc.height;
+    tx.clearRect(0,0,w,h); tx.fillStyle='#0f0';
+    const step=d.length/w; for(let x=0;x<w;x++){ const y=Math.abs(d[Math.floor(x*step)])*h/2; tx.fillRect(x,h/2-y,1,y*2); }
+    const s=((ch.trimStart||0)/ch.player.buffer.duration)*w, e=((ch.trimEnd||ch.player.buffer.duration)/ch.player.buffer.duration)*w;
+    tx.fillStyle='rgba(0,255,0,.3)'; tx.fillRect(s,0,e-s,h);
+    tx.fillStyle='#fff'; tx.fillRect(s-2,0,4,h); tx.fillRect(e-2,0,4,h);
+  };
+  drawTrim();
+  tc.onmousedown=e=>{
+    const s=((ch.trimStart||0)/ch.player.buffer.duration)*tc.width, end=((ch.trimEnd||ch.player.buffer.duration)/ch.player.buffer.duration)*tc.width;
+    const click=e.offsetX; if(Math.abs(click-s)<8) dragging='start'; else if(Math.abs(click-end)<8) dragging='end';
+  };
+  window.onmousemove=e=>{
+    if(!dragging) return;
+    const pos=Math.max(0,Math.min(e.offsetX/tc.width*ch.player.buffer.duration, ch.player.buffer.duration));
+    if(dragging==='start') ch.trimStart=pos; else ch.trimEnd=pos;
+    drawTrim();
+  };
+  window.onmouseup=()=>dragging=null;
+  document.getElementById('speedRange').oninput=e=>{
+    ch.speed=+e.target.value; document.getElementById('speedVal').textContent=(+e.target.value).toFixed(2);
+  };
+  document.getElementById('gainRange').oninput=e=>{
+    ch.gain=+e.target.value; document.getElementById('gainVal').textContent=(+e.target.value).toFixed(1)+' dB';
+    ch.player.volume.value=Tone.gainToDb(ch.gain);
+  };
+  document.getElementById('revChk').onchange=e=>ch.reversed=e.target.checked;
+  document.getElementById('closeModal').onclick=()=>modal.remove();
+}
+
+/*****************************************************************
+ * 9.  GENERATE / SAVE / LOAD
+ *****************************************************************/
+ function generateLoop (seed = null) {
+  const rnd = seed
+    ? Array.from(seed.padEnd(32,'0').match(/.{2}/g).map(b=>parseInt(b,16)))
+    : crypto.getRandomValues(new Uint8Array(32));
+  let ptr = 0;
+  const next = (bits) => {
+    const mask = (1 << bits) - 1;
+    const val  = (rnd[ptr >> 1] >> ((ptr & 1) << 2)) & mask;
+    ptr += bits;
+    return val;
+  };
+  const choose = (arr) => arr[next(Math.ceil(Math.log2(arr.length))) % arr.length];
+  const bool   = (p)   => next(100) < p * 100;
+
+  const channels = [];
+
+  /* Kick */
+  const kickIdx = choose(Families.kick);
+  const kickPat = Array(STEPS).fill(0);
+  const isHalf  = bool(.25);
+  for (let s = 0; s < STEPS; s += 16) kickPat[s] = 1;
+  if (!isHalf) kickPat[8] = bool(.4) ? 1 : 0;
+  channels.push(makeChannel(kickIdx, 'kick', kickPat));
+
+  /* Snare */
+  const snareIdx = choose(Families.snare);
+  const snarePat = Array(STEPS).fill(0);
+  const snarePos = isHalf ? [24] : [16, 48];
+  snarePos.forEach(p => snarePat[p] = 1);
+  if (bool(.3)) snarePat[snarePos[0] + 4] = 1;
+  channels.push(makeChannel(snareIdx, 'snare', snarePat));
+
+  /* Hats */
+  const hatIdx = choose(Families.hat);
+  const hatPat = Array(STEPS).fill(0);
+  const div = bool(.6) ? 2 : 4;
+  for (let s = div; s < STEPS; s += div) hatPat[s] = bool(.85);
+  channels.push(makeChannel(hatIdx, 'hat', hatPat));
+
+  /* Crash */
+  if (bool(.35)) {
+    const crashIdx = choose(Families.crash);
+    const crashPat = Array(STEPS).fill(0);
+    crashPat[0] = 1;
+    channels.push(makeChannel(crashIdx, 'crash', crashPat));
+  }
+
+  /* Bass line */
+  const bassIdx = choose(Families.bass);
+  const bassPat = Array(STEPS).fill(0);
+  const notes   = [];
+  const scalePcs = Key.scale.map(i => Key.root + i);
+  for (let s = 0; s < STEPS; s += 4) {
+    if (bool(.75)) {
+      const n = choose(scalePcs);
+      bassPat[s] = {note: n};
+      notes[s]   = n;
+    }
+  }
+  channels.push({...makeChannel(bassIdx, 'bass', bassPat), baseNote: ogSampleUrls[bassIdx].pitch || 'C4', notes});
+
+  /* Melody */
+  if (bool(.4)) {
+    const melIdx = choose(Families.bell);
+    const melPat = Array(STEPS).fill(0);
+    const notes  = [];
+    for (let s = 0; s < STEPS; s += 8) {
+      if (bool(.5)) {
+        const n = choose(scalePcs) + 12;
+        const pos = s + next(8);
+        melPat[pos] = {note: n};
+        notes[pos]  = n;
+      }
+    }
+    channels.push({...makeChannel(melIdx, 'melody', melPat), baseNote: ogSampleUrls[melIdx].pitch || 'C5', notes});
+  }
+
+  return { bpm: next(40) + 90, swing: next(50), channels };
+
+  function makeChannel (sampleI, fam, pattern) {
+    const meta = ogSampleUrls[sampleI];
+    return {
+      name: meta.text,
+      volume: (fam === 'kick' || fam === 'snare') ? .9 : .7,
+      muted: false, solo: false,
+      sampleUrl: meta.value,
+      baseNote: meta.pitch || null,
+      trimStart: 0, trimEnd: null, speed: 1, gain: 0, reversed: false,
+      sequence: pattern
+    };
+  }
+}
+
+/* Save / Load */
+document.getElementById('genBtn').onclick = () => {
+  // Clear visual steps
+  document.querySelectorAll('.step.on').forEach(el => el.classList.remove('on'));
+
+  // Reset state
+  State.channels.length = 0;
+  State.patterns = {};
+
+  // Apply new pattern
+  applySlimJSON(generateLoop());
+};
+
+document.getElementById('saveBtn').onclick = () => {
+  const json = JSON.stringify({bpm:State.bpm, swing:State.swing, channels:State.channels.map((ch,i)=>({...ch, sequence:State.patterns[i]}))});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([json], {type:'application/json'}));
+  a.download = 'session.json'; a.click();
+};
+document.getElementById('loadBtn').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange = e => {
+  const fr = new FileReader();
+  fr.onload = () => applySlimJSON(JSON.parse(fr.result));
+  fr.readAsText(e.target.files[0]);
+};
+
+/*****************************************************************
+ * 10.  TOP-LEVEL CONTROLS (unchanged)
+ *****************************************************************/
+document.getElementById('playBtn').onclick = () => Tone.start().then(() => Tone.Transport.start());
+document.getElementById('pauseBtn').onclick = () => Tone.Transport.pause();
+document.getElementById('stopBtn').onclick  = () => { Tone.Transport.stop(); State.step = 0; };
+document.getElementById('bpmInput').oninput  = e => { State.bpm = +e.target.value; Tone.Transport.bpm.value = State.bpm; };
+document.getElementById('swingInput').oninput = e => { State.swing = +e.target.value; Tone.Transport.swing = State.swing/100; };
+
+/*****************************************************************
+ * 11.  INIT
+ *****************************************************************/
+async function applySlimJSON (obj) {
+  State.channels.length = 0; State.patterns = {};
+  for (const c of obj.channels) {
+    await addChannel(c.name, c.sampleUrl);
+    const ch = State.channels.at(-1);
+    Object.assign(ch, c);
+    ch.player.volume.value = Tone.gainToDb(ch.volume);
+    State.patterns[State.channels.length - 1] = c.sequence.slice();
+  }
+  ui.renderChannels();
+}
+
+async function addChannel (name, src) {
+  const ch = {name, volume:1, muted:false, solo:false};
+  try {
+    ch.player = await loader.loadSample(src);
+    ch.player.volume.value = Tone.gainToDb(1);
+  } catch (e) { console.error(e); }
+  State.channels.push(ch);
+}
+
+setInterval(() => ui.drawPlayhead(), 16);
+</script>
+</body>
+</html>

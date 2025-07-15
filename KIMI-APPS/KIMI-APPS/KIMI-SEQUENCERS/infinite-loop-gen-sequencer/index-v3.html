@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Web1 64-Step Smart Sequencer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --rowH: 42px; --cellW: 12px; --steps: 64; }
+  * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui,Arial,Helvetica,sans-serif; }
+  body { background:#111; color:#eee; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  button { background:#222; border:1px solid #444; color:#eee; padding:4px 8px; border-radius:4px; cursor:pointer; }
+  button:hover { background:#333; }
+  #topBar { display:flex; align-items:center; gap:8px; padding:8px; background:#1a1a1a; border-bottom:1px solid #333; flex-wrap:wrap; }
+  #channelList { flex:1; overflow-y:auto; background:#0a0a0a; border-right:1px solid #333; }
+  .channelRow {
+    display:grid;
+    grid-template-columns: 140px 120px 80px 24px 24px 24px repeat(var(--steps), var(--cellW));
+    align-items:center;
+    height:var(--rowH);
+    gap:4px;
+    border-bottom:1px solid #222;
+  }
+  .channelRow .name { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:.7rem; }
+  canvas.miniWave { height:30px; width:120px; background:#000; cursor:pointer; }
+  .step { width:var(--cellW); height:var(--rowH); border-right:1px solid #222; cursor:pointer; }
+  .step.on { background:#0f0; }
+  .step.playhead { outline:1px solid #fff; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topBar">
+  <div id="transport">
+    <button id="playBtn">▶</button><button id="stopBtn">⏹</button><button id="pauseBtn">⏸</button>
+  </div>
+  <label>BPM <input id="bpmInput" type="number" min="60" max="200" value="120"></label>
+  <label>Swing <input id="swingInput" type="range" min="0" max="100" value="0"></label>
+  <button id="addChannelBtn">+ Channel</button>
+  <button id="genBtn">🎲 Generate</button>
+  <select id="styleSel">
+    <option value="house">House</option>
+    <option value="trap">Trap</option>
+    <option value="dnb">DnB</option>
+    <option value="lofi">Lo-Fi</option>
+  </select>
+  <button id="saveBtn">Save</button>
+  <button id="loadBtn">Load</button>
+  <input id="fileInput" type="file" accept=".json" style="display:none">
+</div>
+
+<!-- CHANNEL LIST -->
+<div id="channelList"></div>
+
+<script type="module">
+/*****************************************************************
+ * SAMPLE DATABASE with category + metadata
+ ****************************************************************/
+const STEPS = 64;
+const SAMPLE_DB = [
+  // ---- DRUMS ----
+  { id:'kick1',  url:'https://ordinals.com/content/e7d344ef3098d0889856978c4d2e81ccf2358f7f8b66feecc71e03036c59ad48i0',  name:'808 Kick',      category:'kick',   duration:0.85, peak:-0.2, rms:-14, note:null },
+  { id:'snare1', url:'https://ordinals.com/content/ef5707e6ecf4d5b6edb4c3a371ca1c57b5d1057c6505ccb5f8bdc8918b0c4d94i0', name:'808 Snare',     category:'snare',  duration:0.68, peak:-0.3, rms:-15, note:null },
+  { id:'hihat1', url:'https://ordinals.com/content/d030eb3d8bcd68b0ed02b0c67fdb981342eea40b0383814f179a48e76927db93i0', name:'Closed Hat',    category:'hat',    duration:0.13, peak:-0.5, rms:-23, note:null },
+  { id:'clap1',  url:'https://ordinals.com/content/3b7482a832c4f27c32fc1da7cc4249bbbac1cbdfbdb8673079cad0c33486d233i0',  name:'808 Clap',      category:'snare',  duration:0.43, peak:-0.2, rms:-16, note:null },
+  { id:'crash1', url:'https://ordinals.com/content/5a42d7b2e2fe01e4f31cbad5dd671997f87339d970faaab37f6355c4a2f3be5ai0', name:'Crash',         category:'crash',  duration:1.55, peak:-0.3, rms:-18, note:null },
+  // ---- BASS / MELODIC ----
+  { id:'bassF4', url:'https://ordinals.com/content/ddc1838c1a6a3c45b2c6e19ff278c3b51b0797c3f1339c533370442d23687a68i0', name:'Bass F4',       category:'bass',   duration:0.85, peak:-0.1, rms:-12, note:'F4' },
+  { id:'bassA4', url:'https://ordinals.com/content/91f52a4ca00bb27383ae149f24b605d75ea99df033a6cbb6de2389455233bf51i0', name:'Bass A4',       category:'bass',   duration:0.87, peak:-0.2, rms:-13, note:'A4' },
+  { id:'bassD2', url:'https://ordinals.com/content/1e3c2571e96729153e4b63e2b561d85aec7bc5ba372d293af469a525dfa3ed59i0', name:'Bass D2',       category:'bass',   duration:0.92, peak:-0.2, rms:-13, note:'D2' },
+  { id:'glockE5',url:'https://ordinals.com/content/578aa9d3b29ceceafc659ecee22cb7ef1a063ba5b71474db8fe84949746cdeefi0', name:'Glockenspiel',  category:'melody', duration:0.75, peak:-0.2, rms:-18, note:'E5' },
+  { id:'cowA5',  url:'https://ordinals.com/content/3e5fe7bc10e37a145a75f7ddd71debd9079b05568c5b9c5e6b4de3d959a4c46bi0', name:'Cowbell A♯5', category:'melody', duration:0.31, peak:-0.2, rms:-18, note:'A#5' }
+];
+
+/*****************************************************************
+ * STYLE MAP – human-friendly rules
+ ****************************************************************/
+const STYLE_RULES = {
+  house : { kick:[0,16,32,48], snare:[8,24,40,56], hat:[2,6,10,14,18,22,26,30,34,38,42,46,50,54,58,62] },
+  trap  : { kick:[0,8,16,24,32,40,48,56], snare:[12,28,44,60], hat:[4,6,10,12,14,18,20,22,26,28,30,34,36,38,42,44,46,50,52,54,58,60,62] },
+  dnb   : { kick:[0,8,32,40], snare:[16,48], hat:[2,4,6,10,12,14,18,20,22,26,28,30,34,36,38,42,44,46,50,52,54,58,60,62] },
+  lofi  : { kick:[0,32], snare:[16,48], hat:[...Array(32).keys()].map(i=>i*2+1) }
+};
+
+/*****************************************************************
+ * UTILS
+ ****************************************************************/
+const noteToFreq = note => 440 * Math.pow(2,(noteToMidi(note)-69)/12);
+function noteToMidi(note){
+  const m = note.match(/^([A-G]#?)(\d+)$/);
+  const names = {C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11};
+  return names[m[1]] + 12*(+m[2]);
+}
+
+/*****************************************************************
+ * STATE
+ ****************************************************************/
+const State = { bpm:120, swing:0, channels:[], patterns:{}, step:0 };
+
+/*****************************************************************
+ * TONE.JS
+ ****************************************************************/
+let Tone;
+import('https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0')
+  .then(()=>{ Tone = window.Tone; boot(); });
+
+function boot(){
+  Tone.Transport.bpm.value = State.bpm;
+  Tone.Transport.swing = State.swing/100;
+  Tone.Transport.scheduleRepeat(time=>{
+    State.step = Math.floor(Tone.Transport.seconds * State.bpm/60 * 4) % STEPS;
+    State.channels.forEach((ch,idx)=>{
+      const pat = State.patterns[idx];
+      if(!pat || !pat[State.step] || ch.muted || !ch.player) return;
+      const {player, note, speed=1, trimStart=0, trimEnd} = ch;
+      const rate = note ? noteToFreq(note)/noteToFreq(note) * speed : speed;
+      player.playbackRate = rate;
+      const len = trimEnd ? trimEnd-trimStart : player.buffer.duration-trimStart;
+      player.start(time, trimStart, len);
+    });
+  }, '16n');
+}
+
+/*****************************************************************
+ * LOADER
+ ****************************************************************/
+const loader = {
+  async loadSample(src){
+    const res = await fetch(src);
+    if(!res.ok) throw new Error(res.statusText);
+    const ct = res.headers.get('Content-Type') || '';
+    if(ct.includes('application/json')){ const {audioData}=await res.json(); return new Tone.Player(audioData).toDestination(); }
+    if(ct.startsWith('audio/')){ const blob=await res.blob(); return new Tone.Player(URL.createObjectURL(blob)).toDestination(); }
+    const html=await res.text();
+    const m=html.match(/<audio[^>]+src=["']([^"']+)["']/i) || html.match(/src=["'](data:audio\/[^"']+)["']/i);
+    if(m) return this.loadSample(m[1].startsWith('data:')?m[1]:new URL(m[1],src).href);
+    throw new Error('Unsupported');
+  }
+};
+
+/*****************************************************************
+ * GENERATOR
+ ****************************************************************/
+function generateLoop(style='house'){
+  const channels = [];
+  // pick category samples
+  const kick = SAMPLE_DB.filter(s=>s.category==='kick');
+  const snare = SAMPLE_DB.filter(s=>s.category==='snare');
+  const hat = SAMPLE_DB.filter(s=>s.category==='hat');
+  const bass = SAMPLE_DB.filter(s=>s.category==='bass');
+  const melody = SAMPLE_DB.filter(s=>s.category==='melody');
+
+  const rules = STYLE_RULES[style];
+
+  // Kick
+  const k = kick[Math.floor(Math.random()*kick.length)];
+  channels.push(makeChannel(k, rules.kick));
+
+  // Snare
+  const s = snare[Math.floor(Math.random()*snare.length)];
+  channels.push(makeChannel(s, rules.snare));
+
+  // Hats
+  const h = hat[Math.floor(Math.random()*hat.length)];
+  channels.push(makeChannel(h, rules.hat));
+
+  // Bass (simple 1/4 notes)
+  const b = bass[Math.floor(Math.random()*bass.length)];
+  const bassPattern = Array(STEPS).fill(0);
+  for(let i=0;i<STEPS;i+=4) bassPattern[i]=1;
+  channels.push(makeChannel(b, bassPattern));
+
+  // Melody (pentatonic every 2nd step)
+  const m = melody[Math.floor(Math.random()*melody.length)];
+  const melodyPattern = Array(STEPS).fill(0);
+  [0,2,4,7,9,12,14,16,19,21,23,26,28,31,33,35].forEach(n=>melodyPattern[n]=1);
+  channels.push(makeChannel(m, melodyPattern));
+
+  return {bpm:120, swing:0, channels};
+}
+
+function makeChannel(sample, pattern){
+  return {
+    name: sample.name,
+    volume: 0.9,
+    muted: false,
+    solo: false,
+    sampleUrl: sample.url,
+    note: sample.note,
+    trimStart: 0,
+    trimEnd: sample.duration > 1 ? sample.duration * 0.8 : null,
+    speed: 1,
+    gain: 0,
+    reversed: false,
+    sequence: pattern
+  };
+}
+
+/*****************************************************************
+ * UI
+ ****************************************************************/
+const ui = {
+  listEl:document.getElementById('channelList'),
+  renderChannels(){
+    this.listEl.replaceChildren(...State.channels.map((ch,chIdx)=>{
+      const wrap=document.createElement('div'); wrap.className='channelRow';
+      wrap.innerHTML=`
+        <span class="name">${ch.name}</span>
+        <canvas class="miniWave" width="120" height="30"></canvas>
+        <input class="vol" type="range" min="0" max="1" step="0.01" value="${ch.volume}">
+        <label><input type="checkbox" class="mute" ${ch.muted?'checked':''}>M</label>
+        <label><input type="checkbox" class="solo" ${ch.solo?'checked':''}>S</label>
+        ${Array.from({length:STEPS},(_,i)=>`<div class="step ${(State.patterns[chIdx]?.[i]?'on':'')}" data-step="${i}"></div>`).join('')}
+      `;
+      wrap.querySelectorAll('.step').forEach(el=>{
+        el.onclick=()=>{
+          const pat = (State.patterns[chIdx] ||= Array(STEPS).fill(0));
+          pat[+el.dataset.step]=+!pat[+el.dataset.step];
+          el.classList.toggle('on');
+        };
+      });
+      wrap.querySelector('.vol').oninput=e=>{
+        ch.volume=+e.target.value; if(ch.player) ch.player.volume.value=Tone.gainToDb(ch.volume);
+      };
+      ['mute','solo'].forEach(k=>{
+        wrap.querySelector(`.${k}`).onchange=e=>ch[k]=e.target.checked;
+      });
+      wrap.querySelector('.miniWave').onclick=()=>editChannel(chIdx);
+      return wrap;
+    }));
+  },
+  drawPlayhead(){
+    document.querySelectorAll('.step.playhead').forEach(el=>el.classList.remove('playhead'));
+    document.querySelectorAll(`.step[data-step="${State.step}"]`).forEach(el=>el.classList.add('playhead'));
+  }
+};
+
+/*****************************************************************
+ * EDITOR MODAL
+ ****************************************************************/
+function editChannel(idx){
+  const ch=State.channels[idx];
+  if(!ch.player?.buffer) return;
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center';
+  modal.innerHTML=`
+    <div style="background:#111;color:#0f0;font-family:mono;padding:20px;border-radius:8px;width:90vw;max-width:800px">
+      <h3>Edit ${ch.name}</h3>
+      <canvas id="trimCanvas" width="760" height="120" style="background:#000;width:100%"></canvas><br>
+      <label>Speed: <input id="speedRange" type="range" min=".25" max="4" step=".01" value="${ch.speed||1}"></label>
+      <span id="speedVal">${(ch.speed||1).toFixed(2)}</span><br>
+      <label>Gain: <input id="gainRange" type="range" min="-24" max="6" step=".1" value="${ch.gain||0}"></label>
+      <span id="gainVal">${(ch.gain||0).toFixed(1)} dB</span><br>
+      <label><input id="revChk" type="checkbox" ${ch.reversed?'checked':''}> Reverse</label><br>
+      <button id="closeModal">Close</button>
+    </div>`;
+  document.body.appendChild(modal);
+  const tc=document.getElementById('trimCanvas'), tx=tc.getContext('2d');
+  let dragging=null;
+  const drawTrim=()=>{
+    const d=ch.player.buffer.getChannelData(0), w=tc.width, h=tc.height;
+    tx.clearRect(0,0,w,h); tx.fillStyle='#0f0';
+    const step=d.length/w; for(let x=0;x<w;x++){ const y=Math.abs(d[Math.floor(x*step)])*h/2; tx.fillRect(x,h/2-y,1,y*2); }
+    const s=((ch.trimStart||0)/ch.player.buffer.duration)*w, e=((ch.trimEnd||ch.player.buffer.duration)/ch.player.buffer.duration)*w;
+    tx.fillStyle='rgba(0,255,0,.3)'; tx.fillRect(s,0,e-s,h);
+    tx.fillStyle='#fff'; tx.fillRect(s-2,0,4,h); tx.fillRect(e-2,0,4,h);
+  };
+  drawTrim();
+  tc.onmousedown=e=>{
+    const s=((ch.trimStart||0)/ch.player.buffer.duration)*tc.width, end=((ch.trimEnd||ch.player.buffer.duration)/ch.player.buffer.duration)*tc.width;
+    const click=e.offsetX; if(Math.abs(click-s)<8) dragging='start'; else if(Math.abs(click-end)<8) dragging='end';
+  };
+  window.onmousemove=e=>{
+    if(!dragging) return;
+    const pos=Math.max(0,Math.min(e.offsetX/tc.width*ch.player.buffer.duration, ch.player.buffer.duration));
+    if(dragging==='start') ch.trimStart=pos; else ch.trimEnd=pos;
+    drawTrim();
+  };
+  window.onmouseup=()=>dragging=null;
+  document.getElementById('speedRange').oninput=e=>{
+    ch.speed=+e.target.value; document.getElementById('speedVal').textContent=(+e.target.value).toFixed(2);
+  };
+  document.getElementById('gainRange').oninput=e=>{
+    ch.gain=+e.target.value; document.getElementById('gainVal').textContent=(+e.target.value).toFixed(1)+' dB';
+    ch.player.volume.value=Tone.gainToDb(ch.gain);
+  };
+  document.getElementById('revChk').onchange=e=>ch.reversed=e.target.checked;
+  document.getElementById('closeModal').onclick=()=>modal.remove();
+}
+
+/*****************************************************************
+ * SAVE / LOAD / CONTROLS
+ ****************************************************************/
+ document.getElementById('genBtn').onclick = () => {
+  // Clear visual steps
+  document.querySelectorAll('.step.on').forEach(el => el.classList.remove('on'));
+
+  // Reset state
+  State.channels.length = 0;
+  State.patterns = {};
+
+  // Apply new pattern
+  applySlimJSON(generateLoop());
+};
+
+document.getElementById('saveBtn').onclick=()=>{
+  const json=JSON.stringify({bpm:State.bpm,swing:State.swing,channels:State.channels.map((ch,i)=>({...ch,sequence:State.patterns[i]}))});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json],{type:'application/json'})); a.download='session.json'; a.click();
+};
+document.getElementById('loadBtn').onclick=()=>document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange=e=>{
+  const fr=new FileReader(); fr.onload=()=>{ applySlimJSON(JSON.parse(fr.result)); }; fr.readAsText(e.target.files[0]);
+};
+document.getElementById('playBtn').onclick=()=>Tone.start().then(()=>Tone.Transport.start());
+document.getElementById('pauseBtn').onclick=()=>Tone.Transport.pause();
+document.getElementById('stopBtn').onclick=()=>{Tone.Transport.stop(); State.step=0;};
+document.getElementById('bpmInput').oninput=e=>{State.bpm=+e.target.value; Tone.Transport.bpm.value=State.bpm;};
+document.getElementById('swingInput').oninput=e=>{State.swing=+e.target.value; Tone.Transport.swing=State.swing/100;};
+
+/*****************************************************************
+ * INIT
+ ****************************************************************/
+async function applySlimJSON(obj){
+  State.channels.length=0; State.patterns={};
+  for(const c of obj.channels){
+    await addChannel(c.name,c.sampleUrl);
+    const ch=State.channels.at(-1);
+    Object.assign(ch,c);
+    ch.player.volume.value=Tone.gainToDb(ch.volume);
+    State.patterns[State.channels.length-1]=c.sequence.slice();
+  }
+  ui.renderChannels();
+}
+async function addChannel(name,src){
+  const ch={name,volume:1,muted:false,solo:false};
+  try{ ch.player = await loader.loadSample(src); ch.player.volume.value = Tone.gainToDb(1); }catch(e){ console.error(e); }
+  State.channels.push(ch);
+}
+setInterval(()=>ui.drawPlayhead(),16);
+</script>
+</body>
+</html>
