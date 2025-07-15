@@ -766,15 +766,13 @@ async function runEffectTimeline(tl) {
       timelineToUse = window.fxTimeline;
       timelineNameToLog = 'User-defined window.fxTimeline Array';
     } else if (typeof window.fxTimelineFunctionId === 'number') {
-      const func = timelines.getTimelineByNumber(window.fxTimelineFunctionId);
-      timelineToUse = (typeof func === 'function') ? func() : [];
+      timelineToUse = await timelines.getTimelineByNumber(window.fxTimelineFunctionId)();
       timelineNameToLog = `[ID ${window.fxTimelineFunctionId}]`;
-    } else if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function') {
-      timelineToUse = timelines[window.fxTimelineFunctionName]();
+    } else if (typeof window.fxTimelineFunctionName === 'string') {
+      timelineToUse = await timelines.byName(window.fxTimelineFunctionName)();
       timelineNameToLog = window.fxTimelineFunctionName;
     } else {
-      const defaultFunc = timelines.dramaticRevealTimeline;
-      timelineToUse = (typeof defaultFunc === 'function') ? defaultFunc() : [];
+      timelineToUse = await timelines.byName('dramaticRevealTimeline')();
       timelineNameToLog = 'dramaticRevealTimeline (default)';
     }
   }
