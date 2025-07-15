@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Audionauts</title>
+  <style>
+    /* --- Base Setup --- */
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{
+      background:#000000;
+      color:#f0f0f0;
+      font-family:Arial,sans-serif;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      height:100vh;
+      position:relative;
+    }
+
+    /* --- Core Container & Frame --- */
+    #canvas-container {
+      position: relative;
+      width: 80vh;
+      height: 80vh;
+      max-width: 80vw;
+      max-height: 80vh;
+      cursor: pointer;
+    }
+    #canvas-frame {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      /* ✅ KEY FIX: Removed "overflow: hidden" and "border" which were clipping the oversized helmet */
+    }
+
+    /* --- STACKED VISUAL LAYERS --- */
+    #canvas-frame > canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    canvas#main-canvas { z-index: 1; }
+    canvas#hud-canvas {
+      z-index: 2;
+      pointer-events: none;
+      /* ✅ Add opacity and transition for fade control */
+      opacity: 1;
+      transition: opacity 2s linear;
+    }
+    
+    #helmet-overlay {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 125%;
+        height: 125%;
+        transform: translate(-50%, -50%);
+        object-fit: contain; 
+        pointer-events: none;
+        z-index: 3;
+        opacity: 1;
+        transition: opacity 2s linear;
+    }
+
+    /* --- UI & Utility (unchanged) --- */
+    .fx-btns{display:none;gap:3px;justify-content:center;align-items:center;position:relative;margin-top:12px;z-index:10;flex-wrap:nowrap;overflow-x:auto;width:100%;max-width:80vh}
+    #timeline-editor{display:none;position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(18,18,18,.97);border-top:1px solid #282848;padding:10px 24px 16px 24px;min-height:48px;max-height:36vh;overflow:auto;box-shadow:0 -4px 12px #0009;}
+    #dynamicTitleText {
+        position: fixed;
+        left: 50%;
+        top: 48%;                /* Move up! Adjust to taste (e.g. 32%–40%) */
+        transform: translate(-50%,-50%);
+        font-size: 1.5vw;
+        font-weight: bold;
+        color: #ff8800;
+        text-shadow: 0 6px 24px #111b,0 1px 1px #000b;
+        z-index: 9999;
+        pointer-events: none;
+        transition: font-size 10s cubic-bezier(0.77,0,0.175,1),opacity 1.2s cubic-bezier(0.77,0,0.175,1);
+        opacity: 1;
+        user-select: none;
+        }    
+    #error-message,#loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;text-align:center; z-index: 100;}
+    #error-message{color:#f55;display:none}
+    #loading{color:#f0f0f0}
+
+    /* Ensures pixel art stays sharp when upscaled */
+    img, canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges; /* fallback for Safari/older browsers */
+    }
+</style>
+</head>
+<body>
+
+  <div id="canvas-container">
+    <div id="canvas-frame">
+      <canvas id="main-canvas"></canvas>
+      <canvas id="hud-canvas"></canvas>
+      <img id="helmet-overlay" src="./media/neon-helmet.png" alt="Space Helmet Overlay"/>
+    </div>
+    <div id="loading">Loading assets...</div>
+    <div id="error-message" style="display:none;">Failed to load assets.</div>
+  </div>
+
+  <div class="fx-btns" id="fx-btns"></div>
+  <div id="timeline-editor"></div>
+  <script type="module">
+    /* ┌────────────────────────────────────────────────────────────────────────┐
+       │  Audionaut – Unified, 1-file, zero-build replacement                 │
+       └────────────────────────────────────────────────────────────────────────┘ */
+    
+    /* ========= 1.  CONSTANTS  =============================================== */
+    const BPM          = 104.15;
+    const BEATS_PER_BAR = 4;
+    const BAR_SEC       = 60 / BPM * BEATS_PER_BAR;
+    
+    /* ========= 2.  EFFECT HELPERS  =========================================== */
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const lerp  = (a, b, t) => a + (b - a) * t;
+    const easeIO = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    
+    /* ========= 3.  TIMELINE DATA  =========================================== */
+    /*  64-bar timeline used in the original demos  (FractalFocus_64bars.js) */
+    const timeline = [
+      { fx:'fade',           p:'progress', from:0,  to:.8, start:0,  end:8,  e:'linear' },
+      { fx:'pixelate',       p:'pixelSize',from:200,to:1,  start:0,  end:56, e:'easeInOut' },
+      { fx:'blur',           p:'radius',   from:24, to:0,  start:0,  end:48, e:'easeInOut' },
+      { fx:'filmGrain',      p:'intensity',from:0,  to:.7, start:0,  end:32, e:'linear' },
+      { fx:'filmGrain',      p:'intensity',from:.7, to:0,  start:32, end:48, e:'linear' },
+      { fx:'vignette',       p:'intensity',from:.8, to:0,  start:32, end:56, e:'linear' },
+      { fx:'vignette',       p:'size',     from:.7, to:1,  start:32, end:56, e:'linear' },
+      { fx:'glitch',         p:'intensity',from:0,  to:1,  start:16, end:17, e:'easeIn' },
+      { fx:'glitch',         p:'intensity',from:1,  to:0,  start:17, end:18, e:'easeOut' },
+      { fx:'chromaShift',    p:'intensity',from:0,  to:5, start:28, end:32, e:'easeInOut' },
+      { fx:'chromaShift',    p:'intensity',from:5, to:0,  start:32, end:34, e:'easeInOut' },
+    ];
+    
+    /* ========= 4.  EFFECT IMPLEMENTATIONS  ================================== */
+    const effects = {
+      fade:        (ctx, v) => ctx.globalAlpha = clamp(v, 0, 1),
+      pixelate:    (ctx, px) => {
+        px = Math.round(px);
+        if (px <= 1) return;
+        const s = ctx.canvas.width / px;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(ctx.canvas, 0, 0, px, px, 0, 0, ctx.canvas.width, ctx.canvas.height);
+      },
+      blur:        (ctx, r) => ctx.filter = `blur(${r}px)`,
+      filmGrain:   (ctx, intensity) => {
+        const { width:w, height:h } = ctx.canvas;
+        const img = ctx.getImageData(0,0,w,h), d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const g = (Math.random()-.5) * intensity * 255 | 0;
+          d[i]   = clamp(d[i]   + g, 0, 255);
+          d[i+1] = clamp(d[i+1] + g, 0, 255);
+          d[i+2] = clamp(d[i+2] + g, 0, 255);
+        }
+        ctx.putImageData(img,0,0);
+      },
+      vignette:    (ctx, {intensity, size}) => {
+        const { width:w, height:h } = ctx.canvas;
+        const g = ctx.createRadialGradient(w/2,h/2,0, w/2,h/2,w*size);
+        g.addColorStop(0,'rgba(0,0,0,0)');
+        g.addColorStop(1,`rgba(0,0,0,${intensity})`);
+        ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+      },
+      glitch:      (ctx, intensity) => {
+        if (intensity <= 0) return;
+        const { width:w, height:h } = ctx.canvas;
+        const slices = 5 + Math.floor(intensity * 10);
+        const sliceH = h / slices;
+        ctx.save();
+        for (let i = 0; i < slices; i++) {
+          const y = i * sliceH;
+          const offset = (Math.random()-.5) * intensity * w;
+          ctx.drawImage(ctx.canvas, 0, y, w, sliceH, offset, y, w, sliceH);
+        }
+        ctx.restore();
+      },
+      chromaShift: (ctx, intensity) => {
+        if (intensity <= 0) return;
+        const { width:w, height:h } = ctx.canvas;
+        const dx = intensity * w * .02;
+        const dy = intensity * h * .01;
+        ctx.globalCompositeOperation = 'screen';
+        ctx.drawImage(ctx.canvas, -dx, -dy);
+        ctx.drawImage(ctx.canvas,  dx,  dy);
+        ctx.globalCompositeOperation = 'source-over';
+      },
+    };
+    
+    /* ========= 5.  RUNTIME  ================================================= */
+    let img, cvs, ctx, startTime, running = false;
+    const state = {}; // per-parameter values
+    
+    /* ----- load image -------------------------------------------------------- */
+    const loadImg = (src) => new Promise((res,rej)=>{
+      const i=new Image(); i.crossOrigin='anonymous';
+      i.onload = () => res(i); i.onerror = rej; i.src = src;
+    });
+    
+    /* ----- init -------------------------------------------------------------- */
+    async function init() {
+      /* canvas */
+      cvs = document.getElementById('main-canvas');
+      ctx = cvs.getContext('2d');
+ 
+      window.addEventListener('resize', resize);
+    
+      /* image */
+      img = await loadImg(window.images?.[0] || 'https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0');
+    //   draw();
+    
+      /* click handler (start/stop) */
+      cvs.addEventListener('click', toggle);
+    
+      /* optional helmet overlay fade */
+      const helmet = document.getElementById('helmet-overlay');
+      if (helmet) helmet.style.transition = 'opacity 1s';
+      resize(); 
+    }
+    
+    /* ----- draw base image --------------------------------------------------- */
+    function draw() {
+      ctx.clearRect(0,0,cvs.width,cvs.height);
+      ctx.globalAlpha = 1; ctx.filter = 'none';
+      const {w,h} = cvs;
+      const ar = img.width / img.height;
+      const W = ar > 1 ? w : h*ar;
+      const H = ar > 1 ? w/ar : h;
+      ctx.drawImage(img,(w-W)/2,(h-H)/2,W,H);
+    }
+    
+    /* ----- resize ----------------------------------------------------------- */
+    function resize() {
+        const size = Math.min(innerWidth, innerHeight) * .8 | 0;
+        cvs.width = cvs.height = size;
+        // only draw if we already have the image
+        if (img) draw();
+        }
+    
+    /* ----- timeline interpolation ------------------------------------------ */
+    function interp(v) {
+      const sec = (performance.now()/1000) - startTime;
+      const bar = sec / BAR_SEC;
+      for (const l of timeline) {
+        if (bar < l.start || bar > l.end) continue;
+        const t = easeIO((bar - l.start) / (l.end - l.start));
+        state[l.fx] = state[l.fx] || {};
+        state[l.fx][l.p] = lerp(l.from, l.to, t);
+      }
+    }
+    
+    /* ----- render loop ------------------------------------------------------ */
+    function loop() {
+      if (!running) return;
+      draw();
+      interp();
+      ctx.save();
+      for (const fx in effects) {
+        if (!state[fx]) continue;
+        effects[fx](ctx, state[fx][Object.keys(state[fx])[0]]);
+      }
+      ctx.restore();
+      requestAnimationFrame(loop);
+    }
+    
+    /* ----- toggle playback -------------------------------------------------- */
+    function toggle() {
+      running = !running;
+      if (running) {
+        startTime = performance.now()/1000;
+        loop();
+        document.getElementById('helmet-overlay') && (document.getElementById('helmet-overlay').style.opacity = 0);
+      } else {
+        document.getElementById('helmet-overlay') && (document.getElementById('helmet-overlay').style.opacity = 1);
+      }
+    }
+    
+    /* ========= 6.  BOOTSTRAP  =============================================== */
+    document.addEventListener('DOMContentLoaded', init);
+    </script>
+
+</body>
+</html>

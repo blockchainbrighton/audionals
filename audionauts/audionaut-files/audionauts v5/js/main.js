@@ -1,6 +1,6 @@
 // js/main.js
 
-import * as timelines from './timelinesCondensed.js';
+import * as timelines from './timelineManager2.js';
 import {
   utils, effectDefaults, effectKeys, cloneDefaults, effectParams,
   effectMap, moveEffectToTop, sortEnabledOrder
