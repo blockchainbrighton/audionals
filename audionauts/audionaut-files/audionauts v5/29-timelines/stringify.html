@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Timeline Stringifier</title>
+  <style>
+    body { font-family: system-ui, monospace; margin: 2rem; background:#111; color:#eee; }
+    button { padding:.5rem 1rem; margin-bottom:1rem; }
+    textarea { width:100%; height:50vh; font-family:monospace; background:#222; color:#0f0; }
+  </style>
+</head>
+<body>
+
+<h2>One-click stringifier</h2>
+<button id="go">Stringify all timelines</button>
+<textarea id="out" placeholder="Click the button…" readonly></textarea>
+<button id="dl" style="display:none;">Download recipes.json</button>
+
+<script type="module">
+/* ---------- tiny serialiser ---------- */
+const MAP = {
+  F:  { effect: 'fade',        param: 'progress' },
+  Px: { effect: 'pixelate',    param: 'pixelSize' },
+  Bl: { effect: 'blur',        param: 'radius' },
+  CS: { effect: 'chromaShift', param: 'intensity' },
+  Gl: { effect: 'glitch',      param: 'intensity' },
+  Sc: { effect: 'scanLines',   param: 'intensity' },
+  Vg: { effect: 'vignette',    param: 'intensity' },
+  Fg: { effect: 'filmGrain',   param: 'intensity' },
+  C:  { effect: 'colourSweep', param: 'progress' },
+};
+
+const stringify = arr =>
+  arr.map(({effect, param, from, to, startBar, endBar, ...rest}) => {
+    const code = Object.entries(MAP).find(([,v])=>v.effect===effect)?.[0];
+    if (!code) return '';                // unknown effect
+    const tail = Object.keys(rest).length ? ':'+JSON.stringify(rest).slice(1,-1) : '';
+    return `${code}${from}-${to}@${startBar}-${endBar}${tail}`;
+  }).join(',');
+
+/* ---------- grab every *.js in the folder ---------- */
+const jsFiles = [
+  'CrystalBloomTimed.js','DeepDream_64bars.js','FractalFocus_64bars.js','GlitchBloom.js',
+  'GlitchWaves_64bars.js','GraffitiGlow_64bars.js','HighlightFlash_64bars.js',
+  'IridescentWave_64bars.js','NeonShards.js','NoirWindow.js','PsychedelicRipple.js',
+  'ReverseWipe.js','SequentialHueBands.js','ShadowLift_64bars.js','SpectrumSpin_64bars.js',
+  'StarlitReveal.js','StrobeFocus_64bars.js','SunriseReveal.js','analog-film.js',
+  'cyberpunkGlitch_64bars.js','manualTimeline1.js','manualTimeline2.js','manualtimeline3.js',
+  'multiband-bright.js','pixel-dust.js','rgbShatter_64bars.js','spectral-solidity.js',
+  'timeline_colourBandsGlitchReveal.js','timeline_windowSweepReveal.js'
+];
+
+/* ---------- main ---------- */
+const out = document.getElementById('out');
+const dl  = document.getElementById('dl');
+const go  = document.getElementById('go');
+
+go.onclick = async () => {
+  go.disabled = true;
+  const recipes = {};
+  for (const file of jsFiles) {
+    try {
+      const mod = await import('./' + file);
+      // grab the first exported function
+      const fn = Object.values(mod).find(v => typeof v === 'function');
+      if (!fn) { console.warn('No function in', file); continue; }
+      const arr = fn();
+      if (!Array.isArray(arr)) { console.warn('Not an array from', file); continue; }
+      recipes[file.replace('.js','')] = stringify(arr);
+    } catch (e) {
+      console.error('Failed:', file, e);
+      recipes[file.replace('.js','')] = `/* ERROR: ${e.message} */`;
+    }
+  }
+  const json = JSON.stringify(recipes, null, 2);
+  out.value = json;
+  dl.style.display = 'inline-block';
+  dl.onclick = () => {
+    const blob = new Blob([json], {type:'application/json'});
+    const url  = URL.createObjectURL(blob);
+    Object.assign(document.createElement('a'), {href:url, download:'recipes.json'}).click();
+    URL.revokeObjectURL(url);
+  };
+  go.disabled = false;
+};
+</script>
+</body>
+</html>

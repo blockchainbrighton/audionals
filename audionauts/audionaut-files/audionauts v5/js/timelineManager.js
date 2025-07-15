@@ -3,11 +3,40 @@
 
 /** List every file you want to be able to pull in at run‑time.
  *  Use the bare stem *without* “.js”. */
+/* ------------------------------------------------------------------ */
+/* 1.  OLD-MODE: list every file you still want to load dynamically   */
+/* ------------------------------------------------------------------ */
 const fileStems = [
-    'dramaticRevealTimeline',     // 0 – fallback
-    'cyberpunkGlitch_64bars',     // 1 – the one you load via fxTimelineUrl
-    // add more stems here if you ever want to reference them by number
-  ];
+  'dramaticRevealTimeline',
+  'cyberpunkGlitch_64bars',
+  'analog-film',
+  'CrystalBloomTimed',
+  'DeepDream_64bars',
+  'FractalFocus_64bars',
+  'GlitchBloom',
+  'GlitchWaves_64bars',
+  'GraffitiGlow_64bars',
+  'HighlightFlash_64bars',
+  'IridescentWave_64bars',
+  'manualTimeline1',
+  'manualTimeline2',
+  'manualtimeline3',
+  'multiband-bright',
+  'NeonShards',
+  'NoirWindow',
+  'pixel-dust',
+  'PsychedelicRipple',
+  'ReverseWipe',
+  'rgbShatter_64bars',
+  'SequentialHueBands',
+  'ShadowLift_64bars',
+  'SpectrumSpin_64bars',
+  'StarlitReveal',
+  'StrobeFocus_64bars',
+  'SunriseReveal',
+  'timeline_colourBandsGlitchReveal',
+  'timeline_windowSweepReveal',
+];
   
   /* ------------------------------------------------------------------ */
   /* Utilities                                                          */
