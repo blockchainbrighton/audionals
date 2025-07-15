@@ -44,7 +44,7 @@ const HOTKEY_TIMEOUT_MS = 3000;
 // --- MODIFICATION: Initialize UI as hidden ---
 let uiElementsVisible = false; // Set to false to start hidden
 
-window.fxPlaybackState = { currentBar: -1 }; // Add this line
+// window.fxPlaybackState = { currentBar: -1 }; // Add this line
 
 // ───────────── UI Visibility & Hotkeys ─────────────
 

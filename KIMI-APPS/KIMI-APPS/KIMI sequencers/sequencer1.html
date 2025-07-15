@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Audio + MIDI Step Sequencer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: #1a1a1a;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border-bottom: 1px solid #333;
+        }
+
+        .bpm-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #2a2a2a;
+            padding: 10px 20px;
+            border-radius: 8px;
+        }
+
+        .bpm-control input {
+            width: 80px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            color: white;
+            padding: 5px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .transport-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            background: #333;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #555;
+        }
+
+        .btn.active {
+            background: #007acc;
+        }
+
+        .sequences-nav {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .sequence-tab {
+            background: #2a2a2a;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .sequence-tab.active {
+            background: #007acc;
+        }
+
+        .main-container {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .sequencer-grid {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .channel {
+            background: #222;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        .channel-header {
+            background: #2a2a2a;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .channel-name {
+            font-weight: bold;
+            min-width: 150px;
+        }
+
+        .channel-controls {
+            display: flex;
+            gap: 10px;
+            margin-left: auto;
+        }
+
+        .step-row {
+            display: flex;
+            align-items: center;
+            padding: 10px 15px;
+            background: #1a1a1a;
+        }
+
+        .step {
+            width: 40px;
+            height: 40px;
+            margin: 2px;
+            background: #333;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .step:hover {
+            background: #555;
+        }
+
+        .step.active {
+            background: #007acc;
+        }
+
+        .step.playing {
+            background: #00ff88;
+            box-shadow: 0 0 10px #00ff88;
+        }
+
+        .waveform-container {
+            width: 200px;
+            height: 60px;
+            background: #111;
+            border-radius: 4px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .waveform-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .sample-loader {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .sample-loader input {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            width: 250px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #2a2a2a;
+            padding: 30px;
+            border-radius: 12px;
+            min-width: 400px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #999;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .close-btn:hover {
+            color: white;
+        }
+
+        .piano-roll {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            height: 300px;
+            overflow-y: auto;
+        }
+
+        .piano-key {
+            height: 20px;
+            display: flex;
+            align-items: center;
+            padding-left: 10px;
+            border-bottom: 1px solid #333;
+            position: relative;
+        }
+
+        .piano-key.black {
+            background: #2a2a2a;
+        }
+
+        .piano-key.white {
+            background: #3a3a3a;
+        }
+
+        .piano-note {
+            position: absolute;
+            background: #007acc;
+            height: 16px;
+            border-radius: 3px;
+            cursor: pointer;
+            opacity: 0.8;
+        }
+
+        .piano-note:hover {
+            opacity: 1;
+        }
+
+        .arpeggiator-controls {
+            margin-top: 20px;
+            padding: 15px;
+            background: #2a2a2a;
+            border-radius: 8px;
+        }
+
+        .slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        .slider input {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="bpm-control">
+            <label>BPM:</label>
+            <input type="number" id="bpm" value="120" min="60" max="200">
+        </div>
+        
+        <div class="transport-controls">
+            <button class="btn" id="playBtn">Play</button>
+            <button class="btn" id="stopBtn">Stop</button>
+            <button class="btn" id="loopBtn">Loop</button>
+        </div>
+        
+        <div class="sequences-nav">
+            <button class="btn" id="addSeqBtn">+ Add Sequence</button>
+            <div id="sequenceTabs"></div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div id="sequencer" class="sequencer-grid">
+            <button class="btn" onclick="addChannel('audio')">+ Add Audio Channel</button>
+            <button class="btn" onclick="addChannel('midi')">+ Add MIDI Channel</button>
+        </div>
+    </div>
+
+    <div id="sampleModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Sample Editor</h3>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            
+            <div>
+                <label>Start Time (s):</label>
+                <input type="number" id="startTime" value="0" step="0.1" min="0">
+            </div>
+            
+            <div>
+                <label>End Time (s):</label>
+                <input type="number" id="endTime" value="1" step="0.1" min="0">
+            </div>
+            
+            <div>
+                <label>
+                    <input type="checkbox" id="reverse"> Reverse
+                </label>
+            </div>
+            
+            <div>
+                <label>Speed: <span id="speedValue">1.0</span></label>
+                <input type="range" id="speed" min="0.1" max="3" step="0.1" value="1">
+            </div>
+            
+            <button class="btn" onclick="applySampleEdit()">Apply</button>
+        </div>
+    </div>
+
+    <div id="midiModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>MIDI Editor</h3>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            
+            <div class="piano-roll" id="pianoRoll"></div>
+            
+            <div class="arpeggiator-controls">
+                <h4>Arpeggiator</h4>
+                <label>
+                    <input type="checkbox" id="arpEnabled"> Enable
+                </label>
+                <div>
+                    <label>Pattern:</label>
+                    <select id="arpPattern">
+                        <option value="up">Up</option>
+                        <option value="down">Down</option>
+                        <option value="up-down">Up-Down</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Rate: <span id="arpRateValue">1/8</span></label>
+                    <input type="range" id="arpRate" min="1" max="8" value="4">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Audio Context Setup
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let isPlaying = false;
+        let currentStep = 0;
+        let startTime = 0;
+        let sequenceInterval;
+        let sequences = [{}];
+        let currentSequence = 0;
+        let channels = [];
+
+        // State Management
+        class StateManager {
+            constructor() {
+                this.state = {
+                    bpm: 120,
+                    sequences: sequences,
+                    channels: channels
+                };
+            }
+
+            save() {
+                localStorage.setItem('sequencerState', JSON.stringify(this.state));
+            }
+
+            load() {
+                const saved = localStorage.getItem('sequencerState');
+                if (saved) {
+                    this.state = JSON.parse(saved);
+                    return this.state;
+                }
+                return null;
+            }
+        }
+
+        const stateManager = new StateManager();
+
+        // Channel Classes
+        class AudioChannel {
+            constructor(id) {
+                this.id = id;
+                this.type = 'audio';
+                this.name = `Audio ${id}`;
+                this.steps = new Array(64).fill(false);
+                this.sample = null;
+                this.buffer = null;
+                this.startTime = 0;
+                this.endTime = 1;
+                this.reverse = false;
+                this.speed = 1;
+                this.muted = false;
+                this.solo = false;
+                this.waveformData = null;
+            }
+
+            async loadSample(url) {
+                try {
+                    const response = await fetch(url);
+                    const arrayBuffer = await response.arrayBuffer();
+                    this.buffer = await audioContext.decodeAudioData(arrayBuffer);
+                    this.generateWaveform();
+                } catch (error) {
+                    console.error('Error loading sample:', error);
+                }
+            }
+
+            generateWaveform() {
+                if (!this.buffer) return;
+                
+                const canvas = document.querySelector(`#waveform-${this.id}`);
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                ctx.clearRect(0, 0, width, height);
+                ctx.fillStyle = '#007acc';
+                
+                const data = this.buffer.getChannelData(0);
+                const step = Math.ceil(data.length / width);
+                
+                for (let i = 0; i < width; i++) {
+                    let min = 1.0;
+                    let max = -1.0;
+                    
+                    for (let j = 0; j < step; j++) {
+                        const datum = data[(i * step) + j];
+                        if (datum < min) min = datum;
+                        if (datum > max) max = datum;
+                    }
+                    
+                    const yMin = (1 + min) * height / 2;
+                    const yMax = (1 + max) * height / 2;
+                    
+                    ctx.fillRect(i, yMin, 1, yMax - yMin);
+                }
+            }
+
+            play(step) {
+                if (!this.buffer || this.muted || !this.steps[step]) return;
+                
+                const source = audioContext.createBufferSource();
+                const gainNode = audioContext.createGain();
+                
+                source.buffer = this.buffer;
+                source.playbackRate.value = this.speed;
+                
+                if (this.reverse) {
+                    source.buffer = this.createReversedBuffer();
+                }
+                
+                const duration = (this.endTime - this.startTime) / this.speed;
+                source.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                source.start(audioContext.currentTime, this.startTime, duration);
+            }
+
+            createReversedBuffer() {
+                const buffer = audioContext.createBuffer(
+                    this.buffer.numberOfChannels,
+                    this.buffer.length,
+                    this.buffer.sampleRate
+                );
+                
+                for (let channel = 0; channel < this.buffer.numberOfChannels; channel++) {
+                    const inputData = this.buffer.getChannelData(channel);
+                    const outputData = buffer.getChannelData(channel);
+                    
+                    for (let i = 0; i < this.buffer.length; i++) {
+                        outputData[i] = inputData[this.buffer.length - 1 - i];
+                    }
+                }
+                
+                return buffer;
+            }
+        }
+
+        class MidiChannel {
+            constructor(id) {
+                this.id = id;
+                this.type = 'midi';
+                this.name = `MIDI ${id}`;
+                this.steps = new Array(64).fill(false);
+                this.notes = [];
+                this.synth = this.createSynth();
+                this.arpeggiator = {
+                    enabled: false,
+                    pattern: 'up',
+                    rate: 4
+                };
+                this.muted = false;
+                this.solo = false;
+            }
+
+            createSynth() {
+                return {
+                    play: (frequency, velocity = 0.7) => {
+                        const osc = audioContext.createOscillator();
+                        const gain = audioContext.createGain();
+                        
+                        osc.type = 'sawtooth';
+                        osc.frequency.value = frequency;
+                        
+                        gain.gain.value = velocity * 0.3;
+                        
+                        osc.connect(gain);
+                        gain.connect(audioContext.destination);
+                        
+                        osc.start();
+                        gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 1);
+                        osc.stop(audioContext.currentTime + 1);
+                        
+                        return { osc, gain };
+                    }
+                };
+            }
+
+            play(step) {
+                if (this.muted || !this.steps[step]) return;
+                
+                const note = this.notes.find(n => n.step === step);
+                if (note) {
+                    const frequency = 440 * Math.pow(2, (note.pitch - 69) / 12);
+                    this.synth.play(frequency, note.velocity / 127);
+                }
+            }
+        }
+
+        // UI Functions
+        function createChannelUI(channel) {
+            const channelDiv = document.createElement('div');
+            channelDiv.className = 'channel';
+            channelDiv.id = `channel-${channel.id}`;
+            
+            if (channel.type === 'audio') {
+                channelDiv.innerHTML = `
+                    <div class="channel-header">
+                        <span class="channel-name">${channel.name}</span>
+                        <div class="sample-loader">
+                            <input type="url" placeholder="Enter audio URL..." 
+                                   onchange="loadSample(${channel.id}, this.value)">
+                        </div>
+                        <div class="waveform-container" onclick="openSampleEditor(${channel.id})">
+                            <canvas class="waveform-canvas" id="waveform-${channel.id}" width="200" height="60"></canvas>
+                        </div>
+                        <div class="channel-controls">
+                            <button class="btn" onclick="toggleMute(${channel.id})">M</button>
+                            <button class="btn" onclick="toggleSolo(${channel.id})">S</button>
+                            <button class="btn" onclick="removeChannel(${channel.id})">X</button>
+                        </div>
+                    </div>
+                    <div class="step-row">
+                        ${channel.steps.map((step, i) => 
+                            `<div class="step ${step ? 'active' : ''}" 
+                                  onclick="toggleStep(${channel.id}, ${i})">${i + 1}</div>`
+                        ).join('')}
+                    </div>
+                `;
+            } else {
+                channelDiv.innerHTML = `
+                    <div class="channel-header">
+                        <span class="channel-name">${channel.name}</span>
+                        <button class="btn" onclick="openMidiEditor(${channel.id})">Open Piano Roll</button>
+                        <div class="channel-controls">
+                            <button class="btn" onclick="toggleMute(${channel.id})">M</button>
+                            <button class="btn" onclick="toggleSolo(${channel.id})">S</button>
+                            <button class="btn" onclick="removeChannel(${channel.id})">X</button>
+                        </div>
+                    </div>
+                    <div class="step-row">
+                        ${channel.steps.map((step, i) => 
+                            `<div class="step ${step ? 'active' : ''}" 
+                                  onclick="toggleStep(${channel.id}, ${i})">${i + 1}</div>`
+                        ).join('')}
+                    </div>
+                `;
+            }
+            
+            return channelDiv;
+        }
+
+        function addChannel(type) {
+            const id = channels.length;
+            const channel = type === 'audio' ? new AudioChannel(id) : new MidiChannel(id);
+            channels.push(channel);
+            
+            const channelUI = createChannelUI(channel);
+            document.getElementById('sequencer').appendChild(channelUI);
+            
+            if (type === 'audio') {
+                channel.generateWaveform();
+            }
+        }
+
+        function removeChannel(id) {
+            const index = channels.findIndex(c => c.id === id);
+            if (index > -1) {
+                channels.splice(index, 1);
+                document.getElementById(`channel-${id}`).remove();
+            }
+        }
+
+        function toggleStep(channelId, stepIndex) {
+            const channel = channels.find(c => c.id === channelId);
+            if (channel) {
+                channel.steps[stepIndex] = !channel.steps[stepIndex];
+                const step = document.querySelector(`#channel-${channelId} .step:nth-child(${stepIndex + 1})`);
+                step.classList.toggle('active');
+            }
+        }
+
+        function toggleMute(channelId) {
+            const channel = channels.find(c => c.id === channelId);
+            if (channel) {
+                channel.muted = !channel.muted;
+                event.target.classList.toggle('active');
+            }
+        }
+
+        function toggleSolo(channelId) {
+            const channel = channels.find(c => c.id === channelId);
+            if (channel) {
+                channel.solo = !channel.solo;
+                
+                channels.forEach(c => {
+                    if (c.id !== channelId) {
+                        c.muted = channel.solo;
+                    }
+                });
+                
+                event.target.classList.toggle('active');
+            }
+        }
+
+        async function loadSample(channelId, url) {
+            const channel = channels.find(c => c.id === channelId && c.type === 'audio');
+            if (channel) {
+                await channel.loadSample(url);
+            }
+        }
+
+        function openSampleEditor(channelId) {
+            const channel = channels.find(c => c.id === channelId && c.type === 'audio');
+            if (!channel || !channel.buffer) return;
+            
+            document.getElementById('sampleModal').style.display = 'block';
+            document.getElementById('startTime').max = channel.buffer.duration;
+            document.getElementById('endTime').max = channel.buffer.duration;
+            document.getElementById('endTime').value = channel.buffer.duration;
+            
+            window.currentSampleChannel = channel;
+        }
+
+        function openMidiEditor(channelId) {
+            const channel = channels.find(c => c.id === channelId && c.type === 'midi');
+            if (!channel) return;
+            
+            document.getElementById('midiModal').style.display = 'block';
+            renderPianoRoll(channel);
+            window.currentMidiChannel = channel;
+        }
+
+        function closeModal() {
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.style.display = 'none';
+            });
+        }
+
+        function applySampleEdit() {
+            const channel = window.currentSampleChannel;
+            if (!channel) return;
+            
+            channel.startTime = parseFloat(document.getElementById('startTime').value);
+            channel.endTime = parseFloat(document.getElementById('endTime').value);
+            channel.reverse = document.getElementById('reverse').checked;
+            channel.speed = parseFloat(document.getElementById('speed').value);
+            
+            closeModal();
+        }
+
+        function renderPianoRoll(channel) {
+            const pianoRoll = document.getElementById('pianoRoll');
+            pianoRoll.innerHTML = '';
+            
+            for (let i = 60; i >= 36; i--) {
+                const key = document.createElement('div');
+                key.className = `piano-key ${[1, 3, 6, 8, 10].includes(i % 12) ? 'black' : 'white'}`;
+                key.textContent = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][i % 12] + Math.floor(i / 12);
+                
+                channel.notes.forEach(note => {
+                    if (note.pitch === i) {
+                        const noteElement = document.createElement('div');
+                        noteElement.className = 'piano-note';
+                        noteElement.style.left = `${note.step / 64 * 100}%`;
+                        noteElement.style.width = '2%';
+                        noteElement.dataset.note = JSON.stringify(note);
+                        
+                        noteElement.addEventListener('click', () => {
+                            channel.notes = channel.notes.filter(n => n !== note);
+                            renderPianoRoll(channel);
+                        });
+                        
+                        key.appendChild(noteElement);
+                    }
+                });
+                
+                key.addEventListener('click', (e) => {
+                    if (e.target === key) {
+                        const rect = key.getBoundingClientRect();
+                        const x = e.clientX - rect.left;
+                        const step = Math.floor((x / rect.width) * 64);
+                        
+                        channel.notes.push({
+                            pitch: i,
+                            step: step,
+                            velocity: 100
+                        });
+                        
+                        renderPianoRoll(channel);
+                    }
+                });
+                
+                pianoRoll.appendChild(key);
+            }
+        }
+
+        // Transport Controls
+        function play() {
+            if (isPlaying) return;
+            
+            currentStep = 0;
+            isPlaying = true;
+            startTime = audioContext.currentTime;
+            
+            const stepDuration = 60 / parseFloat(document.getElementById('bpm').value) / 4;
+            
+            sequenceInterval = setInterval(() => {
+                channels.forEach(channel => {
+                    channel.play(currentStep);
+                });
+                
+                document.querySelectorAll('.step').forEach(step => {
+                    step.classList.remove('playing');
+                });
+                
+                document.querySelectorAll(`.step:nth-child(${currentStep + 1})`).forEach(step => {
+                    step.classList.add('playing');
+                });
+                
+                currentStep = (currentStep + 1) % 64;
+            }, stepDuration * 1000);
+            
+            document.getElementById('playBtn').classList.add('active');
+        }
+
+        function stop() {
+            isPlaying = false;
+            clearInterval(sequenceInterval);
+            currentStep = 0;
+            
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('playing');
+            });
+            
+            document.getElementById('playBtn').classList.remove('active');
+        }
+
+        // Event Listeners
+        document.getElementById('playBtn').addEventListener('click', play);
+        document.getElementById('stopBtn').addEventListener('click', stop);
+        document.getElementById('loopBtn').addEventListener('click', (e) => {
+            e.target.classList.toggle('active');
+        });
+
+        document.getElementById('bpm').addEventListener('input', (e) => {
+            if (isPlaying) {
+                stop();
+                setTimeout(play, 100);
+            }
+        });
+
+        document.getElementById('speed').addEventListener('input', (e) => {
+            document.getElementById('speedValue').textContent = e.target.value;
+        });
+
+        document.getElementById('arpRate').addEventListener('input', (e) => {
+            const rates = ['1/1', '1/2', '1/4', '1/8', '1/16', '1/32', '1/64', '1/128'];
+            document.getElementById('arpRateValue').textContent = rates[e.target.value - 1];
+        });
+
+        document.getElementById('addSeqBtn').addEventListener('click', () => {
+            sequences.push({});
+            updateSequenceTabs();
+        });
+
+        function updateSequenceTabs() {
+            const tabs = document.getElementById('sequenceTabs');
+            tabs.innerHTML = '';
+            
+            sequences.forEach((seq, index) => {
+                const tab = document.createElement('div');
+                tab.className = `sequence-tab ${index === currentSequence ? 'active' : ''}`;
+                tab.textContent = `Seq ${index + 1}`;
+                tab.addEventListener('click', () => switchSequence(index));
+                tabs.appendChild(tab);
+            });
+        }
+
+        function switchSequence(index) {
+            currentSequence = index;
+            updateSequenceTabs();
+            // Implement sequence switching logic
+        }
+
+        // Initialize
+        updateSequenceTabs();
+        
+        // Load saved state
+        const savedState = stateManager.load();
+        if (savedState) {
+            document.getElementById('bpm').value = savedState.bpm;
+            channels = savedState.channels;
+            sequences = savedState.sequences;
+        }
+    </script>
+</body>
+</html>
