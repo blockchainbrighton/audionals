@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>XLSX to JSON (Column C Colour)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f9; color: #333; display: flex; flex-direction: column; align-items: center; padding: 2em; }
+        .container { max-width: 900px; width: 100%; background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);}
+        h1 { text-align: center; }
+        label { font-weight: bold; margin-bottom: 0.5em; display: block; }
+        textarea { width: 100%; min-height: 200px; margin-top: 1em; font-family: monospace; font-size: 13px; }
+        button, input[type=file] { margin-top: 1em; }
+        .error { color: #b00; font-weight: bold; margin-top: 1em;}
+        .success { color: #080; font-weight: bold; margin-top: 1em;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>XLSX to JSON (log Cell C Colour)</h1>
+        <label for="xlsxInput">Upload .xlsx (first sheet only):</label>
+        <input type="file" id="xlsxInput" accept=".xlsx" />
+        <button id="convertBtn">Convert to JSON</button>
+        <div id="msg" class="error"></div>
+        <textarea id="jsonOutput" placeholder="JSON output will appear here"></textarea>
+    </div>
+<script>
+let sheetData = null;
+let rawSheet = null;
+
+document.getElementById('xlsxInput').addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    const msg = document.getElementById('msg');
+    if (!file) return;
+    msg.textContent = 'Loading...';
+    const reader = new FileReader();
+    reader.onload = function (evt) {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array', cellStyles: true });
+        const sheetName = workbook.SheetNames[0];
+        rawSheet = workbook.Sheets[sheetName];
+        sheetData = XLSX.utils.sheet_to_json(rawSheet, { header: 1, raw: false });
+        msg.textContent = "Sheet loaded: " + sheetName + ", Rows: " + (sheetData.length - 1);
+    };
+    reader.readAsArrayBuffer(file);
+});
+
+document.getElementById('convertBtn').addEventListener('click', function () {
+    const msg = document.getElementById('msg');
+    const jsonOutput = document.getElementById('jsonOutput');
+    msg.textContent = '';
+    jsonOutput.value = '';
+    if (!sheetData) { msg.textContent = 'Please upload an XLSX file first.'; return; }
+    if (sheetData.length < 2) { msg.textContent = 'Sheet has no data.'; return; }
+
+    const headers = sheetData[0];
+    const out = [];
+    for (let r = 1; r < sheetData.length; r++) {
+        const row = sheetData[r];
+        if (!row || row.length === 0) continue;
+        const obj = {};
+        // Map headers to values
+        for (let c = 0; c < headers.length; c++) {
+            obj[headers[c]] = row[c];
+        }
+        // For cell style: Excel row is 1-based, so r+1 (since r=1 for first data row)
+        const cellRef = XLSX.utils.encode_cell({ r: r, c: 2 }); // column C = 2
+        const cell = rawSheet[cellRef];
+        let cellCColour = null;
+        if (cell && cell.s && cell.s.fill && cell.s.fill.fgColor && cell.s.fill.fgColor.rgb) {
+            cellCColour = '#' + cell.s.fill.fgColor.rgb.slice(-6);
+        }
+        obj["cellCColour"] = cellCColour;
+        out.push(obj);
+    }
+    jsonOutput.value = JSON.stringify(out, null, 2);
+    msg.textContent = 'Done! Rows: ' + out.length;
+});
+</script>
+</body>
+</html>

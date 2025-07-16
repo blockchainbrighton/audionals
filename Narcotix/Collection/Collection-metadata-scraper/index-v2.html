@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>NarcotiX NFT Explorer – Auto Endpoint</title>
+<style>
+    body{margin:0;font-family:system-ui;background:#111;color:#0f0;display:flex;flex-direction:column;height:100vh}
+    header{background:#000;padding:.5rem 1rem;display:flex;align-items:center;gap:1rem}
+    button{padding:.4em .8em}
+    #viewer{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+    img{max-width:90%;max-height:60vh;border-radius:8px}
+    pre{background:#000;padding:.5rem;border-radius:4px;max-height:30vh;overflow:auto;font-size:.75rem}
+    #errorBox{background:#300;color:#fff;padding:1rem;border-radius:6px;margin:1rem}
+</style>
+</head>
+<body>
+<header>
+    <span id="label">Probing endpoints…</span>
+    <button id="prev" disabled>Prev</button>
+    <button id="next" disabled>Next</button>
+</header>
+
+<div id="viewer">
+    <div id="errorBox" style="display:none"></div>
+    <img id="img" alt="" style="display:none"/>
+    <pre id="meta" style="display:none"></pre>
+</div>
+
+<script type="module">
+/******************************************************************
+ *  CONFIG
+ ******************************************************************/
+const CONTRACT = 'SP8HMQP4Q63V3E6SXXPXZ4WJXA263HBD95QY2AM3.narcotix';
+const TOTAL = 3333;
+
+// list of endpoints to try (fast, high-uptime providers first)
+const CANDIDATES = [
+  'https://api.mainnet.hiro.so',
+  'https://stacks-node-api.mainnet.stacks.co',
+  'https://api.stacksonchain.com'
+];
+
+// the chosen one
+let BASE_URL;
+
+/******************************************************************
+ *  Endpoint auto-discovery
+ ******************************************************************/
+async function probe(url){
+  try{
+    // use token #1 as probe
+    const testCall = `${url}/v2/contracts/call-read/${CONTRACT.split('.')[0]}/${CONTRACT.split('.')[1]}/get-token-uri`;
+    const payload = {sender: CONTRACT.split('.')[0], arguments: ["u1"]};
+    const r = await fetch(testCall, {method:'POST', body: JSON.stringify(payload)});
+    if(!r.ok) throw new Error(r.status);
+    const {result} = await r.json();
+    if(!result) throw new Error('empty result');
+    return true;           // endpoint works
+  }catch{
+    return false;          // endpoint failed
+  }
+}
+
+async function pickEndpoint(){
+  const outcomes = await Promise.allSettled(CANDIDATES.map(async u => ({url:u, ok: await probe(u)})));
+  const winner = outcomes.find(o => o.value && o.value.ok);
+  if(!winner) throw new Error('All Stacks API endpoints unreachable.');
+  return winner.value.url;
+}
+
+/******************************************************************
+ *  Tiny IndexedDB helper
+ ******************************************************************/
+const DB_NAME = 'narcotix_cache';
+const STORE = 'files';
+let db;
+async function openDB(){
+  return new Promise((res,rej)=>{
+    const req = indexedDB.open(DB_NAME,1);
+    req.onerror = ()=>rej(req.error);
+    req.onsuccess = ()=>res(req.result);
+    req.onupgradeneeded = ()=>req.result.createObjectStore(STORE);
+  });
+}
+async function store(key,blob){
+  const tx = db.transaction(STORE,'readwrite');
+  tx.objectStore(STORE).put(blob,key);
+  return tx.complete;
+}
+async function retrieve(key){
+  return new Promise(res=>{
+    const tx = db.transaction(STORE);
+    const req = tx.objectStore(STORE).get(key);
+    req.onsuccess = ()=>res(req.result);
+  });
+}
+
+/******************************************************************
+ *  Fetch utilities (now use BASE_URL)
+ ******************************************************************/
+async function fetchJSON(url,payload){
+  const opts = payload ? {method:'POST', body: JSON.stringify(payload)} : {};
+  const r = await fetch(url, opts);
+  if(!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+async function getTokenURI(id){
+  const url = `${BASE_URL}/v2/contracts/call-read/${CONTRACT.split('.')[0]}/${CONTRACT.split('.')[1]}/get-token-uri`;
+  const {result} = await fetchJSON(url, {sender: CONTRACT.split('.')[0], arguments: [`u${id}`]});
+  const uri = result.match(/"([^"]+)"/)[1].replace('{id}', id);
+  return uri;
+}
+
+async function getMetadata(id){
+  const key = `meta_${id}`;
+  let blob = await retrieve(key);
+  if(blob) return JSON.parse(await blob.text());
+  const uri = await getTokenURI(id);
+  const json = await fetchJSON(uri);
+  blob = new Blob([JSON.stringify(json)], {type:'application/json'});
+  await store(key, blob);
+  return json;
+}
+
+async function getImage(id, imageURL){
+  const key = `img_${id}`;
+  let blob = await retrieve(key);
+  if(!blob){
+    blob = await (await fetch(imageURL)).blob();
+    await store(key, blob);
+  }
+  return URL.createObjectURL(blob);
+}
+
+/******************************************************************
+ *  UI
+ ******************************************************************/
+let id = 1;
+const $label = document.getElementById('label');
+const $img   = document.getElementById('img');
+const $meta  = document.getElementById('meta');
+const $error = document.getElementById('errorBox');
+
+async function load(id){
+  $label.textContent = `Loading #${id}…`;
+  try{
+    const {image, ...rest} = await getMetadata(id);
+    $img.src = await getImage(id, image);
+    $meta.textContent = JSON.stringify(rest, null, 2);
+    [$img,$meta].forEach(el=>el.style.display='');
+    $error.style.display='none';
+    $label.textContent = `NarcotiX #${id}`;
+  }catch(e){
+    [$img,$meta].forEach(el=>el.style.display='none');
+    $error.style.display='';
+    $error.textContent = `Error loading #${id}: ${e.message}`;
+    $label.textContent = '';
+  }
+}
+
+function inc(delta){
+  id = Math.max(1, Math.min(TOTAL, id + delta));
+  load(id);
+}
+
+document.getElementById('next').onclick = ()=>inc(1);
+document.getElementById('prev').onclick = ()=>inc(-1);
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowRight') inc(1);
+  if(e.key==='ArrowLeft')  inc(-1);
+});
+
+(async ()=>{
+  try{
+    BASE_URL = await pickEndpoint();
+    console.log('Using endpoint:', BASE_URL);
+    db = await openDB();
+    document.getElementById('prev').disabled = false;
+    document.getElementById('next').disabled = false;
+    load(id);
+  }catch(err){
+    [$img,$meta].forEach(el=>el.style.display='none');
+    $error.style.display='';
+    $error.textContent = `Startup failed: ${err.message}`;
+    $label.textContent = '';
+  }
+})();
+</script>
+</body>
+</html>

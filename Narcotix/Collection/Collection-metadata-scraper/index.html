@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>NarcotiX Explorer (3333)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    :root {
+      --accent:#00ffaa;
+      --bg:#111;
+      --text:#eee;
+      --card:#222;
+    }
+    body{margin:0;font-family:system-ui, sans-serif;background:var(--bg);color:var(--text);padding:1rem;display:flex;flex-direction:column;align-items:center}
+    h1{margin:.5rem 0}
+    button{background:var(--accent);border:none;padding:.5rem .9rem;margin:.2rem;border-radius:4px;cursor:pointer}
+    input[type=number]{width:70px;padding:.4rem;border-radius:4px;border:none;text-align:center}
+    #status{width:100%;max-width:750px;margin:.5rem 0;font-family:monospace;font-size:.8rem;background:#000;padding:.5rem;border-radius:4px;max-height:150px;overflow-y:auto}
+    #viewer{display:flex;flex-direction:column;align-items:center;max-width:750px;width:100%}
+    #viewer img{max-width:100%;max-height:60vh;border-radius:6px;margin:.5rem 0}
+    #strip{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-top:.5rem}
+    #strip img{width:50px;height:50px;border-radius:4px;cursor:pointer;border:2px solid transparent}
+    #strip img.active{border-color:var(--accent)}
+    /* 🔄 NEW styles */
+    #controls{
+      display:flex;
+      flex-wrap:wrap;          /* let it wrap on very narrow screens */
+      justify-content:center;  /* keep everything centred */
+      align-items:center;
+      gap:.4rem;               /* replaces per‑button margins */
+      margin-bottom:1rem;
+    }
+
+    /* override the old margin so the flex gap does the work */
+    button{margin:0}
+
+    /* centre the main image within its column */
+    #viewer img{
+      margin:.5rem auto;      /* `.auto` horizontally centres in block flow */
+      display:block;          /* ensures margin auto works everywhere */
+    }
+  </style>
+</head>
+<body>
+  <h1>NarcotiX Explorer (1-3333)</h1>
+
+<!-- 🔄 NEW markup: wrap every control in one flex bar -->
+<div id="controls">
+  <button id="testMeta">Test Metadata</button>
+  <button id="testHistoryBad">History&nbsp;(bad)</button>
+  <button id="testHistoryGood">History&nbsp;(good)</button>
+  <button id="testMints">Fetch Mints</button>
+
+  <input id="tokenInput" type="number" min="1" max="3333" value="1"/>
+  <button id="loadBtn">Load</button>
+  <button id="prevBtn">←</button>
+  <button id="nextBtn">→</button>
+</div>
+
+  <!-- Main display -->
+  <div id="viewer">
+    <img id="mainImg" src="" alt=""/>
+    <h2 id="title"></h2>
+    <p id="desc"></p>
+  </div>
+
+  <!-- Thumbnail strip -->
+  <div id="strip"></div>
+
+  <!-- Debug console -->
+  <div id="status"></div>
+
+  <script>
+    /* ---------- CONSTANTS ---------- */
+    const CONTRACT = 'SP8HMQP4Q63V3E6SXXPXZ4WJXA263HBD95QY2AM3.narcotix';
+    const MAX_SUPPLY = 3333;
+    const CACHE_URL = id => `https://assets.hiro.so/api/mainnet/token-metadata-api/${CONTRACT}/${id}.png`;
+    const META_URL  = id => `https://api.hiro.so/metadata/v1/nft/${CONTRACT}/${id}`;
+
+    /* ---------- DOM ---------- */
+    const statusEl  = document.getElementById('status');
+    const viewerImg = document.getElementById('mainImg');
+    const titleEl   = document.getElementById('title');
+    const descEl    = document.getElementById('desc');
+    const input     = document.getElementById('tokenInput');
+    const strip     = document.getElementById('strip');
+    let currentId   = 1;
+
+    /* ---------- HELPERS ---------- */
+    function log(msg) {
+      console.log(msg);
+      statusEl.textContent += msg + '\n';
+      statusEl.scrollTop = statusEl.scrollHeight;
+    }
+
+    async function fetchJSON(url) {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json();
+    }
+
+    /* ---------- IMAGE LOADER ---------- */
+    const history = new Set();
+    
+    async function loadNFT(id) {
+      id = Math.max(1, Math.min(MAX_SUPPLY, id));
+      currentId = id;
+      input.value = id;
+
+      // main image
+      viewerImg.src = CACHE_URL(id);
+      viewerImg.alt = `NarcotiX #${id}`;
+
+      // metadata
+      try {
+        const meta = await fetchJSON(META_URL(id));
+        titleEl.textContent = meta.metadata?.name || `NarcotiX #${id}`;
+        descEl.textContent  = meta.metadata?.description || '';
+      } catch(e) {
+        titleEl.textContent = `NarcotiX #${id}`;
+        descEl.textContent  = '';
+        log('Metadata error: ' + e.message);
+      }
+
+      // thumbnail strip
+      history.add(id);
+      renderStrip();
+    }
+
+    function renderStrip() {
+      strip.innerHTML = '';
+      [...history].slice(-12).forEach(id => {
+        const img = document.createElement('img');
+        img.src = CACHE_URL(id);
+        img.alt = id;
+        img.className = id === currentId ? 'active' : '';
+        img.onclick = () => loadNFT(id);
+        strip.appendChild(img);
+      });
+    }
+
+    /* ---------- NAV ---------- */
+    document.getElementById('loadBtn').onclick  = () => loadNFT(+input.value);
+    document.getElementById('prevBtn').onclick  = () => loadNFT(currentId - 1);
+    document.getElementById('nextBtn').onclick  = () => loadNFT(currentId + 1);
+    input.addEventListener('keydown', e => e.key === 'Enter' && loadNFT(+input.value));
+
+    /* ---------- CORS TEST BUTTONS (unchanged) ---------- */
+    async function testFetch(label, url) {
+      log(`Testing ${label}: ${url}`);
+      try {
+        const r = await fetch(url);
+        const txt = await r.text();
+        log(`Status: ${r.status}\n${txt.slice(0, 300)}`);
+      } catch(err) {
+        log('Error: ' + err.message);
+      }
+      log('---');
+    }
+
+    document.getElementById('testMeta').onclick = () => {
+      const id = +input.value || 1;
+      testFetch('Metadata', META_URL(id));
+    };
+
+    document.getElementById('testHistoryBad').onclick = () => {
+      const id = +input.value || 1;
+      testFetch('HistoryBad', `https://stacks-node-api.mainnet.stacks.co/extended/v1/tokens/nft/history?asset_identifier=${encodeURIComponent(CONTRACT)}::${id}&page_size=1`);
+    };
+
+    document.getElementById('testHistoryGood').onclick = () => {
+      const id = +input.value || 1;
+      const hex = '0x' + id.toString(16).padStart(2, '0');
+      testFetch('HistoryGood', `https://stacks-node-api.mainnet.stacks.co/extended/v1/tokens/nft/history?asset_identifier=${encodeURIComponent(CONTRACT)}::${id}&value=${hex}&page_size=1`);
+    };
+
+    document.getElementById('testMints').onclick = () =>
+      testFetch('Mints', `https://stacks-node-api.mainnet.stacks.co/extended/v1/tokens/nft/mints?asset_identifier=${encodeURIComponent(CONTRACT)}`);
+
+    /* ---------- FIRST LOAD ---------- */
+    loadNFT(1);
+  </script>
+</body>
+</html>
