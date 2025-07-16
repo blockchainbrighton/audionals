@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>BAM-helmet pixel-to-grid demo</title>
+<style>
+  :root{
+    --helmet:#888888;  /* default grey shell */
+    --visor:#00ff0080; /* default green glass, 50 % alpha */
+    --bg:#000000;      /* default black outside */
+  }
+  body{margin:0;background:#111;display:flex;justify-content:center;align-items:center;height:100vh;font-family:monospace}
+  #grid{
+    display:grid;
+    grid-template-columns:repeat(64,1fr);
+    width:512px;height:512px; /* 8× zoom for visibility */
+    image-rendering:pixelated;
+    gap:0;
+  }
+  #grid div{
+    width:100%;
+    height:100%;
+    box-sizing:border-box;
+  }
+  .helmet{background:var(--helmet)}
+  .visor{background:var(--visor)}
+  .bg{background:var(--bg)}
+  #legend{position:fixed;top:1rem;left:1rem;color:#fff}
+</style>
+</head>
+<body>
+
+<div id="legend">
+  <button onclick="swapHelmet()">🔄 Swap helmet</button>
+  <button onclick="swapBG()">🔄 Swap background</button>
+</div>
+
+<div id="grid"></div>
+
+<script>
+/* ---------- CONFIGURATION ---------- */
+const HELMET_COLORS  = ['#888888','#555555','#cccccc']; // greys
+const VISOR_COLOR    = '#00ff0080';  // transparent green
+const BG_COLORS      = ['#000000','#001122','#220011']; // some dark tones
+
+/* ---------- STATE ---------- */
+let currentHelmet = 0;
+let currentBG     = 0;
+
+/* ---------- CANVAS EXTRACTION ---------- */
+const SIZE = 64;
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d');
+const img = new Image();
+img.crossOrigin = 'anonymous'; // allow local file
+img.onload = () => {
+  canvas.width  = SIZE;
+  canvas.height = SIZE;
+  ctx.drawImage(img, 0, 0, SIZE, SIZE);
+
+  /* ---------- SEMANTIC CLASSIFICATION (fixed) ---------- */
+const raw = ctx.getImageData(0, 0, SIZE, SIZE).data;
+const helmet = [], visor = [], bg = [];
+
+function idx(x, y) { return (y * SIZE + x) * 4; }
+
+for (let y = 0; y < SIZE; y++) {
+  for (let x = 0; x < SIZE; x++) {
+    const r = raw[idx(x, y) + 0];
+    const g = raw[idx(x, y) + 1];
+    const b = raw[idx(x, y) + 2];
+    const a = raw[idx(x, y) + 3];
+
+    let clazz = 'bg';
+    if (a < 128) {
+      clazz = 'visor';                 // transparent pixels
+    } else if (r > 200 && g > 150 && b < 100) {
+      clazz = 'helmet';                // gold-ish (high R & G, low B)
+    }
+
+    if (clazz === 'helmet') helmet.push({ x, y });
+    else if (clazz === 'visor') visor.push({ x, y });
+    else bg.push({ x, y });
+
+    const pixel = document.createElement('div');
+    pixel.className = clazz;
+    document.getElementById('grid').appendChild(pixel);
+  }
+}
+
+/* ---------- GLOBAL ARRAYS (for swapping) ---------- */
+window.ZONES = { helmet, visor, bg };
+
+/* update CSS variables to match the real colours */
+document.documentElement.style.setProperty('--helmet', '#ffd700'); // gold
+document.documentElement.style.setProperty('--bg',    '#ffffff');  // white
+document.documentElement.style.setProperty('--visor', '#ffffff00'); // fully transparent
+};
+img.src = 'BAM-helmet.png';
+
+/* ---------- SWAP FUNCTIONS ---------- */
+function swapHelmet(){
+currentHelmet = (currentHelmet+1) % HELMET_COLORS.length;
+document.documentElement.style.setProperty('--helmet', HELMET_COLORS[currentHelmet]);
+}
+function swapBG(){
+currentBG = (currentBG+1) % BG_COLORS.length;
+document.documentElement.style.setProperty('--bg', BG_COLORS[currentBG]);
+}
+</script>
+</body>
+</html>
