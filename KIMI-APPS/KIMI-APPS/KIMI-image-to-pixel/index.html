@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Astronaut Ordinal Helmet</title>
+    <style>
+        body {
+            background: #000;
+            color: #fff;
+            font-family: monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            border: 2px solid #333;
+            margin: 10px;
+            max-width: 100%;
+            height: auto;
+            /* 320×320 becomes the default, but can grow */
+            width: min(90vw, 320px);
+        }
+        .controls {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        button, select, input {
+            background: #111;
+            color: #fff;
+            border: 1px solid #333;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #222;
+        }
+        .story-text {
+            max-width: 400px;
+            text-align: center;
+            margin: 10px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <h1>Astronaut Ordinal Helmet</h1>
+    <canvas id="helmetCanvas" width="256" height="256"></canvas>
+    
+    <div class="controls">
+        <div class="control-group">
+            <label>Helmet Color:</label>
+            <select id="helmetColor">
+                <option value="white">White</option>
+                <option value="gold">Gold</option>
+                <option value="silver">Silver</option>
+                <option value="black">Black</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label>Background:</label>
+            <select id="backgroundType">
+                <option value="stars">Stars</option>
+                <option value="planet">Planet</option>
+                <option value="glitch">Glitch</option>
+                <option value="none">None</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label>Visor Opacity:</label>
+            <input type="range" id="visorOpacity" min="0" max="255" value="128">
+        </div>
+        
+        <div class="control-group">
+            <label>PFP Image:</label>
+            <input type="file" id="pfpInput" accept="image/*">
+        </div>
+        
+        <div class="control-group">
+            <label>Ordinal ID:</label>
+            <input type="text" id="ordinalId" placeholder="Enter Ordinal ID">
+            <button onclick="loadOrdinal()">Load</button>
+        </div>
+        
+        <div class="control-group">
+            <label>Story:</label>
+            <button onclick="nextStoryFrame()">Next Frame</button>
+            <button onclick="toggleNarration()">Toggle Narration</button>
+        </div>
+        
+        <div class="control-group">
+            <button onclick="exportImage()">Export PNG</button>
+        </div>
+    </div>
+    
+    <div class="story-text" id="storyText">Welcome to the Astronaut Ordinal Helmet. Load an Ordinal or PFP to begin your journey.</div>
+
+<script>
+// Module 1: Helmet Renderer
+class HelmetRenderer {
+    constructor() {
+        this.helmetData = this.parseHelmetData();
+    }
+    
+    parseHelmetData() {
+        const data = "00,ffffc4,ffffc4,ffffc4,ffffc4,ffb734,221508,000000,4a321a,000000,000000,8a4613,000000,f97400,e15b00,b74a00;7:20,6:1,b:4,e:1,8:10,f:1,e:2,b:3,6:1,7:39,6:1,b:1,e:1,8:1,d:2,1:16,d:2,e:1,6:1,7:36,b:1,f:3,d:1,1:9,5:3,d:1,1:10,d:1,e:1,b:1,6:1,7:31,b:1,f:2,d:1,1:11,5:3,d:1,1:12,d:1,f:1,6:1,7:28,6:1,e:1,f:2,d:1,1:11,5:1,1:3,5:1,1:13,d:1,f:1,6:1,7:27,b:1,f:2,d:1,1:12,5:1,d:1,1:2,5:1,d:1,1:14,8:1,6:1,7:24,6:1,e:1,f:2,8:1,1:13,5:5,d:1,1:15,8:1,6:1,7:23,b:1,f:2,8:1,d:1,1:13,5:5,d:1,1:16,f:1,7:23,e:1,f:2,8:1,d:1,1:13,5:1,1:3,5:1,d:1,1:16,d:1,e:1,7:20,6:1,b:1,f:3,8:1,d:1,1:13,5:1,d:1,1:2,5:1,d:1,1:17,d:1,b:1,7:19,6:1,f:4,8:1,d:30,1:7,d:1,f:1,6:1,7:18,b:1,f:4,8:3,f:29,d:2,1:4,d:2,e:1,7:18,e:1,f:5,e:1,b:1,e:1,8:1,d:24,8:1,f:3,e:1,8:1,d:1,1:2,d:2,8:1,7:18,e:1,f:3,e:3,f:1,d:1,1:25,d:2,1:1,d:1,8:1,e:2,8:1,d:3,8:1,7:17,6:1,e:1,f:2,e:2,f:1,d:1,1:1,d:2,8:24,d:6,f:1,b:1,f:1,d:2,8:1,6:1,7:16,f:3,e:2,8:1,d:1,1:1,d:1,0:29,7:1,e:1,d:1,1:1,8:1,e:1,8:1,d:1,8:1,b:1,7:16,f:3,b:1,f:1,d:2,f:1,0:32,d:3,8:1,b:1,d:2,e:1,7:16,e:1,f:1,6:1,e:1,d:2,f:1,0:34,8:1,d:2,b:2,8:1,e:1,7:16,e:2,6:1,8:2,e:1,0:36,d:2,8:1,b:1,f:1,e:1,7:16,e:1,6:1,e:1,d:1,1:1,0:37,f:1,d:2,e:1,6:1,e:1,7:11,d:1,f:1,6:1,7:2,e:1,6:1,8:2,f:1,0:38,f:1,d:2,6:1,b:1,7:2,6:1,8:1,d:1,7:5,f:1,1:1,d:1,f:1,6:1,7:1,6:1,b:1,d:1,8:1,b:1,0:38,f:1,d:2,b:1,6:1,7:2,e:1,8:1,d:1,1:1,d:1,b:1,7:1,b:1,d:1,e:1,8:1,1:1,d:1,f:1,6:1,7:1,b:1,d:1,8:1,b:1,0:38,f:1,d:2,6:2,e:1,8:1,d:1,1:1,8:1,e:1,d:1,7:1,b:1,d:1,e:1,8:1,d:2,8:2,6:1,7:1,e:1,1:1,8:1,b:1,0:38,f:1,d:2,6:1,7:1,e:1,8:1,d:1,1:1,8:1,e:1,d:1,7:1,b:1,d:1,e:1,8:1,d:1,8:1,f:1,6:1,7:1,e:1,1:1,8:1,b:1,0:38,f:1,d:2,6:1,7:1,e:1,f:1,8:1,d:1,8:1,e:1,8:1,7:2,f:1,8:1,d:2,8:1,f:1,6:1,7:1,e:1,1:1,8:1,b:1,0:38,f:1,d:2,6:1,7:1,6:1,f:1,8:1,d:2,8:1,e:1,7:2,6:1,8:1,d:1,8:2,b:1,7:2,e:1,1:1,8:1,b:1,0:38,f:1,d:2,b:1,6:1,7:2,b:1,8:1,d:2,8:1,6:1,7:3,e:1,8:1,f:1,e:1,7:2,6:1,e:1,d:1,8:1,b:1,0:38,f:1,d:2,6:1,7:2,e:1,8:2,b:1,7:5,b:2,7:3,e:1,b:1,d:2,e:1,0:38,f:1,d:2,6:2,7:3,b:2,7:11,e:1,6:1,d:3,0:38,8:1,d:2,6:1,b:1,7:16,e:1,b:1,8:1,1:1,d:1,0:38,d:3,6:1,e:1,7:16,e:1,f:1,b:1,d:2,8:1,0:36,8:1,d:2,e:3,7:16,e:1,f:1,6:1,8:1,1:2,0:36,1:2,f:1,6:1,f:1,e:1,7:16,6:1,f:1,e:2,8:1,d:2,0:34,d:1,1:1,d:1,e:1,f:2,b:1,7:17,e:1,f:1,6:1,b:1,d:3,0:32,d:3,e:1,b:1,8:1,f:1,6:1,7:17,b:1,f:1,e:1,6:1,b:1,d:1,1:1,d:1,8:1,0:28,f:1,d:1,1:1,d:1,f:1,6:1,e:1,8:1,e:1,7:18,b:1,e:1,f:1,e:1,6:1,b:1,8:1,d:1,1:2,d:2,0:23,8:1,d:1,1:2,d:1,b:1,6:1,e:1,8:2,e:1,7:19,e:1,8:2,e:1,6:2,e:1,8:1,d:1,1:27,d:1,e:1,6:1,b:1,e:1,f:1,8:1,e:1,7:20,e:1,f:3,e:1,b:3,e:2,f:1,8:22,f:1,e:2,6:2,e:1,f:1,8:3,e:1,7:21,e:1,f:3,8:2,f:1,e:1,6:1,7:25,6:1,f:1,8:5,e:1,7:22,6:1,e:2,f:1,8:4,f:27,8:5,e:1,7:22,b:1,6:1,7:2,b:1,e:1,f:1,8:31,f:2,e:1,6:2,b:1,7:19,b:1,f:2,e:1,6:1,7:2,b:1,f:1,8:28,f:2,b:1,6:2,e:1,f:2,6:1,7:19,e:1,8:1,f:2,e:4,b:1,6:3,b:1,e:17,b:1,6:5,b:1,e:4,f:2,e:1,7:19,b:2,e:1,f:7,e:2,b:1,e:19,b:4,e:1,f:1,8:1,d:2,8:1,f:1,e:1,b:2,7:18,e:1,f:1,b:1,6:1,b:1,e:1,f:1,8:1,d:33,f:1,b:1,e:1,f:2,7:18,e:1,8:1,f:1,e:1,6:2,e:1,f:3,8:1,d:26,8:1,f:1,e:3,f:1,8:1,d:1,f:1,7:18,e:1,f:1,8:2,f:1,e:2,f:1,b:1,6:2,b:25,6:1,b:1,e:1,f:1,8:1,d:3,8:1,e:1,7:18,e:1,f:3,8:2,d:2,8:1,f:1,8:27,d:2,1:1,d:3,8:1,f:1,e:1,7:18,e:1,f:4,8:1,d:35,f:4,e:1,7:18,e:1,f:4,8:8,d:4,8:5,d:2,8:4,d:1,8:3,d:1,8:6,f:6,e:1,7:18,b:1,f:4,8:8,d:1,1:1,d:3,8:3,d:4,8:3,1:1,d:1,8:1,d:1,1:1,d:1,8:5,f:6,b:1,7:19,b:1,f:3,8:8,d:1,1:1,d:3,f:1,8:2,1:1,f:1,d:1,1:1,8:3,d:1,1:1,d:2,1:1,d:1,8:5,f:5,b:1,7:21,b:1,f:2,8:8,d:1,1:2,d:2,8:3,1:1,d:2,1:1,8:3,1:1,8:1,1:1,d:1,1:1,d:1,8:4,f:5,b:1,7:23,6:1,e:1,f:1,8:7,d:1,1:1,f:1,8:1,1:1,f:1,d:1,8:1,1:4,8:1,d:1,8:1,1:1,8:1,1:1,d:1,1:1,d:1,8:4,f:4,b:1,7:25,6:1,e:1,f:1,8:6,d:1,1:3,f:1,d:1,1:1,8:1,1:1,f:2,1:1,8:1,1:1,d:1,1:1,8:1,d:1,8:1,d:4,8:2,f:2,e:1,6:1,7:28,6:1,e:1,f:4,8:3,f:2,8:2,f:1,8:1,f:1,8:2,f:1,8:1,f:1,8:1,f:1,8:6,f:3,e:1,6:1,7:35,6:1,b:1,e:1,f:1,8:17,f:1,e:2,6:1,7:83";
+        
+        const [colors, ...rows] = data.split(';');
+        const colorMap = colors.split(',').map(c => {
+            if (c === '00') return null; // transparent
+            return '#' + c;
+        });
+        
+        const pixels = [];
+        rows.forEach(row => {
+            const parts = row.split(',');
+            parts.forEach(part => {
+                if (part.includes(':')) {
+                    const [colorIndex, count] = part.split(':');
+                    for (let i = 0; i < parseInt(count); i++) {
+                        pixels.push(colorMap[parseInt(colorIndex, 16)]);
+                    }
+                } else {
+                    pixels.push(colorMap[parseInt(part, 16)]);
+                }
+            });
+        });
+        
+        return pixels;
+    }
+    
+    render(colorScheme, canvas) {
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(64, 64);
+        const data = imageData.data;
+        
+        this.helmetData.forEach((color, i) => {
+            const offset = i * 4;
+            if (color) {
+                const mappedColor = colorScheme[color] || color;
+                const rgb = this.hexToRgb(mappedColor);
+                data[offset] = rgb.r;
+                data[offset + 1] = rgb.g;
+                data[offset + 2] = rgb.b;
+                data[offset + 3] = 255;
+            } else {
+                data[offset + 3] = 0;
+            }
+        });
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+    
+    hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : {r: 0, g: 0, b: 0};
+    }
+}
+
+// Module 2: Background Generator
+class BackgroundGenerator {
+    generate(type, seed = Date.now()) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        
+        switch(type) {
+            case 'stars':
+                this.generateStars(ctx, seed);
+                break;
+            case 'planet':
+                this.generatePlanet(ctx, seed);
+                break;
+            case 'glitch':
+                this.generateGlitch(ctx, seed);
+                break;
+            case 'none':
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, 64, 64);
+                break;
+        }
+        
+        return canvas;
+    }
+    
+    generateStars(ctx, seed) {
+        const random = this.seededRandom(seed);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, 64, 64);
+        
+        for (let i = 0; i < 50; i++) {
+            const x = Math.floor(random() * 64);
+            const y = Math.floor(random() * 64);
+            const size = random() > 0.9 ? 2 : 1;
+            const brightness = Math.floor(random() * 100 + 155);
+            
+            ctx.fillStyle = `rgb(${brightness},${brightness},${brightness})`;
+            ctx.fillRect(x, y, size, size);
+        }
+    }
+    
+    generatePlanet(ctx, seed) {
+        const random = this.seededRandom(seed);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, 64, 64);
+        
+        // Planet
+        const centerX = 32;
+        const centerY = 32;
+        const radius = 20;
+        
+        ctx.fillStyle = '#4444aa';
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Rings
+        ctx.strokeStyle = '#6666cc';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(centerX, centerY, radius + 5, 8, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    
+    generateGlitch(ctx, seed) {
+        const random = this.seededRandom(seed);
+        const imageData = ctx.createImageData(64, 64);
+        const data = imageData.data;
+        
+        for (let i = 0; i < data.length; i += 4) {
+            data[i] = Math.floor(random() * 255);
+            data[i + 1] = Math.floor(random() * 255);
+            data[i + 2] = Math.floor(random() * 255);
+            data[i + 3] = 255;
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+    
+    seededRandom(seed) {
+        let s = seed;
+        return () => {
+            s = (s * 9301 + 49297) % 233280;
+            return s / 233280;
+        };
+    }
+}
+
+// Module 3: Visor Layer Manager
+class VisorLayerManager {
+    render(visorOpacity, canvas) {
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(64, 64);
+        const data = imageData.data;
+        
+        // Create visor mask (simplified - full visor)
+        for (let i = 0; i < data.length; i += 4) {
+            data[i] = 0;
+            data[i + 1] = 100;
+            data[i + 2] = 200;
+            data[i + 3] = visorOpacity;
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+}
+
+// Module 4: PFP Inserter
+class PFPInserter {
+    insert(image, canvas) {
+        const ctx = canvas.getContext('2d');
+        const size = Math.min(30, Math.min(image.width, image.height));
+        const x = (64 - size) / 2;
+        const y = (64 - size) / 2 + 5;
+        
+        ctx.drawImage(image, x, y, size, size);
+    }
+}
+
+// Module 5: HUD & Inscriptions Viewer
+class HUDRenderer {
+    render(text, canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.8)';
+        ctx.font = '4px monospace';
+        ctx.textAlign = 'center';
+        
+        const lines = text.match(/.{1,20}/g) || [text];
+        lines.forEach((line, i) => {
+            ctx.fillText(line, 32, 15 + i * 5);
+        });
+    }
+}
+
+// Module 6: Ordinal Story Engine
+class OrdinalStoryEngine {
+    constructor() {
+        this.stories = [
+            {
+                title: "The Genesis Block",
+                frames: [
+                    { text: "In the beginning, there was code...", image: null },
+                    { text: "Satoshi created the blockchain...", image: null },
+                    { text: "And the world was changed forever.", image: null }
+                ]
+            }
+        ];
+        this.currentStory = 0;
+        this.currentFrame = 0;
+    }
+    
+    getCurrentFrame() {
+        const story = this.stories[this.currentStory];
+        return story.frames[this.currentFrame];
+    }
+    
+    nextFrame() {
+        this.currentFrame = (this.currentFrame + 1) % this.stories[this.currentStory].frames.length;
+        return this.getCurrentFrame();
+    }
+    
+    loadOrdinalData(ordinalId) {
+        // Mock ordinal loading
+        this.stories = [{
+            title: `Ordinal #${ordinalId}`,
+            frames: [
+                { text: "Loading Ordinal...", image: null },
+                { text: "Ordinal loaded successfully!", image: null },
+                { text: `This is Ordinal #${ordinalId}`, image: null }
+            ]
+        }];
+        this.currentFrame = 0;
+    }
+}
+
+// Main Application
+class AstronautHelmetApp {
+    constructor() {
+        this.canvas = document.getElementById('helmetCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.scale = 4;
+        
+        this.helmetRenderer = new HelmetRenderer();
+        this.backgroundGen = new BackgroundGenerator();
+        this.visorManager = new VisorLayerManager();
+        this.pfpInserter = new PFPInserter();
+        this.hudRenderer = new HUDRenderer();
+        this.storyEngine = new OrdinalStoryEngine();
+        
+        this.colorSchemes = {
+            white: { '#ffffc4': '#ffffff', '#ffb734': '#cccccc' },
+            gold: { '#ffffc4': '#ffd700', '#ffb734': '#b8860b' },
+            silver: { '#ffffc4': '#c0c0c0', '#ffb734': '#808080' },
+            black: { '#ffffc4': '#333333', '#ffb734': '#111111' }
+        };
+        
+        this.currentPFP = null;
+        this.narrationEnabled = false;
+        
+        this.setupEventListeners();
+        this.render();
+    }
+    
+    setupEventListeners() {
+        document.getElementById('helmetColor').addEventListener('change', (e) => {
+            this.render();
+        });
+        
+        document.getElementById('backgroundType').addEventListener('change', (e) => {
+            this.render();
+        });
+        
+        document.getElementById('visorOpacity').addEventListener('input', (e) => {
+            this.render();
+        });
+        
+        document.getElementById('pfpInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        this.currentPFP = img;
+                        this.render();
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') {
+                this.nextStoryFrame();
+            }
+        });
+    }
+    
+    render() {
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Save context
+        this.ctx.save();
+        
+        // Scale up for pixelated rendering
+        this.ctx.scale(this.scale, this.scale);
+        
+        // Draw background
+        const bgType = document.getElementById('backgroundType').value;
+        const bgCanvas = this.backgroundGen.generate(bgType);
+        this.ctx.drawImage(bgCanvas, 0, 0);
+        
+        // Draw helmet
+        const helmetCanvas = document.createElement('canvas');
+        helmetCanvas.width = 64;
+        helmetCanvas.height = 64;
+        const colorScheme = this.colorSchemes[document.getElementById('helmetColor').value];
+        this.helmetRenderer.render(colorScheme, helmetCanvas);
+        this.ctx.drawImage(helmetCanvas, 0, 0);
+        
+        // Draw PFP
+        if (this.currentPFP) {
+            const pfpCanvas = document.createElement('canvas');
+            pfpCanvas.width = 64;
+            pfpCanvas.height = 64;
+            this.pfpInserter.insert(this.currentPFP, pfpCanvas);
+            this.ctx.drawImage(pfpCanvas, 0, 0);
+        }
+        
+        // Draw visor
+        const visorOpacity = parseInt(document.getElementById('visorOpacity').value);
+        const visorCanvas = document.createElement('canvas');
+        visorCanvas.width = 64;
+        visorCanvas.height = 64;
+        this.visorManager.render(visorOpacity, visorCanvas);
+        this.ctx.drawImage(visorCanvas, 0, 0);
+        
+        // Draw HUD
+        const frame = this.storyEngine.getCurrentFrame();
+        if (frame) {
+            const hudCanvas = document.createElement('canvas');
+            hudCanvas.width = 64;
+            hudCanvas.height = 64;
+            this.hudRenderer.render(frame.text, hudCanvas);
+            this.ctx.drawImage(hudCanvas, 0, 0);
+        }
+        
+        // Restore context
+        this.ctx.restore();
+        
+        // Update story text
+        document.getElementById('storyText').textContent = frame ? frame.text : '';
+    }
+    
+    loadOrdinal(id) {
+        this.storyEngine.loadOrdinalData(id);
+        this.render();
+    }
+    
+    nextStoryFrame() {
+        this.storyEngine.nextFrame();
+        this.render();
+    }
+    
+    toggleNarration() {
+        this.narrationEnabled = !this.narrationEnabled;
+        if (this.narrationEnabled && 'speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(
+                this.storyEngine.getCurrentFrame().text
+            );
+            speechSynthesis.speak(utterance);
+        }
+    }
+    
+    exportImage() {
+        const link = document.createElement('a');
+        link.download = 'astronaut-helmet.png';
+        link.href = this.canvas.toDataURL();
+        link.click();
+    }
+}
+
+// Initialize app
+const app = new AstronautHelmetApp();
+
+// Global functions for HTML buttons
+function loadOrdinal() {
+    const id = document.getElementById('ordinalId').value;
+    if (id) {
+        app.loadOrdinal(id);
+    }
+}
+
+function nextStoryFrame() {
+    app.nextStoryFrame();
+}
+
+function toggleNarration() {
+    app.toggleNarration();
+}
+
+function exportImage() {
+    app.exportImage();
+}
+</script>
+</body>
+</html>
