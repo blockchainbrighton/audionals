@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Audional Music Video Maker 2.0</title>
+<style>
+  :root{
+    --bg:#111;
+    --panel:#1e1e1e;
+    --accent:#00b7ff;
+    --text:#eee;
+  }
+  *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;color:var(--text)}
+  body{margin:0;background:var(--bg);display:flex;height:100vh;flex-direction:column}
+  h1{margin:4px 0 8px 6px;font-size:1.3em}
+  #layout{display:flex;flex:1;min-height:0}
+  #tracks{flex:1;display:flex;flex-direction:column;background:var(--panel);margin:4px;border-radius:4px;overflow:hidden}
+  .track{background:#222;margin:2px 0;border-radius:4px;position:relative;height:70px;overflow:hidden}
+  .track-label{position:absolute;left:4px;top:4px;font-size:.7em;z-index:3;background:rgba(0,0,0,.4);padding:2px 4px;border-radius:2px}
+  .timeline-ruler{height:24px;background:#000;position:relative}
+  .timeline-cursor{position:absolute;top:0;bottom:0;width:1px;background:var(--accent);z-index:10}
+  .clip{position:absolute;top:2px;bottom:2px;border-radius:3px;background:var(--accent);cursor:grab;overflow:hidden;display:flex;align-items:center;padding:0 6px;font-size:.7em;min-width:4px}
+  .clip img,.clip video{max-height:100%;position:absolute;left:0;top:0;opacity:.6}
+  .clip span{z-index:2;background:rgba(0,0,0,.6);padding:0 4px;border-radius:2px}
+  .clip audio-handle{position:absolute;top:-4px;left:0;right:0;height:4px;background:#0ff;cursor:ns-resize}
+  .clip .handle{position:absolute;top:0;bottom:0;width:6px;background:rgba(255,255,255,.2);cursor:ew-resize}
+  .clip .left{left:0;border-radius:3px 0 0 3px}
+  .clip .right{right:0;border-radius:0 3px 3px 0}
+  #inspector{width:280px;background:var(--panel);margin:4px;border-radius:4px;padding:8px;font-size:.8em;display:flex;flex-direction:column;gap:6px}
+  #inspector input,#inspector select{width:100%}
+  #inspector button{background:#333;border:none;border-radius:3px;padding:4px 8px;cursor:pointer}
+  #inspector button:hover{background:#444}
+  #presetLibrary img,#presetLibrary video{height:32px;margin:2px;cursor:pointer;border:1px solid transparent}
+  #presetLibrary img:hover,#presetLibrary video:hover{border-color:var(--accent)}
+  #transport{height:40px;background:#000;display:flex;align-items:center;padding:0 8px;gap:10px}
+  #transport button{background:#333;border:none;border-radius:3px;padding:4px 8px;cursor:pointer}
+  #transport button:hover{background:#555}
+  #timeDisplay{margin-left:auto;font-size:.9em}
+  #viewer{flex:1;background:#000;display:flex;align-items:center;justify-content:center}
+  #viewer video,#viewer img{max-width:100%;max-height:100%}
+  #viewer canvas{max-width:100%;max-height:100%;display:none}
+</style>
+</head>
+<body>
+  <h1>Audional Music Video Maker 2.0</h1>
+  <div id="layout">
+    <div id="tracks">
+      <div class="timeline-ruler" id="ruler"></div>
+      <div class="track" id="videoA"><div class="track-label">VIDEO A</div></div>
+      <div class="track" id="videoB"><div class="track-label">VIDEO B</div></div>
+      <div class="track" id="audioA"><div class="track-label">AUDIO A</div></div>
+      <div class="track" id="audioB"><div class="track-label">AUDIO B</div></div>
+    </div>
+    <div id="inspector">
+      <h3>Inspector</h3>
+      <label>URL<br><input id="inspUrl" type="text" readonly></label>
+      <label>Start (s)<br><input id="inspStart" type="number" step="0.1"></label>
+      <label>Duration (s)<br><input id="inspDur" type="number" step="0.1" min="0.1"></label>
+      <label>Volume<br><input id="inspVol" type="range" min="0" max="1" step="0.01"></label>
+      <label>Fade-in (s)<br><input id="inspFadeIn" type="number" step="0.1" min="0"></label>
+      <label>Fade-out (s)<br><input id="inspFadeOut" type="number" step="0.1" min="0"></label>
+      <label>Fade curve
+        <select id="inspCurve">
+          <option value="linear">Linear</option>
+          <option value="easeIn">Ease-in</option>
+          <option value="easeOut">Ease-out</option>
+          <option value="easeInOut">Ease-in-out</option>
+        </select>
+      </label>
+      <label>Transition
+        <select id="inspTrans">
+          <option value="cut">Cut</option>
+          <option value="crossfade">Cross-fade</option>
+          <option value="wipeLeft">Wipe Left</option>
+          <option value="slideUp">Slide Up</option>
+        </select>
+      </label>
+      <button id="inspDelete">Delete</button>
+      <hr>
+      <h4>Preset Library</h4>
+      <div id="presetLibrary"></div>
+      <hr>
+      <button onclick="exportJson()">Export JSON</button>
+      <button onclick="importJson()">Import JSON</button>
+      <button onclick="renderVideo()">Render MP4</button>
+      <input type="file" id="fileInput" accept="application/json" style="display:none" onchange="loadJsonFile(event)">
+    </div>
+  </div>
+  <div id="transport">
+    <button onclick="playAll()">▶</button>
+    <button onclick="pauseAll()">⏸</button>
+    <button onclick="stopAll()">⏹</button>
+    <span id="timeDisplay">00:00.00</span>
+  </div>
+  <div id="viewer">
+    <video id="preview" style="display:none" muted></video>
+    <canvas id="canvas"></canvas>
+  </div>
+
+<script>
+/******************************************************************
+ *                         DATA MODEL
+ ******************************************************************/
+const PIX_PER_SEC = 50;
+let projectDuration = 120; // seconds
+let clips = [];           // {id,track,start,dur,url,vol,fin,fout,curve,trans}
+let selected = null;
+let playing = false;
+let playStartTime = 0;
+let playOffset = 0;
+let mediaElementPool = [];
+
+/******************************************************************
+ *                     PRESET ASSET URLs
+ ******************************************************************/
+const presets = {
+  audio:[
+    {name:'Welcome to ZomboCom',url:'https://ordinals.com/content/4ad0e47df8824477df72e454c162048d79e9c2234bf4e95bfa65d6ff36cbff6fi0'},
+    {name:'Deep House 808',url:'https://ordinals.com/content/42c2aeb3bb16845fde392d8ec5b976af880e8636dfc356cd8f9b12d90233c3e3i0'}
+  ],
+  video:[
+    {name:'PUNX Logo',url:'https://ordinals.com/content/c2beb99dbc32188e56ea2ca3750c99a6ce9145892678473b51802ce680cb5f16i0'},
+    {name:'PUNX no.1',url:'https://ordinals.com/content/4e38c53382a55659ef518fe9385f807fc5b827fe99f0854ff0d2a22a0a78b175i0'}
+  ],
+  image:[
+    {name:'I',url:'https://ordinals.com/content/bfd05a40892d872c033994d2375c6382eb90789db6739a7b18f7246a396f5a3di0'},
+    {name:'II',url:'https://ordinals.com/content/5a2b8214a9411c62bed0acb1f1f0b296bf049da181178120311520f25254c365i0'},
+    {name:'III',url:'https://ordinals.com/content/fe22987aae2d261c1848c0e69f571ad605aa5f1f7e03ab8ae460436919da837ai0'},
+    {name:'IV',url:'https://ordinals.com/content/a3e850c3070f255d08b86b334000e35bb2af101c61e0a871d1e6a1b9c41a5322i0'},
+    {name:'V',url:'https://ordinals.com/content/06f24846f17ed13bc54db280209ad6e8cd3b9db46839cd5109920d24090ad7aai0'},
+    {name:'VI',url:'https://ordinals.com/content/24b8261d1560ecbfdc8fa43c60b8fe9f79150f19e021b476fc605c3962ae78a2i0'},
+    {name:'VII',url:'https://ordinals.com/content/5c67ed83db55258aad2d4aa18e80693b4002d5ac0e555928666deeb12692fa80i0'},
+    {name:'VIII',url:'https://ordinals.com/content/7027ca7504d5767930a7e90cdfd8b0553c2a5133fe5fcdf5887dc0311e9486bci0'},
+    {name:'IX',url:'https://ordinals.com/content/57b066a9d5769be2a64fd74e1941e35c034b5265d42e3a868615980aa576a371i0'},
+    {name:'X',url:'https://ordinals.com/content/35349fc8e0badad460b6d7125fe2f833dcbec129a8064c9d7cd5e64172274325i0'}
+  ],
+  gif:[
+    {name:'GIF',url:'https://ordinals.com/content/c9d39d2aef6f2f3d744b2e8e5aab9fb11ba65274e8d19aef777c21f264426b71i0'}
+  ]
+};
+
+/******************************************************************
+ *                    INITIALISE PRESET LIBRARY
+ ******************************************************************/
+function initPresets(){
+  const lib = document.getElementById('presetLibrary');
+  Object.entries(presets).forEach(([type,arr])=>{
+    arr.forEach(p=>{
+      const el = document.createElement(type==='audio'?'audio':(type==='video'||type==='gif'?'video':'img'));
+      el.src = p.url;
+      el.title = p.name;
+      el.style.pointerEvents='none';
+      const wrap=document.createElement('div');
+      wrap.style.display='inline-block';
+      wrap.style.position='relative';
+      wrap.appendChild(el);
+      const label=document.createElement('div');
+      label.textContent=p.name;
+      label.style.fontSize='8px';
+      label.style.textAlign='center';
+      wrap.appendChild(label);
+      wrap.onclick=()=>addClip(autoType(p.url),p.url);
+      lib.appendChild(wrap);
+    });
+  });
+}
+initPresets();
+
+/******************************************************************
+ *                     TIMELINE DRAWING
+ ******************************************************************/
+const ruler = document.getElementById('ruler');
+const tracks = ['videoA','videoB','audioA','audioB'];
+tracks.forEach(t=>{
+  const trackEl=document.getElementById(t);
+  trackEl.ondragover=e=>e.preventDefault();
+  trackEl.ondrop=e=>{
+    e.preventDefault();
+    const url=e.dataTransfer.getData('text/uri-list');
+    if(url) addClip(autoType(url),url);
+  };
+});
+function drawRuler(){
+  ruler.innerHTML='';
+  for(let s=0;s<=projectDuration;s+=5){
+    const tick=document.createElement('div');
+    tick.style.position='absolute';
+    tick.style.left=s*PIX_PER_SEC+'px';
+    tick.style.top='0';
+    tick.style.bottom='0';
+    tick.style.borderLeft='1px solid #555';
+    tick.style.fontSize='9px';
+    tick.style.padding='2px';
+    tick.textContent=s+'s';
+    ruler.appendChild(tick);
+  }
+}
+drawRuler();
+
+function renderClips(){
+  tracks.forEach(t=>{
+    const el=document.getElementById(t);
+    [...el.querySelectorAll('.clip')].forEach(c=>c.remove());
+  });
+  clips.forEach(c=>{
+    const el=document.createElement('div');
+    el.className='clip';
+    el.style.left=c.start*PIX_PER_SEC+'px';
+    el.style.width=c.dur*PIX_PER_SEC+'px';
+    el.dataset.id=c.id;
+    el.innerHTML=`<span>${c.url.split('/').pop().slice(0,20)}…</span>
+                  <div class="handle left"></div>
+                  <div class="handle right"></div>`;
+    el.style.background= (c.track.includes('video')?'#007bff':'#28a745');
+    document.getElementById(c.track).appendChild(el);
+    makeClipInteractive(el,c);
+  });
+}
+
+function makeClipInteractive(el,clip){
+  let dragType='move';
+  el.onmousedown=e=>{
+    e.preventDefault();
+    const id=clip.id;
+    selectClip(id);
+    const startX=e.clientX;
+    const origStart=clip.start;
+    const origDur=clip.dur;
+    if(e.target.classList.contains('left')) dragType='left';
+    else if(e.target.classList.contains('right')) dragType='right';
+    else dragType='move';
+    function onMove(ev){
+      const dx=(ev.clientX-startX)/PIX_PER_SEC;
+      if(dragType==='move'){
+        clip.start=Math.max(0,origStart+dx);
+      }else if(dragType==='left'){
+        const newStart=Math.min(origStart+origDur-0.1,origStart+dx);
+        clip.dur=origDur-(newStart-origStart);
+        clip.start=newStart;
+      }else if(dragType==='right'){
+        clip.dur=Math.max(0.1,origDur+dx);
+      }
+      renderClips();
+      updateInspector();
+    }
+    function onUp(){
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+    }
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  };
+}
+
+function autoType(url){
+  const u=url.toLowerCase();
+  if(/\.(mp3|wav|ogg|flac|m4a)$/.test(u)) return 'audio';
+  if(/\.(mp4|mov|webm|avi)$/.test(u)) return 'video';
+  if(/\.(gif)$/.test(u)) return 'gif';
+  return 'image';
+}
+
+/******************************************************************
+ *                    CLIP CREATION / SELECTION
+ ******************************************************************/
+function addClip(type,url){
+  const track = type==='video'?'videoA':type==='audio'?'audioA':'videoA';
+  const id = 'clip_'+Date.now();
+  const newClip={id,track,url,start:0,dur:3,vol:1,fin:0,fout:0,curve:'linear',trans:'cut'};
+  clips.push(newClip);
+  renderClips();
+  selectClip(id);
+}
+function selectClip(id){
+  selected=id;
+  updateInspector();
+}
+function updateInspector(){
+  const c = clips.find(c=>c.id===selected);
+  if(!c) return;
+  document.getElementById('inspUrl').value=c.url;
+  document.getElementById('inspStart').value=c.start;
+  document.getElementById('inspDur').value=c.dur;
+  document.getElementById('inspVol').value=c.vol;
+  document.getElementById('inspFadeIn').value=c.fin;
+  document.getElementById('inspFadeOut').value=c.fout;
+  document.getElementById('inspCurve').value=c.curve;
+  document.getElementById('inspTrans').value=c.trans;
+}
+['inspStart','inspDur','inspVol','inspFadeIn','inspFadeOut','inspCurve','inspTrans'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',e=>{
+    if(!selected) return;
+    const c=clips.find(c=>c.id===selected);
+    if(!c) return;
+    if(id==='inspStart') c.start=+e.target.value;
+    if(id==='inspDur') c.dur=+e.target.value;
+    if(id==='inspVol') c.vol=+e.target.value;
+    if(id==='inspFadeIn') c.fin=+e.target.value;
+    if(id==='inspFadeOut') c.fout=+e.target.value;
+    if(id==='inspCurve') c.curve=e.target.value;
+    if(id==='inspTrans') c.trans=e.target.value;
+    renderClips();
+  });
+});
+document.getElementById('inspDelete').onclick=()=>{
+  if(!selected) return;
+  clips=clips.filter(c=>c.id!==selected);
+  selected=null;
+  renderClips();
+  updateInspector();
+};
+
+/******************************************************************
+ *                     PLAYBACK / PREVIEW
+ ******************************************************************/
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+let previewRAF;
+function resizeCanvas(){
+  const box=document.getElementById('viewer').getBoundingClientRect();
+  canvas.width=box.width;
+  canvas.height=box.height;
+}
+window.addEventListener('resize',resizeCanvas);
+resizeCanvas();
+
+function playAll(){
+  if(playing) return;
+  playing=true;
+  playStartTime=performance.now();
+  playOffset=0;
+  animate();
+}
+function pauseAll(){
+  if(!playing) return;
+  playing=false;
+  playOffset+=(performance.now()-playStartTime)/1000;
+  cancelAnimationFrame(previewRAF);
+}
+function stopAll(){
+  playing=false;
+  playOffset=0;
+  cancelAnimationFrame(previewRAF);
+  drawFrame(0);
+}
+function animate(){
+  if(!playing) return;
+  const now=(performance.now()-playStartTime)/1000+playOffset;
+  drawFrame(now);
+  updateTimeDisplay(now);
+  previewRAF=requestAnimationFrame(animate);
+}
+function drawFrame(now){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const activeVideoClips=clips.filter(c=>c.track.startsWith('video') && now>=c.start && now<=c.start+c.dur);
+  if(activeVideoClips.length===0) return;
+  activeVideoClips.sort((a,b)=>{
+    const layerA = a.track==='videoA'?0:1;
+    const layerB = b.track==='videoB'?0:1;
+    return layerA-layerB;
+  });
+  const topClip = activeVideoClips[activeVideoClips.length-1];
+  // simple draw (todo: use transition)
+  drawMedia(topClip, now);
+}
+function drawMedia(clip, now){
+  // simplified: direct drawImage with fade based on fade-in/out
+  const img=new Image();
+  img.crossOrigin='anonymous';
+  img.src=clip.url;
+  img.onload=()=>{
+    const alpha=getFadeAlpha(clip, now);
+    ctx.globalAlpha=alpha;
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    ctx.globalAlpha=1;
+  };
+}
+function getFadeAlpha(clip, now){
+  let alpha=1;
+  const t=now-clip.start;
+  if(t<clip.fin){
+    alpha=clip.fin?Math.min(1,t/clip.fin):1;
+  }
+  if(t>clip.dur-clip.fout){
+    alpha=clip.fout?Math.max(0,(clip.dur-t)/clip.fout):1;
+  }
+  // apply curve
+  if(clip.curve==='easeIn') alpha=alpha*alpha;
+  if(clip.curve==='easeOut') alpha=1-(1-alpha)*(1-alpha);
+  if(clip.curve==='easeInOut') alpha=alpha<0.5?2*alpha*alpha:1-2*(1-alpha)*(1-alpha);
+  return alpha;
+}
+function updateTimeDisplay(t){
+  const m=Math.floor(t/60).toString().padStart(2,'0');
+  const s=(t%60).toFixed(2).padStart(5,'0');
+  document.getElementById('timeDisplay').textContent=`${m}:${s}`;
+}
+
+/******************************************************************
+ *                    EXPORT / IMPORT
+ ******************************************************************/
+function exportJson(){
+  const blob=new Blob([JSON.stringify({clips,projectDuration},null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='project.json';
+  a.click();
+}
+function importJson(){
+  document.getElementById('fileInput').click();
+}
+function loadJsonFile(e){
+  const file=e.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const data=JSON.parse(ev.target.result);
+    clips=data.clips||[];
+    projectDuration=data.projectDuration||120;
+    renderClips();
+    drawRuler();
+  };
+  reader.readAsText(file);
+}
+
+/******************************************************************
+ *                    RENDER (WebCodecs MP4)
+ ******************************************************************/
+async function renderVideo(){
+  if(!window.VideoEncoder){alert('WebCodecs not supported');return;}
+  // TODO: implement full multi-track render with transitions
+  alert('Render not implemented in this demo – timeline JSON exported instead.');
+  exportJson();
+}
+</script>
+</body>
+</html>
