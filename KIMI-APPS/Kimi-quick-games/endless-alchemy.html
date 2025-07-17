@@ -1,0 +1,474 @@
+<!-- Already kind of addictive I like this one -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Endless Alchemy</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .game-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .game-area {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+            min-height: 600px;
+        }
+
+        .workshop {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .combination-area {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .drop-zone {
+            width: 100px;
+            height: 100px;
+            border: 2px dashed rgba(255, 255, 255, 0.5);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: white;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .combine-btn {
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2em;
+            cursor: pointer;
+            transition: transform 0.3s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .combine-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .combine-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .library {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 600px;
+        }
+
+        .library h2 {
+            color: white;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .element {
+            width: 80px;
+            height: 80px;
+            margin: 5px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 2em;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .element:hover {
+            transform: translateY(-5px) scale(1.1);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .element.dragging {
+            opacity: 0.5;
+        }
+
+        .library-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .stats {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .discovery-notification {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 50px;
+            border-radius: 20px;
+            font-size: 1.5em;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            animation: popIn 0.5s ease-out;
+        }
+
+        @keyframes popIn {
+            0% {
+                transform: translate(-50%, -50%) scale(0);
+                opacity: 0;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 1;
+            }
+        }
+
+        .share-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .share-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .element[data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Endless Alchemy</h1>
+        <button class="share-btn" onclick="shareDiscovery()">Share Discovery</button>
+        <div class="stats">
+            <p>Discovered: <span id="discovered-count">0</span> / <span id="total-count">0</span></p>
+        </div>
+        <div class="game-area">
+            <div class="workshop">
+                <h2 style="color: white; margin-bottom: 20px;">Combine Elements</h2>
+                <div class="combination-area">
+                    <div class="drop-zone" id="drop1" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+                    <span style="color: white; font-size: 2em;">+</span>
+                    <div class="drop-zone" id="drop2" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+                    <button class="combine-btn" id="combine-btn" onclick="combine()" disabled>Combine</button>
+                </div>
+            </div>
+            <div class="library">
+                <h2>Your Elements</h2>
+                <div class="library-grid" id="library-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game data
+        const elements = [
+            { id: 1, name: 'Fire', icon: '🔥', color: '#ff6b6b' },
+            { id: 2, name: 'Water', icon: '💧', color: '#4ecdc4' },
+            { id: 3, name: 'Earth', icon: '🌍', color: '#8b6914' },
+            { id: 4, name: 'Air', icon: '💨', color: '#b8e6ff' },
+            { id: 5, name: 'Lava', icon: '🌋', color: '#ff4500' },
+            { id: 6, name: 'Steam', icon: '☁️', color: '#c0c0c0' },
+            { id: 7, name: 'Mud', icon: '🟤', color: '#8b4513' },
+            { id: 8, name: 'Energy', icon: '⚡', color: '#ffd700' },
+            { id: 9, name: 'Plant', icon: '🌱', color: '#228b22' },
+            { id: 10, name: 'Stone', icon: '🪨', color: '#696969' },
+            { id: 11, name: 'Metal', icon: '🔩', color: '#c0c0c0' },
+            { id: 12, name: 'Glass', icon: '🪟', color: '#e6e6fa' },
+            { id: 13, name: 'Sand', icon: '🏖️', color: '#f4a460' },
+            { id: 14, name: 'Ocean', icon: '🌊', color: '#000080' },
+            { id: 15, name: 'Life', icon: '🧬', color: '#ff1493' },
+            { id: 16, name: 'Human', icon: '👤', color: '#deb887' },
+            { id: 17, name: 'Tool', icon: '🔧', color: '#8b4513' },
+            { id: 18, name: 'Technology', icon: '📱', color: '#000000' },
+            { id: 19, name: 'Time', icon: '⏰', color: '#9370db' },
+            { id: 20, name: 'Space', icon: '🚀', color: '#191970' }
+        ];
+
+        const recipes = [
+            { inputs: [1, 2], output: 6 },
+            { inputs: [1, 3], output: 5 },
+            { inputs: [2, 3], output: 7 },
+            { inputs: [1, 4], output: 8 },
+            { inputs: [7, 9], output: 9 },
+            { inputs: [3, 8], output: 10 },
+            { inputs: [10, 8], output: 11 },
+            { inputs: [11, 8], output: 17 },
+            { inputs: [10, 5], output: 13 },
+            { inputs: [13, 8], output: 12 },
+            { inputs: [2, 9], output: 14 },
+            { inputs: [9, 15], output: 15 },
+            { inputs: [15, 16], output: 16 },
+            { inputs: [17, 16], output: 18 },
+            { inputs: [8, 18], output: 19 },
+            { inputs: [19, 18], output: 20 }
+        ];
+
+        let library = new Set([1, 2, 3, 4]);
+        let draggedElement = null;
+        let drop1 = null;
+        let drop2 = null;
+
+        // Initialize game
+        function init() {
+            renderLibrary();
+            updateStats();
+        }
+
+        function renderLibrary() {
+            const grid = document.getElementById('library-grid');
+            grid.innerHTML = '';
+            
+            library.forEach(id => {
+                const element = elements.find(e => e.id === id);
+                const div = document.createElement('div');
+                div.className = 'element';
+                div.style.backgroundColor = element.color;
+                div.textContent = element.icon;
+                div.draggable = true;
+                div.dataset.id = id;
+                div.dataset.tooltip = element.name;
+                div.ondragstart = (e) => dragStart(e);
+                div.onclick = () => selectElement(id);
+                grid.appendChild(div);
+            });
+        }
+
+        function updateStats() {
+            document.getElementById('discovered-count').textContent = library.size;
+            document.getElementById('total-count').textContent = elements.length;
+        }
+
+        function allowDrop(ev) {
+            ev.preventDefault();
+            ev.currentTarget.classList.add('drag-over');
+        }
+
+        function dragStart(ev) {
+            draggedElement = ev.target.dataset.id;
+            ev.target.classList.add('dragging');
+        }
+
+        function drop(ev) {
+            ev.preventDefault();
+            ev.currentTarget.classList.remove('drag-over');
+            ev.currentTarget.textContent = '';
+            
+            const element = elements.find(e => e.id === parseInt(draggedElement));
+            const div = document.createElement('div');
+            div.className = 'element';
+            div.style.backgroundColor = element.color;
+            div.textContent = element.icon;
+            div.style.width = '60px';
+            div.style.height = '60px';
+            div.style.fontSize = '1.5em';
+            div.style.margin = '0';
+            div.dataset.id = draggedElement;
+            
+            ev.currentTarget.appendChild(div);
+            
+            if (ev.currentTarget.id === 'drop1') {
+                drop1 = parseInt(draggedElement);
+            } else {
+                drop2 = parseInt(draggedElement);
+            }
+            
+            if (drop1 && drop2) {
+                document.getElementById('combine-btn').disabled = false;
+            }
+            
+            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+        }
+
+        function selectElement(id) {
+            if (!drop1) {
+                drop1 = id;
+                document.getElementById('drop1').innerHTML = `<div class="element" style="background-color: ${elements.find(e => e.id === id).color}; width: 60px; height: 60px; font-size: 1.5em; margin: 0;">${elements.find(e => e.id === id).icon}</div>`;
+            } else if (!drop2) {
+                drop2 = id;
+                document.getElementById('drop2').innerHTML = `<div class="element" style="background-color: ${elements.find(e => e.id === id).color}; width: 60px; height: 60px; font-size: 1.5em; margin: 0;">${elements.find(e => e.id === id).icon}</div>`;
+                document.getElementById('combine-btn').disabled = false;
+            }
+        }
+
+        function combine() {
+            if (!drop1 || !drop2) return;
+            
+            const sortedInputs = [drop1, drop2].sort((a, b) => a - b);
+            const recipe = recipes.find(r => 
+                (r.inputs[0] === sortedInputs[0] && r.inputs[1] === sortedInputs[1]) ||
+                (r.inputs[0] === sortedInputs[1] && r.inputs[1] === sortedInputs[0])
+            );
+            
+            if (recipe && !library.has(recipe.output)) {
+                unlockElement(recipe.output);
+            }
+            
+            clearCombination();
+        }
+
+        function unlockElement(id) {
+            library.add(id);
+            renderLibrary();
+            updateStats();
+            
+            const element = elements.find(e => e.id === id);
+            showDiscovery(element);
+        }
+
+        function showDiscovery(element) {
+            const notification = document.createElement('div');
+            notification.className = 'discovery-notification';
+            notification.innerHTML = `
+                <h2>🎉 New Discovery!</h2>
+                <p style="font-size: 3em; margin: 10px 0;">${element.icon}</p>
+                <p>${element.name}</p>
+            `;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 2000);
+        }
+
+        function clearCombination() {
+            drop1 = null;
+            drop2 = null;
+            document.getElementById('drop1').innerHTML = '';
+            document.getElementById('drop2').innerHTML = '';
+            document.getElementById('combine-btn').disabled = true;
+        }
+
+        function shareDiscovery() {
+            const discovered = Array.from(library).map(id => {
+                const element = elements.find(e => e.id === id);
+                return element.name;
+            });
+            
+            const shareText = `I discovered ${discovered.length} elements in Endless Alchemy! My discoveries: ${discovered.join(', ')}`;
+            
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Endless Alchemy Discovery',
+                    text: shareText
+                });
+            } else {
+                navigator.clipboard.writeText(shareText);
+                alert('Discovery copied to clipboard!');
+            }
+        }
+
+        function getPossibleCombos() {
+            const possible = [];
+            const libArray = Array.from(library);
+            
+            for (let i = 0; i < libArray.length; i++) {
+                for (let j = i + 1; j < libArray.length; j++) {
+                    const recipe = recipes.find(r => 
+                        (r.inputs[0] === libArray[i] && r.inputs[1] === libArray[j]) ||
+                        (r.inputs[0] === libArray[j] && r.inputs[1] === libArray[i])
+                    );
+                    
+                    if (recipe && !library.has(recipe.output)) {
+                        possible.push({
+                            inputs: [libArray[i], libArray[j]],
+                            output: recipe.output
+                        });
+                    }
+                }
+            }
+            
+            return possible;
+        }
+
+        // Initialize game on load
+        init();
+    </script>
+</body>
+</html>

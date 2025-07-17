@@ -1,0 +1,139 @@
+<!-- Looks potentially addictive - needs clear instructions for gameplay  -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hexabloom-2</title>
+    <style>
+        body{margin:0;display:flex;justify-content:center;align-items:center;background:#2e3440}
+        canvas{border:1px solid #88c0d0}
+    </style>
+</head>
+<body>
+<canvas id="c" width="600" height="600"></canvas>
+<script>
+const c = document.getElementById('c'), ctx = c.getContext('2d');
+const W = 7, H = 13, S = 91, T = 30, R = T * 0.866;
+const PALETTE = ['#2e3440', '#88c0d0', '#b48ead', '#a3be8c', '#ebcb8b', '#d08770', '#bf616a'];
+const state = new Uint8Array(S);
+let score = 0, best = +localStorage.getItem('best') || 0;
+
+function seedBoard(seed) {
+    let s = 1;
+    for (let i = 0; i < S; i++) {
+        s = Math.imul(s, 0x45d9f3b) >>> 0;
+        state[i] = (s ^ seed.charCodeAt(i % seed.length)) % 6 + 1;
+    }
+}
+
+function axialToPixel(q, r) {
+    const x = c.width / 2 + (q + r * 0.5) * T * 1.5;
+    const y = c.height / 2 + r * R;
+    return [x, y];
+}
+
+function pixelToAxial(x, y) {
+    x -= c.width / 2;
+    y -= c.height / 2;
+    const q = (x * 2/3) / T;
+    const r = (-x/3 + y * 0.577) / T;
+    const [rx, ry, rz] = [Math.round(q), Math.round(-q - r), Math.round(r)];
+    const qf = rx, rf = rz;
+    if (qf < 0 || qf >= W || rf < 0 || rf >= H) return null;
+    return qf + rf * W;
+}
+
+function neighbors(i) {
+    const q = i % W, r = Math.floor(i / W);
+    const dirs = [[1,0], [1,-1], [0,-1], [-1,0], [-1,1], [0,1]];
+    return dirs.map(([dq,dr]) => {
+        const nq = q + dq, nr = r + dr;
+        return (nq >= 0 && nq < W && nr >= 0 && nr < H) ? nq + nr * W : null;
+    }).filter(v => v !== null);
+}
+
+function bloom(start) {
+    const color = state[start];
+    if (!color) return 0;
+    const q = [start], seen = new Set(q);
+    let chain = 0;
+    while (q.length) {
+        const i = q.shift();
+        state[i] = 0;
+        chain++;
+        neighbors(i).forEach(n => {
+            if (!seen.has(n) && state[n] === color) {
+                seen.add(n);
+                q.push(n);
+            }
+        });
+    }
+    return chain;
+}
+
+function render() {
+    ctx.clearRect(0, 0, c.width, c.height);
+    for (let i = 0; i < S; i++) {
+        const q = i % W, r = Math.floor(i / W);
+        const [x, y] = axialToPixel(q, r);
+        ctx.beginPath();
+        for (let j = 0; j < 6; j++) {
+            const angle = j * Math.PI / 3;
+            const px = x + T * Math.cos(angle);
+            const py = y + T * Math.sin(angle);
+            if (j === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = PALETTE[1];
+        ctx.stroke();
+        if (state[i]) {
+            ctx.fillStyle = PALETTE[state[i] + 1];
+            ctx.fill();
+        }
+    }
+    ctx.fillStyle = '#fff';
+    ctx.font = '20px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Score: ${score}`, 10, 30);
+    ctx.textAlign = 'right';
+    ctx.fillText(`Best: ${best}`, c.width - 10, 30);
+}
+
+function share() {
+    const seed = new Date().toISOString().slice(0,10);
+    prompt('Shareable seed:', seed);
+}
+
+function init() {
+    const seed = new Date().toISOString().slice(0,10);
+    seedBoard(seed);
+    render();
+}
+
+c.addEventListener('click', e => {
+    const rect = c.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const i = pixelToAxial(x, y);
+    if (i !== null && state[i]) {
+        const chain = bloom(i);
+        if (chain) {
+            score += chain;
+            if (score > best) {
+                best = score;
+                localStorage.setItem('best', best);
+            }
+            render();
+            if (state.every(v => !v)) {
+                alert(`Completed! Score: ${score}`);
+                share();
+            }
+        }
+    }
+});
+
+init();
+</script>
+</body>
+</html>

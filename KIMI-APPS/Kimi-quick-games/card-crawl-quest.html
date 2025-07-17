@@ -1,0 +1,204 @@
+<!-- Has potential! - Needs more story line that persists as scrollable text -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Card Crawl Quest</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    #stats {
+      margin-bottom: 15px;
+      font-size: 1.3em;
+    }
+    #hand {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .card {
+      width: 120px;
+      height: 160px;
+      border-radius: 10px;
+      cursor: pointer;
+      position: relative;
+      transition: transform .2s;
+    }
+    .card:hover { transform: scale(1.05); }
+    .enemy   { background: #8b0000; }
+    .loot    { background: #006400; }
+    .event   { background: #4b0082; }
+    .card span {
+      display: block;
+      padding: 4px;
+      font-weight: bold;
+    }
+    #message {
+      color: #ffd700;
+      height: 1.5em;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 1.1em;
+      border: none;
+      border-radius: 5px;
+      background: #444;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:disabled { background: #666; cursor: default; }
+  </style>
+</head>
+<body>
+  <h1>Card Crawl Quest</h1>
+  <div id="stats"></div>
+  <div id="message"></div>
+  <div id="hand"></div>
+  <button id="endTurn">End Turn</button>
+
+  <script>
+    // ---------- DATA ----------
+    const cardPool = [
+      // Enemies
+      {type: 'enemy', name: 'Goblin', value: 3, effect: {hp: -3}},
+      {type: 'enemy', name: 'Orc', value: 5, effect: {hp: -5}},
+      {type: 'enemy', name: 'Vampire', value: 4, effect: {hp: -4, gold: -1}},
+      {type: 'enemy', name: 'Dragon', value: 9, effect: {hp: -9}},
+      // Loot
+      {type: 'loot', name: 'Gold', value: 3, effect: {gold: 3}},
+      {type: 'loot', name: 'Potion', value: 0, effect: {hp: 4}},
+      {type: 'loot', name: 'Shield', value: 0, effect: {hp: 2}},
+      {type: 'loot', name: 'Sword', value: 0, effect: {hp: 0}}, // +1 dmg next fight
+      // Events
+      {type: 'event', name: 'Trap', value: 0, effect: {hp: -2}},
+      {type: 'event', name: 'Blessing', value: 0, effect: {hp: 3}},
+      {type: 'event', name: 'Curse', value: 0, effect: {hp: -1, gold: -2}},
+      {type: 'event', name: 'Merchant', value: 0, effect: {gold: -3, hp: 5}}
+    ];
+
+    let player = { hp: 20, gold: 0, gear: 0 };
+    let deck = [];
+    let discard = [];
+    let hand = [];
+    let swordBuff = 0;
+
+    // ---------- UTILITIES ----------
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    function buildDeck() {
+      deck = [];
+      for (let i = 0; i < 3; i++) deck.push(...cardPool);
+      shuffle(deck);
+    }
+
+    function renderStats() {
+      document.getElementById('stats').textContent =
+        `HP: ${player.hp}  |  Gold: ${player.gold}`;
+    }
+
+    function renderHand() {
+      const handDiv = document.getElementById('hand');
+      handDiv.innerHTML = '';
+      hand.forEach((card, idx) => {
+        const div = document.createElement('div');
+        div.className = `card ${card.type}`;
+        div.innerHTML = `
+          <span>${card.name}</span>
+          <span>${card.type === 'enemy' ? 'ATK ' + card.value : ''}</span>
+        `;
+        div.onclick = () => playCard(idx);
+        handDiv.appendChild(div);
+      });
+    }
+
+    function drawCards(n = 4) {
+      for (let i = 0; i < n; i++) {
+        if (deck.length === 0) {
+          deck = discard.splice(0);
+          shuffle(deck);
+        }
+        if (deck.length) hand.push(deck.pop());
+      }
+    }
+
+    function showMessage(msg) {
+      const m = document.getElementById('message');
+      m.textContent = msg;
+      setTimeout(() => m.textContent = '', 1800);
+    }
+
+    // ---------- GAME ACTIONS ----------
+    function playCard(index) {
+      const card = hand.splice(index, 1)[0];
+      let { effect } = card;
+      if (card.type === 'enemy') {
+        let dmg = card.value - swordBuff;
+        swordBuff = 0;
+        player.hp -= Math.max(dmg, 0);
+        showMessage(`Fought ${card.name}, took ${Math.max(dmg,0)} damage`);
+      } else {
+        Object.keys(effect).forEach(k => {
+          if (k === 'hp' || k === 'gold') player[k] += effect[k];
+          if (k === 'hp' && effect[k] < 0) swordBuff = 0; // reset buff if hurt
+        });
+        if (card.name === 'Sword') {
+          swordBuff += 1;
+          showMessage('Sword equipped, +1 damage next fight');
+        } else {
+          showMessage(`${card.name} used`);
+        }
+      }
+      discard.push(card);
+      renderStats();
+      renderHand();
+      checkGameOver();
+    }
+
+    function endTurn() {
+      if (hand.length === 0) {
+        drawCards(4);
+        renderHand();
+      }
+    }
+
+    function checkGameOver() {
+      if (player.hp <= 0) {
+        alert(`You perished with ${player.gold} gold!`);
+        resetRun();
+      } else if (deck.length + discard.length + hand.length === 0) {
+        alert(`Victory! Finished with ${player.hp} HP and ${player.gold} gold!`);
+        resetRun();
+      }
+    }
+
+    function resetRun() {
+      player = { hp: 20, gold: 0, gear: 0 };
+      swordBuff = 0;
+      discard = [];
+      buildDeck();
+      hand = [];
+      drawCards(4);
+      renderStats();
+      renderHand();
+    }
+
+    // ---------- INIT ----------
+    document.getElementById('endTurn').addEventListener('click', endTurn);
+    resetRun();
+  </script>
+</body>
+</html>

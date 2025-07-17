@@ -1,0 +1,178 @@
+<!--  Can't make the game start or something - catalog 0/64 0 money and empty squares - no errors in console -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mutation Farm</title>
+<style>
+  body{margin:0;font-family:sans-serif;background:#111;color:#eee;display:flex}
+  #farm{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px}
+  .plot{min-height:120px;border:2px solid #333;border-radius:8px;background:#222;display:flex;align-items:center;justify-content:center;position:relative}
+  .plot.occupied{border-color:#0f0}
+  .plantCard{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:grab}
+  .plantCard h4{margin:4px}
+  .plantCard span{font-size:.75em}
+  aside{width:260px;background:#1a1a1a;padding:8px;display:flex;flex-direction:column;gap:8px}
+  #breedPanel,#catalogPanel{background:#222;border-radius:8px;padding:8px}
+  .genePill{display:inline-block;padding:2px 6px;border-radius:6px;margin:2px;font-size:.7em}
+  #coins{font-weight:bold}
+  .ghost{opacity:.4}
+</style>
+</head>
+<body>
+<section id="farm"></section>
+<aside>
+  <div id="coins">💰 0</div>
+  <div id="breedPanel">
+    <h3>Breed</h3>
+    <div id="parents" style="display:flex;gap:8px">
+      <div class="plot" data-parent="0"></div>
+      <div class="plot" data-parent="1"></div>
+    </div>
+    <button id="breedBtn" disabled>Breed (50💰)</button>
+  </div>
+  <div id="catalogPanel">
+    <h3>Catalog (<span id="catCount">0</span>/64)</h3>
+    <div id="catalogList" style="max-height:200px;overflow:auto"></div>
+  </div>
+</aside>
+
+<script>
+/* ---------- data ---------- */
+let coins = 100;
+const genePool = {
+  A:{0:1,1:2,2:3},
+  B:{0:1,1:2,2:3},
+  C:{0:1,1:2,2:3}
+};
+let plants = [];
+let farmSlots = new Array(8).fill(null);
+let catalog = new Set();
+let dragged = null;
+
+/* ---------- helpers ---------- */
+const randChoice = obj => {
+  const keys = Object.keys(obj);
+  const sum = keys.reduce((s,k)=>s+obj[k],0);
+  let r = Math.random()*sum;
+  for(const k of keys){r-=obj[k];if(r<=0)return +k;}
+};
+const geneKey = g => (g.A<<4)+(g.B<<2)+g.C;
+const breed = (p1,p2)=>{
+  const g = {};
+  ['A','B','C'].forEach(k=>{
+    const pool = {...genePool[k]};
+    if(Math.random()<.1) pool[randChoice(pool)]++; // mutation
+    g[k] = randChoice(pool);
+  });
+  return g;
+};
+const grow = (dt)=>{
+  plants.forEach(p=>{
+    p.age += dt;
+    if(p.age>=5 && !p.ready){
+      p.ready=true;
+      p.value = (p.genes.A+p.genes.B+p.genes.C)*10;
+      renderFarm();
+    }
+  });
+};
+const harvest = idx=>{
+  const p = farmSlots[idx];
+  if(!p || !p.ready) return;
+  coins += p.value;
+  catalog.add(geneKey(p.genes));
+  farmSlots[idx]=null;
+  saveGame();
+  renderFarm();
+  renderCatalog();
+};
+const renderFarm = ()=>{
+  const farm = document.getElementById('farm');
+  farm.innerHTML='';
+  farmSlots.forEach((p,i)=>{
+    const div = document.createElement('div');
+    div.className='plot';
+    if(p){
+      div.classList.add('occupied');
+      const card = document.createElement('div');
+      card.className='plantCard';
+      card.draggable=true;
+      card.dataset.idx=i;
+      card.innerHTML=`
+        <h4 style="color:hsl(${p.genes.A*60},70%,60%)">Plant ${p.id}</h4>
+        <div>${['A','B','C'].map(k=>`<span class="genePill" style="background:#333">${k}:${p.genes[k]}</span>`).join('')}</div>
+        <span>${p.ready?`💰${p.value}`:`${Math.floor(p.age*20)}%`}</span>`;
+      card.ondragstart=e=>{
+        dragged={idx:i,plant:p};
+        e.dataTransfer.setData('text/plain','');
+      };
+      div.appendChild(card);
+      if(p.ready) div.onclick=()=>harvest(i);
+    }
+    farm.appendChild(div);
+  });
+};
+const renderCatalog=()=>{
+  document.getElementById('catCount').textContent = catalog.size;
+  const list=document.getElementById('catalogList');
+  list.innerHTML='';
+  [...catalog].forEach(k=>{
+    const g={A:(k>>4)&3,B:(k>>2)&3,C:k&3};
+    const item=document.createElement('div');
+    item.innerHTML=`${['A','B','C'].map(k=>g[k]).join('')} <span style="color:hsl(${g.A*60},70%,60%)">■</span>`;
+    list.appendChild(item);
+  });
+};
+const saveGame=()=>localStorage.mf=JSON.stringify({coins,plants,farmSlots,catalog:[...catalog]});
+const loadGame=()=>{
+  if(localStorage.mf){
+    const d=JSON.parse(localStorage.mf);
+    coins=d.coins;
+    plants=d.plants;
+    farmSlots=d.farmSlots.map(p=>p?{...p,genes:{...p.genes}}:null);
+    catalog=new Set(d.catalog);
+  }
+};
+
+/* ---------- init ---------- */
+loadGame();
+renderFarm();
+renderCatalog();
+setInterval(()=>{grow(.1);},1000);
+
+/* ---------- drag drop ---------- */
+document.addEventListener('dragover',e=>e.preventDefault());
+const parents=[...document.querySelectorAll('[data-parent]')];
+parents.forEach(slot=>{
+  slot.ondragover=e=>e.preventDefault();
+  slot.ondrop=e=>{
+    if(!dragged) return;
+    slot.innerHTML='';
+    const clone=document.createElement('div');
+    clone.className='plantCard';
+    clone.innerHTML=`<h4>Parent</h4>${['A','B','C'].map(k=>`<span class="genePill">${k}:${dragged.plant.genes[k]}</span>`).join('')}`;
+    slot.appendChild(clone);
+    slot.plant=dragged.plant;
+    parents.filter(s=>s!==slot).forEach(s=>s.classList.remove('ghost'));
+    document.getElementById('breedBtn').disabled=!(parents[0].plant && parents[1].plant && coins>=50);
+    dragged=null;
+  };
+});
+document.getElementById('breedBtn').onclick=()=>{
+  if(!parents[0].plant || !parents[1].plant || coins<50) return;
+  coins-=50;
+  const g=breed(parents[0].plant,parents[1].plant);
+  const id=plants.length;
+  const newPlant={id,genes:g,age:0,ready:false};
+  plants.push(newPlant);
+  const empty=farmSlots.findIndex(s=>!s);
+  if(empty!==-1) farmSlots[empty]=newPlant;
+  parents.forEach(s=>{s.innerHTML='';s.plant=null;});
+  document.getElementById('breedBtn').disabled=true;
+  saveGame();
+  renderFarm();
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!--  Another excellent simple game for playing in the hud -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Laser Lattice</title>
+<style>
+body{margin:0;background:#11111b;display:flex;justify-content:center;align-items:center;height:100vh;color:#cdd6f4;font-family:sans-serif}
+#game{display:flex;align-items:flex-start}
+canvas{background:#11111b;border:1px solid #cdd6f4}
+#ui{margin-left:20px}
+button{background:#f38ba8;border:none;color:#111;padding:8px 12px;margin:2px;cursor:pointer;border-radius:4px}
+</style>
+</head>
+<body>
+<div id="game">
+<canvas id="c" width="600" height="600"></canvas>
+<div id="ui">
+<div id="palette"></div>
+<button onclick="reset()">Reset</button>
+<div id="moves">Moves: 0</div>
+<div id="time">0.0s</div>
+</div>
+</div>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d'),S=50;
+let grid=Array(12).fill().map(()=>Array(12).fill(0)),targets=[],beam=[],moveCount=0;
+const palette=[
+{type:0,name:'Clear',color:'#11111b'},
+{type:1,name:'Mirror /',color:'#cdd6f4'},
+{type:2,name:'Mirror \\',color:'#cdd6f1'},
+{type:3,name:'Splitter |',color:'#cdd6f4'}
+];
+let selected=0,startTime=Date.now();
+const seed=new Date().getFullYear()*1000+(new Date().getMonth()+1)*31+new Date().getDate();
+function random(){let x=Math.sin(seed++)*10000;return x-Math.floor(x);}
+function genPuzzle(){
+targets=[];
+for(let i=0;i<12;i++)for(let j=0;j<12;j++)grid[i][j]=0;
+for(let k=0;k<5;k++){
+let x=Math.floor(random()*12),y=Math.floor(random()*12);
+if(grid[y][x]===0){grid[y][x]=4;targets.push([x,y]);}
+}
+}
+function draw(){
+ctx.clearRect(0,0,600,600);
+ctx.strokeStyle='#cdd6f4';
+for(let i=0;i<=12;i++){
+ctx.beginPath();
+ctx.moveTo(i*S,0);ctx.lineTo(i*S,600);
+ctx.moveTo(0,i*S);ctx.lineTo(600,i*S);
+ctx.stroke();
+}
+for(let y=0;y<12;y++)for(let x=0;x<12;x++){
+let tile=grid[y][x];
+if(tile===1){
+ctx.strokeStyle='#cdd6f4';ctx.beginPath();
+ctx.moveTo(x*S,y*S);ctx.lineTo(x*S+S,y*S+S);ctx.stroke();
+}else if(tile===2){
+ctx.strokeStyle='#cdd6f4';ctx.beginPath();
+ctx.moveTo(x*S+S,y*S);ctx.lineTo(x*S,y*S+S);ctx.stroke();
+}else if(tile===3){
+ctx.strokeStyle='#cdd6f4';ctx.beginPath();
+ctx.moveTo(x*S+S/2,y*S);ctx.lineTo(x*S+S/2,y*S+S);ctx.stroke();
+}else if(tile===4){
+ctx.fillStyle='#a6e3a1';
+ctx.fillRect(x*S+5,y*S+5,S-10,S-10);
+ctx.fillStyle='#11111b';ctx.fillText('X',x*S+S/2-5,y*S+S/2+5);
+}
+}
+ctx.fillStyle='#f38ba8';
+beam.forEach(p=>ctx.fillRect(p[0]*S+20,p[1]*S+20,10,10));
+}
+function fire(){
+beam=[];
+let x=0,y=0,dx=1,dy=0,visited=new Set(),lit=new Set(targets.map(t=>t.join(','))),allLit=true;
+while(x>=0&&x<12&&y>=0&&y<12){
+let key=`${x},${y},${dx},${dy}`;
+if(visited.has(key))break;
+visited.add(key);
+beam.push([x,y]);
+let tile=grid[y][x];
+if(tile===4)lit.delete(`${x},${y}`);
+if(tile===1){[dx,dy]=[-dy,-dx];}
+else if(tile===2){[dx,dy]=[dy,dx];}
+else if(tile===3){
+if(Math.abs(dx)){
+let nx=x+dx,ny=y+1;
+if(ny<12&&grid[ny][nx]!==undefined){fireBranch(nx,ny,0,1);}
+ny=y-1;
+if(ny>=0&&grid[ny][nx]!==undefined){fireBranch(nx,ny,0,-1);}
+}
+}
+x+=dx;y+=dy;
+}
+lit.forEach(()=>allLit=false);
+if(allLit&&targets.length){
+setTimeout(()=>alert(`Solved in ${moveCount} moves and ${((Date.now()-startTime)/1000).toFixed(1)}s`),100);
+}
+}
+function fireBranch(x,y,dx,dy){
+let branch=[];
+while(x>=0&&x<12&&y>=0&&y<12){
+branch.push([x,y]);
+let tile=grid[y][x];
+if(tile===4)lit.delete(`${x},${y}`);
+if(tile===1){[dx,dy]=[-dy,-dx];}
+else if(tile===2){[dx,dy]=[dy,dx];}
+else if(tile===3)break;
+x+=dx;y+=dy;
+}
+beam=beam.concat(branch);
+}
+c.addEventListener('click',e=>{
+let rect=c.getBoundingClientRect();
+let x=Math.floor((e.clientX-rect.left)/S);
+let y=Math.floor((e.clientY-rect.top)/S);
+if(x>=0&&x<12&&y>=0&&y<12&&grid[y][x]!==4){
+grid[y][x]=selected===0?0:selected;
+moveCount++;
+document.getElementById('moves').textContent=`Moves: ${moveCount}`;
+fire();
+draw();
+}
+});
+function buildPalette(){
+const p=document.getElementById('palette');
+palette.forEach((item,idx)=>{
+let b=document.createElement('button');
+b.textContent=item.name;
+b.onclick=()=>selected=idx;
+p.appendChild(b);
+});
+}
+function reset(){
+grid=Array(12).fill().map(()=>Array(12).fill(0));
+targets=[];moveCount=0;startTime=Date.now();
+genPuzzle();fire();draw();
+}
+setInterval(()=>document.getElementById('time').textContent=`${((Date.now()-startTime)/1000).toFixed(1)}s`,100);
+buildPalette();genPuzzle();draw();
+</script>
+</body>
+</html>

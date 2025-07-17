@@ -1,0 +1,196 @@
+<!-- Needs instructions -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Quantum Flip</title>
+<style>
+  body{margin:0;background:#111;color:#eee;font-family:monospace;display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column}
+  canvas{border:2px solid #eee;background:#000}
+  #ui{margin-top:10px}
+  input{width:120px;text-align:center}
+</style>
+</head>
+<body>
+
+<canvas id="c" width="640" height="360"></canvas>
+<div id="ui">
+  Seed: <input id="seed" type="number" value="1" min="1" max="99999">
+  <button onclick="restart()">Restart</button>
+  <span id="info"></span>
+</div>
+
+<script>
+/* ---------- CONFIG ---------- */
+const W=640,H=360,TW=20,TH=18,TILE=20;          // 32x18 tiles, 20 px each
+const GRAVITY=0.5,MAXSPD=4,JUMP=-8,REWIND_FRAMES=180;
+const KEYS={LEFT:65,RIGHT:68,JUMP:87,REWIND:82}; // A D W R
+
+/* ---------- GLOBALS ---------- */
+const c=document.getElementById('c');
+const ctx=c.getContext('2d');
+let seed=1,level=[],timer=0,globalTimer=0,exit={x:0,y:0};
+let player={x:0,y:0,vx:0,vy:0,onGround:false};
+let states=new Array(REWIND_FRAMES);
+let head=0,rewinding=false,shadows=[];
+let frame=0;
+
+/* ---------- PRNG ---------- */
+function rnd(){seed=(seed*9301+49297)%233280;return seed/233280;}
+function irnd(a,b){return Math.floor(rnd()*(b-a+1))+a;}
+
+/* ---------- LEVEL ---------- */
+function generateLevel(){
+  level=[];
+  for(let y=0;y<TH;y++){
+    level[y]=[];
+    for(let x=0;x<TW;x++){
+      const solid=y===TH-1||y===0||x===0||x===TW-1;
+      const platform=!solid&&rnd()<0.15;
+      level[y][x]=solid||platform?1:0;
+    }
+  }
+  // place exit
+  let attempts=0;
+  while(true){
+    const ex=irnd(2,TW-2),ey=irnd(2,TH-2);
+    if(level[ey][ex]===0&&level[ey+1][ex]===1){
+      exit={x:ex*TILE,y:ey*TILE};
+      break;
+    }
+    if(++attempts>100)break;
+  }
+  // place player
+  while(true){
+    const px=irnd(1,TW-2),py=irnd(1,TH-3);
+    if(level[py][px]===0&&level[py+1][px]===1){
+      player.x=px*TILE;
+      player.y=py*TILE;
+      break;
+    }
+  }
+}
+
+/* ---------- PHYSICS ---------- */
+function physics(){
+  if(!rewinding){
+    if(KEYS.LEFT in keys)player.vx-=0.5;
+    if(KEYS.RIGHT in keys)player.vx+=0.5;
+    if((KEYS.JUMP in keys)&&player.onGround){player.vy=JUMP;player.onGround=false;}
+    player.vx*=0.8; // friction
+    player.vx=Math.max(-MAXSPD,Math.min(MAXSPD,player.vx));
+    player.vy+=GRAVITY;
+    player.vy=Math.min(player.vy,MAXSPD);
+    move(player);
+  }
+}
+function move(obj){
+  obj.x+=obj.vx;
+  if(tileAt(obj.x,obj.y)||tileAt(obj.x+TILE-1,obj.y)||tileAt(obj.x,obj.y+TILE-1)||tileAt(obj.x+TILE-1,obj.y+TILE-1)){
+    obj.x-=obj.vx; obj.vx=0;
+  }
+  obj.y+=obj.vy;
+  obj.onGround=false;
+  if(tileAt(obj.x,obj.y+TILE)||tileAt(obj.x+TILE-1,obj.y+TILE)){
+    obj.y=Math.floor(obj.y/TILE)*TILE;
+    obj.vy=0;
+    obj.onGround=true;
+  }
+  if(tileAt(obj.x,obj.y)||tileAt(obj.x+TILE-1,obj.y)){
+    obj.y=Math.ceil(obj.y/TILE)*TILE;
+    obj.vy=0;
+  }
+}
+function tileAt(px,py){
+  const tx=Math.floor(px/TILE),ty=Math.floor(py/TILE);
+  return tx<0||ty<0||tx>=TW||ty>=TH?1:level[ty][tx];
+}
+
+/* ---------- REWIND ---------- */
+function record(){
+  states[head]={x:Math.round(player.x),y:Math.round(player.y),vx:player.vx,vy:player.vy};
+  head=(head+1)%REWIND_FRAMES;
+}
+function rewind(){
+  if(shadows.length>=5)return; // max 5 shadows
+  rewinding=true;
+  let idx=(head-1+REWIND_FRAMES)%REWIND_FRAMES;
+  const list=[];
+  for(let i=0;i<REWIND_FRAMES;i++){
+    list.push(states[idx]);
+    idx=(idx-1+REWIND_FRAMES)%REWIND_FRAMES;
+  }
+  shadows.push({frames:list.reverse(),age:0});
+  // restore player
+  const st=states[(head-1+REWIND_FRAMES)%REWIND_FRAMES];
+  player.x=st.x;player.y=st.y;player.vx=0;player.vy=0;
+  rewinding=false;
+}
+
+/* ---------- DRAW ---------- */
+function drawTile(x,y,t){
+  ctx.fillStyle=t?'#444':'#000';
+  ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // tiles
+  for(let y=0;y<TH;y++)
+    for(let x=0;x<TW;x++)
+      drawTile(x,y,level[y][x]);
+  // exit
+  ctx.fillStyle='#0f0';
+  ctx.fillRect(exit.x,exit.y,TILE,TILE);
+  // shadows
+  shadows.forEach((s,i)=>{
+    const alpha=1-i*0.15;
+    ctx.fillStyle=`rgba(100,149,237,${alpha})`;
+    for(let f=0;f<s.frames.length;f+=3){
+      const p=s.frames[f];
+      ctx.fillRect(p.x,p.y,TILE,TILE);
+    }
+  });
+  // player
+  ctx.fillStyle='#fff';
+  ctx.fillRect(player.x,player.y,TILE,TILE);
+  // info
+  document.getElementById('info').textContent=`Time: ${(globalTimer/60).toFixed(2)}`;
+}
+
+/* ---------- INPUT ---------- */
+const keys={};
+window.addEventListener('keydown',e=>{keys[e.keyCode]=true;if(e.keyCode===KEYS.REWIND){rewind();}});
+window.addEventListener('keyup',e=>{keys[e.keyCode]=false;});
+
+/* ---------- LOOP ---------- */
+function restart(){
+  seed=parseInt(document.getElementById('seed').value)||1;
+  generateLevel();
+  timer=0;globalTimer=0;head=0;shadows.length=0;rewinding=false;frame=0;
+}
+function loop(){
+  if(!rewinding)globalTimer++;
+  if(!rewinding&&!tileAt(player.x+TILE/2,player.y+TILE/2)){
+    physics();
+    record();
+  }
+  // update shadows
+  shadows.forEach(s=>{
+    s.age++;
+    if(s.age>REWIND_FRAMES*2)s.frames.shift();
+  });
+  shadows=shadows.filter(s=>s.frames.length);
+  // win
+  if(Math.abs(player.x-exit.x)<TILE&&Math.abs(player.y-exit.y)<TILE){
+    seed++;
+    document.getElementById('seed').value=seed;
+    restart();
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+restart();
+loop();
+</script>
+</body>
+</html>

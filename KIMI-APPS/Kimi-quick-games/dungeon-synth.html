@@ -1,0 +1,203 @@
+<!-- This seems pretty cool - some finesse maybe but a keeper -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Dungeon Synth</title>
+  <style>
+    body { font-family: monospace; background:#111; color:#eee; margin:0; padding:1em; }
+    h1 { margin:0 0 .5em; }
+    #stats { margin-bottom:.5em; }
+    #dungeon { display:grid; grid-template-columns:repeat(20,1.2em); gap:1px; }
+    .tile { width:1.2em; height:1.2em; line-height:1.2em; text-align:center; font-size:1.2em; }
+    .wall { background:#222; }
+    .floor { background:#444; }
+    .player { background:#0f0; color:#000; }
+    .monster { background:#f00; color:#000; }
+    .loot { background:#ff0; color:#000; }
+    .stairs { background:#0ff; color:#000; }
+    #msg { margin-top:.5em; height:1.2em; color:#0ff; }
+  </style>
+</head>
+<body>
+  <h1>Dungeon Synth</h1>
+  <div id="stats"></div>
+  <div id="dungeon"></div>
+  <div id="msg"></div>
+
+  <script>
+
+      // ---------- UTIL ----------
+  const seed = () => (Math.random()*1e9|0);
+  const rng = (s => () => (s = (s*9301+49297)%233280, s/233280))(seed());
+  const randInt = (a,b) => a + (rng()*(b-a+1)|0);
+
+  
+  // ---------- DATA ----------
+  const W = 20, H = 12;
+  let map = [];
+  let player = { x:0, y:0, hp:20, maxHp:20, atk:5, def:1, items:0 };
+  let monsters = [];
+  let floor = 1;
+  let levelSeed = seed();          // <- capture once
+
+
+
+  // ---------- MAP GEN ----------
+    function generateMap(seedValue) {
+    // new RNG local to this map
+    const rng = (s => () => (s = (s * 9301 + 49297) % 233280, s / 233280))(seedValue);
+    const randInt = (a, b) => a + (rng() * (b - a + 1) | 0);
+
+    map = [];
+    monsters = [];
+    const open = [];
+    for (let y = 0; y < H; y++) {
+        map[y] = [];
+        for (let x = 0; x < W; x++) {
+            if (rng() < 0.2) map[y][x] = { type: 'wall', items: [], monster: null };
+        else {
+            map[y][x] = { type: 'floor', items: [], monster: null };
+            open.push({ x, y });
+        }
+        }
+    }
+    // place player
+    const start = open.splice(randInt(0, open.length-1), 1)[0];
+    player.x = start.x;
+    player.y = start.y;
+
+    // place stairs
+    const stairs = open.splice(randInt(0, open.length-1), 1)[0];
+    map[stairs.y][stairs.x].type = 'stairs';
+
+    // place monsters
+    for (let i=0; i<3+floor*2; i++) {
+      if (!open.length) break;
+      const m = open.splice(randInt(0, open.length-1), 1)[0];
+      const mon = {
+        x:m.x, y:m.y,
+        hp: 5 + floor*2,
+        atk: 2 + floor,
+        def: 0,
+        xp: floor*2
+      };
+      map[m.y][m.x].monster = mon;
+      monsters.push(mon);
+    }
+
+    // place loot
+    for (let i=0; i<2+floor; i++) {
+      if (!open.length) break;
+      const l = open.splice(randInt(0, open.length-1), 1)[0];
+      map[l.y][l.x].items.push('potion');
+    }
+  }
+
+  // ---------- RENDER ----------
+  function renderDungeon() {
+    const d = document.getElementById('dungeon');
+    d.innerHTML = '';
+    for (let y=0; y<H; y++) {
+      for (let x=0; x<W; x++) {
+        const tile = map[y][x];
+        const div = document.createElement('div');
+        div.className = 'tile ' + tile.type;
+        let ch = ' ';
+        if (x===player.x && y===player.y) {
+          ch = '@';
+          div.className += ' player';
+        } else if (tile.monster) {
+          ch = 'M';
+          div.className += ' monster';
+        } else if (tile.items.length) {
+          ch = '!';
+          div.className += ' loot';
+        } else if (tile.type==='stairs') {
+          ch = '>';
+        }
+        div.textContent = ch;
+        d.appendChild(div);
+      }
+    }
+    document.getElementById('stats').textContent =
+      `Floor ${floor} | HP: ${player.hp}/${player.maxHp} | ATK ${player.atk} | DEF ${player.def} | Loot ${player.items}`;
+  }
+
+  // ---------- MOVE / COMBAT ----------
+  function resolveCombat(mon) {
+    let msg = '';
+    while (mon.hp>0 && player.hp>0) {
+      // player hits
+      const pdmg = Math.max(1, player.atk - mon.def);
+      mon.hp -= pdmg;
+      msg += `You hit M for ${pdmg}. `;
+      if (mon.hp <=0) {
+        msg += `M defeated! +${mon.xp}xp. `;
+        player.atk += 1;
+        map[mon.y][mon.x].monster = null;
+        monsters.splice(monsters.indexOf(mon),1);
+        break;
+      }
+      // monster hits
+      const mdmg = Math.max(1, mon.atk - player.def);
+      player.hp -= mdmg;
+      msg += `M hits you for ${mdmg}. `;
+    }
+    if (player.hp <=0) {
+      msg = 'You died! Press R to restart.';
+    }
+    document.getElementById('msg').textContent = msg;
+  }
+
+  function movePlayer(dx,dy) {
+    document.getElementById('msg').textContent = '';
+    const nx = player.x + dx, ny = player.y + dy;
+    if (nx<0 || ny<0 || nx>=W || ny>=H || map[ny][nx].type==='wall') return;
+    const tile = map[ny][nx];
+    if (tile.monster) {
+      resolveCombat(tile.monster);
+      if (player.hp<=0) return;
+    } else {
+      player.x = nx;
+      player.y = ny;
+    }
+    // collect items
+    if (tile.items.includes('potion')) {
+      player.hp = Math.min(player.maxHp, player.hp+5);
+      player.items++;
+      tile.items.splice(tile.items.indexOf('potion'),1);
+    }
+    // stairs
+    if (tile.type==='stairs') {
+      floor++;
+      generateMap(levelSeed); 
+    }
+    renderDungeon();
+  }
+
+  // ---------- INIT ----------
+  generateMap(levelSeed);
+  renderDungeon();
+
+  // ---------- INPUT ----------
+  window.addEventListener('keydown', e=>{
+    if (player.hp<=0) {
+      if (e.key==='r' || e.key==='R') {
+        player = { x:0, y:0, hp:20, maxHp:20, atk:5, def:1, items:0 };
+        floor = 1;
+        generateMap(seed());
+        renderDungeon();
+      }
+      return;
+    }
+    switch(e.key) {
+      case 'ArrowUp': case 'w': movePlayer(0,-1); break;
+      case 'ArrowDown': case 's': movePlayer(0,1); break;
+      case 'ArrowLeft': case 'a': movePlayer(-1,0); break;
+      case 'ArrowRight': case 'd': movePlayer(1,0); break;
+    }
+  });
+  </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!-- Not following - needs some instructions and explanations and gameplay -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CoreClicker</title>
+<style>
+  body{margin:0;background:#181825;color:#f5c2e7;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh}
+  #game{display:flex;flex-direction:column;align-items:center;gap:10px}
+  #atom{width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,#89b4fa 40%,#313244 70%);cursor:pointer;position:relative;overflow:hidden}
+  .electron{position:absolute;width:8px;height:8px;background:#a6e3a1;border-radius:50%}
+  #stats,#upgrades{text-align:center;width:200px}
+  button{margin:4px 0;width:100%;background:#313244;color:#f5c2e7;border:0;padding:6px;border-radius:4px}
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="atom"></div>
+  <div id="stats">
+    <div>Energy: <span id="e">0</span></div>
+    <div>Multiplier: <span id="m">1</span></div>
+    <div>Auto/s: <span id="a">0</span></div>
+    <div>Quark×: <span id="q">1</span></div>
+  </div>
+  <div id="upgrades"></div>
+</div>
+
+<script>
+(() => {
+  const LS = localStorage;
+  const seed = new Date().toISOString().slice(0,10);
+  const hue = (seed.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%360);
+  const atom = document.getElementById('atom');
+  const stats = ['e','m','a','q'].reduce((a,k)=>(a[k]=document.getElementById(k),a),{});
+  let G = JSON.parse(LS.getItem('coreClicker') || '{"e":0,"m":1,"a":0,"q":1,"cost":[10,50,100]}');
+  const save = () => LS.setItem('coreClicker',JSON.stringify(G));
+
+  // Draw electrons
+  for(let i=0;i<3;i++){
+    const e = document.createElement('div');
+    e.className='electron';
+    atom.appendChild(e);
+    const r = 40 + i*20;
+    const s = 3+i;
+    setInterval(()=>{
+      const t = Date.now()/1000*s;
+      e.style.left = 100 + r*Math.cos(t) - 4 + 'px';
+      e.style.top = 100 + r*Math.sin(t) - 4 + 'px';
+    },30);
+  }
+
+  // Click atom
+  atom.addEventListener('click',()=>{G.e+=G.m*G.q;update();});
+
+  // Upgrades
+  const ups = [
+    {t:'×2 Multiplier',c:0,f:()=>{G.m*=2;}},
+    {t:'Auto Clicker',c:1,f:()=>{G.a++;}},
+    {t:'Prestige',c:2,f:()=>{G.q=Math.floor(Math.sqrt(G.e/1000))||1;G={e:0,m:1,a:0,q:G.q,cost:[10,50,100]};}}
+  ];
+
+  function update(){
+    stats.e.textContent = Math.floor(G.e);
+    stats.m.textContent = G.m;
+    stats.a.textContent = G.a;
+    stats.q.textContent = G.q;
+    const upg = document.getElementById('upgrades');
+    upg.innerHTML='';
+    ups.forEach((u,i)=>{
+      const btn = document.createElement('button');
+      btn.textContent = `${u.t} (${G.cost[u.c]})`;
+      btn.disabled = G.e < G.cost[u.c];
+      btn.onclick = () => {
+        G.e -= G.cost[u.c];
+        G.cost[u.c] = Math.floor(G.cost[u.c]*1.5);
+        u.f();
+        update();
+      };
+      upg.appendChild(btn);
+    });
+    save();
+  }
+
+  // Auto clicker
+  setInterval(()=>{G.e+=G.a*G.q;update();},1000);
+
+  // Color tweak
+  atom.style.filter = `hue-rotate(${hue}deg)`;
+  update();
+})();
+</script>
+</body>
+</html>

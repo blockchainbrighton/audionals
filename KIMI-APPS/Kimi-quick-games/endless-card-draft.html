@@ -1,0 +1,195 @@
+<!-- Needs a narrative storyline in a retained scrollable text area for more engagement -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Endless Card Draft</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:1rem;background:#111;color:#eee}
+    #enemy{display:flex;gap:.5rem;margin-bottom:1rem}
+    .enemy{min-width:120px;padding:.5rem;background:#222;border:1px solid #444;border-radius:4px}
+    .hp{background:#444;height:8px;border-radius:4px;margin-top:.25rem}
+    .hp div{height:100%;background:#0f0;transition:width .2s}
+    #hand,#choices{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem}
+    .card{position:relative;width:100px;height:140px;border:1px solid #666;border-radius:6px;background:#222;font-size:.75rem;cursor:pointer}
+    .card:hover{border-color:#0ff}
+    .card .name{padding:.25rem;font-weight:bold}
+    .card .text{padding:.25rem;font-size:.6rem;color:#aaa}
+    .card .cost{position:absolute;bottom:4px;right:4px;background:#333;padding:2px 4px;border-radius:3px}
+    #stats{margin-bottom:1rem}
+  </style>
+</head>
+<body>
+  <div id="stats">Wave <span id="wave">1</span> | Score <span id="score">0</span></div>
+  <div id="enemy"></div>
+  <div id="hand"></div>
+  <div id="choices" hidden>
+    <h3>Choose 1 card to add</h3>
+  </div>
+  <script>
+/* ---------- RNG ---------- */
+const rng=(()=>{let s=1;return(seed)=>{s=(seed||s+1)&0xffffffff;s=Math.imul(s,0x19660d)+0x3c6ef35f;return (s>>>0)/0x100000000;}})();
+
+/* ---------- CARD CATALOG ---------- */
+const effects={
+  damage:(amt)=>({target})=>{target.hp-=amt;},
+  block:(amt)=>({player})=>{player.block+=amt;},
+  draw:(amt)=>({game})=>{game.draw(amt);},
+  poison:(amt)=>({target})=>{target.poison=(target.poison||0)+amt;}
+};
+const catalog=[
+  {name:"Strike",cost:1,effect:effects.damage(6)},
+  {name:"Defend",cost:1,effect:effects.block(5)},
+  {name:"Bash",cost:2,effect:effects.damage(8)},
+  {name:"Shrug",cost:1,effect:[effects.block(4),effects.draw(1)]},
+  {name:"Poison Dart",cost:1,effect:effects.poison(3)},
+  {name:"Cleave",cost:1,effect:effects.damage(5)} // hits all – handled below
+];
+function mkCard(base){return{name:base.name,cost:base.cost,effect:base.effect,upgraded:false};}
+
+/* ---------- GAME STATE ---------- */
+const state={
+  wave:1,
+  score:0,
+  deck:[],
+  hand:[],
+  discard:[],
+  exhaust:[],
+  enemies:[],
+  player:{hp:80,block:0,maxHp:80},
+  cullFlag:false
+};
+function init(){
+  state.deck=[...Array(3)].map(()=>mkCard(catalog[0]));
+  state.deck.push(...[...Array(2)].map(()=>mkCard(catalog[1])));
+  shuffleDeck();
+  newWave();
+  draw(5);
+  render();
+}
+function shuffleDeck(){
+  for(let i=state.deck.length-1;i>0;i--){
+    const j=Math.floor(rng()*i);
+    [state.deck[i],state.deck[j]]=[state.deck[j],state.deck[i]];
+  }
+}
+
+/* ---------- FLOW ---------- */
+function draw(n){
+  for(let i=0;i<n;i++){
+    if(!state.deck.length){state.deck=state.discard.splice(0);shuffleDeck();}
+    if(state.deck.length) state.hand.push(state.deck.pop());
+  }
+}
+function playCard(idx){
+  const card=state.hand[idx];
+  if(!card) return;
+  const target=state.enemies[0];
+  const run=e=>typeof e==='function'?e({player:state.player,target,game:state}):null;
+  if(Array.isArray(card.effect)) card.effect.forEach(run); else run(card.effect);
+  state.discard.push(card);
+  state.hand.splice(idx,1);
+  render();
+  if(state.enemies.every(e=>e.hp<=0)) setTimeout(endWave,200);
+}
+function newWave(){
+  state.enemies=[];
+  const n=Math.min(3,Math.floor(state.wave/2)+1);
+  for(let i=0;i<n;i++){
+    const hp=Math.floor(10+state.wave*6);
+    const atk=Math.floor(5+state.wave*1.5);
+    state.enemies.push({hp,maxHp:hp,atk,poison:0});
+  }
+}
+function enemyTurn(){
+  state.player.block=0;
+  state.enemies.forEach(e=>{
+    if(e.poison){e.hp-=e.poison;e.poison--;}
+    if(e.hp>0){
+      let dmg=e.atk-state.player.block;
+      if(dmg<0) dmg=0;
+      state.player.hp-=dmg;
+    }
+  });
+  if(state.player.hp<=0){alert('Game over! Score '+state.score);return;}
+  draw(5);
+  render();
+}
+function endWave(){
+  state.score+=state.wave*10;
+  state.wave++;
+  if(state.wave%3===0){
+    state.cullFlag=true;
+    showCull();
+  }else{
+    showDraft();
+  }
+}
+function showDraft(){
+  document.getElementById('choices').hidden=false;
+  const opts=document.getElementById('choices');
+  opts.innerHTML='<h3>Choose 1 card to add</h3>';
+  const picks=Array(3).fill(0).map(()=>catalog[Math.floor(rng()*catalog.length)]);
+  picks.forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='card';
+    btn.innerHTML=`<div class="name">${c.name}</div><div class="text">${c.cost}</div>`;
+    btn.onclick=()=>{state.deck.push(mkCard(c));opts.hidden=true;enemyTurn();};
+    opts.appendChild(btn);
+  });
+}
+function showCull(){
+  document.getElementById('choices').hidden=false;
+  const opts=document.getElementById('choices');
+  opts.innerHTML='<h3>Click a card to upgrade, right-click to exhaust</h3>';
+  [...state.deck,...state.hand,...state.discard].forEach((c,i)=>{
+    const btn=document.createElement('div');
+    btn.className='card';
+    btn.innerHTML=`<div class="name">${c.name}</div><div class="text">${c.cost}</div>`;
+    btn.onclick=()=>{upgradeCard(c);opts.hidden=true;enemyTurn();};
+    btn.oncontextmenu=(e)=>{e.preventDefault();exhaustCard(c);opts.hidden=true;enemyTurn();};
+    opts.appendChild(btn);
+  });
+}
+function upgradeCard(card){
+  if(card.upgraded) return;
+  card.upgraded=true;
+  if(card.name==="Strike") card.effect=effects.damage(9);
+  if(card.name==="Defend") card.effect=effects.block(8);
+  if(card.name==="Poison Dart") card.effect=effects.poison(5);
+}
+function exhaustCard(card){
+  const arr=[state.deck,state.hand,state.discard].find(a=>a.includes(card));
+  if(arr){const i=arr.indexOf(card);if(i>-1) arr.splice(i,1);}
+  state.exhaust.push(card);
+}
+
+/* ---------- RENDER ---------- */
+function render(){
+  document.getElementById('wave').textContent=state.wave;
+  document.getElementById('score').textContent=state.score;
+  const enemyDiv=document.getElementById('enemy');
+  enemyDiv.innerHTML='';
+  state.enemies.forEach(e=>{
+    const d=document.createElement('div');
+    d.className='enemy';
+    d.innerHTML=`Enemy<br/>HP ${e.hp}/${e.maxHp}<br/>ATK ${e.atk}${e.poison?'<br/>P '+e.poison:''}
+      <div class="hp"><div style="width:${100*e.hp/e.maxHp}%"></div></div>`;
+    enemyDiv.appendChild(d);
+  });
+  const handDiv=document.getElementById('hand');
+  handDiv.innerHTML='';
+  state.hand.forEach((c,i)=>{
+    const d=document.createElement('div');
+    d.className='card';
+    d.innerHTML=`<div class="name">${c.name}</div><div class="text">${c.cost}</div><div class="cost">${c.cost}</div>`;
+    d.onclick=()=>playCard(i);
+    handDiv.appendChild(d);
+  });
+}
+
+/* ---------- INIT ---------- */
+init();
+  </script>
+</body>
+</html>

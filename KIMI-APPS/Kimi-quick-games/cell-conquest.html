@@ -1,0 +1,321 @@
+<!-- Not sure what point of this game is - looks nice and like it could be fixed to have some kind of gameplay -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cellular Conquest</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #111;
+            color: #eee;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            cursor: crosshair;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 12px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #rules {
+            font-size: 10px;
+            margin-top: 5px;
+        }
+        button {
+            background: #333;
+            color: #eee;
+            border: 1px solid #555;
+            padding: 5px 10px;
+            margin: 2px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        button:hover {
+            background: #555;
+        }
+        button:disabled {
+            background: #222;
+            color: #666;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="c"></canvas>
+    <div id="ui">
+        <div>CURRENCY: <span id="currency">0</span></div>
+        <div>ROUND: <span id="round">1</span></div>
+        <div>TILES: <span id="tiles">0/0</span></div>
+        <div id="rules">B: 00000000 S: 00000000</div>
+        <button onclick="startRound()">SPACE: START ROUND</button>
+        <button onclick="mutateRule()" id="mutateBtn">MUTATE (cost: 1)</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        const W = 100, H = 60;
+        const CELL = 6;
+        
+        canvas.width = W * CELL;
+        canvas.height = H * CELL;
+        
+        let grid = new Uint8Array(W * H);
+        let rule = {
+            birth: 0b00000100,    // 4 neighbors
+            survive: 0b00111000   // 3-4-5 neighbors
+        };
+        let currency = 0;
+        let round = 1;
+        let isSimulating = false;
+        let tick = 0;
+        let history = [];
+        
+        // Mouse state
+        let mouseDown = false;
+        let mouseButton = 0;
+        
+        // Initialize grid with symmetric pattern
+        function initGrid() {
+            grid.fill(0);
+            
+            // Random symmetric start
+            for (let y = 0; y < H/2; y++) {
+                for (let x = 0; x < W/2; x++) {
+                    if (Math.random() < 0.15) {
+                        const val = Math.random() < 0.5 ? 1 : 2;
+                        grid[y * W + x] = val;
+                        grid[y * W + (W - 1 - x)] = val;
+                        grid[(H - 1 - y) * W + x] = val;
+                        grid[(H - 1 - y) * W + (W - 1 - x)] = val;
+                    }
+                }
+            }
+            
+            // Ensure some player cells
+            if (grid.filter(v => v === 2).length < 5) {
+                const center = Math.floor(H/2) * W + Math.floor(W/2);
+                grid[center] = 2;
+                grid[center + 1] = 2;
+                grid[center - 1] = 2;
+            }
+        }
+        
+        // Count neighbors for a cell
+        function countNeighbors(x, y) {
+            let ai = 0, player = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = (x + dx + W) % W;
+                    const ny = (y + dy + H) % H;
+                    const val = grid[ny * W + nx];
+                    if (val === 1) ai++;
+                    else if (val === 2) player++;
+                }
+            }
+            return { total: ai + player, ai, player };
+        }
+        
+        // Apply rules to grid
+        function step() {
+            const newGrid = new Uint8Array(W * H);
+            
+            for (let y = 0; y < H; y++) {
+                for (let x = 0; x < W; x++) {
+                    const idx = y * W + x;
+                    const cell = grid[idx];
+                    const n = countNeighbors(x, y);
+                    const total = n.total;
+                    
+                    if (cell === 0) {
+                        // Birth rule
+                        if (rule.birth & (1 << total)) {
+                            // Player vs AI battle for birth
+                            if (n.player > n.ai) {
+                                newGrid[idx] = 2;
+                            } else if (n.ai > n.player) {
+                                newGrid[idx] = 1;
+                            } else {
+                                newGrid[idx] = Math.random() < 0.5 ? 1 : 2;
+                            }
+                        }
+                    } else {
+                        // Survive rule
+                        if (rule.survive & (1 << total)) {
+                            newGrid[idx] = cell;
+                        }
+                    }
+                }
+            }
+            
+            grid = newGrid;
+        }
+        
+        // Evaluate current state
+        function evaluate() {
+            const aiTiles = grid.filter(v => v === 1).length;
+            const playerTiles = grid.filter(v => v === 2).length;
+            const total = aiTiles + playerTiles;
+            const ratio = total > 0 ? playerTiles / total : 0;
+            
+            document.getElementById('tiles').textContent = 
+                `${playerTiles}/${total}`;
+                
+            return { aiTiles, playerTiles, total, ratio };
+        }
+        
+        // Mutate rule
+        function mutateRule() {
+            if (currency < 1) return;
+            
+            currency--;
+            document.getElementById('currency').textContent = currency;
+            
+            if (Math.random() < 0.5) {
+                // Mutate birth
+                rule.birth ^= (1 << Math.floor(Math.random() * 8));
+            } else {
+                // Mutate survive
+                rule.survive ^= (1 << Math.floor(Math.random() * 8));
+            }
+            
+            updateRulesDisplay();
+        }
+        
+        // Update rules display
+        function updateRulesDisplay() {
+            const birth = rule.birth.toString(2).padStart(8, '0');
+            const survive = rule.survive.toString(2).padStart(8, '0');
+            document.getElementById('rules').textContent = 
+                `B: ${birth} S: ${survive}`;
+        }
+        
+        // Render grid
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid
+            for (let y = 0; y < H; y++) {
+                for (let x = 0; x < W; x++) {
+                    const val = grid[y * W + x];
+                    if (val === 1) {
+                        ctx.fillStyle = '#ff4444';
+                        ctx.fillRect(x * CELL, y * CELL, CELL - 1, CELL - 1);
+                    } else if (val === 2) {
+                        ctx.fillStyle = '#44ff44';
+                        ctx.fillRect(x * CELL, y * CELL, CELL - 1, CELL - 1);
+                    }
+                }
+            }
+            
+            // Draw simulation overlay
+            if (isSimulating) {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '20px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(`TICK ${tick}/60`, canvas.width/2, canvas.height/2);
+            }
+        }
+        
+        // Mouse events
+        canvas.addEventListener('mousedown', (e) => {
+            mouseDown = true;
+            mouseButton = e.button;
+            handleCell(e);
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            mouseDown = false;
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (mouseDown) handleCell(e);
+        });
+        
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        
+        function handleCell(e) {
+            if (isSimulating) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / CELL);
+            const y = Math.floor((e.clientY - rect.top) / CELL);
+            
+            if (x >= 0 && x < W && y >= 0 && y < H) {
+                const idx = y * W + x;
+                grid[idx] = mouseButton === 0 ? 2 : 0;
+                render();
+            }
+        }
+        
+        // Keyboard events
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (!isSimulating) startRound();
+            }
+        });
+        
+        // Start round
+        function startRound() {
+            if (isSimulating) return;
+            
+            isSimulating = true;
+            tick = 0;
+            
+            const sim = setInterval(() => {
+                step();
+                tick++;
+                
+                if (tick >= 60) {
+                    clearInterval(sim);
+                    isSimulating = false;
+                    
+                    const { ratio } = evaluate();
+                    if (ratio > 0.5) {
+                        currency += Math.floor(ratio * 10);
+                        document.getElementById('currency').textContent = currency;
+                    }
+                    
+                    round++;
+                    document.getElementById('round').textContent = round;
+                    
+                    // Save to history
+                    history.push({
+                        round: round - 1,
+                        rule: { ...rule },
+                        score: ratio
+                    });
+                    if (history.length > 30) history.shift();
+                    
+                    initGrid();
+                    render();
+                } else {
+                    render();
+                }
+            }, 1000/30); // 30 FPS cap
+        }
+        
+        // Initialize
+        initGrid();
+        updateRulesDisplay();
+        render();
+    </script>
+</body>
+</html>

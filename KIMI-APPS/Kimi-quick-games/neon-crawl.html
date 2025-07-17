@@ -1,0 +1,201 @@
+<!--  looks interesting but needs instructions for gamelplay and probably missions etc -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Neon Crawl</title>
+<style>
+    body{background:#000;color:#0ff;font-family:monospace;font-size:24px;margin:0}
+    pre{letter-spacing:.5em;line-height:1;margin:1em auto;width:fit-content}
+    #ui{display:flex;justify-content:center;gap:2em;margin-bottom:.5em}
+    button{background:#111;border:1px solid #0ff;color:#0ff;padding:.25em .5em}
+    button:hover{background:#0ff;color:#000}
+</style>
+</head>
+<body>
+<pre id="map" aria-label="ASCII dungeon map"></pre>
+<div id="ui"></div>
+<script>
+/* === CONFIG === */
+const W = 40, H = 25;
+const SIGHT = 7;
+const HEAP = [];
+
+/* === STATE === */
+let map = Array.from({length:H},()=>Array(W).fill('#'));
+let player = {x:1,y:1,hp:10,mutations:[],gold:0};
+let mobs = [];
+let depth = 1;
+let seed = +new Date();
+
+/* === UTIL === */
+const rng = () => (seed = (seed * 9301 + 49297) % 233280, seed / 233280);
+const dice = n => Math.floor(rng()*n);
+const dist = (a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
+
+/* === DUNGEON GEN === */
+function generate(seed){
+    // Fill with walls
+    map = Array.from({length:H},()=>Array(W).fill('#'));
+    // Rooms
+    for(let i=0;i<12;i++){
+        const rw = 3+dice(5), rh = 3+dice(3);
+        const rx = dice(W-rw-2)+1, ry = dice(H-rh-2)+1;
+        for(let y=ry;y<ry+rh;y++)
+            for(let x=rx;x<rx+rw;x++)
+                map[y][x]='.';
+    }
+    // Corridors
+    for(let i=0;i<20;i++){
+        const x=dice(W-2)+1, y=dice(H-2)+1;
+        map[y][x]='.';
+    }
+    // Stairs
+    let sx,sy;
+    do{sx=dice(W-2)+1;sy=dice(H-2)+1;}while(map[sy][sx]!='.');
+    map[sy][sx]='>';
+    // Player
+    do{player.x=dice(W-2)+1;player.y=dice(H-2)+1;}while(map[player.y][player.x]!='.');
+    // Mobs
+    mobs=[];
+    for(let i=0;i<5+depth;i++){
+        let mx,my;
+        do{mx=dice(W-2)+1;my=dice(H-2)+1;}while(map[my][mx]!='.' || (mx==player.x&&my==player.y));
+        mobs.push({x:mx,y:my,char:String.fromCharCode(97+dice(26)),hp:2+depth,maxHp:2+depth});
+    }
+    // Gold
+    for(let i=0;i<3+depth;i++){
+        let gx,gy;
+        do{gx=dice(W-2)+1;gy=dice(H-2)+1;}while(map[gy][gx]!='.');
+        map[gy][gx]='$';
+    }
+}
+
+/* === TURN QUEUE === */
+function pushHeap(m,d){HEAP.push({m:m,d:d});HEAP.sort((a,b)=>a.d-b.d);}
+function popHeap(){return HEAP.shift();}
+
+/* === AI === */
+function act(mob){
+    const d=dist(mob,player);
+    if(d===1){
+        player.hp--; return 1;
+    }
+    if(d<=SIGHT){
+        // A* step toward player
+        const dx=Math.sign(player.x-mob.x), dy=Math.sign(player.y-mob.y);
+        const nx=mob.x+dx, ny=mob.y+dy;
+        if(map[ny][nx]=='.' && !mobs.some(m=>m.x===nx&&m.y===ny)){
+            mob.x=nx;mob.y=ny;
+        }
+    } else {
+        // Wander
+        const dir=[[0,1],[1,0],[-1,0],[0,-1]][dice(4)];
+        const nx=mob.x+dir[0], ny=mob.y+dir[1];
+        if(map[ny][nx]=='.' && !mobs.some(m=>m.x===nx&&m.y===ny)){
+            mob.x=nx;mob.y=ny;
+        }
+    }
+    return 1;
+}
+
+/* === MUTATIONS === */
+function mutate(){
+    const muts=[
+        {name:"Regen",desc:"+1 hp/level",passive:p=>{p.hp+=depth}},
+        {name:"Strength",desc:"+1 melee dmg",passive:()=>{}},
+        {name:"Vision",desc:"+2 sight",passive:()=>{}},
+        {name:"Wealth",desc:"+10 gold",passive:p=>{p.gold+=10}}
+    ];
+    const choices=[];
+    for(let i=0;i<3;i++) choices.push(muts[dice(muts.length)]);
+    const div=document.createElement('div');
+    div.innerHTML='<h2>Choose Mutation</h2>';
+    choices.forEach((m,i)=>{
+        const b=document.createElement('button');
+        b.textContent=`${m.name}: ${m.desc}`;
+        b.onclick=()=>{
+            player.mutations.push(m);
+            m.passive(player);
+            div.remove();
+            depth++;
+            generate(seed);
+            render();
+            gameLoop();
+        };
+        div.appendChild(b);
+    });
+    document.body.appendChild(div);
+}
+
+/* === INPUT === */
+window.onkeydown=e=>{
+    const key=e.key;
+    if(key==='r'){generate(seed);render();return;}
+    let dx=0,dy=0;
+    if(key==='ArrowUp')dy=-1;
+    if(key==='ArrowDown')dy=1;
+    if(key==='ArrowLeft')dx=-1;
+    if(key==='ArrowRight')dx=1;
+    if(!dx&&!dy) return;
+    const nx=player.x+dx, ny=player.y+dy;
+    if(map[ny][nx]==='#') return;
+    // Attack?
+    const target=mobs.find(m=>m.x===nx&&m.y===ny);
+    if(target){
+        target.hp--;
+        if(target.hp<=0){
+            mobs=mobs.filter(m=>m!==target);
+            player.gold+=1;
+        }
+    } else {
+        player.x=nx; player.y=ny;
+    }
+    // Gold pickup
+    if(map[player.y][player.x]==='$'){map[player.y][player.x]='.';player.gold++;}
+    // Stairs
+    if(map[player.y][player.x]==='>'){
+        depth++;
+        generate(seed);
+    }
+    // Mobs turn
+    mobs.forEach(m=>pushHeap(m,1));
+    while(HEAP.length){
+        const {m}=popHeap();
+        act(m);
+    }
+    if(player.hp<=0){
+        mutate();
+        player.hp=10+player.mutations.length;
+        return;
+    }
+    render();
+};
+
+/* === RENDER === */
+function render(){
+    const lines=[];
+    for(let y=0;y<H;y++){
+        let line='';
+        for(let x=0;x<W;x++){
+            let ch=map[y][x];
+            if(player.x===x&&player.y===y) ch='@';
+            else{
+                const mob=mobs.find(m=>m.x===x&&m.y===y);
+                if(mob) ch=mob.char;
+            }
+            const vis=Math.abs(x-player.x)+Math.abs(y-player.y)<=SIGHT;
+            line+=vis?ch:' ';
+        }
+        lines.push(line);
+    }
+    document.getElementById('map').textContent=lines.join('\n');
+    document.getElementById('ui').innerHTML=`HP:${player.hp} Gold:${player.gold} Depth:${depth} Mutations:${player.mutations.map(m=>m.name).join(', ')}`;
+}
+
+/* === INIT === */
+generate(seed);
+render();
+</script>
+</body>
+</html>

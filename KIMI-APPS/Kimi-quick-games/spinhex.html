@@ -1,0 +1,192 @@
+<!--  Needs instructions for gameplay -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SpinHex</title>
+<style>
+  body{margin:0;background:#1e1e2e;color:#cdd6f4;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column}
+  canvas{background:#1e1e2e;border-radius:12px;cursor:pointer}
+  #ui{margin-top:12px;font-size:18px}
+</style>
+</head>
+<body>
+<canvas id="c" width="400" height="400"></canvas>
+<div id="ui">Score: <span id="s">0</span> | Moves: <span id="m">0</span> | Best: <span id="b">0</span></div>
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');
+const colors=['#f38ba8','#a6e3a1','#fab387','#94e2d5','#cba6f7','#f2cdcd'];
+const R=3,COUNT=37;
+
+// FIX 1: The starting indices for each ring were incorrect.
+// Ring 1 starts at index 1.
+// Ring 2 starts at index 1 + 6 = 7.
+// Ring 3 starts at index 7 + 12 = 19.
+const CELLS=[1, 7, 19];
+
+const cells=new Uint8Array(COUNT);
+let score=0,moves=0,best=+localStorage.getItem('best')||0;
+const cellPos=[]; // [cx,cy] for each index 0-36
+function initPos(){
+  const cx=200,cy=200,size=30;
+  cellPos[0]=[cx,cy];
+  for(let ring=1;ring<=R;ring++){
+    const n=ring*6,r=size*ring*1.8;
+    for(let i=0;i<n;i++){
+      const a=i*Math.PI*2/n;
+      // With the corrected CELLS array, this now assigns positions correctly.
+      cellPos[CELLS[ring-1]+i]=[cx+r*Math.cos(a),cy+r*Math.sin(a)];
+    }
+  }
+}
+function seedScramble(seed){
+  let h=0;
+  for(let i=0;i<seed.length;i++)h=((h<<5)-h+seed.charCodeAt(i))>>>0;
+  const rnd=()=>(h=(h*1664525+1013904223)>>>0,h/0x100000000);
+  for(let i=0;i<COUNT;i++)cells[i]=Math.floor(rnd()*6);
+}
+function render(){
+  X.clearRect(0,0,400,400);
+  cells.forEach((v,i)=>{
+    // This line no longer causes an error because cellPos is fully populated.
+    const [x,y]=cellPos[i];
+    X.beginPath();
+    X.arc(x,y,20,0,Math.PI*2);
+    X.fillStyle=colors[v];
+    X.fill();
+    X.strokeStyle='#11111b';
+    X.lineWidth=2;
+    X.stroke();
+  });
+}
+function rotate(ring){
+  if(ring===0)return;
+  const start=CELLS[ring-1],len=ring*6;
+  const tmp=cells[start+len-1];
+  for(let i=len-1;i>0;i--)cells[start+i]=cells[start+i-1];
+  cells[start]=tmp;
+  moves++;
+  // Don't render immediately; check for matches first.
+  checkMatches();
+}
+
+// Helper to find the index of the cell in the next ring inwards.
+function getInnerNeighborIndex(idx) {
+  if (idx >= 19) { // In Ring 3 -> map to Ring 2
+    return 7 + Math.floor((idx - 19) * 2 / 3);
+  }
+  if (idx >= 7) {  // In Ring 2 -> map to Ring 1
+    return 1 + Math.floor((idx - 7) / 2);
+  }
+  if (idx >= 1) {  // In Ring 1 -> map to Center
+    return 0;
+  }
+  return -1; // Center has no inner neighbor
+}
+
+// FIX 2: Replaced flawed gravity logic with a working "cascade" model.
+// This function makes cells "fall" inwards to fill empty spaces.
+function gravity(){
+  let changed;
+  do {
+    changed = false;
+    // Repeatedly move cells from inner rings to empty spots in outer rings.
+    for (let i = 1; i < COUNT; i++) {
+      if (cells[i] === 255) {
+        const innerIdx = getInnerNeighborIndex(i);
+        if (innerIdx !== -1 && cells[innerIdx] !== 255) {
+          cells[i] = cells[innerIdx];
+          cells[innerIdx] = 255;
+          changed = true;
+        }
+      }
+    }
+  } while (changed);
+
+  // Fill any remaining empty cells (at the center) with new random colors.
+  for (let i = 0; i < COUNT; i++) {
+    if (cells[i] === 255) {
+      cells[i] = Math.floor(Math.random() * 6);
+    }
+  }
+}
+
+function checkMatches(){
+  const matched=new Set();
+
+  // FIX 3: Replaced flawed radial check with correct "spoke" logic.
+  for (let i = 0; i < 6; i++) {
+    const spoke = [0, 1 + i, 7 + (i * 2), 19 + (i * 3)];
+    for (let j = 0; j < spoke.length; ) {
+      const val = cells[spoke[j]];
+      if (val === 255) { j++; continue; }
+      let k = j + 1;
+      while (k < spoke.length && cells[spoke[k]] === val) k++;
+      const runLength = k - j;
+      if (runLength >= 3) {
+        for (let l = 0; l < runLength; l++) matched.add(spoke[j + l]);
+      }
+      j = k;
+    }
+  }
+
+  // Ring-wise check (original logic was correct)
+  for(let ring=1;ring<=R;ring++){
+    const start=CELLS[ring-1],len=ring*6;
+    for(let i=0;i<len;i++){
+      const val=cells[start+i];
+      if (val === 255) continue;
+      let count=1,j=(i+1)%len;
+      while(j!==i && cells[start+j]===val){count++;j=(j+1)%len;}
+      if(count>=3){
+        for(let k=0;k<count;k++)matched.add(start+(i+k)%len);
+      }
+    }
+  }
+
+  if(matched.size){
+    matched.forEach(i=>{
+      score+=10;
+      cells[i]=255; // Mark matched cells as empty
+    });
+    render(); // Show the cleared cells
+    setTimeout(() => {
+        gravity(); // Fill empty space
+        render();  // Show the board after gravity
+        setTimeout(checkMatches, 250); // Check for new chain-reaction matches
+    }, 250);
+  }else{
+    render();
+    updateUI();
+  }
+}
+function updateUI(){
+  document.getElementById('s').textContent=score;
+  document.getElementById('m').textContent=moves;
+  document.getElementById('b').textContent=best=Math.max(best,score);
+  localStorage.setItem('best',best);
+}
+function getRing(x,y){
+  const [cx,cy]=[200,200];
+  const d=Math.hypot(x-cx,y-cy);
+  if(d<30)return 0; // Center ring
+  if(d<70)return 1; // Ring 1
+  if(d<115)return 2; // Ring 2
+  if(d<160)return 3; // Ring 3
+  return -1;
+}
+C.addEventListener('click',e=>{
+  const rect=C.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  const ring=getRing(x,y);
+  if(ring > 0){ // Rotating the center (ring 0) does nothing, so we can disable it.
+    rotate(ring);
+  }
+});
+initPos();
+seedScramble(new Date().toISOString().slice(0,10));
+render();
+updateUI();
+</script>
+</body>
+</html>

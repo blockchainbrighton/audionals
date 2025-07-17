@@ -1,0 +1,318 @@
+<!-- Needs instructions - looks super cool! -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Orbital Traders</title>
+<style>
+  body{margin:0;background:#000;color:#0f0;font-family:monospace;overflow:hidden}
+  canvas{background:#000;display:block}
+  #ui{position:absolute;top:0;left:0;padding:10px;pointer-events:none}
+  #ui>div{background:#0008;padding:5px;margin:2px 0}
+  button{pointer-events:auto;background:#0f0;color:#000;border:none;padding:4px;margin:2px;font-family:inherit;cursor:pointer}
+  #shop{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none;background:#000;color:#0f0;padding:20px;border:1px solid #0f0}
+</style>
+</head>
+<body>
+<canvas id=c></canvas>
+<div id=ui>
+  <div>Credits: <span id=credits>1000</span></div>
+  <div>Fuel: <span id=fuel>100</span>%</div>
+  <div id=contract>Contract: none</div>
+  <div id=cargo></div>
+</div>
+
+<div id=shop>
+  <h3>Planet <span id=planetName></span></h3>
+  <div id=market></div>
+  <div>
+    <button onclick="buyFuel()">Buy Fuel (10c)</button>
+    <button onclick="upgradeCargo()">Cargo Bay (100c)</button>
+    <button onclick="upgradeThrust()">Thruster (200c)</button>
+  </div>
+  <button onclick="closeShop()">Close</button>
+</div>
+
+<script>
+/* === CONFIG === */
+const G = 0.3;
+const SCALE = 50;
+const DT = 0.02;
+const DRAG = 0.995;
+
+/* === CANVAS === */
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+function resize(){c.width=innerWidth;c.height=innerHeight;}
+resize(); window.onresize = resize;
+
+/* === STATE === */
+let planets = [];
+let player = {
+  pos:{x:0,y:0}, vel:{x:0,y:0},
+  fuel:100, cargo:Array(8).fill(null), credits:1000,
+  thrust:1, maxCargo:8, contract:null
+};
+let path = [];
+let selected = null;
+let landed = null;
+
+/* === UTILS === */
+function rand(min,max){return Math.random()*(max-min)+min;}
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+function load(){
+  const save = localStorage.getItem('orbitalSave');
+  if(save){
+    const data = JSON.parse(save);
+    planets = data.planets;
+    Object.assign(player, data.player);
+  } else {
+    generate();
+  }
+}
+function save(){
+  localStorage.setItem('orbitalSave', JSON.stringify({planets,player}));
+}
+function generate(){
+  planets = [];
+  for(let i=0;i<8;i++){
+    planets.push({
+      x:rand(-10,10)*SCALE,
+      y:rand(-10,10)*SCALE,
+      mass:rand(5,20),
+      prices:Array(8).fill(0).map(()=>rand(10,100)),
+      name:String.fromCharCode(65+i)
+    });
+  }
+  player.pos = {x:planets[0].x,y:planets[0].y};
+}
+
+/* === PHYSICS === */
+function calcOrbit(pos, vel, steps){
+  let p = {x:pos.x,y:pos.y}, v = {x:vel.x,y:vel.y};
+  const pts = [];
+  for(let i=0;i<steps;i++){
+    let ax=0,ay=0;
+    for(const pl of planets){
+      const d = dist(p,pl);
+      const f = G*pl.mass/(d*d+1);
+      ax += f*(pl.x-p.x)/d;
+      ay += f*(pl.y-p.y)/d;
+    }
+    v.x += ax*DT;
+    v.y += ay*DT;
+    p.x += v.x*DT;
+    p.y += v.y*DT;
+    pts.push({x:p.x,y:p.y});
+  }
+  return pts;
+}
+
+/* === DRAW === */
+function draw(){
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.save();
+  ctx.translate(c.width/2,c.height/2);
+  ctx.scale(1,-1);
+  
+  // planets
+  for(const p of planets){
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.mass*2,0,Math.PI*2);
+    ctx.fillStyle = '#0f0';
+    ctx.fill();
+    ctx.scale(1,-1);
+    ctx.fillText(p.name,p.x,-p.y);
+    ctx.scale(1,-1);
+  }
+
+  // trajectory
+  if(selected && player.fuel>0){
+    ctx.beginPath();
+    ctx.moveTo(player.pos.x,player.pos.y);
+    for(const pt of path) ctx.lineTo(pt.x,pt.y);
+    ctx.strokeStyle = '#0f04';
+    ctx.stroke();
+  }
+
+  // player
+  ctx.beginPath();
+  ctx.arc(player.pos.x,player.pos.y,5,0,Math.PI*2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* === INPUT === */
+let dragging = false;
+let start = {x:0,y:0};
+c.addEventListener('mousedown', e=>{
+  if(landed) return;
+  dragging = true;
+  start = {x:e.clientX-c.width/2,y:c.height/2-e.clientY};
+});
+c.addEventListener('mousemove', e=>{
+  if(!dragging) return;
+  const end = {x:e.clientX-c.width/2,y:c.height/2-e.clientY};
+  const dx = end.x-start.x;
+  const dy = end.y-start.y;
+  selected = {x:dx/10,y:dy/10};
+  path = calcOrbit(player.pos, selected, 200);
+});
+c.addEventListener('mouseup', e=>{
+  if(!dragging) return;
+  dragging = false;
+  if(selected && player.fuel>0){
+    player.vel.x += selected.x*player.thrust;
+    player.vel.y += selected.y*player.thrust;
+    player.fuel = Math.max(0, player.fuel-Math.hypot(selected.x,selected.y));
+    selected = null;
+  }
+});
+
+/* === UPDATE === */
+function update(){
+  // physics
+  let ax=0,ay=0;
+  for(const p of planets){
+    const d = dist(player.pos,p);
+    const f = G*p.mass/(d*d+1);
+    ax += f*(p.x-player.pos.x)/d;
+    ay += f*(p.y-player.pos.y)/d;
+  }
+  player.vel.x += ax*DT;
+  player.vel.y += ay*DT;
+  player.vel.x *= DRAG;
+  player.vel.y *= DRAG;
+  player.pos.x += player.vel.x*DT;
+  player.pos.y += player.vel.y*DT;
+
+  // landing
+  for(const p of planets){
+    if(dist(player.pos,p) < p.mass*2){
+      if(!landed){
+        landed = p;
+        openShop();
+      }
+      player.vel = {x:0,y:0};
+      player.pos = {x:p.x,y:p.y};
+      break;
+    }
+  }
+  if(landed && dist(player.pos,landed) > landed.mass*2){
+    landed = null;
+    closeShop();
+  }
+
+  // contract
+  if(player.contract){
+    const idx = player.cargo.findIndex(c=>c && c.type===player.contract.type);
+    if(idx!==-1 && player.cargo[idx].amount >= player.contract.amount){
+      player.credits += player.contract.reward;
+      player.cargo[idx].amount -= player.contract.amount;
+      if(player.cargo[idx].amount===0) player.cargo[idx]=null;
+      player.contract = null;
+      updateUI();
+    }
+  }
+
+  updateUI();
+}
+
+/* === UI === */
+function updateUI(){
+  document.getElementById('credits').textContent = Math.floor(player.credits);
+  document.getElementById('fuel').textContent = Math.floor(player.fuel);
+  const cdiv = document.getElementById('cargo');
+  cdiv.innerHTML = 'Cargo: '+player.cargo.map((c,i)=>c?`${c.type}:${c.amount}`:'--').join(' ');
+  const contractDiv = document.getElementById('contract');
+  if(player.contract){
+    contractDiv.textContent = `Contract: ${player.contract.amount} of ${player.contract.type} for ${player.contract.reward}c`;
+  } else {
+    contractDiv.textContent = 'Contract: none';
+  }
+}
+
+function openShop(){
+  document.getElementById('shop').style.display='block';
+  document.getElementById('planetName').textContent = landed.name;
+  const m = document.getElementById('market');
+  m.innerHTML = '';
+  for(let i=0;i<8;i++){
+    const price = landed.prices[i];
+    const row = document.createElement('div');
+    row.innerHTML = `
+      Good ${i}: ${Math.floor(price)}c
+      <button onclick="buy(${i})">Buy</button>
+      <button onclick="sell(${i})">Sell</button>
+    `;
+    m.appendChild(row);
+  }
+}
+function closeShop(){document.getElementById('shop').style.display='none';}
+function buy(type){
+  if(player.credits >= landed.prices[type]){
+    player.credits -= landed.prices[type];
+    const slot = player.cargo.findIndex(c=>!c);
+    if(slot!==-1){
+      player.cargo[slot] = {type,amount:1};
+    } else {
+      const idx = player.cargo.findIndex(c=>c && c.type===type);
+      if(idx!==-1) player.cargo[idx].amount++;
+    }
+    landed.prices[type] *= 1.05;
+    updateUI();
+  }
+}
+function sell(type){
+  const idx = player.cargo.findIndex(c=>c && c.type===type);
+  if(idx!==-1){
+    player.credits += landed.prices[type];
+    player.cargo[idx].amount--;
+    if(player.cargo[idx].amount===0) player.cargo[idx]=null;
+    landed.prices[type] *= 0.95;
+    updateUI();
+  }
+}
+function buyFuel(){
+  if(player.credits >= 10){
+    player.credits -= 10;
+    player.fuel = Math.min(100, player.fuel+20);
+    updateUI();
+  }
+}
+function upgradeCargo(){
+  if(player.credits >= 100 && player.maxCargo < 16){
+    player.credits -= 100;
+    player.maxCargo += 2;
+    player.cargo.length = player.maxCargo;
+    updateUI();
+  }
+}
+function upgradeThrust(){
+  if(player.credits >= 200){
+    player.credits -= 200;
+    player.thrust += 0.5;
+    updateUI();
+  }
+}
+
+/* === CONTRACTS === */
+function generateContract(){
+  if(!player.contract && Math.random()<0.01){
+    const type = Math.floor(rand(0,8));
+    const amount = Math.floor(rand(1,5));
+    const reward = Math.floor(amount*planets[0].prices[type]*1.5);
+    player.contract = {type,amount,reward};
+    updateUI();
+  }
+}
+setInterval(generateContract, 5000);
+
+/* === LOOP === */
+load();
+setInterval(()=>{update();draw();save()}, 50);
+</script>
+</body>
+</html>

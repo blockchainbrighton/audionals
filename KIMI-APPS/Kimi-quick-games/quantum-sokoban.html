@@ -1,0 +1,174 @@
+<!-- Feels fun and nerdy but needs explanations and instructions for gameplay -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Quantum Sokoban</title>
+<style>
+  body{margin:0;background:#111;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#eee}
+  canvas{border:2px solid #fff}
+  #info{position:absolute;top:10px;left:10px;font-size:14px}
+</style>
+</head>
+<body>
+<canvas id="c" width="384" height="384"></canvas>
+<div id="info">Arrows=Move | Space=Observe | Z=Undo | R=Restart</div>
+
+<script>
+/* ---------- CONFIG ---------- */
+const CELL = 32;
+const W = 12, H = 12;
+const TILES = { wall:'#', floor:' ', goal:'.', crate:'$', player:'@' };
+
+/* ---------- STATE ---------- */
+let grid, crates, player, undoStack, levelSeed = 1;
+
+/* ---------- LEVEL GEN ---------- */
+function loadLevel(seed) {
+  undoStack = [];
+  levelSeed = seed;
+  grid = Array.from({length:H},()=>Array(W).fill(TILES.floor));
+  crates = [];
+  // deterministic noise
+  let rng = () => (seed = (seed * 9301 + 49297) % 233280, seed / 233280);
+  // border walls
+  for(let y=0;y<H;y++){
+    grid[y][0]=grid[y][W-1]=TILES.wall;
+  }
+  for(let x=0;x<W;x++){
+    grid[0][x]=grid[H-1][x]=TILES.wall;
+  }
+  // internal random walls & goals
+  for(let y=2;y<H-2;y++){
+    for(let x=2;x<W-2;x++){
+      if(rng()<.15) grid[y][x]=TILES.wall;
+      else if(rng()<.15) grid[y][x]=TILES.goal;
+    }
+  }
+  // place player
+  do{player={x:~~(rng()*(W-2))+1,y:~~(rng()*(H-2))+1}}while(grid[player.y][player.x]!==TILES.floor);
+  // place 3 crates
+  for(let i=0;i<3;i++){
+    let pos;
+    do{pos={x:~~(rng()*(W-2))+1,y:~~(rng()*(H-2))+1}}while(
+      grid[pos.y][pos.x]!==TILES.floor ||
+      (pos.x===player.x && pos.y===player.y) ||
+      crates.some(c=>c.states[0].x===pos.x && c.states[0].y===pos.y)
+    );
+    crates.push({states:[{x:pos.x,y:pos.y}]});
+  }
+}
+
+/* ---------- MOVE ---------- */
+function move(dx,dy){
+  const next={x:player.x+dx,y:player.y+dy};
+  if(grid[next.y][next.x]===TILES.wall) return;
+  // find crate at next
+  const ci = crates.findIndex(c=>c.states.some(s=>s.x===next.x && s.y===next.y));
+  if(ci!==-1){
+    const c = crates[ci];
+    const ghosts = [];
+    c.states.forEach(s=>{
+      const nxt={x:s.x+dx,y:s.y+dy};
+      if(grid[nxt.y][nxt.x]!==TILES.wall && !crates.some(other=>other!==c && other.states.some(os=>os.x===nxt.x && os.y===nxt.y))){
+        ghosts.push(nxt);
+      }
+    });
+    if(ghosts.length===0) return;
+    undoStack.push(JSON.stringify({grid,crates,player}));
+    // expand superposition
+    c.states = [...c.states,...ghosts];
+    // move player
+    player = next;
+  } else {
+    undoStack.push(JSON.stringify({grid,crates,player}));
+    player = next;
+  }
+}
+
+/* ---------- COLLAPSE ---------- */
+function observe(){
+  undoStack.push(JSON.stringify({grid,crates,player}));
+  crates.forEach(c=>{
+    // choose random state
+    const idx = ~~(Math.random()*c.states.length);
+    c.states = [c.states[idx]];
+  });
+  // resolve overlaps: left-top wins
+  for(let a of crates){
+    for(let b of crates){
+      if(a!==b && a.states[0].x===b.states[0].x && a.states[0].y===b.states[0].y){
+        // move b back to original single state (restart)
+        loadLevel(levelSeed);
+        return;
+      }
+    }
+  }
+  if(winCheck()) nextLevel();
+}
+
+function winCheck(){
+  return crates.every(c=>grid[c.states[0].y][c.states[0].x]===TILES.goal);
+}
+function nextLevel(){loadLevel(levelSeed+1);}
+
+/* ---------- UNDO ---------- */
+function undo(){
+  if(undoStack.length){
+    const prev = JSON.parse(undoStack.pop());
+    grid=prev.grid;crates=prev.crates;player=prev.player;
+  }
+}
+
+/* ---------- DRAW ---------- */
+const ctx = document.getElementById('c').getContext('2d');
+function draw(){
+  ctx.clearRect(0,0,c.width,c.height);
+  // grid
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const tile = grid[y][x];
+      ctx.fillStyle = tile===TILES.wall?'#666':tile===TILES.goal?'#ff5':'#222';
+      ctx.fillRect(x*CELL,y*CELL,CELL,CELL);
+      if(tile===TILES.goal){
+        ctx.fillStyle='#fff';
+        ctx.fillText('.',x*CELL+CELL/2-4,y*CELL+CELL/2+4);
+      }
+    }
+  }
+  // crates
+  crates.forEach(c=>{
+    c.states.forEach((s,i)=>{
+      ctx.globalAlpha = c.states.length>1?0.4:1;
+      ctx.fillStyle = c.states.length>1?'#0ff':'#5af';
+      ctx.fillRect(s.x*CELL+2,s.y*CELL+2,CELL-4,CELL-4);
+    });
+  });
+  // player
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#f55';
+  ctx.beginPath();
+  ctx.arc(player.x*CELL+CELL/2,player.y*CELL+CELL/2,CELL/2-4,0,2*Math.PI);
+  ctx.fill();
+  requestAnimationFrame(draw);
+}
+
+/* ---------- INPUT ---------- */
+window.addEventListener('keydown',e=>{
+  switch(e.code){
+    case 'ArrowUp':move(0,-1);break;
+    case 'ArrowDown':move(0,1);break;
+    case 'ArrowLeft':move(-1,0);break;
+    case 'ArrowRight':move(1,0);break;
+    case 'Space':observe();break;
+    case 'KeyZ':undo();break;
+    case 'KeyR':loadLevel(levelSeed);break;
+  }
+});
+
+/* ---------- INIT ---------- */
+loadLevel(levelSeed);
+draw();
+</script>
+</body>
+</html>

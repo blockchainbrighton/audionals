@@ -1,0 +1,197 @@
+<!--  This game feels potentially exciting and engagaing but needs instructions for gameplay and strong narrative -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Timeloop Detective</title>
+<style>
+    body { margin:0; font-family: sans-serif; display:flex; height:100vh; }
+    #map { width:60%; height:100%; background:#f0f0f0; }
+    #notes { width:40%; padding:20px; box-sizing:border-box; overflow:auto; }
+    .node { fill:#4a90e2; stroke:#fff; stroke-width:2; cursor:pointer; transition:fill .2s; }
+    .node:hover { fill:#2c6aa0; }
+    .clock { font-size:32px; margin-bottom:10px; }
+    .clue { padding:2px 0; color:#555; }
+    .intervention { padding:2px 0; color:#b22222; }
+    button { margin:5px 0 10px; }
+    .schedule { font-size:12px; color:#666; }
+</style>
+</head>
+<body>
+<svg id="map"></svg>
+<aside id="notes">
+    <div class="clock" id="clock">08:00</div>
+    <button id="rewind" style="display:none">Rewind Day (auto at 20:00)</button>
+    <h3>Clues</h3>
+    <div id="clueList"></div>
+    <h3>Interventions</h3>
+    <div id="interList"></div>
+    <div id="status"></div>
+</aside>
+<script>
+/* ---------- Data ---------- */
+const locations = [
+    {id:'lobby', name:'Lobby', x:100, y:150},
+    {id:'vault', name:'Vault', x:250, y:100},
+    {id:'cafe', name:'Cafe', x:400, y:200},
+    {id:'roof', name:'Roof', x:300, y:50},
+    {id:'garage', name:'Garage', x:200, y:250}
+];
+const npcs = [
+    {name:'Guard', timeline:[
+        {time:0, loc:'lobby', action:'patrol'},
+        {time:180, loc:'vault', action:'check lock'},
+        {time:360, loc:'cafe', action:'coffee break'},
+        {time:540, loc:'vault', action:'second check'},
+        {time:720, loc:'lobby', action:'end shift'}
+    ]},
+    {name:'Thief', timeline:[
+        {time:0, loc:'garage', action:'wait'},
+        {time:240, loc:'cafe', action:'meet insider'},
+        {time:480, loc:'roof', action:'rappel gear'},
+        {time:600, loc:'vault', action:'crack safe'},
+        {time:720, loc:'garage', action:'escape'}
+    ]},
+    {name:'Manager', timeline:[
+        {time:0, loc:'lobby', action:'open office'},
+        {time:360, loc:'vault', action:'inspect logs'},
+        {time:480, loc:'cafe', action:'lunch'},
+        {time:600, loc:'vault', action:'sign off'},
+        {time:720, loc:'lobby', action:'leave'}
+    ]}
+];
+let clues = [];
+let changes = [];
+let time = 0; // minutes since 08:00
+let loopCount = 0;
+const DAY_END = 12*60; // 20:00
+/* ---------- Engine ---------- */
+function advance(mins) {
+    time += mins;
+    if (time >= DAY_END) endDay();
+    renderClock();
+    observe();
+}
+function observe() {
+    npcs.forEach(npc=>{
+        const ev = npc.timeline.find(e=>e.time===time);
+        if (!ev) return;
+        const loc = locations.find(l=>l.id===ev.loc);
+        if (loc.id === currentLoc) {
+            const desc = `${npc.name} at ${loc.name} doing "${ev.action}"`;
+            if (!clues.find(c=>c.desc===desc)) clues.push({desc});
+            notebookUI();
+        }
+    });
+}
+function endDay() {
+    loopCount++;
+    applyChanges();
+    time = 0;
+    renderClock();
+    notebookUI();
+    // auto rewind
+    setTimeout(()=>{advance(0);},1000);
+}
+function applyChanges() {
+    changes.forEach(chg=>{
+        const npc = npcs.find(n=>n.name===chg.npc);
+        if (!npc) return;
+        const ev = npc.timeline.find(e=>e.time===chg.time && e.loc===chg.loc);
+        if (ev) {
+            ev.action = chg.newAction;
+            ev.loc = chg.newLoc || ev.loc;
+        }
+    });
+}
+function checkSuccess() {
+    // Heist fails if thief reaches vault after 10:00 and vault is locked
+    const thiefVault = npcs.find(n=>n.name==='Thief').timeline.find(e=>e.loc==='vault' && e.time>=600);
+    const vaultLocked = npcs.find(n=>n.name==='Guard').timeline.some(e=>e.loc==='vault' && e.time>=600 && e.action==='lock vault');
+    if (thiefVault && vaultLocked) return true;
+    return false;
+}
+/* ---------- UI ---------- */
+let currentLoc = null;
+function renderMap() {
+    const svg = document.getElementById('map');
+    locations.forEach(l=>{
+        const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        c.setAttribute('cx',l.x);
+        c.setAttribute('cy',l.y);
+        c.setAttribute('r',20);
+        c.setAttribute('class','node');
+        c.addEventListener('click',()=>{
+            currentLoc = l.id;
+            observe();
+        });
+        svg.appendChild(c);
+        const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+        txt.setAttribute('x',l.x);
+        txt.setAttribute('y',l.y+40);
+        txt.setAttribute('text-anchor','middle');
+        txt.textContent = l.name;
+        svg.appendChild(txt);
+    });
+}
+function renderClock() {
+    const h = 8 + Math.floor(time/60);
+    const m = (time%60).toString().padStart(2,'0');
+    document.getElementById('clock').textContent = `${h}:${m}`;
+}
+function notebookUI() {
+    const cl = document.getElementById('clueList');
+    cl.innerHTML = '';
+    clues.forEach(c=>{
+        const div = document.createElement('div');
+        div.className='clue';
+        div.textContent = c.desc;
+        cl.appendChild(div);
+    });
+    const il = document.getElementById('interList');
+    il.innerHTML = '';
+    changes.forEach(chg=>{
+        const div = document.createElement('div');
+        div.className='intervention';
+        div.textContent = `Loop ${chg.loop}: Changed ${chg.npc} at ${chg.time} to ${chg.newAction}`;
+        il.appendChild(div);
+    });
+    // show schedules
+    const status = document.getElementById('status');
+    status.innerHTML = '<h4>NPC Schedules</h4>';
+    npcs.forEach(npc=>{
+        const s = document.createElement('div');
+        s.className='schedule';
+        s.innerHTML = `<b>${npc.name}</b>: ` +
+            npc.timeline.map(e=>`${e.time}@${e.loc}(${e.action})`).join(', ');
+        status.appendChild(s);
+    });
+    // check win
+    if (checkSuccess()) {
+        alert('Heist prevented! You win in '+loopCount+' loops.');
+        location.reload();
+    }
+}
+/* ---------- Interventions ---------- */
+function addIntervention(npcName,time,loc,newAction,newLoc) {
+    changes.push({loop:loopCount,npc:npcName,time,loc,newAction,newLoc});
+    notebookUI();
+}
+/* ---------- Buttons ---------- */
+document.getElementById('rewind').addEventListener('click',endDay);
+/* ---------- Init ---------- */
+renderMap();
+renderClock();
+notebookUI();
+/* ---------- Time ticker ---------- */
+setInterval(()=>{advance(30);},1000);
+/* ---------- Example intervention interface ---------- */
+window.addEventListener('keydown',e=>{
+    // Press L to lock vault at 10:00
+    if (e.key==='l' || e.key==='L') {
+        addIntervention('Guard',600,'vault','lock vault');
+    }
+});
+</script>
+</body>
+</html>

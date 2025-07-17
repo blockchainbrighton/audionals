@@ -1,0 +1,198 @@
+<!-- Can't seem to make the game start -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Incremental Empire</title>
+  <style>
+    /* 100-ish LOC of styling */
+    body{
+      margin:0;
+      font-family:system-ui, sans-serif;
+      background:#fdf6e3;
+      color:#333;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      padding:2rem;
+    }
+    h1{margin:0 0 .5rem; font-size:2.5rem;}
+    progress{
+      width:100%;
+      max-width:400px;
+      height:1.25rem;
+      accent-color:#b58900;
+    }
+    #shop{
+      margin:1rem 0;
+      display:flex;
+      flex-direction:column;
+      gap:.5rem;
+      width:100%;
+      max-width:400px;
+    }
+    button{
+      padding:.6rem 1rem;
+      font-size:1rem;
+      border:0;
+      border-radius:.4rem;
+      background:#268bd2;
+      color:#fff;
+      cursor:pointer;
+      transition:background .2s;
+    }
+    button:disabled{background:#93a1a1; cursor:not-allowed;}
+    button:hover:not(:disabled){background:#2aa198;}
+    #prestigeBtn{margin-top:1rem; background:#cb4b16;}
+    #prestigeBtn:hover:not(:disabled){background:#dc322f;}
+    .info{font-size:.85rem; color:#586e75;}
+  </style>
+</head>
+<body>
+
+  <h1 id="gold">Loading…</h1>
+  <progress id="goldBar" max="100" value="0"></progress>
+
+  <section id="shop"></section>
+
+  <button id="prestigeBtn" disabled>Prestige</button>
+
+  <script>
+    /* 300-ish LOC of game logic */
+    const buildings = [
+      {name:"Hut", baseCost:10, qty:0, income:1},
+      {name:"Farm", baseCost:100, qty:0, income:5},
+      {name:"Market", baseCost:1200, qty:0, income:25},
+      {name:"Castle", baseCost:15000, qty:0, income:200},
+      {name:"Kingdom", baseCost:300000, qty:0, income:3000},
+    ];
+
+    const milestones = [
+      {gold:150, text:"You can Prestige now!"},
+      {gold:5000, text:"Markets unlocked!"},
+      {gold:50000, text:"Castles unlocked!"},
+      {gold:1e6, text:"Kingdoms unlocked!"},
+    ];
+
+    let resources = {gold:0, crowns:0};
+    let lastSave = Date.now();
+
+    const SAVE_KEY = "incrementalEmpireSave";
+    const VERSION = 1;
+
+    /* ---------- persistence ---------- */
+    function loadSave(){
+      try{
+        const raw = localStorage.getItem(SAVE_KEY);
+        if(!raw) return;
+        const obj = JSON.parse(raw);
+        if(obj.version !== VERSION) throw "version mismatch";
+        resources = obj.resources;
+        buildings.forEach((b,i)=>{b.qty = obj.buildings[i];});
+      }catch(e){console.warn("Save load failed, using defaults");}
+    }
+
+    function saveGame(){
+      const payload = {
+        version:VERSION,
+        resources,
+        buildings:buildings.map(b=>b.qty),
+      };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+      lastSave = Date.now();
+    }
+
+    /* ---------- maths ---------- */
+    function cost(b){ return Math.floor(b.baseCost*Math.pow(1.15,b.qty)); }
+    function gpc(){ return 1 + resources.crowns; } // gold per click
+    function gps(){
+      return buildings.reduce((sum,b)=>sum + b.qty*b.income, 0);
+    }
+
+    /* ---------- ui ---------- */
+    const goldEl = document.getElementById("gold");
+    const goldBar = document.getElementById("goldBar");
+    const shopEl = document.getElementById("shop");
+    const prestigeBtn = document.getElementById("prestigeBtn");
+
+    function renderShop(){
+      shopEl.innerHTML = "";
+      buildings.forEach((b,i)=>{
+        const btn = document.createElement("button");
+        const c = cost(b);
+        btn.innerHTML = `${b.name} (${b.qty})<br>
+                         <span class="info">${c} gold | +${b.income} gps</span>`;
+        btn.disabled = resources.gold < c;
+        btn.onclick = ()=> buyBuilding(i);
+        shopEl.appendChild(btn);
+      });
+    }
+
+    function renderUI(){
+      goldEl.textContent = `${Math.floor(resources.gold)} gold`;
+      goldBar.max = milestones[0].gold;
+      goldBar.value = Math.min(resources.gold, goldBar.max);
+      renderShop();
+      prestigeBtn.disabled = resources.gold < 150;
+      prestigeBtn.textContent = `Prestige for ${Math.floor(resources.gold/100)} Crowns`;
+    }
+
+    /* ---------- game actions ---------- */
+    function buyBuilding(id){
+      const b = buildings[id];
+      const c = cost(b);
+      if(resources.gold < c) return;
+      resources.gold -= c;
+      b.qty += 1;
+      checkMilestones();
+      renderUI();
+      saveGame();
+    }
+
+    function checkMilestones(){
+      milestones.forEach(m=>{
+        if(resources.gold >= m.gold && !m.shown){
+          m.shown = true;
+          alert("🏰 " + m.text);
+        }
+      });
+    }
+
+    function doPrestige(){
+      if(resources.gold < 150) return;
+      resources.crowns += Math.floor(resources.gold/100);
+      resources.gold = 0;
+      buildings.forEach(b=>b.qty=0);
+      milestones.forEach(m=>m.shown=false);
+      renderUI();
+      saveGame();
+    }
+    prestigeBtn.onclick = doPrestige;
+
+    /* ---------- click income ---------- */
+    document.body.addEventListener("click", e=>{
+      if(e.target.closest("button")) return; // ignore buttons
+      resources.gold += gpc();
+      renderUI();
+    });
+
+    /* ---------- main loop ---------- */
+    let lastFrame = 0;
+    function tick(ts){
+      const dt = (ts - lastFrame)/1000; lastFrame = ts;
+      resources.gold += gps()*dt;
+      renderUI();
+      if(ts - lastSave > 5000) saveGame();
+      requestAnimationFrame(tick);
+    }
+
+    /* ---------- init ---------- */
+    function initGame(){
+      loadSave();
+      renderUI();
+      requestAnimationFrame(tick);
+    }
+    initGame();
+  </script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!--  Very simple but very cool - perfect in HUD game for an astronaut -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gravity Golf</title>
+<style>
+  body{margin:0;background:#0c0c18;color:#94e2d5;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh}
+  canvas{border:1px solid #94e2d5}
+  #ui{position:absolute;top:10px;left:10px}
+  button{background:#94e2d5;color:#0c0c18;border:none;padding:4px 8px}
+</style>
+</head>
+<body>
+<canvas id="c" width="800" height="600"></canvas>
+<div id="ui">
+  <div id="score">Strokes: 0</div>
+  <div id="best">Best: -</div>
+  <button onclick="reset()">Reset</button>
+</div>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d'),W=c.width,H=c.height;
+const G=500,PAR=3;
+let seed,planets,ball,vel,strokes,best,drag,aim;
+
+function rnd(){seed=Math.imul(seed,0x19660d)+0x3c6ef35f|0;return(seed>>>0)/2**32;}
+function noise(n){let t=0;for(let i=0;i<n;i++)t+=rnd();return t/n;}
+
+function init(){
+  seed=Math.floor(Date.now()/864e5);
+  planets=[];
+  for(let i=0;i<3;i++){
+    planets.push({
+      x:noise(3)*W,
+      y:noise(3)*H,
+      r:20+noise(1)*30,
+      m:0
+    });
+    planets[i].m=planets[i].r**2/100;
+  }
+  reset();
+}
+
+function reset(){
+  ball={x:50,y:H/2};
+  vel={x:0,y:0};
+  strokes=0;
+  best=localStorage.getItem(seed)||'-';
+  drag=null;
+  updateUI();
+}
+
+function updateUI(){
+  document.getElementById('score').textContent=`Strokes: ${strokes}`;
+  document.getElementById('best').textContent=`Best: ${best}`;
+}
+
+function rk4(p,v,h,acc){
+  let k1=acc(p);
+  let k2=acc({x:p.x+v.x*h/2,y:p.y+v.y*h/2});
+  let k3=acc({x:p.x+v.x*h/2,y:p.y+v.y*h/2});
+  let k4=acc({x:p.x+v.x*h,y:p.y+v.y*h});
+  return{
+    x:v.x+h*(k1.x+2*k2.x+2*k3.x+k4.x)/6,
+    y:v.y+h*(k1.y+2*k2.y+2*k3.y+k4.y)/6
+  };
+}
+
+function gravity(p){
+  let fx=0,fy=0;
+  planets.forEach(planet=>{
+    const dx=planet.x-p.x,dy=planet.y-p.y,d2=dx*dx+dy*dy;
+    const f=G*planet.m/(d2*Math.sqrt(d2));
+    fx+=dx*f;fy+=dy*f;
+  });
+  return{x:fx,y:fy};
+}
+
+function step(){
+  const dt=0.1;
+  vel=rk4(ball,vel,dt,gravity);
+  ball.x+=vel.x*dt;
+  ball.y+=vel.y*dt;
+
+  // bounce walls
+  if(ball.x<0||ball.x>W){vel.x*=-0.8;ball.x=Math.max(0,Math.min(W,ball.x));}
+  if(ball.y<0||ball.y>H){vel.y*=-0.8;ball.y=Math.max(0,Math.min(H,ball.y));}
+
+  // goal
+  if(ball.x>W-50&&Math.abs(ball.y-H/2)<20){
+    if(strokes<best||best==='-'){best=strokes;localStorage.setItem(seed,best);}
+    updateUI();
+    alert(`Finished in ${strokes} strokes! Par: ${PAR}`);
+    reset();
+  }
+}
+
+function draw(){
+  ctx.fillStyle='#0c0c18';ctx.fillRect(0,0,W,H);
+  planets.forEach(p=>{
+    ctx.fillStyle='#94e2d5';
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill();
+    ctx.fillStyle='#0c0c18';
+    ctx.font='12px sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText(p.m.toFixed(1),p.x,p.y+4);
+  });
+  ctx.fillStyle='#f9e2af';
+  ctx.beginPath();ctx.arc(ball.x,ball.y,5,0,7);ctx.fill();
+  if(aim){
+    ctx.strokeStyle='#f38ba8';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(ball.x,ball.y);
+    ctx.lineTo(ball.x-aim.x,ball.y-aim.y);
+    ctx.stroke();
+  }
+  ctx.fillStyle='#94e2d5';
+  ctx.fillRect(W-50,H/2-20,50,40);
+}
+
+function animate(){
+  if(!drag)step();
+  draw();
+  requestAnimationFrame(animate);
+}
+
+c.addEventListener('mousedown',e=>{
+  const rect=c.getBoundingClientRect();
+  const x=e.clientX-rect.x,y=e.clientY-rect.y;
+  if(Math.hypot(x-ball.x,y-ball.y)<10){
+    drag={x,y};
+  }
+});
+
+c.addEventListener('mousemove',e=>{
+  if(drag){
+    const rect=c.getBoundingClientRect();
+    aim={x:e.clientX-rect.x-ball.x,y:e.clientY-rect.y-ball.y};
+  }
+});
+
+c.addEventListener('mouseup',e=>{
+  if(drag){
+    vel={x:-aim.x/10,y:-aim.y/10};
+    strokes++;
+    updateUI();
+    drag=null;
+    aim=null;
+  }
+});
+
+init();
+animate();
+</script>
+</body>
+</html>
