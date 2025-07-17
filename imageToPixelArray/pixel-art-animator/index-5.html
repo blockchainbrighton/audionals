@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Pixel Cosmos – resizable</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:sans-serif;color:#fff}
+  #c{image-rendering:pixelated;image-rendering:-moz-crisp-edges;image-rendering:crisp-edges;border:1px solid #333}
+  #ui{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  button{background:#222;border:1px solid #555;color:#fff;padding:6px 10px;border-radius:4px;cursor:pointer}
+  button:hover{background:#444}
+</style>
+</head>
+<body>
+<canvas id="c" width="64" height="64"></canvas>
+<div id="ui">
+  <button onclick="setScale(1)">1×</button>
+  <button onclick="setScale(2)">2×</button>
+  <button onclick="setScale(4)">4×</button>
+  <button onclick="setScale(8)">8×</button>
+  <button onclick="setScale(Math.min(Math.floor(innerWidth/70),Math.floor(innerHeight/70)))">Fit</button>
+</div>
+
+<script>
+/* === CONFIGURATION & TOOLS ============================================== */
+const W = 64, H = 64;                       // virtual resolution
+let SCALE = 4;                              // pixel scale
+const C = new Uint8ClampedArray(W*H*4);     // RGBA back-buffer
+const PAL = [                               // 16-color palette (R,G,B)
+  0x00,0x00,0x00,   // 0 black
+  0xFF,0xFF,0xFF,   // 1 white
+  0xAA,0xAA,0xAA,   // 2 gray
+  0x00,0x50,0xFF,   // 3 deep blue
+  0xFF,0xC0,0x00,   // 4 sun
+  0xFF,0x50,0x00,   // 5 planet1
+  0x00,0xFF,0x80,   // 6 planet2
+  0x80,0x80,0xFF,   // 7 planet3
+  0xFF,0xFF,0x80,   // 8 moon
+  0xFF,0x00,0x00,   // 9 rocket
+];
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const imgData = ctx.createImageData(W,H);
+
+function setScale(s){
+  SCALE = Math.max(1,Math.floor(s));
+  canvas.style.width  = canvas.style.height = (W*SCALE)+"px";
+  canvas.width  = W;
+  canvas.height = H;
+}
+setScale(4);
+
+/* === SHARED LOW-LEVEL DRAW PRIMITIVES =================================== */
+function pset(x,y,col){ const i=(y*W+x)*4; C[i]=PAL[col*3]; C[i+1]=PAL[col*3+1]; C[i+2]=PAL[col*3+2]; C[i+3]=255; }
+function circle(x,y,r,col){ for(let dy=-r;dy<=r;dy++){ const h=Math.floor(Math.sqrt(r*r-dy*dy)); for(let dx=-h;dx<=h;dx++) pset(x+dx,y+dy,col); } }
+function line(x0,y0,x1,y1,col){
+  const dx=Math.abs(x1-x0), dy=Math.abs(y1-y0), sx=x0<x1?1:-1, sy=y0<y1?1:-1;
+  let err=dx-dy;
+  for(;;){
+    pset(x0,y0,col);
+    if(x0===x1&&y0===y1) break;
+    const e2=err*2;
+    if(e2>-dy){ err-=dy; x0+=sx; }
+    if(e2< dx){ err+=dx; y0+=sy; }
+  }
+}
+/* === STARFIELD ========================================================== */
+const STARS = 72;
+const star = new Uint8Array(STARS*2);
+const starHue = new Uint8Array(STARS);
+const starPhase = new Uint16Array(STARS);
+for(let i=0;i<STARS;i++){
+  star[i*2]   = Math.floor(Math.random()*W);
+  star[i*2+1] = Math.floor(Math.random()*H);
+  starHue[i]  = Math.floor(Math.random()*32+224);
+  starPhase[i]= Math.floor(Math.random()*65536);
+}
+function drawStars(t){
+  for(let i=0;i<STARS;i++){
+    const x=star[i*2], y=star[i*2+1];
+    const phase = (t*0.002 + starPhase[i]) & 0xFFFF;
+    const br = (phase>>13)&3;
+    if(br) pset(x,y,1);
+  }
+}
+
+/* === LUNAR JOURNEY ====================================================== */
+const MOON_R = 3, MOON_COL = 8;
+function lerp(a,b,t){ return a+(b-a)*t; }
+function moonPos(t){
+  const cycle = 8000;
+  const p = ((t%cycle)/cycle);
+  if(p<0.5){
+    const t=p*2;
+    return {x:lerp(0,32,t), y:lerp(0,32,t)};
+  }else{
+    const t=(p-0.5)*2;
+    return {x:lerp(32,63,t), y:lerp(32,63,t)};
+  }
+}
+function drawMoon(t){
+  const {x,y}=moonPos(t);
+  circle(Math.floor(x),Math.floor(y),MOON_R,MOON_COL);
+}
+
+/* === POCKET SOLAR SYSTEM ================================================ */
+const SUN_R = 5, SUN_COL = 4;
+const PLANETS = [
+  {r:1, col:5, d:12, spd:0.003, phase:0},
+  {r:2, col:6, d:19, spd:0.0015, phase:50},
+  {r:1, col:7, d:28, spd:0.0009, phase:120},
+];
+function drawSolar(t){
+  circle(32,32,SUN_R,SUN_COL);
+  for(const pl of PLANETS){
+    const a = pl.phase + t*pl.spd;
+    const x = 32 + Math.cos(a)*pl.d;
+    const y = 32 + Math.sin(a)*pl.d;
+    circle(Math.floor(x),Math.floor(y),pl.r,pl.col);
+  }
+}
+
+/* === GUIDED ROCKET ====================================================== */
+const ROCKET_COL = 9;
+const ROCKET = [[0,2],[-1,1],[-1,-1],[0,-2],[1,-1],[1,1]];
+let rocketT0 = 0, rocketDur = 3000;
+let rocketSrc = {x:5,y:60}, rocketDst = {x:59,y:5};
+function setRocketRoute(src,dst,dur){
+  rocketSrc=src; rocketDst=dst; rocketDur=dur; rocketT0=performance.now();
+}
+setRocketRoute({x:5,y:60},{x:59,y:5},4000);
+function drawRocket(t){
+  const dt = t-rocketT0;
+  const p = (dt%rocketDur)/rocketDur;
+  const x = lerp(rocketSrc.x, rocketDst.x, p);
+  const y = lerp(rocketSrc.y, rocketDst.y, p);
+  const dx = rocketDst.x - rocketSrc.x;
+  const dy = rocketDst.y - rocketSrc.y;
+  const ang = Math.atan2(dy,dx);
+  const cos=Math.cos(ang), sin=Math.sin(ang);
+  for(let i=0;i<ROCKET.length;i++){
+    const [vx,vy]=ROCKET[i];
+    const nx = x + vx*cos - vy*sin;
+    const ny = y + vx*sin + vy*cos;
+    const mx = x + ROCKET[(i+1)%ROCKET.length][0]*cos - ROCKET[(i+1)%ROCKET.length][1]*sin;
+    const my = y + ROCKET[(i+1)%ROCKET.length][0]*sin + ROCKET[(i+1)%ROCKET.length][1]*cos;
+    line(Math.floor(nx),Math.floor(ny),Math.floor(mx),Math.floor(my),ROCKET_COL);
+  }
+}
+
+/* === MAIN LOOP ========================================================== */
+function frame(t){
+  C.fill(0);
+  drawStars(t);
+  drawSolar(t);
+  drawMoon(t);
+  drawRocket(t);
+  imgData.data.set(C);
+  ctx.putImageData(imgData,0,0);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

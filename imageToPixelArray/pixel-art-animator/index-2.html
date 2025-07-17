@@ -1,0 +1,138 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>64×64 Pixel Animation Studio</title>
+<style>
+    body{background:#000;margin:0;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif}
+    canvas{width:512px;height:512px;image-rendering:pixelated;image-rendering:-moz-crisp-edges;image-rendering:crisp-edges}
+    #ui{position:fixed;right:8px;bottom:8px;display:flex;gap:4px}
+    button{background:#222;color:#fff;border:none;padding:2px 6px;font-size:10px;cursor:pointer}
+    button.on{background:#555}
+</style>
+</head>
+<body>
+<canvas id=c width=64 height=64></canvas>
+<div id=ui>
+  <button id=btnStar class=on>★</button>
+  <button id=btnMoon>☾</button>
+  <button id=btnSolar>⊙</button>
+  <button id=btnRocket>🚀</button>
+  <button id=btnAll>ALL</button>
+</div>
+
+<script>
+/* ---------- helpers ---------- */
+const c=document.getElementById('c');
+c.width=64; c.height=64;              // keep internal resolution
+const ctx=c.getContext('2d');
+ctx.imageSmoothingEnabled=false;      // crisp pixels when up-scaled
+const d=ctx.createImageData(64,64);
+const img=new Uint32Array(d.data.buffer);
+const PAL=[0xFF000000,0xFFFFFFFF,0xFF4444FF,0xFFFFDD44,0xFF666666,0xFF22AA22,0xFFAA2222];
+const C={BLK:0,WHT:1,BLU:2,YEL:3,GRY:4,GRN:5,RED:6};
+function set(x,y,c){if(x>=0&x<64&y>=0&y<64)img[y*64+x]=PAL[c]}
+function cls(){img.fill(PAL[C.BLK])}
+function putSprite(x,y,sprite,color){
+    for(let i=0;i<sprite.length;i+=2) set(x+sprite[i],y+sprite[i+1],color);
+}
+const ease=t=>t<.5?2*t*t:1-2*(1-t)*(1-t);
+
+/* ---------- layer mask ---------- */
+let mask=0b0001;           // start with only stars
+function toggle(bit){mask^=1<<bit;updateButtons();}
+function resetAll(){mask=0b1111;updateButtons();}
+function updateButtons(){
+    ['btnStar','btnMoon','btnSolar','btnRocket']
+        .forEach((id,i)=>document.getElementById(id).classList.toggle('on',mask&(1<<i)));
+}
+updateButtons();
+
+/* ---------- starlight ---------- */
+const stars=new Uint8Array(60*3);
+for(let i=0;i<stars.length;i++)stars[i]=Math.random()*64;
+function starlight(t){
+    if(!(mask&1))return;
+    for(let i=0;i<stars.length;i+=3){
+        const x=stars[i],y=stars[i+1];
+        set(x,y,C.WHT);
+        set(x-1,y,Math.random()>.5?C.WHT:C.BLK);
+        set(x+1,y,Math.random()>.5?C.WHT:C.BLK);
+        set(x,y-1,Math.random()>.5?C.WHT:C.BLK);
+        set(x,y+1,Math.random()>.5?C.WHT:C.BLK);
+    }
+}
+
+/* ---------- moon ---------- */
+function moon(t){
+    if(!(mask&2))return;
+    const T=8000;
+    const phase=(t%T)/T;
+    const angle=phase*Math.PI*2-Math.PI/2;
+    const r=28;
+    const x=32+Math.cos(angle)*r;
+    const y=32+Math.sin(angle)*r;
+    const m=[0,1,1,0,2,0,3,1,4,0,0,2,1,2,2,2,3,2,4,2,0,3,1,2,2,2,3,2,4,3,0,4,1,3,2,4,3,3,4,4];
+    putSprite(x-2,y-2,m,C.GRY);
+}
+
+/* ---------- solar system ---------- */
+const planets=[
+    {a:0,r:8,s:.005,color:C.RED,size:[[0,0],[1,0],[0,1],[1,1]]},
+    {a:1,r:15,s:.003,color:C.GRN,size:[[0,0],[0,1],[1,0],[1,1]]},
+    {a:2,r:22,s:.002,color:C.BLU,size:[[0,0],[0,1],[1,0],[1,1]]}
+];
+function solar(t){
+    if(!(mask&4))return;
+    const sun=[[0,0],[1,0],[2,0],[0,1],[1,1],[2,1],[0,2],[1,2],[2,2]];
+    putSprite(30,30,sun,C.YEL);
+    planets.forEach(p=>{
+        const a=t*p.s+p.a;
+        const x=31+Math.cos(a)*p.r;
+        const y=31+Math.sin(a)*p.r;
+        putSprite(x,y,p.size,p.color);
+    });
+}
+
+/* ---------- rocket ---------- */
+const ROCKET=[[0,2],[1,0],[1,1],[1,2],[1,3],[1,4],[2,2]];
+let rocket={x:0,y:32,dx:0,dy:0,active:false,start:0,dur:0};
+function launchRocket(sx,sy,ex,ey,dur=2000){
+    rocket={x:sx,y:sy,dx:ex-sx,dy:ey-sy,start:Date.now(),dur,active:true};
+}
+function updateRocket(t){
+    if(!(mask&8))return;
+    if(!rocket.active){
+        // restart every 4 s when layer is on
+        if(!(t%4000))launchRocket(0,32,60,32,3000);
+        return;
+    }
+    const e=(t-rocket.start)/rocket.dur;
+    if(e>=1){rocket.active=false;return;}
+    const p=ease(e);
+    const x=rocket.x+rocket.dx*p;
+    const y=rocket.y+rocket.dy*p;
+    putSprite(x,y,ROCKET,C.RED);
+    if(Math.random()>.5)putSprite(x-1,y+3,[[0,0]],C.YEL);
+}
+
+/* ---------- compositor ---------- */
+function frame(ts){
+    cls();
+    starlight(ts);
+    moon(ts);
+    solar(ts);
+    updateRocket(ts);
+    ctx.putImageData(d,0,0);
+    requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------- button wiring ---------- */
+['btnStar','btnMoon','btnSolar','btnRocket']
+    .forEach((id,i)=>document.getElementById(id).onclick=()=>toggle(i));
+document.getElementById('btnAll').onclick=resetAll;
+</script>
+</body>
+</html>

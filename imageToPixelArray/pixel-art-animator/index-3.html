@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>256×256 Pixel-Animation Engine</title>
+  <style>
+    html,body{margin:0;height:100%;background:#000;color:#fff;font-family:sans-serif}
+    #wrapper{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
+    #c{image-rendering:pixelated;image-rendering:-moz-crisp-edges;image-rendering:crisp-edges;border:1px solid #333;width:min(90vmin,768px);height:min(90vmin,768px)}
+    #ui{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+    button{background:#222;border:1px solid #555;color:#fff;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:14px}
+    button:hover{background:#444}
+  </style>
+</head>
+<body>
+<div id="wrapper">
+  <canvas id="c" width="256" height="256"></canvas>
+  <div id="ui">
+    <button data-scene="starlight">Starlight</button>
+    <button data-scene="moon">Moon</button>
+    <button data-scene="solarSystem">Solar System</button>
+    <button id="rocketBtn">Launch Rocket</button>
+  </div>
+</div>
+
+<script>
+/* ---------- 256×256 High-Res Pixel-Animation Engine ---------- */
+((W,H)=>{
+  const c=document.getElementById('c');
+  const ctx=c.getContext('2d');
+  const imgData=ctx.createImageData(W,H);
+  const buf=new Uint32Array(imgData.data.buffer);
+
+  /* Helpers ---------------------------------------------------------- */
+  const PAL=[
+    0x000000,0xffffff,0x88ccff,0xffaa00,0x5500ff,0xff0055,
+    0x00ffaa,0xaaaaaa,0xffff00,0xff66cc,0x66ff66,0xcc6600
+  ];
+  const h2rgb=n=> PAL[n%PAL.length];
+  const set=(x,y,col)=>{if(x>=0&&x<W&&y>=0&&y<H)buf[y*W+x]=0xff000000|col;}
+  const clear=()=>buf.fill(0xff000000);
+  const circle=(cx,cy,r,col)=>{
+    for(let y=-r;y<=r;y++){
+      const dy=y*y;
+      for(let x=-r;x<=r;x++){
+        if(x*x+dy<=r*r)set(cx+x,cy+y,col);
+      }
+    }
+  };
+  const line=(x0,y0,x1,y1,col)=>{
+    const dx=Math.abs(x1-x0),dy=Math.abs(y1-y0);
+    const sx=x0<x1?1:-1,sy=y0<y1?1:-1;
+    let err=dx-dy;
+    while(true){
+      set(x0,y0,col);
+      if(x0===x1&&y0===y1)break;
+      const e2=2*err;
+      if(e2>-dy){err-=dy;x0+=sx;}
+      if(e2< dx){err+=dx;y0+=sy;}
+    }
+  };
+
+  /* Timeline ---------------------------------------------------------- */
+  class Timeline{
+    constructor(name){this.name=name;this.t=0;this.items=[]}
+    add(fn){this.items.push(fn);return this;}
+    remove(fn){const i=this.items.indexOf(fn);if(i>-1)this.items.splice(i,1);}
+    step(dt=1){this.t+=dt;this.items.forEach(f=>f(this.t,dt));}
+  }
+
+  /* Engine singleton -------------------------------------------------- */
+  const Engine={
+    timelines:[],
+    active:null,
+    init(){this.loop();return this},
+    switch(name){
+      this.timelines.forEach(t=>Engine.remove(t));
+      const tl=this.scenes[name]();
+      this.active=name;
+      this.add(tl);
+    },
+    add(tl){this.timelines.push(tl);return tl},
+    remove(tl){const i=this.timelines.indexOf(tl);if(i>-1)this.timelines.splice(i,1)},
+    loop(){
+      clear();
+      this.timelines.forEach(tl=>tl.step());
+      ctx.putImageData(imgData,0,0);
+      requestAnimationFrame(()=>this.loop());
+    }
+  }.init();
+
+  /* Built-in scenes --------------------------------------------------- */
+  const scenes={
+    starlight(){
+      const tl=new Timeline('starlight');
+      const stars=[];
+      for(let i=0;i<120;i++){
+        stars.push({
+          x:Math.random()*W,
+          y:Math.random()*H,
+          r:Math.random()*1.5+0.5,
+          phase:Math.random()*360,
+          speed:Math.random()*2+1
+        });
+      }
+      tl.add(t=>{
+        stars.forEach(s=>{
+          const hue=(s.phase+t/s.speed)&255;
+          const col=PAL[2+(hue>>5)&7];
+          circle(s.x,s.y,s.r,col);
+        });
+      });
+      return tl;
+    },
+
+    moon(){
+      const tl=new Timeline('moon');
+      tl.add(t=>{
+        const T=t&2047;
+        const mid=W/2,rad=mid-30;
+        const angle=(T/2048)*2*Math.PI;
+        const x=mid+Math.cos(angle)*rad;
+        const y=mid+Math.sin(angle)*rad;
+        circle(x,y,12,0xcccccc);
+      });
+      return tl;
+    },
+
+    solarSystem(){
+      const tl=new Timeline('solarSystem');
+      const sun={x:128,y:128};
+      const planets=[
+        {r:25,speed:30,size:5,color:0x00ffaa},
+        {r:50,speed:60,size:7,color:0xffaa00},
+        {r:80,speed:100,size:6,color:0x88aaff},
+        {r:110,speed:150,size:4,color:0xff0055}
+      ];
+      tl.add(t=>{
+        circle(sun.x,sun.y,15,0xffff00);
+        planets.forEach(p=>{
+          const a=(t/p.speed)/64;
+          const x=sun.x+Math.cos(a)*p.r;
+          const y=sun.y+Math.sin(a)*p.r;
+          circle(x,y,p.size,p.color);
+        });
+      });
+      return tl;
+    }
+  };
+  Engine.scenes=scenes;
+
+  /* Rocket special ---------------------------------------------------- */
+  document.getElementById('rocketBtn').addEventListener('click',()=>{
+    if(Engine.active==='rocket')return;
+    Engine.timelines.forEach(t=>Engine.remove(t));
+    const tl=new Timeline('rocket');
+    const sx=10,sy=10,ex=W-10,ey=H-10;
+    const dx=ex-sx,dy=ey-sy,len=Math.sqrt(dx*dx+dy*dy);
+    const speed=200;
+    const dur=len*speed;
+    let prog=0;
+    tl.add((t,dt)=>{
+      prog+=dt;
+      const f=Math.min(prog/dur,1);
+      const x=sx+dx*f;
+      const y=sy+dy*f;
+      // draw rocket body
+      circle(x,y,4,0xff0055);
+      // flame
+      circle(x-(dx/len)*8,y-(dy/len)*8,3,0xffaa00);
+      if(f===1)Engine.switch('starlight');
+    });
+    Engine.add(tl);
+  });
+
+  /* UI buttons -------------------------------------------------------- */
+  document.querySelectorAll('[data-scene]').forEach(btn=>{
+    btn.addEventListener('click',()=>Engine.switch(btn.dataset.scene));
+  });
+
+  /* Initial scene */
+  Engine.switch('starlight');
+
+  window.PixelAnim={Engine};
+})(256,256);
+</script>
+</body>
+</html>

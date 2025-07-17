@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Web Modular Synthesizer</title>
+<style>
+    html,body{margin:0;height:100%;font-family:system-ui;background:#111;color:#eee;display:flex;flex-direction:column}
+    #toolbar{background:#222;padding:4px 8px;display:flex;gap:6px;flex-wrap:wrap}
+    button{background:#444;border:none;color:#eee;padding:4px 8px;border-radius:3px;cursor:pointer}
+    button:hover{background:#555}
+    #canvas{flex:1;background:#0a0a0a;position:relative;overflow:hidden;cursor:crosshair}
+    .module{position:absolute;background:#1e1e1e;border:1px solid #444;border-radius:4px;min-width:120px;user-select:none;cursor:grab}
+    .module h3{margin:0;font-size:12px;background:#333;padding:2px 4px;border-radius:4px 4px 0 0}
+    .ctrl{padding:4px;display:flex;flex-direction:column;gap:4px;font-size:11px}
+    .ctrl label{display:flex;justify-content:space-between}
+    .ctrl input{width:60px}
+    .port{width:10px;height:10px;background:#0af;border-radius:50%;position:absolute;top:50%;transform:translateY(-50%);cursor:pointer}
+    .port.in{left:-5px}
+    .port.out{right:-5px}
+    svg{position:absolute;top:0;left:0;pointer-events:none}
+    path{stroke:#0af;stroke-width:2;fill:none}
+</style>
+</head>
+<body>
+<div id="toolbar">
+    <button onclick="add('osc')">Osc</button>
+    <button onclick="add('gain')">Gain</    button>
+    <button onclick="add('filter')">Filter</button>
+    <button onclick="add('lfo')">LFO</button>
+    <button onclick="add('output')">Output</button>
+    <button onclick="clearAll()">Clear</button>
+</div>
+<div id="canvas" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+<svg id="wires"></svg>
+
+<script>
+/* ---------- Audio Context ---------- */
+const actx = new (window.AudioContext || window.webkitAudioContext)();
+let nextId = 0;
+const modules = new Map();
+
+/* ---------- Utility ---------- */
+const $ = q => document.querySelector(q);
+const id = _ => nextId++;
+
+/* ---------- Module Definitions ---------- */
+const defs = {
+    osc: ctx => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g);
+        o.start();
+        return {out:g, params:{freq:440, type:'sine'}, on:({freq,type})=>{o.frequency.value=freq;o.type=type}};
+    },
+    lfo: ctx => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g);
+        o.start();
+        return {out:g, params:{rate:2}, on:({rate})=>o.frequency.value=rate};
+    },
+    gain: ctx => {
+        const g = ctx.createGain();
+        return {in:g, out:g, params:{gain:1}, on:({gain})=>g.gain.value=gain};
+    },
+    filter: ctx => {
+        const f = ctx.createBiquadFilter();
+        return {in:f, out:f, params:{freq:1000,q:1}, on:({freq,q})=>{f.frequency.value=freq;f.Q.value=q}};
+    },
+    output: ctx => {
+        const g = ctx.createGain();
+        g.connect(ctx.destination);
+        return {in:g, params:{gain:1}, on:({gain})=>g.gain.value=gain};
+    }
+};
+
+/* ---------- Wire system ---------- */
+const wires = [];
+let draggingWire = null;
+
+function drawAllWires() {
+    $('#wires').innerHTML = '';
+    wires.forEach(w => {
+        const p1 = getPortPos(w.from);
+        const p2 = getPortPos(w.to);
+        const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+        const d = `M ${p1.x} ${p1.y} C ${p1.x+50} ${p1.y} ${p2.x-50} ${p2.y} ${p2.x} ${p2.y}`;
+        path.setAttribute('d',d);
+        $('#wires').appendChild(path);
+    });
+}
+
+function getPortPos(port) {
+    const rect = port.getBoundingClientRect();
+    const cvs = $('#canvas').getBoundingClientRect();
+    return {x:rect.left+rect.width/2-cvs.left, y:rect.top+rect.height/2-cvs.top};
+}
+
+/* ---------- Module Creation ---------- */
+function add(type) {
+    const uid = id();
+    const node = defs[type](actx);
+    const el = document.createElement('div');
+    el.className = 'module';
+    el.dataset.uid = uid;
+    el.style.left = '50px';
+    el.style.top = '50px';
+    el.innerHTML = `<h3>${type}</h3>`;
+    const ctrlDiv = document.createElement('div');
+    ctrlDiv.className = 'ctrl';
+    el.appendChild(ctrlDiv);
+
+    const proxy = {el, node, params:{...node.params}, type};
+    for (const key in node.params) {
+        const label = document.createElement('label');
+        label.innerHTML = `${key}: <input type="range" min="0" max="${key==='type'?3:2000}" step="0.01" value="${node.params[key]}">`;
+        const inp = label.querySelector('input');
+        if (key==='type') inp.max=3, inp.step=1;
+        inp.addEventListener('input', e=>{
+            proxy.params[key] = key==='type' ? ['sine','square','sawtooth','triangle'][+e.target.value] : +e.target.value;
+            node.on(proxy.params);
+        });
+        ctrlDiv.appendChild(label);
+    }
+
+    // ports
+    if (node.in) {
+        const p = document.createElement('div');
+        p.className = 'port in';
+        p.dataset.uid = uid;
+        p.dataset.dir = 'in';
+        el.appendChild(p);
+    }
+    if (node.out) {
+        const p = document.createElement('div');
+        p.className = 'port out';
+        p.dataset.uid = uid;
+        p.dataset.dir = 'out';
+        el.appendChild(p);
+    }
+
+    $('#canvas').appendChild(el);
+    modules.set(uid, proxy);
+
+    // drag
+    el.onmousedown = e => {
+        if (e.target.classList.contains('port')) return;
+        const ox = e.clientX - el.offsetLeft;
+        const oy = e.clientY - el.offsetTop;
+        const move = mv => {
+            el.style.left = (mv.clientX-ox)+'px';
+            el.style.top = (mv.clientY-oy)+'px';
+            drawAllWires();
+        };
+        const up = () => {
+            document.removeEventListener('mousemove',move);
+            document.removeEventListener('mouseup',up);
+        };
+        document.addEventListener('mousemove',move);
+        document.addEventListener('mouseup',up);
+    };
+
+    // wire drag
+    el.addEventListener('mousedown', e=>{
+        if (!e.target.classList.contains('port')) return;
+        const port = e.target;
+        const dir = port.dataset.dir;
+        if (dir==='out') {
+            draggingWire = {from:port};
+        } else {
+            draggingWire = {to:port};
+        }
+    });
+    /* ---------- wire drop handling ---------- */
+    document.addEventListener('mouseup', e=>{
+        if (!draggingWire) return;
+        const hovered = document.elementsFromPoint(e.clientX,e.clientY).find(x=>x.classList.contains('port'));
+        if (hovered && hovered!==draggingWire.from && hovered!==draggingWire.to) {
+            if (!draggingWire.from) draggingWire.from = hovered;
+            else draggingWire.to = hovered;
+
+            const fuid = draggingWire.from.dataset.uid;
+            const tuid = draggingWire.to.dataset.uid;
+            const fromMod = modules.get(fuid);
+            const toMod   = modules.get(tuid);
+
+            /* NEW: skip if either end is missing */
+            if (!fromMod || !toMod) return;
+
+            if (fromMod.node.out && toMod.node.in) {
+                fromMod.node.out.connect(toMod.node.in);
+                wires.push({from:draggingWire.from, to:draggingWire.to});
+                drawAllWires();
+            }
+        }
+        draggingWire = null;
+    });
+}
+
+function clearAll() {
+    modules.forEach(m=>m.node.out?.disconnect());
+    modules.clear();
+    $('#canvas').innerHTML='';
+    $('#wires').innerHTML='';
+    wires.length=0;
+}
+</script>
+</body>
+</html>

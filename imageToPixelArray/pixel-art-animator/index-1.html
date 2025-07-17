@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>64×64 Pixel-Art Animation Studio</title>
+<style>
+  html,body{margin:0;background:#000;color:#eee;font-family:sans-serif}
+  #ui{display:flex;gap:12px;align-items:center;padding:8px}
+  button{padding:6px 10px}
+</style>
+</head>
+<body>
+
+<canvas id="cvs" width="64" height="64" style="width:512px;height:512px;image-rendering:pixelated"></canvas>
+
+<div id="ui">
+  <select id="sceneSel"></select>
+  <button id="playBtn">Play</button>
+  <button id="pauseBtn">Pause</button>
+  <button id="resetBtn">Reset</button>
+</div>
+
+<script>
+/* ---------- Core Engine ---------- */
+const C = 64, PX = new Uint8ClampedArray(C*C*4);   // 16 384 bytes, 0.016 MB
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+let frame = 0, running = true, currentScene = null;
+
+/* Draw the current 64×64 buffer to the scaled canvas */
+function blit() {
+  const img = new ImageData(PX, C, C);
+  ctx.putImageData(img, 0, 0);
+}
+
+/* Fast palette look-up (palette is 256 x 3 bytes) */
+let PAL = new Uint8Array(256*3);   // 768 bytes
+function setPal(index,r,g,b){ PAL[index*3]=r; PAL[index*3+1]=g; PAL[index*3+2]=b; }
+function pal(index){ return PAL.subarray(index*3, index*3+3); }
+
+/* ---------- Scene definition helpers ---------- */
+
+/* Run-length encoded layer: [startFrame,endFrame,runLength,color,...] */
+function makeLayer(rle){
+  const arr = new Uint8Array(rle.length);
+  rle.forEach((v,i)=>arr[i]=v);
+  return arr;
+}
+
+/* Sprite: {x0,y0,x1,y1,duration,shape}  shape is RLE list */
+function makeSprite(x0,y0,x1,y1,dur,shape){
+  const dx = x1 - x0, dy = y1 - y0, steps = dur;
+  return {x0,y0,dx,dy,steps,shape,curStep:0};
+}
+
+/* ---------- Built-in palettes ---------- */
+function initPalettes(){
+  // 0-7: stars, 8-15: moon, 16-23: sun, 24-31: planets
+  for(let i=0;i<8;i++){
+    const v = 200+i*8;
+    setPal(i, v,v,255);          // blueish white
+  }
+  for(let i=8;i<16;i++){
+    setPal(i, 220,220,180);      // moon grey
+  }
+  for(let i=16;i<24;i++){
+    setPal(i, 255,255,0);        // sun yellow
+  }
+  for(let i=24;i<32;i++){
+    setPal(i, 50,150,200);       // planet cyan
+  }
+  setPal(32,0,0,0);              // space
+}
+
+/* ---------- Renderers ---------- */
+function clear(){
+  PX.fill(0);
+}
+function drawPixel(x,y,c){
+  const off = (y*C + x)*4;
+  const [r,g,b] = pal(c);
+  PX[off]=r; PX[off+1]=g; PX[off+2]=b; PX[off+3]=255;
+}
+
+/* RLE layer to pixels */
+function drawLayer(layer){
+  let i=0;
+  while(i<layer.length){
+    const f0 = layer[i], f1 = layer[i+1], len = layer[i+2], col = layer[i+3];
+    if(frame>=f0 && frame<=f1){
+      let k=i+4;
+      for(let j=0;j<len;j++){
+        const x = layer[k++], y = layer[k++];
+        drawPixel(x,y,col);
+      }
+    }
+    i += 4 + len*2;
+  }
+}
+
+/* Linear sprite interpolation */
+function drawSprite(sp){
+  const t = Math.min(sp.curStep / sp.steps, 1);
+  const x = Math.round(sp.x0 + sp.dx*t);
+  const y = Math.round(sp.y0 + sp.dy*t);
+  let k=0;
+  while(k<sp.shape.length){
+    const dx = sp.shape[k++], dy = sp.shape[k++];
+    drawPixel(x+dx, y+dy, sp.shape[k++]);
+  }
+  if(running) sp.curStep++;
+}
+
+/* ---------- Scene definitions ---------- */
+
+const SCENES = {};
+
+/* 1. Starlight (twinkle) */
+(function(){
+  const stars = [];
+  // 64 random stars; each star has 1-pixel halo that changes color index
+  for(let i=0;i<64;i++){
+    const x = Math.floor(Math.random()*C);
+    const y = Math.floor(Math.random()*C);
+    const base = Math.floor(Math.random()*8);
+    stars.push({x,y,base});
+  }
+  // build run-length layer: 120 frames, each star has 3 states (base, base+1, base+2)
+  const rle = [];
+  stars.forEach(s=>{
+    for(let f=0;f<120;f++){
+      const col = s.base + (f%3);
+      rle.push(f,f,1,col, s.x, s.y);
+    }
+  });
+  SCENES.stars = {
+    duration:120,
+    layers:[makeLayer(rle)]
+  };
+})();
+
+/* 2. Moon rise */
+(function(){
+  // simple 5×5 moon sprite
+  const moonShape = [
+    -2,-2,8, -1,-2,8, 0,-2,8, 1,-2,8, 2,-2,8,
+    -2,-1,8, -1,-1,8, 0,-1,8, 1,-1,8, 2,-1,8,
+    -2, 0,8, -1, 0,8, 0, 0,8, 1, 0,8, 2, 0,8,
+    -2, 1,8, -1, 1,8, 0, 1,8, 1, 1,8, 2, 1,8,
+    -2, 2,8, -1, 2,8, 0, 2,8, 1, 2,8, 2, 2,8
+  ];
+  const moon = makeSprite(-5,60, 30,30, 120, moonShape);
+  SCENES.moon = {
+    duration:120,
+    layers:[],
+    sprites:[moon]
+  };
+})();
+
+/* 3. Rocket fly (custom start/end) */
+function makeRocketScene(sx,sy,ex,ey,duration=60){
+  const rocket = [-1,-1,16,0,-1,16,1,-1,16, -1,0,16,0,0,16,1,0,16, -1,1,16,0,1,16,1,1,16];
+  return {
+    duration,
+    layers:[],
+    sprites:[ makeSprite(sx,sy,ex,ey,duration,rocket) ]
+  };
+}
+SCENES.rocket = makeRocketScene(0,32, 63,32);
+
+/* ---------- Scene runner ---------- */
+function loadScene(name){
+  currentScene = SCENES[name];
+  frame = 0;
+  if(currentScene.sprites)
+    currentScene.sprites.forEach(sp=>sp.curStep=0);
+}
+
+function tick(){
+  if(!currentScene || !running) return;
+  clear();
+  if(currentScene.layers) currentScene.layers.forEach(drawLayer);
+  if(currentScene.sprites) currentScene.sprites.forEach(drawSprite);
+  blit();
+  frame++;
+  if(frame>=currentScene.duration) frame=0;
+}
+
+/* ---------- UI ---------- */
+const sel = document.getElementById('sceneSel');
+Object.keys(SCENES).forEach(k=>{
+  const opt=document.createElement('option');
+  opt.value=k; opt.textContent=k;
+  sel.appendChild(opt);
+});
+sel.onchange = ()=>{ loadScene(sel.value); };
+
+document.getElementById('playBtn').onclick = ()=>running=true;
+document.getElementById('pauseBtn').onclick = ()=>running=false;
+document.getElementById('resetBtn').onclick = ()=>{ frame=0; if(currentScene.sprites) currentScene.sprites.forEach(sp=>sp.curStep=0); };
+
+/* ---------- Init ---------- */
+initPalettes();
+loadScene('stars');
+setInterval(tick, 100);   // 10 fps
+</script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>µ-Modular Synth</title>
+<style>
+html,body{margin:0;height:100%;font-family:sans-serif;background:#111;color:#eee;overflow:hidden}
+#patch{position:relative;width:100%;height:100%}
+.mod{position:absolute;user-select:none;background:#222;border:1px solid #444;border-radius:4px;padding:4px 6px;cursor:move;min-width:90px}
+.mod h4{margin:0 0 4px;font-size:11px;text-align:center}
+.knob{display:inline-block;width:24px;height:24px;border-radius:50%;background:#333;margin:0 2px;cursor:pointer}
+.out,.in{position:absolute;width:10px;height:10px;border-radius:50%;cursor:pointer}
+.out{right:-5px;top:50%;transform:translateY(-50%);background:#0f0}
+.in{left:-5px;top:50%;transform:translateY(-50%);background:#f00}
+.cable{position:absolute;pointer-events:none;z-index:-1;top:0;left:0;width:100%;height:100%}
+#controls{position:fixed;top:4px;left:4px;z-index:999}
+button{background:#444;border:0;color:#eee;padding:4px 8px;margin-right:4px;border-radius:2px;cursor:pointer}
+button:hover{background:#555}
+</style>
+</head>
+<body>
+<div id="patch"></div>
+<div id="controls">
+  <button onclick="add('osc')">Osc</button>
+  <button onclick="add('flt')">Filter</button>
+  <button onclick="add('gain')">Gain</button>
+  <button onclick="add('lfo')">LFO</button>
+  <button onclick="add('out')">Out</button>
+  <button onclick="clearPatch()">Clear</button>
+</div>
+
+<script>
+/* ---------- Web-Audio bootstrap ---------- */
+const ctx = new (window.AudioContext || webkitAudioContext)();
+const master = ctx.createGain();
+master.connect(ctx.destination);
+
+/* ---------- state ---------- */
+const modules = new Map();   // id -> {node, element, ports}
+let nextId = 0;
+let dragged = null, offset = [0,0], wires = [], pendingSrc = null;
+
+/* ---------- module factory ---------- */
+function add(type) {
+  const id = ++nextId;
+  const el = document.createElement('div');
+  el.className = 'mod';
+  el.dataset.id = id;
+  el.style.left = 50 + Math.random()*50 + 'px';
+  el.style.top  = 50 + Math.random()*50 + 'px';
+  el.innerHTML = `<h4>${type.toUpperCase()}</h4>`;
+
+  let node, ins = [], outs = [];
+  switch(type){
+    case 'osc':
+      node = ctx.createOscillator();
+      node.type='sawtooth';
+      node.frequency.value=220;
+      node.start();
+      outs=[node];
+      el.appendChild(knob('freq',20,2000,220,v=>node.frequency.value=v));
+      break;
+    case 'flt':
+      node = ctx.createBiquadFilter();
+      node.type='lowpass';
+      node.frequency.value=800;
+      ins=[node]; outs=[node];
+      el.appendChild(knob('freq',20,8000,800,v=>node.frequency.value=v));
+      break;
+    case 'gain':
+      node = ctx.createGain();
+      node.gain.value=0.5;
+      ins=[node]; outs=[node];
+      el.appendChild(knob('gain',0,1,0.5,v=>node.gain.value=v));
+      break;
+    case 'lfo':
+      node = ctx.createOscillator();
+      node.type='sine';
+      node.frequency.value=2.5;
+      node.start();
+      const g = ctx.createGain();
+      g.gain.value=0;
+      node.connect(g);
+      outs=[g];
+      el.appendChild(knob('rate',0.1,20,2.5,v=>node.frequency.value=v));
+      el.appendChild(knob('depth',0,1,0,v=>g.gain.value=v));
+      break;
+    case 'out':
+      node = master;
+      ins=[master];
+      break;
+  }
+
+  /* jacks */
+  if(outs.length) outs.forEach(()=>el.appendChild(jack('out')));
+  if(ins.length)  ins.forEach(()=>el.appendChild(jack('in')));
+
+  modules.set(id,{node,element:el,ins,outs});
+  document.getElementById('patch').appendChild(el);
+
+  /* drag */
+  el.onpointerdown = e => {
+    dragged = el;
+    offset = [e.clientX-el.offsetLeft, e.clientY-el.offsetTop];
+  };
+}
+
+function knob(name,min,max,val,set){
+  const k=document.createElement('div');
+  k.className='knob'; k.title=name;
+  k.dataset.value=val;
+  k.onpointerdown = e=>{
+    const y0=e.clientY, v0=parseFloat(k.dataset.value);
+    const move=e=>{
+      const dy=y0-e.clientY;
+      const v=Math.max(min,Math.min(max,v0+dy*0.01*(max-min)));
+      k.dataset.value=v; set(v);
+    };
+    const up=()=>{document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up)};
+    document.addEventListener('pointermove',move);
+    document.addEventListener('pointerup',up);
+  };
+  return k;
+}
+
+function jack(dir){
+  const j=document.createElement('div');
+  j.className=dir;
+  j.onclick = dir==='out'?startWire:endWire;
+  return j;
+}
+
+/* ---------- wiring ---------- */
+function startWire(e){
+  e.stopPropagation();
+  pendingSrc = e.target.parentElement.dataset.id;
+}
+function endWire(e){
+  e.stopPropagation();
+  if(!pendingSrc) return;
+  const src = pendingSrc;
+  const dst = e.target.parentElement.dataset.id;
+  if(src===dst){pendingSrc=null; return;}
+
+  const m1=modules.get(src), m2=modules.get(dst);
+  const outPort = m1.outs ? m1.outs[0] : null;
+  const inPort  = m2.ins  ? m2.ins[0]  : null;
+  if(!outPort || !inPort){pendingSrc=null; return;}
+
+  outPort.connect(inPort);
+  wires.push({from:src,to:dst});
+  pendingSrc=null;
+  drawCables();
+}
+
+function drawCables(){
+  const svg=document.getElementById('cables')||(()=>{
+    const s=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    s.id='cables'; s.className='cable';
+    s.setAttribute('width','100%'); s.setAttribute('height','100%');
+    document.getElementById('patch').appendChild(s);
+    return s;
+  })();
+  svg.innerHTML='';
+  wires.forEach(w=>{
+    const f=modules.get(w.from).element.getBoundingClientRect();
+    const t=modules.get(w.to).element.getBoundingClientRect();
+    const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',f.right); line.setAttribute('y1',f.top+f.height/2);
+    line.setAttribute('x2',t.left);  line.setAttribute('y2',t.top+t.height/2);
+    line.setAttribute('stroke','white');
+    line.setAttribute('stroke-width','2');
+    svg.appendChild(line);
+  });
+}
+
+/* ---------- housekeeping ---------- */
+document.addEventListener('pointermove',e=>{
+  if(!dragged) return;
+  dragged.style.left = e.clientX-offset[0]+'px';
+  dragged.style.top  = e.clientY-offset[1]+'px';
+  drawCables();
+});
+document.addEventListener('pointerup',()=>dragged=null);
+
+function clearPatch(){
+  modules.forEach(m=>m.element.remove());
+  modules.clear();
+  wires=[];
+  document.getElementById('cables')?.remove();
+  nextId=0;
+}
+
+/* ---------- start ---------- */
+add('out');
+</script>
+</body>
+</html>

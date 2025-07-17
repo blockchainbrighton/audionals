@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>64×64 Retro Canvas – Unified Shooting Objects</title>
+<style>
+html,body{height:100%;margin:0;background:#222;display:flex;flex-direction:column;
+align-items:center;justify-content:center;font-family:monospace;font-size:11px;color:#aaa;}
+#wrapper{position:relative;width:90vmin;height:90vmin;max-width:512px;max-height:512px;}
+#gameCanvas{position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated;cursor:crosshair;}
+.controls{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:512px}
+button,select{padding:3px 6px;background:#333;color:#eee;border:1px solid #555;cursor:pointer;font-size:11px}
+.status{margin-top:4px;font-size:10px}
+</style>
+</head>
+<body>
+<div id="wrapper"><canvas id="gameCanvas" width="64" height="64"></canvas></div>
+
+<div class="controls">
+  <button onclick="toggle('stars')">Stars</button>
+  <button onclick="toggle('moon')">Moon</button>
+  <button onclick="toggle('solar')">Solar</button>
+  <button onclick="toggle('clouds')">Clouds</button>
+  <button onclick="toggle('shooting')">Shooting</button>
+  <button onclick="toggle('land')">Landscape</button>
+  <button onclick="toggle('aurora')">Aurora</button>
+  <button onclick="toggle('lightning')">Lightning</button>
+  <button onclick="toggle('meteor')">Meteor</button>
+  <button onclick="toggle('sunset')">Sunset</button>
+  <button onclick="launchRocket()">Launch</button>
+  <button onclick="toggle('comet')">Comet Layer</button> <!-- NEW -->
+  <button onclick="launchComet()">Launch Comet</button> <!-- NEW -->
+  <button onclick="resetAll()">Reset</button>
+</div>
+
+<div class="controls">
+  Shoot 
+  <select id="shootColor"><option value="white">White</option><option value="silver">Silver</option><option value="gold">Gold</option><option value="rainbow">Rainbow</option></select>
+  <label><input type="checkbox" id="shootTracer" checked>Tracer</label>
+    Meteor 
+  <select id="meteorColor"><option value="fire">Fire</option><option value="ice">Ice</option><option value="rainbow">Rainbow</option></select>
+  <label><input type="checkbox" id="meteorTrail" checked>Trail</label>
+    Aurora 
+  <select id="auroraColor"><option value="green">Green</option><option value="rainbow">Rainbow</option></select>
+  <!-- NEW COMET CONTROLS -->
+    Comet 
+  <select id="cometColor"><option value="white">White</option><option value="silver">Silver</option><option value="gold">Gold</option><option value="rainbow">Rainbow</option><option value="black">Black</option></select>
+  <label><input type="checkbox" id="cometTrail" checked>Trail</label>
+</div>
+
+<div class="status"><span id="fps">FPS:0</span> | <span id="layers">Layers:Stars</span></div>
+
+<script>
+/* ---------- canvas ---------- */
+const cvs=document.getElementById('gameCanvas'),ctx=cvs.getContext('2d');
+let frame=0;
+const layer={stars:true,moon:false,solar:false,clouds:false,shooting:false,land:false,aurora:false,lightning:false,meteor:false,sunset:false,comet:false}; // Added comet
+function toggle(k){layer[k]=!layer[k];}
+
+/* ---------- generic flying-object system ---------- */
+const flyingObjects=[]; // {x,y,vx,vy,life,conf, ...}
+
+const configs={
+  shooting:{
+    life:1200,spawnRate:0.01,
+    init:()=>({x:Math.random()*64,y:0,vx:-0.5-Math.random(),vy:1+Math.random()}),
+    color:(obj)=>getColor(document.getElementById('shootColor').value,obj.life/1200),
+    trailLen:10
+  },
+  meteor:{
+    life:1200,spawnRate:0.005,
+    init:()=>{
+      const a=Math.PI/4+Math.random()*Math.PI/4;
+      return{x:Math.random()*64,y:0,vx:Math.cos(a)*2,vy:Math.sin(a)*2};
+    },
+    color:(obj)=>{
+      const life=obj.life/1200,mode=document.getElementById('meteorColor').value;
+      switch(mode){
+        case 'fire':return `rgba(255,${100+life*155},0,${life})`;
+        case 'ice': return `rgba(100,200,255,${life})`;
+        default:    return getColor('rainbow',life);
+      }
+    },
+    trailLen:8
+  },
+  // NEW COMET CONFIGURATION
+  comet: {
+    life: 4000, // Comets are slow and have a long life
+    spawnRate: 0.002, // Spawn rate for the toggleable layer
+    init: () => {
+      const edge = Math.floor(Math.random() * 4); // 0: top, 1: left, 2: right, 3: bottom
+      let x, y, vx, vy;
+      const speed = 0.05 + Math.random() * 0.15; // Slow speed
+      
+      switch(edge) {
+        case 0: // Start from Top edge
+          x = Math.random() * 64; y = -5;
+          vx = (Math.random() - 0.5) * 0.3; vy = speed;
+          break;
+        case 1: // Start from Left edge
+          x = -5; y = Math.random() * 64;
+          vx = speed; vy = (Math.random() - 0.5) * 0.3;
+          break;
+        case 2: // Start from Right edge
+          x = 69; y = Math.random() * 64;
+          vx = -speed; vy = (Math.random() - 0.5) * 0.3;
+          break;
+        case 3: // NEW: Start from Bottom edge
+          x = Math.random() * 64; y = 69;
+          vx = (Math.random() - 0.5) * 0.3; vy = -speed; // Note the negative speed for upward travel
+          break;
+      }
+
+      // Add properties for dynamic sizing
+      const startSize = 1 + Math.random() * 2; // size from 1px to 3px
+      const endSize = 1 + Math.random() * 2;
+      
+      return { x, y, vx, vy, startSize, endSize };
+    },
+    color: (obj) => {
+      const life = obj.life / 4000;
+      const mode = document.getElementById('cometColor').value;
+      if (mode === 'black') return `rgba(0,0,0,${life * 0.75})`;
+      return getColor(mode, life);
+    },
+    trailLen: 30
+  }
+};
+
+function addFlyingObject(type){
+  const c=configs[type];
+  flyingObjects.push({...c.init(),life:c.life,conf:c,type});
+}
+
+// NEW: Function to launch a single comet via button click
+function launchComet() {
+  addFlyingObject('comet');
+}
+
+function updateFlyingObjects(nightAlpha){
+  ctx.globalAlpha = nightAlpha; // Master opacity based on time of day
+
+  for(let i=flyingObjects.length-1;i>=0;i--){
+    const o=flyingObjects[i]; o.life--;
+    o.x+=o.vx; o.y+=o.vy;
+    // Expanded boundary check to account for larger objects and off-screen starting points
+    if(o.life<=0||o.x>74||o.y>74||o.x<-10||o.y<-10){flyingObjects.splice(i,1);continue;}
+
+    // --- NEW: Size interpolation logic ---
+    const hasSize = o.startSize !== undefined;
+    let size = 1, intSize = 1;
+    if (hasSize) {
+        const progress = 1 - (o.life / o.conf.life); // 0 at start, 1 at end
+        size = o.startSize + (o.endSize - o.startSize) * progress;
+        intSize = Math.max(1, Math.ceil(size));
+    }
+
+    const color=o.conf.color(o);
+    const trail=o.conf.trailLen;
+    // Unified trail checkbox logic
+    const showTrail=(o.type==='shooting' && $('shootTracer').checked) ||
+                    (o.type==='meteor'   && $('meteorTrail').checked) ||
+                    (o.type==='comet'    && $('cometTrail').checked);
+    
+    if(showTrail){
+      for(let j=0;j<trail;j++){
+        const px=o.x-j*o.vx/2,py=o.y-j*o.vy/2;
+        ctx.fillStyle=color.replace(/[\d.]+\)$/, (o.life/o.conf.life)/(j+1) +')');
+        // Draw trail particles with interpolated size
+        ctx.fillRect((px - size/2)|0, (py - size/2)|0, intSize, intSize);
+      }
+    }
+    ctx.fillStyle=color;
+    // Draw the head of the object with its current size
+    ctx.fillRect((o.x - size/2)|0, (o.y - size/2)|0, intSize, intSize);
+  }
+  ctx.globalAlpha = 1; // Reset globalAlpha to not affect other layers
+}
+
+/* ---------- stars ---------- */
+const stars=[...Array(35)].map(()=>({x:Math.random()*64,y:Math.random()*64,b:Math.random(),ts:0.01+Math.random()*0.03}));
+/* ---------- moon ---------- */
+const moon={prog:0,spd:0.0001};
+/* ---------- solar ---------- */
+const solar={prog:0, spd:0.0002, r:4, pls:[
+  {a:0,d:8,r:1,s:0.02,c:'#4ae'},
+  {a:Math.PI/2,d:12,r:1.5,s:0.015,c:'#e74'},
+  {a:Math.PI,d:16,r:1,s:0.01,c:'#fc0'}
+]};
+/* ---------- clouds ---------- */
+const clouds=[...Array(4)].map(()=>({x:Math.random()*80,y:8+Math.random()*20,w:12+Math.random()*16,s:0.03+Math.random()*0.03}));
+/* ---------- landscape ---------- */
+const landPts=[...Array(33)].map((_,i)=>({x:i*2,y:32+Math.sin(i*0.5)*6+Math.random()*3}));
+/* ---------- aurora ---------- */
+const aurora=[];for(let i=0;i<3;i++)aurora.push({y:5+i*3,phase:i,amp:4+i*2,speed:0.02+i*0.01});
+/* ---------- lightning ---------- */
+let lightning=0,flash=0;
+/* ---------- sunset ---------- */
+let sunsetPhase=0; const sunsetSpeed=0.0003;
+/* ---------- rockets ---------- */
+const rockets=[];
+const launchingRockets=[];
+const rocket={fly({from,to}){rockets.push({x:from[0],y:from[1],tx:to[0],ty:to[1],p:0,s:0.05,trail:[]})}};
+window.rocket=rocket;
+
+/* ---------- helpers ---------- */
+const $=id=>document.getElementById(id);
+const getColor=(mode,life)=>{
+  switch(mode){
+    case 'silver':return `rgba(200,200,255,${life})`;
+    case 'gold':return `rgba(255,215,0,${life})`;
+    case 'rainbow':return `hsl(${(Date.now()/10)%360},100%,50%)`;
+    default:return `rgba(255,255,255,${life})`;
+  }
+};
+
+/* ---------- draw ---------- */
+function draw(){
+  if(layer.sunset){
+    sunsetPhase = Math.min(1, sunsetPhase + sunsetSpeed);
+    const grad=ctx.createLinearGradient(0,0,0,64);
+    const z_r=135-sunsetPhase*120, z_g=206-sunsetPhase*186, z_b=235-sunsetPhase*215;
+    let h_r, h_g, h_b;
+    if (sunsetPhase < 0.6) {
+      const p=sunsetPhase/0.6;h_r=135+p*(255-135);h_g=206+p*(120-206);h_b=235+p*(20-235);
+    } else {
+      const p=(sunsetPhase-0.6)/0.4;h_r=255+p*(15-255);h_g=120+p*(20-120);h_b=20+p*(20-20);
+    }
+    grad.addColorStop(0,`rgb(${z_r|0},${z_g|0},${z_b|0})`);
+    grad.addColorStop(1,`rgb(${h_r|0},${h_g|0},${h_b|0})`);
+    ctx.fillStyle=grad;ctx.fillRect(0,0,64,64);
+  } else { ctx.fillStyle='#000011'; ctx.fillRect(0,0,64,64); }
+  frame++;
+  
+  let nightAlpha = layer.sunset ? Math.max(0, Math.min(1, (sunsetPhase - 0.3) / 0.7)) : 1;
+  
+  if(layer.stars && (layer.sunset ? sunsetPhase > 0.3 : true)){
+    stars.forEach(s=>{s.b+=s.ts;if(s.b>1||s.b<0)s.ts*=-1;
+      ctx.fillStyle=`rgba(255,255,255,${Math.abs(Math.sin(s.b*Math.PI))*nightAlpha})`;
+      ctx.fillRect(s.x|0,s.y|0,1,1);
+    });
+  }
+  
+  if(layer.aurora){
+    const mode=$('auroraColor').value, finalAlpha=0.15*nightAlpha;
+    for(let x=0;x<64;x++){
+      aurora.forEach(b=>{
+        const y=b.y+b.amp*Math.sin(x*0.2+frame*b.speed+b.phase);
+        ctx.fillStyle=mode==='rainbow'?`hsla(${(x*5+frame)%360},100%,70%,${finalAlpha})`:`rgba(0,255,128,${finalAlpha})`;
+        ctx.fillRect(x,y|0,1,1);
+      });
+    }
+  }
+
+  // --- UNIFIED FLYING OBJECT SPAWNING AND UPDATING ---
+  if(layer.shooting && Math.random()<configs.shooting.spawnRate) addFlyingObject('shooting');
+  if(layer.meteor   && Math.random()<configs.meteor.spawnRate)   addFlyingObject('meteor');
+  if(layer.comet    && Math.random()<configs.comet.spawnRate)    addFlyingObject('comet'); // New spawner
+  updateFlyingObjects(nightAlpha);
+
+  if(layer.sunset){
+    const sunY=5+sunsetPhase*65,sunColor=`rgba(255,${200-sunsetPhase*150},${50-sunsetPhase*50},1)`;
+    ctx.fillStyle=sunColor;ctx.beginPath();ctx.arc(32,sunY,3,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=sunColor.replace('1)','0.3)');ctx.beginPath();ctx.arc(32,sunY,4,0,Math.PI*2);ctx.fill();
+  }
+
+  if(layer.moon){
+    moon.prog+=moon.spd;if(moon.prog>=1)moon.prog=0;
+    const arc=Math.sin(moon.prog*Math.PI),x=moon.prog*74-5,y=70-arc*60,r=1+arc*4;
+    ctx.fillStyle='#f0e68c';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ddd';ctx.beginPath();ctx.arc(x-1,y-1,r-1,0,Math.PI*2);ctx.fill();
+  }
+  
+  if(layer.clouds){
+    ctx.fillStyle='rgba(255,255,255,0.3)';
+    clouds.forEach(c=>{c.x-=c.s;if(c.x<-c.w)c.x=64+c.w;
+      for(let i=0;i<c.w;i++)ctx.fillRect((c.x+i)|0,(c.y+Math.sin(i*0.6)*2)|0,1,1);
+    });
+  }
+  
+  if(layer.land){
+    ctx.fillStyle='#0a1a0a';ctx.beginPath();ctx.moveTo(0,64);
+    landPts.forEach(p=>ctx.lineTo(p.x,p.y));ctx.lineTo(64,64);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#0c2f0c';
+    for(let i=0;i<landPts.length-1;i++){const p=landPts[i];ctx.fillRect(p.x,p.y|0,2,1);}
+  }
+  
+  if(layer.lightning){
+    if(Math.random()<0.003){lightning=8;flash=4;}
+    if(flash>0){ctx.fillStyle='rgba(255,255,255,0.4)';ctx.fillRect(0,0,64,64);flash--;}
+    if(lightning>0){
+      ctx.strokeStyle='rgba(255,255,255,0.8)';ctx.beginPath();ctx.moveTo(32,0);
+      for(let i=0;i<8;i++)ctx.lineTo(32+(Math.random()-0.5)*20,i*8);ctx.stroke();lightning--;
+    }
+  }
+  
+  if(layer.solar && !layer.sunset){
+    // 1. Update and calculate the sun's path using the same logic as the moon
+    solar.prog = (solar.prog + solar.spd) % 1; // Use modulo to loop from 0 to 1
+    const arc = Math.sin(solar.prog * Math.PI); // Creates a smooth 0 -> 1 -> 0 arc
+
+    // 2. Define the sun's higher and wider arc across the sky
+    const sunX = solar.prog * 84 - 10; // Moves from x=-10 to x=74
+    const sunY = 80 - arc * 85;        // Rises from y=80, peaks at y=-5 (top), sets at y=80
+    const sunR = solar.r;
+
+    // 3. Draw the sun at its new dynamic position
+    ctx.fillStyle='#ffcc00';ctx.beginPath();ctx.arc(sunX, sunY, sunR, 0, Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,204,0,0.3)';ctx.beginPath();ctx.arc(sunX, sunY, sunR+1, 0, Math.PI*2);ctx.fill();
+    
+    // 4. Make the planets and their orbital paths follow the moving sun
+    solar.pls.forEach(p=>{p.a+=p.s;
+      const x=sunX+Math.cos(p.a)*p.d,y=sunY+Math.sin(p.a)*p.d; // Use sunX and sunY as the center
+      ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.beginPath();ctx.arc(sunX, sunY, p.d, 0, Math.PI*2);ctx.stroke();
+      ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(x,y,p.r,0,Math.PI*2);ctx.fill();
+    });
+  }
+
+  
+  rockets.forEach((r,i)=>{
+    r.p+=r.s;if(r.p>=1){
+      for(let j=0;j<5;j++){ctx.fillStyle=`hsl(${Math.random()*60},100%,50%)`;ctx.fillRect(r.tx+(Math.random()-.5)*4,r.ty+(Math.random()-.5)*4,1,1);}
+      rockets.splice(i,1);return;
+    }
+    const x=r.x+(r.tx-r.x)*r.p,y=r.y+(r.ty-r.y)*r.p;
+    r.trail.push({x,y});if(r.trail.length>5)r.trail.shift();
+    r.trail.forEach((p,j)=>{ctx.fillStyle=`rgba(255,100,0,${j/5})`;ctx.fillRect(p.x|0,p.y|0,1,1)});
+    ctx.fillStyle='#ff6600';ctx.fillRect(x|0,y|0,1,1);
+    const ang=Math.atan2(r.ty-r.y,r.tx-r.x),tx=x+Math.cos(ang),ty=y+Math.sin(ang);
+    ctx.fillStyle='#ffaa00';ctx.fillRect(tx|0,ty|0,1,1);
+  });
+
+  launchingRockets.forEach((r,i)=>{
+    r.y-=r.speed;r.trail.push({x:r.x,y:r.y});
+    if(r.trail.length>100)r.trail.shift();
+    r.trail.forEach((p,j)=>{const a=j/r.trail.length;ctx.fillStyle=`rgba(255,${100+a*155},0,${a})`;ctx.fillRect(p.x|0,p.y|0,1,1);});
+    if(r.y<-30)launchingRockets.splice(i,1);
+  });
+  
+  updStatus();
+  requestAnimationFrame(draw);
+}
+
+function launchRocket(){
+  launchingRockets.push({x:31,y:60,speed:0.3,life:200,trail:[]});
+}
+
+/* ---------- ui ---------- */
+function resetAll(){
+  Object.keys(layer).forEach(k=>layer[k]=false);layer.stars=true;
+  rockets.length=0;launchingRockets.length=0;flyingObjects.length=0;
+  lightning=flash=0;moon.prog=0;sunsetPhase=0;
+  solar.pls.forEach(p=>p.a=Math.random()*Math.PI*2);
+  solar.prog = 0;
+
+}
+let lt=performance.now(),fc=0;
+function updStatus(){
+  fc++;const now=performance.now();
+  if(now-lt>=1000){
+    $('fps').textContent=`FPS:${fc}`;fc=0;lt=now;
+    const active=Object.keys(layer).filter(k=>layer[k]);
+    $('layers').textContent=`Layers:${active.join('+')||'none'}`;
+  }
+}
+cvs.addEventListener('click',e=>{
+  const rect=cvs.getBoundingClientRect();
+  const x=((e.clientX-rect.left)/rect.width*64)|0,y=((e.clientY-rect.top)/rect.height*64)|0;
+  if(rockets.length){const r=rockets[rockets.length-1];rocket.fly({from:[r.tx,r.ty],to:[x,y]});}
+  else rocket.fly({from:[32,32],to:[x,y]});
+});
+draw();
+</script>
+</body>
+</html>

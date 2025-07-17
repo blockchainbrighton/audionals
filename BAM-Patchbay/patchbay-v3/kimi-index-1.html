@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Mini-Modular Synth (All-in-One)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+/* ----------  CORE LAYOUT  ---------- */
+html,body{height:100%}
+body{margin:0;font-family:sans-serif;background:#222;color:#eee;display:flex;overflow:hidden}
+#palette,#instructions-panel{flex:0 0 180px;background:#333;padding:10px;overflow-y:auto;user-select:none}
+#canvas-container{flex:1;display:flex;justify-content:center;align-items:center;overflow:auto}
+#canvas{width:800px;height:600px;position:relative;background:#1a1a1a;border:1px solid #555}
+#connections{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+
+/* ----------  PALETTE  ---------- */
+.module-item{padding:8px;margin:4px 0;background:#444;border:1px solid #666;border-radius:4px;cursor:grab;text-align:center}
+#clear-all-btn{width:100%;margin-top:10px;padding:6px;background:#c85050;color:#fff;border:none;border-radius:4px;cursor:pointer}
+
+/* ----------  MODULES  ---------- */
+.module{position:absolute;background:#606070;border:1px solid #888;border-radius:5px;padding:5px;min-width:110px;box-shadow:2px 2px 5px rgba(0,0,0,.3);cursor:default}
+.module header{background:#505060;margin:-5px -5px 5px -5px;padding:4px;text-align:center;border-radius:4px 4px 0 0;cursor:move;font-size:.9em}
+.module input[type=range]{width:calc(100% - 10px);margin:5px}
+.connector{width:14px;height:14px;border-radius:50%;position:absolute;bottom:-7px;cursor:pointer}
+.connector.input{left:10px;background:#70a070}  /* green */
+.connector.output{right:10px;background:#a07070} /* red  */
+.connector.selected{border:2px solid yellow}
+
+/* ----------  RESPONSIVE  ---------- */
+@media(max-width:820px){
+ body{flex-direction:column}
+ #palette,#instructions-panel{width:100%;height:120px;flex:none}
+ #canvas-container{flex:1;height:auto;min-height:250px}
+}
+</style>
+</head>
+<body>
+
+<!-- ----------  PALETTE  ---------- -->
+<div id="palette">
+  <h3>Palette</h3>
+  <div class="module-item" draggable="true" data-type="oscillator">Oscillator</div>
+  <div class="module-item" draggable="true" data-type="gain">Gain</div>
+  <div class="module-item" draggable="true" data-type="filter">Filter</div>
+  <div class="module-item" draggable="true" data-type="lfo">LFO</div>
+  <div class="module-item" draggable="true" data-type="output">Output</div>
+  <div class="module-item" draggable="true" data-type="samplePlayer">Sample Player</div>
+  <div class="module-item" draggable="true" data-type="sequencer">Sequencer</div>
+  <div class="module-item" draggable="true" data-type="bpmClock">BPM Clock</div>
+  <button id="clear-all-btn">Clear All</button>
+</div>
+
+<!-- ----------  CANVAS  ---------- -->
+<div id="canvas-container">
+  <div id="canvas">
+    <svg id="connections"></svg>
+  </div>
+</div>
+
+<!-- ----------  INSTRUCTIONS  ---------- -->
+<div id="instructions-panel">
+  <h4>How-to</h4>
+  <p>Drag modules from the Palette onto the canvas. Connect red outputs to green inputs. Right-click any connector to disconnect. Signal must end at the <strong>Output</strong> module to hear sound.</p>
+</div>
+
+<script type="module">
+/* =========================================================
+   1.  GLOBAL STATE
+   =========================================================*/
+const state = {
+  modules:{}, connections:[], dragType:null,
+  dragState:{id:null,offX:0,offY:0},
+  selectedConnector:null,
+  nextId:()=>'mod-'+Math.random().toString(36).slice(2,9)
+};
+
+/* =========================================================
+   2.  AUDIO CONTEXT
+   =========================================================*/
+const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+
+/* =========================================================
+   3.  DOM SHORTCUTS
+   =========================================================*/
+const canvas = document.getElementById('canvas');
+const svg = document.getElementById('connections');
+
+/* =========================================================
+   4.  WIRE DRAWING
+   =========================================================*/
+function drawLine(c1,c2,color='#fff'){
+  const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+  line.setAttribute('stroke',color); line.setAttribute('stroke-width','2');
+  svg.appendChild(line); updateLine(line,c1,c2); return line;
+}
+function updateLine(line,c1,c2){
+  const b=(el)=>el.getBoundingClientRect();
+  const s=b(svg), r1=b(c1), r2=b(c2);
+  line.setAttribute('x1',r1.left+r1.width/2-s.left);
+  line.setAttribute('y1',r1.top+r1.height/2-s.top);
+  line.setAttribute('x2',r2.left+r2.width/2-s.left);
+  line.setAttribute('y2',r2.top+r2.height/2-s.top);
+}
+
+/* =========================================================
+   5.  CONNECTION HANDLING
+   =========================================================*/
+function handleConnectorClick(moduleId,dir,type='audio'){
+  const mod=state.modules[moduleId];
+  if(!mod) return;
+  const connEl=mod.element.querySelector(`.connector.${dir}.${type}-${dir}`);
+  if(!connEl) return;
+
+  if(!state.selectedConnector){
+    if(dir==='output'){
+      state.selectedConnector={id:moduleId,el:connEl,type};
+      connEl.classList.add('selected');
+    }
+    return;
+  }
+
+  const src=state.selectedConnector;
+  if(dir==='input' && src.id!==moduleId){
+    const dst=mod;
+    try{
+      if(src.type==='audio' && type==='audio'){
+        const srcNode=state.modules[src.id].audioNode;
+        let dstNode=dst.audioNode;
+        if(dst.type==='oscillator' && src.type==='lfo') dstNode=dst.audioNode.frequency;
+        else if(dst.type==='filter' && src.type==='lfo') dstNode=dst.audioNode.frequency;
+        else if(dst.type==='gain' && src.type==='lfo') dstNode=dst.audioNode.gain;
+        srcNode.connect(dstNode);
+        const line=drawLine(src.el,connEl);
+        state.connections.push({srcId:src.id,dstId:moduleId,type,srcType:src.type,dstType:type,line});
+      }else if(src.type==='trigger' && type==='trigger' && src.id!==moduleId){
+        if(state.modules[src.id].type==='sequencer' && dst.type==='samplePlayer'){
+          state.modules[src.id].connectedTriggers.push(dst.play);
+          const line=drawLine(src.el,connEl);
+          state.connections.push({srcId:src.id,dstId:moduleId,type:'trigger',line});
+        }
+      }
+    }catch(e){console.error(e)}
+    src.el.classList.remove('selected');
+    state.selectedConnector=null;
+  }else if(src.id===moduleId && src.el===connEl){
+    src.el.classList.remove('selected');
+    state.selectedConnector=null;
+  }
+}
+function rightClickDisconnect(e,moduleId,dir,type){
+  e.preventDefault();
+  for(let i=state.connections.length-1;i>=0;i--){
+    const c=state.connections[i];
+    let hit=false;
+    if(dir==='output' && c.srcId===moduleId && c.srcType===type) hit=true;
+    if(dir==='input'  && c.dstId===moduleId && c.dstType===type) hit=true;
+    if(hit){
+      const srcMod=state.modules[c.srcId], dstMod=state.modules[c.dstId];
+      if(c.type==='audio' && srcMod && dstMod){
+        try{ srcMod.audioNode.disconnect(dstMod.audioNode); }catch(e){}
+      }
+      if(c.type==='trigger' && srcMod && dstMod){
+        const idx=srcMod.connectedTriggers?.indexOf(dstMod.play);
+        if(idx>-1) srcMod.connectedTriggers.splice(idx,1);
+      }
+      c.line.remove();
+      state.connections.splice(i,1);
+    }
+  }
+  if(state.selectedConnector?.id===moduleId){state.selectedConnector=null}
+}
+
+/* =========================================================
+   6.  MODULE FACTORIES
+   =========================================================*/
+const factories={
+  oscillator:(parent,id)=>{
+    const osc=audioCtx.createOscillator(); osc.frequency.value=440; osc.start();
+    addSlider(parent,'Freq',20,2000,440,v=>osc.frequency.value=v,'Hz');
+    return {audioNode:osc,type:'oscillator',element:parent,id};
+  },
+  gain:(parent,id)=>{
+    const g=audioCtx.createGain(); g.gain.value=.5;
+    addSlider(parent,'Gain',0,1,.5,v=>g.gain.value=v,'');
+    return {audioNode:g,type:'gain',element:parent,id};
+  },
+  filter:(parent,id)=>{
+    const f=audioCtx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=500; f.Q.value=1;
+    addSlider(parent,'Cutoff',20,20000,500,v=>f.frequency.value=v,'Hz');
+    addSlider(parent,'Q',.1,30,1,v=>f.Q.value=v,'');
+    const sel=document.createElement('select');['lowpass','highpass','bandpass'].forEach(t=>{
+      const o=document.createElement('option');o.value=t;o.text=t;sel.appendChild(o);
+    });sel.onchange=()=>f.type=sel.value;parent.appendChild(sel);
+    return {audioNode:f,type:'filter',element:parent,id};
+  },
+  lfo:(parent,id)=>{
+    const osc=audioCtx.createOscillator(), depth=audioCtx.createGain();
+    osc.frequency.value=5; depth.gain.value=100; osc.connect(depth); osc.start();
+    addSlider(parent,'Rate',.1,20,5,v=>osc.frequency.value=v,'Hz');
+    addSlider(parent,'Depth',0,500,100,v=>depth.gain.value=v,'');
+    return {audioNode:depth,type:'lfo',element:parent,id};
+  },
+  output:(parent,id)=>{
+    const label=document.createElement('div');label.textContent='🎧 Master';
+    parent.appendChild(label);
+    return {audioNode:audioCtx.destination,type:'output',element:parent,id};
+  },
+  samplePlayer:(parent,id)=>{
+    const gain=audioCtx.createGain();
+    const fileInput=document.createElement('input');fileInput.type='file';fileInput.accept='audio/*';
+    const cvs=document.createElement('canvas');cvs.width=150;cvs.height=40;cvs.style.cssText='border:1px solid #555';
+    parent.append(fileInput,cvs);
+    let buffer=null;
+    fileInput.onchange=async e=>{
+      const [file]=e.target.files;
+      if(!file)return;
+      buffer=await audioCtx.decodeAudioData(await file.arrayBuffer());
+      drawWave(cvs,buffer);
+    };
+    const play=()=>{
+      if(!buffer){console.warn('no buffer');return}
+      audioCtx.resume();
+      const src=audioCtx.createBufferSource();src.buffer=buffer;src.connect(gain);src.start();
+      cvs.style.borderColor='lime';src.onended=()=>cvs.style.borderColor='#555';
+    };
+    return {audioNode:gain,type:'samplePlayer',element:parent,id,play,connectedTriggers:[]};
+  },
+  sequencer:(parent,id)=>{
+    const steps=Array(16).fill(false);
+    let current=0,playing=false,bpm=120,stepMs=60000/(bpm*4),timer;
+    const playBtn=document.createElement('button');playBtn.textContent='▶️';
+    const stopBtn=document.createElement('button');stopBtn.textContent='⏹️';
+    const div=document.createElement('div');div.style.display='flex';div.style.gap='2px';
+    const els=steps.map((_,i)=>{
+      const d=document.createElement('div');d.style.cssText='width:20px;height:20px;border:1px solid #555;background:#333;cursor:pointer';
+      d.onclick=()=>{steps[i]=!steps[i];d.style.background=steps[i]?'orange':'#333'};
+      div.appendChild(d);return d;
+    });
+    parent.append(playBtn,stopBtn,div);
+    const tick=()=>{
+      els.forEach((e,i)=>e.style.boxShadow=(i===current&&playing?'0 0 4px yellow':'none'));
+      if(steps[current]) connectedTriggers.forEach(fn=>fn());
+      current=(current+1)%16;
+    };
+    const scheduler=()=>{if(!playing)return;tick();timer=setTimeout(scheduler,stepMs)};
+    playBtn.onclick=()=>{audioCtx.resume();playing=!playing;playBtn.textContent=playing?'⏸️':'▶️';if(playing)scheduler()};
+    stopBtn.onclick=()=>{playing=false;clearTimeout(timer);current=0;tick();playBtn.textContent='▶️'};
+    const setTempo=v=>{bpm=v;stepMs=60000/(bpm*4)};
+    const connectedTriggers=[];
+    return {audioNode:null,type:'sequencer',element:parent,id,setTempo,connectedTriggers};
+  },
+  bpmClock:(parent,id)=>{
+    let bpm=120;
+    const lbl=document.createElement('label');lbl.textContent='BPM:';
+    const out=document.createElement('span');out.textContent=bpm;
+    const s=addSlider(parent,'',30,240,bpm,v=>{
+      bpm=v|0;out.textContent=bpm;
+      Object.values(state.modules).forEach(m=>m.type==='sequencer'&&m.setTempo?.(bpm));
+    });
+    parent.append(lbl,s,out);
+    Object.values(state.modules).forEach(m=>m.type==='sequencer'&&m.setTempo?.(bpm));
+    return {audioNode:null,type:'bpmClock',element:parent,id};
+  }
+};
+function addSlider(parent,label,min,max,val,setter,unit){
+  const d=document.createElement('div');d.style.margin='4px 0';
+  const l=document.createElement('label');l.textContent=label;
+  const s=document.createElement('input');s.type='range';s.min=min;s.max=max;s.value=val;s.step=(max-min)/100;
+  const v=document.createElement('span');v.textContent=val+unit;
+  s.oninput=()=>{const n=parseFloat(s.value);v.textContent=n+unit;setter(n)};
+  d.append(l,s,v);parent.appendChild(d);return s;
+}
+function drawWave(cvs,buffer){
+  const ctx=cvs.getContext('2d'),d=buffer.getChannelData(0),step=Math.ceil(d.length/cvs.width);
+  ctx.clearRect(0,0,cvs.width,cvs.height);ctx.strokeStyle='#fff';ctx.beginPath();
+  for(let i=0;i<cvs.width;i++){
+    let min=1,max=-1;
+    for(let j=0;j<step;j++){const v=d[i*step+j];if(v<min)min=v;if(v>max)max=v;}
+    const y=(1+min)*cvs.height/2;ctx.lineTo(i,y);ctx.lineTo(i,(1+max)*cvs.height/2);
+  }ctx.stroke();
+}
+
+/* =========================================================
+   7.  CREATE / DELETE MODULES
+   =========================================================*/
+function createModule(type,x,y){
+  const id=state.nextId();
+  const div=document.createElement('div');div.className='module';div.id=id;div.style.left=x+'px';div.style.top=y+'px';
+  const header=document.createElement('header');header.textContent=type;div.appendChild(header);
+  const mod=factories[type](div,id);
+  state.modules[id]=mod;
+  canvas.appendChild(div);
+
+  /* connectors */
+  const addConn=(dir,type2)=>{
+    const c=document.createElement('div');
+    c.className=`connector ${dir} ${type2}-${dir}`;
+    c.style.backgroundColor=dir==='output'?'#a07070':'#70a070';
+    c.onclick=e=>{e.stopPropagation();handleConnectorClick(id,dir,type2)};
+    c.oncontextmenu=e=>rightClickDisconnect(e,id,dir,type2);
+    div.appendChild(c);
+  };
+  if(!['output','sequencer','bpmClock'].includes(type)) addConn('output','audio');
+  if(!['oscillator','lfo','samplePlayer','sequencer','bpmClock'].includes(type)) addConn('input','audio');
+  if(type==='samplePlayer') addConn('input','trigger');
+  if(type==='sequencer') addConn('output','trigger');
+
+  /* drag existing module */
+  header.onmousedown=e=>{
+    if(e.button!==0)return;
+    const r=div.getBoundingClientRect();
+    state.dragState={id,offX:e.clientX-r.left,offY:e.clientY-r.top};
+    div.style.zIndex=1000;
+  };
+  /* remove module */
+  header.oncontextmenu=e=>{
+    e.preventDefault();
+    if(type==='output' && confirm('Clear entire chain leading to Output?')){
+      const chain=new Set([id]);
+      let q=[id],p=0;
+      while(p<q.length){
+        const cur=q[p++];
+        state.connections.forEach(c=>{
+          if(c.dstId===cur && !chain.has(c.srcId)){chain.add(c.srcId);q.push(c.srcId)}
+        });
+      }
+      chain.forEach(removeModule);
+      return;
+    }
+    if(confirm('Remove this module?')) removeModule(id);
+  };
+}
+function removeModule(id){
+  const m=state.modules[id];if(!m)return;
+  state.connections.slice().forEach(c=>{
+    if(c.srcId===id||c.dstId===id){
+      c.line.remove();
+      const idx=state.connections.indexOf(c);
+      if(idx>-1)state.connections.splice(idx,1);
+    }
+  });
+  m.element.remove();
+  delete state.modules[id];
+}
+document.getElementById('clear-all-btn').onclick=()=>Object.keys(state.modules).forEach(removeModule);
+
+/* =========================================================
+   8.  DRAG & DROP
+   =========================================================*/
+document.querySelectorAll('.module-item').forEach(el=>{
+  el.draggable=true;
+  el.ondragstart=e=>{state.dragType=el.dataset.type;e.dataTransfer.effectAllowed='copy'};
+  el.ondragend=()=>state.dragType=null;
+});
+canvas.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect='copy'};
+canvas.ondrop=e=>{
+  e.preventDefault();
+  if(!state.dragType)return;
+  const r=canvas.getBoundingClientRect();
+  createModule(state.dragType,e.clientX-r.left,e.clientY-r.top);
+  state.dragType=null;
+};
+document.addEventListener('mousemove',e=>{
+  if(!state.dragState.id)return;
+  const m=state.modules[state.dragState.id];if(!m)return;
+  const cr=canvas.getBoundingClientRect();
+  let x=e.clientX-cr.left-state.dragState.offX;
+  let y=e.clientY-cr.top-state.dragState.offY;
+  x=Math.max(0,Math.min(cr.width-m.element.offsetWidth,x));
+  y=Math.max(0,Math.min(cr.height-m.element.offsetHeight,y));
+  m.element.style.left=x+'px';m.element.style.top=y+'px';
+  state.connections.forEach(c=>{
+    if(c.srcId===state.dragState.id||c.dstId===state.dragState.id){
+      const srcEl=state.modules[c.srcId].element.querySelector(`.connector.output.${c.srcType}-output`);
+      const dstEl=state.modules[c.dstId].element.querySelector(`.connector.input.${c.dstType}-input`);
+      updateLine(c.line,srcEl,dstEl);
+    }
+  });
+});
+document.addEventListener('mouseup',()=>{
+  if(state.dragState.id) state.modules[state.dragState.id].element.style.zIndex='';
+  state.dragState.id=null;
+});
+</script>
+</body>
+</html>
