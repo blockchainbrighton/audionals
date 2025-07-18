@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Red-Blue Capsule (Sharp Line, 3D Controls)</title>
+  <style>
+    body{margin:0;overflow:hidden;background:#000}
+    canvas{display:block}
+  </style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.min.js"></script>
+<script>
+// BufferGeometry-only CapsuleGeometry for r125+
+function CapsuleBufferGeometry(radius=0.5, length=1.5, capSegments=24, radialSegments=24) {
+  // 1. Cylinder
+  const cyl = new THREE.CylinderGeometry(radius, radius, length, radialSegments, 1, true);
+
+  // 2. Top hemisphere
+  const sphereTop = new THREE.SphereGeometry(radius, capSegments, radialSegments, 0, Math.PI*2, 0, Math.PI/2);
+  sphereTop.translate(0, length/2, 0);
+
+  // 3. Bottom hemisphere
+  const sphereBottom = new THREE.SphereGeometry(radius, capSegments, radialSegments, 0, Math.PI*2, Math.PI/2, Math.PI/2);
+  sphereBottom.translate(0, -length/2, 0);
+
+  // 4. Merge
+  return THREE.BufferGeometryUtils.mergeBufferGeometries([cyl, sphereTop, sphereBottom]);
+}
+
+/* ---------- Scene boiler-plate ---------- */
+const scene    = new THREE.Scene();
+const camera   = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const dir = new THREE.DirectionalLight(0xffffff, 0.7);
+dir.position.set(1,1,2);
+scene.add(dir);
+
+/* ---------- Capsule with hard color split ---------- */
+const R = 0.5, L = 1.5, N = 32;
+const pillGeo = CapsuleBufferGeometry(R, L, N, N);
+
+// For a perfectly sharp split, set colors per vertex based on y > 0 (with epsilon)
+const color = new THREE.Color();
+const colors = [];
+const pos = pillGeo.attributes.position;
+const epsilon = 1e-6;
+for (let i = 0; i < pos.count; i++) {
+  // Strict separation: y >= 0 is blue, y < 0 is red
+  if (pos.getY(i) >= -epsilon) {
+    color.set(0x0000ff); // blue
+  } else {
+    color.set(0xff0000); // red
+  }
+  colors.push(color.r, color.g, color.b);
+}
+pillGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+const pillMat = new THREE.MeshStandardMaterial({
+  vertexColors: true,
+  roughness: 0.4,
+  metalness: 0.1
+});
+const pill = new THREE.Mesh(pillGeo, pillMat);
+scene.add(pill);
+
+/* ---------- Camera, controls, and render loop ---------- */
+camera.position.set(0, 0, 4);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; // Smooths the movement
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene,camera);
+}
+animate();
+
+/* ---------- Responsive ---------- */
+addEventListener('resize',()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
