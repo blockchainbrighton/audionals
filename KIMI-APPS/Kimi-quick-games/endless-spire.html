@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Endless Spire • Draft of Fate</title>
+<style>
+  :root{
+    --bg:#0d0d0d;
+    --bg2:#1a1a1a;
+    --accent:#0ff;
+    --text:#ddd;
+    --danger:#f55;
+    --success:#5f5;
+  }
+  *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+  body{margin:0;background:var(--bg);color:var(--text);display:grid;
+       grid-template-columns:1fr 320px;grid-template-rows:auto 1fr;gap:4px;height:100vh}
+  header{grid-column:1/-1;background:var(--bg2);padding:.5rem 1rem;display:flex;gap:1rem;align-items:center;font-size:.9rem}
+  header span{margin-right:.5rem}
+  #battleArea,#sideArea{overflow:hidden;display:flex;flex-direction:column}
+  #battleArea{background:var(--bg2);padding:.5rem}
+  #log{flex:1;background:#000;padding:.5rem;font-size:.8rem;overflow-y:auto;white-space:pre-wrap}
+  #inventory{background:var(--bg2);padding:.5rem;font-size:.8rem;overflow-y:auto}
+  #inventory ul{margin:0;padding-left:1rem}
+  .card{position:relative;width:95px;height:135px;border:1px solid #555;border-radius:6px;background:#222;font-size:.7rem;
+        cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;padding:.3rem;transition:border .1s}
+  .card:hover{border-color:var(--accent)}
+  .card .cost{position:absolute;bottom:3px;right:3px;background:#333;padding:1px 3px;border-radius:3px}
+  .enemy{min-width:120px;padding:.4rem;background:#222;border:1px solid #444;border-radius:4px;margin-right:.5rem}
+  .hpBar{background:#444;height:6px;border-radius:3px;margin-top:.2rem}
+  .hpBar div{height:100%;background:var(--success);transition:width .2s}
+  #hand,#enemy{display:flex;flex-wrap:wrap;gap:.3rem;margin:.3rem 0}
+  #choices{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;
+           justify-content:center;gap:.5rem;z-index:10}
+  #choices.hidden{display:none}
+  #choices .card{margin:0 .2rem}
+  .quest{background:#111;border:1px solid #444;margin:.2rem 0;padding:.3rem;border-radius:4px;font-size:.75rem}
+</style>
+</head>
+<body>
+<header>
+  <span>Wave <b id="wave">1</b></span>
+  <span>Score <b id="score">0</b></span>
+  <span>HP <b id="hp">80</b>/80</span>
+  <span>Block <b id="block">0</b></span>
+  <span>Gold <b id="gold">0</b></span>
+</header>
+
+<!-- LEFT COLUMN -->
+<div id="battleArea">
+  <div id="enemy"></div>
+  <div id="hand"></div>
+  <div style="text-align:center;margin:.5rem">
+    <button id="endTurnBtn" onclick="endPlayerTurn()">End Turn</button>
+  </div>
+  
+</div>
+
+<!-- RIGHT COLUMN -->
+<div id="sideArea">
+  <div id="log">You enter the Endless Spire...</div>
+  <div id="inventory">
+    <strong>Inventory</strong>
+    <ul id="invList"></ul>
+    <strong>Side Quests</strong>
+    <div id="quests"></div>
+  </div>
+</div>
+
+<!-- Modal for draft / upgrade -->
+<div id="choices" class="hidden"></div>
+
+<script>
+/* ===== RNG ===== */
+const rng=(()=>{let s=1;return(seed)=>{s=(seed||s+1)&0xffffffff;s=Math.imul(s,0x19660d)+0x3c6ef35f;return (s>>>0)/0x100000000;}})();
+
+/* ===== CARD CATALOG ===== */
+const effects={
+  damage:(amt)=>({target})=>{target.hp-=amt;},
+  block:(amt)=>({player})=>{player.block+=amt;},
+  draw:(amt)=>({game})=>{game.draw(amt);},
+  poison:(amt)=>({target})=>{target.poison=(target.poison||0)+amt;}
+};
+const catalog=[
+  {name:"Strike",cost:1,effect:effects.damage(6),desc:"Deal 6 damage"},
+  {name:"Defend",cost:1,effect:effects.block(5),desc:"Gain 5 Block"},
+  {name:"Bash",cost:2,effect:effects.damage(8),desc:"Deal 8 damage"},
+  {name:"Shrug",cost:1,effect:[effects.block(4),effects.draw(1)],desc:"Block 4, draw 1"},
+  {name:"Poison Dart",cost:1,effect:effects.poison(3),desc:"Apply 3 Poison"},
+  {name:"Cleave",cost:1,effect:effects.damage(5),desc:"Deal 5 damage to ALL enemies"}
+];
+function mkCard(base){return{name:base.name,cost:base.cost,effect:base.effect,desc:base.desc,upgraded:false};}
+
+/* ===== STATE ===== */
+const state={
+  wave:1,score:0,gold:0,
+  deck:[],hand:[],discard:[],exhaust:[],
+  enemies:[],
+  player:{hp:80,block:0,maxHp:80},
+  inventory:["Potion of Mending"],
+  quests:[
+    {id:"firstBlood",desc:"Defeat your first enemy",done:false,reward:20},
+    {id:"poisoner",desc:"Apply Poison 10 times",progress:0,goal:10,reward:30}
+  ]
+};
+
+/* ===== NARRATIVE LOGGER ===== */
+function log(str){const l=document.getElementById('log');l.textContent+=`\n${str}`;l.scrollTop=l.scrollHeight;}
+
+/* ===== INIT ===== */
+function init(){
+  state.deck=[...Array(3)].map(()=>mkCard(catalog[0]));
+  state.deck.push(...[...Array(2)].map(()=>mkCard(catalog[1])));
+  shuffleDeck();
+  newWave();
+  draw(5);
+  render();
+  log("A spiral staircase descends into darkness. Your journey begins.");
+}
+function shuffleDeck(){
+  for(let i=state.deck.length-1;i>0;i--){
+    const j=Math.floor(rng()*i);
+    [state.deck[i],state.deck[j]]=[state.deck[j],state.deck[i]];
+  }
+}
+
+/* ---------- NEW HELPERS ---------- */
+function canPlayAnything(){
+  return state.hand.length > 0 ||
+         state.deck.length > 0 ||
+         state.discard.length > 0;
+}
+
+function endPlayerTurn(){
+  log("You stand your ground, letting the shadows advance.");
+  enemyTurn();
+}
+
+/* ===== FLOW ===== */
+/* ---------- PATCH draw(n) ---------- */
+function draw(n){
+  for(let i=0;i<n;i++){
+    if(!state.deck.length){            // reshuffle discard into deck
+      if(!state.discard.length){       // nothing to reshuffle → OUT OF CARDS
+        log("You have exhausted every card. The shadows close in...");
+        defeat();
+        return;
+      }
+      state.deck=state.discard.splice(0);
+      shuffleDeck();
+    }
+    if(state.deck.length) state.hand.push(state.deck.pop());
+  }
+}
+
+function playCard(idx){
+  const card=state.hand[idx];
+  if(!card) return;
+  const target=state.enemies[0];
+  const run=e=>typeof e==='function'?e({player:state.player,target,game:state}):null;
+  if(Array.isArray(card.effect)) card.effect.forEach(run); else run(card.effect);
+  state.discard.push(card);
+  state.hand.splice(idx,1);
+  log(`Played ${card.name}${target?" on Enemy":""}.`);
+  checkQuest("poisoner",target?.poison||0);
+  render();
+  if(state.enemies.every(e=>e.hp<=0)) setTimeout(endWave,300);
+}
+function newWave(){
+  state.enemies=[];
+  const n=Math.min(4,Math.floor(state.wave/2)+1);
+  for(let i=0;i<n;i++){
+    const hp=Math.floor(12+state.wave*7);
+    const atk=Math.floor(5+state.wave*1.6);
+    state.enemies.push({hp,maxHp:hp,atk,poison:0});
+  }
+  log(`Wave ${state.wave}: ${n} shadow${n>1?"s":""} emerge!`);
+}
+function enemyTurn(){
+  state.player.block=0;
+  state.enemies.forEach(e=>{
+    if(e.poison){e.hp-=e.poison;e.poison--;}
+    if(e.hp>0){
+      let dmg=e.atk-state.player.block;
+      if(dmg<0) dmg=0;
+      state.player.hp-=dmg;
+      log(`Enemy hits you for ${dmg}.`);
+    }
+  });
+  if(state.player.hp<=0){log("YOU DIED");return;}
+  draw(5);
+  render();
+}
+function endWave(){
+  state.score+=state.wave*10;
+  state.gold+=5+state.wave;
+  log(`Wave cleared! +${state.wave*10} score, +${5+state.wave} gold.`);
+  if(!state.quests.find(q=>q.id==="firstBlood").done){
+    completeQuest("firstBlood");
+  }
+  if(state.wave%3===0){
+    showUpgrade();
+  }else{
+    showDraft();
+  }
+}
+
+/* ---------- NEW defeat() ---------- */
+function defeat(){
+  log(`GAME OVER – Wave ${state.wave}, Score ${state.score}`);
+  const choices=document.getElementById('choices');
+  choices.innerHTML='<h2>Game Over</h2><button onclick="location.reload()">Restart</button>';
+  choices.classList.remove('hidden');
+}
+
+/* ===== QUESTS ===== */
+function checkQuest(id,val=1){
+  const q=state.quests.find(q=>q.id===id);
+  if(q && !q.done && q.goal){
+    q.progress=Math.min(q.goal,(q.progress||0)+val);
+    if(q.progress>=q.goal) completeQuest(id);
+  }
+}
+function completeQuest(id){
+  const q=state.quests.find(q=>q.id===id);
+  if(!q || q.done) return;
+  q.done=true;
+  state.score+=q.reward;
+  log(`Quest complete: ${q.desc} (+${q.reward} score).`);
+  render();
+}
+
+/* ===== DRAFT / UPGRADE ===== */
+function showDraft(){
+  const choices=document.getElementById('choices');choices.classList.remove('hidden');
+  choices.innerHTML='<h2>Choose a card to add</h2>';
+  const picks=Array(3).fill(0).map(()=>catalog[Math.floor(rng()*catalog.length)]);
+  picks.forEach(c=>{
+    const btn=document.createElement('div');
+    btn.className='card';
+    btn.innerHTML=`<div>${c.name}</div><div>${c.desc}</div><div class="cost">${c.cost}</div>`;
+    btn.onclick=()=>{state.deck.push(mkCard(c));choices.classList.add('hidden');log(`Added ${c.name} to deck.`);enemyTurn();};
+    choices.appendChild(btn);
+  });
+}
+function showUpgrade(){
+  const choices=document.getElementById('choices');choices.classList.remove('hidden');
+  choices.innerHTML='<h2>Click a card to upgrade</h2>';
+  [...state.deck,...state.hand,...state.discard].forEach((c,i)=>{
+    const btn=document.createElement('div');
+    btn.className='card';
+    btn.innerHTML=`<div>${c.name}</div><div>${c.desc}</div><div class="cost">${c.cost}</div>`;
+    btn.onclick=()=>{upgradeCard(c);choices.classList.add('hidden');log(`Upgraded ${c.name}.`);enemyTurn();};
+    choices.appendChild(btn);
+  });
+}
+function upgradeCard(card){
+  if(card.upgraded) return;
+  card.upgraded=true;
+  if(card.name==="Strike") card.effect=effects.damage(9);
+  if(card.name==="Defend") card.effect=effects.block(8);
+  if(card.name==="Poison Dart"){card.effect=effects.poison(5);card.desc="Apply 5 Poison";}
+}
+
+/* ===== RENDER ===== */
+function render(){
+  document.getElementById('wave').textContent=state.wave;
+  document.getElementById('score').textContent=state.score;
+  document.getElementById('gold').textContent=state.gold;
+  document.getElementById('hp').textContent=state.player.hp;
+  document.getElementById('block').textContent=state.player.block;
+
+  const enemyDiv=document.getElementById('enemy');
+  enemyDiv.innerHTML='';
+  state.enemies.forEach((e,i)=>{
+    const d=document.createElement('div');
+    d.className='enemy';
+    d.innerHTML=`Shadow #${i+1}<br>${e.hp}/${e.maxHp} HP<br>ATK ${e.atk}${e.poison?`<br>Poison ${e.poison}`:''}
+      <div class="hpBar"><div style="width:${100*e.hp/e.maxHp}%"></div></div>`;
+    enemyDiv.appendChild(d);
+  });
+
+  const handDiv=document.getElementById('hand');
+  handDiv.innerHTML='';
+  state.hand.forEach((c,i)=>{
+    const d=document.createElement('div');
+    d.className='card';
+    d.innerHTML=`<div>${c.name}</div><div>${c.desc}</div><div class="cost">${c.cost}</div>`;
+    d.onclick=()=>playCard(i);
+    handDiv.appendChild(d);
+  });
+
+  const inv=document.getElementById('invList');
+  inv.innerHTML='';
+  state.inventory.forEach(item=>inv.insertAdjacentHTML('beforeend',`<li>${item}</li>`));
+
+  const qDiv=document.getElementById('quests');
+  qDiv.innerHTML='';
+  state.quests.forEach(q=>{
+    qDiv.insertAdjacentHTML('beforeend',
+      `<div class="quest">${q.done?"✅":"⏳"} ${q.desc} ${q.goal?`(${q.progress||0}/${q.goal})`:""}</div>`);
+  });
+}
+
+/* ===== GO ===== */
+init();
+</script>
+</body>
+</html>

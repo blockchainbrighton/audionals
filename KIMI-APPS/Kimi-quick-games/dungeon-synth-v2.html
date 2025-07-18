@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dungeon Synth: Resonant Depths</title>
+<style>
+    *{box-sizing:border-box;font-family:"Courier New",monospace}
+    body{margin:0;background:#0a0a0a;color:#ccc;font-size:14px}
+    #ui{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column}
+    #topBar{display:flex;justify-content:space-between;padding:4px 8px;background:#111;border-bottom:1px solid #444}
+    #gameArea{flex:1;display:flex}
+    #logPanel{width:320px;border-left:1px solid #444;display:flex;flex-direction:column;background:#111}
+    #log{flex:1;overflow-y:auto;padding:4px;font-size:12px;line-height:1.3em}
+    #questPanel{height:160px;border-top:1px solid #444;padding:4px;font-size:12px;overflow-y:auto}
+    #inventoryPanel{width:220px;background:#111;border-right:1px solid #444;padding:4px;font-size:12px;overflow-y:auto}
+    #dungeonWrap{flex:1;display:flex;align-items:center;justify-content:center;background:#0a0a0a}
+    #dungeon{display:grid;gap:1px}
+    .tile{width:24px;height:24px;font-size:18px;text-align:center;line-height:24px}
+    .wall{background:#222}.floor{background:#333}.stairs{background:#0ff;color:#000}
+    .player{background:#0f0;color:#000}.monster{background:#f00;color:#000}
+    .loot{background:#ff0;color:#000}.npc{background:#5ff;color:#000}
+    .lore{background:#f5f;color:#000}
+    .selected{outline:2px solid #0ff}
+    .cooldown{opacity:.4}
+    .slot{border:1px solid #555;margin:1px;display:flex;align-items:center;justify-content:center;height:24px;cursor:pointer;background:#222}
+    .slot img{width:20px;height:20px}
+    .eq{background:#444}
+    #dialogOverlay{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center}
+    #dialogBox{width:400px;background:#111;border:1px solid #0ff;padding:12px}
+    #dialogBox p{margin:0 0 8px}
+    #dialogBox button{margin:4px 2px}
+    #titleScreen{position:absolute;top:0;left:0;right:0;bottom:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    #titleScreen h1{color:#0ff;font-size:48px;margin-bottom:24px}
+    #titleScreen button{background:#0ff;border:none;padding:8px 16px;margin:4px;font-size:16px;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="titleScreen">
+  <h1>DUNGEON SYNTH:<br>RESONANT DEPTHS</h1>
+  <button onclick="startGame('LEAD')">Lead Synth (Balanced)</button>
+  <button onclick="startGame('BASS')">Bass Line (Tank)</button>
+  <button onclick="startGame('PAD')">Pad (Support)</button>
+  <button onclick="startGame('ARP')">Arpeggiator (DPS)</button>
+</div>
+
+<div id="ui" style="display:none">
+  <div id="topBar">
+    <div id="stats"></div>
+    <div>FLOOR <span id="floorNum">1</span></div>
+    <div><button onclick="saveGame()">Save</button><button onclick="loadGame()">Load</button></div>
+  </div>
+  <div id="gameArea">
+    <div id="inventoryPanel">
+      <h3>Inventory</h3>
+      <div id="invSlots"></div>
+      <h3>Equipment</h3>
+      <div id="eqSlots"></div>
+    </div>
+    <div id="dungeonWrap">
+      <div id="dungeon"></div>
+    </div>
+    <div id="logPanel">
+      <div id="log"></div>
+      <div id="questPanel"><h4>Quest Log</h4><ul id="questList"></ul></div>
+    </div>
+  </div>
+</div>
+
+<div id="dialogOverlay">
+  <div id="dialogBox"></div>
+</div>
+
+<script>
+/* ============================================================
+   1.  CONSTANTS & DATA TABLES
+   ============================================================ */
+const W=24, H=16, VISION=7;
+const ITEM_DB={
+  'potion':     {name:'Health Vial',       type:'cons', use:pl=>{pl.hp=Math.min(pl.maxHp,pl.hp+15);log('Gulped a vial.');}, stack:9},
+  'ironSw':     {name:'Iron Sword',        type:'weapon', stats:{atk:3}},
+  'leather':    {name:'Leather Jerkin',    type:'armor',  stats:{def:2}},
+  'ringSTR':    {name:'Ring of Might',     type:'ring',   stats:{atk:2}},
+  'scrollFB':   {name:'Scroll Fireball',   type:'spell',  use:(pl,x,y)=>castFireball(pl,x,y), charges:3},
+  'shimmer':    {name:'Shimmering Dust',   type:'craft', stack:99},
+  'keyRed':     {name:'Red Key',           type:'key'},
+  'lute':       {name:'Lute of Echoes',    type:'trinket', stats:{arp:1}},
+  'synthCore':  {name:'Synth Core (Quest)',type:'quest'}
+};
+const QUESTS={
+  'lostCore': {
+    title:'The Lost Core',
+    desc:'Find the Synth Core on floor 3 and bring it to the Bard NPC.',
+    status:'active',
+    stage:0
+  },
+  'shimmer': {
+    title:'Shimmer Harvest',
+    desc:'Collect 10 Shimmering Dust for the Alchemist.',
+    status:'hidden',
+    stage:0,
+    goal:10
+  }
+};
+const CLASSES={
+  LEAD:{base:{hp:25,atk:5,def:2,spd:1},color:'#0f0'},
+  BASS:{base:{hp:35,atk:3,def:5,spd:0},color:'#88f'},
+  PAD: {base:{hp:20,atk:3,def:2,spd:1,heal:2},color:'#f5f'},
+  ARP: {base:{hp:18,atk:7,def:1,spd:2},color:'#fa0'}
+};
+const NPCs=[
+  {id:'bard', floors:[2,4,6], dialogue:[
+    {text:'Ah, a fellow musician! Bring me the Synth Core and I shall teach you the Resonant Chord.', options:[
+      {txt:'Accept',next:-1,fn:()=>giveQuest('lostCore')}
+    ]}
+  ]},
+  {id:'alchemist', floors:[4,7], dialogue:[
+    {text:'Bring me 10 Shimmering Dust and I shall brew you a potion of Endless Echo.', options:[
+      {txt:'Accept',next:-1,fn:()=>giveQuest('shimmer')}
+    ]}
+  ]}
+];
+/* ============================================================
+   2.  STATE
+   ============================================================ */
+let map=[], player, monsters=[], floor=1, seedVal=Date.now();
+let discovered=new Set();
+let inventory=[], equipment={}, quests={}, npcs=[];
+
+/* ============================================================
+   3.  RNG
+   ============================================================ */
+function R(s){return ()=>(s=(s*9301+49297)%233280,s/233280);}
+let rng=R(seedVal);
+
+/* ============================================================
+   4.  AUDIO ENGINE
+   ============================================================ */
+const AudioCtx=window.AudioContext||window.webkitAudioContext;
+let actx=new AudioCtx();
+let melodyOsc=null, bassOsc=null;
+function startMusic(){
+  if(melodyOsc){melodyOsc.stop();bassOsc.stop();}
+  melodyOsc=actx.createOscillator();melodyOsc.type='square';
+  bassOsc=actx.createOscillator();bassOsc.type='sawtooth';
+  const melGain=actx.createGain(), bassGain=actx.createGain();
+  melodyOsc.connect(melGain);melGain.connect(actx.destination);
+  bassOsc.connect(bassGain);bassGain.connect(actx.destination);
+  melGain.gain.value=.05;bassGain.gain.value=.07;
+  bassOsc.frequency.setValueAtTime(55,actx.currentTime);
+  melodyOsc.start();bassOsc.start();
+}
+function setMusicMood(mood){ // mood 0=calm 1=combat
+  if(!melodyOsc) return;
+  melodyOsc.frequency.setValueAtTime(220+mood*110,actx.currentTime);
+  bassOsc.frequency.setValueAtTime(55+mood*55,actx.currentTime);
+}
+
+/* ============================================================
+   5.  MAP GENERATION
+   ============================================================ */
+function genMap(){
+  map=[];
+  monsters=[];
+  npcs=[];
+  discovered.clear();
+  const open=[];
+  for(let y=0;y<H;y++){
+    map[y]=[];
+    for(let x=0;x<W;x++){
+      map[y][x]={type:(rng()<.18?'wall':'floor'),items:[],monster:null,npc:null,lore:null};
+      if(map[y][x].type==='floor')open.push({x,y});
+    }
+  }
+  // player start
+  const start=open.splice(rng()*open.length|0,1)[0];
+  player.x=start.x;player.y=start.y;
+  // stairs
+  const stairs=open.splice(rng()*open.length|0,1)[0];
+  map[stairs.y][stairs.x].type='stairs';
+  // monsters
+  const numMons=4+floor*2;
+  for(let i=0;i<numMons;i++){
+    if(!open.length)break;
+    const m=open.splice(rng()*open.length|0,1)[0];
+    const mon={x:m.x,y:m.y,hp:8+floor*3,atk:2+floor,def:rng()*floor|0,xp:floor*3+2,gold:rng()*floor*3|0};
+    map[m.y][m.x].monster=mon;
+    monsters.push(mon);
+  }
+  // loot
+  for(let i=0;i<3+floor;i++){
+    if(!open.length)break;
+    const l=open.splice(rng()*open.length|0,1)[0];
+    const roll=rng();
+    if(roll<.4)map[l.y][l.x].items.push('potion');
+    else if(roll<.6)map[l.y][l.x].items.push('ironSw');
+    else if(roll<.7)map[l.y][l.x].items.push('leather');
+    else if(roll<.8)map[l.y][l.x].items.push('ringSTR');
+    else map[l.y][l.x].items.push('scrollFB');
+  }
+  // npc
+  NPCs.forEach(npc=>{
+    if(npc.floors.includes(floor)){
+      if(!open.length)return;
+      const p=open.splice(rng()*open.length|0,1)[0];
+      npcs.push({...npc,x:p.x,y:p.y});
+      map[p.y][p.x].npc=npc;
+    }
+  });
+  // lore
+  if(rng()<.3){
+    if(!open.length)return;
+    const p=open.splice(rng()*open.length|0,1)[0];
+    map[p.y][p.x].lore=`Tablet #${floor}: ${['A','B','C','D'][rng()*4|0]}${['♪','♫','♬','♭'][rng()*4|0]}`;
+  }
+}
+/* ============================================================
+   6.  RENDER
+   ============================================================ */
+function render(){
+  const d=document.getElementById('dungeon');d.innerHTML='';
+  d.style.gridTemplateColumns=`repeat(${W},24px)`;
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const div=document.createElement('div');
+      div.className='tile';
+      const dx=x-player.x, dy=y-player.y;
+      const inVision=Math.abs(dx)<=VISION && Math.abs(dy)<=VISION;
+      if(!inVision && !discovered.has(`${x},${y}`)){div.className+=' wall';div.textContent=' ';d.appendChild(div);continue;}
+      discovered.add(`${x},${y}`);
+      const tile=map[y][x];
+      div.className+=` ${tile.type}`;
+      let ch=' ';
+      if(tile.monster){ch='M';div.className+=' monster';}
+      else if(tile.npc){ch='?';div.className+=' npc';}
+      else if(tile.items.length){ch='!';div.className+=' loot';}
+      else if(tile.lore){ch='ℹ';div.className+=' lore';}
+      else if(tile.type==='stairs'){ch='>';}
+      if(x===player.x && y===player.y){ch='@';div.className='tile player';}
+      div.textContent=ch;
+      div.onclick=()=>handleClick(x,y);
+      d.appendChild(div);
+    }
+  }
+  document.getElementById('stats').textContent=
+    `HP ${player.hp}/${player.maxHp}  ATK ${totalStat('atk')}  DEF ${totalStat('def')}  GOLD ${player.gold||0}`;
+  renderInventory();
+  renderQuests();
+}
+/* ============================================================
+   7.  PLAYER ACTIONS
+   ============================================================ */
+function move(dx,dy){
+  if(player.hp<=0)return;
+  const nx=player.x+dx, ny=player.y+dy;
+  if(nx<0||ny<0||nx>=W||ny>=H||map[ny][nx].type==='wall')return;
+  const tile=map[ny][nx];
+  if(tile.monster){
+    combat(tile.monster);
+  }else if(tile.npc){
+    openDialog(tile.npc);
+  }else if(tile.items.length){
+    const itm=tile.items.pop();
+    addItem(itm);
+    log(`Picked up ${ITEM_DB[itm].name}`);
+    player.x=nx;player.y=ny;
+  }else if(tile.lore){
+    log(tile.lore);player.x=nx;player.y=ny;
+  }else if(tile.type==='stairs'){
+    nextFloor();
+  }else{player.x=nx;player.y=ny;}
+  render();
+}
+function combat(mon){
+  setMusicMood(1);
+  while(mon.hp>0 && player.hp>0){
+    const pdmg=Math.max(1,totalStat('atk')-mon.def);
+    mon.hp-=pdmg;log(`You hit ${pdmg}.`);
+    if(mon.hp<=0){log(`Monster slain +${mon.xp}xp +${mon.gold}g`);player.xp=(player.xp||0)+mon.xp;player.gold=(player.gold||0)+mon.gold;levelUp();map[mon.y][mon.x].monster=null;monsters.splice(monsters.indexOf(mon),1);break;}
+    const mdmg=Math.max(1,mon.atk-totalStat('def'));
+    player.hp-=mdmg;log(`Monster hits ${mdmg}.`);
+  }
+  if(player.hp<=0){log('YOU DIED. Press R to restart.');}
+  setMusicMood(0);
+}
+function nextFloor(){
+  floor++;
+  if(floor>15){alert('Victory! You reached the surface and composed the Ultimate Chord!');resetGame();return;}
+  genMap();
+  render();
+}
+function levelUp(){
+  const need=10*(player.lvl||1);
+  if((player.xp||0)>=need){
+    player.lvl=(player.lvl||1)+1;
+    player.xp=0;
+    player.maxHp+=5;player.hp+=5;
+    log(`Leveled up to ${player.lvl}!`);
+  }
+}
+/* ============================================================
+   8.  ITEM & INVENTORY
+   ============================================================ */
+function addItem(id){
+  if(ITEM_DB[id].type==='cons' || ITEM_DB[id].type==='craft'){
+    const stack=inventory.find(i=>i.id===id);
+    if(stack && ITEM_DB[id].stack){stack.qty=(stack.qty||1)+1;}
+    else{inventory.push({id,qty:1});}
+  }else{inventory.push({id});}
+}
+function renderInventory(){
+  const inv=document.getElementById('invSlots');inv.innerHTML='';
+  inventory.forEach((itm,idx)=>{
+    const div=document.createElement('div');
+    div.className='slot';
+    div.textContent=ITEM_DB[itm.id].name+(itm.qty?`x${itm.qty}`:'');
+    div.onclick=()=>useItem(idx);
+    inv.appendChild(div);
+  });
+  const eq=document.getElementById('eqSlots');eq.innerHTML='';
+  ['weapon','armor','ring1','ring2','trinket1','trinket2','spell1','spell2','spell3'].forEach(slot=>{
+    const div=document.createElement('div');
+    div.className='slot eq';
+    if(equipment[slot])div.textContent=ITEM_DB[equipment[slot]].name;
+    div.dataset.slot=slot;
+    div.onclick=()=>equipFromInventory(slot);
+    eq.appendChild(div);
+  });
+}
+function useItem(idx){
+  const itm=inventory[idx];
+  if(ITEM_DB[itm.id].use){
+    ITEM_DB[itm.id].use(player);
+    if(ITEM_DB[itm.id].type!=='spell'){if(!--itm.qty)inventory.splice(idx,1);}
+    render();
+  }
+}
+function equipFromInventory(slot){
+  const id=inventory.find(i=>ITEM_DB[i.id].type===slot.replace(/\d+$/,''));
+  if(!id)return;
+  if(equipment[slot])inventory.push({id:equipment[slot]});
+  equipment[slot]=id.id;
+  inventory.splice(inventory.findIndex(i=>i===id),1);
+  render();
+}
+function totalStat(stat){
+  let base=player[stat]||0;
+  Object.values(equipment).forEach(id=>{
+    if(id && ITEM_DB[id].stats && ITEM_DB[id].stats[stat])base+=ITEM_DB[id].stats[stat];
+  });
+  return base;
+}
+/* ============================================================
+   9.  QUESTS & DIALOGUE
+   ============================================================ */
+function giveQuest(id){
+  quests[id]={...QUESTS[id]};
+}
+function renderQuests(){
+  const q=document.getElementById('questList');q.innerHTML='';
+  Object.values(quests).forEach(qu=>{
+    if(qu.status==='hidden')return;
+    const li=document.createElement('li');
+    li.textContent=qu.title+(qu.goal?` (${qu.stage}/${qu.goal})`:qu.stage?' (Done)':'');
+    q.appendChild(li);
+  });
+}
+function openDialog(npc){
+  const box=document.getElementById('dialogOverlay');
+  const inner=document.getElementById('dialogBox');
+  inner.innerHTML='';
+  const node=npc.dialogue[0];
+  inner.innerHTML+=`<p>${node.text}</p>`;
+  node.options.forEach(opt=>{
+    const btn=document.createElement('button');
+    btn.textContent=opt.txt;
+    btn.onclick=()=>{opt.fn&&opt.fn();box.style.display='none';};
+    inner.appendChild(btn);
+  });
+  box.style.display='flex';
+}
+/* ============================================================
+   10. SPELLS & CLICK TARGETING
+   ============================================================ */
+function castFireball(pl,x,y){
+  const tile=map[y][x];
+  if(tile.monster){
+    const dmg=8+totalStat('atk');
+    tile.monster.hp-=dmg;
+    log(`Fireball hits ${dmg}!`);
+    if(tile.monster.hp<=0){combat(tile.monster);}
+  }
+}
+function handleClick(x,y){
+  const tile=map[y][x];
+  if(tile.monster && Math.abs(x-player.x)<=5 && Math.abs(y-player.y)<=5){
+    const spell=Object.values(equipment).find(id=>id && ITEM_DB[id].type==='spell');
+    if(spell){
+      const idx=inventory.findIndex(i=>i.id===spell);
+      ITEM_DB[spell].use(player,x,y);
+      inventory[idx].charges--;
+      if(inventory[idx].charges<=0){inventory.splice(idx,1);equipment.spell1=null;equipment.spell2=null;equipment.spell3=null;}
+      render();
+    }else{move(x-player.x,y-player.y);}
+  }else{move(x-player.x,y-player.y);}
+}
+/* ============================================================
+   11. SAVE / LOAD
+   ============================================================ */
+function saveGame(){
+  const data={
+    player,floor,map,monsters,npcs,discovered,inventory,equipment,quests,seedVal
+  };
+  localStorage.setItem('ds_save',JSON.stringify(data));
+  log('Game saved.');
+}
+function loadGame(){
+  const data=JSON.parse(localStorage.getItem('ds_save'));
+  if(!data){log('No save found.');return;}
+  Object.assign(window,data);
+  render();
+  log('Game loaded.');
+}
+/* ============================================================
+   12. GAME FLOW
+   ============================================================ */
+function startGame(cls){
+  document.getElementById('titleScreen').style.display='none';
+  document.getElementById('ui').style.display='flex';
+  player={...CLASSES[cls].base,x:0,y:0,cls};
+  genMap();
+  render();
+  startMusic();
+}
+function resetGame(){
+  floor=1;inventory=[];equipment={};quests={};player=null;
+  document.getElementById('ui').style.display='none';
+  document.getElementById('titleScreen').style.display='flex';
+}
+/* ============================================================
+   13. INPUT
+   ============================================================ */
+window.addEventListener('keydown',e=>{
+  if(player?.hp<=0 && e.key.toLowerCase()==='r')resetGame();
+  if(!player)return;
+  switch(e.key.toLowerCase()){
+    case 'w':case 'arrowup':move(0,-1);break;
+    case 's':case 'arrowdown':move(0,1);break;
+    case 'a':case 'arrowleft':move(-1,0);break;
+    case 'd':case 'arrowright':move(1,0);break;
+    case '1':useItem(0);break;
+    case '2':useItem(1);break;
+    case '3':useItem(2);break;
+    case '4':useItem(3);break;
+    case '5':useItem(4);break;
+    case 'l':if(e.ctrlKey){e.preventDefault();loadGame();}break;
+    case 's':if(e.ctrlKey){e.preventDefault();saveGame();}break;
+  }
+});
+function log(msg){
+  const l=document.getElementById('log');
+  l.textContent+=msg+'\n';
+  l.scrollTop=l.scrollHeight;
+}
+</script>
+</body>
+</html>

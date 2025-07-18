@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Monster Merge Arena: Chronicles of Aetheria</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=Roboto:wght@300;400&display=swap');
+
+  body{
+    font-family:'Roboto',sans-serif;
+    background:radial-gradient(circle at top,#1a1a2e 0%,#111 100%);
+    color:#eee;
+    margin:0;
+    padding:20px;
+    min-height:100vh;
+  }
+
+  h1{
+    font-family:'Cinzel',serif;
+    text-align:center;
+    margin-top:0;
+    font-size:2.5em;
+    background:linear-gradient(to right,#ffd700,#ff6b6b);
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
+
+  .story-panel{
+    max-width:800px;
+    margin:0 auto 20px;
+    background:rgba(0,0,0,.5);
+    border:1px solid #333;
+    border-radius:10px;
+    padding:20px;
+    font-style:italic;
+    line-height:1.6;
+  }
+
+  .progress-bar{
+    max-width:800px;
+    margin:0 auto 20px;
+    background:#222;
+    border-radius:10px;
+    padding:10px;
+  }
+
+  .progress-fill{
+    background:linear-gradient(to right,#4CAF50,#8BC34A);
+    height:20px;
+    border-radius:10px;
+    transition:width .3s;
+  }
+
+  #team,#arena{
+    max-width:800px;
+    margin:0 auto 20px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    justify-content:center;
+    align-items:flex-start;
+  }
+
+  .monster{
+    width:120px;
+    height:160px;
+    background:linear-gradient(135deg,#1e1e1e 0%,#2a2a2a 100%);
+    border:2px solid transparent;
+    border-radius:12px;
+    position:relative;
+    cursor:pointer;
+    transition:all .3s;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 4px 8px rgba(0,0,0,.3);
+  }
+
+  .monster:hover{
+    transform:translateY(-5px);
+    box-shadow:0 8px 16px rgba(0,255,255,.2);
+  }
+
+  .monster.selected{
+    border-color:#ffd700;
+    box-shadow:0 0 20px rgba(255,215,0,.5);
+  }
+
+  .monster.rare{
+    border-color:#9c27b0;
+    box-shadow:0 0 20px rgba(156,39,176,.5);
+  }
+
+  .monster .icon{
+    font-size:60px;
+    margin-bottom:5px;
+  }
+
+  .monster .level{
+    font-weight:bold;
+    color:#ffd700;
+    font-size:14px;
+  }
+
+  .monster .stats{
+    font-size:11px;
+    margin-top:5px;
+    opacity:.8;
+  }
+
+  .merge-panel{
+    width:100%;
+    text-align:center;
+    margin-bottom:10px;
+  }
+
+  button{
+    background:linear-gradient(135deg,#ffd700 0%,#ff6b6b 100%);
+    color:#000;
+    border:none;
+    padding:12px 24px;
+    border-radius:25px;
+    font-weight:bold;
+    cursor:pointer;
+    font-size:16px;
+    transition:transform .2s;
+    margin:5px;
+  }
+
+  button:hover:not(:disabled){
+    transform:scale(1.05);
+  }
+
+  button:disabled{
+    opacity:.4;
+    cursor:not-allowed;
+  }
+
+  #arena-log{
+    width:100%;
+    height:200px;
+    background:rgba(0,0,0,.7);
+    border:1px solid #333;
+    border-radius:8px;
+    overflow-y:auto;
+    padding:15px;
+    font-size:14px;
+    box-sizing:border-box;
+    font-family:'Courier New',monospace;
+  }
+
+  .battle-animation{
+    position:fixed;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,.8);
+    display:none;
+    justify-content:center;
+    align-items:center;
+    z-index:1000;
+  }
+
+  .battle-scene{
+    display:flex;
+    gap:100px;
+    align-items:center;
+  }
+
+  .battle-monster{
+    font-size:100px;
+    animation:bounce 1s infinite;
+  }
+
+  @keyframes bounce{
+    0%,100%{transform:translateY(0);}
+    50%{transform:translateY(-20px);}
+  }
+
+  .achievement{
+    position:fixed;
+    top:20px;
+    right:20px;
+    background:linear-gradient(135deg,#ffd700 0%,#ff6b6b 100%);
+    color:#000;
+    padding:15px 25px;
+    border-radius:25px;
+    font-weight:bold;
+    transform:translateX(100%);
+    transition:transform .5s;
+    z-index:1001;
+  }
+
+  .achievement.show{
+    transform:translateX(0);
+  }
+</style>
+</head>
+<body>
+
+<h1>Monster Merge Arena: Chronicles of Aetheria</h1>
+
+<div class="story-panel" id="storyText">
+  <div id="storyContent">
+    <h3>The Awakening</h3>
+    <p>In the realm of Aetheria, where elemental powers shape reality, you are a newly awakened Summoner. The ancient Aether Crystals have chosen you to restore balance to the fractured lands. Begin your journey with four basic elemental spirits and discover the secrets of merging to create powerful allies.</p>
+  </div>
+</div>
+
+<div class="progress-bar">
+  <div style="text-align:center;margin-bottom:10px;">Aether Balance: <span id="balanceText">0%</span></div>
+  <div class="progress-fill" id="balanceBar" style="width:0%"></div>
+</div>
+
+<div id="team" class="merge-panel">
+  <div style="width:100%;margin-bottom:10px;font-size:20px;font-weight:bold;">Your Elemental Spirits</div>
+</div>
+
+<div id="arena">
+  <button id="fightBtn" disabled>Journey to the Next Realm</button>
+  <button id="restBtn" style="display:none;">Rest at Aether Spring</button>
+  <div id="arena-log"></div>
+</div>
+
+<div class="battle-animation" id="battleAnim">
+  <div class="battle-scene">
+    <div class="battle-monster" id="playerBattle"></div>
+    <div style="font-size:50px;">VS</div>
+    <div class="battle-monster" id="enemyBattle"></div>
+  </div>
+</div>
+
+<div class="achievement" id="achievement"></div>
+
+<script>
+/* ========= DATA ========= */
+const traits = {
+  fire: {icon:'🔥',atk:3,hp:2,name:'Inferno',color:'#ff4444'},
+  water:{icon:'💧',atk:2,hp:3,name:'Tide',color:'#4444ff'},
+  grass:{icon:'🌿',atk:2,hp:2,heal:1,name:'Verdant',color:'#44ff44'},
+  rock: {icon:'🪨',atk:1,hp:4,name:'Stone',color:'#888888'},
+  storm:{icon:'⚡',atk:4,hp:3,name:'Tempest',color:'#ffff44'},
+  ice:  {icon:'❄️',atk:3,hp:4,name:'Frost',color:'#44ffff'},
+  light:{icon:'✨',atk:5,hp:3,name:'Radiant',color:'#ffff88'},
+  dark: {icon:'🌑',atk:4,hp:5,name:'Void',color:'#8844ff'}
+};
+
+let discoveredTraits = ['fire','water','grass','rock'];
+let storyProgress = 0;
+let aetherBalance = 0;
+let achievements = [];
+
+function createMonster(trait, level=1, isRare=false){
+  const base = traits[trait];
+  const rarity = isRare ? 1.5 : 1;
+  return {
+    trait,
+    level,
+    icon: base.icon,
+    name: base.name,
+    color: base.color,
+    maxHp: Math.floor((base.hp * level + 5) * rarity),
+    hp: Math.floor((base.hp * level + 5) * rarity),
+    atk: Math.floor(base.atk * level * rarity),
+    heal: base.heal ? Math.floor(base.heal * level * rarity) : 0,
+    isRare
+  };
+}
+
+let monsters = [
+  createMonster('fire'),
+  createMonster('water'),
+  createMonster('grass'),
+  createMonster('rock')
+];
+
+let selected = [];
+let currentOpponent = null;
+let wave = 1;
+
+/* ========= STORY SYSTEM ========= */
+const storyEvents = [
+  {wave:1,text:"<h3>The First Step</h3><p>You've discovered the Aether Crossroads. Elemental spirits gather here, drawn by the imbalance. Your journey begins!</p>"},
+  {wave:3,text:"<h3>Whispers of Power</h3><p>The Aether Crystals pulse with new energy. You've learned that merging different elements creates unexpected results...</p>"},
+  {wave:5,text:"<h3>The Storm Approaches</h3><p>Dark clouds gather over Aetheria. You've unlocked Storm element! Lightning crackles between your merged spirits.</p>"},
+  {wave:10,text:"<h3>Icebound Realms</h3><p>The Frozen Peaks have awakened. Your spirits now channel the power of Ice, freezing enemies in crystalline prisons.</p>"},
+  {wave:15,text:"<h3>Light and Shadow</h3><p>The final secrets reveal themselves. Light and Dark elements emerge from the deepest mergers. The fate of Aetheria rests in your hands.</p>"},
+  {wave:20,text:"<h3>The Final Convergence</h3><p>All elements swirl together at the Heart of Aetheria. The ultimate merger awaits...</p>"}
+];
+
+function checkStory(){
+  const event = storyEvents.find(e=>e.wave===wave);
+  if(event){
+    document.getElementById('storyContent').innerHTML = event.text;
+    if(wave===5 && !discoveredTraits.includes('storm')){
+      discoveredTraits.push('storm');
+      showAchievement("Storm Element Unlocked! ⚡");
+    }
+    if(wave===10 && !discoveredTraits.includes('ice')){
+      discoveredTraits.push('ice');
+      showAchievement("Ice Element Unlocked! ❄️");
+    }
+    if(wave===15){
+      discoveredTraits.push('light','dark');
+      showAchievement("Light & Dark Unlocked! ✨🌑");
+    }
+  }
+}
+
+/* ========= MERGE SYSTEM ========= */
+function mergeMonsters(m1,m2){
+  if(m1===m2) return;
+  
+  let newTrait;
+  if(m1.trait === m2.trait){
+    newTrait = m1.trait;
+  }else{
+    const combo = [m1.trait,m2.trait].sort().join('-');
+    const combos = {
+      'fire-water':'storm',
+      'fire-grass':'storm',
+      'water-rock':'ice',
+      'grass-rock':'ice',
+      'fire-ice':'light',
+      'water-storm':'light',
+      'grass-storm':'dark',
+      'rock-ice':'dark'
+    };
+    newTrait = combos[combo] || Object.keys(traits)[(Object.keys(traits).indexOf(m1.trait)+Object.keys(traits).indexOf(m2.trait))%8];
+  }
+  
+  const newLevel = m1.level + m2.level;
+  const isRare = (m1.isRare || m2.isRare) || Math.random() < 0.1;
+  const merged = createMonster(newTrait,newLevel,isRare);
+  
+  monsters = monsters.filter(m=> m!==m1 && m!==m2);
+  monsters.push(merged);
+  selected = [];
+  
+  if(!discoveredTraits.includes(newTrait)){
+    discoveredTraits.push(newTrait);
+    showAchievement(`New Element: ${traits[newTrait].name}! ${traits[newTrait].icon}`);
+  }
+  
+  render();
+}
+
+/* ========= BATTLE SYSTEM ========= */
+function generateOpponent(){
+  const possibleTraits = discoveredTraits;
+  const trait = possibleTraits[Math.floor(Math.random()*possibleTraits.length)];
+  const level = Math.floor(wave*0.8 + Math.random()*wave*0.5);
+  const isRare = Math.random() < 0.05 + wave*0.005;
+  return createMonster(trait,level,isRare);
+}
+
+function resolveBattle(player,opponent){
+  const log = [];
+  const playerCopy = {...player,hp:player.hp};
+  const opponentCopy = {...opponent,hp:opponent.hp};
+  
+  log.push(`<span style="color:${player.color}">${player.icon} ${player.name} L${player.level}</span> enters the realm...`);
+  log.push(`<span style="color:${opponent.color}">${opponent.icon} ${opponent.name} L${opponent.level}</span> materializes!`);
+  
+  showBattleAnimation(player,opponent);
+  
+  while(playerCopy.hp>0 && opponentCopy.hp>0){
+    if(Math.random()<0.5){
+      attack(playerCopy,opponentCopy,log);
+      if(opponentCopy.hp<=0) break;
+      attack(opponentCopy,playerCopy,log);
+    }else{
+      attack(opponentCopy,playerCopy,log);
+      if(playerCopy.hp<=0) break;
+      attack(playerCopy,opponentCopy,log);
+    }
+    
+    if(playerCopy.heal>0){
+      const heal = playerCopy.heal;
+      playerCopy.hp = Math.min(player.hp,playerCopy.hp+heal);
+      log.push(`<span style="color:${player.color}">${player.icon}</span> restores ${heal} HP!`);
+    }
+  }
+  
+  const win = playerCopy.hp > 0;
+  if(win){
+    wave++;
+    aetherBalance = Math.min(100,(wave-1)*5);
+    monsters.push(createMonster(discoveredTraits[Math.floor(Math.random()*discoveredTraits.length)]));
+    log.push(`<div style="color:#ffd700;font-weight:bold">Victory! The realm's balance shifts...</div>`);
+    if(wave%5===0) document.getElementById('restBtn').style.display = 'inline-block';
+  }else{
+    log.push(`<div style="color:#ff4444;font-weight:bold">Defeat... The spirits retreat to recover...</div>`);
+  }
+  
+  updateBalance();
+  checkStory();
+  return {win,log};
+}
+
+function attack(attacker,defender,log){
+  const crit = Math.random() < 0.1;
+  const dmg = attacker.atk + Math.floor(Math.random()*3-1);
+  const finalDmg = crit ? dmg*2 : dmg;
+  defender.hp = Math.max(0,defender.hp - finalDmg);
+  
+  const critText = crit ? 'CRITICAL!' : '';
+  log.push(`<span style="color:${attacker.color}">${attacker.icon}</span> ${critText} hits for ${finalDmg} damage! <span style="color:${defender.color}">${defender.icon}</span> HP: ${defender.hp}`);
+}
+
+/* ========= UI FUNCTIONS ========= */
+function render(){
+  const teamDiv = document.getElementById('team');
+  teamDiv.innerHTML = '<div style="width:100%;margin-bottom:10px;font-size:20px;font-weight:bold;">Your Elemental Spirits</div>';
+  
+  monsters.forEach(m=>{
+    const div = document.createElement('div');
+    div.className='monster' + (m.isRare?' rare':'');
+    if(selected.includes(m)) div.classList.add('selected');
+    
+    div.innerHTML = `
+      <div class="icon">${m.icon}</div>
+      <div class="level">${m.name} L${m.level}</div>
+      <div class="stats">
+        HP:${m.hp}<br>
+        ATK:${m.atk}${m.heal?`<br>HEAL:${m.heal}`:''}
+      </div>
+    `;
+    
+    div.onclick = ()=>{
+      if(selected.includes(m)){
+        selected = selected.filter(x=>x!==m);
+      }else if(selected.length<2){
+        selected.push(m);
+        if(selected.length===2){
+          mergeMonsters(selected[0],selected[1]);
+        }
+      }
+      render();
+    };
+    teamDiv.appendChild(div);
+  });
+  
+  const fightBtn = document.getElementById('fightBtn');
+  fightBtn.disabled = monsters.length===0;
+  fightBtn.textContent = `Journey to Realm ${wave}`;
+}
+
+function showBattleAnimation(player,enemy){
+  document.getElementById('playerBattle').textContent = player.icon;
+  document.getElementById('playerBattle').style.color = player.color;
+  document.getElementById('enemyBattle').textContent = enemy.icon;
+  document.getElementById('enemyBattle').style.color = enemy.color;
+  
+  const anim = document.getElementById('battleAnim');
+  anim.style.display = 'flex';
+  setTimeout(()=>anim.style.display='none',2000);
+}
+
+function showAchievement(text){
+  const ach = document.getElementById('achievement');
+  ach.textContent = text;
+  ach.classList.add('show');
+  setTimeout(()=>ach.classList.remove('show'),3000);
+}
+
+function updateBalance(){
+  document.getElementById('balanceBar').style.width = aetherBalance + '%';
+  document.getElementById('balanceText').textContent = aetherBalance + '%';
+}
+
+/* ========= GAME FUNCTIONS ========= */
+function enterArena(monster){
+  if(!monster) return;
+  currentOpponent = generateOpponent();
+  const result = resolveBattle(monster,currentOpponent);
+  
+  const logDiv = document.getElementById('arena-log');
+  logDiv.innerHTML = result.log.join('<br>');
+  
+  if(!result.win){
+    monsters.forEach(m=>m.hp=m.maxHp);
+  }
+  
+  document.getElementById('restBtn').style.display = 'none';
+  render();
+}
+
+function restAtSpring(){
+  monsters.forEach(m=>{
+    m.hp = m.maxHp;
+    if(Math.random() < 0.3) m.level++;
+  });
+  showAchievement("Spirits refreshed and empowered!");
+  document.getElementById('restBtn').style.display = 'none';
+  render();
+}
+
+/* ========= INITIALIZATION ========= */
+document.getElementById('fightBtn').onclick = ()=> enterArena(monsters[0]);
+document.getElementById('restBtn').onclick = restAtSpring;
+checkStory();
+render();
+</script>
+</body>
+</html>
