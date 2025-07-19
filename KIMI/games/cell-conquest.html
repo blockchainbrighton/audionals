@@ -1,67 +1,160 @@
-<!-- Not sure what point of this game is - looks nice and like it could be fixed to have some kind of gameplay -->
 <!DOCTYPE html>
 <html>
 <head>
     <title>Cellular Conquest</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Adds the Showdown library to convert Markdown to HTML -->
+    <script src="https://cdn.jsdelivr.net/npm/showdown/dist/showdown.min.js"></script>
     <style>
+        /* General Body and Centering */
         body {
             margin: 0;
             padding: 0;
             background: #111;
             color: #eee;
             font-family: 'Courier New', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
             overflow: hidden;
         }
+
+        /* Main Game Container */
+        #game-container {
+            border: 1px solid #333;
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        /* Canvas Styling */
         canvas {
             display: block;
             margin: 0 auto;
             cursor: crosshair;
+            background: #000;
+            /* Pixelated rendering for crisp cells */
             image-rendering: pixelated;
             image-rendering: -moz-crisp-edges;
             image-rendering: crisp-edges;
         }
+
+        /* UI Panel Styling */
         #ui {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            font-size: 12px;
-            background: rgba(0,0,0,0.7);
-            padding: 10px;
-            border-radius: 5px;
+            padding: 0 10px 15px 10px;
+            font-size: 14px;
         }
+
+        #ui-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
         #rules {
-            font-size: 10px;
+            font-size: 12px;
             margin-top: 5px;
+            color: #aaa;
         }
+
+        /* Container for all buttons */
+        #ui-buttons {
+            display: flex;
+            gap: 5px; /* Adds space between buttons */
+        }
+
         button {
             background: #333;
             color: #eee;
             border: 1px solid #555;
-            padding: 5px 10px;
-            margin: 2px;
+            padding: 8px 12px;
             cursor: pointer;
             font-family: inherit;
+            font-size: 12px;
+            flex-grow: 1; /* Makes buttons share space */
         }
+
         button:hover {
             background: #555;
         }
+
         button:disabled {
             background: #222;
             color: #666;
             cursor: not-allowed;
         }
+
+        /* Modal (Pop-up) Styling */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .modal-content {
+            background: #282828;
+            color: #eee;
+            padding: 20px 30px;
+            border: 1px solid #555;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 650px;
+            max-height: 80vh;
+            overflow-y: auto;
+            font-family: Arial, sans-serif; /* More readable for text */
+            line-height: 1.6;
+        }
+        .modal-content h1, .modal-content h2, .modal-content h3 {
+            color: #44ff44;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+        .modal-content code {
+            background: #111;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .modal-content button {
+            display: block;
+            margin: 20px auto 0 auto;
+            width: 100px;
+            flex-grow: 0; /* Override button flex-grow */
+        }
     </style>
 </head>
 <body>
-    <canvas id="c"></canvas>
-    <div id="ui">
-        <div>CURRENCY: <span id="currency">0</span></div>
-        <div>ROUND: <span id="round">1</span></div>
-        <div>TILES: <span id="tiles">0/0</span></div>
-        <div id="rules">B: 00000000 S: 00000000</div>
-        <button onclick="startRound()">SPACE: START ROUND</button>
-        <button onclick="mutateRule()" id="mutateBtn">MUTATE (cost: 1)</button>
+    <div id="game-container">
+        <div id="ui">
+            <div id="ui-info">
+                <div>CURRENCY: <span id="currency">0</span></div>
+                <div>ROUND: <span id="round">1</span></div>
+                <div>TILES: <span id="tiles">0/0</span></div>
+            </div>
+            <div id="rules">B: 00000000 S: 00000000</div>
+            <hr style="border-color: #333; margin: 15px 0;">
+            <div id="ui-buttons">
+                <button onclick="startRound()">SPACE: START ROUND</button>
+                <button onclick="mutateRule()" id="mutateBtn">MUTATE (cost: 1)</button>
+                <button onclick="showGuide()">HOW TO PLAY</button>
+            </div>
+        </div>
+        <canvas id="c"></canvas>
+    </div>
+
+    <!-- Pop-up Modal HTML for the Guide -->
+    <div id="guideModal" class="modal-backdrop">
+        <div class="modal-content">
+            <div id="guideContent">Loading Guide...</div>
+            <button onclick="hideGuide()">Close</button>
+        </div>
     </div>
 
     <script>
@@ -75,8 +168,8 @@
         
         let grid = new Uint8Array(W * H);
         let rule = {
-            birth: 0b00000100,    // 4 neighbors
-            survive: 0b00111000   // 3-4-5 neighbors
+            birth: 0b00000100,    // Corresponds to B: 00001000 in display
+            survive: 0b00111000   // Corresponds to S: 00111000 in display
         };
         let currency = 0;
         let round = 1;
@@ -84,17 +177,13 @@
         let tick = 0;
         let history = [];
         
-        // Mouse state
         let mouseDown = false;
         let mouseButton = 0;
         
-        // Initialize grid with symmetric pattern
         function initGrid() {
             grid.fill(0);
-            
-            // Random symmetric start
-            for (let y = 0; y < H/2; y++) {
-                for (let x = 0; x < W/2; x++) {
+            for (let y = 0; y < H / 2; y++) {
+                for (let x = 0; x < W / 2; x++) {
                     if (Math.random() < 0.15) {
                         const val = Math.random() < 0.5 ? 1 : 2;
                         grid[y * W + x] = val;
@@ -104,17 +193,15 @@
                     }
                 }
             }
-            
-            // Ensure some player cells
             if (grid.filter(v => v === 2).length < 5) {
-                const center = Math.floor(H/2) * W + Math.floor(W/2);
+                const center = Math.floor(H / 2) * W + Math.floor(W / 2);
                 grid[center] = 2;
                 grid[center + 1] = 2;
                 grid[center - 1] = 2;
             }
+            evaluate(); // Update tiles display on init
         }
         
-        // Count neighbors for a cell
         function countNeighbors(x, y) {
             let ai = 0, player = 0;
             for (let dy = -1; dy <= 1; dy++) {
@@ -130,10 +217,8 @@
             return { total: ai + player, ai, player };
         }
         
-        // Apply rules to grid
         function step() {
             const newGrid = new Uint8Array(W * H);
-            
             for (let y = 0; y < H; y++) {
                 for (let x = 0; x < W; x++) {
                     const idx = y * W + x;
@@ -142,177 +227,155 @@
                     const total = n.total;
                     
                     if (cell === 0) {
-                        // Birth rule
                         if (rule.birth & (1 << total)) {
-                            // Player vs AI battle for birth
-                            if (n.player > n.ai) {
-                                newGrid[idx] = 2;
-                            } else if (n.ai > n.player) {
-                                newGrid[idx] = 1;
-                            } else {
-                                newGrid[idx] = Math.random() < 0.5 ? 1 : 2;
-                            }
+                            if (n.player > n.ai) newGrid[idx] = 2;
+                            else if (n.ai > n.player) newGrid[idx] = 1;
+                            else newGrid[idx] = Math.random() < 0.5 ? 1 : 2;
                         }
                     } else {
-                        // Survive rule
                         if (rule.survive & (1 << total)) {
                             newGrid[idx] = cell;
                         }
                     }
                 }
             }
-            
             grid = newGrid;
         }
         
-        // Evaluate current state
         function evaluate() {
             const aiTiles = grid.filter(v => v === 1).length;
             const playerTiles = grid.filter(v => v === 2).length;
             const total = aiTiles + playerTiles;
             const ratio = total > 0 ? playerTiles / total : 0;
-            
-            document.getElementById('tiles').textContent = 
-                `${playerTiles}/${total}`;
-                
+            document.getElementById('tiles').textContent = `${playerTiles}/${total}`;
             return { aiTiles, playerTiles, total, ratio };
         }
         
-        // Mutate rule
         function mutateRule() {
             if (currency < 1) return;
-            
             currency--;
             document.getElementById('currency').textContent = currency;
-            
             if (Math.random() < 0.5) {
-                // Mutate birth
-                rule.birth ^= (1 << Math.floor(Math.random() * 8));
+                rule.birth ^= (1 << Math.floor(Math.random() * 9));
             } else {
-                // Mutate survive
-                rule.survive ^= (1 << Math.floor(Math.random() * 8));
+                rule.survive ^= (1 << Math.floor(Math.random() * 9));
             }
-            
             updateRulesDisplay();
         }
         
-        // Update rules display
         function updateRulesDisplay() {
             const birth = rule.birth.toString(2).padStart(8, '0');
             const survive = rule.survive.toString(2).padStart(8, '0');
-            document.getElementById('rules').textContent = 
-                `B: ${birth} S: ${survive}`;
+            document.getElementById('rules').textContent = `B: ${birth} S: ${survive}`;
         }
         
-        // Render grid
         function render() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Draw grid
             for (let y = 0; y < H; y++) {
                 for (let x = 0; x < W; x++) {
                     const val = grid[y * W + x];
-                    if (val === 1) {
-                        ctx.fillStyle = '#ff4444';
-                        ctx.fillRect(x * CELL, y * CELL, CELL - 1, CELL - 1);
-                    } else if (val === 2) {
-                        ctx.fillStyle = '#44ff44';
-                        ctx.fillRect(x * CELL, y * CELL, CELL - 1, CELL - 1);
-                    }
+                    if (val === 1) ctx.fillStyle = '#ff4444';
+                    else if (val === 2) ctx.fillStyle = '#44ff44';
+                    else continue;
+                    ctx.fillRect(x * CELL, y * CELL, CELL - 1, CELL - 1);
                 }
             }
-            
-            // Draw simulation overlay
             if (isSimulating) {
                 ctx.fillStyle = 'rgba(0,0,0,0.5)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = '#fff';
-                ctx.font = '20px monospace';
+                ctx.font = '24px monospace';
                 ctx.textAlign = 'center';
-                ctx.fillText(`TICK ${tick}/60`, canvas.width/2, canvas.height/2);
+                ctx.fillText(`TICK ${tick}/60`, canvas.width / 2, canvas.height / 2);
             }
         }
         
-        // Mouse events
         canvas.addEventListener('mousedown', (e) => {
             mouseDown = true;
             mouseButton = e.button;
             handleCell(e);
         });
-        
-        canvas.addEventListener('mouseup', () => {
-            mouseDown = false;
-        });
-        
-        canvas.addEventListener('mousemove', (e) => {
-            if (mouseDown) handleCell(e);
-        });
-        
+        canvas.addEventListener('mouseup', () => mouseDown = false);
+        canvas.addEventListener('mousemove', (e) => { if (mouseDown) handleCell(e); });
         canvas.addEventListener('contextmenu', (e) => e.preventDefault());
         
         function handleCell(e) {
             if (isSimulating) return;
-            
             const rect = canvas.getBoundingClientRect();
             const x = Math.floor((e.clientX - rect.left) / CELL);
             const y = Math.floor((e.clientY - rect.top) / CELL);
-            
             if (x >= 0 && x < W && y >= 0 && y < H) {
                 const idx = y * W + x;
                 grid[idx] = mouseButton === 0 ? 2 : 0;
                 render();
+                evaluate(); // Update tiles display immediately on click
             }
         }
         
-        // Keyboard events
         document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') {
+            if (e.code === 'Space' && document.activeElement.tagName !== 'BUTTON') {
                 e.preventDefault();
                 if (!isSimulating) startRound();
             }
         });
         
-        // Start round
         function startRound() {
             if (isSimulating) return;
-            
             isSimulating = true;
             tick = 0;
-            
             const sim = setInterval(() => {
                 step();
                 tick++;
-                
                 if (tick >= 60) {
                     clearInterval(sim);
                     isSimulating = false;
-                    
                     const { ratio } = evaluate();
                     if (ratio > 0.5) {
                         currency += Math.floor(ratio * 10);
                         document.getElementById('currency').textContent = currency;
                     }
-                    
                     round++;
                     document.getElementById('round').textContent = round;
-                    
-                    // Save to history
-                    history.push({
-                        round: round - 1,
-                        rule: { ...rule },
-                        score: ratio
-                    });
+                    history.push({ round: round - 1, rule: { ...rule }, score: ratio });
                     if (history.length > 30) history.shift();
-                    
                     initGrid();
                     render();
                 } else {
                     render();
                 }
-            }, 1000/30); // 30 FPS cap
+            }, 1000 / 30);
+        }
+
+        // --- Guide Modal JavaScript ---
+        const guideModal = document.getElementById('guideModal');
+        const guideContent = document.getElementById('guideContent');
+        let guideLoaded = false;
+        const converter = new showdown.Converter();
+
+        async function showGuide() {
+            if (!guideLoaded) {
+                try {
+                    const response = await fetch('cell-conquest.md');
+                    if (!response.ok) {
+                        guideContent.innerHTML = '<h3>Error</h3><p>Could not find or load guide.md.</p>';
+                    } else {
+                        const markdownText = await response.text();
+                        guideContent.innerHTML = converter.makeHtml(markdownText);
+                        guideLoaded = true;
+                    }
+                } catch (error) {
+                    console.error('Error fetching guide:', error);
+                    guideContent.innerHTML = '<h3>Error</h3><p>An error occurred while trying to load the guide.</p>';
+                }
+            }
+            guideModal.style.display = 'flex';
+        }
+
+        function hideGuide() {
+            guideModal.style.display = 'none';
         }
         
-        // Initialize
+        // --- Initialize Game ---
         initGrid();
         updateRulesDisplay();
         render();
