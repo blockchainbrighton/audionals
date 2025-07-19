@@ -1,19 +1,95 @@
-<!-- Not following - needs some instructions and explanations and gameplay -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>CoreClicker</title>
 <style>
-  body{margin:0;background:#181825;color:#f5c2e7;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh}
-  #game{display:flex;flex-direction:column;align-items:center;gap:10px}
-  #atom{width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,#89b4fa 40%,#313244 70%);cursor:pointer;position:relative;overflow:hidden}
-  .electron{position:absolute;width:8px;height:8px;background:#a6e3a1;border-radius:50%}
-  #stats,#upgrades{text-align:center;width:200px}
-  button{margin:4px 0;width:100%;background:#313244;color:#f5c2e7;border:0;padding:6px;border-radius:4px}
+  body {
+    margin: 0;
+    padding: 20px 0;
+    background: #181825;
+    color: #f5c2e7;
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column; /* Allow vertical stacking */
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+  }
+  #game {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px; /* Space between game and instructions */
+  }
+  #atom {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #89b4fa 40%, #313244 70%);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .electron {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #a6e3a1;
+    border-radius: 50%;
+  }
+  #stats, #upgrades {
+    text-align: center;
+    width: 200px;
+  }
+  button {
+    margin: 4px 0;
+    width: 100%;
+    background: #313244;
+    color: #f5c2e7;
+    border: 1px solid #45475a; /* Added subtle border */
+    padding: 8px; /* Increased padding */
+    border-radius: 4px;
+    cursor: pointer; /* Add pointer on hover */
+    font-size: 14px;
+  }
+  button:disabled {
+    color: #6c7086;
+    cursor: not-allowed;
+  }
+  button:hover:not(:disabled) {
+    background: #45475a;
+  }
+  #resetButton {
+    background: #f38ba8; /* Distinct color for danger */
+    color: #1e1e2e;
+    font-weight: bold;
+  }
+  #resetButton:hover {
+    background: #eba0ac;
+  }
+  #instructions {
+    max-width: 600px;
+    padding: 15px;
+    border: 1px solid #45475a;
+    border-radius: 8px;
+    background: #1e1e2e;
+  }
+  h3 {
+    color: #cba6f7;
+    margin-top: 0;
+  }
+  ul {
+    padding-left: 20px;
+  }
+  li {
+    margin-bottom: 8px;
+  }
 </style>
 </head>
 <body>
+
 <div id="game">
   <div id="atom"></div>
   <div id="stats">
@@ -23,56 +99,96 @@
     <div>Quark×: <span id="q">1</span></div>
   </div>
   <div id="upgrades"></div>
+  <!-- Reset Button is added here -->
+  <div id="controls">
+      <button id="resetButton">Reset All Progress</button>
+  </div>
+</div>
+
+<!-- Instructions are added here -->
+<div id="instructions">
+    <h3>How to Play CoreClicker</h3>
+    <ul>
+        <li><b>Goal:</b> The primary goal is to generate as much Energy as possible by clicking the Atom and buying upgrades.</li>
+        <li><b>Energy:</b> This is your main currency, earned by clicking and from Auto Clickers. Use it to purchase upgrades.</li>
+    </ul>
+    <h3>Understanding the Stats</h3>
+    <ul>
+        <li><b>Multiplier:</b> Increases the amount of Energy you get for each click.</li>
+        <li><b>Auto/s:</b> Automatically generates a set amount of Energy every second, even when you're not clicking.</li>
+        <li><b>Quark×:</b> This is a powerful prestige multiplier. It multiplies all Energy gains from both clicks and auto-clickers. You gain Quarks by Prestiging.</li>
+    </ul>
+    <h3>Upgrades</h3>
+    <ul>
+        <li><b>×2 Multiplier:</b> Doubles your click power permanently for the current prestige cycle.</li>
+        <li><b>Auto Clicker:</b> Increases your passive Energy generation (Auto/s).</li>
+        <li><b>Prestige:</b> This is a key feature. When your progress slows, you can Prestige to reset your Energy, Multiplier, Auto Clickers, and upgrade costs. In return, you'll gain <b>Quarks</b> based on how much Energy you had. This makes your next run much faster.</li>
+        <li><b>Reset All Progress:</b> This button will completely wipe all your saved data (Energy, Quarks, etc.) and restart the game from the very beginning, as if you were a new player. Use with caution!</li>
+    </ul>
 </div>
 
 <script>
 (() => {
   const LS = localStorage;
-  const seed = new Date().toISOString().slice(0,10);
-  const hue = (seed.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%360);
+  const seed = new Date().toISOString().slice(0, 10);
+  const hue = (seed.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 360);
   const atom = document.getElementById('atom');
-  const stats = ['e','m','a','q'].reduce((a,k)=>(a[k]=document.getElementById(k),a),{});
+  const stats = ['e', 'm', 'a', 'q'].reduce((a, k) => (a[k] = document.getElementById(k), a), {});
   let G = JSON.parse(LS.getItem('coreClicker') || '{"e":0,"m":1,"a":0,"q":1,"cost":[10,50,100]}');
-  const save = () => LS.setItem('coreClicker',JSON.stringify(G));
+  const save = () => LS.setItem('coreClicker', JSON.stringify(G));
 
   // Draw electrons
-  for(let i=0;i<3;i++){
+  for (let i = 0; i < 3; i++) {
     const e = document.createElement('div');
-    e.className='electron';
+    e.className = 'electron';
     atom.appendChild(e);
-    const r = 40 + i*20;
-    const s = 3+i;
-    setInterval(()=>{
-      const t = Date.now()/1000*s;
-      e.style.left = 100 + r*Math.cos(t) - 4 + 'px';
-      e.style.top = 100 + r*Math.sin(t) - 4 + 'px';
-    },30);
+    const r = 40 + i * 20;
+    const s = 3 + i;
+    setInterval(() => {
+      const t = Date.now() / 1000 * s;
+      e.style.left = 100 + r * Math.cos(t) - 4 + 'px';
+      e.style.top = 100 + r * Math.sin(t) - 4 + 'px';
+    }, 30);
   }
 
   // Click atom
-  atom.addEventListener('click',()=>{G.e+=G.m*G.q;update();});
+  atom.addEventListener('click', () => {
+    G.e += G.m * G.q;
+    update();
+  });
 
   // Upgrades
-  const ups = [
-    {t:'×2 Multiplier',c:0,f:()=>{G.m*=2;}},
-    {t:'Auto Clicker',c:1,f:()=>{G.a++;}},
-    {t:'Prestige',c:2,f:()=>{G.q=Math.floor(Math.sqrt(G.e/1000))||1;G={e:0,m:1,a:0,q:G.q,cost:[10,50,100]};}}
-  ];
+  const ups = [{
+    t: '×2 Multiplier',
+    c: 0,
+    f: () => { G.m *= 2; }
+  }, {
+    t: 'Auto Clicker',
+    c: 1,
+    f: () => { G.a++; }
+  }, {
+    t: 'Prestige',
+    c: 2,
+    f: () => {
+      G.q = Math.floor(Math.sqrt(G.e / 1000)) || 1;
+      G = { e: 0, m: 1, a: 0, q: G.q, cost: [10, 50, 100] };
+    }
+  }];
 
-  function update(){
+  function update() {
     stats.e.textContent = Math.floor(G.e);
     stats.m.textContent = G.m;
     stats.a.textContent = G.a;
     stats.q.textContent = G.q;
     const upg = document.getElementById('upgrades');
-    upg.innerHTML='';
-    ups.forEach((u,i)=>{
+    upg.innerHTML = '';
+    ups.forEach((u, i) => {
       const btn = document.createElement('button');
       btn.textContent = `${u.t} (${G.cost[u.c]})`;
       btn.disabled = G.e < G.cost[u.c];
       btn.onclick = () => {
         G.e -= G.cost[u.c];
-        G.cost[u.c] = Math.floor(G.cost[u.c]*1.5);
+        G.cost[u.c] = Math.floor(G.cost[u.c] * 1.5);
         u.f();
         update();
       };
@@ -80,9 +196,21 @@
     });
     save();
   }
+  
+  // *** NEW: Reset Button Logic ***
+  const resetButton = document.getElementById('resetButton');
+  resetButton.addEventListener('click', () => {
+    if (confirm('Are you sure you want to reset all your progress? This cannot be undone.')) {
+        LS.removeItem('coreClicker');
+        window.location.reload();
+    }
+  });
 
   // Auto clicker
-  setInterval(()=>{G.e+=G.a*G.q;update();},1000);
+  setInterval(() => {
+    G.e += G.a * G.q;
+    update();
+  }, 1000);
 
   // Color tweak
   atom.style.filter = `hue-rotate(${hue}deg)`;
