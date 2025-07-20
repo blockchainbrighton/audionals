@@ -45,20 +45,180 @@ function seedScramble(seed){
   const rnd=()=>(h=(h*1664525+1013904223)>>>0,h/0x100000000);
   for(let i=0;i<COUNT;i++)cells[i]=Math.floor(rnd()*6);
 }
-function render(){
-  X.clearRect(0,0,400,400);
-  cells.forEach((v,i)=>{
-    // This line no longer causes an error because cellPos is fully populated.
-    const [x,y]=cellPos[i];
-    X.beginPath();
-    X.arc(x,y,20,0,Math.PI*2);
-    X.fillStyle=colors[v];
-    X.fill();
-    X.strokeStyle='#11111b';
-    X.lineWidth=2;
-    X.stroke();
-  });
+
+/******************************************************************
+ *  VISUAL UPGRADES
+ ******************************************************************/
+
+// ---------- helpers ----------
+const durPop   = 150;   // pop & fade matched cells
+const durSlide = 180;   // slide & fade new cells
+const durMove  = 200;   // gravity glides
+
+// simple easing
+const ease = t => t<.5 ? 2*t*t : 1-2*(1-t)*(1-t);
+
+// draw ONE cell with optional scale & alpha
+function drawCell(i, scale = 1, alpha = 1) {
+  const [x, y] = cellPos[i];
+  X.save();
+  X.globalAlpha = alpha;
+  X.translate(x, y);
+  X.scale(scale, scale);
+  X.beginPath();
+  X.arc(0, 0, 20, 0, Math.PI*2);
+  X.fillStyle = colors[cells[i]];
+  X.fill();
+  X.strokeStyle = '#11111b';
+  X.lineWidth = 2;
+  X.stroke();
+  X.restore();
 }
+
+// ---------- 1.  show matched cells popping ----------
+function popMatched(indices) {
+  const start = performance.now();
+  function frame(t) {
+    const p = Math.min((t - start) / durPop, 1);
+    const scale = 1 - p;
+    const alpha = 1 - p;
+    X.clearRect(0, 0, 400, 400);
+    // draw everything normally except the popped cells
+    cells.forEach((_, i) => {
+      if (indices.has(i)) drawCell(i, scale, alpha);
+      else drawCell(i, 1, 1);
+    });
+    if (p < 1) requestAnimationFrame(frame);
+    else {
+      indices.forEach(i => cells[i] = 255);          // mark empty
+      slideNewCells();                               // step 2
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------- 2.  new random cells drop in ----------
+function slideNewCells() {
+  const emptyIndices = [];
+  for (let i = 0; i < COUNT; i++)
+    if (cells[i] === 255) emptyIndices.push(i);
+
+  emptyIndices.forEach(i => cells[i] = Math.floor(Math.random()*6));
+
+  const start = performance.now();
+  function frame(t) {
+    const p = Math.min((t - start) / durSlide, 1);
+    const eased = ease(p);
+    X.clearRect(0, 0, 400, 400);
+    cells.forEach((_, i) => {
+      if (emptyIndices.includes(i)) {
+        const [sx, sy] = cellPos[0];                 // start at centre
+        const [tx, ty] = cellPos[i];
+        const x = sx + (tx - sx) * eased;
+        const y = sy + (ty - sy) * eased;
+        X.save();
+        X.globalAlpha = eased;
+        X.translate(x, y);
+        X.beginPath();
+        X.arc(0, 0, 20, 0, Math.PI*2);
+        X.fillStyle = colors[cells[i]];
+        X.fill();
+        X.stroke();
+        X.restore();
+      } else drawCell(i);
+    });
+    if (p < 1) requestAnimationFrame(frame);
+    else glideGravity();                             // step 3
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------- 3.  gravity: glide cells inward ----------
+function glideGravity() {
+  // pre-compute target positions after gravity
+  const pre = cells.slice();
+  gravity();                               // old logic, mutates cells
+  const post = cells.slice();
+
+  const moving = [];                       // [index, from, to]
+  for (let i = 0; i < COUNT; i++) {
+    if (pre[i] !== post[i] && post[i] !== 255) {
+      moving.push({ idx: i, val: post[i], from: cellPos[getInnerNeighborIndex(i)], to: cellPos[i] });
+    }
+  }
+  if (!moving.length) { checkMatches(); return; }
+
+  const start = performance.now();
+  function frame(t) {
+    const p = Math.min((t - start) / durMove, 1);
+    const eased = ease(p);
+    X.clearRect(0, 0, 400, 400);
+    cells.forEach((_, i) => {
+      const m = moving.find(m => m.idx === i);
+      if (m) {
+        const x = m.from[0] + (m.to[0] - m.from[0]) * eased;
+        const y = m.from[1] + (m.to[1] - m.from[1]) * eased;
+        X.save();
+        X.translate(x, y);
+        X.beginPath();
+        X.arc(0, 0, 20, 0, Math.PI*2);
+        X.fillStyle = colors[m.val];
+        X.fill();
+        X.stroke();
+        X.restore();
+      } else drawCell(i);
+    });
+    if (p < 1) requestAnimationFrame(frame);
+    else {
+      // gravity already wrote final positions into cells
+      checkMatches();
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------- new checkMatches ----------
+function checkMatches() {
+  const matched = new Set();
+  // spoke matches
+  for (let i = 0; i < 6; i++) {
+    const spoke = [0, 1 + i, 7 + (i * 2), 19 + (i * 3)];
+    for (let j = 0; j < spoke.length; ) {
+      const val = cells[spoke[j]];
+      if (val === 255) { j++; continue; }
+      let k = j + 1;
+      while (k < spoke.length && cells[spoke[k]] === val) k++;
+      const run = k - j;
+      if (run >= 3) for (let l = 0; l < run; l++) matched.add(spoke[j + l]);
+      j = k;
+    }
+  }
+  // ring matches
+  for (let ring = 1; ring <= R; ring++) {
+    const start = CELLS[ring - 1], len = ring * 6;
+    for (let i = 0; i < len; i++) {
+      const val = cells[start + i];
+      if (val === 255) continue;
+      let count = 1, j = (i + 1) % len;
+      while (j !== i && cells[start + j] === val) { count++; j = (j + 1) % len; }
+      if (count >= 3) for (let k = 0; k < count; k++) matched.add(start + (i + k) % len);
+    }
+  }
+  if (matched.size) {
+    matched.forEach(i => score += 10);
+    popMatched(matched);        // animate pop, then new, then gravity
+  } else {
+    render();                   // static draw
+    updateUI();
+  }
+}
+
+// ---------- unchanged ----------
+function render() {
+  X.clearRect(0, 0, 400, 400);
+  cells.forEach((_, i) => drawCell(i));
+}
+
 
 function animateRing(ring, duration = 250) {
   const start = CELLS[ring - 1];
