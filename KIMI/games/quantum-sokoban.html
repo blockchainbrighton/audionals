@@ -1,18 +1,54 @@
-<!-- Feels fun and nerdy but needs explanations and instructions for gameplay -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Quantum Sokoban</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <style>
-  body{margin:0;background:#111;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#eee}
-  canvas{border:2px solid #fff}
-  #info{position:absolute;top:10px;left:10px;font-size:14px}
+  *{box-sizing:border-box}
+  body{margin:0;background:#111;font-family:sans-serif;color:#eee;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden}
+  canvas{border:2px solid #fff;max-width:100%;max-height:100%}
+  #info{position:absolute;top:6px;left:6px;font-size:13px;z-index:2}
+  #tip{position:absolute;bottom:6px;left:6px;right:6px;background:#000a;padding:6px;border-radius:4px;font-size:13px;text-align:center;transition:opacity .4s}
+  #tip.hidden{opacity:0;pointer-events:none}
+  #touchControls{
+    position:absolute;bottom:12px;right:12px;display:grid;
+    grid-template-columns:repeat(3,48px);grid-gap:4px;user-select:none
+  }
+  #touchControls div{
+    width:48px;height:48px;background:#222c;border:1px solid #fff6;border-radius:6px;
+    display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff
+  }
+  #touchControls div:active{background:#0ff6}
+  .tooltip{
+    position:absolute;background:#000e;color:#fff;padding:4px 6px;border-radius:4px;font-size:12px;
+    white-space:nowrap;pointer-events:none;z-index:10
+  }
 </style>
 </head>
 <body>
 <canvas id="c" width="384" height="384"></canvas>
-<div id="info">Arrows=Move | Space=Observe | Z=Undo | R=Restart</div>
+
+<div id="info">
+  <span id="keys">Arrows=Move | Space=Observe | Z=Undo | R=Restart</span>
+</div>
+
+<div id="tip" class="hidden">
+  💡 Push crates onto yellow goals. Tap a crate or goal for a hint.
+  <button onclick="hideTip()" style="margin-left:6px">Got it</button>
+</div>
+
+<div id="touchControls">
+  <div></div>
+  <div id="up" title="Move Up">↑</div>
+  <div></div>
+  <div id="left" title="Move Left">←</div>
+  <div id="observe" title="Observe / Collapse">👁</div>
+  <div id="right" title="Move Right">→</div>
+  <div></div>
+  <div id="down" title="Move Down">↓</div>
+  <div id="undo" title="Undo last move">↶</div>
+</div>
 
 <script>
 /* ---------- CONFIG ---------- */
@@ -21,64 +57,62 @@ const W = 12, H = 12;
 const TILES = { wall:'#', floor:' ', goal:'.', crate:'$', player:'@' };
 
 /* ---------- STATE ---------- */
-let grid, crates, player, undoStack, levelSeed = 1;
+let grid, crates, player, undoStack, levelSeed = 1, firstLevel = true;
 
-/* ---------- LEVEL GEN ---------- */
+/* ---------- SAFE UTILS ---------- */
+function inBounds(x,y){return x>=0 && x<W && y>=0 && y<H;}
+function cell(x,y){return inBounds(x,y)?grid[y][x]:TILES.wall;}
+
+/* ---------- LEVEL GEN (hardened) ---------- */
 function loadLevel(seed) {
   undoStack = [];
   levelSeed = seed;
   grid = Array.from({length:H},()=>Array(W).fill(TILES.floor));
   crates = [];
-  // deterministic noise
   let rng = () => (seed = (seed * 9301 + 49297) % 233280, seed / 233280);
   // border walls
-  for(let y=0;y<H;y++){
-    grid[y][0]=grid[y][W-1]=TILES.wall;
-  }
-  for(let x=0;x<W;x++){
-    grid[0][x]=grid[H-1][x]=TILES.wall;
-  }
-  // internal random walls & goals
+  for(let y=0;y<H;y++){grid[y][0]=grid[y][W-1]=TILES.wall;}
+  for(let x=0;x<W;x++){grid[0][x]=grid[H-1][x]=TILES.wall;}
+  // inner walls & goals
   for(let y=2;y<H-2;y++){
     for(let x=2;x<W-2;x++){
       if(rng()<.15) grid[y][x]=TILES.wall;
       else if(rng()<.15) grid[y][x]=TILES.goal;
     }
   }
-  // place player
-  do{player={x:~~(rng()*(W-2))+1,y:~~(rng()*(H-2))+1}}while(grid[player.y][player.x]!==TILES.floor);
-  // place 3 crates
+  // safe player placement
+  const floors=[];
+  for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++)if(grid[y][x]===TILES.floor)floors.push({x,y});
+  player=floors.splice(~~(rng()*floors.length),1)[0];
+  // safe crate placement
   for(let i=0;i<3;i++){
-    let pos;
-    do{pos={x:~~(rng()*(W-2))+1,y:~~(rng()*(H-2))+1}}while(
-      grid[pos.y][pos.x]!==TILES.floor ||
-      (pos.x===player.x && pos.y===player.y) ||
-      crates.some(c=>c.states[0].x===pos.x && c.states[0].y===pos.y)
-    );
-    crates.push({states:[{x:pos.x,y:pos.y}]});
+    if(!floors.length)break;           // should never happen
+    const idx=~~(rng()*floors.length);
+    crates.push({states:[floors[idx]]});
+    floors.splice(idx,1);
   }
+  if(firstLevel){showTip();firstLevel=false;}
 }
 
 /* ---------- MOVE ---------- */
 function move(dx,dy){
   const next={x:player.x+dx,y:player.y+dy};
-  if(grid[next.y][next.x]===TILES.wall) return;
-  // find crate at next
+  if(cell(next.x,next.y)===TILES.wall) return;
+
   const ci = crates.findIndex(c=>c.states.some(s=>s.x===next.x && s.y===next.y));
   if(ci!==-1){
     const c = crates[ci];
     const ghosts = [];
     c.states.forEach(s=>{
       const nxt={x:s.x+dx,y:s.y+dy};
-      if(grid[nxt.y][nxt.x]!==TILES.wall && !crates.some(other=>other!==c && other.states.some(os=>os.x===nxt.x && os.y===nxt.y))){
+      if(cell(nxt.x,nxt.y)!==TILES.wall &&
+         !crates.some(other=>other!==c && other.states.some(os=>os.x===nxt.x && os.y===nxt.y))){
         ghosts.push(nxt);
       }
     });
     if(ghosts.length===0) return;
     undoStack.push(JSON.stringify({grid,crates,player}));
-    // expand superposition
     c.states = [...c.states,...ghosts];
-    // move player
     player = next;
   } else {
     undoStack.push(JSON.stringify({grid,crates,player}));
@@ -86,33 +120,24 @@ function move(dx,dy){
   }
 }
 
-/* ---------- COLLAPSE ---------- */
+/* ---------- COLLAPSE (hardened) ---------- */
 function observe(){
   undoStack.push(JSON.stringify({grid,crates,player}));
   crates.forEach(c=>{
-    // choose random state
     const idx = ~~(Math.random()*c.states.length);
     c.states = [c.states[idx]];
   });
-  // resolve overlaps: left-top wins
-  for(let a of crates){
-    for(let b of crates){
-      if(a!==b && a.states[0].x===b.states[0].x && a.states[0].y===b.states[0].y){
-        // move b back to original single state (restart)
-        loadLevel(levelSeed);
-        return;
-      }
-    }
+  // resolve overlaps
+  const occupied=new Set();
+  for(const c of crates){
+    const key=`${c.states[0].x},${c.states[0].y}`;
+    if(occupied.has(key)){loadLevel(levelSeed);return;}
+    occupied.add(key);
   }
   if(winCheck()) nextLevel();
 }
 
-function winCheck(){
-  return crates.every(c=>grid[c.states[0].y][c.states[0].x]===TILES.goal);
-}
-function nextLevel(){loadLevel(levelSeed+1);}
-
-/* ---------- UNDO ---------- */
+/* ---------- UNDO / RESTART ---------- */
 function undo(){
   if(undoStack.length){
     const prev = JSON.parse(undoStack.pop());
@@ -124,7 +149,6 @@ function undo(){
 const ctx = document.getElementById('c').getContext('2d');
 function draw(){
   ctx.clearRect(0,0,c.width,c.height);
-  // grid
   for(let y=0;y<H;y++){
     for(let x=0;x<W;x++){
       const tile = grid[y][x];
@@ -132,11 +156,13 @@ function draw(){
       ctx.fillRect(x*CELL,y*CELL,CELL,CELL);
       if(tile===TILES.goal){
         ctx.fillStyle='#fff';
-        ctx.fillText('.',x*CELL+CELL/2-4,y*CELL+CELL/2+4);
+        ctx.font='20px monospace';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText('.',x*CELL+CELL/2,y*CELL+CELL/2);
       }
     }
   }
-  // crates
   crates.forEach(c=>{
     c.states.forEach((s,i)=>{
       ctx.globalAlpha = c.states.length>1?0.4:1;
@@ -144,7 +170,6 @@ function draw(){
       ctx.fillRect(s.x*CELL+2,s.y*CELL+2,CELL-4,CELL-4);
     });
   });
-  // player
   ctx.globalAlpha=1;
   ctx.fillStyle='#f55';
   ctx.beginPath();
@@ -153,7 +178,7 @@ function draw(){
   requestAnimationFrame(draw);
 }
 
-/* ---------- INPUT ---------- */
+/* ---------- INPUT (keyboard) ---------- */
 window.addEventListener('keydown',e=>{
   switch(e.code){
     case 'ArrowUp':move(0,-1);break;
@@ -165,6 +190,60 @@ window.addEventListener('keydown',e=>{
     case 'KeyR':loadLevel(levelSeed);break;
   }
 });
+
+/* ---------- INPUT (touch & mouse) ---------- */
+const canvas=document.getElementById('c');
+let touchStartX,touchStartY;
+
+// tap to move or show hint
+canvas.addEventListener('click',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const x=Math.floor((e.clientX-rect.left)/CELL);
+  const y=Math.floor((e.clientY-rect.top)/CELL);
+  if(!inBounds(x,y))return;
+  const crateTip = crates.some(c=>c.states.some(s=>s.x===x && s.y===y));
+  const goalTip = grid[y][x]===TILES.goal;
+  if(crateTip) showTooltip(e.clientX,e.clientY,'Push into open paths to create superposition.');
+  else if(goalTip) showTooltip(e.clientX,e.clientY,'Get all definite crates onto these goals.');
+  else{
+    const dx=Math.sign(x-player.x),dy=Math.sign(y-player.y);
+    if(Math.abs(x-player.x)>Math.abs(y-player.y)) move(dx,0); else move(0,dy);
+  }
+});
+
+// swipe gestures
+canvas.addEventListener('touchstart',e=>{
+  touchStartX=e.touches[0].clientX;
+  touchStartY=e.touches[0].clientY;
+});
+canvas.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-touchStartX;
+  const dy=e.changedTouches[0].clientY-touchStartY;
+  const absDx=Math.abs(dx),absDy=Math.abs(dy);
+  if(Math.max(absDx,absDy)>30){
+    if(absDx>absDy) move(Math.sign(dx),0); else move(0,Math.sign(dy));
+  }
+});
+
+// on-screen buttons
+['up','down','left','right'].forEach(dir=>{
+  document.getElementById(dir).addEventListener('click',()=>{
+    const deltas={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+    move(...deltas[dir]);
+  });
+});
+document.getElementById('observe').addEventListener('click',observe);
+document.getElementById('undo').addEventListener('click',undo);
+
+/* ---------- UI helpers ---------- */
+function showTip(){document.getElementById('tip').classList.remove('hidden')}
+function hideTip(){document.getElementById('tip').classList.add('hidden')}
+function showTooltip(x,y,text){
+  const t=document.createElement('div');
+  t.className='tooltip';t.style.left=x+'px';t.style.top=y+'px';t.innerText=text;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),2000);
+}
 
 /* ---------- INIT ---------- */
 loadLevel(levelSeed);
