@@ -31,7 +31,8 @@ button.active {
   <button id="btn-aurora" onclick="toggle('aurora')">Aurora</button>
   <button id="btn-lightning" onclick="toggle('lightning')">Lightning</button>
   <button id="btn-meteor" onclick="toggle('meteor')">Meteors</button>
-  <button id="btn-sunset" onclick="toggle('sunset')">Sunset</button>
+  <button id="btn-sunrise" onclick="startSunrise()">Sunrise</button>
+  <button id="btn-sunset" onclick="startSunset()">Sunset</button>
   <button id="btn-rocket" onclick="toggle('rocket')">Rocket Layer</button>
   <button onclick="launchRocket()">Launch Rocket</button>
   <button id="btn-comet" onclick="toggle('comet')">Comet Layer</button>
@@ -53,7 +54,7 @@ let frame = 0;
 const layer = {
   stars: true, moon: false, solar: false, clouds: false,
   shooting: false, land: false, aurora: false,
-  lightning: false, meteor: false, sunset: false, comet: false, rocket: false
+  lightning: false, meteor: false, comet: false, rocket: false
 };
 function toggle(k) {
     layer[k] = !layer[k];
@@ -105,13 +106,12 @@ const config = {
     flashAlpha: 0.4, duration: 8, color: '#ffffff'
   },
 
-  /* Sunset --- MODIFIED --- ------------------------------------------- */
-  sunset: {
-    enabled: () => layer.sunset,
-    speed: 0.0003,
+  /* Day/Night Cycle --- RENAMED & MODIFIED --- */
+  dayNight: {
+    speed: 0.001,
     dayTop: '#87ceeb', dayHorizon: '#87ceeb',
-    horizonPeakColor: '#ff6a00', // Fiery orange color for the peak sunset
-    peakTime: 0.6, // When (in the 0-1 cycle) the horizon color is at its peak
+    horizonPeakColor: '#ff6a00',
+    peakTime: 0.6,
     nightTop: '#0f1414', nightHorizon: '#151415',
     sunColorStart: '#ffff32', sunColorEnd: '#ffc832'
   },
@@ -124,7 +124,7 @@ const config = {
 
   /* Solar system ------------------------------------------------------ */
   solar: {
-    enabled: () => layer.solar && !layer.sunset, speed: 0.0002, sunRadius: 4,
+    enabled: () => layer.solar, speed: 0.0002, sunRadius: 4,
     planets: [
       { r: 1, d: 8, s: 0.02, c: '#4ae', a: 0 }, { r: 1.5, d: 12, s: 0.015, c: '#e74', a: 0 },
       { r: 1, d: 16, s: 0.01, c: '#fc0', a: 0 }
@@ -227,12 +227,12 @@ function buildSettingsPanel() {
         add('flashAlpha', slider(cfg, 'flashAlpha', 0, 1, 0.05)); add('duration', slider(cfg, 'duration', 1, 30, 1));
         add('color', colorPick(cfg, 'color'));
         break;
-      case 'sunset': // <-- MODIFIED
-        add('speed', slider(cfg, 'speed', 0.0001, 0.001, 0.0001));
-        add('peakTime', slider(cfg, 'peakTime', 0.1, 0.9, 0.01)); // New
+      case 'dayNight': // <-- MODIFIED to match new config
+        add('speed', slider(cfg, 'speed', 0.0001, 0.002, 0.0001));
+        add('peakTime', slider(cfg, 'peakTime', 0.1, 0.9, 0.01));
         add('dayTop', colorPick(cfg, 'dayTop'));
         add('dayHorizon', colorPick(cfg, 'dayHorizon'));
-        add('horizonPeak', colorPick(cfg, 'horizonPeakColor')); // New
+        add('horizonPeak', colorPick(cfg, 'horizonPeakColor'));
         add('nightTop', colorPick(cfg, 'nightTop'));
         add('nightHorizon', colorPick(cfg, 'nightHorizon'));
         add('sunColorStart', colorPick(cfg, 'sunColorStart'));
@@ -278,8 +278,12 @@ settingsBtn.onclick = () => {
 document.querySelector('.controls').appendChild(settingsBtn);
 
 const stars = [], moon = { prog: 0 }, solar = { prog: 0, planets: JSON.parse(JSON.stringify(config.solar.planets)) }, clouds = [], landPts = [], auroraBands = [];
-let lightning = 0, flash = 0, sunsetPhase = 0;
+let lightning = 0, flash = 0;
 const launchingRockets = [];
+
+// --- NEW State Management ---
+let dayNightState = 'night'; // States: 'night', 'sunrising', 'day', 'sunsetting'
+let dayNightPhase = 1; // 0 = day, 1 = night
 
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -297,18 +301,36 @@ function resetScene() {
   landPts.length = 0; for (let i = 0; i <= 32; i++) { landPts.push({ x: i * 2, y: config.land.baseHeight + Math.sin(i * 0.5) * config.land.amplitude + rand(-config.land.random, config.land.random) }); }
   auroraBands.length = 0; for (let i = 0; i < config.aurora.bandCount; i++) { auroraBands.push({ y: config.aurora.yBase + i * config.aurora.ySpread, phase: i, amp: rand(config.aurora.amplitudeMin, config.aurora.amplitudeMax), speed: rand(config.aurora.speedMin, config.aurora.speedMax) }); }
   flyingObjects.length = 0; launchingRockets.length = 0; lightning = flash = 0;
-  moon.prog = 0; sunsetPhase = 0; solar.prog = 0;
+  moon.prog = 0; solar.prog = 0;
   solar.planets.forEach((p, i) => Object.assign(p, config.solar.planets[i]));
+  dayNightState = 'night';
+  dayNightPhase = 1;
+  updateButtonHighlights();
 }
-resetScene();
 
 function maybeSpawn(type) {
   const cfg = config[type]; if (!cfg.enabled()) return;
   if (flyingObjects.filter(o => o.type === type).length >= cfg.maxCount) return;
   if (Math.random() < cfg.spawnRate) addFlyingObject(type);
 }
+
+// --- MODIFIED Button Handlers ---
+function startSunrise() {
+    if (dayNightState === 'night') {
+        dayNightState = 'sunrising';
+        updateButtonHighlights();
+    }
+}
+function startSunset() {
+    if (dayNightState === 'day') {
+        dayNightState = 'sunsetting';
+        updateButtonHighlights();
+    }
+}
+
 function addFlyingObject(type) {
   const cfg = config[type]; let x, y, vx, vy, angle;
+  // This function is unchanged
   switch (type) {
     case 'shooting': case 'meteor':
       angle = rand(cfg.angleMin, cfg.angleMax); const speed1 = rand(cfg.speedMin, cfg.speedMax);
@@ -331,60 +353,61 @@ function addFlyingObject(type) {
   flyingObjects.push({ type, x, y, vx, vy, life: cfg.life, sizeStart: cfg.sizeStart, sizeEnd: cfg.sizeEnd, trail: [] });
 }
 
-/* ---------- DRAW LOOP (MODIFIED) ---------- */
+/* ---------- DRAW LOOP (HEAVILY MODIFIED) ---------- */
 function draw() {
     frame++;
 
-    // --- SUNSET LOGIC ---
-    if (config.sunset.enabled()) {
-        sunsetPhase = Math.min(1, sunsetPhase + config.sunset.speed);
-        const grad = ctx.createLinearGradient(0, 0, 0, 64);
-        
-        // Pre-calculate RGB versions of colors
-        const dayTopRgb = hexToRgb(config.sunset.dayTop);
-        const dayHorRgb = hexToRgb(config.sunset.dayHorizon);
-        const peakHorRgb = hexToRgb(config.sunset.horizonPeakColor);
-        const nightTopRgb = hexToRgb(config.sunset.nightTop);
-        const nightHorRgb = hexToRgb(config.sunset.nightHorizon);
-        
-        // Top of the sky (zenith) fades directly from day to night
-        const topColor = lerpColor(dayTopRgb, nightTopRgb, sunsetPhase);
-        
-        // Bottom of the sky (horizon) has a 2-stage fade: day -> peak -> night
-        let horizonColor;
-        const peakTime = config.sunset.peakTime;
-        if (sunsetPhase < peakTime) {
-            // Stage 1: Fading from Day Horizon to Peak Color
-            const progress = sunsetPhase / peakTime;
-            horizonColor = lerpColor(dayHorRgb, peakHorRgb, progress);
-        } else {
-            // Stage 2: Fading from Peak Color to Night Horizon
-            const progress = (sunsetPhase - peakTime) / (1 - peakTime);
-            horizonColor = lerpColor(peakHorRgb, nightHorRgb, progress);
-        }
-
-        grad.addColorStop(0, topColor);
-        grad.addColorStop(1, horizonColor);
-        ctx.fillStyle = grad;
-    } else {
-        // If sunset is disabled, fade back to black
-        sunsetPhase = Math.max(0, sunsetPhase - config.sunset.speed);
-        if (sunsetPhase > 0) {
-             const grad = ctx.createLinearGradient(0, 0, 0, 64);
-             const dayTopRgb = hexToRgb(config.sunset.dayTop);
-             const nightTopRgb = hexToRgb(config.sunset.nightTop);
-             grad.addColorStop(0, lerpColor(dayTopRgb, nightTopRgb, sunsetPhase));
-             grad.addColorStop(1, '#000011');
-             ctx.fillStyle = grad;
-        } else {
-             ctx.fillStyle = '#000011';
-        }
+    // --- State-based Day/Night Animation ---
+    switch(dayNightState) {
+        case 'sunrising':
+            dayNightPhase -= config.dayNight.speed;
+            if (dayNightPhase <= 0) {
+                dayNightPhase = 0;
+                dayNightState = 'day';
+                updateButtonHighlights();
+            }
+            break;
+        case 'sunsetting':
+            dayNightPhase += config.dayNight.speed;
+            if (dayNightPhase >= 1) {
+                dayNightPhase = 1;
+                dayNightState = 'night';
+                updateButtonHighlights();
+            }
+            break;
     }
+
+    // --- Sky & Sun Drawing ---
+    const dnCfg = config.dayNight;
+    const grad = ctx.createLinearGradient(0, 0, 0, 64);
+    const dayTopRgb    = hexToRgb(dnCfg.dayTop);
+    const dayHorRgb    = hexToRgb(dnCfg.dayHorizon);
+    const peakHorRgb   = hexToRgb(dnCfg.horizonPeakColor);
+    const nightTopRgb  = hexToRgb(dnCfg.nightTop);
+    const nightHorRgb  = hexToRgb(dnCfg.nightHorizon);
+
+    const topColor = lerpColor(dayTopRgb, nightTopRgb, dayNightPhase);
+    grad.addColorStop(0, topColor);
+
+    let horizonColor;
+    if (dayNightPhase < dnCfg.peakTime) {
+        horizonColor = lerpColor(dayHorRgb, peakHorRgb, dayNightPhase / dnCfg.peakTime);
+    } else {
+        horizonColor = lerpColor(peakHorRgb, nightHorRgb, (dayNightPhase - dnCfg.peakTime) / (1 - dnCfg.peakTime));
+    }
+    grad.addColorStop(1, horizonColor);
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 64, 64);
 
-    const nightAlpha = config.sunset.enabled() || sunsetPhase > 0.3
-        ? Math.max(0, Math.min(1, (sunsetPhase - 0.3) / 0.7))
-        : 1;
+    // Draw Sun (only if it's not full night)
+    if (dayNightPhase < 1) {
+        const sunY = 5 + dayNightPhase * 65;
+        const sunColor = lerpColor(hexToRgb(dnCfg.sunColorStart), hexToRgb(dnCfg.sunColorEnd), dayNightPhase);
+        ctx.fillStyle = sunColor; ctx.beginPath(); ctx.arc(32, sunY, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = sunColor.replace('rgb', 'rgba').replace(')', ', 0.3)'); ctx.beginPath(); ctx.arc(32, sunY, 4, 0, Math.PI * 2); ctx.fill();
+    }
+
+    const nightAlpha = dayNightPhase > 0.3 ? Math.max(0, Math.min(1, (dayNightPhase - 0.3) / 0.7)) : 0;
 
     if (config.stars.enabled() && nightAlpha > 0.1) {
         stars.forEach(s => {
@@ -394,7 +417,8 @@ function draw() {
             ctx.fillRect(s.x | 0, s.y | 0, 1, 1);
         });
     }
-
+    
+    // ... Other drawing logic is unchanged
     if (config.aurora.enabled() && nightAlpha > 0.2) {
         const finalAlpha = config.aurora.alpha * nightAlpha;
         for (let x = 0; x < 64; x++) {
@@ -436,22 +460,15 @@ function draw() {
         else { ctx.fillStyle = color.replace(/,[\d.]+\)$/, `,${lifeRatio})`); }
         ctx.fillRect((o.x - size / 2) | 0, (o.y - size / 2) | 0, intSize, intSize);
     }
-
-    if (config.sunset.enabled()) {
-        const sunY = 5 + sunsetPhase * 65;
-        const sunColor = lerpColor(hexToRgb(config.sunset.sunColorStart), hexToRgb(config.sunset.sunColorEnd), sunsetPhase);
-        ctx.fillStyle = sunColor; ctx.beginPath(); ctx.arc(32, sunY, 3, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = sunColor.replace('rgb', 'rgba').replace(')', ', 0.3)'); ctx.beginPath(); ctx.arc(32, sunY, 4, 0, Math.PI * 2); ctx.fill();
-    }
-
-    if (config.moon.enabled()) {
+    
+    if (config.moon.enabled() && nightAlpha > 0.5) {
         moon.prog = (moon.prog + config.moon.speed) % 1; const arc = Math.sin(moon.prog * Math.PI);
         const x = moon.prog * 74 - 5; const y = (64 - config.moon.yAmplitude) + (1-arc) * config.moon.yAmplitude;
         const r = remap(arc, 0, 1, config.moon.radiusMin, config.moon.radiusMax);
         ctx.fillStyle = config.moon.color1; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = config.moon.color2; ctx.beginPath(); ctx.arc(x - 1, y - 1, Math.max(0, r - 1), 0, Math.PI * 2); ctx.fill();
     }
-
+    
     if (config.clouds.enabled()) {
         ctx.fillStyle = config.clouds.color;
         clouds.forEach(c => { c.x -= c.s; if (c.x < -c.w) c.x = 64 + c.w; for (let i = 0; i < c.w; i++) { ctx.fillRect((c.x + i) | 0, (c.y + Math.sin(i * 0.6) * config.clouds.waveAmp) | 0, 1, 1); } });
@@ -462,7 +479,7 @@ function draw() {
         landPts.forEach(p => ctx.lineTo(p.x, p.y)); ctx.lineTo(64, 64); ctx.closePath(); ctx.fill();
         ctx.fillStyle = config.land.colorTop; for (let i = 0; i < landPts.length - 1; i++) { ctx.fillRect(landPts[i].x, landPts[i].y | 0, 2, 1); }
     }
-
+    
     if (config.lightning.enabled()) {
         if (Math.random() < config.lightning.chance) { lightning = config.lightning.duration; flash = config.lightning.duration / 2; }
         if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${config.lightning.flashAlpha})`; ctx.fillRect(0, 0, 64, 64); flash--; }
@@ -474,7 +491,7 @@ function draw() {
         }
     }
 
-    if (config.solar.enabled()) {
+    if (config.solar.enabled() && nightAlpha > 0.9) {
         solar.prog = (solar.prog + config.solar.speed) % 1; const arc = Math.sin(solar.prog * Math.PI);
         const sunX = solar.prog * 84 - 10, sunY = 80 - arc * 85, sunR = config.solar.sunRadius;
         ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2); ctx.fill();
@@ -504,20 +521,45 @@ function draw() {
             if (r.y < -30) launchingRockets.splice(i, 1);
         }
     }
-
+    
     updStatus();
     requestAnimationFrame(draw);
 }
 
+// --- MODIFIED Button Highlighter ---
 function updateButtonHighlights() {
     Object.keys(layer).forEach(k => {
         const btn = $(`btn-${k}`);
         if (btn) { layer[k] ? btn.classList.add('active') : btn.classList.remove('active'); }
     });
+
+    const sunriseBtn = $('btn-sunrise');
+    const sunsetBtn = $('btn-sunset');
+
+    // Reset classes
+    sunriseBtn.classList.remove('active');
+    sunsetBtn.classList.remove('active');
+
+    // Set disabled state based on the master state
+    sunriseBtn.disabled = dayNightState !== 'night';
+    sunsetBtn.disabled = dayNightState !== 'day';
+
+    // Set active class for transitions
+    if (dayNightState === 'sunrising') {
+        sunriseBtn.classList.add('active');
+        sunriseBtn.disabled = true;
+        sunsetBtn.disabled = true;
+    } else if (dayNightState === 'sunsetting') {
+        sunsetBtn.classList.add('active');
+        sunriseBtn.disabled = true;
+        sunsetBtn.disabled = true;
+    }
 }
+
 function resetAll() {
   Object.keys(layer).forEach(k => layer[k] = false);
-  layer.stars = true; resetScene(); updateButtonHighlights();
+  layer.stars = true; 
+  resetScene();
 }
 function launchRocket() {
   const cfg = config.rocket; if(!cfg.enabled()) return;
@@ -546,8 +588,9 @@ function updStatus() {
   }
 }
 
+// Initial setup
+resetScene();
 draw();
-updateButtonHighlights();
 </script>
 </body>
 </html>
