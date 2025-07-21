@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>64×64 Retro Canvas – Fully Programmable</title>
+<style>
+html,body{height:100%;margin:0;background:#222;display:flex;flex-direction:column;
+align-items:center;justify-content:center;font-family:monospace;font-size:11px;color:#aaa;}
+#wrapper{position:relative;width:90vmin;height:90vmin;max-width:512px;max-height:512px;}
+#gameCanvas{position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated;cursor:crosshair;}
+.controls{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:512px}
+button,select{padding:3px 6px;background:#333;color:#eee;border:1px solid #555;cursor:pointer;font-size:11px;transition: background-color 0.2s, border-color 0.2s;}
+.status{margin-top:4px;font-size:10px}
+button.active {
+  background-color: #4CAF50;
+  border-color: #80c080;
+  color: white;
+}
+</style>
+</head>
+<body>
+<div id="wrapper"><canvas id="gameCanvas" width="64" height="64"></canvas></div>
+
+<div class="controls">
+  <button id="btn-stars" onclick="toggle('stars')">Stars</button>
+  <button id="btn-moon" onclick="toggle('moon')">Moon</button>
+  <button id="btn-solar" onclick="toggle('solar')">Solar System</button>
+  <button id="btn-clouds" onclick="toggle('clouds')">Clouds</button>
+  <button id="btn-shooting" onclick="toggle('shooting')">Shooting Stars</button>
+  <button id="btn-land" onclick="toggle('land')">Landscape</button>
+  <button id="btn-aurora" onclick="toggle('aurora')">Aurora</button>
+  <button id="btn-lightning" onclick="toggle('lightning')">Lightning</button>
+  <button id="btn-meteor" onclick="toggle('meteor')">Meteors</button>
+  <button id="btn-sunset" onclick="toggle('sunset')">Sunset</button>
+  <button id="btn-rocket" onclick="toggle('rocket')">Rocket Layer</button>
+  <button onclick="launchRocket()">Launch Rocket</button>
+  <button id="btn-comet" onclick="toggle('comet')">Comet Layer</button>
+  <button onclick="launchComet()">Launch Comet</button>
+  <button onclick="resetAll()">Reset</button>
+</div>
+
+<div class="status"><span id="fps">FPS:0</span> | <span id="layers">Layers:Stars</span></div>
+
+<script>
+/* =========================================================
+   64×64 Retro Canvas – FULLY PROGRAMMABLE UI
+   ========================================================= */
+const cvs = document.getElementById('gameCanvas');
+const ctx = cvs.getContext('2d');
+let frame = 0;
+
+/* ---------- layer toggles ---------- */
+const layer = {
+  stars: true, moon: false, solar: false, clouds: false,
+  shooting: false, land: false, aurora: false,
+  lightning: false, meteor: false, sunset: false, comet: false, rocket: false
+};
+function toggle(k) {
+    layer[k] = !layer[k];
+    updateButtonHighlights();
+}
+
+/* ---------- generic flying-object system ---------- */
+const flyingObjects = [];
+
+/* ---------- HIGH-RES CONFIG OBJECTS ---------- */
+const config = {
+  /* Shooting stars ---------------------------------------------------- */
+  shooting: {
+    enabled: () => layer.shooting, life: 1200, spawnRate: 0.01, maxCount: 40,
+    speedMin: 0.5, speedMax: 2, angleMin: -Math.PI * 0.7, angleMax: -Math.PI * 0.3,
+    sizeStart: 1, sizeEnd: 1, colorMode: 'white', trailLen: 10, trailFadePow: 1, trail: true
+  },
+
+  /* Meteors ----------------------------------------------------------- */
+  meteor: {
+    enabled: () => layer.meteor, life: 1200, spawnRate: 0.005, maxCount: 20,
+    speedMin: 1.5, speedMax: 3.5, angleMin: Math.PI * 0.2, angleMax: Math.PI * 0.4,
+    sizeStart: 1.5, sizeEnd: 0.5, colorMode: 'fire', trailLen: 8, trailFadePow: 1.2, trail: true
+  },
+
+  /* Comets ------------------------------------------------------------ */
+  comet: {
+    enabled: () => layer.comet, life: 4000, spawnRate: 0.002, maxCount: 5,
+    speedMin: 0.05, speedMax: 0.2, edgeBias: [1, 1, 1, 1], angleSpread: 0.4,
+    sizeStart: 2.5, sizeEnd: 1, colorMode: 'white', trailLen: 30, trailFadePow: 0.8, trail: true
+  },
+    
+  /* Rockets ----------------------------------------------------------- */
+  rocket: {
+    enabled: () => layer.rocket, speed: 0.3, startX: 31, startY: 60,
+    trailLen: 80, trailFadePow: 1, colorMode: 'fire'
+  },
+
+  /* Aurora ------------------------------------------------------------ */
+  aurora: {
+    enabled: () => layer.aurora, yBase: 5, bandCount: 3, ySpread: 3,
+    amplitudeMin: 4, amplitudeMax: 7, speedMin: 0.01, speedMax: 0.04,
+    waveFreq: 0.2, alpha: 0.15, colorMode: 'green'
+  },
+
+  /* Lightning --------------------------------------------------------- */
+  lightning: {
+    enabled: () => layer.lightning, chance: 0.003, forks: 8, forkJitter: 20,
+    flashAlpha: 0.4, duration: 8, color: '#ffffff'
+  },
+
+  /* Sunset --- MODIFIED --- ------------------------------------------- */
+  sunset: {
+    enabled: () => layer.sunset,
+    speed: 0.0003,
+    dayTop: '#87ceeb', dayHorizon: '#87ceeb',
+    horizonPeakColor: '#ff6a00', // Fiery orange color for the peak sunset
+    peakTime: 0.6, // When (in the 0-1 cycle) the horizon color is at its peak
+    nightTop: '#0f1414', nightHorizon: '#151415',
+    sunColorStart: '#ffff32', sunColorEnd: '#ffc832'
+  },
+
+  /* Moon -------------------------------------------------------------- */
+  moon: {
+    enabled: () => layer.moon, speed: 0.0001, yAmplitude: 60,
+    radiusMin: 1, radiusMax: 5, color1: '#f0e68c', color2: '#dddddd'
+  },
+
+  /* Solar system ------------------------------------------------------ */
+  solar: {
+    enabled: () => layer.solar && !layer.sunset, speed: 0.0002, sunRadius: 4,
+    planets: [
+      { r: 1, d: 8, s: 0.02, c: '#4ae', a: 0 }, { r: 1.5, d: 12, s: 0.015, c: '#e74', a: 0 },
+      { r: 1, d: 16, s: 0.01, c: '#fc0', a: 0 }
+    ]
+  },
+
+  /* Clouds ------------------------------------------------------------ */
+  clouds: {
+    enabled: () => layer.clouds, count: 4, yMin: 8, yMax: 28,
+    widthMin: 12, widthMax: 28, speedMin: 0.03, speedMax: 0.06,
+    color: 'rgba(255,255,255,0.3)', waveAmp: 2
+  },
+
+  /* Stars ------------------------------------------------------------- */
+  stars: {
+    enabled: () => layer.stars, count: 35, twinkleSpeedMin: 0.01,
+    twinkleSpeedMax: 0.04, minBrightness: 0.1
+  },
+
+  /* Landscape --------------------------------------------------------- */
+  land: {
+    enabled: () => layer.land, baseHeight: 32, amplitude: 6, random: 3,
+    colorBack: '#0a1a0a', colorTop: '#0c2f0c'
+  }
+};
+
+/* ---------- auto-generated settings panel ---------- */
+let panel = null;
+function buildSettingsPanel() {
+  if (panel) { panel.remove(); panel = null; return; }
+  panel = document.createElement('div');
+  panel.id = 'settingsPanel';
+  panel.style.cssText = `position:fixed;top:10px;right:10px;width:280px;max-height:95vh;overflow-y:auto;background:#111a;color:#eee;font-size:11px;font-family:monospace;border:1px solid #555;padding:8px;border-radius:4px;z-index:9999;`;
+  document.body.appendChild(panel);
+
+  const add = (label, node) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin:4px 0;display:flex;align-items:center;justify-content:space-between;gap:6px;';
+    const lab = document.createElement('label'); lab.textContent = label;
+    row.append(lab, node); panel.appendChild(row); return node;
+  };
+  const slider = (obj, key, min, max, step = 0.01) => {
+    const inp = document.createElement('input');
+    inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step; inp.value = obj[key];
+    inp.style.width = '120px';
+    inp.addEventListener('input', () => { obj[key] = +inp.value; });
+    return inp;
+  };
+  const colorPick = (obj, key) => {
+    const inp = document.createElement('input');
+    inp.type = 'color'; inp.value = obj[key];
+    inp.style.cssText = 'padding:0;height:18px;width:30px;background:none;border:none;';
+    inp.addEventListener('input', () => { obj[key] = inp.value; });
+    return inp;
+  };
+  const checkbox = (obj, key) => {
+    const inp = document.createElement('input');
+    inp.type = 'checkbox'; inp.checked = Boolean(obj[key]);
+    inp.addEventListener('change', () => { obj[key] = inp.checked; });
+    return inp;
+  };
+  const select = (obj, key, ...options) => {
+    const sel = document.createElement('select');
+    options.forEach(opt => { const o = document.createElement('option'); o.value = o.textContent = opt; sel.appendChild(o); });
+    sel.value = obj[key];
+    sel.addEventListener('change', () => { obj[key] = sel.value; });
+    return sel;
+  };
+
+  Object.keys(config).forEach(k => {
+    const cfg = config[k];
+    const h = document.createElement('h4');
+    h.textContent = k.charAt(0).toUpperCase() + k.slice(1);
+    h.style.cssText = 'margin:12px 0 4px 0;border-bottom:1px solid #444;padding-bottom:2px;';
+    panel.appendChild(h);
+    switch (k) {
+      case 'shooting': case 'meteor': case 'comet':
+        add('spawnRate', slider(cfg, 'spawnRate', 0, 0.1, 0.001)); add('maxCount', slider(cfg, 'maxCount', 1, 100, 1));
+        add('speedMin', slider(cfg, 'speedMin', 0, 5, 0.05)); add('speedMax', slider(cfg, 'speedMax', 0, 5, 0.05));
+        add('sizeStart', slider(cfg, 'sizeStart', 0.5, 5, 0.1)); add('sizeEnd', slider(cfg, 'sizeEnd', 0.5, 5, 0.1));
+        add('trailLen', slider(cfg, 'trailLen', 0, 50, 1)); add('trailFadePow', slider(cfg, 'trailFadePow', 0.1, 3, 0.1));
+        add('colorMode', select(cfg, 'colorMode', 'white', 'silver', 'gold', 'rainbow', 'fire', 'ice', 'custom'));
+        add('trail', checkbox(cfg, 'trail'));
+        break;
+      case 'rocket':
+        add('speed', slider(cfg, 'speed', 0.1, 2, 0.05)); add('startX', slider(cfg, 'startX', 0, 63, 1));
+        add('startY', slider(cfg, 'startY', 0, 63, 1)); add('trailLen', slider(cfg, 'trailLen', 1, 100, 1));
+        add('trailFadePow', slider(cfg, 'trailFadePow', 0.1, 3, 0.1));
+        add('colorMode', select(cfg, 'colorMode', 'fire', 'ice', 'white', 'rainbow'));
+        break;
+      case 'aurora':
+        add('bandCount', slider(cfg, 'bandCount', 1, 10, 1)); add('yBase', slider(cfg, 'yBase', 0, 32, 1));
+        add('ySpread', slider(cfg, 'ySpread', 0, 10, 0.5)); add('amplitudeMin', slider(cfg, 'amplitudeMin', 0, 10, 0.5));
+        add('amplitudeMax', slider(cfg, 'amplitudeMax', 0, 15, 0.5)); add('speedMin', slider(cfg, 'speedMin', 0, 0.1, 0.005));
+        add('speedMax', slider(cfg, 'speedMax', 0, 0.1, 0.005)); add('waveFreq', slider(cfg, 'waveFreq', 0.05, 1, 0.01));
+        add('alpha', slider(cfg, 'alpha', 0, 0.5, 0.01)); add('colorMode', select(cfg, 'colorMode', 'green', 'rainbow'));
+        break;
+      case 'lightning':
+        add('chance', slider(cfg, 'chance', 0, 0.02, 0.0001)); add('forks', slider(cfg, 'forks', 1, 20, 1));
+        add('flashAlpha', slider(cfg, 'flashAlpha', 0, 1, 0.05)); add('duration', slider(cfg, 'duration', 1, 30, 1));
+        add('color', colorPick(cfg, 'color'));
+        break;
+      case 'sunset': // <-- MODIFIED
+        add('speed', slider(cfg, 'speed', 0.0001, 0.001, 0.0001));
+        add('peakTime', slider(cfg, 'peakTime', 0.1, 0.9, 0.01)); // New
+        add('dayTop', colorPick(cfg, 'dayTop'));
+        add('dayHorizon', colorPick(cfg, 'dayHorizon'));
+        add('horizonPeak', colorPick(cfg, 'horizonPeakColor')); // New
+        add('nightTop', colorPick(cfg, 'nightTop'));
+        add('nightHorizon', colorPick(cfg, 'nightHorizon'));
+        add('sunColorStart', colorPick(cfg, 'sunColorStart'));
+        add('sunColorEnd', colorPick(cfg, 'sunColorEnd'));
+        break;
+      case 'moon':
+        add('speed', slider(cfg, 'speed', 0.00005, 0.0005, 0.00005)); add('yAmplitude', slider(cfg, 'yAmplitude', 10, 70, 1));
+        add('radiusMin', slider(cfg, 'radiusMin', 0.5, 5, 0.1)); add('radiusMax', slider(cfg, 'radiusMax', 1, 10, 0.1));
+        add('color1', colorPick(cfg, 'color1')); add('color2', colorPick(cfg, 'color2'));
+        break;
+      case 'solar':
+        add('speed', slider(cfg, 'speed', 0.0001, 0.001, 0.0001));
+        add('sunRadius', slider(cfg, 'sunRadius', 1, 10, 0.5));
+        break;
+      case 'clouds':
+        add('count', slider(cfg, 'count', 1, 10, 1));
+        add('speedMin', slider(cfg, 'speedMin', 0.01, 0.2, 0.005)); add('speedMax', slider(cfg, 'speedMax', 0.01, 0.2, 0.005));
+        add('waveAmp', slider(cfg, 'waveAmp', 0, 5, 0.25));
+        const cloudColorInp = document.createElement('input'); cloudColorInp.type = 'text'; cloudColorInp.value = cfg.color;
+        cloudColorInp.style.width = '120px'; cloudColorInp.addEventListener('change', () => { cfg.color = cloudColorInp.value; });
+        add('color', cloudColorInp);
+        break;
+      case 'stars':
+        add('count', slider(cfg, 'count', 1, 100, 1));
+        add('twinkleSpeedMin', slider(cfg, 'twinkleSpeedMin', 0.005, 0.1, 0.005));
+        add('twinkleSpeedMax', slider(cfg, 'twinkleSpeedMax', 0.005, 0.1, 0.005));
+        break;
+      case 'land':
+        add('baseHeight', slider(cfg, 'baseHeight', 10, 50, 1)); add('amplitude', slider(cfg, 'amplitude', 0, 15, 0.5));
+        add('random', slider(cfg, 'random', 0, 10, 0.5)); add('colorBack', colorPick(cfg, 'colorBack'));
+        add('colorTop', colorPick(cfg, 'colorTop'));
+        break;
+    }
+  });
+}
+
+const settingsBtn = document.createElement('button');
+settingsBtn.textContent = 'Show Settings';
+settingsBtn.onclick = () => {
+  settingsBtn.textContent = panel ? 'Show Settings' : 'Hide Settings';
+  buildSettingsPanel();
+};
+document.querySelector('.controls').appendChild(settingsBtn);
+
+const stars = [], moon = { prog: 0 }, solar = { prog: 0, planets: JSON.parse(JSON.stringify(config.solar.planets)) }, clouds = [], landPts = [], auroraBands = [];
+let lightning = 0, flash = 0, sunsetPhase = 0;
+const launchingRockets = [];
+
+const $ = id => document.getElementById(id);
+const rand = (a, b) => a + Math.random() * (b - a);
+const remap = (v, a1, a2, b1, b2) => b1 + (v - a1) * (b2 - b1) / (a2 - a1);
+const hexToRgb = hex => hex.replace(/^#?([a-f\d])([a-f\d])([a-f\d])$/i, (m, r, g, b) => '#' + r + r + g + g + b + b).substring(1).match(/.{2}/g).map(x => parseInt(x, 16));
+const lerpColor = (c1, c2, factor) => {
+    factor = Math.max(0, Math.min(1, factor));
+    const r = c1[0] + factor * (c2[0] - c1[0]); const g = c1[1] + factor * (c2[1] - c1[1]);
+    const b = c1[2] + factor * (c2[2] - c1[2]); return `rgb(${r|0},${g|0},${b|0})`;
+};
+
+function resetScene() {
+  stars.length = 0; for (let i = 0; i < config.stars.count; i++) { stars.push({ x: rand(0, 64), y: rand(0, 64), b: rand(0, 1), ts: rand(config.stars.twinkleSpeedMin, config.stars.twinkleSpeedMax) }); }
+  clouds.length = 0; for (let i = 0; i < config.clouds.count; i++) { clouds.push({ x: rand(-20, 84), y: rand(config.clouds.yMin, config.clouds.yMax), w: rand(config.clouds.widthMin, config.clouds.widthMax), s: rand(config.clouds.speedMin, config.clouds.speedMax) }); }
+  landPts.length = 0; for (let i = 0; i <= 32; i++) { landPts.push({ x: i * 2, y: config.land.baseHeight + Math.sin(i * 0.5) * config.land.amplitude + rand(-config.land.random, config.land.random) }); }
+  auroraBands.length = 0; for (let i = 0; i < config.aurora.bandCount; i++) { auroraBands.push({ y: config.aurora.yBase + i * config.aurora.ySpread, phase: i, amp: rand(config.aurora.amplitudeMin, config.aurora.amplitudeMax), speed: rand(config.aurora.speedMin, config.aurora.speedMax) }); }
+  flyingObjects.length = 0; launchingRockets.length = 0; lightning = flash = 0;
+  moon.prog = 0; sunsetPhase = 0; solar.prog = 0;
+  solar.planets.forEach((p, i) => Object.assign(p, config.solar.planets[i]));
+}
+resetScene();
+
+function maybeSpawn(type) {
+  const cfg = config[type]; if (!cfg.enabled()) return;
+  if (flyingObjects.filter(o => o.type === type).length >= cfg.maxCount) return;
+  if (Math.random() < cfg.spawnRate) addFlyingObject(type);
+}
+function addFlyingObject(type) {
+  const cfg = config[type]; let x, y, vx, vy, angle;
+  switch (type) {
+    case 'shooting': case 'meteor':
+      angle = rand(cfg.angleMin, cfg.angleMax); const speed1 = rand(cfg.speedMin, cfg.speedMax);
+      if (type === 'shooting') { vx = Math.cos(angle) * speed1; vy = Math.abs(Math.sin(angle)) * speed1; }
+      else { vx = Math.cos(angle) * speed1; vy = Math.sin(angle) * speed1; }
+      x = rand(0, 64); y = 0;
+      break;
+    case 'comet': {
+      const edges = ['top', 'left', 'right', 'bottom'], weights = cfg.edgeBias, total = weights.reduce((a, b) => a + b, 0);
+      let r = rand(0, total); const edge = edges.find((_, i) => (r -= weights[i]) <= 0) || 'top';
+      const speed2 = rand(cfg.speedMin, cfg.speedMax);
+      switch (edge) {
+        case 'top': x = rand(0, 64); y = -5; vx = rand(-cfg.angleSpread, cfg.angleSpread); vy = speed2; break;
+        case 'left': x = -5; y = rand(0, 64); vx = speed2; vy = rand(-cfg.angleSpread, cfg.angleSpread); break;
+        case 'right': x = 69; y = rand(0, 64); vx = -speed2; vy = rand(-cfg.angleSpread, cfg.angleSpread); break;
+        case 'bottom': x = rand(0, 64); y = 69; vx = rand(-cfg.angleSpread, cfg.angleSpread); vy = -speed2; break;
+      } break;
+    }
+  }
+  flyingObjects.push({ type, x, y, vx, vy, life: cfg.life, sizeStart: cfg.sizeStart, sizeEnd: cfg.sizeEnd, trail: [] });
+}
+
+/* ---------- DRAW LOOP (MODIFIED) ---------- */
+function draw() {
+    frame++;
+
+    // --- SUNSET LOGIC ---
+    if (config.sunset.enabled()) {
+        sunsetPhase = Math.min(1, sunsetPhase + config.sunset.speed);
+        const grad = ctx.createLinearGradient(0, 0, 0, 64);
+        
+        // Pre-calculate RGB versions of colors
+        const dayTopRgb = hexToRgb(config.sunset.dayTop);
+        const dayHorRgb = hexToRgb(config.sunset.dayHorizon);
+        const peakHorRgb = hexToRgb(config.sunset.horizonPeakColor);
+        const nightTopRgb = hexToRgb(config.sunset.nightTop);
+        const nightHorRgb = hexToRgb(config.sunset.nightHorizon);
+        
+        // Top of the sky (zenith) fades directly from day to night
+        const topColor = lerpColor(dayTopRgb, nightTopRgb, sunsetPhase);
+        
+        // Bottom of the sky (horizon) has a 2-stage fade: day -> peak -> night
+        let horizonColor;
+        const peakTime = config.sunset.peakTime;
+        if (sunsetPhase < peakTime) {
+            // Stage 1: Fading from Day Horizon to Peak Color
+            const progress = sunsetPhase / peakTime;
+            horizonColor = lerpColor(dayHorRgb, peakHorRgb, progress);
+        } else {
+            // Stage 2: Fading from Peak Color to Night Horizon
+            const progress = (sunsetPhase - peakTime) / (1 - peakTime);
+            horizonColor = lerpColor(peakHorRgb, nightHorRgb, progress);
+        }
+
+        grad.addColorStop(0, topColor);
+        grad.addColorStop(1, horizonColor);
+        ctx.fillStyle = grad;
+    } else {
+        // If sunset is disabled, fade back to black
+        sunsetPhase = Math.max(0, sunsetPhase - config.sunset.speed);
+        if (sunsetPhase > 0) {
+             const grad = ctx.createLinearGradient(0, 0, 0, 64);
+             const dayTopRgb = hexToRgb(config.sunset.dayTop);
+             const nightTopRgb = hexToRgb(config.sunset.nightTop);
+             grad.addColorStop(0, lerpColor(dayTopRgb, nightTopRgb, sunsetPhase));
+             grad.addColorStop(1, '#000011');
+             ctx.fillStyle = grad;
+        } else {
+             ctx.fillStyle = '#000011';
+        }
+    }
+    ctx.fillRect(0, 0, 64, 64);
+
+    const nightAlpha = config.sunset.enabled() || sunsetPhase > 0.3
+        ? Math.max(0, Math.min(1, (sunsetPhase - 0.3) / 0.7))
+        : 1;
+
+    if (config.stars.enabled() && nightAlpha > 0.1) {
+        stars.forEach(s => {
+            s.b += s.ts; if (s.b > 1 || s.b < 0) s.ts *= -1;
+            const bright = Math.max(config.stars.minBrightness, Math.abs(Math.sin(s.b * Math.PI)));
+            ctx.fillStyle = `rgba(255,255,255,${bright * nightAlpha})`;
+            ctx.fillRect(s.x | 0, s.y | 0, 1, 1);
+        });
+    }
+
+    if (config.aurora.enabled() && nightAlpha > 0.2) {
+        const finalAlpha = config.aurora.alpha * nightAlpha;
+        for (let x = 0; x < 64; x++) {
+            auroraBands.forEach(b => {
+                const y = b.y + b.amp * Math.sin(x * config.aurora.waveFreq + frame * b.speed + b.phase);
+                ctx.fillStyle = config.aurora.colorMode === 'rainbow' ? `hsla(${(x * 5 + frame) % 360},100%,70%,${finalAlpha})` : `rgba(0,255,128,${finalAlpha})`;
+                ctx.fillRect(x, y | 0, 1, 1);
+            });
+        }
+    }
+
+    ['shooting', 'meteor', 'comet'].forEach(maybeSpawn);
+    for (let i = flyingObjects.length - 1; i >= 0; i--) {
+        const o = flyingObjects[i]; o.life--; o.x += o.vx; o.y += o.vy;
+        if (!config[o.type]) continue;
+        const cfg = config[o.type], lifeRatio = o.life / cfg.life;
+        if (o.life <= 0 || o.x < -10 || o.x > 74 || o.y < -10 || o.y > 74) { flyingObjects.splice(i, 1); continue; }
+        const size = remap(lifeRatio, 0, 1, cfg.sizeEnd, cfg.sizeStart), intSize = Math.max(1, Math.round(size));
+        let color;
+        switch (cfg.colorMode) {
+            case 'fire': color = `rgba(255,${100 + lifeRatio * 155},0,${lifeRatio})`; break;
+            case 'ice': color = `rgba(100,200,255,${lifeRatio})`; break;
+            case 'rainbow': color = `hsl(${(Date.now() / 10) % 360},100%,50%)`; break;
+            case 'gold': color = `rgba(255,215,0,${lifeRatio})`; break;
+            case 'silver': color = `rgba(192,192,192,${lifeRatio})`; break;
+            default: color = `rgba(255,255,255,${lifeRatio})`;
+        }
+        if (cfg.trail) {
+            o.trail.unshift({ x: o.x, y: o.y }); if (o.trail.length > cfg.trailLen) o.trail.length = cfg.trailLen;
+            o.trail.forEach((p, idx) => {
+                const trailAlpha = Math.pow(1 - idx / cfg.trailLen, cfg.trailFadePow) * lifeRatio;
+                let trailColor = color;
+                if (trailColor.startsWith('hsl')) { ctx.fillStyle = trailColor.replace(')', `, ${trailAlpha})`).replace('hsl', 'hsla'); }
+                else { ctx.fillStyle = trailColor.replace(/,[\d.]+\)$/, `,${trailAlpha})`); }
+                ctx.fillRect((p.x - size / 2) | 0, (p.y - size / 2) | 0, intSize, intSize);
+            });
+        }
+        if (color.startsWith('hsl')) { ctx.fillStyle = color; }
+        else { ctx.fillStyle = color.replace(/,[\d.]+\)$/, `,${lifeRatio})`); }
+        ctx.fillRect((o.x - size / 2) | 0, (o.y - size / 2) | 0, intSize, intSize);
+    }
+
+    if (config.sunset.enabled()) {
+        const sunY = 5 + sunsetPhase * 65;
+        const sunColor = lerpColor(hexToRgb(config.sunset.sunColorStart), hexToRgb(config.sunset.sunColorEnd), sunsetPhase);
+        ctx.fillStyle = sunColor; ctx.beginPath(); ctx.arc(32, sunY, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = sunColor.replace('rgb', 'rgba').replace(')', ', 0.3)'); ctx.beginPath(); ctx.arc(32, sunY, 4, 0, Math.PI * 2); ctx.fill();
+    }
+
+    if (config.moon.enabled()) {
+        moon.prog = (moon.prog + config.moon.speed) % 1; const arc = Math.sin(moon.prog * Math.PI);
+        const x = moon.prog * 74 - 5; const y = (64 - config.moon.yAmplitude) + (1-arc) * config.moon.yAmplitude;
+        const r = remap(arc, 0, 1, config.moon.radiusMin, config.moon.radiusMax);
+        ctx.fillStyle = config.moon.color1; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = config.moon.color2; ctx.beginPath(); ctx.arc(x - 1, y - 1, Math.max(0, r - 1), 0, Math.PI * 2); ctx.fill();
+    }
+
+    if (config.clouds.enabled()) {
+        ctx.fillStyle = config.clouds.color;
+        clouds.forEach(c => { c.x -= c.s; if (c.x < -c.w) c.x = 64 + c.w; for (let i = 0; i < c.w; i++) { ctx.fillRect((c.x + i) | 0, (c.y + Math.sin(i * 0.6) * config.clouds.waveAmp) | 0, 1, 1); } });
+    }
+
+    if (config.land.enabled()) {
+        ctx.fillStyle = config.land.colorBack; ctx.beginPath(); ctx.moveTo(0, 64);
+        landPts.forEach(p => ctx.lineTo(p.x, p.y)); ctx.lineTo(64, 64); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = config.land.colorTop; for (let i = 0; i < landPts.length - 1; i++) { ctx.fillRect(landPts[i].x, landPts[i].y | 0, 2, 1); }
+    }
+
+    if (config.lightning.enabled()) {
+        if (Math.random() < config.lightning.chance) { lightning = config.lightning.duration; flash = config.lightning.duration / 2; }
+        if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${config.lightning.flashAlpha})`; ctx.fillRect(0, 0, 64, 64); flash--; }
+        if (lightning > 0) {
+            ctx.strokeStyle = config.lightning.color.replace(')', ', 0.8)').replace('#', 'rgba(' + hexToRgb(config.lightning.color).join(',') + ',');
+            ctx.beginPath(); ctx.moveTo(32, 0);
+            for (let i = 0; i < config.lightning.forks; i++) { ctx.lineTo(32 + (Math.random() - 0.5) * config.lightning.forkJitter, i * (64 / config.lightning.forks)); }
+            ctx.stroke(); lightning--;
+        }
+    }
+
+    if (config.solar.enabled()) {
+        solar.prog = (solar.prog + config.solar.speed) % 1; const arc = Math.sin(solar.prog * Math.PI);
+        const sunX = solar.prog * 84 - 10, sunY = 80 - arc * 85, sunR = config.solar.sunRadius;
+        ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,204,0,0.3)'; ctx.beginPath(); ctx.arc(sunX, sunY, sunR + 1, 0, Math.PI * 2); ctx.fill();
+        config.solar.planets.forEach(p => {
+            p.a = (p.a + p.s) % (Math.PI * 2);
+            const x = sunX + Math.cos(p.a) * p.d; const y = sunY + Math.sin(p.a) * p.d;
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.beginPath(); ctx.arc(sunX, sunY, p.d, 0, Math.PI * 2); ctx.stroke();
+            ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(x, y, p.r, 0, Math.PI * 2); ctx.fill();
+        });
+    }
+
+    if (config.rocket.enabled()) {
+        for(let i = launchingRockets.length - 1; i >= 0; i--) {
+            const r = launchingRockets[i], cfg = config.rocket; r.y -= cfg.speed; r.trail.unshift({ x: r.x, y: r.y });
+            if (r.trail.length > cfg.trailLen) r.trail.length = cfg.trailLen;
+            r.trail.forEach((p, j) => {
+                const lifeRatio = 1 - j / r.trail.length, alpha = Math.pow(lifeRatio, cfg.trailFadePow); let color;
+                switch (cfg.colorMode) {
+                    case 'fire': color = `rgba(255,${100 + lifeRatio * 155},0,${alpha})`; break;
+                    case 'ice': color = `rgba(100,200,255,${alpha})`; break;
+                    case 'rainbow': color = `hsla(${(Date.now() / 10 + j*2) % 360},100%,70%,${alpha})`; break;
+                    default: color = `rgba(255,255,255,${alpha})`;
+                }
+                ctx.fillStyle = color; ctx.fillRect(p.x | 0, p.y | 0, 1, 1);
+            });
+            if (r.y < -30) launchingRockets.splice(i, 1);
+        }
+    }
+
+    updStatus();
+    requestAnimationFrame(draw);
+}
+
+function updateButtonHighlights() {
+    Object.keys(layer).forEach(k => {
+        const btn = $(`btn-${k}`);
+        if (btn) { layer[k] ? btn.classList.add('active') : btn.classList.remove('active'); }
+    });
+}
+function resetAll() {
+  Object.keys(layer).forEach(k => layer[k] = false);
+  layer.stars = true; resetScene(); updateButtonHighlights();
+}
+function launchRocket() {
+  const cfg = config.rocket; if(!cfg.enabled()) return;
+  launchingRockets.push({ x: cfg.startX, y: cfg.startY, trail: [] });
+}
+function launchComet() {
+  if(!config.comet.enabled()) return; addFlyingObject('comet');
+}
+cvs.addEventListener('click', e => {
+  if (!config.rocket.enabled()) return;
+  const rect = cvs.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width * 64) | 0;
+  const y = ((e.clientY - rect.top) / rect.height * 64) | 0;
+  flyingObjects.push({
+    type: 'shooting', x: 32, y: 60, vx: (x - 32) * 0.05, vy: (y - 60) * 0.05,
+    life: config.shooting.life, sizeStart: 1.5, sizeEnd: 0.5, trail: []
+  });
+});
+let lt = performance.now(), fc = 0;
+function updStatus() {
+  fc++; const now = performance.now();
+  if (now - lt >= 1000) {
+    $('fps').textContent = `FPS:${fc}`; fc = 0; lt = now;
+    const active = Object.keys(layer).filter(k => layer[k]);
+    $('layers').textContent = `Layers:${active.join('+') || 'none'}`;
+  }
+}
+
+draw();
+updateButtonHighlights();
+</script>
+</body>
+</html>

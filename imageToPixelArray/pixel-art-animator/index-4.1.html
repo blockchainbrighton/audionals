@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fully Programmable 64x64 Retro Canvas</title>
+<style>
+    :root {
+        --bg-color: #1a1a1a;
+        --panel-bg: #282828;
+        --control-bg: #333;
+        --text-color: #ccc;
+        --border-color: #444;
+        --highlight-color: #55aaff;
+    }
+    html, body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg-color);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: monospace;
+        font-size: 12px;
+        color: var(--text-color);
+        overflow: hidden;
+    }
+    #app-container {
+        display: flex;
+        flex-direction: row;
+        width: 100%;
+        height: 100%;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 10px;
+        box-sizing: border-box;
+    }
+    #canvas-wrapper {
+        position: relative;
+        width: 60vh;
+        height: 60vh;
+        max-width: 90vw;
+        max-height: 90vw;
+        flex-shrink: 0;
+    }
+    #gameCanvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+        cursor: crosshair;
+        border: 1px solid var(--border-color);
+    }
+    .controls-column {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        height: 90vh;
+        overflow-y: auto;
+        padding: 10px;
+        background: var(--panel-bg);
+        border-radius: 5px;
+        flex-grow: 1;
+        min-width: 240px;
+    }
+    .top-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        justify-content: center;
+        padding: 5px;
+        width: 100%;
+    }
+    .control-group {
+        background: var(--control-bg);
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid var(--border-color);
+    }
+    .control-group summary {
+        cursor: pointer;
+        font-weight: bold;
+        color: var(--highlight-color);
+        padding-bottom: 5px;
+    }
+    .control-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 6px;
+        gap: 5px;
+    }
+    label { flex-shrink: 0;}
+    button, select {
+        padding: 4px 8px;
+        background: #3f3f3f;
+        color: var(--text-color);
+        border: 1px solid var(--border-color);
+        cursor: pointer;
+        font-size: 11px;
+        border-radius: 3px;
+        width: 100%;
+    }
+    button.active {
+        border-color: var(--highlight-color);
+        background: #4a4a4a;
+    }
+    input[type="range"] { width: 100%; }
+    input[type="color"] { background: transparent; border: none; width: 30px; height: 30px; padding: 0;}
+    .status {
+        position: absolute;
+        bottom: 5px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 10px;
+        background: rgba(0,0,0,0.5);
+        padding: 2px 5px;
+        border-radius: 3px;
+    }
+    /* Mobile Layout */
+    @media (max-width: 768px) {
+        body { overflow-y: auto; }
+        #app-container {
+            flex-direction: column;
+            height: auto;
+            justify-content: flex-start;
+        }
+        .controls-column {
+            width: 95%;
+            max-width: 500px;
+            height: auto;
+            overflow-y: visible;
+            order: 3;
+        }
+        #canvas-wrapper {
+            width: 90vw;
+            height: 90vw;
+            order: 2;
+        }
+        .top-controls {
+            order: 1;
+            position: relative;
+            width: 100%;
+        }
+    }
+</style>
+</head>
+<body>
+
+<div id="app-container">
+    <div class="top-controls" id="main-toggle-buttons"></div>
+    <div class="controls-column" id="left-controls"></div>
+    <div id="canvas-wrapper">
+        <canvas id="gameCanvas" width="64" height="64"></canvas>
+        <div class="status"><span id="fps">FPS:0</span> | <span id="layers">Layers:Stars</span></div>
+    </div>
+    <div class="controls-column" id="right-controls"></div>
+</div>
+
+<script>
+/* ---------- SETUP ---------- */
+const cvs = document.getElementById('gameCanvas'), ctx = cvs.getContext('2d');
+let frame = 0;
+let lt = performance.now(), fc = 0;
+const $ = id => document.getElementById(id);
+
+/* ---------- SETTINGS & CONFIGURATION ---------- */
+// The single source of truth for all visual elements
+let settings = {
+    stars: { active: true, count: 50, twinkleSpeed: 0.02, color: 'rgba(255,255,255,1)' },
+    moon: { active: false, speed: 0.0001, size: 4, color1: '#f0e68c', color2: '#dddddd' },
+    sun: { active: false, speed: 0.0002, radius: 4, color: '#ffcc00' },
+    solarSystem: { active: false, planetCount: 3, planetSpeed: 0.01, orbitOpacity: 0.1 },
+    clouds: { active: false, count: 5, speed: 0.04, minWidth: 12, maxWidth: 20, color: 'rgba(255,255,255,0.3)' },
+    shooting: { active: false, frequency: 0.01, speed: 1.5, trailLength: 10, trailIntensity: 1.0, color: 'rgba(255,255,255,1)' },
+    meteor: { active: false, frequency: 0.005, speed: 2.5, trailLength: 15, trailIntensity: 1.0, color: 'rgba(255,120,0,1)' },
+    comet: { active: false, frequency: 0.002, speed: 0.1, trailLength: 35, trailIntensity: 0.8, color: 'rgba(200,220,255,1)' },
+    rocket: { active: false, speed: 0.4, trailLength: 100, trailIntensity: 1.0, color: 'rgba(255,100,0,1)' },
+    aurora: { active: false, bands: 3, speed: 0.02, amplitude: 5, intensity: 0.15, color: 'rgba(0,255,128,1)' },
+    lightning: { active: false, frequency: 0.003, intensity: 0.8 },
+    sunset: { active: false, speed: 0.0003 },
+    landscape: { active: false, color1: '#0a1a0a', color2: '#0c2f0c' },
+};
+
+const initialSettings = JSON.parse(JSON.stringify(settings));
+
+/* ---------- PRESETS & SAVE/LOAD ---------- */
+const presets = {
+    'default': JSON.parse(JSON.stringify(initialSettings)),
+    'arcticAurora': {
+        stars: { active: true, count: 100, twinkleSpeed: 0.01, color: 'rgba(255,255,255,1)' },
+        moon: { active: true, speed: 0.0001, size: 5, color1: '#f0f0ff', color2: '#e0e0f0' },
+        aurora: { active: true, bands: 5, speed: 0.02, amplitude: 8, intensity: 0.2, color: 'rgba(0,255,128,1)'},
+        landscape: { active: true, color1: '#d0d0e0', color2: '#f0f0ff' }
+    },
+    'desertSun': {
+        sun: { active: true, speed: 0.0003, radius: 5, color: '#ffdd00' },
+        clouds: { active: true, count: 3, speed: 0.02, color: 'rgba(255,255,255,0.2)'},
+        landscape: { active: true, color1: '#c2b280', color2: '#d8c898' },
+        meteor: { active: true, frequency: 0.001, speed: 3, trailLength: 10, color: 'rgba(255,200,100,1)' }
+    },
+    'cyberpunkNight': {
+        stars: { active: true, count: 150, twinkleSpeed: 0.05, color: 'rgba(255,0,255,1)' },
+        shooting: { active: true, frequency: 0.08, speed: 2, trailLength: 15, trailIntensity: 1, color: 'rgba(0,255,255,1)'},
+        lightning: { active: true, frequency: 0.01, intensity: 1},
+        landscape: { active: true, color1: '#101030', color2: '#200040' }
+    }
+};
+
+function applyPreset(name) {
+    if (!presets[name]) return;
+    let presetSettings = JSON.parse(JSON.stringify(presets[name]));
+    // Set all to inactive first
+    for(const key in settings) { settings[key].active = false; }
+    // Apply preset settings
+    for(const key in presetSettings) {
+        if(settings[key]) {
+            Object.assign(settings[key], presetSettings[key]);
+            settings[key].active = true;
+        }
+    }
+    buildControls(); // Re-render all controls with new values
+}
+
+function saveSettings() {
+    localStorage.setItem('retroCanvasSettings', JSON.stringify(settings));
+    alert('Settings Saved!');
+}
+
+function loadSettings() {
+    const saved = localStorage.getItem('retroCanvasSettings');
+    if (saved) {
+        settings = JSON.parse(saved);
+    }
+}
+
+
+/* ---------- DYNAMIC UI GENERATION ---------- */
+function createSlider(object, key, min, max, step) {
+    const item = document.createElement('div');
+    item.className = 'control-item';
+    const value = settings[object][key];
+    item.innerHTML = `<label for="${object}-${key}">${key}</label>
+                      <input type="range" id="${object}-${key}" min="${min}" max="${max}" step="${step}">
+                      <span id="val-${object}-${key}">${Number(value).toFixed(4)}</span>`;
+    const slider = item.querySelector('input');
+    slider.value = value;
+    slider.oninput = () => {
+        settings[object][key] = parseFloat(slider.value);
+        $(`val-${object}-${key}`).textContent = settings[object][key].toFixed(key.includes('frequency') || key.includes('speed') ? 4 : 2);
+    };
+    return item;
+}
+
+function createColorPicker(object, key) {
+    const item = document.createElement('div');
+    item.className = 'control-item';
+    item.innerHTML = `<label for="${object}-${key}">${key}</label>
+                      <input type="color" id="${object}-${key}">`;
+    const picker = item.querySelector('input');
+    try {
+        const rgba = settings[object][key].match(/(\d+(\.\d+)?)/g);
+        picker.value = `#${parseInt(rgba[0]).toString(16).padStart(2,'0')}${parseInt(rgba[1]).toString(16).padStart(2,'0')}${parseInt(rgba[2]).toString(16).padStart(2,'0')}`;
+    } catch(e) { picker.value = '#ffffff'; }
+
+    picker.oninput = () => {
+        const r = parseInt(picker.value.substr(1, 2), 16);
+        const g = parseInt(picker.value.substr(3, 2), 16);
+        const b = parseInt(picker.value.substr(5, 2), 16);
+        const currentAlpha = settings[object][key].split(',')[3]?.replace(')','') || '1';
+        settings[object][key] = `rgba(${r},${g},${b},${currentAlpha})`;
+    };
+    return item;
+}
+
+function buildControls() {
+    const leftCol = $('left-controls');
+    const rightCol = $('right-controls');
+    const mainToggles = $('main-toggle-buttons');
+    leftCol.innerHTML = ''; rightCol.innerHTML = ''; mainToggles.innerHTML = '';
+
+    // Main Toggle Buttons
+    for (const key in settings) {
+        const btn = document.createElement('button');
+        btn.id = `btn-${key}`; btn.textContent = key; btn.onclick = () => toggle(key);
+        if (settings[key].active) btn.classList.add('active');
+        mainToggles.appendChild(btn);
+    }
+    
+    // Presets and Save/Load
+    const systemGroup = document.createElement('details');
+    systemGroup.className = 'control-group'; systemGroup.open = true;
+    systemGroup.innerHTML = `<summary>System</summary>`;
+    const presetSelect = document.createElement('select');
+    presetSelect.innerHTML = `<option>Select Preset...</option>` + Object.keys(presets).map(p => `<option value="${p}">${p}</option>`).join('');
+    presetSelect.onchange = (e) => applyPreset(e.target.value);
+    systemGroup.appendChild(presetSelect);
+    const saveBtn = document.createElement('button');
+    saveBtn.textContent = 'Save Current State'; saveBtn.onclick = saveSettings;
+    systemGroup.appendChild(saveBtn);
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'Reset to Default'; resetBtn.onclick = () => applyPreset('default');
+    systemGroup.appendChild(resetBtn);
+    leftCol.appendChild(systemGroup);
+
+    // Launchers
+    const launchGroup = document.createElement('details');
+    launchGroup.className = 'control-group'; launchGroup.open = true;
+    launchGroup.innerHTML = `<summary>Launchers</summary>`;
+    const launchRocketBtn = document.createElement('button');
+    launchRocketBtn.textContent = 'Launch Rocket'; launchRocketBtn.onclick = () => addFlyingObject('rocket');
+    launchGroup.appendChild(launchRocketBtn);
+    const launchCometBtn = document.createElement('button');
+    launchCometBtn.textContent = 'Launch Manual Comet'; launchCometBtn.onclick = () => addFlyingObject('comet', true); // manual launch
+    launchGroup.appendChild(launchCometBtn);
+    leftCol.appendChild(launchGroup);
+
+    // Dynamic Control Panels
+    let i = 0;
+    for (const key in settings) {
+        const group = document.createElement('details');
+        group.className = 'control-group';
+        group.innerHTML = `<summary>${key}</summary>`;
+        
+        // Add specific controls here
+        if (key === 'stars') { group.appendChild(createSlider('stars', 'count', 10, 200, 1)); }
+        if (key === 'solarSystem') { group.appendChild(createSlider('solarSystem', 'planetCount', 1, 5, 1)); }
+        if (key === 'shooting' || key === 'meteor' || key === 'comet') {
+            group.appendChild(createSlider(key, 'frequency', 0.001, 0.1, 0.001));
+        }
+        if (key === 'rocket' || key === 'shooting' || key === 'meteor' || key === 'comet') {
+            group.appendChild(createSlider(key, 'speed', 0.1, 5, 0.1));
+            group.appendChild(createSlider(key, 'trailLength', 5, 100, 1));
+            group.appendChild(createColorPicker(key, 'color'));
+        }
+        
+        if (group.children.length > 1) {
+            (i % 2 === 0 ? leftCol : rightCol).appendChild(group);
+            i++;
+        }
+    }
+}
+
+function toggle(k) {
+    settings[k].active = !settings[k].active;
+    const btn = $(`btn-${k}`);
+    settings[k].active ? btn.classList.add('active') : btn.classList.remove('active');
+}
+
+/* ---------- ENTITY MANAGEMENT ---------- */
+const entities = {
+    stars: [], moon: { prog: 0 }, sun: { prog: 0 }, clouds: [],
+    flyingObjects: [], landPts: [], aurora: [], solarSystem: { planets: [] },
+    lightning: { countdown: 0, flash: 0 }, sunsetPhase: 0
+};
+
+function initializeEntities() {
+    entities.stars = [...Array(Math.floor(settings.stars.count))].map(() => ({ x: Math.random() * 64, y: Math.random() * 64, b: Math.random(), ts: 0.01 + Math.random() * 0.03 }));
+    entities.clouds = [...Array(Math.floor(settings.clouds.count))].map(() => ({ x: Math.random() * 80, y: 8 + Math.random() * 20, w: settings.clouds.minWidth + Math.random() * (settings.clouds.maxWidth - settings.clouds.minWidth), s: settings.clouds.speed / 2 + Math.random() * settings.clouds.speed }));
+    entities.landPts = [...Array(33)].map((_, i) => ({ x: i * 2, y: 32 + Math.sin(i * 0.5) * 6 + Math.random() * 3 }));
+    entities.aurora = [...Array(Math.floor(settings.aurora.bands))].map((_, i) => ({ y: 5 + i * (25/settings.aurora.bands), phase: i, amp: settings.aurora.amplitude / 2 + i * 2, speed: settings.aurora.speed / 2 + i * 0.01 }));
+    entities.solarSystem.planets = [...Array(Math.floor(settings.solarSystem.planetCount))].map((_, i) => ({ a: Math.random() * Math.PI * 2, d: 8 + i * 4, r: 1 + Math.random(), s: (0.01 + Math.random() * 0.01) * settings.solarSystem.planetSpeed, c: `hsl(${Math.random()*360}, 80%, 70%)`}));
+}
+
+
+/* ---------- DRAWING LOGIC ---------- */
+function draw() {
+    // Background
+    if (settings.sunset.active) {
+        entities.sunsetPhase = Math.min(1, entities.sunsetPhase + settings.sunset.speed);
+        const grad = ctx.createLinearGradient(0, 0, 0, 64);
+        const p = entities.sunsetPhase;
+        grad.addColorStop(0, `rgb(${135-p*120|0},${206-p*186|0},${235-p*215|0})`);
+        grad.addColorStop(1, `rgb(${135+Math.min(1,p/.6)*(255-135)-Math.max(0,(p-.6)/.4)*(255-15)|0},${206+Math.min(1,p/.6)*(120-206)-Math.max(0,(p-.6)/.4)*(120-20)|0},${235+Math.min(1,p/.6)*(20-235)|0})`);
+        ctx.fillStyle = grad;
+    } else {
+        entities.sunsetPhase = Math.max(0, entities.sunsetPhase - settings.sunset.speed);
+        ctx.fillStyle = '#000011';
+    }
+    ctx.fillRect(0, 0, 64, 64);
+    frame++;
+
+    const nightAlpha = settings.sunset.active ? Math.max(0, Math.min(1, (entities.sunsetPhase - 0.3) / 0.7)) : 1;
+
+    // Drawing Layers
+    if (settings.stars.active && nightAlpha > 0.1) drawStars(nightAlpha);
+    if (settings.aurora.active && nightAlpha > 0.2) drawAurora(nightAlpha);
+    
+    updateFlyingObjects(nightAlpha);
+    
+    if (settings.sunset.active) drawSunForSunset();
+    if (settings.sun.active && !settings.sunset.active) drawSun();
+    if (settings.moon.active) drawMoon();
+    if (settings.clouds.active) drawClouds();
+    if (settings.landscape.active) drawLandscape();
+    if (settings.lightning.active) drawLightning();
+    
+    updStatus();
+    requestAnimationFrame(draw);
+}
+
+function drawSun() {
+    entities.sun.prog = (entities.sun.prog + settings.sun.speed) % 1;
+    const arc = Math.sin(entities.sun.prog * Math.PI);
+    const sunX = entities.sun.prog * 84 - 10;
+    const sunY = 80 - arc * 85;
+    ctx.fillStyle = settings.sun.color;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, settings.sun.radius, 0, Math.PI*2);
+    ctx.fill();
+
+    // Solar System Planets
+    if(settings.solarSystem.active) {
+        if(entities.solarSystem.planets.length !== settings.solarSystem.planetCount) initializeEntities();
+        entities.solarSystem.planets.forEach(p => {
+            p.a += p.s * settings.solarSystem.planetSpeed;
+            const x = sunX + Math.cos(p.a) * p.d;
+            const y = sunY + Math.sin(p.a) * p.d;
+            ctx.strokeStyle=`rgba(255,255,255,${settings.solarSystem.orbitOpacity})`;
+            ctx.beginPath(); ctx.arc(sunX, sunY, p.d, 0, Math.PI * 2); ctx.stroke();
+            ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(x,y,p.r,0,Math.PI*2); ctx.fill();
+        });
+    }
+}
+// Other draw functions (drawStars, drawAurora, etc.) are largely unchanged.
+function drawStars(alpha) { if (entities.stars.length !== settings.stars.count) initializeEntities(); entities.stars.forEach(s => { s.ts = (0.01 + Math.random() * 0.03) * (settings.stars.twinkleSpeed / 0.02); s.b += s.ts; if (s.b > 1 || s.b < 0) s.ts *= -1; ctx.fillStyle = `rgba(255,255,255,${Math.abs(Math.sin(s.b * Math.PI)) * alpha})`; ctx.fillRect(s.x | 0, s.y | 0, 1, 1); }); }
+function drawAurora(alpha) { if (entities.aurora.length !== settings.aurora.bands) initializeEntities(); const finalAlpha = settings.aurora.intensity * alpha; for (let x = 0; x < 64; x++) { entities.aurora.forEach(b => { b.speed = settings.aurora.speed; b.amp = settings.aurora.amplitude; const y = b.y + b.amp * Math.sin(x * 0.2 + frame * b.speed + b.phase); const color = settings.aurora.color; ctx.fillStyle = `rgba(${color.match(/\d+/g).slice(0,3).join(',')},${finalAlpha})`; ctx.fillRect(x, y | 0, 1, 1); }); } }
+function drawSunForSunset() { const sunY = 5 + entities.sunsetPhase * 65; const sunColor = `rgba(255,${200-entities.sunsetPhase*150},${50-entities.sunsetPhase*50},1)`; ctx.fillStyle = sunColor; ctx.beginPath(); ctx.arc(32, sunY, settings.sun.radius, 0, Math.PI * 2); ctx.fill(); }
+function drawMoon() { entities.moon.prog = (entities.moon.prog + settings.moon.speed) % 1; const arc = Math.sin(entities.moon.prog * Math.PI); const x = entities.moon.prog * 74 - 5; const y = 70 - arc * 60; const r = 1 + arc * settings.moon.size; ctx.fillStyle = settings.moon.color1; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = settings.moon.color2; ctx.beginPath(); ctx.arc(x - 1, y - 1, r > 1 ? r - 1: r, 0, Math.PI * 2); ctx.fill(); }
+function drawClouds() { if (entities.clouds.length !== settings.clouds.count) initializeEntities(); ctx.fillStyle = settings.clouds.color; entities.clouds.forEach(c => { c.s = settings.clouds.speed; c.x -= c.s; if (c.x < -c.w) c.x = 64 + Math.random() * c.w; for (let i = 0; i < c.w; i++) ctx.fillRect((c.x + i) | 0, (c.y + Math.sin(i * 0.6) * 2) | 0, 1, 1); }); }
+function drawLandscape() { ctx.fillStyle = settings.landscape.color1; ctx.beginPath(); ctx.moveTo(0, 64); entities.landPts.forEach(p => ctx.lineTo(p.x, p.y)); ctx.lineTo(64, 64); ctx.closePath(); ctx.fill(); ctx.fillStyle = settings.landscape.color2; for (let i = 0; i < entities.landPts.length - 1; i++) { ctx.fillRect(entities.landPts[i].x, entities.landPts[i].y | 0, 2, 1); } }
+function drawLightning() { if (Math.random() < settings.lightning.frequency) { entities.lightning.countdown = 8; entities.lightning.flash = 4; } if (entities.lightning.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${0.4 * settings.lightning.intensity})`; ctx.fillRect(0, 0, 64, 64); entities.lightning.flash--; } if (entities.lightning.countdown > 0) { ctx.strokeStyle = `rgba(255,255,255,${0.8 * settings.lightning.intensity})`; ctx.beginPath(); ctx.moveTo(32, 0); for (let i = 0; i < 8; i++) ctx.lineTo(32 + (Math.random() - 0.5) * 20, i * 8); ctx.stroke(); entities.lightning.countdown--; } }
+
+
+/* ---------- FLYING OBJECT SYSTEM ---------- */
+function addFlyingObject(type, manual = false) {
+    const s = settings[type];
+    let x, y, vx, vy;
+
+    if (type === 'rocket') {
+        x = 31; y = 64; vx = (Math.random() - 0.5) * 0.2; vy = -1;
+    } else if (type === 'comet' && manual) {
+        const edge = Math.floor(Math.random() * 4);
+        const speed = s.speed / 2 + Math.random() * s.speed;
+        switch(edge) {
+            case 0: x = Math.random()*64; y = -5; vx = (Math.random()-.5)*.3; vy = speed; break;
+            case 1: x = -5; y = Math.random()*64; vx = speed; vy = (Math.random()-.5)*.3; break;
+            case 2: x = 69; y = Math.random()*64; vx = -speed; vy = (Math.random()-.5)*.3; break;
+            case 3: x = Math.random()*64; y = 69; vx = (Math.random()-.5)*.3; vy = -speed; break;
+        }
+    } else { // Generic top-down spawn
+        const angle = Math.PI/4 + Math.random()*Math.PI/2;
+        const speed = s.speed / 2 + Math.random() * s.speed;
+        x = Math.random() * 64; y = 0;
+        vx = Math.cos(angle) * speed * (Math.random() < 0.5 ? 1 : -1); vy = Math.sin(angle) * speed;
+    }
+
+    entities.flyingObjects.push({
+        x, y, vx, vy,
+        life: 200, totalLife: 200, type: type, trail: []
+    });
+}
+
+function updateFlyingObjects(alpha) {
+    ['shooting', 'meteor', 'comet'].forEach(type => {
+        if (settings[type].active && Math.random() < settings[type].frequency) {
+            addFlyingObject(type);
+        }
+    });
+
+    ctx.globalAlpha = alpha;
+    for (let i = entities.flyingObjects.length - 1; i >= 0; i--) {
+        const o = entities.flyingObjects[i];
+        const s = settings[o.type];
+        o.life--;
+        const speed = o.type === 'rocket' ? s.speed : o.vy;
+        o.x += o.vx * s.speed; o.y += o.vy * s.speed;
+        
+        o.trail.push({x:o.x, y:o.y});
+        if(o.trail.length > s.trailLength) o.trail.shift();
+
+        if (o.life <= 0 || o.x > 74 || o.y > 74 || o.x < -10 || o.y < -10) {
+            entities.flyingObjects.splice(i, 1); continue;
+        }
+
+        const baseColor = s.color.match(/\d+/g);
+        const trailColor = `rgba(${baseColor[0]},${baseColor[1]},${baseColor[2]},`;
+
+        o.trail.forEach((p, j) => {
+            const trailAlpha = (j / s.trailLength) * s.trailIntensity * (o.life / o.totalLife);
+            ctx.fillStyle = `${trailColor}${trailAlpha})`;
+            ctx.fillRect(p.x | 0, p.y | 0, 1, 1);
+        });
+        
+        ctx.fillStyle = s.color;
+        ctx.fillRect(o.x | 0, o.y | 0, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+}
+
+/* ---------- UI & MAIN LOOP ---------- */
+function updStatus() {
+    fc++;
+    const now = performance.now();
+    if (now - lt >= 1000) {
+        $('fps').textContent = `FPS:${fc}`; fc = 0; lt = now;
+        const active = Object.keys(settings).filter(k => settings[k].active);
+        $('layers').textContent = `Layers:${active.join('+') || 'none'}`;
+    }
+}
+
+// Initial setup
+loadSettings();
+buildControls();
+initializeEntities();
+draw();
+</script>
+
+</body>
+</html>
