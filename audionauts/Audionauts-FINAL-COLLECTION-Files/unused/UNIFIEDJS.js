@@ -1,3 +1,5 @@
+// UNIFIED.js
+
 // === config.js ===
 const ANIMATION_CONFIG = { helmet:{mode:"fade"}, hud:{mode:"fade"} };
 const SEED = 0;

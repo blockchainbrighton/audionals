@@ -2,7 +2,7 @@
 // ─────────────────────────────────────────────
 // Shared math helpers
 // ─────────────────────────────────────────────
-import { clamp, random, randomInt, easeInOut } from './utils/math.js';
+import { clamp, random, randomInt, easeInOut } from './utils.js';
 
 // ─────────────────────────────────────────────
 // Utilities (Perlin noise + math re-exports)
