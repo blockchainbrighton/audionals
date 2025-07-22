@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pac-Mix – Musical Maze</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#111;color:#eee;font-family:sans-serif}
+  canvas{display:block;margin:auto;border:1px solid #333}
+  #ui{position:fixed;top:0;left:0;right:0;padding:4px 8px;background:#0008;display:flex;justify-content:space-between;font-size:14px}
+  #dlg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#222;padding:20px;border-radius:8px;text-align:center;z-index:9}
+  .hidden{display:none}
+  button{padding:6px 12px;margin:4px;border:none;border-radius:4px;background:#0c7;cursor:pointer}
+  button:hover{background:#0e9}
+  label{display:block;margin:4px 0}
+</style>
+<!-- libraries (optional but allowed) -->
+<script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+</head>
+<body>
+
+<div id="ui">
+  <span id="score">Score 0</span>
+  <span id="level">Level 1</span>
+  <span id="bpm">BPM 90</span>
+  <button onclick="pause()">⏸</button>
+</div>
+
+<div id="dlg" class="hidden">
+  <h2>Pac-Mix</h2>
+  <p id="dlgText">Arrow-keys / WASD / swipe to move.<br>Eat dots to play notes. Stay on beat!</p>
+  <button onclick="startGame()">Start</button>
+  <button onclick="showOptions()">Options</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+/*****************************************************************
+ * CONFIG
+ *****************************************************************/
+const CFG = {
+  cell: 24,              // pixel size
+  cols: 28,
+  rows: 31,
+  lives: 3,
+  baseBPM: 90,
+  colorBlindSafe: true,  // palette below
+  palette: ['#000','#fff','#0c7','#f0a','#fc0','#5bf','#f55','#5d5']
+};
+
+if (CFG.colorBlindSafe) CFG.palette = ['#000','#fff','#0077b6','#f94144','#f8961e','#90be6d','#f9c74f','#577590'];
+
+/*****************************************************************
+ * AUDIO ENGINE (Tone.js)
+ *****************************************************************/
+let synth, bass, kick, hihat, loop;
+function initAudio() {
+  Tone.start();
+  synth = new Tone.PolySynth(Tone.Synth).toDestination();
+  bass = new Tone.MembraneSynth().toDestination();
+  kick = new Tone.MembraneSynth({pitchDecay:0.05,octaves:10}).toDestination();
+  hihat = new Tone.NoiseSynth({volume:-18,noise:{type:'white'},envelope:{attack:0.005,decay:0.05,sustain:0}}).toDestination();
+  loop = new Tone.Sequence((_,step)=>{
+    // metronome click
+    if (step%4===0) kick.triggerAttackRelease('C1','8n');
+    else hihat.triggerAttackRelease('16n');
+  },[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],'16n');
+  Tone.Transport.bpm.value = CFG.baseBPM;
+}
+function setBPM(b){Tone.Transport.bpm.value=b;}
+function playNote(note='C4',dur='8n'){synth.triggerAttackRelease(note,dur);}
+function playBass(note='C2'){bass.triggerAttackRelease(note,'16n');}
+
+/*****************************************************************
+ * MAZE & DOTS
+ *****************************************************************/
+class Maze {
+  constructor(w=CFG.cols,h=CFG.rows){
+    this.w=w;this.h=h;
+    this.grid=Array(h).fill().map(()=>Array(w).fill(1)); // 1=wall
+    this.dots=[];
+    this.loadTemplate();
+    this.createDots();
+  }
+  loadTemplate(){
+    // classic Pac-Man layout (simplified) 0=empty,1=wall,2=tunnel
+    const str = `
+1111111111111111111111111111
+1000000000110000000000000001
+1011110111111110111110111101
+1011110111111110111110111101
+1000000000000000000000000001
+1011110110111111110110111101
+1000000110000110000110000001
+1111110111110110111110111111
+1111110110000000000110111111
+11111101101011111010110111111
+11111101101011111010110111111
+0000000000100000010000000000
+11111101101011111010110111111
+11111101101011111010110111111
+1111110110000000000110111111
+1111110110111111110110111111
+1000000000000000000000000001
+1011110111111110111110111101
+1000000110000000000110000001
+1111110110111111110110111111
+1000000000000110000000000001
+1011111111110110111111111101
+1000000000000000000000000001
+1111111111111111111111111111
+    `.trim().split('\n');
+    str.forEach((row,y)=>row.split('').forEach((c,x)=>{
+      this.grid[y][x]=c==='1'?1:0;
+      if(c==='0') this.dots.push({x,y});
+    }));
+  }
+  createDots(){
+    // assign musical scale notes to dots
+    const scale=['C4','D4','E4','F4','G4','A4','B4','C5'];
+    this.dots.forEach((d,i)=>d.note=scale[i%scale.length]);
+  }
+  at(x,y){return this.grid[y]?.[x]??1;}
+  remainingDots(){return this.dots.length;}
+  eat(x,y){
+    const idx=this.dots.findIndex(d=>d.x===x && d.y===y);
+    if(idx>-1){
+      const d=this.dots.splice(idx,1)[0];
+      playNote(d.note,'8n');
+      return true;
+    }
+    return false;
+  }
+}
+
+/*****************************************************************
+ * PLAYER
+ *****************************************************************/
+class Player {
+  constructor(maze){
+    this.maze=maze;
+    this.reset();
+  }
+  reset(){
+    this.x=13;this.y=23;
+    this.dir={x:0,y:0};
+    this.nextDir={x:0,y:0};
+    this.speed=0.1;
+  }
+  update(delta){
+    const {x,y}=this;
+    // try nextDir first
+    const nx=x+this.nextDir.x*this.speed*delta;
+    const ny=y+this.nextDir.y*this.speed*delta;
+    if(!this.maze.at(Math.round(nx),Math.round(ny))){
+      this.dir=this.nextDir;
+    }
+    const tx=x+this.dir.x*this.speed*delta;
+    const ty=y+this.dir.y*this.speed*delta;
+    if(!this.maze.at(Math.round(tx),Math.round(ty))){
+      this.x=tx;this.y=ty;
+    }
+    // tunnel
+    if(this.x<0) this.x=CFG.cols-1;
+    if(this.x>=CFG.cols) this.x=0;
+  }
+  setDir(dx,dy){
+    this.nextDir={x:dx,y:dy};
+  }
+}
+
+/*****************************************************************
+ * GHOST
+ *****************************************************************/
+class Ghost {
+  constructor(maze,color){
+    this.maze=maze;
+    this.x=14;this.y=11;
+    this.dir={x:0,y:-1};
+    this.speed=0.08;
+    this.color=color;
+  }
+  update(delta,player){
+    // simple chase AI (breadth-first not added for brevity)
+    const dx=Math.sign(player.x-this.x);
+    const dy=Math.sign(player.y-this.y);
+    const [nx,ny]=[this.x+dx,this.y+dy];
+    if(!this.maze.at(nx,ny)) this.dir={x:dx,y:dy};
+    this.x+=this.dir.x*this.speed*delta;
+    this.y+=this.dir.y*this.speed*delta;
+  }
+  hits(px,py){return Math.abs(px-this.x)<0.5 && Math.abs(py-this.y)<0.5;}
+}
+
+/*****************************************************************
+ * GAME STATE
+ *****************************************************************/
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+let maze,player,ghosts,level,bpm,lives,score,lastTime,paused,gameOver;
+
+function resize(){
+  const scale=Math.min(innerWidth/(CFG.cols*CFG.cell),innerHeight/(CFG.rows*CFG.cell));
+  canvas.width=CFG.cols*CFG.cell*scale;
+  canvas.height=CFG.rows*CFG.cell*scale;
+  ctx.scale(scale,scale);
+}
+window.addEventListener('resize',resize);resize();
+
+function initGame(){
+  if(!Tone.context) initAudio();
+  maze=new Maze();
+  player=new Player(maze);
+  ghosts=[new Ghost(maze,CFG.palette[2]),new Ghost(maze,CFG.palette[3])];
+  level=1;score=0;lives=CFG.lives;bpm=CFG.baseBPM;
+  Tone.Transport.stop();Tone.Transport.start();
+  loop.start(0);
+  setBPM(bpm);
+  gameOver=false;paused=false;
+  lastTime=performance.now();
+  tick();
+}
+function nextLevel(){
+  level++;score+=1000;
+  bpm=Math.min(180,CFG.baseBPM+level*10);
+  setBPM(bpm);
+  maze=new Maze();
+  player.reset();
+  ghosts.forEach(g=>{g.x=14;g.y=11;});
+}
+
+function tick(){
+  if(paused||gameOver)return;
+  const now=performance.now();
+  const delta=Math.min(30,now-lastTime);
+  lastTime=now;
+
+  player.update(delta);
+  ghosts.forEach(g=>g.update(delta,player));
+
+  // collision with dots
+  const px=Math.round(player.x),py=Math.round(player.y);
+  if(maze.eat(px,py)){score+=10;}
+
+  // collision with ghosts
+  ghosts.forEach(g=>{
+    if(g.hits(player.x,player.y)){
+      lives--;
+      if(lives<=0){gameOver=true;showGameOver();return;}
+      player.reset();
+    }
+  });
+
+  if(maze.remainingDots()===0){nextLevel();}
+
+  draw();
+  requestAnimationFrame(tick);
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // maze walls
+  ctx.fillStyle=CFG.palette[1];
+  for(let y=0;y<CFG.rows;y++){
+    for(let x=0;x<CFG.cols;x++){
+      if(maze.at(x,y)) ctx.fillRect(x*CFG.cell,y*CFG.cell,CFG.cell,CFG.cell);
+    }
+  }
+  // dots
+  ctx.fillStyle=CFG.palette[4];
+  maze.dots.forEach(d=>{
+    ctx.beginPath();
+    ctx.arc((d.x+.5)*CFG.cell,(d.y+.5)*CFG.cell,2,0,2*Math.PI);
+    ctx.fill();
+  });
+  // player
+  ctx.fillStyle=CFG.palette[5];
+  ctx.beginPath();
+  ctx.arc((player.x+.5)*CFG.cell,(player.y+.5)*CFG.cell,CFG.cell/2-2,0,2*Math.PI);
+  ctx.fill();
+  // ghosts
+  ghosts.forEach(g=>{
+    ctx.fillStyle=g.color;
+    ctx.beginPath();
+    ctx.arc((g.x+.5)*CFG.cell,(g.y+.5)*CFG.cell,CFG.cell/2-2,0,2*Math.PI);
+    ctx.fill();
+  });
+  // HUD
+  document.getElementById('score').textContent=`Score ${score}`;
+  document.getElementById('level').textContent=`Level ${level}`;
+  document.getElementById('bpm').textContent=`BPM ${bpm}`;
+}
+
+/*****************************************************************
+ * INPUT
+ *****************************************************************/
+window.addEventListener('keydown',e=>{
+  switch(e.code){
+    case 'ArrowUp':
+    case 'KeyW':player.setDir(0,-1);break;
+    case 'ArrowDown':
+    case 'KeyS':player.setDir(0,1);break;
+    case 'ArrowLeft':
+    case 'KeyA':player.setDir(-1,0);break;
+    case 'ArrowRight':
+    case 'KeyD':player.setDir(1,0);break;
+    case 'Escape':pause();break;
+  }
+});
+// touch swipe
+let touchStartX,touchStartY;
+canvas.addEventListener('touchstart',e=>{
+  const t=e.touches[0];
+  touchStartX=t.clientX;touchStartY=t.clientY;
+});
+canvas.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-touchStartX;
+  const dy=e.changedTouches[0].clientY-touchStartY;
+  if(Math.abs(dx)>Math.abs(dy)){
+    player.setDir(dx>0?1:-1,0);
+  }else{
+    player.setDir(0,dy>0?1:-1);
+  }
+});
+
+/*****************************************************************
+ * UI
+ *****************************************************************/
+function pause(){
+  paused=!paused;
+  if(paused){Tone.Transport.pause();document.querySelector('#dlg').classList.remove('hidden');}
+  else{Tone.Transport.start();document.querySelector('#dlg').classList.add('hidden');tick();}
+}
+function startGame(){
+  document.querySelector('#dlg').classList.add('hidden');
+  if(!gameOver)initGame();
+  else{gameOver=false;initGame();}
+}
+function showOptions(){
+  const dlg=document.querySelector('#dlgText');
+  dlg.innerHTML=`
+  <label>Master Volume <input type="range" min="0" max="1" step="0.05" value="0.5" oninput="Tone.Destination.volume.value=this.value-0.5"></label>
+  <label><input type="checkbox" onchange="Tone.Master.mute=this.checked"> Mute</label>
+  <button onclick="startGame()">Back</button>`;
+}
+function showGameOver(){
+  Tone.Transport.stop();
+  document.querySelector('#dlg').classList.remove('hidden');
+  const high=Math.max(localStorage.getItem('pacmix')||0,score);
+  localStorage.setItem('pacmix',high);
+  document.querySelector('#dlgText').innerHTML=`Game Over<br>Score: ${score}<br>Best: ${high}<br><button onclick="startGame()">Play Again</button>`;
+}
+
+/*****************************************************************
+ * ENTRY
+ *****************************************************************/
+window.onload=()=>{
+  document.querySelector('#dlg').classList.remove('hidden');
+  document.querySelector('#dlgText').innerHTML=`Arrow-keys / WASD / swipe to move.<br>Eat dots to trigger notes. Stay on beat!<br><button onclick="startGame()">Start</button><button onclick="showOptions()">Options</button>`;
+};
+</script>
+</body>
+</html>

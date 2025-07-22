@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Soundcraft</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;font-family:Arial,Helvetica,sans-serif;background:#000;color:#fff}
+#ui{position:absolute;top:0;left:0;width:100%;height:100%;z-index:10;pointer-events:none}
+#ui>*{pointer-events:auto}
+#title,#gameOver,#tutorial{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;background:#111;border:2px solid #fff;border-radius:8px;padding:20px 40px;max-width:90vw}
+#hud{position:absolute;top:10px;left:10px;font-size:14px}
+#hud span{margin-right:15px}
+#options{position:absolute;top:10px;right:10px;background:#111;border:1px solid #fff;border-radius:4px;padding:10px;display:none}
+#options label{display:block;margin-bottom:4px}
+button{background:#333;border:1px solid #fff;color:#fff;padding:8px 14px;border-radius:4px;cursor:pointer;margin:4px}
+canvas{display:block}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="ui">
+    <div id="title">
+        <h1>Soundcraft</h1>
+        <p>Build waveforms, craft effects, make music.</p>
+        <button id="startBtn">Start Game</button>
+        <button id="optionsBtn">Options</button>
+    </div>
+    <div id="hud" style="display:none">
+        <span>Score: <span id="score">0</span></span>
+        <span>Lives: <span id="lives">3</span></span>
+        <span>Level: <span id="level">1</span></span>
+        <button id="pauseBtn">⏸</button>
+    </div>
+    <div id="gameOver" style="display:none">
+        <h2>Game Over</h2>
+        <p>Score: <span id="finalScore">0</span></p>
+        <p>High Score: <span id="highScore">0</span></p>
+        <button id="restartBtn">Restart</button>
+    </div>
+    <div id="tutorial" style="display:none">
+        <p>Drag blocks (waveforms) to the grid.<br>
+        Combine adjacent blocks to create effects.<br>
+        Match the rhythm to power your structure!</p>
+        <button id="closeTutBtn">Got it</button>
+    </div>
+    <div id="options">
+        <label>Master Vol <input type="range" id="masterVol" min="0" max="1" step="0.01" value="0.6"></label>
+        <label>SFX Vol <input type="range" id="sfxVol" min="0" max="1" step="0.01" value="0.7"></label>
+        <label>Music Vol <input type="range" id="musicVol" min="0" max="1" step="0.01" value="0.5"></label>
+        <button id="closeOptionsBtn">Close</button>
+    </div>
+</div>
+<script>
+/* ========== UTILS ========== */
+const clamp = (v,min,max)=>Math.min(Math.max(v,min),max);
+const randomColor = ()=>new THREE.Color(Math.random()*0xffffff);
+/* ========== AUDIO ENGINE ========== */
+class AudioEngine {
+constructor(){
+this.master = new Tone.Volume(-12).toDestination();
+this.sfxVol = new Tone.Volume(-6).connect(this.master);
+this.musicVol = new Tone.Volume(-12).connect(this.master);
+this.bpm = 120;
+Tone.Transport.bpm.value = this.bpm;
+this.metalSynth = new Tone.MetalSynth({volume:-18}).connect(this.sfxVol);
+this.oscPool = [];
+for(let i=0;i<10;i++){
+const o = new Tone.Oscillator().connect(this.sfxVol);
+o.volume.value = -20;
+this.oscPool.push(o);
+}
+}
+playNote(freq,dur=0.25,wave='sine'){
+const osc = this.oscPool.pop() || new Tone.Oscillator().connect(this.sfxVol);
+osc.type = wave;
+osc.frequency.value = freq;
+osc.start();
+osc.stop(+${dur});
+this.oscPool.unshift(osc);
+}
+kick(time){
+this.metalSynth.triggerAttackRelease('C2','8n',time,0.2);
+}
+setBPM(b){ Tone.Transport.bpm.value = b; }
+start(){ Tone.Transport.start(); }
+pause(){ Tone.Transport.pause(); }
+}
+/* ========== GAME CLASSES ========== */
+class Block {
+constructor(type,x,y){
+this.type = type; // 0=sine,1=saw,2=square
+this.x = x;
+this.y = y;
+this.color = ['#4caf50','#ff9800','#2196f3'][type];
+this.active = true;
+}
+getFreq(){
+return [261.63,293.66,329.63][this.type];
+}
+}
+class Grid {
+constructor(w,h,size){
+this.w = w;
+this.h = h;
+this.size = size;
+this.blocks = Array(h).fill().map(()=>Array(w).fill(null));
+}
+addBlock(block){
+if(this.canPlace(block.x,block.y)){
+this.blocks[block.y][block.x] = block;
+return true;
+}
+return false;
+}
+canPlace(x,y){
+return x>=0&&x<this.w&&y>=0&&y<this.h&&!this.blocks[y][x];
+}
+remove(x,y){
+const b = this.blocks[y][x];
+this.blocks[y][x] = null;
+return b;
+}
+getNeighbors(x,y){
+const n=[];
+[[0,1],[1,0],[0,-1],[-1,0]].forEach(([dx,dy])=>{
+const nx=x+dx,ny=y+dy;
+if(nx>=0&&nx<this.w&&ny>=0&&ny<this.h&&this.blocks[ny][nx]) n.push(this.blocks[ny][nx]);
+});
+return n;
+}
+forEach(cb){
+this.blocks.forEach((row,y)=>row.forEach((b,x)=>b&&cb(b,x,y)));
+}
+}
+class Game {
+constructor(){
+this.canvas = document.getElementById('canvas');
+this.renderer = new THREE.WebGLRenderer({canvas:this.canvas,antialias:true});
+this.renderer.setSize(window.innerWidth,window.innerHeight);
+this.scene = new THREE.Scene();
+this.camera = new THREE.OrthographicCamera(-10,10,5,-5,0.1,100);
+this.camera.position.z=10;
+this.grid = new Grid(8,6,1);
+this.audio = new AudioEngine();
+this.score = 0;
+this.lives = 3;
+this.level = 1;
+this.paused = false;
+this.nextBlock = new Block(Math.floor(Math.random()3),0,0);
+this.nextBlockMesh = this.createMesh(this.nextBlock);
+this.nextBlockMesh.position.set(9,0,0);
+this.scene.add(this.nextBlockMesh);
+this.meshes = [];
+this.dropTimer = 0;
+this.dropInterval = 2; // seconds
+this.rhythmTimer = 0;
+this.rhythmInterval = 60/this.audio.bpm;
+this.initEvents();
+this.initUI();
+this.animate();
+}
+createMesh(block){
+const g = new THREE.BoxGeometry(0.9,0.9,0.1);
+const m = new THREE.MeshBasicMaterial({color:block.color});
+const mesh = new THREE.Mesh(g,m);
+return mesh;
+}
+initEvents(){
+window.addEventListener('resize',()=>{
+const {innerWidth:w,innerHeight:h}=window;
+this.renderer.setSize(w,h);
+const aspect = w/h;
+const h2 = 5;
+const w2 = h2aspect;
+this.camera.left=-w2;
+this.camera.right=w2;
+this.camera.top=h2;
+this.camera.bottom=-h2;
+this.camera.updateProjectionMatrix();
+});
+this.canvas.addEventListener('pointerdown',e=>{
+if(this.paused) return;
+const rect = this.canvas.getBoundingClientRect();
+const x = ((e.clientX-rect.left)/rect.width)2-1;
+const y = -((e.clientY-rect.top)/rect.height)2+1;
+this.handlePointer(x,y);
+});
+document.addEventListener('keydown',e=>{
+if(e.code==='KeyP') this.togglePause();
+});
+}
+handlePointer(x,y){
+// map to grid
+const gx = Math.floor((x+10)/20this.grid.w);
+const gy = Math.floor((y+5)/10this.grid.h);
+if(this.grid.canPlace(gx,gy)){
+const b = this.nextBlock;
+b.x=gx;b.y=gy;
+this.grid.addBlock(b);
+const mesh = this.createMesh(b);
+mesh.position.set(gx-this.grid.w/2+0.5,gy-this.grid.h/2+0.5,0);
+this.scene.add(mesh);
+this.meshes.push(mesh);
+this.nextBlock = new Block(Math.floor(Math.random()3),0,0);
+this.nextBlockMesh.material.color.set(this.nextBlock.color);
+this.checkConnections(b);
+this.score += 10;
+this.updateHUD();
+}
+}
+checkConnections(block){
+const n = this.grid.getNeighbors(block.x,block.y);
+if(n.length>=2){
+n.forEach(nb=>{
+this.audio.playNote(nb.getFreq(),0.3,['sine','sawtooth','square'][nb.type]);
+});
+this.score += n.length10;
+// simple effect: remove
+n.forEach(nb=>{
+this.grid.remove(nb.x,nb.y);
+const m = this.meshes.find(m=>m.position.x===nb.x-this.grid.w/2+0.5&&m.position.y===nb.y-this.grid.h/2+0.5);
+if(m){ this.scene.remove(m); this.meshes.splice(this.meshes.indexOf(m),1); }
+});
+}
+}
+initUI(){
+document.getElementById('startBtn').onclick = ()=>this.start();
+document.getElementById('restartBtn').onclick = ()=>this.restart();
+document.getElementById('pauseBtn').onclick = ()=>this.togglePause();
+document.getElementById('optionsBtn').onclick = ()=>document.getElementById('options').style.display='block';
+document.getElementById('closeOptionsBtn').onclick = ()=>document.getElementById('options').style.display='none';
+document.getElementById('closeTutBtn').onclick = ()=>document.getElementById('tutorial').style.display='none';
+const sliders = ['masterVol','sfxVol','musicVol'];
+sliders.forEach(id=>{
+const el = document.getElementById(id);
+el.oninput = ()=>{
+const v = parseFloat(el.value);
+if(id==='masterVol') this.audio.master.volume.value = Tone.gainToDb(v);
+if(id==='sfxVol') this.audio.sfxVol.volume.value = Tone.gainToDb(v);
+if(id==='musicVol') this.audio.musicVol.volume.value = Tone.gainToDb(v);
+};
+});
+}
+start(){
+document.getElementById('title').style.display='none';
+document.getElementById('hud').style.display='block';
+if(!localStorage.getItem('tutDone')){
+document.getElementById('tutorial').style.display='block';
+localStorage.setItem('tutDone','1');
+}
+this.audio.start();
+}
+restart(){
+this.scene.clear();
+this.meshes = [];
+this.grid.blocks = Array(this.grid.h).fill().map(()=>Array(this.grid.w).fill(null));
+this.score = 0;
+this.lives = 3;
+this.level = 1;
+this.paused = false;
+this.nextBlock = new Block(Math.floor(Math.random()*3),0,0);
+this.nextBlockMesh = this.createMesh(this.nextBlock);
+this.nextBlockMesh.position.set(9,0,0);
+this.scene.add(this.nextBlockMesh);
+document.getElementById('gameOver').style.display='none';
+document.getElementById('hud').style.display='block';
+this.updateHUD();
+this.audio.start();
+}
+togglePause(){
+this.paused = !this.paused;
+if(this.paused){
+this.audio.pause();
+document.getElementById('pauseBtn').textContent='▶';
+} else {
+this.audio.start();
+document.getElementById('pauseBtn').textContent='⏸';
+}
+}
+updateHUD(){
+document.getElementById('score').textContent=this.score;
+document.getElementById('lives').textContent=this.lives;
+document.getElementById('level').textContent=this.level;
+}
+gameOver(){
+this.paused=true;
+this.audio.pause();
+const hs = localStorage.getItem('soundcraftHS')||0;
+if(this.score>hs) localStorage.setItem('soundcraftHS',this.score);
+document.getElementById('finalScore').textContent=this.score;
+document.getElementById('highScore').textContent=localStorage.getItem('soundcraftHS')||0;
+document.getElementById('gameOver').style.display='block';
+}
+animate(){
+requestAnimationFrame(()=>this.animate());
+if(!this.paused){
+const dt = 1/60;
+this.dropTimer += dt;
+this.rhythmTimer += dt;
+if(this.rhythmTimer>=this.rhythmInterval){
+this.rhythmTimer=0;
+this.audio.kick();
+this.renderer.domElement.style.filter='brightness(1.2)';
+setTimeout(()=>this.renderer.domElement.style.filter='',50);
+}
+if(this.dropTimer>=this.dropInterval){
+this.dropTimer=0;
+this.lives--;
+if(this.lives<=0) this.gameOver();
+this.updateHUD();
+}
+}
+this.renderer.render(this.scene,this.camera);
+}
+}
+/* ========== INIT ========== */
+function initGame(){
+new Game();
+}
+window.onload = initGame;
+</body>
+</html>

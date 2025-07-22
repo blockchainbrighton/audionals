@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chord Invaders</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#111;color:#eee;font-family:sans-serif;overflow:hidden}
+  #gameCanvas{background:#000;display:block;margin:0 auto}
+  #ui{position:fixed;top:0;left:0;right:0;padding:6px 10px;display:flex;justify-content:space-between;font-size:14px}
+  .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#000c;z-index:9}
+  .screen h1{margin:.2em 0;font-size:2.5em}
+  button{background:#444;border:1px solid #666;color:#eee;padding:.6em 1.2em;font-size:1em;border-radius:4px;cursor:pointer;margin:.4em}
+  button:hover{background:#555}
+  #optionsPanel{background:#222;padding:1em;border-radius:6px;display:none}
+  label{display:block;margin:.4em 0}
+  input[type=range]{width:140px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="ui">
+  <span id="score">Score: 0</span>
+  <span id="level">Level: 1</span>
+  <span id="lives">Lives: 3</span>
+  <button onclick="togglePause()">Pause</button>
+</div>
+
+<!-- Title Screen -->
+<div id="titleScreen" class="screen">
+  <h1>Chord Invaders</h1>
+  <p>Shoot aliens to mute their notes, clear a full row to strum the chord.</p>
+  <button onclick="startGame()">Start</button>
+  <button onclick="showOptions()">Options</button>
+  <div id="optionsPanel">
+    <label>Master Volume<input type="range" id="masterVol" min="0" max="1" step="0.05" value="0.5"></label>
+    <label>SFX Volume<input type="range" id="sfxVol"   min="0" max="1" step="0.05" value="0.8"></label>
+    <label><input type="checkbox" id="colorblind"> Color-blind mode</label>
+    <button onclick="hideOptions()">Close</button>
+  </div>
+</div>
+
+<!-- Game Over Screen -->
+<div id="gameOverScreen" class="screen" style="display:none">
+  <h1>Game Over</h1>
+  <p id="finalScore">Score: 0</p>
+  <button onclick="startGame()">Restart</button>
+</div>
+
+<script>
+/* ---------- CONFIG ---------- */
+const COLS = 8, ROWS = 5, ALIEN_W = 40, ALIEN_H = 30, GUTTER = 8;
+const PLAYER_W = 50, PLAYER_H = 20;
+const BULLET_SPEED = 7;
+const CHORDS = [
+  ['C4','E4','G4'], ['D4','F4','A4'], ['E4','G#4','B4'], ['F4','A4','C5'],
+  ['G4','B4','D5'], ['A4','C5','E5'], ['B4','D5','F#5']
+];
+let level, score, lives, paused, gameRunning;
+let aliens, bullets, stars, player;
+let lastShotTime, highScores, synths, muteMap, colorBlind;
+
+/* ---------- AUDIO ---------- */
+Tone.Transport.bpm.value = 120;
+const masterVol = new Tone.Volume(-6).toDestination();
+const sfxVolNode = new Tone.Volume(-2).connect(masterVol); // Separate volume for SFX
+
+function initAudio(){
+  synths = [];
+  for (let i=0;i<COLS;i++){
+    synths.push(new Tone.PolySynth(Tone.Synth,{
+      oscillator:{type:'triangle'},
+      envelope:{attack:0.02,decay:0.2,sustain:0.3,release:0.5}
+    }).connect(masterVol));
+  }
+}
+function playNote(col,note,dur='8n'){
+  if (!muteMap[col]) synths[col].triggerAttackRelease(note,dur);
+}
+function strumChord(row){
+  const chord = CHORDS[(level-1)%CHORDS.length];
+  const t = Tone.now();
+  chord.forEach((n,i)=>{ if(!muteMap[i]) synths[i].triggerAttackRelease(n,'4n',t+i*0.1);});
+}
+function playShoot(){
+  new Tone.Oscillator('C6','square').connect(sfxVolNode).start().stop('+0.1');
+}
+function playHit(){
+  new Tone.Noise('white').connect(sfxVolNode).start().stop('+0.1');
+}
+
+/* ---------- P5 ---------- */
+let canvas;
+function setup(){
+  canvas = createCanvas(windowWidth,windowHeight);
+  canvas.parent('gameCanvas');
+  rectMode(CENTER); textAlign(CENTER,CENTER);
+  stars = Array(100).fill().map(()=>({x:random(width),y:random(height),size:random(1,3)}));
+  noLoop();
+  /* bind DOM once p5 is ready */
+  select('#masterVol').input(e=>masterVol.volume.value = Tone.gainToDb(e.target.value));
+  select('#sfxVol').input(e=>sfxVolNode.volume.value = Tone.gainToDb(e.target.value));
+  select('#colorblind').changed(e=>colorBlind=e.target.checked);
+}
+function windowResized(){resizeCanvas(windowWidth,windowHeight);}
+
+/* ---------- GAME LOGIC ---------- */
+function resetRound(){
+  aliens = []; bullets = []; muteMap = Array(COLS).fill(false);
+  const chord = CHORDS[(level-1)%CHORDS.length];
+  const startX = -((COLS-1) * (ALIEN_W + GUTTER)) / 2;
+  const startY = -((ROWS-1) * (ALIEN_H + GUTTER)) / 2 - height/4;
+  for (let r=0;r<ROWS;r++){
+    for (let c=0;c<COLS;c++){
+      aliens.push({
+        x:startX + c*(ALIEN_W+GUTTER),
+        y:startY + r*(ALIEN_H+GUTTER),
+        w:ALIEN_W,h:ALIEN_H,col:c,row:r,note:chord[c%chord.length],alive:true
+      });
+    }
+  }
+  player = {x:0,y:height/2-80,w:PLAYER_W,h:PLAYER_H};
+}
+function startGame(){
+  Tone.start();
+  if(!synths) initAudio(); // Initialize audio only once
+  level = 1; score = 0; lives = 3; gameRunning = true; paused = false; lastShotTime = 0;
+  Tone.Transport.bpm.value = 120;
+  select('#titleScreen').hide();
+  select('#gameOverScreen').hide();
+  resetRound();
+  loop();
+}
+function gameOver(){
+  gameRunning = false; noLoop();
+  highScores = JSON.parse(localStorage.getItem('chordInvadersHS')||'[]');
+  highScores.push(score); highScores.sort((a,b)=>b-a); highScores = highScores.slice(0,5);
+  localStorage.setItem('chordInvadersHS',JSON.stringify(highScores));
+  select('#finalScore').html('Score: '+score);
+  select('#gameOverScreen').show();
+}
+function togglePause(){
+  if(!gameRunning) return;
+  paused = !paused;
+  paused ? noLoop() : loop();
+}
+function showOptions(){select('#optionsPanel').show();}
+function hideOptions(){select('#optionsPanel').hide();}
+
+/* ---------- UPDATE / DRAW ---------- */
+let alienDir = 1, moveTimer = 0;
+function draw(){
+  if (!gameRunning || paused) return;
+  background(0);
+  /* stars */
+  fill(255); noStroke();
+  stars.forEach(s=>{
+    s.y += s.size * 0.1;
+    if(s.y > height) s.y=0;
+    ellipse(s.x,s.y,s.size)
+  });
+  translate(width/2,height/2);
+
+  /* move aliens to beat */
+  moveTimer += deltaTime/1000;
+  const beat = 60/Tone.Transport.bpm.value;
+  if (moveTimer >= beat){
+    moveTimer = 0;
+    let edge = false;
+    aliens.forEach(a=>{
+      if(!a.alive) return;
+      a.x += 10*alienDir;
+      if(abs(a.x) > width/2 - 40) edge=true;
+    });
+    if(edge){alienDir*=-1; aliens.forEach(a=>a.y+=20);}
+  }
+
+  /* bullets */
+  bullets.forEach(b => {
+      b.y += b.friendly ? -BULLET_SPEED : BULLET_SPEED;
+  });
+
+  /* collisions */
+  bullets.forEach(b => {
+    if (b.friendly) {
+      aliens.forEach(a => {
+        if (a.alive && !b.hit && abs(b.x - a.x) < a.w / 2 && abs(b.y - a.y) < a.h / 2) {
+          a.alive = false;
+          b.hit = true;
+          muteMap[a.col] = true;
+          score += 10;
+          playHit();
+          const remainingInRow = aliens.filter(al => al.row === a.row && al.alive);
+          if (remainingInRow.length === 0) {
+            strumChord(a.row);
+            score += 100;
+            if (aliens.every(al => !al.alive)) {
+              level++;
+              Tone.Transport.bpm.value += 10;
+              resetRound();
+            }
+          }
+        }
+      });
+    } else {
+      if (!b.hit && abs(b.x - player.x) < player.w / 2 && abs(b.y - player.y) < player.h / 2) {
+        b.hit = true;
+        lives--;
+        playHit();
+        if (lives <= 0) gameOver();
+      }
+    }
+  });
+  bullets = bullets.filter(b => !b.hit && b.y > -height/2 && b.y < height/2);
+
+  /* spawn alien bullet */
+  const shooters = aliens.filter(a => a.alive);
+  if (shooters.length > 0 && random() < 0.005 * level) {
+      const shooter = random(shooters);
+      bullets.push({ x: shooter.x, y: shooter.y, friendly: false });
+  }
+
+  /* draw */
+  aliens.forEach(a=>{
+    if(!a.alive) return;
+    fill(colorBlind?'#fff':`hsl(${a.col*45},70%,50%)`);
+    rect(a.x,a.y,a.w,a.h,4);
+    fill(0); textSize(10); text(a.note.replace(/\d/,''),a.x,a.y);
+  });
+  fill(0,200,255); rect(player.x,player.y,player.w,player.h,4);
+  bullets.forEach(b=>{fill(b.friendly?'#0ff':'#f00'); ellipse(b.x,b.y,6);});
+  
+  /* clamp player position */
+  player.x = constrain(player.x, -width/2 + player.w/2, width/2 - player.w/2);
+
+  /* HUD */
+  select('#score').html('Score: '+score);
+  select('#level').html('Level: '+level);
+  select('#lives').html('Lives: '+lives);
+}
+
+/* ---------- INPUT ---------- */
+function keyPressed(){
+  if(!gameRunning || paused) return;
+  if(keyCode===LEFT_ARROW) player.x-=25;
+  if(keyCode===RIGHT_ARROW) player.x+=25;
+  if(key===' ' && millis()-lastShotTime>200){
+    bullets.push({x:player.x,y:player.y-player.h/2,friendly:true});
+    lastShotTime=millis(); playShoot();
+  }
+}
+function mouseMoved() {
+    if (!gameRunning || paused) return;
+    player.x = mouseX - width / 2;
+}
+function mousePressed(){
+  if(!gameRunning || paused) return;
+  if (millis()-lastShotTime > 200) {
+    bullets.push({x:player.x,y:player.y-player.h/2,friendly:true});
+    lastShotTime=millis(); playShoot();
+  }
+}
+function touchMoved(){
+  if(!gameRunning || paused) return;
+  player.x = touches[0].x - width/2;
+  return false;
+}
+function touchStarted(){
+  if(!gameRunning || paused) return;
+  if (millis()-lastShotTime > 200) {
+    bullets.push({x:player.x,y:player.y-player.h/2,friendly:true});
+    lastShotTime=millis(); playShoot();
+  }
+  return false;
+}
+</script>
+</body>
+</html>

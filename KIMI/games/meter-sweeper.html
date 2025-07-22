@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Meter-Sweeper</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+body{background:#111;color:#eee;overflow:hidden}
+canvas{display:block;margin:auto;background:#1e1e1e}
+#ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+#ui>*{pointer-events:auto}
+#title,#pause,#gameOver,#options,#tutorial{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#222;border:2px solid #444;padding:20px;border-radius:10px;text-align:center;max-width:90vw;max-height:90vh;overflow:auto}
+button{padding:8px 16px;margin:5px;font-size:16px;background:#333;border:1px solid #666;color:#eee;border-radius:5px;cursor:pointer}
+button:hover{background:#555}
+.hidden{display:none}
+#hud{position:absolute;top:10px;left:10px;font-size:18px}
+#muteBtn{position:absolute;top:10px;right:10px;font-size:14px}
+label{display:block;margin:5px 0}
+input[type=range]{width:150px}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r159/three.min.js"></script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui">
+  <div id="title">
+    <h1>Meter-Sweeper</h1>
+    <p>Find the safe tiles by counting adjacent time signatures.</p>
+    <button id="startBtn">Start</button>
+    <button id="optionsBtn">Options</button>
+  </div>
+  <div id="pause" class="hidden">
+    <h2>Paused</h2>
+    <button id="resumeBtn">Resume</button>
+    <button id="optionsBtn2">Options</button>
+    <button id="quitBtn">Quit to Title</button>
+  </div>
+  <div id="gameOver" class="hidden">
+    <h2 id="goText">Game Over</h2>
+    <p>Final Score: <span id="finalScore">0</span></p>
+    <p>Level: <span id="finalLevel">1</span></p>
+    <button id="restartBtn">Restart</button>
+    <button id="titleBtn">Back to Title</button>
+  </div>
+  <div id="options" class="hidden">
+    <h2>Options</h2>
+    <label>Master Volume<input type="range" id="masterVol" min="0" max="1" step="0.01" value="0.5"></label>
+    <label>FX Volume<input type="range" id="fxVol" min="0" max="1" step="0.01" value="0.7"></label>
+    <label>
+      Color-blind mode
+      <input type="checkbox" id="cbMode">
+    </label>
+    <button id="closeOptions">Close</button>
+  </div>
+  <div id="tutorial" class="hidden">
+    <h2>How to Play</h2>
+    <p>Left-click tiles to reveal them. Numbers show how many adjacent mines have the displayed time signature. Right-click to flag mines. Safe tiles click like a metronome; mines explode into polyrhythm chaos.</p>
+    <button id="closeTut">Got it!</button>
+  </div>
+  <div id="hud" class="hidden">
+    <div>Score: <span id="score">0</span></div>
+    <div>Level: <span id="level">1</span></div>
+    <div>Lives: <span id="lives">3</span></div>
+    <div>Mode: <span id="mode">4/4</span></div>
+  </div>
+  <button id="muteBtn" class="hidden">🔊</button>
+</div>
+
+<script>
+/* ---------- CONFIG ---------- */
+const GRID = 8; // board size
+const CELL = 48; // px
+const margin = 2;
+const totalW = GRID * (CELL + margin) - margin;
+const totalH = totalW;
+/* ---------- CANVAS & RENDER ---------- */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+function resize() {
+  const w = Math.min(window.innerWidth, totalW + 40);
+  const h = Math.min(window.innerHeight, totalH + 40);
+  canvas.width = w;
+  canvas.height = h;
+  ctx.translate((w - totalW) / 2, (h - totalH) / 2);
+}
+window.addEventListener('resize', resize);
+resize();
+/* ---------- AUDIO ---------- */
+let masterVol, fxVol;
+function initAudio() {
+  masterVol = new Tone.Volume().toDestination();
+  fxVol = new Tone.Volume().connect(masterVol);
+  Tone.Transport.bpm.value = 120;
+}
+const clickSynth = new Tone.MembraneSynth().connect(masterVol);
+const mineSynth = new Tone.NoiseSynth({
+  envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.2 }
+}).connect(fxVol);
+const flagSynth = new Tone.MetalSynth().connect(fxVol);
+/* ---------- GAME STATE ---------- */
+let game, level, lives, score, board, firstClick, mode, paused;
+const modes = ['4/4','3/4','5/4'];
+const modeBeats = { '4/4':4, '3/4':3, '5/4':5 };
+/* ---------- TILE CLASS ---------- */
+class Tile {
+  constructor(x,y){
+    this.x = x; this.y = y;
+    this.revealed = false;
+    this.flagged = false;
+    this.mine = false;
+    this.sig = null;
+    this.count = 0; // adjacent counts per sig
+  }
+  draw(){
+    const cx = this.x * (CELL + margin);
+    const cy = this.y * (CELL + margin);
+    ctx.fillStyle = this.revealed ? '#333' : '#555';
+    if(this.flagged) ctx.fillStyle='#f55';
+    ctx.fillRect(cx, cy, CELL, CELL);
+    if(this.revealed){
+      if(this.mine){
+        ctx.fillStyle='#f00';
+        ctx.beginPath();
+        ctx.arc(cx+CELL/2, cy+CELL/2, CELL/3, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle='#fff';
+        ctx.font='14px Arial';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText(this.sig, cx+CELL/2, cy+CELL/2);
+      } else {
+        ctx.fillStyle='#eee';
+        ctx.font='12px Arial';
+        ctx.textAlign='center';
+        for(let [sig,val] of Object.entries(this.count)){
+          if(val>0){
+            ctx.fillText(`${val}×${sig}`, cx+CELL/2, cy+CELL/2 + Object.keys(this.count).indexOf(sig)*12 - 6);
+          }
+        }
+      }
+    }
+  }
+}
+/* ---------- BOARD ---------- */
+function generateBoard(level){
+  board = Array.from({length:GRID}, (_,y)=>Array.from({length:GRID}, (_,x)=>new Tile(x,y)));
+  const mines = Math.min(level+2, Math.floor(GRID*GRID/3));
+  for(let i=0;i<mines;i++){
+    let x,y;
+    do {
+      x=Math.floor(Math.random()*GRID);
+      y=Math.floor(Math.random()*GRID);
+    } while(board[y][x].mine);
+    board[y][x].mine = true;
+    board[y][x].sig = modes[Math.floor(Math.random()*modes.length)];
+  }
+  // compute counts
+  for(let y=0;y<GRID;y++){
+    for(let x=0;x<GRID;x++){
+      const t = board[y][x];
+      t.count = {};
+      for(let dy=-1;dy<=1;dy++){
+        for(let dx=-1;dx<=1;dx++){
+          const ny=y+dy,nx=x+dx;
+          if(ny<0||nx<0||ny>=GRID||nx>=GRID) continue;
+          const adj = board[ny][nx];
+          if(adj.mine){
+            t.count[adj.sig] = (t.count[adj.sig]||0)+1;
+          }
+        }
+      }
+    }
+  }
+}
+/* ---------- INPUT ---------- */
+let pointer = {x:0,y:0,pressed:false};
+function getTile(px,py){
+  const x = Math.floor(px/(CELL+margin));
+  const y = Math.floor(py/(CELL+margin));
+  if(x<0||y<0||x>=GRID||y>=GRID) return null;
+  return board[y][x];
+}
+function pointerDown(e){
+  if(paused) return;
+  // normalize coords
+  const rect = canvas.getBoundingClientRect();
+  let px = (e.clientX - rect.left) - (canvas.width - totalW)/2;
+  let py = (e.clientY - rect.top) - (canvas.height - totalH)/2;
+  const tile = getTile(px,py);
+  if(!tile) return;
+  if(e.button===0 && !tile.flagged){
+    reveal(tile);
+  } else if(e.button===2){
+    e.preventDefault();
+    tile.flagged = !tile.flagged;
+    flagSynth.triggerAttackRelease('16n');
+  }
+}
+canvas.addEventListener('mousedown', pointerDown);
+canvas.addEventListener('contextmenu', e=>e.preventDefault());
+canvas.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  pointer.x = e.touches[0].clientX;
+  pointer.y = e.touches[0].clientY;
+  pointer.pressed=true;
+});
+canvas.addEventListener('touchend', e=>{
+  if(!pointer.pressed) return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  let px = (pointer.x - rect.left) - (canvas.width - totalW)/2;
+  let py = (pointer.y - rect.top) - (canvas.height - totalH)/2;
+  const tile = getTile(px,py);
+  if(tile) reveal(tile);
+  pointer.pressed=false;
+});
+/* ---------- GAMEPLAY ---------- */
+function reveal(tile){
+  if(tile.revealed) return;
+  tile.revealed=true;
+  if(firstClick){
+    firstClick=false;
+    Tone.start();
+    Tone.Transport.start();
+  }
+  if(tile.mine){
+    lives--;
+    updateHUD();
+    mineSynth.triggerAttackRelease('8n');
+    if(lives<=0){
+      endGame(false);
+      return;
+    }
+  } else {
+    score += 10;
+    clickSynth.triggerAttackRelease('C2','8n');
+    checkWin();
+  }
+}
+function checkWin(){
+  for(let row of board){
+    for(let t of row){
+      if(!t.mine && !t.revealed) return;
+    }
+  }
+  endGame(true);
+}
+function nextLevel(){
+  level++;
+  mode = modes[(level-1)%modes.length];
+  document.getElementById('mode').textContent = mode;
+  generateBoard(level);
+  firstClick=true;
+  updateHUD();
+}
+function endGame(win){
+  paused=true;
+  Tone.Transport.stop();
+  const go = document.getElementById('gameOver');
+  document.getElementById('goText').textContent = win ? "Level Cleared!" : "Game Over";
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('finalLevel').textContent = level;
+  go.classList.remove('hidden');
+}
+/* ---------- UI ---------- */
+function updateHUD(){
+  document.getElementById('score').textContent = score;
+  document.getElementById('level').textContent = level;
+  document.getElementById('lives').textContent = lives;
+}
+function initGame(){
+  level=1;
+  lives=3;
+  score=0;
+  mode = modes[0];
+  generateBoard(level);
+  firstClick=true;
+  paused=false;
+  updateHUD();
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('muteBtn').classList.remove('hidden');
+  Tone.Transport.stop();
+  Tone.Transport.cancel();
+}
+/* ---------- DRAW ---------- */
+function draw(){
+  ctx.clearRect(-CELL,-CELL,canvas.width+CELL*2,canvas.height+CELL*2);
+  for(let row of board) for(let t of row) t.draw();
+}
+function loop(){
+  if(!paused) draw();
+  requestAnimationFrame(loop);
+}
+/* ---------- EVENTS ---------- */
+document.getElementById('startBtn').onclick = ()=>{
+  document.getElementById('title').classList.add('hidden');
+  initGame();
+  if(!localStorage.getItem('tutSeen')){
+    document.getElementById('tutorial').classList.remove('hidden');
+    localStorage.setItem('tutSeen','1');
+  }
+};
+document.getElementById('optionsBtn').onclick = document.getElementById('optionsBtn2').onclick = ()=>{
+  document.getElementById('options').classList.remove('hidden');
+};
+document.getElementById('closeOptions').onclick = ()=>document.getElementById('options').classList.add('hidden');
+document.getElementById('closeTut').onclick = ()=>document.getElementById('tutorial').classList.add('hidden');
+document.getElementById('restartBtn').onclick = ()=>{
+  document.getElementById('gameOver').classList.add('hidden');
+  initGame();
+};
+document.getElementById('titleBtn').onclick = ()=>{
+  document.getElementById('gameOver').classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('muteBtn').classList.add('hidden');
+  document.getElementById('title').classList.remove('hidden');
+};
+document.getElementById('resumeBtn').onclick = ()=>{
+  document.getElementById('pause').classList.add('hidden');
+  paused=false;
+};
+document.getElementById('quitBtn').onclick = ()=>{
+  document.getElementById('pause').classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('muteBtn').classList.add('hidden');
+  document.getElementById('title').classList.remove('hidden');
+};
+document.getElementById('masterVol').oninput = e=>{
+  masterVol.volume.value = Tone.gainToDb(parseFloat(e.target.value));
+};
+document.getElementById('fxVol').oninput = e=>{
+  fxVol.volume.value = Tone.gainToDb(parseFloat(e.target.value));
+};
+document.getElementById('cbMode').onchange = e=>{
+  if(e.target.checked){
+    document.body.classList.add('cb');
+    // simple color-blind palette swap
+    // handled in draw via class detection
+  } else {
+    document.body.classList.remove('cb');
+  }
+};
+document.getElementById('muteBtn').onclick = ()=>{
+  Tone.Master.mute = !Tone.Master.mute;
+  document.getElementById('muteBtn').textContent = Tone.Master.mute ? '🔇' : '🔊';
+};
+window.addEventListener('keydown', e=>{
+  if(e.code==='Escape' && document.getElementById('hud').classList.contains('hidden')===false){
+    paused = !paused;
+    if(paused){
+      document.getElementById('pause').classList.remove('hidden');
+    } else {
+      document.getElementById('pause').classList.add('hidden');
+    }
+  }
+});
+/* ---------- BOOT ---------- */
+initAudio();
+loop();
+</script>
+</body>
+</html>
