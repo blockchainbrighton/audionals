@@ -33,155 +33,60 @@ button.active {
   <button id="btn-meteor" onclick="toggle('meteor')">Meteors</button>
   <button id="btn-sunrise" onclick="startSunrise()">Sunrise</button>
   <button id="btn-sunset" onclick="startSunset()">Sunset</button>
-  <button id="btn-rocket" onclick="toggle('rocket')">Rocket Layer</button>
   <button onclick="launchRocket()">Launch Rocket</button>
-  <button id="btn-comet" onclick="toggle('comet')">Comet Layer</button>
   <button onclick="launchComet()">Launch Comet</button>
   <button onclick="resetAll()">Reset</button>
+  <button id="settingsBtn" onclick="toggleSettingsPanel()">Show Settings</button>
+
 </div>
 
 <div class="status"><span id="fps">FPS:0</span> | <span id="layers">Layers:Stars</span></div>
 
 <script>
-/* =========================================================
-   64×64 Retro Canvas – Fully Programmable UI
-   ========================================================= */
 const cvs = document.getElementById('gameCanvas');
 const ctx = cvs.getContext('2d');
 let frame = 0;
 
-/* ---------- layer toggles ---------- */
+
+
 const layer = {
   stars: true, moon: false, solar: false, clouds: false,
   shooting: false, land: false, aurora: false,
-  lightning: false, meteor: false, comet: false, rocket: false
+  lightning: false, meteor: false
 };
-function toggle(k) {
-    layer[k] = !layer[k];
-    updateButtonHighlights();
-}
+const flyingObjects = [], launchingRockets = [];
 
-/* ---------- generic flying-object system ---------- */
-const flyingObjects = [];
-
-/* ---------- HIGH-RES CONFIG OBJECTS ---------- */
 const config = {
-  /* Shooting stars ---------------------------------------------------- */
-  shooting: {
-    enabled: () => layer.shooting, life: 1200, spawnRate: 0.01, maxCount: 40,
-    speedMin: 0.5, speedMax: 2, angleMin: -Math.PI * 0.7, angleMax: -Math.PI * 0.3,
-    sizeStart: 1, sizeEnd: 1, colorMode: 'white', trailLen: 10, trailFadePow: 1, trail: true
-  },
-
-  /* Meteors ----------------------------------------------------------- */
-  meteor: {
-    enabled: () => layer.meteor, life: 1200, spawnRate: 0.005, maxCount: 20,
-    speedMin: 1.5, speedMax: 3.5, angleMin: Math.PI * 0.2, angleMax: Math.PI * 0.4,
-    sizeStart: 1.5, sizeEnd: 0.5, colorMode: 'fire', trailLen: 8, trailFadePow: 1.2, trail: true
-  },
-
-  /* Comets ------------------------------------------------------------ */
-  comet: {
-    enabled: () => layer.comet, life: 4000, spawnRate: 0.002, maxCount: 5,
-    speedMin: 0.05, speedMax: 0.2, edgeBias: [1, 1, 1, 1], angleSpread: 0.4,
-    sizeStart: 2.5, sizeEnd: 1, colorMode: 'white', trailLen: 30, trailFadePow: 0.8, trail: true
-  },
-    
-  /* Rockets ----------------------------------------------------------- */
-  rocket: {
-    enabled: () => layer.rocket, speed: 0.3, startX: 31, startY: 60,
-    trailLen: 80, trailFadePow: 1, colorMode: 'fire'
-  },
-
-  /* Aurora ------------------------------------------------------------ */
-  aurora: {
-    enabled: () => layer.aurora, yBase: 5, bandCount: 3, ySpread: 3,
-    amplitudeMin: 4, amplitudeMax: 7, speedMin: 0.01, speedMax: 0.04,
-    waveFreq: 0.2, alpha: 0.15, colorMode: 'green', lineWidth: 1
-  },
-
-  /* Lightning --------------------------------------------------------- */
-  lightning: {
-    enabled: () => layer.lightning, chance: 0.003, forks: 8, forkJitter: 20,
-    flashAlpha: 0.4, duration: 8, color: '#ffffff'
-  },
-
-  /* Day/Night Cycle --- RENAMED & MODIFIED --- */
-  dayNight: {
-    speed: 0.001,
-    dayTop: '#87ceeb', dayHorizon: '#87ceeb',
-    horizonPeakColor: '#ff6a00',
-    peakTime: 0.6,
-    nightTop: '#0f1414', nightHorizon: '#151415',
-    sunColorStart: '#ffff32', sunColorEnd: '#ffc832'
-  },
-
-  /* Moon -------------------------------------------------------------- */
-  moon: {
-    enabled: () => layer.moon, speed: 0.0001, yAmplitude: 60,
-    radiusMin: 1, radiusMax: 5, color1: '#f0e68c', color2: '#dddddd',
-    daytimeAlpha: 0.15
-  },
-
-  /* Solar system ------------------------------------------------------ */
-  solar: {
-    enabled: () => layer.solar, speed: 0.0002, sunRadius: 4,
-    orbitalLineWidth: 1, orbitalLineOpacity: 0.1,
-    planets: [
-      { r: 1, d: 8, s: 0.02, c: '#4ae', a: 0 },
-      { r: 1.5, d: 12, s: 0.015, c: '#e74', a: 0 },
-      { r: 1, d: 16, s: 0.01, c: '#fc0', a: 0 }
-    ]
-  },
-
-  /* Clouds ------------------------------------------------------------ */
-  clouds: {
-    enabled: () => layer.clouds, count: 4, yMin: 8, yMax: 28,
-    widthMin: 12, widthMax: 28, speedMin: 0.03, speedMax: 0.06,
-    color: 'rgba(255,255,255,0.3)', waveAmp: 2
-  },
-
-  /* Stars ------------------------------------------------------------- */
-  stars: {
-    enabled: () => layer.stars, count: 35, twinkleSpeedMin: 0.01,
-    twinkleSpeedMax: 0.04, minBrightness: 0.1
-  },
-
-  /* Landscape --------------------------------------------------------- */
-  land: {
-    enabled: () => layer.land, baseHeight: 32, amplitude: 6, random: 3,
-    colorBack: '#0a1a0a', colorTop: '#0c2f0c'
-  }
+  shooting: { enabled: () => layer.shooting, life: 1200, spawnRate: 0.01, maxCount: 40, speedMin: 0.5, speedMax: 2, angleMin: -Math.PI * 0.7, angleMax: -Math.PI * 0.3, sizeStart: 1, sizeEnd: 1, colorMode: 'white', trailLen: 10, trailFadePow: 1, trail: true },
+  meteor:   { enabled: () => layer.meteor, life: 1200, spawnRate: 0.005, maxCount: 20, speedMin: 1.5, speedMax: 3.5, angleMin: Math.PI * 0.2, angleMax: Math.PI * 0.4, sizeStart: 1.5, sizeEnd: 0.5, colorMode: 'fire', trailLen: 8, trailFadePow: 1.2, trail: true },
+  comet:    { enabled: () => true, life: 4000, spawnRate: 0, maxCount: 5, speedMin: 0.05, speedMax: 0.2, edgeBias: [1,1,1,1], angleSpread: 0.4, sizeStart: 2.5, sizeEnd: 1, colorMode: 'white', trailLen: 30, trailFadePow: 0.8, trail: true },
+  rocket:   { enabled: () => true, speed: 0.3, startX: 31, startY: 60, trailLen: 80, trailFadePow: 1, colorMode: 'fire' },
+  aurora:   { enabled: () => layer.aurora, yBase: 5, bandCount: 3, ySpread: 3, amplitudeMin: 4, amplitudeMax: 7, speedMin: 0.01, speedMax: 0.04, waveFreq: 0.2, alpha: 0.15, colorMode: 'green', lineWidth: 1 },
+  lightning:{ enabled: () => layer.lightning, chance: 0.003, forks: 8, forkJitter: 20, flashAlpha: 0.4, duration: 8, color: '#ffffff' },
+  dayNight: { speed: 0.001, dayTop: '#87ceeb', dayHorizon: '#87ceeb', horizonPeakColor: '#ff6a00', peakTime: 0.6, nightTop: '#0f1414', nightHorizon: '#151415', sunColorStart: '#ffff32', sunColorEnd: '#ffc832' },
+  moon:     { enabled: () => layer.moon, speed: 0.0001, yAmplitude: 60, radiusMin: 1, radiusMax: 5, color1: '#f0e68c', color2: '#dddddd', daytimeAlpha: 0.15 },
+  solar:    { enabled: () => layer.solar, speed: 0.0002, sunRadius: 4, orbitalLineWidth: 1, orbitalLineOpacity: 0.1, planets: [ { r: 1, d: 8, s: 0.02, c: '#4ae', a: 0 }, { r: 1.5, d: 12, s: 0.015, c: '#e74', a: 0 }, { r: 1, d: 16, s: 0.01, c: '#fc0', a: 0 } ] },
+  clouds:   { enabled: () => layer.clouds, count: 4, yMin: 8, yMax: 28, widthMin: 12, widthMax: 28, speedMin: 0.03, speedMax: 0.06, color: 'rgba(255,255,255,0.3)', waveAmp: 2 },
+  stars:    { enabled: () => layer.stars, count: 35, twinkleSpeedMin: 0.01, twinkleSpeedMax: 0.04, minBrightness: 0.1 },
+  land:     { enabled: () => layer.land, baseHeight: 32, amplitude: 6, random: 3, colorBack: '#0a1a0a', colorTop: '#0c2f0c' }
 };
 
-/* ---------- auto-generated settings panel ---------- */
-let panel = null;
-const panelState = { expandedSections: new Set() };
+let panel = null, lightning = 0, flash = 0, dayNightState = 'night', dayNightPhase = 1, nightAlpha = 1;
 
 function buildSettingsPanel() {
-  panel = document.getElementById('settingsPanel');
   if (!panel) {
     panel = document.createElement('div');
     panel.id = 'settingsPanel';
-    panel.style.cssText = `position:fixed;top:10px;right:10px;width:280px;max-height:95vh;overflow-y:auto;background:#111a;color:#eee;font-size:11px;font-family:monospace;border:1px solid #555;padding:8px;border-radius:4px;z-index:9999;`;
+    panel.style.cssText = `position:fixed;top:10px;right:10px;width:300px;max-height:95vh;overflow-y:auto;background:#111a;color:#eee;font-size:11px;font-family:monospace;border:1px solid #555;padding:8px 12px;border-radius:4px;z-index:9999;`;
     document.body.appendChild(panel);
   }
-
-  const currentlyExpanded = new Set();
-  panel.querySelectorAll('.collapsible-content').forEach(div => {
-    if (div.style.display !== 'none') {
-      currentlyExpanded.add(div.dataset.key);
-    }
-  });
-
   panel.innerHTML = '';
-
-  const add = (container, label, node) => {
+  const addRow = (label, node) => {
     const row = document.createElement('div');
     row.style.cssText = 'margin:4px 0;display:flex;align-items:center;justify-content:space-between;gap:6px;';
     const lab = document.createElement('label'); lab.textContent = label;
     row.append(lab, node);
-    container.appendChild(row);
+    panel.appendChild(row);
     return node;
   };
   const slider = (obj, key, min, max, step = 0.01) => {
@@ -217,7 +122,6 @@ function buildSettingsPanel() {
 
   Object.keys(config).forEach(k => {
     const cfg = config[k];
-    
     const h = document.createElement('h4');
     h.textContent = k.charAt(0).toUpperCase() + k.slice(1);
     h.style.cssText = 'margin:12px 0 4px 0;border-bottom:1px solid #444;padding-bottom:2px;cursor:pointer;user-select:none;';
@@ -227,152 +131,133 @@ function buildSettingsPanel() {
     const contentDiv = document.createElement('div');
     contentDiv.className = 'collapsible-content';
     contentDiv.dataset.key = k;
-    
-    if (currentlyExpanded.has(k)) {
-        contentDiv.style.display = 'block';
-    } else {
-        contentDiv.style.display = 'none';
-    }
-    
+    contentDiv.style.display = 'none';
     panel.appendChild(contentDiv);
 
     h.addEventListener('click', () => {
-        const isCollapsed = contentDiv.style.display === 'none';
-        contentDiv.style.display = isCollapsed ? 'block' : 'none';
+      contentDiv.style.display = contentDiv.style.display === 'none' ? 'block' : 'none';
     });
 
     switch (k) {
       case 'shooting': case 'meteor': case 'comet':
-        add(contentDiv, 'spawnRate', slider(cfg, 'spawnRate', 0, 0.1, 0.001)); add(contentDiv, 'maxCount', slider(cfg, 'maxCount', 1, 100, 1));
-        add(contentDiv, 'speedMin', slider(cfg, 'speedMin', 0, 5, 0.05)); add(contentDiv, 'speedMax', slider(cfg, 'speedMax', 0, 5, 0.05));
-        add(contentDiv, 'sizeStart', slider(cfg, 'sizeStart', 0.5, 5, 0.1)); add(contentDiv, 'sizeEnd', slider(cfg, 'sizeEnd', 0.5, 5, 0.1));
-        add(contentDiv, 'trailLen', slider(cfg, 'trailLen', 0, 50, 1)); add(contentDiv, 'trailFadePow', slider(cfg, 'trailFadePow', 0.1, 3, 0.1));
-        add(contentDiv, 'colorMode', select(cfg, 'colorMode', 'white', 'silver', 'gold', 'rainbow', 'fire', 'ice', 'custom'));
-        add(contentDiv, 'trail', checkbox(cfg, 'trail'));
+        addRow('spawnRate', slider(cfg, 'spawnRate', 0, 0.1, 0.001)).parentNode.parentNode.appendChild(contentDiv);
+        addRow('maxCount', slider(cfg, 'maxCount', 1, 100, 1));
+        addRow('speedMin', slider(cfg, 'speedMin', 0, 5, 0.05));
+        addRow('speedMax', slider(cfg, 'speedMax', 0, 5, 0.05));
+        addRow('sizeStart', slider(cfg, 'sizeStart', 0.5, 5, 0.1));
+        addRow('sizeEnd', slider(cfg, 'sizeEnd', 0.5, 5, 0.1));
+        addRow('trailLen', slider(cfg, 'trailLen', 0, 50, 1));
+        addRow('trailFadePow', slider(cfg, 'trailFadePow', 0.1, 3, 0.1));
+        addRow('colorMode', select(cfg, 'colorMode', 'white', 'silver', 'gold', 'rainbow', 'fire', 'ice', 'custom'));
+        addRow('trail', checkbox(cfg, 'trail'));
         break;
       case 'rocket':
-        add(contentDiv, 'speed', slider(cfg, 'speed', 0.1, 2, 0.05)); add(contentDiv, 'startX', slider(cfg, 'startX', 0, 63, 1));
-        add(contentDiv, 'startY', slider(cfg, 'startY', 0, 63, 1)); add(contentDiv, 'trailLen', slider(cfg, 'trailLen', 1, 100, 1));
-        add(contentDiv, 'trailFadePow', slider(cfg, 'trailFadePow', 0.1, 3, 0.1));
-        add(contentDiv, 'colorMode', select(cfg, 'colorMode', 'fire', 'ice', 'white', 'rainbow'));
+        addRow('speed', slider(cfg, 'speed', 0.1, 2, 0.05));
+        addRow('startX', slider(cfg, 'startX', 0, 63, 1));
+        addRow('startY', slider(cfg, 'startY', 0, 63, 1));
+        addRow('trailLen', slider(cfg, 'trailLen', 1, 100, 1));
+        addRow('trailFadePow', slider(cfg, 'trailFadePow', 0.1, 3, 0.1));
+        addRow('colorMode', select(cfg, 'colorMode', 'fire', 'ice', 'white', 'rainbow'));
         break;
       case 'aurora':
-        add(contentDiv, 'bandCount', slider(cfg, 'bandCount', 1, 10, 1)); add(contentDiv, 'yBase', slider(cfg, 'yBase', 0, 32, 1));
-        add(contentDiv, 'ySpread', slider(cfg, 'ySpread', 0, 10, 0.5)); add(contentDiv, 'amplitudeMin', slider(cfg, 'amplitudeMin', 0, 10, 0.5));
-        add(contentDiv, 'amplitudeMax', slider(cfg, 'amplitudeMax', 0, 15, 0.5)); add(contentDiv, 'speedMin', slider(cfg, 'speedMin', 0, 0.1, 0.005));
-        add(contentDiv, 'speedMax', slider(cfg, 'speedMax', 0, 0.1, 0.005));
-        add(contentDiv, 'waveFreq', slider(cfg, 'waveFreq', 0.05, 1, 0.01));
-        add(contentDiv, 'alpha', slider(cfg, 'alpha', 0, 0.5, 0.01));
-        add(contentDiv, 'colorMode', select(cfg, 'colorMode', 'green', 'rainbow'));
-        add(contentDiv, 'lineWidth', slider(cfg, 'lineWidth', 1, 5, 1));
+        addRow('bandCount', slider(cfg, 'bandCount', 1, 10, 1));
+        addRow('yBase', slider(cfg, 'yBase', 0, 32, 1));
+        addRow('ySpread', slider(cfg, 'ySpread', 0, 10, 0.5));
+        addRow('amplitudeMin', slider(cfg, 'amplitudeMin', 0, 10, 0.5));
+        addRow('amplitudeMax', slider(cfg, 'amplitudeMax', 0, 15, 0.5));
+        addRow('speedMin', slider(cfg, 'speedMin', 0, 0.1, 0.005));
+        addRow('speedMax', slider(cfg, 'speedMax', 0, 0.1, 0.005));
+        addRow('waveFreq', slider(cfg, 'waveFreq', 0.05, 1, 0.01));
+        addRow('alpha', slider(cfg, 'alpha', 0, 0.5, 0.01));
+        addRow('colorMode', select(cfg, 'colorMode', 'green', 'rainbow'));
+        addRow('lineWidth', slider(cfg, 'lineWidth', 1, 5, 1));
         break;
       case 'lightning':
-        add(contentDiv, 'chance', slider(cfg, 'chance', 0, 0.02, 0.0001)); add(contentDiv, 'forks', slider(cfg, 'forks', 1, 20, 1));
-        add(contentDiv, 'flashAlpha', slider(cfg, 'flashAlpha', 0, 1, 0.05)); add(contentDiv, 'duration', slider(cfg, 'duration', 1, 30, 1));
-        add(contentDiv, 'color', colorPick(cfg, 'color'));
+        addRow('chance', slider(cfg, 'chance', 0, 0.02, 0.0001));
+        addRow('forks', slider(cfg, 'forks', 1, 20, 1));
+        addRow('flashAlpha', slider(cfg, 'flashAlpha', 0, 1, 0.05));
+        addRow('duration', slider(cfg, 'duration', 1, 30, 1));
+        addRow('color', colorPick(cfg, 'color'));
         break;
       case 'dayNight':
-        add(contentDiv, 'speed', slider(cfg, 'speed', 0.0001, 0.002, 0.0001));
-        add(contentDiv, 'peakTime', slider(cfg, 'peakTime', 0.1, 0.9, 0.01));
-        add(contentDiv, 'dayTop', colorPick(cfg, 'dayTop'));
-        add(contentDiv, 'dayHorizon', colorPick(cfg, 'dayHorizon'));
-        add(contentDiv, 'horizonPeak', colorPick(cfg, 'horizonPeakColor'));
-        add(contentDiv, 'nightTop', colorPick(cfg, 'nightTop'));
-        add(contentDiv, 'nightHorizon', colorPick(cfg, 'nightHorizon'));
-        add(contentDiv, 'sunColorStart', colorPick(cfg, 'sunColorStart'));
-        add(contentDiv, 'sunColorEnd', colorPick(cfg, 'sunColorEnd'));
+        addRow('speed', slider(cfg, 'speed', 0.0001, 0.002, 0.0001));
+        addRow('peakTime', slider(cfg, 'peakTime', 0.1, 0.9, 0.01));
+        addRow('dayTop', colorPick(cfg, 'dayTop'));
+        addRow('dayHorizon', colorPick(cfg, 'dayHorizon'));
+        addRow('horizonPeakColor', colorPick(cfg, 'horizonPeakColor'));
+        addRow('nightTop', colorPick(cfg, 'nightTop'));
+        addRow('nightHorizon', colorPick(cfg, 'nightHorizon'));
+        addRow('sunColorStart', colorPick(cfg, 'sunColorStart'));
+        addRow('sunColorEnd', colorPick(cfg, 'sunColorEnd'));
         break;
       case 'moon':
-        add(contentDiv, 'speed', slider(cfg, 'speed', 0.00005, 0.0005, 0.00005)); add(contentDiv, 'yAmplitude', slider(cfg, 'yAmplitude', 10, 70, 1));
-        add(contentDiv, 'radiusMin', slider(cfg, 'radiusMin', 0.5, 5, 0.1)); add(contentDiv, 'radiusMax', slider(cfg, 'radiusMax', 1, 10, 0.1));
-        add(contentDiv, 'color1', colorPick(cfg, 'color1')); add(contentDiv, 'color2', colorPick(cfg, 'color2'));
-        add(contentDiv, 'daytimeAlpha', slider(cfg, 'daytimeAlpha', 0, 1, 0.01));
+        addRow('speed', slider(cfg, 'speed', 0.00005, 0.0005, 0.00005));
+        addRow('yAmplitude', slider(cfg, 'yAmplitude', 10, 70, 1));
+        addRow('radiusMin', slider(cfg, 'radiusMin', 0.5, 5, 0.1));
+        addRow('radiusMax', slider(cfg, 'radiusMax', 1, 10, 0.1));
+        addRow('color1', colorPick(cfg, 'color1'));
+        addRow('color2', colorPick(cfg, 'color2'));
+        addRow('daytimeAlpha', slider(cfg, 'daytimeAlpha', 0, 1, 0.01));
         break;
       case 'solar':
-        add(contentDiv, 'speed', slider(cfg, 'speed', 0.0001, 0.001, 0.0001));
-        add(contentDiv, 'sunRadius', slider(cfg, 'sunRadius', 1, 10, 0.5));
-        add(contentDiv, 'Orbital Line Width', slider(cfg, 'orbitalLineWidth', 0, 5, 0.5));
-        add(contentDiv, 'Orbital Opacity', slider(cfg, 'orbitalLineOpacity', 0, 1, 0.05));
-        
-        const addPlanetBtn = document.createElement('button');
-        addPlanetBtn.textContent = 'Add Planet';
-        addPlanetBtn.onclick = () => {
-            cfg.planets.push({ r: 1, d: 20, s: 0.01, c: '#fff', a: 0 });
-            buildSettingsPanel();
-        };
-        add(contentDiv, '', addPlanetBtn);
-        
-        const removePlanetBtn = document.createElement('button');
-        removePlanetBtn.textContent = 'Remove Planet';
-        removePlanetBtn.onclick = () => {
-            if (cfg.planets.length > 0) {
-                cfg.planets.pop();
-                buildSettingsPanel();
-            }
-        };
-        add(contentDiv, '', removePlanetBtn);
-        
+        addRow('speed', slider(cfg, 'speed', 0.0001, 0.001, 0.0001));
+        addRow('sunRadius', slider(cfg, 'sunRadius', 1, 10, 0.5));
+        addRow('orbitalLineWidth', slider(cfg, 'orbitalLineWidth', 0, 5, 0.5));
+        addRow('orbitalLineOpacity', slider(cfg, 'orbitalLineOpacity', 0, 1, 0.05));
         cfg.planets.forEach((p, i) => {
-            const planetSettings = document.createElement('div');
-            planetSettings.style.border = '1px solid #555';
-            planetSettings.style.padding = '4px';
-            planetSettings.style.margin = '4px 0';
-            add(planetSettings, `Planet ${i+1} Radius`, slider(p, 'r', 0.5, 5, 0.1));
-            add(planetSettings, `Planet ${i+1} Distance`, slider(p, 'd', 5, 30, 0.5));
-            add(planetSettings, `Planet ${i+1} Speed`, slider(p, 's', 0.001, 0.05, 0.001));
-            add(planetSettings, `Planet ${i+1} Color`, colorPick(p, 'c'));
-            contentDiv.appendChild(planetSettings);
+          const planetDiv = document.createElement('div');
+          planetDiv.style.border = '1px solid #555';
+          planetDiv.style.padding = '4px';
+          planetDiv.style.margin = '4px 0';
+          addRow(`Planet${i+1} Radius`, slider(p, 'r', 0.5, 5, 0.1));
+          addRow(`Planet${i+1} Distance`, slider(p, 'd', 5, 30, 0.5));
+          addRow(`Planet${i+1} Speed`, slider(p, 's', 0.001, 0.05, 0.001));
+          addRow(`Planet${i+1} Color`, colorPick(p, 'c'));
+          contentDiv.appendChild(planetDiv);
         });
         break;
       case 'clouds':
-        add(contentDiv, 'count', slider(cfg, 'count', 1, 10, 1));
-        add(contentDiv, 'speedMin', slider(cfg, 'speedMin', 0.01, 0.2, 0.005)); add(contentDiv, 'speedMax', slider(cfg, 'speedMax', 0.01, 0.2, 0.005));
-        add(contentDiv, 'waveAmp', slider(cfg, 'waveAmp', 0, 5, 0.25));
+        addRow('count', slider(cfg, 'count', 1, 10, 1));
+        addRow('speedMin', slider(cfg, 'speedMin', 0.01, 0.2, 0.005));
+        addRow('speedMax', slider(cfg, 'speedMax', 0.01, 0.2, 0.005));
+        addRow('waveAmp', slider(cfg, 'waveAmp', 0, 5, 0.25));
         const cloudColorInp = document.createElement('input'); cloudColorInp.type = 'text'; cloudColorInp.value = cfg.color;
         cloudColorInp.style.width = '120px'; cloudColorInp.addEventListener('change', () => { cfg.color = cloudColorInp.value; });
-        add(contentDiv, 'color', cloudColorInp);
+        addRow('color', cloudColorInp);
         break;
       case 'stars':
-        add(contentDiv, 'count', slider(cfg, 'count', 1, 100, 1));
-        add(contentDiv, 'twinkleSpeedMin', slider(cfg, 'twinkleSpeedMin', 0.005, 0.1, 0.005));
-        add(contentDiv, 'twinkleSpeedMax', slider(cfg, 'twinkleSpeedMax', 0.005, 0.1, 0.005));
+        addRow('count', slider(cfg, 'count', 1, 100, 1));
+        addRow('twinkleSpeedMin', slider(cfg, 'twinkleSpeedMin', 0.005, 0.1, 0.005));
+        addRow('twinkleSpeedMax', slider(cfg, 'twinkleSpeedMax', 0.005, 0.1, 0.005));
         break;
       case 'land':
-        add(contentDiv, 'baseHeight', slider(cfg, 'baseHeight', 10, 50, 1)); add(contentDiv, 'amplitude', slider(cfg, 'amplitude', 0, 15, 0.5));
-        add(contentDiv, 'random', slider(cfg, 'random', 0, 10, 0.5)); add(contentDiv, 'colorBack', colorPick(cfg, 'colorBack'));
-        add(contentDiv, 'colorTop', colorPick(cfg, 'colorTop'));
+        addRow('baseHeight', slider(cfg, 'baseHeight', 10, 50, 1));
+        addRow('amplitude', slider(cfg, 'amplitude', 0, 15, 0.5));
+        addRow('random', slider(cfg, 'random', 0, 10, 0.5));
+        addRow('colorBack', colorPick(cfg, 'colorBack'));
+        addRow('colorTop', colorPick(cfg, 'colorTop'));
         break;
     }
+    // Open all by default for quick access:
+    contentDiv.style.display = 'block';
   });
 }
 
 function toggleSettingsPanel() {
-    const settingsBtn = document.getElementById('settingsBtn');
-    panel = document.getElementById('settingsPanel');
-    if (panel) {
-        panel.remove();
-        panel = null;
-        settingsBtn.textContent = 'Show Settings';
-    } else {
-        buildSettingsPanel();
-        settingsBtn.textContent = 'Hide Settings';
-    }
+  panel = document.getElementById('settingsPanel');
+  const settingsBtn = document.getElementById('settingsBtn');
+  if (panel) {
+    panel.remove();
+    panel = null;
+    settingsBtn.textContent = 'Show Settings';
+  } else {
+    buildSettingsPanel();
+    settingsBtn.textContent = 'Hide Settings';
+  }
 }
 
-const settingsBtn = document.createElement('button');
-settingsBtn.textContent = 'Show Settings';
-settingsBtn.id = 'settingsBtn';
-settingsBtn.onclick = toggleSettingsPanel;
-document.querySelector('.controls').appendChild(settingsBtn);
 
 const stars = [], moon = { prog: 0 }, solar = { prog: 0, planets: JSON.parse(JSON.stringify(config.solar.planets)) }, clouds = [], landPts = [], auroraBands = [];
-let lightning = 0, flash = 0;
-const launchingRockets = [];
-
-let dayNightState = 'night';
-let dayNightPhase = 1;
-let nightAlpha = 1;
-
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
 const remap = (v, a1, a2, b1, b2) => b1 + (v - a1) * (b2 - b1) / (a2 - a1);
@@ -382,6 +267,47 @@ const lerpColor = (c1, c2, factor) => {
     const r = c1[0] + factor * (c2[0] - c1[0]); const g = c1[1] + factor * (c2[1] - c1[1]);
     const b = c1[2] + factor * (c2[2] - c1[2]); return `rgb(${r|0},${g|0},${b|0})`;
 };
+
+function toggle(k) {
+  if (layer.hasOwnProperty(k)) {
+    layer[k] = !layer[k];
+    updateButtonHighlights();
+  }
+}
+
+function maybeSpawn(type) {
+  const cfg = config[type]; if (!cfg.enabled()) return;
+  if (nightAlpha <= 0) return;
+  if (flyingObjects.filter(o => o.type === type).length >= cfg.maxCount) return;
+  if (Math.random() < cfg.spawnRate) addFlyingObject(type);
+}
+
+function launchRocket() {
+  const cfg = config.rocket;
+  launchingRockets.push({ x: cfg.startX, y: cfg.startY, trail: [] });
+}
+function launchComet() {
+  addFlyingObject('comet');
+}
+function addFlyingObject(type) {
+  const cfg = config[type]; let x, y, vx, vy, angle;
+  if (type === 'shooting' || type === 'meteor') {
+    angle = rand(cfg.angleMin, cfg.angleMax); const speed1 = rand(cfg.speedMin, cfg.speedMax);
+    vx = Math.cos(angle) * speed1; vy = (type === 'shooting') ? Math.abs(Math.sin(angle)) * speed1 : Math.sin(angle) * speed1;
+    x = rand(0, 64); y = 0;
+  } else if (type === 'comet') {
+    const edges = ['top', 'left', 'right', 'bottom'], weights = cfg.edgeBias, total = weights.reduce((a, b) => a + b, 0);
+    let r = rand(0, total); const edge = edges.find((_, i) => (r -= weights[i]) <= 0) || 'top';
+    const speed2 = rand(cfg.speedMin, cfg.speedMax);
+    switch (edge) {
+      case 'top':    x = rand(0, 64); y = -5;  vx = rand(-cfg.angleSpread, cfg.angleSpread); vy = speed2; break;
+      case 'left':   x = -5; y = rand(0, 64); vx = speed2; vy = rand(-cfg.angleSpread, cfg.angleSpread); break;
+      case 'right':  x = 69; y = rand(0, 64); vx = -speed2; vy = rand(-cfg.angleSpread, cfg.angleSpread); break;
+      case 'bottom': x = rand(0, 64); y = 69; vx = rand(-cfg.angleSpread, cfg.angleSpread); vy = -speed2; break;
+    }
+  }
+  flyingObjects.push({ type, x, y, vx, vy, life: cfg.life, sizeStart: cfg.sizeStart, sizeEnd: cfg.sizeEnd, trail: [] });
+}
 
 function resetScene() {
   stars.length = 0; for (let i = 0; i < config.stars.count; i++) { stars.push({ x: rand(0, 64), y: rand(0, 64), b: rand(0, 1), ts: rand(config.stars.twinkleSpeedMin, config.stars.twinkleSpeedMax) }); }
@@ -394,13 +320,6 @@ function resetScene() {
   dayNightState = 'night';
   dayNightPhase = 1;
   updateButtonHighlights();
-}
-
-function maybeSpawn(type) {
-  const cfg = config[type]; if (!cfg.enabled()) return;
-  if (nightAlpha <= 0) return;
-  if (flyingObjects.filter(o => o.type === type).length >= cfg.maxCount) return;
-  if (Math.random() < cfg.spawnRate) addFlyingObject(type);
 }
 
 function startSunrise() {
@@ -416,73 +335,24 @@ function startSunset() {
     }
 }
 
-function addFlyingObject(type) {
-  const cfg = config[type]; let x, y, vx, vy, angle;
-  switch (type) {
-    case 'shooting': case 'meteor':
-      angle = rand(cfg.angleMin, cfg.angleMax); const speed1 = rand(cfg.speedMin, cfg.speedMax);
-      if (type === 'shooting') { vx = Math.cos(angle) * speed1; vy = Math.abs(Math.sin(angle)) * speed1; }
-      else { vx = Math.cos(angle) * speed1; vy = Math.sin(angle) * speed1; }
-      x = rand(0, 64); y = 0;
-      break;
-    case 'comet': {
-      const edges = ['top', 'left', 'right', 'bottom'], weights = cfg.edgeBias, total = weights.reduce((a, b) => a + b, 0);
-      let r = rand(0, total); const edge = edges.find((_, i) => (r -= weights[i]) <= 0) || 'top';
-      const speed2 = rand(cfg.speedMin, cfg.speedMax);
-      switch (edge) {
-        case 'top': x = rand(0, 64); y = -5; vx = rand(-cfg.angleSpread, cfg.angleSpread); vy = speed2; break;
-        case 'left': x = -5; y = rand(0, 64); vx = speed2; vy = rand(-cfg.angleSpread, cfg.angleSpread); break;
-        case 'right': x = 69; y = rand(0, 64); vx = -speed2; vy = rand(-cfg.angleSpread, cfg.angleSpread); break;
-        case 'bottom': x = rand(0, 64); y = 69; vx = rand(-cfg.angleSpread, cfg.angleSpread); vy = -speed2; break;
-      } break;
-    }
-  }
-  flyingObjects.push({ type, x, y, vx, vy, life: cfg.life, sizeStart: cfg.sizeStart, sizeEnd: cfg.sizeEnd, trail: [] });
-}
-
 function draw() {
     frame++;
-
     switch(dayNightState) {
-        case 'sunrising':
-            dayNightPhase -= config.dayNight.speed;
-            if (dayNightPhase <= 0) {
-                dayNightPhase = 0;
-                dayNightState = 'day';
-                updateButtonHighlights();
-            }
-            break;
-        case 'sunsetting':
-            dayNightPhase += config.dayNight.speed;
-            if (dayNightPhase >= 1) {
-                dayNightPhase = 1;
-                dayNightState = 'night';
-                updateButtonHighlights();
-            }
-            break;
+        case 'sunrising': dayNightPhase -= config.dayNight.speed; if (dayNightPhase <= 0) { dayNightPhase = 0; dayNightState = 'day'; updateButtonHighlights(); } break;
+        case 'sunsetting': dayNightPhase += config.dayNight.speed; if (dayNightPhase >= 1) { dayNightPhase = 1; dayNightState = 'night'; updateButtonHighlights(); } break;
     }
 
     const dnCfg = config.dayNight;
     const grad = ctx.createLinearGradient(0, 0, 0, 64);
-    const dayTopRgb    = hexToRgb(dnCfg.dayTop);
-    const dayHorRgb    = hexToRgb(dnCfg.dayHorizon);
-    const peakHorRgb   = hexToRgb(dnCfg.horizonPeakColor);
-    const nightTopRgb  = hexToRgb(dnCfg.nightTop);
-    const nightHorRgb  = hexToRgb(dnCfg.nightHorizon);
-
-    const topColor = lerpColor(dayTopRgb, nightTopRgb, dayNightPhase);
-    grad.addColorStop(0, topColor);
+    const dayTopRgb    = hexToRgb(dnCfg.dayTop), dayHorRgb    = hexToRgb(dnCfg.dayHorizon), peakHorRgb   = hexToRgb(dnCfg.horizonPeakColor), nightTopRgb  = hexToRgb(dnCfg.nightTop), nightHorRgb  = hexToRgb(dnCfg.nightHorizon);
+    const topColor = lerpColor(dayTopRgb, nightTopRgb, dayNightPhase); grad.addColorStop(0, topColor);
 
     let horizonColor;
-    if (dayNightPhase < dnCfg.peakTime) {
-        horizonColor = lerpColor(dayHorRgb, peakHorRgb, dayNightPhase / dnCfg.peakTime);
-    } else {
-        horizonColor = lerpColor(peakHorRgb, nightHorRgb, (dayNightPhase - dnCfg.peakTime) / (1 - dnCfg.peakTime));
-    }
+    if (dayNightPhase < dnCfg.peakTime) { horizonColor = lerpColor(dayHorRgb, peakHorRgb, dayNightPhase / dnCfg.peakTime); }
+    else { horizonColor = lerpColor(peakHorRgb, nightHorRgb, (dayNightPhase - dnCfg.peakTime) / (1 - dnCfg.peakTime)); }
     grad.addColorStop(1, horizonColor);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 64, 64);
-    
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, 64, 64);
+
     nightAlpha = dayNightPhase > 0.3 ? remap(dayNightPhase, 0.3, 1.0, 0, 1) : 0;
     ctx.globalAlpha = 1;
 
@@ -501,34 +371,27 @@ function draw() {
             ctx.fillRect(s.x | 0, s.y | 0, 1, 1);
         });
     }
-    
     if (config.aurora.enabled() && nightAlpha > 0) {
-        const auroraCfg = config.aurora;
-        const finalAlpha = auroraCfg.alpha * nightAlpha;
+        const auroraCfg = config.aurora, finalAlpha = auroraCfg.alpha * nightAlpha;
         ctx.lineWidth = auroraCfg.lineWidth;
         for (let x = 0; x < 64; x++) {
             auroraBands.forEach(b => {
                 const y = b.y + b.amp * Math.sin(x * auroraCfg.waveFreq + frame * b.speed + b.phase);
                 ctx.strokeStyle = auroraCfg.colorMode === 'rainbow' ? `hsla(${(x * 5 + frame) % 360},100%,70%,${finalAlpha})` : `rgba(0,255,128,${finalAlpha})`;
-                ctx.beginPath();
-                ctx.moveTo(x, y);
-                ctx.lineTo(x, y + auroraCfg.lineWidth);
-                ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + auroraCfg.lineWidth); ctx.stroke();
             });
         }
-        ctx.lineWidth = 1; // Reset to default
+        ctx.lineWidth = 1;
     }
 
     ['shooting', 'meteor', 'comet'].forEach(maybeSpawn);
     if (nightAlpha > 0) {
         for (let i = flyingObjects.length - 1; i >= 0; i--) {
             const o = flyingObjects[i]; o.life--; o.x += o.vx; o.y += o.vy;
-            if (!config[o.type]) continue;
-            const cfg = config[o.type];
+            if (!config[o.type]) continue; const cfg = config[o.type];
             const lifeRatio = o.life / cfg.life * nightAlpha;
             if (o.life <= 0 || o.x < -10 || o.x > 74 || o.y < -10 || o.y > 74) { flyingObjects.splice(i, 1); continue; }
-            const size = remap(o.life / cfg.life, 0, 1, cfg.sizeEnd, cfg.sizeStart);
-            const intSize = Math.max(1, Math.round(size));
+            const size = remap(o.life / cfg.life, 0, 1, cfg.sizeEnd, cfg.sizeStart), intSize = Math.max(1, Math.round(size));
             let color;
             switch (cfg.colorMode) {
                 case 'fire': color = `rgba(255,${100 + o.life / cfg.life * 155},0,${lifeRatio})`; break;
@@ -553,33 +416,27 @@ function draw() {
             ctx.fillRect((o.x - size / 2) | 0, (o.y - size / 2) | 0, intSize, intSize);
         }
     }
-    
+
     if (config.moon.enabled()) {
         const moonCfg = config.moon;
         const moonAlpha = moonCfg.daytimeAlpha + nightAlpha * (1 - moonCfg.daytimeAlpha);
-        
         ctx.globalAlpha = moonAlpha;
-
         moon.prog = (moon.prog + moonCfg.speed) % 1; const arc = Math.sin(moon.prog * Math.PI);
         const x = moon.prog * 74 - 5; const y = (64 - moonCfg.yAmplitude) + (1-arc) * moonCfg.yAmplitude;
         const r = remap(arc, 0, 1, moonCfg.radiusMin, moonCfg.radiusMax);
         ctx.fillStyle = moonCfg.color1; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = moonCfg.color2; ctx.beginPath(); ctx.arc(x - 1, y - 1, Math.max(0, r - 1), 0, Math.PI * 2); ctx.fill();
-
         ctx.globalAlpha = 1;
     }
-    
     if (config.clouds.enabled()) {
         ctx.fillStyle = config.clouds.color;
         clouds.forEach(c => { c.x -= c.s; if (c.x < -c.w) c.x = 64 + c.w; for (let i = 0; i < c.w; i++) { ctx.fillRect((c.x + i) | 0, (c.y + Math.sin(i * 0.6) * config.clouds.waveAmp) | 0, 1, 1); } });
     }
-
     if (config.land.enabled()) {
         ctx.fillStyle = config.land.colorBack; ctx.beginPath(); ctx.moveTo(0, 64);
         landPts.forEach(p => ctx.lineTo(p.x, p.y)); ctx.lineTo(64, 64); ctx.closePath(); ctx.fill();
         ctx.fillStyle = config.land.colorTop; for (let i = 0; i < landPts.length - 1; i++) { ctx.fillRect(landPts[i].x, landPts[i].y | 0, 2, 1); }
     }
-    
     if (config.lightning.enabled()) {
         if (Math.random() < config.lightning.chance) { lightning = config.lightning.duration; flash = config.lightning.duration / 2; }
         if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${config.lightning.flashAlpha})`; ctx.fillRect(0, 0, 64, 64); flash--; }
@@ -590,17 +447,13 @@ function draw() {
             ctx.stroke(); lightning--;
         }
     }
-
     if (config.solar.enabled() && nightAlpha > 0.9) {
-        const solarCfg = config.solar;
-        ctx.globalAlpha = nightAlpha;
+        const solarCfg = config.solar; ctx.globalAlpha = nightAlpha;
         solar.prog = (solar.prog + solarCfg.speed) % 1; const arc = Math.sin(solar.prog * Math.PI);
         const sunX = solar.prog * 84 - 10, sunY = 80 - arc * 85, sunR = solarCfg.sunRadius;
         ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = 'rgba(255,204,0,0.3)'; ctx.beginPath(); ctx.arc(sunX, sunY, sunR + 1, 0, Math.PI * 2); ctx.fill();
-        
         ctx.lineWidth = solarCfg.orbitalLineWidth;
-        
         solarCfg.planets.forEach(p => {
             p.a = (p.a + p.s) % (Math.PI * 2);
             const x = sunX + Math.cos(p.a) * p.d; const y = sunY + Math.sin(p.a) * p.d;
@@ -608,10 +461,8 @@ function draw() {
             ctx.beginPath(); ctx.arc(sunX, sunY, p.d, 0, Math.PI * 2); ctx.stroke();
             ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(x, y, p.r, 0, Math.PI * 2); ctx.fill();
         });
-        ctx.globalAlpha = 1;
-        ctx.lineWidth = 1; // Reset to default
+        ctx.globalAlpha = 1; ctx.lineWidth = 1;
     }
-
     if (config.rocket.enabled()) {
         for(let i = launchingRockets.length - 1; i >= 0; i--) {
             const r = launchingRockets[i], cfg = config.rocket; r.y -= cfg.speed; r.trail.unshift({ x: r.x, y: r.y });
@@ -629,49 +480,28 @@ function draw() {
             if (r.y < -30) launchingRockets.splice(i, 1);
         }
     }
-    
     updStatus();
     requestAnimationFrame(draw);
 }
 
 function updateButtonHighlights() {
     Object.keys(layer).forEach(k => {
-        const btn = $(`btn-${k}`);
+        const btn = $('btn-' + k);
         if (btn) { layer[k] ? btn.classList.add('active') : btn.classList.remove('active'); }
     });
-
-    const sunriseBtn = $('btn-sunrise');
-    const sunsetBtn = $('btn-sunset');
-
-    sunriseBtn.classList.remove('active');
-    sunsetBtn.classList.remove('active');
-
+    const sunriseBtn = $('btn-sunrise'), sunsetBtn = $('btn-sunset');
+    sunriseBtn.classList.remove('active'); sunsetBtn.classList.remove('active');
     sunriseBtn.disabled = dayNightState !== 'night';
     sunsetBtn.disabled = dayNightState !== 'day';
-
-    if (dayNightState === 'sunrising') {
-        sunriseBtn.classList.add('active');
-        sunriseBtn.disabled = true;
-        sunsetBtn.disabled = true;
-    } else if (dayNightState === 'sunsetting') {
-        sunsetBtn.classList.add('active');
-        sunsetBtn.disabled = true;
-        sunsetBtn.disabled = true;
-    }
+    if (dayNightState === 'sunrising') { sunriseBtn.classList.add('active'); sunriseBtn.disabled = true; sunsetBtn.disabled = true; }
+    else if (dayNightState === 'sunsetting') { sunsetBtn.classList.add('active'); sunsetBtn.disabled = true; }
 }
-
 function resetAll() {
   Object.keys(layer).forEach(k => layer[k] = false);
   layer.stars = true; 
   resetScene();
 }
-function launchRocket() {
-  const cfg = config.rocket; if(!cfg.enabled()) return;
-  launchingRockets.push({ x: cfg.startX, y: cfg.startY, trail: [] });
-}
-function launchComet() {
-  if(!config.comet.enabled()) return; addFlyingObject('comet');
-}
+
 cvs.addEventListener('click', e => {
   if (!config.rocket.enabled()) return;
   const rect = cvs.getBoundingClientRect();
