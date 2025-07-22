@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Analog Reveal – Corrected Logic</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:sans-serif}
+  #cvs{display:block;margin:auto;max-width:90vmin;max-height:90vmin;cursor:pointer}
+</style>
+</head>
+<body>
+<canvas id="cvs"></canvas>
+<script type="module">
+const TIMELINE_TO_LOAD = 22;
+const IMAGE_URL = 'https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0';
+const BADGE_URL = 'https://ordinals.com/content/2c762a593dc60bcd92169b07de5a60d588a94819d165178ca317d45e4eeb2b11i0';
+const BADGE_RECT = { x: .42, y: .18, w: .17, h: .17 }; // (fractional, main image as square)
+const AUDIO_URL = './opus.webm';
+const RECIPES_URL = './timelines/recipes.json';
+const TOP_29_TIMELINES = [
+  "CrystalBloomTimed", "DeepDream_64bars", "FractalFocus_64bars", "GlitchBloom", "GlitchWaves_64bars",
+  "GraffitiGlow_64bars", "HighlightFlash_64bars", "IridescentWave_64bars", "NeonShards", "NoirWindow",
+  "PsychedelicRipple", "ReverseWipe", "SequentialHueBands", "ShadowLift_64bars", "SpectrumSpin_64bars",
+  "StarlitReveal", "StrobeFocus_64bars", "SunriseReveal", "analog-film", "cyberpunkGlitch_64bars",
+  "manualTimeline1", "manualTimeline2", "manualtimeline3", "multiband-bright", "pixel-dust",
+  "rgbShatter_64bars", "spectral-solidity", "timeline_colourBandsGlitchReveal", "timeline_windowSweepReveal"
+];
+
+const cvs = document.getElementById('cvs'), ctx = cvs.getContext('2d');
+const audio = new Audio(AUDIO_URL); audio.preload = 'auto';
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const barsToSec = (bars, bpm = 104.15, beatsPerBar = 4) => 60 / bpm * bars * beatsPerBar;
+
+let img, w, h, timeline = [], frameId = null, running = false, startTime = null;
+const buf1 = document.createElement('canvas'), buf2 = document.createElement('canvas');
+let buf1ctx = buf1.getContext('2d'), buf2ctx = buf2.getContext('2d');
+
+const EFFECT_MAP = {
+  F: { effect: 'fade', param: 'progress' },
+  Px: { effect: 'pixelate', param: 'pixelSize' },
+  Bl: { effect: 'blur', param: 'radius' },
+  CS: { effect: 'chromaShift', param: 'intensity' },
+  Gl: { effect: 'glitch', param: 'intensity' },
+  Sc: { effect: 'scanLines', param: 'intensity' },
+  Vg: { effect: 'vignette', param: 'intensity' },
+  Fg: { effect: 'filmGrain', param: 'intensity' },
+  C: { effect: 'colourSweep', param: 'progress' },
+};
+
+function parseValue(val) {
+  if (typeof val !== 'string') return val;
+  if (val.startsWith('[') && val.endsWith(']')) { try { return JSON.parse(val); } catch (e) {} }
+  if (val.includes(',')) { return val.split(',').map(s => parseValue(s.trim())); }
+  if (val === 'true')  return true;
+  if (val === 'false') return false;
+  const num = parseFloat(val);
+  return (!isNaN(num) && isFinite(val)) ? num : val;
+}
+
+function parseTimeline(str) {
+  if (!str) return [];
+  const segments = str.split(/(?<!,)\s*,\s*(?![^"]*"(?:,|$))/);
+  const regex = /^([A-Z][a-z]?)((?:-?\d*\.?\d+|-?\w+|[^@]+?))-((?:-?\d*\.?\d+|-?\w+|[^@]+?))@(-?\d*\.?\d+)-(-?\d*\.?\d+)(?::(.*))?$/;
+  return segments.map(segment => {
+    const m = segment.match(regex);
+    if (!m) return null;
+    const [ , code, fromStr, toStr, startBar, endBar, rest ] = m;
+    const base = EFFECT_MAP[code];
+    if (!base) return null;
+    const fromVal = parseValue(fromStr), toVal = parseValue(toStr);
+    const param = Array.isArray(fromVal) || Array.isArray(toVal) ? 'brightnessRange' : base.param;
+    const event = { effect: base.effect, param, from: fromVal, to: toVal, startBar: +startBar, endBar: +endBar };
+    if (rest) { try { Object.assign(event, JSON.parse(`{${rest}}`)); } catch (e) { /* ignore */ } }
+    return event;
+  }).filter(Boolean);
+}
+
+const fx = {
+  filmGrain(src, dst, ct, p, ww, hh) {
+    dst.filter = `contrast(110%) brightness(110%)`; dst.drawImage(src.canvas,0,0); dst.filter='none';
+    const id = dst.getImageData(0,0,ww,hh), d = id.data;
+    for (let i=0;i<d.length;i+=4) { const g=(Math.random()-.5)*255*p.intensity; d[i]+=g; d[i+1]+=g; d[i+2]+=g; }
+    dst.putImageData(id,0,0);
+  },
+  vignette(src,dst,ct,p,ww,hh) {
+    dst.drawImage(src.canvas,0,0);
+    const g = dst.createRadialGradient(ww/2,hh/2,0,ww/2,hh/2,Math.min(ww,hh)*0.5);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(0.6,'rgba(0,0,0,0)');
+    g.addColorStop(1,`rgba(0,0,0,${p.intensity})`); dst.fillStyle=g; dst.fillRect(0,0,ww,hh);
+  },
+  // --- UPDATED colourSweep function ---
+  colourSweep(src, dst, ct, p, ww, hh) {
+    const id = src.getImageData(0, 0, ww, hh);
+    const d = id.data;
+
+    // Check for brightnessRange and apply it as a filter
+    const hasRange = Array.isArray(p.brightnessRange);
+    const [minB, maxB] = hasRange ? p.brightnessRange : [0, 255];
+
+    // Check for progress wipe and calculate its threshold
+    const hasWipe = typeof p.progress === 'number';
+    const pr = clamp(p.progress || 0, 0, 1);
+    const fwd = p.direction !== -1;
+    const thr = (fwd ? pr : 1 - pr) * 255;
+    const isHide = p.mode === 'hide';
+    const soft = p.edgeSoftness || 0;
+    const band = 32 * soft;
+
+    for (let i = 0; i < d.length; i += 4) {
+      const bright = (d[i] + d[i+1] + d[i+2]) / 3;
+
+      // 1. Initial visibility is based on the brightness range filter.
+      // If a pixel is outside the range, it's always transparent.
+      if (bright < minB || bright > maxB) {
+        d[i+3] = 0;
+        continue;
+      }
+
+      // 2. If no wipe is active (p.progress is not defined), the pixel is fully opaque.
+      if (!hasWipe) {
+        d[i+3] = 255;
+        continue;
+      }
+
+      // 3. If a wipe IS active, calculate alpha based on progress.
+      const show = isHide ? bright > thr : bright <= thr;
+      const dist = isHide ? (bright - thr) : (thr - bright);
+      let alpha = 0;
+      if (show) {
+        alpha = 255;
+      } else if (band > 0 && dist < band) {
+        // This is the softening band for the wipe
+        alpha = 255 * (1 + dist / band);
+      }
+      d[i+3] = alpha;
+    }
+
+    dst.putImageData(id, 0, 0);
+  },
+  blur(src,dst,ct,p,ww,hh){ dst.filter=`blur(${p.radius}px)`; dst.drawImage(src.canvas,0,0); dst.filter='none'; },
+  scanLines(src,dst,ct,p,ww,hh){ dst.drawImage(src.canvas,0,0); dst.fillStyle=`rgba(0,0,0,${p.intensity})`; const s=p.spacing||6; for(let y=0;y<hh;y+=s) dst.fillRect(0,y,ww,1); },
+  glitch(src,dst,ct,p,ww,hh){
+    if(!p.intensity){dst.drawImage(src.canvas,0,0);return;}
+    dst.clearRect(0,0,ww,hh); const slices=3+Math.floor(p.intensity*8);
+    for(let i=0;i<slices;i++){ const hh2=hh/slices, y=i*hh2, off=(Math.random()-.5)*p.intensity*ww*.05; dst.drawImage(src.canvas,0,y,ww,hh2,off,y,ww,hh2);}
+  },
+  pixelate(src,dst,ct,p,ww,hh){
+    const size=Math.max(1,p.pixelSize|0); if(size<=1){dst.drawImage(src.canvas,0,0);return;}
+    const t=document.createElement('canvas').getContext('2d'); t.canvas.width=ww; t.canvas.height=hh;
+    t.imageSmoothingEnabled=false; t.drawImage(src.canvas,0,0,ww/size,hh/size);
+    t.drawImage(t.canvas,0,0,ww/size,hh/size,0,0,ww,hh); dst.drawImage(t.canvas,0,0);
+  },
+  fade(src,dst,ct,p,ww,hh){ dst.globalAlpha=clamp(p.progress,0,1); dst.drawImage(src.canvas,0,0); dst.globalAlpha=1; },
+  chromaShift(src,dst,ct,p,ww,hh){ dst.drawImage(src.canvas,0,0);}
+};
+
+// --- UPDATED draw function ---
+function draw() {
+  if (!img || !timeline || !timeline.length || !running) {
+    frameId = requestAnimationFrame(draw);
+    return;
+  }
+  const now = (performance.now() / 1000) - startTime;
+  buf1ctx.clearRect(0, 0, w, h);
+  buf1ctx.drawImage(img, 0, 0, w, h);
+
+  // 1. Calculate all active events and their current values for this frame.
+  const activeEvents = timeline.map(l => {
+    const tStart = barsToSec(l.startBar), tEnd = barsToSec(l.endBar);
+    if (now < tStart || now > tEnd) return null;
+    let t = (tEnd - tStart > 0) ? (now - tStart) / (tEnd - tStart) : 1;
+    if (l.easing === 'easeInOut') t = ease(t);
+    const val = (typeof l.from === 'number' && typeof l.to === 'number')
+      ? l.from + (l.to - l.from) * t
+      : (t < 0.5 ? l.from : l.to);
+    return { ...l, [l.param]: val };
+  }).filter(Boolean);
+
+  // 2. Group the events by effect, merging their parameters.
+  // This allows multiple timeline lanes to control one effect instance.
+  const effectsToApply = {};
+  for (const event of activeEvents) {
+    // If the effect isn't in our list to apply yet, add it with its base properties.
+    if (!effectsToApply[event.effect]) {
+      effectsToApply[event.effect] = { ...event };
+    } else {
+      // Otherwise, merge the new parameter into the existing effect object.
+      Object.assign(effectsToApply[event.effect], { [event.param]: event[event.param] });
+    }
+  }
+
+  // 3. Determine a stable render order.
+  const effectOrder = [...new Set(activeEvents.map(e => e.effect))];
+
+  // 4. Apply each effect once with its final, merged parameters.
+  for (const effectName of effectOrder) {
+    if (fx[effectName]) {
+      const params = effectsToApply[effectName];
+      fx[effectName](buf1ctx, buf2ctx, now, params, w, h);
+      [buf1ctx, buf2ctx] = [buf2ctx, buf1ctx]; // Swap buffers for the next effect in the chain
+    }
+  }
+
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  ctx.drawImage(buf1ctx.canvas, 0, 0); // Draw the final result
+  frameId = requestAnimationFrame(draw);
+}
+
+
+function resize() {
+  const s = Math.min(innerWidth, innerHeight)*.9|0;
+  cvs.width = cvs.height = s; w = h = s;
+  buf1.width = buf2.width = s; buf1.height = buf2.height = s;
+  if (!img) {
+    ctx.fillStyle = '#555'; ctx.fillRect(0,0,w,h);
+    ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.font = '24px sans-serif';
+    ctx.fillText('Loading...', w/2, h/2);
+  }
+}
+window.addEventListener('resize', resize);
+
+function reset() {
+  running = false;
+  if (frameId) cancelAnimationFrame(frameId);
+  audio.pause(); audio.currentTime = 0;
+  if (img) {
+    ctx.clearRect(0,0,w,h);
+    ctx.drawImage(img, 0, 0, w, h);
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0,0,w,h);
+  }
+}
+
+function toggleRun() {
+  if (!img) return;
+  if (!running) {
+    running = true; startTime = performance.now()/1000;
+    audio.currentTime = 0; audio.play().catch(()=>{});
+    draw();
+  } else {
+    reset();
+  }
+}
+
+function loadImg(url) {
+  return new Promise((resolve, reject) => {
+    const im = new window.Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = () => resolve(im);
+    im.onerror = reject;
+    im.src = url;
+  });
+}
+
+async function loadCompositeImage(mainUrl, badgeUrl, badgeRect) {
+  const [main, badge] = await Promise.all([loadImg(mainUrl), badgeUrl ? loadImg(badgeUrl) : null]);
+  if (!badge) return main;
+  const size = Math.max(main.width, main.height);
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const cx = c.getContext('2d');
+  cx.drawImage(main, 0, 0, size, size);
+  const { x, y, w, h } = badgeRect;
+  cx.drawImage(badge, x * size, y * size, w * size, h * size);
+  return new Promise((resolve, reject) => {
+    const finalImg = new window.Image();
+    finalImg.crossOrigin = 'anonymous';
+    finalImg.onload = () => resolve(finalImg);
+    finalImg.onerror = reject;
+    finalImg.src = c.toDataURL();
+  });
+}
+
+async function init() {
+  resize();
+  try {
+    const response = await fetch(RECIPES_URL);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const recipes = await response.json();
+    const idx = clamp(TIMELINE_TO_LOAD - 1, 0, TOP_29_TIMELINES.length - 1);
+    const timelineName = TOP_29_TIMELINES[idx];
+    console.log(`Using timeline: ${timelineName}`);
+    timeline = parseTimeline(recipes[timelineName]) || [];
+    img = await loadCompositeImage(IMAGE_URL, BADGE_URL, BADGE_RECT);
+    reset();
+    cvs.onclick = toggleRun;
+  } catch (error) {
+    console.error(error);
+    ctx.fillStyle = 'red';
+    ctx.textAlign = 'center';
+    ctx.font = '18px sans-serif';
+    ctx.fillText(`Error: ${error.message}`, w / 2, h / 2);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
