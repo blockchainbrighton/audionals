@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>64×64 Retro Sky – condensed</title>
+<style>
+  html,body{height:100%;margin:0;background:#222;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;color:#aaa}
+  #wrap{position:relative;width:90vmin;height:90vmin;max-width:512px;max-height:512px}
+  canvas{position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated;cursor:crosshair}
+  .controls{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:512px}
+  button,select{padding:3px 6px;background:#333;color:#eee;border:1px solid #555;cursor:pointer;font-size:11px}
+  .status{margin-top:4px;font-size:10px}
+  button.active{background:#4CAF50;border-color:#80c080;color:white}
+  #settingsPanel{position:fixed;top:10px;right:10px;width:300px;max-height:95vh;overflow-y:auto;background:#111a;color:#eee;font-size:11px;border:1px solid #555;padding:8px;border-radius:4px;z-index:9999}
+  #settingsPanel h4{margin:8px 0 2px;border-bottom:1px solid #444;cursor:pointer}
+  #settingsPanel>div{margin-bottom:6px}
+  #settingsPanel label{display:inline-block;width:110px}
+  #settingsPanel input[type=range]{width:120px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="64" height="64"></canvas>
+</div>
+<div class="controls" id="controls"></div>
+<div class="status"><span id="fps">FPS:0</span> | <span id="layers">Layers:Stars</span></div>
+
+<script>
+/* ----------------------------------------------------------
+   1. CONFIGURATION SCHEMA (single source of truth)
+---------------------------------------------------------- */
+const schema = {
+  shooting:{spawnRate:.01,maxCount:40,speedMin:.5,speedMax:2,angleMin:-Math.PI*.7,angleMax:-Math.PI*.3,sizeStart:1,sizeEnd:1,life:1200,color:'white',trailLen:10,trailFadePow:1,trail:true},
+  meteor:  {spawnRate:.005,maxCount:20,speedMin:1.5,speedMax:3.5,angleMin:Math.PI*.2,angleMax:Math.PI*.4,sizeStart:1.5,sizeEnd:.5,life:1200,color:'fire',trailLen:8,trailFadePow:1.2,trail:true},
+  comet:   {spawnRate:0,maxCount:5,speedMin:.05,speedMax:.2,angleSpread:.4,sizeStart:2.5,sizeEnd:1,life:4000,color:'white',trailLen:30,trailFadePow:.8,trail:true},
+  rocket:  {speed:.3,startX:31,startY:60,trailLen:80,color:'fire',trailFadePow:1, life:120},
+  aurora:  {yBase:5,bandCount:3,ySpread:3,ampMin:4,ampMax:7,speedMin:.01,speedMax:.04,waveFreq:.2,alpha:.15,color:'green',lineWidth:1},
+  lightning:{chance:.003,forks:8,forkJitter:20,flashAlpha:.4,duration:8,color:'#fff'},
+  dayNight:{speed:.001,peakTime:.6,dayTop:'#87ceeb',dayHorizon:'#87ceeb',peakColor:'#ff6a00',nightTop:'#0f1414',nightHorizon:'#151415',sunStart:'#ffff32',sunEnd:'#ffc832'},
+  moon:    {speed:.0001,yAmp:60,rMin:1,rMax:5,color1:'#f0e68c',color2:'#ddd',dayAlpha:.15},
+  solar:   {speed:.0002,sunRadius:4,orbLineW:1,orbLineAlpha:.1,planets:[{r:1,d:8,s:.02,c:'#4ae'},{r:1.5,d:12,s:.015,c:'#e74'},{r:1,d:16,s:.01,c:'#fc0'}]},
+  clouds:  {count:4,yMin:8,yMax:28,wMin:12,wMax:28,sMin:.03,sMax:.06,color:'rgba(255,255,255,.3)',wave:2},
+  stars:   {count:35,twMin:.01,twMax:.04,minB:.1},
+  land:    {base:32,amp:6,rnd:3,colBack:'#0a1a0a',colTop:'#0c2f0c'}
+};
+
+
+/* ----------------------------------------------------------
+   2. STATE
+---------------------------------------------------------- */
+const state = {
+  layer:{stars:true,moon:false,solar:false,clouds:false,shooting:false,land:false,aurora:false,lightning:false,meteor:false},
+  dayPhase:1, dayState:'night',  // 1=night, 0=day
+  stars:[], clouds:[], landPts:[], auroraBands:[],
+  particles: [], rockets:[]
+};
+let frame=0, lightningTimer=0, flashTimer=0;
+
+/* ----------------------------------------------------------
+   3. HELPERS
+---------------------------------------------------------- */
+const rand=(a,b)=>a+Math.random()*(b-a);
+const lerp=(a,b,t)=>a+t*(b-a);
+const hex=hex=>hex.replace('#','').match(/.{2}/g).map(x=>parseInt(x,16));
+const lerpColor=(a,b,t)=>{
+  t=Math.max(0,Math.min(1,t)); 
+  return `rgb(${a.map((v,i)=>v+t*(b[i]-v)|0)})`;
+};
+
+/* ----------------------------------------------------------
+   4. BUTTONS + KEYBOARD (Create before reset)
+---------------------------------------------------------- */
+const btns=[
+  ['Stars','stars'],['Moon','moon'],['Solar','solar'],['Clouds','clouds'],['Shooting','shooting'],['Landscape','land'],['Aurora','aurora'],['Lightning','lightning'],['Meteors','meteor'],
+  ['Sunrise','sunrise'], ['Sunset','sunset'], ['Launch Rocket','rocket'], ['Launch Comet','comet'], ['Reset','reset'], ['Settings','settings']
+];
+const controls=document.getElementById('controls');
+btns.forEach(([label,key])=>{
+  const btn=document.createElement('button');
+  btn.textContent=label;
+  btn.id='btn-'+key;
+  btn.onclick=()=>handleBtn(key);
+  controls.appendChild(btn);
+});
+
+/* ----------------------------------------------------------
+   5. RESET / INIT
+---------------------------------------------------------- */
+function reset(){
+  state.stars = Array.from({length:schema.stars.count},()=>({x:rand(0,64),y:rand(0,64),b:rand(0,1),s:rand(schema.stars.twMin,schema.stars.twMax)}));
+  state.clouds = Array.from({length:schema.clouds.count},()=>({x:rand(-20,84),y:rand(schema.clouds.yMin,schema.clouds.yMax),w:rand(schema.clouds.wMin,schema.clouds.wMax),s:rand(schema.clouds.sMin,schema.clouds.sMax)}));
+  state.landPts = Array.from({length:33},(_,i)=>({x:i*2,y:schema.land.base+Math.sin(i*.5)*schema.land.amp+rand(-schema.land.rnd,schema.land.rnd)}));
+  state.auroraBands = Array.from({length:schema.aurora.bandCount},(_,i)=>({y:schema.aurora.yBase+i*schema.aurora.ySpread,phase:i,amp:rand(schema.aurora.ampMin,schema.aurora.ampMax),speed:rand(schema.aurora.speedMin,schema.aurora.speedMax)}));
+  state.particles.length=0; state.rockets.length=0;
+  lightningTimer=flashTimer=0;
+  updateBtns();
+}
+reset();
+
+/* ----------------------------------------------------------
+   6. BUTTONS + KEYBOARD (Handlers)
+---------------------------------------------------------- */
+function handleBtn(k){
+  if(k==='reset'){Object.keys(state.layer).forEach(x=>state.layer[x]=false); state.layer.stars=true; reset();}
+  else if(k==='sunrise' && state.dayState==='night'){state.dayState='sunrising';}
+  else if(k==='sunset' && state.dayState==='day'){state.dayState='sunsetting';}
+ 
+ 
+  else if(k==='rocket') state.rockets.push({
+  type: 'rocket',
+  life: 120,
+  x: schema.rocket.startX,
+  y: schema.rocket.startY,
+  vx: 0,
+  vy: -schema.rocket.speed,
+  size: 2,
+  size2: 1,
+  trail: []
+});
+
+else if(k==='comet') spawn('comet');
+  else if(k==='settings') toggleSettings();
+  else if(state.layer.hasOwnProperty(k)){state.layer[k]=!state.layer[k]; updateBtns();}
+}
+function updateBtns(){
+  Object.keys(state.layer).forEach(k=>{const b=document.getElementById('btn-'+k); b&&b.classList.toggle('active',state.layer[k]);});
+  ['btn-sunrise','btn-sunset'].forEach(id=>document.getElementById(id).disabled=false);
+  if(state.dayState==='sunrising'){document.getElementById('btn-sunrise').classList.add('active');document.getElementById('btn-sunset').disabled=true;}
+  if(state.dayState==='sunsetting'){document.getElementById('btn-sunset').classList.add('active');document.getElementById('btn-sunrise').disabled=true;}
+  document.getElementById('btn-sunrise').disabled=state.dayState!=='night';
+  document.getElementById('btn-sunset').disabled=state.dayState!=='day';
+}
+window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.code==='KeyS'){e.preventDefault();toggleSettings();}});
+document.getElementById('c').addEventListener('click',e=>{
+  if(!schema.rocket) return;
+  const rect=e.target.getBoundingClientRect();
+  const x=((e.clientX-rect.left)/rect.width*64)|0;
+  const y=((e.clientY-rect.top)/rect.height*64)|0;
+  state.particles.push({type:'shooting',x:32,y:60,vx:(x-32)*.05,vy:(y-60)*.05,life:schema.shooting.life,size:1.5,size2:.5,trail:[]});
+});
+
+/* ----------------------------------------------------------
+   7. PARTICLE SPAWNER
+---------------------------------------------------------- */
+function spawn(type){
+  const cfg=schema[type]; if(!cfg) return;
+  let x,y,vx,vy;
+  if(type==='shooting'||type==='meteor'){
+    const ang=rand(cfg.angleMin,cfg.angleMax),spd=rand(cfg.speedMin,cfg.speedMax);
+    vx=Math.cos(ang)*spd; vy=Math.sin(ang)*spd*(type==='shooting'?-1:1);
+    x=rand(0,64); y=type==='shooting'?64:0;
+  } else if(type==='comet'){
+    const edge=rand(0,4)|0;
+    [x,y,vx,vy]=[[rand(0,64),-5,0,rand(cfg.speedMin,cfg.speedMax)],
+                 [-5,rand(0,64),rand(cfg.speedMin,cfg.speedMax),0],
+                 [69,rand(0,64),-rand(cfg.speedMin,cfg.speedMax),0],
+                 [rand(0,64),69,0,-rand(cfg.speedMin,cfg.speedMax)]][edge];
+    vx+=rand(-cfg.angleSpread,cfg.angleSpread)*.2;
+    vy+=rand(-cfg.angleSpread,cfg.angleSpread)*.2;
+  }
+  state.particles.push({type,x,y,vx,vy,life:cfg.life,size:cfg.sizeStart,size2:cfg.sizeEnd,trail:[]});
+}
+
+/* ----------------------------------------------------------
+   8. MAIN LOOP
+---------------------------------------------------------- */
+const ctx=document.getElementById('c').getContext('2d');
+let lt=performance.now(),fc=0;
+(function loop(){
+  frame++; fc++;
+  // Day/night
+  if(state.dayState==='sunrising'){state.dayPhase-=schema.dayNight.speed;if(state.dayPhase<=0){state.dayPhase=0;state.dayState='day';updateBtns();}}
+  if(state.dayState==='sunsetting'){state.dayPhase+=schema.dayNight.speed;if(state.dayPhase>=1){state.dayPhase=1;state.dayState='night';updateBtns();}}
+  const nightA=state.dayPhase>.3?lerp(0,1,(state.dayPhase-.3)/.7):0;
+
+  // Sky gradient
+  const grad=ctx.createLinearGradient(0,0,0,64);
+  const top=lerpColor(hex(schema.dayNight.dayTop),hex(schema.dayNight.nightTop),state.dayPhase);
+  const bottom=state.dayPhase<schema.dayNight.peakTime
+        ?lerpColor(hex(schema.dayNight.dayHorizon),hex(schema.dayNight.peakColor),state.dayPhase/schema.dayNight.peakTime)
+        :lerpColor(hex(schema.dayNight.peakColor),hex(schema.dayNight.nightHorizon),(state.dayPhase-schema.dayNight.peakTime)/(1-schema.dayNight.peakTime));
+  grad.addColorStop(0,top); grad.addColorStop(1,bottom);
+  ctx.fillStyle=grad; ctx.fillRect(0,0,64,64);
+
+  // Sun
+  if(state.dayPhase<1){
+    const y=5+state.dayPhase*65;
+    ctx.fillStyle=lerpColor(hex(schema.dayNight.sunStart),hex(schema.dayNight.sunEnd),state.dayPhase);
+    ctx.beginPath(); ctx.arc(32,y,3,0,7); ctx.fill();
+    ctx.fillStyle=ctx.fillStyle.replace('rgb','rgba').replace(')',',.3)');
+    ctx.beginPath(); ctx.arc(32,y,4,0,7); ctx.fill();
+  }
+
+  // Stars
+  if(state.layer.stars && nightA){
+    state.stars.forEach(s=>{
+      s.b+=s.s; if(s.b>1||s.b<0) s.s*=-1;
+      ctx.fillStyle=`rgba(255,255,255,${Math.max(schema.stars.minB,Math.abs(Math.sin(s.b*Math.PI)))*nightA})`;
+      ctx.fillRect(s.x|0,s.y|0,1,1);
+    });
+  }
+
+  // Aurora
+  if(state.layer.aurora && nightA){
+    ctx.lineWidth=schema.aurora.lineWidth;
+    for(let x=0;x<64;x++){
+      state.auroraBands.forEach(b=>{
+        const y=b.y+b.amp*Math.sin(x*schema.aurora.waveFreq+frame*b.speed+b.phase);
+        ctx.strokeStyle=schema.aurora.color==='rainbow'?`hsla(${(x*5+frame)%360},100%,70%,${schema.aurora.alpha*nightA})`:`rgba(0,255,128,${schema.aurora.alpha*nightA})`;
+        ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+1); ctx.stroke();
+      });
+    }
+    ctx.lineWidth=1;
+  }
+
+  // Clouds
+  if(state.layer.clouds){
+    ctx.fillStyle=schema.clouds.color;
+    state.clouds.forEach(c=>{
+      c.x-=c.s; if(c.x<-c.w) c.x=64+c.w;
+      for(let i=0;i<c.w;i++) ctx.fillRect((c.x+i)|0,(c.y+Math.sin(i*.6)*schema.clouds.wave)|0,1,1);
+    });
+  }
+
+  // Land
+  if(state.layer.land){
+    ctx.fillStyle=schema.land.colBack;
+    ctx.beginPath(); ctx.moveTo(0,64);
+    state.landPts.forEach(p=>ctx.lineTo(p.x,p.y));
+    ctx.lineTo(64,64); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=schema.land.colTop;
+    for(let i=0;i<state.landPts.length-1;i++) ctx.fillRect(state.landPts[i].x,state.landPts[i].y|0,2,1);
+  }
+
+  // Lightning
+  if(state.layer.lightning){
+    if(Math.random()<schema.lightning.chance){lightningTimer=flashTimer=schema.lightning.duration;}
+    if(flashTimer>0){ctx.fillStyle=`rgba(255,255,255,${schema.lightning.flashAlpha})`; ctx.fillRect(0,0,64,64); flashTimer--;}
+    if(lightningTimer>0){
+      ctx.strokeStyle=schema.lightning.color;
+      ctx.beginPath(); ctx.moveTo(32,0);
+      for(let i=0;i<schema.lightning.forks;i++) ctx.lineTo(32+(Math.random()-.5)*schema.lightning.forkJitter,i*(64/schema.lightning.forks));
+      ctx.stroke(); lightningTimer--;
+    }
+  }
+
+  // Moon
+  if(state.layer.moon){
+    const a=schema.moon.dayAlpha+nightA*(1-schema.moon.dayAlpha);
+    ctx.globalAlpha=a;
+    state.moonProg=(state.moonProg||0)+schema.moon.speed;
+    const arc=Math.sin(state.moonProg*Math.PI);
+    const x=state.moonProg*74-5,y=64-schema.moon.yAmp+(1-arc)*schema.moon.yAmp;
+    const r=lerp(schema.moon.rMin,schema.moon.rMax,arc);
+    ctx.fillStyle=schema.moon.color1; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+    ctx.fillStyle=schema.moon.color2; ctx.beginPath(); ctx.arc(x-1,y-1,r-1,0,7); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  // Solar system
+  if(state.layer.solar && nightA>.9){
+    const cfg=schema.solar;
+    state.solarProg=(state.solarProg||0)+cfg.speed;
+    const arc=Math.sin(state.solarProg*Math.PI);
+    const sx=state.solarProg*84-10,sy=80-arc*85;
+    ctx.globalAlpha=nightA;
+    ctx.fillStyle='#ffcc00'; ctx.beginPath(); ctx.arc(sx,sy,cfg.sunRadius,0,7); ctx.fill();
+    ctx.fillStyle='rgba(255,204,0,.3)'; ctx.beginPath(); ctx.arc(sx,sy,cfg.sunRadius+1,0,7); ctx.fill();
+    ctx.lineWidth=cfg.orbLineW;
+    cfg.planets.forEach(p=>{
+      p.angle=(p.angle||0)+p.s;
+      const px=sx+Math.cos(p.angle)*p.d,py=sy+Math.sin(p.angle)*p.d;
+      ctx.strokeStyle=`rgba(255,255,255,${cfg.orbLineAlpha*nightA})`;
+      ctx.beginPath(); ctx.arc(sx,sy,p.d,0,7); ctx.stroke();
+      ctx.fillStyle=p.c; ctx.beginPath(); ctx.arc(px,py,p.r,0,7); ctx.fill();
+    });
+    ctx.globalAlpha=1; ctx.lineWidth=1;
+  }
+
+  // Particles / Rockets
+  ['shooting','meteor','comet'].forEach(type=>{
+    const cfg=schema[type]; if(!state.layer[type]||!cfg) return;
+    if(state.particles.filter(p=>p.type===type).length<cfg.maxCount && Math.random()<cfg.spawnRate*nightA) spawn(type);
+  });
+  // Draw
+  [...state.particles,...state.rockets].forEach((o,i,arr)=>{
+    o.life--; o.x+=o.vx; o.y+=o.vy;
+    if(o.life<=0||o.x<-10||o.x>74||o.y<-10||o.y>74){arr.splice(i,1); return;}
+    const lifeNorm=o.life/schema[o.type].life;
+    const sz=lerp(o.size2,o.size,lifeNorm);
+    let color;
+    switch(schema[o.type].color){
+      case'fire':color=`rgba(255,${100+lifeNorm*155},0,${lifeNorm*nightA})`;break;
+      case'white':default:color=`rgba(255,255,255,${lifeNorm*nightA})`;break;
+    }
+    if(schema[o.type].trail){
+      o.trail.unshift({x:o.x,y:o.y});
+      if(o.trail.length>schema[o.type].trailLen) o.trail.length=schema[o.type].trailLen;
+      o.trail.forEach((p,j)=>{
+        const a=Math.pow(1-j/schema[o.type].trailLen,schema[o.type].trailFadePow)*lifeNorm*nightA;
+        ctx.fillStyle=color.replace(/,[\d.]+\)$/,`,${a})`);
+        ctx.fillRect(p.x|0,p.y|0,1,1);
+      });
+    }
+    ctx.fillStyle=color; ctx.fillRect((o.x-sz/2)|0,(o.y-sz/2)|0,Math.max(1,sz|0),Math.max(1,sz|0));
+  });
+
+  // FPS / layers
+  const now=performance.now();
+  if(now-lt>1000){document.getElementById('fps').textContent='FPS:'+fc; fc=0; lt=now;
+    document.getElementById('layers').textContent='Layers:'+Object.keys(state.layer).filter(k=>state.layer[k]).join('+')||'none';
+  }
+  requestAnimationFrame(loop);
+})();
+
+/* ----------------------------------------------------------
+   9. MINIMAL SETTINGS PANEL (auto-generated)
+---------------------------------------------------------- */
+let settingsOpen=false;
+function toggleSettings(){
+  settingsOpen=!settingsOpen;
+  const btn=document.getElementById('btn-settings');
+  if(settingsOpen){
+    btn.textContent='Hide Settings';
+    const panel=document.createElement('div'); panel.id='settingsPanel';
+    Object.entries(schema).forEach(([key,obj])=>{
+      const h=document.createElement('h4'); h.textContent=key;
+      h.onclick=()=>content.style.display=content.style.display==='none'?'block':'none';
+      panel.appendChild(h);
+      const content=document.createElement('div');
+      const add=(label,input)=>{const row=document.createElement('div');row.innerHTML=`<label>${label}</label>`;row.appendChild(input);content.appendChild(row);};
+      Object.entries(obj).forEach(([k,v])=>{
+        if(Array.isArray(v)) return; // planets handled below
+        let inp;
+        if(typeof v==='number'){inp=document.createElement('input'); inp.type='range'; inp.min=0; inp.max=typeof v==='number'?v*5||1:1; inp.step=0.01; inp.value=v; inp.oninput=e=>obj[k]=+e.target.value;}
+        else if(typeof v==='string' && v.startsWith('#')){inp=document.createElement('input'); inp.type='color'; inp.value=v; inp.oninput=e=>obj[k]=e.target.value;}
+        else if(typeof v==='boolean'){inp=document.createElement('input'); inp.type='checkbox'; inp.checked=v; inp.onchange=e=>obj[k]=e.target.checked;}
+        else return;
+        add(k,inp);
+      });
+      if(key==='solar') obj.planets.forEach((p,i)=>{
+        const pd=document.createElement('div'); pd.style.border='1px solid #555'; pd.style.margin='4px 0'; pd.style.padding='4px';
+        ['r','d','s'].forEach(k=>{
+          const inp=document.createElement('input'); inp.type='range'; inp.min=0; inp.max=k==='d'?30:5; inp.step=0.1; inp.value=p[k]; inp.oninput=e=>p[k]=+e.target.value;
+          add(`planet${i+1}.${k}`,inp,pd);
+        });
+        const c=document.createElement('input'); c.type='color'; c.value=p.c; c.oninput=e=>p.c=e.target.value;
+        add(`planet${i+1}.color`,c,pd);
+        content.appendChild(pd);
+      });
+      panel.appendChild(content);
+    });
+    document.body.appendChild(panel);
+  }else{
+    btn.textContent='Show Settings';
+    document.getElementById('settingsPanel')?.remove();
+  }
+}
+</script>
+</body>
+</html>
