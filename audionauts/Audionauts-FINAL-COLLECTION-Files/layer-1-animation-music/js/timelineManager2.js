@@ -4,15 +4,37 @@
 /* 1.  Static list of names (used only for fallback or console list)  */
 /* ------------------------------------------------------------------ */
 const fileStems = [
-  'dramaticRevealTimeline','cyberpunkGlitch_64bars','analog-film','CrystalBloomTimed',
-  'DeepDream_64bars','FractalFocus_64bars','GlitchBloom','GlitchWaves_64bars',
-  'GraffitiGlow_64bars','HighlightFlash_64bars','IridescentWave_64bars',
-  'manualTimeline1','manualTimeline2','manualtimeline3','multiband-bright',
-  'NeonShards','NoirWindow','pixel-dust','PsychedelicRipple','ReverseWipe',
-  'rgbShatter_64bars','SequentialHueBands','ShadowLift_64bars','SpectrumSpin_64bars',
-  'StarlitReveal','StrobeFocus_64bars','SunriseReveal',
-  'timeline_colourBandsGlitchReveal','timeline_windowSweepReveal'
+  "CrystalBloomTimed",
+  "DeepDream_64bars",
+  "FractalFocus_64bars",
+  "GlitchBloom",
+  "GlitchWaves_64bars",
+  "GraffitiGlow_64bars",
+  "HighlightFlash_64bars",
+  "IridescentWave_64bars",
+  "NeonShards",
+  "NoirWindow",
+  "PsychedelicRipple",
+  "ReverseWipe",
+  "SequentialHueBands",
+  "ShadowLift_64bars",
+  "SpectrumSpin_64bars",
+  "StarlitReveal",
+  "StrobeFocus_64bars",
+  "SunriseReveal",
+  "analog-film",
+  "cyberpunkGlitch_64bars",
+  "manualTimeline1",
+  "manualTimeline2",
+  "manualtimeline3",
+  "multiband-bright",
+  "pixel-dust",
+  "rgbShatter_64bars",
+  "spectral-solidity",
+  "timeline_colourBandsGlitchReveal",
+  "timeline_windowSweepReveal"
 ];
+
 
 /* ------------------------------------------------------------------ */
 /* 2.  One-time fetch & cache of recipes.json                          */
