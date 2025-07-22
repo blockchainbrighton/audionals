@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ultra-Programmable 64×64 Retro Canvas</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{
+  --bg:#111;
+  --panel:#222;
+  --txt:#aaa;
+  --accent:#0af;
+  --border:#444;
+  font-family:monospace;
+  font-size:11px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);display:flex;flex-direction:column;height:100vh;overflow:hidden}
+#uiTop,#uiBottom{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;max-height:20vh;overflow-y:auto}
+#uiLeft,#uiRight{display:flex;flex-direction:column;gap:2px;max-height:60vh;overflow-y:auto}
+#wrapper{flex:0 0 auto;position:relative;height:60vh;width:60vh;max-width:60vh;max-height:60vh;margin:auto}
+#gameCanvas{position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated;cursor:crosshair}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:3px;margin:2px;overflow:hidden;min-width:160px}
+.panel h4{padding:3px 5px;background:var(--accent);color:#000;cursor:pointer;user-select:none}
+.panel>div{padding:4px;display:grid;grid-template-columns:1fr 1fr;gap:2px;font-size:10px}
+.panel input,select{width:100%;background:#333;color:#eee;border:1px solid var(--border);border-radius:2px;font:inherit}
+.panel input[type=checkbox]{width:auto}
+.panel label{grid-column:1/3;display:flex;align-items:center;gap:4px}
+.panel.closed>div{display:none}
+.status{position:fixed;bottom:2px;left:50%;transform:translateX(-50%);font-size:10px;background:#0005;padding:2px 6px;border-radius:3px}
+
+@media (max-width:600px){
+  body{flex-direction:column}
+  #uiLeft,#uiRight{width:100%;max-height:20vh;flex-direction:row;overflow-x:auto}
+  #wrapper{order:1;margin:2vh 0}
+}
+</style>
+</head>
+<body>
+
+<!-- LEFT / TOP CONTROLS -->
+<div id="uiLeft"></div>
+
+<!-- CENTRAL CANVAS -->
+<div id="wrapper"><canvas id="gameCanvas" width="64" height="64"></canvas></div>
+
+<!-- RIGHT / BOTTOM CONTROLS -->
+<div id="uiRight"></div>
+
+<!-- STATUS BAR -->
+<div class="status">
+  <span id="fps">FPS:0</span> | <span id="layers">Layers:Stars</span>
+</div>
+
+<script>
+/* ---------- helpers ---------- */
+const $=id=>document.getElementById(id);
+const clamp=(v,min,max)=>Math.min(Math.max(v,min),max);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const randomColour=()=>`hsl(${rand(0,360)},100%,50%)`;
+
+/* ---------- canvas ---------- */
+const cvs=$('gameCanvas'),ctx=cvs.getContext('2d');
+let frame=0;
+
+/* ---------- global toggles ---------- */
+const layer={stars:true,moon:false,solar:false,clouds:false,shooting:false,land:false,aurora:false,lightning:false,meteor:false,sunset:false,comet:false};
+
+/* ---------- generic flying-object system ---------- */
+const flyingObjects=[];
+const configs={
+  shooting:{
+    spawnRate:{min:0,max:.05,step:.001,value:.01},
+    life:{min:100,max:3000,step:100,value:1200},
+    speed:{min:.1,max:5,step:.1,value:1},
+    vxMin:{min:-5,max:0,step:.1,value:-.5},
+    vxMax:{min:0,max:5,step:.1,value:0},
+    vyMin:{min:.1,max:5,step:.1,value:1},
+    vyMax:{min:1,max:5,step:.1,value:2},
+    trailLen:{min:0,max:50,step:1,value:10},
+    colour:'white',
+    useTrail:true,
+    fadeSpeed:1
+  },
+  meteor:{
+    spawnRate:{min:0,max:.05,step:.001,value:.005},
+    life:{min:100,max:3000,step:100,value:1200},
+    speed:{min:.1,max:5,step:.1,value:2},
+    angleMin:{min:0,max:Math.PI/2,step:.1,value:Math.PI/4},
+    angleMax:{min:Math.PI/4,max:Math.PI,step:.1,value:Math.PI/2},
+    trailLen:{min:0,max:50,step:1,value:8},
+    colour:'fire',
+    useTrail:true,
+    fadeSpeed:1
+  },
+  comet:{
+    spawnRate:{min:0,max:.05,step:.001,value:.002},
+    life:{min:1000,max:10000,step:100,value:4000},
+    speed:{min:.01,max:1,step:.01,value:.15},
+    startSize:{min:1,max:5,step:.1,value:2},
+    endSize:{min:1,max:5,step:.1,value:1},
+    trailLen:{min:0,max:100,step:1,value:30},
+    colour:'white',
+    useTrail:true,
+    fadeSpeed:1
+  }
+};
+
+function addFlyingObject(type){
+  const c=configs[type];
+  let obj={life:c.life.value,conf:c,type};
+  switch(type){
+    case 'shooting':
+      Object.assign(obj,{
+        x:rand(0,64),y:0,
+        vx:rand(c.vxMin.value,c.vxMax.value),
+        vy:rand(c.vyMin.value,c.vyMax.value)
+      });
+      break;
+    case 'meteor':
+      const a=rand(c.angleMin.value,c.angleMax.value);
+      const s=rand(.5,1)*c.speed.value;
+      Object.assign(obj,{
+        x:rand(0,64),y:0,
+        vx:Math.cos(a)*s,
+        vy:Math.sin(a)*s
+      });
+      break;
+    case 'comet':
+      const edge=Math.floor(rand(0,4));
+      const spd=c.speed.value;
+      let x,y,vx,vy;
+      switch(edge){
+        case 0:x=rand(0,64);y=-5;vx=rand(-.3,.3);vy=spd;break;
+        case 1:x=-5;y=rand(0,64);vx=spd;vy=rand(-.3,.3);break;
+        case 2:x=69;y=rand(0,64);vx=-spd;vy=rand(-.3,.3);break;
+        case 3:x=rand(0,64);y=69;vx=rand(-.3,.3);vy=-spd;break;
+      }
+      Object.assign(obj,{x,y,vx,vy,startSize:c.startSize.value,endSize:c.endSize.value});
+      break;
+  }
+  flyingObjects.push(obj);
+}
+
+/* ---------- per-layer programmable data ---------- */
+const data={
+  stars:{
+    count:{min:1,max:200,step:1,value:35},
+    twinkle:{min:.001,max:.05,step:.001,value:.02},
+    brightness:{min:.1,max:1,step:.01,value:.7},
+    colour:'white'
+  },
+  moon:{
+    speed:{min:.00005,max:.001,step:.00001,value:.0001},
+    colour:'#f0e68c'
+  },
+  solar:{
+    speed:{min:.0001,max:.002,step:.00001,value:.0002},
+    sunRadius:{min:1,max:8,step:.1,value:4},
+    colours:['#4ae','#e74','#fc0'],
+    planetRadius:1.5,
+    orbitDist:12
+  },
+  clouds:{
+    count:{min:1,max:10,step:1,value:4},
+    speed:{min:.01,max:.1,step:.001,value:.04},
+    opacity:{min:.1,max:1,step:.01,value:.3},
+    colour:'#fff'
+  },
+  land:{
+    colour:'#0a1a0a',
+    detailColour:'#0c2f0c',
+    amplitude:{min:1,max:20,step:.1,value:6},
+    detail:{min:1,max:5,step:1,value:2}
+  },
+  aurora:{
+    count:{min:1,max:5,step:1,value:3},
+    amplitude:{min:1,max:10,step:.1,value:4},
+    speed:{min:.005,max:.1,step:.001,value:.02},
+    opacity:{min:.01,max:.3,step:.01,value:.15},
+    colour:'green'
+  },
+  lightning:{
+    chance:{min:0,max:.01,step:.0001,value:.003},
+    duration:{min:1,max:20,step:1,value:8},
+    flashOpacity:{min:.1,max:1,step:.01,value:.4}
+  },
+  sunset:{
+    speed:{min:.0001,max:.005,step:.00001,value:.0003}
+  }
+};
+
+/* ---------- build UI ---------- */
+function makePanel(name,obj,parent){
+  const p=document.createElement('div');
+  p.className='panel closed';
+  const h=document.createElement('h4');
+  h.textContent=name;
+  h.onclick=()=>p.classList.toggle('closed');
+  p.appendChild(h);
+  const body=document.createElement('div');
+  p.appendChild(body);
+  parent.appendChild(p);
+
+  Object.entries(obj).forEach(([k,v])=>{
+    if(typeof v==='object' && v.min!==undefined){
+      const label=document.createElement('label');
+      label.textContent=k;
+      const inp=document.createElement('input');
+      inp.type='range';inp.min=v.min;inp.max=v.max;inp.step=v.step;inp.value=v.value;
+      inp.oninput=e=>v.value=+e.target.value;
+      body.appendChild(label);body.appendChild(inp);
+    }else if(typeof v==='boolean'){
+      const label=document.createElement('label');
+      label.textContent=k;
+      const inp=document.createElement('input');
+      inp.type='checkbox';inp.checked=v;
+      inp.onchange=e=>obj[k]=e.target.checked;
+      label.prepend(inp);
+      body.appendChild(label);
+    }else if(typeof v==='string' && k==='colour'){
+      const label=document.createElement('label');
+      label.textContent=k;
+      const inp=document.createElement('input');
+      inp.type='color';inp.value=v;
+      inp.oninput=e=>obj[k]=e.target.value;
+      body.appendChild(label);body.appendChild(inp);
+    }else if(Array.isArray(v)){
+      /* skip arrays for brevity */
+    }else if(typeof v==='string'){
+      const label=document.createElement('label');
+      label.textContent=k;
+      const inp=document.createElement('select');
+      ['white','silver','gold','rainbow','fire','ice','green'].forEach(opt=>{
+        const o=document.createElement('option');
+        o.value=opt;o.textContent=opt;
+        if(opt===v)o.selected=true;
+        inp.appendChild(o);
+      });
+      inp.onchange=e=>obj[k]=e.target.value;
+      body.appendChild(label);body.appendChild(inp);
+    }
+  });
+}
+
+/* ---------- create panels ---------- */
+const left=$('uiLeft'),right=$('uiRight');
+makePanel('Stars',data.stars,left);
+makePanel('Moon',data.moon,left);
+makePanel('Solar',data.solar,left);
+makePanel('Clouds',data.clouds,left);
+makePanel('Landscape',data.land,left);
+makePanel('Aurora',data.aurora,left);
+
+makePanel('Shooting',configs.shooting,right);
+makePanel('Meteor',configs.meteor,right);
+makePanel('Comet',configs.comet,right);
+makePanel('Lightning',data.lightning,right);
+makePanel('Sunset',data.sunset,right);
+
+/* ---------- layer toggles ---------- */
+['stars','moon','solar','clouds','shooting','land','aurora','lightning','meteor','sunset','comet']
+  .forEach(name=>{
+    const btn=document.createElement('button');
+    btn.textContent=name.charAt(0).toUpperCase()+name.slice(1);
+    btn.onclick=()=>layer[name]=!layer[name];
+    btn.style.cssText='padding:2px 4px;font-size:10px';
+    (name.match(/shooting|meteor|comet|lightning|sunset/)?right:left).appendChild(btn);
+  });
+
+/* ---------- global reset ---------- */
+const reset=document.createElement('button');
+reset.textContent='Reset All';
+reset.style.cssText='padding:4px 8px;font-size:12px;margin:4px';
+$('uiTop')||$('uiLeft').appendChild(reset);
+reset.onclick=()=>{
+  flyingObjects.length=0;
+  Object.keys(layer).forEach(k=>layer[k]=false);
+  layer.stars=true;
+};
+
+/* ---------- draw ---------- */
+let lt=performance.now(),fc=0;
+function draw(){
+  ctx.fillStyle='#000011';ctx.fillRect(0,0,64,64);
+  frame++;
+
+  /* ---------- stars ---------- */
+  if(layer.stars){
+    const d=data.stars;
+    for(let i=0;i<d.count.value;i++){
+      const x=(Math.sin(i*2.345)*32+32)|0;
+      const y=(Math.cos(i*1.876)*32+32)|0;
+      const b=Math.sin(frame*d.twinkle.value+i)*d.brightness.value;
+      ctx.fillStyle=`rgba(255,255,255,${b})`;
+      ctx.fillRect(x,y,1,1);
+    }
+  }
+
+  /* ---------- moon ---------- */
+  if(layer.moon){
+    const d=data.moon;
+    moon.prog=(moon.prog+d.speed.value)%1;
+    const arc=Math.sin(moon.prog*Math.PI);
+    const x=moon.prog*74-5,y=70-arc*60,r=1+arc*4;
+    ctx.fillStyle=d.colour;
+    ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ddd';
+    ctx.beginPath();ctx.arc(x-1,y-1,r-1,0,Math.PI*2);ctx.fill();
+  }
+
+  /* ---------- solar ---------- */
+  if(layer.solar && !layer.sunset){
+    const d=data.solar;
+    solar.prog=(solar.prog+d.speed.value)%1;
+    const arc=Math.sin(solar.prog*Math.PI);
+    const sunX=solar.prog*84-10;
+    const sunY=80-arc*85;
+    ctx.fillStyle='#ffcc00';
+    ctx.beginPath();ctx.arc(sunX,sunY,d.sunRadius.value,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,204,0,0.3)';
+    ctx.beginPath();ctx.arc(sunX,sunY,d.sunRadius.value+1,0,Math.PI*2);ctx.fill();
+    solar.pls.forEach((p,i)=>{
+      p.a+=p.s;
+      const x=sunX+Math.cos(p.a)*d.orbitDist*(i+1);
+      const y=sunY+Math.sin(p.a)*d.orbitDist*(i+1);
+      ctx.strokeStyle='rgba(255,255,255,0.1)';
+      ctx.beginPath();ctx.arc(sunX,sunY,d.orbitDist*(i+1),0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle=d.colours[i];
+      ctx.beginPath();ctx.arc(x,y,d.planetRadius*(i+1)/2,0,Math.PI*2);ctx.fill();
+    });
+  }
+
+  /* ---------- clouds ---------- */
+  if(layer.clouds){
+    const d=data.clouds;
+    for(let i=0;i<d.count.value;i++){
+      const x=(frame*d.speed.value*10+i*15)%80-10;
+      const y=8+Math.sin(i*1.2)*15;
+      ctx.fillStyle=`rgba(255,255,255,${d.opacity.value})`;
+      for(let j=0;j<12;j++){
+        ctx.fillRect((x+j)|0,(y+Math.sin(j*0.6)*2)|0,1,1);
+      }
+    }
+  }
+
+  /* ---------- landscape ---------- */
+  if(layer.land){
+    const d=data.land;
+    ctx.fillStyle=d.colour;
+    ctx.beginPath();ctx.moveTo(0,64);
+    for(let i=0;i<=64;i++){
+      const y=32+Math.sin(i*0.5)*d.amplitude.value+Math.cos(i*0.3)*d.detail.value;
+      ctx.lineTo(i,y);
+    }
+    ctx.lineTo(64,64);ctx.closePath();ctx.fill();
+    ctx.fillStyle=d.detailColour;
+    for(let i=0;i<64;i+=2){
+      const y=32+Math.sin(i*0.5)*d.amplitude.value+Math.cos(i*0.3)*d.detail.value;
+      ctx.fillRect(i,y|0,1,1);
+    }
+  }
+
+  /* ---------- aurora ---------- */
+  if(layer.aurora){
+    const d=data.aurora;
+    const mode=d.colour==='rainbow'?'hsl':'rgba';
+    for(let x=0;x<64;x++){
+      for(let i=0;i<d.count.value;i++){
+        const y=5+i*3+d.amplitude.value*Math.sin(x*0.2+frame*d.speed.value+i);
+        const alpha=d.opacity.value;
+        ctx.fillStyle=mode==='hsl'
+          ?`hsla(${(x*5+frame)%360},100%,70%,${alpha})`
+          :`rgba(0,255,128,${alpha})`;
+        ctx.fillRect(x,y|0,1,1);
+      }
+    }
+  }
+
+  /* ---------- lightning ---------- */
+  if(layer.lightning){
+    const d=data.lightning;
+    if(Math.random()<d.chance.value){
+      ctx.fillStyle=`rgba(255,255,255,${d.flashOpacity.value})`;
+      ctx.fillRect(0,0,64,64);
+      ctx.strokeStyle='rgba(255,255,255,0.8)';
+      ctx.beginPath();ctx.moveTo(32,0);
+      for(let i=0;i<d.duration.value;i++){
+        ctx.lineTo(32+(Math.random()-0.5)*20,i*4);
+      }
+      ctx.stroke();
+    }
+  }
+
+  /* ---------- sunset ---------- */
+  if(layer.sunset){
+    const d=data.sunset;
+    sunsetPhase=Math.min(1,sunsetPhase+d.speed.value);
+    const g=ctx.createLinearGradient(0,0,0,64);
+    g.addColorStop(0,`rgba(${135-sunsetPhase*120},${206-sunsetPhase*186},${235-sunsetPhase*215},1)`);
+    g.addColorStop(1,`rgba(${255-sunsetPhase*240},${120-sunsetPhase*100},${20},1)`);
+    ctx.fillStyle=g;ctx.fillRect(0,0,64,64);
+  }
+
+  /* ---------- flying objects ---------- */
+  if(layer.shooting && Math.random()<configs.shooting.spawnRate.value) addFlyingObject('shooting');
+  if(layer.meteor   && Math.random()<configs.meteor.spawnRate.value)   addFlyingObject('meteor');
+  if(layer.comet    && Math.random()<configs.comet.spawnRate.value)    addFlyingObject('comet');
+
+  /* ---------- update flying objects ---------- */
+  for(let i=flyingObjects.length-1;i>=0;i--){
+    const o=flyingObjects[i];
+    o.life--;
+    o.x+=o.vx;
+    o.y+=o.vy;
+    if(o.life<=0||o.x<-10||o.x>74||o.y<-10||o.y>74){flyingObjects.splice(i,1);continue;}
+
+    const life=o.life/o.conf.life.value;
+    let size=1;
+    if(o.startSize!==undefined){
+      size=o.startSize+(o.endSize-o.startSize)*(1-life);
+    }
+    const intSize=Math.max(1,Math.round(size));
+
+    let colour;
+    switch(o.type){
+      case 'shooting':
+        colour=configs.shooting.colour==='rainbow'?randomColour():configs.shooting.colour;
+        break;
+      case 'meteor':
+        switch(configs.meteor.colour){
+          case 'fire':colour=`rgba(255,${100+life*155},0,${life})`;break;
+          case 'ice': colour=`rgba(100,200,255,${life})`;break;
+          default:colour=randomColour();
+        }
+        break;
+      case 'comet':
+        colour=configs.comet.colour==='rainbow'?randomColour():configs.comet.colour;
+        break;
+    }
+
+    if(o.conf.useTrail){
+      const len=o.conf.trailLen.value;
+      for(let j=0;j<len;j++){
+        const px=o.x-j*o.vx/2;
+        const py=o.y-j*o.vy/2;
+        const alpha=life/(j+1)*o.conf.fadeSpeed;
+        ctx.fillStyle=colour.replace(/[\d.]+\)$/,alpha+')');
+        ctx.fillRect((px-size/2)|0,(py-size/2)|0,intSize,intSize);
+      }
+    }
+    ctx.fillStyle=colour.replace(/[\d.]+\)$/,life+')');
+    ctx.fillRect((o.x-size/2)|0,(o.y-size/2)|0,intSize,intSize);
+  }
+
+  /* ---------- status ---------- */
+  fc++;
+  const now=performance.now();
+  if(now-lt>1000){
+    $('fps').textContent='FPS:'+fc;
+    const active=Object.keys(layer).filter(k=>layer[k]);
+    $('layers').textContent='Layers:'+(active.length?active.join('+'):'none');
+    fc=0;lt=now;
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>

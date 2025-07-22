@@ -1,239 +1,307 @@
-<!-- Needs instructions for gameplay - I can't work out what I'm supposed to do-->
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>Minimalist Factory</title>
   <style>
-    body {
-      font-family: system-ui, sans-serif;
-      background: #111;
-      color: #eee;
-      margin: 0;
-      padding: 1rem;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+    :root{
+      --accent:#0ff;
+      --accent2:#0f0;
     }
-    h1 { margin: 0 0 .5rem; font-size: 1.6rem; }
-    #factory {
-      display: grid;
-      grid-template-columns: repeat(6, 3rem);
-      gap: 2px;
-      margin-bottom: 1rem;
+    body{
+      font-family: system-ui,sans-serif;
+      background:#111;
+      color:#eee;
+      margin:0;
+      padding:1rem;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
     }
-    .tile {
-      width: 3rem;
-      height: 3rem;
-      background: #222;
-      border: 1px solid #333;
-      position: relative;
-      cursor: pointer;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 1.5rem;
-      user-select: none;
+    h1{margin:0 0 .5rem;font-size:1.6rem}
+    #factory{
+      display:grid;
+      grid-template-columns:repeat(6,3rem);
+      gap:2px;
+      margin-bottom:1rem;
+      position:relative;
     }
-    .tile.selected { outline: 2px solid #0ff; }
-    .arrow {
-      position: absolute;
-      color: #0f0;
-      font-size: .8rem;
-      pointer-events: none;
+    .tile{
+      width:3rem;height:3rem;
+      background:#222;
+      border:1px solid #333;
+      position:relative;
+      cursor:pointer;
+      display:flex;justify-content:center;align-items:center;
+      font-size:1.5rem;
+      user-select:none;
     }
-    .arrow.up    { top: 0; left: 50%; transform: translateX(-50%); }
-    .arrow.right { right: 0; top: 50%; transform: translateY(-50%); }
-    .arrow.down  { bottom: 0; left: 50%; transform: translateX(-50%); }
-    .arrow.left  { left: 0; top: 50%; transform: translateY(-50%); }
-    #controls {
-      display: flex;
-      gap: .5rem;
-      flex-wrap: wrap;
-      justify-content: center;
+    .tile.selected{outline:2px solid var(--accent)}
+    .tile.preview{background:#2a2a2a}
+    .arrow{
+      position:absolute;
+      color:var(--accent2);
+      font-size:.8rem;
+      pointer-events:none;
     }
-    button {
-      padding: .4rem .8rem;
-      background: #222;
-      color: #eee;
-      border: 1px solid #444;
-      cursor: pointer;
+    .arrow.up{top:0;left:50%;transform:translateX(-50%)}
+    .arrow.right{right:0;top:50%;transform:translateY(-50%)}
+    .arrow.down{bottom:0;left:50%;transform:translateX(-50%)}
+    .arrow.left{left:0;top:50%;transform:translateY(-50%)}
+
+    /* TOOLTIP */
+    [data-tooltip]{
+      position:relative;
     }
-    button:hover { background: #333; }
-    #stats {
-      margin-top: .5rem;
-      font-size: .9rem;
+    [data-tooltip]::after{
+      content:attr(data-tooltip);
+      position:absolute;
+      bottom:100%;
+      left:50%;
+      transform:translateX(-50%);
+      background:#0009;
+      color:#fff;
+      padding:.25rem .5rem;
+      border-radius:4px;
+      white-space:nowrap;
+      pointer-events:none;
+      opacity:0;
+      transition:.15s;
+      z-index:10;
     }
+    [data-tooltip]:hover::after{opacity:1}
+
+    #controls{
+      display:flex;
+      gap:.5rem;
+      flex-wrap:wrap;
+      justify-content:center;
+    }
+    button{
+      padding:.4rem .8rem;
+      background:#222;
+      color:#eee;
+      border:1px solid #444;
+      cursor:pointer;
+    }
+    button:hover{background:#333}
+    #stats{margin-top:.5rem;font-size:.9rem}
+
+    /* TUTORIAL POP-UP */
+    #tutorial{
+      position:fixed;
+      inset:0;
+      background:#000b;
+      display:flex;justify-content:center;align-items:center;
+      z-index:100;
+    }
+    #tutorial.hidden{display:none}
+    #tutorial .box{
+      background:#222;
+      border:1px solid #444;
+      padding:1.5rem;
+      max-width:320px;
+      text-align:center;
+    }
+    #tutorial button{margin-top:.75rem}
   </style>
 </head>
 <body>
   <h1>Minimalist Factory</h1>
+
   <div id="factory"></div>
+
   <div id="controls">
-    <button data-type="gen">Generator</button>
-    <button data-type="conv">Conveyor</button>
-    <button data-type="asm">Assembler</button>
-    <button data-type="sell">Seller</button>
-    <button id="reset">Reset</button>
+    <button data-type="gen"  data-tooltip="Creates 1 unit/tick">Generator ⚡</button>
+    <button data-type="conv" data-tooltip="Moves items forward">Conveyor ▶️</button>
+    <button data-type="asm"  data-tooltip="2→3 upgrade">Assembler 🏭</button>
+    <button data-type="sell" data-tooltip="Turns items into cash">Seller 💰</button>
+    <button id="reset" data-tooltip="Clear the grid">Reset</button>
   </div>
+
   <div id="stats">Output: 0 | Target: 50</div>
 
+  <!-- Tutorial overlay -->
+  <div id="tutorial">
+    <div class="box">
+      <p id="tut-text">Welcome! Place your first <b>Generator</b>.</p>
+      <button id="tut-btn">OK</button>
+    </div>
+  </div>
+
   <script>
-    // ---------- CONFIG ----------
-    const ROWS = 6;
-    const COLS = 6;
-    const TICK_MS = 400;
-    const TARGET = 50;
+    /* ---------- CONFIG ---------- */
+    const ROWS = 6, COLS = 6, TICK_MS = 400, TARGET = 50;
 
-    // ---------- DATA ----------
-    const grid = Array.from({length: ROWS}, () => Array(COLS).fill(null));
-    let selected = null;
-    let output = 0;
+    /* ---------- DATA ---------- */
+    const grid = Array.from({length:ROWS},_=>Array(COLS).fill(null));
+    let selected = null, output = 0, placeMode = null;
+    const tutSteps = [
+      "Click any empty tile to drop a Generator ⚡.",
+      "Great! Now place a Conveyor ▶️ next to it.",
+      "Click the Generator, then click the Conveyor to link them. Arrow appears!"
+    ];
+    let tutStep = 0;
 
-    // ---------- MACHINE TYPES ----------
+    /* ---------- MACHINES ---------- */
     const MACHINES = {
-      gen:  { icon: '⚡', produces: 1 },
-      conv: { icon: '▶️', moves: true },
-      asm:  { icon: '🏭', consumes: 2, produces: 3 },
-      sell: { icon: '💰', sells: true }
+      gen:  {icon:'⚡',produces:1},
+      conv: {icon:'▶️',moves:true},
+      asm:  {icon:'🏭',consumes:2,produces:3},
+      sell: {icon:'💰',sells:true}
     };
 
-    // ---------- DOM ----------
+    /* ---------- DOM ---------- */
     const factoryEl = document.getElementById('factory');
-    const statsEl = document.getElementById('stats');
+    const statsEl   = document.getElementById('stats');
+    const tutorial  = document.getElementById('tutorial');
+    const tutText   = document.getElementById('tut-text');
+    const tutBtn    = document.getElementById('tut-btn');
 
-    // ---------- GRID RENDER ----------
-    function renderFactory() {
-      factoryEl.innerHTML = '';
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
+    /* ---------- RENDER ---------- */
+    function renderFactory(){
+      factoryEl.innerHTML='';
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
           const tile = document.createElement('div');
-          tile.className = 'tile';
-          tile.dataset.r = r;
-          tile.dataset.c = c;
+          tile.className='tile';
+          if(placeMode && !grid[r][c]) tile.classList.add('preview');
+          tile.dataset.r=r;
+          tile.dataset.c=c;
+
           const m = grid[r][c];
           tile.textContent = m ? MACHINES[m.type].icon : '';
-          if (m && m.outDir) {
-            const a = document.createElement('span');
-            a.className = 'arrow ' + m.outDir;
-            a.textContent = '▲';
+          if(m && m.outDir){
+            const a=document.createElement('span');
+            a.className='arrow '+m.outDir;
+            a.textContent='▲';
             tile.appendChild(a);
           }
-          if (selected && selected.r === r && selected.c === c) {
-            tile.classList.add('selected');
-          }
-          tile.addEventListener('click', () => handleTileClick(r, c));
+          if(selected && selected.r===r && selected.c===c) tile.classList.add('selected');
+
+          tile.addEventListener('click', ()=>handleTileClick(r,c));
           factoryEl.appendChild(tile);
         }
       }
-      statsEl.textContent = `Output: ${output} | Target: ${TARGET}`;
-      if (output >= TARGET) {
-        alert('Target reached! Factory optimized.');
+      statsEl.textContent=`Output: ${output} | Target: ${TARGET}`;
+      if(output>=TARGET){
+        setTimeout(()=>alert('Target reached! Factory optimized.'),100);
         resetGame();
       }
     }
 
-    // ---------- PLACE / CONNECT ----------
-    function placeMachine(type, r, c) {
-      if (grid[r][c]) return;
-      grid[r][c] = { type, buffer: 0, outDir: null };
+    /* ---------- PLACE / CONNECT ---------- */
+    function placeMachine(type,r,c){
+      if(grid[r][c]) return;
+      grid[r][c]={type,buffer:0,outDir:null};
+      placeMode=null;
+      advanceTutorial();
       renderFactory();
     }
 
-    function connectMachines(r1, c1, r2, c2) {
-      const m1 = grid[r1][c1];
-      if (!m1 || m1.outDir) return;
-      if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
-
+    function connectMachines(r1,c1,r2,c2){
+      const m1=grid[r1][c1];
+      if(!m1||m1.outDir) return;
+      if(Math.abs(r1-r2)+Math.abs(c1-c2)!==1) return;
       let dir;
-      if (r2 < r1) dir = 'up';
-      else if (r2 > r1) dir = 'down';
-      else if (c2 > c1) dir = 'right';
-      else dir = 'left';
-      m1.outDir = dir;
-      selected = null;
+      if(r2<r1) dir='up';
+      else if(r2>r1) dir='down';
+      else if(c2>c1) dir='right';
+      else dir='left';
+      m1.outDir=dir;
+      selected=null;
+      advanceTutorial();
       renderFactory();
     }
 
-    // ---------- SIMULATION ----------
-    function stepFactory() {
-      // 1. Move items
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          const m = grid[r][c];
-          if (!m || !m.outDir) continue;
-          let nr = r, nc = c;
-          if (m.outDir === 'up') nr--;
-          else if (m.outDir === 'down') nr++;
-          else if (m.outDir === 'left') nc--;
-          else if (m.outDir === 'right') nc++;
-          if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
-          const next = grid[nr][nc];
-          if (!next) continue;
-          if (m.buffer > 0) {
-            next.buffer += 1;
-            m.buffer -= 1;
+    /* ---------- SIMULATION ---------- */
+    function stepFactory(){
+      /* 1. Move */
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          const m=grid[r][c];
+          if(!m||!m.outDir) continue;
+          let nr=r,nc=c;
+          if(m.outDir==='up') nr--;
+          else if(m.outDir==='down') nr++;
+          else if(m.outDir==='left') nc--;
+          else if(m.outDir==='right') nc++;
+          if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
+          const next=grid[nr][nc];
+          if(!next) continue;
+          if(m.buffer>0){next.buffer+=1;m.buffer-=1;}
+        }
+      }
+      /* 2. Produce/consume/sell */
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          const m=grid[r][c];
+          if(!m) continue;
+          const def=MACHINES[m.type];
+          if(def.produces&&!def.consumes){
+            m.buffer+=def.produces;
+          }else if(def.consumes&&m.buffer>=def.consumes){
+            m.buffer-=def.consumes;
+            m.buffer+=def.produces;
+          }else if(def.sells){
+            output+=m.buffer;
+            m.buffer=0;
           }
         }
       }
+      renderFactory();
+    }
 
-      // 2. Produce / consume
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          const m = grid[r][c];
-          if (!m) continue;
-          const def = MACHINES[m.type];
-          if (def.produces && !def.consumes) {
-            m.buffer += def.produces;
-          } else if (def.consumes && m.buffer >= def.consumes) {
-            m.buffer -= def.consumes;
-            m.buffer += def.produces;
-          } else if (def.sells) {
-            output += m.buffer;
-            m.buffer = 0;
-          }
-        }
+    /* ---------- UI HANDLERS ---------- */
+    function handleTileClick(r,c){
+      if(placeMode){
+        placeMachine(placeMode,r,c);
+        return;
+      }
+      if(!selected){
+        selected={r,c};
+      }else{
+        connectMachines(selected.r,selected.c,r,c);
       }
       renderFactory();
     }
 
-    // ---------- UI HANDLERS ----------
-    function handleTileClick(r, c) {
-      if (!selected) {
-        selected = { r, c };
-      } else {
-        connectMachines(selected.r, selected.c, r, c);
-      }
-      renderFactory();
-    }
-
-    document.querySelectorAll('#controls button[data-type]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const type = btn.dataset.type;
-        const empty = [];
-        for (let r = 0; r < ROWS; r++)
-          for (let c = 0; c < COLS; c++)
-            if (!grid[r][c]) empty.push({r, c});
-        if (empty.length === 0) return;
-        const {r, c} = empty[Math.floor(Math.random()*empty.length)];
-        placeMachine(type, r, c);
+    document.querySelectorAll('#controls button[data-type]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        placeMode = btn.dataset.type;
+        selected = null;
+        renderFactory();
       });
     });
 
-    document.getElementById('reset').addEventListener('click', resetGame);
+    document.getElementById('reset').addEventListener('click',resetGame);
 
-    function resetGame() {
-      for (let r = 0; r < ROWS; r++)
-        for (let c = 0; c < COLS; c++)
-          grid[r][c] = null;
-      output = 0;
-      selected = null;
+    /* ---------- TUTORIAL ---------- */
+    function advanceTutorial(){
+      if(tutStep>=tutSteps.length){tutorial.classList.add('hidden');return;}
+      tutStep++;
+      if(tutStep<tutSteps.length) tutText.innerHTML=tutSteps[tutStep];
+    }
+    tutBtn.addEventListener('click',()=>{
+      if(tutStep===0){
+        tutText.innerHTML=tutSteps[0];
+        tutStep++;
+      }else{
+        advanceTutorial();
+      }
+    });
+
+    /* ---------- INIT ---------- */
+    function resetGame(){
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)grid[r][c]=null;
+      output=0;selected=null;placeMode=null;tutStep=0;
+      tutorial.classList.remove('hidden');
+      tutText.innerHTML="Welcome! Place your first <b>Generator</b>.";
       renderFactory();
     }
 
-    // ---------- INIT ----------
     resetGame();
-    setInterval(stepFactory, TICK_MS);
+    setInterval(stepFactory,TICK_MS);
   </script>
 </body>
 </html>

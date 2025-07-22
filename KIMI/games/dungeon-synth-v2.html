@@ -32,6 +32,43 @@
     #titleScreen{position:absolute;top:0;left:0;right:0;bottom:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center}
     #titleScreen h1{color:#0ff;font-size:48px;margin-bottom:24px}
     #titleScreen button{background:#0ff;border:none;padding:8px 16px;margin:4px;font-size:16px;cursor:pointer}
+
+    /* Add these styles inside the <style> tag in the <head> */
+#guideOverlay{
+    position:absolute;top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,.85);
+    display:none; /* Initially hidden */
+    align-items:center;justify-content:center;
+    z-index: 100;
+}
+#guideBox{
+    width:90%;
+    max-width:700px;
+    height:85vh;
+    background:#111;
+    border:1px solid #0ff;
+    padding:20px;
+    display:flex;
+    flex-direction:column;
+}
+#guideContent{
+    flex:1;
+    overflow-y:auto;
+    margin-bottom: 15px;
+    padding-right: 10px; /* space for scrollbar */
+    line-height: 1.6em;
+}
+#guideContent h1 { color: #0ff; font-size: 28px; margin-bottom: 16px; border-bottom: 1px solid #0ff;}
+#guideContent h2 { color: #ccc; font-size: 22px; margin-top: 24px; margin-bottom: 12px; border-bottom: 1px solid #444;}
+#guideContent h3 { color: #ccc; font-size: 18px; margin-top: 16px; margin-bottom: 8px;}
+#guideContent p { margin-bottom: 12px; }
+#guideContent ul { list-style: square; padding-left: 20px; }
+#guideContent li { margin-bottom: 8px; }
+#guideContent strong { color: #ff0; font-weight: normal; }
+.guide-button {
+    background:#0ff; border:none; padding:8px 16px;
+    font-size:16px; cursor:pointer; align-self: center;
+}
 </style>
 </head>
 <body>
@@ -41,6 +78,7 @@
   <button onclick="startGame('BASS')">Bass Line (Tank)</button>
   <button onclick="startGame('PAD')">Pad (Support)</button>
   <button onclick="startGame('ARP')">Arpeggiator (DPS)</button>
+  <button onclick="showGuide()">View Guide</button>
 </div>
 
 <div id="ui" style="display:none">
@@ -420,6 +458,7 @@ function loadGame(){
   render();
   log('Game loaded.');
 }
+
 /* ============================================================
    12. GAME FLOW
    ============================================================ */
@@ -461,6 +500,68 @@ function log(msg){
   l.textContent+=msg+'\n';
   l.scrollTop=l.scrollHeight;
 }
+
+
+/* ============================================================
+   14. GUIDE DISPLAY
+   ============================================================ */
+function showGuide() {
+    fetch('dungeon-synth-v2.md')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Guide file not found.');
+            }
+            return response.text();
+        })
+        .then(markdown => {
+            const html = parseMarkdownToHTML(markdown);
+            document.getElementById('guideContent').innerHTML = html;
+            document.getElementById('guideOverlay').style.display = 'flex';
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById('guideContent').innerHTML = `<p>Error: Could not load dungeon-synth-v2.md. Make sure the file is in the same folder as the HTML file.</p>`;
+            document.getElementById('guideOverlay').style.display = 'flex';
+        });
+}
+
+function hideGuide() {
+    document.getElementById('guideOverlay').style.display = 'none';
+}
+
+function parseMarkdownToHTML(markdown) {
+    let html = markdown
+        // Headings
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        // Bold
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        // List items
+        .replace(/^\* (.*$)/gim, '<li>$1</li>');
+
+    // Wrap consecutive list items in <ul> tags
+    html = html.replace(/<li>(.*?)<\/li>\s*(?=(<li>))/g, '<li>$1</li>');
+    html = html.replace(/(<li>.*?<\/li>)/g, '<ul>$1</ul>');
+    html = html.replace(/<\/ul>\s*<ul>/g, '');
+
+    // Paragraphs (any line that isn't a heading or list)
+    html = html.split('\n').map(line => {
+        if (line.trim() === '' || line.startsWith('<h') || line.startsWith('<ul')) {
+            return line;
+        }
+        return `<p>${line}</p>`;
+    }).join('');
+
+    return html;
+}
 </script>
+<!-- Add this section right before the </body> tag -->
+<div id="guideOverlay">
+  <div id="guideBox">
+    <div id="guideContent"></div>
+    <button class="guide-button" onclick="hideGuide()">Close</button>
+  </div>
+</div>
 </body>
 </html>
