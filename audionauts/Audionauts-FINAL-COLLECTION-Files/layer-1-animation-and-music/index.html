@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Analog Reveal – One File</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:sans-serif}
+  #cvs{display:block;margin:auto;max-width:90vmin;max-height:90vmin;cursor:pointer}
+</style>
+</head>
+<body>
+<canvas id="cvs"></canvas>
+
+<script type="module">
+/* =========================================================
+   1.  CONFIG
+   ========================================================= */
+// CHOOSE WHICH TIMELINE TO PLAY (from 1 to 29)
+const TIMELINE_TO_LOAD = 1;
+
+const IMAGE_URL = 'https://ordinals.com/content/01c48d3cceb02215bc3d44f9a2dc7fba63ea63719a2ef1c35d3f0c4db93ab8d5i0';
+const AUDIO_URL = './opus.webm';
+const RECIPES_URL = './timelines/recipes.json';
+
+/* =========================================================
+   2.  THE 29 CURATED TIMELINES
+   ========================================================= */
+// List of the 29 timelines from your notes
+const TOP_29_TIMELINES = [
+    "CrystalBloomTimed", "DeepDream_64bars", "FractalFocus_64bars", "GlitchBloom", "GlitchWaves_64bars",
+    "GraffitiGlow_64bars", "HighlightFlash_64bars", "IridescentWave_64bars", "NeonShards", "NoirWindow",
+    "PsychedelicRipple", "ReverseWipe", "SequentialHueBands", "ShadowLift_64bars", "SpectrumSpin_64bars",
+    "StarlitReveal", "StrobeFocus_64bars", "SunriseReveal", "analog-film", "cyberpunkGlitch_64bars",
+    "manualTimeline1", "manualTimeline2", "manualtimeline3", "multiband-bright", "pixel-dust",
+    "rgbShatter_64bars", "spectral-solidity", "timeline_colourBandsGlitchReveal", "timeline_windowSweepReveal"
+];
+
+/* =========================================================
+   3.  MINI ENGINE – no external files
+   ========================================================= */
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+const audio = new Audio(AUDIO_URL);
+audio.preload = 'auto';
+
+/* ---------- helpers ---------- */
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const barsToSec = (bars, bpm = 104.15, beatsPerBar = 4) => 60 / bpm * bars * beatsPerBar;
+
+/* ---------- state ---------- */
+let img, w, h, startTime = null, frameId = null;
+let timeline = []; // This will be populated dynamically
+
+/* ---------- Timeline Parser ---------- */
+// This logic converts the compact string from recipes.json back into a usable object array.
+const EFFECT_MAP = {
+    F: { effect: 'fade', param: 'progress' },
+    Px: { effect: 'pixelate', param: 'pixelSize' },
+    Bl: { effect: 'blur', param: 'radius' },
+    CS: { effect: 'chromaShift', param: 'intensity' },
+    Gl: { effect: 'glitch', param: 'intensity' },
+    Sc: { effect: 'scanLines', param: 'intensity' },
+    Vg: { effect: 'vignette', param: 'intensity' },
+    Fg: { effect: 'filmGrain', param: 'intensity' },
+    C: { effect: 'colourSweep', param: 'progress' },
+};
+
+function parseValue(val) {
+    if (typeof val !== 'string') return val;
+    if (val.includes(',')) return val.split(',').map(s => parseValue(s.trim()));
+    const num = parseFloat(val);
+    if (!isNaN(num) && isFinite(val)) return num;
+    if (val === 'true') return true;
+    if (val === 'false') return false;
+    return val; // Return as string
+}
+
+function parseTimeline(str) {
+    if (!str) return [];
+    const segments = str.split(/(?<!,)\s*,\s*(?![^"]*"(?:,|$))/); // Split by comma, respecting quotes
+    const regex = /^([A-Z][a-z]?)((?:-?\d*\.?\d+|-?\w+|[^@]+?))-((?:-?\d*\.?\d+|-?\w+|[^@]+?))@(-?\d*\.?\d+)-(-?\d*\.?\d+)(?::(.*))?$/;
+
+    return segments.map(segment => {
+        const match = segment.match(regex);
+        if (!match) {
+            console.warn(`Could not parse timeline segment: "${segment}"`);
+            return null;
+        }
+
+        const [, code, from, to, startBar, endBar, rest] = match;
+        const base = EFFECT_MAP[code];
+        if (!base) {
+            console.warn(`Unknown effect code: "${code}"`);
+            return null;
+        }
+
+        const event = {
+            ...base,
+            from: parseValue(from),
+            to: parseValue(to),
+            startBar: parseFloat(startBar),
+            endBar: parseFloat(endBar),
+        };
+
+        if (rest) {
+            try {
+                const extraParams = JSON.parse(`{${rest}}`);
+                Object.assign(event, extraParams);
+            } catch (e) {
+                console.error(`Failed to parse extra params: {${rest}}`, e);
+            }
+        }
+        return event;
+    }).filter(Boolean); // Filter out any nulls from failed parses
+}
+
+
+/* ---------- effect functions (Unchanged) ---------- */
+const fx = {
+  filmGrain(src,dst,ct,p,ww,hh){
+    dst.filter=`contrast(110%) brightness(110%)`;
+    dst.drawImage(src.canvas,0,0);
+    dst.filter='none';
+    const id=dst.getImageData(0,0,ww,hh),d=id.data;
+    for(let i=0;i<d.length;i+=4){
+      const g=(Math.random()-0.5)*255*p.intensity;
+      d[i]+=g; d[i+1]+=g; d[i+2]+=g;
+    }
+    dst.putImageData(id,0,0);
+  },
+  vignette(src,dst,ct,p,ww,hh){
+    dst.drawImage(src.canvas,0,0);
+    const g=dst.createRadialGradient(ww/2,hh/2,0,ww/2,hh/2,Math.min(ww,hh)*0.5);
+    g.addColorStop(0,'rgba(0,0,0,0)');
+    g.addColorStop(0.6,'rgba(0,0,0,0)');
+    g.addColorStop(1,`rgba(0,0,0,${p.intensity})`);
+    dst.fillStyle=g; dst.fillRect(0,0,ww,hh);
+  },
+  colourSweep(src,dst,ct,p,ww,hh){
+    const pr=clamp(p.progress,0,1);
+    const fwd=p.direction!==-1;
+    const thr=(fwd?pr:1-pr)*255;
+    const id=src.getImageData(0,0,ww,hh),d=id.data;
+    const soft=p.edgeSoftness||0, band=32*soft;
+    const isHide=p.mode==='hide';
+    for(let i=0;i<d.length;i+=4){
+      const bright=(d[i]+d[i+1]+d[i+2])/3;
+      const show=isHide?bright>thr:bright<=thr;
+      const dist=isHide?(bright-thr):(thr-bright);
+      let alpha=0;
+      if(show) alpha=255;
+      else if(band>0&&dist<band) alpha=255*(1+dist/band);
+      d[i+3]=alpha;
+    }
+    dst.putImageData(id,0,0);
+  },
+  blur(src,dst,ct,p,ww,hh){
+    dst.filter=`blur(${p.radius}px)`;
+    dst.drawImage(src.canvas,0,0);
+    dst.filter='none';
+  },
+  scanLines(src,dst,ct,p,ww,hh){
+    dst.drawImage(src.canvas,0,0);
+    dst.fillStyle=`rgba(0,0,0,${p.intensity})`;
+    const spacing=p.spacing||6;
+    for(let y=0;y<hh;y+=spacing) dst.fillRect(0,y,ww,1);
+  },
+  glitch(src,dst,ct,p,ww,hh){
+    if(!p.intensity){dst.drawImage(src.canvas,0,0);return;}
+    dst.clearRect(0,0,ww,hh);
+    const slices=3+Math.floor(p.intensity*8);
+    for(let i=0;i<slices;i++){
+      const hh2=hh/slices, y=i*hh2;
+      const offset=(Math.random()-.5)*p.intensity*ww*.05;
+      dst.drawImage(src.canvas,0,y,ww,hh2,offset,y,ww,hh2);
+    }
+  },
+  // Added pixelate and fade effects which were in recipes but not in the original engine
+  pixelate(src, dst, ct, p, ww, hh) {
+    const size = Math.max(1, p.pixelSize | 0);
+    if (size <= 1) {
+        dst.drawImage(src.canvas, 0, 0);
+        return;
+    }
+    const tempCtx = document.createElement('canvas').getContext('2d');
+    const w = src.canvas.width;
+    const h = src.canvas.height;
+    tempCtx.canvas.width = w;
+    tempCtx.canvas.height = h;
+    
+    // Draw original to a small size, then scale it up to create pixelation
+    tempCtx.imageSmoothingEnabled = false;
+    tempCtx.drawImage(src.canvas, 0, 0, w / size, h / size);
+    tempCtx.drawImage(tempCtx.canvas, 0, 0, w / size, h / size, 0, 0, w, h);
+    
+    dst.drawImage(tempCtx.canvas, 0, 0);
+  },
+  fade(src, dst, ct, p, ww, hh) {
+    dst.globalAlpha = clamp(p.progress, 0, 1);
+    dst.drawImage(src.canvas, 0, 0);
+    dst.globalAlpha = 1;
+  },
+  chromaShift(src, dst, ct, p, ww, hh){
+    dst.drawImage(src.canvas, 0, 0); // fallback
+  }
+};
+
+/* ---------- main loop ---------- */
+const buf1 = document.createElement('canvas');
+const buf2 = document.createElement('canvas');
+let buf1ctx = buf1.getContext('2d');
+let buf2ctx = buf2.getContext('2d');
+
+function draw() {
+    if (!img || !timeline.length) { frameId = requestAnimationFrame(draw); return; }
+    const now = (performance.now() / 1000) - (startTime || 0);
+    buf1ctx.clearRect(0, 0, w, h);
+    buf1ctx.drawImage(img, 0, 0, w, h);
+
+    /* apply timeline */
+    timeline.forEach(l => {
+        if (!l || !l.effect) return;
+        const tStart = barsToSec(l.startBar);
+        const tEnd = barsToSec(l.endBar);
+        if (now < tStart || now > tEnd) return;
+        
+        // Handle instantaneous events
+        let t = (tEnd - tStart > 0) ? (now - tStart) / (tEnd - tStart) : 1;
+
+        if (l.easing === 'easeInOut') t = ease(t);
+
+        const val = (typeof l.from === 'number' && typeof l.to === 'number')
+            ? l.from + (l.to - l.from) * t
+            : (t < 0.5 ? l.from : l.to); // For non-numeric values, just switch halfway
+        
+        const p = { ...l, [l.param]: val };
+
+        if (fx[l.effect]) {
+            fx[l.effect](buf1ctx, buf2ctx, now, p, w, h);
+            [buf1ctx, buf2ctx] = [buf2ctx, buf1ctx];
+        } else {
+           // console.warn(`Effect function not found: ${l.effect}`);
+        }
+    });
+
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    ctx.drawImage(buf1ctx.canvas, 0, 0);
+    frameId = requestAnimationFrame(draw);
+}
+
+/* ---------- bootstrap ---------- */
+function resize() {
+    const s = Math.min(innerWidth, innerHeight) * .9 | 0;
+    cvs.width = cvs.height = s;
+    w = h = s;
+    buf1.width = buf2.width = s;
+    buf1.height = buf2.height = s;
+    if (!img) { // If image hasn't loaded, show loading text
+      ctx.fillStyle = '#555';
+      ctx.fillRect(0,0,w,h);
+      ctx.fillStyle = 'white';
+      ctx.textAlign = 'center';
+      ctx.font = '24px sans-serif';
+      ctx.fillText('Loading...', w/2, h/2);
+    }
+}
+window.addEventListener('resize', resize);
+
+function start() {
+    if (frameId) cancelAnimationFrame(frameId);
+    startTime = performance.now() / 1000;
+    audio.currentTime = 0;
+    audio.play().catch(console.warn);
+    draw();
+}
+
+async function init() {
+    resize();
+    try {
+        const response = await fetch(RECIPES_URL);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const recipes = await response.json();
+
+        const index = clamp(TIMELINE_TO_LOAD - 1, 0, TOP_29_TIMELINES.length - 1);
+        const timelineName = TOP_29_TIMELINES[index];
+        const timelineString = recipes[timelineName];
+        
+        console.log(`Loading timeline #${TIMELINE_TO_LOAD}: ${timelineName}`);
+        
+        if (!timelineString) {
+            throw new Error(`Timeline "${timelineName}" not found in recipes.json.`);
+        }
+        
+        timeline = parseTimeline(timelineString);
+
+        const imgObj = new Image();
+        imgObj.crossOrigin = 'anonymous';
+        imgObj.onload = () => {
+            img = imgObj;
+            ctx.clearRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(0,0,w,h);
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.font = '24px sans-serif';
+            ctx.fillText('Click to Start', w/2, h/2);
+            cvs.onclick = start;
+        };
+        imgObj.onerror = () => {
+          ctx.fillStyle = 'red';
+          ctx.fillText('Error loading image.', w/2, h/2 + 30);
+        }
+        imgObj.src = IMAGE_URL;
+
+    } catch (error) {
+        console.error("Failed to initialize:", error);
+        ctx.fillStyle = 'red';
+        ctx.textAlign = 'center';
+        ctx.font = '18px sans-serif';
+        ctx.fillText(`Error: ${error.message}`, w / 2, h / 2);
+    }
+}
+
+init();
+
+</script>
+</body>
+</html>
