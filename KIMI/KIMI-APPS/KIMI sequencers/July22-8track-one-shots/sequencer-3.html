@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Drum & Synth Sequencer</title>
+<style>
+  :root{ --bg:#111; --fg:#eee; --hi:#0f0; --sn:#09f; }
+  body{margin:0;font-family:sans-serif;background:var(--bg);color:var(--fg);display:flex;flex-direction:column;align-items:center;user-select:none}
+  #transport{display:flex;gap:1em;padding:.5em;background:#222;border-radius:4px;margin:.5em 0}
+  button{padding:.4em .8em;border:none;border-radius:3px;background:#444;color:var(--fg);cursor:pointer}
+  button:hover{background:#555}
+  #grid{display:grid;grid-template-columns:repeat(64, minmax(8px,1fr));gap:1px;width:98%;max-width:1200px}
+  .step{aspect-ratio:1;background:#222;border-radius:2px}
+  .step.on{background:var(--hi)}
+  .step.playhead{background:#fff}
+  .row{display:contents}
+  label{font-size:.7em;color:#aaa}
+  #tempo{display:flex;align-items:center;gap:.3em}
+  #synthPanel{display:none;flex-direction:column;gap:.3em;background:#222;padding:.5em;border-radius:4px;margin:.5em 0}
+</style>
+</head>
+<body>
+
+<div id="transport">
+  <button id="playBtn">Play</button>
+  <button id="stopBtn">Stop</button>
+  <div id="tempo"><label>Tempo:</label><input id="bpm" type="range" min="60" max="180" value="120"><span id="bpmVal">120</span></div>
+  <button id="randSamples">Random Samples</button>
+  <button id="randPattern">Random Pattern</button>
+  <button id="armRec">Arm Rec</button>
+</div>
+
+<div id="synthPanel">
+  <label>A<input type="range" id="a" min="0" max="1" step=".01" value=".01"></label>
+  <label>D<input type="range" id="d" min="0" max="1" step=".01" value=".2"></label>
+  <label>S<input type="range" id="s" min="0" max="1" step=".01" value=".5"></label>
+  <label>R<input type="range" id="r" min="0" max="1" step=".01" value=".5"></label>
+</div>
+
+<div id="grid"></div>
+
+<script type="module">
+import * as Tone from 'https://cdn.skypack.dev/tone@14.7.77';
+
+const CHANNELS = 9, STEPS = 64;
+
+const SAMPLE_NAMES = [
+  ['kick 1.wav','kick 2.wav'],
+  ['snare 1.wav','snare 2.wav'],
+  ['hihat 1.wav','hihat 2.wav'],
+  ['floor 1.wav'],
+  ['tom 1.wav'],
+  ['tom 2.wav'],
+  ['kick 1.wav'],
+  ['snare 1.wav']
+];
+
+const PRESETS = {
+  kick : [[0,8,16,24,32,48],[0,12,24,36,48,60]],
+  snare:[[12,28,44,60],[16,32,48]],
+  hihat:[...Array(16)].flatMap((_,i)=>[i*4,i*4+2]),
+  floor:[[8,24,40,56]],
+  tom  :[[4,20,36,52]],
+  hightom:[[6,22,38,54]]
+};
+
+let seq, transport;
+const patterns = Array.from({length:CHANNELS},()=>Array(STEPS).fill(0));
+const synthNotes = [];
+let recording = false;
+const currentSamples = [...Array(CHANNELS)].map((_,i)=>i<SAMPLE_NAMES.length?0:0);
+const players = {};
+
+function buildGrid(){
+  const grid = document.getElementById('grid');
+  for(let ch=0;ch<CHANNELS;ch++){
+    for(let st=0;st<STEPS;st++){
+      const step = document.createElement('div');
+      step.className='step';
+      step.dataset.ch=ch;
+      step.dataset.st=st;
+      step.addEventListener('click',()=>{
+        patterns[ch][st]^=1;
+        step.classList.toggle('on',patterns[ch][st]);
+      });
+      grid.appendChild(step);
+    }
+  }
+}
+buildGrid();
+
+async function initAudio(){
+  await Tone.start();
+  transport = Tone.Transport;
+  transport.bpm.value = 120;
+  for(let ch=0;ch<CHANNELS-1;ch++){
+    players[ch] = new Tone.Players().toDestination();
+  }
+  const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+  seq = new Tone.Sequence((time,step)=>{
+    document.querySelectorAll('.step.playhead').forEach(el=>el.classList.remove('playhead'));
+    document.querySelectorAll(`[data-st="${step}"]`).forEach(el=>el.classList.add('playhead'));
+    for(let ch=0;ch<CHANNELS;ch++){
+      if(ch<CHANNELS-1){
+        if(patterns[ch][step]){
+          const s = currentSamples[ch];
+          const name = SAMPLE_NAMES[ch][s % SAMPLE_NAMES[ch].length].toLowerCase();
+          if(players[ch].has(name)) players[ch].get(name).start(time);
+        }
+      }else{
+        synthNotes.filter(n=>n.step===step).forEach(n=>{
+          synth.triggerAttackRelease(Tone.Midi(n.note).toFrequency(), '16n', time);
+        });
+      }
+    }
+  }, [...Array(STEPS).keys()], '16n');
+}
+initAudio();
+
+async function loadSamples() {
+  // real filenames on disk
+  const realFiles = [
+    'kick 1.wav', 'kick 2.wav',
+    'snare 1.wav', 'snare 2.WAV',
+    'HiHat 1.wav', 'HiHat 2.wav',
+    'floor 1.wav',
+    'tom 1.wav', 'tom 2.WAV'
+  ];
+
+  for (let ch = 0; ch < CHANNELS - 1; ch++) {
+    const variants = SAMPLE_NAMES[ch];           // e.g. ['kick 1.wav','kick 2.wav']
+    const idx      = currentSamples[ch];
+    const fileName = variants[idx % variants.length]; // selected file
+
+    // exact match in realFiles
+    const exact = realFiles.find(f => f.toLowerCase() === fileName.toLowerCase());
+    if (!exact) { console.warn('missing', fileName); continue; }
+
+    try {
+      await players[ch].add(exact, `audio-samples/${exact}`);
+    } catch (e) {
+      console.warn('could not load', exact);
+    }
+  }
+}
+
+document.getElementById('playBtn').onclick = ()=>{seq.start(0); transport.start()};
+document.getElementById('stopBtn').onclick = ()=>{transport.stop(); seq.stop()};
+document.getElementById('bpm').oninput = e=>{
+  const v = +e.target.value;
+  document.getElementById('bpmVal').textContent = v;
+  transport.bpm.value = v;
+};
+
+document.getElementById('randSamples').onclick = ()=>{
+  for(let ch=0;ch<CHANNELS-1;ch++){
+    currentSamples[ch] = Math.floor(Math.random()*SAMPLE_NAMES[ch].length);
+  }
+  loadSamples();
+};
+
+document.getElementById('randPattern').onclick = ()=>{
+  for(let ch=0;ch<CHANNELS-1;ch++){
+    patterns[ch].fill(0);
+    const key = ['kick','snare','hihat','floor','tom','hightom'][ch] || 'kick';
+    const arr = PRESETS[key] || [];
+    const choice = arr[Math.floor(Math.random()*arr.length)] || [];
+    choice.forEach(i=>patterns[ch][i]=1);
+  }
+  document.querySelectorAll('.step').forEach(el=>{
+    const {ch,st} = el.dataset;
+    el.classList.toggle('on',patterns[ch][st]);
+  });
+};
+
+document.getElementById('armRec').onclick = ()=>{
+  recording = !recording;
+  document.getElementById('armRec').textContent = recording?'Rec Armed':'Arm Rec';
+  document.getElementById('synthPanel').style.display = recording?'flex':'none';
+};
+
+const keyMap = {a:60,w:62,s:63,e:65,d:67,f:68,t:70,g:72,y:74,h:75,u:77,j:79};
+window.addEventListener('keydown',e=>{
+  if(!recording) return;
+  const note = keyMap[e.key.toLowerCase()];
+  if(note===undefined) return;
+  const step = Math.floor(transport.seconds * transport.bpm.value / 15) % STEPS;
+  synthNotes.push({step,note});
+});
+</script>
+
+</body>
+</html>

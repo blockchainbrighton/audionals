@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>8-Channel Drum Sequencer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--bg:#111;--fg:#eee;--accent:#0f0;--cell:#333;--cell-active:#0f0;--playhead:#ff0}
+*{box-sizing:border-box;font-family:sans-serif;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);padding:1rem}
+header{display:flex;gap:1rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap}
+button{background:#222;color:var(--fg);border:1px solid #555;padding:.5rem 1rem;border-radius:4px;cursor:pointer}
+button:hover{background:#444}
+label{display:flex;align-items:center;gap:.5rem}
+input[type=range]{width:120px}
+#grid{display:grid;gap:.25rem}
+.channel{display:contents}
+.channel::before{
+  content:attr(data-name) " (" attr(data-sample) ")";
+  grid-column:1;
+  align-self:center;
+  font-size:.8rem;
+  white-space:nowrap;
+  padding-right:.5rem
+}
+.step{
+  width:1.25rem;
+  height:1.25rem;
+  background:var(--cell);
+  cursor:pointer;
+  border-radius:2px;
+}
+.step.active{background:var(--cell-active)}
+.step.playhead{outline:2px solid var(--playhead)}
+@media(max-width:800px){
+  .channel::before{font-size:.7rem}
+  .step{width:1rem;height:1rem}
+}
+</style>
+</head>
+<body>
+<header>
+  <button id="playBtn">Play</button>
+  <label>Tempo <input type="range" id="tempo" min="60" max="180" value="120"></label>
+  <button id="randomSamples">Random Samples</button>
+  <button id="randomPattern">Random Pattern</button>
+</header>
+<main id="grid"></main>
+
+<script type="module">
+import * as Tone from 'https://cdn.skypack.dev/tone@14.8.49';
+
+/* ---------- CONFIG ---------- */
+const channelNames = ['Kick','Snare','HiHat','Floor','Mid','High','Spare1','Spare2'];
+const channels = Array.from({length: 8}, () => ({
+  player: new Tone.Player().toDestination(),
+  pattern: Array(64).fill(false),
+  file: ''
+}));
+
+Tone.Transport.loop = true;
+Tone.Transport.loopEnd = '4m';
+
+/* ---------- KNOWN SAMPLE LIST ---------- */
+// Mirror of what is actually on disk (case & extension exact)
+const sampleFiles = [
+  'kick 1.wav','kick 2.wav',
+  'snare 1.wav','snare 2.WAV',
+  'HiHat 1.wav','HiHat 2.wav',
+  'floor 1.wav','tom 1.wav','tom 2.WAV'
+].map(f => f.replace(/ /g, ' '));        // normalise spaces
+
+/* ---------- LOAD SAMPLE ---------- */
+function loadSample(chIdx, filename) {
+  const url = './audio-samples/' + encodeURI(filename);
+  channels[chIdx].player.load(url).catch(()=>{});
+  channels[chIdx].file = filename;
+  const rowEl = document.querySelectorAll('.channel')[chIdx];
+  if (rowEl) rowEl.dataset.sample = filename;
+}
+
+/* ---------- UI BUILD ---------- */
+function buildUI() {
+  const grid = document.getElementById('grid');
+  channels.forEach((_, row) => {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'channel';
+    rowEl.dataset.name = channelNames[row];
+    rowEl.dataset.sample = '';
+    for (let step = 0; step < 64; step++) {
+      const cell = document.createElement('div');
+      cell.className = 'step';
+      cell.dataset.row = row;
+      cell.dataset.step = step;
+      cell.addEventListener('click', () => toggleStep(row, step));
+      rowEl.appendChild(cell);
+    }
+    grid.appendChild(rowEl);
+  });
+}
+
+/* ---------- STEP TOGGLE ---------- */
+function toggleStep(row, step) {
+  channels[row].pattern[step] = !channels[row].pattern[step];
+  const el = document.querySelector(`.step[data-row="${row}"][data-step="${step}"]`);
+  el.classList.toggle('active', channels[row].pattern[step]);
+}
+
+/* ---------- SEQUENCER LOOP ---------- */
+let step = 0;
+Tone.Transport.scheduleRepeat(time => {
+  channels.forEach(ch => {
+    if (ch.pattern[step]) ch.player.start(time);
+  });
+  document.querySelectorAll('.step.playhead').forEach(el => el.classList.remove('playhead'));
+  document.querySelectorAll(`.step[data-step="${step}"]`).forEach(el => el.classList.add('playhead'));
+  step = (step + 1) % 64;
+}, '16n');
+
+/* ---------- TRANSPORT CONTROLS ---------- */
+async function togglePlay() {
+  await Tone.start();
+  if (Tone.Transport.state === 'started') {
+    Tone.Transport.stop();
+    document.getElementById('playBtn').textContent = 'Play';
+  } else {
+    Tone.Transport.start();
+    document.getElementById('playBtn').textContent = 'Stop';
+  }
+}
+document.getElementById('playBtn').addEventListener('click', togglePlay);
+document.getElementById('tempo').addEventListener('input', e => Tone.Transport.bpm.value = e.target.value);
+
+/* ---------- RANDOMISERS ---------- */
+const presets = {
+  kick:  [[0,8,16,24,32,48], [0,12,24,36,48,60]],
+  snare: [[12,28,44,60], [16,32,48]],
+  hihat: [Array.from({length:16}, (_,i)=>i*4), Array.from({length:16}, (_,i)=>i*4+2)],
+  floor: [[4,20,36,52]],
+  mid:   [[6,22,38,54]],
+  high:  [[10,26,42,58]]
+};
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+}
+
+function randomSamples() {
+  const pool = [...sampleFiles];
+  shuffle(pool);
+  channels.forEach((ch, i) => loadSample(i, pool[i % pool.length]));
+}
+
+function randomPattern() {
+  channels.forEach((ch, idx) => {
+    ch.pattern.fill(false);
+    const name = channelNames[idx].toLowerCase();
+    let preset;
+    if (presets[name]) {
+      preset = presets[name][Math.floor(Math.random() * presets[name].length)];
+    } else {
+      preset = Array.from({length: 8}, () => Math.floor(Math.random() * 64));
+    }
+    preset.forEach(i => { if (i < 64) ch.pattern[i] = true; });
+  });
+  document.querySelectorAll('.step').forEach(el => {
+    const row = +el.dataset.row;
+    const step = +el.dataset.step;
+    el.classList.toggle('active', channels[row].pattern[step]);
+  });
+}
+
+document.getElementById('randomSamples').addEventListener('click', randomSamples);
+document.getElementById('randomPattern').addEventListener('click', randomPattern);
+
+/* ---------- INITIAL LOAD ---------- */
+buildUI();
+sampleFiles.slice(0, 8).forEach((f, i) => loadSample(i, f));
+randomPattern();
+Tone.Transport.bpm.value = 120;
+</script>
+</body>
+</html>

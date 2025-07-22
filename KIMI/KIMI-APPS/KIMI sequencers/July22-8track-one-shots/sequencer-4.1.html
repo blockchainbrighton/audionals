@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8-Channel Drum Sequencer</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #1e1e2e, #2d2d44);
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 {
+            text-align: center; margin-bottom: 30px; font-size: 2.5em;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .controls-section {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px; flex-wrap: wrap; gap: 20px;
+        }
+        .play-controls { display: flex; gap: 10px; align-items: center; }
+        .play-btn, .stop-btn {
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            border: none; cursor: pointer; transition: all .3s; font-weight: bold;
+        }
+        .play-btn { width: 50px; height: 50px; font-size: 20px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .stop-btn { width: 40px; height: 40px; background: linear-gradient(135deg, #ff6b6b, #ff8e53); color: white; }
+        .play-btn:hover, .stop-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(255,255,255,.2); }
+        .bpm-control, .volume-control { display: flex; align-items: center; gap: 10px; color: #4ecdc4; font-weight: bold; }
+        .bpm-control input { width: 80px; padding: 5px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.3); border-radius: 4px; color: white; }
+        .volume-slider { width: 100px; accent-color: #4ecdc4; }
+        .controls { display: flex; gap: 10px; }
+        button.btn-primary {
+            padding: 12px 24px; font-size: 16px; border: none; border-radius: 8px;
+            cursor: pointer; transition: all .3s; font-weight: bold;
+            background: linear-gradient(135deg, #667eea, #764ba2); color: white;
+        }
+        button.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102,126,234,.4); }
+        .sequencer {
+            background: rgba(255,255,255,.05); border-radius: 12px; padding: 20px; backdrop-filter: blur(10px);
+        }
+        .channel {
+            display: flex; align-items: center; margin-bottom: 10px; padding: 10px;
+            background: rgba(255,255,255,.05); border-radius: 8px; transition: all .3s;
+        }
+        .channel:hover { background: rgba(255,255,255,.1); }
+        .channel-label {
+            width: 120px; font-weight: bold; color: #4ecdc4;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .channel-mute {
+            background: none; border: none; color: #666; cursor: pointer; font-size: 20px; transition: color .3s;
+        }
+        .channel-mute.active { color: #ff6b6b; }
+        .steps { display: flex; flex: 1; gap: 2px; }
+        .step {
+            width: 30px; height: 30px; border: 1px solid rgba(255,255,255,.2);
+            cursor: pointer; transition: all .2s; position: relative; border-radius: 4px;
+        }
+        .step:hover { border-color: rgba(255,255,255,.5); }
+        .step.active { background: linear-gradient(135deg, #ff6b6b, #4ecdc4); box-shadow: 0 0 10px rgba(255,107,107,.5); }
+        .step.playing { transform: scale(1.2); box-shadow: 0 0 20px rgba(255,255,255,.8); }
+        .step[data-step="16"], .step[data-step="32"], .step[data-step="48"], .step[data-step="64"] {
+            border-right: 2px solid rgba(255,255,255,.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>8-Channel Drum Sequencer</h1>
+
+        <div class="controls-section">
+            <div class="play-controls">
+                <button class="play-btn" id="playBtn">▶</button>
+                <button class="stop-btn" id="stopBtn">⏹</button>
+            </div>
+
+            <div class="bpm-control">
+                <label>BPM:</label>
+                <input type="number" id="bpmInput" value="120" min="60" max="200">
+            </div>
+
+            <div class="volume-control">
+                <label>Master Volume:</label>
+                <input type="range" class="volume-slider" id="masterVolume" min="0" max="100" value="70">
+                <span id="volumeDisplay">70%</span>
+            </div>
+
+            <div class="controls">
+                <button class="btn-primary" onclick="loadRandomSamples()">🎲 Load Random Samples</button>
+                <button class="btn-primary" onclick="generateRandomPattern()">🎵 Generate Random Pattern</button>
+            </div>
+        </div>
+
+        <div class="sequencer" id="sequencer">
+            <!-- Channels generated dynamically -->
+        </div>
+    </div>
+
+    <script>
+        /* ---------- Core audio setup ---------- */
+        let audioContext, masterGainNode;
+        let samples = {};
+        const channelTypes = [
+            { name: 'Kick', patterns: ['kick','kick1','kick2'] },
+            { name: 'Snare', patterns: ['snare','snare1','snare2'] },
+            { name: 'HiHat', patterns: ['hihat','hihat1','hihat2'] },
+            { name: 'Floor', patterns: ['floor','floor1'] },
+            { name: 'Tom', patterns: ['tom','tom1','tom2'] },
+            { name: 'Crash', patterns: ['crash'] },
+            { name: 'Ride', patterns: ['ride'] },
+            { name: 'Open Hat', patterns: ['openhat'] }
+        ];
+        let channels = [];          // 8 channels
+        let currentStep = 0;        // 0-63
+        let isPlaying = false;
+        let stepInterval = null;    // timer ID
+        let bpm = 120;
+
+        /* ---------- Pre-computed beat templates ---------- */
+        const beatPatterns = {
+            kick: {
+                fourOnFloor: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+                halfTime:    [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
+                broken:      [1,0,0,0, 0,0,1,0, 0,0,0,0, 1,0,0,1]
+            },
+            snare: {
+                backbeat: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+                ghost:    [0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0]
+            },
+            hihat: {
+                eighths: [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1],
+                shuffle: [0,1,0,0, 1,0,0,1, 0,1,0,0, 1,0,0,1]
+            },
+            floor: { simple: [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1] },
+            tom:   { fill:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,1,0] }
+        };
+
+        /* ---------- Initialization ---------- */
+        function init() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            masterGainNode = audioContext.createGain();
+            masterGainNode.connect(audioContext.destination);
+            masterGainNode.gain.value = 0.7;
+
+            createChannels();
+            loadRandomSamples();
+            generateRandomPattern();
+        }
+
+        function createChannels() {
+            const seq = document.getElementById('sequencer');
+            seq.innerHTML = '';
+            channels = [];
+            for (let i = 0; i < 8; i++) {
+                const ch = {
+                    type: channelTypes[i],
+                    steps: Array(64).fill(0),
+                    sample: null,
+                    gainNode: audioContext.createGain(),
+                    muted: false
+                };
+                ch.gainNode.connect(masterGainNode);
+
+                const row = document.createElement('div');
+                row.className = 'channel';
+                row.innerHTML = `
+                    <div class="channel-label">
+                        <button class="channel-mute" data-ch="${i}">🔊</button>
+                        ${ch.type.name}
+                    </div>
+                    <div class="steps" data-ch="${i}">
+                        ${Array(64).fill().map((_,j)=>`<div class="step" data-step="${j+1}" onclick="toggleStep(${i},${j})"></div>`).join('')}
+                    </div>`;
+                seq.appendChild(row);
+                channels.push(ch);
+            }
+            // mute toggles
+            document.querySelectorAll('.channel-mute').forEach(btn=>{
+                btn.onclick = e=>{
+                    const idx = +e.target.dataset.ch;
+                    channels[idx].muted = !channels[idx].muted;
+                    e.target.textContent = channels[idx].muted ? '🔇' : '🔊';
+                    e.target.classList.toggle('active', channels[idx].muted);
+                };
+            });
+        }
+
+        /* ---------- Sample loading ---------- */
+        async function loadRandomSamples() {
+            const files = ['kick 1.wav','kick 2.wav','snare 1.wav','snare 2.WAV',
+                           'HiHat 1.wav','HiHat 2.wav','floor 1.wav','tom 1.wav','tom 2.WAV'];
+            const map = {
+                kick:['kick 1.wav','kick 2.wav'], snare:['snare 1.wav','snare 2.WAV'],
+                hihat:['HiHat 1.wav','HiHat 2.wav'], floor:['floor 1.wav'], tom:['tom 1.wav','tom 2.WAV']
+            };
+            for (let i=0;i<8;i++){
+                const type = channels[i].type.name.toLowerCase();
+                let pool=[];
+                for (const [k,v] of Object.entries(map)) if (type.includes(k)) pool.push(...v);
+                if (!pool.length) pool=files;
+                const file = pool[Math.floor(Math.random()*pool.length)];
+                try {
+                    const buf = await (await fetch(`audio-samples/${file}`)).arrayBuffer();
+                    channels[i].sample = await audioContext.decodeAudioData(buf);
+                } catch {
+                    channels[i].sample = createTone(type);
+                }
+            }
+        }
+        function createTone(type){
+            const sr=audioContext.sampleRate, dur=.1, buf=audioContext.createBuffer(1,sr*dur,sr), data=buf.getChannelData(0);
+            const f = type.includes('kick')?60: type.includes('snare')?200: type.includes('hihat')?8000:400;
+            for (let i=0;i<data.length;i++){ const t=i/sr; data[i]=Math.sin(2*Math.PI*f*t)*Math.exp(-t*10); }
+            return buf;
+        }
+
+        /* ---------- Pattern generation ---------- */
+        function generateRandomPattern(){
+            channels.forEach(ch=>{
+                ch.steps.fill(0);
+                let pat=[];
+                if (ch.type.name.toLowerCase().includes('kick')) pat=randomPick([beatPatterns.kick.fourOnFloor,beatPatterns.kick.halfTime,beatPatterns.kick.broken]);
+                else if (ch.type.name.toLowerCase().includes('snare')) pat=randomPick([beatPatterns.snare.backbeat,beatPatterns.snare.ghost]);
+                else if (ch.type.name.toLowerCase().includes('hihat')) pat=randomPick([beatPatterns.hihat.eighths,beatPatterns.hihat.shuffle]);
+                else if (ch.type.name.toLowerCase().includes('floor')) pat=randomPick([beatPatterns.floor.simple]);
+                else if (ch.type.name.toLowerCase().includes('tom')) pat=randomPick([beatPatterns.tom.fill]);
+                else pat=Array(16).fill().map(()=>Math.random()>.7?1:0);
+                for (let bar=0;bar<4;bar++) for (let s=0;s<16;s++) ch.steps[bar*16+s]=pat[s]||0;
+                // slight random variation
+                for (let i=0;i<64;i++) if (Math.random()<.08) ch.steps[i]^=1;
+                updateChannelUI(channels.indexOf(ch));
+            });
+        }
+        const randomPick=arr=>arr[Math.floor(Math.random()*arr.length)];
+
+        /* ---------- UI helpers ---------- */
+        function toggleStep(ch,step){ channels[ch].steps[step]^=1; updateChannelUI(ch); }
+        function updateChannelUI(chIdx){
+            const steps=document.querySelector(`.steps[data-ch="${chIdx}"]`).children;
+            for (let i=0;i<64;i++) steps[i].classList.toggle('active',channels[chIdx].steps[i]);
+        }
+
+        /* ---------- Transport ---------- */
+        const playBtn=document.getElementById('playBtn'), stopBtn=document.getElementById('stopBtn'),
+              bpmInput=document.getElementById('bpmInput'), masterVol=document.getElementById('masterVolume');
+        playBtn.onclick = () => isPlaying ? stop() : play();
+        stopBtn.onclick = () => { stop(); currentStep=0; updatePlayhead(); };
+        bpmInput.onchange = () => { bpm=+bpmInput.value; if (isPlaying){stop();play();} };
+        masterVol.oninput = e => { masterGainNode.gain.value=e.target.value/100; document.getElementById('volumeDisplay').textContent=e.target.value+'%'; };
+
+        /* ---------- Playback ---------- */
+        let scheduled = [];           // keep track of scheduled sources
+        function play(){
+            isPlaying=true; playBtn.textContent='⏸';
+            const stepDur=(60/bpm)/4; // 1/16th
+            nextStep(stepDur);        // kick off recursive scheduler
+        }
+        function stop(){
+            isPlaying=false; playBtn.textContent='▶';
+            // kill all scheduled sources
+            scheduled.forEach(s=>{ try{ s.stop(); }catch{} });
+            scheduled=[];
+            // reset playhead
+            document.querySelectorAll('.step.playing').forEach(s=>s.classList.remove('playing'));
+        }
+        function nextStep(stepDur){
+            if (!isPlaying) return;
+            const now=audioContext.currentTime;
+            // play current step
+            channels.forEach(ch=>{
+                if (ch.steps[currentStep] && ch.sample && !ch.muted){
+                    const src=audioContext.createBufferSource();
+                    src.buffer=ch.sample;
+                    src.connect(ch.gainNode);
+                    src.start(now);
+                    scheduled.push(src);
+                    // auto-cleanup
+                    src.onended = ()=>{ const i=scheduled.indexOf(src); if(i>-1) scheduled.splice(i,1); };
+                }
+            });
+            updatePlayhead();
+            currentStep=(currentStep+1)%64;
+            // schedule next call
+            setTimeout(()=>nextStep(stepDur), stepDur*1000);
+        }
+        function updatePlayhead(){
+            document.querySelectorAll('.step.playing').forEach(s=>s.classList.remove('playing'));
+            document.querySelectorAll(`.step[data-step="${currentStep+1}"]`).forEach(s=>s.classList.add('playing'));
+        }
+
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
