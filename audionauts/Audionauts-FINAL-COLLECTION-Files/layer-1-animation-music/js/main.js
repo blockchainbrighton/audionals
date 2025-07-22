@@ -401,8 +401,9 @@ async function fetchAndProcessTimelineJS(url) {
 async function runEffectTimeline(tl) {
   let timelineToUse = tl, timelineNameToLog = 'Provided Timeline';
 
-  if (timelineToUse && timelineToUse.length > 0) {}
-  else if (window.fxTimelineUrl && !initialTimelineLoaded) {
+  if (timelineToUse && timelineToUse.length > 0) {
+      // Use provided timeline, do nothing
+  } else if (window.fxTimelineUrl && !initialTimelineLoaded) {
     log(`[FX] Attempting to load timeline from URL: ${window.fxTimelineUrl}`);
     const fetchedTimeline = await fetchAndProcessTimelineJS(window.fxTimelineUrl);
     if (fetchedTimeline && fetchedTimeline.length > 0) {
@@ -417,20 +418,25 @@ async function runEffectTimeline(tl) {
     timelineToUse = effectTimeline;
     timelineNameToLog = 'Manual UI Timeline';
   } else {
+    // --- THIS BLOCK IS REWRITTEN TO USE THE NEW timelineManager2.js ---
     if (window.fxTimeline && window.fxTimeline.length > 0) {
       timelineToUse = window.fxTimeline;
       timelineNameToLog = 'User-defined window.fxTimeline Array';
     } else if (typeof window.fxTimelineFunctionId === 'number') {
-      const func = timelines.getTimelineByNumber(window.fxTimelineFunctionId);
-      timelineToUse = (typeof func === 'function') ? func() : [];
-      timelineNameToLog = `[ID ${window.fxTimelineFunctionId}]`;
-    } else if (typeof window.fxTimelineFunctionName === 'string' && typeof timelines[window.fxTimelineFunctionName] === 'function') {
-      timelineToUse = timelines[window.fxTimelineFunctionName]();
+      const timelineLoader = timelines.getTimelineByNumber(window.fxTimelineFunctionId);
+      timelineToUse = await timelineLoader(); // Await the promise from the loader
+      const name = timelines.availableTimelineNames[window.fxTimelineFunctionId] || 'Unknown';
+      timelineNameToLog = `[ID ${window.fxTimelineFunctionId}] ${name}`;
+    } else if (typeof window.fxTimelineFunctionName === 'string') {
+      const timelineLoaderFn = await timelines.byName(window.fxTimelineFunctionName); // Await the promise that resolves to a function
+      if (timelineLoaderFn) {
+          timelineToUse = timelineLoaderFn(); // Call the function to get the array
+      }
       timelineNameToLog = window.fxTimelineFunctionName;
     } else {
-      const defaultFunc = timelines.dramaticRevealTimeline;
-      timelineToUse = (typeof defaultFunc === 'function') ? defaultFunc() : [];
-      timelineNameToLog = 'dramaticRevealTimeline (default)';
+      const defaultLoader = timelines.getTimelineByNumber(0); // Default to the first timeline
+      timelineToUse = await defaultLoader();
+      timelineNameToLog = `${timelines.availableTimelineNames[0]} (default)`;
     }
   }
 
@@ -452,7 +458,9 @@ async function runEffectTimeline(tl) {
 
   const coerce = v => {
     if (typeof v === 'string') {
-        if (!isNaN(parseFloat(v)) && isFinite(v)) return parseFloat(v);
+        // Check for numeric strings that are not comma-separated
+        if (!isNaN(parseFloat(v)) && isFinite(v) && !v.includes(',')) return parseFloat(v);
+        // Check for comma-separated numbers
         if (v.includes(',')) return v.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
     }
     return v;
