@@ -188,6 +188,11 @@
       <fieldset>
         <legend>🎨 Generative Effects</legend>
         <div class="effect-control">
+          <label for="effect-style-select">Effect Style:</label>
+          <select id="effect-style-select">
+            <option value="Smooth Gradient">Smooth Gradient</option>
+            <option value="Textured Contour">Textured Contour</option>
+          </select>
           <label for="pattern-select">Pattern:</label>
           <select id="pattern-select"></select>
           <label for="palette-select">Color Palette:</label>
@@ -243,6 +248,7 @@
         'Rings': (x, y, size) => (Math.sin(Math.sqrt((x - size/2)**2 + (y - size/2)**2)/2) + 1) / 2,
     };
     const COLOR_PALETTES = {
+        'Cyberpunk': [{pos:0, c:'#4B0082'}, {pos:0.5, c:'#FF00FF'}, {pos:1, c:'#00FFFF'}],
         'Fire': [{pos:0,c:'#FFFF00'},{pos:0.5,c:'#FF4500'},{pos:1,c:'#8B0000'}],
         'Ice': [{pos:0,c:'#FFFFFF'},{pos:0.5,c:'#00BFFF'},{pos:1,c:'#00008B'}],
         'Galaxy': [{pos:0,c:'#FFBBFF'},{pos:0.25,c:'#AA00AA'},{pos:0.75,c:'#000033'},{pos:1,c:'#000000'}],
@@ -259,6 +265,7 @@
     const dom = {
         gridContainer: document.getElementById('grid-container'),
         layerVisibilityControls: document.getElementById('layer-visibility-controls'),
+        effectStyleSelect: document.getElementById('effect-style-select'),
         patternSelect: document.getElementById('pattern-select'),
         paletteSelect: document.getElementById('palette-select'),
         targetLayersContainer: document.getElementById('target-layers-container'),
@@ -345,6 +352,7 @@
     }
 
     function applyGenerativeEffect() {
+        const styleName = dom.effectStyleSelect.value;
         const patternName = dom.patternSelect.value;
         const paletteName = dom.paletteSelect.value;
         const targetLayers = Array.from(dom.targetLayersContainer.querySelectorAll('input:checked')).map(cb => +cb.value);
@@ -352,7 +360,7 @@
         const palette = COLOR_PALETTES[paletteName];
 
         if (!patternFn || !palette || targetLayers.length === 0) {
-            alert("Please select a pattern, a palette, and at least one target layer."); // Keep alert for critical user error
+            alert("Please select a pattern, a palette, and at least one target layer.");
             return false;
         }
 
@@ -360,7 +368,30 @@
             if (targetLayers.includes(p.type)) {
                 const [x, y] = getXY(i);
                 const normValue = patternFn(x, y, GRID_SIZE);
-                p.color = mapValueToColor(normValue, palette);
+
+                if (styleName === 'Textured Contour' && palette.length >= 2) {
+                    // This style creates posterized (hard-edged) color bands,
+                    // but uses a dithered pattern for the transition between the last two colors.
+                    const threshold = palette[palette.length - 2].pos;
+
+                    if (normValue < threshold) {
+                        // For values below the threshold, find the correct solid color band (posterization).
+                        let colorIndex = 0;
+                        while (colorIndex < palette.length - 2 && normValue >= palette[colorIndex + 1].pos) {
+                            colorIndex++;
+                        }
+                        p.color = palette[colorIndex].c;
+                    } else {
+                        // For values at or above the threshold, dither between the last two colors.
+                        const color1 = palette[palette.length - 2].c;
+                        const color2 = palette[palette.length - 1].c;
+                        // Use a horizontal line dither pattern.
+                        p.color = (y % 2 === 0) ? color1 : color2;
+                    }
+                } else {
+                    // Fallback to the original smooth gradient logic.
+                    p.color = mapValueToColor(normValue, palette);
+                }
             }
         });
         renderGridFromData();
@@ -368,10 +399,12 @@
     }
 
     function generateAndApplyRandomEffect() {
+        const styles = Object.keys(dom.effectStyleSelect.options).map(o => o.value);
         const patterns = Object.keys(PATTERN_GENERATORS);
         const palettes = Object.keys(COLOR_PALETTES);
         const layerIds = Object.keys(LAYER_DEFINITIONS).filter(k => +k !== LAYER_TYPES.BG);
 
+        const randomStyle = styles[Math.floor(Math.random() * styles.length)];
         const randomPattern = patterns[Math.floor(Math.random() * patterns.length)];
         const randomPalette = palettes[Math.floor(Math.random() * palettes.length)];
 
@@ -381,6 +414,7 @@
         const randomTargets = shuffledLayers.slice(0, numTargets).map(Number);
 
         // Update UI controls
+        dom.effectStyleSelect.value = randomStyle;
         dom.patternSelect.value = randomPattern;
         dom.paletteSelect.value = randomPalette;
         dom.targetLayersContainer.querySelectorAll('input').forEach(cb => {
@@ -390,11 +424,12 @@
         // Apply immediately and silently
         applyGenerativeEffect();
         const targetNames = randomTargets.map(t => LAYER_DEFINITIONS[t].name).join(', ');
-        showToast(`Applied ${randomPattern} + ${randomPalette} to ${targetNames}`);
+        showToast(`Applied ${randomStyle}: ${randomPattern} + ${randomPalette} to ${targetNames}`);
     }
 
     function captureEffect() {
         const effectRecipe = {
+            style: dom.effectStyleSelect.value,
             pattern: dom.patternSelect.value,
             palette: dom.paletteSelect.value,
             targets: Array.from(dom.targetLayersContainer.querySelectorAll('input:checked')).map(cb => LAYER_DEFINITIONS[cb.value].name),
@@ -504,7 +539,7 @@
         };
         document.getElementById('export-button').onclick = () => {
             const cvs = document.createElement('canvas');
-            cvs.width = GRID_SIZE; cvs.height = GRID_SIZE;
+cvs.width = GRID_SIZE; cvs.height = GRID_SIZE;
             const ctx = cvs.getContext('2d');
             ctx.imageSmoothingEnabled = false;
             gridData.forEach((p, i) => {
