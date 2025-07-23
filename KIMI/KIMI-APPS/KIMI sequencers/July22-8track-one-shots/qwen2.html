@@ -1,0 +1,865 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8-Channel Drum Sequencer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: #e6e6e6;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            padding: 20px 0;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #ff7e5f, #feb47b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .subtitle {
+            color: #a0a0c0;
+            font-size: 1.1rem;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #4a4a8a, #6a5acd);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+            background: linear-gradient(45deg, #5a5aac, #7a6aff);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        .transport {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .play-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #00c9ff, #92fe9d);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+        }
+        
+        .stop-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #ff416c, #ff4b2b);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+        }
+        
+        .sequencer-grid {
+            background: rgba(30, 30, 60, 0.7);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            margin-bottom: 30px;
+            overflow-x: auto;
+        }
+        
+        .channel-header {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        
+        .channel-name {
+            width: 120px;
+            padding: 10px;
+            font-weight: bold;
+            text-align: center;
+            background: rgba(80, 80, 140, 0.5);
+            border-radius: 8px;
+            margin-right: 10px;
+        }
+        
+        .step-header {
+            display: flex;
+            flex: 1;
+        }
+        
+        .step-label {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .channel-row {
+            display: flex;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+        
+        .channel-label {
+            width: 120px;
+            padding: 8px;
+            text-align: center;
+            background: rgba(60, 60, 100, 0.6);
+            border-radius: 6px;
+            margin-right: 10px;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .steps-container {
+            display: flex;
+            flex: 1;
+        }
+        
+        .step {
+            width: 30px;
+            height: 30px;
+            background: rgba(100, 100, 160, 0.3);
+            border-radius: 4px;
+            margin: 0 2px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .step:hover {
+            background: rgba(120, 120, 180, 0.5);
+        }
+        
+        .step.active {
+            background: linear-gradient(45deg, #ff7e5f, #feb47b);
+            box-shadow: 0 0 10px rgba(255, 126, 95, 0.7);
+        }
+        
+        .step.current {
+            border: 2px solid #00c9ff;
+            box-shadow: 0 0 15px rgba(0, 201, 255, 0.8);
+        }
+        
+        .synth-section {
+            background: rgba(30, 30, 60, 0.7);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #feb47b;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .synth-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        
+        .control-group {
+            background: rgba(40, 40, 80, 0.5);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        
+        .control-group h3 {
+            margin-bottom: 15px;
+            color: #92fe9d;
+            font-size: 1.2rem;
+        }
+        
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        label {
+            font-size: 14px;
+            color: #a0a0c0;
+        }
+        
+        input[type="range"] {
+            width: 60%;
+        }
+        
+        select, input[type="number"] {
+            background: rgba(20, 20, 40, 0.7);
+            border: 1px solid #4a4a8a;
+            color: white;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        
+        .midi-editor {
+            margin-top: 20px;
+        }
+        
+        .midi-grid {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            gap: 2px;
+            margin-top: 10px;
+        }
+        
+        .midi-note {
+            height: 30px;
+            background: rgba(100, 100, 160, 0.3);
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .midi-note:hover {
+            background: rgba(120, 120, 180, 0.5);
+        }
+        
+        .midi-note.active {
+            background: linear-gradient(45deg, #00c9ff, #92fe9d);
+        }
+        
+        .status-bar {
+            text-align: center;
+            padding: 15px;
+            background: rgba(20, 20, 40, 0.7);
+            border-radius: 10px;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #a0a0c0;
+        }
+        
+        .bpm-display {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #feb47b;
+        }
+        
+        @media (max-width: 768px) {
+            .sequencer-grid {
+                padding: 10px;
+            }
+            
+            .channel-name, .channel-label {
+                width: 80px;
+                font-size: 12px;
+            }
+            
+            .step {
+                width: 20px;
+                height: 20px;
+            }
+            
+            .step-label {
+                width: 20px;
+                height: 20px;
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>8-Channel Drum Sequencer</h1>
+            <p class="subtitle">With built-in synth and MIDI editing</p>
+        </header>
+        
+        <div class="controls">
+            <button id="randomLoadBtn">Random Sample Load</button>
+            <button id="randomBeatBtn">Generate Random Beat</button>
+            <button id="clearBtn">Clear All Steps</button>
+        </div>
+        
+        <div class="transport">
+            <button class="stop-btn">⏹</button>
+            <button class="play-btn">▶</button>
+            <div class="bpm-display">BPM: <span id="bpmValue">120</span></div>
+            <input type="range" id="bpmSlider" min="60" max="180" value="120">
+        </div>
+        
+        <div class="sequencer-grid">
+            <div class="channel-header">
+                <div class="channel-name">Channel</div>
+                <div class="step-header" id="stepHeader"></div>
+            </div>
+            
+            <div id="sequencerRows"></div>
+        </div>
+        
+        <div class="synth-section">
+            <h2 class="section-title">Synth Channel</h2>
+            
+            <div class="synth-controls">
+                <div class="control-group">
+                    <h3>Oscillator</h3>
+                    <div class="control-row">
+                        <label for="waveform">Waveform:</label>
+                        <select id="waveform">
+                            <option value="sine">Sine</option>
+                            <option value="square">Square</option>
+                            <option value="sawtooth">Sawtooth</option>
+                            <option value="triangle">Triangle</option>
+                        </select>
+                    </div>
+                    <div class="control-row">
+                        <label for="detune">Detune:</label>
+                        <input type="range" id="detune" min="-50" max="50" value="0">
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Envelope</h3>
+                    <div class="control-row">
+                        <label for="attack">Attack:</label>
+                        <input type="range" id="attack" min="0" max="100" value="10">
+                    </div>
+                    <div class="control-row">
+                        <label for="decay">Decay:</label>
+                        <input type="range" id="decay" min="0" max="100" value="30">
+                    </div>
+                    <div class="control-row">
+                        <label for="sustain">Sustain:</label>
+                        <input type="range" id="sustain" min="0" max="100" value="70">
+                    </div>
+                    <div class="control-row">
+                        <label for="release">Release:</label>
+                        <input type="range" id="release" min="0" max="100" value="40">
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Filter</h3>
+                    <div class="control-row">
+                        <label for="filterType">Type:</label>
+                        <select id="filterType">
+                            <option value="lowpass">Low Pass</option>
+                            <option value="highpass">High Pass</option>
+                            <option value="bandpass">Band Pass</option>
+                        </select>
+                    </div>
+                    <div class="control-row">
+                        <label for="frequency">Frequency:</label>
+                        <input type="range" id="frequency" min="50" max="5000" value="1000">
+                    </div>
+                    <div class="control-row">
+                        <label for="resonance">Resonance:</label>
+                        <input type="range" id="resonance" min="1" max="30" value="1">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="midi-editor">
+                <h3>MIDI Editor</h3>
+                <p>Click on the grid below to place notes</p>
+                <div class="midi-grid" id="midiGrid"></div>
+            </div>
+        </div>
+        
+        <div class="status-bar">
+            <p>Tip: Use the Random Sample Load button to load random drum samples, then generate a beat with Random Beat</p>
+        </div>
+    </div>
+
+    <script>
+        // Audio context
+        let audioContext;
+        let isPlaying = false;
+        let currentStep = 0;
+        let tempo = 120;
+        let nextStepTime = 0;
+        let schedulerTimer;
+        let lookahead = 25.0; // ms
+        let scheduleAheadTime = 100.0; // ms
+        
+        // Sample data
+        const sampleFiles = [
+            'HiHat 1.wav', 'HiHat 2.wav',
+            'kick 1.wav', 'kick 2.wav',
+            'snare 1.wav', 'snare 2.WAV',
+            'tom 1.wav', 'tom 2.WAV',
+            'floor 1.wav'
+        ];
+        
+        // Channel configuration
+        const channels = [
+            { name: "Kick", color: "#FF6B6B", samples: [] },
+            { name: "Snare", color: "#4ECDC4", samples: [] },
+            { name: "Hi-Hat", color: "#FFE66D", samples: [] },
+            { name: "Tom 1", color: "#1A535C", samples: [] },
+            { name: "Tom 2", color: "#FF9F1C", samples: [] },
+            { name: "Floor Tom", color: "#7209B7", samples: [] },
+            { name: "Perc 1", color: "#3A86FF", samples: [] },
+            { name: "Perc 2", color: "#FB5607", samples: [] }
+        ];
+        
+        // Sequencer data
+        const steps = 64;
+        const bars = 4;
+        let sequence = Array(8).fill().map(() => Array(steps).fill(false));
+        
+        // Synth parameters
+        let synthParams = {
+            waveform: 'sine',
+            detune: 0,
+            attack: 0.1,
+            decay: 0.3,
+            sustain: 0.7,
+            release: 0.4,
+            filterType: 'lowpass',
+            frequency: 1000,
+            resonance: 1
+        };
+        
+        // MIDI notes data
+        let midiNotes = Array(16).fill(false);
+        
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            initAudio();
+            createSequencerGrid();
+            createMidiGrid();
+            setupEventListeners();
+            updateBPM();
+        });
+        
+        // Initialize Web Audio API
+        function initAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        // Create the sequencer grid UI
+        function createSequencerGrid() {
+            const stepHeader = document.getElementById('stepHeader');
+            const sequencerRows = document.getElementById('sequencerRows');
+            
+            // Create step headers
+            for (let i = 0; i < steps; i++) {
+                const stepLabel = document.createElement('div');
+                stepLabel.className = 'step-label';
+                stepLabel.textContent = i + 1;
+                stepHeader.appendChild(stepLabel);
+            }
+            
+            // Create channel rows
+            channels.forEach((channel, channelIndex) => {
+                const channelRow = document.createElement('div');
+                channelRow.className = 'channel-row';
+                
+                const channelLabel = document.createElement('div');
+                channelLabel.className = 'channel-label';
+                channelLabel.textContent = channel.name;
+                channelLabel.style.color = channel.color;
+                channelRow.appendChild(channelLabel);
+                
+                const stepsContainer = document.createElement('div');
+                stepsContainer.className = 'steps-container';
+                
+                for (let step = 0; step < steps; step++) {
+                    const stepElement = document.createElement('div');
+                    stepElement.className = 'step';
+                    stepElement.dataset.channel = channelIndex;
+                    stepElement.dataset.step = step;
+                    
+                    stepElement.addEventListener('click', () => {
+                        toggleStep(channelIndex, step);
+                    });
+                    
+                    stepsContainer.appendChild(stepElement);
+                }
+                
+                channelRow.appendChild(stepsContainer);
+                sequencerRows.appendChild(channelRow);
+            });
+        }
+        
+        // Create MIDI editor grid
+        function createMidiGrid() {
+            const midiGrid = document.getElementById('midiGrid');
+            midiGrid.innerHTML = '';
+            
+            for (let i = 0; i < 16; i++) {
+                const noteElement = document.createElement('div');
+                noteElement.className = 'midi-note';
+                noteElement.dataset.note = i;
+                
+                noteElement.addEventListener('click', () => {
+                    toggleMidiNote(i);
+                });
+                
+                midiGrid.appendChild(noteElement);
+            }
+        }
+        
+        // Toggle a step on/off
+        function toggleStep(channel, step) {
+            sequence[channel][step] = !sequence[channel][step];
+            updateStepDisplay(channel, step);
+        }
+        
+        // Update the visual display of a step
+        function updateStepDisplay(channel, step) {
+            const stepElement = document.querySelector(`.step[data-channel="${channel}"][data-step="${step}"]`);
+            if (sequence[channel][step]) {
+                stepElement.classList.add('active');
+            } else {
+                stepElement.classList.remove('active');
+            }
+        }
+        
+        // Toggle a MIDI note
+        function toggleMidiNote(note) {
+            midiNotes[note] = !midiNotes[note];
+            updateMidiNoteDisplay(note);
+        }
+        
+        // Update MIDI note display
+        function updateMidiNoteDisplay(note) {
+            const noteElement = document.querySelector(`.midi-note[data-note="${note}"]`);
+            if (midiNotes[note]) {
+                noteElement.classList.add('active');
+            } else {
+                noteElement.classList.remove('active');
+            }
+        }
+        
+        // Clear all steps
+        function clearAllSteps() {
+            for (let ch = 0; ch < 8; ch++) {
+                for (let step = 0; step < steps; step++) {
+                    sequence[ch][step] = false;
+                    updateStepDisplay(ch, step);
+                }
+            }
+            
+            // Clear MIDI notes
+            for (let i = 0; i < 16; i++) {
+                midiNotes[i] = false;
+                updateMidiNoteDisplay(i);
+            }
+        }
+        
+        // Randomly load samples for each channel
+        function randomSampleLoad() {
+            // In a real implementation, this would load actual audio files
+            // For this demo, we'll just simulate the loading
+            
+            channels.forEach((channel, index) => {
+                // Simulate loading 1-3 samples per channel
+                const sampleCount = Math.floor(Math.random() * 3) + 1;
+                channel.samples = [];
+                
+                for (let i = 0; i < sampleCount; i++) {
+                    const randomSample = sampleFiles[Math.floor(Math.random() * sampleFiles.length)];
+                    channel.samples.push(randomSample);
+                }
+                
+                // Update channel label to show loaded samples
+                const channelLabel = document.querySelectorAll('.channel-label')[index];
+                channelLabel.textContent = `${channel.name} (${channel.samples.length})`;
+            });
+            
+            showStatus("Random samples loaded for all channels");
+        }
+        
+        // Generate a random beat
+        function generateRandomBeat() {
+            // Clear existing sequence
+            clearAllSteps();
+            
+            // Define genre-based patterns
+            const patterns = {
+                house: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
+                techno: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+                breakbeat: [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0],
+                hiphop: [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0]
+            };
+            
+            // Select a random genre
+            const genres = Object.keys(patterns);
+            const selectedGenre = genres[Math.floor(Math.random() * genres.length)];
+            const basePattern = patterns[selectedGenre];
+            
+            // Apply patterns to channels
+            // Kick - every beat
+            for (let step = 0; step < steps; step += 4) {
+                sequence[0][step] = true;
+                updateStepDisplay(0, step);
+            }
+            
+            // Snare - backbeat
+            for (let step = 4; step < steps; step += 8) {
+                sequence[1][step] = true;
+                updateStepDisplay(1, step);
+                sequence[1][step + 4] = true;
+                updateStepDisplay(1, step + 4);
+            }
+            
+            // Hi-hat - based on genre pattern
+            for (let bar = 0; bar < bars; bar++) {
+                for (let i = 0; i < 16; i++) {
+                    if (basePattern[i]) {
+                        const step = bar * 16 + i;
+                        sequence[2][step] = true;
+                        updateStepDisplay(2, step);
+                    }
+                }
+            }
+            
+            // Add some variation to toms and percussion
+            for (let ch = 3; ch < 8; ch++) {
+                const variationCount = Math.floor(Math.random() * 8) + 4;
+                for (let i = 0; i < variationCount; i++) {
+                    const step = Math.floor(Math.random() * steps);
+                    sequence[ch][step] = true;
+                    updateStepDisplay(ch, step);
+                }
+            }
+            
+            // Add some MIDI notes
+            const noteCount = Math.floor(Math.random() * 8) + 4;
+            for (let i = 0; i < noteCount; i++) {
+                const note = Math.floor(Math.random() * 16);
+                midiNotes[note] = true;
+                updateMidiNoteDisplay(note);
+            }
+            
+            showStatus(`Random ${selectedGenre} beat generated`);
+        }
+        
+        // Update BPM display and value
+        function updateBPM() {
+            document.getElementById('bpmValue').textContent = tempo;
+        }
+        
+        // Show status message
+        function showStatus(message) {
+            const statusBar = document.querySelector('.status-bar');
+            statusBar.innerHTML = `<p>${message}</p>`;
+            
+            setTimeout(() => {
+                statusBar.innerHTML = '<p>Tip: Use the Random Sample Load button to load random drum samples, then generate a beat with Random Beat</p>';
+            }, 3000);
+        }
+        
+        // Play a step
+        function playStep(step) {
+            // Highlight current step
+            document.querySelectorAll('.step').forEach(el => {
+                el.classList.remove('current');
+            });
+            
+            for (let ch = 0; ch < 8; ch++) {
+                const stepElement = document.querySelector(`.step[data-channel="${ch}"][data-step="${step}"]`);
+                if (stepElement) {
+                    stepElement.classList.add('current');
+                }
+                
+                // Play sample if step is active
+                if (sequence[ch][step] && channels[ch].samples.length > 0) {
+                    // In a real implementation, this would play the actual sample
+                    // For this demo, we'll just log it
+                    console.log(`Playing ${channels[ch].name} at step ${step}`);
+                }
+            }
+            
+            // Play synth notes if any
+            if (step < 16 && midiNotes[step]) {
+                playSynthNote(60 + step); // Simple note mapping
+            }
+        }
+        
+        // Play a synth note
+        function playSynthNote(midiNote) {
+            if (!audioContext) return;
+            
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            const filter = audioContext.createBiquadFilter();
+            
+            oscillator.type = synthParams.waveform;
+            oscillator.detune.value = synthParams.detune;
+            oscillator.frequency.value = 440 * Math.pow(2, (midiNote - 69) / 12);
+            
+            filter.type = synthParams.filterType;
+            filter.frequency.value = synthParams.frequency;
+            filter.Q.value = synthParams.resonance;
+            
+            // Envelope
+            const now = audioContext.currentTime;
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(synthParams.sustain, now + synthParams.attack/10);
+            gainNode.gain.linearRampToValueAtTime(synthParams.sustain, now + synthParams.attack/10 + synthParams.decay/10);
+            gainNode.gain.linearRampToValueAtTime(0, now + synthParams.attack/10 + synthParams.decay/10 + synthParams.release/10);
+            
+            oscillator.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.start(now);
+            oscillator.stop(now + synthParams.attack/10 + synthParams.decay/10 + synthParams.release/10);
+        }
+        
+        // Scheduler for the sequencer
+        function scheduler() {
+            if (!isPlaying) return;
+            
+            while (nextStepTime < audioContext.currentTime + scheduleAheadTime / 1000) {
+                playStep(currentStep);
+                currentStep = (currentStep + 1) % steps;
+                nextStepTime += 60.0 / tempo / 4; // 16th notes
+            }
+            
+            schedulerTimer = setTimeout(scheduler, lookahead);
+        }
+        
+        // Start playback
+        function startPlayback() {
+            if (isPlaying) return;
+            
+            if (!audioContext) initAudio();
+            
+            isPlaying = true;
+            currentStep = 0;
+            nextStepTime = audioContext.currentTime;
+            scheduler();
+            
+            document.querySelector('.play-btn').textContent = '⏸';
+        }
+        
+        // Stop playback
+        function stopPlayback() {
+            isPlaying = false;
+            clearTimeout(schedulerTimer);
+            
+            // Remove current step highlighting
+            document.querySelectorAll('.step').forEach(el => {
+                el.classList.remove('current');
+            });
+            
+            document.querySelector('.play-btn').textContent = '▶';
+        }
+        
+        // Setup event listeners
+        function setupEventListeners() {
+            document.getElementById('randomLoadBtn').addEventListener('click', randomSampleLoad);
+            document.getElementById('randomBeatBtn').addEventListener('click', generateRandomBeat);
+            document.getElementById('clearBtn').addEventListener('click', clearAllSteps);
+            
+            document.querySelector('.play-btn').addEventListener('click', () => {
+                if (isPlaying) {
+                    stopPlayback();
+                } else {
+                    startPlayback();
+                }
+            });
+            
+            document.querySelector('.stop-btn').addEventListener('click', stopPlayback);
+            
+            document.getElementById('bpmSlider').addEventListener('input', (e) => {
+                tempo = parseInt(e.target.value);
+                updateBPM();
+            });
+            
+            // Synth parameter listeners
+            document.getElementById('waveform').addEventListener('change', (e) => {
+                synthParams.waveform = e.target.value;
+            });
+            
+            document.getElementById('detune').addEventListener('input', (e) => {
+                synthParams.detune = parseInt(e.target.value);
+            });
+            
+            document.getElementById('attack').addEventListener('input', (e) => {
+                synthParams.attack = parseInt(e.target.value) / 100;
+            });
+            
+            document.getElementById('decay').addEventListener('input', (e) => {
+                synthParams.decay = parseInt(e.target.value) / 100;
+            });
+            
+            document.getElementById('sustain').addEventListener('input', (e) => {
+                synthParams.sustain = parseInt(e.target.value) / 100;
+            });
+            
+            document.getElementById('release').addEventListener('input', (e) => {
+                synthParams.release = parseInt(e.target.value) / 100;
+            });
+            
+            document.getElementById('filterType').addEventListener('change', (e) => {
+                synthParams.filterType = e.target.value;
+            });
+            
+            document.getElementById('frequency').addEventListener('input', (e) => {
+                synthParams.frequency = parseInt(e.target.value);
+            });
+            
+            document.getElementById('resonance').addEventListener('input', (e) => {
+                synthParams.resonance = parseInt(e.target.value);
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pixel Art Maker – Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      /* --- Design Tokens -------------------------------------------------- */
+      --sidebar-width: 240px;
+      --radius: 10px;
+      --color-border: #d0d5e0;
+      --color-primary: #105fe0;
+      --color-primary-light: #5d8cff;
+      --color-accent: #36d3aa;
+      --color-danger: #a23b4a;
+      --font-family: system-ui, sans-serif;
+      --grid-max: 640px;            /* clamps grid size on large screens */
+    }
+    /* --- Global reset ---------------------------------------------------- */
+    *,*::before,*::after{box-sizing:border-box;}
+    html,body{height:100%;margin:0;}
+    body{
+      display:flex;flex-direction:column;min-width:900px;min-height:650px;
+      font-family:var(--font-family);background:#f4f6fb;color:#333;
+    }
+    /* --- Layout ---------------------------------------------------------- */
+    #mainLayout{flex:1;display:flex;}
+    #leftColumn{
+      flex:0 0 var(--sidebar-width);
+      display:flex;flex-direction:column;gap:1rem;
+      padding:1rem .75rem;background:#fff;border-right:1px solid var(--color-border);
+    }
+    #rightColumn{
+      flex:1;display:flex;flex-direction:column;align-items:center;gap:1rem;
+      padding:1rem 1.5rem;overflow:auto;
+    }
+    /* --- Re‑usable button component ------------------------------------- */
+    .btn{
+      display:inline-flex;align-items:center;justify-content:center;
+      padding:.5rem 1rem;font-weight:600;font-size:1rem;
+      border-radius:var(--radius);border:1.8px solid transparent;
+      background:#fff;cursor:pointer;transition:background .15s,box-shadow .15s;
+    }
+    .btn:active{transform:translateY(1px);} /* subtle press effect */
+    .btn-primary{background:var(--color-primary);color:#fff;}
+    .btn-outline{border-color:var(--color-primary);color:var(--color-primary);background:#fafcfe;}
+    .btn-danger{border-color:var(--color-danger);color:var(--color-danger);background:#fafcfe;}
+    /* latch toggle active state */
+    #latchToggle.on{background:var(--color-accent);border-color:#0c8b67;color:#fff;}
+    /* --- Palette --------------------------------------------------------- */
+    #paletteRow{display:flex;flex-wrap:wrap;gap:.5rem;}
+    .paletteColorBtn{
+      width:34px;height:34px;border-radius:8px;border:2px solid #888;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .paletteColorBtn.selected{border-color:var(--color-primary);box-shadow:0 0 0 2px var(--color-primary-light);}
+    .paletteColorBtn.transparent{background:repeating-linear-gradient(45deg,#ddd 0 8px,#fff 8px 16px);border-style:dashed;}
+    /* --- User colour rows ------------------------------------------------ */
+    .userColorRow{display:flex;align-items:center;gap:.25rem;font-size:.9rem;}
+    /* --- Grid ------------------------------------------------------------ */
+    #gridBox,#grid{width:min(var(--grid-max),60vmin);height:min(var(--grid-max),60vmin);}
+    #grid{display:grid;grid-template-columns:repeat(64,1fr);grid-template-rows:repeat(64,1fr);}
+    .cell{border:1px solid #f4f7fc;background-clip:padding-box;}
+    /* --- Responsive tweaks ---------------------------------------------- */
+    @media(max-width:1200px){:root{--sidebar-width:200px;}}
+  </style>
+</head>
+<body>
+  <div id="mainLayout">
+    <!-- -------- Sidebar -------------------------------------------------- -->
+    <aside id="leftColumn">
+      <h2 style="margin:0 0 .5rem 0;font-size:1rem;">Palette</h2>
+      <div id="paletteRow"></div>
+      <section id="userColorsBlock"></section>
+      <button id="latchToggle" class="btn btn-outline">Latch: Off</button>
+      <button id="undoBtn" class="btn btn-danger">Undo</button>
+    </aside>
+    <!-- -------- Main content -------------------------------------------- -->
+    <main id="rightColumn">
+      <div id="topRow" style="display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;">
+        <input type="file" id="imageUpload" accept="image/*">
+        <button id="clearCanvas" class="btn btn-outline">Clear</button>
+        <button id="saveProject" class="btn btn-outline">Save Project</button>
+        <button id="loadProjectBtn" class="btn btn-outline">Load Project</button>
+        <input type="file" id="projectLoader" accept=".pxproj,.json" hidden>
+      </div>
+      <div id="gridBox"><div id="grid"></div></div>
+      <section id="arrayDataBlock" style="width:100%;max-width:720px;display:flex;flex-direction:column;gap:.5rem;">
+        <label for="arrayDataOutput" style="font-weight:600;">Pixel Array Data:</label>
+        <textarea id="arrayDataOutput" readonly style="width:100%;height:130px;font-family:'JetBrains Mono','Menlo',monospace;border:1.2px solid #ccc;border-radius:5px;resize:none;"></textarea>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+          <button id="arrayCopyBtn"   class="btn btn-outline" style="min-width:130px;">Copy Array</button>
+          <button id="arrayPasteBtn" class="btn btn-outline" style="min-width:130px;">Paste Array</button> <!-- New Paste Button -->
+          <button id="downloadPNG"   class="btn btn-outline" style="min-width:130px;">Download PNG</button>
+          <button id="downloadSVG" class="btn btn-outline" style="min-width:120px;">Download SVG</button>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>
+    /* =====================================================================
+       1. DATA STRUCTURES & GLOBAL STATE
+    ===================================================================== */
+    const SIZE = 64, MAX_UNDO = 100;
+    let palette = [[0]][[0]][[0]][[0]], userColors = Array(5).fill("#ffd700"),
+        gridArray = Array.from({length: SIZE}, () => Array(SIZE).fill(0)),
+        originalArray = Array.from({length: SIZE}, () => Array(SIZE).fill(0)),
+        gridHistory = [], undoPointer = -1, mouseDown = false, latchMode = false, selectedColorIndex = 0,
+        cellElems = Array.from({length: SIZE}, () => Array(SIZE));
+    const $ = s => document.querySelector(s), cloneGrid = g => g.map(r => [...r]);
+    const setLatchUI = () => {
+        const toggleBtn = $('#latchToggle');
+        toggleBtn.classList.toggle('on', latchMode);
+        toggleBtn.textContent = latchMode ? 'Latch: On' : 'Latch: Off';
+    }
+    /* =====================================================================
+       2. INITIALIZATION
+    ===================================================================== */
+    document.addEventListener("DOMContentLoaded", () => {
+      loadDefaultHelmet();
+      buildGrid();
+      setupUserColorsUI();
+      createColorButtons();
+      drawGrid();
+      pushUndo();
+    });
+    /* =====================================================================
+       3. UTILS
+    ===================================================================== */
+    const hexToRgbArr = h => [0, 2, 4].map(i => parseInt(h.slice(1 + i, 3 + i), 16));
+    const hexToRgbaArr = (h, a = 255) => [...hexToRgbArr(h), a];
+    /* =====================================================================
+       4. UNDO STACK
+    ===================================================================== */
+    function pushUndo() {
+      if (gridHistory.length > MAX_UNDO) {
+        gridHistory.shift();
+        undoPointer--;
+      }
+      gridHistory = gridHistory.slice(0, undoPointer + 1);
+      gridHistory.push(cloneGrid(gridArray));
+      undoPointer = gridHistory.length - 1;
+    }
+    function undo() {
+      if (undoPointer <= 0) return;
+      undoPointer--;
+      gridArray = cloneGrid(gridHistory[undoPointer]);
+      drawGrid();
+    }
+    /* =====================================================================
+       5. GRID DOM & PAINTING
+    ===================================================================== */
+    function buildGrid() {
+      const grid = $('#grid');
+      grid.innerHTML = '';
+      for (let row = 0; row < SIZE; row++) {
+        for (let col = 0; col < SIZE; col++) {
+          const div = document.createElement('div');
+          div.className = 'cell';
+          cellElems[row][col] = div;
+          div.onmousedown = e => {
+            mouseDown = true;
+            gridArray[row][col] = e.button === 2 ? (originalArray[row][col] ?? 0) : selectedColorIndex;
+            repaintCell(row, col);
+            pushUndo();
+            e.preventDefault();
+          };
+          div.onmouseover = () => {
+            if (mouseDown && latchMode) {
+              gridArray[row][col] = selectedColorIndex;
+              repaintCell(row, col);
+            }
+          };
+          div.onmouseup = () => mouseDown = false;
+          div.oncontextmenu = e => {
+            gridArray[row][col] = originalArray[row][col] ?? 0;
+            repaintCell(row, col);
+            pushUndo();
+            e.preventDefault();
+          };
+          grid.appendChild(div);
+        }
+      }
+      document.addEventListener('mouseup', () => mouseDown = false);
+    }
+    const repaintCell = (r, c) => {
+      const idx = gridArray[r][c], col = palette[idx];
+      cellElems[r][c].style.backgroundColor = idx === 0 ? 'rgba(0,0,0,0)' : `rgb(${col[0]},${col[1]},${col[2]})`;
+    }
+    function drawGrid() {
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) repaintCell(r, c);
+      updateArrayDisplay();
+    }
+    /* =====================================================================
+       6. PALETTE & USER COLORS
+    ===================================================================== */
+    function createColorButtons() {
+      const row = $('#paletteRow');
+      row.innerHTML = '';
+      palette.forEach((c, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'paletteColorBtn' + (i === selectedColorIndex ? ' selected' : '') + (i === 0 ? ' transparent' : '');
+        btn.style.backgroundColor = i === 0 ? 'rgba(0,0,0,0)' : `rgb(${c[0]},${c[1]},${c[2]})`;
+        btn.title = i === 0 ? 'Transparent Pixel' : `Palette ${i}`;
+        btn.innerHTML = i === 0 ? '<span style="font-size:1.2em;">⌀</span>' : '';
+        btn.onclick = () => {
+          selectedColorIndex = i;
+          createColorButtons();
+        };
+        row.appendChild(btn);
+      });
+    }
+    function setupUserColorsUI() {
+      const div = $('#userColorsBlock');
+      div.innerHTML = '<strong>User Palette Colors:</strong>';
+      userColors.forEach((hex, i) => {
+        const row = document.createElement('div');
+        row.className = 'userColorRow';
+        row.innerHTML = `<label for=userColor${i}>Color ${i + 1}: </label>`;
+        const input = document.createElement('input');
+        input.type = 'color';
+        input.value = hex;
+        input.id = `userColor${i}`;
+        const btn = document.createElement('button');
+        btn.textContent = 'Set';
+        input.oninput = btn.onclick = () => setUserColor(i, input.value);
+        row.append(input, btn);
+        div.appendChild(row);
+      });
+    }
+    function setUserColor(i, hex) {
+      userColors[i] = hex;
+      // Ensure palette index exists
+      const paletteIndex = 1 + i;
+      if (paletteIndex >= palette.length) {
+          // Fill gaps if necessary (shouldn't usually happen)
+          while (palette.length <= paletteIndex) palette.push([0,0,0]);
+      }
+      palette[paletteIndex] = hexToRgbArr(hex);
+      createColorButtons();
+      drawGrid();
+    }
+    /* =====================================================================
+       7. LATCH MODE TOGGLE & UNDO BUTTON
+    ===================================================================== */
+    $('#latchToggle').onclick = function() {
+      latchMode = !latchMode;
+      setLatchUI();
+    };
+    $('#undoBtn').onclick = undo;
+    /* =====================================================================
+       8. SAVE & LOAD PROJECT
+    ===================================================================== */
+    const serialiseProject = () => JSON.stringify({
+      version: 1, palette, userColors, gridArray, originalArray, latchMode
+    });
+    function saveProject() {
+      const blob = new Blob([serialiseProject()], { type: 'application/json' }),
+            a = document.createElement('a'),
+            ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+      a.href = URL.createObjectURL(blob);
+      a.download = `pixelart-${ts}.pxproj`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+    function loadProject(json) {
+      try {
+        const d = JSON.parse(json);
+        if (!d.gridArray || !d.palette) throw 'Invalid project file';
+        palette = d.palette;
+        userColors = d.userColors || Array(5).fill("#ffd700");
+        gridArray = d.gridArray;
+        originalArray = d.originalArray || cloneGrid(gridArray);
+        latchMode = !!d.latchMode;
+
+        // Ensure userColors array is the correct size (5)
+        while (userColors.length < 5) userColors.push("#ffd700");
+        while (userColors.length > 5) userColors.pop();
+
+        // Ensure palette[0] is transparent
+        if (!palette[0] || !(palette[0][3] === 0 || (palette[0][0] === 0 && palette[0][1] === 0 && palette[0][2] === 0 && palette[0][3] === 0))) {
+             palette.unshift([0, 0, 0, 0]);
+        }
+
+        setLatchUI();
+        setupUserColorsUI();
+        createColorButtons();
+        drawGrid();
+        pushUndo(); // Push the loaded state onto the undo stack
+      } catch (e) {
+        alert('Could not load project: ' + e);
+      }
+    }
+    $('#saveProject').onclick = saveProject;
+    $('#loadProjectBtn').onclick = () => $('#projectLoader').click();
+    $('#projectLoader').onchange = e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = evt => loadProject(evt.target.result);
+      r.readAsText(f);
+      e.target.value = ''; // Reset input
+    };
+    /* =====================================================================
+       9. DEFAULT HELMET LOADER (Modified for robustness)
+    ===================================================================== */
+    function loadDefaultHelmet() {
+      const rleString = "00,ffd700,ffd700,ffd700,ffd700,ffd700,ff00d4,00baff,00baff,4c18f0,00baff,00baff,1f0e38,00baff,4c18f0,020616;0:20,f:1,9:4,7:1,6:10,9:1,7:2,9:3,f:1,0:39,f:1,9:1,7:1,6:1,7:2,c:16,7:3,f:1,0:36,9:4,7:1,c:9,6:3,7:1,c:10,7:2,9:1,f:1,0:31,9:3,7:1,c:11,6:3,7:1,c:12,7:1,9:1,f:1,0:28,f:1,7:1,9:2,7:1,c:11,6:1,c:3,6:1,c:13,7:1,9:1,f:1,0:27,9:3,7:1,c:12,6:1,7:1,c:2,6:1,7:1,c:14,6:1,f:1,0:24,f:1,7:1,9:2,6:1,c:13,6:5,7:1,c:15,6:1,f:1,0:23,9:3,6:1,7:1,c:13,6:5,7:1,c:16,9:1,0:23,7:1,9:2,6:1,7:1,c:13,6:1,c:3,6:1,7:1,c:16,7:2,0:20,f:1,9:4,6:1,7:1,c:13,6:1,7:1,c:2,6:1,7:1,c:17,7:1,9:1,0:19,f:1,9:4,6:1,7:30,c:7,7:1,9:1,f:1,0:18,9:5,6:3,9:29,7:2,c:4,7:3,0:18,7:1,9:5,7:1,9:1,7:1,6:1,7:24,6:1,9:3,7:1,6:1,7:1,c:2,7:2,6:1,0:18,7:1,9:3,7:3,9:1,7:1,c:25,7:2,c:1,7:1,6:1,7:2,6:1,7:3,6:1,0:17,f:1,7:1,9:2,7:2,9:1,7:1,c:1,7:2,6:24,7:6,9:3,7:2,6:1,f:1,0:16,9:3,7:2,6:1,7:1,c:1,7:1,0:30,7:2,c:1,6:1,7:1,6:1,7:1,6:1,9:1,0:16,9:5,7:2,9:1,0:32,7:3,6:1,9:1,7:3,0:16,7:1,9:1,f:1,7:3,9:1,0:34,6:1,7:2,9:2,6:1,7:1,0:16,7:2,f:1,6:2,7:1,0:36,7:2,6:1,9:2,7:1,0:16,7:1,f:1,7:2,c:1,0:37,9:1,7:3,f:1,7:1,0:11,7:1,9:1,f:1,0:2,7:1,f:1,6:2,9:1,0:38,9:1,7:2,f:1,9:1,0:2,f:1,6:1,7:1,0:5,9:1,c:1,7:1,9:1,f:1,0:1,f:1,9:1,7:1,6:1,9:1,0:38,9:1,7:2,9:1,f:1,0:1,7:2,c:1,9:1,0:3,9:1,7:1,c:2,7:2,f:2,7:2,6:1,9:1,0:38,9:1,7:2,9:1,f:1,0:1,9:1,7:1,c:1,7:1,9:1,0:1,9:1,7:2,6:1,c:1,7:1,9:1,f:2,9:1,7:1,6:1,9:1,0:38,9:1,7:2,9:1,f:1,0:1,7:1,6:1,7:1,c:1,6:1,7:2,0:1,9:1,7:2,6:1,c:1,7:1,6:1,f:2,7:1,c:1,6:1,9:1,0:38,9:1,7:2,f:2,7:1,6:1,7:1,c:1,6:1,7:2,0:1,9:1,7:2,6:1,c:1,7:1,6:1,f:2,7:1,c:1,6:1,9:1,0:38,9:1,7:2,f:2,7:1,6:1,7:1,c:1,6:1,7:2,0:1,9:1,7:2,6:1,c:1,7:1,6:1,f:2,7:1,c:1,6:1,9:1,0:38,9:1,7:2,f:2,7:1,6:1,7:1,c:1,6:1,7:2,0:1,9:1,7:2,6:1,c:1,7:1,6:1,f:2,7:1,c:1,6:1,9:1,0:38,9:1,7:2,f:2,7:1,6:1,7:1,c:1,6:1,7:2,0:1,9:1,7:2,6:1,7:2,6:1,f:2,7:1,c:1,6:1,9:1,0:38,9:1,7:2,f:2,7:1,6:1,7:2,6:1,7:2,0:1,9:1,7:2,6:1,7:1,6:2,f:2,7:1,c:1,6:1,9:1,0:38,9:1,7:2,f:2,7:1,6:2,7:1,6:1,7:2,0:1,f:1,7:2,6:1,7:1,6:1,9:1,f:2,7:1,c:1,6:1,9:1,0:38,9:1,7:2,f:2,7:1,9:1,6:1,7:1,6:1,7:1,6:1,0:2,9:1,6:1,7:2,6:1,9:1,f:2,7:1,c:1,6:1,9:1,0:38,9:1,7:2,f:3,9:1,6:1,7:2,6:1,7:1,0:2,f:1,6:1,7:1,6:2,9:1,0:1,f:1,7:1,c:1,6:1,9:1,0:38,9:1,7:2,f:2,0:1,9:1,6:1,7:2,6:1,f:1,0:3,7:1,6:1,9:1,7:1,0:2,f:1,7:2,6:1,9:1,0:38,9:1,7:2,9:1,f:1,0:2,7:1,6:2,9:1,0:5,9:2,0:3,7:1,9:1,7:3,0:38,9:1,7:2,f:2,0:3,9:2,0:11,7:1,f:1,7:3,0:38,6:1,7:2,f:1,9:1,0:16,7:1,9:1,6:1,c:1,7:1,0:38,7:3,f:1,7:1,0:16,7:1,9:2,7:2,6:1,0:36,6:1,7:5,0:16,7:1,9:1,f:1,6:1,c:2,0:36,c:2,9:1,f:1,9:1,7:1,0:16,f:1,9:1,7:2,6:1,7:2,0:34,7:1,c:1,7:2,9:3,0:17,7:1,9:1,f:1,9:1,7:3,0:32,7:4,9:1,6:1,9:1,f:1,0:17,9:2,7:1,f:1,9:1,7:1,c:1,7:1,6:1,0:28,9:1,7:1,c:1,7:1,9:1,f:1,7:1,6:1,7:1,0:18,9:1,7:1,9:1,7:1,f:1,9:1,6:1,7:1,c:2,7:2,0:23,6:1,7:1,c:2,7:1,9:1,f:1,7:1,6:2,7:1,0:19,7:1,6:2,7:1,f:2,7:1,6:1,7:1,c:27,7:2,f:1,9:1,7:1,9:1,6:1,7:1,0:20,7:1,9:3,7:1,9:3,7:2,9:1,6:22,9:1,7:2,f:2,7:1,9:1,6:3,7:1,0:21,7:1,9:3,6:2,9:1,7:1,f:27,9:1,6:5,7:1,0:22,f:1,7:2,9:1,6:4,9:14,f:11,9:2,6:5,7:1,0:22,9:1,f:2,0:1,9:1,7:1,9:1,6:31,9:2,7:1,f:2,9:1,0:19,9:3,7:1,f:3,9:2,6:28,9:3,f:2,7:1,9:2,f:1,0:19,7:1,6:1,9:2,7:4,9:1,f:3,9:1,7:17,9:1,f:5,9:1,7:4,9:2,7:1,0:19,9:2,7:1,9:7,7:2,9:1,7:19,9:4,7:1,9:1,6:1,7:2,6:1,9:1,7:1,9:2,0:18,7:1,9:2,f:1,9:1,7:1,9:1,6:1,7:33,9:2,7:1,9:2,0:18,7:1,6:1,9:1,7:1,f:2,7:1,9:3,6:1,7:26,6:1,9:1,7:3,9:1,6:1,7:1,9:1,0:18,7:1,9:1,6:2,9:1,7:2,9:2,f:2,9:25,f:1,9:1,7:1,9:1,6:1,7:3,6:1,7:1,0:18,7:1,9:3,6:2,7:2,6:1,9:1,6:27,7:2,c:1,7:3,6:1,9:1,7:1,0:18,7:1,9:4,6:1,7:35,9:4,7:1,0:18,7:1,9:4,6:34,9:6,7:1,0:18,9:5,6:9,c:1,f:2,7:1,6:4,f:2,7:1,6:3,c:1,7:1,6:2,c:1,7:1,6:5,9:7,0:19,9:4,6:9,c:1,7:1,6:1,f:1,7:1,6:2,c:1,7:1,6:1,c:1,7:1,6:2,f:1,c:1,7:1,f:1,c:1,7:1,6:5,9:6,0:21,9:3,6:9,c:2,f:1,7:1,6:3,c:1,7:1,6:1,c:1,7:1,6:2,c:1,7:1,c:1,7:1,c:1,7:1,6:4,9:6,0:23,f:1,7:1,9:1,6:8,c:1,7:1,6:1,c:1,7:1,6:2,c:4,7:1,6:2,c:1,7:1,c:1,7:1,c:1,7:1,6:4,9:5,0:25,f:1,7:1,9:1,6:7,c:3,7:1,6:1,c:1,7:1,c:1,7:1,6:1,c:1,7:1,c:1,7:1,c:1,7:1,6:2,f:1,7:1,f:1,7:1,6:2,9:2,7:1,f:1,0:28,f:1,7:1,9:4,6:2,7:3,6:18,9:3,7:1,f:1,0:35,f:1,9:1,7:1,9:1,6:17,9:1,7:2,f:1,0:83;64";
+
+      try {
+        const [paletteHexString, rleDataString] = rleString.split(';');
+        const gridSize = parseInt(rleDataString.split(';').pop(), 10);
+        if (gridSize !== SIZE) {
+          console.warn(`Default helmet data size (${gridSize}) does not match grid size (${SIZE}).`);
+          return; // Skip loading if size mismatch
+        }
+
+        const paletteHexes = paletteHexString.split(',');
+        palette = paletteHexes.map(hex => {
+          if (hex === "00") return [0, 0, 0, 0];
+          const fullHex = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex.padEnd(6, '0');
+          return hexToRgbArr('#' + fullHex);
+        });
+
+        for (let i = 0; i < 5; i++) {
+          const paletteIndex = i + 1;
+          if (palette[paletteIndex]) {
+            const [r, g, b] = palette[paletteIndex];
+            const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+            userColors[i] = hex;
+          } else {
+            userColors[i] = "#ffd700";
+            if (palette.length <= paletteIndex) {
+              palette.push(hexToRgbArr(userColors[i]));
+            }
+          }
+        }
+
+        const rleParts = rleDataString.split(';')[0].split(',');
+        gridArray = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+        let dataIndex = 0;
+        let gridRow = 0, gridCol = 0;
+        for (const part of rleParts) {
+          const [colorHex, countStr] = part.split(':');
+          const count = parseInt(countStr, 16) || 1;
+          let colorIndex = 0;
+          const searchHex = colorHex.padEnd(2, '0');
+          const fullSearchHex = searchHex === "00" ? "00" : (searchHex.length === 3 ? searchHex.split('').map(c => c + c).join('') : searchHex.padEnd(6, '0'));
+          const searchRgb = fullSearchHex === "00" ? [0, 0, 0, 0] : hexToRgbArr('#' + fullSearchHex);
+          if (fullSearchHex === "00") {
+            colorIndex = 0;
+          } else {
+            const foundIndex = palette.findIndex((p, idx) =>
+              idx === 0 ? (p[3] === 0) :
+              (p[0] === searchRgb[0] && p[1] === searchRgb[1] && p[2] === searchRgb[2])
+            );
+            colorIndex = foundIndex !== -1 ? foundIndex : 0;
+          }
+          for (let i = 0; i < count; i++) {
+            if (gridRow < SIZE && gridCol < SIZE) {
+              gridArray[gridRow][gridCol] = colorIndex;
+              gridCol++;
+              if (gridCol >= SIZE) {
+                gridCol = 0;
+                gridRow++;
+              }
+              if (gridRow >= SIZE) break;
+            }
+          }
+          if (gridRow >= SIZE) break;
+        }
+
+        originalArray = cloneGrid(gridArray);
+        const firstNonTransparentColorIndex = palette.findIndex((c, i) => i > 0 && (c[3] !== 0 || !(c[0] === 0 && c[1] === 0 && c[2] === 0 && c[3] === 0)));
+        selectedColorIndex = firstNonTransparentColorIndex > 0 ? firstNonTransparentColorIndex : 1;
+
+      } catch (e) {
+        console.error("Error loading default helmet:", e);
+        // Ensure grid is cleared on error
+        gridArray = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+        originalArray = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+        selectedColorIndex = 1;
+      }
+    }
+
+    /* =====================================================================
+       10. EXISTING FUNCTIONS (UNCHANGED OR MINIMALLY CHANGED) ------------
+           · quantize()
+           · updatePaletteFromImage()
+           · image upload processing
+           · rgbToPaletteIndex()
+           · updateArrayDisplay()
+           · downloadPNG()
+           · clearCanvas()
+           · downloadSVG()
+       ===================================================================== */
+
+    function quantize(pixels, n = 16) {
+      let clusters = [], centroids = [];
+      for (let i = 0; i < n; i++) centroids.push(pixels[Math.floor(Math.random() * pixels.length)] || [0,0,0]), clusters.push([]);
+      let change = true;
+      for (let iter = 0; iter < 8 && change; iter++) {
+        clusters.forEach(c => c.length = 0);
+        for (let p of pixels) {
+          let min = 1e9, idx = 0;
+          centroids.forEach((c, i) => {
+            let d = (p[0]-c[0])**2 + (p[1]-c[1])**2 + (p[2]-c[2])**2;
+            if (d < min) min = d, idx = i;
+          });
+          clusters[idx].push(p);
+        }
+        change = false;
+        centroids = clusters.map((cl, i) => {
+          if (!cl.length) return centroids[i];
+          let avg = cl.reduce((a,b) => [a[0]+b[0],a[1]+b[1],a[2]+b[2]], [0,0,0]).map(x=>Math.round(x/cl.length));
+          if (!centroids[i].every((v,d)=>v===avg[d])) change=true;
+          return avg;
+        });
+      }
+      return centroids;
+    }
+
+    function updatePaletteFromImage(pixels) {
+      let imgCols = quantize(pixels, 15);
+      palette = [[0,0,0,0], ...imgCols];
+      userColors.forEach((hex,i)=>{ if(hex) palette[1 + i] = hexToRgbArr(hex); });
+      createColorButtons();
+    }
+
+    function rgbToPaletteIndex(r, g, b, a=255) {
+      if(a<40) return 0;
+      let min = 1e9, idx = 1;
+      for(let i=1;i<palette.length;i++) {
+        let c = palette[i], d = (r-c[0])**2+(g-c[1])**2+(b-c[2])**2;
+        if(d<min) min=d, idx=i;
+      }
+      return idx;
+    }
+
+    $('#imageUpload').onchange = function(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      const r = new FileReader();
+      r.onloadend = () => {
+        const img = new Image(); img.src = r.result; img.crossOrigin = 'Anonymous';
+        img.onload = function() {
+          const canvas = document.createElement('canvas'); canvas.width = SIZE; canvas.height = SIZE;
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, SIZE, SIZE);
+          ctx.drawImage(img, 0, 0, SIZE, SIZE);
+          const data = ctx.getImageData(0,0,SIZE,SIZE).data, pixels = [];
+          for (let i=0;i<SIZE*SIZE;i++) { const o=i*4; if (data[o+3]>40) pixels.push([data[o],data[o+1],data[o+2]]); }
+          updatePaletteFromImage(pixels);
+          for (let row=0; row<SIZE; row++) for (let col=0; col<SIZE; col++) {
+            const idx=(row*SIZE+col)*4, r=data[idx],g=data[idx+1],b=data[idx+2],a=data[idx+3];
+            const pi = rgbToPaletteIndex(r,g,b,a);
+            gridArray[row][col] = pi;
+            originalArray[row][col] = pi;
+          }
+          drawGrid();
+          pushUndo();
+        };
+      };
+      r.readAsDataURL(file);
+    };
+
+    function updateArrayDisplay() {
+      const flat = gridArray.flat();
+      const paletteString = palette.map(c=>c.length===4 && c[3]===0 ?"00":c.map(x=>x.toString(16).padStart(2,'0')).join('')).join(',');
+      const rle = [];
+      let last = flat[0], count = 1;
+      for (let i=1;i<flat.length;i++)
+        flat[i]===last ? count++ : (rle.push([last.toString(16),count]), last=flat[i], count=1);
+      rle.push([last.toString(16),count]);
+      // Include the grid size (;64) at the end, just like the default helmet data
+      $('#arrayDataOutput').value = `${paletteString};${rle.map(([c,n])=>c+':'+n).join(',')};${SIZE}`;
+    }
+
+    $('#arrayCopyBtn').onclick = () => {
+      const outputArea = $('#arrayDataOutput');
+      outputArea.select();
+      document.execCommand('copy');
+      // Optional: Provide feedback
+      const originalText = $('#arrayCopyBtn').textContent;
+      $('#arrayCopyBtn').textContent = "Copied!";
+      setTimeout(() => { $('#arrayCopyBtn').textContent = originalText; }, 1000);
+    };
+
+    // --- NEW: Paste Array Functionality ---
+    function pasteArrayData(rleString) {
+        // Reuse the core logic from loadDefaultHelmet but make it generic
+        try {
+            // Split the string into palette, RLE data, and grid size parts
+            // e.g., "pal1,pal2;0:20,f:1;64" -> ["pal1,pal2", "0:20,f:1", "64"]
+            const parts = rleString.split(';');
+            if (parts.length < 3) {
+                 throw new Error("Invalid RLE format: Missing parts.");
+            }
+            const paletteHexString = parts[0];
+            const rleDataString = parts[1];
+            const gridSizeString = parts[2]; // Get the grid size part correctly
+
+            const gridSize = parseInt(gridSizeString, 10); // Parse the grid size string
+            if (isNaN(gridSize) || gridSize !== SIZE) {
+                alert(`Pasted data size (${gridSize}) does not match grid size (${SIZE}).`);
+                return;
+            }
+
+            // Parse palette
+            const paletteHexes = paletteHexString.split(',');
+            const newPalette = paletteHexes.map(hex => {
+                if (hex === "00") return [0, 0, 0, 0];
+                const fullHex = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex.padEnd(6, '0');
+                return hexToRgbArr('#' + fullHex);
+            });
+
+            // Update userColors based on the new palette (indices 1-5)
+            const newUserColors = [...userColors]; // Copy current
+            for (let i = 0; i < 5; i++) {
+                const paletteIndex = i + 1;
+                if (newPalette[paletteIndex]) {
+                    const [r, g, b] = newPalette[paletteIndex];
+                    const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                    newUserColors[i] = hex;
+                } else {
+                     newUserColors[i] = "#ffd700"; // Default if not enough colors
+                     if (newPalette.length <= paletteIndex) {
+                         newPalette.push(hexToRgbArr(newUserColors[i]));
+                     }
+                }
+            }
+
+            // Parse RLE data
+            const rleParts = rleDataString.split(','); // Split the RLE part by commas
+            const newGridArray = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+            let gridRow = 0, gridCol = 0;
+            for (const part of rleParts) {
+                const [colorHex, countStr] = part.split(':');
+                const count = parseInt(countStr, 16) || 1;
+                let colorIndex = 0;
+                // Convert the hex string representing the palette index back to an integer
+                // Handle potential padding or single char hex if needed for index representation,
+                // though typically it should just be the hex of the index number.
+                // The colorHex here is like 'f' for index 15.
+                colorIndex = parseInt(colorHex, 16);
+                if (isNaN(colorIndex)) colorIndex = 0; // Default to 0 (transparent) if parsing fails
+
+                for (let i = 0; i < count; i++) {
+                    if (gridRow < SIZE && gridCol < SIZE) {
+                        newGridArray[gridRow][gridCol] = colorIndex;
+                        gridCol++;
+                        if (gridCol >= SIZE) {
+                            gridCol = 0;
+                            gridRow++;
+                        }
+                        if (gridRow >= SIZE) break;
+                    }
+                }
+                if (gridRow >= SIZE) break;
+            }
+
+
+            // --- Apply the loaded data to the main state ---
+            palette = newPalette;
+            userColors = newUserColors;
+            gridArray = newGridArray;
+            originalArray = cloneGrid(gridArray); // Update original as well
+
+            // Set the first non-transparent color as selected by default
+            const firstNonTransparentColorIndex = palette.findIndex((c, i) => i > 0 && (c[3] !== 0 || !(c[0] === 0 && c[1] === 0 && c[2] === 0 && c[3] === 0)));
+            selectedColorIndex = firstNonTransparentColorIndex > 0 ? firstNonTransparentColorIndex : 1;
+
+            // --- Update UI ---
+            setLatchUI();
+            setupUserColorsUI();
+            createColorButtons();
+            drawGrid();
+            pushUndo(); // Push the loaded state onto the undo stack
+
+
+        } catch (e) {
+            alert('Could not paste/load array data: Invalid format or error.\n' + (e.message || e));
+            console.error("Paste Array Error:", e);
+        }
+    }
+
+    // Button click handler (also slightly improved error handling)
+    $('#arrayPasteBtn').onclick = async () => {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (text && text.includes(';') && text.split(';').length >= 3) { // Basic check for RLE format (3 parts)
+                 pasteArrayData(text);
+            } else {
+                 alert("Clipboard does not contain valid RLE data (expected format: palette;RLE;size).");
+            }
+        } catch (err) {
+            // Fallback or error handling if clipboard API fails
+            console.warn('Clipboard API failed or permission denied:', err);
+            alert('Could not read clipboard. Please paste the RLE data manually into the text area and try again.');
+            $('#arrayDataOutput').focus();
+        }
+    };
+
+    // Optional: Allow pasting directly into the textarea (if it's focused or empty)
+    $('#arrayDataOutput').addEventListener('paste', (event) => {
+        // Only trigger if the textarea is effectively empty or focused for pasting
+        const outputArea = $('#arrayDataOutput');
+        if (outputArea.value === '' || document.activeElement === outputArea) {
+            event.preventDefault(); // Prevent default paste into textarea
+            const pastedText = (event.clipboardData || window.clipboardData).getData('text');
+            if (pastedText && pastedText.includes(';') && pastedText.split(';').length >= 3) {
+                pasteArrayData(pastedText);
+            } else {
+                alert("Pasted text does not appear to be valid RLE data (expected format: palette;RLE;size).");
+            }
+        }
+        // If the textarea already has content, let the default paste happen
+        // (e.g., user copying part of the data)
+    });
+
+
+    $('#downloadPNG').onclick = function() {
+      const canvas = document.createElement('canvas'); canvas.width = SIZE; canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      const imgData = ctx.createImageData(SIZE,SIZE);
+      for(let row=0; row<SIZE; row++) for(let col=0; col<SIZE; col++) {
+        const i = (row*SIZE+col)*4, idx = gridArray[row][col], c = palette[idx];
+        if(idx === 0 || (c.length === 4 && c[3] === 0)) { imgData.data[i+3] = 0; }
+        else { imgData.data[i] = c[0]; imgData.data[i+1] = c[1]; imgData.data[i+2] = c[2]; imgData.data[i+3] = 255; }
+      }
+      ctx.putImageData(imgData,0,0);
+      const link = document.createElement('a');
+      link.download = 'pixelart.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    };
+
+    $('#downloadSVG').onclick = function() {
+        let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" shape-rendering="crispEdges" style="background:none">`;
+        for(let y=0; y<SIZE; y++)
+            for(let x=0; x<SIZE; x++){
+            const idx = gridArray[y][x], c = palette[idx];
+            if(idx!==0 && !(c.length === 4 && c[3] === 0)){
+                svg += `<rect x="${x}" y="${y}" width="1" height="1" fill="rgb(${c[0]},${c[1]},${c[2]})"/>`;
+            }
+            }
+        svg += '</svg>';
+        const blob = new Blob([svg], {type:'image/svg+xml'});
+        const link = document.createElement('a');
+        link.download = 'pixelart.svg';
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
+    };
+
+    $('#clearCanvas').onclick = () => {
+      gridArray = Array(SIZE).fill().map(()=>Array(SIZE).fill(0));
+      originalArray = Array(SIZE).fill().map(()=>Array(SIZE).fill(0));
+      drawGrid();
+      pushUndo();
+    };
+
+    document.addEventListener('contextmenu', e => e.preventDefault());
+  </script>
+</body>
+</html>
