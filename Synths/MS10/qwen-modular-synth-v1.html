@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modular Synthesizer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: sans-serif;
+            overflow: hidden; /* Prevents scrollbars from workspace */
+        }
+
+        #app-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #palette {
+            width: 200px;
+            background-color: #333;
+            color: white;
+            padding: 15px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        #palette h3 {
+            margin-bottom: 10px;
+        }
+
+        .module-item {
+            padding: 10px;
+            margin-bottom: 5px;
+            background-color: #555;
+            border-radius: 4px;
+            cursor: grab;
+            user-select: none;
+        }
+
+        .module-item:hover {
+            background-color: #777;
+        }
+
+        #workspace {
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+            background-color: #111;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #connections-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* So clicks pass through to canvas/modules */
+            z-index: 10;
+        }
+
+        .module {
+            position: absolute;
+            background-color: #444;
+            border: 1px solid #666;
+            border-radius: 5px;
+            padding: 10px;
+            min-width: 150px;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+            cursor: move;
+            z-index: 20; /* Above canvas, below SVG */
+        }
+
+        .module-header {
+            font-weight: bold;
+            margin-bottom: 8px;
+            user-select: none; /* Prevent text selection on drag */
+        }
+
+        .module-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .module-slider, .module-select {
+            width: 100%;
+            margin-top: 2px;
+        }
+
+        .module-connector {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background-color: #999;
+            border: 1px solid #ccc;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 25;
+        }
+
+        .module-connector.input {
+            left: -6px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .module-connector.output {
+            right: -6px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .module-connector.selected {
+            background-color: #4a90e2; /* Blue highlight */
+            border-color: #2a70c2;
+        }
+
+        .connection-line {
+            stroke: #4a90e2;
+            stroke-width: 2;
+        }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <div id="palette">
+            <h3>Modules</h3>
+            <div class="module-item" draggable="true" data-type="oscillator">Oscillator</div>
+            <div class="module-item" draggable="true" data-type="gain">Gain</div>
+            <div class="module-item" draggable="true" data-type="filter">Filter</div>
+            <div class="module-item" draggable="true" data-type="lfo">LFO</div>
+            <div class="module-item" draggable="true" data-type="output">Output</div>
+        </div>
+
+        <div id="workspace">
+            <div id="canvas"></div>
+            <svg id="connections-svg"></svg>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- SHARED STATE ---
+        const sharedState = {
+            modules: {}, // Stores module data by ID
+            connections: [], // Stores connection data
+            selectedConnector: null // Stores info about the currently selected connector for connection
+        };
+
+
+        // --- AUDIO CONTEXT ---
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+
+        // --- DOM ELEMENTS ---
+        const domElements = {
+            palette: document.getElementById('palette'),
+            canvas: document.getElementById('canvas'),
+            connectionsSvg: document.getElementById('connections-svg')
+        };
+        let svgNS = "http://www.w3.org/2000/svg";
+
+
+        // --- MODULE CREATION LOGIC ---
+        let moduleIdCounter = 0;
+
+        function createModuleDOM(type, moduleId) {
+            const moduleElement = document.createElement('div');
+            moduleElement.className = 'module';
+            moduleElement.dataset.moduleId = moduleId;
+
+            const header = document.createElement('div');
+            header.className = 'module-header';
+            header.textContent = type.charAt(0).toUpperCase() + type.slice(1); // Capitalize type
+
+            const controlsContainer = document.createElement('div');
+            controlsContainer.className = 'module-controls';
+
+            moduleElement.appendChild(header);
+            moduleElement.appendChild(controlsContainer);
+
+            return moduleElement;
+        }
+
+        function createConnectors(type, moduleElement, moduleId) {
+            // --- Output Connector ---
+            if (type !== 'output') { // Output module typically doesn't have an audio output
+                const outputConnector = document.createElement('div');
+                outputConnector.className = 'module-connector output';
+                outputConnector.dataset.ioType = 'output';
+                outputConnector.title = 'Output';
+                moduleElement.appendChild(outputConnector);
+            }
+
+            // --- Input Connector ---
+            if (type !== 'oscillator' && type !== 'lfo') { // Sources don't typically have audio inputs
+                const inputConnector = document.createElement('div');
+                inputConnector.className = 'module-connector input';
+                inputConnector.dataset.ioType = 'input';
+                inputConnector.title = 'Input';
+                moduleElement.appendChild(inputConnector);
+            }
+        }
+
+
+        // --- MODULE-SPECIFIC AUDIO/UI CREATION ---
+        function createOscillatorModule(audioCtx, parentElement) {
+            const oscillator = audioCtx.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 440; // Default frequency
+            oscillator.start(); // Start immediately
+
+            // --- Create UI Elements ---
+            const freqSlider = document.createElement('input');
+            freqSlider.type = 'range';
+            freqSlider.min = 20;
+            freqSlider.max = 5000;
+            freqSlider.step = 1;
+            freqSlider.value = oscillator.frequency.value;
+            freqSlider.className = 'module-slider';
+
+            const freqLabel = document.createElement('label');
+            freqLabel.textContent = 'Freq (Hz):';
+            freqLabel.htmlFor = freqSlider.id = `osc-freq-${Math.random().toString(36).substring(7)}`;
+
+            const typeSelect = document.createElement('select');
+            typeSelect.className = 'module-select';
+            ['sine', 'square', 'sawtooth', 'triangle'].forEach(type => {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+                typeSelect.appendChild(option);
+            });
+            typeSelect.value = oscillator.type;
+
+            const typeLabel = document.createElement('label');
+            typeLabel.textContent = 'Type:';
+            typeLabel.htmlFor = typeSelect.id = `osc-type-${Math.random().toString(36).substring(7)}`;
+
+            // --- Event Listeners ---
+            freqSlider.addEventListener('input', () => {
+                oscillator.frequency.value = freqSlider.value;
+            });
+
+            typeSelect.addEventListener('change', () => {
+                oscillator.type = typeSelect.value;
+            });
+
+            // --- Append UI ---
+            parentElement.appendChild(freqLabel);
+            parentElement.appendChild(freqSlider);
+            parentElement.appendChild(typeLabel);
+            parentElement.appendChild(typeSelect);
+
+            // Return the primary connectable AudioNode
+            return oscillator;
+        }
+
+        function createGainModule(audioCtx, parentElement) {
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0.5; // Default gain
+
+            // --- Create UI Elements ---
+            const gainSlider = document.createElement('input');
+            gainSlider.type = 'range';
+            gainSlider.min = 0;
+            gainSlider.max = 2; // Allow boosting
+            gainSlider.step = 0.01;
+            gainSlider.value = gainNode.gain.value;
+            gainSlider.className = 'module-slider';
+
+            const gainLabel = document.createElement('label');
+            gainLabel.textContent = 'Gain:';
+            gainLabel.htmlFor = gainSlider.id = `gain-val-${Math.random().toString(36).substring(7)}`;
+
+            // --- Event Listeners ---
+            gainSlider.addEventListener('input', () => {
+                gainNode.gain.value = gainSlider.value;
+            });
+
+            // --- Append UI ---
+            parentElement.appendChild(gainLabel);
+            parentElement.appendChild(gainSlider);
+
+            // Return the primary connectable AudioNode
+            return gainNode;
+        }
+
+        function createFilterModule(audioCtx, parentElement) {
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 1000; // Default cutoff
+            filter.Q.value = 1; // Default resonance
+
+            // --- Create UI Elements ---
+            const freqSlider = document.createElement('input');
+            freqSlider.type = 'range';
+            freqSlider.min = 20;
+            freqSlider.max = audioCtx.sampleRate / 2; // Nyquist
+            freqSlider.step = 1;
+            freqSlider.value = filter.frequency.value;
+            freqSlider.className = 'module-slider';
+
+            const freqLabel = document.createElement('label');
+            freqLabel.textContent = 'Cutoff (Hz):';
+            freqLabel.htmlFor = freqSlider.id = `filter-freq-${Math.random().toString(36).substring(7)}`;
+
+            const resSlider = document.createElement('input');
+            resSlider.type = 'range';
+            resSlider.min = 0.1;
+            resSlider.max = 20;
+            resSlider.step = 0.1;
+            resSlider.value = filter.Q.value;
+            resSlider.className = 'module-slider';
+
+            const resLabel = document.createElement('label');
+            resLabel.textContent = 'Resonance (Q):';
+            resLabel.htmlFor = resSlider.id = `filter-q-${Math.random().toString(36).substring(7)}`;
+
+            const typeSelect = document.createElement('select');
+            typeSelect.className = 'module-select';
+            ['lowpass', 'highpass', 'bandpass', 'lowshelf', 'highshelf', 'peaking', 'notch', 'allpass'].forEach(type => {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+                typeSelect.appendChild(option);
+            });
+            typeSelect.value = filter.type;
+
+            const typeLabel = document.createElement('label');
+            typeLabel.textContent = 'Type:';
+            typeLabel.htmlFor = typeSelect.id = `filter-type-${Math.random().toString(36).substring(7)}`;
+
+            // --- Event Listeners ---
+            freqSlider.addEventListener('input', () => {
+                filter.frequency.value = freqSlider.value;
+            });
+
+            resSlider.addEventListener('input', () => {
+                filter.Q.value = resSlider.value;
+            });
+
+            typeSelect.addEventListener('change', () => {
+                filter.type = typeSelect.value;
+            });
+
+            // --- Append UI ---
+            parentElement.appendChild(freqLabel);
+            parentElement.appendChild(freqSlider);
+            parentElement.appendChild(resLabel);
+            parentElement.appendChild(resSlider);
+            parentElement.appendChild(typeLabel);
+            parentElement.appendChild(typeSelect);
+
+            // Return the primary connectable AudioNode
+            return filter;
+        }
+
+        function createLFOModule(audioCtx, parentElement) {
+            const lfo = audioCtx.createOscillator();
+            lfo.type = 'sine';
+            lfo.frequency.value = 2; // Default LFO rate
+            lfo.start(); // Start immediately
+
+            // --- Create UI Elements ---
+            const rateSlider = document.createElement('input');
+            rateSlider.type = 'range';
+            rateSlider.min = 0.1;
+            rateSlider.max = 20;
+            rateSlider.step = 0.1;
+            rateSlider.value = lfo.frequency.value;
+            rateSlider.className = 'module-slider';
+
+            const rateLabel = document.createElement('label');
+            rateLabel.textContent = 'Rate (Hz):';
+            rateLabel.htmlFor = rateSlider.id = `lfo-rate-${Math.random().toString(36).substring(7)}`;
+
+            const depthSlider = document.createElement('input');
+            depthSlider.type = 'range';
+            depthSlider.min = 0;
+            depthSlider.max = 1000; // Depth range, will be scaled
+            depthSlider.step = 1;
+            depthSlider.value = 100; // Default depth (scaled)
+            depthSlider.className = 'module-slider';
+
+            const depthLabel = document.createElement('label');
+            depthLabel.textContent = 'Depth:';
+            depthLabel.htmlFor = depthSlider.id = `lfo-depth-${Math.random().toString(36).substring(7)}`;
+
+            const typeSelect = document.createElement('select');
+            typeSelect.className = 'module-select';
+            ['sine', 'square', 'sawtooth', 'triangle'].forEach(type => {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+                typeSelect.appendChild(option);
+            });
+            typeSelect.value = lfo.type;
+
+            const typeLabel = document.createElement('label');
+            typeLabel.textContent = 'Type:';
+            typeLabel.htmlFor = typeSelect.id = `lfo-type-${Math.random().toString(36).substring(7)}`;
+
+            // --- Gain Node for LFO Depth ---
+            const depthGain = audioCtx.createGain();
+            depthGain.gain.value = depthSlider.value; // Initial scaled depth
+            lfo.connect(depthGain); // LFO output goes to depth gain
+
+            // --- Event Listeners ---
+            rateSlider.addEventListener('input', () => {
+                lfo.frequency.value = rateSlider.value;
+            });
+
+            depthSlider.addEventListener('input', () => {
+                // Scale depth for typical modulation ranges (e.g., 0-1000 Hz for freq, 0-1 for gain)
+                // This scaling might need adjustment based on what it's modulating.
+                depthGain.gain.value = depthSlider.value;
+            });
+
+            typeSelect.addEventListener('change', () => {
+                lfo.type = typeSelect.value;
+            });
+
+            // --- Append UI ---
+            parentElement.appendChild(rateLabel);
+            parentElement.appendChild(rateSlider);
+            parentElement.appendChild(depthLabel);
+            parentElement.appendChild(depthSlider);
+            parentElement.appendChild(typeLabel);
+            parentElement.appendChild(typeSelect);
+
+            // Return the gain node for connection, as it represents the scaled LFO output
+            return depthGain;
+        }
+
+        function createOutputModule(audioCtx, parentElement) {
+            // Using a GainNode as the input point for the output module
+            const inputGain = audioCtx.createGain();
+            inputGain.connect(audioCtx.destination); // Connect directly to speakers
+
+            // --- Create UI Elements (Optional) ---
+            const label = document.createElement('label');
+            label.textContent = 'Master Output';
+            parentElement.appendChild(label);
+
+            // Return the input GainNode for connections
+            return inputGain;
+        }
+
+        async function createAudioNodeAndUI(type, parentElement) {
+            let audioNode;
+            switch (type) {
+                case 'oscillator':
+                    audioNode = createOscillatorModule(audioContext, parentElement);
+                    break;
+                case 'gain':
+                    audioNode = createGainModule(audioContext, parentElement);
+                    break;
+                case 'filter':
+                    audioNode = createFilterModule(audioContext, parentElement);
+                    break;
+                case 'lfo':
+                    audioNode = createLFOModule(audioContext, parentElement);
+                    break;
+                case 'output':
+                    audioNode = createOutputModule(audioContext, parentElement);
+                    break;
+                default:
+                    console.error("Unknown module type for audio/UI:", type);
+                    return null;
+            }
+            return audioNode;
+        }
+
+        async function createModule(type, x, y) {
+            moduleIdCounter++;
+            const moduleId = `module-${type}-${moduleIdCounter}`;
+            const element = createModuleDOM(type, moduleId);
+
+            // Position the module
+            element.style.left = `${x}px`;
+            element.style.top = `${y}px`;
+
+            // Create AudioNode and UI
+            const audioNode = await createAudioNodeAndUI(type, element.querySelector('.module-controls'));
+
+            if (!audioNode) {
+                throw new Error(`Failed to create audio node for type: ${type}`);
+            }
+
+            // Create connectors
+            createConnectors(type, element, moduleId);
+
+            return {
+                id: moduleId,
+                type: type,
+                element: element,
+                audioNode: audioNode
+            };
+        }
+
+
+        // --- DRAG & DROP MANAGER ---
+        let currentDraggedItem = null;
+
+        function initializeDragAndDrop() {
+            // --- Palette Drag Start ---
+            domElements.palette.addEventListener('dragstart', (e) => {
+                if (e.target.classList.contains('module-item')) {
+                    currentDraggedItem = e.target;
+                    e.dataTransfer.setData('text/plain', e.target.dataset.type); // Pass the module type
+                    e.dataTransfer.effectAllowed = 'copy';
+                }
+            });
+
+            // --- Canvas Drag Over (allow drop) ---
+            domElements.canvas.addEventListener('dragover', (e) => {
+                e.preventDefault(); // Necessary to allow drop
+                e.dataTransfer.dropEffect = 'copy';
+            });
+
+            // --- Canvas Drop ---
+            domElements.canvas.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                if (currentDraggedItem) {
+                    const moduleType = e.dataTransfer.getData('text/plain');
+                    const rect = domElements.canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+
+                    try {
+                        const newModule = await createModule(moduleType, x, y);
+                        domElements.canvas.appendChild(newModule.element);
+                        sharedState.modules[newModule.id] = newModule;
+                    } catch (error) {
+                        console.error("Failed to create module:", error);
+                    }
+                    currentDraggedItem = null;
+                }
+            });
+
+            // --- Module Dragging on Canvas ---
+            domElements.canvas.addEventListener('mousedown', (e) => {
+                if (e.target.classList.contains('module') || e.target.classList.contains('module-header')) {
+                    const moduleElement = e.target.classList.contains('module') ? e.target : e.target.closest('.module');
+                    if (moduleElement) {
+                        const moduleId = moduleElement.dataset.moduleId;
+                        const startX = e.clientX;
+                        const startY = e.clientY;
+                        const startModuleX = parseInt(moduleElement.style.left, 10) || 0;
+                        const startModuleY = parseInt(moduleElement.style.top, 10) || 0;
+
+                        const onMouseMove = (moveEvent) => {
+                            const dx = moveEvent.clientX - startX;
+                            const dy = moveEvent.clientY - startY;
+                            moduleElement.style.left = `${startModuleX + dx}px`;
+                            moduleElement.style.top = `${startModuleY + dy}px`;
+                            // Update connection lines
+                            window.dispatchEvent(new CustomEvent('moduleMoved', { detail: { moduleId } }));
+                        };
+
+                        const onMouseUp = () => {
+                            document.removeEventListener('mousemove', onMouseMove);
+                            document.removeEventListener('mouseup', onMouseUp);
+                        };
+
+                        document.addEventListener('mousemove', onMouseMove);
+                        document.addEventListener('mouseup', onMouseUp);
+                    }
+                }
+            });
+        }
+
+
+        // --- CONNECTION MANAGER ---
+        function getParamName(node, param) {
+            if (node.frequency === param) return 'frequency';
+            if (node.Q === param) return 'Q';
+            if (node.gain === param) return 'gain';
+            if (node.detune === param) return 'detune';
+            // Add more as needed
+            return 'unknown_param';
+        }
+
+        function drawConnection(connection) {
+            const srcModule = sharedState.modules[connection.source.moduleId];
+            const dstModule = sharedState.modules[connection.destination.moduleId];
+
+            if (!srcModule || !dstModule) return;
+
+            const srcConnector = document.querySelector(`.module[data-module-id="${connection.source.moduleId}"] .module-connector.output`);
+            const dstConnector = document.querySelector(`.module[data-module-id="${connection.destination.moduleId}"] .module-connector.input`);
+
+            if (!srcConnector || !dstConnector) return;
+
+            const srcRect = srcConnector.getBoundingClientRect();
+            const dstRect = dstConnector.getBoundingClientRect();
+            const canvasRect = domElements.canvas.getBoundingClientRect();
+
+            const x1 = srcRect.left + srcRect.width / 2 - canvasRect.left;
+            const y1 = srcRect.top + srcRect.height / 2 - canvasRect.top;
+            const x2 = dstRect.left + dstRect.width / 2 - canvasRect.left;
+            const y2 = dstRect.top + dstRect.height / 2 - canvasRect.top;
+
+            const line = document.createElementNS(svgNS, 'line');
+            line.id = connection.id;
+            line.setAttribute('x1', x1);
+            line.setAttribute('y1', y1);
+            line.setAttribute('x2', x2);
+            line.setAttribute('y2', y2);
+            line.classList.add('connection-line');
+            domElements.connectionsSvg.appendChild(line);
+        }
+
+        function redrawConnectionsForModule(moduleId) {
+            const relevantConnections = sharedState.connections.filter(
+                conn => conn.source.moduleId === moduleId || conn.destination.moduleId === moduleId
+            );
+
+            relevantConnections.forEach(conn => {
+                const lineElement = document.getElementById(conn.id);
+                if (lineElement) {
+                    lineElement.remove();
+                    drawConnection(conn); // Redraw with new positions
+                }
+            });
+        }
+
+        function removeConnection(connectionId) {
+            const connectionIndex = sharedState.connections.findIndex(c => c.id === connectionId);
+            if (connectionIndex === -1) return;
+
+            const conn = sharedState.connections[connectionIndex];
+            const srcModuleData = sharedState.modules[conn.source.moduleId];
+            const dstModuleData = sharedState.modules[conn.destination.moduleId];
+
+            if (srcModuleData && dstModuleData) {
+                try {
+                    if (conn.source.type === 'lfo' && conn.destination.type === 'param') {
+                        // Disconnect LFO from specific param
+                        // This is a simplification; ideally, we'd track the param better
+                        srcModuleData.audioNode.disconnect(); // Disconnects all, might affect other connections
+                    } else if (conn.source.type === 'audio' && conn.destination.type === 'audio') {
+                         // Disconnect audio nodes
+                         srcModuleData.audioNode.disconnect(dstModuleData.audioNode);
+                    }
+                } catch (e) {
+                    console.warn("Error during disconnection:", e);
+                    // Fallback: disconnect all from source
+                    try { srcModuleData.audioNode.disconnect(); } catch (e2) { console.warn("Fallback disconnect failed:", e2); }
+                }
+            }
+
+            // Remove from state
+            sharedState.connections.splice(connectionIndex, 1);
+
+            // Remove SVG line
+            const lineElement = document.getElementById(connectionId);
+            if (lineElement) {
+                lineElement.remove();
+            }
+        }
+
+        function createAudioConnection(src, dst) {
+            const srcModuleData = sharedState.modules[src.moduleId];
+            const dstModuleData = sharedState.modules[dst.moduleId];
+
+            if (srcModuleData.audioNode && dstModuleData.audioNode) {
+                try {
+                    srcModuleData.audioNode.connect(dstModuleData.audioNode);
+                    const connectionId = `conn-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+                    const newConnection = {
+                        id: connectionId,
+                        source: { moduleId: src.moduleId, type: 'audio' },
+                        destination: { moduleId: dst.moduleId, type: 'audio' }
+                    };
+                    sharedState.connections.push(newConnection);
+                    drawConnection(newConnection);
+                } catch (e) {
+                    console.error("Error connecting audio nodes:", e);
+                }
+            }
+        }
+
+        function createModulationConnection(src, dst) {
+            const lfoModuleData = sharedState.modules[src.moduleId];
+            const targetModuleData = sharedState.modules[dst.moduleId];
+            const lfoNode = lfoModuleData.audioNode;
+            let targetParam = targetModuleData.audioNode; // Default to main input
+
+            // --- LFO/Modulation Logic ---
+            if (targetModuleData.type === 'oscillator' && targetModuleData.audioNode.frequency) {
+                targetParam = targetModuleData.audioNode.frequency;
+            } else if (targetModuleData.type === 'filter' && targetModuleData.audioNode.frequency) {
+                targetParam = targetModuleData.audioNode.frequency;
+            } else if (targetModuleData.type === 'gain' && targetModuleData.audioNode.gain) {
+                targetParam = targetModuleData.audioNode.gain;
+            }
+            // Add more else if blocks for other module types here
+
+            if (lfoNode && targetParam) {
+                try {
+                    lfoNode.connect(targetParam);
+                    const connectionId = `conn-mod-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+                    const newConnection = {
+                        id: connectionId,
+                        source: { moduleId: src.moduleId, type: 'lfo' },
+                        destination: { moduleId: dst.moduleId, type: 'param', paramName: getParamName(targetModuleData.audioNode, targetParam) }
+                    };
+                    sharedState.connections.push(newConnection);
+                    drawConnection(newConnection);
+                } catch (e) {
+                    console.error("Error connecting LFO to parameter:", e);
+                }
+            }
+        }
+
+        function handleConnectorClick(moduleId, ioType, event) {
+            const moduleData = sharedState.modules[moduleId];
+            if (!moduleData) return;
+
+            if (sharedState.selectedConnector === null) {
+                // First click: select the connector
+                if (ioType === 'output') {
+                     sharedState.selectedConnector = { moduleId, ioType };
+                     event.target.classList.add('selected'); // Visual feedback
+                }
+                // Do nothing for input on first click
+            } else {
+                // Second click: attempt to connect
+                const src = sharedState.selectedConnector;
+                const dst = { moduleId, ioType };
+
+                if (src.ioType === 'output' && dst.ioType === 'input' && src.moduleId !== dst.moduleId) {
+                    // Audio connection
+                    createAudioConnection(src, dst);
+                } else if (src.ioType === 'output' && sharedState.modules[src.moduleId].type === 'lfo' && dst.ioType === 'input') {
+                    // LFO modulation connection
+                    createModulationConnection(src, dst);
+                }
+
+                // Deselect source connector
+                const srcElement = document.querySelector(`.module[data-module-id="${src.moduleId}"] .module-connector[data-io-type="output"]`);
+                if (srcElement) srcElement.classList.remove('selected');
+                sharedState.selectedConnector = null;
+            }
+        }
+
+        function handleConnectorRightClick(moduleId, ioType, event) {
+            event.preventDefault();
+            const moduleData = sharedState.modules[moduleId];
+            if (!moduleData) return;
+
+            // Find connections involving this connector
+            const connectionsToRemove = sharedState.connections.filter(conn => {
+                if (ioType === 'output') {
+                    return conn.source.moduleId === moduleId;
+                } else { // input
+                    return conn.destination.moduleId === moduleId;
+                }
+            });
+
+            connectionsToRemove.forEach(conn => {
+                removeConnection(conn.id);
+            });
+        }
+
+        function initializeConnectionHandling() {
+            domElements.canvas.addEventListener('click', (e) => {
+                if (e.target.classList.contains('module-connector')) {
+                    const moduleId = e.target.closest('.module').dataset.moduleId;
+                    const ioType = e.target.dataset.ioType; // 'input' or 'output'
+                    handleConnectorClick(moduleId, ioType, e);
+                }
+            });
+
+            domElements.canvas.addEventListener('contextmenu', (e) => {
+                if (e.target.classList.contains('module-connector')) {
+                    const moduleId = e.target.closest('.module').dataset.moduleId;
+                    const ioType = e.target.dataset.ioType;
+                    handleConnectorRightClick(moduleId, ioType, e);
+                }
+            });
+
+            // Listen for module movement to update connections
+            window.addEventListener('moduleMoved', (e) => {
+                redrawConnectionsForModule(e.detail.moduleId);
+            });
+        }
+
+
+        // --- MAIN INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeDragAndDrop();
+            initializeConnectionHandling();
+        });
+    </script>
+</body>
+</html>

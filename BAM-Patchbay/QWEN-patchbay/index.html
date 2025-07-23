@@ -1,0 +1,633 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAM-Patchbay</title>
+    <style>
+        /* css/style.css */
+        :root {
+            --panel-size: 150px;
+            --panel-bg: #2c3e50;
+            --panel-border: #1a252f;
+            --inner-panel-bg: #34495e;
+            --screen-bg: #1a252f;
+            --jack-bg: #7f8c8d;
+            --jack-hole-bg: #2c3e50;
+            --text-color: #ecf0f1;
+            --shadow-dark: rgba(0, 0, 0, 0.5);
+            --shadow-light: rgba(255, 255, 255, 0.1);
+            --noise-url: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            --jack-connected-color: #f1c40f; /* Yellow */
+            --jack-pending-color: #e67e22; /* Orange */
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: var(--text-color);
+            overflow-x: auto;
+        }
+
+        #app-container {
+            display: flex;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 20px;
+            flex-grow: 1;
+        }
+
+        .panel-container {
+            width: var(--panel-size);
+            height: var(--panel-size);
+            background-color: var(--panel-bg);
+            border: 2px solid var(--panel-border);
+            border-radius: 8px;
+            box-shadow: 5px 5px 10px var(--shadow-dark), -2px -2px 5px var(--shadow-light);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 10px;
+            box-sizing: border-box;
+            background-image: var(--noise-url);
+            background-blend-mode: overlay;
+        }
+
+        .inner-panel {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+            justify-content: space-between;
+            flex-grow: 1;
+            background-color: var(--inner-panel-bg);
+            border-radius: 4px;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+
+        .io-column {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            align-items: center;
+            width: 30%;
+        }
+
+        .screen {
+            flex-grow: 1;
+            margin: 0 10px;
+            background-color: var(--screen-bg);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            color: #95a5a6;
+            box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -1px -1px 2px var(--shadow-light);
+        }
+
+        .jack {
+            width: 24px;
+            height: 24px;
+            background-color: var(--jack-bg);
+            border-radius: 50%;
+            position: relative;
+            cursor: pointer;
+            box-shadow: 2px 2px 4px var(--shadow-dark), -1px -1px 2px var(--shadow-light);
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+
+        .jack:hover {
+            transform: scale(1.1);
+            box-shadow: 3px 3px 6px var(--shadow-dark), -1px -1px 3px var(--shadow-light);
+        }
+
+        .jack-hole {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 12px;
+            height: 12px;
+            background-color: var(--jack-hole-bg);
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+        }
+
+        .jack.connected .jack-hole {
+            background-color: var(--jack-connected-color);
+        }
+
+        .jack.pending .jack-hole {
+            background-color: var(--jack-pending-color);
+        }
+
+        .io-label {
+            font-size: 0.6em;
+            margin-top: 2px;
+            text-align: center;
+            color: #bdc3c7;
+        }
+
+        #debug-panel {
+            width: 300px;
+            min-width: 250px;
+            background-color: #34495e;
+            border: 1px solid #2c3e50;
+            border-radius: 8px;
+            padding: 15px;
+            margin-left: 20px;
+            box-shadow: 5px 5px 10px var(--shadow-dark);
+            overflow-y: auto;
+            max-height: 90vh;
+            box-sizing: border-box;
+        }
+
+        #debug-panel h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #ecf0f1;
+            border-bottom: 1px solid #7f8c8d;
+            padding-bottom: 5px;
+        }
+
+        #debug-messages {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85em;
+        }
+
+        #debug-messages li {
+            padding: 5px 0;
+            border-bottom: 1px dotted #7f8c8d;
+        }
+
+        #debug-messages li.debug { color: #3498db; }
+        #debug-messages li.info { color: #2ecc71; }
+        #debug-messages li.success { color: #f1c40f; }
+        #debug-messages li.warn { color: #e67e22; }
+        #debug-messages li.error { color: #e74c3c; font-weight: bold; }
+
+        #patch-svg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .patch-cable {
+            stroke: #3498db;
+            stroke-width: 2;
+            stroke-linecap: round;
+        }
+
+        @media (max-width: 768px) {
+            :root {
+                --panel-size: 120px;
+            }
+            #app-container {
+                flex-direction: column;
+            }
+            #debug-panel {
+                width: auto;
+                margin-left: 0;
+                margin-top: 20px;
+                max-height: 30vh;
+            }
+            #grid-container {
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <div id="grid-container"></div>
+        <div id="debug-panel">
+            <h3>Debug Messages</h3>
+            <ul id="debug-messages"></ul>
+        </div>
+    </div>
+    <svg id="patch-svg-layer" xmlns="http://www.w3.org/2000/svg"></svg>
+
+    <!-- Load external libraries from CDNs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script type="module">
+        // js/debug.js
+        function logDebug(message, type = 'info') {
+            const debugList = document.getElementById('debug-messages');
+            if (debugList) {
+                const listItem = document.createElement('li');
+                listItem.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                listItem.classList.add(type);
+                debugList.appendChild(listItem);
+                debugList.scrollTop = debugList.scrollHeight;
+            }
+
+            switch (type.toLowerCase()) {
+                case 'debug': console.debug(message); break;
+                case 'info': console.info(message); break;
+                case 'success': console.log(`%c${message}`, 'color: #2ecc71; font-weight: bold;'); break;
+                case 'warn': console.warn(message); break;
+                case 'error': console.error(message); break;
+                default: console.log(message);
+            }
+        }
+
+        // js/libraryChecker.js
+        function checkLibraries() {
+            logDebug("Checking for required libraries...", 'info');
+
+            return new Promise((resolve, reject) => {
+                if (typeof window.Tone === 'undefined' || !window.Tone) {
+                    const errorMsg = "Tone.js library not found. Please ensure it's loaded correctly.";
+                    logDebug(errorMsg, 'error');
+                    reject(new Error(errorMsg));
+                    return;
+                } else {
+                    if (typeof window.Tone.context === 'undefined') {
+                        logDebug("Tone.js found but context not initialized yet.", 'warn');
+                    } else {
+                        logDebug("Tone.js library detected and context available.", 'success');
+                    }
+                }
+
+                if (typeof window.THREE === 'undefined' || !window.THREE) {
+                    const errorMsg = "Three.js library not found. Please ensure it's loaded correctly.";
+                    logDebug(errorMsg, 'error');
+                    reject(new Error(errorMsg));
+                    return;
+                } else {
+                    if (typeof window.THREE.Scene === 'undefined') {
+                        const errorMsg = "Three.js found but core classes are missing.";
+                        logDebug(errorMsg, 'error');
+                        reject(new Error(errorMsg));
+                        return;
+                    } else {
+                        logDebug("Three.js library detected.", 'success');
+                    }
+                }
+
+                resolve();
+            });
+        }
+
+        // js/app.js
+        async function initializeApp() {
+            logDebug("Initializing core application logic...", 'info');
+
+            try {
+                if (window.Tone && typeof Tone.context !== 'undefined') {
+                    logDebug("Tone.js context is available.", 'debug');
+                } else {
+                    logDebug("Tone.js does not seem to be fully initialized or available.", 'warn');
+                }
+
+                if (window.THREE && typeof THREE.Scene !== 'undefined') {
+                    logDebug("Three.js core classes are available.", 'debug');
+                } else {
+                    logDebug("Three.js does not seem to be fully initialized or available.", 'warn');
+                }
+
+                logDebug("Core application logic initialized.", 'success');
+            } catch (error) {
+                logDebug(`Error initializing core application: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        // js/ui.js
+        const GRID_SIZE = 3;
+        const JACK_TYPES = [
+            { type: 'output', label: 'OUT', side: 'right' },
+            { type: 'input', label: 'IN', side: 'left' }
+        ];
+        const CHANNELS = ['L', 'R'];
+
+        function setupUI() {
+            logDebug("Setting up UI...", 'info');
+            const gridContainer = document.getElementById('grid-container');
+
+            if (!gridContainer) {
+                logDebug("Grid container element not found!", 'error');
+                return;
+            }
+
+            gridContainer.innerHTML = '';
+
+            for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+                const panel = createPanel(i);
+                gridContainer.appendChild(panel);
+            }
+
+            logDebug("UI setup complete.", 'success');
+        }
+
+        function createPanel(panelIndex) {
+            const panelContainer = document.createElement('div');
+            panelContainer.className = 'panel-container';
+            panelContainer.id = `panel-${panelIndex}`;
+
+            const innerPanel = document.createElement('div');
+            innerPanel.className = 'inner-panel';
+
+            const leftIOColumn = document.createElement('div');
+            leftIOColumn.className = 'io-column';
+
+            const rightIOColumn = document.createElement('div');
+            rightIOColumn.className = 'io-column';
+
+            const screen = document.createElement('div');
+            screen.className = 'screen';
+            screen.textContent = `Panel ${panelIndex + 1}`;
+
+            CHANNELS.forEach((channel, channelIndex) => {
+                const leftJackContainer = createJack(channel, 'input', panelIndex, channelIndex);
+                leftIOColumn.appendChild(leftJackContainer);
+
+                const rightJackContainer = createJack(channel, 'output', panelIndex, channelIndex);
+                rightIOColumn.appendChild(rightJackContainer);
+            });
+
+            innerPanel.appendChild(leftIOColumn);
+            innerPanel.appendChild(screen);
+            innerPanel.appendChild(rightIOColumn);
+
+            panelContainer.appendChild(innerPanel);
+
+            return panelContainer;
+        }
+
+        function createJack(channel, jackType, panelIndex, jackIndex) {
+            const jackContainer = document.createElement('div');
+
+            const jack = document.createElement('div');
+            jack.className = 'jack';
+            jack.id = `jack-${panelIndex}-${jackType}-${jackIndex}`;
+
+            jack.dataset.jackType = jackType;
+            jack.dataset.jackPanel = panelIndex;
+            jack.dataset.jackIndex = jackIndex;
+            const jackId = `${panelIndex}-${jackType}-${jackIndex}`;
+            jack.dataset.jackId = jackId;
+
+            const jackHole = document.createElement('div');
+            jackHole.className = 'jack-hole';
+            jack.appendChild(jackHole);
+
+            const label = document.createElement('div');
+            label.className = 'io-label';
+            label.textContent = `${channel} ${jackType === 'input' ? 'IN' : 'OUT'}`;
+
+            jackContainer.appendChild(jack);
+            jackContainer.appendChild(label);
+
+            return jackContainer;
+        }
+
+        // js/patchCable.js
+        let svgLayer = null;
+        let jackElements = [];
+        let pendingConnection = null;
+        let activeConnections = new Map();
+
+        function initPatching() {
+            logDebug("Initializing patching system...", 'info');
+
+            svgLayer = document.getElementById('patch-svg-layer');
+            if (!svgLayer) {
+                logDebug("SVG layer not found!", 'error');
+                return;
+            }
+
+            jackElements = document.querySelectorAll('.jack');
+            if (jackElements.length === 0) {
+                logDebug("No jack elements found for patching!", 'error');
+                return;
+            }
+
+            jackElements.forEach(jack => {
+                jack.addEventListener('click', handleJackClick);
+            });
+
+            document.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('resize', redrawAllCables);
+
+            logDebug("Patching system initialized.", 'success');
+        }
+
+        function handleJackClick(event) {
+            const jackElement = event.currentTarget;
+            const jackType = jackElement.dataset.jackType;
+            const jackPanel = jackElement.dataset.jackPanel;
+            const jackIndex = jackElement.dataset.jackIndex;
+            const jackId = jackElement.dataset.jackId;
+
+            if (!jackType || !jackPanel || !jackIndex || !jackId) {
+                logDebug(`Jack data attributes missing on element ${jackElement.id}`, 'error');
+                return;
+            }
+
+            if (jackElement.classList.contains('connected')) {
+                removeConnection(jackId);
+                return;
+            }
+
+            if (jackType === 'input' && !pendingConnection) {
+                logDebug("Clicked an input jack without a pending output connection.", 'debug');
+                return;
+            }
+
+            if (jackType === 'output') {
+                if (pendingConnection) {
+                    clearPendingConnection();
+                }
+                pendingConnection = { type: jackType, panel: jackPanel, index: jackIndex, element: jackElement, id: jackId };
+                jackElement.classList.add('pending');
+                logDebug(`Pending connection started from Output ${jackId}`, 'debug');
+                return;
+            }
+
+            if (jackType === 'input' && pendingConnection && pendingConnection.type === 'output') {
+                const outputJackId = pendingConnection.id;
+                const inputJackId = jackId;
+
+                if (activeConnections.has(inputJackId)) {
+                    logDebug(`Input jack ${inputJackId} is already connected.`, 'warn');
+                    clearPendingConnection();
+                    return;
+                }
+
+                createConnection(outputJackId, inputJackId);
+                clearPendingConnection();
+                return;
+            }
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Escape' && pendingConnection) {
+                logDebug("Pending connection cancelled via Escape key.", 'debug');
+                clearPendingConnection();
+            }
+        }
+
+        function clearPendingConnection() {
+            if (pendingConnection) {
+                pendingConnection.element.classList.remove('pending');
+                pendingConnection = null;
+            }
+        }
+
+        function createConnection(outputJackId, inputJackId) {
+            const outputJackElement = document.querySelector(`.jack[data-jack-id="${outputJackId}"]`);
+            const inputJackElement = document.querySelector(`.jack[data-jack-id="${inputJackId}"]`);
+
+            if (!outputJackElement || !inputJackElement) {
+                logDebug(`Could not find jack elements for connection (${outputJackId} -> ${inputJackId})`, 'error');
+                return;
+            }
+
+            const outputCoords = getJackCenterCoords(outputJackElement);
+            const inputCoords = getJackCenterCoords(inputJackElement);
+
+            if (!outputCoords || !inputCoords) {
+                logDebug(`Could not calculate jack coordinates for connection (${outputJackId} -> ${inputJackId})`, 'error');
+                return;
+            }
+
+            const lineElement = drawCable(outputCoords, inputCoords);
+
+            activeConnections.set(inputJackId, { outputJackId, svgLineElement: lineElement });
+
+            outputJackElement.classList.add('connected');
+            inputJackElement.classList.add('connected');
+
+            logDebug(`Connection established: ${outputJackId} -> ${inputJackId}`, 'success');
+        }
+
+        function removeConnection(jackId) {
+            let inputJackIdToRemove = null;
+            let connectionData = null;
+
+            if (activeConnections.has(jackId)) {
+                inputJackIdToRemove = jackId;
+                connectionData = activeConnections.get(jackId);
+            } else {
+                for (let [inputId, conn] of activeConnections) {
+                    if (conn.outputJackId === jackId) {
+                        inputJackIdToRemove = inputId;
+                        connectionData = conn;
+                        break;
+                    }
+                }
+            }
+
+            if (!inputJackIdToRemove || !connectionData) {
+                logDebug(`No active connection found for jack ID ${jackId}`, 'warn');
+                return;
+            }
+
+            const { outputJackId, svgLineElement } = connectionData;
+
+            if (svgLineElement && svgLineElement.parentNode) {
+                svgLineElement.parentNode.removeChild(svgLineElement);
+            }
+
+            activeConnections.delete(inputJackIdToRemove);
+
+            const outputJackElement = document.querySelector(`.jack[data-jack-id="${outputJackId}"]`);
+            const inputJackElement = document.querySelector(`.jack[data-jack-id="${inputJackIdToRemove}"]`);
+            if (outputJackElement) outputJackElement.classList.remove('connected');
+            if (inputJackElement) inputJackElement.classList.remove('connected');
+
+            logDebug(`Connection removed: ${outputJackId} -> ${inputJackIdToRemove}`, 'info');
+        }
+
+        function getJackCenterCoords(jackElement) {
+            try {
+                const rect = jackElement.getBoundingClientRect();
+                const appContainerRect = document.getElementById('app-container').getBoundingClientRect();
+                return {
+                    x: rect.left + rect.width / 2 - appContainerRect.left,
+                    y: rect.top + rect.height / 2 - appContainerRect.top
+                };
+            } catch (error) {
+                logDebug(`Error calculating jack coordinates: ${error.message}`, 'error');
+                return null;
+            }
+        }
+
+        function drawCable(start, end) {
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', start.x);
+            line.setAttribute('y1', start.y);
+            line.setAttribute('x2', end.x);
+            line.setAttribute('y2', end.y);
+            line.classList.add('patch-cable');
+            svgLayer.appendChild(line);
+            return line;
+        }
+
+        function redrawAllCables() {
+            while (svgLayer.firstChild) {
+                svgLayer.removeChild(svgLayer.firstChild);
+            }
+
+            for (let [inputJackId, connection] of activeConnections) {
+                const outputJackId = connection.outputJackId;
+                const outputJackElement = document.querySelector(`.jack[data-jack-id="${outputJackId}"]`);
+                const inputJackElement = document.querySelector(`.jack[data-jack-id="${inputJackId}"]`);
+
+                if (outputJackElement && inputJackElement) {
+                    const outputCoords = getJackCenterCoords(outputJackElement);
+                    const inputCoords = getJackCenterCoords(inputJackElement);
+                    if (outputCoords && inputCoords) {
+                        const newLineElement = drawCable(outputCoords, inputCoords);
+                        connection.svgLineElement = newLineElement;
+                    }
+                }
+            }
+        }
+
+        // js/main.js
+        async function startApplication() {
+            logDebug("Starting application initialization...", 'info');
+
+            try {
+                await checkLibraries();
+                await initializeApp();
+                setupUI();
+                initPatching();
+                logDebug("All modules initialized successfully.", 'success');
+            } catch (error) {
+                logDebug(`Application startup failed: ${error.message}`, 'error');
+                console.error("Critical startup error:", error);
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startApplication);
+        } else {
+            startApplication();
+        }
+    </script>
+</body>
+</html>
