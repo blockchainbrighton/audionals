@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rhythm Runner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: none;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            color: #fff;
+        }
+        #gameContainer {
+            position: relative;
+            width: 480px;
+            height: 640px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            background: linear-gradient(to bottom, #0f3460, #1a1a2e);
+            display: block;
+        }
+        #gameOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(10, 15, 30, 0.85);
+            z-index: 10;
+            transition: opacity 0.3s;
+        }
+        #gameOverlay h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            text-shadow: 0 0 10px #4cc9f0;
+            background: linear-gradient(to right, #4cc9f0, #f72585);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 2px;
+        }
+        #gameOverlay p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            text-align: center;
+            max-width: 80%;
+            line-height: 1.6;
+            color: #a9d6e5;
+        }
+        #startButton, #restartButton {
+            background: linear-gradient(to right, #4361ee, #3a0ca3);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.3rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        #startButton:hover, #restartButton:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(to right, #4895ef, #4361ee);
+        }
+        #startButton:active, #restartButton:active {
+            transform: translateY(1px);
+        }
+        .hidden {
+            display: none;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 1rem;
+            color: #4cc9f0;
+            padding: 0 20px;
+        }
+        .mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            display: none;
+            justify-content: space-around;
+            padding: 0 20px;
+        }
+        .mobile-btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: rgba(67, 97, 238, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            color: white;
+            user-select: none;
+            backdrop-filter: blur(5px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+        @media (max-width: 500px) {
+            #gameContainer {
+                width: 100vw;
+                height: 100vh;
+                border-radius: 0;
+            }
+            body {
+                padding: 0;
+            }
+            #gameOverlay h1 {
+                font-size: 2.5rem;
+            }
+            .mobile-controls {
+                display: flex;
+            }
+            #instructions {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="480" height="640"></canvas>
+        
+        <div id="gameOverlay">
+            <h1>RHYTHM RUNNER</h1>
+            <p>Dodge obstacles and create musical streaks! Each obstacle plays a note when you hit it. Avoid them to build streaks and unlock rhythm rewards!</p>
+            <button id="startButton">START GAME</button>
+            <div id="instructions">
+                Controls: A/S/D to switch lanes | SPACE to jump<br>
+                Swipe up/down to change lanes | Tap to jump (mobile)
+            </div>
+        </div>
+        
+        <div class="mobile-controls">
+            <div class="mobile-btn" id="upBtn">↑</div>
+            <div class="mobile-btn" id="jumpBtn">JUMP</div>
+            <div class="mobile-btn" id="downBtn">↓</div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Game constants
+        const CANVAS_WIDTH = 480;
+        const CANVAS_HEIGHT = 640;
+        const LANE_WIDTH = CANVAS_WIDTH / 3;
+        const PLAYER_SIZE = 50;
+        const OBSTACLE_WIDTH = 60;
+        const OBSTACLE_HEIGHT = 30;
+        const PLAYER_SPEED = 8;
+        const OBSTACLE_SPEED = 5;
+        const GRAVITY = 0.8;
+        const JUMP_FORCE = -15;
+        const BPM = 120;
+        const SCALE = ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4'];
+
+        // Game state
+        const gameState = {
+            playerLane: 1,
+            playerY: CANVAS_HEIGHT - 150,
+            velocityY: 0,
+            isJumping: false,
+            obstacles: [],
+            score: 0,
+            streak: 0,
+            lives: 3,
+            gameOver: false,
+            lastObstacleTime: 0,
+            obstacleInterval: 1500,
+            gameStarted: false
+        };
+
+        // DOM elements
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameOverlay = document.getElementById('gameOverlay');
+        const startButton = document.getElementById('startButton');
+        const restartButton = document.createElement('button');
+        restartButton.id = 'restartButton';
+        restartButton.textContent = 'PLAY AGAIN';
+        restartButton.classList.add('hidden');
+        gameOverlay.appendChild(restartButton);
+
+        // Mobile controls
+        const upBtn = document.getElementById('upBtn');
+        const downBtn = document.getElementById('downBtn');
+        const jumpBtn = document.getElementById('jumpBtn');
+
+        // Audio setup
+        const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+        const kick = new Tone.MembraneSynth().toDestination();
+        const hihat = new Tone.MetalSynth({
+            frequency: 200,
+            envelope: {attack: 0.001, decay: 0.1},
+            harmonicity: 5.1,
+            modulationIndex: 32,
+            resonance: 400,
+            octaves: 1.5
+        }).toDestination();
+        const clap = new Tone.NoiseSynth({
+            noise: {type: 'white'},
+            envelope: {attack: 0.001, decay: 0.2, sustain: 0}
+        }).toDestination();
+
+        // Create background groove
+        const kickLoop = new Tone.Loop(() => {
+            kick.triggerAttackRelease('C1', '8n');
+        }, '4n');
+
+        // Start audio context on first interaction
+        function unlockAudio() {
+            Tone.start();
+            document.body.removeEventListener('touchstart', unlockAudio);
+            document.body.removeEventListener('click', unlockAudio);
+        }
+        document.body.addEventListener('touchstart', unlockAudio);
+        document.body.addEventListener('click', unlockAudio);
+
+        // Draw player
+        function drawPlayer() {
+            const playerX = gameState.playerLane * LANE_WIDTH + LANE_WIDTH / 2;
+            
+            // Draw player body
+            ctx.fillStyle = '#4361ee';
+            ctx.beginPath();
+            ctx.arc(playerX, gameState.playerY, PLAYER_SIZE / 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw player details
+            ctx.fillStyle = '#4cc9f0';
+            ctx.beginPath();
+            ctx.arc(playerX - 10, gameState.playerY - 5, 8, 0, Math.PI * 2);
+            ctx.arc(playerX + 10, gameState.playerY - 5, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw player mouth
+            ctx.strokeStyle = '#f72585';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(playerX, gameState.playerY + 5, 10, 0.2, Math.PI - 0.2);
+            ctx.stroke();
+        }
+
+        // Draw obstacles
+        function drawObstacles() {
+            gameState.obstacles.forEach(obstacle => {
+                // Draw obstacle body
+                ctx.fillStyle = obstacle.color;
+                ctx.fillRect(obstacle.x, obstacle.y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT);
+                
+                // Draw musical note
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '20px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(obstacle.note, obstacle.x + OBSTACLE_WIDTH / 2, obstacle.y + OBSTACLE_HEIGHT / 2);
+                
+                // Draw highlight
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(obstacle.x, obstacle.y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT);
+            });
+        }
+
+        // Draw lanes
+        function drawLanes() {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 2;
+            
+            for (let i = 1; i < 3; i++) {
+                ctx.beginPath();
+                ctx.moveTo(LANE_WIDTH * i, 0);
+                ctx.lineTo(LANE_WIDTH * i, CANVAS_HEIGHT);
+                ctx.stroke();
+            }
+            
+            // Draw lane indicators
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                ctx.arc(LANE_WIDTH * i + LANE_WIDTH / 2, CANVAS_HEIGHT - 30, 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Draw HUD
+        function drawHUD() {
+            // Draw score
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Score: ${gameState.score}`, 20, 40);
+            
+            // Draw streak
+            ctx.fillStyle = gameState.streak >= 8 ? '#f72585' : 
+                           gameState.streak >= 4 ? '#4cc9f0' : '#ffffff';
+            ctx.fillText(`Streak: ${gameState.streak}`, 20, 70);
+            
+            // Draw lives
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#ff6b6b';
+            ctx.fillText('Lives: ', CANVAS_WIDTH - 100, 40);
+            
+            for (let i = 0; i < 3; i++) {
+                ctx.fillStyle = i < gameState.lives ? '#ff6b6b' : 'rgba(255, 255, 255, 0.2)';
+                ctx.beginPath();
+                ctx.arc(CANVAS_WIDTH - 30 - (i * 30), 35, 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Draw streak rewards
+            if (gameState.streak >= 4) {
+                ctx.fillStyle = '#4cc9f0';
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('HI-HAT UNLOCKED!', CANVAS_WIDTH / 2, 100);
+            }
+            
+            if (gameState.streak >= 8) {
+                ctx.fillStyle = '#f72585';
+                ctx.fillText('CLAP UNLOCKED!', CANVAS_WIDTH / 2, 125);
+            }
+        }
+
+        // Draw game over screen
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME OVER', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
+            
+            ctx.font = '28px Arial';
+            ctx.fillText(`Final Score: ${gameState.score}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 20);
+        }
+
+        // Update player position
+        function updatePlayer() {
+            // Apply gravity
+            if (gameState.isJumping) {
+                gameState.playerY += gameState.velocityY;
+                gameState.velocityY += GRAVITY;
+                
+                // Check if landed
+                if (gameState.playerY >= CANVAS_HEIGHT - 150) {
+                    gameState.playerY = CANVAS_HEIGHT - 150;
+                    gameState.isJumping = false;
+                    gameState.velocityY = 0;
+                }
+            }
+        }
+
+        // Update obstacles
+        function updateObstacles() {
+            // Move obstacles
+            gameState.obstacles.forEach(obstacle => {
+                obstacle.x -= OBSTACLE_SPEED;
+            });
+            
+            // Remove off-screen obstacles
+            gameState.obstacles = gameState.obstacles.filter(obstacle => obstacle.x > -OBSTACLE_WIDTH);
+            
+            // Check collisions
+            const playerX = gameState.playerLane * LANE_WIDTH + LANE_WIDTH / 2;
+            const playerTop = gameState.playerY - PLAYER_SIZE / 2;
+            const playerBottom = gameState.playerY + PLAYER_SIZE / 2;
+            const playerLeft = playerX - PLAYER_SIZE / 2;
+            const playerRight = playerX + PLAYER_SIZE / 2;
+            
+            gameState.obstacles.forEach(obstacle => {
+                const obstacleTop = obstacle.y;
+                const obstacleBottom = obstacle.y + OBSTACLE_HEIGHT;
+                const obstacleLeft = obstacle.x;
+                const obstacleRight = obstacle.x + OBSTACLE_WIDTH;
+                
+                // Collision detection
+                if (playerRight > obstacleLeft && 
+                    playerLeft < obstacleRight && 
+                    playerBottom > obstacleTop && 
+                    playerTop < obstacleBottom) {
+                    
+                    // Play collision note
+                    synth.triggerAttackRelease(SCALE[obstacle.noteIndex], '8n');
+                    
+                    // Remove obstacle
+                    gameState.obstacles = gameState.obstacles.filter(obs => obs !== obstacle);
+                    
+                    // Deduct life
+                    gameState.lives--;
+                    gameState.streak = 0;
+                    
+                    // Game over check
+                    if (gameState.lives <= 0) {
+                        gameState.gameOver = true;
+                        Tone.Transport.stop();
+                        kickLoop.stop();
+                    }
+                } else if (obstacle.x + OBSTACLE_WIDTH < playerX - PLAYER_SIZE / 2 && !obstacle.passed) {
+                    // Player avoided obstacle
+                    obstacle.passed = true;
+                    gameState.streak++;
+                    gameState.score += 10;
+                    
+                    // Play streak rewards
+                    if (gameState.streak === 4) {
+                        hihat.triggerAttackRelease('C5', '32n');
+                    } else if (gameState.streak === 8) {
+                        clap.triggerAttackRelease('16n');
+                    }
+                }
+            });
+        }
+
+        // Spawn obstacles
+        function spawnObstacle() {
+            const now = Date.now();
+            if (now - gameState.lastObstacleTime > gameState.obstacleInterval) {
+                const lane = Math.floor(Math.random() * 3);
+                const noteIndex = Math.floor(Math.random() * 7);
+                const note = noteIndex + 1;
+                const colors = ['#f72585', '#4361ee', '#4cc9f0', '#7209b7', '#3a0ca3'];
+                
+                gameState.obstacles.push({
+                    x: CANVAS_WIDTH,
+                    y: CANVAS_HEIGHT - 200,
+                    lane: lane,
+                    note: note,
+                    noteIndex: noteIndex,
+                    color: colors[noteIndex],
+                    passed: false
+                });
+                
+                gameState.lastObstacleTime = now;
+                
+                // Gradually increase difficulty
+                if (gameState.obstacleInterval > 800) {
+                    gameState.obstacleInterval -= 5;
+                }
+            }
+        }
+
+        // Main game loop
+        function gameLoop() {
+            // Clear canvas
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // Draw game elements
+            drawLanes();
+            drawObstacles();
+            drawPlayer();
+            drawHUD();
+            
+            if (!gameState.gameOver) {
+                // Update game state
+                updatePlayer();
+                updateObstacles();
+                spawnObstacle();
+                
+                // Continue game loop
+                requestAnimationFrame(gameLoop);
+            } else {
+                drawGameOver();
+            }
+        }
+
+        // Handle keyboard input
+        function handleKeyDown(e) {
+            if (!gameState.gameStarted || gameState.gameOver) return;
+            
+            switch(e.key.toLowerCase()) {
+                case 'a':
+                    gameState.playerLane = Math.max(0, gameState.playerLane - 1);
+                    break;
+                case 'd':
+                    gameState.playerLane = Math.min(2, gameState.playerLane + 1);
+                    break;
+                case 's':
+                    gameState.playerLane = 1;
+                    break;
+                case ' ':
+                    if (!gameState.isJumping) {
+                        gameState.isJumping = true;
+                        gameState.velocityY = JUMP_FORCE;
+                    }
+                    break;
+            }
+        }
+
+        // Touch controls for mobile
+        function setupTouchControls() {
+            let touchStartY = 0;
+            
+            canvas.addEventListener('touchstart', e => {
+                touchStartY = e.touches[0].clientY;
+                e.preventDefault();
+            });
+            
+            canvas.addEventListener('touchmove', e => {
+                e.preventDefault();
+            });
+            
+            canvas.addEventListener('touchend', e => {
+                if (!gameState.gameStarted || gameState.gameOver) return;
+                
+                const touchEndY = e.changedTouches[0].clientY;
+                const diffY = touchStartY - touchEndY;
+                
+                // Vertical swipe
+                if (Math.abs(diffY) > 30) {
+                    if (diffY > 0) {
+                        // Swipe up
+                        gameState.playerLane = Math.max(0, gameState.playerLane - 1);
+                    } else {
+                        // Swipe down
+                        gameState.playerLane = Math.min(2, gameState.playerLane + 1);
+                    }
+                } else {
+                    // Tap to jump
+                    if (!gameState.isJumping) {
+                        gameState.isJumping = true;
+                        gameState.velocityY = JUMP_FORCE;
+                    }
+                }
+                
+                e.preventDefault();
+            });
+            
+            // Mobile buttons
+            upBtn.addEventListener('touchstart', () => {
+                if (gameState.gameStarted && !gameState.gameOver) {
+                    gameState.playerLane = Math.max(0, gameState.playerLane - 1);
+                }
+            });
+            
+            downBtn.addEventListener('touchstart', () => {
+                if (gameState.gameStarted && !gameState.gameOver) {
+                    gameState.playerLane = Math.min(2, gameState.playerLane + 1);
+                }
+            });
+            
+            jumpBtn.addEventListener('touchstart', () => {
+                if (gameState.gameStarted && !gameState.gameOver && !gameState.isJumping) {
+                    gameState.isJumping = true;
+                    gameState.velocityY = JUMP_FORCE;
+                }
+            });
+        }
+
+        // Start game
+        function startGame() {
+            // Reset game state
+            gameState.playerLane = 1;
+            gameState.playerY = CANVAS_HEIGHT - 150;
+            gameState.velocityY = 0;
+            gameState.isJumping = false;
+            gameState.obstacles = [];
+            gameState.score = 0;
+            gameState.streak = 0;
+            gameState.lives = 3;
+            gameState.gameOver = false;
+            gameState.lastObstacleTime = 0;
+            gameState.obstacleInterval = 1500;
+            gameState.gameStarted = true;
+            
+            // Hide overlay
+            gameOverlay.classList.add('hidden');
+            
+            // Start audio
+            Tone.Transport.bpm.value = BPM;
+            kickLoop.start(0);
+            Tone.Transport.start();
+            
+            // Start game loop
+            gameLoop();
+        }
+
+        // Event listeners
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', startGame);
+        document.addEventListener('keydown', handleKeyDown);
+        setupTouchControls();
+
+        // Initial setup
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Press START to play', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+    </script>
+</body>
+</html>

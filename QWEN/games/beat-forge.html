@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beat Forge</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px #00eeff, 0 0 20px #00eeff;
+            letter-spacing: 2px;
+            background: linear-gradient(to right, #ff00cc, #00eeff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.8;
+            margin-bottom: 15px;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #00eeff;
+            box-shadow: 0 0 15px rgba(0, 238, 255, 0.3);
+        }
+
+        .stat-box {
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.7;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #00eeff;
+            text-shadow: 0 0 5px #00eeff;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            width: 100%;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.4);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            border: 1px solid #00eeff;
+            transition: all 0.2s;
+            box-shadow: 0 0 8px rgba(0, 238, 255, 0.3);
+        }
+
+        button:hover {
+            background: rgba(0, 238, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+            width: 100%;
+            aspect-ratio: 1/1;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid #00eeff;
+            box-shadow: 0 0 20px rgba(0, 238, 255, 0.4);
+        }
+
+        .tile {
+            background: rgba(20, 20, 40, 0.7);
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid rgba(0, 238, 255, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tile::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 50%, rgba(0,238,255,0.1) 100%);
+            z-index: 1;
+        }
+
+        .tile:hover {
+            transform: scale(1.03);
+            box-shadow: 0 0 10px rgba(0, 238, 255, 0.5);
+            border-color: rgba(0, 238, 255, 0.7);
+        }
+
+        .tile.selected {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(255, 0, 204, 0.7);
+            border-color: #ff00cc;
+            z-index: 2;
+        }
+
+        .tile-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 2;
+        }
+
+        .tile-icon {
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+        }
+
+        .tile-name {
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .tile-tier {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            font-size: 0.7rem;
+            background: rgba(0, 0, 0, 0.5);
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 3;
+        }
+
+        /* Tile type styles */
+        .kick {
+            background: linear-gradient(135deg, #ff00cc, #8a2be2);
+        }
+
+        .snare {
+            background: linear-gradient(135deg, #00eeff, #0077ff);
+        }
+
+        .hihat {
+            background: linear-gradient(135deg, #00ff9d, #00b36b);
+        }
+
+        .bass {
+            background: linear-gradient(135deg, #ffcc00, #ff6600);
+        }
+
+        /* Game over overlay */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .overlay-content {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 90%;
+            width: 400px;
+            border: 2px solid #00eeff;
+            box-shadow: 0 0 30px rgba(0, 238, 255, 0.5);
+        }
+
+        .overlay h2 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: #00eeff;
+            text-shadow: 0 0 10px #00eeff;
+        }
+
+        .overlay p {
+            font-size: 1.2rem;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .instructions {
+            margin-top: 20px;
+            text-align: center;
+            max-width: 500px;
+            font-size: 0.9rem;
+            opacity: 0.7;
+            line-height: 1.6;
+        }
+
+        .instructions strong {
+            color: #00eeff;
+        }
+
+        @media (max-width: 500px) {
+            .board {
+                gap: 4px;
+                padding: 5px;
+            }
+            
+            .tile-icon {
+                font-size: 1.4rem;
+            }
+            
+            .tile-name {
+                font-size: 0.6rem;
+            }
+            
+            h1 {
+                font-size: 2.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>BEAT FORGE</h1>
+        <div class="subtitle">SYNTH-POWERED MERGE PUZZLE</div>
+    </div>
+    
+    <div class="game-container">
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-label">SCORE</div>
+                <div id="score" class="stat-value">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">HIGHEST TIER</div>
+                <div id="highest-tier" class="stat-value">1</div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="undo-btn">UNDO</button>
+            <button id="mute-btn">MUTE</button>
+            <button id="restart-btn">RESTART</button>
+        </div>
+        
+        <div class="board" id="board"></div>
+    </div>
+    
+    <div class="instructions">
+        <p><strong>HOW TO PLAY:</strong> Click or tap two identical adjacent tiles to merge them. Create higher-tier instruments to increase your score. Reach tier 4 to win!</p>
+    </div>
+    
+    <div class="overlay" id="game-over">
+        <div class="overlay-content">
+            <h2 id="game-result">GAME OVER</h2>
+            <p id="game-message">The board is full!</p>
+            <button id="play-again">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        // Main game IIFE
+        (function() {
+            // Game constants
+            const BOARD_SIZE = 6;
+            const TILE_TYPES = ['kick', 'snare', 'hihat', 'bass'];
+            const TILE_NAMES = {
+                kick: 'KICK',
+                snare: 'SNARE',
+                hihat: 'HI-HAT',
+                bass: 'BASS'
+            };
+            const TILE_ICONS = {
+                kick: '🥁',
+                snare: '🥁',
+                hihat: '🎶',
+                bass: '🎸'
+            };
+            const BPM = 110;
+            
+            // Game state
+            let board = [];
+            let score = 0;
+            let highestTier = 1;
+            let selectedTile = null;
+            let gameState = 'playing'; // 'playing', 'won', 'lost'
+            let history = [];
+            let isMuted = false;
+            
+            // Audio engine
+            const AudioMixer = (function() {
+                const synths = {};
+                const effects = {};
+                
+                // Initialize synths for each tile type
+                function init() {
+                    synths.kick = new Tone.MembraneSynth().toDestination();
+                    synths.snare = new Tone.NoiseSynth({
+                        noise: { type: 'white' },
+                        envelope: { attack: 0.001, decay: 0.2, sustain: 0 }
+                    }).toDestination();
+                    synths.hihat = new Tone.MetalSynth({
+                        frequency: 200,
+                        envelope: { attack: 0.001, decay: 0.1 },
+                        harmonicity: 5.1,
+                        modulationIndex: 32,
+                        resonance: 400,
+                        octaves: 1.5
+                    }).toDestination();
+                    synths.bass = new Tone.Synth({
+                        oscillator: { type: 'sine' }
+                    }).toDestination();
+                    
+                    // Add effects
+                    effects.compressor = new Tone.Compressor(-20, 3).toDestination();
+                    effects.reverb = new Tone.Reverb(0.5).toDestination();
+                    effects.distortion = new Tone.Distortion(0.5).toDestination();
+                    
+                    // Connect synths to effects
+                    synths.kick.connect(effects.compressor);
+                    synths.snare.connect(effects.compressor);
+                    synths.hihat.connect(effects.reverb);
+                    synths.bass.connect(effects.distortion);
+                    
+                    // Start transport
+                    Tone.Transport.bpm.value = BPM;
+                    Tone.Transport.start();
+                }
+                
+                // Play a tile's sound
+                function playSound(type, tier) {
+                    if (isMuted || gameState !== 'playing') return;
+                    
+                    const velocity = 0.2 + (tier * 0.1);
+                    
+                    switch(type) {
+                        case 'kick':
+                            synths.kick.triggerAttackRelease('C1', '8n', undefined, velocity);
+                            break;
+                        case 'snare':
+                            synths.snare.triggerAttackRelease('8n', undefined, velocity);
+                            break;
+                        case 'hihat':
+                            synths.hihat.triggerAttackRelease('16n', undefined, velocity);
+                            break;
+                        case 'bass':
+                            const notes = ['C2', 'D2', 'E2', 'F2', 'G2', 'A2', 'B2'];
+                            const note = notes[Math.floor(Math.random() * notes.length)];
+                            synths.bass.triggerAttackRelease(note, '8n', undefined, velocity);
+                            break;
+                    }
+                }
+                
+                // Schedule pattern for a tile
+                function schedulePattern(type, tier, time) {
+                    if (isMuted || gameState !== 'playing') return;
+                    
+                    switch(type) {
+                        case 'kick':
+                            // Play on beats 1 and 3 (quarter notes)
+                            if (time % 4 === 0 || time % 4 === 2) {
+                                playSound(type, tier);
+                            }
+                            break;
+                        case 'snare':
+                            // Play on beats 2 and 4
+                            if (time % 4 === 1 || time % 4 === 3) {
+                                playSound(type, tier);
+                            }
+                            break;
+                        case 'hihat':
+                            // Play every 8th note
+                            playSound(type, tier);
+                            break;
+                        case 'bass':
+                            // Play syncopated pattern
+                            if (time % 8 === 0 || time % 8 === 3 || time % 8 === 5) {
+                                playSound(type, tier);
+                            }
+                            break;
+                    }
+                }
+                
+                return {
+                    init,
+                    playSound,
+                    schedulePattern
+                };
+            })();
+            
+            // Tile class
+            class Tile {
+                constructor(type, tier = 1) {
+                    this.type = type;
+                    this.tier = tier;
+                    this.element = null;
+                }
+                
+                createElement() {
+                    const tile = document.createElement('div');
+                    tile.className = `tile ${this.type}`;
+                    tile.dataset.type = this.type;
+                    tile.dataset.tier = this.tier;
+                    
+                    const content = document.createElement('div');
+                    content.className = 'tile-content';
+                    
+                    const icon = document.createElement('div');
+                    icon.className = 'tile-icon';
+                    icon.textContent = TILE_ICONS[this.type];
+                    
+                    const name = document.createElement('div');
+                    name.className = 'tile-name';
+                    name.textContent = TILE_NAMES[this.type];
+                    
+                    const tierEl = document.createElement('div');
+                    tierEl.className = 'tile-tier';
+                    tierEl.textContent = this.tier;
+                    
+                    content.appendChild(icon);
+                    content.appendChild(name);
+                    tile.appendChild(content);
+                    tile.appendChild(tierEl);
+                    
+                    tile.addEventListener('click', () => this.handleClick());
+                    tile.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        this.handleClick();
+                    }, { passive: true });
+                    
+                    this.element = tile;
+                    return tile;
+                }
+                
+                handleClick() {
+                    if (gameState !== 'playing') return;
+                    
+                    if (!selectedTile) {
+                        // First tile selection
+                        selectedTile = this;
+                        this.element.classList.add('selected');
+                    } else {
+                        // Second tile selection
+                        if (selectedTile === this) {
+                            // Deselect if same tile clicked
+                            selectedTile.element.classList.remove('selected');
+                            selectedTile = null;
+                        } else if (this.canMergeWith(selectedTile)) {
+                            // Merge tiles
+                            this.mergeWith(selectedTile);
+                            selectedTile.element.classList.remove('selected');
+                            selectedTile = null;
+                        } else {
+                            // Select new tile
+                            selectedTile.element.classList.remove('selected');
+                            selectedTile = this;
+                            this.element.classList.add('selected');
+                        }
+                    }
+                }
+                
+                canMergeWith(otherTile) {
+                    // Check if adjacent and same type
+                    const pos1 = getTilePosition(this);
+                    const pos2 = getTilePosition(otherTile);
+                    
+                    // Adjacent check (including diagonals)
+                    const isAdjacent = (
+                        (Math.abs(pos1.row - pos2.row) <= 1 && Math.abs(pos1.col - pos2.col) <= 1) &&
+                        !(pos1.row === pos2.row && pos1.col === pos2.col)
+                    );
+                    
+                    return isAdjacent && this.type === otherTile.type && this.tier === otherTile.tier;
+                }
+                
+                mergeWith(otherTile) {
+                    // Save state for undo
+                    saveState();
+                    
+                    // Remove both tiles
+                    const pos1 = getTilePosition(this);
+                    const pos2 = getTilePosition(otherTile);
+                    
+                    // Create new upgraded tile
+                    const newTier = Math.min(this.tier + 1, 4);
+                    const newTile = new Tile(this.type, newTier);
+                    
+                    // Place new tile at first position
+                    board[pos1.row][pos1.col] = newTile;
+                    board[pos2.row][pos2.col] = null;
+                    
+                    // Update UI
+                    renderBoard();
+                    
+                    // Update score
+                    score += newTier;
+                    updateScore();
+                    
+                    // Check for win
+                    if (newTier === 4) {
+                        gameState = 'won';
+                        showGameOver('YOU WIN!', `You created a tier 4 ${TILE_NAMES[this.type]}!`);
+                    }
+                    
+                    // Check for highest tier
+                    if (newTier > highestTier) {
+                        highestTier = newTier;
+                        updateScore();
+                    }
+                    
+                    // Play sound
+                    AudioMixer.playSound(this.type, newTier);
+                }
+            }
+            
+            // Board class
+            const Board = (function() {
+                function init() {
+                    createBoard();
+                    renderBoard();
+                    startTransport();
+                }
+                
+                function createBoard() {
+                    board = [];
+                    for (let row = 0; row < BOARD_SIZE; row++) {
+                        board[row] = [];
+                        for (let col = 0; col < BOARD_SIZE; col++) {
+                            // Randomly create tiles (70% chance)
+                            if (Math.random() < 0.7) {
+                                const type = TILE_TYPES[Math.floor(Math.random() * TILE_TYPES.length)];
+                                board[row][col] = new Tile(type);
+                            } else {
+                                board[row][col] = null;
+                            }
+                        }
+                    }
+                }
+                
+                function renderBoard() {
+                    const boardElement = document.getElementById('board');
+                    boardElement.innerHTML = '';
+                    
+                    for (let row = 0; row < BOARD_SIZE; row++) {
+                        for (let col = 0; col < BOARD_SIZE; col++) {
+                            const tile = board[row][col];
+                            if (tile) {
+                                const tileElement = tile.createElement();
+                                boardElement.appendChild(tileElement);
+                            } else {
+                                const emptyTile = document.createElement('div');
+                                emptyTile.className = 'tile empty';
+                                boardElement.appendChild(emptyTile);
+                            }
+                        }
+                    }
+                }
+                
+                function startTransport() {
+                    // Schedule pattern events
+                    Tone.Transport.scheduleRepeat((time) => {
+                        // Get current 16th note
+                        const sixteenth = Tone.Time(time).toTicks() / Tone.Transport.PPQ;
+                        
+                        // Play patterns for all tiles
+                        for (let row = 0; row < BOARD_SIZE; row++) {
+                            for (let col = 0; col < BOARD_SIZE; col++) {
+                                const tile = board[row][col];
+                                if (tile) {
+                                    AudioMixer.schedulePattern(tile.type, tile.tier, sixteenth);
+                                }
+                            }
+                        }
+                    }, "16n");
+                }
+                
+                return {
+                    init,
+                    renderBoard
+                };
+            })();
+            
+            // Helper functions
+            function getTilePosition(tile) {
+                for (let row = 0; row < BOARD_SIZE; row++) {
+                    for (let col = 0; col < BOARD_SIZE; col++) {
+                        if (board[row][col] === tile) {
+                            return { row, col };
+                        }
+                    }
+                }
+                return null;
+            }
+            
+            function updateScore() {
+                document.getElementById('score').textContent = score;
+                document.getElementById('highest-tier').textContent = highestTier;
+            }
+            
+            function saveState() {
+                const state = {
+                    board: JSON.parse(JSON.stringify(board.map(row => 
+                        row.map(tile => tile ? { type: tile.type, tier: tile.tier } : null)
+                    ))),
+                    score,
+                    highestTier,
+                    selectedTile: selectedTile ? getTilePosition(selectedTile) : null
+                };
+                history.push(state);
+            }
+            
+            function undo() {
+                if (history.length === 0 || gameState !== 'playing') return;
+                
+                const prevState = history.pop();
+                board = prevState.board.map(row => 
+                    row.map(tileData => tileData ? new Tile(tileData.type, tileData.tier) : null)
+                );
+                score = prevState.score;
+                highestTier = prevState.highestTier;
+                selectedTile = null;
+                
+                renderBoard();
+                updateScore();
+            }
+            
+            function toggleMute() {
+                isMuted = !isMuted;
+                document.getElementById('mute-btn').textContent = isMuted ? 'UNMUTE' : 'MUTE';
+            }
+            
+            function restart() {
+                // Reset game state
+                board = [];
+                score = 0;
+                highestTier = 1;
+                selectedTile = null;
+                history = [];
+                gameState = 'playing';
+                
+                // Hide game over overlay
+                document.getElementById('game-over').classList.remove('active');
+                
+                // Update UI
+                updateScore();
+                document.getElementById('mute-btn').textContent = 'MUTE';
+                
+                // Reinitialize board
+                Board.init();
+            }
+            
+            function showGameOver(title, message) {
+                document.getElementById('game-result').textContent = title;
+                document.getElementById('game-message').textContent = message;
+                document.getElementById('game-over').classList.add('active');
+            }
+            
+            // Event listeners
+            document.getElementById('undo-btn').addEventListener('click', undo);
+            document.getElementById('mute-btn').addEventListener('click', toggleMute);
+            document.getElementById('restart-btn').addEventListener('click', restart);
+            document.getElementById('play-again').addEventListener('click', restart);
+            
+            // Initialize game
+            window.addEventListener('load', () => {
+                AudioMixer.init();
+                Board.init();
+                updateScore();
+            });
+        })();
+    </script>
+</body>
+</html>

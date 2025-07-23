@@ -1,0 +1,281 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Melody Garden</title>
+    <script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            touch-action: manipulation;
+        }
+        body {
+            margin: 0;
+            padding: 10px;
+            font-family: sans-serif;
+            background: #f0f8e0;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        svg {
+            width: 100%;
+            height: auto;
+            background: #e8f5d0;
+            border-radius: 4px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            flex: 1;
+            min-height: 44px;
+            font-size: 16px;
+            border: none;
+            border-radius: 4px;
+            background: #8bc34a;
+            color: white;
+            cursor: pointer;
+        }
+        button:active {
+            background: #689f38;
+        }
+        .cell {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <svg id="garden" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="controls">
+            <button id="toggleBtn">Pause</button>
+            <button id="clearBtn">Clear All</button>
+            <button id="fertilizeBtn">Fertilize</button>
+        </div>
+    </div>
+
+    <script>
+        /* MIT License - Melody Garden */
+        
+        const AudioEngine = (() => {
+            const NOTES = ['C4', 'D4', 'E4', 'G4', 'A4'];
+            const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+            let activeEffects = [];
+            let isPlaying = true;
+
+            Tone.Transport.bpm.value = 100;
+            Tone.Transport.scheduleRepeat(onBeat, "8n");
+
+            function onBeat(time) {
+                if (!isPlaying) return;
+                Garden.playSeeds(time);
+            }
+
+            function playNote(note, time, effects = {}) {
+                let source = synth;
+                const connections = [];
+
+                if (effects.reverb) {
+                    const reverb = new Tone.Reverb(1.5).toDestination();
+                    source = source.connect(reverb);
+                    connections.push(reverb);
+                }
+
+                if (effects.chorus) {
+                    const chorus = new Tone.Chorus(4, 2.5, 0.5).toDestination();
+                    source = source.connect(chorus);
+                    connections.push(chorus);
+                }
+
+                const duration = effects.sustain ? "4n" : "8n";
+                source.triggerAttackRelease(note, duration, time);
+
+                if (connections.length) {
+                    activeEffects.push({ connections, time: time + 4 });
+                }
+            }
+
+            function cleanupEffects() {
+                const now = Tone.now();
+                activeEffects = activeEffects.filter(e => {
+                    if (e.time < now) {
+                        e.connections.forEach(conn => conn.dispose());
+                        return false;
+                    }
+                    return true;
+                });
+            }
+
+            function togglePlayback() {
+                isPlaying = !isPlaying;
+                if (isPlaying) Tone.Transport.start();
+                else Tone.Transport.stop();
+                return isPlaying;
+            }
+
+            function start() {
+                Tone.Transport.start();
+                Tone.Transport.loop = true;
+                Tone.Transport.loopEnd = "1m";
+            }
+
+            return {
+                NOTES,
+                playNote,
+                cleanupEffects,
+                togglePlayback,
+                start
+            };
+        })();
+
+        const Garden = (() => {
+            const svg = document.getElementById('garden');
+            const NS = "http://www.w3.org/2000/svg";
+            const grid = Array(10).fill().map(() => Array(10).fill(null));
+            const colors = ['#FF5252', '#FFD740', '#7C4DFF', '#18FFFF', '#69F0AE'];
+            let fertilizeActive = false;
+            let fertilizeEnd = 0;
+
+            function getNoteIndex(note) {
+                return AudioEngine.NOTES.indexOf(note);
+            }
+
+            function createSeed(x, y) {
+                const existing = grid[y][x];
+                if (existing) {
+                    existing.age = 0;
+                    existing.element.setAttribute('opacity', '1');
+                    return;
+                }
+
+                const noteIndex = (x + y) % AudioEngine.NOTES.length;
+                const note = AudioEngine.NOTES[noteIndex];
+                const age = 0;
+
+                const circle = document.createElementNS(NS, 'circle');
+                circle.setAttribute('cx', x + 0.5);
+                circle.setAttribute('cy', y + 0.5);
+                circle.setAttribute('r', '0.4');
+                circle.setAttribute('fill', colors[noteIndex]);
+                circle.setAttribute('opacity', '1');
+                circle.classList.add('cell');
+                svg.appendChild(circle);
+
+                grid[y][x] = { note, age, element: circle };
+            }
+
+            function removeSeed(x, y) {
+                const seed = grid[y][x];
+                if (seed) {
+                    seed.element.remove();
+                    grid[y][x] = null;
+                }
+            }
+
+            function clearAll() {
+                for (let y = 0; y < 10; y++) {
+                    for (let x = 0; x < 10; x++) {
+                        removeSeed(x, y);
+                    }
+                }
+            }
+
+            function getAdjacent(x, y) {
+                return [
+                    [x-1, y], [x+1, y], [x, y-1], [x, y+1]
+                ].filter(([nx, ny]) => 
+                    nx >= 0 && nx < 10 && ny >= 0 && ny < 10 && grid[ny][nx]
+                );
+            }
+
+            function playSeeds(time) {
+                const now = Tone.now();
+                if (fertilizeActive && fertilizeEnd < now) {
+                    fertilizeActive = false;
+                }
+
+                for (let y = 0; y < 10; y++) {
+                    for (let x = 0; x < 10; x++) {
+                        const seed = grid[y][x];
+                        if (!seed) continue;
+
+                        seed.age++;
+                        if (seed.age >= 64) { // 8 bars
+                            removeSeed(x, y);
+                            continue;
+                        }
+
+                        const opacity = 1 - (seed.age / 64);
+                        seed.element.setAttribute('opacity', opacity.toString());
+
+                        const adjacents = getAdjacent(x, y);
+                        if (adjacents.length > 0) {
+                            const [nx, ny] = adjacents[0];
+                            const neighbor = grid[ny][nx];
+                            AudioEngine.playNote(
+                                [seed.note, neighbor.note],
+                                time,
+                                { chorus: true, reverb: fertilizeActive, sustain: fertilizeActive }
+                            );
+                        } else {
+                            AudioEngine.playNote(
+                                seed.note,
+                                time,
+                                { reverb: fertilizeActive, sustain: fertilizeActive }
+                            );
+                        }
+                    }
+                }
+                AudioEngine.cleanupEffects();
+            }
+
+            function fertilize() {
+                fertilizeActive = true;
+                fertilizeEnd = Tone.now() + 4;
+            }
+
+            function handleClick(e) {
+                const rect = svg.getBoundingClientRect();
+                const size = rect.width / 10;
+                const x = Math.floor((e.clientX - rect.left) / size);
+                const y = Math.floor((e.clientY - rect.top) / size);
+                
+                if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+                    createSeed(x, y);
+                }
+            }
+
+            svg.addEventListener('click', handleClick, { passive: true });
+            svg.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                handleClick(e.touches[0]);
+            }, { passive: false });
+
+            document.getElementById('toggleBtn').addEventListener('click', () => {
+                const playing = AudioEngine.togglePlayback();
+                document.getElementById('toggleBtn').textContent = playing ? 'Pause' : 'Resume';
+            }, { passive: true });
+
+            document.getElementById('clearBtn').addEventListener('click', clearAll, { passive: true });
+            document.getElementById('fertilizeBtn').addEventListener('click', fertilize, { passive: true });
+
+            return {
+                playSeeds,
+                createSeed,
+                clearAll
+            };
+        })();
+
+        AudioEngine.start();
+    </script>
+</body>
+</html>
