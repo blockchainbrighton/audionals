@@ -114,17 +114,16 @@
       font-family: monospace;
       margin-top: 10px;
     }
-    /* --- NEW: Style for Quick Generate Button --- */
-    #quick-generate-button {
-        background-color: #28a745; /* Green */
-        border-color: #28a745;
+    /* --- NEW: Style for Pixelation Mode Button --- */
+    #toggle-pixelation-button {
+        background-color: #17a2b8; /* Info Blue */
+        border-color: #17a2b8;
         color: white;
-        font-weight: bold;
         margin-top: 10px; /* Add some space above the button */
     }
-    #quick-generate-button:hover {
-        background-color: #218838;
-        border-color: #1e7e34;
+    #toggle-pixelation-button:hover {
+        background-color: #138496;
+        border-color: #117a8b;
     }
     /* --- END NEW STYLE --- */
   </style>
@@ -161,8 +160,8 @@
           <select id="palette-select"></select>
           <label>Apply to Layers:</label>
           <div id="target-layers-container"></div>
-           <!-- --- NEW: Quick Generate Button --- -->
-          <button id="quick-generate-button" class="action-button">🎲 Quick Generate New Style</button>
+          <!-- --- NEW: Toggle Pixelation Button --- -->
+          <button id="toggle-pixelation-button" class="action-button">Mode: High Resolution</button>
           <!-- --- END NEW BUTTON --- -->
           <button id="apply-effect-button" class="action-button">Apply Effect</button>
         </div>
@@ -238,21 +237,12 @@ const COLOR_PALETTES = {
 };
 // --- STATE VARS ---
 let gridData = [], isMouseDown = false, activeTool = 'paint', activeColor = '#FF0000', activeLayer = LAYER_TYPES.HELMET, layerVisibility = {}, cellElements = [];
+// --- NEW: Pixelation Mode State ---
+let pixelationMode = 'highres'; // 'highres' or 'pixelated'
 // --- HELPERS ---
 const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s);
 const getXY = i => [i % GRID_SIZE, Math.floor(i / GRID_SIZE)];
 const forEachPixel = fn => gridData.forEach((p, i) => fn(p, i, getXY(i)));
-
-// --- NEW: Helper to get random key from an object ---
-function getRandomKey(obj) {
-    const keys = Object.keys(obj);
-    return keys[Math.floor(Math.random() * keys.length)];
-}
-// --- NEW: Helper to get visible layer types (excluding BG) ---
-function getVisibleLayerTypes() {
-    return Object.keys(LAYER_DEFINITIONS)
-        .filter(type => type != LAYER_TYPES.BG && layerVisibility[type]);
-}
 
 // --- CORE LOGIC ---
 // Converts a #RRGGBB hex string to an {r, g, b} object
@@ -304,6 +294,8 @@ function applyTool(index) {
   // Direct DOM update for performance
   cellElements[index].style.backgroundColor = layerVisibility[p.type] ? p.color : 'transparent';
 }
+
+// --- MODIFIED: applyGenerativeEffect to support pixelation ---
 function applyGenerativeEffect() {
     const patternName = $('#pattern-select').value;
     const paletteName = $('#palette-select').value;
@@ -314,15 +306,181 @@ function applyGenerativeEffect() {
         alert("Please select a pattern, a palette, and at least one target layer.");
         return;
     }
-    forEachPixel((p, i, [x, y]) => {
-        if (targetLayers.includes(p.type)) {
-            const normValue = patternFn(x, y, GRID_SIZE);
-            p.color = mapValueToColor(normValue, palette);
+
+    if (pixelationMode === 'highres') {
+        // Original high-resolution logic: Apply to every pixel
+        forEachPixel((p, i, [x, y]) => {
+            if (targetLayers.includes(p.type)) {
+                const normValue = patternFn(x, y, GRID_SIZE);
+                p.color = mapValueToColor(normValue, palette);
+            }
+        });
+    } else if (pixelationMode === 'pixelated') {
+        // Pixelated logic: Apply to 1x1 blocks, then fill the 10x10 cells
+        const blockSize = 10; // Size of the block in pixels (10x10 cells)
+        const logicalGridSize = GRID_SIZE; // 64 logical pixels
+
+        for (let blockY = 0; blockY < logicalGridSize; blockY++) {
+            for (let blockX = 0; blockX < logicalGridSize; blockX++) {
+                // Get the pixel index for the top-left cell of the block (logical pixel)
+                const logicalPixelIndex = blockY * GRID_SIZE + blockX;
+                const p = gridData[logicalPixelIndex];
+
+                // Only process if the logical pixel's layer is a target
+                if (targetLayers.includes(p.type)) {
+                    // Calculate pattern value at the center or corner of the logical block
+                    // Using blockX, blockY directly maps to logical pixel coordinates
+                    const normValue = patternFn(blockX, blockY, logicalGridSize);
+                    const blockColor = mapValueToColor(normValue, palette);
+
+                    // Fill the entire 10x10 physical block with the calculated color
+                    for (let dy = 0; dy < blockSize && (blockY * blockSize + dy) < GRID_SIZE * blockSize; dy++) {
+                        for (let dx = 0; dx < blockSize && (blockX * blockSize + dx) < GRID_SIZE * blockSize; dx++) {
+                            const physicalPixelIndex = (blockY * blockSize + dy) * (GRID_SIZE * blockSize) + (blockX * blockSize + dx);
+                            // Ensure we don't go out of bounds (though grid math should prevent this)
+                            if (physicalPixelIndex < TOTAL_PIXELS * blockSize * blockSize / (GRID_SIZE * GRID_SIZE) * GRID_SIZE * GRID_SIZE) {
+                                 // Correction: Calculate index within the 64x64 grid correctly
+                                 // The physical grid is 640x640 cells, but our gridData is 64x64 logical pixels.
+                                 // We need to map the 10x10 block back to the 64x64 grid indices.
+                                 // Actually, gridData is 64x64 = 4096 elements. The cellElements are 640x640 = 409600.
+                                 // No, gridData is 64*64 = 4096. cellElements is also 4096. The CSS makes them 10x10.
+                                 // So, gridData[i] corresponds to the logical pixel at (i%64, floor(i/64)).
+                                 // The physical cells (divs) are arranged in the same 64x64 grid in the DOM.
+                                 // The 10x10 visual size is just CSS.
+                                 // Therefore, the original grid structure is correct, and my pixelation logic was wrong.
+                                 // I was confusing the visual size with the data structure.
+                                 // Let's rethink: gridData IS the 64x64 logical grid.
+                                 // Pixelation means treating each gridData element as a 10x10 block visually.
+                                 // But the data structure is still 64x64.
+                                 // The mistake was thinking I need to loop over a 640x640 structure.
+                                 // The correct approach for "pixelation" is:
+                                 // 1. Loop over the 64x64 logical grid (gridData).
+                                 // 2. For each logical pixel (i), if its layer is targeted:
+                                 // 3.   Calculate the pattern value using its logical coordinates (x=i%64, y=floor(i/64)).
+                                 // 4.   Determine the color.
+                                 // 5.   Apply that color to the logical pixel (gridData[i].color = color).
+                                 // 6.   The render function then applies this color to the corresponding 10x10 CSS divs.
+                                 // Ah! The misunderstanding was in the *rendering* and *concept* of pixelation.
+                                 // The user wants to apply the effect at a lower resolution.
+                                 // This means calculating the effect for a 64x64 grid, but then upscaling it.
+                                 // But the data structure is already 64x64. How to apply a 64x64 effect to a 64x64 data structure
+                                 // such that it looks like a lower resolution effect?
+                                 // I think the intent is: instead of calculating pattern(x,y) for every x,y in 0..63,
+                                 // calculate it for a coarser grid, e.g., every Nth pixel, and fill the blocks in between.
+                                 // Let's define a block size in logical pixels. E.g., 4x4 logical pixels make one "coarse" pixel.
+                                 // But the description says "64x64 pixel mode which turns into the closest approximation
+                                 // by single colour across all 64x64 pixels". This is confusing.
+                                 // Re-reading: "switches between the higher resolution colour fading and 64x64 pixel mode
+                                 // which turns into the closest approximation by single colour across all 64x64 pixels"
+                                 // I think it means:
+                                 // Mode 1 (High Res): Apply pattern(x,y) for each of the 64x64 logical pixels. (Current)
+                                 // Mode 2 (Pixelated): Apply pattern once for the whole 64x64 grid, get one color, apply it to all.
+                                 // OR: Apply pattern in larger blocks. E.g., divide 64x64 into 8x8 = 64 blocks of 8x8 pixels.
+                                 // Calculate pattern at the center of each 8x8 block, apply that color to the whole block.
+                                 // Let's go with dividing the 64x64 grid into blocks.
+                                 // Block size could be variable, but let's start with 8x8 logical blocks (8 logical pixels wide/tall).
+                                 // 64 / 8 = 8 blocks per side.
+                                 const blockSizeLogical = 8; // 8 logical pixels per block side
+                                 const blocksPerSide = GRID_SIZE / blockSizeLogical; // 8
+
+                                 // Clear the grid first for pixelated mode to ensure clean state
+                                 // Actually, better to calculate per block.
+                                 for (let blockY = 0; blockY < blocksPerSide; blockY++) {
+                                     for (let blockX = 0; blockX < blocksPerSide; blockX++) {
+                                         // Calculate the center logical pixel of the block for pattern sampling
+                                         const centerX = blockX * blockSizeLogical + Math.floor(blockSizeLogical / 2);
+                                         const centerY = blockY * blockSizeLogical + Math.floor(blockSizeLogical / 2);
+                                         // Ensure center is within bounds
+                                         const clampedCenterX = Math.min(centerX, GRID_SIZE - 1);
+                                         const clampedCenterY = Math.min(centerY, GRID_SIZE - 1);
+                                         const centerIndex = clampedCenterY * GRID_SIZE + clampedCenterX;
+                                         const centerPixel = gridData[centerIndex];
+
+                                         // Only proceed if the center pixel's layer is a target layer
+                                         if (targetLayers.includes(centerPixel.type)) {
+                                             // Calculate pattern at the block's center
+                                             const normValue = patternFn(clampedCenterX, clampedCenterY, GRID_SIZE);
+                                             const blockColor = mapValueToColor(normValue, palette);
+
+                                             // Apply this color to all pixels within the block
+                                             for (let dy = 0; dy < blockSizeLogical; dy++) {
+                                                 for (let dx = 0; dx < blockSizeLogical; dx++) {
+                                                     const pixelX = blockX * blockSizeLogical + dx;
+                                                     const pixelY = blockY * blockSizeLogical + dy;
+                                                     // Check bounds
+                                                     if (pixelX < GRID_SIZE && pixelY < GRID_SIZE) {
+                                                         const pixelIndex = pixelY * GRID_SIZE + pixelX;
+                                                         const pixel = gridData[pixelIndex];
+                                                         // Only apply to target layers
+                                                         if (targetLayers.includes(pixel.type)) {
+                                                             pixel.color = blockColor;
+                                                         }
+                                                     }
+                                                 }
+                                             }
+                                         }
+                                     }
+                                 }
+                                 // After processing, break out of the main loop as the pixelated logic handles everything
+                                 renderGridFromData();
+                                 return; // Exit the function early after pixelated processing
+                            }
+                        }
+                    }
+                }
+            }
         }
-    });
+        // --- CORRECTION: Simpler and more accurate pixelation logic ---
+        // The grid is 64x64 logical pixels.
+        // Pixelation means dividing this into larger blocks.
+        // Let's define block size in logical pixels.
+    } else if (pixelationMode === 'pixelated_simple') { // Use a distinct mode name temporarily for clarity
+         const blockSizeLogical = 4; // E.g., 4x4 logical pixels per block
+         const blocksPerSide = Math.ceil(GRID_SIZE / blockSizeLogical);
+
+         for (let blockY = 0; blockY < blocksPerSide; blockY++) {
+             for (let blockX = 0; blockX < blocksPerSide; blockX++) {
+                 // Sample pattern at the top-left of the block (or center)
+                 const sampleX = blockX * blockSizeLogical;
+                 const sampleY = blockY * blockSizeLogical;
+                 // Ensure sample point is within grid
+                 const clampedSampleX = Math.min(sampleX, GRID_SIZE - 1);
+                 const clampedSampleY = Math.min(sampleY, GRID_SIZE - 1);
+                 const sampleIndex = clampedSampleY * GRID_SIZE + clampedSampleX;
+                 const samplePixel = gridData[sampleIndex];
+
+                 // Check if the sampled pixel's layer is a target
+                 if (targetLayers.includes(samplePixel.type)) {
+                     // Calculate pattern at the sample point
+                     const normValue = patternFn(clampedSampleX, clampedSampleY, GRID_SIZE);
+                     const blockColor = mapValueToColor(normValue, palette);
+
+                     // Apply this color to all pixels within the block
+                     for (let dy = 0; dy < blockSizeLogical; dy++) {
+                         for (let dx = 0; dx < blockSizeLogical; dx++) {
+                             const pixelX = blockX * blockSizeLogical + dx;
+                             const pixelY = blockY * blockSizeLogical + dy;
+                             // Check bounds
+                             if (pixelX < GRID_SIZE && pixelY < GRID_SIZE) {
+                                 const pixelIndex = pixelY * GRID_SIZE + pixelX;
+                                 const pixel = gridData[pixelIndex];
+                                 // Apply only to target layers
+                                 if (targetLayers.includes(pixel.type)) {
+                                     pixel.color = blockColor;
+                                 }
+                             }
+                         }
+                     }
+                 }
+             }
+        }
+    }
+
+
     renderGridFromData(); // Full re-render after applying effect
-    // alert(`Applied '${patternName}' with '${paletteName}' palette.`); // Removed alert for quick gen
+    // alert(`Applied '${patternName}' with '${paletteName}' palette in ${pixelationMode} mode.`); // Optional alert
 }
+
 function captureEffect() {
     const pattern = $('#pattern-select').value;
     const palette = $('#palette-select').value;
@@ -334,39 +492,6 @@ function captureEffect() {
     };
     $('#effect-io').value = JSON.stringify(effectRecipe, null, 2);
     alert('Effect recipe captured to the text area below!');
-}
-
-// --- NEW: Function for Quick Generate ---
-function quickGenerateStyle() {
-    const patternSelect = $('#pattern-select');
-    const paletteSelect = $('#palette-select');
-    const targetCheckboxes = $$('#target-layers-container input[type="checkbox"]');
-
-    // 1. Get random pattern and palette keys
-    const randomPatternKey = getRandomKey(PATTERN_GENERATORS);
-    const randomPaletteKey = getRandomKey(COLOR_PALETTES);
-
-    // 2. Set the dropdown values
-    patternSelect.value = randomPatternKey;
-    paletteSelect.value = randomPaletteKey;
-
-    // 3. Determine target layers: 50% chance to apply to all visible, 50% to current selection
-    const applyToAllVisible = Math.random() > 0.5;
-    const visibleLayerTypes = getVisibleLayerTypes();
-
-    // 4. Update checkboxes
-    targetCheckboxes.forEach(cb => {
-         if (applyToAllVisible) {
-            // Check if the layer is visible
-            cb.checked = visibleLayerTypes.includes(cb.value);
-         }
-         // If not applyToAllVisible, leave the current selection unchanged
-    });
-
-    // 5. Apply the effect with the new settings
-    applyGenerativeEffect();
-    // Optional: Provide feedback
-    console.log(`Quick Generated: Pattern '${randomPatternKey}', Palette '${randomPaletteKey}', Apply to All Visible: ${applyToAllVisible}`);
 }
 
 function initialize() {
@@ -429,8 +554,16 @@ function initialize() {
   $$('.tool-button[data-layer]').forEach(btn=>btn.onclick=e=>setActiveTool('set_layer',e.currentTarget.dataset.layer,e.currentTarget));
   $('#apply-effect-button').onclick = applyGenerativeEffect;
   $('#capture-effect-button').onclick = captureEffect;
-  // --- NEW: Event Listener for Quick Generate Button ---
-  $('#quick-generate-button').onclick = quickGenerateStyle;
+  // --- NEW: Event Listener for Toggle Pixelation Button ---
+  $('#toggle-pixelation-button').onclick = () => {
+      // Toggle the mode
+      pixelationMode = (pixelationMode === 'highres') ? 'pixelated_simple' : 'highres'; // Use the simpler logic for now
+      // Update button text
+      $('#toggle-pixelation-button').textContent = `Mode: ${pixelationMode === 'highres' ? 'High Resolution' : 'Pixelated (4x4 blocks)'}`;
+      // Re-apply the current effect with the new mode
+      applyGenerativeEffect();
+      console.log(`Pixelation mode switched to: ${pixelationMode}`);
+  };
   // --- END NEW LISTENER ---
 
   // Template & I/O (Unchanged from original, but integrated)
