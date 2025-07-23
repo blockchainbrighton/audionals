@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Advanced Pixel Art Helmet Creator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .main-container {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+    .tools-panel {
+      padding: 10px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .tools-panel fieldset {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 10px;
+      margin: 0;
+    }
+    .tools-panel legend {
+      font-weight: bold;
+      padding: 0 5px;
+    }
+    .tool-button, .color-button, .action-button {
+      width: 100%;
+      padding: 8px 12px;
+      margin-bottom: 5px;
+      border: 1px solid #ccc;
+      background-color: #f9f9f9;
+      cursor: pointer;
+      border-radius: 4px;
+      text-align: left;
+    }
+    .tool-button.active, .color-button.active {
+      background-color: #007BFF;
+      color: white;
+      border-color: #0056b3;
+    }
+    #color-picker-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    #color-picker {
+        height: 35px;
+        width: 50px;
+        padding: 2px;
+    }
+    .layer-visibility label {
+        display: block;
+        margin-bottom: 5px;
+    }
+    #grid-container {
+      display: flex;
+      flex-wrap: wrap;
+      width: 640px;
+      height: 640px;
+      background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      border: 2px solid #999;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .cell {
+      width: 10px;
+      height: 10px;
+      box-sizing: border-box;
+    }
+    .io-section {
+        width: 100%;
+        max-width: 900px; /* Adjust as needed */
+        margin-top: 20px;
+        padding: 10px;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    #template-io {
+      display: block;
+      width: calc(100% - 10px);
+      height: 80px;
+      font-family: monospace;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Advanced Pixel Art Helmet Creator</h1>
+
+  <div class="main-container">
+    <div class="tools-panel">
+      <fieldset>
+        <legend>Paint Tools</legend>
+        <div id="color-picker-wrapper">
+            <input type="color" id="color-picker" value="#FF0000">
+            <button class="tool-button" id="paint-tool">Paint Color</button>
+        </div>
+        <button class="color-button" data-color="#000000">Paint Black</button>
+        <button class="color-button" data-color="#FFFFFF">Paint White</button>
+        <button class="color-button" data-color="transparent">Eraser (Transparent)</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>Layer Assignment</legend>
+        <button class="tool-button" data-layer="1">Set to Helmet</button>
+        <button class="tool-button" data-layer="2">Set to A-Logo</button>
+        <button class="tool-button" data-layer="3">Set to A-Shadow</button>
+        <button class="tool-button" data-layer="4">Set to B.A.M.</button>
+        <button class="tool-button" data-layer="5">Set to B.A.M. Shadow</button>
+      </fieldset>
+      
+      <fieldset>
+          <legend>Layer Visibility</legend>
+          <div id="layer-visibility-controls" class="layer-visibility"></div>
+      </fieldset>
+    </div>
+
+    <div id="grid-container"></div>
+  </div>
+  
+  <div class="io-section">
+      <h3>Import / Export</h3>
+      <input type="file" accept="image/png" id="image-input" style="display: none;"/>
+      <button id="analyze-button" class="action-button">Import & Analyze Image</button>
+      <button id="export-button" class="action-button">Export Design as PNG</button>
+      <h3>Template Data</h3>
+      <button id="load-embedded-template-button" class="action-button">Load Embedded Template</button>
+      <button id="load-template-button" class="action-button">Load Template from Text</button>
+      <button id="generate-template-button" class="action-button">Generate Template to Text</button>
+      <textarea id="template-io" placeholder="Generate or paste a multi-layer template here."></textarea>
+  </div>
+
+
+  <script>
+    // --- SETUP & CONSTANTS ---
+    const GRID_SIZE = 64;
+    const TOTAL_PIXELS = GRID_SIZE * GRID_SIZE;
+
+    const EMBEDDED_TEMPLATE_DATA = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3,1,1,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3,1,1,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3,1,1,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3,1,1,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,1,1,1,0,0,0,0,0,1,1,1,1,1,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,1,1,1,1,1,1,0,0,0,1,1,1,1,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,1,1,1,1,0,0,0,0,0,1,1,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,4,4,4,5,1,1,1,1,4,4,5,1,1,1,4,5,1,1,4,5,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,4,5,5,4,5,1,1,4,5,1,4,5,1,1,4,4,5,4,4,5,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,4,4,4,5,1,1,1,4,5,1,4,5,1,1,4,5,4,5,4,5,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,4,5,5,4,5,1,1,4,4,4,4,5,1,1,4,5,4,5,4,5,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,4,4,4,5,1,4,5,4,5,1,4,5,4,5,4,5,1,1,4,5,4,5,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+
+    const LAYER_TYPES = {
+        BG: 0,
+        HELMET: 1,
+        LOGO_A: 2,
+        LOGO_A_SHADOW: 3,
+        TEXT_BAM: 4,
+        TEXT_BAM_SHADOW: 5,
+    };
+
+    const LAYER_DEFINITIONS = {
+        [LAYER_TYPES.BG]: { name: 'Background', defaultColor: 'transparent' },
+        [LAYER_TYPES.HELMET]: { name: 'Helmet', defaultColor: '#000000' },
+        [LAYER_TYPES.LOGO_A]: { name: 'A-Logo', defaultColor: '#808080' },
+        [LAYER_TYPES.LOGO_A_SHADOW]: { name: 'A-Shadow', defaultColor: '#606060' },
+        [LAYER_TYPES.TEXT_BAM]: { name: 'B.A.M.', defaultColor: '#A9A9A9' },
+        [LAYER_TYPES.TEXT_BAM_SHADOW]: { name: 'B.A.M. Shadow', defaultColor: '#898989' },
+    };
+
+    // --- GLOBAL STATE ---
+    let gridData = [];
+    let isMouseDown = false;
+    let activeTool = 'paint'; // 'paint' or 'set_layer'
+    let activeColor = '#FF0000';
+    let activeLayer = LAYER_TYPES.HELMET;
+    let layerVisibility = {};
+
+    // --- CORE FUNCTIONS ---
+
+    // Apply the currently active tool to a specific pixel
+    function applyTool(index) {
+        if (index < 0 || index >= TOTAL_PIXELS) return;
+
+        switch (activeTool) {
+            case 'paint':
+                const currentPixel = gridData[index];
+                if (activeColor === 'transparent') {
+                    currentPixel.type = LAYER_TYPES.BG;
+                    currentPixel.color = 'transparent';
+                } else {
+                    currentPixel.color = activeColor;
+                    // If painting on a background pixel, assign it to the default helmet layer
+                    if (currentPixel.type === LAYER_TYPES.BG) {
+                        currentPixel.type = LAYER_TYPES.HELMET;
+                    }
+                }
+                break;
+            case 'set_layer':
+                gridData[index].type = activeLayer;
+                gridData[index].color = LAYER_DEFINITIONS[activeLayer].defaultColor;
+                break;
+        }
+        renderGridFromData(); // Re-render to show changes
+    }
+
+    // Renders the entire grid based on gridData and layerVisibility
+    function renderGridFromData() {
+        const cells = document.querySelectorAll('.cell');
+        gridData.forEach((pixel, i) => {
+            let finalColor = 'transparent';
+            if (layerVisibility[pixel.type]) {
+                finalColor = pixel.color;
+            }
+            cells[i].style.backgroundColor = finalColor;
+        });
+    }
+
+    // --- INITIALIZATION ---
+    function initialize() {
+        const gridContainer = document.getElementById('grid-container');
+        const layerControlsContainer = document.getElementById('layer-visibility-controls');
+        
+        // Setup Layer Visibility and create checkboxes
+        for (const type in LAYER_DEFINITIONS) {
+            layerVisibility[type] = true; // All layers visible by default
+            if (Number(type) === LAYER_TYPES.BG) continue; // No toggle for BG
+
+            const def = LAYER_DEFINITIONS[type];
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = true;
+            checkbox.dataset.layerType = type;
+            checkbox.addEventListener('change', (e) => {
+                layerVisibility[e.target.dataset.layerType] = e.target.checked;
+                renderGridFromData();
+            });
+            label.appendChild(checkbox);
+            label.append(` ${def.name}`);
+            layerControlsContainer.appendChild(label);
+        }
+        
+        // Create Grid Cells
+        gridContainer.innerHTML = '';
+        gridData = [];
+        for (let i = 0; i < TOTAL_PIXELS; i++) {
+            gridData.push({ type: LAYER_TYPES.BG, color: 'transparent' });
+            const cell = document.createElement('div');
+            cell.classList.add('cell');
+            cell.dataset.index = i;
+            gridContainer.appendChild(cell);
+        }
+        renderGridFromData();
+
+        // --- GLOBAL EVENT LISTENERS ---
+        gridContainer.addEventListener('mousedown', (e) => {
+            isMouseDown = true;
+            if (e.target.classList.contains('cell')) {
+                applyTool(e.target.dataset.index);
+            }
+        });
+        gridContainer.addEventListener('mousemove', (e) => {
+            if (isMouseDown && e.target.classList.contains('cell')) {
+                applyTool(e.target.dataset.index);
+            }
+        });
+        window.addEventListener('mouseup', () => {
+            isMouseDown = false;
+        });
+        // Prevent drag selection outside the grid
+        gridContainer.addEventListener('mouseleave', () => { isMouseDown = false; });
+    }
+    
+    // --- UI & TOOL HANDLERS ---
+    
+    function setActiveTool(tool, value, buttonEl) {
+        document.querySelectorAll('.tool-button, .color-button').forEach(b => b.classList.remove('active'));
+        if (buttonEl) buttonEl.classList.add('active');
+
+        activeTool = tool;
+        if (tool === 'paint') {
+            activeColor = value;
+            if (value !== 'transparent') {
+                document.getElementById('color-picker').value = value;
+            }
+        } else if (tool === 'set_layer') {
+            activeLayer = Number(value);
+        }
+    }
+
+    document.getElementById('paint-tool').addEventListener('click', (e) => {
+        const color = document.getElementById('color-picker').value;
+        setActiveTool('paint', color, e.currentTarget);
+    });
+    document.getElementById('color-picker').addEventListener('input', (e) => {
+        const paintToolButton = document.getElementById('paint-tool');
+        if (paintToolButton.classList.contains('active')) {
+            activeColor = e.target.value;
+        }
+    });
+
+    document.querySelectorAll('.color-button').forEach(button => {
+        button.addEventListener('click', (e) => {
+            setActiveTool('paint', e.currentTarget.dataset.color, e.currentTarget);
+        });
+    });
+
+    document.querySelectorAll('.tool-button[data-layer]').forEach(button => {
+        button.addEventListener('click', (e) => {
+            setActiveTool('set_layer', e.currentTarget.dataset.layer, e.currentTarget);
+        });
+    });
+
+    // --- IMPORT / EXPORT / TEMPLATE FUNCTIONS ---
+
+    function generateTemplate() {
+        const templateArray = gridData.map(pixel => pixel.type);
+        document.getElementById('template-io').value = JSON.stringify(templateArray);
+        alert('Multi-layer template generated!');
+    }
+
+    function loadTemplate() {
+        const templateString = document.getElementById('template-io').value;
+        try {
+            const templateArray = JSON.parse(templateString);
+            if (!Array.isArray(templateArray) || templateArray.length !== TOTAL_PIXELS) throw new Error();
+            
+            templateArray.forEach((type, i) => {
+                gridData[i].type = type;
+                gridData[i].color = LAYER_DEFINITIONS[type]?.defaultColor || 'transparent';
+            });
+            renderGridFromData();
+        } catch (e) {
+            alert(`Invalid Template: Must be a valid array with ${TOTAL_PIXELS} elements.`);
+        }
+    }
+    
+    // *** NEW FUNCTION to load the embedded data ***
+    function loadEmbeddedTemplate() {
+        if (!EMBEDDED_TEMPLATE_DATA || EMBEDDED_TEMPLATE_DATA.length !== TOTAL_PIXELS) {
+            alert('Embedded template data is corrupted or missing.');
+            return;
+        }
+        
+        EMBEDDED_TEMPLATE_DATA.forEach((type, i) => {
+            gridData[i].type = type;
+            gridData[i].color = LAYER_DEFINITIONS[type]?.defaultColor || 'transparent'; 
+        });
+        
+        renderGridFromData();
+        alert('Embedded template loaded successfully!');
+    }
+
+    function exportImage() {
+        const canvas = document.createElement('canvas');
+        canvas.width = GRID_SIZE;
+        canvas.height = GRID_SIZE;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+
+        gridData.forEach(({ type, color }, i) => {
+            if (type !== LAYER_TYPES.BG) {
+                const x = i % GRID_SIZE;
+                const y = Math.floor(i / GRID_SIZE);
+                ctx.fillStyle = color;
+                ctx.fillRect(x, y, 1, 1);
+            }
+        });
+        const link = document.createElement('a');
+        link.download = 'pixel_art_helmet_64x64.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+
+    function analyzeImage(imageSrc) {
+        const img = new Image();
+        img.src = imageSrc;
+        img.onload = () => {
+            if (img.width !== GRID_SIZE || img.height !== GRID_SIZE) {
+                return alert(`Image must be ${GRID_SIZE}x${GRID_SIZE} pixels.`);
+            }
+
+            const ctx = document.createElement('canvas').getContext('2d');
+            ctx.canvas.width = GRID_SIZE; ctx.canvas.height = GRID_SIZE;
+            ctx.drawImage(img, 0, 0);
+            const imageData = ctx.getImageData(0, 0, GRID_SIZE, GRID_SIZE).data;
+
+            for (let i = 0; i < TOTAL_PIXELS; i++) {
+                const a = imageData[i * 4 + 3];
+                if (a > 0) {
+                    const r = imageData[i * 4];
+                    const g = imageData[i * 4 + 1];
+                    const b = imageData[i * 4 + 2];
+                    gridData[i] = { type: LAYER_TYPES.HELMET, color: `rgba(${r},${g},${b},${a/255})` };
+                } else {
+                    gridData[i] = { type: LAYER_TYPES.BG, color: 'transparent' };
+                }
+            }
+            renderGridFromData();
+            alert("Image analyzed. All colored pixels set to 'Helmet' layer. Use Layer Assignment tools to re-classify text and shadows.");
+        };
+        img.onerror = () => alert("Could not load image.");
+    }
+
+    document.getElementById('image-input').addEventListener('change', (e) => {
+        if (e.target.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (ev) => analyzeImage(ev.target.result);
+            reader.readAsDataURL(e.target.files[0]);
+        }
+    });
+    
+    document.getElementById('analyze-button').addEventListener('click', () => {
+        document.getElementById('image-input').click();
+    });
+
+    document.getElementById('export-button').addEventListener('click', exportImage);
+    document.getElementById('generate-template-button').addEventListener('click', generateTemplate);
+    document.getElementById('load-template-button').addEventListener('click', loadTemplate);
+    // *** NEW EVENT LISTENER for the new button ***
+    document.getElementById('load-embedded-template-button').addEventListener('click', loadEmbeddedTemplate);
+
+
+    // Start the application
+    initialize();
+    // Set a default active tool on load
+    document.getElementById('paint-tool').click();
+
+  </script>
+</body>
+</html>
