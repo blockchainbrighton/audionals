@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generative Pixel Art Helmet Creator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .main-container {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+    .tools-panel {
+      padding: 10px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      max-height: 90vh; /* Prevent overflow */
+      overflow-y: auto;  /* Add scrollbar if needed */
+      width: 250px;
+    }
+    .tools-panel fieldset {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 10px;
+      margin: 0;
+    }
+    .tools-panel legend {
+      font-weight: bold;
+      padding: 0 5px;
+    }
+    .tool-button, .color-button, .action-button {
+      width: 100%;
+      padding: 8px 12px;
+      margin-bottom: 5px;
+      border: 1px solid #ccc;
+      background-color: #f9f9f9;
+      cursor: pointer;
+      border-radius: 4px;
+      text-align: left;
+    }
+    .tool-button:hover, .color-button:hover, .action-button:hover {
+        background-color: #e9e9e9;
+    }
+    .tool-button.active, .color-button.active {
+      background-color: #007BFF;
+      color: white;
+      border-color: #0056b3;
+    }
+    #color-picker-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    #color-picker {
+        height: 35px;
+        width: 50px;
+        padding: 2px;
+    }
+    .layer-visibility label, .effect-control label {
+        display: block;
+        margin-bottom: 5px;
+    }
+    .effect-control select {
+        width: 100%;
+        padding: 5px;
+        margin-bottom: 10px;
+    }
+    #target-layers-container {
+        display: flex;
+        flex-direction: column;
+    }
+    #grid-container {
+      display: flex;
+      flex-wrap: wrap;
+      width: 640px;
+      height: 640px;
+      background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      border: 2px solid #999;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .cell {
+      width: 10px;
+      height: 10px;
+      box-sizing: border-box;
+    }
+    .io-section {
+        width: 100%;
+        max-width: 910px; /* main container + gap */
+        margin-top: 20px;
+        padding: 10px;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    textarea {
+      display: block;
+      width: calc(100% - 10px);
+      height: 80px;
+      font-family: monospace;
+      margin-top: 10px;
+    }
+    /* --- NEW: Style for Quick Generate Button --- */
+    #quick-generate-button {
+        background-color: #28a745; /* Green */
+        border-color: #28a745;
+        color: white;
+        font-weight: bold;
+        margin-top: 10px; /* Add some space above the button */
+    }
+    #quick-generate-button:hover {
+        background-color: #218838;
+        border-color: #1e7e34;
+    }
+    /* --- END NEW STYLE --- */
+  </style>
+</head>
+<body>
+  <h1>Generative Pixel Art Helmet Creator</h1>
+  <div class="main-container">
+    <div class="tools-panel">
+      <fieldset>
+        <legend>Paint Tools</legend>
+        <div id="color-picker-wrapper">
+            <input type="color" id="color-picker" value="#FF0000">
+            <button class="tool-button" id="paint-tool">Paint Color</button>
+        </div>
+        <button class="color-button" data-color="#000000">Paint Black</button>
+        <button class="color-button" data-color="#FFFFFF">Paint White</button>
+        <button class="color-button" data-color="transparent">Eraser (Transparent)</button>
+      </fieldset>
+      <fieldset>
+        <legend>Layer Assignment</legend>
+        <button class="tool-button" data-layer="1">Set to Helmet</button>
+        <button class="tool-button" data-layer="2">Set to A-Logo</button>
+        <button class="tool-button" data-layer="3">Set to A-Shadow</button>
+        <button class="tool-button" data-layer="4">Set to B.A.M.</button>
+        <button class="tool-button" data-layer="5">Set to B.A.M. Shadow</button>
+      </fieldset>
+      <!-- NEW: Generative Effects Panel -->
+      <fieldset>
+        <legend>🎨 Generative Effects</legend>
+        <div class="effect-control">
+          <label for="pattern-select">Pattern:</label>
+          <select id="pattern-select"></select>
+          <label for="palette-select">Color Palette:</label>
+          <select id="palette-select"></select>
+          <label>Apply to Layers:</label>
+          <div id="target-layers-container"></div>
+           <!-- --- NEW: Quick Generate Button --- -->
+          <button id="quick-generate-button" class="action-button">🎲 Quick Generate New Style</button>
+          <!-- --- END NEW BUTTON --- -->
+          <button id="apply-effect-button" class="action-button">Apply Effect</button>
+        </div>
+      </fieldset>
+      <fieldset>
+          <legend>Layer Visibility</legend>
+          <div id="layer-visibility-controls" class="layer-visibility"></div>
+      </fieldset>
+    </div>
+    <div id="grid-container"></div>
+  </div>
+  <div class="io-section">
+      <h3>Import / Export</h3>
+      <input type="file" accept="image/png" id="image-input" style="display: none;"/>
+      <button id="analyze-button" class="action-button">Import & Analyze Image</button>
+      <button id="export-button" class="action-button">Export Design as PNG</button>
+      <h3>Template Data (Layers)</h3>
+      <button id="load-embedded-template-button" class="action-button">Load Embedded Template</button>
+      <button id="load-template-button" class="action-button">Load Template from Text</button>
+      <button id="generate-template-button" class="action-button">Generate Template to Text</button>
+      <textarea id="template-io" placeholder="Generate or paste a multi-layer template here."></textarea>
+      <h3>Capture Effect Settings</h3>
+      <button id="capture-effect-button" class="action-button">Capture Current Effect Settings</button>
+      <textarea id="effect-io" placeholder="Click 'Capture' to save the current effect settings as a reusable recipe."></textarea>
+  </div>
+  <script>
+    // --- CONSTANTS & STATE ---
+const GRID_SIZE = 64, TOTAL_PIXELS = GRID_SIZE * GRID_SIZE;
+const EMBEDDED_TEMPLATE_DATA = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3,1,1,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3,1,1,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3,1,1,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3,1,1,2,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,1,1,1,0,0,0,0,0,1,1,1,1,1,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,1,1,1,1,1,1,0,0,0,1,1,1,1,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,1,1,1,1,0,0,0,0,0,1,1,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,4,4,4,5,1,1,1,1,4,4,5,1,1,1,4,5,1,1,4,5,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,4,5,5,4,5,1,1,4,5,1,4,5,1,1,4,4,5,4,4,5,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,4,4,4,5,1,1,1,4,5,1,4,5,1,1,4,5,4,5,4,5,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,4,5,5,4,5,1,1,4,4,4,4,5,1,1,4,5,4,5,4,5,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,4,4,4,5,1,4,5,4,5,1,4,5,4,5,4,5,1,1,4,5,4,5,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+const LAYER_TYPES = { BG:0, HELMET:1, LOGO_A:2, LOGO_A_SHADOW:3, TEXT_BAM:4, TEXT_BAM_SHADOW:5 };
+const LAYER_DEFINITIONS = {
+  0:{name:'Background',defaultColor:'transparent'},1:{name:'Helmet',defaultColor:'#333'},
+  2:{name:'A-Logo',defaultColor:'#AAA'},3:{name:'A-Shadow',defaultColor:'#666'},
+  4:{name:'B.A.M.',defaultColor:'#CCC'},5:{name:'B.A.M. Shadow',defaultColor:'#888'}
+};
+// --- NEW: MODULAR PATTERNS AND PALETTES ---
+// PATTERN GENERATORS: Return a value from 0.0 to 1.0 based on pixel coordinates.
+const PATTERN_GENERATORS = {
+    'Radial': (x, y, size) => {
+        const cx = size / 2, cy = size / 2;
+        const dx = x - cx, dy = y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        return Math.min(dist / (size / 2), 1.0);
+    },
+    'Linear X': (x, y, size) => x / (size - 1),
+    'Linear Y': (x, y, size) => y / (size - 1),
+    'Diagonal': (x, y, size) => (x + y) / ((size - 1) * 2),
+    'Swirl': (x, y, size) => {
+        const cx = size / 2, cy = size / 2;
+        const dx = x - cx, dy = y - cy;
+        const angle = Math.atan2(dy, dx);
+        return (angle + Math.PI) / (2 * Math.PI);
+    },
+    'Checkerboard': (x, y, size) => (Math.floor(x / (size/8)) + Math.floor(y / (size/8))) % 2,
+    'Sin X': (x, y, size) => (Math.sin(x / 4) + 1) / 2,
+    'Sin Y': (x, y, size) => (Math.sin(y / 4) + 1) / 2,
+    'Rings': (x, y, size) => (Math.sin(Math.sqrt((x-size/2)**2 + (y-size/2)**2)/2) + 1) / 2,
+};
+// COLOR PALETTES: An array of color stops. { pos: 0-1, color: '#RRGGBB' }
+const COLOR_PALETTES = {
+    'Fire': [{pos:0,c:'#FFFF00'},{pos:0.5,c:'#FF4500'},{pos:1,c:'#8B0000'}],
+    'Ice': [{pos:0,c:'#FFFFFF'},{pos:0.5,c:'#00BFFF'},{pos:1,c:'#00008B'}],
+    'Galaxy': [{pos:0,c:'#FFBBFF'},{pos:0.25,c:'#AA00AA'},{pos:0.75,c:'#000033'},{pos:1,c:'#000000'}],
+    'Neon': [{pos:0,c:'#00FFFF'},{pos:0.5,c:'#FF00FF'},{pos:1,c:'#FFFF00'}],
+    'Forest': [{pos:0,c:'#90EE90'},{pos:0.5,c:'#228B22'},{pos:1,c:'#006400'}],
+    'Metal': [{pos:0,c:'#FFFFFF'},{pos:0.3,c:'#C0C0C0'},{pos:0.7,c:'#808080'},{pos:1,c:'#404040'}],
+    'Union Jack': [{pos:0,c:'#C8102E'},{pos:0.5,c:'#FFFFFF'},{pos:1,c:'#0052A3'}],
+    'Rainbow': [
+        {pos:0,c:'#FF0000'}, {pos:1/6,c:'#FFFF00'}, {pos:2/6,c:'#00FF00'},
+        {pos:3/6,c:'#00FFFF'}, {pos:4/6,c:'#0000FF'}, {pos:5/6,c:'#FF00FF'}, {pos:1,c:'#FF0000'}
+    ],
+    'Grayscale': [{pos:0,c:'#FFFFFF'},{pos:1,c:'#000000'}],
+};
+// --- STATE VARS ---
+let gridData = [], isMouseDown = false, activeTool = 'paint', activeColor = '#FF0000', activeLayer = LAYER_TYPES.HELMET, layerVisibility = {}, cellElements = [];
+// --- HELPERS ---
+const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s);
+const getXY = i => [i % GRID_SIZE, Math.floor(i / GRID_SIZE)];
+const forEachPixel = fn => gridData.forEach((p, i) => fn(p, i, getXY(i)));
+
+// --- NEW: Helper to get random key from an object ---
+function getRandomKey(obj) {
+    const keys = Object.keys(obj);
+    return keys[Math.floor(Math.random() * keys.length)];
+}
+// --- NEW: Helper to get visible layer types (excluding BG) ---
+function getVisibleLayerTypes() {
+    return Object.keys(LAYER_DEFINITIONS)
+        .filter(type => type != LAYER_TYPES.BG && layerVisibility[type]);
+}
+
+// --- CORE LOGIC ---
+// Converts a #RRGGBB hex string to an {r, g, b} object
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
+}
+// Linearly interpolates a value
+function lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+// Maps a 0-1 value to a color from a palette using interpolation
+function mapValueToColor(value, palette) {
+    if (value <= palette[0].pos) return palette[0].c;
+    if (value >= palette[palette.length - 1].pos) return palette[palette.length - 1].c;
+    let i = 0;
+    while (palette[i+1].pos < value) { i++; }
+    const start = palette[i], end = palette[i+1];
+    const range = end.pos - start.pos;
+    const t = (value - start.pos) / range;
+    const startRgb = hexToRgb(start.c), endRgb = hexToRgb(end.c);
+    const r = Math.round(lerp(startRgb.r, endRgb.r, t));
+    const g = Math.round(lerp(startRgb.g, endRgb.g, t));
+    const b = Math.round(lerp(startRgb.b, endRgb.b, t));
+    return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`;
+}
+function renderGridFromData() {
+  forEachPixel((p, i) => {
+    cellElements[i].style.backgroundColor = layerVisibility[p.type] ? p.color : 'transparent';
+  });
+}
+function applyTool(index) {
+  if (index < 0 || index >= TOTAL_PIXELS) return;
+  const p = gridData[index];
+  if (activeTool === 'paint') {
+    if (activeColor === 'transparent') {
+      p.type = LAYER_TYPES.BG;
+      p.color = 'transparent';
+    } else {
+      p.color = activeColor;
+      if (p.type === LAYER_TYPES.BG) {
+        p.type = LAYER_TYPES.HELMET; // Default to helmet if painting on BG
+      }
+    }
+  } else if (activeTool === 'set_layer') {
+    p.type = activeLayer;
+    p.color = LAYER_DEFINITIONS[activeLayer].defaultColor;
+  }
+  // Direct DOM update for performance
+  cellElements[index].style.backgroundColor = layerVisibility[p.type] ? p.color : 'transparent';
+}
+function applyGenerativeEffect() {
+    const patternName = $('#pattern-select').value;
+    const paletteName = $('#palette-select').value;
+    const targetLayers = Array.from($$('#target-layers-container input:checked')).map(cb => +cb.value);
+    const patternFn = PATTERN_GENERATORS[patternName];
+    const palette = COLOR_PALETTES[paletteName];
+    if (!patternFn || !palette || targetLayers.length === 0) {
+        alert("Please select a pattern, a palette, and at least one target layer.");
+        return;
+    }
+    forEachPixel((p, i, [x, y]) => {
+        if (targetLayers.includes(p.type)) {
+            const normValue = patternFn(x, y, GRID_SIZE);
+            p.color = mapValueToColor(normValue, palette);
+        }
+    });
+    renderGridFromData(); // Full re-render after applying effect
+    // alert(`Applied '${patternName}' with '${paletteName}' palette.`); // Removed alert for quick gen
+}
+function captureEffect() {
+    const pattern = $('#pattern-select').value;
+    const palette = $('#palette-select').value;
+    const targets = Array.from($$('#target-layers-container input:checked')).map(cb => LAYER_DEFINITIONS[cb.value].name);
+    const effectRecipe = {
+        pattern,
+        palette,
+        targets,
+    };
+    $('#effect-io').value = JSON.stringify(effectRecipe, null, 2);
+    alert('Effect recipe captured to the text area below!');
+}
+
+// --- NEW: Function for Quick Generate ---
+function quickGenerateStyle() {
+    const patternSelect = $('#pattern-select');
+    const paletteSelect = $('#palette-select');
+    const targetCheckboxes = $$('#target-layers-container input[type="checkbox"]');
+
+    // 1. Get random pattern and palette keys
+    const randomPatternKey = getRandomKey(PATTERN_GENERATORS);
+    const randomPaletteKey = getRandomKey(COLOR_PALETTES);
+
+    // 2. Set the dropdown values
+    patternSelect.value = randomPatternKey;
+    paletteSelect.value = randomPaletteKey;
+
+    // 3. Determine target layers: 50% chance to apply to all visible, 50% to current selection
+    const applyToAllVisible = Math.random() > 0.5;
+    const visibleLayerTypes = getVisibleLayerTypes();
+
+    // 4. Update checkboxes
+    targetCheckboxes.forEach(cb => {
+         if (applyToAllVisible) {
+            // Check if the layer is visible
+            cb.checked = visibleLayerTypes.includes(cb.value);
+         }
+         // If not applyToAllVisible, leave the current selection unchanged
+    });
+
+    // 5. Apply the effect with the new settings
+    applyGenerativeEffect();
+    // Optional: Provide feedback
+    console.log(`Quick Generated: Pattern '${randomPatternKey}', Palette '${randomPaletteKey}', Apply to All Visible: ${applyToAllVisible}`);
+}
+
+function initialize() {
+  const gridContainer=$('#grid-container'), layerCtrls=$('#layer-visibility-controls');
+  const patternSelect = $('#pattern-select'), paletteSelect = $('#palette-select');
+  const targetLayersContainer = $('#target-layers-container');
+  // Populate Generative UI
+  Object.keys(PATTERN_GENERATORS).forEach(name => {
+      patternSelect.innerHTML += `<option value="${name}">${name}</option>`;
+  });
+  Object.keys(COLOR_PALETTES).forEach(name => {
+      paletteSelect.innerHTML += `<option value="${name}">${name}</option>`;
+  });
+  // Populate Layer controls
+  Object.keys(LAYER_DEFINITIONS).forEach(type => {
+    layerVisibility[type] = true;
+    const def = LAYER_DEFINITIONS[type];
+    if (type == LAYER_TYPES.BG) return; // Don't add controls for background
+    // Visibility toggle
+    const label = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = true; cb.dataset.layerType = type;
+    cb.onchange = e => { layerVisibility[e.target.dataset.layerType] = e.target.checked; renderGridFromData(); };
+    label.append(cb, ` ${def.name}`);
+    layerCtrls.appendChild(label);
+    // Effect target checkbox
+    const targetLabel = document.createElement('label');
+    const targetCb = document.createElement('input');
+    targetCb.type = 'checkbox'; targetCb.value = type;
+    if (type == LAYER_TYPES.HELMET) targetCb.checked = true; // Default to helmet
+    targetLabel.append(targetCb, ` ${def.name}`);
+    targetLayersContainer.appendChild(targetLabel);
+  });
+  gridContainer.innerHTML = '';
+  gridData = Array(TOTAL_PIXELS).fill().map(() => ({ type: LAYER_TYPES.BG, color: 'transparent' }));
+  for(let i=0; i<TOTAL_PIXELS; i++) {
+    const cell = document.createElement('div');
+    cell.classList.add('cell');
+    cell.dataset.index = i;
+    gridContainer.appendChild(cell);
+  }
+  cellElements = $$('.cell');
+  renderGridFromData();
+  // --- Event Listeners ---
+  gridContainer.onmousedown=e=>{isMouseDown=true;if(e.target.classList.contains('cell'))applyTool(+e.target.dataset.index);};
+  gridContainer.onmousemove=e=>{if(isMouseDown&&e.target.classList.contains('cell'))applyTool(+e.target.dataset.index);};
+  window.onmouseup=()=>isMouseDown=false;
+  gridContainer.onmouseleave=()=>isMouseDown=false;
+  // Tools & Buttons
+  function setActiveTool(tool,value,btn){
+    $$('.tool-button,.color-button').forEach(b=>b.classList.remove('active'));
+    btn&&btn.classList.add('active');
+    activeTool=tool;
+    if(tool==='paint'){activeColor=value;if(value!=='transparent')$('#color-picker').value=value;}
+    else if(tool==='set_layer')activeLayer=+value;
+  }
+  $('#paint-tool').onclick=e=>setActiveTool('paint',$('#color-picker').value,e.currentTarget);
+  $('#color-picker').oninput=e=>$('#paint-tool').classList.contains('active')&&(activeColor=e.target.value);
+  $$('.color-button').forEach(btn=>btn.onclick=e=>setActiveTool('paint',e.currentTarget.dataset.color,e.currentTarget));
+  $$('.tool-button[data-layer]').forEach(btn=>btn.onclick=e=>setActiveTool('set_layer',e.currentTarget.dataset.layer,e.currentTarget));
+  $('#apply-effect-button').onclick = applyGenerativeEffect;
+  $('#capture-effect-button').onclick = captureEffect;
+  // --- NEW: Event Listener for Quick Generate Button ---
+  $('#quick-generate-button').onclick = quickGenerateStyle;
+  // --- END NEW LISTENER ---
+
+  // Template & I/O (Unchanged from original, but integrated)
+  $('#generate-template-button').onclick=()=>{
+    $('#template-io').value=JSON.stringify(gridData.map(p=>p.type));
+    alert('Layer template generated!');
+  };
+  $('#load-template-button').onclick=()=>{
+    try{
+      const t=JSON.parse($('#template-io').value);
+      if(Array.isArray(t)&&t.length===TOTAL_PIXELS){
+          forEachPixel((p,i)=>{
+              const newType = t[i];
+              p.type = newType;
+              p.color = LAYER_DEFINITIONS[newType]?.defaultColor || 'transparent';
+          });
+          renderGridFromData();
+      } else { alert('Invalid template data.'); }
+    }catch{alert('Invalid template format.');}
+  };
+  // ***** THIS IS THE CORRECTED BLOCK *****
+  $('#load-embedded-template-button').onclick=()=>{
+    if (EMBEDDED_TEMPLATE_DATA.length === TOTAL_PIXELS) {
+      forEachPixel((p, i) => {
+        const newType = EMBEDDED_TEMPLATE_DATA[i];
+        p.type = newType;
+        p.color = LAYER_DEFINITIONS[newType]?.defaultColor || 'transparent';
+      });
+      renderGridFromData();
+      alert('Embedded template loaded!');
+    }
+  };
+  // ***** END OF CORRECTION *****
+  $('#export-button').onclick=()=>{
+    const cvs=document.createElement('canvas');cvs.width=GRID_SIZE;cvs.height=GRID_SIZE;const ctx=cvs.getContext('2d');
+    ctx.imageSmoothingEnabled=false;
+    forEachPixel((p,i,[x,y])=>{
+        if(layerVisibility[p.type] && p.type !== LAYER_TYPES.BG){
+            ctx.fillStyle=p.color;
+            ctx.fillRect(x,y,1,1);
+        }
+    });
+    const link=document.createElement('a');link.download='helmet-design.png';link.href=cvs.toDataURL('image/png');link.click();
+  };
+  $('#analyze-button').onclick=()=>$('#image-input').click();
+  $('#image-input').onchange=e=>{
+    if(e.target.files[0]){
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        const img=new Image();
+        img.onload=()=>{
+          if(img.width!==GRID_SIZE||img.height!==GRID_SIZE)return alert(`${GRID_SIZE}x${GRID_SIZE} required.`);
+          const ctx=document.createElement('canvas').getContext('2d');
+          ctx.canvas.width=GRID_SIZE;ctx.canvas.height=GRID_SIZE;ctx.drawImage(img,0,0);
+          const d=ctx.getImageData(0,0,GRID_SIZE,GRID_SIZE).data;
+          forEachPixel((_,i)=>{const a=d[i*4+3];gridData[i]=a>0?{type:LAYER_TYPES.HELMET,color:`rgb(${d[i*4]},${d[i*4+1]},${d[i*4+2]})`}:{type:LAYER_TYPES.BG,color:'transparent'};});
+          renderGridFromData();alert("Image loaded. All pixels assigned to 'Helmet' layer. Assign other layers as needed.");
+        };img.src=ev.target.result;
+      };reader.readAsDataURL(e.target.files[0]);
+    }
+  };
+  // --- Init ---
+  setActiveTool('paint', '#FF0000', $('#paint-tool'));
+}
+initialize();
+</script>
+</body>
+</html>
