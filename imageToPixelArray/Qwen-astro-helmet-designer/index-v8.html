@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generative Helmet Explorer</title>
+  <style>
+    body {
+      font-family: 'Courier New', monospace;
+      margin: 0;
+      padding: 20px;
+      background: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 { margin-bottom: 10px; }
+    .controls {
+      margin: 20px 0;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      background: #333;
+      color: white;
+      border: 1px solid #555;
+      border-radius: 4px;
+    }
+    button:hover { background: #444; }
+    #grid-container {
+      width: 640px;
+      height: 640px;
+      display: grid;
+      grid-template-columns: repeat(64, 1fr);
+      gap: 0;
+      border: 2px solid #444;
+    }
+    .cell {
+      width: 10px;
+      height: 10px;
+      box-sizing: border-box;
+    }
+    #favorites {
+      margin-top: 20px;
+      width: 640px;
+    }
+    .thumb {
+      width: 128px;
+      height: 128px;
+      display: inline-block;
+      margin: 5px;
+      border: 2px solid #444;
+      cursor: pointer;
+    }
+    .thumb:hover { border-color: #00ffcc; }
+  </style>
+</head>
+<body>
+  <h1>🎲 Generative Helmet Explorer</h1>
+  <div class="controls">
+    <button id="generate">Generate</button>
+    <button id="capture">Capture</button>
+    <button id="export">Export All</button>
+  </div>
+  <div id="grid-container"></div>
+  <div id="favorites">
+    <h3>Favorites</h3>
+    <div id="favorites-list"></div>
+  </div>
+
+  <script>
+    const GRID_SIZE = 64;
+    const TOTAL = GRID_SIZE * GRID_SIZE;
+    const container = document.getElementById('grid-container');
+    const favoritesList = document.getElementById('favorites-list');
+    let grid = Array(TOTAL).fill('');
+    let currentSeed = Math.random();
+
+    // Create grid
+    container.innerHTML = '';
+    for (let i = 0; i < TOTAL; i++) {
+      const cell = document.createElement('div');
+      cell.classList.add('cell');
+      container.appendChild(cell);
+    }
+    const cells = document.querySelectorAll('.cell');
+
+    // Random utility
+    const seededRandom = (seed) => {
+      const x = Math.sin(seed++) * 10000;
+      return x - Math.floor(x);
+    };
+
+    const randomFromSeed = (seed, min = 0, max = 1) => {
+      return min + (max - min) * seededRandom(seed);
+    };
+
+    const hsl = (h, s, l) => `hsl(${h % 360}, ${s}%, ${l}%)`;
+
+    // Color themes
+    const themes = [
+      () => hsl(0, 90, 50), // Red
+      () => hsl(40, 100, 60), // Orange
+      () => hsl(240, 80, 60), // Blue
+      () => hsl(120, 70, 50), // Green
+      () => hsl(300, 90, 60), // Magenta
+      () => hsl(180, 100, 60), // Cyan
+      () => hsl(randomFromSeed(currentSeed + 1) * 360, 90, 60), // Random hue
+      () => `rgb(${randomFromSeed(currentSeed + 2)*255},${randomFromSeed(currentSeed + 3)*255},${randomFromSeed(currentSeed + 4)*255})`
+    ];
+
+    // Pattern functions
+    const patterns = [
+      // Radial gradient
+      (x, y, cx, cy) => {
+        const r = Math.hypot(x - cx, y - cy);
+        return r < 10 ? 0 : r < 20 ? 1 : r < 30 ? 2 : 3;
+      },
+      // Checker
+      (x, y) => (Math.floor(x / 4) + Math.floor(y / 4)) % 2,
+      // Stripes
+      (x, y) => Math.floor(x / 6) % 3,
+      // Diagonal
+      (x, y) => (x + y) % 8 < 4 ? 0 : 1,
+      // Spiral
+      (x, y, cx, cy) => {
+        const dx = x - cx, dy = y - cy;
+        const angle = Math.atan2(dy, dx);
+        const r = Math.hypot(dx, dy);
+        return Math.floor((angle + r * 0.2) / 1) % 3;
+      },
+      // Noise-like
+      (x, y) => {
+        const n = Math.sin(x * 0.4) * Math.cos(y * 0.3) + Math.sin(x * y * 0.005);
+        return n > 0 ? 0 : 1;
+      },
+      // Concentric rings
+      (x, y, cx, cy) => Math.floor(Math.hypot(x - cx, y - cy) / 6) % 4,
+      // Grid pulse
+      (x, y) => (Math.sin(x * 0.2) + Math.cos(y * 0.2)) > 0 ? 0 : 1
+    ];
+
+    // Generate helmet
+    function generate() {
+      currentSeed = Math.random(); // New seed
+      const cx = 32, cy = 32;
+
+      // Pick random pattern and colors
+      const pattern = patterns[Math.floor(randomFromSeed(currentSeed + 10) * patterns.length)];
+      const numColors = 2 + Math.floor(randomFromSeed(currentSeed + 11) * 3); // 2-4 colors
+      const palette = Array(numColors).fill().map(() => themes[Math.floor(randomFromSeed(currentSeed + 12 + numColors) * themes.length)]());
+
+      // Apply to grid
+      for (let i = 0; i < TOTAL; i++) {
+        const x = i % GRID_SIZE;
+        const y = Math.floor(i / GRID_SIZE);
+        const v = pattern(x, y, cx, cy);
+        const color = palette[v % palette.length] || '#000';
+        grid[i] = color;
+        cells[i].style.backgroundColor = color;
+      }
+    }
+
+    // Capture current design
+    function capture() {
+      const thumb = document.createElement('canvas');
+      thumb.width = 64;
+      thumb.height = 64;
+      const ctx = thumb.getContext('2d');
+      for (let i = 0; i < TOTAL; i++) {
+        const x = i % GRID_SIZE;
+        const y = Math.floor(i / GRID_SIZE);
+        ctx.fillStyle = grid[i] || 'transparent';
+        ctx.fillRect(x, y, 1, 1);
+      }
+      const img = document.createElement('img');
+      img.src = thumb.toDataURL();
+      img.classList.add('thumb');
+      img.onclick = () => {
+        // Load favorite
+        const data = ctx.getImageData(0, 0, 64, 64).data;
+        for (let i = 0; i < TOTAL; i++) {
+          const a = data[i * 4 + 3];
+          if (a > 0) {
+            const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
+            cells[i].style.backgroundColor = `rgb(${r},${g},${b})`;
+            grid[i] = `rgb(${r},${g},${b})`;
+          }
+        }
+      };
+      favoritesList.appendChild(img);
+    }
+
+    // Export all favorites as data
+    function exportAll() {
+      const data = Array.from(favoritesList.children).map(img => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, 64, 64);
+        return ctx.getImageData(0, 0, 64, 64).data;
+      });
+      console.log('Captured helmet arrays:', data);
+      alert(`Exported ${data.length} designs to console.`);
+    }
+
+    // Events
+    document.getElementById('generate').onclick = generate;
+    document.getElementById('capture').onclick = capture;
+    document.getElementById('export').onclick = exportAll;
+
+    // Init
+    generate();
+  </script>
+</body>
+</html>
