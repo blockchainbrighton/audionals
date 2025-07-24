@@ -1,0 +1,1355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Orbital Traders: Galactic Commerce</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  body {
+    margin: 0;
+    background: linear-gradient(135deg, #000428, #004e92);
+    color: #0f0;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  #game-container {
+    position: relative;
+    flex: 1;
+    display: flex;
+  }
+  
+  canvas {
+    background: #000;
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  
+  #ui {
+    position: absolute;
+    top: 0;
+    left: 0;
+    padding: 15px;
+    pointer-events: none;
+    z-index: 10;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+  }
+  
+  #player-stats, #game-info {
+    background: rgba(0, 20, 0, 0.7);
+    padding: 12px;
+    border: 1px solid #0f0;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+    pointer-events: auto;
+  }
+  
+  #player-stats > div, #game-info > div {
+    margin: 5px 0;
+    font-size: 14px;
+  }
+  
+  #cargo-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 5px;
+  }
+  
+  .cargo-item {
+    background: rgba(0, 40, 0, 0.8);
+    border: 1px solid #0a0;
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  
+  #shop {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+    background: rgba(0, 15, 0, 0.95);
+    color: #0f0;
+    padding: 25px;
+    border: 2px solid #0f0;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+    z-index: 20;
+    width: 80%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  
+  #shop h2 {
+    text-align: center;
+    margin-bottom: 15px;
+    color: #0f8;
+    text-shadow: 0 0 5px rgba(0, 255, 0, 0.7);
+  }
+  
+  #market {
+    margin: 15px 0;
+  }
+  
+  .market-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    border-bottom: 1px solid #0a0;
+  }
+  
+  .market-item:last-child {
+    border-bottom: none;
+  }
+  
+  .market-item button {
+    margin-left: 10px;
+    padding: 4px 8px;
+    background: #0f0;
+    color: #000;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+  }
+  
+  .market-item button:hover {
+    background: #0a0;
+    box-shadow: 0 0 5px rgba(0, 255, 0, 0.7);
+  }
+  
+  #shop-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 20px;
+  }
+  
+  #shop-actions button {
+    flex: 1;
+    min-width: 120px;
+    padding: 8px;
+    background: #0f0;
+    color: #000;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+  }
+  
+  #shop-actions button:hover {
+    background: #0a0;
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.7);
+  }
+  
+  #close-shop {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    margin-top: 15px;
+    background: #0a0;
+    color: #000;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    font-size: 16px;
+  }
+  
+  #close-shop:hover {
+    background: #0f0;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.7);
+  }
+  
+  #notifications {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 300px;
+    z-index: 15;
+  }
+  
+  .notification {
+    background: rgba(0, 20, 0, 0.8);
+    border: 1px solid #0f0;
+    border-radius: 5px;
+    padding: 10px;
+    margin-top: 10px;
+    animation: fadeIn 0.3s, fadeOut 0.5s 2.5s;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  @keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  
+  #guide-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 10, 0, 0.95);
+    z-index: 30;
+    display: none;
+    flex-direction: column;
+    padding: 30px;
+    overflow-y: auto;
+  }
+  
+  #guide-panel h1 {
+    text-align: center;
+    margin-bottom: 20px;
+    color: #0f8;
+    text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+  }
+  
+  .guide-section {
+    margin-bottom: 25px;
+    padding: 15px;
+    border: 1px solid #0a0;
+    border-radius: 5px;
+    background: rgba(0, 20, 0, 0.3);
+  }
+  
+  .guide-section h2 {
+    color: #0f8;
+    margin-bottom: 10px;
+  }
+  
+  .guide-section ul {
+    padding-left: 20px;
+    margin: 10px 0;
+  }
+  
+  .guide-section li {
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+  
+  .key {
+    display: inline-block;
+    background: #0a0;
+    color: #000;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: bold;
+  }
+  
+  #guide-close {
+    align-self: center;
+    padding: 10px 30px;
+    background: #0f0;
+    color: #000;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    font-size: 16px;
+    margin-top: 20px;
+  }
+  
+  #guide-close:hover {
+    background: #0a0;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.7);
+  }
+  
+  #title-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #000428, #004e92);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 40;
+    color: #0f0;
+    text-align: center;
+    padding: 20px;
+  }
+  
+  #title-screen h1 {
+    font-size: 3.5rem;
+    margin-bottom: 20px;
+    text-shadow: 0 0 15px rgba(0, 255, 0, 0.7);
+    letter-spacing: 3px;
+  }
+  
+  #title-screen p {
+    max-width: 600px;
+    margin-bottom: 30px;
+    line-height: 1.6;
+    font-size: 1.1rem;
+  }
+  
+  #title-buttons {
+    display: flex;
+    gap: 20px;
+  }
+  
+  #start-button, #guide-button {
+    padding: 15px 40px;
+    font-size: 1.2rem;
+    background: #0f0;
+    color: #000;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    letter-spacing: 1px;
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+    transition: all 0.3s;
+  }
+  
+  #start-button:hover, #guide-button:hover {
+    background: #0a0;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.8);
+    transform: scale(1.05);
+  }
+  
+  .ship-icon {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    margin-right: 5px;
+    box-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+  }
+  
+  .event-popup {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 15, 0, 0.95);
+    border: 2px solid #0f0;
+    border-radius: 10px;
+    padding: 20px;
+    z-index: 25;
+    width: 80%;
+    max-width: 500px;
+    text-align: center;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+    display: none;
+  }
+  
+  .event-popup h3 {
+    color: #0f8;
+    margin-bottom: 15px;
+  }
+  
+  .event-popup p {
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  
+  .event-popup button {
+    padding: 8px 20px;
+    margin: 0 5px;
+    background: #0f0;
+    color: #000;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+  }
+  
+  .event-popup button:hover {
+    background: #0a0;
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.7);
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="c"></canvas>
+  
+  <div id="ui">
+    <div id="player-stats">
+      <div><span class="ship-icon"></span> <strong>ORION MK-II</strong></div>
+      <div>Credits: <span id="credits">1000</span></div>
+      <div>Fuel: <span id="fuel">100</span>%</div>
+      <div>Hull: <span id="hull">100</span>%</div>
+      <div>Reputation: <span id="reputation">0</span></div>
+      <div id="contract">Contract: none</div>
+      <div>Cargo:</div>
+      <div id="cargo-display"></div>
+    </div>
+    
+    <div id="game-info">
+      <div>Location: <span id="location">Deep Space</span></div>
+      <div>Speed: <span id="speed">0</span> km/s</div>
+      <div>Current Mission: <span id="mission">Explore the galaxy</span></div>
+      <div>Faction: <span id="faction">Independent</span></div>
+      <div id="time">Day 1</div>
+    </div>
+  </div>
+  
+  <div id="shop">
+    <h2>Planet <span id="planetName">X</span></h2>
+    <div id="market"></div>
+    
+    <div id="shop-actions">
+      <button onclick="buyFuel()">Buy Fuel (10c)</button>
+      <button onclick="upgradeCargo()">Cargo Bay (100c)</button>
+      <button onclick="upgradeThrust()">Thruster (200c)</button>
+      <button onclick="repairHull()">Repair Hull (50c)</button>
+      <button onclick="mineResources()">Mine Resources (5 Fuel)</button>
+      <button onclick="acceptMission()">Accept Mission</button>
+    </div>
+    
+    <button id="close-shop" onclick="closeShop()">Close</button>
+  </div>
+  
+  <div id="notifications"></div>
+  
+  <div id="event-popup" class="event-popup">
+    <h3 id="event-title">Alien Encounter</h3>
+    <p id="event-description">A mysterious alien vessel approaches your position. Their intentions are unclear.</p>
+    <button id="event-option1">Attempt Communication</button>
+    <button id="event-option2">Prepare for Combat</button>
+    <button id="event-option3">Flee</button>
+  </div>
+  
+  <div id="guide-panel">
+    <h1>ORBITAL TRADERS GUIDE</h1>
+    
+    <div class="guide-section">
+      <h2>Getting Started</h2>
+      <p>Welcome to Orbital Traders! You are the captain of the Orion MK-II, a small trading vessel exploring the galaxy. Your goal is to build your reputation, complete missions, and become the most successful trader in the sector.</p>
+    </div>
+    
+    <div class="guide-section">
+      <h2>Movement Controls</h2>
+      <ul>
+        <li><span class="key">Click and drag</span> on the game screen to set your trajectory</li>
+        <li>Release to launch your ship in that direction</li>
+        <li>Fuel is consumed based on the distance and speed of your launch</li>
+        <li>Planets have gravity wells that will pull you in when you get close</li>
+      </ul>
+    </div>
+    
+    <div class="guide-section">
+      <h2>Trading System</h2>
+      <ul>
+        <li>Landing on planets opens the market interface</li>
+        <li><span class="key">Buy</span> resources when prices are low</li>
+        <li><span class="key">Sell</span> resources when prices are high to make profit</li>
+        <li>Prices fluctuate based on supply and demand</li>
+        <li>You can <span class="key">Mine</span> resources directly from planets (costs fuel)</li>
+      </ul>
+    </div>
+    
+    <div class="guide-section">
+      <h2>Contracts & Missions</h2>
+      <ul>
+        <li>Accept contracts to deliver specific resources for rewards</li>
+        <li>Complete contracts to earn credits and reputation</li>
+        <li>Higher reputation unlocks better opportunities</li>
+        <li>New contracts appear randomly while traveling</li>
+      </ul>
+    </div>
+    
+    <div class="guide-section">
+      <h2>Ship Management</h2>
+      <ul>
+        <li><span class="key">Buy Fuel</span>: Refuel your ship (10 credits for 20 fuel)</li>
+        <li><span class="key">Upgrade Cargo</span>: Increase cargo capacity (100 credits)</li>
+        <li><span class="key">Upgrade Thrust</span>: Improve engine power (200 credits)</li>
+        <li><span class="key">Repair Hull</span>: Fix damage (50 credits for 25 hull)</li>
+      </ul>
+    </div>
+    
+    <div class="guide-section">
+      <h2>Random Events</h2>
+      <p>While traveling through space, you may encounter:</p>
+      <ul>
+        <li>Asteroid fields (navigate carefully to avoid damage)</li>
+        <li>Alien vessels (choose how to interact)</li>
+        <li>Derelict ships (may contain valuable resources or dangers)</li>
+      </ul>
+    </div>
+    
+    <div class="guide-section">
+      <h2>Game Tips</h2>
+      <ul>
+        <li>Always keep some fuel for emergencies</li>
+        <li>Repair hull damage before it becomes critical</li>
+        <li>Trade resources between planets for maximum profit</li>
+        <li>Accept contracts that match resources you already have</li>
+        <li>Explore all planets to find the best trading opportunities</li>
+      </ul>
+    </div>
+    
+    <button id="guide-close">BACK TO GAME</button>
+  </div>
+  
+  <div id="title-screen">
+    <h1>ORBITAL TRADERS</h1>
+    <p>Navigate the galaxy, trade resources, complete missions, and survive in the vast expanse of space. Your choices will shape your destiny among the stars.</p>
+    <div id="title-buttons">
+      <button id="start-button">BEGIN JOURNEY</button>
+      <button id="guide-button">HOW TO PLAY</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* === CONFIG === */
+const G = 0.3;
+const SCALE = 50;
+const DT = 0.02;
+const DRAG = 0.995;
+
+/* === CANVAS === */
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+
+function resize() {
+  c.width = innerWidth;
+  c.height = innerHeight;
+}
+
+resize();
+window.onresize = resize;
+
+/* === STATE === */
+let planets = [];
+let player = {
+  pos: {x: 0, y: 0},
+  vel: {x: 0, y: 0},
+  fuel: 100,
+  cargo: Array(8).fill(null),
+  credits: 1000,
+  thrust: 1,
+  maxCargo: 8,
+  contract: null,
+  hull: 100,
+  reputation: 0,
+  location: "Deep Space",
+  mission: "Explore the galaxy",
+  faction: "Independent",
+  day: 1
+};
+
+let path = [];
+let selected = null;
+let landed = null;
+let particles = [];
+let gameStarted = false;
+let guideOpen = false;
+let justLanded = false; // New flag to prevent immediate re-landing
+
+/* === UTILS === */
+function rand(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function load() {
+  const save = localStorage.getItem('orbitalSave');
+  if (save) {
+    try {
+      const data = JSON.parse(save);
+      planets = data.planets || [];
+      Object.assign(player, data.player || {});
+      // Ensure player has all required properties
+      if (player.cargo === undefined) player.cargo = Array(8).fill(null);
+      if (player.maxCargo === undefined) player.maxCargo = 8;
+      if (player.hull === undefined) player.hull = 100;
+      if (player.reputation === undefined) player.reputation = 0;
+    } catch (e) {
+      console.error("Error loading save data", e);
+      generate();
+    }
+  } else {
+    generate();
+  }
+}
+
+function save() {
+  try {
+    localStorage.setItem('orbitalSave', JSON.stringify({planets, player}));
+  } catch (e) {
+    console.error("Error saving game", e);
+  }
+}
+
+function generate() {
+  planets = [];
+  const planetNames = ["Terra", "Nova", "Zephyr", "Aether", "Valkyrie", "Elysium", "Nexus", "Aurora"];
+  const factions = ["Terran Alliance", "Zephyrian Collective", "Aetherian Syndicate", "Independent"];
+  
+  for (let i = 0; i < 8; i++) {
+    planets.push({
+      x: rand(-10, 10) * SCALE,
+      y: rand(-10, 10) * SCALE,
+      mass: rand(5, 20),
+      prices: Array(8).fill(0).map(() => rand(10, 100)),
+      name: planetNames[i],
+      faction: factions[Math.floor(rand(0, factions.length))],
+      resources: ["Ore", "Gas", "Minerals", "Crystals", "Metals", "Fuel", "Tech", "Food"][i]
+    });
+  }
+  
+  // Start player slightly away from the first planet to prevent immediate landing
+  const startPlanet = planets[0];
+  const angle = rand(0, Math.PI * 2);
+  const distance = startPlanet.mass * 2 + 30; // Start further away
+  
+  player.pos = {
+    x: startPlanet.x + Math.cos(angle) * distance,
+    y: startPlanet.y + Math.sin(angle) * distance
+  };
+  
+  player.location = "Deep Space";
+  landed = null;
+  justLanded = false;
+}
+
+/* === PARTICLES === */
+class Particle {
+  constructor(x, y, vx, vy, life, color) {
+    this.x = x;
+    this.y = y;
+    this.vx = vx;
+    this.vy = vy;
+    this.life = life;
+    this.maxLife = life;
+    this.color = color;
+  }
+  
+  update() {
+    this.x += this.vx * DT;
+    this.y += this.vy * DT;
+    this.vx *= 0.98;
+    this.vy *= 0.98;
+    this.life--;
+  }
+  
+  draw(ctx) {
+    const alpha = this.life / this.maxLife;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function createParticles(x, y, count, color) {
+  for (let i = 0; i < count; i++) {
+    const angle = rand(0, Math.PI * 2);
+    const speed = rand(20, 100);
+    const vx = Math.cos(angle) * speed;
+    const vy = Math.sin(angle) * speed;
+    particles.push(new Particle(x, y, vx, vy, rand(20, 50), color));
+  }
+}
+
+/* === PHYSICS === */
+function calcOrbit(pos, vel, steps) {
+  let p = {x: pos.x, y: pos.y}, v = {x: vel.x, y: vel.y};
+  const pts = [];
+  for (let i = 0; i < steps; i++) {
+    let ax = 0, ay = 0;
+    for (const pl of planets) {
+      const d = dist(p, pl);
+      const f = G * pl.mass / (d * d + 1);
+      ax += f * (pl.x - p.x) / d;
+      ay += f * (pl.y - p.y) / d;
+    }
+    v.x += ax * DT;
+    v.y += ay * DT;
+    p.x += v.x * DT;
+    p.y += v.y * DT;
+    pts.push({x: p.x, y: p.y});
+  }
+  return pts;
+}
+
+/* === DRAW === */
+function draw() {
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.save();
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.scale(1, -1);
+  
+  // Draw stars in background
+  ctx.fillStyle = "#fff";
+  for (let i = 0; i < 200; i++) {
+    const x = rand(-c.width/2, c.width/2);
+    const y = rand(-c.height/2, c.height/2);
+    ctx.beginPath();
+    ctx.arc(x, y, rand(0.5, 1.5), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Draw planets
+  for (const p of planets) {
+    // Planet body
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.mass * 2, 0, Math.PI * 2);
+    
+    // Planet color based on faction
+    if (p.faction === "Terran Alliance") ctx.fillStyle = "#4a9dff";
+    else if (p.faction === "Zephyrian Collective") ctx.fillStyle = "#ff4a9d";
+    else if (p.faction === "Aetherian Syndicate") ctx.fillStyle = "#9dff4a";
+    else ctx.fillStyle = "#0f0";
+    
+    ctx.fill();
+    
+    // Planet ring for some
+    if (p.mass > 15) {
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, p.mass * 3, p.mass * 1.5, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    
+    // Planet name
+    ctx.scale(1, -1);
+    ctx.fillStyle = "#fff";
+    ctx.font = "12px 'Courier New'";
+    ctx.textAlign = "center";
+    ctx.fillText(p.name, p.x, -p.y - p.mass * 2 - 10);
+    ctx.scale(1, -1);
+  }
+
+  // Draw particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].update();
+    particles[i].draw(ctx);
+    if (particles[i].life <= 0) {
+      particles.splice(i, 1);
+    }
+  }
+
+  // Draw trajectory
+  if (selected && player.fuel > 0) {
+    ctx.beginPath();
+    ctx.moveTo(player.pos.x, player.pos.y);
+    for (const pt of path) ctx.lineTo(pt.x, pt.y);
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // Draw player ship
+  ctx.save();
+  ctx.translate(player.pos.x, player.pos.y);
+  const angle = Math.atan2(player.vel.y, player.vel.x);
+  ctx.rotate(angle);
+  
+  // Ship body
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.moveTo(10, 0);
+  ctx.lineTo(-10, -5);
+  ctx.lineTo(-5, 0);
+  ctx.lineTo(-10, 5);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Engine glow
+  if (Math.hypot(player.vel.x, player.vel.y) > 0.1) {
+    ctx.fillStyle = "rgba(0, 200, 255, 0.7)";
+    ctx.beginPath();
+    ctx.moveTo(-10, -3);
+    ctx.lineTo(-15, 0);
+    ctx.lineTo(-10, 3);
+    ctx.closePath();
+    ctx.fill();
+  }
+  
+  ctx.restore();
+
+  ctx.restore();
+}
+
+/* === INPUT === */
+let dragging = false;
+let start = {x: 0, y: 0};
+
+c.addEventListener('mousedown', e => {
+  if (landed || !gameStarted || guideOpen) return;
+  dragging = true;
+  start = {x: e.clientX - c.width / 2, y: c.height / 2 - e.clientY};
+});
+
+c.addEventListener('mousemove', e => {
+  if (!dragging || !gameStarted || guideOpen) return;
+  const end = {x: e.clientX - c.width / 2, y: c.height / 2 - e.clientY};
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  selected = {x: dx / 10, y: dy / 10};
+  path = calcOrbit(player.pos, selected, 200);
+});
+
+c.addEventListener('mouseup', e => {
+  if (!dragging || !gameStarted || guideOpen) return;
+  dragging = false;
+  if (selected && player.fuel > 0) {
+    player.vel.x += selected.x * player.thrust;
+    player.vel.y += selected.y * player.thrust;
+    const fuelCost = Math.hypot(selected.x, selected.y) * 0.5;
+    player.fuel = Math.max(0, player.fuel - fuelCost);
+    
+    // Create engine particles
+    createParticles(
+      player.pos.x - 10, 
+      player.pos.y, 
+      10, 
+      "#0ff"
+    );
+    
+    selected = null;
+  }
+});
+
+/* === UPDATE === */
+function update() {
+  if (!gameStarted || guideOpen) return;
+  
+  // Physics
+  let ax = 0, ay = 0;
+  for (const p of planets) {
+    const d = dist(player.pos, p);
+    const f = G * p.mass / (d * d + 1);
+    ax += f * (p.x - player.pos.x) / d;
+    ay += f * (p.y - player.pos.y) / d;
+  }
+  player.vel.x += ax * DT;
+  player.vel.y += ay * DT;
+  player.vel.x *= DRAG;
+  player.vel.y *= DRAG;
+  player.pos.x += player.vel.x * DT;
+  player.pos.y += player.vel.y * DT;
+
+  // Landing detection with cooldown
+  if (justLanded) {
+    // Check if we've moved away from the planet
+    if (landed && dist(player.pos, landed) > landed.mass * 2 + 20) {
+      justLanded = false;
+    }
+  } else {
+    for (const p of planets) {
+      if (dist(player.pos, p) < p.mass * 2 + 5) {
+        if (!landed) {
+          landed = p;
+          player.location = p.name;
+          openShop();
+          createParticles(player.pos.x, player.pos.y, 30, "#0f0");
+          justLanded = true; // Set the cooldown flag
+        }
+        player.vel = {x: 0, y: 0};
+        player.pos = {x: p.x, y: p.y};
+        break;
+      }
+    }
+  }
+  
+  // Update location when moving away from planets
+  if (landed && dist(player.pos, landed) > landed.mass * 2 + 20 && !justLanded) {
+    landed = null;
+    closeShop();
+    player.location = "Deep Space";
+  }
+
+  // Contract completion
+  if (player.contract) {
+    const idx = player.cargo.findIndex(c => c && c.type === player.contract.type);
+    if (idx !== -1 && player.cargo[idx].amount >= player.contract.amount) {
+      player.credits += player.contract.reward;
+      player.reputation += 5;
+      player.cargo[idx].amount -= player.contract.amount;
+      if (player.cargo[idx].amount === 0) player.cargo[idx] = null;
+      addNotification(`Contract completed! Earned ${player.contract.reward} credits and 5 reputation.`);
+      player.contract = null;
+      updateUI();
+    }
+  }
+
+  // Random events (less frequent)
+  if (Math.random() < 0.0005 && !landed) {
+    triggerRandomEvent();
+  }
+
+  // Update time
+  if (Math.floor(Math.random() * 200) === 0) {
+    player.day++;
+    updateUI();
+  }
+
+  // Check for game over conditions
+  if (player.hull <= 0) {
+    addNotification("YOUR SHIP HAS BEEN DESTROYED! GAME OVER");
+    setTimeout(() => {
+      if (confirm("Game Over! Restart?")) {
+        resetGame();
+      }
+    }, 2000);
+    return;
+  }
+  
+  if (player.fuel <= 0 && !landed) {
+    addNotification("OUT OF FUEL! You drift helplessly in space...");
+  }
+
+  updateUI();
+}
+
+/* === UI === */
+function updateUI() {
+  document.getElementById('credits').textContent = Math.floor(player.credits);
+  document.getElementById('fuel').textContent = Math.floor(player.fuel);
+  document.getElementById('hull').textContent = Math.floor(player.hull);
+  document.getElementById('reputation').textContent = Math.floor(player.reputation);
+  document.getElementById('location').textContent = player.location;
+  document.getElementById('mission').textContent = player.mission;
+  document.getElementById('faction').textContent = player.faction;
+  document.getElementById('time').textContent = `Day ${player.day}`;
+  
+  const cargoDisplay = document.getElementById('cargo-display');
+  cargoDisplay.innerHTML = '';
+  
+  player.cargo.forEach((item, i) => {
+    if (item) {
+      const cargoItem = document.createElement('div');
+      cargoItem.className = 'cargo-item';
+      cargoItem.textContent = `${item.type}: ${item.amount}`;
+      cargoDisplay.appendChild(cargoItem);
+    }
+  });
+  
+  // Update speed display
+  const speed = Math.hypot(player.vel.x, player.vel.y);
+  document.getElementById('speed').textContent = speed.toFixed(1);
+  
+  // Update contract display
+  const contractDiv = document.getElementById('contract');
+  if (player.contract) {
+    contractDiv.textContent = `Contract: ${player.contract.amount} of ${player.contract.type} for ${player.contract.reward}c`;
+  } else {
+    contractDiv.textContent = 'Contract: none';
+  }
+}
+
+function openShop() {
+  document.getElementById('shop').style.display = 'block';
+  document.getElementById('planetName').textContent = landed.name;
+  
+  const m = document.getElementById('market');
+  m.innerHTML = '';
+  
+  for (let i = 0; i < 8; i++) {
+    const price = landed.prices[i];
+    const resourceType = ["Ore", "Gas", "Minerals", "Crystals", "Metals", "Fuel", "Tech", "Food"][i];
+    
+    const row = document.createElement('div');
+    row.className = 'market-item';
+    row.innerHTML = `
+      <div>${resourceType}: <strong>${Math.floor(price)}c</strong></div>
+      <div>
+        <button onclick="buy(${i})">Buy</button>
+        <button onclick="sell(${i})">Sell</button>
+      </div>
+    `;
+    m.appendChild(row);
+  }
+}
+
+function closeShop() {
+  document.getElementById('shop').style.display = 'none';
+}
+
+function buy(type) {
+  if (player.credits >= landed.prices[type]) {
+    player.credits -= landed.prices[type];
+    const slot = player.cargo.findIndex(c => !c);
+    if (slot !== -1) {
+      player.cargo[slot] = {type: ["Ore", "Gas", "Minerals", "Crystals", "Metals", "Fuel", "Tech", "Food"][type], amount: 1};
+    } else {
+      const idx = player.cargo.findIndex(c => c && c.type === ["Ore", "Gas", "Minerals", "Crystals", "Metals", "Fuel", "Tech", "Food"][type]);
+      if (idx !== -1) player.cargo[idx].amount++;
+      else {
+        addNotification("Cargo bay is full!");
+        return;
+      }
+    }
+    landed.prices[type] *= 1.05;
+    addNotification(`Bought 1 unit of ${["Ore", "Gas", "Minerals", "Crystals", "Metals", "Fuel", "Tech", "Food"][type]}`);
+    updateUI();
+  } else {
+    addNotification("Not enough credits!");
+  }
+}
+
+function sell(type) {
+  const idx = player.cargo.findIndex(c => c && c.type === ["Ore", "Gas", "Minerals", "Crystals", "Metals", "Fuel", "Tech", "Food"][type]);
+  if (idx !== -1) {
+    player.credits += landed.prices[type];
+    player.cargo[idx].amount--;
+    if (player.cargo[idx].amount === 0) player.cargo[idx] = null;
+    landed.prices[type] *= 0.95;
+    addNotification(`Sold 1 unit of ${["Ore", "Gas", "Minerals", "Crystals", "Metals", "Fuel", "Tech", "Food"][type]}`);
+    updateUI();
+  } else {
+    addNotification("You don't have that resource!");
+  }
+}
+
+function buyFuel() {
+  if (player.credits >= 10) {
+    player.credits -= 10;
+    player.fuel = Math.min(100, player.fuel + 20);
+    addNotification("Bought 20 units of fuel");
+    updateUI();
+  } else {
+    addNotification("Not enough credits!");
+  }
+}
+
+function upgradeCargo() {
+  if (player.credits >= 100 && player.maxCargo < 16) {
+    player.credits -= 100;
+    player.maxCargo += 2;
+    // Expand cargo array properly
+    const newCargo = Array(player.maxCargo).fill(null);
+    for (let i = 0; i < player.cargo.length && i < newCargo.length; i++) {
+      newCargo[i] = player.cargo[i];
+    }
+    player.cargo = newCargo;
+    addNotification("Upgraded cargo bay capacity");
+    updateUI();
+  } else if (player.maxCargo >= 16) {
+    addNotification("Cargo bay is already at maximum capacity!");
+  } else {
+    addNotification("Not enough credits!");
+  }
+}
+
+function upgradeThrust() {
+  if (player.credits >= 200) {
+    player.credits -= 200;
+    player.thrust += 0.5;
+    addNotification("Upgraded thrusters");
+    updateUI();
+  } else {
+    addNotification("Not enough credits!");
+  }
+}
+
+function repairHull() {
+  if (player.credits >= 50 && player.hull < 100) {
+    player.credits -= 50;
+    player.hull = Math.min(100, player.hull + 25);
+    addNotification("Repaired ship hull");
+    updateUI();
+  } else if (player.hull >= 100) {
+    addNotification("Hull is already at full integrity!");
+  } else {
+    addNotification("Not enough credits!");
+  }
+}
+
+function mineResources() {
+  if (player.fuel >= 5 && landed) {
+    player.fuel -= 5;
+    const resourceType = landed.resources;
+    const amount = Math.floor(rand(1, 3));
+    
+    const slot = player.cargo.findIndex(c => !c);
+    if (slot !== -1) {
+      player.cargo[slot] = {type: resourceType, amount: amount};
+    } else {
+      const idx = player.cargo.findIndex(c => c && c.type === resourceType);
+      if (idx !== -1) player.cargo[idx].amount += amount;
+      else {
+        addNotification("Cargo bay is full!");
+        return;
+      }
+    }
+    
+    addNotification(`Mined ${amount} units of ${resourceType}`);
+    updateUI();
+  } else if (!landed) {
+    addNotification("You must be landed to mine resources!");
+  } else {
+    addNotification("Not enough fuel to mine!");
+  }
+}
+
+function acceptMission() {
+  if (!player.contract) {
+    const type = Math.floor(rand(0, 8));
+    const amount = Math.floor(rand(2, 6));
+    const reward = Math.floor(amount * planets[0].prices[type] * 1.5);
+    player.contract = {
+      type: ["Ore", "Gas", "Minerals", "Crystals", "Metals", "Fuel", "Tech", "Food"][type],
+      amount: amount,
+      reward: reward
+    };
+    addNotification(`Accepted contract: Deliver ${amount} units of ${player.contract.type} for ${reward} credits`);
+    updateUI();
+  } else {
+    addNotification("You already have an active contract!");
+  }
+}
+
+function addNotification(message) {
+  const notifications = document.getElementById('notifications');
+  const notification = document.createElement('div');
+  notification.className = 'notification';
+  notification.textContent = message;
+  notifications.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.style.animation = 'fadeOut 0.5s';
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 500);
+  }, 3000);
+}
+
+function toggleGuide() {
+  guideOpen = !guideOpen;
+  document.getElementById('guide-panel').style.display = guideOpen ? 'flex' : 'none';
+  
+  // If we're opening the guide from the title screen, hide the title screen
+  if (guideOpen && document.getElementById('title-screen').style.display !== 'none') {
+    document.getElementById('title-screen').style.display = 'none';
+  }
+  
+  // If we're closing the guide and game hasn't started, show title screen
+  if (!guideOpen && !gameStarted) {
+    document.getElementById('title-screen').style.display = 'flex';
+  }
+}
+
+function triggerRandomEvent() {
+  const events = [
+    {
+      title: "Asteroid Field",
+      description: "You've encountered a dense asteroid field. Navigate carefully or risk hull damage.",
+      options: [
+        {text: "Navigate carefully (-5 fuel)", action: () => {
+          player.fuel = Math.max(0, player.fuel - 5);
+          addNotification("You carefully navigated the asteroid field.");
+        }},
+        {text: "Go around (+10 fuel)", action: () => {
+          player.fuel = Math.max(0, player.fuel - 10);
+          addNotification("You took a detour around the asteroid field.");
+        }},
+        {text: "Risk it (-10 hull)", action: () => {
+          player.hull = Math.max(0, player.hull - 10);
+          addNotification("You took damage navigating the field.");
+        }}
+      ]
+    },
+    {
+      title: "Alien Vessel",
+      description: "A mysterious alien vessel approaches. Their intentions are unclear.",
+      options: [
+        {text: "Attempt Communication", action: () => {
+          if (Math.random() > 0.5) {
+            const credits = Math.floor(rand(50, 150));
+            player.credits += credits;
+            addNotification(`The aliens are friendly! They give you ${credits} credits.`);
+          } else {
+            player.hull = Math.max(0, player.hull - 15);
+            addNotification("The aliens attack! Your ship takes damage.");
+          }
+        }},
+        {text: "Prepare for Combat", action: () => {
+          player.hull = Math.max(0, player.hull - 20);
+          addNotification("You prepare for battle but take damage in the process.");
+        }},
+        {text: "Flee", action: () => {
+          player.fuel = Math.max(0, player.fuel - 15);
+          addNotification("You escape but use a lot of fuel.");
+        }}
+      ]
+    },
+    {
+      title: "Derelict Ship",
+      description: "You discover a derelict ship floating in space. It might contain valuable resources.",
+      options: [
+        {text: "Board the ship", action: () => {
+          if (Math.random() > 0.3) {
+            const resource = ["Ore", "Gas", "Minerals", "Crystals", "Metals", "Fuel", "Tech", "Food"][Math.floor(rand(0, 8))];
+            const amount = Math.floor(rand(1, 4));
+            
+            const slot = player.cargo.findIndex(c => !c);
+            if (slot !== -1) {
+              player.cargo[slot] = {type: resource, amount: amount};
+              addNotification(`You found ${amount} units of ${resource} on the derelict ship.`);
+            } else {
+              addNotification("Your cargo bay is full!");
+            }
+          } else {
+            player.hull = Math.max(0, player.hull - 10);
+            addNotification("The ship was booby-trapped! You take hull damage.");
+          }
+        }},
+        {text: "Scan from a distance", action: () => {
+          addNotification("You scan the ship but find nothing of value.");
+        }},
+        {text: "Ignore it", action: () => {
+          addNotification("You leave the derelict ship behind.");
+        }}
+      ]
+    }
+  ];
+  
+  const event = events[Math.floor(rand(0, events.length))];
+  document.getElementById('event-title').textContent = event.title;
+  document.getElementById('event-description').textContent = event.description;
+  
+  const option1 = document.getElementById('event-option1');
+  const option2 = document.getElementById('event-option2');
+  const option3 = document.getElementById('event-option3');
+  
+  option1.textContent = event.options[0].text;
+  option1.onclick = () => {
+    event.options[0].action();
+    document.getElementById('event-popup').style.display = 'none';
+  };
+  
+  option2.textContent = event.options[1].text;
+  option2.onclick = () => {
+    event.options[1].action();
+    document.getElementById('event-popup').style.display = 'none';
+  };
+  
+  option3.textContent = event.options[2].text;
+  option3.onclick = () => {
+    event.options[2].action();
+    document.getElementById('event-popup').style.display = 'none';
+  };
+  
+  document.getElementById('event-popup').style.display = 'block';
+}
+
+function resetGame() {
+  // Reset player state
+  player = {
+    pos: {x: 0, y: 0},
+    vel: {x: 0, y: 0},
+    fuel: 100,
+    cargo: Array(8).fill(null),
+    credits: 1000,
+    thrust: 1,
+    maxCargo: 8,
+    contract: null,
+    hull: 100,
+    reputation: 0,
+    location: "Deep Space",
+    mission: "Explore the galaxy",
+    faction: "Independent",
+    day: 1
+  };
+  
+  // Reset game state
+  landed = null;
+  selected = null;
+  path = [];
+  particles = [];
+  justLanded = false;
+  
+  // Generate new game
+  generate();
+  updateUI();
+  
+  // Close any open panels
+  document.getElementById('shop').style.display = 'none';
+  document.getElementById('event-popup').style.display = 'none';
+  
+  addNotification("Game restarted! Good luck on your new journey.");
+}
+
+/* === INIT === */
+document.getElementById('start-button').addEventListener('click', () => {
+  document.getElementById('title-screen').style.display = 'none';
+  gameStarted = true;
+  load();
+  updateUI();
+  addNotification("Welcome to Orbital Traders! Click and drag to set your course.");
+});
+
+document.getElementById('guide-button').addEventListener('click', toggleGuide);
+document.getElementById('guide-close').addEventListener('click', toggleGuide);
+
+// Close event popup when clicking outside
+document.getElementById('event-popup').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('event-popup')) {
+    document.getElementById('event-popup').style.display = 'none';
+  }
+});
+
+/* === CONTRACTS === */
+function generateContract() {
+  if (!player.contract && Math.random() < 0.01) {
+    const type = Math.floor(rand(0, 8));
+    const amount = Math.floor(rand(1, 5));
+    const reward = Math.floor(amount * planets[0].prices[type] * 1.5);
+    player.contract = {
+      type: ["Ore", "Gas", "Minerals", "Crystals", "Metals", "Fuel", "Tech", "Food"][type],
+      amount: amount,
+      reward: reward
+    };
+    updateUI();
+  }
+}
+
+setInterval(generateContract, 5000);
+
+/* === LOOP === */
+load();
+setInterval(() => {
+  update();
+  draw();
+  save();
+}, 50);
+</script>
+</body>
+</html>

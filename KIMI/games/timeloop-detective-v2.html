@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Timeloop Detective: The Vault Heist</title>
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    body {
+        background: linear-gradient(135deg, #1a2a6c, #2c3e50);
+        color: #ecf0f1;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    
+    header {
+        background: rgba(0, 0, 0, 0.7);
+        padding: 12px 20px;
+        text-align: center;
+        border-bottom: 2px solid #3498db;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        flex-shrink: 0;
+    }
+    
+    h1 {
+        font-size: 1.8rem;
+        margin-bottom: 5px;
+        color: #3498db;
+        text-shadow: 0 0 10px rgba(52, 152, 219, 0.7);
+    }
+    
+    .subtitle {
+        font-size: 0.9rem;
+        color: #bdc3c7;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    
+    .game-container {
+        display: flex;
+        flex: 1;
+        padding: 15px;
+        gap: 15px;
+        max-height: calc(100vh - 140px);
+    }
+    
+    #map-container {
+        flex: 3;
+        background: rgba(30, 30, 40, 0.8);
+        border-radius: 10px;
+        padding: 12px;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    #map-container::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: 
+            radial-gradient(circle at 20% 30%, rgba(52, 152, 219, 0.1) 0%, transparent 40%),
+            radial-gradient(circle at 80% 70%, rgba(155, 89, 182, 0.1) 0%, transparent 40%);
+        pointer-events: none;
+    }
+    
+    #map-header {
+        padding: 8px 0;
+        text-align: center;
+        font-size: 1.2rem;
+        color: #3498db;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+    
+    #map {
+        flex: 1;
+        background: rgba(20, 25, 35, 0.9);
+        border-radius: 8px;
+        border: 1px solid #34495e;
+        min-height: 0;
+    }
+    
+    #notes {
+        flex: 2;
+        background: rgba(30, 30, 40, 0.8);
+        border-radius: 10px;
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+        overflow: hidden;
+    }
+    
+    .panel {
+        background: rgba(40, 45, 60, 0.7);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
+        border: 1px solid #34495e;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        flex-shrink: 0;
+    }
+    
+    .panel-scrollable {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+    }
+    
+    .panel h3 {
+        color: #3498db;
+        margin-bottom: 10px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #34495e;
+        font-size: 1.1rem;
+    }
+    
+    .clock {
+        font-size: 2rem;
+        text-align: center;
+        margin: 8px 0 15px;
+        font-weight: bold;
+        color: #2ecc71;
+        text-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
+        background: rgba(0, 0, 0, 0.3);
+        padding: 8px;
+        border-radius: 8px;
+        border: 1px solid #27ae60;
+    }
+    
+    .loop-counter {
+        text-align: center;
+        font-size: 1rem;
+        color: #f39c12;
+        margin-bottom: 12px;
+    }
+    
+    .loop-counter span {
+        font-weight: bold;
+        color: #e74c3c;
+    }
+    
+    .clue, .intervention {
+        padding: 8px 10px;
+        margin: 6px 0;
+        border-radius: 5px;
+        background: rgba(0, 0, 0, 0.2);
+        border-left: 3px solid #3498db;
+        transition: all 0.3s ease;
+        font-size: 0.9rem;
+    }
+    
+    .clue:hover, .intervention:hover {
+        background: rgba(52, 152, 219, 0.2);
+        transform: translateX(3px);
+    }
+    
+    .intervention {
+        border-left-color: #e74c3c;
+    }
+    
+    .intervention::before {
+        content: "⚠ ";
+        color: #f1c40f;
+    }
+    
+    button {
+        background: linear-gradient(to bottom, #3498db, #2980b9);
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        margin: 8px 0;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        width: 100%;
+        font-size: 0.95rem;
+    }
+    
+    button:hover {
+        background: linear-gradient(to bottom, #3ca0db, #2c8fd1);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3);
+    }
+    
+    button:active {
+        transform: translateY(1px);
+    }
+    
+    button:disabled {
+        background: #7f8c8d;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+    
+    #rewind {
+        background: linear-gradient(to bottom, #e74c3c, #c0392b);
+    }
+    
+    #rewind:hover {
+        background: linear-gradient(to bottom, #ff6b6b, #e74c3c);
+    }
+    
+    .schedule {
+        font-size: 0.85rem;
+        color: #bdc3c7;
+        padding: 5px 0;
+        border-bottom: 1px dashed #34495e;
+    }
+    
+    .schedule:last-child {
+        border-bottom: none;
+    }
+    
+    .schedule b {
+        color: #3498db;
+    }
+    
+    .node {
+        fill: #3498db;
+        stroke: #fff;
+        stroke-width: 2;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        filter: drop-shadow(0 0 5px rgba(52, 152, 219, 0.5));
+    }
+    
+    .node:hover {
+        fill: #2980b9;
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 10px rgba(52, 152, 219, 0.8));
+    }
+    
+    .node.current {
+        fill: #2ecc71;
+        stroke: #fff;
+        stroke-width: 3;
+        filter: drop-shadow(0 0 10px rgba(46, 204, 113, 0.8));
+    }
+    
+    .node-text {
+        fill: white;
+        font-size: 12px;
+        font-weight: bold;
+        text-anchor: middle;
+        pointer-events: none;
+        text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+    }
+    
+    .npc {
+        fill: #e74c3c;
+        stroke: #fff;
+        stroke-width: 2;
+        filter: drop-shadow(0 0 5px rgba(231, 76, 60, 0.5));
+    }
+    
+    .npc.guard {
+        fill: #3498db;
+    }
+    
+    .npc.manager {
+        fill: #9b59b6;
+    }
+    
+    .npc-text {
+        fill: white;
+        font-size: 10px;
+        font-weight: bold;
+        text-anchor: middle;
+        pointer-events: none;
+    }
+    
+    .action-indicator {
+        fill: #f1c40f;
+        opacity: 0.8;
+        animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+        0% { opacity: 0.5; }
+        50% { opacity: 1; }
+        100% { opacity: 0.5; }
+    }
+    
+    .status {
+        margin-top: 10px;
+        padding: 8px;
+        border-radius: 5px;
+        text-align: center;
+        font-weight: bold;
+        font-size: 0.9rem;
+    }
+    
+    .status.success {
+        background: rgba(46, 204, 113, 0.2);
+        color: #2ecc71;
+        border: 1px solid #27ae60;
+    }
+    
+    .status.failure {
+        background: rgba(231, 76, 60, 0.2);
+        color: #e74c3c;
+        border: 1px solid #c0392b;
+    }
+    
+    .status.warning {
+        background: rgba(241, 196, 15, 0.2);
+        color: #f1c40f;
+        border: 1px solid #f39c12;
+    }
+    
+    .intervention-form {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 10px;
+    }
+    
+    .form-row {
+        display: flex;
+        gap: 8px;
+    }
+    
+    select, input {
+        flex: 1;
+        padding: 8px;
+        border-radius: 5px;
+        border: 1px solid #34495e;
+        background: rgba(0, 0, 0, 0.3);
+        color: white;
+        font-size: 0.9rem;
+    }
+    
+    .instructions {
+        background: rgba(40, 45, 60, 0.7);
+        border-radius: 8px;
+        padding: 12px;
+        margin: 12px 15px 0;
+        font-size: 0.9rem;
+        line-height: 1.4;
+        border: 1px solid #34495e;
+        flex-shrink: 0;
+    }
+    
+    .instructions h3 {
+        color: #3498db;
+        margin-bottom: 8px;
+        font-size: 1.1rem;
+    }
+    
+    .instructions ul {
+        padding-left: 18px;
+        margin: 8px 0;
+    }
+    
+    .instructions li {
+        margin-bottom: 6px;
+    }
+    
+    .highlight {
+        color: #f1c40f;
+        font-weight: bold;
+    }
+    
+    .key-hint {
+        display: inline-block;
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid #34495e;
+        padding: 2px 5px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.85rem;
+    }
+    
+    footer {
+        text-align: center;
+        padding: 10px;
+        color: #7f8c8d;
+        font-size: 0.8rem;
+        background: rgba(0, 0, 0, 0.7);
+        border-top: 1px solid #34495e;
+        flex-shrink: 0;
+    }
+    
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: #3498db;
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: #2980b9;
+    }
+</style>
+</head>
+<body>
+    <header>
+        <h1>Timeloop Detective: The Vault Heist</h1>
+        <p class="subtitle">Investigate the Meridian Bank heist. Each loop reveals new clues to prevent the theft of $50 million.</p>
+    </header>
+    
+    <div class="instructions">
+        <h3>How to Play</h3>
+        <ul>
+            <li>Click locations to observe NPC activities</li>
+            <li>Collect clues to understand the heist plan</li>
+            <li>Intervene to change NPC behaviors and prevent the crime</li>
+            <li>Press <span class="key-hint">L</span> to lock vault at 6:00 PM</li>
+            <li>Press <span class="key-hint">G</span> to guard vault at 6:00 PM</li>
+            <li>Press <span class="key-hint">R</span> to rewind the day manually</li>
+        </ul>
+    </div>
+    
+    <div class="game-container">
+        <div id="map-container">
+            <div id="map-header">Bank Layout</div>
+            <svg id="map"></svg>
+        </div>
+        
+        <aside id="notes">
+            <div class="panel">
+                <div class="clock" id="clock">08:00</div>
+                <div class="loop-counter">Loop: <span id="loop-count">1</span></div>
+                <button id="rewind">Rewind Day (auto at 8:00 PM)</button>
+            </div>
+            
+            <div class="panel panel-scrollable">
+                <h3>Clues</h3>
+                <div id="clueList"></div>
+            </div>
+            
+            <div class="panel panel-scrollable">
+                <h3>Interventions</h3>
+                <div id="interList"></div>
+            </div>
+            
+            <div class="panel panel-scrollable">
+                <h3>NPC Schedules</h3>
+                <div id="status"></div>
+                
+                <div class="intervention-form">
+                    <h3>Manual Intervention</h3>
+                    <div class="form-row">
+                        <select id="npc-select">
+                            <option value="">Select NPC</option>
+                            <option value="Guard">Guard</option>
+                            <option value="Thief">Thief</option>
+                            <option value="Manager">Manager</option>
+                        </select>
+                        <select id="time-select">
+                            <option value="">Select Time</option>
+                            <option value="0">08:00</option>
+                            <option value="180">11:00</option>
+                            <option value="240">12:00</option>
+                            <option value="360">02:00</option>
+                            <option value="480">04:00</option>
+                            <option value="540">05:00</option>
+                            <option value="600">06:00</option>
+                            <option value="720">08:00</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <select id="location-select">
+                            <option value="">Select Location</option>
+                            <option value="lobby">Lobby</option>
+                            <option value="vault">Vault</option>
+                            <option value="cafe">Cafe</option>
+                            <option value="roof">Roof</option>
+                            <option value="garage">Garage</option>
+                        </select>
+                        <input type="text" id="action-input" placeholder="New action">
+                    </div>
+                    <button id="apply-intervention">Apply Intervention</button>
+                </div>
+            </div>
+            
+            <div id="game-status" class="status warning">Collect clues to understand the heist plan</div>
+        </aside>
+    </div>
+    
+    <footer>
+        <p>Timeloop Detective: The Vault Heist | Use your detective skills to prevent the ultimate crime</p>
+    </footer>
+
+<script>
+/* ---------- Data ---------- */
+const locations = [
+    {id:'lobby', name:'Lobby', x:150, y:200},
+    {id:'vault', name:'Vault', x:350, y:120},
+    {id:'cafe', name:'Cafe', x:500, y:250},
+    {id:'roof', name:'Roof', x:400, y:50},
+    {id:'garage', name:'Garage', x:250, y:350}
+];
+
+const npcs = [
+    {name:'Guard', timeline:[
+        {time:0, loc:'lobby', action:'patrol'},
+        {time:180, loc:'vault', action:'check lock'},
+        {time:360, loc:'cafe', action:'coffee break'},
+        {time:540, loc:'vault', action:'second check'},
+        {time:720, loc:'lobby', action:'end shift'}
+    ]},
+    {name:'Thief', timeline:[
+        {time:0, loc:'garage', action:'wait'},
+        {time:240, loc:'cafe', action:'meet insider'},
+        {time:480, loc:'roof', action:'rappel gear'},
+        {time:600, loc:'vault', action:'crack safe'},
+        {time:720, loc:'garage', action:'escape'}
+    ]},
+    {name:'Manager', timeline:[
+        {time:0, loc:'lobby', action:'open office'},
+        {time:360, loc:'vault', action:'inspect logs'},
+        {time:480, loc:'cafe', action:'lunch'},
+        {time:600, loc:'vault', action:'sign off'},
+        {time:720, loc:'lobby', action:'leave'}
+    ]}
+];
+
+let clues = [];
+let changes = [];
+let time = 0; // minutes since 08:00
+let loopCount = 1;
+const DAY_END = 12*60; // 20:00
+
+// Extended clue system
+const clueDatabase = [
+    "Thief met with an insider at the cafe at 12:00 PM",
+    "Guard takes a coffee break at 2:00 PM",
+    "Manager inspects vault logs at 2:00 PM",
+    "Thief has rappel gear on the roof at 4:00 PM",
+    "Vault cracking begins at 6:00 PM",
+    "Thief escapes through the garage at 8:00 PM",
+    "Guard checks the vault twice - at 11:00 AM and 5:00 PM",
+    "Manager signs off on vault security at 6:00 PM"
+];
+
+// Story progression
+const storyPhases = [
+    {loop: 1, hint: "Investigate the cafe to find out about the insider meeting"},
+    {loop: 2, hint: "The thief is planning to access the vault from the roof"},
+    {loop: 3, hint: "You need to lock the vault before 6:00 PM"},
+    {loop: 4, hint: "The guard's coffee break creates a security gap"},
+    {loop: 5, hint: "The manager has access to vault security protocols"}
+];
+
+/* ---------- Engine ---------- */
+function advance(mins) {
+    time += mins;
+    if (time >= DAY_END) endDay();
+    renderClock();
+    observe();
+    renderNPCs();
+    updateStatus();
+}
+
+function observe() {
+    npcs.forEach(npc=>{
+        const ev = npc.timeline.find(e=>e.time===time);
+        if (!ev) return;
+        const loc = locations.find(l=>l.id===ev.loc);
+        if (loc.id === currentLoc) {
+            const desc = `${npc.name} at ${loc.name} doing "${ev.action}"`;
+            if (!clues.find(c=>c.desc===desc)) {
+                clues.push({desc, time: new Date()});
+                notebookUI();
+                
+                // Add related clues
+                const relatedClue = clueDatabase.find(clue => 
+                    clue.includes(npc.name) && clue.includes(loc.name) && clue.includes(ev.action)
+                );
+                if (relatedClue && !clues.find(c=>c.desc===relatedClue)) {
+                    clues.push({desc: relatedClue, time: new Date()});
+                }
+            }
+        }
+    });
+}
+
+function endDay() {
+    loopCount++;
+    applyChanges();
+    time = 0;
+    renderClock();
+    notebookUI();
+    renderNPCs();
+    updateStatus();
+    
+    // auto rewind
+    setTimeout(()=>{advance(0);},1000);
+}
+
+function applyChanges() {
+    changes.forEach(chg=>{
+        const npc = npcs.find(n=>n.name===chg.npc);
+        if (!npc) return;
+        const ev = npc.timeline.find(e=>e.time===chg.time && e.loc===chg.loc);
+        if (ev) {
+            ev.action = chg.newAction;
+            ev.loc = chg.newLoc || ev.loc;
+        }
+    });
+}
+
+function checkSuccess() {
+    // Heist fails if thief reaches vault after 10:00 and vault is locked
+    const thiefVault = npcs.find(n=>n.name==='Thief').timeline.find(e=>e.loc==='vault' && e.time>=600);
+    const vaultLocked = npcs.find(n=>n.name==='Guard').timeline.some(e=>e.loc==='vault' && e.time>=600 && e.action==='lock vault');
+    return thiefVault && vaultLocked;
+}
+
+function checkFailure() {
+    // Heist succeeds if thief cracks the safe
+    const thiefCracksSafe = npcs.find(n=>n.name==='Thief').timeline.some(e=>e.loc==='vault' && e.time>=600 && e.action==='crack safe');
+    return thiefCracksSafe && time >= 600;
+}
+
+/* ---------- UI ---------- */
+let currentLoc = null;
+
+function renderMap() {
+    const svg = document.getElementById('map');
+    svg.innerHTML = '';
+    
+    // Draw connections between locations
+    const connections = [
+        {from: 'lobby', to: 'vault'},
+        {from: 'lobby', to: 'cafe'},
+        {from: 'vault', to: 'roof'},
+        {from: 'cafe', to: 'garage'},
+        {from: 'vault', to: 'cafe'},
+        {from: 'lobby', to: 'garage'}
+    ];
+    
+    connections.forEach(conn => {
+        const fromLoc = locations.find(l => l.id === conn.from);
+        const toLoc = locations.find(l => l.id === conn.to);
+        
+        if (fromLoc && toLoc) {
+            const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+            line.setAttribute('x1', fromLoc.x);
+            line.setAttribute('y1', fromLoc.y);
+            line.setAttribute('x2', toLoc.x);
+            line.setAttribute('y2', toLoc.y);
+            line.setAttribute('stroke', '#34495e');
+            line.setAttribute('stroke-width', 2);
+            svg.appendChild(line);
+        }
+    });
+    
+    // Draw locations
+    locations.forEach(l=>{
+        const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        c.setAttribute('cx', l.x);
+        c.setAttribute('cy', l.y);
+        c.setAttribute('r', 25);
+        c.setAttribute('class', 'node' + (currentLoc === l.id ? ' current' : ''));
+        c.addEventListener('click',()=>{
+            currentLoc = l.id;
+            observe();
+        });
+        svg.appendChild(c);
+        
+        const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+        txt.setAttribute('x', l.x);
+        txt.setAttribute('y', l.y + 5);
+        txt.setAttribute('class', 'node-text');
+        txt.textContent = l.name;
+        svg.appendChild(txt);
+    });
+}
+
+function renderNPCs() {
+    const svg = document.getElementById('map');
+    
+    // Remove existing NPCs
+    document.querySelectorAll('.npc, .npc-text, .action-indicator').forEach(el => el.remove());
+    
+    npcs.forEach(npc => {
+        const ev = npc.timeline.find(e => e.time === time);
+        if (!ev) return;
+        
+        const loc = locations.find(l => l.id === ev.loc);
+        if (!loc) return;
+        
+        // Draw NPC
+        const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        circle.setAttribute('cx', loc.x);
+        circle.setAttribute('cy', loc.y - 40);
+        circle.setAttribute('r', 15);
+        circle.setAttribute('class', `npc ${npc.name.toLowerCase()}`);
+        svg.appendChild(circle);
+        
+        // Draw NPC name
+        const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+        txt.setAttribute('x', loc.x);
+        txt.setAttribute('y', loc.y - 40 + 5);
+        txt.setAttribute('class', 'npc-text');
+        txt.textContent = npc.name.charAt(0);
+        svg.appendChild(txt);
+        
+        // Draw action indicator if at vault
+        if (loc.id === 'vault' && time >= 600) {
+            const indicator = document.createElementNS('http://www.w3.org/2000/svg','circle');
+            indicator.setAttribute('cx', loc.x + 30);
+            indicator.setAttribute('cy', loc.y - 40);
+            indicator.setAttribute('r', 8);
+            indicator.setAttribute('class', 'action-indicator');
+            svg.appendChild(indicator);
+        }
+    });
+}
+
+function renderClock() {
+    const h = 8 + Math.floor(time/60);
+    const m = (time%60).toString().padStart(2,'0');
+    document.getElementById('clock').textContent = `${h}:${m}`;
+    document.getElementById('loop-count').textContent = loopCount;
+}
+
+function notebookUI() {
+    const cl = document.getElementById('clueList');
+    cl.innerHTML = '';
+    clues.forEach(c=>{
+        const div = document.createElement('div');
+        div.className='clue';
+        div.textContent = c.desc;
+        cl.appendChild(div);
+    });
+    
+    const il = document.getElementById('interList');
+    il.innerHTML = '';
+    changes.forEach(chg=>{
+        const div = document.createElement('div');
+        div.className='intervention';
+        div.textContent = `Loop ${chg.loop}: Changed ${chg.npc} at ${formatTime(chg.time)} to "${chg.newAction}"`;
+        il.appendChild(div);
+    });
+    
+    // Show schedules
+    const status = document.getElementById('status');
+    status.innerHTML = '';
+    npcs.forEach(npc=>{
+        const s = document.createElement('div');
+        s.className='schedule';
+        s.innerHTML = `<b>${npc.name}</b>: ` +
+            npc.timeline.map(e=>`${formatTime(e.time)}@${e.loc}(${e.action})`).join(', ');
+        status.appendChild(s);
+    });
+    
+    // Check win/lose conditions
+    if (checkSuccess()) {
+        document.getElementById('game-status').className = 'status success';
+        document.getElementById('game-status').textContent = 'SUCCESS: Heist prevented! The vault is secure.';
+        setTimeout(() => {
+            alert(`Heist prevented! You won in ${loopCount} loops.\n\nYour detective skills have saved the bank from a $50 million loss.`);
+            location.reload();
+        }, 1000);
+    } else if (checkFailure()) {
+        document.getElementById('game-status').className = 'status failure';
+        document.getElementById('game-status').textContent = 'FAILURE: The thief cracked the safe!';
+        setTimeout(() => {
+            alert(`The heist succeeded! The thief cracked the safe at ${formatTime(600)}.\n\nTry again to prevent the crime.`);
+            endDay();
+        }, 1000);
+    } else {
+        // Show story hints
+        const currentPhase = storyPhases.find(phase => loopCount >= phase.loop);
+        if (currentPhase) {
+            document.getElementById('game-status').className = 'status warning';
+            document.getElementById('game-status').textContent = `HINT: ${currentPhase.hint}`;
+        }
+    }
+}
+
+function updateStatus() {
+    // Update status based on current time and clues
+    const statusElement = document.getElementById('game-status');
+    
+    if (time < 300) {
+        statusElement.className = 'status';
+        statusElement.textContent = 'Morning routine. Gather initial clues.';
+    } else if (time < 600) {
+        statusElement.className = 'status warning';
+        statusElement.textContent = 'Critical period: Prevent the heist before 6:00 PM!';
+    } else if (time < 720) {
+        statusElement.className = 'status';
+        statusElement.textContent = 'Evening activities. Monitor escape routes.';
+    }
+}
+
+function formatTime(minutes) {
+    const h = 8 + Math.floor(minutes/60);
+    const m = (minutes%60).toString().padStart(2,'0');
+    return `${h}:${m}`;
+}
+
+/* ---------- Interventions ---------- */
+function addIntervention(npcName,time,loc,newAction,newLoc) {
+    changes.push({loop:loopCount,npc:npcName,time,loc,newAction,newLoc});
+    notebookUI();
+}
+
+/* ---------- Buttons ---------- */
+document.getElementById('rewind').addEventListener('click',endDay);
+
+document.getElementById('apply-intervention').addEventListener('click', () => {
+    const npc = document.getElementById('npc-select').value;
+    const time = parseInt(document.getElementById('time-select').value);
+    const loc = document.getElementById('location-select').value;
+    const action = document.getElementById('action-input').value;
+    
+    if (npc && !isNaN(time) && loc && action) {
+        addIntervention(npc, time, loc, action, loc);
+        // Reset form
+        document.getElementById('npc-select').value = '';
+        document.getElementById('time-select').value = '';
+        document.getElementById('location-select').value = '';
+        document.getElementById('action-input').value = '';
+    } else {
+        alert('Please fill all fields for intervention');
+    }
+});
+
+/* ---------- Keyboard Controls ---------- */
+window.addEventListener('keydown',e=>{
+    // Press L to lock vault at 10:00
+    if (e.key==='l' || e.key==='L') {
+        addIntervention('Guard',600,'vault','lock vault');
+    }
+    // Press G to guard vault at 10:00
+    if (e.key==='g' || e.key==='G') {
+        addIntervention('Guard',600,'vault','guard vault');
+    }
+    // Press R to rewind
+    if (e.key==='r' || e.key==='R') {
+        endDay();
+    }
+});
+
+/* ---------- Init ---------- */
+renderMap();
+renderClock();
+notebookUI();
+renderNPCs();
+
+/* ---------- Time ticker ---------- */
+setInterval(()=>{advance(30);},1000);
+
+// Add initial clues
+setTimeout(() => {
+    clues.push({desc: "A $50 million heist is planned for today", time: new Date()});
+    clues.push({desc: "The thief has inside knowledge of bank security", time: new Date()});
+    notebookUI();
+}, 500);
+</script>
+</body>
+</html>

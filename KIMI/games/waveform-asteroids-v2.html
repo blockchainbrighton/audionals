@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Waveform Asteroids: Resonance Drift - DEBUG</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Courier New', monospace;color:#0ff}
+body{background:#000;overflow:hidden}
+canvas{display:block}
+#ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
+#ui>*{pointer-events:auto}
+#title,#gameOver,#pause,#options,#tutorial,#winScreen{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;background:#001122cc;padding:2rem;border:1px solid #0ff;border-radius:1rem;display:none}
+button{background:#003344;border:1px solid #0ff;padding:.6rem 1.2rem;margin:.5rem;border-radius:.5rem;font-size:1rem;cursor:pointer;color:#0ff}
+button:hover{background:#005577}
+label{display:block;margin:.5rem}
+input[type=range]{width:120px;vertical-align:middle}
+#hud{position:absolute;top:.5rem;left:.5rem;font-size:1.2rem}
+#hud span{margin-right:1rem}
+#driveBarContainer{position:absolute;top:1rem;right:1rem;width:200px;height:20px;background:#001122;border:1px solid #0ff;border-radius:3px}
+#driveBar{height:100%;width:0%;background:#0ff;transition:width 0.3s}
+#powerUps{position:absolute;top:40px;right:1rem;font-size:1rem;text-align:right}
+#narrative{position:absolute;bottom:1rem;left:50%;transform:translateX(-50%);background:#001122cc;padding:1rem;border:1px solid #0ff;border-radius:0.5rem;max-width:80%;display:none}
+#virtualControls{display:none;position:absolute;bottom:20px;left:20px}
+.joystick-base{width:80px;height:80px;background:rgba(0,100,150,0.3);border-radius:50%;border:2px solid #0ff}
+.joystick-nub{position:absolute;top:20px;left:20px;width:40px;height:40px;background:#0ff;border-radius:50%}
+.action-button{position:absolute;bottom:20px;right:20px;width:60px;height:60px;background:rgba(0,100,150,0.3);border-radius:50%;border:2px solid #0ff;color:#0ff;font-size:12px}
+.debug-log { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #0f0; font-size: 10px; padding: 5px; max-height: 100px; overflow-y: auto; z-index: 100; }
+@media(max-width:600px){
+  #hud{font-size:1rem}
+  #driveBarContainer{width:150px;top:0.5rem;right:0.5rem}
+}
+</style>
+</head>
+<body>
+<div class="debug-log" id="debugLog"></div>
+<canvas id="game"></canvas>
+<div id="ui">
+  <div id="title" style="display:block;"> <!-- Ensure title is visible -->
+    <h1>WAVEFORM ASTEROIDS</h1>
+    <h2>RESONANCE DRIFT</h2>
+    <p>Collect resonance samples to charge your Harmonic Drive</p>
+    <button id="startBtn">ENTER DRIFT</button>
+    <button id="optionsBtnTitle">SYSTEMS</button>
+  </div>
+  <div id="tutorial">
+    <h2>DRIFT PROTOCOLS</h2>
+    <p>Arrow keys / WASD: Thrust & Turn<br/>Space: Fire Resonance Cannon<br/>Destroy asteroids to release samples!<br/>Collect samples to charge your escape drive!</p>
+    <button id="closeTutorialBtn">ACKNOWLEDGED</button>
+  </div>
+  <div id="hud" style="display:none">
+    <span>SCORE <span id="score">0</span></span>
+    <span>LEVEL <span id="level">1</span></span>
+    <span>LIVES <span id="lives">3</span></span>
+    <span>ENERGY <span id="energy">0</span></span>
+  </div>
+  <div id="driveBarContainer" style="display:none">
+    <div id="driveBar"></div>
+  </div>
+  <div id="powerUps" style="display:none"></div>
+  <div id="narrative"></div>
+  <div id="pause">
+    <h2>DRIFT SUSPENDED</h2>
+    <button id="resumeBtn">RESUME</button>
+    <button id="optionsBtnPause">SYSTEMS</button>
+    <button id="restartBtn">RESTART</button>
+  </div>
+  <div id="gameOver">
+    <h2>RESONANCE LOST</h2>
+    <p>Final Score: <span id="finalScore">0</span></p>
+    <p>The Drift consumed your vessel...</p>
+    <button id="playAgainBtn">TRY AGAIN</button>
+  </div>
+  <div id="winScreen">
+    <h2>RESONANCE MASTERED</h2>
+    <p>Score: <span id="winScore">0</span></p>
+    <p>You've harnessed the Drift's energy and escaped!</p>
+    <button id="playAgainWinBtn">ENTER DRIFT AGAIN</button>
+  </div>
+  <div id="options">
+    <h2>SYSTEMS CALIBRATION</h2>
+    <label>Master <input type="range" id="volMaster" min="-30" max="0" step="1" value="-6"/></label>
+    <label>SFX   <input type="range" id="volSFX"   min="-30" max="0" step="1" value="-12"/></label>
+    <label>Music <input type="range" id="volMusic" min="-30" max="0" step="1" value="-18"/></label>
+    <button id="closeOptionsBtn">CLOSE</button>
+  </div>
+  <div id="virtualControls">
+    <div class="joystick-base">
+      <div class="joystick-nub" id="joystick"></div>
+    </div>
+    <button class="action-button" id="fireButton">FIRE</button>
+  </div>
+</div>
+<script>
+/* ----------------- DEBUG LOGGING ----------------- */
+function log(msg) {
+    const logElement = document.getElementById('debugLog');
+    if (logElement) {
+        logElement.innerHTML += `[${new Date().toISOString().substr(11, 12)}] ${msg}<br>`;
+        logElement.scrollTop = logElement.scrollHeight; // Auto-scroll to bottom
+        console.log(`[DEBUG] ${msg}`); // Also log to console
+    }
+}
+
+log("Script started");
+
+/* ----------------- CONFIG ----------------- */
+const WIDTH = window.innerWidth, HEIGHT = window.innerHeight;
+log(`Screen size: ${WIDTH}x${HEIGHT}`);
+const SHIP_SIZE = 15, BULLET_SPEED = 500, MAX_AST_SPEED = 80, MAX_BULLETS = 5;
+const HARMONIC_DRIVE_GOAL = 100;
+const SAMPLE_SPAWN_CHANCE = 0.3;
+const COLORS = { 
+  ship: '#0ff', 
+  bullet: '#ff0', 
+  ast: ['#f66','#6f6','#66f'],
+  sample: '#f0f'
+};
+Tone.Transport.bpm.value = 120;
+log("Configuration loaded");
+
+/* ----------------- AUDIO ----------------- */
+try {
+    const masterVol = new Tone.Volume(-6).toDestination();
+    const sfxVol = new Tone.Volume(-12).connect(masterVol);
+    const musicVol = new Tone.Volume(-18).connect(masterVol);
+    log("Tone.js volumes initialized");
+
+    function makeSynth(type='sine', vol=sfxVol){
+      const osc = new Tone.Oscillator({type, frequency:440}).connect(vol);
+      const env = new Tone.AmplitudeEnvelope({attack:0.01, decay:0.1, sustain:0, release:0.2}).connect(vol);
+      osc.connect(env);
+      return {osc, env};
+    }
+
+    const shot = makeSynth('square');
+    const thrust = makeSynth('sawtooth');
+    const explosion = makeSynth('triangle');
+    const sampleCollect = makeSynth('sine');
+    sampleCollect.osc.frequency.value = 880;
+    const powerUpSound = makeSynth('triangle');
+    powerUpSound.osc.frequency.value = 440;
+
+    const sampleSynth = new Tone.PolySynth(Tone.Synth).connect(musicVol);
+    const granularPad = new Tone.Player().connect(musicVol);
+    granularPad.loop = true;
+    log("Tone.js synths initialized");
+
+    // Ambient music
+    const ambientSynth = new Tone.FMSynth({
+      harmonicity: 3,
+      modulationIndex: 10,
+      detune: 0,
+      oscillator: { type: "sine" },
+      envelope: { attack: 0.01, decay: 0.01, sustain: 0.1, release: 0.5 },
+      modulation: { type: "square" },
+      modulationEnvelope: { attack: 0.5, decay: 0, sustain: 1, release: 0.5 }
+    }).connect(musicVol);
+    ambientSynth.volume.value = -20;
+
+    // Create a simple evolving ambient pattern
+    const ambientPart = new Tone.Part(((time, note) => {
+      ambientSynth.triggerAttackRelease(note, "2n", time);
+    }), [
+      ["C2", "0:0"],
+      ["G2", "0:2"],
+      ["A#2", "0:4"],
+      ["G2", "1:0"],
+      ["F2", "1:2"],
+      ["D#2", "1:4"],
+      ["C2", "2:0"],
+      ["G2", "2:2"],
+      ["F2", "2:4"],
+      ["D#2", "3:0"]
+    ]).start(0);
+    ambientPart.loop = true;
+    log("Tone.js ambient music initialized");
+} catch (e) {
+    log(`ERROR initializing Tone.js: ${e.message}`);
+}
+
+/* ----------------- GAME STATE ----------------- */
+let ship, bullets, asteroids, samples, particles, score, lives, level, resonanceEnergy, harmonicDriveCharge, activePowerUps, running, paused;
+let keys={}, touchStart=null;
+let joystickDelta = {x: 0, y: 0};
+let isTouchingJoystick = false;
+log("Game state variables declared");
+
+/* ----------------- THREE.JS SETUP ----------------- */
+try {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000011); // Add background
+    log("Three.js scene created");
+
+    const camera = new THREE.PerspectiveCamera(60, WIDTH/HEIGHT, 0.1, 1000);
+    log("Three.js camera created");
+
+    const renderer = new THREE.WebGLRenderer({canvas: document.getElementById('game'), alpha:true});
+    renderer.setSize(WIDTH, HEIGHT);
+    log("Three.js renderer created and sized");
+
+    camera.position.z = 100;
+    log("Camera positioned");
+
+    /* Lighting */
+    const ambientLight = new THREE.AmbientLight(0x222244); // Add ambient light
+    scene.add(ambientLight);
+    const light = new THREE.DirectionalLight('#ffffff',1);
+    light.position.set(0,0,1);
+    scene.add(light);
+    log("Three.js lighting added");
+
+    // Add stars
+    const starGeometry = new THREE.BufferGeometry();
+    const starVertices = [];
+    for (let i = 0; i < 1000; i++) {
+      const x = THREE.MathUtils.randFloatSpread(2000);
+      const y = THREE.MathUtils.randFloatSpread(2000);
+      const z = THREE.MathUtils.randFloatSpread(2000);
+      starVertices.push(x, y, z);
+    }
+    starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+    const starMaterial = new THREE.PointsMaterial({color: 0x88ccff, size: 1});
+    const stars = new THREE.Points(starGeometry, starMaterial);
+    scene.add(stars);
+    log("Three.js stars added");
+} catch (e) {
+    log(`ERROR initializing Three.js: ${e.message}`);
+}
+
+/* ----------------- HELPERS ----------------- */
+const rand = (a,b)=>Math.random()*(b-a)+a;
+const wrap = (v,min,max)=>v<min?max:v>max?min:v;
+const dist = (a,b)=>Math.hypot(a.x-b.x, a.y-b.y);
+log("Helper functions defined");
+
+/* ----------------- CLASSES ----------------- */
+class Ship {
+  constructor(){
+    log("Creating Ship instance");
+    this.pos={x:0,y:0};
+    this.vel={x:0,y:0};
+    this.angle=0;
+    this.thrusting=false;
+    this.geom = new THREE.BufferGeometry();
+    const verts = new Float32Array([0,12,-10,-10,10,-10]);
+    this.geom.setAttribute('position', new THREE.BufferAttribute(verts,2));
+    this.mat = new THREE.LineBasicMaterial({color:COLORS.ship});
+    this.mesh = new THREE.LineLoop(this.geom, this.mat);
+    scene.add(this.mesh);
+    log("Ship mesh added to scene");
+  }
+  update(dt){
+    // Keyboard controls
+    if(keys.ArrowLeft || keys.KeyA) this.angle -= 5*dt;
+    if(keys.ArrowRight || keys.KeyD) this.angle += 5*dt;
+    
+    // Touch controls
+    if (Math.abs(joystickDelta.x) > 10) {
+      this.angle += (joystickDelta.x / 50) * dt * 5;
+    }
+    
+    this.thrusting = keys.ArrowUp || keys.KeyW || (Math.abs(joystickDelta.y) > 10 && joystickDelta.y < 0);
+    
+    if(this.thrusting){
+      const thrustPower = 200;
+      const ax = Math.cos(this.angle-90*Math.PI/180)*thrustPower;
+      const ay = Math.sin(this.angle-90*Math.PI/180)*thrustPower;
+      this.vel.x += ax*dt;
+      this.vel.y += ay*dt;
+      thrust.osc.frequency.rampTo(80,0.1);
+      thrust.env.triggerAttackRelease('8n');
+    }else{
+      thrust.env.triggerRelease();
+    }
+    
+    this.vel.x *= 0.99;
+    this.vel.y *= 0.99;
+    this.pos.x += this.vel.x*dt;
+    this.pos.y += this.vel.y*dt;
+    this.pos.x = wrap(this.pos.x,-WIDTH/2,WIDTH/2);
+    this.pos.y = wrap(this.pos.y,-HEIGHT/2,HEIGHT/2);
+    this.mesh.position.set(this.pos.x, this.pos.y, 0);
+    this.mesh.rotation.z = this.angle * Math.PI/180;
+  }
+}
+
+class Bullet {
+  constructor(x,y,angle){
+    log("Creating Bullet instance");
+    this.pos={x,y};
+    this.vel={
+      x:Math.cos(angle*Math.PI/180)*BULLET_SPEED,
+      y:Math.sin(angle*Math.PI/180)*BULLET_SPEED
+    };
+    this.life=1.5;
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0,0,0,0,0,0]),3));
+    this.mesh=new THREE.Points(g,new THREE.PointsMaterial({color:COLORS.bullet,size:4}));
+    scene.add(this.mesh);
+    log("Bullet mesh added to scene");
+  }
+  update(dt){
+    this.pos.x += this.vel.x*dt;
+    this.pos.y += this.vel.y*dt;
+    this.life -= dt;
+    this.mesh.position.set(this.pos.x, this.pos.y, 0);
+    if(Math.abs(this.pos.x)>WIDTH/2 || Math.abs(this.pos.y)>HEIGHT/2 || this.life<=0){
+      scene.remove(this.mesh);
+      return false;
+    }
+    return true;
+  }
+}
+
+class Asteroid {
+  constructor(x,y,size=3){
+    log(`Creating Asteroid instance (size: ${size})`);
+    this.pos={x,y};
+    this.size=size;
+    this.vel={x:rand(-MAX_AST_SPEED,MAX_AST_SPEED),y:rand(-MAX_AST_SPEED,MAX_AST_SPEED)};
+    this.angle=rand(0,360);
+    this.rotSpeed=rand(-60,60);
+    this.geom=new THREE.SphereGeometry(size*6,8,6);
+    this.mat=new THREE.MeshStandardMaterial({color:COLORS.ast[size-1],wireframe:true});
+    this.mesh=new THREE.Mesh(this.geom,this.mat);
+    scene.add(this.mesh);
+    log("Asteroid mesh added to scene");
+    this.generateWaveform();
+  }
+  generateWaveform(){
+    const len = 256;
+    const data = new Float32Array(len);
+    for(let i=0;i<len;i++) data[i] = (Math.random()*2-1)*0.3;
+    this.buffer = new Tone.ToneAudioBuffer();
+    this.buffer.fromArray(data);
+    log("Asteroid waveform generated");
+  }
+  update(dt){
+    this.pos.x += this.vel.x*dt;
+    this.pos.y += this.vel.y*dt;
+    this.angle += this.rotSpeed*dt;
+    this.pos.x = wrap(this.pos.x,-WIDTH/2,WIDTH/2);
+    this.pos.y = wrap(this.pos.y,-HEIGHT/2,HEIGHT/2);
+    this.mesh.position.set(this.pos.x, this.pos.y, 0);
+    this.mesh.rotation.y = this.angle*Math.PI/180;
+  }
+  split(){
+    if(this.size>1){
+      log(`Splitting asteroid into ${this.size-1} pieces`);
+      return [
+        new Asteroid(this.pos.x,this.pos.y,this.size-1),
+        new Asteroid(this.pos.x,this.pos.y,this.size-1)
+      ];
+    }
+    return [];
+  }
+  destroy(){
+    log("Destroying asteroid");
+    scene.remove(this.mesh);
+    granularPad.buffer = this.buffer;
+    granularPad.start();
+    Tone.Transport.scheduleOnce(()=>granularPad.stop(),'+2');
+  }
+}
+
+class Sample {
+  constructor(x, y) {
+    log("Creating Sample instance");
+    this.pos = { x, y };
+    this.geom = new THREE.IcosahedronGeometry(5, 1);
+    this.mat = new THREE.MeshStandardMaterial({ 
+      color: COLORS.sample, 
+      emissive: '#800080',
+      wireframe: false 
+    });
+    this.mesh = new THREE.Mesh(this.geom, this.mat);
+    this.angle = 0;
+    scene.add(this.mesh);
+    log("Sample mesh added to scene");
+  }
+  update(dt) {
+    this.angle += 2 * dt;
+    this.mesh.rotation.y = this.angle;
+    this.mesh.rotation.x = this.angle * 0.7;
+    
+    if (dist(this.pos, ship.pos) < SHIP_SIZE + 5) {
+       collectSample(this);
+       return false;
+    }
+    
+    this.mesh.position.set(this.pos.x, this.pos.y, 0);
+    return true;
+  }
+  destroy() {
+    log("Destroying sample");
+    scene.remove(this.mesh);
+  }
+}
+
+/* ----------------- GAME FUNCTIONS ----------------- */
+function resetGame(){
+  log("Resetting game");
+  if(ship) scene.remove(ship.mesh);
+  ship=new Ship();
+  bullets=[];
+  asteroids=[];
+  samples=[];
+  particles=[];
+  score=0;
+  lives=3;
+  level=1;
+  resonanceEnergy=0;
+  harmonicDriveCharge=0;
+  activePowerUps={};
+  spawnAsteroids();
+  updateHUD();
+  document.getElementById('driveBar').style.width = '0%';
+  document.getElementById('powerUps').innerHTML = '';
+  document.getElementById('narrative').style.display = 'none';
+  log("Game reset complete");
+}
+
+function spawnAsteroids(){
+  log(`Spawning ${3+level} asteroids for level ${level}`);
+  for(let i=0;i<3+level;i++){
+    let x,y;
+    do{
+      x=rand(-WIDTH/2,WIDTH/2);
+      y=rand(-HEIGHT/2,HEIGHT/2);
+    }while(dist({x,y},ship.pos)<100);
+    asteroids.push(new Asteroid(x,y,3));
+  }
+}
+
+function updateHUD(){
+  document.getElementById('score').textContent = score;
+  document.getElementById('level').textContent = level;
+  document.getElementById('lives').textContent = lives;
+  document.getElementById('energy').textContent = resonanceEnergy;
+  document.getElementById('driveBar').style.width = (harmonicDriveCharge / HARMONIC_DRIVE_GOAL * 100) + '%';
+  
+  // Update power-up display
+  let powerUpText = '';
+  for (const [key, value] of Object.entries(activePowerUps)) {
+    if (value > 0) {
+      powerUpText += `${key}: ${value.toFixed(1)}s<br>`;
+    }
+  }
+  document.getElementById('powerUps').innerHTML = powerUpText;
+}
+
+function fire(){
+  if(bullets.length>=MAX_BULLETS) return;
+  log("Firing bullet");
+  const b=new Bullet(ship.pos.x,ship.pos.y,ship.angle);
+  bullets.push(b);
+  shot.env.triggerAttackRelease('16n');
+}
+
+function collectSample(sample) {
+  log("Collecting sample");
+  resonanceEnergy += 10;
+  harmonicDriveCharge += 10;
+  score += 50;
+  
+  // Play collection sound
+  sampleCollect.env.triggerAttackRelease('8n');
+  
+  // Show narrative snippet
+  showNarrative(getRandomNarrative());
+  
+  // Chance to get a power-up
+  if (Math.random() < 0.3) {
+    activateRandomPowerUp();
+  }
+  
+  sample.destroy();
+  updateHUD();
+}
+
+function activateRandomPowerUp() {
+  const powerUps = ['Shield Harmonics', 'Multi-Shot Resonance', 'Asteroid Attraction'];
+  const selectedPowerUp = powerUps[Math.floor(Math.random() * powerUps.length)];
+  
+  // Activate power-up for 10 seconds
+  activePowerUps[selectedPowerUp] = 10;
+  
+  // Play power-up sound
+  powerUpSound.env.triggerAttackRelease('4n');
+  
+  log(`Activated power-up: ${selectedPowerUp}`);
+  updateHUD();
+}
+
+function updatePowerUps(dt) {
+  for (const [key, value] of Object.entries(activePowerUps)) {
+    activePowerUps[key] = value - dt;
+    if (activePowerUps[key] <= 0) {
+      delete activePowerUps[key];
+    }
+  }
+  updateHUD();
+}
+
+function showNarrative(text) {
+  const narrativeElement = document.getElementById('narrative');
+  narrativeElement.innerHTML = `<p>${text}</p>`;
+  narrativeElement.style.display = 'block';
+  
+  // Hide after 5 seconds
+  setTimeout(() => {
+    narrativeElement.style.display = 'none';
+  }, 5000);
+}
+
+function getRandomNarrative() {
+  const snippets = [
+    "Resonance readings spiking... the Drift is reacting to your presence.",
+    "These samples contain exotic matter... could power our escape drive.",
+    "The asteroids' composition is unlike anything in our databases.",
+    "Energy fluctuations detected... something else is in the Drift with us.",
+    "Harmonic frequencies aligning... you're beginning to understand the Drift.",
+    "Ancient technology signatures... who built this place?",
+    "The Drift intensifies... collect more samples to stabilize your position.",
+    "Resonance patterns suggest an exit... keep collecting samples."
+  ];
+  return snippets[Math.floor(Math.random() * snippets.length)];
+}
+
+function checkCollisions(){
+  // Bullet-asteroid collisions
+  for(let bi=bullets.length-1; bi>=0; bi--){
+    const b = bullets[bi];
+    for(let ai=asteroids.length-1; ai>=0; ai--){
+      const a = asteroids[ai];
+      if(dist(b.pos,a.pos)<a.size*6){
+        log("Bullet hit asteroid");
+        bullets.splice(bi,1); 
+        scene.remove(b.mesh);
+        asteroids.splice(ai,1); 
+        a.destroy();
+        score += a.size*10;
+        updateHUD();
+        
+        // Chance to spawn a sample
+        if(Math.random() < SAMPLE_SPAWN_CHANCE){
+          log("Spawning sample from destroyed asteroid");
+          samples.push(new Sample(a.pos.x, a.pos.y));
+        }
+        
+        const newAst = a.split();
+        asteroids.push(...newAst);
+        explosion.env.triggerAttackRelease('4n');
+        
+        if(asteroids.length===0){
+          log("Level complete, advancing to next level");
+          level++;
+          spawnAsteroids();
+          Tone.Transport.bpm.value += 5;
+        }
+        break; // Break since this bullet is gone
+      }
+    }
+  }
+  
+  // Ship-sample collisions
+  for(let si=samples.length-1; si>=0; si--){
+    const s = samples[si];
+    if(dist(ship.pos,s.pos)<SHIP_SIZE+5){
+      log("Ship collected sample");
+      collectSample(s);
+      samples.splice(si,1);
+    }
+  }
+  
+  // Ship-asteroid collisions
+  asteroids.forEach(a=>{
+    if(dist(ship.pos,a.pos)<a.size*6+SHIP_SIZE){
+      log("Ship hit by asteroid");
+      // Check for shield power-up
+      if(activePowerUps['Shield Harmonics'] > 0){
+        // Remove the shield power-up
+        delete activePowerUps['Shield Harmonics'];
+        updateHUD();
+        log("Shield Harmonics power-up absorbed the hit");
+        // Don't lose a life
+        return;
+      }
+      
+      lives--;
+      updateHUD();
+      if(lives<=0){
+        log("Game over - no lives remaining");
+        gameOver();
+      }else{
+        log("Resetting ship position");
+        resetShip();
+      }
+    }
+  });
+}
+
+function resetShip(){
+  ship.pos={x:0,y:0};
+  ship.vel={x:0,y:0};
+}
+
+function gameOver(){
+  log("Game over triggered");
+  running=false;
+  document.getElementById('finalScore').textContent=score;
+  document.getElementById('gameOver').style.display='block';
+  Tone.Transport.stop();
+  // Stop ambient music on game over
+  if (typeof ambientPart !== 'undefined') ambientPart.stop();
+}
+
+function winGame(){
+  log("Win condition met");
+  running=false;
+  document.getElementById('winScore').textContent=score;
+  document.getElementById('winScreen').style.display='block';
+  Tone.Transport.stop();
+  // Stop ambient music on win
+  if (typeof ambientPart !== 'undefined') ambientPart.stop();
+}
+
+function checkWinCondition(){
+  if(harmonicDriveCharge >= HARMONIC_DRIVE_GOAL){
+    log("Win condition checked and met");
+    winGame();
+  }
+}
+
+/* ----------------- INPUT ----------------- */
+window.addEventListener('keydown',e=>keys[e.code]=true);
+window.addEventListener('keyup',e=>keys[e.code]=false);
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space'&&running&&!paused){e.preventDefault();fire();}
+  if(e.code==='Escape'&&running){togglePause();}
+});
+
+// Touch controls (passive event listeners to address warnings)
+const joystick = document.getElementById('joystick');
+const joystickBase = joystick.parentElement;
+const fireButton = document.getElementById('fireButton');
+
+joystickBase.addEventListener('touchstart', handleJoystickStart, { passive: false });
+joystickBase.addEventListener('touchmove', handleJoystickMove, { passive: false });
+joystickBase.addEventListener('touchend', handleJoystickEnd, { passive: false });
+
+fireButton.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if(running && !paused) fire();
+}, { passive: false });
+
+function handleJoystickStart(e) {
+  e.preventDefault();
+  isTouchingJoystick = true;
+}
+
+function handleJoystickMove(e) {
+  if (!isTouchingJoystick) return;
+  e.preventDefault();
+  
+  const baseRect = joystickBase.getBoundingClientRect();
+  const touch = e.touches[0];
+  const baseCenterX = baseRect.left + baseRect.width / 2;
+  const baseCenterY = baseRect.top + baseRect.height / 2;
+  
+  joystickDelta.x = touch.clientX - baseCenterX;
+  joystickDelta.y = touch.clientY - baseCenterY;
+  
+  // Limit joystick movement
+  const maxDistance = baseRect.width / 2 - joystick.offsetWidth / 2;
+  const distance = Math.sqrt(joystickDelta.x * joystickDelta.x + joystickDelta.y * joystickDelta.y);
+  if (distance > maxDistance) {
+    joystickDelta.x = joystickDelta.x * maxDistance / distance;
+    joystickDelta.y = joystickDelta.y * maxDistance / distance;
+  }
+  
+  joystick.style.transform = `translate(${joystickDelta.x}px, ${joystickDelta.y}px)`;
+}
+
+function handleJoystickEnd() {
+  isTouchingJoystick = false;
+  joystickDelta = {x: 0, y: 0};
+  joystick.style.transform = 'translate(0px, 0px)';
+}
+
+/* ----------------- MENU LOGIC ----------------- */
+function togglePause(){
+  paused=!paused;
+  document.getElementById('pause').style.display=paused?'block':'none';
+  if(paused) Tone.Transport.pause(); else Tone.Transport.start();
+  log(`Game ${paused ? 'paused' : 'resumed'}`);
+}
+
+/* ----------------- INIT ----------------- */
+function initGame(){
+  log("Initializing game");
+  resetGame();
+  document.getElementById('title').style.display='none';
+  document.getElementById('hud').style.display='block';
+  document.getElementById('driveBarContainer').style.display='block';
+  document.getElementById('powerUps').style.display='block';
+  document.getElementById('tutorial').style.display='none';
+  
+  // Show virtual controls on mobile
+  if ('ontouchstart' in window) {
+    document.getElementById('virtualControls').style.display='block';
+  }
+  
+  running=true;
+  Tone.Transport.start();
+  // Start ambient music when game starts
+  if (typeof ambientPart !== 'undefined') ambientPart.start();
+  log("Game initialization complete");
+}
+
+/* ----------------- GAME LOOP ----------------- */
+let last=0;
+function animate(time){
+  const dt=Math.min((time-last)/1000,0.1); last=time;
+  if(running && !paused){
+    ship.update(dt);
+    bullets = bullets.filter(b=>b.update(dt));
+    asteroids.forEach(a=>a.update(dt));
+    samples = samples.filter(s=>s.update(dt));
+    updatePowerUps(dt);
+    checkCollisions();
+    checkWinCondition(); // Check win condition in game loop
+    renderer.render(scene,camera);
+  }
+  requestAnimationFrame(animate);
+}
+log("Starting animation loop");
+requestAnimationFrame(animate);
+
+/* ----------------- UI WIREUP ----------------- */
+document.getElementById('startBtn').onclick=()=>{
+  log("Start button clicked");
+  if(!localStorage.getItem('seenTutorial')){
+    localStorage.setItem('seenTutorial','1');
+    document.getElementById('tutorial').style.display='block';
+    log("Showing tutorial for first time");
+  }else{initGame();}
+};
+document.getElementById('closeTutorialBtn').onclick=initGame;
+document.getElementById('optionsBtnTitle').onclick=document.getElementById('optionsBtnPause').onclick=()=>{
+  document.getElementById('options').style.display='block';
+};
+document.getElementById('closeOptionsBtn').onclick=()=>{
+  document.getElementById('options').style.display='none';
+};
+document.getElementById('resumeBtn').onclick=togglePause;
+document.getElementById('restartBtn').onclick=()=>{resetGame();togglePause();};
+document.getElementById('playAgainBtn').onclick=()=>{
+  document.getElementById('gameOver').style.display='none';
+  resetGame();
+  running=true;
+  Tone.Transport.start();
+  if (typeof ambientPart !== 'undefined') ambientPart.start(); // Restart ambient music
+};
+document.getElementById('playAgainWinBtn').onclick=()=>{
+  document.getElementById('winScreen').style.display='none';
+  resetGame();
+  running=true;
+  Tone.Transport.start();
+  if (typeof ambientPart !== 'undefined') ambientPart.start(); // Restart ambient music
+};
+
+/* Volume sliders */
+['volMaster','volSFX','volMusic'].forEach(id=>{
+  const ctrl = document.getElementById(id);
+  const target = id==='volMaster'?masterVol:id==='volSFX'?sfxVol:musicVol;
+  ctrl.oninput=()=>target.volume.value=ctrl.value;
+});
+
+/* Resize */
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+  log("Window resized");
+});
+
+log("Script initialization complete");
+</script>
+</body>
+</html>

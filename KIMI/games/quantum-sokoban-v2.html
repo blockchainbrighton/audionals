@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Quantum Sokoban: The Paradox Protocol</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(135deg, #0f0c29, #302b63, #24243e);font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;color:#eee;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden}
+  canvas{border:2px solid #0ff;box-shadow:0 0 20px rgba(0,255,255,0.5);max-width:100%;max-height:100%}
+  #info{position:absolute;top:10px;left:10px;font-size:14px;z-index:2;background:rgba(0,0,0,0.7);padding:8px 12px;border-radius:8px;border:1px solid #0ff}
+  #tip{position:absolute;bottom:10px;left:10px;right:10px;background:rgba(0,20,40,0.9);padding:12px;border-radius:8px;font-size:14px;text-align:center;transition:opacity .4s;box-shadow:0 0 15px rgba(0,255,255,0.3);border:1px solid #0ff}
+  #tip.hidden{opacity:0;pointer-events:none}
+  #touchControls{
+    position:absolute;bottom:15px;right:15px;display:grid;
+    grid-template-columns:repeat(3,52px);grid-gap:6px;user-select:none
+  }
+  #touchControls div{
+    width:52px;height:52px;background:rgba(30, 30, 60, 0.8);border:1px solid #0ff;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;font-size:22px;color:#0ff;box-shadow:0 0 10px rgba(0,255,255,0.3);
+    transition:all 0.2s
+  }
+  #touchControls div:active{background:rgba(0, 255, 255, 0.3);transform:scale(0.95)}
+  .tooltip{
+    position:absolute;background:rgba(0,20,40,0.95);color:#0ff;padding:8px 12px;border-radius:6px;font-size:13px;
+    white-space:nowrap;pointer-events:none;z-index:10;box-shadow:0 0 10px rgba(0,255,255,0.5);border:1px solid #0ff;
+    animation: pulse 1.5s infinite
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 5px rgba(0,255,255,0.5); }
+    50% { box-shadow: 0 0 15px rgba(0,255,255,0.8); }
+    100% { box-shadow: 0 0 5px rgba(0,255,255,0.5); }
+  }
+  #levelDisplay{position:absolute;top:10px;right:10px;font-size:18px;font-weight:bold;background:rgba(0,0,0,0.7);padding:6px 12px;border-radius:8px;border:1px solid #0ff}
+  #powerUps{position:absolute;top:50px;right:10px;display:flex;flex-direction:column;gap:8px}
+  .powerUp{
+    width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;
+    background:rgba(30, 30, 60, 0.8);border:1px solid #0ff;cursor:pointer;transition:all 0.3s;
+    box-shadow:0 0 8px rgba(0,255,255,0.3)
+  }
+  .powerUp:hover{transform:scale(1.1);box-shadow:0 0 15px rgba(0,255,255,0.7)}
+  .powerUp:active{transform:scale(0.95)}
+  #dialogueBox{
+    position:absolute;bottom:80px;left:20px;right:20px;background:rgba(0,20,40,0.95);
+    padding:15px;border-radius:12px;font-size:16px;line-height:1.5;border:1px solid #0ff;
+    box-shadow:0 0 20px rgba(0,255,255,0.4);display:none;z-index:100
+  }
+  #dialogueBox h3{margin:0 0 10px;color:#0ff;text-shadow:0 0 5px rgba(0,255,255,0.7)}
+  #dialogueBox p{margin:0}
+  #continueBtn{
+    background:linear-gradient(to right, #00c6ff, #0072ff);
+    border:none;color:white;padding:8px 16px;border-radius:4px;margin-top:10px;
+    cursor:pointer;font-weight:bold;transition:all 0.3s
+  }
+  #continueBtn:hover{transform:scale(1.05);box-shadow:0 0 10px rgba(0,198,255,0.7)}
+  .particle{position:absolute;border-radius:50%;pointer-events:none}
+  #quantumField{
+    position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;
+    background:radial-gradient(circle, transparent 20%, rgba(0,255,255,0.05) 100%);
+    opacity:0.3;z-index:-1
+  }
+  .crate-label{
+    position:absolute;color:white;font-size:12px;font-weight:bold;text-shadow:0 0 3px black;
+    pointer-events:none;z-index:5
+  }
+  #guideBtn{
+    position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    background:rgba(0,20,40,0.9);border:1px solid #0ff;color:#0ff;padding:6px 12px;
+    border-radius:6px;cursor:pointer;font-size:14px;transition:all 0.3s;z-index:50
+  }
+  #guideBtn:hover{background:rgba(0,40,80,0.9);box-shadow:0 0 10px rgba(0,255,255,0.5)}
+  #gameGuide{
+    position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);
+    width:90%;max-width:600px;max-height:80vh;background:rgba(0,20,40,0.95);
+    border-radius:12px;border:1px solid #0ff;
+    box-shadow:0 0 30px rgba(0,255,255,0.5);z-index:200;display:none;
+    overflow:hidden
+  }
+  #gameGuideContent{
+    padding:20px;
+    max-height:calc(80vh - 60px);
+    overflow-y:auto
+  }
+  #gameGuide h2{color:#0ff;margin-top:0;text-align:center}
+  #gameGuide h3{color:#0ff;margin-top:20px}
+  #gameGuide ul{padding-left:20px}
+  #gameGuide li{margin-bottom:8px}
+  #closeGuide{
+    position:absolute;top:10px;right:10px;background:#f33;border:none;
+    color:white;width:30px;height:30px;border-radius:50%;cursor:pointer;font-weight:bold;
+    z-index:10
+  }
+  .key{display:inline-block;background:#000;color:#0ff;padding:2px 6px;border-radius:4px;font-family:monospace}
+  .highlight{color:#0ff;font-weight:bold}
+  .example{background:rgba(0,40,80,0.5);padding:10px;border-radius:6px;margin:10px 0}
+  #closeGuideBtn{
+    background:#0ff;color:#000;border:none;padding:8px 16px;border-radius:4px;
+    cursor:pointer;font-weight:bold;display:block;margin:20px auto 0;
+    transition:all 0.3s
+  }
+  #closeGuideBtn:hover{transform:scale(1.05);box-shadow:0 0 10px rgba(0,255,255,0.7)}
+</style>
+</head>
+<body>
+<canvas id="c" width="384" height="384"></canvas>
+<div id="quantumField"></div>
+
+<div id="info">
+  <span id="keys">Arrows=Move | Space=Observe | Z=Undo | R=Restart</span>
+</div>
+
+<div id="levelDisplay">Level: 1</div>
+
+<div id="powerUps">
+  <div class="powerUp" id="tunnel" title="Quantum Tunneling">🕳️</div>
+  <div class="powerUp" id="entangle" title="Entanglement">🔗</div>
+  <div class="powerUp" id="measure" title="Precise Measurement">🔍</div>
+</div>
+
+<div id="tip" class="hidden">
+  💡 Push crates onto yellow goals. Tap a crate or goal for a hint.
+  <button onclick="hideTip()" style="margin-left:6px;background:#0ff;color:#000;border:none;padding:4px 8px;border-radius:4px;cursor:pointer">Got it</button>
+</div>
+
+<div id="dialogueBox">
+  <h3>Dr. Quantum</h3>
+  <p>Welcome to the Quantum Research Facility. You must solve these puzzles to prevent a paradox cascade!</p>
+  <button id="continueBtn">Continue</button>
+</div>
+
+<button id="guideBtn">🎮 Game Guide</button>
+
+<div id="gameGuide">
+  <button id="closeGuide">✕</button>
+  <div id="gameGuideContent">
+    <h2>Quantum Sokoban Guide</h2>
+    
+    <h3>Basic Gameplay</h3>
+    <p>Navigate the quantum researcher (🔴) to push crates (📦) onto yellow goals (●).</p>
+    <ul>
+      <li>Use <span class="key">Arrow Keys</span> or on-screen buttons to move</li>
+      <li>Push crates to create quantum superposition (multiple possible positions)</li>
+      <li>Press <span class="key">SPACE</span> to <span class="highlight">Observe</span> and collapse superpositions</li>
+    </ul>
+    
+    <div class="example">
+      <p><span class="highlight">Tip:</span> Crates in superposition appear translucent. Observe to make them definite!</p>
+    </div>
+    
+    <h3>Quantum Mechanics</h3>
+    <ul>
+      <li><span class="highlight">Superposition:</span> Pushing creates multiple possible crate positions</li>
+      <li><span class="highlight">Observation:</span> Collapses all crates to definite positions</li>
+      <li><span class="highlight">Entanglement:</span> Linked crates mirror each other's positions</li>
+      <li><span class="highlight">Tunneling:</span> Pass through barriers (limited uses)</li>
+    </ul>
+    
+    <h3>Special Tiles</h3>
+    <ul>
+      <li><span class="highlight">Goals (●):</span> Collapse crates here to complete levels</li>
+      <li><span class="highlight">Hazards (⚡):</span> Reset level if touched</li>
+      <li><span class="highlight">Portals (◎):</span> Teleport to another portal</li>
+      <li><span class="highlight">Barriers (||):</span> Block movement (use tunneling)</li>
+    </ul>
+    
+    <h3>Power-ups</h3>
+    <ul>
+      <li><span class="highlight">🕳️ Quantum Tunneling:</span> Pass through one barrier</li>
+      <li><span class="highlight">🔗 Entanglement:</span> Link two crates' positions</li>
+      <li><span class="highlight">🔍 Precise Measurement:</span> Guide crate collapse toward goals</li>
+    </ul>
+    
+    <div class="example">
+      <p><span class="highlight">Strategy:</span> Use power-ups wisely! Save tunneling for critical barriers.</p>
+    </div>
+    
+    <h3>Controls</h3>
+    <ul>
+      <li><span class="key">Arrow Keys</span>: Move player</li>
+      <li><span class="key">SPACE</span>: Observe (collapse crates)</li>
+      <li><span class="key">Z</span>: Undo last move</li>
+      <li><span class="key">R</span>: Restart level</li>
+      <li><span class="key">T</span>: Use Tunneling</li>
+      <li><span class="key">E</span>: Use Entanglement</li>
+      <li><span class="key">M</span>: Use Measurement</li>
+    </ul>
+    
+    <h3>Advanced Strategies</h3>
+    <ul>
+      <li><span class="highlight">Plan Ahead:</span> Think several moves ahead when creating superpositions</li>
+      <li><span class="highlight">Chain Reactions:</span> Use entanglement to solve multiple crates at once</li>
+      <li><span class="highlight">Efficient Tunneling:</span> Save tunneling for complex barrier arrangements</li>
+      <li><span class="highlight">Precise Timing:</span> Use measurement when crates are near goals for better results</li>
+    </ul>
+    
+    <h3>Level Progression</h3>
+    <p>As you advance through levels:</p>
+    <ul>
+      <li>More crates are introduced</li>
+      <li>Barriers become more common</li>
+      <li>Entanglement mechanics appear</li>
+      <li>Puzzle complexity increases</li>
+    </ul>
+    
+    <p style="text-align:center;margin-top:20px">
+      <button id="closeGuideBtn">Start Playing!</button>
+    </p>
+  </div>
+</div>
+
+<div id="touchControls">
+  <div></div>
+  <div id="up" title="Move Up">↑</div>
+  <div></div>
+  <div id="left" title="Move Left">←</div>
+  <div id="observe" title="Observe / Collapse">👁</div>
+  <div id="right" title="Move Right">→</div>
+  <div></div>
+  <div id="down" title="Move Down">↓</div>
+  <div id="undo" title="Undo last move">↶</div>
+</div>
+
+<script>
+/* ---------- CONFIG ---------- */
+const CELL = 32;
+const W = 12, H = 12;
+const TILES = { 
+  wall:'#', 
+  floor:' ', 
+  goal:'.', 
+  crate:'$', 
+  player:'@',
+  hazard:'!',
+  portal:'O',
+  barrier:'|'
+};
+
+/* ---------- STATE ---------- */
+let grid, crates, player, undoStack, levelSeed = 1, firstLevel = true;
+let level = 1;
+let particles = [];
+let quantumFieldActive = false;
+let entangledCrates = [];
+let tunnelingCharges = 3;
+let entanglementCharges = 2;
+let measurementCharges = 1;
+let storyProgress = 0;
+let crateLabels = [];
+let gameStarted = false;
+
+/* ---------- SAFE UTILS ---------- */
+function inBounds(x,y){return x>=0 && x<W && y>=0 && y<H;}
+function cell(x,y){return inBounds(x,y)?grid[y][x]:TILES.wall;}
+
+/* ---------- PARTICLE SYSTEM ---------- */
+function createParticle(x, y, color, size, speed, life) {
+  particles.push({
+    x: x,
+    y: y,
+    size: size || Math.random() * 4 + 2,
+    color: color || `hsl(${Math.random() * 360}, 100%, 70%)`,
+    speedX: (Math.random() - 0.5) * speed || (Math.random() - 0.5) * 4,
+    speedY: (Math.random() - 0.5) * speed || (Math.random() - 0.5) * 4,
+    life: life || Math.random() * 30 + 20,
+    maxLife: life || Math.random() * 30 + 20
+  });
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.speedX;
+    p.y += p.speedY;
+    p.life--;
+    
+    if (p.life <= 0) {
+      particles.splice(i, 1);
+    }
+  }
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+/* ---------- LEVEL GEN (enhanced) ---------- */
+function loadLevel(seed) {
+  undoStack = [];
+  levelSeed = seed;
+  grid = Array.from({length:H},()=>Array(W).fill(TILES.floor));
+  crates = [];
+  crateLabels = [];
+  entangledCrates = [];
+  particles = [];
+  
+  let rng = () => (seed = (seed * 9301 + 49297) % 233280, seed / 233280);
+  
+  // border walls
+  for(let y=0;y<H;y++){grid[y][0]=grid[y][W-1]=TILES.wall;}
+  for(let x=0;x<W;x++){grid[0][x]=grid[H-1][x]=TILES.wall;}
+  
+  // inner walls & goals
+  for(let y=2;y<H-2;y++){
+    for(let x=2;x<W-2;x++){
+      if(rng()<.15) grid[y][x]=TILES.wall;
+      else if(rng()<.1) grid[y][x]=TILES.goal;
+      else if(rng()<.05) grid[y][x]=TILES.hazard;
+      else if(rng()<.03) grid[y][x]=TILES.portal;
+    }
+  }
+  
+  // Add barriers in later levels
+  if (level > 3) {
+    for(let y=2;y<H-2;y++){
+      for(let x=2;x<W-2;x++){
+        if(rng()<.05) grid[y][x]=TILES.barrier;
+      }
+    }
+  }
+  
+  // safe player placement
+  const floors=[];
+  for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++)if(grid[y][x]===TILES.floor)floors.push({x,y});
+  player=floors.splice(~~(rng()*floors.length),1)[0];
+  
+  // safe crate placement
+  const crateCount = Math.min(3 + Math.floor(level/2), 6);
+  for(let i=0;i<crateCount;i++){
+    if(!floors.length)break;
+    const idx=~~(rng()*floors.length);
+    const states = [floors[idx]];
+    
+    // Add superposition states for higher levels
+    if (level > 2 && rng() < 0.6) {
+      const additionalStates = Math.min(2, Math.floor(level/2));
+      for (let j = 0; j < additionalStates; j++) {
+        if (floors.length > 1) {
+          const idx2 = ~~(rng()*floors.length);
+          states.push(floors[idx2]);
+        }
+      }
+    }
+    
+    crates.push({states, id: i});
+    crateLabels.push({x: floors[idx].x, y: floors[idx].y, text: `C${i}`});
+    floors.splice(idx,1);
+  }
+  
+  // Entangle some crates in later levels
+  if (level > 4 && crates.length > 1) {
+    const crate1 = Math.floor(rng() * crates.length);
+    let crate2;
+    do {
+      crate2 = Math.floor(rng() * crates.length);
+    } while (crate2 === crate1);
+    
+    entangledCrates = [crate1, crate2];
+  }
+  
+  document.getElementById('levelDisplay').textContent = `Level: ${level}`;
+  
+  if(firstLevel && !gameStarted){
+    showTip();
+    firstLevel=false;
+    showStory();
+  }
+}
+
+/* ---------- STORY SYSTEM ---------- */
+function showStory() {
+  const dialogueBox = document.getElementById('dialogueBox');
+  const dialogueText = document.getElementById('dialogueBox').querySelector('p');
+  const continueBtn = document.getElementById('continueBtn');
+  
+  const storyLines = [
+    "Welcome to the Quantum Research Facility. You must solve these puzzles to prevent a paradox cascade!",
+    "The quantum crates contain unstable particles. Push them to the yellow goals to stabilize them.",
+    "Be careful! Some crates are in superposition. Observe them to collapse their states.",
+    "Higher levels introduce quantum entanglement - linked crates will affect each other!",
+    "Use your quantum abilities wisely. Tunnel through walls, entangle crates, and measure precisely.",
+    "The fate of the quantum realm rests in your hands, researcher!"
+  ];
+  
+  if (storyProgress < storyLines.length) {
+    dialogueText.textContent = storyLines[storyProgress];
+    dialogueBox.style.display = 'block';
+    
+    continueBtn.onclick = () => {
+      storyProgress++;
+      if (storyProgress >= storyLines.length) {
+        dialogueBox.style.display = 'none';
+        gameStarted = true;
+      } else {
+        showStory();
+      }
+    };
+  } else {
+    dialogueBox.style.display = 'none';
+    gameStarted = true;
+  }
+}
+
+/* ---------- MOVE ---------- */
+function move(dx,dy){
+  if (!gameStarted) return;
+  
+  const next={x:player.x+dx,y:player.y+dy};
+  if(cell(next.x,next.y)===TILES.wall) return;
+  
+  // Handle barriers
+  if(cell(next.x,next.y)===TILES.barrier && tunnelingCharges <= 0) return;
+  
+  // Use tunneling charge if moving through barrier
+  if(cell(next.x,next.y)===TILES.barrier) {
+    tunnelingCharges--;
+    updatePowerUpDisplay();
+    createParticle(next.x*CELL + CELL/2, next.y*CELL + CELL/2, '#ff00ff', 5, 3, 40);
+  }
+  
+  const ci = crates.findIndex(c=>c.states.some(s=>s.x===next.x && s.y===next.y));
+  if(ci!==-1){
+    const c = crates[ci];
+    const ghosts = [];
+    c.states.forEach(s=>{
+      const nxt={x:s.x+dx,y:s.y+dy};
+      if(cell(nxt.x,nxt.y)!==TILES.wall &&
+         !crates.some(other=>other!==c && other.states.some(os=>os.x===nxt.x && os.y===nxt.y))){
+        ghosts.push(nxt);
+      }
+    });
+    if(ghosts.length===0) return;
+    undoStack.push(JSON.stringify({grid,crates,player}));
+    c.states = [...c.states,...ghosts];
+    
+    // Create particles for movement
+    createParticle(next.x*CELL + CELL/2, next.y*CELL + CELL/2, '#00ffff', 3, 2, 30);
+    
+    player = next;
+  } else {
+    undoStack.push(JSON.stringify({grid,crates,player}));
+    player = next;
+    
+    // Create particles for movement
+    createParticle(player.x*CELL + CELL/2, player.y*CELL + CELL/2, '#00ff00', 2, 1, 20);
+  }
+  
+  // Handle hazards
+  if(cell(player.x, player.y) === TILES.hazard) {
+    createParticle(player.x*CELL + CELL/2, player.y*CELL + CELL/2, '#ff0000', 4, 5, 50);
+    loadLevel(levelSeed); // Reset level
+    return;
+  }
+  
+  // Handle portals
+  if(cell(player.x, player.y) === TILES.portal) {
+    // Find another portal
+    let portalPos = null;
+    for(let y=0;y<H;y++){
+      for(let x=0;x<W;x++){
+        if(grid[y][x] === TILES.portal && (x !== player.x || y !== player.y)) {
+          portalPos = {x, y};
+          break;
+        }
+      }
+      if(portalPos) break;
+    }
+    
+    if(portalPos) {
+      player = {...portalPos};
+      createParticle(player.x*CELL + CELL/2, player.y*CELL + CELL/2, '#ffff00', 6, 4, 60);
+    }
+  }
+}
+
+/* ---------- COLLAPSE (enhanced) ---------- */
+function observe(){
+  if (!gameStarted) return;
+  
+  undoStack.push(JSON.stringify({grid,crates,player}));
+  crates.forEach(c=>{
+    const idx = ~~(Math.random()*c.states.length);
+    c.states = [c.states[idx]];
+    
+    // Create collapse particles
+    const pos = c.states[0];
+    for(let i=0;i<10;i++) {
+      createParticle(
+        pos.x*CELL + CELL/2 + (Math.random()-0.5)*20,
+        pos.y*CELL + CELL/2 + (Math.random()-0.5)*20,
+        '#ffffff',
+        Math.random()*3+1,
+        Math.random()*4+2,
+        Math.random()*30+20
+      );
+    }
+  });
+  
+  // Handle entangled crates
+  if (entangledCrates.length === 2) {
+    const [crate1, crate2] = entangledCrates;
+    if (crate1 < crates.length && crate2 < crates.length) {
+      // Mirror the position of the first crate to the second
+      const pos1 = crates[crate1].states[0];
+      crates[crate2].states = [{x: pos1.x, y: pos1.y}];
+      
+      // Create entanglement particles
+      for(let i=0;i<15;i++) {
+        createParticle(
+          pos1.x*CELL + CELL/2 + (Math.random()-0.5)*30,
+          pos1.y*CELL + CELL/2 + (Math.random()-0.5)*30,
+          '#ff00ff',
+          Math.random()*4+2,
+          Math.random()*3+1,
+          Math.random()*40+30
+        );
+      }
+    }
+  }
+  
+  // resolve overlaps
+  const occupied=new Set();
+  for(const c of crates){
+    const key=`${c.states[0].x},${c.states[0].y}`;
+    if(occupied.has(key)){
+      loadLevel(levelSeed);
+      return;
+    }
+    occupied.add(key);
+  }
+  
+  if(winCheck()) {
+    level++;
+    if (level > 10) {
+      // Victory!
+      document.getElementById('dialogueBox').querySelector('h3').textContent = 'Mission Complete!';
+      document.getElementById('dialogueBox').querySelector('p').textContent = 'You have stabilized the quantum realm! The paradox has been averted.';
+      document.getElementById('dialogueBox').style.display = 'block';
+      document.getElementById('continueBtn').onclick = () => {
+        document.getElementById('dialogueBox').style.display = 'none';
+        level = 1;
+        loadLevel(1);
+      };
+    } else {
+      loadLevel(levelSeed + level);
+    }
+  }
+}
+
+/* ---------- POWER-UPS ---------- */
+function useTunneling() {
+  if (!gameStarted) return;
+  
+  if (tunnelingCharges > 0) {
+    tunnelingCharges--;
+    updatePowerUpDisplay();
+    createParticle(player.x*CELL + CELL/2, player.y*CELL + CELL/2, '#ff00ff', 6, 4, 50);
+    quantumFieldActive = true;
+    setTimeout(() => quantumFieldActive = false, 1000);
+  }
+}
+
+function useEntanglement() {
+  if (!gameStarted) return;
+  
+  if (entanglementCharges > 0 && crates.length > 1) {
+    entanglementCharges--;
+    updatePowerUpDisplay();
+    
+    // Select two random crates to entangle
+    const crate1 = Math.floor(Math.random() * crates.length);
+    let crate2;
+    do {
+      crate2 = Math.floor(Math.random() * crates.length);
+    } while (crate2 === crate1);
+    
+    entangledCrates = [crate1, crate2];
+    
+    // Create entanglement effect
+    const pos1 = crates[crate1].states[0];
+    const pos2 = crates[crate2].states[0];
+    
+    for(let i=0;i<20;i++) {
+      createParticle(
+        pos1.x*CELL + CELL/2 + (Math.random()-0.5)*20,
+        pos1.y*CELL + CELL/2 + (Math.random()-0.5)*20,
+        '#ff00ff',
+        Math.random()*3+1,
+        Math.random()*3+1,
+        Math.random()*40+30
+      );
+      
+      createParticle(
+        pos2.x*CELL + CELL/2 + (Math.random()-0.5)*20,
+        pos2.y*CELL + CELL/2 + (Math.random()-0.5)*20,
+        '#ff00ff',
+        Math.random()*3+1,
+        Math.random()*3+1,
+        Math.random()*40+30
+      );
+    }
+  }
+}
+
+function useMeasurement() {
+  if (!gameStarted) return;
+  
+  if (measurementCharges > 0) {
+    measurementCharges--;
+    updatePowerUpDisplay();
+    
+    // Collapse all crates with higher probability to favorable positions
+    undoStack.push(JSON.stringify({grid,crates,player}));
+    crates.forEach(c=>{
+      // Prefer positions closer to goals
+      let bestIdx = 0;
+      let bestDist = Infinity;
+      
+      c.states.forEach((s, idx) => {
+        for(let y=0;y<H;y++){
+          for(let x=0;x<W;x++){
+            if(grid[y][x] === TILES.goal) {
+              const dist = Math.abs(s.x - x) + Math.abs(s.y - y);
+              if(dist < bestDist) {
+                bestDist = dist;
+                bestIdx = idx;
+              }
+            }
+          }
+        }
+      });
+      
+      // 70% chance to choose the best position, 30% random
+      const idx = Math.random() < 0.7 ? bestIdx : ~~(Math.random()*c.states.length);
+      c.states = [c.states[idx]];
+      
+      // Create measurement particles
+      const pos = c.states[0];
+      for(let i=0;i<15;i++) {
+        createParticle(
+          pos.x*CELL + CELL/2 + (Math.random()-0.5)*25,
+          pos.y*CELL + CELL/2 + (Math.random()-0.5)*25,
+          '#00ffff',
+          Math.random()*4+2,
+          Math.random()*4+2,
+          Math.random()*50+30
+        );
+      }
+    });
+    
+    // resolve overlaps
+    const occupied=new Set();
+    for(const c of crates){
+      const key=`${c.states[0].x},${c.states[0].y}`;
+      if(occupied.has(key)){
+        loadLevel(levelSeed);
+        return;
+      }
+      occupied.add(key);
+    }
+    
+    if(winCheck()) nextLevel();
+  }
+}
+
+function updatePowerUpDisplay() {
+  document.getElementById('tunnel').textContent = tunnelingCharges > 0 ? '🕳️' : '❌';
+  document.getElementById('entangle').textContent = entanglementCharges > 0 ? '🔗' : '❌';
+  document.getElementById('measure').textContent = measurementCharges > 0 ? '🔍' : '❌';
+}
+
+/* ---------- WIN CHECK ---------- */
+function winCheck(){
+  return crates.every(c=>{
+    const pos = c.states[0];
+    return grid[pos.y][pos.x] === TILES.goal;
+  });
+}
+
+/* ---------- UNDO / RESTART ---------- */
+function undo(){
+  if (!gameStarted) return;
+  
+  if(undoStack.length){
+    const prev = JSON.parse(undoStack.pop());
+    grid=prev.grid;crates=prev.crates;player=prev.player;
+  }
+}
+
+/* ---------- DRAW ---------- */
+const ctx = document.getElementById('c').getContext('2d');
+function draw(){
+  ctx.clearRect(0,0,c.width,c.height);
+  
+  // Draw quantum field effect
+  if (quantumFieldActive) {
+    ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
+    ctx.fillRect(0, 0, c.width, c.height);
+  }
+  
+  // Draw grid
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const tile = grid[y][x];
+      let color;
+      
+      switch(tile) {
+        case TILES.wall: color = '#444'; break;
+        case TILES.goal: color = '#ff5'; break;
+        case TILES.hazard: color = '#f33'; break;
+        case TILES.portal: color = '#0ff'; break;
+        case TILES.barrier: color = '#88f'; break;
+        default: color = '#222';
+      }
+      
+      ctx.fillStyle = color;
+      ctx.fillRect(x*CELL,y*CELL,CELL,CELL);
+      
+      // Draw special tile details
+      if(tile===TILES.goal){
+        ctx.fillStyle='#fff';
+        ctx.font='24px Arial';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText('●',x*CELL+CELL/2,y*CELL+CELL/2);
+      } else if(tile===TILES.hazard){
+        ctx.fillStyle='#fff';
+        ctx.font='20px Arial';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText('⚡',x*CELL+CELL/2,y*CELL+CELL/2);
+      } else if(tile===TILES.portal){
+        ctx.fillStyle='#fff';
+        ctx.beginPath();
+        ctx.arc(x*CELL+CELL/2, y*CELL+CELL/2, CELL/3, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(x*CELL+CELL/2, y*CELL+CELL/2, CELL/6, 0, Math.PI*2);
+        ctx.fill();
+      } else if(tile===TILES.barrier){
+        ctx.fillStyle='rgba(100, 100, 255, 0.3)';
+        ctx.fillRect(x*CELL,y*CELL,CELL,CELL);
+        ctx.fillStyle='#fff';
+        ctx.font='16px Arial';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText('||',x*CELL+CELL/2,y*CELL+CELL/2);
+      }
+    }
+  }
+  
+  // Draw crate labels
+  crateLabels.forEach(label => {
+    ctx.fillStyle = '#fff';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label.text, label.x*CELL + CELL/2, label.y*CELL + CELL/2 - 12);
+  });
+  
+  // Draw crates
+  crates.forEach(c=>{
+    c.states.forEach((s,i)=>{
+      ctx.globalAlpha = c.states.length>1?0.6:1;
+      ctx.fillStyle = c.states.length>1?'#0ff':'#5af';
+      
+      // Draw crate with rounded corners
+      ctx.beginPath();
+      const radius = 5;
+      ctx.moveTo(s.x*CELL + radius, s.y*CELL);
+      ctx.lineTo(s.x*CELL + CELL - radius, s.y*CELL);
+      ctx.quadraticCurveTo(s.x*CELL + CELL, s.y*CELL, s.x*CELL + CELL, s.y*CELL + radius);
+      ctx.lineTo(s.x*CELL + CELL, s.y*CELL + CELL - radius);
+      ctx.quadraticCurveTo(s.x*CELL + CELL, s.y*CELL + CELL, s.x*CELL + CELL - radius, s.y*CELL + CELL);
+      ctx.lineTo(s.x*CELL + radius, s.y*CELL + CELL);
+      ctx.quadraticCurveTo(s.x*CELL, s.y*CELL + CELL, s.x*CELL, s.y*CELL + CELL - radius);
+      ctx.lineTo(s.x*CELL, s.y*CELL + radius);
+      ctx.quadraticCurveTo(s.x*CELL, s.y*CELL, s.x*CELL + radius, s.y*CELL);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Draw crate symbol
+      ctx.fillStyle = '#000';
+      ctx.font = '20px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('📦', s.x*CELL + CELL/2, s.y*CELL + CELL/2);
+    });
+  });
+  
+  ctx.globalAlpha=1;
+  
+  // Draw player with glow effect
+  ctx.shadowColor = '#f55';
+  ctx.shadowBlur = 15;
+  ctx.fillStyle='#f55';
+  ctx.beginPath();
+  ctx.arc(player.x*CELL+CELL/2,player.y*CELL+CELL/2,CELL/2-4,0,2*Math.PI);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  
+  // Draw particles
+  drawParticles();
+  
+  requestAnimationFrame(draw);
+}
+
+/* ---------- INPUT (keyboard) ---------- */
+window.addEventListener('keydown',e=>{
+  switch(e.code){
+    case 'ArrowUp':move(0,-1);break;
+    case 'ArrowDown':move(0,1);break;
+    case 'ArrowLeft':move(-1,0);break;
+    case 'ArrowRight':move(1,0);break;
+    case 'Space':observe();break;
+    case 'KeyZ':undo();break;
+    case 'KeyR':loadLevel(levelSeed);break;
+    case 'KeyT':useTunneling();break;
+    case 'KeyE':useEntanglement();break;
+    case 'KeyM':useMeasurement();break;
+  }
+});
+
+/* ---------- INPUT (touch & mouse) ---------- */
+const canvas=document.getElementById('c');
+let touchStartX,touchStartY;
+
+// tap to move or show hint
+canvas.addEventListener('click',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const x=Math.floor((e.clientX-rect.left)/CELL);
+  const y=Math.floor((e.clientY-rect.top)/CELL);
+  if(!inBounds(x,y))return;
+  const crateTip = crates.some(c=>c.states.some(s=>s.x===x && s.y===y));
+  const goalTip = grid[y][x]===TILES.goal;
+  const hazardTip = grid[y][x]===TILES.hazard;
+  const portalTip = grid[y][x]===TILES.portal;
+  const barrierTip = grid[y][x]===TILES.barrier;
+  
+  if(crateTip) showTooltip(e.clientX,e.clientY,'Quantum crate: Push to create superposition!');
+  else if(goalTip) showTooltip(e.clientX,e.clientY,'Goal: Collapse crate here to stabilize it.');
+  else if(hazardTip) showTooltip(e.clientX,e.clientY,'Hazard: Avoid or restart level!');
+  else if(portalTip) showTooltip(e.clientX,e.clientY,'Portal: Teleports you to another portal.');
+  else if(barrierTip) showTooltip(e.clientX,e.clientY,'Barrier: Use tunneling to pass through.');
+  else{
+    const dx=Math.sign(x-player.x),dy=Math.sign(y-player.y);
+    if(Math.abs(x-player.x)>Math.abs(y-player.y)) move(dx,0); else move(0,dy);
+  }
+});
+
+// swipe gestures
+canvas.addEventListener('touchstart',e=>{
+  touchStartX=e.touches[0].clientX;
+  touchStartY=e.touches[0].clientY;
+});
+canvas.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-touchStartX;
+  const dy=e.changedTouches[0].clientY-touchStartY;
+  const absDx=Math.abs(dx),absDy=Math.abs(dy);
+  if(Math.max(absDx,absDy)>30){
+    if(absDx>absDy) move(Math.sign(dx),0); else move(0,Math.sign(dy));
+  }
+});
+
+// on-screen buttons
+['up','down','left','right'].forEach(dir=>{
+  document.getElementById(dir).addEventListener('click',()=>{
+    const deltas={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+    move(...deltas[dir]);
+  });
+});
+document.getElementById('observe').addEventListener('click',observe);
+document.getElementById('undo').addEventListener('click',undo);
+
+// power-up buttons
+document.getElementById('tunnel').addEventListener('click', useTunneling);
+document.getElementById('entangle').addEventListener('click', useEntanglement);
+document.getElementById('measure').addEventListener('click', useMeasurement);
+
+// Guide button
+document.getElementById('guideBtn').addEventListener('click', () => {
+  document.getElementById('gameGuide').style.display = 'block';
+});
+
+// Close guide
+document.getElementById('closeGuide').addEventListener('click', () => {
+  document.getElementById('gameGuide').style.display = 'none';
+});
+
+document.getElementById('closeGuideBtn').addEventListener('click', () => {
+  document.getElementById('gameGuide').style.display = 'none';
+});
+
+/* ---------- UI helpers ---------- */
+function showTip(){document.getElementById('tip').classList.remove('hidden')}
+function hideTip(){document.getElementById('tip').classList.add('hidden')}
+function showTooltip(x,y,text){
+  const t=document.createElement('div');
+  t.className='tooltip';t.style.left=x+'px';t.style.top=(y-40)+'px';t.innerText=text;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),2000);
+}
+
+/* ---------- GAME LOOP ---------- */
+function gameLoop() {
+  updateParticles();
+  requestAnimationFrame(gameLoop);
+}
+
+/* ---------- INIT ---------- */
+loadLevel(levelSeed);
+updatePowerUpDisplay();
+draw();
+gameLoop();
+</script>
+</body>
+</html>

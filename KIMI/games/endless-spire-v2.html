@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Endless Spire • Draft of Fate</title>
+<style>
+  :root{
+    --bg:#0d0d0d;
+    --bg2:#1a1a1a;
+    --accent:#0ff;
+    --text:#ddd;
+    --danger:#f55;
+    --success:#5f5;
+    --warning:#ff5; /* For Energy */
+    --info:#55f;    /* For Block */
+    --attack:#c33;  /* Attack card color */
+    --skill:#33c;   /* Skill card color */
+    --power:#c3c;   /* Power card color */
+    --status:#aa3;  /* Status effect color */
+    --target:#ff0;  /* Targeting highlight */
+  }
+  *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+  body{margin:0;background:var(--bg);color:var(--text);display:grid;
+       grid-template-columns:1fr 320px;grid-template-rows:auto 1fr;gap:4px;height:100vh}
+  header{grid-column:1/-1;background:var(--bg2);padding:.5rem 1rem;display:flex;gap:1rem;align-items:center;font-size:.9rem}
+  header span{margin-right:.5rem}
+  #battleArea,#sideArea{overflow:hidden;display:flex;flex-direction:column}
+  #battleArea{background:var(--bg2);padding:.5rem}
+  #log{flex:1;background:#000;padding:.5rem;font-size:.8rem;overflow-y:auto;white-space:pre-wrap}
+  #inventory{background:var(--bg2);padding:.5rem;font-size:.8rem;overflow-y:auto}
+  #inventory ul{margin:0;padding-left:1rem}
+  .card{position:relative;width:95px;height:135px;border:1px solid #555;border-radius:6px;background:#222;font-size:.7rem;
+        cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;padding:.3rem;transition:border .1s}
+  .card:hover{border-color:var(--accent)}
+  .card .cost{position:absolute;bottom:3px;right:3px;background:#333;padding:1px 3px;border-radius:3px}
+  .card.attack { background: #2a1a1a; border-color: #633; }
+  .card.skill { background: #1a1a2a; border-color: #336; }
+  .card.power { background: #2a1a2a; border-color: #636; }
+  .enemy{min-width:120px;padding:.4rem;background:#222;border:1px solid #444;border-radius:4px;margin-right:.5rem; position: relative; cursor: pointer;}
+  .enemy.targeted { border-color: var(--target); box-shadow: 0 0 5px var(--target); }
+  .hpBar{background:#444;height:6px;border-radius:3px;margin-top:.2rem}
+  .hpBar div{height:100%;background:var(--success);transition:width .2s}
+  .status{font-size:0.7rem; color: var(--status); margin-top: 0.2rem;}
+  #hand,#enemy{display:flex;flex-wrap:wrap;gap:.3rem;margin:.3rem 0}
+  #choices{position:fixed;inset:0;background:rgba(0,0,0,.9);display:flex;flex-direction:column;align-items:center;
+           justify-content:center;gap:.5rem;z-index:10;padding: 1rem; overflow-y: auto;}
+  #choices.hidden{display:none}
+  #choices .card{margin:0 .2rem}
+  .quest{background:#111;border:1px solid #444;margin:.2rem 0;padding:.3rem;border-radius:4px;font-size:.75rem}
+  .relic, .potion, .event-choice { margin: 0.3rem 0; padding: 0.4rem; background: #111; border: 1px solid #333; border-radius: 4px; font-size: 0.8rem; cursor: pointer; }
+  .event-choice:hover { border-color: var(--accent); }
+  .floor-desc { font-style: italic; margin: 0.5rem 0; padding: 0.3rem; background: rgba(255,255,255,0.05); border-radius: 4px; text-align: center; }
+  #potionBar { display: flex; gap: 0.3rem; margin: 0.3rem 0; flex-wrap: wrap; }
+  .potion { width: auto; padding: 0.3rem 0.5rem; text-align: center; }
+  .potion button { margin-left: 0.3rem; background: var(--bg2); border: 1px solid #555; color: var(--text); cursor: pointer; }
+  .potion button:hover { border-color: var(--accent); }
+  .game-over { text-align: center; }
+  .game-over h2 { margin-top: 0; }
+  .class-choice { display: flex; gap: 1rem; margin-top: 1rem; justify-content: center; flex-wrap: wrap; }
+  .class-option { padding: 1rem; border: 1px solid #444; border-radius: 8px; background: #111; cursor: pointer; width: 180px; text-align: center; }
+  .class-option:hover { border-color: var(--accent); }
+  .class-option h3 { margin: 0 0 0.5rem 0; }
+  .class-option p { font-size: 0.8rem; opacity: 0.8; }
+</style>
+</head>
+<body>
+<header>
+  <span>Wave <b id="wave">1</b></span>
+  <span>Score <b id="score">0</b></span>
+  <span>HP <b id="hp">80</b>/<b id="maxHp">80</b></span>
+  <span>Block <b id="block">0</b></span>
+  <span>Energy <b id="energy">3</b>/<b id="maxEnergy">3</b></span>
+  <span>Gold <b id="gold">0</b></span>
+</header>
+<!-- LEFT COLUMN -->
+<div id="battleArea">
+  <div id="floorDesc" class="floor-desc"></div>
+  <div id="enemy"></div>
+  <div id="potionBar"></div>
+  <div id="hand"></div>
+  <div style="text-align:center;margin:.5rem">
+    <button id="endTurnBtn" onclick="endPlayerTurn()">End Turn</button>
+  </div>
+</div>
+<!-- RIGHT COLUMN -->
+<div id="sideArea">
+  <div id="log">Welcome to the Endless Spire...</div>
+  <div id="inventory">
+    <strong>Relics</strong>
+    <div id="relics"></div>
+    <strong>Potions</strong>
+    <div id="potions"></div>
+    <strong>Side Quests</strong>
+    <div id="quests"></div>
+  </div>
+</div>
+<!-- Modal for draft / upgrade / events -->
+<div id="choices" class="hidden"></div>
+<script>
+/* ===== RNG ===== */
+const rng=(()=>{let s=1;return(seed)=>{s=(seed||s+1)&0xffffffff;s=Math.imul(s,0x19660d)+0x3c6ef35f;return (s>>>0)/0x100000000;}})();
+
+/* ===== CARD CATALOG ===== */
+const effects={
+  damage:(amt)=>({target})=>{ if(target && target.hp > 0) { const actualDmg = target.vulnerable ? Math.floor(amt * 1.5) : amt; target.hp-=actualDmg; log(`Dealt ${actualDmg} damage.`); } },
+  block:(amt)=>({player})=>{player.block+=amt;},
+  draw:(amt)=>({game})=>{game.draw(amt);},
+  poison:(amt)=>({target})=>{if(target && target.hp > 0) { target.poison=(target.poison||0)+amt; log(`Applied ${amt} Poison.`); } },
+  weak:(amt)=>({target})=>{if(target && target.hp > 0) { target.weak=(target.weak||0)+amt; log(`Applied ${amt} Weak.`); } },
+  vulnerable:(amt)=>({target})=>{if(target && target.hp > 0) { target.vulnerable=(target.vulnerable||0)+amt; log(`Applied ${amt} Vulnerable.`); } },
+  heal:(amt)=>({player})=>{player.hp=Math.min(player.maxHp, player.hp + amt); log(`Healed ${amt} HP.`);},
+  gainEnergy:(amt)=>({player})=>{player.energy=Math.min(player.maxEnergy, player.energy + amt); log(`Gained ${amt} Energy.`);},
+  exhaust:(amt)=>({game, cardIndex})=>{ if(cardIndex !== undefined && cardIndex >= 0 && cardIndex < game.hand.length) { const card = game.hand[cardIndex]; game.exhaust.push(card); game.hand.splice(cardIndex, 1); log(`Exhausted ${card.name}.`); } }
+};
+
+const catalog=[
+  {name:"Strike",type:"attack",cost:1,effect:effects.damage(6),desc:"Deal 6 damage"},
+  {name:"Defend",type:"skill",cost:1,effect:effects.block(5),desc:"Gain 5 Block"},
+  {name:"Bash",type:"attack",cost:2,effect:[effects.damage(8), effects.weak(2)],desc:"Deal 8 damage. Apply 2 Weak."},
+  {name:"Shrug",type:"skill",cost:1,effect:[effects.block(4),effects.draw(1)],desc:"Gain 4 Block. Draw 1 card."},
+  {name:"Poison Dart",type:"skill",cost:1,effect:effects.poison(3),desc:"Apply 3 Poison."},
+  {name:"Cleave",type:"attack",cost:1,effect:effects.damage(5),desc:"Deal 5 damage to ALL enemies"},
+  {name:"Power Through",type:"skill",cost:1,effect:[effects.block(15), effects.exhaust(1)],desc:"Gain 15 Block. Exhaust 1 random card."},
+  {name:"Anger",type:"attack",cost:0,effect:effects.damage(6),desc:"Deal 6 damage. Exhaust."},
+  {name:"Second Wind",type:"skill",cost:1,effect:({game, player})=>{ const cardsExhausted = game.hand.length; game.discard.push(...game.hand.splice(0)); player.block += cardsExhausted * 5; log(`Exhausted ${cardsExhausted} cards. Gained ${cardsExhausted * 5} Block.`); },desc:"Exhaust your hand. Gain 5 Block for each card Exhausted."},
+  {name:"Ritual Dagger",type:"attack",cost:1,effect:[effects.damage(15), effects.weak(1)],desc:"Deal 15 damage. Apply 1 Weak. Exhaust."}
+];
+
+// Relic definitions
+const relics = {
+    "Ring of the Snake": { desc: "At the start of each combat, draw 2 additional cards.", effect: "startCombatDrawBonus", value: 2 },
+    "Cracked Core": { desc: "At the start of your turn, gain 1 Energy if you have no cards in hand.", effect: "startTurnEnergyIfEmptyHand", value: 1 },
+    "Burning Blood": { desc: "At the end of your turn, heal 6 HP.", effect: "endTurnHeal", value: 6 },
+    "Preserved Insect": { desc: "Enemies in Elite combats have 25% less HP.", effect: "eliteHpReduction", value: 0.75 },
+    "Art of War": { desc: "If you do not play any Attacks during your turn, gain 2 Energy next turn.", effect: "noAttackGainEnergy", value: 2 }
+};
+
+// Potion definitions
+const potions = {
+    "Potion of Mending": { effect: "heal", value: 15, desc: "Heal 15 HP." },
+    "Elixir of Energy": { effect: "gainEnergy", value: 2, desc: "Gain 2 Energy." },
+    "Swift Draught": { effect: "draw", value: 3, desc: "Draw 3 cards." },
+    "Antidote": { effect: "removeDebuffs", value: 0, desc: "Remove all debuffs." } // Placeholder
+};
+
+// Event definitions
+const events = [
+    {
+        name: "The Cleric",
+        desc: "An old cleric offers to heal you for a price.",
+        choices: [
+            { text: "Pay 15 Gold for 20 HP.", condition: (s) => s.gold >= 15, effect: (s) => { s.gold -= 15; s.player.hp = Math.min(s.player.maxHp, s.player.hp + 20); }, outcome: "The cleric chants and heals your wounds. 'Be safe, traveler.'" },
+            { text: "Decline.", effect: (s) => {}, outcome: "You nod curtly and move on." }
+        ]
+    },
+    {
+        name: "Treasure Chest",
+        desc: "You find an ornate chest. It might contain great riches or great danger.",
+        choices: [
+            { text: "Open it.", effect: (s) => { const loot = ["Potion of Mending", "Gold (+25)", "Relic?"]; const roll = loot[Math.floor(rng() * loot.length)]; if (roll === "Gold (+25)") s.gold += 25; else if (roll === "Relic?") { const relicNames = Object.keys(relics); const relic = relicNames[Math.floor(rng() * relicNames.length)]; s.inventory.relics.push(relic); log(`Found Relic: ${relic}`); } else s.inventory.potions.push(roll); }, outcome: "You open the chest..." },
+            { text: "Leave it be.", effect: (s) => {}, outcome: "Best not to risk it. You continue on." }
+        ]
+    }
+];
+
+function mkCard(base, upgraded=false){
+    const card = {
+        name: base.name,
+        type: base.type,
+        cost: base.cost,
+        effect: base.effect,
+        desc: base.desc,
+        upgraded: upgraded
+    };
+    if (upgraded) {
+        if(card.name==="Strike") { card.effect=effects.damage(9); card.desc = "Deal 9 damage."; }
+        if(card.name==="Defend") { card.effect=effects.block(8); card.desc = "Gain 8 Block."; }
+        if(card.name==="Poison Dart"){ card.effect=effects.poison(5); card.desc="Apply 5 Poison."; }
+        if(card.name==="Bash"){ card.effect=[effects.damage(10), effects.weak(3)]; card.desc="Deal 10 damage. Apply 3 Weak."; }
+        if(card.name==="Cleave"){ card.effect=effects.damage(8); card.desc="Deal 8 damage to ALL enemies."; }
+        if(card.name==="Shrug"){ card.effect=[effects.block(7),effects.draw(1)]; card.desc="Gain 7 Block. Draw 1 card."; }
+        if(card.name==="Power Through"){ card.effect=[effects.block(20), effects.exhaust(1)]; card.desc="Gain 20 Block. Exhaust 1 random card."; }
+        if(card.name==="Anger"){ card.effect=effects.damage(8); card.desc="Deal 8 damage. Exhaust."; }
+        if(card.name==="Second Wind"){ card.desc="Exhaust your hand. Gain 7 Block for each card Exhausted."; } // Effect logic handles scaling
+        if(card.name==="Ritual Dagger"){ card.effect=[effects.damage(20), effects.weak(1)]; card.desc="Deal 20 damage. Apply 1 Weak. Exhaust."; }
+    }
+    return card;
+}
+
+/* ===== STATE ===== */
+const state={
+  wave:1,score:0,gold:0,
+  deck:[],hand:[],discard:[],exhaust:[],
+  enemies:[],
+  player:{hp:80,block:0,maxHp:80, energy: 3, maxEnergy: 3, weak: 0, vulnerable: 0, playedAttackThisTurn: false},
+  inventory:{ // Organize inventory
+      relics: [], // Start with a relic after class choice
+      potions: ["Potion of Mending", "Elixir of Energy"]
+  },
+  quests:[
+    {id:"firstBlood",desc:"Defeat your first enemy",done:false,reward:20},
+    {id:"poisoner",desc:"Apply Poison 10 times",progress:0,goal:10,reward:30},
+    {id:"defender",desc:"Gain 100 Block",progress:0,goal:100,reward:25},
+    {id:"energyMaster",desc:"Gain 20 Energy",progress:0,goal:20,reward:15}
+  ],
+  currentTarget: null, // For targeting
+  floorDescriptions: [
+      "A spiral staircase descends into darkness. Your journey begins.",
+      "The walls shimmer with an eerie green light.",
+      "Ancient runes cover the floor, pulsing faintly.",
+      "A cold wind howls through unseen cracks.",
+      "The air is thick with the scent of decay.",
+      "Glowing eyes peer at you from the shadows.",
+      "The stones beneath your feet feel unstable.",
+      "Whispers echo from the walls, speaking of forgotten horrors.",
+      "A chill runs down your spine. Something is near.",
+      "The staircase seems to stretch on forever..."
+  ],
+  gameStarted: false,
+  playerClass: null
+};
+
+/* ===== NARRATIVE LOGGER ===== */
+function log(str){
+    const l=document.getElementById('log');
+    l.textContent+=`\n${str}`;
+    l.scrollTop=l.scrollHeight;
+}
+
+/* ===== INIT ===== */
+function init(){
+  showClassSelection();
+}
+
+function showClassSelection() {
+    const choices=document.getElementById('choices');
+    choices.classList.remove('hidden');
+    choices.innerHTML='<h2>Choose Your Path</h2><div class="class-choice">';
+    
+    const warriorBtn = document.createElement('div');
+    warriorBtn.className = 'class-option';
+    warriorBtn.innerHTML = '<h3>Ironclad</h3><p>Start with a balanced deck and the "Burning Blood" relic.</p>';
+    warriorBtn.onclick = function() { selectClass("Ironclad"); }; // Use function expression
+    
+    const mageBtn = document.createElement('div');
+    mageBtn.className = 'class-option';
+    mageBtn.innerHTML = '<h3>Silent</h3><p>Start with a poison-based deck and the "Ring of the Snake" relic.</p>';
+    mageBtn.onclick = function() { selectClass("Silent"); }; // Use function expression
+    
+    choices.appendChild(warriorBtn);
+    choices.appendChild(mageBtn);
+    choices.innerHTML += '</div>';
+}
+
+function selectClass(className) {
+    state.playerClass = className;
+    if (className === "Ironclad") {
+        state.deck = [mkCard(catalog[0]), mkCard(catalog[0]), mkCard(catalog[0]), mkCard(catalog[0]), mkCard(catalog[0]), mkCard(catalog[1]), mkCard(catalog[1]), mkCard(catalog[1]), mkCard(catalog[1]), mkCard(catalog[1])]; // 5 Strikes, 5 Defends
+        state.inventory.relics.push("Burning Blood");
+    } else if (className === "Silent") {
+        state.deck = [mkCard(catalog[4]), mkCard(catalog[4]), mkCard(catalog[4]), mkCard(catalog[4]), mkCard(catalog[1]), mkCard(catalog[1]), mkCard(catalog[1]), mkCard(catalog[1]), mkCard(catalog[5]), mkCard(catalog[5])]; // 4 Poison Darts, 2 Defends, 2 Cleaves
+        state.inventory.relics.push("Ring of the Snake");
+    }
+    shuffleDeck();
+    newWave();
+    draw(5);
+    render();
+    log(state.floorDescriptions[0] || "You enter the Endless Spire...");
+    document.getElementById('choices').classList.add('hidden');
+    state.gameStarted = true;
+}
+
+function shuffleDeck(){
+  for(let i=state.deck.length-1;i>0;i--){
+    const j=Math.floor(rng()*i);
+    [state.deck[i],state.deck[j]]=[state.deck[j],state.deck[i]];
+  }
+}
+
+/* ---------- NEW HELPERS ---------- */
+function canPlayAnything(){
+  return state.hand.length > 0 ||
+         state.deck.length > 0 ||
+         state.discard.length > 0;
+}
+
+function endPlayerTurn(){
+  log("You end your turn.");
+  // Check Art of War relic
+  const artOfWar = state.inventory.relics.find(r => r === "Art of War");
+  if (artOfWar && !state.player.playedAttackThisTurn) {
+      const energyGain = relics["Art of War"].value;
+      log(`Art of War: You did not play an Attack. Gain ${energyGain} Energy next turn.`);
+      state.player.energyToGainNextTurn = (state.player.energyToGainNextTurn || 0) + energyGain;
+  }
+  state.player.playedAttackThisTurn = false; // Reset for next turn
+  // Apply relic end-turn effects
+  const burningBlood = state.inventory.relics.find(r => r === "Burning Blood");
+  if (burningBlood) {
+      const healAmt = relics["Burning Blood"].value;
+      state.player.hp = Math.min(state.player.maxHp, state.player.hp + healAmt);
+      log(`Burning Blood heals you for ${healAmt} HP.`);
+  }
+  enemyTurn();
+}
+
+/* ===== FLOW ===== */
+/* ---------- PATCH draw(n) ---------- */
+function draw(n){
+  for(let i=0;i<n;i++){
+    if(!state.deck.length){
+      if(!state.discard.length){
+        log("You have exhausted every card. The shadows close in...");
+        defeat();
+        return;
+      }
+      state.deck=state.discard.splice(0);
+      shuffleDeck();
+    }
+    if(state.deck.length) state.hand.push(state.deck.pop());
+  }
+}
+function playCard(idx){
+  const card=state.hand[idx];
+  if(!card) return;
+  if(card.cost > state.player.energy) {
+      log(`Not enough energy to play ${card.name}.`);
+      return;
+  }
+
+  let target = null;
+  if (card.type === "attack" || card.desc.includes("Apply")) {
+      if (state.enemies.length === 1) {
+          target = state.enemies[0];
+      } else if (state.enemies.length > 1) {
+          if (state.currentTarget !== null && state.currentTarget < state.enemies.length && state.enemies[state.currentTarget].hp > 0) {
+              target = state.enemies[state.currentTarget];
+          } else {
+              log(`Select a target for ${card.name}.`);
+              render(); // Re-render to show targeting state
+              return; // Wait for target selection
+          }
+      }
+  }
+
+  state.player.energy -= card.cost;
+  if(card.type === "attack") state.player.playedAttackThisTurn = true;
+
+  const run=e=>typeof e==='function'?e({player:state.player,target,game:state, cardIndex: idx}):null;
+  if(Array.isArray(card.effect)) card.effect.forEach(run); else run(card.effect);
+
+  // Handle Exhaust (Anger, Second Wind exhausts hand, Ritual Dagger)
+  if (card.name === "Anger" || card.name === "Ritual Dagger" || card.desc.includes("Exhaust")) {
+      state.exhaust.push(card);
+  } else {
+      state.discard.push(card);
+  }
+  state.hand.splice(idx,1);
+
+  log(`Played ${card.name}${target?` on Shadow #${state.enemies.indexOf(target)+1}`:""}.`);
+
+  // Quest Checks
+  if(card.name.includes("Poison")) checkQuest("poisoner", card.name === "Poison Dart" ? (card.upgraded ? 5 : 3) : 0);
+  if(card.name.includes("Block")) {
+      const blockAmt = card.name === "Defend" ? (card.upgraded ? 8 : 5) :
+                       card.name === "Shrug" ? (card.upgraded ? 7 : 4) :
+                       card.name === "Power Through" ? (card.upgraded ? 20 : 15) :
+                       card.name === "Second Wind" ? (state.hand.length * (card.upgraded ? 7 : 5)) : 0;
+      checkQuest("defender", blockAmt);
+  }
+  if(card.name.includes("Energy")) {
+       // Assuming gainEnergy effect card exists
+       checkQuest("energyMaster", card.name === "Elixir of Energy" ? 2 : 0); // Simplified
+  }
+
+  // Clear target after play
+  state.currentTarget = null;
+  render();
+  if(state.enemies.every(e=>e.hp<=0)) setTimeout(endWave,300);
+}
+
+function selectTarget(enemyIndex) {
+    if (state.currentTarget !== null) {
+        const prevTargetElement = document.querySelector(`.enemy[data-index="${state.currentTarget}"]`);
+        if (prevTargetElement) prevTargetElement.classList.remove('targeted');
+    }
+    state.currentTarget = enemyIndex;
+    const targetElement = document.querySelector(`.enemy[data-index="${enemyIndex}"]`);
+    if (targetElement) targetElement.classList.add('targeted');
+    render(); // Update UI to show target
+    // Find the card that needs targeting (last clicked card that requires it)
+    // This is a bit tricky without tracking the clicked card. A better way is to have playCard wait for target.
+    // For now, assume the first playable card needing a target is the one.
+    const playableCards = state.hand.filter(card => card.cost <= state.player.energy);
+    for (let i = 0; i < playableCards.length; i++) {
+        const card = playableCards[i];
+        if ((card.type === "attack" || card.desc.includes("Apply")) && state.enemies.length > 1) {
+             const cardIdx = state.hand.findIndex(c => c === card);
+             if (cardIdx !== -1) {
+                 playCard(cardIdx); // This will now have a target
+                 break;
+             }
+        }
+    }
+}
+
+function usePotion(index) {
+    if (index < 0 || index >= state.inventory.potions.length) return;
+    const potName = state.inventory.potions[index];
+    const pot = potions[potName];
+    if (!pot) return;
+
+    if (pot.effect === "heal") {
+        state.player.hp = Math.min(state.player.maxHp, state.player.hp + pot.value);
+        log(`Used ${potName}: Healed ${pot.value} HP.`);
+    } else if (pot.effect === "gainEnergy") {
+        state.player.energy = Math.min(state.player.maxEnergy, state.player.energy + pot.value);
+        log(`Used ${potName}: Gained ${pot.value} Energy.`);
+    } else if (pot.effect === "draw") {
+        draw(pot.value);
+        log(`Used ${potName}: Drew ${pot.value} cards.`);
+    } else if (pot.effect === "removeDebuffs") {
+        state.player.weak = 0;
+        state.player.vulnerable = 0;
+        log(`Used ${potName}: Removed all debuffs.`);
+    }
+
+    state.inventory.potions.splice(index, 1);
+    render();
+}
+
+
+function newWave(){
+  state.enemies=[];
+  const n=Math.min(4,Math.floor(state.wave/2)+1);
+  for(let i=0;i<n;i++){
+    const hp=Math.floor(12+state.wave*7);
+    const atk=Math.floor(5+state.wave*1.6);
+    state.enemies.push({hp,maxHp:hp,atk,poison:0, weak:0, vulnerable: 0});
+  }
+  log(`Wave ${state.wave}: ${n} shadow${n>1?"s":""} emerge!`);
+  document.getElementById('floorDesc').textContent = state.floorDescriptions[(state.wave - 1) % state.floorDescriptions.length] || "";
+  // Apply relic start-combat effects
+  const snakeRing = state.inventory.relics.find(r => r === "Ring of the Snake");
+  if (snakeRing) {
+      const drawBonus = relics["Ring of the Snake"].value;
+      draw(drawBonus);
+      log(`Ring of the Snake lets you draw ${drawBonus} extra cards.`);
+  }
+  // Reset player energy and status
+  state.player.energy = state.player.maxEnergy + (state.player.energyToGainNextTurn || 0);
+  state.player.energyToGainNextTurn = 0; // Reset
+  state.player.weak = 0;
+  state.player.vulnerable = 0;
+  state.currentTarget = null; // Reset target
+}
+
+function enemyTurn(){
+  state.player.block=0;
+  let anyEnemiesAlive = false;
+  state.enemies.forEach(e=>{
+    if(e.hp > 0) {
+        anyEnemiesAlive = true;
+        // Apply status effects
+        if(e.poison){e.hp-=e.poison; log(`Shadow takes ${e.poison} Poison damage.`); e.poison--;}
+        if(e.weak > 0) e.weak--;
+        if(e.vulnerable > 0) e.vulnerable--;
+
+        // Attack
+        if(e.hp>0){
+          let baseDmg = e.atk;
+          if(e.weak > 0) baseDmg = Math.floor(baseDmg * 0.75);
+          let dmg=baseDmg - state.player.block;
+          if(dmg<0) dmg=0;
+          // Apply player vulnerability
+          if(state.player.vulnerable > 0) dmg = Math.floor(dmg * 1.5);
+          state.player.hp-=dmg;
+          log(`Shadow hits you for ${dmg}${e.weak > 0 ? " (Weakened)" : ""}${state.player.vulnerable > 0 ? " (You are Vulnerable!)" : ""}.`);
+        }
+    }
+  });
+
+  if (!anyEnemiesAlive) {
+      return; // Handled by playCard check
+  }
+
+  if(state.player.hp<=0){
+      log("YOU DIED");
+      defeat();
+      return;
+  }
+
+  // Start of next turn - check for Cracked Core relic
+  state.player.energy = state.player.maxEnergy + (state.player.energyToGainNextTurn || 0);
+  state.player.energyToGainNextTurn = 0; // Reset
+  const crackedCore = state.inventory.relics.find(r => r === "Cracked Core");
+  if (crackedCore && state.hand.length === 0) {
+      const energyGain = relics["Cracked Core"].value;
+      state.player.energy = Math.min(state.player.maxEnergy, state.player.energy + energyGain);
+      log(`Cracked Core grants you ${energyGain} Energy.`);
+  }
+  state.player.weak = 0; // Reset player status at start of turn
+  state.player.vulnerable = 0;
+
+  draw(5);
+  render();
+}
+
+function endWave(){
+  state.score+=state.wave*10;
+  state.gold+=5+state.wave;
+  log(`Wave cleared! +${state.wave*10} score, +${5+state.wave} gold.`);
+  if(!state.quests.find(q=>q.id==="firstBlood").done){
+    completeQuest("firstBlood");
+  }
+  // Decide what happens next: Event, Boss, Draft, or Upgrade
+  if(state.wave % 7 === 0){ // Boss every 7 waves
+      // Placeholder for Boss logic - just give a good reward for now
+      state.inventory.relics.push("Cracked Core"); // Example boss reward
+      log("You have defeated a powerful foe and claimed a new relic!");
+      setTimeout(() => { state.wave++; newWave(); draw(5); render(); }, 1500); // Simple continue
+  } else if(state.wave % 5 === 0) { // Event every 5 waves (unless boss)
+      showEvent();
+  } else if(state.wave%3===0){
+    showUpgrade();
+  }else{
+    showDraft();
+  }
+  // state.wave++; // Increment AFTER draft/upgrade/event
+}
+
+function showEvent() {
+    const choices=document.getElementById('choices');
+    choices.classList.remove('hidden');
+    const event = events[Math.floor(rng() * events.length)];
+    choices.innerHTML=`<h2>${event.name}</h2><p>${event.desc}</p>`;
+    event.choices.forEach(choice => {
+        if (!choice.condition || choice.condition(state)) {
+            const btn = document.createElement('div');
+            btn.className = 'event-choice';
+            btn.textContent = choice.text;
+            btn.onclick = () => {
+                choice.effect(state);
+                log(choice.outcome);
+                choices.classList.add('hidden');
+                state.wave++;
+                newWave();
+                draw(5);
+                render();
+            };
+            choices.appendChild(btn);
+        }
+    });
+}
+
+
+/* ---------- NEW defeat() ---------- */
+function defeat(){
+  log(`GAME OVER – Wave ${state.wave}, Score ${state.score}`);
+  const choices=document.getElementById('choices');
+  choices.innerHTML=`<div class="game-over"><h2>Game Over</h2><p>Wave: ${state.wave}</p><p>Score: ${state.score}</p><button onclick="location.reload()">Ascend Again</button></div>`;
+  choices.classList.remove('hidden');
+}
+
+/* ===== QUESTS ===== */
+function checkQuest(id,val=1){
+  const q=state.quests.find(q=>q.id===id);
+  if(q && !q.done && q.goal){
+    q.progress=Math.min(q.goal,(q.progress||0)+val);
+    if(q.progress>=q.goal) completeQuest(id);
+  }
+}
+function completeQuest(id){
+  const q=state.quests.find(q=>q.id===id);
+  if(!q || q.done) return;
+  q.done=true;
+  state.score+=q.reward;
+  log(`Quest complete: ${q.desc} (+${q.reward} score).`);
+  render();
+}
+
+/* ===== DRAFT / UPGRADE ===== */
+function showDraft(){
+  const choices=document.getElementById('choices');
+  choices.classList.remove('hidden');
+  choices.innerHTML='<h2>Choose a card to add</h2>';
+  const picks=Array(3).fill(0).map(()=>catalog[Math.floor(rng()*catalog.length)]);
+  picks.forEach(c=>{
+    const btn=document.createElement('div');
+    btn.className=`card ${c.type}`;
+    btn.innerHTML=`<div>${c.name}</div><div>${c.desc}</div><div class="cost">${c.cost}</div>`;
+    btn.onclick=()=>{state.deck.push(mkCard(c));choices.classList.add('hidden');log(`Added ${c.name} to deck.`); state.wave++; newWave(); draw(5); render(); }; // Increment wave HERE
+    choices.appendChild(btn);
+  });
+}
+function showUpgrade(){
+  const choices=document.getElementById('choices');
+  choices.classList.remove('hidden');
+  choices.innerHTML='<h2>Click a card to upgrade</h2>';
+  const allCards = [...state.deck,...state.hand,...state.discard].filter(c => !c.upgraded);
+  if (allCards.length === 0) {
+      choices.innerHTML += '<p>No cards to upgrade.</p><button onclick="choices.classList.add(\'hidden\'); state.wave++; newWave(); draw(5); render();">Continue</button>'; // Increment wave HERE
+      return;
+  }
+  allCards.forEach((c,i)=>{
+    const btn=document.createElement('div');
+    btn.className=`card ${c.type}`;
+    btn.innerHTML=`<div>${c.name}</div><div>${c.desc}</div><div class="cost">${c.cost}</div>`;
+    btn.onclick=()=>{upgradeCard(c);choices.classList.add('hidden');log(`Upgraded ${c.name}.`); state.wave++; newWave(); draw(5); render(); }; // Increment wave HERE
+    choices.appendChild(btn);
+  });
+}
+function upgradeCard(card){
+  if(card.upgraded) return;
+  // Find and replace the card in all piles
+  const upgradeInPile = (pile) => {
+    const index = pile.findIndex(c => c === card);
+    if (index !== -1) {
+        pile[index] = mkCard(card, true); // Replace with upgraded version
+    }
+  };
+  upgradeInPile(state.deck);
+  upgradeInPile(state.hand);
+  upgradeInPile(state.discard);
+  // Note: Exhaust pile usually doesn't need upgrading mid-game, but could be handled if needed.
+}
+
+/* ===== RENDER ===== */
+function render(){
+  if (!state.gameStarted) return; // Don't render until game starts
+  document.getElementById('wave').textContent=state.wave;
+  document.getElementById('score').textContent=state.score;
+  document.getElementById('gold').textContent=state.gold;
+  document.getElementById('hp').textContent=state.player.hp;
+  document.getElementById('maxHp').textContent=state.player.maxHp;
+  document.getElementById('block').textContent=state.player.block;
+  document.getElementById('energy').textContent=state.player.energy;
+  document.getElementById('maxEnergy').textContent=state.player.maxEnergy;
+
+  const enemyDiv=document.getElementById('enemy');
+  enemyDiv.innerHTML='';
+  state.enemies.forEach((e,i)=>{
+    const d=document.createElement('div');
+    d.className='enemy';
+    d.setAttribute('data-index', i);
+    if (state.currentTarget === i) d.classList.add('targeted');
+    let statusText = "";
+    if (e.poison) statusText += `Poison: ${e.poison} `;
+    if (e.weak) statusText += `Weak: ${e.weak} `;
+    if (e.vulnerable) statusText += `Vulnerable: ${e.vulnerable} `;
+    d.innerHTML=`Shadow #${i+1}<br>${e.hp}/${e.maxHp} HP<br>ATK ${e.atk}${statusText ? `<br><span class="status">${statusText.trim()}</span>` : ''}
+      <div class="hpBar"><div style="width:${100*e.hp/e.maxHp}%"></div></div>`;
+    if(state.enemies.length > 1) {
+        d.onclick = () => selectTarget(i);
+    }
+    enemyDiv.appendChild(d);
+  });
+
+  const handDiv=document.getElementById('hand');
+  handDiv.innerHTML='';
+  state.hand.forEach((c,i)=>{
+    const d=document.createElement('div');
+    d.className=`card ${c.type}`;
+    if(c.cost > state.player.energy) d.style.opacity = '0.6';
+    d.innerHTML=`<div>${c.name}${c.upgraded ? " +" : ""}</div><div>${c.desc}</div><div class="cost">${c.cost}</div>`;
+    d.onclick=()=> {
+        if(c.cost <= state.player.energy) {
+            if ((c.type === "attack" || c.desc.includes("Apply")) && state.enemies.length > 1) {
+                 playCard(i); // Let playCard handle target selection
+            } else {
+                playCard(i);
+            }
+        } else {
+            log(`Not enough energy to play ${c.name}.`);
+        }
+    };
+    handDiv.appendChild(d);
+  });
+
+  // Render Potions
+  const potionBar = document.getElementById('potionBar');
+  potionBar.innerHTML = '';
+  state.inventory.potions.forEach((potName, index) => {
+      const p = potions[potName];
+      if(p) {
+          const potDiv = document.createElement('div');
+          potDiv.className = 'potion';
+          potDiv.innerHTML = `${potName} <button onclick="usePotion(${index})">Use</button>`;
+          potionBar.appendChild(potDiv);
+      }
+  });
+
+  // Render Inventory (Relics, Potions, Quests)
+  const relicDiv = document.getElementById('relics');
+  relicDiv.innerHTML = '';
+  state.inventory.relics.forEach(rel => {
+      const r = relics[rel];
+      if(r) relicDiv.insertAdjacentHTML('beforeend', `<div class="relic"><strong>${rel}</strong>: ${r.desc}</div>`);
+  });
+
+  const potionDiv = document.getElementById('potions');
+  potionDiv.innerHTML = '<em>(Use from the bar above during combat)</em>';
+  // state.inventory.potions.forEach(pot => { // Already shown in bar
+  //    const p = potions[pot];
+  //    if(p) potionDiv.insertAdjacentHTML('beforeend', `<div class="potion"><strong>${pot}</strong>: ${p.desc}</div>`);
+  // });
+
+  const qDiv=document.getElementById('quests');
+  qDiv.innerHTML='';
+  state.quests.forEach(q=>{
+    qDiv.insertAdjacentHTML('beforeend',
+      `<div class="quest">${q.done?"✅":"⏳"} ${q.desc} ${q.goal?`(${q.progress||0}/${q.goal})`:""}</div>`);
+  });
+}
+/* ===== GO ===== */
+init();
+</script>
+</body>
+</html>

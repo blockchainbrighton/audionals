@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SpinHex: Chronicles of the Crystalline Core</title>
+<style>
+  :root {
+    --bg-main: #0f0f1a;
+    --bg-board: #1a1a2e;
+    --text-primary: #e2e8f0;
+    --text-secondary: #a5b4fc;
+    --accent: #818cf8;
+    --border-radius: 16px;
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg-main);
+    color: var(--text-primary);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    flex-direction: column;
+    padding: 20px;
+    background-image:
+      radial-gradient(circle at 10% 20%, rgba(129, 140, 248, 0.1) 0%, transparent 20%),
+      radial-gradient(circle at 90% 80%, rgba(167, 139, 250, 0.1) 0%, transparent 20%);
+  }
+  .game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 100%;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 20px;
+    width: 100%;
+  }
+  h1 {
+    margin: 0 0 8px 0;
+    font-size: 2.8rem;
+    background: linear-gradient(90deg, #818cf8, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  .subtitle {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    margin-bottom: 15px;
+    max-width: 600px;
+    line-height: 1.5;
+  }
+  .board-wrapper {
+    position: relative;
+    background: var(--bg-board);
+    border-radius: var(--border-radius);
+    padding: 25px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  canvas {
+    background: #111827;
+    border-radius: 12px;
+    cursor: pointer;
+    display: block;
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+  }
+  .ui-panel {
+    display: flex;
+    justify-content: space-between;
+    width: 400px;
+    margin-top: 20px;
+    background: rgba(30, 30, 46, 0.7);
+    padding: 15px 20px;
+    border-radius: var(--border-radius);
+    font-size: 18px;
+    font-weight: 500;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .stat-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-top: 4px;
+  }
+  .instructions {
+    max-width: 500px;
+    margin-top: 25px;
+    padding: 20px;
+    background: rgba(30, 30, 46, 0.6);
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    line-height: 1.6;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .instructions h2 {
+    color: var(--accent);
+    margin-top: 0;
+    font-size: 1.4rem;
+  }
+  .instructions ul {
+    padding-left: 20px;
+    margin-bottom: 0;
+  }
+  .instructions li {
+    margin-bottom: 10px;
+  }
+  .highlight {
+    color: #fbbf24;
+    font-weight: 600;
+  }
+  .story-panel {
+    max-width: 500px;
+    margin-top: 25px;
+    padding: 20px;
+    background: rgba(30, 30, 46, 0.6);
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    line-height: 1.6;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .story-panel h2 {
+    color: var(--accent);
+    margin-top: 0;
+    font-size: 1.4rem;
+  }
+  @media (max-width: 500px) {
+    .ui-panel { width: 95%; }
+    h1 { font-size: 2.2rem; }
+    .board-wrapper { padding: 15px; }
+  }
+</style>
+</head>
+<body>
+<div class="game-container">
+  <div class="header">
+    <h1>SpinHex</h1>
+    <p class="subtitle">Restore harmony to the Crystalline Core by aligning the ancient energy pathways</p>
+  </div>
+
+  <div class="board-wrapper">
+    <canvas id="c" width="400" height="400"></canvas>
+  </div>
+
+  <div class="ui-panel">
+    <div class="stat">
+      <div>SCORE</div>
+      <div id="s" class="stat-value">0</div>
+    </div>
+    <div class="stat">
+      <div>MOVES</div>
+      <div id="m" class="stat-value">0</div>
+    </div>
+    <div class="stat">
+      <div>BEST</div>
+      <div id="b" class="stat-value">0</div>
+    </div>
+  </div>
+
+  <div class="story-panel">
+    <h2>The Crystalline Core</h2>
+    <p>In the heart of the Aetherial Realm lies the <span class="highlight">Crystalline Core</span>,
+    a source of universal harmony. Ancient guardians maintained its balance by aligning energy pathways.
+    But a cosmic disturbance has scrambled the Core's structure!</p>
+    <p>Your mission: Rotate the hexagonal rings to restore <span class="highlight">resonance chains</span>.
+    Form lines of matching crystals along the radial spokes and concentric rings to release
+    stabilizing energy. Each alignment strengthens the Core, but beware - chaotic energy
+    increases with every move.</p>
+    <p>Restore enough harmony before the Core destabilizes, or face the consequences of a
+    realm-wide energy collapse!</p>
+  </div>
+
+  <div class="instructions">
+    <h2>How to Play</h2>
+    <ul>
+      <li><span class="highlight">Rotate Rings</span>: Click on any outer ring to rotate it clockwise</li>
+      <li><span class="highlight">Create Matches</span>: Align 3+ matching colored crystals along spokes or rings</li>
+      <li><span class="highlight">Chain Reactions</span>: Cascading matches yield bonus points</li>
+      <li><span class="highlight">Strategic Depth</span>: Plan rotations to set up powerful combos</li>
+      <li><span class="highlight">Objective</span>: Maximize your score before moves run out (infinite moves in this version)</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');
+const colors=['#f38ba8','#a6e3a1','#fab387','#94e2d5','#cba6f7','#f2cdcd'];
+const R=3,COUNT=37;
+const CELLS=[1, 7, 19];
+const cells=new Uint8Array(COUNT);
+let score=0,moves=0,best=+localStorage.getItem('best')||0;
+const cellPos=[];
+
+// Enhanced color palette with glow effects
+const glowColors = [
+  '#ff7a90', // pink
+  '#8de969', // green
+  '#ff9e64', // orange
+  '#6bd5e0', // teal
+  '#b08cf7', // purple
+  '#f5a9a9'  // light pink
+];
+
+function initPos(){
+  const cx=200,cy=200,size=30;
+  cellPos[0]=[cx,cy];
+  for(let ring=1;ring<=R;ring++){
+    const n=ring*6,r=size*ring*1.8;
+    for(let i=0;i<n;i++){
+      const a=i*Math.PI*2/n;
+      cellPos[CELLS[ring-1]+i]=[cx+r*Math.cos(a),cy+r*Math.sin(a)];
+    }
+  }
+}
+
+function seedScramble(seed){
+  let h=0;
+  for(let i=0;i<seed.length;i++)h=((h<<5)-h+seed.charCodeAt(i))>>>0;
+  const rnd=()=>(h=(h*1664525+1013904223)>>>0,h/0x100000000);
+  for(let i=0;i<COUNT;i++)cells[i]=Math.floor(rnd()*6);
+}
+
+/******************************************************************
+ *  VISUAL UPGRADES
+ ******************************************************************/
+const durPop   = 150;
+const durSlide = 180;
+const durMove  = 200;
+const ease = t => t<.5 ? 2*t*t : 1-2*(1-t)*(1-t);
+
+// Enhanced drawCell with glow effect and better visibility
+function drawCell(i, scale = 1, alpha = 1, glow = false) {
+  const [x, y] = cellPos[i];
+  X.save();
+  X.globalAlpha = alpha;
+  X.translate(x, y);
+  X.scale(scale, scale);
+
+  if (glow) {
+    // Create glow effect
+    const gradient = X.createRadialGradient(0, 0, 15, 0, 0, 25);
+    gradient.addColorStop(0, glowColors[cells[i]]);
+    gradient.addColorStop(1, 'transparent');
+
+    X.beginPath();
+    X.arc(0, 0, 25, 0, Math.PI*2);
+    X.fillStyle = gradient;
+    X.fill();
+  }
+
+  // Main cell with border
+  X.beginPath();
+  X.arc(0, 0, 20, 0, Math.PI*2);
+  X.fillStyle = colors[cells[i]];
+  X.fill();
+
+  // Inner highlight for better visibility
+  X.beginPath();
+  X.arc(-5, -5, 8, 0, Math.PI*2);
+  X.fillStyle = 'rgba(255, 255, 255, 0.4)';
+  X.fill();
+
+  // Border
+  X.strokeStyle = '#11111b';
+  X.lineWidth = 2;
+  X.stroke();
+  X.restore();
+}
+
+function popMatched(indices) {
+  const start = performance.now();
+  function frame(t) {
+    const p = Math.min((t - start) / durPop, 1);
+    const scale = 1 - p;
+    const alpha = 1 - p;
+    X.clearRect(0, 0, 400, 400);
+    cells.forEach((_, i) => {
+      if (indices.has(i)) drawCell(i, scale, alpha, true);
+      else drawCell(i, 1, 1);
+    });
+    if (p < 1) requestAnimationFrame(frame);
+    else {
+      indices.forEach(i => cells[i] = 255);
+      slideNewCells();
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+function slideNewCells() {
+  const emptyIndices = [];
+  for (let i = 0; i < COUNT; i++)
+    if (cells[i] === 255) emptyIndices.push(i);
+  emptyIndices.forEach(i => cells[i] = Math.floor(Math.random()*6));
+
+  const start = performance.now();
+  function frame(t) {
+    const p = Math.min((t - start) / durSlide, 1);
+    const eased = ease(p);
+    X.clearRect(0, 0, 400, 400);
+    cells.forEach((_, i) => {
+      if (emptyIndices.includes(i)) {
+        const [sx, sy] = cellPos[0];
+        const [tx, ty] = cellPos[i];
+        const x = sx + (tx - sx) * eased;
+        const y = sy + (ty - sy) * eased;
+        X.save();
+        X.globalAlpha = eased;
+        X.translate(x, y);
+        X.beginPath();
+        X.arc(0, 0, 20, 0, Math.PI*2);
+        X.fillStyle = colors[cells[i]];
+        X.fill();
+
+        // Add glow to new cells
+        const gradient = X.createRadialGradient(0, 0, 15, 0, 0, 25);
+        gradient.addColorStop(0, glowColors[cells[i]]);
+        gradient.addColorStop(1, 'transparent');
+        X.beginPath();
+        X.arc(0, 0, 25, 0, Math.PI*2);
+        X.fillStyle = gradient;
+        X.fill();
+
+        X.strokeStyle = '#11111b';
+        X.lineWidth = 2;
+        X.stroke();
+        X.restore();
+      } else drawCell(i);
+    });
+    if (p < 1) requestAnimationFrame(frame);
+    else glideGravity();
+  }
+  requestAnimationFrame(frame);
+}
+
+function glideGravity() {
+  const pre = cells.slice();
+  gravity();
+  const post = cells.slice();
+  const moving = [];
+  for (let i = 0; i < COUNT; i++) {
+    if (pre[i] !== post[i] && post[i] !== 255) {
+      moving.push({
+        idx: i,
+        val: post[i],
+        from: cellPos[getInnerNeighborIndex(i)],
+        to: cellPos[i]
+      });
+    }
+  }
+  if (!moving.length) { checkMatches(); return; }
+
+  const start = performance.now();
+  function frame(t) {
+    const p = Math.min((t - start) / durMove, 1);
+    const eased = ease(p);
+    X.clearRect(0, 0, 400, 400);
+    cells.forEach((_, i) => {
+      const m = moving.find(m => m.idx === i);
+      if (m) {
+        const x = m.from[0] + (m.to[0] - m.from[0]) * eased;
+        const y = m.from[1] + (m.to[1] - m.from[1]) * eased;
+        X.save();
+        X.translate(x, y);
+        X.beginPath();
+        X.arc(0, 0, 20, 0, Math.PI*2);
+        X.fillStyle = colors[m.val];
+        X.fill();
+
+        // Glow effect during movement
+        const gradient = X.createRadialGradient(0, 0, 15, 0, 0, 25);
+        gradient.addColorStop(0, glowColors[m.val]);
+        gradient.addColorStop(1, 'transparent');
+        X.beginPath();
+        X.arc(0, 0, 25, 0, Math.PI*2);
+        X.fillStyle = gradient;
+        X.fill();
+
+        X.strokeStyle = '#11111b';
+        X.lineWidth = 2;
+        X.stroke();
+        X.restore();
+      } else drawCell(i);
+    });
+    if (p < 1) requestAnimationFrame(frame);
+    else {
+      checkMatches();
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+function checkMatches() {
+  const matched = new Set();
+
+  // Spoke matches
+  for (let i = 0; i < 6; i++) {
+    const spoke = [0, 1 + i, 7 + (i * 2), 19 + (i * 3)];
+    for (let j = 0; j < spoke.length; ) {
+      const val = cells[spoke[j]];
+      if (val === 255) { j++; continue; }
+      let k = j + 1;
+      while (k < spoke.length && cells[spoke[k]] === val) k++;
+      const run = k - j;
+      if (run >= 3) for (let l = 0; l < run; l++) matched.add(spoke[j + l]);
+      j = k;
+    }
+  }
+
+  // Ring matches
+  for (let ring = 1; ring <= R; ring++) {
+    const start = CELLS[ring - 1], len = ring * 6;
+    for (let i = 0; i < len; i++) {
+      const val = cells[start + i];
+      if (val === 255) continue;
+      let count = 1, j = (i + 1) % len;
+      while (j !== i && cells[start + j] === val) { count++; j = (j + 1) % len; }
+      if (count >= 3) for (let k = 0; k < count; k++) matched.add(start + (i + k) % len);
+    }
+  }
+
+  if (matched.size) {
+    // Bonus points for larger matches
+    const basePoints = 10;
+    const bonusPoints = matched.size > 3 ? (matched.size - 3) * 5 : 0;
+    matched.forEach(i => score += basePoints);
+    score += bonusPoints;
+
+    popMatched(matched);
+  } else {
+    render();
+    updateUI();
+  }
+}
+
+function render() {
+  X.clearRect(0, 0, 400, 400);
+  cells.forEach((_, i) => drawCell(i));
+}
+
+
+// FIXED ROTATION ANIMATION
+function animateRing(ring, duration = 250) {
+  const start = CELLS[ring - 1];
+  const len = ring * 6;
+  const center = [200, 200];
+  const stepAngle = (Math.PI * 2) / len;
+  let startTime = performance.now();
+
+  // Pre-render the static board state to an offscreen canvas
+  const offscreenCanvas = document.createElement('canvas');
+  offscreenCanvas.width = 400;
+  offscreenCanvas.height = 400;
+  const offscreenCtx = offscreenCanvas.getContext('2d');
+  offscreenCtx.clearRect(0, 0, 400, 400);
+
+  // Draw center
+  const [cx, cy] = cellPos[0];
+  offscreenCtx.beginPath();
+  offscreenCtx.arc(cx, cy, 20, 0, Math.PI * 2);
+  offscreenCtx.fillStyle = colors[cells[0]];
+  offscreenCtx.fill();
+  offscreenCtx.strokeStyle = '#11111b';
+  offscreenCtx.lineWidth = 2;
+  offscreenCtx.stroke();
+
+  // Draw all static rings
+  for (let r = 1; r <= R; r++) {
+    if (r !== ring) {
+      const st = CELLS[r - 1];
+      const ln = r * 6;
+      for (let i = 0; i < ln; i++) {
+        const idx = st + i;
+        const [x, y] = cellPos[idx];
+        offscreenCtx.beginPath();
+        offscreenCtx.arc(x, y, 20, 0, Math.PI * 2);
+        offscreenCtx.fillStyle = colors[cells[idx]];
+        offscreenCtx.fill();
+        offscreenCtx.stroke();
+      }
+    }
+  }
+
+  function step(t) {
+    const elapsed = t - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const angle = progress * stepAngle;
+
+    // Clear main canvas
+    X.clearRect(0, 0, 400, 400);
+    // Draw the pre-rendered static parts
+    X.drawImage(offscreenCanvas, 0, 0);
+
+    // Now draw the rotating ring on top
+    X.save();
+    X.translate(...center);
+    X.rotate(angle);
+    X.translate(-center[0], -center[1]);
+
+    // Draw the rotating ring cells
+    for (let i = 0; i < len; i++) {
+      const idx = start + i;
+      const [x, y] = cellPos[idx];
+      X.beginPath();
+      X.arc(x, y, 20, 0, Math.PI * 2);
+      X.fillStyle = colors[cells[idx]];
+      X.fill();
+      X.strokeStyle = '#11111b';
+      X.lineWidth = 2;
+      X.stroke();
+    }
+    X.restore();
+
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else {
+      // Commit data change
+      const tmp = cells[start + len - 1];
+      for (let i = len - 1; i > 0; i--) cells[start + i] = cells[start + i - 1];
+      cells[start] = tmp;
+      moves++;
+      checkMatches();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+
+function rotate(ring) {
+  if (ring === 0) return;
+  animateRing(ring); // Use animation instead of instant update
+}
+
+function getInnerNeighborIndex(idx) {
+  if (idx >= 19) return 7 + Math.floor((idx - 19) * 2 / 3);
+  if (idx >= 7) return 1 + Math.floor((idx - 7) / 2);
+  if (idx >= 1) return 0;
+  return -1;
+}
+
+function gravity(){
+  let changed;
+  do {
+    changed = false;
+    for (let i = 1; i < COUNT; i++) {
+      if (cells[i] === 255) {
+        const innerIdx = getInnerNeighborIndex(i);
+        if (innerIdx !== -1 && cells[innerIdx] !== 255) {
+          cells[i] = cells[innerIdx];
+          cells[innerIdx] = 255;
+          changed = true;
+        }
+      }
+    }
+  } while (changed);
+  for (let i = 0; i < COUNT; i++) {
+    if (cells[i] === 255) {
+      cells[i] = Math.floor(Math.random() * 6);
+    }
+  }
+}
+
+function updateUI(){
+  document.getElementById('s').textContent=score;
+  document.getElementById('m').textContent=moves;
+  document.getElementById('b').textContent=best=Math.max(best,score);
+  localStorage.setItem('best',best);
+}
+
+function getRing(x, y) {
+  if (Math.hypot(x - 200, y - 200) <= 20) return 0;
+  let bestDist = Infinity;
+  let bestRing = -1;
+  for (let ring = 1; ring <= R; ring++) {
+    const start = CELLS[ring - 1];
+    const len   = ring * 6;
+    for (let i = 0; i < len; i++) {
+      const [cx, cy] = cellPos[start + i];
+      const d = Math.hypot(x - cx, y - cy);
+      if (d <= 20 && d < bestDist) {
+        bestDist = d;
+        bestRing = ring;
+      }
+    }
+  }
+  return bestRing;
+}
+
+C.addEventListener('click', e => {
+  const rect = C.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const ring = getRing(x, y);
+  if (ring > 0) rotate(ring);
+});
+
+// Initialize game
+initPos();
+seedScramble(new Date().toISOString().slice(0,10));
+render();
+updateUI();
+
+// Add background particles for ambiance
+function createParticles() {
+  const particles = [];
+  for (let i = 0; i < 50; i++) {
+    particles.push({
+      x: Math.random() * 400,
+      y: Math.random() * 400,
+      size: Math.random() * 2 + 1,
+      speed: Math.random() * 0.5 + 0.1,
+      opacity: Math.random() * 0.3 + 0.1
+    });
+  }
+
+  function animate() {
+    X.fillStyle = 'rgba(15, 15, 26, 0.1)';
+    X.fillRect(0, 0, 400, 400);
+
+    particles.forEach(p => {
+      p.y += p.speed;
+      if (p.y > 400) {
+        p.y = 0;
+        p.x = Math.random() * 400;
+      }
+
+      X.beginPath();
+      X.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      X.fillStyle = `rgba(165, 180, 252, ${p.opacity})`;
+      X.fill();
+    });
+
+    requestAnimationFrame(animate);
+  }
+
+  // Draw particles behind the board
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = 400;
+  tempCanvas.height = 400;
+  const tempCtx = tempCanvas.getContext('2d');
+
+  // Copy current board to temp canvas
+  tempCtx.drawImage(C, 0, 0);
+
+  // Draw particles on main canvas
+  animate();
+
+  // Draw board back on top
+  X.drawImage(tempCanvas, 0, 0);
+}
+
+// Initialize particles after a short delay to ensure board is rendered
+setTimeout(createParticles, 100);
+</script>
+</body>
+</html>
