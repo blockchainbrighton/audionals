@@ -1,0 +1,871 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gravity Golf</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            color: #fff;
+        }
+        .game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background: rgba(10, 10, 35, 0.8);
+            border-radius: 12px;
+            box-shadow: 0 0 30px rgba(0, 150, 255, 0.4);
+            overflow: hidden;
+            border: 1px solid rgba(100, 150, 255, 0.3);
+        }
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+            background: rgba(0, 0, 30, 0.6);
+            border-bottom: 1px solid rgba(100, 150, 255, 0.3);
+        }
+        .stats {
+            display: flex;
+            gap: 20px;
+        }
+        .stat-box {
+            background: rgba(0, 20, 60, 0.7);
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(100, 150, 255, 0.3);
+            text-align: center;
+            min-width: 100px;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #a0c0ff;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffffff;
+        }
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+        }
+        .btn {
+            background: linear-gradient(to bottom, #4a6fc5, #2a4a8a);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            pointer-events: auto;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s;
+            border: 1px solid rgba(100, 150, 255, 0.5);
+        }
+        .btn:hover {
+            background: linear-gradient(to bottom, #5a7fd5, #3a5a9a);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+        }
+        .btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 10, 30, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 300px;
+            border: 1px solid rgba(100, 150, 255, 0.3);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .instructions h3 {
+            color: #6ab7ff;
+            margin-bottom: 10px;
+        }
+        .instructions ul {
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        .power-meter {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 20px;
+            height: 150px;
+            background: rgba(0, 0, 30, 0.7);
+            border-radius: 10px;
+            border: 1px solid rgba(100, 150, 255, 0.3);
+            overflow: hidden;
+        }
+        .power-fill {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(to top, #ff3366, #ff9966);
+            border-radius: 10px;
+            transition: height 0.1s;
+        }
+        .message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 20, 60, 0.9);
+            padding: 30px 50px;
+            border-radius: 15px;
+            text-align: center;
+            border: 2px solid #4a9fff;
+            box-shadow: 0 0 30px rgba(74, 158, 255, 0.5);
+            z-index: 20;
+            display: none;
+        }
+        .message h2 {
+            font-size: 36px;
+            color: #6ab7ff;
+            margin-bottom: 20px;
+        }
+        .message p {
+            font-size: 20px;
+            margin-bottom: 25px;
+            color: #ffffff;
+        }
+        .stars {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .star {
+            position: absolute;
+            background: #fff;
+            border-radius: 50%;
+        }
+        .title {
+            text-align: center;
+            padding: 20px;
+            font-size: 36px;
+            color: #6ab7ff;
+            text-shadow: 0 0 10px rgba(106, 183, 255, 0.7);
+            letter-spacing: 2px;
+        }
+        .title span {
+            color: #ff9966;
+        }
+        .level-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 20, 60, 0.7);
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(100, 150, 255, 0.3);
+            text-align: center;
+            z-index: 10;
+        }
+        .level-label {
+            font-size: 14px;
+            color: #a0c0ff;
+            margin-bottom: 5px;
+        }
+        .level-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="title">GRAVITY <span>GOLF</span></div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div class="ui-overlay">
+            <div class="header">
+                <div class="controls">
+                    <button id="resetBtn" class="btn">Reset Level</button>
+                </div>
+                <div class="stats">
+                    <div class="stat-box">
+                        <div class="stat-label">STROKES</div>
+                        <div id="strokes" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">TOTAL</div>
+                        <div id="total" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">PAR</div>
+                        <div id="par" class="stat-value">3</div>
+                    </div>
+                </div>
+            </div>
+            <div class="level-indicator">
+                <div class="level-label">LEVEL</div>
+                <div id="level" class="level-value">1</div>
+            </div>
+            <div class="instructions">
+                <h3>HOW TO PLAY</h3>
+                <ul>
+                    <li><strong>Click and hold</strong> on the ball to aim</li>
+                    <li><strong>Drag away</strong> to set power and direction</li>
+                    <li><strong>Release</strong> to shoot</li>
+                    <li>Use gravity to guide the ball to the goal</li>
+                    <li>Complete in as few strokes as possible!</li>
+                </ul>
+            </div>
+            <div class="power-meter">
+                <div id="powerFill" class="power-fill"></div>
+            </div>
+            <div id="winMessage" class="message">
+                <h2>LEVEL COMPLETE!</h2>
+                <p>You finished in <span id="finalStrokes">0</span> strokes</p>
+                <button id="nextLevelBtn" class="btn">Next Level</button>
+            </div>
+            <div id="gameCompleteMessage" class="message">
+                <h2>GAME COMPLETE!</h2>
+                <p>Congratulations! You finished all levels with <span id="finalTotal">0</span> total strokes.</p>
+                <button id="playAgainBtn" class="btn">Play Again</button>
+            </div>
+        </div>
+        <div class="stars" id="stars"></div>
+    </div>
+    <script>
+        // Game constants
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 600;
+        const BALL_RADIUS = 10;
+        const GOAL_WIDTH = 60;
+        const GOAL_HEIGHT = 30;
+        const WALL_THICKNESS = 10;
+        const MAX_LEVELS = 5;
+        
+        // Game state
+        let gameState = {
+            ball: { x: 100, y: 300, vx: 0, vy: 0 },
+            goal: { x: CANVAS_WIDTH - 100, y: CANVAS_HEIGHT/2 - GOAL_HEIGHT/2 },
+            planets: [],
+            obstacles: [],
+            movingObstacles: [],
+            blackHoles: [],
+            strokes: 0,
+            totalStrokes: 0,
+            level: 1,
+            par: 3,
+            isAiming: false,
+            aimStart: { x: 0, y: 0 },
+            aimEnd: { x: 0, y: 0 },
+            isBallMoving: false,
+            levelComplete: false
+        };
+        
+        // Canvas setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // DOM elements
+        const strokesElement = document.getElementById('strokes');
+        const totalElement = document.getElementById('total');
+        const parElement = document.getElementById('par');
+        const levelElement = document.getElementById('level');
+        const resetBtn = document.getElementById('resetBtn');
+        const winMessage = document.getElementById('winMessage');
+        const gameCompleteMessage = document.getElementById('gameCompleteMessage');
+        const finalStrokesElement = document.getElementById('finalStrokes');
+        const finalTotalElement = document.getElementById('finalTotal');
+        const nextLevelBtn = document.getElementById('nextLevelBtn');
+        const playAgainBtn = document.getElementById('playAgainBtn');
+        const powerFill = document.getElementById('powerFill');
+        
+        // Initialize stars background
+        function createStars() {
+            const starsContainer = document.getElementById('stars');
+            starsContainer.innerHTML = '';
+            for (let i = 0; i < 150; i++) {
+                const star = document.createElement('div');
+                star.classList.add('star');
+                const size = Math.random() * 3;
+                star.style.width = `${size}px`;
+                star.style.height = `${size}px`;
+                star.style.left = `${Math.random() * 100}%`;
+                star.style.top = `${Math.random() * 100}%`;
+                star.style.opacity = Math.random() * 0.8 + 0.2;
+                starsContainer.appendChild(star);
+            }
+        }
+        
+        // Seeded random number generator
+        function createSeededRandom(seed) {
+            return function() {
+                seed = (seed * 9301 + 49297) % 233280;
+                return seed / 233280;
+            };
+        }
+        
+        // Initialize game level based on current level
+        function initLevel() {
+            // Reset game state
+            gameState.ball = { x: 100, y: 300, vx: 0, vy: 0 };
+            gameState.strokes = 0;
+            gameState.isAiming = false;
+            gameState.isBallMoving = false;
+            gameState.levelComplete = false;
+            
+            // Set level-specific parameters
+            switch(gameState.level) {
+                case 1:
+                    gameState.par = 3;
+                    break;
+                case 2:
+                    gameState.par = 4;
+                    break;
+                case 3:
+                    gameState.par = 5;
+                    break;
+                case 4:
+                    gameState.par = 6;
+                    break;
+                case 5:
+                    gameState.par = 7;
+                    break;
+                default:
+                    gameState.par = 3;
+            }
+            
+            // Update UI
+            strokesElement.textContent = gameState.strokes;
+            totalElement.textContent = gameState.totalStrokes;
+            parElement.textContent = gameState.par;
+            levelElement.textContent = gameState.level;
+            
+            // Hide messages
+            winMessage.style.display = 'none';
+            gameCompleteMessage.style.display = 'none';
+            
+            // Generate level elements
+            generateLevelElements();
+        }
+        
+        // Generate level-specific elements
+        function generateLevelElements() {
+            gameState.planets = [];
+            gameState.obstacles = [];
+            gameState.movingObstacles = [];
+            gameState.blackHoles = [];
+            
+            const seededRandom = createSeededRandom(gameState.level * 1000);
+            
+            // Create planets
+            const planetCount = 2 + Math.floor(seededRandom() * (2 + gameState.level));
+            for (let i = 0; i < planetCount; i++) {
+                const radius = 20 + seededRandom() * 30;
+                const x = 150 + seededRandom() * (CANVAS_WIDTH - 300);
+                const y = 100 + seededRandom() * (CANVAS_HEIGHT - 200);
+                const mass = radius * (0.3 + seededRandom() * 0.4);
+                const colorIndex = Math.floor(seededRandom() * 5);
+                const colors = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#1A535C', '#FF9F1C'];
+                
+                gameState.planets.push({
+                    x, y, radius, mass,
+                    color: colors[colorIndex]
+                });
+            }
+            
+            // Create obstacles for higher levels
+            if (gameState.level >= 2) {
+                const obstacleCount = 1 + Math.floor(seededRandom() * gameState.level);
+                for (let i = 0; i < obstacleCount; i++) {
+                    const width = 20 + seededRandom() * 50;
+                    const height = 20 + seededRandom() * 50;
+                    const x = 200 + seededRandom() * (CANVAS_WIDTH - 300);
+                    const y = 100 + seededRandom() * (CANVAS_HEIGHT - 200);
+                    
+                    gameState.obstacles.push({
+                        x, y, width, height
+                    });
+                }
+            }
+            
+            // Create moving obstacles for higher levels
+            if (gameState.level >= 3) {
+                const movingObstacleCount = 1 + Math.floor(seededRandom() * (gameState.level - 2));
+                for (let i = 0; i < movingObstacleCount; i++) {
+                    const width = 30 + seededRandom() * 40;
+                    const height = 30 + seededRandom() * 40;
+                    const x = 200 + seededRandom() * (CANVAS_WIDTH - 300);
+                    const y = 100 + seededRandom() * (CANVAS_HEIGHT - 200);
+                    const speedX = (seededRandom() - 0.5) * 4;
+                    const speedY = (seededRandom() - 0.5) * 4;
+                    
+                    gameState.movingObstacles.push({
+                        x, y, width, height, speedX, speedY
+                    });
+                }
+            }
+            
+            // Create black holes for higher levels
+            if (gameState.level >= 4) {
+                const blackHoleCount = 1 + Math.floor(seededRandom() * (gameState.level - 3));
+                for (let i = 0; i < blackHoleCount; i++) {
+                    const radius = 15 + seededRandom() * 15;
+                    const x = 200 + seededRandom() * (CANVAS_WIDTH - 300);
+                    const y = 100 + seededRandom() * (CANVAS_HEIGHT - 200);
+                    
+                    gameState.blackHoles.push({
+                        x, y, radius
+                    });
+                }
+            }
+            
+            // Position goal
+            gameState.goal = { 
+                x: CANVAS_WIDTH - 100, 
+                y: CANVAS_HEIGHT/2 - GOAL_HEIGHT/2 
+            };
+        }
+        
+        // Draw game elements
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // Draw walls
+            ctx.fillStyle = '#2a4a8a';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, WALL_THICKNESS);
+            ctx.fillRect(0, CANVAS_HEIGHT - WALL_THICKNESS, CANVAS_WIDTH, WALL_THICKNESS);
+            ctx.fillRect(0, 0, WALL_THICKNESS, CANVAS_HEIGHT);
+            ctx.fillRect(CANVAS_WIDTH - WALL_THICKNESS, 0, WALL_THICKNESS, CANVAS_HEIGHT);
+            
+            // Draw planets
+            gameState.planets.forEach(planet => {
+                // Planet glow
+                const gradient = ctx.createRadialGradient(
+                    planet.x, planet.y, 0,
+                    planet.x, planet.y, planet.radius * 1.5
+                );
+                gradient.addColorStop(0, planet.color + '80');
+                gradient.addColorStop(1, 'transparent');
+                ctx.beginPath();
+                ctx.arc(planet.x, planet.y, planet.radius * 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                
+                // Planet body
+                ctx.beginPath();
+                ctx.arc(planet.x, planet.y, planet.radius, 0, Math.PI * 2);
+                ctx.fillStyle = planet.color;
+                ctx.fill();
+                
+                // Planet highlight
+                ctx.beginPath();
+                ctx.arc(
+                    planet.x - planet.radius * 0.3, 
+                    planet.y - planet.radius * 0.3, 
+                    planet.radius * 0.3, 
+                    0, Math.PI * 2
+                );
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.fill();
+            });
+            
+            // Draw black holes
+            gameState.blackHoles.forEach(blackHole => {
+                // Black hole event horizon
+                ctx.beginPath();
+                ctx.arc(blackHole.x, blackHole.y, blackHole.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#000';
+                ctx.fill();
+                
+                // Black hole accretion disk
+                const gradient = ctx.createRadialGradient(
+                    blackHole.x, blackHole.y, blackHole.radius,
+                    blackHole.x, blackHole.y, blackHole.radius * 2
+                );
+                gradient.addColorStop(0, 'rgba(255, 50, 50, 0.8)');
+                gradient.addColorStop(1, 'rgba(255, 50, 50, 0)');
+                ctx.beginPath();
+                ctx.arc(blackHole.x, blackHole.y, blackHole.radius * 2, 0, Math.PI * 2);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+            });
+            
+            // Draw obstacles
+            gameState.obstacles.forEach(obstacle => {
+                ctx.fillStyle = '#6a5acd';
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                
+                // Obstacle border
+                ctx.strokeStyle = '#483d8b';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            });
+            
+            // Draw moving obstacles
+            gameState.movingObstacles.forEach(obstacle => {
+                ctx.fillStyle = '#ff4500';
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                
+                // Obstacle border
+                ctx.strokeStyle = '#ff8c00';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            });
+            
+            // Draw goal
+            ctx.fillStyle = '#4a9fff';
+            ctx.fillRect(gameState.goal.x, gameState.goal.y, GOAL_WIDTH, GOAL_HEIGHT);
+            
+            // Draw goal glow
+            const goalGradient = ctx.createLinearGradient(
+                gameState.goal.x, gameState.goal.y, 
+                gameState.goal.x + GOAL_WIDTH, gameState.goal.y + GOAL_HEIGHT
+            );
+            goalGradient.addColorStop(0, 'rgba(74, 158, 255, 0.3)');
+            goalGradient.addColorStop(1, 'rgba(74, 158, 255, 0)');
+            ctx.beginPath();
+            ctx.roundRect = ctx.roundRect || function(x, y, width, height, radius) {
+                if (width < 2 * radius) radius = width / 2;
+                if (height < 2 * radius) radius = height / 2;
+                this.beginPath();
+                this.moveTo(x + radius, y);
+                this.arcTo(x + width, y, x + width, y + height, radius);
+                this.arcTo(x + width, y + height, x, y + height, radius);
+                this.arcTo(x, y + height, x, y, radius);
+                this.arcTo(x, y, x + width, y, radius);
+                this.closePath();
+                return this;
+            };
+            ctx.roundRect(gameState.goal.x - 10, gameState.goal.y - 10, GOAL_WIDTH + 20, GOAL_HEIGHT + 20, 5);
+            ctx.fillStyle = goalGradient;
+            ctx.fill();
+            
+            // Draw goal border
+            ctx.strokeStyle = '#6ab7ff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(gameState.goal.x, gameState.goal.y, GOAL_WIDTH, GOAL_HEIGHT);
+            
+            // Draw ball
+            ctx.beginPath();
+            ctx.arc(gameState.ball.x, gameState.ball.y, BALL_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            
+            // Draw ball highlight
+            ctx.beginPath();
+            ctx.arc(
+                gameState.ball.x - BALL_RADIUS * 0.3, 
+                gameState.ball.y - BALL_RADIUS * 0.3, 
+                BALL_RADIUS * 0.3, 
+                0, Math.PI * 2
+            );
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.fill();
+            
+            // Draw aim line
+            if (gameState.isAiming) {
+                ctx.beginPath();
+                ctx.moveTo(gameState.aimStart.x, gameState.aimStart.y);
+                ctx.lineTo(gameState.aimEnd.x, gameState.aimEnd.y);
+                ctx.strokeStyle = '#ff3366';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                // Draw power indicator
+                const dx = gameState.aimEnd.x - gameState.aimStart.x;
+                const dy = gameState.aimEnd.y - gameState.aimStart.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const power = Math.min(distance / 100, 1);
+                powerFill.style.height = `${power * 100}%`;
+            } else {
+                powerFill.style.height = '0%';
+            }
+        }
+        
+        // Apply physics to the ball
+        function update() {
+            if (!gameState.isBallMoving) return;
+            
+            // Apply gravity from planets
+            gameState.planets.forEach(planet => {
+                const dx = planet.x - gameState.ball.x;
+                const dy = planet.y - gameState.ball.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Avoid division by zero
+                if (distance > 5) {
+                    const force = planet.mass / (distance * distance);
+                    gameState.ball.vx += force * (dx / distance);
+                    gameState.ball.vy += force * (dy / distance);
+                }
+            });
+            
+            // Update moving obstacles
+            gameState.movingObstacles.forEach(obstacle => {
+                obstacle.x += obstacle.speedX;
+                obstacle.y += obstacle.speedY;
+                
+                // Bounce off walls
+                if (obstacle.x <= WALL_THICKNESS || obstacle.x + obstacle.width >= CANVAS_WIDTH - WALL_THICKNESS) {
+                    obstacle.speedX = -obstacle.speedX;
+                }
+                if (obstacle.y <= WALL_THICKNESS || obstacle.y + obstacle.height >= CANVAS_HEIGHT - WALL_THICKNESS) {
+                    obstacle.speedY = -obstacle.speedY;
+                }
+            });
+            
+            // Update ball position
+            gameState.ball.x += gameState.ball.vx;
+            gameState.ball.y += gameState.ball.vy;
+            
+            // Apply friction
+            gameState.ball.vx *= 0.99;
+            gameState.ball.vy *= 0.99;
+            
+            // Wall collisions
+            if (gameState.ball.x - BALL_RADIUS < WALL_THICKNESS) {
+                gameState.ball.x = WALL_THICKNESS + BALL_RADIUS;
+                gameState.ball.vx = -gameState.ball.vx * 0.8;
+            }
+            if (gameState.ball.x + BALL_RADIUS > CANVAS_WIDTH - WALL_THICKNESS) {
+                gameState.ball.x = CANVAS_WIDTH - WALL_THICKNESS - BALL_RADIUS;
+                gameState.ball.vx = -gameState.ball.vx * 0.8;
+            }
+            if (gameState.ball.y - BALL_RADIUS < WALL_THICKNESS) {
+                gameState.ball.y = WALL_THICKNESS + BALL_RADIUS;
+                gameState.ball.vy = -gameState.ball.vy * 0.8;
+            }
+            if (gameState.ball.y + BALL_RADIUS > CANVAS_HEIGHT - WALL_THICKNESS) {
+                gameState.ball.y = CANVAS_HEIGHT - WALL_THICKNESS - BALL_RADIUS;
+                gameState.ball.vy = -gameState.ball.vy * 0.8;
+            }
+            
+            // Obstacle collisions
+            gameState.obstacles.forEach(obstacle => {
+                if (
+                    gameState.ball.x + BALL_RADIUS > obstacle.x &&
+                    gameState.ball.x - BALL_RADIUS < obstacle.x + obstacle.width &&
+                    gameState.ball.y + BALL_RADIUS > obstacle.y &&
+                    gameState.ball.y - BALL_RADIUS < obstacle.y + obstacle.height
+                ) {
+                    // Simple bounce - reverse velocity
+                    gameState.ball.vx = -gameState.ball.vx * 0.8;
+                    gameState.ball.vy = -gameState.ball.vy * 0.8;
+                    
+                    // Move ball outside obstacle
+                    const centerX = obstacle.x + obstacle.width / 2;
+                    const centerY = obstacle.y + obstacle.height / 2;
+                    const dx = gameState.ball.x - centerX;
+                    const dy = gameState.ball.y - centerY;
+                    
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        gameState.ball.x = dx > 0 ? obstacle.x + obstacle.width + BALL_RADIUS : obstacle.x - BALL_RADIUS;
+                    } else {
+                        gameState.ball.y = dy > 0 ? obstacle.y + obstacle.height + BALL_RADIUS : obstacle.y - BALL_RADIUS;
+                    }
+                }
+            });
+            
+            // Moving obstacle collisions
+            gameState.movingObstacles.forEach(obstacle => {
+                if (
+                    gameState.ball.x + BALL_RADIUS > obstacle.x &&
+                    gameState.ball.x - BALL_RADIUS < obstacle.x + obstacle.width &&
+                    gameState.ball.y + BALL_RADIUS > obstacle.y &&
+                    gameState.ball.y - BALL_RADIUS < obstacle.y + obstacle.height
+                ) {
+                    // Simple bounce - reverse velocity
+                    gameState.ball.vx = -gameState.ball.vx * 0.8;
+                    gameState.ball.vy = -gameState.ball.vy * 0.8;
+                    
+                    // Move ball outside obstacle
+                    const centerX = obstacle.x + obstacle.width / 2;
+                    const centerY = obstacle.y + obstacle.height / 2;
+                    const dx = gameState.ball.x - centerX;
+                    const dy = gameState.ball.y - centerY;
+                    
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        gameState.ball.x = dx > 0 ? obstacle.x + obstacle.width + BALL_RADIUS : obstacle.x - BALL_RADIUS;
+                    } else {
+                        gameState.ball.y = dy > 0 ? obstacle.y + obstacle.height + BALL_RADIUS : obstacle.y - BALL_RADIUS;
+                    }
+                }
+            });
+            
+            // Black hole attraction
+            gameState.blackHoles.forEach(blackHole => {
+                const dx = blackHole.x - gameState.ball.x;
+                const dy = blackHole.y - gameState.ball.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // If ball is very close to black hole, it's captured
+                if (distance < blackHole.radius) {
+                    // Reset ball to start position
+                    gameState.ball.x = 100;
+                    gameState.ball.y = 300;
+                    gameState.ball.vx = 0;
+                    gameState.ball.vy = 0;
+                    gameState.isBallMoving = false;
+                    return;
+                }
+                
+                // Apply strong attraction force
+                if (distance > 5) {
+                    const force = 50 / (distance * distance); // Stronger force than planets
+                    gameState.ball.vx += force * (dx / distance);
+                    gameState.ball.vy += force * (dy / distance);
+                }
+            });
+            
+            // Goal collision
+            if (
+                gameState.ball.x + BALL_RADIUS > gameState.goal.x &&
+                gameState.ball.x - BALL_RADIUS < gameState.goal.x + GOAL_WIDTH &&
+                gameState.ball.y + BALL_RADIUS > gameState.goal.y &&
+                gameState.ball.y - BALL_RADIUS < gameState.goal.y + GOAL_HEIGHT
+            ) {
+                gameState.levelComplete = true;
+                gameState.isBallMoving = false;
+                
+                // Update total strokes
+                gameState.totalStrokes += gameState.strokes;
+                totalElement.textContent = gameState.totalStrokes;
+                
+                // Show win message
+                finalStrokesElement.textContent = gameState.strokes;
+                
+                // Check if game is complete
+                if (gameState.level >= MAX_LEVELS) {
+                    finalTotalElement.textContent = gameState.totalStrokes;
+                    gameCompleteMessage.style.display = 'block';
+                } else {
+                    winMessage.style.display = 'block';
+                }
+            }
+            
+            // Stop ball if velocity is very low
+            if (Math.abs(gameState.ball.vx) < 0.1 && Math.abs(gameState.ball.vy) < 0.1) {
+                gameState.ball.vx = 0;
+                gameState.ball.vy = 0;
+                gameState.isBallMoving = false;
+            }
+        }
+        
+        // Handle mouse events
+        canvas.addEventListener('mousedown', (e) => {
+            if (gameState.isBallMoving || gameState.levelComplete) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Check if click is on the ball
+            const dx = mouseX - gameState.ball.x;
+            const dy = mouseY - gameState.ball.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance <= BALL_RADIUS) {
+                gameState.isAiming = true;
+                gameState.aimStart = { x: gameState.ball.x, y: gameState.ball.y };
+                gameState.aimEnd = { x: gameState.ball.x, y: gameState.ball.y };
+            }
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (!gameState.isAiming) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            gameState.aimEnd = { x: mouseX, y: mouseY };
+        });
+        
+        canvas.addEventListener('mouseup', (e) => {
+            if (!gameState.isAiming) return;
+            gameState.isAiming = false;
+            
+            // Calculate shot power and direction
+            const dx = gameState.aimEnd.x - gameState.aimStart.x;
+            const dy = gameState.aimEnd.y - gameState.aimStart.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Only shoot if there's enough power
+            if (distance > 5) {
+                gameState.ball.vx = -dx * 0.1;
+                gameState.ball.vy = -dy * 0.1;
+                gameState.isBallMoving = true;
+                gameState.strokes++;
+                strokesElement.textContent = gameState.strokes;
+            }
+        });
+        
+        // Reset button
+        resetBtn.addEventListener('click', () => {
+            initLevel();
+        });
+        
+        // Next level button
+        nextLevelBtn.addEventListener('click', () => {
+            gameState.level++;
+            initLevel();
+        });
+        
+        // Play again button
+        playAgainBtn.addEventListener('click', () => {
+            gameState.level = 1;
+            gameState.totalStrokes = 0;
+            initLevel();
+        });
+        
+        // Game loop
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Initialize game
+        createStars();
+        initLevel();
+        gameLoop();
+    </script>
+</body>
+</html>
+```
