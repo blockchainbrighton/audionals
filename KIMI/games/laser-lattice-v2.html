@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laser Lattice</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            width: 100%;
+            max-width: 900px;
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            background: linear-gradient(to right, #ff7e5f, #feb47b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .game-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 30px;
+            max-width: 1200px;
+            width: 100%;
+        }
+        
+        .grid-container {
+            background: rgba(0, 0, 30, 0.7);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(12, 40px);
+            grid-template-rows: repeat(12, 40px);
+            gap: 1px;
+            background: #0a1929;
+            border: 2px solid #2a4d7a;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .cell {
+            width: 40px;
+            height: 40px;
+            background: #0c1e30;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .cell:hover {
+            background: #132a45;
+            transform: scale(1.05);
+        }
+        
+        .cell.target {
+            background: rgba(40, 167, 69, 0.2);
+        }
+        
+        .cell.laser-path {
+            background: rgba(0, 200, 255, 0.15);
+        }
+        
+        .cell.component {
+            background: rgba(50, 50, 100, 0.7);
+        }
+        
+        .cell.component:hover {
+            background: rgba(70, 70, 140, 0.9);
+        }
+        
+        .cell.laser {
+            background: rgba(255, 215, 0, 0.3);
+        }
+        
+        .cell.laser::after {
+            content: "";
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255,215,0,0.7) 0%, rgba(255,215,0,0) 70%);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(0.8); opacity: 0.7; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(0.8); opacity: 0.7; }
+        }
+        
+        .component-icon {
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 2;
+        }
+        
+        .target-icon {
+            position: absolute;
+            font-size: 28px;
+            color: #28a745;
+            z-index: 1;
+        }
+        
+        .laser-beam {
+            position: absolute;
+            background: rgba(255, 215, 0, 0.7);
+            z-index: 0;
+        }
+        
+        .controls {
+            background: rgba(0, 0, 30, 0.7);
+            border-radius: 10px;
+            padding: 20px;
+            width: 250px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        .palette {
+            margin-bottom: 25px;
+        }
+        
+        .palette-title {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #ff7e5f;
+        }
+        
+        .components {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .component-item {
+            background: rgba(30, 40, 80, 0.8);
+            border: 2px solid #2a4d7a;
+            border-radius: 8px;
+            padding: 15px 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .component-item:hover {
+            background: rgba(50, 70, 120, 0.9);
+            transform: translateY(-3px);
+        }
+        
+        .component-item.selected {
+            background: rgba(100, 150, 255, 0.5);
+            border-color: #4d9de0;
+            box-shadow: 0 0 15px rgba(77, 157, 224, 0.7);
+        }
+        
+        .component-item .component-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+        
+        .component-name {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .component-desc {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+        
+        .buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        button {
+            background: linear-gradient(to right, #4a69bd, #6a89cc);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 12px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        button.reset {
+            background: linear-gradient(to right, #e55039, #eb2f06);
+            grid-column: span 2;
+        }
+        
+        .stats {
+            background: rgba(30, 40, 80, 0.8);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .stat:last-child {
+            border-bottom: none;
+        }
+        
+        .stat-value {
+            font-weight: bold;
+            color: #ff7e5f;
+        }
+        
+        .instructions {
+            background: rgba(0, 0, 30, 0.7);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 25px;
+            max-width: 900px;
+            width: 100%;
+        }
+        
+        .instructions h2 {
+            color: #ff7e5f;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .win-message {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+        }
+        
+        .win-message.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .win-content {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f);
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 0 50px rgba(255, 215, 0, 0.5);
+        }
+        
+        .win-content h2 {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            color: gold;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+        }
+        
+        .win-content p {
+            font-size: 1.2rem;
+            margin-bottom: 25px;
+        }
+        
+        .win-content button {
+            font-size: 1.2rem;
+            padding: 12px 30px;
+        }
+        
+        @media (max-width: 768px) {
+            .game-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .controls {
+                width: 100%;
+                max-width: 500px;
+            }
+            
+            .grid {
+                grid-template-columns: repeat(12, 30px);
+                grid-template-rows: repeat(12, 30px);
+            }
+            
+            .cell {
+                width: 30px;
+                height: 30px;
+            }
+            
+            .component-icon {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>LASER LATTICE</h1>
+        <p class="subtitle">Strategically place optical components to guide the laser beam and illuminate all targets!</p>
+    </header>
+    
+    <div class="game-container">
+        <div class="grid-container">
+            <div class="grid" id="gameGrid"></div>
+        </div>
+        
+        <div class="controls">
+            <div class="palette">
+                <h2 class="palette-title">Component Palette</h2>
+                <div class="components">
+                    <div class="component-item selected" data-component="mirror1">
+                        <div class="component-icon">/</div>
+                        <div class="component-name">Mirror /</div>
+                        <div class="component-desc">Reflects laser 90°</div>
+                    </div>
+                    <div class="component-item" data-component="mirror2">
+                        <div class="component-icon">\</div>
+                        <div class="component-name">Mirror \</div>
+                        <div class="component-desc">Reflects laser 90°</div>
+                    </div>
+                    <div class="component-item" data-component="splitter">
+                        <div class="component-icon">|</div>
+                        <div class="component-name">Splitter</div>
+                        <div class="component-desc">Splits beam in two</div>
+                    </div>
+                    <div class="component-item" data-component="clear">
+                        <div class="component-icon">✕</div>
+                        <div class="component-name">Clear</div>
+                        <div class="component-desc">Remove components</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="buttons">
+                <button id="undoBtn">Undo</button>
+                <button id="redoBtn">Redo</button>
+                <button id="resetBtn" class="reset">Reset Puzzle</button>
+            </div>
+            
+            <div class="stats">
+                <div class="stat">
+                    <span>Moves:</span>
+                    <span class="stat-value" id="movesCount">0</span>
+                </div>
+                <div class="stat">
+                    <span>Time:</span>
+                    <span class="stat-value" id="timeCount">00:00</span>
+                </div>
+                <div class="stat">
+                    <span>Targets:</span>
+                    <span class="stat-value" id="targetsCount">0/0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="instructions">
+        <h2>How to Play</h2>
+        <ul>
+            <li>Place mirrors and splitters to guide the laser beam from the top-left corner to all green targets</li>
+            <li>Select a component from the palette, then click on the grid to place it</li>
+            <li>Right-click to remove components or use the Clear tool</li>
+            <li>Mirror / reflects the laser clockwise, Mirror \ reflects counter-clockwise</li>
+            <li>Splitters create a new beam at 90° while letting the original beam pass through</li>
+            <li>Win by illuminating all targets simultaneously</li>
+        </ul>
+    </div>
+    
+    <div class="win-message" id="winMessage">
+        <div class="win-content">
+            <h2>Puzzle Solved!</h2>
+            <p>You've successfully illuminated all targets!</p>
+            <p>Moves: <span id="winMoves">0</span> | Time: <span id="winTime">00:00</span></p>
+            <button id="newGameBtn">New Puzzle</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Game constants
+            const GRID_SIZE = 12;
+            const COMPONENTS = {
+                MIRROR1: '/',
+                MIRROR2: '\\',
+                SPLITTER: '|',
+                CLEAR: 'clear'
+            };
+            
+            // Game state
+            let gameState = {
+                grid: [],
+                selectedComponent: COMPONENTS.MIRROR1,
+                moves: 0,
+                startTime: null,
+                elapsedTime: 0,
+                targets: [],
+                targetsHit: [],
+                history: [],
+                historyIndex: -1,
+                isGameActive: true
+            };
+            
+            // DOM elements
+            const gameGrid = document.getElementById('gameGrid');
+            const movesCount = document.getElementById('movesCount');
+            const timeCount = document.getElementById('timeCount');
+            const targetsCount = document.getElementById('targetsCount');
+            const undoBtn = document.getElementById('undoBtn');
+            const redoBtn = document.getElementById('redoBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const winMessage = document.getElementById('winMessage');
+            const winMoves = document.getElementById('winMoves');
+            const winTime = document.getElementById('winTime');
+            const newGameBtn = document.getElementById('newGameBtn');
+            
+            // Initialize the game
+            function initGame() {
+                createGrid();
+                setupEventListeners();
+                generatePuzzle();
+                startTimer();
+                updateUI();
+            }
+            
+            // Create the game grid
+            function createGrid() {
+                gameGrid.innerHTML = '';
+                gameState.grid = [];
+                
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    gameState.grid[row] = [];
+                    for (let col = 0; col < GRID_SIZE; col++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.dataset.row = row;
+                        cell.dataset.col = col;
+                        
+                        gameGrid.appendChild(cell);
+                        gameState.grid[row][col] = null;
+                    }
+                }
+            }
+            
+            // Generate a new puzzle
+            function generatePuzzle() {
+                // Reset game state
+                gameState.moves = 0;
+                gameState.elapsedTime = 0;
+                gameState.targets = [];
+                gameState.targetsHit = [];
+                gameState.history = [];
+                gameState.historyIndex = -1;
+                gameState.isGameActive = true;
+                
+                // Clear grid
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    for (let col = 0; col < GRID_SIZE; col++) {
+                        gameState.grid[row][col] = null;
+                        const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                        cell.innerHTML = '';
+                        cell.className = 'cell';
+                    }
+                }
+                
+                // Place targets (random positions)
+                const targetCount = 4 + Math.floor(Math.random() * 3); // 4-6 targets
+                while (gameState.targets.length < targetCount) {
+                    const row = Math.floor(Math.random() * GRID_SIZE);
+                    const col = Math.floor(Math.random() * GRID_SIZE);
+                    
+                    // Don't place targets at (0,0) or too close to it
+                    if ((row === 0 && col === 0) || (row <= 1 && col <= 1)) continue;
+                    
+                    // Check if target already exists at this position
+                    const exists = gameState.targets.some(t => t.row === row && t.col === col);
+                    if (!exists) {
+                        gameState.targets.push({ row, col });
+                        
+                        // Add target to grid
+                        const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                        cell.classList.add('target');
+                        cell.innerHTML = '<div class="target-icon">✕</div>';
+                    }
+                }
+                
+                // Place initial laser
+                const startCell = document.querySelector('.cell[data-row="0"][data-col="0"]');
+                startCell.classList.add('laser');
+                
+                updateUI();
+            }
+            
+            // Set up event listeners
+            function setupEventListeners() {
+                // Component selection
+                document.querySelectorAll('.component-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        document.querySelectorAll('.component-item').forEach(i => i.classList.remove('selected'));
+                        item.classList.add('selected');
+                        gameState.selectedComponent = item.dataset.component;
+                    });
+                });
+                
+                // Grid cell interaction
+                gameGrid.addEventListener('click', handleCellClick);
+                gameGrid.addEventListener('contextmenu', handleRightClick);
+                
+                // Button events
+                undoBtn.addEventListener('click', undoMove);
+                redoBtn.addEventListener('click', redoMove);
+                resetBtn.addEventListener('click', generatePuzzle);
+                newGameBtn.addEventListener('click', () => {
+                    winMessage.classList.remove('show');
+                    generatePuzzle();
+                });
+            }
+            
+            // Handle left click on grid cell
+            function handleCellClick(e) {
+                if (!gameState.isGameActive) return;
+                
+                const cell = e.target.closest('.cell');
+                if (!cell) return;
+                
+                const row = parseInt(cell.dataset.row);
+                const col = parseInt(cell.dataset.col);
+                
+                // Can't place on start position or targets
+                if (row === 0 && col === 0) return;
+                if (gameState.targets.some(t => t.row === row && t.col === col)) return;
+                
+                // Save state for undo
+                saveState();
+                
+                // Place or remove component
+                if (gameState.selectedComponent === COMPONENTS.CLEAR) {
+                    if (gameState.grid[row][col]) {
+                        gameState.grid[row][col] = null;
+                        cell.innerHTML = '';
+                        cell.classList.remove('component');
+                        gameState.moves++;
+                    }
+                } else {
+                    if (!gameState.grid[row][col]) {
+                        gameState.grid[row][col] = gameState.selectedComponent;
+                        cell.innerHTML = `<div class="component-icon">${gameState.selectedComponent}</div>`;
+                        cell.classList.add('component');
+                        gameState.moves++;
+                    }
+                }
+                
+                updateUI();
+                calculateLaserPath();
+            }
+            
+            // Handle right click on grid cell
+            function handleRightClick(e) {
+                e.preventDefault();
+                if (!gameState.isGameActive) return;
+                
+                const cell = e.target.closest('.cell');
+                if (!cell) return;
+                
+                const row = parseInt(cell.dataset.row);
+                const col = parseInt(cell.dataset.col);
+                
+                // Can't remove from start position or targets
+                if (row === 0 && col === 0) return;
+                if (gameState.targets.some(t => t.row === row && t.col === col)) return;
+                
+                // Save state for undo
+                saveState();
+                
+                // Remove component
+                if (gameState.grid[row][col]) {
+                    gameState.grid[row][col] = null;
+                    cell.innerHTML = '';
+                    cell.classList.remove('component');
+                    gameState.moves++;
+                    updateUI();
+                    calculateLaserPath();
+                }
+            }
+            
+            // Save current state for undo/redo
+            function saveState() {
+                // Remove any future states if we're not at the end of history
+                if (gameState.historyIndex < gameState.history.length - 1) {
+                    gameState.history = gameState.history.slice(0, gameState.historyIndex + 1);
+                }
+                
+                // Save current state
+                const stateCopy = {
+                    grid: JSON.parse(JSON.stringify(gameState.grid)),
+                    moves: gameState.moves
+                };
+                gameState.history.push(stateCopy);
+                gameState.historyIndex++;
+                
+                // Limit history size
+                if (gameState.history.length > 50) {
+                    gameState.history.shift();
+                    gameState.historyIndex--;
+                }
+            }
+            
+            // Undo last move
+            function undoMove() {
+                if (gameState.historyIndex < 0) return;
+                
+                const prevState = gameState.history[gameState.historyIndex];
+                gameState.grid = JSON.parse(JSON.stringify(prevState.grid));
+                gameState.moves = prevState.moves;
+                gameState.historyIndex--;
+                
+                // Update grid display
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    for (let col = 0; col < GRID_SIZE; col++) {
+                        const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                        if (row === 0 && col === 0) continue; // Skip start position
+                        
+                        if (gameState.grid[row][col]) {
+                            cell.innerHTML = `<div class="component-icon">${gameState.grid[row][col]}</div>`;
+                            cell.classList.add('component');
+                        } else {
+                            cell.innerHTML = '';
+                            cell.classList.remove('component');
+                        }
+                    }
+                }
+                
+                updateUI();
+                calculateLaserPath();
+            }
+            
+            // Redo move
+            function redoMove() {
+                if (gameState.historyIndex >= gameState.history.length - 1) return;
+                
+                gameState.historyIndex++;
+                const nextState = gameState.history[gameState.historyIndex];
+                gameState.grid = JSON.parse(JSON.stringify(nextState.grid));
+                gameState.moves = nextState.moves;
+                
+                // Update grid display
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    for (let col = 0; col < GRID_SIZE; col++) {
+                        const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                        if (row === 0 && col === 0) continue; // Skip start position
+                        
+                        if (gameState.grid[row][col]) {
+                            cell.innerHTML = `<div class="component-icon">${gameState.grid[row][col]}</div>`;
+                            cell.classList.add('component');
+                        } else {
+                            cell.innerHTML = '';
+                            cell.classList.remove('component');
+                        }
+                    }
+                }
+                
+                updateUI();
+                calculateLaserPath();
+            }
+            
+            // Calculate and display laser path
+            function calculateLaserPath() {
+                // Clear previous laser path
+                document.querySelectorAll('.cell.laser-path, .cell.laser').forEach(cell => {
+                    cell.classList.remove('laser-path', 'laser');
+                });
+                
+                // Reset targets hit
+                gameState.targetsHit = [];
+                updateUI();
+                
+                // Start laser at (0,0) moving right
+                let x = 0;
+                let y = 0;
+                let dx = 1; // moving right
+                let dy = 0;
+                let beams = [{x, y, dx, dy}];
+                
+                // Mark starting position
+                const startCell = document.querySelector('.cell[data-row="0"][data-col="0"]');
+                startCell.classList.add('laser');
+                
+                // Track visited positions to prevent infinite loops
+                const visited = new Set();
+                
+                while (beams.length > 0) {
+                    const beam = beams.shift();
+                    let {x, y, dx, dy} = beam;
+                    
+                    // Move beam step by step
+                    while (true) {
+                        // Move one step
+                        x += dx;
+                        y += dy;
+                        
+                        // Check boundaries
+                        if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) break;
+                        
+                        // Create unique key for position and direction
+                        const key = `${x},${y},${dx},${dy}`;
+                        if (visited.has(key)) break;
+                        visited.add(key);
+                        
+                        // Get cell
+                        const cell = document.querySelector(`.cell[data-row="${y}"][data-col="${x}"]`);
+                        cell.classList.add('laser-path');
+                        
+                        // Check for targets
+                        const isTarget = gameState.targets.some(t => t.row === y && t.col === x);
+                        if (isTarget) {
+                            if (!gameState.targetsHit.some(t => t.row === y && t.col === x)) {
+                                gameState.targetsHit.push({ row: y, col: x });
+                            }
+                        }
+                        
+                        // Check for components
+                        const component = gameState.grid[y][x];
+                        if (component) {
+                            if (component === COMPONENTS.MIRROR1) { // /
+                                // Swap and negate directions
+                                [dx, dy] = [-dy, -dx];
+                            } else if (component === COMPONENTS.MIRROR2) { // \
+                                // Swap directions
+                                [dx, dy] = [dy, dx];
+                            } else if (component === COMPONENTS.SPLITTER) { // |
+                                // Split beam: one continues, one turns 90 degrees
+                                // Continue in current direction
+                                beams.push({x, y, dx, dy});
+                                
+                                // Create new beam at 90 degrees
+                                if (dx !== 0) {
+                                    // Horizontal beam splits vertically
+                                    beams.push({x, y, dx: 0, dy: dx > 0 ? 1 : -1});
+                                } else {
+                                    // Vertical beam splits horizontally
+                                    beams.push({x, y, dx: dy > 0 ? 1 : -1, dy: 0});
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Check win condition
+                if (gameState.targetsHit.length === gameState.targets.length && gameState.targets.length > 0) {
+                    setTimeout(showWinMessage, 500);
+                }
+            }
+            
+            // Show win message
+            function showWinMessage() {
+                gameState.isGameActive = false;
+                winMoves.textContent = gameState.moves;
+                winTime.textContent = formatTime(gameState.elapsedTime);
+                winMessage.classList.add('show');
+            }
+            
+            // Start game timer
+            function startTimer() {
+                gameState.startTime = Date.now() - gameState.elapsedTime * 1000;
+                
+                function updateTimer() {
+                    if (gameState.isGameActive) {
+                        const now = Date.now();
+                        gameState.elapsedTime = Math.floor((now - gameState.startTime) / 1000);
+                        timeCount.textContent = formatTime(gameState.elapsedTime);
+                    }
+                    requestAnimationFrame(updateTimer);
+                }
+                
+                updateTimer();
+            }
+            
+            // Format time as MM:SS
+            function formatTime(seconds) {
+                const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const secs = (seconds % 60).toString().padStart(2, '0');
+                return `${mins}:${secs}`;
+            }
+            
+            // Update UI elements
+            function updateUI() {
+                movesCount.textContent = gameState.moves;
+                targetsCount.textContent = `${gameState.targetsHit.length}/${gameState.targets.length}`;
+            }
+            
+            // Initialize the game
+            initGame();
+        });
+    </script>
+</body>
+</html>
