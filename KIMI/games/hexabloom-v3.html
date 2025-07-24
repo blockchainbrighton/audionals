@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Enhanced Hexabloom-2</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1f2d, #2c3e50);
+            overflow: hidden;
+            color: #e0e0e0;
+        }
+        
+        .game-container {
+            position: relative;
+            width: 600px;
+            height: 700px;
+            background: rgba(30, 35, 50, 0.8);
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            border: 2px solid #4a6fa5;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 20px;
+            background: rgba(20, 25, 40, 0.9);
+            border-bottom: 2px solid #4a6fa5;
+        }
+        
+        .score-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .score-label {
+            font-size: 14px;
+            color: #88c0d0;
+            margin-bottom: 4px;
+        }
+        
+        .score-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffffff;
+        }
+        
+        .best-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .best-label {
+            font-size: 14px;
+            color: #88c0d0;
+            margin-bottom: 4px;
+        }
+        
+        .best-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffffff;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            padding: 15px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background: linear-gradient(to bottom, #4a6fa5, #2c3e50);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            border: 1px solid #88c0d0;
+        }
+        
+        button:hover {
+            background: linear-gradient(to bottom, #5a7fb5, #3c4e60);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border: 2px solid #4a6fa5;
+            border-radius: 8px;
+            background: rgba(20, 25, 40, 0.7);
+        }
+        
+        .combo-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            color: #ffcc00;
+            text-shadow: 0 0 10px rgba(255, 204, 0, 0.7);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .instructions {
+            padding: 20px;
+            text-align: center;
+            background: rgba(20, 25, 40, 0.7);
+            border-top: 2px solid #4a6fa5;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .instructions h3 {
+            color: #88c0d0;
+            margin-bottom: 10px;
+        }
+        
+        .power-up-info {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 10px;
+        }
+        
+        .power-up {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .power-up-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+        
+        .particle {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 5;
+        }
+        
+        .level-indicator {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            color: #88c0d0;
+            border: 1px solid #4a6fa5;
+        }
+        
+        .time-bonus {
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            color: #ffcc00;
+            border: 1px solid #ffcc00;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <div class="score-container">
+                <div class="score-label">SCORE</div>
+                <div class="score-value" id="score">0</div>
+            </div>
+            <div class="best-container">
+                <div class="best-label">BEST</div>
+                <div class="best-value" id="best">0</div>
+            </div>
+        </div>
+        
+        <div class="level-indicator">Level: <span id="level">1</span></div>
+        <div class="time-bonus" id="time-bonus">+10s TIME BONUS!</div>
+        
+        <canvas id="c" width="600" height="500"></canvas>
+        
+        <div class="controls">
+            <button id="new-game">New Game</button>
+            <button id="share">Share Seed</button>
+        </div>
+        
+        <div class="instructions">
+            <h3>How to Play</h3>
+            <p>Click on groups of 2 or more connected hexagons of the same color to remove them. Larger groups give more points!</p>
+            
+            <div class="power-up-info">
+                <div class="power-up">
+                    <div class="power-up-color" style="background: #ff5555;"></div>
+                    <span>Bomb: Clears surrounding hexagons</span>
+                </div>
+                <div class="power-up">
+                    <div class="power-up-color" style="background: #55ff55;"></div>
+                    <span>Gravity: Shifts hexagons down</span>
+                </div>
+                <div class="power-up">
+                    <div class="power-up-color" style="background: #ffff55;"></div>
+                    <span>Shuffle: Randomizes colors</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="combo-display" id="combo-display"></div>
+    </div>
+
+    <script>
+        const c = document.getElementById('c');
+        const ctx = c.getContext('2d');
+        const W = 7, H = 13, S = 91, T = 30, R = T * 0.866;
+        const PALETTE = ['#2e3440', '#88c0d0', '#b48ead', '#a3be8c', '#ebcb8b', '#d08770', '#bf616a', '#ff5555', '#55ff55', '#ffff55'];
+        const state = new Uint8Array(S);
+        const powerUps = new Uint8Array(S); // 0 = normal, 1 = bomb, 2 = gravity, 3 = shuffle
+        let score = 0, best = +localStorage.getItem('best') || 0;
+        let combo = 0;
+        let level = 1;
+        let timeBonus = 0;
+        let particles = [];
+        
+        document.getElementById('best').textContent = best;
+        document.getElementById('level').textContent = level;
+
+        function seedBoard(seed) {
+            let s = 1;
+            for (let i = 0; i < S; i++) {
+                s = Math.imul(s, 0x45d9f3b) >>> 0;
+                state[i] = (s ^ seed.charCodeAt(i % seed.length)) % 6 + 1;
+                
+                // Add power-ups randomly (10% chance)
+                if (Math.random() < 0.1) {
+                    powerUps[i] = Math.floor(Math.random() * 3) + 1;
+                } else {
+                    powerUps[i] = 0;
+                }
+            }
+        }
+
+        function axialToPixel(q, r) {
+            const x = c.width / 2 + (q + r * 0.5) * T * 1.5;
+            const y = c.height / 2 + r * R;
+            return [x, y];
+        }
+
+        function pixelToAxial(x, y) {
+            x -= c.width / 2;
+            y -= c.height / 2;
+            const q = (x * 2/3) / T;
+            const r = (-x/3 + y * 0.577) / T;
+            const [rx, ry, rz] = [Math.round(q), Math.round(-q - r), Math.round(r)];
+            const qf = rx, rf = rz;
+            if (qf < 0 || qf >= W || rf < 0 || rf >= H) return null;
+            return qf + rf * W;
+        }
+
+        function neighbors(i) {
+            const q = i % W, r = Math.floor(i / W);
+            const dirs = [[1,0], [1,-1], [0,-1], [-1,0], [-1,1], [0,1]];
+            return dirs.map(([dq,dr]) => {
+                const nq = q + dq, nr = r + dr;
+                return (nq >= 0 && nq < W && nr >= 0 && nr < H) ? nq + nr * W : null;
+            }).filter(v => v !== null);
+        }
+
+        function bloom(start) {
+            const color = state[start];
+            if (!color) return 0;
+            
+            // Handle power-ups
+            if (powerUps[start] === 1) { // Bomb
+                return bombEffect(start);
+            } else if (powerUps[start] === 2) { // Gravity
+                return gravityEffect(start);
+            } else if (powerUps[start] === 3) { // Shuffle
+                return shuffleEffect(start);
+            }
+            
+            // Normal bloom
+            const q = [start], seen = new Set(q);
+            let chain = 0;
+            
+            while (q.length) {
+                const i = q.shift();
+                state[i] = 0;
+                powerUps[i] = 0;
+                chain++;
+                
+                // Create particles for removed hex
+                createParticles(i, color);
+                
+                neighbors(i).forEach(n => {
+                    if (!seen.has(n) && state[n] === color) {
+                        seen.add(n);
+                        q.push(n);
+                    }
+                });
+            }
+            
+            return chain;
+        }
+
+        function bombEffect(start) {
+            const q = start % W, r = Math.floor(start / W);
+            let chain = 0;
+            
+            // Clear surrounding hexagons
+            for (let dq = -1; dq <= 1; dq++) {
+                for (let dr = -1; dr <= 1; dr++) {
+                    const nq = q + dq, nr = r + dr;
+                    if (nq >= 0 && nq < W && nr >= 0 && nr < H) {
+                        const i = nq + nr * W;
+                        if (state[i]) {
+                            state[i] = 0;
+                            powerUps[i] = 0;
+                            chain++;
+                            
+                            // Create particles
+                            createParticles(i, 7); // Red particles for bomb
+                        }
+                    }
+                }
+            }
+            
+            return chain;
+        }
+
+        function gravityEffect(start) {
+            let chain = 0;
+            
+            // Apply gravity to all columns
+            for (let col = 0; col < W; col++) {
+                let emptySpaces = 0;
+                
+                // Process from bottom to top
+                for (let row = H - 1; row >= 0; row--) {
+                    const i = col + row * W;
+                    if (state[i] === 0) {
+                        emptySpaces++;
+                    } else if (emptySpaces > 0) {
+                        // Move hex down
+                        const newPos = col + (row + emptySpaces) * W;
+                        state[newPos] = state[i];
+                        powerUps[newPos] = powerUps[i];
+                        state[i] = 0;
+                        powerUps[i] = 0;
+                        chain++;
+                        
+                        // Create particles
+                        createParticles(newPos, state[newPos]);
+                    }
+                }
+            }
+            
+            return chain;
+        }
+
+        function shuffleEffect(start) {
+            // Shuffle all colors
+            for (let i = 0; i < S; i++) {
+                if (state[i]) {
+                    state[i] = Math.floor(Math.random() * 6) + 1;
+                }
+            }
+            
+            // Create particles for all hexagons
+            for (let i = 0; i < S; i++) {
+                if (state[i]) {
+                    createParticles(i, state[i]);
+                }
+            }
+            
+            return 1; // Minimal chain for shuffle
+        }
+
+        function createParticles(hexIndex, colorIndex) {
+            const [x, y] = axialToPixel(hexIndex % W, Math.floor(hexIndex / W));
+            const color = PALETTE[colorIndex];
+            
+            for (let i = 0; i < 15; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    size: Math.random() * 4 + 2,
+                    speedX: (Math.random() - 0.5) * 4,
+                    speedY: (Math.random() - 0.5) * 4,
+                    color: color,
+                    life: 30
+                });
+            }
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.speedX;
+                p.y += p.speedY;
+                p.life--;
+                
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function renderParticles() {
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life / 30;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, c.width, c.height);
+            
+            // Draw background grid
+            ctx.strokeStyle = 'rgba(136, 192, 208, 0.1)';
+            ctx.lineWidth = 1;
+            
+            for (let i = 0; i < S; i++) {
+                const q = i % W, r = Math.floor(i / W);
+                const [x, y] = axialToPixel(q, r);
+                
+                ctx.beginPath();
+                for (let j = 0; j < 6; j++) {
+                    const angle = j * Math.PI / 3;
+                    const px = x + T * Math.cos(angle);
+                    const py = y + T * Math.sin(angle);
+                    if (j === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.stroke();
+            }
+            
+            // Render particles
+            renderParticles();
+            
+            // Draw hexagons
+            for (let i = 0; i < S; i++) {
+                const q = i % W, r = Math.floor(i / W);
+                const [x, y] = axialToPixel(q, r);
+                
+                ctx.beginPath();
+                for (let j = 0; j < 6; j++) {
+                    const angle = j * Math.PI / 3;
+                    const px = x + T * Math.cos(angle);
+                    const py = y + T * Math.sin(angle);
+                    if (j === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                
+                if (state[i]) {
+                    // Fill with color
+                    ctx.fillStyle = PALETTE[state[i] + 1];
+                    ctx.fill();
+                    
+                    // Draw power-up indicator
+                    if (powerUps[i] > 0) {
+                        ctx.fillStyle = PALETTE[6 + powerUps[i]]; // Power-up colors
+                        ctx.beginPath();
+                        ctx.arc(x, y, T * 0.4, 0, Math.PI * 2);
+                        ctx.fill();
+                        
+                        // Draw icon
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = 'bold 16px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        
+                        const icons = ['B', 'G', 'S'];
+                        ctx.fillText(icons[powerUps[i]-1], x, y);
+                    }
+                }
+                
+                // Draw border
+                ctx.strokeStyle = 'rgba(136, 192, 208, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+            
+            // Update score display
+            document.getElementById('score').textContent = score;
+            document.getElementById('best').textContent = best;
+            document.getElementById('level').textContent = level;
+        }
+
+        function showCombo(chain, x, y) {
+            const comboDisplay = document.getElementById('combo-display');
+            comboDisplay.textContent = `${chain}x COMBO!`;
+            comboDisplay.style.opacity = '1';
+            comboDisplay.style.left = `${x}px`;
+            comboDisplay.style.top = `${y}px`;
+            
+            setTimeout(() => {
+                comboDisplay.style.opacity = '0';
+            }, 1000);
+        }
+
+        function share() {
+            const seed = new Date().toISOString().slice(0,10);
+            prompt('Shareable seed:', seed);
+        }
+
+        function init() {
+            const seed = new Date().toISOString().slice(0,10);
+            seedBoard(seed);
+            score = 0;
+            combo = 0;
+            level = 1;
+            timeBonus = 0;
+            particles = [];
+            render();
+        }
+
+        function checkLevelUp() {
+            // Increase level every 500 points
+            const newLevel = Math.floor(score / 500) + 1;
+            if (newLevel > level) {
+                level = newLevel;
+                // Show time bonus
+                const timeBonusElement = document.getElementById('time-bonus');
+                timeBonusElement.style.opacity = '1';
+                setTimeout(() => {
+                    timeBonusElement.style.opacity = '0';
+                }, 2000);
+            }
+        }
+
+        c.addEventListener('click', e => {
+            const rect = c.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const i = pixelToAxial(x, y);
+            
+            if (i !== null && state[i]) {
+                const chain = bloom(i);
+                if (chain) {
+                    // Calculate score with combo multiplier
+                    const comboMultiplier = Math.max(1, Math.floor(combo / 3));
+                    const points = chain * comboMultiplier * level;
+                    score += points;
+                    combo++;
+                    
+                    // Show combo effect
+                    showCombo(combo, x, y);
+                    
+                    // Update best score
+                    if (score > best) {
+                        best = score;
+                        localStorage.setItem('best', best);
+                    }
+                    
+                    // Check for level up
+                    checkLevelUp();
+                    
+                    render();
+                    
+                    // Check if board is empty
+                    if (state.every(v => !v)) {
+                        setTimeout(() => {
+                            alert(`Level ${level} Completed! Score: ${score}`);
+                            init();
+                        }, 500);
+                    }
+                }
+            }
+        });
+
+        document.getElementById('new-game').addEventListener('click', init);
+        document.getElementById('share').addEventListener('click', share);
+
+        // Animation loop
+        function animate() {
+            updateParticles();
+            render();
+            requestAnimationFrame(animate);
+        }
+
+        init();
+        animate();
+    </script>
+</body>
+</html>

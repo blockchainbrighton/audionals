@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Endless Alchemy ∞</title>
+<style>
+  :root {
+    --bg0: #0f0c29;
+    --bg1: #302b63;
+    --bg2: #24243e;
+    --accent: #5cdbff;
+    --success: #70ff70;
+    --danger: #ff7070;
+    --glass: rgba(255,255,255,.08);
+    --catalyst-glow: rgba(255, 215, 0, 0.4); /* Gold glow for catalysts */
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(135deg,var(--bg0),var(--bg1),var(--bg2));
+    color:#fff;
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+  #particles-js{position:fixed;inset:0;z-index:-1}
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:1rem 2rem;
+    backdrop-filter:blur(12px);
+    background:var(--glass);
+    border-bottom:1px solid rgba(255,255,255,.12);
+  }
+  header h1{font-size:2rem;letter-spacing:1px}
+  .era-badge{
+    background:linear-gradient(90deg,var(--accent),#ff6ec7);
+    padding:.3rem .8rem;
+    border-radius:99px;
+    font-size:.75rem;
+    font-weight:700;
+  }
+  .share-btn, .hint-btn{
+    background:var(--glass);
+    border:1px solid rgba(255,255,255,.2);
+    color:#fff;
+    padding:.6rem 1.2rem;
+    border-radius:10px;
+    cursor:pointer;
+    transition:.25s;
+    margin-left: 0.5rem; /* Add space between buttons */
+  }
+  .share-btn:hover, .hint-btn:hover{background:rgba(255,255,255,.2)}
+  main{
+    display:grid;
+    grid-template-columns:1fr 300px;
+    gap:2rem;
+    padding:2rem;
+    max-width:1200px;
+    margin:auto;
+  }
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+  .panel{
+    background:var(--glass);
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:20px;
+    padding:1.5rem;
+    backdrop-filter:blur(12px);
+    box-shadow:0 8px 32px rgba(0,0,0,.4);
+  }
+  .workshop{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  .combo-row{
+    display:flex;
+    gap:1rem;
+    align-items:center;
+    margin-bottom:1.5rem;
+  }
+  .socket{
+    width:110px;
+    height:110px;
+    border:2px dashed rgba(255,255,255,.3);
+    border-radius:20px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:.3s;
+    position:relative;
+    background: rgba(0,0,0,0.1); /* Slightly visible background */
+  }
+  .socket.filled{
+    border-color:var(--accent);
+    box-shadow:0 0 15px var(--accent);
+    background: rgba(0,0,0,0.2); /* Darker when filled */
+  }
+  .socket img{width:60px;height:60px;pointer-events:none}
+  .combine-btn-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem; /* Space between button and undo */
+    margin-bottom: 1rem;
+  }
+  .combine-btn{
+    background:linear-gradient(135deg,var(--accent),#ff6ec7);
+    border:none;
+    padding:.9rem 2rem;
+    font-size:1.1rem;
+    border-radius:14px;
+    color:#000;
+    font-weight:700;
+    cursor:pointer;
+    transition:.25s;
+    box-shadow:0 4px 15px rgba(0,0,0,.3);
+    flex-grow: 1; /* Button takes available space */
+  }
+  .combine-btn:disabled{opacity:.4;cursor:not-allowed}
+  .combine-btn:not(:disabled):hover{transform:translateY(-3px);box-shadow:0 6px 25px rgba(0,0,0,.5)}
+  .undo-btn {
+    background: var(--glass);
+    border: 1px solid rgba(255,255,255,.2);
+    color: #fff;
+    padding: .9rem 1rem;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: .25s;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .undo-btn:hover { background: rgba(255,255,255,.2); }
+  .undo-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  .hint-section {
+    width: 100%;
+    text-align: center;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255,255,255,.1);
+  }
+
+  .library{
+    overflow-y:auto;
+    max-height:70vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .library-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  .library-header h2 { margin: 0; }
+  .grid{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.5rem;
+    justify-content:center;
+    flex-grow: 1; /* Grid takes available space */
+  }
+  .element-card{
+    width:80px;
+    height:80px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:2.2rem;
+    border-radius:18px;
+    cursor:pointer;
+    user-select:none;
+    transition:transform .3s,box-shadow .3s;
+    position:relative;
+    box-shadow: 0 2px 5px rgba(0,0,0,.2); /* Subtle base shadow */
+  }
+  .element-card.new-discovery {
+     animation: popIn 0.5s ease-out, glowPulse 2s infinite; /* Combine pop and glow */
+  }
+  @keyframes popIn {
+    0% { transform: scale(0.5); opacity: 0; }
+    70% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes glowPulse {
+    0% { box-shadow: 0 0 5px gold; }
+    50% { box-shadow: 0 0 15px orange, 0 0 25px gold; }
+    100% { box-shadow: 0 0 5px gold; }
+  }
+  .element-card.catalyst {
+    border: 2px solid gold;
+    box-shadow: 0 0 8px var(--catalyst-glow);
+    animation: catalystGlow 3s ease-in-out infinite alternate;
+  }
+  @keyframes catalystGlow {
+    from { box-shadow: 0 0 8px var(--catalyst-glow); }
+    to { box-shadow: 0 0 15px var(--catalyst-glow), 0 0 25px rgba(255, 215, 0, 0.2); }
+  }
+
+  .element-card:hover{
+    transform:translateY(-5px) scale(1.1);
+    box-shadow:0 6px 18px rgba(0,0,0,.45);
+    z-index: 10; /* Bring to front on hover */
+  }
+  .tooltip{
+    position:absolute;
+    bottom:-30px;
+    left:50%;
+    transform:translateX(-50%);
+    background:rgba(0,0,0,.75);
+    padding:4px 8px;
+    border-radius:6px;
+    font-size:.7rem;
+    white-space:nowrap;
+    opacity:0;
+    transition:.3s;
+    pointer-events:none;
+    z-index: 100; /* Ensure tooltip is above other elements */
+  }
+  .element-card:hover .tooltip{opacity:1}
+  .modal{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.6);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:999;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .4s ease; /* Smoother transition */
+  }
+  .modal.show{opacity:1;pointer-events:auto}
+  .modal-content{
+    background:var(--glass);
+    border:1px solid rgba(255,255,255,.2);
+    border-radius:20px;
+    padding:2rem 3rem;
+    text-align:center;
+    animation:popModal .6s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Custom pop */
+    position: relative;
+    overflow: hidden; /* Contain particles */
+  }
+  #modal-particles {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: -1; /* Behind content */
+  }
+  @keyframes popModal{
+    0% { transform: scale(0.3) translateY(50px); opacity: 0; }
+    70% { transform: scale(1.05) translateY(-10px); }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+  }
+  .modal-content h2{font-size:2rem;margin-bottom:.5rem}
+  .modal-content .big{font-size:4rem; margin: 0.5rem 0;}
+  .modal-content p { margin: 0.5rem 0; }
+  .modal-content button{
+    margin-top:1rem;
+    padding:.6rem 1.4rem;
+    border:none;
+    border-radius:10px;
+    background:var(--accent);
+    color:#000;
+    font-weight:700;
+    cursor:pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .modal-content button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  }
+  .achievements-panel {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255,255,255,.1);
+    max-height: 30vh;
+    overflow-y: auto;
+  }
+  .achievements-panel h3 {
+    text-align: center;
+    margin-bottom: 0.5rem;
+    color: var(--accent);
+  }
+  .achievements{
+    font-size:.8rem;
+    color:#ccc;
+    list-style: none;
+    padding: 0;
+  }
+  .achievements li{
+    margin:.3rem 0;
+    padding: 0.3rem 0.5rem;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+  }
+  .achievements li::before {
+    content: "🔒";
+    margin-right: 0.5rem;
+  }
+  .achievements li.unlocked {
+    background: rgba(112, 255, 112, 0.1);
+  }
+  .achievements li.unlocked::before {
+    content: "✅";
+  }
+  .goals-panel {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255,255,255,.1);
+  }
+  .goals-panel h3 {
+    text-align: center;
+    margin-bottom: 0.5rem;
+    color: var(--accent);
+  }
+  .goal-item {
+    font-size: 0.8rem;
+    margin: 0.4rem 0;
+    padding: 0.3rem;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
+  }
+  .goal-item.unlocked {
+    background: rgba(112, 255, 112, 0.1);
+    color: var(--success);
+  }
+  .goal-item span { font-weight: bold; }
+</style>
+</head>
+<body>
+  <div id="particles-js"></div>
+  <header>
+    <h1>Endless Alchemy ∞</h1>
+    <div>
+      <span class="era-badge" id="era">Stone Age</span>
+      <!-- Hint button moved to workshop -->
+      <button class="share-btn" onclick="shareGame()">📤 Share</button>
+    </div>
+  </header>
+  <main>
+    <section class="panel workshop">
+      <h2>Alchemy Bench</h2>
+      <div class="combo-row">
+        <div class="socket" id="slot1" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)"></div>
+        <span style="font-size:2rem;">+</span>
+        <div class="socket" id="slot2" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)"></div>
+      </div>
+      <div class="combine-btn-row">
+        <button class="combine-btn" id="craftBtn" disabled onclick="craftElements()">⚗️ Combine</button>
+        <button class="undo-btn" id="undoBtn" disabled onclick="undoLastDrop()">↩️</button>
+      </div>
+       <div class="hint-section">
+        <button class="hint-btn" onclick="showDynamicHints()">💡 Hint</button>
+      </div>
+      <div class="goals-panel">
+        <h3>Next Era Goals</h3>
+        <div id="goalsList">
+            <!-- Goals will be populated by JS -->
+        </div>
+      </div>
+    </section>
+    <section class="panel library">
+       <div class="library-header">
+        <h2>Your Elements (<span id="count">0</span>/<span id="totalCount">120</span>)</h2>
+         <button class="hint-btn" onclick="toggleAchievementsPanel()" title="Toggle Achievements">🏆</button>
+       </div>
+      <div class="grid" id="lib"></div>
+      <div class="achievements-panel" id="achievementsPanel" style="display:none;">
+        <h3>Achievements</h3>
+        <ul class="achievements" id="ach"></ul>
+      </div>
+    </section>
+  </main>
+  <!-- Discovery Modal -->
+  <div class="modal" id="discModal">
+    <div class="modal-content">
+      <div id="modal-particles"></div>
+      <h2>Discovery!</h2>
+      <p class="big" id="discIcon"></p>
+      <p id="discName"></p>
+      <p id="discDesc"></p> <!-- Description placeholder -->
+      <button onclick="closeModal()">Continue</button>
+    </div>
+  </div>
+
+<!-- Particles -->
+<script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+<script>
+// --- Particle.js Configuration ---
+window.particlesJS("particles-js",{
+  particles:{
+    number:{value:80,density:{enable:true, value_area:800}},
+    color:{value:"#ffffff"},
+    shape:{type:"circle"},
+    opacity:{value:.2, random:true},
+    size:{value:3, random:true},
+    line_linked:{enable:true,distance:150,color:"#ffffff",opacity:.1},
+    move:{enable:true,speed:.8, direction:"none", random:true, straight:false, out_mode:"out", bounce:false}
+  },
+  interactivity:{
+    detect_on:"canvas",
+    events:{onhover:{enable:true,mode:"repulse"}, onclick:{enable:false}, resize:true}
+  }
+});
+
+// --- Modal Particles ---
+function initModalParticles() {
+    if (window.particlesJS) {
+        window.particlesJS("modal-particles", {
+            particles: {
+                number: { value: 30 }, // Fewer particles for modal
+                color: { value: "#5cdbff" }, // Match accent color
+                shape: { type: "circle" },
+                opacity: { value: 0.8, random: true },
+                size: { value: 5, random: true }, // Slightly larger
+                move: {
+                    enable: true,
+                    speed: 1.5, // Faster movement
+                    direction: "none",
+                    random: true,
+                    straight: false,
+                    out_mode: "out",
+                    bounce: false
+                }
+            },
+            interactivity: { detect_on: "canvas", events: { onhover: { enable: false }, onclick: { enable: false } } }
+        });
+    }
+}
+
+// --- Sound Effects (Conceptual - requires actual audio files) ---
+// const sfx = {
+//   combineSuccess: new Audio('path/to/combine_success.mp3'),
+//   discovery: new Audio('path/to/discovery.mp3'),
+//   drag: new Audio('path/to/drag.mp3'),
+//   drop: new Audio('path/to/drop.mp3'),
+//   error: new Audio('path/to/error.mp3')
+// };
+// function playSFX(soundName) { if (sfx[soundName]) sfx[soundName].play().catch(e=>console.log("SFX play error:", e)); }
+
+// --- Game Data ---
+const elements = [
+  {id:0,name:"Fire",icon:"🔥",color:"#ff5c5c",tier:0, desc: "The essence of heat and combustion."},
+  {id:1,name:"Water",icon:"💧",color:"#4ecdc4",tier:0, desc: "The flowing liquid of life."},
+  {id:2,name:"Earth",icon:"🌍",color:"#8b6914",tier:0, desc: "The solid ground beneath your feet."},
+  {id:3,name:"Air",icon:"💨",color:"#b8e6ff",tier:0, desc: "The invisible breath of wind."},
+  {id:4,name:"Steam",icon:"☁️",color:"#c0c0c0",tier:1, desc: "Water transformed by fire's touch."},
+  {id:5,name:"Lava",icon:"🌋",color:"#ff4500",tier:1, desc: "Earth melted by intense heat."},
+  {id:6,name:"Mud",icon:"🟤",color:"#8b4513",tier:1, desc: "Earth and water mixed together."},
+  {id:7,name:"Energy",icon:"⚡",color:"#ffd700",tier:1, desc: "The fundamental force that powers change."},
+  {id:8,name:"Stone",icon:"🪨",color:"#696969",tier:2, desc: "Hardened earth, shaped by time."},
+  {id:9,name:"Metal",icon:"🔩",color:"#c0c0c0",tier:2, desc: "A strong and malleable material."},
+  {id:10,name:"Sand",icon:"🏖️",color:"#f4a460",tier:2, desc: "Tiny grains of weathered stone."},
+  {id:11,name:"Plant",icon:"🌱",color:"#228b22",tier:2, desc: "Life sprouting from the earth."},
+  {id:12,name:"Glass",icon:"🪟",color:"#e6e6fa",tier:3, desc: "Sand transformed by intense heat."},
+  {id:13,name:"Ocean",icon:"🌊",color:"#000080",tier:3, desc: "A vast body of water."},
+  {id:14,name:"Life",icon:"🧬",color:"#ff1493",tier:3, desc: "The spark that animates matter."},
+  {id:15,name:"Tool",icon:"🔧",color:"#8b4513",tier:3, desc: "An instrument to shape the world."},
+  {id:16,name:"Human",icon:"👤",color:"#deb887",tier:4, desc: "A being of flesh, mind, and spirit."},
+  {id:17,name:"Technology",icon:"📱",color:"#000",tier:4, desc: "The application of scientific knowledge."},
+  {id:18,name:"Time",icon:"⏰",color:"#9370db",tier:4, desc: "The dimension of duration."},
+  {id:19,name:"Space",icon:"🚀",color:"#191970",tier:4, desc: "The vast expanse beyond Earth."},
+  {id:20,name:"City",icon:"🏙️",color:"#708090",tier:5, desc: "A large human settlement."},
+  {id:21,name:"Robot",icon:"🤖",color:"#ddd",tier:5, desc: "A machine designed to execute tasks."},
+  {id:22,name:"Satellite",icon:"🛰️",color:"#5f9ea0",tier:5, desc: "An object orbiting a planet."},
+  {id:23,name:"Star",icon:"⭐",color:"#ffff66",tier:5, desc: "A luminous sphere of plasma."},
+  {id:24,name:"Galaxy",icon:"🌌",color:"#663399",tier:6, desc: "A massive system of stars."},
+  {id:25,name:"Universe",icon:"🌠",color:"#fff",tier:6, desc: "All of space and time."},
+  {id:26,name:"Philosopher",icon:"🧙",color:"#8a2be2",tier:6, desc: "A seeker of fundamental truths."},
+  {id:27,name:"God",icon:"✨",color:"#ffd700",tier:7, desc: "A supreme being or deity."},
+  {id:28,name:"Void",icon:"🕳️",color:"#111",tier:7, desc: "The complete absence of matter."},
+  {id:29,name:"Big Bang",icon:"💥",color:"#ff0040",tier:8, desc: "The event that began the universe."},
+  {id:30,name:"Infinity",icon:"♾️",color:"#00ffff",tier:8, desc: "Boundless, endless, limitless."},
+  {id:31,name:"Alchemist",icon:"🧪",color:"#00ffaa",tier:9, desc: "Master of transformation."},
+  {id:32,name:"Phoenix",icon:"🐦‍🔥",color:"#ff3300",tier:4, desc: "A mythical bird reborn from its ashes.", catalyst: true},
+  {id:33,name:"Volcano",icon:"🌋",color:"#cc3300",tier:3, desc: "A vent in the Earth's crust."},
+  {id:34,name:"Quicksilver",icon:"🧊",color:"#b3ffff",tier:4, desc: "A mythical, ever-changing metal.", catalyst: true},
+  {id:35,name:"Dragon",icon:"🐉",color:"#7cfc00",tier:5, desc: "A powerful mythical creature.", catalyst: true},
+  {id:36,name:"Rainbow",icon:"🌈",color:"linear-gradient(90deg,red,orange,yellow,green,blue,indigo,violet)",tier:4, desc: "Light dispersed through water droplets."},
+  {id:37,name:"Crystal",icon:"💎",color:"#e0ffff",tier:4, desc: "A solid with a regular geometric shape."},
+  {id:38,name:"Lightning",icon:"⚡️",color:"#ffff99",tier:3, desc: "A sudden electric discharge."},
+  {id:39,name:"Cloud",icon:"☁️",color:"#ffffff",tier:2, desc: "A visible mass of water droplets."},
+  {id:40,name:"Ice",icon:"🧊",color:"#aeeeee",tier:2, desc: "Water frozen solid."},
+  {id:41,name:"Snow",icon:"❄️",color:"#f0f8ff",tier:2, desc: "Frozen water crystals."},
+  {id:42,name:"Desert",icon:"🏜️",color:"#d2b48c",tier:3, desc: "A barren area of land."},
+  {id:43,name:"Forest",icon:"🌲",color:"#006400",tier:3, desc: "A large area covered with trees."},
+  {id:44,name:"Mountain",icon:"⛰️",color:"#a0522d",tier:3, desc: "A large natural elevation."},
+  {id:45,name:"River",icon:"🌊",color:"#00bfff",tier:3, desc: "A large natural stream of water."},
+  {id:46,name:"Lake",icon:"🏞️",color:"#4682b4",tier:3, desc: "A large body of water surrounded by land."},
+  {id:47,name:"Island",icon:"🏝️",color:"#32cd32",tier:4, desc: "Land surrounded by water."},
+  {id:48,name:"Continent",icon:"🌍",color:"#228b22",tier:5, desc: "One of the large landmasses."},
+  {id:49,name:"Planet",icon:"🪐",color:"#1e90ff",tier:5, desc: "A celestial body orbiting a star."},
+  {id:50,name:"Sun",icon:"☀️",color:"#ffd700",tier:5, desc: "The star at the center of our system."},
+  {id:51,name:"Moon",icon:"🌙",color:"#f5f5f5",tier:5, desc: "Earth's natural satellite."},
+  {id:52,name:"Comet",icon:"☄️",color:"#ff69b4",tier:5, desc: "A celestial object with a tail."},
+  {id:53,name:"Black Hole",icon:"⚫",color:"#000",tier:6, desc: "A region of spacetime with immense gravity."},
+  {id:54,name:"Nebula",icon:"🌌",color:"#dda0dd",tier:6, desc: "A giant cloud of dust and gas."},
+  {id:55,name:"Supernova",icon:"💥",color:"#ff4500",tier:6, desc: "The explosive death of a star."},
+  {id:56,name:"Time Machine",icon:"⌛",color:"#9370db",tier:6, desc: "A device to travel through time.", catalyst: true},
+  {id:57,name:"AI",icon:"🧠",color:"#00bfff",tier:6, desc: "Artificial intelligence.", catalyst: true},
+  {id:58,name:"Quantum",icon:"⚛️",color:"#7b68ee",tier:7, desc: "Relating to the smallest scales."},
+  {id:59,name:"Multiverse",icon:"🔭",color:"#ba55d3",tier:7, desc: "A hypothetical set of universes."},
+  {id:60,name:"Dream",icon:"💭",color:"#e6e6fa",tier:4, desc: "A sequence of images during sleep."},
+  {id:61,name:"Soul",icon:"👻",color:"#f8f8ff",tier:5, desc: "The spiritual part of a person."},
+  {id:62,name:"Love",icon:"❤️",color:"#ff69b4",tier:4, desc: "A feeling of strong affection."},
+  {id:63,name:"War",icon:"⚔️",color:"#dc143c",tier:5, desc: "A conflict between groups."},
+  {id:64,name:"Peace",icon:"☮️",color:"#7fffd4",tier:6, desc: "A state of harmony."},
+  {id:65,name:"Music",icon:"🎵",color:"#ff69b4",tier:4, desc: "The art of arranging sounds."},
+  {id:66,name:"Art",icon:"🎨",color:"#ff4500",tier:5, desc: "The expression of human creativity."},
+  {id:67,name:"Science",icon:"🔬",color:"#4169e1",tier:5, desc: "The study of the natural world."},
+  {id:68,name:"Math",icon:"➗",color:"#708090",tier:5, desc: "The abstract science of number."},
+  {id:69,name:"Money",icon:"💰",color:"#ffd700",tier:4, desc: "A medium of exchange."},
+  {id:70,name:"Power",icon:"⚡️",color:"#ffff00",tier:5, desc: "The ability to do something."},
+  {id:71,name:"Chaos",icon:"🌪️",color:"#800080",tier:6, desc: "Complete disorder and confusion."},
+  {id:72,name:"Order",icon:"⚖️",color:"#f5f5dc",tier:6, desc: "The arrangement of people or things."},
+  {id:73,name:"Death",icon:"💀",color:"#000",tier:5, desc: "The end of life."},
+  {id:74,name:"Rebirth",icon:"🔄",color:"#7fff00",tier:6, desc: "The action of being born again."},
+  {id:75,name:"Eternity",icon:"♾️",color:"#00ffff",tier:8, desc: "Infinite time."},
+  {id:76,name:"Mystery",icon:"❓",color:"#b0c4de",tier:6, desc: "Something difficult to understand."},
+  {id:77,name:"Light",icon:"💡",color:"#ffffe0",tier:3, desc: "Natural agent that makes things visible."},
+  {id:78,name:"Shadow",icon:"🌑",color:"#2f2f2f",tier:3, desc: "A dark area blocked from light."},
+  {id:79,name:"Mirror",icon:"🪞",color:"#c0c0c0",tier:4, desc: "A reflective surface."},
+  {id:80,name:"Echo",icon:"📢",color:"#add8e6",tier:5, desc: "A sound reflected back."},
+  {id:81,name:"Memory",icon:"🧠",color:"#deb887",tier:5, desc: "The faculty of remembering."},
+  {id:82,name:"Future",icon:"🔮",color:"#dda0dd",tier:6, desc: "Time regarded as still to come."},
+  {id:83,name:"Past",icon:"📜",color:"#d2b48c",tier:6, desc: "Time that has already happened."},
+  {id:84,name:"Portal",icon:"🌀",color:"#9932cc",tier:6, desc: "An entrance to another place."},
+  {id:85,name:"Dimension",icon:"🎲",color:"#8a2be2",tier:7, desc: "A measurable extent of space."},
+  {id:86,name:"Imagination",icon:"🎈",color:"#ff69b4",tier:7, desc: "The faculty of forming mental images."},
+  {id:87,name:"Reality",icon:"👁️",color:"#ffffff",tier:8, desc: "The state of things as they exist."},
+  {id:88,name:"Truth",icon:"✔️",color:"#00ff00",tier:8, desc: "The quality of being true."},
+  {id:89,name:"Lie",icon:"❌",color:"#ff0000",tier:8, desc: "A statement intended to deceive."},
+  {id:90,name:"Paradox",icon:"🔄",color:"#800080",tier:9, desc: "A seemingly contradictory statement."},
+  {id:91,name:"Nothing",icon:"🕳️",color:"#000",tier:9, desc: "Not anything; zero quantity."},
+  {id:92,name:"Everything",icon:"🌌",color:"#ffffff",tier:9, desc: "All things taken together."},
+  {id:93,name:"Balance",icon:"☯️",color:"#000",tier:8, desc: "A state of equilibrium."},
+  {id:94,name:"Illusion",icon:"🎭",color:"#dda0dd",tier:7, desc: "A deceptive appearance."},
+  {id:95,name:"Destiny",icon:"🧵",color:"#ffd700",tier:9, desc: "The events predetermined."},
+  {id:96,name:"Gravity",icon:"🪐",color:"#696969",tier:5, desc: "The force that attracts objects."},
+  {id:97,name:"Atom",icon:"⚛️",color:"#5f9ea0",tier:4, desc: "The basic unit of matter."},
+  {id:98,name:"Particle",icon:".",color:"#ffffff",tier:3, desc: "A minute portion of matter."},
+  {id:99,name:"Wave",icon:"〰️",color:"#87ceeb",tier:3, desc: "A ridge of water moving across."},
+  // --- New Elements for Depth ---
+  {id:100,name:"Light Beam",icon:"🔦",color:"#ffff00",tier:4, desc: "A concentrated stream of light."},
+  {id:101,name:"Dark Matter",icon:"🌑",color:"#000080",tier:7, desc: "Hypothetical invisible matter.", catalyst: true},
+  {id:102,name:"Singularity",icon:"🌀",color:"#ffffff",tier:8, desc: "A point of infinite density."},
+  {id:103,name:"Thought",icon:"💭",color:"#d8bfd8",tier:5, desc: "An idea or opinion produced by thinking."},
+  {id:104,name:"Emotion",icon:"😊",color:"linear-gradient(45deg, red, yellow, blue)",tier:5, desc: "A natural instinctive state of mind."},
+  {id:105,name:"Knowledge",icon:"📚",color:"#f5deb3",tier:6, desc: "Facts, information, and skills acquired."},
+
+
+];
+
+// --- Recipes ---
+// Note: Recipes now use element IDs directly for clarity.
+const recipes = [
+  // Tier 0 -> 1
+  [0, 1, 4], [0, 2, 5], [1, 2, 6], [0, 3, 7],
+  // Tier 1 -> 2
+  [4, 11, 9], [5, 8, 9], [6, 11, 10], [7, 10, 11],
+  // Tier 2 -> 3
+  [9, 10, 12], [1, 11, 13], [11, 14, 15], [2, 11, 8],
+  // Tier 3 -> 4
+  [12, 15, 16], [13, 16, 17], [7, 17, 18], [18, 19, 20],
+  // Tier 4 -> 5
+  [20, 17, 21], [21, 22, 23], [23, 24, 25], [16, 26, 27],
+  // Tier 5 -> 6
+  [25, 27, 28], [28, 29, 30], [30, 31, 32], [27, 33, 34],
+  // Tier 6 -> 7
+  [30, 35, 36], [36, 37, 38], [38, 39, 40], [40, 41, 42],
+  // Tier 7 -> 8
+  [41, 42, 43], [43, 44, 45], [45, 46, 47], [47, 48, 49],
+  // Tier 8 -> 9
+  [49, 50, 51], [51, 52, 53], [53, 54, 55], [55, 56, 57],
+  // --- Misc Fun / Complex ---
+  [27, 35, 35], [14, 60, 61], [61, 62, 63], [63, 64, 65],
+  [65, 66, 67], [67, 68, 69], [69, 70, 71], [71, 72, 73],
+  [73, 74, 75], [75, 76, 77], [77, 78, 79], [79, 80, 81],
+  [81, 82, 83], [83, 84, 85], [85, 86, 87], [87, 88, 89],
+  [89, 90, 91], [91, 92, 93], [93, 94, 95], [95, 96, 97],
+  [97, 98, 99], [99, 0, 7], [99, 1, 4], [99, 2, 5],
+  [99, 3, 7], [98, 0, 7], [98, 1, 4], [98, 2, 5], [98, 3, 7],
+  // --- New Recipes ---
+  [77, 78, 79], // Light + Shadow = Mirror
+  [16, 103, 26], // Human + Thought = Philosopher
+  [26, 67, 105], // Philosopher + Science = Knowledge
+  [105, 104, 66], // Knowledge + Emotion = Art
+  [31, 100, 101], // Alchemist + Light Beam = Dark Matter (Catalyst interaction example)
+  [101, 53, 102], // Dark Matter (Cat) + Black Hole = Singularity
+  [32, 34, 36], // Phoenix (Cat) + Quicksilver (Cat) = Rainbow
+  [56, 18, 18], // Time Machine (Cat) + Time = Time (duplicate for catalyst use)
+  [57, 17, 21], // AI (Cat) + Technology = Robot (Alternative path)
+  [35, 23, 23], // Dragon (Cat) + Star = Star (duplicate)
+
+];
+
+// --- Achievements ---
+const achievements = [
+  { id: 'first_craft', name: "First Steps", desc: "Combine your first two elements.", icon: "👣", unlocked: false },
+  { id: 'element_25', name: "Elementary", desc: "Discover 25 elements.", icon: "📈", unlocked: false },
+  { id: 'element_50', name: "Halfway There", desc: "Discover 50 elements.", icon: "📊", unlocked: false },
+  { id: 'catalyst_used', name: "Catalyst Connoisseur", desc: "Use a catalyst element in a combination.", icon: "⚗️", unlocked: false },
+  { id: 'era_space', name: "Spacefarer", desc: "Reach the Space Era.", icon: "🚀", unlocked: false },
+  { id: 'discover_god', name: "Playing God", desc: "Discover the element 'God'.", icon: "✨", unlocked: false },
+  { id: 'element_100', name: "Alchemy Master", desc: "Discover 100 elements.", icon: "🏅", unlocked: false },
+  { id: 'discover_infinity', name: "To Infinity...", desc: "Discover the element 'Infinity'.", icon: "♾️", unlocked: false },
+  { id: 'discover_alchemist', name: "Self-Aware", desc: "Discover the element 'Alchemist'.", icon: "🧙‍♂️", unlocked: false },
+];
+
+// --- State ---
+let lib = new Set([0, 1, 2, 3]);
+let slot1 = null;
+let slot2 = null;
+let lastDroppedSlot = null; // For undo
+const eraNames = ["Stone Age", "Bronze Age", "Iron Age", "Industrial", "Modern", "Space", "Cosmic", "Transcendent", "Eternal", "Beyond"];
+let stats = {
+    crafts: 0,
+    discoveries: 4 // Starting elements
+};
+
+// --- DOM Elements ---
+const libEl = document.getElementById('lib');
+const countEl = document.getElementById('count');
+const totalCountEl = document.getElementById('totalCount');
+const craftBtn = document.getElementById('craftBtn');
+const undoBtn = document.getElementById('undoBtn');
+const modal = document.getElementById('discModal');
+const discIcon = document.getElementById('discIcon');
+const discName = document.getElementById('discName');
+const discDesc = document.getElementById('discDesc'); // New description element
+const eraEl = document.getElementById('era');
+const achEl = document.getElementById('ach');
+const goalsListEl = document.getElementById('goalsList');
+const achievementsPanelEl = document.getElementById('achievementsPanel');
+
+totalCountEl.textContent = elements.length; // Set total element count
+
+// --- Initialization ---
+function initGame() {
+    console.log("Initializing game...");
+    loadGameState();
+    renderLibrary();
+    updateEra();
+    updateAchievements();
+    updateGoals();
+    initModalParticles(); // Initialize modal particles
+    console.log("Game initialized.");
+}
+
+// --- Persistence (Basic using localStorage) ---
+function saveGameState() {
+    const state = {
+        lib: [...lib],
+        stats: stats,
+        achievements: achievements.map(a => ({ id: a.id, unlocked: a.unlocked }))
+    };
+    try {
+        localStorage.setItem('endlessAlchemySave', JSON.stringify(state));
+        console.log("Game state saved.");
+    } catch (e) {
+        console.warn("Failed to save game state:", e);
+    }
+}
+
+function loadGameState() {
+    try {
+        const saveData = JSON.parse(localStorage.getItem('endlessAlchemySave'));
+        if (saveData) {
+            lib = new Set(saveData.lib);
+            stats = saveData.stats || { crafts: 0, discoveries: lib.size };
+            // Load achievements
+            if (saveData.achievements) {
+                saveData.achievements.forEach(savedAch => {
+                     const ach = achievements.find(a => a.id === savedAch.id);
+                     if (ach) ach.unlocked = savedAch.unlocked;
+                });
+            }
+            console.log("Game state loaded.");
+        } else {
+            console.log("No saved game state found.");
+        }
+    } catch (e) {
+        console.warn("Failed to load game state:", e);
+        // Keep default state
+    }
+}
+
+// --- UI Updates ---
+function renderLibrary() {
+    libEl.innerHTML = '';
+    const sortedLib = [...lib].sort((a, b) => a - b);
+    sortedLib.forEach(id => {
+        libEl.appendChild(makeCard(id, true));
+    });
+    countEl.textContent = lib.size;
+    saveGameState(); // Save after library change
+}
+
+function makeCard(id, draggable = false) {
+    const e = elements[id];
+    const div = document.createElement('div');
+    div.className = 'element-card';
+    if (e.color.startsWith('l')) {
+        div.style.background = e.color; // Use gradient as-is
+    } else {
+        div.style.backgroundColor = e.color; // Use solid color
+    }
+    div.textContent = e.icon;
+    div.dataset.id = id;
+    div.dataset.tooltip = e.name;
+
+    // Tooltip
+    const tooltip = document.createElement('span');
+    tooltip.className = 'tooltip';
+    tooltip.textContent = e.name;
+    div.appendChild(tooltip);
+
+    if (draggable) {
+        div.draggable = true;
+        div.ondragstart = dragStart;
+    }
+    return div;
+}
+
+function updateEra() {
+    if (lib.size === 0) {
+        eraEl.textContent = "Stone Age";
+        return;
+    }
+    const maxTier = Math.max(...[...lib].map(id => elements[id]?.tier ?? -1));
+    const eraIndex = Math.min(maxTier, eraNames.length - 1);
+    eraEl.textContent = eraNames[eraIndex] || "Unknown Era";
+    checkAchievements(); // Check for era-related achievements
+    updateGoals(); // Update goals based on new era
+}
+
+function updateAchievements() {
+    achEl.innerHTML = '';
+    achievements.forEach(ach => {
+        const li = document.createElement('li');
+        li.textContent = `${ach.icon} ${ach.name}: ${ach.desc}`;
+        if (ach.unlocked) {
+            li.classList.add('unlocked');
+        }
+        achEl.appendChild(li);
+    });
+}
+
+function toggleAchievementsPanel() {
+    if (achievementsPanelEl.style.display === "none") {
+        achievementsPanelEl.style.display = "block";
+    } else {
+        achievementsPanelEl.style.display = "none";
+    }
+}
+
+
+function updateGoals() {
+    goalsListEl.innerHTML = '';
+    const currentTier = Math.max(...[...lib].map(id => elements[id]?.tier ?? -1));
+    const nextTier = currentTier + 1;
+
+    // Find elements in the next tier that can be crafted
+    const craftableNextTierElements = elements.filter(e => e.tier === nextTier && !lib.has(e.id));
+
+    if (craftableNextTierElements.length === 0) {
+        const li = document.createElement('div');
+        li.className = 'goal-item';
+        li.textContent = "Explore combinations in the current era!";
+        goalsListEl.appendChild(li);
+        return;
+    }
+
+    // Find recipes that lead to these elements
+    const potentialRecipes = [];
+    craftableNextTierElements.forEach(targetElement => {
+        const relevantRecipes = recipes.filter(r =>
+            r[2] === targetElement.id &&
+            lib.has(r[0]) &&
+            lib.has(r[1])
+        );
+        potentialRecipes.push(...relevantRecipes.map(r => ({
+            recipe: r,
+            result: targetElement
+        })));
+    });
+
+    if (potentialRecipes.length > 0) {
+        // Display up to 3 goals
+        potentialRecipes.slice(0, 3).forEach(({ recipe, result }) => {
+            const li = document.createElement('div');
+            li.className = 'goal-item';
+            li.innerHTML = `Craft <span>${elements[recipe[0]].name}</span> + <span>${elements[recipe[1]].name}</span> = <span>${result.name}</span>`;
+            goalsListEl.appendChild(li);
+        });
+    } else {
+        // Suggest elements to aim for to unlock next tier recipes
+        const neededComponents = new Set();
+        recipes.filter(r => elements[r[2]] && elements[r[2]].tier === nextTier)
+               .forEach(r => {
+                    if (!lib.has(r[0])) neededComponents.add(r[0]);
+                    if (!lib.has(r[1])) neededComponents.add(r[1]);
+               });
+
+        if (neededComponents.size > 0) {
+             const neededList = [...neededComponents].slice(0, 3).map(id => elements[id].name).join(', ');
+             const li = document.createElement('div');
+             li.className = 'goal-item';
+             li.innerHTML = `Need: <span>${neededList}</span> for next tier.`;
+             goalsListEl.appendChild(li);
+        } else {
+             const li = document.createElement('div');
+             li.className = 'goal-item';
+             li.textContent = "No immediate goals found. Experiment!";
+             goalsListEl.appendChild(li);
+        }
+    }
+}
+
+
+// --- Drag & Drop ---
+function allowDrop(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('filled');
+    // playSFX('drag'); // Optional: sound on drag over
+}
+
+function dragLeave(e) {
+    // Optional: Remove 'filled' class if desired, or keep it for visual consistency
+    // e.currentTarget.classList.remove('filled');
+}
+
+function dragStart(e) {
+    e.dataTransfer.setData("text/plain", e.target.dataset.id);
+    // playSFX('drag'); // Optional: sound on drag start
+}
+
+function drop(e) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('filled'); // Remove highlight
+    const id = parseInt(e.dataTransfer.getData("text/plain"), 10);
+    if (isNaN(id) || !elements[id]) return; // Safety check
+
+    const slotId = e.currentTarget.id;
+    const card = makeCard(id);
+    card.style.width = '70px';
+    card.style.height = '70px';
+    card.style.fontSize = '2.5rem';
+
+    // Clear slot first
+    e.currentTarget.innerHTML = '';
+    e.currentTarget.appendChild(card);
+
+    // Update state
+    if (slotId === 'slot1') {
+        slot1 = id;
+        lastDroppedSlot = 'slot1';
+    } else if (slotId === 'slot2') {
+        slot2 = id;
+        lastDroppedSlot = 'slot2';
+    }
+    craftBtn.disabled = !(slot1 !== null && slot2 !== null);
+    undoBtn.disabled = false;
+    // playSFX('drop'); // Optional: sound on drop
+}
+
+
+// --- Crafting Logic ---
+function craftElements() {
+    if (slot1 === null || slot2 === null) return;
+
+    const sortedSlots = [slot1, slot2].sort((a, b) => a - b);
+    let recipeFound = false;
+    // let resultId = null; // Variable declared but not strictly needed here
+
+    // Iterate through recipes to find a match
+    for (const recipe of recipes) {
+        const [ing1, ing2, result] = recipe;
+        // Check if the sorted input matches the recipe (order independent)
+        if (ing1 === sortedSlots[0] && ing2 === sortedSlots[1]) {
+            recipeFound = true; // Recipe match found
+            // Check if result is not already known
+            if (!lib.has(result)) {
+                // resultId = result; // Not used directly here
+                unlockElement(result); // Unlock the new element
+                stats.crafts++;
+                checkAchievements(); // Check after a successful craft
+                // playSFX('combineSuccess'); // Play success sound
+                // Visual feedback for successful *discovery*
+                triggerBenchFlash(); // Use helper function
+            } else {
+                // Recipe exists, but result is known.
+                 // Optional: Feedback for known result
+                 // alert(`You already know ${elements[result].name}!`);
+                 // playSFX('error'); // Or maybe a different "known" sound?
+
+                 // Visual feedback for "known result" attempt
+                 triggerBenchShake(); // Use helper function
+
+                 // For now, still count it as an attempt/action
+                 stats.crafts++;
+                 // playSFX('combineSuccess'); // Or maybe no sound? Up to design.
+            }
+            // Regardless of new discovery or known result, clear slots and finish
+            clearSlots();
+            return; // Exit the function after handling the found recipe
+        }
+    }
+
+    // If the loop completes without finding a matching recipe
+    if (!recipeFound) {
+        // No matching recipe found
+        alert("This combination doesn't seem to work...");
+        // playSFX('error');
+        // Visual feedback for invalid combination
+        triggerBenchShake(); // Use helper function
+    }
+    // Clear slots after an unsuccessful attempt or handling a known result
+    clearSlots();
+}
+
+// --- Helper Functions for Visual Feedback ---
+// These functions handle injecting and triggering CSS animations.
+// Make sure the corresponding CSS keyframes (@keyframes shake, @keyframes benchFlash)
+// are defined in your main <style> section in the HTML.
+
+function triggerBenchShake() {
+    const bench = document.querySelector('.combo-row');
+    if (bench) {
+        bench.style.animation = 'none'; // Reset animation
+        // Trigger reflow to restart animation
+        void bench.offsetWidth; // This line forces a reflow
+        bench.style.animation = 'shake 0.5s'; // Apply shake animation
+    }
+}
+
+function triggerBenchFlash() {
+    const bench = document.querySelector('.combo-row');
+    if (bench) {
+        bench.style.animation = 'none'; // Reset animation
+        // Trigger reflow to restart animation
+        void bench.offsetWidth; // This line forces a reflow
+        bench.style.animation = 'benchFlash 0.8s'; // Apply flash animation
+    }
+}
+
+
+function unlockElement(id) {
+    if (lib.has(id)) return; // Safety check
+    lib.add(id);
+    stats.discoveries++;
+    renderLibrary(); // Re-render to include new element
+    updateEra();
+
+    // Highlight new element in library
+    setTimeout(() => { // Wait for render
+        const newCard = document.querySelector(`.element-card[data-id="${id}"]`);
+        if (newCard) {
+            newCard.classList.add('new-discovery');
+            // Remove class after animation to allow re-triggering
+            setTimeout(() => newCard.classList.remove('new-discovery'), 2500);
+        }
+    }, 100);
+
+    // Show discovery modal
+    const element = elements[id];
+    discIcon.textContent = element.icon;
+    discName.textContent = element.name;
+    discDesc.textContent = element.desc || ""; // Show description
+    modal.classList.add('show');
+
+    // Check for specific discovery achievements
+    if (id === 27) { unlockAchievement('discover_god'); }
+    if (id === 30) { unlockAchievement('discover_infinity'); }
+    if (id === 31) { unlockAchievement('discover_alchemist'); }
+
+    // Vibrate if supported
+    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    // playSFX('discovery');
+
+    // Auto-close modal after delay
+    setTimeout(closeModal, 2500);
+}
+
+// --- Helper Functions ---
+function clearSlots() {
+    slot1 = null;
+    slot2 = null;
+    lastDroppedSlot = null;
+    document.getElementById('slot1').innerHTML = '';
+    document.getElementById('slot2').innerHTML = '';
+    craftBtn.disabled = true;
+    undoBtn.disabled = true;
+    // Remove filled class if it stuck
+    document.getElementById('slot1').classList.remove('filled');
+    document.getElementById('slot2').classList.remove('filled');
+}
+
+function undoLastDrop() {
+    if (!lastDroppedSlot) return;
+    if (lastDroppedSlot === 'slot1') {
+        slot1 = null;
+        document.getElementById('slot1').innerHTML = '';
+        document.getElementById('slot1').classList.remove('filled');
+    } else if (lastDroppedSlot === 'slot2') {
+        slot2 = null;
+        document.getElementById('slot2').innerHTML = '';
+        document.getElementById('slot2').classList.remove('filled');
+    }
+    lastDroppedSlot = null;
+    craftBtn.disabled = !(slot1 !== null && slot2 !== null);
+    undoBtn.disabled = true;
+}
+
+function closeModal() {
+    modal.classList.remove('show');
+}
+
+// --- Achievement System ---
+function checkAchievements() {
+    if (!achievements.find(a => a.id === 'first_craft' && a.unlocked) && stats.crafts >= 1) {
+        unlockAchievement('first_craft');
+    }
+    if (!achievements.find(a => a.id === 'element_25' && a.unlocked) && lib.size >= 25) {
+        unlockAchievement('element_25');
+    }
+    if (!achievements.find(a => a.id === 'element_50' && a.unlocked) && lib.size >= 50) {
+        unlockAchievement('element_50');
+    }
+    if (!achievements.find(a => a.id === 'element_100' && a.unlocked) && lib.size >= 100) {
+        unlockAchievement('element_100');
+    }
+    const maxTier = Math.max(...[...lib].map(id => elements[id]?.tier ?? -1));
+    if (!achievements.find(a => a.id === 'era_space' && a.unlocked) && maxTier >= 5) {
+        unlockAchievement('era_space');
+    }
+    // Check for catalyst use (requires tracking in craftElements)
+    // This is a simplified check: if any element marked as catalyst is in the lib, assume it was used.
+    // A more robust way is to track it during the craft process.
+    const hasCatalyst = [...lib].some(id => elements[id]?.catalyst);
+    if (!achievements.find(a => a.id === 'catalyst_used' && a.unlocked) && hasCatalyst) {
+        unlockAchievement('catalyst_used');
+    }
+    updateAchievements();
+    saveGameState();
+}
+
+function unlockAchievement(id) {
+    const ach = achievements.find(a => a.id === id);
+    if (ach && !ach.unlocked) {
+        ach.unlocked = true;
+        console.log(`Achievement Unlocked: ${ach.name}`);
+        updateAchievements();
+        saveGameState();
+        // Optional: Show a brief notification for achievement unlock
+    }
+}
+
+// --- Hint System ---
+function showDynamicHints() {
+    const hints = [];
+    const libArray = [...lib];
+
+    // 1. Prioritize hints for the next tier
+    const currentMaxTier = Math.max(...libArray.map(id => elements[id]?.tier ?? -1));
+    const nextTier = currentMaxTier + 1;
+
+    // Find recipes leading to next tier elements
+    const nextTierRecipes = recipes.filter(r =>
+        elements[r[2]] && elements[r[2]].tier === nextTier &&
+        lib.has(r[0]) && lib.has(r[1]) &&
+        !lib.has(r[2])
+    );
+
+    nextTierRecipes.forEach(r => {
+        hints.push(`${elements[r[0]].icon} + ${elements[r[1]].icon} → ? (${elements[r[2]].tier > currentMaxTier ? "Next Era!" : ""})`);
+    });
+
+    // 2. If not enough next-tier hints, add general hints
+    if (hints.length < 5) {
+        for (let i = 0; i < libArray.length && hints.length < 7; i++) {
+            for (let j = i + 1; j < libArray.length && hints.length < 7; j++) {
+                const id1 = libArray[i];
+                const id2 = libArray[j];
+                const sortedPair = [id1, id2].sort((a, b) => a - b);
+                const recipe = recipes.find(rec => rec[0] === sortedPair[0] && rec[1] === sortedPair[1]);
+                if (recipe && !lib.has(recipe[2])) {
+                    // Avoid duplicates and prioritize unique hints
+                    const hintStr = `${elements[id1].icon} + ${elements[id2].icon} → ?`;
+                    if (!hints.includes(hintStr)) {
+                         hints.push(hintStr);
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. If still not enough, suggest exploring current tier
+     if (hints.length === 0) {
+        hints.push("Combine elements from your current era to find new paths!");
+        hints.push("Look for elements that might act as catalysts (⭐)!");
+     }
+
+    alert("💡 Hints:\n" + (hints.join('\n') || "No new combinations found! Try different pairs."));
+}
+
+
+// --- Sharing ---
+function shareGame() {
+    const text = `I've discovered ${stats.discoveries}/${elements.length} elements in Endless Alchemy ∞ and reached the ${eraEl.textContent}! Can you beat my progress?`;
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+            alert('Progress summary copied to clipboard!');
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+            prompt("Copy this text to share your progress:", text); // Fallback
+        });
+    } else {
+        prompt("Copy this text to share your progress:", text); // Fallback for older browsers
+    }
+}
+
+// --- Start the game ---
+window.onload = initGame;
+</script>
+</body>
+</html>

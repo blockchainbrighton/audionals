@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cellular Conquest: Evolved</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Adds the Showdown library to convert Markdown to HTML -->
+    <script src="https://cdn.jsdelivr.net/npm/showdown/dist/showdown.min.js"></script>
+    <style>
+        /* General Body and Centering */
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to bottom, #0a0a15, #000);
+            color: #eee;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        /* Main Game Container */
+        #game-container {
+            border: 1px solid #444;
+            background: #15151f;
+            box-shadow: 0 0 20px rgba(0, 100, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        /* Canvas Styling */
+        canvas {
+            display: block;
+            margin: 0 auto;
+            cursor: crosshair;
+            background: #05050a;
+            /* Pixelated rendering for crisp cells */
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+            border: 1px solid #333;
+        }
+        /* UI Panel Styling */
+        #ui {
+            padding: 0 10px 15px 10px;
+            font-size: 14px;
+        }
+        #ui-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            flex-wrap: wrap; /* Allow wrapping on small screens */
+        }
+        .ui-info-item {
+            margin-right: 10px;
+        }
+        #rules {
+            font-size: 12px;
+            margin-top: 5px;
+            color: #aaa;
+            text-align: center;
+            font-family: monospace; /* Monospace for rule clarity */
+        }
+        #game-status {
+            text-align: center;
+            font-size: 16px;
+            margin-top: 5px;
+            min-height: 20px; /* Reserve space for status messages */
+        }
+        /* Container for all buttons */
+        #ui-buttons {
+            display: flex;
+            flex-wrap: wrap; /* Allow buttons to wrap */
+            gap: 5px; /* Adds space between buttons */
+            margin-top: 10px;
+        }
+        button {
+            background: #2a4a2a;
+            color: #e0ffe0;
+            border: 1px solid #44aa44;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            flex-grow: 1; /* Makes buttons share space */
+            border-radius: 4px;
+            transition: background 0.2s, transform 0.1s;
+        }
+        button:hover {
+            background: #3a6a3a;
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            background: #222;
+            color: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+        /* Modal (Pop-up) Styling */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .modal-content {
+            background: #1a1a2a;
+            color: #eee;
+            padding: 20px 30px;
+            border: 1px solid #555;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 650px;
+            max-height: 80vh;
+            overflow-y: auto;
+            font-family: Arial, sans-serif; /* More readable for text */
+            line-height: 1.6;
+            box-shadow: 0 0 30px rgba(0, 200, 0, 0.2);
+        }
+        .modal-content h1, .modal-content h2, .modal-content h3 {
+            color: #66ff66;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+        .modal-content code {
+            background: #111;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .modal-content button {
+            display: block;
+            margin: 20px auto 0 auto;
+            width: 100px;
+            flex-grow: 0; /* Override button flex-grow */
+        }
+        /* Particle effect styles */
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="ui">
+            <div id="ui-info">
+                <div class="ui-info-item">CURRENCY: <span id="currency">10</span></div>
+                <div class="ui-info-item">ROUND: <span id="round">1</span>/5</div>
+                <div class="ui-info-item">TILES: <span id="tiles">0/0</span></div>
+                <div class="ui-info-item">BRUSH: <span id="brush-size">1</span>x</div>
+            </div>
+            <div id="rules">B: 00000100 S: 00111000</div>
+            <div id="game-status">SETUP PHASE - Place/Convert Cells</div>
+            <hr style="border-color: #333; margin: 15px 0;">
+            <div id="ui-buttons">
+                <button onclick="startRound()" id="startBtn">SPACE: START ROUND</button>
+                <button onclick="mutateRule()" id="mutateBtn">MUTATE RULE (cost: 2)</button>
+                <button onclick="upgradeBrush()" id="brushBtn">UPGRADE BRUSH (cost: 3)</button>
+                <button onclick="showGuide()">HOW TO PLAY</button>
+            </div>
+        </div>
+        <canvas id="c"></canvas>
+    </div>
+    <!-- Pop-up Modal HTML for the Guide -->
+    <div id="guideModal" class="modal-backdrop">
+        <div class="modal-content">
+            <div id="guideContent">Loading Guide...</div>
+            <button onclick="hideGuide()">Close</button>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        const W = 100, H = 60;
+        const CELL = 6;
+        canvas.width = W * CELL;
+        canvas.height = H * CELL;
+        let grid = new Uint8Array(W * H);
+        let rule = {
+            birth: 0b00000100,
+            survive: 0b00111000
+        };
+        let currency = 10; // Start with some currency
+        let round = 1;
+        const maxRounds = 5;
+        let isSimulating = false;
+        let tick = 0;
+        let history = [];
+        let mouseDown = false;
+        let mouseButton = 0;
+        let brushSize = 1; // New: Brush size variable
+
+        // New: Particle system for effects
+        let particles = [];
+
+        function initGrid() {
+            grid.fill(0);
+            // Improved initial seeding for more interesting starts
+            for (let i = 0; i < 150; i++) {
+                const x = Math.floor(Math.random() * W);
+                const y = Math.floor(Math.random() * H);
+                const val = Math.random() < 0.7 ? 1 : 2; // Mostly AI, some player
+                grid[y * W + x] = val;
+            }
+            // Ensure some player presence
+            const center = Math.floor(H / 2) * W + Math.floor(W / 2);
+            grid[center] = 2;
+            grid[center + 1] = 2;
+            grid[center - 1] = 2;
+            evaluate();
+            updateUI();
+        }
+
+        function countNeighbors(x, y) {
+            let ai = 0, player = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = (x + dx + W) % W;
+                    const ny = (y + dy + H) % H;
+                    const val = grid[ny * W + nx];
+                    if (val === 1) ai++;
+                    else if (val === 2) player++;
+                }
+            }
+            return { total: ai + player, ai, player };
+        }
+
+        function step() {
+            const newGrid = new Uint8Array(W * H);
+            for (let y = 0; y < H; y++) {
+                for (let x = 0; x < W; x++) {
+                    const idx = y * W + x;
+                    const cell = grid[idx];
+                    const n = countNeighbors(x, y);
+                    const total = n.total;
+                    if (cell === 0) {
+                        if (rule.birth & (1 << total)) {
+                            if (n.player > n.ai) newGrid[idx] = 2;
+                            else if (n.ai > n.player) newGrid[idx] = 1;
+                            else newGrid[idx] = Math.random() < 0.5 ? 1 : 2;
+                        }
+                    } else {
+                        if (rule.survive & (1 << total)) {
+                            newGrid[idx] = cell;
+                        }
+                    }
+                }
+            }
+            grid = newGrid;
+        }
+
+        function evaluate() {
+            const aiTiles = grid.filter(v => v === 1).length;
+            const playerTiles = grid.filter(v => v === 2).length;
+            const total = aiTiles + playerTiles;
+            const ratio = total > 0 ? playerTiles / total : 0;
+            document.getElementById('tiles').textContent = `${playerTiles}/${total}`;
+            return { aiTiles, playerTiles, total, ratio };
+        }
+
+        function mutateRule() {
+            if (currency < 2 || isSimulating) return;
+            currency -= 2;
+            updateUI();
+
+            // New: More targeted mutation logic
+            const changeType = Math.random();
+            if (changeType < 0.4) {
+                 // Flip a random Birth bit
+                const bit = Math.floor(Math.random() * 9);
+                rule.birth ^= (1 << bit);
+                showStatus(`Mutated Birth rule at N=${bit}`, '#44ff44');
+            } else if (changeType < 0.8) {
+                // Flip a random Survive bit
+                const bit = Math.floor(Math.random() * 9);
+                rule.survive ^= (1 << bit);
+                showStatus(`Mutated Survival rule at N=${bit}`, '#44ff44');
+            } else {
+                // Swap a random Birth and Survive bit
+                const bit = Math.floor(Math.random() * 9);
+                const bVal = (rule.birth >> bit) & 1;
+                const sVal = (rule.survive >> bit) & 1;
+                if (bVal !== sVal) { // Only swap if different
+                    rule.birth ^= (1 << bit);
+                    rule.survive ^= (1 << bit);
+                     showStatus(`Swapped B/S rules at N=${bit}`, '#ffff44');
+                } else {
+                    // If same, just mutate one of them
+                     const which = Math.random() < 0.5 ? 'birth' : 'survive';
+                     rule[which] ^= (1 << bit);
+                      showStatus(`Mutated ${which==='birth'?'Birth':'Survival'} rule at N=${bit}`, '#44ff44');
+                }
+            }
+            updateRulesDisplay();
+            // Add a simple visual effect for mutation
+            createParticles(canvas.width / 2, 20, 15, '#44ff44');
+        }
+
+        function updateRulesDisplay() {
+            const birth = rule.birth.toString(2).padStart(8, '0');
+            const survive = rule.survive.toString(2).padStart(8, '0');
+            document.getElementById('rules').textContent = `B: ${birth} S: ${survive}`;
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let y = 0; y < H; y++) {
+                for (let x = 0; x < W; x++) {
+                    const val = grid[y * W + x];
+                    if (val === 1) ctx.fillStyle = '#ff5555'; // Slightly brighter red
+                    else if (val === 2) ctx.fillStyle = '#55ff55'; // Slightly brighter green
+                    else continue;
+                    ctx.fillRect(x * CELL, y * CELL, CELL - 1, CELL - 1);
+                }
+            }
+
+            // Render particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+                ctx.globalAlpha = 1.0;
+                
+                // Update particle
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02;
+                
+                // Remove dead particles
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+
+
+            if (isSimulating) {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '24px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(`TICK ${tick}/60`, canvas.width / 2, canvas.height / 2);
+            }
+        }
+
+        // --- Particle System ---
+        function createParticles(x, y, count, color) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    size: Math.random() * 3 + 1,
+                    vx: (Math.random() - 0.5) * 4,
+                    vy: (Math.random() - 0.5) * 4,
+                    color: color,
+                    life: 1.0
+                });
+            }
+        }
+
+        // --- Brush Size Upgrade ---
+        function upgradeBrush() {
+            if (currency < 3 || isSimulating) return;
+            currency -= 3;
+            brushSize = Math.min(brushSize + 1, 5); // Max size of 5
+            updateUI();
+            showStatus(`Brush upgraded to ${brushSize}x${brushSize}`, '#66ccff');
+        }
+
+        // --- Game Status Message ---
+        function showStatus(message, color = '#ffffff') {
+             const statusEl = document.getElementById('game-status');
+             statusEl.textContent = message;
+             statusEl.style.color = color;
+             // Optional: Add a fade effect or timeout
+             clearTimeout(statusEl.timeoutId);
+             statusEl.timeoutId = setTimeout(() => {
+                 if(statusEl.textContent === message) {
+                     statusEl.textContent = isSimulating ? "SIMULATING..." : "SETUP PHASE - Place/Convert Cells";
+                     statusEl.style.color = '#ffffff';
+                 }
+             }, 2000);
+        }
+
+
+        canvas.addEventListener('mousedown', (e) => {
+            mouseDown = true;
+            mouseButton = e.button;
+            handleCell(e);
+        });
+        canvas.addEventListener('mouseup', () => mouseDown = false);
+        canvas.addEventListener('mousemove', (e) => { if (mouseDown) handleCell(e); });
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        function handleCell(e) {
+            if (isSimulating) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = Math.floor((e.clientX - rect.left) / CELL);
+            const mouseY = Math.floor((e.clientY - rect.top) / CELL);
+
+            // Apply brush size
+            const halfBrush = Math.floor(brushSize / 2);
+            for (let dy = -halfBrush; dy <= halfBrush; dy++) {
+                for (let dx = -halfBrush; dx <= halfBrush; dx++) {
+                    const x = mouseX + dx;
+                    const y = mouseY + dy;
+                    if (x >= 0 && x < W && y >= 0 && y < H) {
+                        const idx = y * W + x;
+                        if (mouseButton === 0) { // Left Click: Place/Convert to Player
+                            if (grid[idx] === 1) {
+                                grid[idx] = 2; // Convert AI to Player
+                                createParticles(x * CELL + CELL/2, y * CELL + CELL/2, 3, '#55ff55');
+                            } else if (grid[idx] === 0) {
+                                grid[idx] = 2; // Place new Player cell
+                            }
+                        } else if (mouseButton === 2) { // Right Click: Remove
+                            grid[idx] = 0;
+                        }
+                    }
+                }
+            }
+            render();
+            evaluate();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && document.activeElement.tagName !== 'BUTTON') {
+                e.preventDefault();
+                if (!isSimulating) startRound();
+            }
+        });
+
+        function startRound() {
+            if (isSimulating) return;
+            isSimulating = true;
+            tick = 0;
+            document.getElementById('startBtn').disabled = true;
+            showStatus("SIMULATING...", '#ffff44');
+
+            const sim = setInterval(() => {
+                step();
+                tick++;
+                render(); // Render every tick for smoother animation
+                if (tick >= 60) {
+                    clearInterval(sim);
+                    isSimulating = false;
+                    document.getElementById('startBtn').disabled = false;
+
+                    const { ratio, playerTiles } = evaluate();
+                    let roundCurrency = 0;
+                    if (ratio > 0.5) {
+                        roundCurrency = Math.floor((ratio - 0.5) * 20); // More reward for higher dominance
+                        currency += roundCurrency;
+                        showStatus(`Round Won! +${roundCurrency} Currency`, '#66ff66');
+                        createParticles(canvas.width / 2, canvas.height / 2, 30, '#66ff66');
+                    } else if (ratio === 0.5) {
+                         showStatus(`Round Draw!`, '#ffff44');
+                    } else {
+                        showStatus(`Round Lost!`, '#ff6666');
+                        createParticles(canvas.width / 2, canvas.height / 2, 30, '#ff6666');
+                    }
+
+                    history.push({ round: round, rule: { ...rule }, score: ratio, earned: roundCurrency });
+                    if (history.length > 30) history.shift();
+
+                    round++;
+                    if (round > maxRounds) {
+                        // Game Over
+                        const totalScore = history.reduce((sum, h) => sum + h.score, 0);
+                        const avgScore = totalScore / history.length;
+                        let finalMsg = `Game Over! Avg Score: ${(avgScore * 100).toFixed(1)}%`;
+                        if (avgScore > 0.6) finalMsg += " - Excellent!";
+                        else if (avgScore > 0.5) finalMsg += " - Good Job!";
+                        else finalMsg += " - Try Again!";
+                        showStatus(finalMsg, '#ffffff');
+                        round = 1; // Reset for next game
+                        currency = 10; // Reset currency
+                        rule = { birth: 0b00000100, survive: 0b00111000 }; // Reset rule
+                    }
+                    
+                    updateUI();
+                    initGrid(); // Prepare for next round
+                    render();
+                }
+            }, 1000 / 30); // 30 FPS simulation
+        }
+
+        function updateUI() {
+            document.getElementById('currency').textContent = currency;
+            document.getElementById('round').textContent = `${round}`;
+            document.getElementById('brush-size').textContent = `${brushSize}`;
+            document.getElementById('mutateBtn').disabled = (currency < 2 || isSimulating);
+            document.getElementById('brushBtn').disabled = (currency < 3 || isSimulating || brushSize >= 5);
+        }
+
+        // --- Guide Modal JavaScript ---
+        const guideModal = document.getElementById('guideModal');
+        const guideContent = document.getElementById('guideContent');
+        let guideLoaded = false;
+        const converter = new showdown.Converter();
+        async function showGuide() {
+            if (!guideLoaded) {
+                // Provide default guide content inline if file fails
+                const defaultGuide = `
+# Cellular Conquest: Evolved - How to Play
+
+**Goal:** Dominate the cellular automaton grid over 5 rounds by strategically placing, converting, and mutating rules.
+
+---
+
+## Core Mechanics
+
+*   **Setup Phase:** Before each round, place (Left-Click) or remove (Right-Click) your green cells. You can also **convert red AI cells to green player cells** by Left-Clicking them. Use your brush size upgrade to affect larger areas.
+*   **Simulation Phase:** Press SPACE to start a 60-tick simulation based on the current rule set.
+*   **Rules (B/S):** The rules determine birth and survival. For example, \`B: 00000100 S: 00111000\` means:
+    *   Birth: A new cell is born if it has exactly 2 neighbors (\`B: ...1....\`).
+    *   Survival: An existing cell survives if it has 3, 4, or 5 neighbors (\`S: ..111...\`).
+    *   When a new cell is born in a contested area (with both red and green neighbors), it takes the color of the majority.
+
+---
+
+## Currency & Upgrades
+
+Earn currency by winning rounds (having more than 50% of the territory at the end).
+
+*   **Mutate Rule (Cost: 2):** Randomly changes the B/S rules to potentially give you an advantage.
+*   **Upgrade Brush (Cost: 3):** Increases the size of your cursor for placing/removing/converting cells faster. (Max size: 5x5).
+
+---
+
+## Strategy Tips
+
+*   Start by creating compact, stable shapes that are likely to survive or grow under various rules.
+*   Convert clusters of AI cells near your territory to expand quickly.
+*   Use mutations wisely. A good rule for you is one that favors growth of your patterns and hinders the AI's.
+*   Larger brushes are great for the initial setup but precision is key in tight spots.
+                `;
+                try {
+                    // Attempt to load external file
+                    const response = await fetch('cell-conquest-evolved-guide.md');
+                    if (!response.ok) {
+                        throw new Error('File not found');
+                    }
+                    const markdownText = await response.text();
+                    guideContent.innerHTML = converter.makeHtml(markdownText);
+                } catch (error) {
+                    console.warn('Could not load external guide, using default:', error);
+                    guideContent.innerHTML = converter.makeHtml(defaultGuide);
+                }
+                guideLoaded = true;
+            }
+            guideModal.style.display = 'flex';
+        }
+        function hideGuide() {
+            guideModal.style.display = 'none';
+        }
+
+        // --- Initialize Game ---
+        initGrid();
+        updateRulesDisplay();
+        updateUI(); // Initial UI update
+        render();
+    </script>
+</body>
+</html>
