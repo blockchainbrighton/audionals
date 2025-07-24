@@ -672,10 +672,11 @@
     function renderShop(){
       shopEl.innerHTML = "";
       buildings.forEach((b,i)=>{
-        const btn = document.createElement("div");
-        btn.className = "building";
+        const buildingEl = document.createElement("div");
+        buildingEl.className = "building";
+        buildingEl.dataset.id = i; // Store building index
         const c = cost(b);
-        btn.innerHTML = `
+        buildingEl.innerHTML = `
           <div class="building-header">
             <div class="building-name">${b.icon} ${b.name}</div>
             <div class="building-qty">${b.qty}</div>
@@ -686,8 +687,7 @@
           </div>
           <button class="building-btn" ${resources.gold < c ? 'disabled' : ''}>Buy</button>
         `;
-        btn.querySelector('.building-btn').onclick = ()=> buyBuilding(i);
-        shopEl.appendChild(btn);
+        shopEl.appendChild(buildingEl);
       });
     }
 
@@ -698,13 +698,13 @@
         
         const upgradeEl = document.createElement("div");
         upgradeEl.className = "upgrade";
+        upgradeEl.dataset.id = i; // Store upgrade index
         upgradeEl.innerHTML = `
           <div class="upgrade-name">${u.name}</div>
           <div class="upgrade-desc">${u.effect}</div>
           <div class="upgrade-cost">${u.cost.toLocaleString()} gold</div>
           <button class="upgrade-btn" ${resources.gold < u.cost ? 'disabled' : ''}>Buy</button>
         `;
-        upgradeEl.querySelector('.upgrade-btn').onclick = () => buyUpgrade(i);
         upgradesEl.appendChild(upgradeEl);
       });
     }
@@ -824,14 +824,42 @@
       saveGame();
     }
 
-    // Event listeners
-    prestigeBtn.onclick = doPrestige;
-
-    clickArea.addEventListener("click", e => {
-      const amount = gpc();
-      resources.gold += amount;
-      createClickEffect(e.clientX, e.clientY, Math.floor(amount));
-      renderUI();
+    // Event delegation for dynamically created elements
+    document.addEventListener('click', function(e) {
+      // Handle building purchases
+      if (e.target.classList.contains('building-btn')) {
+        const buildingEl = e.target.closest('.building');
+        if (buildingEl) {
+          const id = parseInt(buildingEl.dataset.id);
+          buyBuilding(id);
+        }
+        return;
+      }
+      
+      // Handle upgrade purchases
+      if (e.target.classList.contains('upgrade-btn')) {
+        const upgradeEl = e.target.closest('.upgrade');
+        if (upgradeEl) {
+          const id = parseInt(upgradeEl.dataset.id);
+          buyUpgrade(id);
+        }
+        return;
+      }
+      
+      // Handle prestige button
+      if (e.target.id === 'prestigeBtn') {
+        doPrestige();
+        return;
+      }
+      
+      // Handle click area
+      if (e.target.closest('#clickArea')) {
+        const amount = gpc();
+        resources.gold += amount;
+        createClickEffect(e.clientX, e.clientY, Math.floor(amount));
+        renderUI();
+        return;
+      }
     });
 
     // Main game loop
