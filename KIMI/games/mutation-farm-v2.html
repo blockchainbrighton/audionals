@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mutation Farm</title>
+<style>
+  :root {
+    --primary: #2c5f2d;
+    --secondary: #97bc62;
+    --accent: #ff6b6b;
+    --dark: #1a1a2e;
+    --light: #f8f9fa;
+    --soil: #5d4037;
+    --plant-green: #4caf50;
+    --plant-blue: #2196f3;
+    --plant-purple: #9c27b0;
+    --plant-orange: #ff9800;
+    --plant-red: #f44336;
+    --plant-yellow: #ffeb3b;
+  }
+  
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1a2a3a, #0d1b2a);
+    color: #e0e0e0;
+    display: flex;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+  
+  #game-container {
+    display: flex;
+    flex: 1;
+    padding: 20px;
+    gap: 20px;
+  }
+  
+  #farm-section {
+    flex: 3;
+    background: rgba(30, 30, 46, 0.7);
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(92, 107, 192, 0.3);
+  }
+  
+  #farm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--secondary);
+  }
+  
+  #farm-header h2 {
+    color: var(--secondary);
+    text-shadow: 0 0 10px rgba(151, 188, 98, 0.5);
+    font-size: 2rem;
+  }
+  
+  #farm {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+  }
+  
+  .plot {
+    min-height: 140px;
+    border: 3px solid #3a3a5a;
+    border-radius: 12px;
+    background: linear-gradient(to bottom, #2c3e50, #1a1a2e);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 0.3s ease;
+    overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  }
+  
+  .plot::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      radial-gradient(circle at 20% 30%, rgba(151, 188, 98, 0.1) 0%, transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(44, 95, 45, 0.2) 0%, transparent 40%);
+    border-radius: 12px;
+  }
+  
+  .plot.occupied {
+    border-color: var(--secondary);
+    box-shadow: 0 0 20px rgba(151, 188, 98, 0.4);
+  }
+  
+  .plot:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(151, 188, 98, 0.6);
+  }
+  
+  .plantCard {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    position: relative;
+    z-index: 2;
+    padding: 10px;
+    background: rgba(30, 30, 46, 0.6);
+    border-radius: 10px;
+    transition: all 0.2s ease;
+  }
+  
+  .plantCard:hover {
+    background: rgba(44, 95, 45, 0.3);
+  }
+  
+  .plantCard h4 {
+    margin: 4px 0 8px;
+    font-size: 1.2rem;
+    color: var(--secondary);
+    text-shadow: 0 0 5px rgba(151, 188, 98, 0.5);
+  }
+  
+  .plantCard span {
+    font-size: 0.85em;
+    margin: 2px 0;
+  }
+  
+  .plant-icon {
+    font-size: 2.5rem;
+    margin-bottom: 8px;
+    text-shadow: 0 0 10px currentColor;
+    animation: pulse 2s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+  
+  .growth-bar {
+    width: 90%;
+    height: 8px;
+    background: #333;
+    border-radius: 4px;
+    margin: 8px 0;
+    overflow: hidden;
+  }
+  
+  .growth-fill {
+    height: 100%;
+    background: linear-gradient(to right, #ff9a00, #4caf50);
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+  
+  .value-tag {
+    background: rgba(255, 107, 107, 0.2);
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+    color: #ff6b6b;
+    margin-top: 5px;
+  }
+  
+  aside {
+    width: 320px;
+    background: rgba(30, 30, 46, 0.8);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(92, 107, 192, 0.3);
+    overflow-y: auto;
+    max-height: 90vh;
+  }
+  
+  .panel {
+    background: rgba(40, 40, 60, 0.7);
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(92, 107, 192, 0.2);
+  }
+  
+  .panel h3 {
+    color: var(--secondary);
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--secondary);
+    font-size: 1.4rem;
+  }
+  
+  #breedPanel {
+    background: rgba(44, 95, 45, 0.3);
+  }
+  
+  #parents {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+  }
+  
+  .parent-slot {
+    flex: 1;
+    min-height: 100px;
+    border: 2px dashed #aaa;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(30, 30, 46, 0.5);
+    transition: all 0.3s ease;
+  }
+  
+  .parent-slot.occupied {
+    border-style: solid;
+    border-color: var(--secondary);
+    background: rgba(44, 95, 45, 0.2);
+  }
+  
+  .parent-slot .plantCard {
+    cursor: default;
+  }
+  
+  #breedBtn {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(to right, var(--primary), #3a7d34);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  }
+  
+  #breedBtn:hover:not(:disabled) {
+    background: linear-gradient(to right, #3a7d34, var(--primary));
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+  }
+  
+  #breedBtn:disabled {
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+  
+  #catalogPanel {
+    background: rgba(40, 40, 60, 0.7);
+  }
+  
+  #catalogList {
+    max-height: 250px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  
+  .catalog-item {
+    background: rgba(30, 30, 46, 0.7);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: all 0.3s ease;
+    border: 1px solid #444;
+  }
+  
+  .catalog-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    border-color: var(--secondary);
+  }
+  
+  .catalog-genes {
+    display: flex;
+    gap: 5px;
+    margin: 5px 0;
+  }
+  
+  .genePill {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    margin: 2px;
+    font-size: 0.8em;
+    font-weight: bold;
+    background: rgba(151, 188, 98, 0.2);
+    color: var(--secondary);
+  }
+  
+  .stats {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+    padding: 10px;
+    background: rgba(30, 30, 46, 0.5);
+    border-radius: 10px;
+    font-size: 1.1rem;
+  }
+  
+  #coins {
+    font-weight: bold;
+    color: gold;
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+  }
+  
+  #plants-count {
+    color: var(--secondary);
+  }
+  
+  .ghost {
+    opacity: 0.4;
+  }
+  
+  .mutation-indicator {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: bold;
+    box-shadow: 0 0 5px rgba(255, 107, 107, 0.7);
+  }
+  
+  .empty-plot {
+    color: #777;
+    font-style: italic;
+    text-align: center;
+    padding: 10px;
+  }
+  
+  .empty-plot::before {
+    content: "🌱";
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 10px;
+  }
+  
+  .harvest-btn {
+    background: linear-gradient(to right, #ff9800, #ff5722);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: all 0.2s ease;
+  }
+  
+  .harvest-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 10px rgba(255, 152, 0, 0.5);
+  }
+  
+  .notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(44, 95, 45, 0.9);
+    color: white;
+    padding: 15px 20px;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    transform: translateX(200%);
+    transition: transform 0.3s ease;
+    z-index: 1000;
+    border-left: 4px solid var(--secondary);
+  }
+  
+  .notification.show {
+    transform: translateX(0);
+  }
+  
+  .tutorial {
+    background: rgba(30, 30, 46, 0.9);
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+    border: 1px solid var(--secondary);
+  }
+  
+  .tutorial h3 {
+    color: var(--secondary);
+    margin-bottom: 10px;
+  }
+  
+  .tutorial ul {
+    padding-left: 20px;
+  }
+  
+  .tutorial li {
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+  
+  .plant-rarity {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  
+  .rarity-common { background: #4caf50; }
+  .rarity-uncommon { background: #2196f3; }
+  .rarity-rare { background: #9c27b0; }
+  .rarity-epic { background: #ff9800; }
+  .rarity-legendary { background: #ff5722; }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <section id="farm-section">
+    <div id="farm-header">
+      <h2>🌱 Mutation Farm</h2>
+      <div class="stats">
+        <div id="coins">💰 <span>100</span></div>
+        <div id="plants-count">🌿 <span>0</span> Plants</div>
+      </div>
+    </div>
+    <div id="farm"></div>
+  </section>
+  
+  <aside>
+    <div class="tutorial">
+      <h3>How to Play</h3>
+      <ul>
+        <li>Drag plants to breeding slots to create new mutations</li>
+        <li>Harvest mature plants for coins</li>
+        <li>Discover all 64 plant combinations in the catalog</li>
+        <li>Rare mutations are worth more coins!</li>
+      </ul>
+    </div>
+    
+    <div id="breedPanel" class="panel">
+      <h3>Breed New Plants</h3>
+      <div id="parents">
+        <div class="parent-slot" data-parent="0"></div>
+        <div class="parent-slot" data-parent="1"></div>
+      </div>
+      <button id="breedBtn" disabled>Breed (50💰)</button>
+    </div>
+    
+    <div id="catalogPanel" class="panel">
+      <h3>Catalog (<span id="catCount">0</span>/64)</h3>
+      <div id="catalogList"></div>
+    </div>
+  </aside>
+</div>
+
+<div id="notification" class="notification"></div>
+
+<script>
+/* ---------- data ---------- */
+let coins = 100;
+const genePool = {
+  A:{0:1,1:2,2:3},
+  B:{0:1,1:2,2:3},
+  C:{0:1,1:2,2:3}
+};
+let plants = [];
+let farmSlots = new Array(8).fill(null);
+let catalog = new Set();
+let dragged = null;
+let plantCounter = 0;
+
+// Plant rarities based on gene combinations
+const getRarity = (genes) => {
+  const total = genes.A + genes.B + genes.C;
+  if (total <= 2) return 'common';
+  if (total <= 4) return 'uncommon';
+  if (total <= 6) return 'rare';
+  if (total <= 8) return 'epic';
+  return 'legendary';
+};
+
+const getRarityColor = (rarity) => {
+  const colors = {
+    common: '#4caf50',
+    uncommon: '#2196f3',
+    rare: '#9c27b0',
+    epic: '#ff9800',
+    legendary: '#ff5722'
+  };
+  return colors[rarity] || '#4caf50';
+};
+
+/* ---------- helpers ---------- */
+const randChoice = obj => {
+  const keys = Object.keys(obj);
+  const sum = keys.reduce((s,k)=>s+obj[k],0);
+  let r = Math.random()*sum;
+  for(const k of keys){r-=obj[k];if(r<=0)return +k;}
+};
+
+const geneKey = g => (g.A<<4)+(g.B<<2)+g.C;
+
+const breed = (p1,p2)=>{
+  const g = {};
+  let mutated = false;
+  
+  ['A','B','C'].forEach(k=>{
+    const pool = {...genePool[k]};
+    if(Math.random()<0.15) { // Increased mutation chance
+      pool[randChoice(pool)]++; 
+      mutated = true;
+    }
+    g[k] = randChoice(pool);
+  });
+  
+  return { genes: g, mutated };
+};
+
+const grow = (dt)=>{
+  plants.forEach(p=>{
+    if (!p.ready) {
+      p.age += dt;
+      if(p.age>=5){
+        p.ready=true;
+        const rarity = getRarity(p.genes);
+        p.value = (p.genes.A+p.genes.B+p.genes.C)*10 + (rarity === 'legendary' ? 50 : rarity === 'epic' ? 30 : rarity === 'rare' ? 15 : 0);
+        renderFarm();
+        showNotification(`Plant ${p.id} is ready for harvest!`);
+      }
+    }
+  });
+};
+
+const harvest = idx=>{
+  const p = farmSlots[idx];
+  if(!p || !p.ready) return;
+  
+  coins += p.value;
+  catalog.add(geneKey(p.genes));
+  
+  farmSlots[idx]=null;
+  saveGame();
+  renderFarm();
+  renderCatalog();
+  renderStats();
+  
+  showNotification(`Harvested Plant ${p.id} for ${p.value} coins!`);
+};
+
+const showNotification = (message) => {
+  const notification = document.getElementById('notification');
+  notification.textContent = message;
+  notification.classList.add('show');
+  
+  setTimeout(() => {
+    notification.classList.remove('show');
+  }, 3000);
+};
+
+const renderFarm = ()=>{
+  const farm = document.getElementById('farm');
+  farm.innerHTML='';
+  
+  farmSlots.forEach((p,i)=>{
+    const div = document.createElement('div');
+    div.className='plot';
+    
+    if(p){
+      div.classList.add('occupied');
+      const card = document.createElement('div');
+      card.className='plantCard';
+      card.draggable=true;
+      card.dataset.idx=i;
+      
+      const rarity = getRarity(p.genes);
+      const color = getRarityColor(rarity);
+      
+      // Plant icon based on rarity
+      let plantIcon = '🌿';
+      if (rarity === 'uncommon') plantIcon = '🌱';
+      if (rarity === 'rare') plantIcon = '🍀';
+      if (rarity === 'epic') plantIcon = '🌻';
+      if (rarity === 'legendary') plantIcon = '🌺';
+      
+      card.innerHTML=`
+        <div class="plant-icon" style="color:${color}">${plantIcon}</div>
+        <h4>Plant ${p.id}</h4>
+        <div class="plant-rarity rarity-${rarity}">${rarity.toUpperCase()}</div>
+        <div>${['A','B','C'].map(k=>`<span class="genePill">${k}:${p.genes[k]}</span>`).join('')}</div>
+        ${p.ready ? 
+          `<div class="value-tag">💰${p.value}</div>
+           <button class="harvest-btn">Harvest</button>` : 
+          `<div class="growth-bar">
+            <div class="growth-fill" style="width:${Math.min(100, p.age*20)}%"></div>
+          </div>
+          <span>${Math.floor(p.age*20)}% grown</span>`
+        }`;
+      
+      card.ondragstart=e=>{
+        if (!p.ready) {
+          dragged={idx:i,plant:p};
+          e.dataTransfer.setData('text/plain','');
+        } else {
+          e.preventDefault();
+        }
+      };
+      
+      div.appendChild(card);
+      
+      if(p.ready) {
+        const harvestBtn = card.querySelector('.harvest-btn');
+        harvestBtn.onclick = () => harvest(i);
+      }
+      
+      if(p.mutated) {
+        const mutationIndicator = document.createElement('div');
+        mutationIndicator.className = 'mutation-indicator';
+        mutationIndicator.textContent = '!';
+        div.appendChild(mutationIndicator);
+      }
+    } else {
+      div.innerHTML = '<div class="empty-plot">Empty Plot</div>';
+    }
+    
+    farm.appendChild(div);
+  });
+};
+
+const renderCatalog=()=>{
+  document.getElementById('catCount').textContent = catalog.size;
+  const list=document.getElementById('catalogList');
+  list.innerHTML='';
+  
+  [...catalog].forEach(k=>{
+    const g={A:(k>>4)&3,B:(k>>2)&3,C:k&3};
+    const rarity = getRarity(g);
+    const color = getRarityColor(rarity);
+    
+    const item=document.createElement('div');
+    item.className = 'catalog-item';
+    item.innerHTML=`
+      <div style="color:${color}; font-size:1.5rem; margin-bottom:5px;">${rarity === 'legendary' ? '🌺' : rarity === 'epic' ? '🌻' : rarity === 'rare' ? '🍀' : '🌿'}</div>
+      <div class="catalog-genes">
+        ${['A','B','C'].map(k=>`<span class="genePill">${k}:${g[k]}</span>`).join('')}
+      </div>
+      <div style="font-size:0.8rem; margin-top:5px; color:${color}">${rarity.toUpperCase()}</div>
+    `;
+    list.appendChild(item);
+  });
+};
+
+const renderStats = () => {
+  document.getElementById('coins').innerHTML = `💰 <span>${coins}</span>`;
+  document.getElementById('plants-count').innerHTML = `🌿 <span>${plants.length}</span> Plants`;
+};
+
+const saveGame=()=>localStorage.mf=JSON.stringify({coins,plants,farmSlots,catalog:[...catalog]});
+
+const loadGame=()=>{
+  if(localStorage.mf){
+    const d=JSON.parse(localStorage.mf);
+    coins=d.coins;
+    plants=d.plants;
+    farmSlots=d.farmSlots.map(p=>p?{...p,genes:{...p.genes}}:null);
+    catalog=new Set(d.catalog);
+  }
+};
+
+/* ---------- init ---------- */
+loadGame();
+renderFarm();
+renderCatalog();
+renderStats();
+setInterval(()=>{grow(0.1);},1000);
+
+/* ---------- drag drop ---------- */
+document.addEventListener('dragover',e=>e.preventDefault());
+
+const parents=[...document.querySelectorAll('[data-parent]')];
+parents.forEach(slot=>{
+  slot.ondragover=e=>e.preventDefault();
+  slot.ondrop=e=>{
+    if(!dragged) return;
+    slot.innerHTML='';
+    
+    const plant = dragged.plant;
+    const rarity = getRarity(plant.genes);
+    const color = getRarityColor(rarity);
+    
+    const clone=document.createElement('div');
+    clone.className='plantCard';
+    clone.innerHTML=`
+      <div class="plant-icon" style="color:${color}; font-size:1.8rem;">🌿</div>
+      <h4>Parent</h4>
+      <div>${['A','B','C'].map(k=>`<span class="genePill">${k}:${plant.genes[k]}</span>`).join('')}</div>
+    `;
+    slot.appendChild(clone);
+    slot.plant=plant;
+    slot.classList.add('occupied');
+    
+    document.getElementById('breedBtn').disabled=!(parents[0].plant && parents[1].plant && coins>=50);
+    dragged=null;
+  };
+});
+
+document.getElementById('breedBtn').onclick=()=>{
+  if(!parents[0].plant || !parents[1].plant || coins<50) return;
+  
+  coins-=50;
+  const result = breed(parents[0].plant,parents[1].plant);
+  const g = result.genes;
+  const mutated = result.mutated;
+  
+  const id=plantCounter++;
+  const newPlant={id,genes:g,age:0,ready:false,mutated};
+  plants.push(newPlant);
+  
+  const empty=farmSlots.findIndex(s=>!s);
+  if(empty!==-1) farmSlots[empty]=newPlant;
+  
+  parents.forEach(s=>{
+    s.innerHTML='';
+    s.plant=null;
+    s.classList.remove('occupied');
+  });
+  
+  document.getElementById('breedBtn').disabled=true;
+  saveGame();
+  renderFarm();
+  renderStats();
+  
+  if (mutated) {
+    showNotification(`Mutation successful! New plant created!`);
+  }
+};
+
+// Initial plants
+const createInitialPlant = () => {
+  const g = {A: Math.floor(Math.random() * 3), B: Math.floor(Math.random() * 3), C: Math.floor(Math.random() * 3)};
+  const id = plantCounter++;
+  const newPlant = {id, genes: g, age: 0, ready: false, mutated: false};
+  plants.push(newPlant);
+  return newPlant;
+};
+
+// Add initial plants to farm
+for (let i = 0; i < 3; i++) {
+  const plant = createInitialPlant();
+  farmSlots[i] = plant;
+}
+
+renderFarm();
+renderCatalog();
+renderStats();
+</script>
+</body>
+</html>

@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Enhanced Minimalist Factory</title>
+  <style>
+    :root{
+      --accent:#0ff;
+      --accent2:#0f0;
+      --gen:#ff6b6b;
+      --conv:#4ecdc4;
+      --asm:#1a936f;
+      --sell:#ffd166;
+      --merger:#9b5de5;
+      --splitter:#f15bb5;
+      --storage:#00bbf9;
+      --trash:#ef476f;
+      --grid-bg:#1a1a2e;
+      --tile-bg:#16213e;
+      --tile-border:#0f3460;
+    }
+    
+    body{
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      color:#eee;
+      margin:0;
+      padding:1rem;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      min-height: 100vh;
+    }
+    
+    h1{
+      margin:0 0 .5rem;
+      font-size:2.2rem;
+      text-align: center;
+      text-shadow: 0 0 10px var(--accent);
+      background: linear-gradient(to right, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 1px;
+    }
+    
+    .game-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      max-width: 100%;
+    }
+    
+    #factory{
+      display:grid;
+      grid-template-columns:repeat(6,3.5rem);
+      gap:3px;
+      margin-bottom:1rem;
+      position:relative;
+      background: var(--grid-bg);
+      padding: 10px;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+    }
+    
+    .tile{
+      width:3.5rem;
+      height:3.5rem;
+      background: var(--tile-bg);
+      border:2px solid var(--tile-border);
+      position:relative;
+      cursor:pointer;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      font-size:1.8rem;
+      user-select:none;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+    }
+    
+    .tile:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 10px var(--accent);
+      z-index: 2;
+    }
+    
+    .tile.selected{
+      outline:3px solid var(--accent);
+      box-shadow: 0 0 15px var(--accent);
+      z-index: 3;
+    }
+    
+    .tile.preview{
+      background: rgba(40, 40, 80, 0.7);
+      box-shadow: 0 0 10px var(--accent2);
+    }
+    
+    .arrow{
+      position:absolute;
+      color:var(--accent2);
+      font-size:1rem;
+      pointer-events:none;
+      text-shadow: 0 0 5px #000;
+      z-index: 1;
+    }
+    
+    .arrow.up{top:0;left:50%;transform:translateX(-50%)}
+    .arrow.right{right:0;top:50%;transform:translateY(-50%)}
+    .arrow.down{bottom:0;left:50%;transform:translateX(-50%)}
+    .arrow.left{left:0;top:50%;transform:translateY(-50%)}
+    
+    /* Machine-specific styling */
+    .gen { color: var(--gen); }
+    .conv { color: var(--conv); }
+    .asm { color: var(--asm); }
+    .sell { color: var(--sell); }
+    .merger { color: var(--merger); }
+    .splitter { color: var(--splitter); }
+    .storage { color: var(--storage); }
+    .trash { color: var(--trash); }
+    
+    /* TOOLTIP */
+    [data-tooltip]{
+      position:relative;
+    }
+    
+    [data-tooltip]::after{
+      content:attr(data-tooltip);
+      position:absolute;
+      bottom:100%;
+      left:50%;
+      transform:translateX(-50%);
+      background:#0009;
+      color:#fff;
+      padding:.25rem .5rem;
+      border-radius:4px;
+      white-space:nowrap;
+      pointer-events:none;
+      opacity:0;
+      transition:.15s;
+      z-index:10;
+      font-size: 0.8rem;
+      text-align: center;
+      min-width: 120px;
+    }
+    
+    [data-tooltip]:hover::after{opacity:1}
+    
+    #controls{
+      display:flex;
+      gap:.7rem;
+      flex-wrap:wrap;
+      justify-content:center;
+      background: rgba(20, 20, 40, 0.7);
+      padding: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+      max-width: 100%;
+    }
+    
+    button{
+      padding:.5rem 1rem;
+      background: linear-gradient(to bottom, #2c3e50, #1a1a2e);
+      color:#eee;
+      border:1px solid #444;
+      cursor:pointer;
+      border-radius: 5px;
+      font-weight: bold;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 80px;
+    }
+    
+    button:hover{
+      background: linear-gradient(to bottom, #34495e, #2c3e50);
+      transform: translateY(-2px);
+      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.3);
+    }
+    
+    button.active {
+      background: linear-gradient(to bottom, var(--accent), #0cc);
+      color: #000;
+      box-shadow: 0 0 10px var(--accent);
+    }
+    
+    .machine-icon {
+      font-size: 1.5rem;
+      margin-bottom: 5px;
+    }
+    
+    #stats{
+      margin-top:.5rem;
+      font-size:1.1rem;
+      background: rgba(20, 20, 40, 0.7);
+      padding: 0.8rem 1.5rem;
+      border-radius: 10px;
+      display: flex;
+      gap: 1.5rem;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    }
+    
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .stat-value {
+      font-weight: bold;
+      font-size: 1.3rem;
+      color: var(--accent);
+    }
+    
+    /* TUTORIAL POP-UP */
+    #tutorial{
+      position:fixed;
+      inset:0;
+      background: rgba(0, 0, 30, 0.9);
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      z-index:100;
+      backdrop-filter: blur(5px);
+    }
+    
+    #tutorial.hidden{display:none}
+    
+    #tutorial .box{
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      border: 2px solid var(--accent);
+      padding:2rem;
+      max-width:400px;
+      text-align:center;
+      border-radius: 15px;
+      box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { box-shadow: 0 0 10px rgba(0, 255, 255, 0.3); }
+      50% { box-shadow: 0 0 30px rgba(0, 255, 255, 0.6); }
+      100% { box-shadow: 0 0 10px rgba(0, 255, 255, 0.3); }
+    }
+    
+    #tutorial h2 {
+      margin-top: 0;
+      color: var(--accent);
+    }
+    
+    #tutorial p {
+      font-size: 1.1rem;
+      line-height: 1.5;
+    }
+    
+    #tutorial button{
+      margin-top:1rem;
+      padding: 0.7rem 1.5rem;
+      font-size: 1.1rem;
+      background: linear-gradient(to right, var(--accent), var(--accent2));
+      color: #000;
+      border: none;
+      border-radius: 30px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    #tutorial button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 20px var(--accent);
+    }
+    
+    /* Progress bar */
+    .progress-container {
+      width: 100%;
+      background: #222;
+      border-radius: 10px;
+      margin: 10px 0;
+      height: 20px;
+      overflow: hidden;
+      box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+    }
+    
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(to right, var(--accent), var(--accent2));
+      border-radius: 10px;
+      transition: width 0.5s ease;
+    }
+    
+    /* Item flow animation */
+    .item-flow {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      z-index: 5;
+      pointer-events: none;
+      animation: flow 0.5s linear forwards;
+    }
+    
+    @keyframes flow {
+      from { transform: translate(0, 0); opacity: 1; }
+      to { transform: translate(var(--tx), var(--ty)); opacity: 0; }
+    }
+    
+    /* Efficiency indicator */
+    .efficiency {
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      font-size: 0.7rem;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 1px 3px;
+      border-radius: 3px;
+    }
+    
+    /* Responsive design */
+    @media (max-width: 768px) {
+      #factory {
+        grid-template-columns: repeat(6, 2.8rem);
+      }
+      
+      .tile {
+        width: 2.8rem;
+        height: 2.8rem;
+        font-size: 1.4rem;
+      }
+      
+      #controls {
+        flex-wrap: wrap;
+        max-width: 95%;
+      }
+      
+      button {
+        min-width: 70px;
+        padding: 0.4rem 0.6rem;
+        font-size: 0.8rem;
+      }
+      
+      .machine-icon {
+        font-size: 1.2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Enhanced Minimalist Factory</h1>
+  
+  <div class="game-container">
+    <div id="factory"></div>
+    
+    <div id="controls">
+      <button data-type="gen" data-tooltip="Creates 1 unit/tick">
+        <span class="machine-icon">⚡</span>
+        <span>Generator</span>
+      </button>
+      <button data-type="conv" data-tooltip="Moves items forward">
+        <span class="machine-icon">▶️</span>
+        <span>Conveyor</span>
+      </button>
+      <button data-type="asm" data-tooltip="2→3 upgrade">
+        <span class="machine-icon">🏭</span>
+        <span>Assembler</span>
+      </button>
+      <button data-type="sell" data-tooltip="Turns items into cash">
+        <span class="machine-icon">💰</span>
+        <span>Seller</span>
+      </button>
+      <button data-type="merger" data-tooltip="Combines two inputs">
+        <span class="machine-icon">🔀</span>
+        <span>Merger</span>
+      </button>
+      <button data-type="splitter" data-tooltip="Divides output">
+        <span class="machine-icon">🔄</span>
+        <span>Splitter</span>
+      </button>
+      <button data-type="storage" data-tooltip="Holds items">
+        <span class="machine-icon">📦</span>
+        <span>Storage</span>
+      </button>
+      <button data-type="trash" data-tooltip="Destroys items">
+        <span class="machine-icon">🗑️</span>
+        <span>Trash</span>
+      </button>
+      <button id="reset" data-tooltip="Clear the grid">
+        <span class="machine-icon">🔄</span>
+        <span>Reset</span>
+      </button>
+      <button id="rotate" data-tooltip="Rotate selected machine">
+        <span class="machine-icon">↻</span>
+        <span>Rotate</span>
+      </button>
+    </div>
+    
+    <div id="stats">
+      <div class="stat-item">
+        <div>Output</div>
+        <div class="stat-value" id="output-value">0</div>
+      </div>
+      <div class="stat-item">
+        <div>Target</div>
+        <div class="stat-value" id="target-value">50</div>
+      </div>
+      <div class="stat-item">
+        <div>Efficiency</div>
+        <div class="stat-value" id="efficiency-value">100%</div>
+      </div>
+      <div class="stat-item">
+        <div>Items/s</div>
+        <div class="stat-value" id="items-per-second">0</div>
+      </div>
+    </div>
+    
+    <div class="progress-container">
+      <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+    </div>
+  </div>
+  
+  <!-- Tutorial overlay -->
+  <div id="tutorial">
+    <div class="box">
+      <h2>Factory Manager</h2>
+      <p id="tut-text">Welcome! Place your first <b>Generator</b> to start producing items.</p>
+      <button id="tut-btn">Start Building</button>
+    </div>
+  </div>
+
+  <script>
+    /* ---------- CONFIG ---------- */
+    const ROWS = 6, COLS = 6, TICK_MS = 300, TARGET = 100;
+    const MAX_BUFFER = 10; // Maximum items a machine can hold
+
+    /* ---------- DATA ---------- */
+    const grid = Array.from({length:ROWS},_=>Array(COLS).fill(null));
+    let selected = null, output = 0, placeMode = null;
+    let totalItemsProduced = 0;
+    let itemsPerSecond = 0;
+    let lastSecond = Date.now();
+    let efficiency = 100;
+    
+    const tutSteps = [
+      "Click any empty tile to drop a Generator ⚡.",
+      "Great! Now place a Conveyor ▶️ next to it.",
+      "Click the Generator, then click the Conveyor to link them. Arrow appears!",
+      "Add a Seller 💰 to convert items to cash!",
+      "Try adding an Assembler 🏭 to upgrade 2 items into 3!",
+      "Use Merger 🔀 to combine two inputs into one!",
+      "Rotate machines with the Rotate button to change direction!"
+    ];
+    let tutStep = 0;
+
+    /* ---------- MACHINES ---------- */
+    const MACHINES = {
+      gen:  {icon:'⚡', produces:1, color: 'var(--gen)'},
+      conv: {icon:'▶️', moves:true, color: 'var(--conv)'},
+      asm:  {icon:'🏭', consumes:2, produces:3, color: 'var(--asm)'},
+      sell: {icon:'💰', sells:true, color: 'var(--sell)'},
+      merger: {icon:'🔀', consumes:2, produces:1, color: 'var(--merger)'},
+      splitter: {icon:'🔄', consumes:1, produces:2, color: 'var(--splitter)'},
+      storage: {icon:'📦', stores:true, capacity: 5, color: 'var(--storage)'},
+      trash: {icon:'🗑️', destroys:true, color: 'var(--trash)'}
+    };
+
+    /* ---------- DOM ---------- */
+    const factoryEl = document.getElementById('factory');
+    const statsEl   = document.getElementById('stats');
+    const tutorial  = document.getElementById('tutorial');
+    const tutText   = document.getElementById('tut-text');
+    const tutBtn    = document.getElementById('tut-btn');
+    const rotateBtn = document.getElementById('rotate');
+    const outputValue = document.getElementById('output-value');
+    const targetValue = document.getElementById('target-value');
+    const efficiencyValue = document.getElementById('efficiency-value');
+    const itemsPerSecondValue = document.getElementById('items-per-second');
+    const progressBar = document.getElementById('progress-bar');
+
+    /* ---------- RENDER ---------- */
+    function renderFactory(){
+      factoryEl.innerHTML='';
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          const tile = document.createElement('div');
+          tile.className='tile';
+          if(placeMode && !grid[r][c]) tile.classList.add('preview');
+          tile.dataset.r=r;
+          tile.dataset.c=c;
+
+          const m = grid[r][c];
+          if(m) {
+            tile.textContent = MACHINES[m.type].icon;
+            tile.classList.add(m.type);
+            
+            // Show buffer for storage machines
+            if(m.type === 'storage' && m.buffer > 0) {
+              const bufferDisplay = document.createElement('div');
+              bufferDisplay.textContent = m.buffer;
+              bufferDisplay.style.position = 'absolute';
+              bufferDisplay.style.bottom = '2px';
+              bufferDisplay.style.right = '2px';
+              bufferDisplay.style.fontSize = '0.7rem';
+              bufferDisplay.style.background = 'rgba(0,0,0,0.7)';
+              bufferDisplay.style.padding = '1px 3px';
+              bufferDisplay.style.borderRadius = '3px';
+              tile.appendChild(bufferDisplay);
+            }
+            
+            // Show efficiency for machines that produce
+            if(MACHINES[m.type].produces && m.type !== 'storage') {
+              const effDisplay = document.createElement('div');
+              effDisplay.className = 'efficiency';
+              effDisplay.textContent = `${Math.min(100, Math.floor((m.buffer / MAX_BUFFER) * 100))}%`;
+              tile.appendChild(effDisplay);
+            }
+          }
+          
+          if(m && m.outDir){
+            const a=document.createElement('span');
+            a.className='arrow '+m.outDir;
+            a.textContent='▲';
+            tile.appendChild(a);
+          }
+          
+          if(selected && selected.r===r && selected.c===c) {
+            tile.classList.add('selected');
+          }
+
+          tile.addEventListener('click', ()=>handleTileClick(r,c));
+          factoryEl.appendChild(tile);
+        }
+      }
+      
+      // Update stats
+      outputValue.textContent = output;
+      targetValue.textContent = TARGET;
+      efficiencyValue.textContent = `${efficiency}%`;
+      itemsPerSecondValue.textContent = itemsPerSecond.toFixed(1);
+      
+      // Update progress bar
+      const progress = Math.min(100, (output / TARGET) * 100);
+      progressBar.style.width = `${progress}%`;
+      
+      // Check win condition
+      if(output >= TARGET){
+        setTimeout(()=> {
+          alert(`Target reached! Factory optimized with ${efficiency}% efficiency.`);
+          resetGame();
+        }, 100);
+      }
+    }
+
+    /* ---------- PLACE / CONNECT ---------- */
+    function placeMachine(type,r,c){
+      if(grid[r][c]) return;
+      grid[r][c]={type,buffer:0,outDir:null};
+      placeMode=null;
+      advanceTutorial();
+      renderFactory();
+    }
+
+    function connectMachines(r1,c1,r2,c2){
+      const m1=grid[r1][c1];
+      if(!m1||m1.outDir) return;
+      if(Math.abs(r1-r2)+Math.abs(c1-c2)!==1) return;
+      let dir;
+      if(r2<r1) dir='up';
+      else if(r2>r1) dir='down';
+      else if(c2>c1) dir='right';
+      else dir='left';
+      m1.outDir=dir;
+      selected=null;
+      advanceTutorial();
+      renderFactory();
+    }
+    
+    function rotateMachine(r, c) {
+      const m = grid[r][c];
+      if(!m) return;
+      
+      const directions = ['up', 'right', 'down', 'left'];
+      const currentIndex = directions.indexOf(m.outDir);
+      const nextIndex = (currentIndex + 1) % directions.length;
+      m.outDir = directions[nextIndex];
+      
+      renderFactory();
+    }
+
+    /* ---------- SIMULATION ---------- */
+    function stepFactory(){
+      // Calculate items per second
+      const now = Date.now();
+      if(now - lastSecond >= 1000) {
+        itemsPerSecond = totalItemsProduced;
+        totalItemsProduced = 0;
+        lastSecond = now;
+      }
+      
+      // Reset efficiency
+      let totalCapacity = 0;
+      let usedCapacity = 0;
+      
+      /* 1. Move items */
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          const m=grid[r][c];
+          if(!m||!m.outDir) continue;
+          
+          // Calculate capacity for efficiency
+          if(MACHINES[m.type].produces) {
+            totalCapacity += MAX_BUFFER;
+            usedCapacity += m.buffer;
+          }
+          
+          let nr=r,nc=c;
+          if(m.outDir==='up') nr--;
+          else if(m.outDir==='down') nr++;
+          else if(m.outDir==='left') nc--;
+          else if(m.outDir==='right') nc++;
+          
+          if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
+          const next=grid[nr][nc];
+          if(!next) continue;
+          
+          // Handle different machine types
+          if(m.type === 'splitter' && m.buffer > 0) {
+            // Splitter logic
+            if(next.buffer < MAX_BUFFER) {
+              next.buffer += 1;
+              m.buffer -= 1;
+              createItemFlow(r, c, nr, nc);
+            }
+          } else if(m.buffer > 0 && next.buffer < MAX_BUFFER) {
+            // Normal flow
+            next.buffer += 1;
+            m.buffer -= 1;
+            createItemFlow(r, c, nr, nc);
+          }
+        }
+      }
+      
+      /* 2. Produce/consume/sell */
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          const m=grid[r][c];
+          if(!m) continue;
+          
+          const def=MACHINES[m.type];
+          
+          // Calculate capacity for efficiency
+          if(def.produces) {
+            totalCapacity += MAX_BUFFER;
+            usedCapacity += m.buffer;
+          }
+          
+          if(def.produces && !def.consumes && !def.stores && !def.destroys){
+            // Generators
+            if(m.buffer < MAX_BUFFER) {
+              m.buffer += def.produces;
+              totalItemsProduced += def.produces;
+            }
+          } else if(def.consumes && def.produces){
+            // Assemblers/Mergers
+            if(m.buffer >= def.consumes && m.buffer < MAX_BUFFER) {
+              m.buffer -= def.consumes;
+              m.buffer += def.produces;
+              totalItemsProduced += def.produces;
+            }
+          } else if(def.sells){
+            // Sellers
+            output += m.buffer;
+            totalItemsProduced += m.buffer;
+            m.buffer = 0;
+          } else if(def.destroys){
+            // Trash
+            m.buffer = 0;
+          }
+        }
+      }
+      
+      // Calculate efficiency
+      efficiency = totalCapacity > 0 ? Math.floor((usedCapacity / totalCapacity) * 100) : 100;
+      
+      renderFactory();
+    }
+    
+    function createItemFlow(fromR, fromC, toR, toC) {
+      const fromTile = document.querySelector(`.tile[data-r="${fromR}"][data-c="${fromC}"]`);
+      const toTile = document.querySelector(`.tile[data-r="${toR}"][data-c="${toC}"]`);
+      
+      if(!fromTile || !toTile) return;
+      
+      const fromRect = fromTile.getBoundingClientRect();
+      const toRect = toTile.getBoundingClientRect();
+      
+      const flow = document.createElement('div');
+      flow.className = 'item-flow';
+      flow.style.left = `${fromRect.left + fromRect.width/2}px`;
+      flow.style.top = `${fromRect.top + fromRect.height/2}px`;
+      
+      // Set animation variables
+      const tx = toRect.left - fromRect.left;
+      const ty = toRect.top - fromRect.top;
+      flow.style.setProperty('--tx', `${tx}px`);
+      flow.style.setProperty('--ty', `${ty}px`);
+      
+      document.body.appendChild(flow);
+      
+      // Remove after animation
+      setTimeout(() => {
+        flow.remove();
+      }, 500);
+    }
+
+    /* ---------- UI HANDLERS ---------- */
+    function handleTileClick(r,c){
+      if(placeMode){
+        placeMachine(placeMode,r,c);
+        return;
+      }
+      
+      if(!selected){
+        selected={r,c};
+      }else{
+        if(selected.r === r && selected.c === c) {
+          // Deselect if clicking the same tile
+          selected = null;
+        } else {
+          connectMachines(selected.r,selected.c,r,c);
+        }
+      }
+      renderFactory();
+    }
+
+    document.querySelectorAll('#controls button[data-type]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        // Remove active class from all buttons
+        document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active'));
+        
+        // Add active class to clicked button
+        btn.classList.add('active');
+        
+        placeMode = btn.dataset.type;
+        selected = null;
+        renderFactory();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click',resetGame);
+    
+    rotateBtn.addEventListener('click', () => {
+      if(selected) {
+        rotateMachine(selected.r, selected.c);
+      }
+    });
+
+    /* ---------- TUTORIAL ---------- */
+    function advanceTutorial(){
+      if(tutStep>=tutSteps.length){tutorial.classList.add('hidden');return;}
+      tutStep++;
+      if(tutStep<tutSteps.length) tutText.innerHTML=tutSteps[tutStep];
+    }
+    
+    tutBtn.addEventListener('click',()=>{
+      if(tutStep===0){
+        tutText.innerHTML=tutSteps[0];
+        tutStep++;
+      }else{
+        advanceTutorial();
+      }
+    });
+
+    /* ---------- INIT ---------- */
+    function resetGame(){
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)grid[r][c]=null;
+      output=0;
+      totalItemsProduced = 0;
+      itemsPerSecond = 0;
+      efficiency = 100;
+      selected=null;
+      placeMode=null;
+      tutStep=0;
+      
+      // Reset button states
+      document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active'));
+      
+      tutorial.classList.remove('hidden');
+      tutText.innerHTML="Welcome! Place your first <b>Generator</b> to start producing items.";
+      renderFactory();
+    }
+
+    resetGame();
+    setInterval(stepFactory,TICK_MS);
+  </script>
+</body>
+</html>

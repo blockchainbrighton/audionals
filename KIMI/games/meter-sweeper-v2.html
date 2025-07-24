@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Meter-Sweeper</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+body {
+  background: linear-gradient(to bottom, #1a1a2e, #16213e);
+  color: #e0e0ff;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+canvas {
+  display: block;
+  margin: auto;
+  background: #0f3460;
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+#ui {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+#ui > * {
+  pointer-events: auto;
+}
+#title, #pause, #gameOver, #options, #tutorial {
+  position: relative;
+  background: rgba(30, 30, 60, 0.95);
+  border: 2px solid #4a4a8a;
+  padding: 30px;
+  border-radius: 15px;
+  text-align: center;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
+  z-index: 10;
+}
+#title h1 {
+    font-size: 3em;
+    margin-bottom: 20px;
+    color: #64b5f6;
+    text-shadow: 0 0 10px rgba(100, 181, 246, 0.7);
+}
+#title p {
+    font-size: 1.2em;
+    margin-bottom: 25px;
+}
+button {
+  padding: 12px 24px;
+  margin: 10px;
+  font-size: 18px;
+  background: linear-gradient(to bottom, #4a4a8a, #2c2c5c);
+  border: 1px solid #6464b4;
+  color: #e0e0ff;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+button:hover {
+  background: linear-gradient(to bottom, #5a5a9a, #3c3c7c);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.4);
+}
+button:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+.hidden {
+  display: none !important;
+}
+#hud {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  font-size: 20px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 10px 15px;
+  border-radius: 8px;
+  border: 1px solid #4a4a8a;
+}
+#hud > div {
+    margin: 5px 0;
+}
+#modeDisplay {
+    font-weight: bold;
+    color: #64b5f6;
+    font-size: 1.2em;
+}
+#muteBtn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-size: 20px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #4a4a8a;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+label {
+  display: block;
+  margin: 15px 0;
+  text-align: left;
+  font-size: 18px;
+}
+input[type=range] {
+  width: 100%;
+  margin-top: 5px;
+}
+input[type=checkbox] {
+    transform: scale(1.5);
+    margin-right: 10px;
+}
+#hintBtn {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 18px;
+    padding: 10px 20px;
+    background: linear-gradient(to bottom, #ff9800, #f57c00);
+    border: 1px solid #ffa726;
+}
+#hintBtn:hover {
+    background: linear-gradient(to bottom, #ffa726, #fb8c00);
+}
+#hintBtn:disabled {
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+.tile {
+    stroke: #444;
+    stroke-width: 1;
+}
+.tile-revealed {
+    fill: #2c3e50;
+}
+.tile-hidden {
+    fill: #34495e;
+    cursor: pointer;
+}
+.tile-flagged {
+    fill: #e74c3c;
+    animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+    0% { opacity: 0.8; }
+    50% { opacity: 1; }
+    100% { opacity: 0.8; }
+}
+.mine-circle {
+    fill: #c0392b;
+    stroke: #e74c3c;
+    stroke-width: 2;
+}
+.mine-text {
+    fill: white;
+    font-weight: bold;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    font-size: 14px;
+}
+.count-text {
+    fill: #ecf0f1;
+    font-weight: bold;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    font-size: 16px;
+}
+.count-4-4 { fill: #3498db; } /* Blue */
+.count-3-4 { fill: #2ecc71; } /* Green */
+.count-5-4 { fill: #9b59b6; } /* Purple */
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r159/three.min.js"></script> <!-- Kept if needed for future 3D -->
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui">
+  <div id="title">
+    <h1>Meter-Sweeper</h1>
+    <p>Navigate the rhythmic minefield! Reveal tiles by counting adjacent time signatures.</p>
+    <button id="startBtn">Start Game</button>
+    <button id="optionsBtn">Options</button>
+    <button id="tutorialBtn">How to Play</button>
+  </div>
+  
+  <div id="pause" class="hidden">
+    <h2>Paused</h2>
+    <p>Take a breather...</p>
+    <button id="resumeBtn">Resume</button>
+    <button id="optionsBtn2">Options</button>
+    <button id="quitBtn">Main Menu</button>
+  </div>
+  
+  <div id="gameOver" class="hidden">
+    <h2 id="goText">Game Over</h2>
+    <p>Final Score: <span id="finalScore">0</span></p>
+    <p>Level Reached: <span id="finalLevel">1</span></p>
+    <button id="restartBtn">Play Again</button>
+    <button id="titleBtn">Main Menu</button>
+  </div>
+  
+  <div id="options" class="hidden">
+    <h2>Settings</h2>
+    <label>Master Volume<input type="range" id="masterVol" min="0" max="1" step="0.01" value="0.5"></label>
+    <label>FX Volume<input type="range" id="fxVol" min="0" max="1" step="0.01" value="0.7"></label>
+    <label style="display: flex; align-items: center;">
+      <input type="checkbox" id="cbMode"> Color-blind Mode
+    </label>
+    <button id="closeOptions">Done</button>
+  </div>
+  
+  <div id="tutorial" class="hidden">
+    <h2>How to Play</h2>
+    <p><strong>Goal:</strong> Reveal all safe tiles without triggering a mine.</p>
+    <p><strong>Left-click</strong> a tile to reveal it. Safe tiles play a rhythmic click. Numbers indicate how many mines of that time signature are adjacent.</p>
+    <p><strong>Right-click</strong> to place/remove a flag on suspected mines.</p>
+    <p><strong>Avoid mines:</strong> Triggering one costs a life and plays a chaotic "explosion" sound.</p>
+    <p><strong>Clear a level:</strong> Reveal all safe tiles to advance. Grid size and mine count increase!</p>
+    <p><strong>Hint:</strong> Spend points to reveal a safe tile (if available).</p>
+    <button id="closeTut">Got it!</button>
+  </div>
+</div>
+
+<div id="hud" class="hidden">
+  <div>Score: <span id="score">0</span></div>
+  <div>Level: <span id="level">1</span></div>
+  <div>Lives: <span id="lives">3</span></div>
+  <div>Mode: <span id="modeDisplay">4/4</span></div>
+  <div>Time: <span id="timer">0</span>s</div>
+</div>
+<button id="muteBtn" class="hidden">🔊</button>
+<button id="hintBtn" class="hidden" disabled>Hint (50 pts)</button>
+
+<script>
+/* ---------- CONFIG & STATE ---------- */
+let GRID_SIZE = 8; // Initial board size
+const CELL_SIZE = 40; // px
+const MARGIN = 2;
+let totalW, totalH;
+let canvas, ctx;
+let masterVol, fxVol;
+let clickSynth, mineSynth, flagSynth, hintSynth;
+let gameBoard = [];
+let currentLevel = 1;
+let playerLives = 3;
+let playerScore = 0;
+let gameMode = '4/4';
+let isPaused = false;
+let isFirstClick = true;
+let startTime;
+let elapsedTime = 0;
+let timerInterval;
+let hintCost = 50;
+
+const TIME_SIGNATURES = ['4/4', '3/4', '5/4'];
+const MODE_BEATS = { '4/4': 4, '3/4': 3, '5/4': 5 };
+
+/* ---------- INITIALIZATION ---------- */
+function initAudio() {
+  masterVol = new Tone.Volume().toDestination();
+  fxVol = new Tone.Volume().connect(masterVol);
+  Tone.Transport.bpm.value = 120;
+
+  clickSynth = new Tone.MembraneSynth({
+    pitchDecay: 0.05,
+    octaves: 2,
+    envelope: { attack: 0.001, decay: 0.2, sustain: 0 }
+  }).connect(masterVol);
+
+  mineSynth = new Tone.NoiseSynth({
+    noise: { type: 'brown' },
+    envelope: { attack: 0.01, decay: 0.5, sustain: 0.1, release: 0.8 }
+  }).connect(fxVol);
+
+  flagSynth = new Tone.MetalSynth({
+    frequency: 200,
+    envelope: { attack: 0.001, decay: 0.1, release: 0.1 },
+    harmonicity: 5.1,
+    modulationIndex: 32,
+    resonance: 400,
+    octaves: 1
+  }).connect(fxVol);
+
+  hintSynth = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.8 }
+  }).connect(fxVol);
+}
+
+function resizeCanvas() {
+  totalW = GRID_SIZE * (CELL_SIZE + MARGIN) - MARGIN;
+  totalH = totalW;
+  const w = Math.min(window.innerWidth, totalW + 60);
+  const h = Math.min(window.innerHeight, totalH + 120);
+  canvas.width = w;
+  canvas.height = h;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
+  ctx.translate((w - totalW) / 2, (h - totalH) / 2);
+}
+
+function initGame() {
+  currentLevel = 1;
+  playerLives = 3;
+  playerScore = 0;
+  gameMode = TIME_SIGNATURES[0];
+  GRID_SIZE = Math.min(8 + currentLevel - 1, 15); // Increase grid size with level, cap at 15
+  resizeCanvas();
+  generateBoard();
+  isFirstClick = true;
+  isPaused = false;
+  elapsedTime = 0;
+  updateHUD();
+  startTimer();
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('muteBtn').classList.remove('hidden');
+  document.getElementById('hintBtn').classList.remove('hidden');
+  document.getElementById('hintBtn').disabled = true; // Disable until first click
+  Tone.Transport.stop();
+  Tone.Transport.cancel();
+}
+
+function startTimer() {
+    clearInterval(timerInterval);
+    startTime = Date.now() - elapsedTime * 1000;
+    timerInterval = setInterval(() => {
+        elapsedTime = (Date.now() - startTime) / 1000;
+        document.getElementById('timer').textContent = Math.floor(elapsedTime);
+    }, 1000);
+}
+
+function stopTimer() {
+    clearInterval(timerInterval);
+}
+
+/* ---------- GAME LOGIC ---------- */
+class Tile {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.isRevealed = false;
+    this.isFlagged = false;
+    this.isMine = false;
+    this.signature = null; // Time signature for mines
+    this.adjacentCounts = {}; // { '4/4': count, '3/4': count, ... }
+  }
+
+  draw() {
+    const px = this.x * (CELL_SIZE + MARGIN);
+    const py = this.y * (CELL_SIZE + MARGIN);
+
+    let tileClass = 'tile tile-hidden';
+    if (this.isRevealed) {
+        tileClass = 'tile tile-revealed';
+    } else if (this.isFlagged) {
+        tileClass = 'tile tile-flagged';
+    }
+
+    // Draw tile background
+    ctx.fillStyle = this.isRevealed ? '#2c3e50' : (this.isFlagged ? '#e74c3c' : '#34495e');
+    ctx.strokeStyle = '#2c3e50';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(px, py, CELL_SIZE, CELL_SIZE, 5); // Requires Path2D.roundRect support or polyfill
+    ctx.fill();
+    ctx.stroke();
+
+    if (this.isRevealed) {
+      if (this.isMine) {
+        // Draw mine
+        ctx.fillStyle = '#c0392b';
+        ctx.beginPath();
+        ctx.arc(px + CELL_SIZE/2, py + CELL_SIZE/2, CELL_SIZE/3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#e74c3c';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.signature, px + CELL_SIZE/2, py + CELL_SIZE/2);
+      } else {
+        // Draw counts
+        let yOffset = -10; // Start position for text
+        const lineHeight = 18;
+        for (let [sig, count] of Object.entries(this.adjacentCounts)) {
+            if (count > 0) {
+                let colorClass = `count-${sig.replace('/', '-')}`;
+                ctx.fillStyle = getColorForSignature(sig);
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`${count}`, px + CELL_SIZE/2, py + CELL_SIZE/2 + yOffset);
+                yOffset += lineHeight;
+            }
+        }
+      }
+    }
+  }
+}
+
+function getColorForSignature(sig) {
+    switch(sig) {
+        case '4/4': return '#3498db'; // Blue
+        case '3/4': return '#2ecc71'; // Green
+        case '5/4': return '#9b59b6'; // Purple
+        default: return '#ecf0f1'; // White
+    }
+}
+
+function generateBoard() {
+  gameBoard = Array.from({ length: GRID_SIZE }, (_, y) =>
+    Array.from({ length: GRID_SIZE }, (_, x) => new Tile(x, y))
+  );
+
+  const mineCount = Math.min(currentLevel + 3, Math.floor(GRID_SIZE * GRID_SIZE / 3));
+  let safeStartArea = [];
+
+  // Place mines
+  for (let i = 0; i < mineCount; i++) {
+    let x, y;
+    let attempts = 0;
+    do {
+      x = Math.floor(Math.random() * GRID_SIZE);
+      y = Math.floor(Math.random() * GRID_SIZE);
+      attempts++;
+      // Higher chance of complex signatures at higher levels
+      const sigIndex = Math.random() < (currentLevel / 20) ? 2 : Math.floor(Math.random() * 3);
+      if (attempts > 1000) break; // Safety break
+    } while (gameBoard[y][x].isMine || safeStartArea.some(t => t.x === x && t.y === y));
+
+    gameBoard[y][x].isMine = true;
+    gameBoard[y][x].signature = TIME_SIGNATURES[Math.floor(Math.random() * TIME_SIGNATURES.length)];
+  }
+
+  // Calculate adjacent counts
+  for (let y = 0; y < GRID_SIZE; y++) {
+    for (let x = 0; x < GRID_SIZE; x++) {
+      const tile = gameBoard[y][x];
+      tile.adjacentCounts = { '4/4': 0, '3/4': 0, '5/4': 0 };
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const ny = y + dy;
+          const nx = x + dx;
+          if (ny >= 0 && ny < GRID_SIZE && nx >= 0 && nx < GRID_SIZE) {
+            const neighbor = gameBoard[ny][nx];
+            if (neighbor.isMine) {
+              tile.adjacentCounts[neighbor.signature]++;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+function getTile(px, py) {
+  const x = Math.floor(px / (CELL_SIZE + MARGIN));
+  const y = Math.floor(py / (CELL_SIZE + MARGIN));
+  if (x < 0 || y < 0 || x >= GRID_SIZE || y >= GRID_SIZE) return null;
+  return gameBoard[y][x];
+}
+
+function handlePointerDown(e) {
+  if (isPaused) return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const px = (e.clientX - rect.left) - (canvas.width - totalW) / 2;
+  const py = (e.clientY - rect.top) - (canvas.height - totalH) / 2;
+  const tile = getTile(px, py);
+  if (!tile) return;
+
+  if (e.button === 0 && !tile.isFlagged) { // Left Click
+    if (isFirstClick) {
+        Tone.start();
+        Tone.Transport.start();
+        isFirstClick = false;
+        document.getElementById('hintBtn').disabled = false; // Enable hint after first click
+        // Ensure first click area is safe
+        const safeArea = [];
+        for(let dy=-1; dy<=1; dy++) {
+            for(let dx=-1; dx<=1; dx++) {
+                const nx = tile.x + dx;
+                const ny = tile.y + dy;
+                if(nx >=0 && nx < GRID_SIZE && ny >=0 && ny < GRID_SIZE) {
+                    safeArea.push({x:nx, y:ny});
+                }
+            }
+        }
+        // Re-generate if first click or its neighbors are mines
+        let needsRegen = gameBoard[tile.y][tile.x].isMine || 
+                         safeArea.some(t => gameBoard[t.y][t.x].isMine);
+        if(needsRegen) {
+             // Simple re-roll: move mines from safe area to random non-safe, non-mine spots
+             const safeCoords = safeArea.map(t=>`${t.x},${t.y}`);
+             const allCoords = [];
+             for(let y=0; y<GRID_SIZE; y++) {
+                 for(let x=0; x<GRID_SIZE; x++) {
+                     allCoords.push({x,y});
+                 }
+             }
+             const freeCoords = allCoords.filter(c => !safeCoords.includes(`${c.x},${c.y}`));
+             
+             for(let y=0; y<GRID_SIZE; y++) {
+                 for(let x=0; x<GRID_SIZE; x++) {
+                     if(safeCoords.includes(`${x},${y}`) && gameBoard[y][x].isMine) {
+                         gameBoard[y][x].isMine = false;
+                         gameBoard[y][x].signature = null;
+                         // Find a new spot
+                         if(freeCoords.length > 0) {
+                             const newSpotIndex = Math.floor(Math.random() * freeCoords.length);
+                             const newSpot = freeCoords.splice(newSpotIndex, 1)[0];
+                             gameBoard[newSpot.y][newSpot.x].isMine = true;
+                             gameBoard[newSpot.y][newSpot.x].signature = TIME_SIGNATURES[Math.floor(Math.random() * TIME_SIGNATURES.length)];
+                         }
+                     }
+                 }
+             }
+             // Recalculate counts after moving mines
+             for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                  const t = gameBoard[y][x];
+                  t.adjacentCounts = { '4/4': 0, '3/4': 0, '5/4': 0 };
+                  for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                      const ny = y + dy;
+                      const nx = x + dx;
+                      if (ny >= 0 && ny < GRID_SIZE && nx >= 0 && nx < GRID_SIZE) {
+                        const adj = gameBoard[ny][nx];
+                        if (adj.isMine) {
+                          t.adjacentCounts[adj.signature]++;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+        }
+    }
+    revealTile(tile);
+  } else if (e.button === 2) { // Right Click
+    if (!tile.isRevealed) {
+      tile.isFlagged = !tile.isFlagged;
+      flagSynth.triggerAttackRelease('16n');
+      draw();
+    }
+  }
+}
+
+function revealTile(tile) {
+  if (tile.isRevealed || tile.isFlagged) return;
+  tile.isRevealed = true;
+
+  if (tile.isMine) {
+    playerLives--;
+    updateHUD();
+    // Play polyrhythmic explosion
+    const beatDuration = 0.25; // 16th note at 120 BPM
+    const sig = tile.signature;
+    const beats = MODE_BEATS[sig];
+    for (let i = 0; i < beats; i++) {
+        // Schedule noise bursts for each beat of the signature
+        mineSynth.triggerAttackRelease(`${beatDuration}n`, `+${i * beatDuration}`);
+    }
+    
+    if (playerLives <= 0) {
+      endGame(false);
+      return;
+    }
+  } else {
+    // Play rhythmic safe click based on level mode and position
+    const baseNote = 40 + (tile.y * GRID_SIZE + tile.x) % 20; // Vary pitch slightly
+    const noteName = Tone.Frequency(baseNote, "midi").toNote();
+    const noteDuration = `8n`; // Could be tied to mode later
+    clickSynth.triggerAttackRelease(noteName, noteDuration);
+    
+    playerScore += 10;
+    updateHUD();
+    checkWinCondition();
+  }
+  draw();
+}
+
+function checkWinCondition() {
+  for (let row of gameBoard) {
+    for (let tile of row) {
+      if (!tile.isMine && !tile.isRevealed) {
+        return; // Not won yet
+      }
+    }
+  }
+  // Level cleared
+  playerScore += Math.floor(100 / (elapsedTime + 1)); // Bonus for speed
+  stopTimer();
+  setTimeout(() => {
+      nextLevel();
+  }, 1000); // Brief pause before next level
+}
+
+function nextLevel() {
+  currentLevel++;
+  gameMode = TIME_SIGNATURES[(currentLevel - 1) % TIME_SIGNATURES.length];
+  GRID_SIZE = Math.min(8 + currentLevel - 1, 15); // Increase grid, cap at 15
+  resizeCanvas();
+  generateBoard();
+  isFirstClick = true;
+  elapsedTime = 0;
+  startTimer();
+  updateHUD();
+  document.getElementById('hintBtn').disabled = true; // Disable until first click
+  draw();
+}
+
+
+function endGame(isWin) {
+  isPaused = true;
+  stopTimer();
+  Tone.Transport.stop();
+  const goScreen = document.getElementById('gameOver');
+  document.getElementById('goText').textContent = isWin ? "Level Cleared!" : "Game Over";
+  document.getElementById('finalScore').textContent = playerScore;
+  document.getElementById('finalLevel').textContent = currentLevel;
+  goScreen.classList.remove('hidden');
+}
+
+function useHint() {
+    if (playerScore < hintCost || isFirstClick) return;
+    playerScore -= hintCost;
+    updateHUD();
+    hintSynth.triggerAttackRelease("C5", "8n");
+    
+    // Find a safe, unrevealed, unflagged tile
+    const safeTiles = [];
+    for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+            const tile = gameBoard[y][x];
+            if (!tile.isMine && !tile.isRevealed && !tile.isFlagged) {
+                safeTiles.push(tile);
+            }
+        }
+    }
+    if (safeTiles.length > 0) {
+        const hintTile = safeTiles[Math.floor(Math.random() * safeTiles.length)];
+        // Briefly highlight the tile?
+        revealTile(hintTile);
+    } else {
+        // No safe tiles left, shouldn't happen in a solvable game, but just in case
+        console.log("No safe tiles to hint!");
+    }
+}
+
+/* ---------- UI & RENDERING ---------- */
+function updateHUD() {
+  document.getElementById('score').textContent = playerScore;
+  document.getElementById('level').textContent = currentLevel;
+  document.getElementById('lives').textContent = playerLives;
+  document.getElementById('modeDisplay').textContent = gameMode;
+  // Timer updated by interval
+}
+
+function draw() {
+  ctx.clearRect(-CELL_SIZE, -CELL_SIZE, canvas.width + CELL_SIZE * 2, canvas.height + CELL_SIZE * 2);
+  for (let row of gameBoard) {
+    for (let tile of row) {
+      tile.draw();
+    }
+  }
+}
+
+function gameLoop() {
+  if (!isPaused) {
+    // Drawing is handled by event handlers for efficiency
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+/* ---------- EVENT LISTENERS ---------- */
+document.addEventListener('DOMContentLoaded', () => {
+  canvas = document.getElementById('game');
+  ctx = canvas.getContext('2d');
+  if (ctx.roundRect === undefined) {
+      // Polyfill for roundRect if not supported
+      ctx.roundRect = function(x, y, width, height, radii) {
+          if (radii === undefined) radii = 0;
+          this.beginPath();
+          this.moveTo(x + radii, y);
+          this.lineTo(x + width - radii, y);
+          this.quadraticCurveTo(x + width, y, x + width, y + radii);
+          this.lineTo(x + width, y + height - radii);
+          this.quadraticCurveTo(x + width, y + height, x + width - radii, y + height);
+          this.lineTo(x + radii, y + height);
+          this.quadraticCurveTo(x, y + height, x, y + height - radii);
+          this.lineTo(x, y + radii);
+          this.quadraticCurveTo(x, y, x + radii, y);
+          this.closePath();
+      };
+  }
+
+  initAudio();
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  canvas.addEventListener('mousedown', handlePointerDown);
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  // UI Button Events
+  document.getElementById('startBtn').onclick = () => {
+    document.getElementById('title').classList.add('hidden');
+    initGame();
+    draw();
+    if (!localStorage.getItem('msTutSeen')) {
+      document.getElementById('tutorial').classList.remove('hidden');
+      localStorage.setItem('msTutSeen', '1');
+    }
+  };
+  document.getElementById('optionsBtn').onclick = document.getElementById('optionsBtn2').onclick = () => {
+    document.getElementById('options').classList.remove('hidden');
+  };
+  document.getElementById('closeOptions').onclick = () => document.getElementById('options').classList.add('hidden');
+  document.getElementById('tutorialBtn').onclick = () => document.getElementById('tutorial').classList.remove('hidden');
+  document.getElementById('closeTut').onclick = () => document.getElementById('tutorial').classList.add('hidden');
+
+  document.getElementById('restartBtn').onclick = () => {
+    document.getElementById('gameOver').classList.add('hidden');
+    initGame();
+    draw();
+  };
+  document.getElementById('titleBtn').onclick = () => {
+    document.getElementById('gameOver').classList.add('hidden');
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('muteBtn').classList.add('hidden');
+    document.getElementById('hintBtn').classList.add('hidden');
+    stopTimer();
+    document.getElementById('title').classList.remove('hidden');
+  };
+
+  document.getElementById('resumeBtn').onclick = () => {
+    document.getElementById('pause').classList.add('hidden');
+    isPaused = false;
+    if (!isFirstClick) startTimer();
+  };
+  document.getElementById('quitBtn').onclick = () => {
+    document.getElementById('pause').classList.add('hidden');
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('muteBtn').classList.add('hidden');
+    document.getElementById('hintBtn').classList.add('hidden');
+    stopTimer();
+    document.getElementById('title').classList.remove('hidden');
+  };
+
+  document.getElementById('masterVol').oninput = e => {
+    masterVol.volume.value = Tone.gainToDb(parseFloat(e.target.value));
+  };
+  document.getElementById('fxVol').oninput = e => {
+    fxVol.volume.value = Tone.gainToDb(parseFloat(e.target.value));
+  };
+  document.getElementById('cbMode').onchange = e => {
+    if (e.target.checked) {
+      document.body.classList.add('cb-mode');
+    } else {
+      document.body.classList.remove('cb-mode');
+    }
+  };
+
+  document.getElementById('muteBtn').onclick = () => {
+    Tone.Master.mute = !Tone.Master.mute;
+    document.getElementById('muteBtn').textContent = Tone.Master.mute ? '🔇' : '🔊';
+  };
+
+  document.getElementById('hintBtn').onclick = useHint;
+
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Escape' && !document.getElementById('hud').classList.contains('hidden')) {
+      isPaused = !isPaused;
+      if (isPaused) {
+        stopTimer();
+        document.getElementById('pause').classList.remove('hidden');
+      } else {
+        if (!isFirstClick) startTimer();
+        document.getElementById('pause').classList.add('hidden');
+      }
+    }
+  });
+
+  gameLoop();
+});
+</script>
+</body>
+</html>
