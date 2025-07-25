@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>8-Channel 4-Bar Web Audio Sequencer (Live Load)</title>
+  <script type="module" src="audional-base64-sample-loader.js" defer></script>
+  <style>
+    body {
+      font-family: 'Courier New', monospace;
+      background: #1a1a1a;
+      color: #eee;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      color: #0f0;
+    }
+    .controls {
+      margin: 20px;
+      padding: 15px;
+      background: #222;
+      border-radius: 8px;
+      display: inline-block;
+    }
+    .bpm-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .bpm-control label {
+      width: 80px;
+      text-align: right;
+      color: #0f0;
+    }
+    input[type="range"] {
+      width: 200px;
+    }
+    input[type="number"] {
+      width: 60px;
+      background: #333;
+      color: #fff;
+      border: 1px solid #555;
+      padding: 5px;
+    }
+    button {
+      background: #0f0;
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 0 10px;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+    button:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+
+    .sequencer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .channel {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #222;
+      padding: 10px;
+      border-radius: 8px;
+      width: 95%;
+      max-width: 960px;
+    }
+    .channel-label {
+      width: 160px;
+      text-align: left;
+      font-weight: bold;
+      color: #0f0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 0 5px;
+    }
+    .sample-select {
+      width: 240px;
+      padding: 6px;
+      background: #333;
+      color: #fff;
+      border: 1px solid #555;
+      border-radius: 4px;
+    }
+    .steps {
+      display: flex;
+      gap: 5px;
+      flex-grow: 1;
+    }
+    .step {
+      width: 40px;
+      height: 40px;
+      background: #333;
+      border: 1px solid #555;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .step.active {
+      background: #0f0;
+    }
+    .step.playing {
+      background: #ff0;
+      border-color: #aa0;
+    }
+    .loading {
+      color: #ff0;
+      font-style: italic;
+      margin: 20px;
+    }
+    .status {
+      font-size: 0.9em;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>8-Channel 4-Bar Sequencer</h1>
+  <p class="loading" id="loaderStatus">Loading sample list...</p>
+
+  <div class="controls">
+    <div class="bpm-control">
+      <label for="bpmInput">BPM:</label>
+      <input type="range" id="bpmSlider" min="60" max="180" value="120" />
+      <input type="number" id="bpmInput" min="60" max="180" value="120" style="text-align:center;" />
+    </div>
+    <button id="playBtn" disabled>Play</button>
+    <button id="stopBtn" disabled>Stop</button>
+  </div>
+
+  <div class="sequencer" id="sequencer"></div>
+
+  <script type="module">
+    import { SimpleSampleLoader } from './audional-base64-sample-loader.js';
+  
+    const NUM_CHANNELS = 8;
+    const STEPS_PER_BAR = 16;
+    const SAMPLE_COUNT = SimpleSampleLoader.ogSampleUrls.length;
+  
+    let BPM = 120;
+    let audioContext;
+    let currentStep = -1;
+    let intervalId;
+    let sampleNames = [];
+    let sampleBPMs = [];     // BPM only meaningful for loops
+    let isLoopSample = [];   // Flag: true if sample is a rhythmic loop
+    let allBuffers = {};
+  
+    // Channel state
+    let channelSelection = [0, 1, 2, 3, 4, 5, 6, 7];
+    let channelSteps = Array(NUM_CHANNELS).fill().map(() => Array(STEPS_PER_BAR).fill(false));
+  
+    // DOM Elements
+    const sequencerEl = document.getElementById('sequencer');
+    const playBtn = document.getElementById('playBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const bpmInput = document.getElementById('bpmInput');
+    const bpmSlider = document.getElementById('bpmSlider');
+    const loaderStatus = document.getElementById('loaderStatus');
+  
+    // Create BPM warning element
+    const bpmWarning = document.createElement('div');
+    bpmWarning.id = 'bpmWarning';
+    bpmWarning.style.color = '#ff9800';
+    bpmWarning.style.fontWeight = 'bold';
+    bpmWarning.style.display = 'none';
+    bpmWarning.style.marginTop = '8px';
+    loaderStatus.parentNode.insertBefore(bpmWarning, loaderStatus.nextSibling);
+  
+    // Sync BPM
+    function syncBPM() {
+      let val = Math.round(bpmInput.value || bpmSlider.value);
+      val = Math.max(60, Math.min(180, val));
+      bpmInput.value = val;
+      bpmSlider.value = val;
+      BPM = val;
+  
+      // Re-check all selected loop samples after BPM change
+      checkAllSelectedLoopsBPM();
+    }
+    bpmInput.addEventListener('input', syncBPM);
+    bpmSlider.addEventListener('input', syncBPM);
+  
+    playBtn.addEventListener('click', startAudioContext);
+    stopBtn.addEventListener('click', stopSequencer);
+  
+    // Initialize UI
+    async function initSequencer() {
+      try {
+        loaderStatus.textContent = 'Fetching sample list...';
+        await loadSampleMetadata();
+  
+        loaderStatus.textContent = 'Ready! Click Play to start.';
+        loaderStatus.style.color = '#0f0';
+        playBtn.disabled = false;
+        stopBtn.disabled = false;
+      } catch (err) {
+        loaderStatus.textContent = 'Error: ' + err.message;
+        loaderStatus.style.color = '#f00';
+        console.error(err);
+      }
+  
+      // Build UI
+      for (let i = 0; i < NUM_CHANNELS; i++) {
+        const channel = document.createElement('div');
+        channel.className = 'channel';
+  
+        const label = document.createElement('div');
+        label.className = 'channel-label';
+        label.textContent = sampleNames[channelSelection[i]];
+        channel.appendChild(label);
+  
+        const select = document.createElement('select');
+        select.className = 'sample-select';
+        select.dataset.channel = i;
+  
+        for (let j = 0; j < sampleNames.length; j++) {
+          const opt = document.createElement('option');
+          opt.value = j;
+          if (isLoopSample[j]) {
+            opt.textContent = `${sampleNames[j]} (${sampleBPMs[j]} BPM)`;
+          } else {
+            opt.textContent = sampleNames[j]; // No BPM shown for one-shots
+          }
+          select.appendChild(opt);
+        }
+  
+        select.value = channelSelection[i];
+        select.addEventListener('change', async () => {
+          const chIndex = parseInt(select.dataset.channel, 10);
+          const newIndex = parseInt(select.value, 10);
+  
+          // Update selection and label
+          channelSelection[chIndex] = newIndex;
+          label.textContent = sampleNames[newIndex];
+  
+          // Only check BPM if it's a loop sample
+          if (isLoopSample[newIndex]) {
+            checkBPMCompatibility(newIndex);
+          } else {
+            // If user selected a one-shot, re-check all others — maybe removed a loop
+            checkAllSelectedLoopsBPM();
+          }
+  
+          // Load the sample if not already loaded
+          if (!allBuffers[newIndex]) {
+            try {
+              loaderStatus.textContent = `Loading: ${sampleNames[newIndex]}...`;
+              const buffer = await SimpleSampleLoader.getSampleByIndex(newIndex);
+              allBuffers[newIndex] = buffer;
+              loaderStatus.textContent = 'Ready!';
+            } catch (err) {
+              loaderStatus.textContent = `Failed to load: ${sampleNames[newIndex]}`;
+              console.error(err);
+              setTimeout(() => (loaderStatus.textContent = 'Ready!'), 2000);
+            }
+          }
+        });
+  
+        channel.appendChild(select);
+  
+        const stepsContainer = document.createElement('div');
+        stepsContainer.className = 'steps';
+  
+        for (let step = 0; step < STEPS_PER_BAR; step++) {
+          const stepEl = document.createElement('div');
+          stepEl.className = 'step';
+          stepEl.dataset.channel = i;
+          stepEl.dataset.step = step;
+          stepEl.addEventListener('click', () => {
+            stepEl.classList.toggle('active');
+            channelSteps[i][step] = !channelSteps[i][step];
+          });
+          stepsContainer.appendChild(stepEl);
+        }
+  
+        channel.appendChild(stepsContainer);
+        sequencerEl.appendChild(channel);
+      }
+  
+      // Preload default samples
+      for (let i = 0; i < NUM_CHANNELS; i++) {
+        const idx = channelSelection[i];
+        if (!allBuffers[idx]) {
+          allBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx);
+        }
+      }
+      loaderStatus.textContent = 'Ready! Click Play to start.';
+  
+      // Initial BPM check
+      checkAllSelectedLoopsBPM();
+    }
+  
+    // Load names, BPM, and isLoop flag
+    async function loadSampleMetadata() {
+      const urls = SimpleSampleLoader.ogSampleUrls;
+      if (urls.length === 0) throw new Error("No samples found in ogSampleUrls");
+  
+      for (let i = 0; i < urls.length; i++) {
+        const item = urls[i];
+        sampleNames[i] = item.text || `Sample ${i}`;
+  
+        // Use explicit `isLoop`, or infer from name (case-insensitive)
+        const nameLower = sampleNames[i].toLowerCase();
+        isLoopSample[i] = item.isLoop !== undefined 
+          ? item.isLoop 
+          : ['loop', 'groove', 'beat', 'pattern'].some(keyword => nameLower.includes(keyword));
+  
+        // Only assign BPM if it's a loop; otherwise ignore
+        if (isLoopSample[i]) {
+          sampleBPMs[i] = item.bpm !== undefined ? item.bpm : 120;
+        } else {
+          sampleBPMs[i] = null; // Not applicable
+        }
+      }
+    }
+  
+    // Check if selected loop's BPM matches global BPM
+    function checkBPMCompatibility(sampleIndex) {
+      const loopBPM = sampleBPMs[sampleIndex];
+      if (Math.abs(loopBPM - BPM) > 1) {
+        bpmWarning.style.display = 'block';
+        bpmWarning.textContent = `⚠️ BPM mismatch: Selected loop is ${loopBPM} BPM, but sequencer is ${BPM} BPM. Consider adjusting BPM to avoid sync issues.`;
+      } else {
+        checkAllSelectedLoopsBPM(); // Might now be fixed
+      }
+    }
+  
+    // Check all currently selected loop samples for BPM mismatch
+    function checkAllSelectedLoopsBPM() {
+      const loopIndices = channelSelection.filter(ch => isLoopSample[ch]);
+      const mismatches = loopIndices.filter(idx => Math.abs(sampleBPMs[idx] - BPM) > 1);
+  
+      if (mismatches.length > 0) {
+        const uniqueBPMs = [...new Set(mismatches.map(idx => sampleBPMs[idx]))].join(', ');
+        bpmWarning.style.display = 'block';
+        bpmWarning.textContent = `⚠️ BPM mismatch: Selected loops are ${uniqueBPMs} BPM, but sequencer is ${BPM} BPM. Sync may be affected.`;
+      } else {
+        bpmWarning.style.display = 'none';
+      }
+    }
+  
+    function startAudioContext() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      if (!intervalId) startSequencer();
+    }
+  
+    function startSequencer() {
+      if (intervalId) clearInterval(intervalId);
+  
+      const stepTimeMs = (60 / BPM / 4) * 1000; // 16th note
+  
+      currentStep = 0;
+      playBtn.disabled = true;
+      stopBtn.disabled = false;
+  
+      intervalId = setInterval(() => {
+        document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
+  
+        document.querySelectorAll(`.step[data-step="${currentStep}"]`).forEach(el => {
+          const ch = el.dataset.channel;
+          if (channelSteps[ch][currentStep]) {
+            el.classList.add('playing');
+            const sampleIdx = channelSelection[ch];
+            const buffer = allBuffers[sampleIdx];
+            if (!buffer) return;
+  
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.start();
+          }
+        });
+  
+        currentStep = (currentStep + 1) % STEPS_PER_BAR;
+      }, stepTimeMs);
+    }
+  
+    function stopSequencer() {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
+      playBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+  
+    // Initialize
+    initSequencer();
+  </script>
+</body>
+</html>

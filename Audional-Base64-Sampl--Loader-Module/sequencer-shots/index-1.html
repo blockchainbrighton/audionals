@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ordinals Sequencer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #8b008b; /* Dark purple background */
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-size: 2.4rem;
+            color: #ff69b4; /* Pinkish-purple title color */
+            margin-bottom: 5px;
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.8;
+            margin-bottom: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: linear-gradient(to right, #ff69b4, #8b008b);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .tempo-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 5px 10px;
+            border-radius: 10px;
+            margin-left: 10px;
+        }
+        
+        .tempo-control label {
+            font-weight: bold;
+        }
+        
+        .tempo-control input {
+            width: 50px;
+            padding: 5px;
+            border-radius: 5px;
+            border: none;
+            background: rgba(0, 0, 0, 0.3);
+            color: white;
+            text-align: center;
+        }
+        
+        .sequencer-grid {
+            display: grid;
+            grid-template-columns: repeat(17, 1fr); /* 17 columns: 1 for channel names + 16 steps */
+            gap: 8px;
+            margin-bottom: 30px;
+        }
+        
+        .channel-header {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            font-weight: bold;
+            height: 60px;
+        }
+        
+        .channel-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .sample-select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 5px;
+            background: rgba(0, 0, 0, 0.3);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .step {
+            aspect-ratio: 1;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .step:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .step.active {
+            background: linear-gradient(to right, #ff69b4, #8b008b);
+            box-shadow: 0 0 15px rgba(218, 27, 96, 0.7);
+        }
+        
+        .step.playing {
+            box-shadow: 0 0 0 3px white;
+        }
+        
+        .step::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.1);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .step:active::after {
+            opacity: 0.3;
+        }
+        
+        .status-bar {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-top: 20px;
+            font-size: 1.1rem;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #ff69b4;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        footer {
+            margin-top: 30px;
+            text-align: center;
+            opacity: 0.7;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            .sequencer-grid {
+                grid-template-columns: repeat(17, 1fr);
+                gap: 4px;
+            }
+            
+            .channel-header {
+                padding: 5px;
+                font-size: 0.8rem;
+            }
+            
+            .step {
+                font-size: 0.7rem;
+            }
+            
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            .controls {
+                gap: 5px;
+            }
+            
+            button {
+                padding: 8px 12px;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Ordinals Sequencer</h1>
+            <p class="subtitle">8-channel 4-bar sequencer with on-chain audio samples</p>
+        </header>
+        
+        <div class="controls">
+            <button id="playBtn">▶ Play</button>
+            <button id="stopBtn">⏹ Stop</button>
+            <button id="clearBtn">🗑 Clear</button>
+            <div class="tempo-control">
+                <label for="tempo">Tempo:</label>
+                <input type="number" id="tempo" min="40" max="240" value="120">
+                <span>BPM</span>
+            </div>
+        </div>
+        
+        <div class="sequencer-grid" id="sequencerGrid">
+            <!-- Grid will be generated by JavaScript -->
+        </div>
+        
+        <div class="status-bar" id="statusBar">
+            <span id="statusText">Initializing sequencer...</span>
+        </div>
+    </div>
+
+    <script>
+        // audional-base64-sample-loader.js (simplified inline version)
+        const SimpleSampleLoader = (function() {
+            // Valid base64 encoded WAV files for demonstration
+            const ogSampleUrls = [
+                // Kick drum sound
+                "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==",
+                // Snare drum sound
+                "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==",
+                // Hi-hat sound
+                "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==",
+                // Clap sound
+                "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==",
+                // Bass sound
+                "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==",
+                // Synth sound
+                "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==",
+                // Vocal sound
+                "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==",
+                // FX sound
+                "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA=="
+            ];
+            
+            // Cache for loaded samples
+            const sampleCache = {};
+            
+            // Normalize URL (simplified for this example)
+            function normalizeOrdUrl(url) {
+                return url;
+            }
+            
+            // Fetch and decode audio buffer
+            async function fetchAndDecodeAudio(url) {
+                if (sampleCache[url]) {
+                    return sampleCache[url];
+                }
+                
+                try {
+                    // For demonstration, we'll create a simple tone instead of decoding base64
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    
+                    // Create a simple oscillator for each channel
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    // Set different frequencies for each channel
+                    const frequencies = [100, 150, 200, 250, 300, 350, 400, 450];
+                    const channelIndex = ogSampleUrls.indexOf(url);
+                    oscillator.frequency.value = frequencies[channelIndex] || 200;
+                    
+                    // Configure gain for short sound
+                    gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.2);
+                    
+                    oscillator.start();
+                    oscillator.stop(audioContext.currentTime + 0.2);
+                    
+                    // Create a minimal audio buffer for compatibility
+                    const buffer = audioContext.createBuffer(1, 1, 22050);
+                    sampleCache[url] = buffer;
+                    return buffer;
+                } catch (error) {
+                    console.error("Error creating audio:", error);
+                    throw error;
+                }
+            }
+            
+            // Public API
+            return {
+                async getSampleByIndex(index) {
+                    if (index < 0 || index >= ogSampleUrls.length) {
+                        throw new Error(`Sample index ${index} out of range`);
+                    }
+                    
+                    const url = normalizeOrdUrl(ogSampleUrls[index]);
+                    return await fetchAndDecodeAudio(url);
+                },
+                
+                async getAllSamples() {
+                    const promises = ogSampleUrls.map((url, index) => 
+                        this.getSampleByIndex(index)
+                    );
+                    return Promise.all(promises);
+                }
+            };
+        })();
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Configuration
+            const NUM_CHANNELS = 8;
+            const NUM_BARS = 4;
+            const NUM_STEPS = 16; // 4 bars * 4 steps per bar
+            
+            // DOM Elements
+            const sequencerGrid = document.getElementById('sequencerGrid');
+            const playBtn = document.getElementById('playBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const clearBtn = document.getElementById('clearBtn');
+            const tempoInput = document.getElementById('tempo');
+            const statusBar = document.getElementById('statusBar');
+            const statusText = document.getElementById('statusText');
+            
+            // Audio context and state
+            let audioContext;
+            let isPlaying = false;
+            let currentStep = 0;
+            let nextStepTime = 0;
+            let timerID;
+            let buffers = [];
+            
+            // Sample names for display
+            const sampleNames = [
+                "Kick Drum", "Snare", "Hi-Hat", "Clap", 
+                "Bass", "Synth", "Vocal", "FX"
+            ];
+            
+            // Initialize the sequencer grid
+            function initSequencer() {
+                // Create bar labels
+                sequencerGrid.innerHTML = ''; // Clear existing content
+                
+                // Channel headers and dropdowns
+                for (let channel = 0; channel < NUM_CHANNELS; channel++) {
+                    const channelHeader = document.createElement('div');
+                    channelHeader.className = 'channel-header';
+                    channelHeader.innerHTML = `
+                        <div class="channel-name">${sampleNames[channel]}</div>
+                        <select class="sample-select" data-channel="${channel}">
+                            <option value="">Loading samples...</option>
+                        </select>
+                    `;
+                    sequencerGrid.appendChild(channelHeader);
+                    
+                    // Steps for this channel
+                    for (let step = 0; step < NUM_STEPS; step++) {
+                        const stepElement = document.createElement('div');
+                        stepElement.className = 'step';
+                        stepElement.dataset.channel = channel;
+                        stepElement.dataset.step = step;
+                        stepElement.textContent = step + 1;
+                        stepElement.addEventListener('click', toggleStep);
+                        sequencerGrid.appendChild(stepElement);
+                    }
+                }
+                
+                // Load samples and populate dropdowns
+                loadSamples();
+            }
+            
+            // Load audio samples
+            async function loadSamples() {
+                try {
+                    statusText.innerHTML = '<span class="loading"></span> Loading samples...';
+                    
+                    // Load all samples (0-7 for 8 channels)
+                    for (let i = 0; i < NUM_CHANNELS; i++) {
+                        try {
+                            const buffer = await SimpleSampleLoader.getSampleByIndex(i);
+                            buffers[i] = buffer;
+                        } catch (error) {
+                            console.error(`Error loading sample ${i}:`, error);
+                        }
+                    }
+                    
+                    // Update dropdowns with sample names
+                    const selects = document.querySelectorAll('.sample-select');
+                    selects.forEach((select, index) => {
+                        select.innerHTML = '';
+                        const option = document.createElement('option');
+                        option.value = index;
+                        option.textContent = sampleNames[index];
+                        select.appendChild(option);
+                        select.value = index;
+                    });
+                    
+                    statusText.textContent = `Loaded ${buffers.filter(b => b).length} samples. Ready to play!`;
+                } catch (error) {
+                    console.error('Error loading samples:', error);
+                    statusText.textContent = 'Error loading samples. Please check console.';
+                }
+            }
+            
+            // Toggle step activation
+            function toggleStep(e) {
+                const stepElement = e.currentTarget;
+                stepElement.classList.toggle('active');
+            }
+            
+            // Play a sound
+            function playSound(channelIndex, time) {
+                if (!audioContext) return;
+                
+                // Create a simple oscillator for each channel
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                // Set different frequencies for each channel
+                const frequencies = [60, 120, 200, 250, 80, 300, 400, 500];
+                oscillator.frequency.value = frequencies[channelIndex] || 200;
+                
+                // Configure waveform based on channel
+                const waveforms = ['sine', 'square', 'sawtooth', 'triangle', 'sine', 'square', 'sawtooth', 'triangle'];
+                oscillator.type = waveforms[channelIndex] || 'sine';
+                
+                // Configure gain for short sound
+                gainNode.gain.setValueAtTime(0.3, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+                
+                oscillator.start(time);
+                oscillator.stop(time + 0.1);
+            }
+            
+            // Scheduler for the sequencer
+            function scheduler() {
+                if (!isPlaying) return;
+                
+                // Schedule steps
+                while (nextStepTime < audioContext.currentTime + 0.1) {
+                    scheduleStep(currentStep, nextStepTime);
+                    
+                    // Move to next step
+                    currentStep = (currentStep + 1) % NUM_STEPS;
+                    nextStepTime += 60.0 / tempoInput.value / 4; // 4 steps per beat
+                }
+                
+                timerID = setTimeout(scheduler, 0);
+            }
+            
+            // Schedule a step
+            function scheduleStep(step, time) {
+                // Highlight the current step
+                document.querySelectorAll('.step').forEach(el => {
+                    el.classList.remove('playing');
+                });
+                
+                for (let channel = 0; channel < NUM_CHANNELS; channel++) {
+                    const stepElement = document.querySelector(`.step[data-channel="${channel}"][data-step="${step}"]`);
+                    if (stepElement) {
+                        stepElement.classList.add('playing');
+                        
+                        // Play sound if step is active
+                        if (stepElement.classList.contains('active')) {
+                            playSound(channel, time);
+                        }
+                    }
+                }
+            }
+            
+            // Start playback
+            function startPlayback() {
+                if (isPlaying) return;
+                
+                // Initialize audio context on first interaction
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                
+                isPlaying = true;
+                currentStep = 0;
+                nextStepTime = audioContext.currentTime;
+                
+                playBtn.textContent = '⏸ Pause';
+                statusText.textContent = 'Playing...';
+                
+                scheduler();
+            }
+            
+            // Pause playback
+            function pausePlayback() {
+                isPlaying = false;
+                clearTimeout(timerID);
+                playBtn.textContent = '▶ Play';
+                statusText.textContent = 'Paused';
+                
+                // Remove playing highlights
+                document.querySelectorAll('.step').forEach(el => {
+                    el.classList.remove('playing');
+                });
+            }
+            
+            // Stop playback
+            function stopPlayback() {
+                isPlaying = false;
+                clearTimeout(timerID);
+                playBtn.textContent = '▶ Play';
+                statusText.textContent = 'Stopped';
+                
+                // Remove playing highlights
+                document.querySelectorAll('.step').forEach(el => {
+                    el.classList.remove('playing');
+                });
+            }
+            
+            // Clear all steps
+            function clearSteps() {
+                document.querySelectorAll('.step').forEach(el => {
+                    el.classList.remove('active');
+                });
+                statusText.textContent = 'Steps cleared';
+            }
+            
+            // Event listeners
+            playBtn.addEventListener('click', () => {
+                if (isPlaying) {
+                    pausePlayback();
+                } else {
+                    startPlayback();
+                }
+            });
+            
+            stopBtn.addEventListener('click', stopPlayback);
+            clearBtn.addEventListener('click', clearSteps);
+            
+            // Initialize the sequencer
+            initSequencer();
+        });
+    </script>
+</body>
+</html>
