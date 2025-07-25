@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>WebGL Fluid Simulation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: none;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        #container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            z-index: 10;
+            pointer-events: none;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 300;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(0, 200, 255, 0.7);
+        }
+        
+        .instructions {
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 0 20px;
+            line-height: 1.6;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            transition: opacity 0.5s ease-out;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(0, 200, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #00c8ff;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        #loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <p>Loading fluid simulation...</p>
+    </div>
+    
+    <div id="container">
+        <div id="ui">
+            <h1>FLUID SIMULATION</h1>
+            <div class="instructions">
+                Touch and drag to interact with the fluid<br>
+                Move slower for more controlled effects
+            </div>
+        </div>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        // Main WebGL fluid simulation implementation
+        (function() {
+            // Get DOM elements
+            const canvas = document.getElementById('canvas');
+            const loadingScreen = document.getElementById('loading');
+            
+            // Set canvas size to full screen
+            function resizeCanvas() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            
+            // Initialize WebGL context
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            if (!gl) {
+                alert('WebGL not supported by your browser!');
+                return;
+            }
+            
+            // Vertex shader source - simple pass-through
+            const vertexShaderSource = `
+                attribute vec2 a_position;
+                attribute vec2 a_texCoord;
+                varying vec2 v_texCoord;
+                
+                void main() {
+                    gl_Position = vec4(a_position, 0.0, 1.0);
+                    v_texCoord = a_texCoord;
+                }
+            `;
+            
+            // Fragment shader for fluid simulation
+            const fragmentShaderSource = `
+                precision highp float;
+                
+                varying vec2 v_texCoord;
+                
+                uniform sampler2D u_velocity;
+                uniform sampler2D u_dye;
+                uniform vec2 u_resolution;
+                uniform vec2 u_mouse;
+                uniform vec2 u_mouseVelocity;
+                uniform float u_time;
+                uniform bool u_isMouseDown;
+                
+                // Reduced time step for slower movement
+                const float dt = 0.008;
+                // Increased dissipation to keep fluid on screen longer
+                const float dissipation = 0.995;
+                const float velocityDissipation = 0.99;
+                // Larger interaction radius
+                const float radius = 0.03;
+                // Reduced intensity for more controlled effects
+                const float intensity = 5.0;
+                
+                vec2 sampleVelocity(vec2 uv) {
+                    return texture2D(u_velocity, uv).xy * 2.0 - 1.0;
+                }
+                
+                vec3 sampleDye(vec2 uv) {
+                    return texture2D(u_dye, uv).xyz;
+                }
+                
+                void main() {
+                    vec2 uv = v_texCoord;
+                    vec2 px = 1.0 / u_resolution;
+                    
+                    // Advection step - move fluid based on velocity field
+                    vec2 prevPos = uv - dt * sampleVelocity(uv);
+                    vec3 dye = sampleDye(prevPos) * dissipation;
+                    
+                    // Add dye and velocity at mouse position
+                    if (u_isMouseDown) {
+                        float dist = distance(uv, u_mouse);
+                        if (dist < radius) {
+                            float strength = 1.0 - dist / radius;
+                            // More vibrant colors
+                            dye += vec3(0.3, 0.7, 1.0) * strength * intensity;
+                            
+                            // Add velocity in direction of mouse movement (reduced strength)
+                            vec2 vel = u_mouseVelocity * strength * intensity * 0.5;
+                            // Store velocity in [0,1] range
+                            gl_FragColor = vec4((vel + 1.0) * 0.5, 0.0, 1.0);
+                            return;
+                        }
+                    }
+                    
+                    // Viscosity diffusion (simplified)
+                    vec2 velocity = sampleVelocity(uv);
+                    velocity *= velocityDissipation;
+                    
+                    // Store dye in RGB and velocity in GA channels
+                    gl_FragColor = vec4(dye, (velocity + 1.0) * 0.5);
+                }
+            `;
+            
+            // Create shader program
+            function createShader(gl, type, source) {
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+                gl.compileShader(shader);
+                
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    console.error('Shader compilation error:', gl.getShaderInfoLog(shader));
+                    gl.deleteShader(shader);
+                    return null;
+                }
+                
+                return shader;
+            }
+            
+            function createProgram(gl, vertexShader, fragmentShader) {
+                const program = gl.createProgram();
+                gl.attachShader(program, vertexShader);
+                gl.attachShader(program, fragmentShader);
+                gl.linkProgram(program);
+                
+                if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                    console.error('Program linking error:', gl.getProgramInfoLog(program));
+                    gl.deleteProgram(program);
+                    return null;
+                }
+                
+                return program;
+            }
+            
+            const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+            const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+            const program = createProgram(gl, vertexShader, fragmentShader);
+            
+            // Set up vertex data for a full-screen quad
+            const positionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            const positions = [
+                -1, -1,
+                1, -1,
+                -1, 1,
+                1, 1
+            ];
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+            
+            const texCoordBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+            const texCoords = [
+                0, 0,
+                1, 0,
+                0, 1,
+                1, 1
+            ];
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texCoords), gl.STATIC_DRAW);
+            
+            // Get attribute and uniform locations
+            const positionAttributeLocation = gl.getAttribLocation(program, 'a_position');
+            const texCoordAttributeLocation = gl.getAttribLocation(program, 'a_texCoord');
+            const velocityUniformLocation = gl.getUniformLocation(program, 'u_velocity');
+            const dyeUniformLocation = gl.getUniformLocation(program, 'u_dye');
+            const resolutionUniformLocation = gl.getUniformLocation(program, 'u_resolution');
+            const mouseUniformLocation = gl.getUniformLocation(program, 'u_mouse');
+            const mouseVelocityUniformLocation = gl.getUniformLocation(program, 'u_mouseVelocity');
+            const timeUniformLocation = gl.getUniformLocation(program, 'u_time');
+            const isMouseDownUniformLocation = gl.getUniformLocation(program, 'u_isMouseDown');
+            
+            // Create framebuffers and textures for double buffering
+            const textures = [];
+            const framebuffers = [];
+            
+            for (let i = 0; i < 2; i++) {
+                // Create texture
+                const texture = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                textures.push(texture);
+                
+                // Create framebuffer
+                const framebuffer = gl.createFramebuffer();
+                gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+                framebuffers.push(framebuffer);
+            }
+            
+            // Mouse interaction state
+            let mouseX = 0;
+            let mouseY = 0;
+            let mouseVelX = 0;
+            let mouseVelY = 0;
+            let isMouseDown = false;
+            let lastMouseX = 0;
+            let lastMouseY = 0;
+            let lastTime = 0;
+            
+            // Handle mouse/touch events
+            function handleMove(x, y) {
+                // Normalize coordinates to [0, 1]
+                mouseX = x / canvas.width;
+                mouseY = 1.0 - y / canvas.height; // Flip Y coordinate
+                
+                // Calculate velocity
+                const currentTime = performance.now();
+                if (lastTime > 0) {
+                    const deltaTime = (currentTime - lastTime) / 1000;
+                    mouseVelX = (mouseX - lastMouseX) / deltaTime;
+                    mouseVelY = (mouseY - lastMouseY) / deltaTime;
+                }
+                
+                lastMouseX = mouseX;
+                lastMouseY = mouseY;
+                lastTime = currentTime;
+            }
+            
+            canvas.addEventListener('mousedown', (e) => {
+                isMouseDown = true;
+                handleMove(e.clientX, e.clientY);
+            });
+            
+            canvas.addEventListener('mousemove', (e) => {
+                if (isMouseDown) {
+                    handleMove(e.clientX, e.clientY);
+                }
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                isMouseDown = false;
+            });
+            
+            canvas.addEventListener('mouseleave', () => {
+                isMouseDown = false;
+            });
+            
+            // Touch events
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                isMouseDown = true;
+                const touch = e.touches[0];
+                handleMove(touch.clientX, touch.clientY);
+            });
+            
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                handleMove(touch.clientX, touch.clientY);
+            });
+            
+            canvas.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                isMouseDown = false;
+            });
+            
+            // Initialize textures with some starting values
+            function initTextures() {
+                for (let i = 0; i < 2; i++) {
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffers[i]);
+                    gl.viewport(0, 0, canvas.width, canvas.height);
+                    gl.clearColor(0, 0, 0, 0);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+                }
+            }
+            
+            // Render function
+            let currentFrame = 0;
+            let startTime = performance.now();
+            
+            function render() {
+                const currentTime = performance.now();
+                const elapsedTime = (currentTime - startTime) / 1000;
+                
+                // Swap framebuffers
+                const sourceIndex = currentFrame % 2;
+                const targetIndex = (currentFrame + 1) % 2;
+                
+                // Bind target framebuffer for rendering
+                gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffers[targetIndex]);
+                gl.viewport(0, 0, canvas.width, canvas.height);
+                
+                // Use shader program
+                gl.useProgram(program);
+                
+                // Bind textures
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, textures[sourceIndex]);
+                gl.uniform1i(velocityUniformLocation, 0);
+                
+                gl.activeTexture(gl.TEXTURE1);
+                gl.bindTexture(gl.TEXTURE_2D, textures[sourceIndex]);
+                gl.uniform1i(dyeUniformLocation, 1);
+                
+                // Set uniforms
+                gl.uniform2f(resolutionUniformLocation, canvas.width, canvas.height);
+                gl.uniform2f(mouseUniformLocation, mouseX, mouseY);
+                gl.uniform2f(mouseVelocityUniformLocation, mouseVelX, mouseVelY);
+                gl.uniform1f(timeUniformLocation, elapsedTime);
+                gl.uniform1i(isMouseDownUniformLocation, isMouseDown);
+                
+                // Set up vertex attributes
+                gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+                gl.enableVertexAttribArray(positionAttributeLocation);
+                gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+                gl.enableVertexAttribArray(texCoordAttributeLocation);
+                gl.vertexAttribPointer(texCoordAttributeLocation, 2, gl.FLOAT, false, 0, 0);
+                
+                // Draw
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                
+                // Draw to screen
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                gl.viewport(0, 0, canvas.width, canvas.height);
+                
+                gl.useProgram(program);
+                
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, textures[targetIndex]);
+                gl.uniform1i(velocityUniformLocation, 0);
+                
+                gl.activeTexture(gl.TEXTURE1);
+                gl.bindTexture(gl.TEXTURE_2D, textures[targetIndex]);
+                gl.uniform1i(dyeUniformLocation, 1);
+                
+                gl.uniform2f(resolutionUniformLocation, canvas.width, canvas.height);
+                gl.uniform2f(mouseUniformLocation, mouseX, mouseY);
+                gl.uniform2f(mouseVelocityUniformLocation, mouseVelX, mouseVelY);
+                gl.uniform1f(timeUniformLocation, elapsedTime);
+                gl.uniform1i(isMouseDownUniformLocation, isMouseDown);
+                
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                
+                currentFrame++;
+                
+                requestAnimationFrame(render);
+            }
+            
+            // Start the simulation
+            initTextures();
+            render();
+            
+            // Hide loading screen after a short delay
+            setTimeout(() => {
+                loadingScreen.classList.add('hidden');
+            }, 1500);
+        })();
+    </script>
+</body>
+</html>

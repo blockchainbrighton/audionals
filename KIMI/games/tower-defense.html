@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Touch Tower Defense</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+
+        .game-container {
+            position: relative;
+            width: 95vw;
+            height: 95vh;
+            max-width: 1200px;
+            background: rgba(0, 0, 30, 0.7);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+
+        .game-area {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #gameCanvas {
+            background: #0c1e3e;
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .ui-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 200px;
+            background: rgba(10, 20, 40, 0.9);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+            z-index: 20;
+            transition: all 0.3s ease;
+        }
+
+        .panel-title {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            color: #4fc3f7;
+            text-shadow: 0 0 10px rgba(79, 195, 247, 0.5);
+        }
+
+        .turret-draggable {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(145deg, #3a6186, #89253e);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            border: 3px solid #4fc3f7;
+            cursor: grab;
+            transition: all 0.2s;
+        }
+
+        .turret-draggable:active {
+            cursor: grabbing;
+            transform: scale(0.95);
+        }
+
+        .turret-icon {
+            width: 50px;
+            height: 50px;
+            background: #ff5252;
+            border-radius: 50%;
+            position: relative;
+        }
+
+        .turret-icon::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            background: #ffd54f;
+            border-radius: 50%;
+        }
+
+        .stats {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .stat-value {
+            color: #4fc3f7;
+            font-weight: bold;
+        }
+
+        .instructions {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #bbbbbb;
+            margin-top: 15px;
+        }
+
+        .highlight {
+            color: #ffd54f;
+            font-weight: bold;
+        }
+
+        .drag-preview {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 82, 82, 0.7);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 100;
+            display: none;
+        }
+
+        .range-indicator {
+            position: absolute;
+            border: 2px dashed rgba(79, 195, 247, 0.5);
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+
+        .game-title {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 2rem;
+            color: #ffd54f;
+            text-shadow: 0 0 10px rgba(255, 213, 79, 0.7);
+            z-index: 10;
+        }
+
+        .game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            display: none;
+        }
+
+        .game-over h2 {
+            font-size: 3rem;
+            color: #ff5252;
+            margin-bottom: 20px;
+        }
+
+        .restart-btn {
+            background: #4fc3f7;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            border-radius: 50px;
+            color: #0c1e3e;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s;
+        }
+
+        .restart-btn:active {
+            transform: scale(0.95);
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .control-btn {
+            flex: 1;
+            background: #66bb6a;
+            border: none;
+            padding: 8px;
+            font-size: 0.8rem;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s;
+        }
+
+        .control-btn.clear-btn {
+            background: #ff7043;
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+
+        .panel-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            background: rgba(10, 20, 40, 0.9);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+            z-index: 30;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+            display: none;
+        }
+
+        .panel-hidden .ui-panel {
+            transform: translateX(250px);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .panel-hidden .panel-toggle {
+            display: flex;
+        }
+
+        @media (max-width: 768px) {
+            .ui-panel {
+                width: 150px;
+                padding: 15px;
+            }
+            
+            .panel-title {
+                font-size: 1.2rem;
+            }
+            
+            .turret-draggable {
+                width: 60px;
+                height: 60px;
+            }
+            
+            .turret-icon {
+                width: 40px;
+                height: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container" id="gameContainer">
+        <div class="game-area">
+            <div class="game-title">TOUCH TOWER DEFENSE</div>
+            <canvas id="gameCanvas"></canvas>
+            <div class="drag-preview" id="dragPreview"></div>
+            <div class="range-indicator" id="rangeIndicator"></div>
+            <div class="game-over" id="gameOver">
+                <h2>GAME OVER</h2>
+                <button class="restart-btn" id="restartBtn">PLAY AGAIN</button>
+            </div>
+        </div>
+        
+        <div class="ui-panel">
+            <h2 class="panel-title">DEFENSE PANEL</h2>
+            <div class="turret-draggable" id="turretDraggable">
+                <div class="turret-icon"></div>
+            </div>
+            <div class="stats">
+                <div class="stat">
+                    <span>Lives:</span>
+                    <span class="stat-value" id="livesValue">10</span>
+                </div>
+                <div class="stat">
+                    <span>Score:</span>
+                    <span class="stat-value" id="scoreValue">0</span>
+                </div>
+                <div class="stat">
+                    <span>Enemies:</span>
+                    <span class="stat-value" id="enemiesValue">0</span>
+                </div>
+            </div>
+            <div class="instructions">
+                <p><span class="highlight">Drag</span> the turret to place it anywhere</p>
+                <p><span class="highlight">Tap</span> placed turrets to see their range</p>
+                <p>Stop enemies from reaching the end!</p>
+            </div>
+            <div class="control-buttons">
+                <button class="control-btn clear-btn" id="clearGuideBtn">Clear Guide</button>
+                <button class="control-btn" id="hidePanelBtn">Hide Panel</button>
+            </div>
+        </div>
+        
+        <div class="panel-toggle" id="panelToggle">⚙</div>
+    </div>
+
+    <script>
+        // Game constants
+        const GRID_SIZE = 15;
+        const CELL_SIZE = 40;
+        const TURRET_RANGE = 3;
+        const TURRET_DAMAGE = 10;
+        const ENEMY_SPEED = 1;
+        const ENEMY_HEALTH = 30;
+        const SPAWN_RATE = 2000; // milliseconds
+        const PROJECTILE_SPEED = 5;
+        
+        // Game state
+        let gameState = {
+            grid: [],
+            turrets: [],
+            enemies: [],
+            projectiles: [],
+            lives: 10,
+            score: 0,
+            gameOver: false,
+            selectedTurret: null,
+            showGuide: true
+        };
+        
+        // Path for enemies (defined as row, col coordinates)
+        const PATH = [
+            {row: 0, col: 7}, {row: 1, col: 7}, {row: 2, col: 7}, {row: 3, col: 7},
+            {row: 4, col: 7}, {row: 5, col: 7}, {row: 6, col: 7}, {row: 7, col: 7},
+            {row: 8, col: 7}, {row: 9, col: 7}, {row: 10, col: 7}, {row: 11, col: 7},
+            {row: 12, col: 7}, {row: 13, col: 7}, {row: 14, col: 7}
+        ];
+        
+        // DOM elements
+        const gameContainer = document.getElementById('gameContainer');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const dragPreview = document.getElementById('dragPreview');
+        const rangeIndicator = document.getElementById('rangeIndicator');
+        const livesValue = document.getElementById('livesValue');
+        const scoreValue = document.getElementById('scoreValue');
+        const enemiesValue = document.getElementById('enemiesValue');
+        const gameOverScreen = document.getElementById('gameOver');
+        const restartBtn = document.getElementById('restartBtn');
+        const turretDraggable = document.getElementById('turretDraggable');
+        const clearGuideBtn = document.getElementById('clearGuideBtn');
+        const hidePanelBtn = document.getElementById('hidePanelBtn');
+        const panelToggle = document.getElementById('panelToggle');
+        
+        // Initialize canvas size
+        function initCanvas() {
+            const gameArea = document.querySelector('.game-area');
+            canvas.width = gameArea.clientWidth;
+            canvas.height = gameArea.clientHeight;
+        }
+        
+        // Initialize game grid
+        function initGrid() {
+            gameState.grid = [];
+            for (let row = 0; row < GRID_SIZE; row++) {
+                gameState.grid[row] = [];
+                for (let col = 0; col < GRID_SIZE; col++) {
+                    // Mark path cells
+                    const isPath = PATH.some(p => p.row === row && p.col === col);
+                    gameState.grid[row][col] = {
+                        isPath: isPath,
+                        hasTurret: false,
+                        turret: null
+                    };
+                }
+            }
+        }
+        
+        // Initialize game
+        function initGame() {
+            initCanvas();
+            initGrid();
+            gameState.turrets = [];
+            gameState.enemies = [];
+            gameState.projectiles = [];
+            gameState.lives = 10;
+            gameState.score = 0;
+            gameState.gameOver = false;
+            gameState.selectedTurret = null;
+            gameState.showGuide = true;
+            
+            updateUI();
+            gameOverScreen.style.display = 'none';
+            
+            // Start game loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Draw the game grid
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const offsetX = (canvas.width - GRID_SIZE * CELL_SIZE) / 2;
+            const offsetY = (canvas.height - GRID_SIZE * CELL_SIZE) / 2;
+            
+            // Draw grid cells
+            for (let row = 0; row < GRID_SIZE; row++) {
+                for (let col = 0; col < GRID_SIZE; col++) {
+                    const x = offsetX + col * CELL_SIZE;
+                    const y = offsetY + row * CELL_SIZE;
+                    
+                    // Draw path
+                    if (gameState.grid[row][col].isPath) {
+                        ctx.fillStyle = '#388e3c';
+                        ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                        
+                        // Draw path direction indicator
+                        if (gameState.showGuide) {
+                            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.moveTo(x + CELL_SIZE/2, y + CELL_SIZE/4);
+                            ctx.lineTo(x + CELL_SIZE/2, y + 3*CELL_SIZE/4);
+                            ctx.stroke();
+                        }
+                    } 
+                    // Draw regular grid cells
+                    else {
+                        ctx.fillStyle = '#1a237e';
+                        ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                        
+                        // Draw grid lines
+                        if (gameState.showGuide) {
+                            ctx.strokeStyle = 'rgba(100, 100, 255, 0.2)';
+                            ctx.lineWidth = 1;
+                            ctx.strokeRect(x, y, CELL_SIZE, CELL_SIZE);
+                        }
+                    }
+                    
+                    // Highlight selected turret range
+                    if (gameState.selectedTurret && 
+                        gameState.selectedTurret.row === row && 
+                        gameState.selectedTurret.col === col) {
+                        ctx.strokeStyle = 'rgba(79, 195, 247, 0.7)';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(x, y, CELL_SIZE, CELL_SIZE);
+                    }
+                }
+            }
+        }
+        
+        // Draw turrets
+        function drawTurrets() {
+            const offsetX = (canvas.width - GRID_SIZE * CELL_SIZE) / 2;
+            const offsetY = (canvas.height - GRID_SIZE * CELL_SIZE) / 2;
+            
+            gameState.turrets.forEach(turret => {
+                const x = offsetX + turret.col * CELL_SIZE + CELL_SIZE/2;
+                const y = offsetY + turret.row * CELL_SIZE + CELL_SIZE/2;
+                
+                // Draw turret base
+                ctx.fillStyle = '#e53935';
+                ctx.beginPath();
+                ctx.arc(x, y, 15, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw turret barrel
+                ctx.strokeStyle = '#ffd54f';
+                ctx.lineWidth = 5;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y - 20);
+                ctx.stroke();
+            });
+        }
+        
+        // Draw enemies
+        function drawEnemies() {
+            const offsetX = (canvas.width - GRID_SIZE * CELL_SIZE) / 2;
+            const offsetY = (canvas.height - GRID_SIZE * CELL_SIZE) / 2;
+            
+            gameState.enemies.forEach(enemy => {
+                const x = offsetX + enemy.col * CELL_SIZE + CELL_SIZE/2;
+                const y = offsetY + enemy.row * CELL_SIZE + CELL_SIZE/2;
+                
+                // Draw enemy body
+                ctx.fillStyle = '#8e24aa';
+                ctx.beginPath();
+                ctx.arc(x, y, 12, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw enemy eyes
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(x - 5, y - 3, 3, 0, Math.PI * 2);
+                ctx.arc(x + 5, y - 3, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw health bar
+                const healthPercent = enemy.health / ENEMY_HEALTH;
+                ctx.fillStyle = 'red';
+                ctx.fillRect(x - 15, y - 25, 30, 5);
+                ctx.fillStyle = 'lime';
+                ctx.fillRect(x - 15, y - 25, 30 * healthPercent, 5);
+            });
+        }
+        
+        // Draw projectiles
+        function drawProjectiles() {
+            gameState.projectiles.forEach(projectile => {
+                ctx.fillStyle = '#ffd54f';
+                ctx.beginPath();
+                ctx.arc(projectile.x, projectile.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        
+        // Draw range indicator
+        function drawRangeIndicator() {
+            if (!gameState.selectedTurret) {
+                rangeIndicator.style.display = 'none';
+                return;
+            }
+            
+            const offsetX = (canvas.width - GRID_SIZE * CELL_SIZE) / 2;
+            const offsetY = (canvas.height - GRID_SIZE * CELL_SIZE) / 2;
+            
+            const x = offsetX + gameState.selectedTurret.col * CELL_SIZE + CELL_SIZE/2;
+            const y = offsetY + gameState.selectedTurret.row * CELL_SIZE + CELL_SIZE/2;
+            
+            rangeIndicator.style.display = 'block';
+            rangeIndicator.style.left = `${x}px`;
+            rangeIndicator.style.top = `${y}px`;
+            rangeIndicator.style.width = `${TURRET_RANGE * CELL_SIZE * 2}px`;
+            rangeIndicator.style.height = `${TURRET_RANGE * CELL_SIZE * 2}px`;
+        }
+        
+        // Spawn a new enemy
+        function spawnEnemy() {
+            if (gameState.gameOver) return;
+            
+            const enemy = {
+                row: PATH[0].row,
+                col: PATH[0].col,
+                pathIndex: 0,
+                health: ENEMY_HEALTH,
+                maxHealth: ENEMY_HEALTH
+            };
+            
+            gameState.enemies.push(enemy);
+            updateUI();
+        }
+        
+        // Move enemies along the path
+        function moveEnemies() {
+            for (let i = gameState.enemies.length - 1; i >= 0; i--) {
+                const enemy = gameState.enemies[i];
+                
+                // Move to next path point
+                if (enemy.pathIndex < PATH.length - 1) {
+                    const nextPoint = PATH[enemy.pathIndex + 1];
+                    const currentPoint = PATH[enemy.pathIndex];
+                    
+                    // Move towards next point
+                    if (enemy.row < nextPoint.row) enemy.row += ENEMY_SPEED/10;
+                    if (enemy.row > nextPoint.row) enemy.row -= ENEMY_SPEED/10;
+                    if (enemy.col < nextPoint.col) enemy.col += ENEMY_SPEED/10;
+                    if (enemy.col > nextPoint.col) enemy.col -= ENEMY_SPEED/10;
+                    
+                    // Check if reached next point
+                    if (Math.abs(enemy.row - nextPoint.row) < 0.2 && 
+                        Math.abs(enemy.col - nextPoint.col) < 0.2) {
+                        enemy.row = nextPoint.row;
+                        enemy.col = nextPoint.col;
+                        enemy.pathIndex++;
+                    }
+                } 
+                // Reached end of path
+                else {
+                    // Remove enemy and reduce lives
+                    gameState.enemies.splice(i, 1);
+                    gameState.lives--;
+                    updateUI();
+                    
+                    if (gameState.lives <= 0) {
+                        gameState.gameOver = true;
+                        gameOverScreen.style.display = 'flex';
+                    }
+                }
+            }
+        }
+        
+        // Turret shooting logic
+        function updateTurrets() {
+            gameState.turrets.forEach(turret => {
+                // Find closest enemy in range
+                let closestEnemy = null;
+                let closestDistance = Infinity;
+                
+                gameState.enemies.forEach(enemy => {
+                    const distance = Math.sqrt(
+                        Math.pow(turret.row - enemy.row, 2) + 
+                        Math.pow(turret.col - enemy.col, 2)
+                    );
+                    
+                    if (distance <= TURRET_RANGE && distance < closestDistance) {
+                        closestDistance = distance;
+                        closestEnemy = enemy;
+                    }
+                });
+                
+                // Shoot at closest enemy
+                if (closestEnemy) {
+                    const projectile = {
+                        x: (canvas.width - GRID_SIZE * CELL_SIZE) / 2 + turret.col * CELL_SIZE + CELL_SIZE/2,
+                        y: (canvas.height - GRID_SIZE * CELL_SIZE) / 2 + turret.row * CELL_SIZE + CELL_SIZE/2,
+                        targetX: (canvas.width - GRID_SIZE * CELL_SIZE) / 2 + closestEnemy.col * CELL_SIZE + CELL_SIZE/2,
+                        targetY: (canvas.height - GRID_SIZE * CELL_SIZE) / 2 + closestEnemy.row * CELL_SIZE + CELL_SIZE/2,
+                        damage: TURRET_DAMAGE
+                    };
+                    
+                    gameState.projectiles.push(projectile);
+                }
+            });
+        }
+        
+        // Update projectiles
+        function updateProjectiles() {
+            for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
+                const projectile = gameState.projectiles[i];
+                
+                // Calculate direction
+                const dx = projectile.targetX - projectile.x;
+                const dy = projectile.targetY - projectile.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Move projectile
+                if (distance > PROJECTILE_SPEED) {
+                    projectile.x += (dx / distance) * PROJECTILE_SPEED;
+                    projectile.y += (dy / distance) * PROJECTILE_SPEED;
+                } 
+                // Hit target
+                else {
+                    // Find enemy at target position
+                    for (let j = gameState.enemies.length - 1; j >= 0; j--) {
+                        const enemy = gameState.enemies[j];
+                        const enemyX = (canvas.width - GRID_SIZE * CELL_SIZE) / 2 + enemy.col * CELL_SIZE + CELL_SIZE/2;
+                        const enemyY = (canvas.height - GRID_SIZE * CELL_SIZE) / 2 + enemy.row * CELL_SIZE + CELL_SIZE/2;
+                        
+                        const dist = Math.sqrt(
+                            Math.pow(projectile.targetX - enemyX, 2) + 
+                            Math.pow(projectile.targetY - enemyY, 2)
+                        );
+                        
+                        if (dist < 20) {
+                            enemy.health -= projectile.damage;
+                            
+                            if (enemy.health <= 0) {
+                                gameState.enemies.splice(j, 1);
+                                gameState.score += 10;
+                                updateUI();
+                            }
+                            break;
+                        }
+                    }
+                    
+                    // Remove projectile
+                    gameState.projectiles.splice(i, 1);
+                }
+            }
+        }
+        
+        // Update UI elements
+        function updateUI() {
+            livesValue.textContent = gameState.lives;
+            scoreValue.textContent = gameState.score;
+            enemiesValue.textContent = gameState.enemies.length;
+        }
+        
+        // Main game loop
+        function gameLoop() {
+            if (!gameState.gameOver) {
+                drawGrid();
+                drawTurrets();
+                drawEnemies();
+                drawProjectiles();
+                drawRangeIndicator();
+                
+                moveEnemies();
+                updateTurrets();
+                updateProjectiles();
+                
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // Handle touch start for dragging turret
+        turretDraggable.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = turretDraggable.getBoundingClientRect();
+            
+            // Show drag preview
+            dragPreview.style.display = 'block';
+            dragPreview.style.left = `${touch.clientX - 25}px`;
+            dragPreview.style.top = `${touch.clientY - 25}px`;
+        });
+        
+        // Handle touch move for dragging turret
+        document.addEventListener('touchmove', function(e) {
+            if (dragPreview.style.display === 'block') {
+                e.preventDefault();
+                const touch = e.touches[0];
+                dragPreview.style.left = `${touch.clientX - 25}px`;
+                dragPreview.style.top = `${touch.clientY - 25}px`;
+            }
+        });
+        
+        // Handle touch end for placing turret
+        document.addEventListener('touchend', function(e) {
+            if (dragPreview.style.display === 'block') {
+                e.preventDefault();
+                dragPreview.style.display = 'none';
+                
+                // Get touch position
+                const touch = e.changedTouches[0];
+                const x = touch.clientX;
+                const y = touch.clientY;
+                
+                // Calculate grid position
+                const offsetX = (canvas.width - GRID_SIZE * CELL_SIZE) / 2;
+                const offsetY = (canvas.height - GRID_SIZE * CELL_SIZE) / 2;
+                
+                const col = Math.floor((x - offsetX) / CELL_SIZE);
+                const row = Math.floor((y - offsetY) / CELL_SIZE);
+                
+                // Check if position is valid
+                if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE) {
+                    if (!gameState.grid[row][col].isPath && !gameState.grid[row][col].hasTurret) {
+                        // Place turret
+                        gameState.grid[row][col].hasTurret = true;
+                        gameState.grid[row][col].turret = { row, col };
+                        gameState.turrets.push({ row, col });
+                    }
+                }
+            }
+        });
+        
+        // Handle tap on canvas to select turret
+        canvas.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            // Calculate grid position
+            const offsetX = (canvas.width - GRID_SIZE * CELL_SIZE) / 2;
+            const offsetY = (canvas.height - GRID_SIZE * CELL_SIZE) / 2;
+            
+            const col = Math.floor((x - offsetX) / CELL_SIZE);
+            const row = Math.floor((y - offsetY) / CELL_SIZE);
+            
+            // Check if there's a turret at this position
+            if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE) {
+                if (gameState.grid[row][col].hasTurret) {
+                    gameState.selectedTurret = gameState.grid[row][col].turret;
+                } else {
+                    gameState.selectedTurret = null;
+                }
+            } else {
+                gameState.selectedTurret = null;
+            }
+        });
+        
+        // Clear guide window
+        clearGuideBtn.addEventListener('click', function() {
+            gameState.showGuide = false;
+        });
+        
+        // Hide/show panel
+        hidePanelBtn.addEventListener('click', function() {
+            gameContainer.classList.add('panel-hidden');
+        });
+        
+        panelToggle.addEventListener('click', function() {
+            gameContainer.classList.remove('panel-hidden');
+        });
+        
+        // Restart game
+        restartBtn.addEventListener('click', function() {
+            gameContainer.classList.remove('panel-hidden');
+            initGame();
+        });
+        
+        // Initialize game on load
+        window.addEventListener('load', function() {
+            initGame();
+            
+            // Start enemy spawning
+            setInterval(spawnEnemy, SPAWN_RATE);
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', initCanvas);
+    </script>
+</body>
+</html>

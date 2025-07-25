@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Enhanced Particle Life</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: none;
+        }
+        
+        body {
+            overflow: hidden;
+            background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            width: 100vw;
+            color: white;
+        }
+        
+        #canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        
+        .ui-panel {
+            position: fixed;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 15px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #topPanel {
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+        }
+        
+        #stats {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4cc9f0;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+        
+        #title {
+            font-size: 28px;
+            font-weight: 700;
+            text-align: center;
+            background: linear-gradient(90deg, #f72585, #4361ee, #4cc9f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 15px rgba(76, 201, 240, 0.3);
+        }
+        
+        #controls {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .control-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 20px;
+        }
+        
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+        }
+        
+        #bottomPanel {
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 25px;
+        }
+        
+        #colorSelector {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .color-option {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .color-option.active {
+            transform: scale(1.2);
+            box-shadow: 0 0 15px currentColor;
+            border-color: white;
+        }
+        
+        #powerControls {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .power-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 30px;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 16px;
+        }
+        
+        .power-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        #instructions {
+            position: fixed;
+            bottom: 90px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 16px;
+            z-index: 10;
+            padding: 0 20px;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+        }
+        
+        #particleCounter {
+            position: fixed;
+            top: 90px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 10;
+        }
+        
+        .pulse {
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .highlight {
+            animation: highlight 0.5s ease;
+        }
+        
+        @keyframes highlight {
+            0% { background: rgba(255, 255, 255, 0.3); }
+            100% { background: rgba(255, 255, 255, 0.1); }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div id="topPanel" class="ui-panel">
+        <div id="stats">
+            <div class="stat-item">
+                <div class="stat-value" id="particleCount">0</div>
+                <div class="stat-label">PARTICLES</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="fpsCounter">0</div>
+                <div class="stat-label">FPS</div>
+            </div>
+        </div>
+        
+        <div id="title">PARTICLE LIFE</div>
+        
+        <div id="controls">
+            <div class="control-btn" id="clearBtn" title="Clear Particles">🗑️</div>
+            <div class="control-btn" id="pauseBtn" title="Pause/Resume">⏸️</div>
+            <div class="control-btn" id="settingsBtn" title="Settings">⚙️</div>
+        </div>
+    </div>
+    
+    <div id="particleCounter">Particles: <span id="counter">0</span></div>
+    
+    <div id="instructions">Touch and drag to create particles • Tap colors to change type</div>
+    
+    <div id="bottomPanel" class="ui-panel">
+        <div id="colorSelector">
+            <div class="color-option active" style="background-color: #FF5252; color: #FF5252;" data-color="0"></div>
+            <div class="color-option" style="background-color: #4CAF50; color: #4CAF50;" data-color="1"></div>
+            <div class="color-option" style="background-color: #2196F3; color: #2196F3;" data-color="2"></div>
+            <div class="color-option" style="background-color: #FFC107; color: #FFC107;" data-color="3"></div>
+            <div class="color-option" style="background-color: #9C27B0; color: #9C27B0;" data-color="4"></div>
+        </div>
+        
+        <div id="powerControls">
+            <div class="power-btn" id="explodeBtn">
+                <span>💥</span>
+                <span>Explode</span>
+            </div>
+            <div class="power-btn" id="attractBtn">
+                <span>🧲</span>
+                <span>Attract</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas to full viewport
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // Game state
+        const state = {
+            particles: [],
+            paused: false,
+            particleCount: 0,
+            lastTime: 0,
+            fps: 0,
+            currentColorIndex: 0,
+            settings: {
+                particleLimit: 1000,
+                interactionRadius: 100,
+                forceMultiplier: 1.0
+            }
+        };
+        
+        // Color definitions with names and interaction rules
+        const colors = [
+            { 
+                name: 'Red', 
+                value: '#FF5252', 
+                r: 255, g: 82, b: 82,
+                rules: [ // Red interactions
+                    { force: -0.8, color: 0 }, // Repels Red strongly
+                    { force: 0.5, color: 1 },  // Attracts Green
+                    { force: 0.2, color: 2 },  // Weakly attracts Blue
+                    { force: -0.3, color: 3 }, // Repels Yellow
+                    { force: 0.4, color: 4 }   // Attracts Purple
+                ]
+            },
+            { 
+                name: 'Green', 
+                value: '#4CAF50', 
+                r: 76, g: 175, b: 80,
+                rules: [ // Green interactions
+                    { force: -0.3, color: 0 }, // Weakly repels Red
+                    { force: -0.6, color: 1 }, // Repels Green
+                    { force: 0.8, color: 2 },  // Strongly attracts Blue
+                    { force: 0.4, color: 3 },  // Attracts Yellow
+                    { force: -0.2, color: 4 }  // Weakly repels Purple
+                ]
+            },
+            { 
+                name: 'Blue', 
+                value: '#2196F3', 
+                r: 33, g: 150, b: 243,
+                rules: [ // Blue interactions
+                    { force: 0.3, color: 0 },  // Weakly attracts Red
+                    { force: -0.5, color: 1 }, // Repels Green
+                    { force: -0.4, color: 2 }, // Repels Blue
+                    { force: 0.6, color: 3 },  // Strongly attracts Yellow
+                    { force: 0.2, color: 4 }   // Weakly attracts Purple
+                ]
+            },
+            { 
+                name: 'Yellow', 
+                value: '#FFC107', 
+                r: 255, g: 193, b: 7,
+                rules: [ // Yellow interactions
+                    { force: -0.4, color: 0 }, // Repels Red
+                    { force: 0.3, color: 1 },  // Attracts Green
+                    { force: -0.3, color: 2 }, // Repels Blue
+                    { force: -0.7, color: 3 }, // Strongly repels Yellow
+                    { force: 0.5, color: 4 }   // Attracts Purple
+                ]
+            },
+            { 
+                name: 'Purple', 
+                value: '#9C27B0', 
+                r: 156, g: 39, b: 176,
+                rules: [ // Purple interactions
+                    { force: 0.4, color: 0 },  // Attracts Red
+                    { force: -0.2, color: 1 }, // Weakly repels Green
+                    { force: 0.3, color: 2 },  // Attracts Blue
+                    { force: -0.5, color: 3 }, // Repels Yellow
+                    { force: -0.6, color: 4 }  // Repels Purple
+                ]
+            }
+        ];
+        
+        // UI Elements
+        const particleCountElement = document.getElementById('particleCount');
+        const counterElement = document.getElementById('counter');
+        const fpsCounterElement = document.getElementById('fpsCounter');
+        const colorOptions = document.querySelectorAll('.color-option');
+        const clearBtn = document.getElementById('clearBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const explodeBtn = document.getElementById('explodeBtn');
+        const attractBtn = document.getElementById('attractBtn');
+        
+        // Update active color indicator
+        function updateActiveColor() {
+            colorOptions.forEach((option, index) => {
+                if (index === state.currentColorIndex) {
+                    option.classList.add('active');
+                } else {
+                    option.classList.remove('active');
+                }
+            });
+        }
+        
+        updateActiveColor();
+        
+        // Event Listeners
+        colorOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                state.currentColorIndex = parseInt(option.dataset.color);
+                updateActiveColor();
+                option.classList.add('highlight');
+                setTimeout(() => option.classList.remove('highlight'), 300);
+            });
+        });
+        
+        clearBtn.addEventListener('click', () => {
+            state.particles = [];
+            state.particleCount = 0;
+            clearBtn.classList.add('highlight');
+            setTimeout(() => clearBtn.classList.remove('highlight'), 300);
+        });
+        
+        pauseBtn.addEventListener('click', () => {
+            state.paused = !state.paused;
+            pauseBtn.textContent = state.paused ? '▶️' : '⏸️';
+            pauseBtn.title = state.paused ? 'Resume' : 'Pause';
+            pauseBtn.classList.add('highlight');
+            setTimeout(() => pauseBtn.classList.remove('highlight'), 300);
+        });
+        
+        explodeBtn.addEventListener('click', () => {
+            createExplosion(canvas.width/2, canvas.height/2, 100);
+            explodeBtn.classList.add('highlight');
+            setTimeout(() => explodeBtn.classList.remove('highlight'), 300);
+        });
+        
+        attractBtn.addEventListener('click', () => {
+            createAttractor(canvas.width/2, canvas.height/2);
+            attractBtn.classList.add('highlight');
+            setTimeout(() => attractBtn.classList.remove('highlight'), 300);
+        });
+        
+        // Particle class
+        class Particle {
+            constructor(x, y, color, isSpecial = false) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 4;
+                this.vy = (Math.random() - 0.5) * 4;
+                this.radius = isSpecial ? Math.random() * 8 + 6 : Math.random() * 4 + 2;
+                this.color = color;
+                this.life = isSpecial ? 2000 : 1000;
+                this.isSpecial = isSpecial;
+                this.trail = [];
+                this.maxTrail = isSpecial ? 15 : 8;
+            }
+            
+            update() {
+                // Add current position to trail
+                this.trail.push({x: this.x, y: this.y});
+                if (this.trail.length > this.maxTrail) {
+                    this.trail.shift();
+                }
+                
+                // Apply velocity
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Boundary checks with damping
+                if (this.x < 0) {
+                    this.x = 0;
+                    this.vx *= -0.8;
+                } else if (this.x > canvas.width) {
+                    this.x = canvas.width;
+                    this.vx *= -0.8;
+                }
+                
+                if (this.y < 0) {
+                    this.y = 0;
+                    this.vy *= -0.8;
+                } else if (this.y > canvas.height) {
+                    this.y = canvas.height;
+                    this.vy *= -0.8;
+                }
+                
+                // Apply friction
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+                
+                // Decrease lifespan
+                this.life--;
+            }
+            
+            draw() {
+                // Draw trail
+                for (let i = 0; i < this.trail.length; i++) {
+                    const point = this.trail[i];
+                    const alpha = i / this.trail.length * 0.5;
+                    const size = this.radius * (i / this.trail.length);
+                    
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, size, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${this.color.r}, ${this.color.g}, ${this.color.b}, ${alpha})`;
+                    ctx.fill();
+                }
+                
+                // Draw particle
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                
+                if (this.isSpecial) {
+                    // Special particles have a glow effect
+                    const gradient = ctx.createRadialGradient(
+                        this.x, this.y, 0,
+                        this.x, this.y, this.radius * 2
+                    );
+                    gradient.addColorStop(0, this.color.value);
+                    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                    
+                    ctx.fillStyle = gradient;
+                    ctx.fill();
+                    
+                    // Core
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius * 0.6, 0, Math.PI * 2);
+                    ctx.fillStyle = 'white';
+                    ctx.fill();
+                } else {
+                    ctx.fillStyle = this.color.value;
+                    ctx.fill();
+                    
+                    // Add glow effect
+                    ctx.shadowColor = this.color.value;
+                    ctx.shadowBlur = 15;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+            }
+        }
+        
+        // Special attractor particle
+        class Attractor {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 30;
+                this.strength = 5;
+                this.life = 300;
+                this.pulse = 0;
+            }
+            
+            update() {
+                this.pulse = Math.sin(Date.now() / 100) * 5;
+                this.life--;
+            }
+            
+            draw() {
+                // Draw pulsing effect
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius + this.pulse, 0, Math.PI * 2);
+                const gradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, this.radius + this.pulse
+                );
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                
+                // Draw core
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius * 0.4, 0, Math.PI * 2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fill();
+            }
+            
+            attract(particles) {
+                for (const p of particles) {
+                    const dx = this.x - p.x;
+                    const dy = this.y - p.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < 300) {
+                        const force = this.strength / (distance + 1);
+                        p.vx += (dx / distance) * force;
+                        p.vy += (dy / distance) * force;
+                    }
+                }
+            }
+        }
+        
+        // Interaction rules
+        function getForce(p1, p2) {
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Skip if too close or too far
+            if (distance < 5 || distance > state.settings.interactionRadius) return { fx: 0, fy: 0 };
+            
+            // Normalize direction
+            const nx = dx / distance;
+            const ny = dy / distance;
+            
+            // Get color indices
+            const c1 = colors.indexOf(p1.color);
+            const c2 = colors.indexOf(p2.color);
+            
+            // Find interaction rule
+            let force = 0;
+            for (const rule of p1.color.rules) {
+                if (rule.color === c2) {
+                    force = rule.force;
+                    break;
+                }
+            }
+            
+            // Apply force based on distance
+            const strength = (force * state.settings.forceMultiplier) / distance;
+            return {
+                fx: nx * strength,
+                fy: ny * strength
+            };
+        }
+        
+        // Add particles at position
+        function addParticles(x, y, count, isSpecial = false) {
+            if (state.particles.length >= state.settings.particleLimit) return;
+            
+            const color = colors[state.currentColorIndex];
+            for (let i = 0; i < count; i++) {
+                // Add some randomness to position
+                const offsetX = (Math.random() - 0.5) * 50;
+                const offsetY = (Math.random() - 0.5) * 50;
+                state.particles.push(new Particle(x + offsetX, y + offsetY, color, isSpecial));
+                state.particleCount++;
+            }
+        }
+        
+        // Create explosion effect
+        function createExplosion(x, y, count) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 10 + 5;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                
+                const p = new Particle(x, y, color, true);
+                p.vx = Math.cos(angle) * speed;
+                p.vy = Math.sin(angle) * speed;
+                p.life = 500;
+                state.particles.push(p);
+                state.particleCount++;
+            }
+        }
+        
+        // Create attractor
+        let attractor = null;
+        function createAttractor(x, y) {
+            attractor = new Attractor(x, y);
+        }
+        
+        // Touch event handlers
+        canvas.addEventListener('touchstart', handleTouch);
+        canvas.addEventListener('touchmove', handleTouch);
+        
+        function handleTouch(e) {
+            e.preventDefault();
+            const touches = e.touches;
+            for (let i = 0; i < touches.length; i++) {
+                const touch = touches[i];
+                addParticles(touch.clientX, touch.clientY, 5);
+            }
+        }
+        
+        // Mouse events for testing on desktop
+        canvas.addEventListener('mousedown', handleMouseDown);
+        canvas.addEventListener('mousemove', handleMouseMove);
+        
+        let isMouseDown = false;
+        
+        function handleMouseDown(e) {
+            isMouseDown = true;
+            addParticles(e.clientX, e.clientY, 10);
+        }
+        
+        function handleMouseMove(e) {
+            if (isMouseDown) {
+                addParticles(e.clientX, e.clientY, 5);
+            }
+        }
+        
+        canvas.addEventListener('mouseup', () => isMouseDown = false);
+        canvas.addEventListener('mouseleave', () => isMouseDown = false);
+        
+        // Double click for special particles
+        canvas.addEventListener('dblclick', (e) => {
+            addParticles(e.clientX, e.clientY, 1, true);
+        });
+        
+        // Animation loop
+        function animate(timestamp) {
+            // Calculate FPS
+            if (state.lastTime) {
+                const delta = (timestamp - state.lastTime) / 1000;
+                state.fps = Math.round(1 / delta);
+            }
+            state.lastTime = timestamp;
+            
+            fpsCounterElement.textContent = state.fps;
+            particleCountElement.textContent = state.particleCount;
+            counterElement.textContent = state.particles.length;
+            
+            if (!state.paused) {
+                // Clear canvas with a semi-transparent overlay for trail effect
+                ctx.fillStyle = 'rgba(10, 10, 30, 0.1)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Update and draw attractor
+                if (attractor) {
+                    attractor.update();
+                    attractor.attract(state.particles);
+                    attractor.draw();
+                    
+                    if (attractor.life <= 0) {
+                        attractor = null;
+                    }
+                }
+                
+                // Update and draw particles
+                for (let i = 0; i < state.particles.length; i++) {
+                    const p = state.particles[i];
+                    
+                    // Apply forces from other particles
+                    for (let j = 0; j < state.particles.length; j++) {
+                        if (i !== j) {
+                            const other = state.particles[j];
+                            const force = getForce(p, other);
+                            p.vx += force.fx;
+                            p.vy += force.fy;
+                        }
+                    }
+                    
+                    // Update particle
+                    p.update();
+                    
+                    // Remove dead particles
+                    if (p.life <= 0) {
+                        state.particles.splice(i, 1);
+                        i--;
+                        state.particleCount--;
+                        continue;
+                    }
+                    
+                    // Draw particle
+                    p.draw();
+                }
+            }
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // Start animation
+        animate();
+        
+        // Add some initial particles
+        function addInitialParticles() {
+            for (let i = 0; i < 30; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                state.particles.push(new Particle(x, y, color));
+                state.particleCount++;
+            }
+        }
+        
+        addInitialParticles();
+        
+        // Periodic special effects
+        setInterval(() => {
+            if (Math.random() > 0.7 && !state.paused) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                createExplosion(x, y, 20);
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
