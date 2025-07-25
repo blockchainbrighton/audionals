@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spectrum Spinner - Harmonic Chord Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            color: #e6e6e6;
+        }
+        
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: rgba(25, 25, 45, 0.8);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #ff7e5f, #feb47b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.8;
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        
+        .game-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .wheel-container {
+            flex: 1;
+            min-width: 300px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #spinnerCanvas {
+            background: rgba(10, 10, 20, 0.7);
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+        }
+        
+        .pointer {
+            position: absolute;
+            top: 0;
+            width: 30px;
+            height: 50px;
+            background: #ff7e5f;
+            clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+            z-index: 10;
+            transform: translateY(-50%);
+        }
+        
+        .controls {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .panel {
+            background: rgba(30, 30, 50, 0.7);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .panel-title {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            color: #feb47b;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .panel-title i {
+            font-size: 1.6rem;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        
+        .stat-box {
+            text-align: center;
+            padding: 12px;
+            background: rgba(40, 40, 60, 0.6);
+            border-radius: 10px;
+            flex: 1;
+            margin: 0 5px;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #ff7e5f;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        
+        .chord-display {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .chord-note {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(60, 60, 90, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .chord-note.active {
+            background: linear-gradient(135deg, #ff7e5f, #feb47b);
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(255, 126, 95, 0.7);
+        }
+        
+        .ratio-display {
+            text-align: center;
+            font-size: 1.8rem;
+            font-weight: bold;
+            margin: 15px 0;
+            min-height: 60px;
+            color: #feb47b;
+        }
+        
+        .chord-name {
+            text-align: center;
+            font-size: 1.5rem;
+            margin: 10px 0;
+            min-height: 40px;
+            color: #7bff7b;
+        }
+        
+        .buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #ff7e5f, #feb47b);
+            color: white;
+            font-weight: bold;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .help-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        
+        .help-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .help-content {
+            background: rgba(30, 30, 50, 0.95);
+            width: 90%;
+            max-width: 700px;
+            border-radius: 20px;
+            padding: 30px;
+            position: relative;
+            box-shadow: 0 0 40px rgba(255, 126, 95, 0.3);
+        }
+        
+        .close-help {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: #ff7e5f;
+            font-size: 2rem;
+            cursor: pointer;
+        }
+        
+        .help-title {
+            text-align: center;
+            margin-bottom: 25px;
+            color: #feb47b;
+            font-size: 2rem;
+        }
+        
+        .help-section {
+            margin-bottom: 25px;
+        }
+        
+        .help-section h3 {
+            color: #7bff7b;
+            margin-bottom: 10px;
+            font-size: 1.4rem;
+        }
+        
+        .help-section p {
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        
+        .ratio-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .ratio-item {
+            background: rgba(40, 40, 60, 0.6);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        
+        .ratio-value {
+            font-weight: bold;
+            color: #ff7e5f;
+            font-size: 1.2rem;
+        }
+        
+        .ratio-name {
+            margin-top: 5px;
+            color: #7bff7b;
+        }
+        
+        .instructions {
+            list-style-type: none;
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 10px;
+            position: relative;
+            padding-left: 30px;
+        }
+        
+        .instructions li:before {
+            content: "•";
+            color: #ff7e5f;
+            font-size: 1.5rem;
+            position: absolute;
+            left: 0;
+            top: -5px;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            opacity: 0.7;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            .game-container {
+                flex-direction: column;
+            }
+            
+            .ratio-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Spectrum Spinner</h1>
+            <p class="subtitle">Spin the harmonic wheel to create chords. Select 3-4 sectors to form a chord and see how consonant your creation is!</p>
+        </header>
+        
+        <div class="game-container">
+            <div class="wheel-container">
+                <div class="pointer"></div>
+                <canvas id="spinnerCanvas" width="400" height="400"></canvas>
+            </div>
+            
+            <div class="controls">
+                <div class="panel">
+                    <h2 class="panel-title">Game Stats</h2>
+                    <div class="stats">
+                        <div class="stat-box">
+                            <div class="stat-value" id="score">0</div>
+                            <div class="stat-label">SCORE</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="combo">0</div>
+                            <div class="stat-label">COMBO</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="chords">0</div>
+                            <div class="stat-label">CHORDS</div>
+                        </div>
+                    </div>
+                    
+                    <div class="chord-display">
+                        <div class="chord-note" id="note1">-</div>
+                        <div class="chord-note" id="note2">-</div>
+                        <div class="chord-note" id="note3">-</div>
+                        <div class="chord-note" id="note4">-</div>
+                    </div>
+                    
+                    <div class="ratio-display" id="ratioDisplay">-</div>
+                    <div class="chord-name" id="chordName">-</div>
+                    
+                    <div class="buttons">
+                        <button id="spinButton">SPIN WHEEL</button>
+                        <button id="playButton" disabled>PLAY CHORD</button>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <h2 class="panel-title">Controls</h2>
+                    <p>1. Click SPIN to start the wheel</p>
+                    <p>2. When it stops, click sectors to select notes (3-4)</p>
+                    <p>3. Click PLAY CHORD to hear your creation</p>
+                    <p>4. Try to create consonant chords for higher scores!</p>
+                    
+                    <div class="buttons">
+                        <button id="helpButton">HOW TO PLAY</button>
+                        <button id="resetButton">RESET GAME</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Harmonic Chord Generator | Web Audio API | Created with HTML5 Canvas</p>
+        </div>
+    </div>
+    
+    <div class="help-overlay" id="helpOverlay">
+        <div class="help-content">
+            <button class="close-help" id="closeHelp">&times;</button>
+            <h2 class="help-title">How to Play Spectrum Spinner</h2>
+            
+            <div class="help-section">
+                <h3>Game Objective</h3>
+                <p>Create consonant chords by selecting harmonic ratios from the spinning wheel. The closer your chord ratios are to just intonation, the higher your score!</p>
+            </div>
+            
+            <div class="help-section">
+                <h3>How It Works</h3>
+                <ul class="instructions">
+                    <li>Click SPIN to start the wheel</li>
+                    <li>The wheel is divided into 16 sectors representing harmonic ratios (1x to 16x)</li>
+                    <li>When the wheel stops, click sectors to select notes (3-4 required)</li>
+                    <li>Selected sectors will light up and show in the chord display</li>
+                    <li>Click PLAY CHORD to hear your creation and see your score</li>
+                </ul>
+            </div>
+            
+            <div class="help-section">
+                <h3>Harmonic Ratios</h3>
+                <p>Consonant chords are based on simple integer ratios. Here are some common examples:</p>
+                <div class="ratio-grid">
+                    <div class="ratio-item">
+                        <div class="ratio-value">4:5:6</div>
+                        <div class="ratio-name">Major Triad (C-E-G)</div>
+                    </div>
+                    <div class="ratio-item">
+                        <div class="ratio-value">6:7:9</div>
+                        <div class="ratio-name">Dominant Seventh</div>
+                    </div>
+                    <div class="ratio-item">
+                        <div class="ratio-value">3:4:5</div>
+                        <div class="ratio-name">Minor Triad</div>
+                    </div>
+                    <div class="ratio-item">
+                        <div class="ratio-value">8:10:12:15</div>
+                        <div class="ratio-name">Major Seventh Chord</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="help-section">
+                <h3>Scoring System</h3>
+                <p>Your score is based on how close your chord ratios are to just intonation:</p>
+                <ul class="instructions">
+                    <li>Perfect match: 100 points</li>
+                    <li>Within 5 cents: 80 points</li>
+                    <li>Within 10 cents: 60 points</li>
+                    <li>Within 20 cents: 30 points</li>
+                    <li>Dissonant (over 20 cents): 0 points + noise burst</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game state
+        const gameState = {
+            IDLE: 'IDLE',
+            SPINNING: 'SPINNING',
+            SELECTING: 'SELECTING',
+            EVALUATING: 'EVALUATING'
+        };
+        
+        // Consonant chord ratios (just intonation)
+        const consonantChords = [
+            { ratio: [4, 5, 6], name: "Major Triad" },
+            { ratio: [3, 4, 5], name: "Minor Triad" },
+            { ratio: [6, 7, 9], name: "Dominant Seventh" },
+            { ratio: [8, 10, 12, 15], name: "Major Seventh" },
+            { ratio: [4, 5, 6, 7], name: "Major Seventh" },
+            { ratio: [5, 6, 7, 9], name: "Minor Seventh" }
+        ];
+        
+        // Game variables
+        let currentState = gameState.IDLE;
+        let score = 0;
+        let combo = 0;
+        let chordsPlayed = 0;
+        let baseFrequency = 220; // A3
+        let selectedSectors = [];
+        let spinVelocity = 0;
+        let spinAngle = 0;
+        let spinDecay = 0.98;
+        let isSpinning = false;
+        let animationId = null;
+        
+        // DOM Elements
+        const canvas = document.getElementById('spinnerCanvas');
+        const ctx = canvas.getContext('2d');
+        const spinButton = document.getElementById('spinButton');
+        const playButton = document.getElementById('playButton');
+        const helpButton = document.getElementById('helpButton');
+        const resetButton = document.getElementById('resetButton');
+        const closeHelp = document.getElementById('closeHelp');
+        const helpOverlay = document.getElementById('helpOverlay');
+        const scoreDisplay = document.getElementById('score');
+        const comboDisplay = document.getElementById('combo');
+        const chordsDisplay = document.getElementById('chords');
+        const ratioDisplay = document.getElementById('ratioDisplay');
+        const chordName = document.getElementById('chordName');
+        const noteDisplays = [
+            document.getElementById('note1'),
+            document.getElementById('note2'),
+            document.getElementById('note3'),
+            document.getElementById('note4')
+        ];
+        
+        // Audio context
+        let audioContext;
+        let masterGain;
+        
+        // Initialize the game
+        function init() {
+            setupCanvas();
+            setupEventListeners();
+            drawWheel();
+            updateUI();
+        }
+        
+        // Set up canvas dimensions
+        function setupCanvas() {
+            const size = Math.min(canvas.parentElement.clientWidth, 400);
+            canvas.width = size;
+            canvas.height = size;
+        }
+        
+        // Set up event listeners
+        function setupEventListeners() {
+            spinButton.addEventListener('click', startSpin);
+            playButton.addEventListener('click', playChord);
+            helpButton.addEventListener('click', () => helpOverlay.classList.add('active'));
+            resetButton.addEventListener('click', resetGame);
+            closeHelp.addEventListener('click', () => helpOverlay.classList.remove('active'));
+            canvas.addEventListener('click', handleCanvasClick);
+            
+            window.addEventListener('resize', () => {
+                setupCanvas();
+                drawWheel();
+            });
+        }
+        
+        // Draw the spinner wheel
+        function drawWheel() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = Math.min(centerX, centerY) * 0.9;
+            const sectorAngle = (2 * Math.PI) / 16;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw sectors
+            for (let i = 0; i < 16; i++) {
+                const startAngle = i * sectorAngle + spinAngle;
+                const endAngle = (i + 1) * sectorAngle + spinAngle;
+                
+                // Sector color
+                const isSelected = selectedSectors.includes(i);
+                const hue = (i * 360 / 16) % 360;
+                const lightness = isSelected ? 70 : 40;
+                ctx.fillStyle = `hsl(${hue}, 80%, ${lightness}%)`;
+                
+                // Draw sector
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Draw sector border
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Draw harmonic number
+                const textAngle = startAngle + sectorAngle / 2;
+                const textRadius = radius * 0.7;
+                const textX = centerX + Math.cos(textAngle) * textRadius;
+                const textY = centerY + Math.sin(textAngle) * textRadius;
+                
+                ctx.fillStyle = isSelected ? '#fff' : '#000';
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`${i + 1}x`, textX, textY);
+            }
+            
+            // Draw center circle
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius * 0.1, 0, Math.PI * 2);
+            ctx.fillStyle = '#222';
+            ctx.fill();
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+        
+        // Start spinning the wheel
+        function startSpin() {
+            if (currentState !== gameState.IDLE) return;
+            
+            currentState = gameState.SPINNING;
+            spinButton.disabled = true;
+            playButton.disabled = true;
+            
+            // Reset selections
+            selectedSectors = [];
+            updateNoteDisplays();
+            ratioDisplay.textContent = '-';
+            chordName.textContent = '-';
+            
+            // Set initial spin velocity
+            spinVelocity = 0.2 + Math.random() * 0.3;
+            isSpinning = true;
+            
+            // Start animation
+            if (animationId) cancelAnimationFrame(animationId);
+            spinAnimation();
+        }
+        
+        // Animation loop for spinning
+        function spinAnimation() {
+            if (!isSpinning) {
+                currentState = gameState.SELECTING;
+                spinButton.disabled = false;
+                playButton.disabled = false;
+                return;
+            }
+            
+            spinAngle += spinVelocity;
+            spinVelocity *= spinDecay;
+            
+            if (spinVelocity < 0.001) {
+                spinVelocity = 0;
+                isSpinning = false;
+            }
+            
+            drawWheel();
+            animationId = requestAnimationFrame(spinAnimation);
+        }
+        
+        // Handle canvas click for sector selection
+        function handleCanvasClick(event) {
+            if (currentState !== gameState.SELECTING) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const radius = Math.min(centerX, centerY) * 0.9;
+            
+            // Check if click is inside the wheel
+            if (distance > radius * 0.1 && distance < radius) {
+                const angle = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
+                const normalizedAngle = (angle - spinAngle + Math.PI * 2) % (Math.PI * 2);
+                const sectorAngle = (Math.PI * 2) / 16;
+                const sector = Math.floor(normalizedAngle / sectorAngle);
+                
+                // Toggle sector selection
+                const index = selectedSectors.indexOf(sector);
+                if (index === -1) {
+                    if (selectedSectors.length < 4) {
+                        selectedSectors.push(sector);
+                    }
+                } else {
+                    selectedSectors.splice(index, 1);
+                }
+                
+                updateNoteDisplays();
+                drawWheel();
+            }
+        }
+        
+        // Update note displays
+        function updateNoteDisplays() {
+            for (let i = 0; i < 4; i++) {
+                if (i < selectedSectors.length) {
+                    noteDisplays[i].textContent = selectedSectors[i] + 1;
+                    noteDisplays[i].classList.add('active');
+                } else {
+                    noteDisplays[i].textContent = '-';
+                    noteDisplays[i].classList.remove('active');
+                }
+            }
+        }
+        
+        // Play the selected chord
+        function playChord() {
+            if (currentState !== gameState.SELECTING || selectedSectors.length < 3) return;
+            
+            currentState = gameState.EVALUATING;
+            playButton.disabled = true;
+            
+            // Initialize audio context on first interaction
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioContext.createGain();
+                masterGain.connect(audioContext.destination);
+                masterGain.gain.value = 0.3;
+            }
+            
+            // Play the chord
+            playChordSound();
+            
+            // Evaluate the chord
+            evaluateChord();
+            
+            // Update game stats
+            chordsPlayed++;
+            chordsDisplay.textContent = chordsPlayed;
+            
+            // Return to idle state after a delay
+            setTimeout(() => {
+                currentState = gameState.IDLE;
+                playButton.disabled = false;
+            }, 2000);
+        }
+        
+        // Play the chord sound
+        function playChordSound() {
+            if (!audioContext) return;
+            
+            // Sort selected sectors for ratio calculation
+            const sortedSectors = [...selectedSectors].map(s => s + 1).sort((a, b) => a - b);
+            
+            // Create oscillators for each selected harmonic
+            const oscillators = [];
+            const now = audioContext.currentTime;
+            
+            sortedSectors.forEach((harmonic, index) => {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.value = baseFrequency * harmonic;
+                
+                // ADSR envelope
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(0.8, now + 0.02); // Attack
+                gainNode.gain.linearRampToValueAtTime(0.6, now + 0.1);  // Decay
+                gainNode.gain.setValueAtTime(0.6, now + 1.5);           // Sustain
+                gainNode.gain.linearRampToValueAtTime(0, now + 2.0);    // Release
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(masterGain);
+                
+                oscillator.start(now);
+                oscillator.stop(now + 2.0);
+                
+                oscillators.push(oscillator);
+            });
+            
+            // Add vibrato for dissonant chords
+            if (combo === 0) { // Dissonant
+                const lfo = audioContext.createOscillator();
+                const lfoGain = audioContext.createGain();
+                
+                lfo.type = 'sine';
+                lfo.frequency.value = 5 + Math.random() * 5;
+                lfoGain.gain.value = 10 + Math.random() * 15;
+                
+                lfo.connect(lfoGain);
+                lfoGain.connect(oscillators[0].frequency);
+                
+                lfo.start(now);
+                lfo.stop(now + 0.5);
+            }
+        }
+        
+        // Evaluate the chord for consonance
+        function evaluateChord() {
+            if (selectedSectors.length < 3) return;
+            
+            // Sort selected sectors for ratio calculation
+            const sortedSectors = [...selectedSectors].map(s => s + 1).sort((a, b) => a - b);
+            
+            // Calculate the ratio
+            const gcd = calculateGCD(sortedSectors);
+            const ratio = sortedSectors.map(n => n / gcd);
+            
+            // Display the ratio
+            ratioDisplay.textContent = ratio.join(':');
+            
+            // Find the closest consonant chord
+            let bestMatch = null;
+            let bestScore = 0;
+            
+            for (const chord of consonantChords) {
+                const score = calculateChordSimilarity(ratio, chord.ratio);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMatch = chord;
+                }
+            }
+            
+            // Calculate points based on similarity
+            let points = 0;
+            if (bestScore > 0.95) {
+                points = 100;
+                chordName.textContent = bestMatch.name;
+            } else if (bestScore > 0.9) {
+                points = 80;
+                chordName.textContent = bestMatch.name;
+            } else if (bestScore > 0.85) {
+                points = 60;
+                chordName.textContent = bestMatch.name;
+            } else if (bestScore > 0.8) {
+                points = 30;
+                chordName.textContent = "Almost consonant";
+            } else {
+                points = 0;
+                chordName.textContent = "Dissonant";
+                
+                // Play dissonant noise
+                playDissonance();
+            }
+            
+            // Update score and combo
+            if (points > 0) {
+                combo++;
+                score += points * combo;
+            } else {
+                combo = 0;
+            }
+            
+            scoreDisplay.textContent = score;
+            comboDisplay.textContent = combo;
+        }
+        
+        // Calculate GCD of an array
+        function calculateGCD(numbers) {
+            const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+            return numbers.reduce((acc, num) => gcd(acc, num));
+        }
+        
+        // Calculate similarity between two ratios
+        function calculateChordSimilarity(ratio1, ratio2) {
+            if (ratio1.length !== ratio2.length) return 0;
+            
+            let totalDifference = 0;
+            for (let i = 0; i < ratio1.length; i++) {
+                totalDifference += Math.abs(ratio1[i] - ratio2[i]);
+            }
+            
+            // Normalize difference (0 = perfect match, 1 = completely different)
+            const maxDifference = ratio1.reduce((sum, val) => sum + val, 0);
+            return 1 - (totalDifference / maxDifference);
+        }
+        
+        // Play dissonant noise
+        function playDissonance() {
+            if (!audioContext) return;
+            
+            const now = audioContext.currentTime;
+            const noise = audioContext.createBufferSource();
+            const buffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.5, audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            // Fill buffer with noise
+            for (let i = 0; i < buffer.length; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            
+            const gainNode = audioContext.createGain();
+            gainNode.gain.setValueAtTime(0.5, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            
+            noise.buffer = buffer;
+            noise.connect(gainNode);
+            gainNode.connect(masterGain);
+            
+            noise.start(now);
+            noise.stop(now + 0.5);
+        }
+        
+        // Update UI elements
+        function updateUI() {
+            scoreDisplay.textContent = score;
+            comboDisplay.textContent = combo;
+            chordsDisplay.textContent = chordsPlayed;
+        }
+        
+        // Reset the game
+        function resetGame() {
+            score = 0;
+            combo = 0;
+            chordsPlayed = 0;
+            selectedSectors = [];
+            spinAngle = 0;
+            spinVelocity = 0;
+            isSpinning = false;
+            currentState = gameState.IDLE;
+            
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            spinButton.disabled = false;
+            playButton.disabled = true;
+            
+            updateNoteDisplays();
+            ratioDisplay.textContent = '-';
+            chordName.textContent = '-';
+            updateUI();
+            drawWheel();
+        }
+        
+        // Initialize the game when the page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

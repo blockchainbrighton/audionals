@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chord Cascade</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            padding: 20px;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+        
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            max-width: 1000px;
+            width: 100%;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            width: 100%;
+        }
+        
+        .header h1 {
+            font-size: 2.8rem;
+            margin-bottom: 5px;
+            background: linear-gradient(to right, #ff7e5f, #feb47b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 2px;
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto 20px;
+        }
+        
+        .game-area {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+        }
+        
+        .board-container {
+            position: relative;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        #game-board {
+            display: grid;
+            grid-template-columns: repeat(10, 30px);
+            grid-template-rows: repeat(20, 30px);
+            gap: 1px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .cell {
+            width: 30px;
+            height: 30px;
+            background: rgba(30, 30, 50, 0.6);
+            border-radius: 3px;
+            transition: all 0.1s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: white;
+            font-size: 14px;
+        }
+        
+        .cell.filled {
+            box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.3);
+        }
+        
+        .cell.consonant {
+            background: linear-gradient(135deg, #00b09b, #96c93d);
+            box-shadow: 0 0 15px #00ffaa;
+            animation: pulseGreen 1.5s infinite;
+        }
+        
+        .cell.dissonant {
+            background: linear-gradient(135deg, #ff416c, #ff4b2b);
+            box-shadow: 0 0 15px #ff0000;
+            animation: pulseRed 0.5s infinite;
+        }
+        
+        .piece {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 3px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: white;
+            font-size: 14px;
+            box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.3);
+            transition: transform 0.1s ease;
+        }
+        
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 200px;
+        }
+        
+        .panel {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            color: white;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .panel h2 {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            color: #ffb347;
+            text-align: center;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        .stat {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #4dabf7;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        
+        .dissonance-meter {
+            height: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .meter-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00c9ff, #92fe9d);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .meter-fill.warning {
+            background: linear-gradient(90deg, #ff416c, #ff4b2b);
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .control-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .control-btn:active {
+            transform: translateY(1px);
+        }
+        
+        .start-screen, .game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 10;
+            border-radius: 8px;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .game-over {
+            display: none;
+        }
+        
+        .start-screen h2, .game-over h2 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: #ffb347;
+        }
+        
+        .start-screen p, .game-over p {
+            max-width: 500px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        
+        .btn {
+            background: linear-gradient(to right, #ff7e5f, #feb47b);
+            border: none;
+            color: white;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(1px);
+        }
+        
+        .instructions {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 20px;
+            color: white;
+            margin-top: 20px;
+            width: 100%;
+        }
+        
+        .instructions h3 {
+            color: #ffb347;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .instructions ul {
+            list-style-type: none;
+            padding: 0 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 10px;
+            padding-left: 25px;
+            position: relative;
+        }
+        
+        .instructions li:before {
+            content: "•";
+            color: #4dabf7;
+            font-size: 1.5rem;
+            position: absolute;
+            left: 0;
+            top: -5px;
+        }
+        
+        .key {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 0 2px;
+        }
+        
+        @keyframes pulseGreen {
+            0% { box-shadow: 0 0 5px #00ffaa; }
+            50% { box-shadow: 0 0 20px #00ffaa; }
+            100% { box-shadow: 0 0 5px #00ffaa; }
+        }
+        
+        @keyframes pulseRed {
+            0% { box-shadow: 0 0 5px #ff0000; }
+            50% { box-shadow: 0 0 20px #ff0000; }
+            100% { box-shadow: 0 0 5px #ff0000; }
+        }
+        
+        @keyframes flash {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        
+        .flash {
+            animation: flash 0.3s ease;
+        }
+        
+        @media (max-width: 768px) {
+            .game-area {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .side-panel {
+                width: 100%;
+                max-width: 400px;
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+            
+            .panel {
+                flex: 1;
+                min-width: 150px;
+            }
+            
+            #game-board {
+                grid-template-columns: repeat(10, 25px);
+                grid-template-rows: repeat(20, 25px);
+            }
+            
+            .cell, .piece {
+                width: 25px;
+                height: 25px;
+                font-size: 12px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .header p {
+                font-size: 1rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .controls {
+                grid-template-columns: 1fr 1fr;
+            }
+            
+            .control-btn {
+                padding: 8px;
+                font-size: 0.9rem;
+            }
+            
+            .side-panel {
+                flex-direction: column;
+            }
+            
+            .panel {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <h1>CHORD CASCADE</h1>
+            <p>A Tetris-inspired harmonic puzzle game. Create consonant chords to score points!</p>
+        </div>
+        
+        <div class="game-area">
+            <div class="board-container">
+                <div id="game-board"></div>
+                
+                <div class="start-screen" id="start-screen">
+                    <h2>CHORD CASCADE</h2>
+                    <p>Arrange falling musical notes to form consonant chords. When three or more notes create a valid chord, they'll lock in place and play harmoniously!</p>
+                    <button class="btn" id="start-btn">START GAME</button>
+                </div>
+                
+                <div class="game-over" id="game-over">
+                    <h2>GAME OVER</h2>
+                    <p>Your dissonance meter overflowed! Try to create more consonant chords next time.</p>
+                    <button class="btn" id="restart-btn">PLAY AGAIN</button>
+                </div>
+            </div>
+            
+            <div class="side-panel">
+                <div class="panel">
+                    <h2>GAME STATS</h2>
+                    <div class="stats">
+                        <div class="stat">
+                            <div class="stat-value" id="score">0</div>
+                            <div class="stat-label">SCORE</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="level">1</div>
+                            <div class="stat-label">LEVEL</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="chords">0</div>
+                            <div class="stat-label">CHORDS</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="dissonance">0%</div>
+                            <div class="stat-label">DISSONANCE</div>
+                        </div>
+                    </div>
+                    <div class="dissonance-meter">
+                        <div class="meter-fill" id="meter-fill"></div>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <h2>CONTROLS</h2>
+                    <div class="controls">
+                        <button class="control-btn" id="left-btn">← LEFT</button>
+                        <button class="control-btn" id="rotate-btn">↑ ROTATE</button>
+                        <button class="control-btn" id="right-btn">→ RIGHT</button>
+                        <button class="control-btn" id="down-btn">↓ DOWN</button>
+                        <button class="control-btn" id="drop-btn">DROP</button>
+                        <button class="control-btn" id="mute-btn">MUTE</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <h3>HOW TO PLAY</h3>
+            <ul>
+                <li>Notes fall from the top of the grid. Move them with <span class="key">←</span> and <span class="key">→</span></li>
+                <li>Rotate notes to change their pitch using <span class="key">↑</span> or the ROTATE button</li>
+                <li>Create consonant chords (major/minor triads, 7th chords) by stacking notes</li>
+                <li>When 3-4 notes form a valid chord, they lock in place and play harmoniously</li>
+                <li>Avoid dissonant intervals (minor 2nds, tritones) - they increase the dissonance meter</li>
+                <li>If the dissonance meter fills completely, the game ends!</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const COLS = 10;
+        const ROWS = 20;
+        const EMPTY = 'empty';
+        
+        // Note definitions
+        const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const NOTE_FREQUENCIES = {
+            'C': 261.63, 'C#': 277.18, 'D': 293.66, 'D#': 311.13, 
+            'E': 329.63, 'F': 349.23, 'F#': 369.99, 'G': 392.00, 
+            'G#': 415.30, 'A': 440.00, 'A#': 466.16, 'B': 493.88
+        };
+        
+        // Interval definitions
+        const CONSONANT_INTERVALS = [0, 3, 4, 7, 8, 9, 12]; // P1, m3, M3, P5, m6, M6, P8
+        const DISSONANT_INTERVALS = [1, 2, 6, 10, 11]; // m2, M2, tritone, m7, M7
+        
+        // Game state
+        let board = [];
+        let currentPiece = null;
+        let score = 0;
+        let level = 1;
+        let chordsFormed = 0;
+        let dissonance = 0;
+        let gameOver = false;
+        let isMuted = false;
+        let dropInterval = null;
+        let lastTime = 0;
+        let dropSpeed = 1000; // ms
+        
+        // Audio context
+        let audioContext = null;
+        let masterGain = null;
+        
+        // DOM elements
+        const gameBoard = document.getElementById('game-board');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const scoreDisplay = document.getElementById('score');
+        const levelDisplay = document.getElementById('level');
+        const chordsDisplay = document.getElementById('chords');
+        const dissonanceDisplay = document.getElementById('dissonance');
+        const meterFill = document.getElementById('meter-fill');
+        const leftBtn = document.getElementById('left-btn');
+        const rightBtn = document.getElementById('right-btn');
+        const rotateBtn = document.getElementById('rotate-btn');
+        const downBtn = document.getElementById('down-btn');
+        const dropBtn = document.getElementById('drop-btn');
+        const muteBtn = document.getElementById('mute-btn');
+        
+        // Initialize the game board
+        function initBoard() {
+            board = [];
+            gameBoard.innerHTML = '';
+            
+            for (let row = 0; row < ROWS; row++) {
+                board[row] = [];
+                for (let col = 0; col < COLS; col++) {
+                    board[row][col] = EMPTY;
+                    
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    gameBoard.appendChild(cell);
+                }
+            }
+        }
+        
+        // Create a new piece
+        function createPiece() {
+            const noteIndex = Math.floor(Math.random() * NOTES.length);
+            const note = NOTES[noteIndex];
+            
+            currentPiece = {
+                note: note,
+                row: 0, // Start at the top row
+                col: Math.floor(COLS / 2),
+                element: null
+            };
+            
+            // Create visual element for the piece
+            const pieceElement = document.createElement('div');
+            pieceElement.className = 'piece';
+            pieceElement.textContent = note;
+            pieceElement.style.backgroundColor = getColorForNote(note);
+            pieceElement.style.color = 'white';
+            pieceElement.style.fontWeight = 'bold';
+            
+            gameBoard.appendChild(pieceElement);
+            currentPiece.element = pieceElement;
+            
+            updatePiecePosition();
+            
+            // Play preview sound
+            if (!isMuted && audioContext) {
+                playNote(note, 0.1, 0.1);
+            }
+        }
+        
+        // Update piece position on the board
+        function updatePiecePosition() {
+            if (!currentPiece) return;
+            
+            // Position absolutely within the board container
+            currentPiece.element.style.transform = `translate(${currentPiece.col * 30}px, ${currentPiece.row * 30}px)`;
+        }
+        
+        // Move piece left
+        function moveLeft() {
+            if (!currentPiece || gameOver) return;
+            
+            if (currentPiece.col > 0 && board[currentPiece.row][currentPiece.col - 1] === EMPTY) {
+                currentPiece.col--;
+                updatePiecePosition();
+                
+                // Play preview sound
+                if (!isMuted && audioContext) {
+                    playNote(currentPiece.note, 0.1, 0.1);
+                }
+            }
+        }
+        
+        // Move piece right
+        function moveRight() {
+            if (!currentPiece || gameOver) return;
+            
+            if (currentPiece.col < COLS - 1 && board[currentPiece.row][currentPiece.col + 1] === EMPTY) {
+                currentPiece.col++;
+                updatePiecePosition();
+                
+                // Play preview sound
+                if (!isMuted && audioContext) {
+                    playNote(currentPiece.note, 0.1, 0.1);
+                }
+            }
+        }
+        
+        // Rotate piece (change note)
+        function rotatePiece() {
+            if (!currentPiece || gameOver) return;
+            
+            const currentIndex = NOTES.indexOf(currentPiece.note);
+            const newIndex = (currentIndex + 1) % NOTES.length;
+            currentPiece.note = NOTES[newIndex];
+            
+            currentPiece.element.textContent = currentPiece.note;
+            currentPiece.element.style.backgroundColor = getColorForNote(currentPiece.note);
+            
+            // Play preview sound
+            if (!isMuted && audioContext) {
+                playNote(currentPiece.note, 0.1, 0.1);
+            }
+        }
+        
+        // Move piece down
+        function moveDown() {
+            if (!currentPiece || gameOver) return;
+            
+            if (canMoveDown()) {
+                currentPiece.row++;
+                updatePiecePosition();
+            } else {
+                lockPiece();
+            }
+        }
+        
+        // Hard drop
+        function hardDrop() {
+            if (!currentPiece || gameOver) return;
+            
+            while (canMoveDown()) {
+                currentPiece.row++;
+            }
+            updatePiecePosition();
+            lockPiece();
+        }
+        
+        // Check if piece can move down
+        function canMoveDown() {
+            if (currentPiece.row >= ROWS - 1) return false;
+            if (board[currentPiece.row + 1][currentPiece.col] !== EMPTY) return false;
+            return true;
+        }
+        
+        // Lock piece in place
+        function lockPiece() {
+            if (!currentPiece) return;
+            
+            // Place piece on the board
+            board[currentPiece.row][currentPiece.col] = currentPiece.note;
+            
+            // Update the cell visually
+            const cell = document.querySelector(`.cell[data-row="${currentPiece.row}"][data-col="${currentPiece.col}"]`);
+            cell.className = 'cell filled';
+            cell.textContent = currentPiece.note;
+            cell.style.backgroundColor = getColorForNote(currentPiece.note);
+            
+            // Remove the piece element
+            if (currentPiece.element) {
+                gameBoard.removeChild(currentPiece.element);
+            }
+            
+            // Remove the piece reference
+            currentPiece = null;
+            
+            // Check for completed chords
+            checkForChords();
+            
+            // Check for dissonant intervals
+            checkForDissonance();
+            
+            // Check for game over
+            if (isGameOver()) {
+                endGame();
+                return;
+            }
+            
+            // Create a new piece
+            createPiece();
+        }
+        
+        // Check for completed chords
+        function checkForChords() {
+            // Check each column for potential chords
+            for (let col = 0; col < COLS; col++) {
+                const stack = [];
+                const elements = [];
+                
+                // Collect notes in the column from bottom up
+                for (let row = ROWS - 1; row >= 0; row--) {
+                    if (board[row][col] !== EMPTY) {
+                        stack.push(board[row][col]);
+                        elements.push(document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`));
+                    } else {
+                        break;
+                    }
+                }
+                
+                // Check if we have a valid chord (3-4 notes)
+                if (stack.length >= 3 && stack.length <= 4) {
+                    if (isConsonantChord(stack)) {
+                        // Lock the chord
+                        elements.forEach(el => {
+                            el.classList.add('consonant');
+                            el.classList.remove('dissonant');
+                        });
+                        
+                        // Play chord sound
+                        if (!isMuted && audioContext) {
+                            playChord(stack);
+                        }
+                        
+                        // Update score
+                        const points = stack.length * 100 * level;
+                        score += points;
+                        chordsFormed++;
+                        updateStats();
+                        
+                        // Flash effect
+                        elements.forEach(el => el.classList.add('flash'));
+                        setTimeout(() => {
+                            elements.forEach(el => el.classList.remove('flash'));
+                        }, 300);
+                        
+                        // Remove the chord from the board
+                        setTimeout(() => {
+                            stack.forEach((_, index) => {
+                                const row = ROWS - 1 - index;
+                                board[row][col] = EMPTY;
+                                const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                                cell.className = 'cell';
+                                cell.textContent = '';
+                            });
+                            
+                            // Drop pieces above
+                            dropPiecesAbove(col);
+                        }, 500);
+                    }
+                }
+            }
+        }
+        
+        // Check for dissonant intervals
+        function checkForDissonance() {
+            for (let col = 0; col < COLS; col++) {
+                const stack = [];
+                const elements = [];
+                
+                // Collect notes in the column from bottom up
+                for (let row = ROWS - 1; row >= 0; row--) {
+                    if (board[row][col] !== EMPTY) {
+                        stack.push(board[row][col]);
+                        elements.push(document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`));
+                    } else {
+                        break;
+                    }
+                }
+                
+                // Check for dissonant intervals in the stack
+                let hasDissonance = false;
+                for (let i = 0; i < stack.length - 1; i++) {
+                    const note1 = stack[i];
+                    const note2 = stack[i + 1];
+                    const interval = getInterval(note1, note2);
+                    
+                    if (DISSONANT_INTERVALS.includes(interval)) {
+                        hasDissonance = true;
+                        break;
+                    }
+                }
+                
+                if (hasDissonance && stack.length > 1) {
+                    // Mark as dissonant
+                    elements.forEach(el => {
+                        el.classList.add('dissonant');
+                        el.classList.remove('consonant');
+                    });
+                    
+                    // Play dissonant sound
+                    if (!isMuted && audioContext) {
+                        playDissonance(stack);
+                    }
+                    
+                    // Increase dissonance meter
+                    dissonance += 5;
+                    if (dissonance > 100) dissonance = 100;
+                    updateStats();
+                    
+                    // Flash effect
+                    elements.forEach(el => el.classList.add('flash'));
+                    setTimeout(() => {
+                        elements.forEach(el => el.classList.remove('flash'));
+                    }, 300);
+                }
+            }
+        }
+        
+        // Drop pieces above after chord removal
+        function dropPiecesAbove(col) {
+            for (let row = ROWS - 1; row >= 0; row--) {
+                if (board[row][col] === EMPTY) {
+                    // Find the next piece above to drop
+                    for (let r = row - 1; r >= 0; r--) {
+                        if (board[r][col] !== EMPTY) {
+                            // Move the piece down
+                            board[row][col] = board[r][col];
+                            board[r][col] = EMPTY;
+                            
+                            // Update visual elements
+                            const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                            const aboveCell = document.querySelector(`.cell[data-row="${r}"][data-col="${col}"]`);
+                            
+                            cell.className = 'cell filled';
+                            cell.textContent = board[row][col];
+                            cell.style.backgroundColor = getColorForNote(board[row][col]);
+                            
+                            aboveCell.className = 'cell';
+                            aboveCell.textContent = '';
+                            
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check if a chord is consonant
+        function isConsonantChord(notes) {
+            // For simplicity, we'll check if all intervals are consonant
+            for (let i = 0; i < notes.length - 1; i++) {
+                for (let j = i + 1; j < notes.length; j++) {
+                    const interval = getInterval(notes[i], notes[j]);
+                    if (!CONSONANT_INTERVALS.includes(interval)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        
+        // Calculate interval between two notes
+        function getInterval(note1, note2) {
+            const index1 = NOTES.indexOf(note1);
+            const index2 = NOTES.indexOf(note2);
+            const diff = Math.abs(index1 - index2);
+            return diff;
+        }
+        
+        // Check if game is over
+        function isGameOver() {
+            // Game over if any piece is at the top row
+            for (let col = 0; col < COLS; col++) {
+                if (board[0][col] !== EMPTY) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // End the game
+        function endGame() {
+            gameOver = true;
+            gameOverScreen.style.display = 'flex';
+            clearInterval(dropInterval);
+        }
+        
+        // Update game stats display
+        function updateStats() {
+            scoreDisplay.textContent = score;
+            levelDisplay.textContent = level;
+            chordsDisplay.textContent = chordsFormed;
+            dissonanceDisplay.textContent = `${dissonance}%`;
+            
+            // Update dissonance meter
+            meterFill.style.width = `${dissonance}%`;
+            if (dissonance > 70) {
+                meterFill.classList.add('warning');
+            } else {
+                meterFill.classList.remove('warning');
+            }
+            
+            // Level up every 5 chords
+            const newLevel = Math.floor(chordsFormed / 5) + 1;
+            if (newLevel > level) {
+                level = newLevel;
+                dropSpeed = Math.max(100, 1000 - (level - 1) * 100);
+                updateStats();
+            }
+        }
+        
+        // Get color for a note
+        function getColorForNote(note) {
+            const colors = {
+                'C': '#FF6B6B',
+                'C#': '#FF8E53',
+                'D': '#FFD166',
+                'D#': '#06D6A0',
+                'E': '#118AB2',
+                'F': '#073B4C',
+                'F#': '#9B5DE5',
+                'G': '#F15BB5',
+                'G#': '#FEE440',
+                'A': '#00BBF9',
+                'A#': '#9B5DE5',
+                'B': '#F15BB5'
+            };
+            return colors[note] || '#666';
+        }
+        
+        // Audio functions
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioContext.createGain();
+                masterGain.connect(audioContext.destination);
+                masterGain.gain.value = 0.3;
+            }
+        }
+        
+        function playNote(note, duration = 0.5, volume = 0.5) {
+            if (!audioContext || isMuted) return;
+            
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.type = 'triangle';
+            oscillator.frequency.value = NOTE_FREQUENCIES[note];
+            
+            gainNode.gain.value = volume;
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(masterGain);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + duration);
+        }
+        
+        function playChord(notes) {
+            if (!audioContext || isMuted) return;
+            
+            const duration = 1.0;
+            const now = audioContext.currentTime;
+            
+            notes.forEach((note, index) => {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.value = NOTE_FREQUENCIES[note];
+                
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(masterGain);
+                
+                oscillator.start(now);
+                oscillator.stop(now + duration);
+            });
+        }
+        
+        function playDissonance(notes) {
+            if (!audioContext || isMuted) return;
+            
+            const duration = 0.5;
+            const now = audioContext.currentTime;
+            
+            notes.forEach((note, index) => {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                // Add detune for dissonance effect
+                const detune = (Math.random() * 50) - 25; // -25 to +25 cents
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.value = NOTE_FREQUENCIES[note] * Math.pow(2, detune / 1200);
+                
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(masterGain);
+                
+                oscillator.start(now);
+                oscillator.stop(now + duration);
+            });
+        }
+        
+        // Toggle mute
+        function toggleMute() {
+            isMuted = !isMuted;
+            muteBtn.textContent = isMuted ? 'UNMUTE' : 'MUTE';
+        }
+        
+        // Game loop
+        function gameLoop(timestamp) {
+            if (gameOver) return;
+            
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = timestamp - lastTime;
+            
+            if (deltaTime > dropSpeed) {
+                moveDown();
+                lastTime = timestamp;
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start the game
+        function startGame() {
+            // Reset game state
+            score = 0;
+            level = 1;
+            chordsFormed = 0;
+            dissonance = 0;
+            gameOver = false;
+            dropSpeed = 1000;
+            
+            // Hide screens
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            
+            // Initialize board
+            initBoard();
+            updateStats();
+            
+            // Create first piece
+            createPiece();
+            
+            // Start game loop
+            lastTime = 0;
+            requestAnimationFrame(gameLoop);
+            
+            // Initialize audio
+            initAudio();
+        }
+        
+        // Event listeners
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', startGame);
+        
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (gameOver) return;
+            
+            switch (e.key) {
+                case 'ArrowLeft':
+                    moveLeft();
+                    break;
+                case 'ArrowRight':
+                    moveRight();
+                    break;
+                case 'ArrowUp':
+                    rotatePiece();
+                    break;
+                case 'ArrowDown':
+                    moveDown();
+                    break;
+                case ' ':
+                    hardDrop();
+                    break;
+            }
+        });
+        
+        // Button controls
+        leftBtn.addEventListener('click', moveLeft);
+        rightBtn.addEventListener('click', moveRight);
+        rotateBtn.addEventListener('click', rotatePiece);
+        downBtn.addEventListener('click', moveDown);
+        dropBtn.addEventListener('click', hardDrop);
+        muteBtn.addEventListener('click', toggleMute);
+        
+        // Initialize the board for display
+        initBoard();
+    </script>
+</body>
+</html>

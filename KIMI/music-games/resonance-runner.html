@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resonance Runner</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            color: #fff;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            height: 500px;
+            box-shadow: 0 0 30px rgba(0, 150, 255, 0.4);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        canvas {
+            background: #0f3460;
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 20px;
+            pointer-events: none;
+        }
+        
+        #scoreDisplay {
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 0 0 5px rgba(0, 200, 255, 0.8);
+        }
+        
+        #comboDisplay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 20px;
+            color: #ffcc00;
+            text-shadow: 0 0 5px rgba(255, 204, 0, 0.5);
+        }
+        
+        #distanceDisplay {
+            position: absolute;
+            top: 50px;
+            right: 20px;
+            font-size: 18px;
+            color: #00ff9d;
+        }
+        
+        #chordDisplay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        
+        #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+        
+        #gameOverScreen.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #4cc9f0;
+            text-shadow: 0 0 10px rgba(76, 201, 240, 0.7);
+        }
+        
+        h2 {
+            font-size: 32px;
+            margin-bottom: 30px;
+            color: #f72585;
+        }
+        
+        p {
+            font-size: 20px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        #finalScore {
+            font-size: 28px;
+            font-weight: bold;
+            color: #4cc9f0;
+            margin: 20px 0;
+        }
+        
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        
+        .btn {
+            background: linear-gradient(to right, #4361ee, #3a0ca3);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            border-radius: 50px;
+            margin-top: 30px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s;
+            pointer-events: all;
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(to right, #4895ef, #4361ee);
+        }
+        
+        .btn:active {
+            transform: translateY(1px);
+        }
+        
+        .instructions {
+            max-width: 80%;
+            text-align: center;
+            margin: 20px 0;
+            line-height: 1.6;
+            color: #a9d6e5;
+        }
+        
+        .key {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid #4cc9f0;
+            border-radius: 5px;
+            padding: 2px 8px;
+            margin: 0 3px;
+        }
+        
+        .mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            display: none;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+        
+        .mobile-btn {
+            width: 80px;
+            height: 80px;
+            background: rgba(76, 201, 240, 0.3);
+            border: 2px solid #4cc9f0;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: white;
+            font-weight: bold;
+        }
+        
+        @media (max-width: 850px) {
+            #gameContainer {
+                width: 95vw;
+                height: 70vh;
+            }
+            
+            .mobile-controls {
+                display: flex;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui">
+            <div id="scoreDisplay">Score: 0</div>
+            <div id="comboDisplay">Combo: 0</div>
+            <div id="distanceDisplay">Distance: 0m</div>
+            <div id="chordDisplay"></div>
+        </div>
+        
+        <div id="gameOverScreen">
+            <h2>Harmony Disrupted!</h2>
+            <p>Your musical journey has ended</p>
+            <div id="finalScore">Score: 0</div>
+            <button id="restartButton" class="btn">Play Again</button>
+        </div>
+        
+        <div id="startScreen">
+            <h1>RESONANCE RUNNER</h1>
+            <p class="instructions">Collect musical notes to form harmonious chords. Consonant chords speed you up, while dissonant ones create obstacles!</p>
+            <p class="instructions">Controls: <span class="key">SPACE</span> to jump, <span class="key">↑</span><span class="key">↓</span> to change lanes</p>
+            <button id="startButton" class="btn">Start Harmony</button>
+        </div>
+        
+        <div class="mobile-controls">
+            <div class="mobile-btn" id="jumpBtn">JUMP</div>
+            <div class="mobile-btn" id="switchBtn">SWITCH</div>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const LANE_HEIGHT = 100;
+        const PLAYER_WIDTH = 40;
+        const PLAYER_HEIGHT = 60;
+        const GRAVITY = 0.8;
+        const JUMP_FORCE = -15;
+        const GROUND_Y = 400;
+        const ORB_RADIUS = 20;
+        const OBSTACLE_WIDTH = 30;
+        const OBSTACLE_HEIGHT = 60;
+        const GAME_SPEED = 5;
+        const CONSONANT_BONUS = 3;
+        const DISONANT_PENALTY = 2;
+        
+        // Musical constants
+        const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const NOTE_COLORS = {
+            'C': '#FF5252', 'C#': '#FF4081', 'D': '#E040FB', 'D#': '#7C4DFF',
+            'E': '#536DFE', 'F': '#448AFF', 'F#': '#40C4FF', 'G': '#18FFFF',
+            'G#': '#64FFDA', 'A': '#69F0AE', 'A#': '#B2FF59', 'B': '#EEFF41'
+        };
+        
+        // Consonant triads (major and minor)
+        const CONSONANT_TRIADS = [
+            [0, 4, 7],   // C major
+            [0, 3, 7],   // C minor
+            [2, 6, 9],   // D minor
+            [4, 7, 11],  // E minor
+            [5, 9, 0],   // F major
+            [7, 11, 2],  // G major
+            [9, 0, 4],   // A minor
+            [11, 2, 5]   // B diminished (treated as consonant for gameplay)
+        ];
+        
+        // Dissonant intervals
+        const DISSONANT_INTERVALS = [1, 2, 6, 10]; // m2, M2, tritone, m7
+        
+        // Game state
+        const GAME_STATES = {
+            START: 'start',
+            PLAY: 'play',
+            GAMEOVER: 'gameover'
+        };
+        
+        // Game variables
+        let gameState = GAME_STATES.START;
+        let canvas, ctx;
+        let player;
+        let orbs = [];
+        let obstacles = [];
+        let score = 0;
+        let combo = 0;
+        let distance = 0;
+        let collectedNotes = [];
+        let gameSpeed = GAME_SPEED;
+        let frameCount = 0;
+        let lastTime = 0;
+        let audioEngine;
+        
+        // DOM elements
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const comboDisplay = document.getElementById('comboDisplay');
+        const distanceDisplay = document.getElementById('distanceDisplay');
+        const chordDisplay = document.getElementById('chordDisplay');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        const startScreen = document.getElementById('startScreen');
+        const startButton = document.getElementById('startButton');
+        const restartButton = document.getElementById('restartButton');
+        const jumpBtn = document.getElementById('jumpBtn');
+        const switchBtn = document.getElementById('switchBtn');
+        
+        // Initialize the game
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            resizeCanvas();
+            
+            // Create audio engine
+            audioEngine = new AudioEngine();
+            
+            // Create player
+            player = new Runner(100, GROUND_Y - PLAYER_HEIGHT);
+            
+            // Event listeners
+            window.addEventListener('resize', resizeCanvas);
+            window.addEventListener('keydown', handleKeyDown);
+            startButton.addEventListener('click', startGame);
+            restartButton.addEventListener('click', startGame);
+            jumpBtn.addEventListener('click', () => player.jump());
+            switchBtn.addEventListener('click', () => player.switchLane());
+            
+            // Start game loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Resize canvas to fit container
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        
+        // Start the game
+        function startGame() {
+            gameState = GAME_STATES.PLAY;
+            startScreen.style.display = 'none';
+            gameOverScreen.classList.remove('visible');
+            
+            // Reset game state
+            player = new Runner(100, GROUND_Y - PLAYER_HEIGHT);
+            orbs = [];
+            obstacles = [];
+            score = 0;
+            combo = 0;
+            distance = 0;
+            collectedNotes = [];
+            gameSpeed = GAME_SPEED;
+            frameCount = 0;
+            
+            updateUI();
+        }
+        
+        // Handle keyboard input
+        function handleKeyDown(e) {
+            if (gameState !== GAME_STATES.PLAY) return;
+            
+            switch(e.code) {
+                case 'Space':
+                    player.jump();
+                    break;
+                case 'ArrowUp':
+                    player.switchLane(-1);
+                    break;
+                case 'ArrowDown':
+                    player.switchLane(1);
+                    break;
+            }
+        }
+        
+        // Main game loop
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background
+            drawBackground();
+            
+            if (gameState === GAME_STATES.PLAY) {
+                updateGame(deltaTime);
+            }
+            
+            drawGame();
+            
+            // Draw ground
+            ctx.fillStyle = '#2a5a7a';
+            ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Update game state
+        function updateGame(deltaTime) {
+            frameCount++;
+            distance += gameSpeed / 10;
+            
+            // Update player
+            player.update();
+            
+            // Generate orbs
+            if (frameCount % 60 === 0) {
+                generateOrb();
+            }
+            
+            // Generate obstacles after dissonant chords
+            if (frameCount % 90 === 0 && Math.random() > 0.7) {
+                generateObstacle();
+            }
+            
+            // Update orbs
+            for (let i = orbs.length - 1; i >= 0; i--) {
+                orbs[i].update();
+                
+                // Remove off-screen orbs
+                if (orbs[i].x < -50) {
+                    orbs.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with player
+                if (checkCollision(player, orbs[i])) {
+                    collectOrb(orbs[i]);
+                    orbs.splice(i, 1);
+                }
+            }
+            
+            // Update obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].update();
+                
+                // Remove off-screen obstacles
+                if (obstacles[i].x < -50) {
+                    obstacles.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with player
+                if (checkCollision(player, obstacles[i])) {
+                    gameOver();
+                }
+            }
+            
+            // Gradually increase difficulty
+            if (frameCount % 500 === 0) {
+                gameSpeed += 0.2;
+            }
+            
+            updateUI();
+        }
+        
+        // Draw everything
+        function drawGame() {
+            // Draw player
+            player.draw(ctx);
+            
+            // Draw orbs
+            orbs.forEach(orb => orb.draw(ctx));
+            
+            // Draw obstacles
+            obstacles.forEach(obstacle => obstacle.draw(ctx));
+        }
+        
+        // Draw parallax background
+        function drawBackground() {
+            // Sky gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#0f3460');
+            gradient.addColorStop(1, '#1a1a2e');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Stars
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            for (let i = 0; i < 100; i++) {
+                const x = (i * 37) % canvas.width;
+                const y = (i * 57) % (canvas.height * 0.6);
+                const size = Math.sin(frameCount * 0.01 + i) * 1.5 + 1.5;
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Distant mountains
+            ctx.fillStyle = 'rgba(30, 40, 80, 0.7)';
+            ctx.beginPath();
+            ctx.moveTo(0, GROUND_Y);
+            for (let i = 0; i < canvas.width; i += 20) {
+                const height = Math.sin(i * 0.02 + frameCount * 0.005) * 30 + 100;
+                ctx.lineTo(i, GROUND_Y - height);
+            }
+            ctx.lineTo(canvas.width, GROUND_Y);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Closer hills
+            ctx.fillStyle = 'rgba(40, 50, 100, 0.5)';
+            ctx.beginPath();
+            ctx.moveTo(0, GROUND_Y);
+            for (let i = 0; i < canvas.width; i += 15) {
+                const height = Math.sin(i * 0.03 + frameCount * 0.008) * 20 + 70;
+                ctx.lineTo(i, GROUND_Y - height);
+            }
+            ctx.lineTo(canvas.width, GROUND_Y);
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        // Generate a new orb
+        function generateOrb() {
+            const lane = Math.floor(Math.random() * 3);
+            const noteIndex = Math.floor(Math.random() * 12);
+            const note = NOTES[noteIndex];
+            
+            orbs.push(new Orb(
+                canvas.width + 50,
+                GROUND_Y - LANE_HEIGHT * (lane + 1) + LANE_HEIGHT / 2,
+                note,
+                noteIndex
+            ));
+        }
+        
+        // Generate a new obstacle
+        function generateObstacle() {
+            const lane = Math.floor(Math.random() * 3);
+            obstacles.push(new Obstacle(
+                canvas.width + 50,
+                GROUND_Y - LANE_HEIGHT * (lane + 1) + (LANE_HEIGHT - OBSTACLE_HEIGHT) / 2
+            ));
+        }
+        
+        // Collect an orb
+        function collectOrb(orb) {
+            // Play note sound
+            audioEngine.playNote(orb.noteIndex);
+            
+            // Add to collected notes
+            collectedNotes.push(orb.noteIndex);
+            
+            // Update score
+            score += 10;
+            
+            // Check for triad completion
+            if (collectedNotes.length === 3) {
+                checkChord();
+            }
+        }
+        
+        // Check if collected notes form a chord
+        function checkChord() {
+            // Normalize notes to C major scale (0-11)
+            const normalizedNotes = collectedNotes.map(note => note % 12);
+            normalizedNotes.sort((a, b) => a - b);
+            
+            // Calculate intervals
+            const intervals = [
+                (normalizedNotes[1] - normalizedNotes[0] + 12) % 12,
+                (normalizedNotes[2] - normalizedNotes[1] + 12) % 12,
+                (normalizedNotes[2] - normalizedNotes[0] + 12) % 12
+            ];
+            
+            // Check if it's a consonant triad
+            let isConsonant = false;
+            for (const triad of CONSONANT_TRIADS) {
+                const sortedTriad = [...triad].sort((a, b) => a - b);
+                if (arraysEqual(normalizedNotes, sortedTriad)) {
+                    isConsonant = true;
+                    break;
+                }
+            }
+            
+            // Check if it contains dissonant intervals
+            let isDissonant = false;
+            for (const interval of intervals) {
+                if (DISSONANT_INTERVALS.includes(interval)) {
+                    isDissonant = true;
+                    break;
+                }
+            }
+            
+            // Display chord name
+            const rootNote = NOTES[normalizedNotes[0]];
+            const chordName = isConsonant ? `${rootNote} ${intervals[0] === 4 ? 'Major' : 'Minor'} Triad` : 'Dissonant Chord';
+            showChordDisplay(chordName, isConsonant);
+            
+            if (isConsonant && !isDissonant) {
+                // Consonant chord - bonus speed and visual effect
+                gameSpeed += CONSONANT_BONUS;
+                combo++;
+                score += combo * 50;
+                audioEngine.playChord(collectedNotes, true);
+                createBloomEffect();
+            } else if (isDissonant) {
+                // Dissonant chord - spawn obstacles
+                gameSpeed = Math.max(GAME_SPEED, gameSpeed - DISONANT_PENALTY);
+                combo = 0;
+                audioEngine.playChord(collectedNotes, false);
+                for (let i = 0; i < 3; i++) {
+                    generateObstacle();
+                }
+            } else {
+                // Neutral chord
+                combo = 0;
+                audioEngine.playChord(collectedNotes, false);
+            }
+            
+            // Reset collected notes
+            collectedNotes = [];
+        }
+        
+        // Show chord display
+        function showChordDisplay(chordName, isConsonant) {
+            chordDisplay.textContent = chordName;
+            chordDisplay.style.color = isConsonant ? '#69F0AE' : '#FF5252';
+            chordDisplay.style.opacity = '1';
+            
+            setTimeout(() => {
+                chordDisplay.style.opacity = '0';
+            }, 1500);
+        }
+        
+        // Create visual bloom effect
+        function createBloomEffect() {
+            const bloom = document.createElement('div');
+            bloom.style.position = 'absolute';
+            bloom.style.top = '0';
+            bloom.style.left = '0';
+            bloom.style.width = '100%';
+            bloom.style.height = '100%';
+            bloom.style.background = 'radial-gradient(circle, rgba(105, 240, 174, 0.4) 0%, transparent 70%)';
+            bloom.style.pointerEvents = 'none';
+            bloom.style.animation = 'fadeOut 1s forwards';
+            
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes fadeOut {
+                    0% { opacity: 1; }
+                    100% { opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+            
+            document.getElementById('gameContainer').appendChild(bloom);
+            
+            setTimeout(() => {
+                bloom.remove();
+                style.remove();
+            }, 1000);
+        }
+        
+        // Check collision between two objects
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+        
+        // Compare two arrays
+        function arraysEqual(a, b) {
+            return a.length === b.length && a.every((val, index) => val === b[index]);
+        }
+        
+        // Update UI elements
+        function updateUI() {
+            scoreDisplay.textContent = `Score: ${score}`;
+            comboDisplay.textContent = `Combo: ${combo}`;
+            distanceDisplay.textContent = `Distance: ${Math.floor(distance)}m`;
+        }
+        
+        // Game over
+        function gameOver() {
+            gameState = GAME_STATES.GAMEOVER;
+            finalScoreDisplay.textContent = `Score: ${score}`;
+            gameOverScreen.classList.add('visible');
+            audioEngine.playGameOver();
+        }
+        
+        // Runner class
+        class Runner {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = PLAYER_WIDTH;
+                this.height = PLAYER_HEIGHT;
+                this.velocityY = 0;
+                this.lane = 1; // 0, 1, 2 (top to bottom)
+                this.targetLane = 1;
+                this.isJumping = false;
+                this.jumpCooldown = 0;
+            }
+            
+            update() {
+                // Apply gravity
+                if (this.y < GROUND_Y - this.height) {
+                    this.velocityY += GRAVITY;
+                    this.y += this.velocityY;
+                } else {
+                    this.y = GROUND_Y - this.height;
+                    this.velocityY = 0;
+                    this.isJumping = false;
+                }
+                
+                // Lane switching
+                if (this.lane !== this.targetLane) {
+                    const targetY = GROUND_Y - LANE_HEIGHT * (this.targetLane + 1) + (LANE_HEIGHT - this.height) / 2;
+                    this.y += (targetY - this.y) * 0.2;
+                    
+                    if (Math.abs(this.y - targetY) < 1) {
+                        this.lane = this.targetLane;
+                        this.y = targetY;
+                    }
+                }
+                
+                // Jump cooldown
+                if (this.jumpCooldown > 0) {
+                    this.jumpCooldown--;
+                }
+            }
+            
+            draw(ctx) {
+                // Draw player body
+                ctx.fillStyle = '#4cc9f0';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Draw player details
+                ctx.fillStyle = '#3a0ca3';
+                ctx.fillRect(this.x + 5, this.y + 5, this.width - 10, 10); // Head
+                ctx.fillRect(this.x + 5, this.y + 20, this.width - 10, 5); // Body line
+                ctx.fillRect(this.x + 5, this.y + 30, 8, 20); // Left leg
+                ctx.fillRect(this.x + this.width - 13, this.y + 30, 8, 20); // Right leg
+                
+                // Draw musical note on player
+                ctx.fillStyle = '#f72585';
+                ctx.beginPath();
+                ctx.arc(this.x + this.width - 10, this.y + 15, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(this.x + this.width - 10, this.y + 25, 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            jump() {
+                if (!this.isJumping && this.jumpCooldown <= 0) {
+                    this.velocityY = JUMP_FORCE;
+                    this.isJumping = true;
+                    this.jumpCooldown = 15;
+                }
+            }
+            
+            switchLane(direction) {
+                const newLane = this.targetLane + direction;
+                if (newLane >= 0 && newLane <= 2) {
+                    this.targetLane = newLane;
+                }
+            }
+        }
+        
+        // Orb class
+        class Orb {
+            constructor(x, y, note, noteIndex) {
+                this.x = x;
+                this.y = y;
+                this.radius = ORB_RADIUS;
+                this.width = ORB_RADIUS * 2;
+                this.height = ORB_RADIUS * 2;
+                this.note = note;
+                this.noteIndex = noteIndex;
+                this.color = NOTE_COLORS[note];
+                this.oscillation = Math.random() * Math.PI * 2;
+            }
+            
+            update() {
+                this.x -= gameSpeed;
+                this.oscillation += 0.05;
+                this.y += Math.sin(this.oscillation) * 0.5;
+            }
+            
+            draw(ctx) {
+                // Draw orb
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw note label
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 16px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.note, this.x, this.y);
+                
+                // Draw glow
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+        
+        // Obstacle class
+        class Obstacle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = OBSTACLE_WIDTH;
+                this.height = OBSTACLE_HEIGHT;
+            }
+            
+            update() {
+                this.x -= gameSpeed;
+            }
+            
+            draw(ctx) {
+                // Draw obstacle
+                ctx.fillStyle = '#f72585';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Draw musical sharp symbol
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('♯', this.x + this.width/2, this.y + this.height/2);
+            }
+        }
+        
+        // Audio Engine class
+        class AudioEngine {
+            constructor() {
+                this.audioContext = null;
+                this.initAudio();
+            }
+            
+            initAudio() {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (e) {
+                    console.error('Web Audio API is not supported in this browser');
+                }
+            }
+            
+            // Play a single note
+            playNote(noteIndex) {
+                if (!this.audioContext) return;
+                
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                
+                // Calculate frequency (C4 = 261.63 Hz)
+                const frequency = 261.63 * Math.pow(2, noteIndex / 12);
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.value = frequency;
+                
+                gainNode.gain.value = 0.2;
+                gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.3);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+                
+                oscillator.start();
+                oscillator.stop(this.audioContext.currentTime + 0.3);
+            }
+            
+            // Play a chord
+            playChord(notes, isConsonant) {
+                if (!this.audioContext) return;
+                
+                const now = this.audioContext.currentTime;
+                const duration = isConsonant ? 1.0 : 0.7;
+                
+                notes.forEach((noteIndex, i) => {
+                    const oscillator = this.audioContext.createOscillator();
+                    const gainNode = this.audioContext.createGain();
+                    
+                    // Calculate frequency
+                    const frequency = 261.63 * Math.pow(2, noteIndex / 12);
+                    
+                    // For dissonant chords, add slight pitch variance for beating effect
+                    let finalFrequency = frequency;
+                    if (!isConsonant) {
+                        finalFrequency = frequency * (1 + (Math.random() * 0.02 - 0.01));
+                    }
+                    
+                    oscillator.type = 'triangle';
+                    oscillator.frequency.value = finalFrequency;
+                    
+                    // ADSR envelope
+                    gainNode.gain.setValueAtTime(0, now);
+                    gainNode.gain.linearRampToValueAtTime(0.15, now + 0.02);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration);
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(this.audioContext.destination);
+                    
+                    oscillator.start(now);
+                    oscillator.stop(now + duration);
+                });
+            }
+            
+            // Play game over sound
+            playGameOver() {
+                if (!this.audioContext) return;
+                
+                const now = this.audioContext.currentTime;
+                
+                // Play descending notes
+                for (let i = 0; i < 4; i++) {
+                    const oscillator = this.audioContext.createOscillator();
+                    const gainNode = this.audioContext.createGain();
+                    
+                    oscillator.type = 'sine';
+                    oscillator.frequency.value = 300 - i * 50;
+                    
+                    gainNode.gain.setValueAtTime(0, now);
+                    gainNode.gain.linearRampToValueAtTime(0.2, now + 0.02);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(this.audioContext.destination);
+                    
+                    oscillator.start(now + i * 0.1);
+                    oscillator.stop(now + 0.5 + i * 0.1);
+                }
+            }
+        }
+        
+        // Initialize the game when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

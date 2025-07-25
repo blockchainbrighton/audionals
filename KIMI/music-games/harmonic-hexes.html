@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harmonic Hexes</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: white;
+            overflow-x: hidden;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            background: linear-gradient(to right, #ff7e5f, #feb47b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 2px;
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            opacity: 0.9;
+        }
+        
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+        
+        .stats-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .stat-box {
+            text-align: center;
+            flex: 1;
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #ffcc00;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        
+        .board-container {
+            position: relative;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+        
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background: rgba(10, 20, 40, 0.7);
+            border-radius: 10px;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            width: 100%;
+            justify-content: center;
+            margin-top: 10px;
+        }
+        
+        button {
+            background: linear-gradient(to right, #ff7e5f, #feb47b);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        .instructions {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+        
+        .instructions h2 {
+            margin-bottom: 15px;
+            color: #ffcc00;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .highlight {
+            color: #ffcc00;
+            font-weight: bold;
+        }
+        
+        .territory-bar {
+            height: 20px;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .territory-fill {
+            height: 100%;
+            background: linear-gradient(to right, #00c9ff, #92fe9d);
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 100;
+        }
+        
+        .notification.show {
+            opacity: 1;
+        }
+        
+        .consonant {
+            color: #92fe9d;
+        }
+        
+        .dissonant {
+            color: #ff6b6b;
+        }
+        
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .stats-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .controls {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Harmonic Hexes</h1>
+        <p class="subtitle">Create consonant chords to expand your territory</p>
+    </header>
+    
+    <div class="game-container">
+        <div class="stats-container">
+            <div class="stat-box">
+                <div class="stat-value" id="score">0</div>
+                <div class="stat-label">SCORE</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="clusters">0</div>
+                <div class="stat-label">CLUSTERS</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="territory">0%</div>
+                <div class="stat-label">TERRITORY</div>
+            </div>
+        </div>
+        
+        <div class="board-container">
+            <canvas id="gameCanvas" width="600" height="520"></canvas>
+            <div class="territory-bar">
+                <div class="territory-fill" id="territoryBar"></div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="undoBtn">Undo Last Move</button>
+            <button id="resetBtn">Reset Game</button>
+        </div>
+    </div>
+    
+    <div class="instructions">
+        <h2>How to Play</h2>
+        <ul>
+            <li>Click on any hex to cycle through musical notes (C → D → E → F → G → A → B)</li>
+            <li>Create <span class="highlight">consonant chords</span> by forming clusters of 3-4 adjacent hexes</li>
+            <li>When a consonant cluster is formed, it locks in place and plays a chord</li>
+            <li>Your <span class="highlight">territory</span> expands with each consonant cluster you create</li>
+            <li>Creating <span class="dissonant">dissonant clusters</span> causes random adjacent tiles to change notes</li>
+            <li>Try to maximize your territory by creating as many consonant clusters as possible!</li>
+        </ul>
+    </div>
+    
+    <div class="notification" id="notification"></div>
+
+    <script>
+        // Game constants
+        const NOTES = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+        const HEX_RADIUS = 30;
+        const BOARD_SIZE = 7;
+        const COLORS = {
+            background: '#0a1428',
+            hex: '#1e3c72',
+            hexBorder: '#4a6fc5',
+            locked: '#2c5282',
+            text: '#ffffff',
+            consonant: '#92fe9d',
+            dissonant: '#ff6b6b',
+            territory: '#00c9ff'
+        };
+
+        // Game state
+        const gameState = {
+            score: 0,
+            clusters: 0,
+            territory: 0,
+            board: [],
+            lockedHexes: new Set(),
+            lastMove: null,
+            history: []
+        };
+
+        // Audio engine
+        class AudioEngine {
+            constructor() {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                this.masterGain = this.audioContext.createGain();
+                this.masterGain.connect(this.audioContext.destination);
+                this.masterGain.gain.value = 0.3;
+            }
+
+            // Play a single note
+            playNote(note, octave = 4) {
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(this.masterGain);
+                
+                // Calculate frequency based on note
+                const noteFreq = this.getNoteFrequency(note, octave);
+                oscillator.frequency.value = noteFreq;
+                
+                // Set waveform
+                oscillator.type = 'sine';
+                
+                // Apply ADSR envelope
+                const now = this.audioContext.currentTime;
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(0.5, now + 0.02);
+                gainNode.gain.linearRampToValueAtTime(0.3, now + 0.1);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.3);
+                
+                oscillator.start(now);
+                oscillator.stop(now + 0.3);
+            }
+
+            // Play a chord
+            playChord(notes) {
+                const oscillators = [];
+                const gainNodes = [];
+                
+                notes.forEach((note, index) => {
+                    const oscillator = this.audioContext.createOscillator();
+                    const gainNode = this.audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(this.masterGain);
+                    
+                    // Calculate frequency based on note
+                    const noteFreq = this.getNoteFrequency(note, 4);
+                    oscillator.frequency.value = noteFreq;
+                    
+                    // Set different waveforms for variety
+                    const waveforms = ['sine', 'triangle', 'sawtooth'];
+                    oscillator.type = waveforms[index % waveforms.length];
+                    
+                    // Apply ADSR envelope
+                    const now = this.audioContext.currentTime;
+                    gainNode.gain.setValueAtTime(0, now);
+                    gainNode.gain.linearRampToValueAtTime(0.3, now + 0.05);
+                    gainNode.gain.linearRampToValueAtTime(0.2, now + 0.2);
+                    gainNode.gain.linearRampToValueAtTime(0, now + 1.0);
+                    
+                    oscillator.start(now);
+                    oscillator.stop(now + 1.0);
+                    
+                    oscillators.push(oscillator);
+                    gainNodes.push(gainNode);
+                });
+            }
+
+            // Play dissonant sound
+            playDissonance() {
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(this.masterGain);
+                
+                // Dissonant frequency
+                oscillator.frequency.value = 200 + Math.random() * 100;
+                oscillator.type = 'square';
+                
+                // Apply short ADSR envelope
+                const now = this.audioContext.currentTime;
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(0.4, now + 0.01);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.2);
+                
+                oscillator.start(now);
+                oscillator.stop(now + 0.2);
+            }
+
+            // Get frequency for a note
+            getNoteFrequency(note, octave) {
+                const noteMap = {
+                    'C': 0, 'D': 2, 'E': 4, 'F': 5, 
+                    'G': 7, 'A': 9, 'B': 11
+                };
+                
+                const semitones = noteMap[note] + (octave - 4) * 12;
+                return 440 * Math.pow(2, semitones / 12);
+            }
+        }
+
+        // Hex grid management
+        class HexGrid {
+            constructor(size) {
+                this.size = size;
+                this.hexes = [];
+                this.audio = new AudioEngine();
+                this.initBoard();
+            }
+
+            // Initialize the board
+            initBoard() {
+                gameState.board = [];
+                gameState.lockedHexes = new Set();
+                
+                // Create hexes in axial coordinates
+                for (let q = -Math.floor(this.size/2); q <= Math.floor(this.size/2); q++) {
+                    const r1 = Math.max(-Math.floor(this.size/2), -q - Math.floor(this.size/2));
+                    const r2 = Math.min(Math.floor(this.size/2), -q + Math.floor(this.size/2));
+                    
+                    for (let r = r1; r <= r2; r++) {
+                        const s = -q - r;
+                        const noteIndex = Math.floor(Math.random() * NOTES.length);
+                        gameState.board.push({
+                            q, r, s,
+                            note: NOTES[noteIndex],
+                            noteIndex: noteIndex,
+                            locked: false
+                        });
+                    }
+                }
+            }
+
+            // Get hex at axial coordinates
+            getHex(q, r) {
+                return gameState.board.find(hex => hex.q === q && hex.r === r);
+            }
+
+            // Get neighbors of a hex
+            getNeighbors(q, r) {
+                const directions = [
+                    { q: 1, r: 0 }, { q: 1, r: -1 }, { q: 0, r: -1 },
+                    { q: -1, r: 0 }, { q: -1, r: 1 }, { q: 0, r: 1 }
+                ];
+                
+                return directions.map(dir => {
+                    return this.getHex(q + dir.q, r + dir.r);
+                }).filter(hex => hex !== undefined);
+            }
+
+            // Get clusters of adjacent hexes
+            getClusters() {
+                const visited = new Set();
+                const clusters = [];
+                
+                for (const hex of gameState.board) {
+                    if (visited.has(`${hex.q},${hex.r}`)) continue;
+                    
+                    const cluster = [];
+                    const queue = [hex];
+                    
+                    while (queue.length > 0) {
+                        const current = queue.shift();
+                        const key = `${current.q},${current.r}`;
+                        
+                        if (visited.has(key)) continue;
+                        visited.add(key);
+                        cluster.push(current);
+                        
+                        const neighbors = this.getNeighbors(current.q, current.r);
+                        for (const neighbor of neighbors) {
+                            const neighborKey = `${neighbor.q},${neighbor.r}`;
+                            if (!visited.has(neighborKey) && !gameState.lockedHexes.has(neighborKey)) {
+                                queue.push(neighbor);
+                            }
+                        }
+                    }
+                    
+                    if (cluster.length >= 3) {
+                        clusters.push(cluster);
+                    }
+                }
+                
+                return clusters;
+            }
+
+            // Convert axial coordinates to pixel coordinates
+            axialToPixel(q, r) {
+                const x = HEX_RADIUS * Math.sqrt(3) * (q + r/2);
+                const y = HEX_RADIUS * 3/2 * r;
+                return { x, y };
+            }
+
+            // Draw the hex grid
+            draw(ctx) {
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                
+                // Center the grid
+                const offsetX = ctx.canvas.width / 2;
+                const offsetY = ctx.canvas.height / 2;
+                
+                // Draw each hex
+                for (const hex of gameState.board) {
+                    const { x, y } = this.axialToPixel(hex.q, hex.r);
+                    const screenX = offsetX + x;
+                    const screenY = offsetY + y;
+                    
+                    // Draw hexagon
+                    ctx.beginPath();
+                    for (let i = 0; i < 6; i++) {
+                        const angle = Math.PI / 3 * i;
+                        const hx = screenX + HEX_RADIUS * Math.cos(angle);
+                        const hy = screenY + HEX_RADIUS * Math.sin(angle);
+                        if (i === 0) ctx.moveTo(hx, hy);
+                        else ctx.lineTo(hx, hy);
+                    }
+                    ctx.closePath();
+                    
+                    // Fill based on state
+                    const key = `${hex.q},${hex.r}`;
+                    if (gameState.lockedHexes.has(key)) {
+                        ctx.fillStyle = COLORS.locked;
+                    } else {
+                        ctx.fillStyle = COLORS.hex;
+                    }
+                    ctx.fill();
+                    
+                    // Draw border
+                    ctx.strokeStyle = COLORS.hexBorder;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    // Draw note
+                    ctx.fillStyle = COLORS.text;
+                    ctx.font = 'bold 18px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(hex.note, screenX, screenY);
+                }
+            }
+
+            // Handle hex click
+            handleClick(x, y) {
+                // Center the grid
+                const offsetX = gameCanvas.width / 2;
+                const offsetY = gameCanvas.height / 2;
+                
+                // Find clicked hex
+                for (const hex of gameState.board) {
+                    const { x: hexX, y: hexY } = this.axialToPixel(hex.q, hex.r);
+                    const screenX = offsetX + hexX;
+                    const screenY = offsetY + hexY;
+                    
+                    // Calculate distance from click to hex center
+                    const distance = Math.sqrt(Math.pow(x - screenX, 2) + Math.pow(y - screenY, 2));
+                    
+                    // If click is within hex
+                    if (distance <= HEX_RADIUS) {
+                        // Check if hex is locked
+                        const key = `${hex.q},${hex.r}`;
+                        if (gameState.lockedHexes.has(key)) {
+                            showNotification("This hex is locked!", "dissonant");
+                            return;
+                        }
+                        
+                        // Save state for undo
+                        gameState.history.push(JSON.parse(JSON.stringify(gameState.board)));
+                        
+                        // Cycle note
+                        hex.noteIndex = (hex.noteIndex + 1) % NOTES.length;
+                        hex.note = NOTES[hex.noteIndex];
+                        
+                        // Play note
+                        this.audio.playNote(hex.note);
+                        
+                        // Save last move for undo
+                        gameState.lastMove = { q: hex.q, r: hex.r, s: hex.s };
+                        
+                        // Check for clusters
+                        this.checkClusters();
+                        
+                        return;
+                    }
+                }
+            }
+
+            // Check for clusters and handle consonance/dissonance
+            checkClusters() {
+                const clusters = this.getClusters();
+                let consonantClusters = 0;
+                
+                for (const cluster of clusters) {
+                    // Check if cluster is consonant
+                    const isConsonant = this.isConsonantCluster(cluster);
+                    
+                    if (isConsonant) {
+                        consonantClusters++;
+                        
+                        // Lock cluster
+                        for (const hex of cluster) {
+                            const key = `${hex.q},${hex.r}`;
+                            gameState.lockedHexes.add(key);
+                        }
+                        
+                        // Play chord
+                        const notes = cluster.map(hex => hex.note);
+                        this.audio.playChord(notes);
+                        
+                        // Update stats
+                        gameState.clusters++;
+                        gameState.score += cluster.length * 10;
+                        
+                        showNotification(`Consonant cluster formed! +${cluster.length * 10} points`, "consonant");
+                    } else {
+                        // Dissonant cluster - cause chaos
+                        this.handleDissonance(cluster);
+                    }
+                }
+                
+                // Update territory
+                gameState.territory = Math.round((gameState.lockedHexes.size / gameState.board.length) * 100);
+                
+                // Update UI
+                updateUI();
+            }
+
+            // Check if a cluster is consonant
+            isConsonantCluster(cluster) {
+                // Simple consonance check: check if all intervals are consonant
+                for (let i = 0; i < cluster.length; i++) {
+                    for (let j = i + 1; j < cluster.length; j++) {
+                        if (!this.isConsonantInterval(cluster[i].note, cluster[j].note)) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+
+            // Check if interval between two notes is consonant
+            isConsonantInterval(note1, note2) {
+                const noteMap = { 'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11 };
+                const interval = Math.abs(noteMap[note1] - noteMap[note2]) % 12;
+                
+                // Consonant intervals: unison, perfect 4th, perfect 5th, major 3rd, minor 3rd
+                const consonantIntervals = [0, 3, 4, 5, 7, 8, 9];
+                return consonantIntervals.includes(interval);
+            }
+
+            // Handle dissonance - change random adjacent tiles
+            handleDissonance(cluster) {
+                this.audio.playDissonance();
+                
+                // For each hex in the dissonant cluster, affect a random neighbor
+                for (const hex of cluster) {
+                    const neighbors = this.getNeighbors(hex.q, hex.r);
+                    if (neighbors.length > 0) {
+                        const randomNeighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
+                        const key = `${randomNeighbor.q},${randomNeighbor.r}`;
+                        
+                        // Only affect unlocked hexes
+                        if (!gameState.lockedHexes.has(key)) {
+                            // Change to a random note
+                            const newNoteIndex = Math.floor(Math.random() * NOTES.length);
+                            randomNeighbor.noteIndex = newNoteIndex;
+                            randomNeighbor.note = NOTES[newNoteIndex];
+                        }
+                    }
+                }
+                
+                showNotification("Dissonant cluster! Adjacent tiles changed", "dissonant");
+            }
+
+            // Undo last move
+            undo() {
+                if (gameState.history.length > 0) {
+                    // Restore previous state
+                    gameState.board = gameState.history.pop();
+                    
+                    // Reset locked hexes
+                    gameState.lockedHexes = new Set();
+                    for (const hex of gameState.board) {
+                        if (hex.locked) {
+                            const key = `${hex.q},${hex.r}`;
+                            gameState.lockedHexes.add(key);
+                        }
+                    }
+                    
+                    // Recalculate territory
+                    gameState.territory = Math.round((gameState.lockedHexes.size / gameState.board.length) * 100);
+                    
+                    // Update UI
+                    updateUI();
+                    showNotification("Move undone", "consonant");
+                } else {
+                    showNotification("No moves to undo", "dissonant");
+                }
+            }
+
+            // Reset game
+            reset() {
+                gameState.history = [];
+                gameState.score = 0;
+                gameState.clusters = 0;
+                gameState.territory = 0;
+                this.initBoard();
+                updateUI();
+                showNotification("Game reset", "consonant");
+            }
+        }
+
+        // Show notification
+        function showNotification(message, type) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 2000);
+        }
+
+        // Update UI elements
+        function updateUI() {
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('clusters').textContent = gameState.clusters;
+            document.getElementById('territory').textContent = `${gameState.territory}%`;
+            document.getElementById('territoryBar').style.width = `${gameState.territory}%`;
+        }
+
+        // Initialize game
+        const gameCanvas = document.getElementById('gameCanvas');
+        const ctx = gameCanvas.getContext('2d');
+        const hexGrid = new HexGrid(BOARD_SIZE);
+
+        // Draw initial board
+        hexGrid.draw(ctx);
+
+        // Event listeners
+        gameCanvas.addEventListener('click', (e) => {
+            const rect = gameCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            hexGrid.handleClick(x, y);
+            hexGrid.draw(ctx);
+        });
+
+        document.getElementById('undoBtn').addEventListener('click', () => {
+            hexGrid.undo();
+            hexGrid.draw(ctx);
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            hexGrid.reset();
+            hexGrid.draw(ctx);
+        });
+
+        // Initial UI update
+        updateUI();
+    </script>
+</body>
+</html>

@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Overtone Orbit - Harmonic Planet Simulation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: #e6e6e6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #4cc9f0, #4361ee);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: #a9d6e5;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 1000px;
+        }
+        .canvas-container {
+            position: relative;
+            width: 600px;
+            height: 600px;
+            margin: 0 auto 20px;
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(67, 97, 238, 0.4);
+            overflow: hidden;
+            background: radial-gradient(circle at center, #0a1429 0%, #090d1f 70%);
+            border: 2px solid rgba(76, 201, 240, 0.3);
+        }
+        canvas {
+            display: block;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            background: linear-gradient(45deg, #4361ee, #3a0ca3);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 30px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(67, 97, 238, 0.5);
+        }
+        button:active {
+            transform: translateY(1px);
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            width: 100%;
+            max-width: 600px;
+            background: rgba(26, 38, 57, 0.7);
+            padding: 15px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        .stat-box {
+            text-align: center;
+            min-width: 100px; /* Ensure consistent width */
+            margin: 5px; /* Add margin for spacing when wrapped */
+        }
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #4cc9f0;
+        }
+        .stat-label {
+            font-size: 0.9rem;
+            color: #a9d6e5;
+        }
+        .instructions {
+            background: rgba(26, 38, 57, 0.7);
+            padding: 20px;
+            border-radius: 15px;
+            max-width: 600px;
+            margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        .instructions h2 {
+            color: #4cc9f0;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .instructions ul {
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 0.9rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 10;
+            border: 1px solid rgba(76, 201, 240, 0.5);
+            backdrop-filter: blur(5px);
+        }
+        .tooltip.visible {
+            opacity: 1;
+        }
+        footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #a9d6e5;
+            font-size: 0.9rem;
+        }
+        @media (max-width: 650px) {
+            .canvas-container {
+                width: 95vw;
+                height: 95vw;
+            }
+            h1 {
+                font-size: 2.2rem;
+            }
+            .subtitle {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Overtone Orbit</h1>
+        <p class="subtitle">Drag planets to harmonic orbits, collect power-ups, and form chords!</p>
+    </header>
+    <div class="container">
+        <div class="stats">
+             <div class="stat-box">
+                <div class="stat-value" id="score">0</div>
+                <div class="stat-label">Score</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="stable">0</div>
+                <div class="stat-label">Stable Planets</div>
+            </div>
+             <div class="stat-box">
+                <div class="stat-value" id="chord">-</div>
+                <div class="stat-label">Target Chord</div>
+            </div>
+             <div class="stat-box">
+                <div class="stat-value" id="multiplier">x1</div>
+                <div class="stat-label">Power-Up</div>
+            </div>
+             <div class="stat-box">
+                <div class="stat-value" id="timer">--</div>
+                <div class="stat-label">Chord Timer</div>
+            </div>
+        </div>
+        <div class="canvas-container">
+            <canvas id="orbitCanvas" width="600" height="600"></canvas>
+            <div class="tooltip" id="tooltip"></div>
+        </div>
+        <div class="controls">
+            <button id="randomizeBtn">Randomize Orbits</button>
+            <button id="resetBtn">Reset System</button>
+        </div>
+        <div class="instructions">
+            <h2>How It Works</h2>
+            <ul>
+                <li>Drag the planets to different orbital rings around the central sun</li>
+                <li>Each ring represents a harmonic ratio (2:1, 3:2, 5:4, etc.)</li>
+                <li>When a planet is in the correct position, it creates a consonant tone</li>
+                <li>Misplaced planets create dissonant beats and visual wobble</li>
+                <li><strong>New:</strong> Collect blue "Resonance Boosters" for score multipliers!</li>
+                <li><strong>New:</strong> Match the "Target Chord" for big bonuses!</li>
+                <li>Your score increases based on stable planet positions and active power-ups</li>
+            </ul>
+        </div>
+    </div>
+    <footer>
+        <p>Created with Web Audio API | Overtone Orbit Simulation</p>
+    </footer>
+    <script>
+        // Main application
+        document.addEventListener('DOMContentLoaded', () => {
+            // Canvas setup
+            const canvas = document.getElementById('orbitCanvas');
+            const ctx = canvas.getContext('2d');
+            const tooltip = document.getElementById('tooltip');
+            // UI elements
+            const scoreElement = document.getElementById('score');
+            const stableElement = document.getElementById('stable');
+            const chordElement = document.getElementById('chord');
+            const multiplierElement = document.getElementById('multiplier');
+            const timerElement = document.getElementById('timer');
+            const randomizeBtn = document.getElementById('randomizeBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            
+            // Audio context
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Constants
+            const CENTER_X = canvas.width / 2;
+            const CENTER_Y = canvas.height / 2;
+            const SUN_RADIUS = 40;
+            const PLANET_COUNT = 8; // Reduced for clarity with new elements
+            const POWERUP_COUNT = 3;
+            const TOLERANCE_CENTS = 10; // ±10 cents tolerance for stable orbits
+            const BASE_FREQUENCY = 220; // Root frequency (A3)
+            const MIN_DISTANCE = 80; // Minimum distance from center
+            
+            // Game state
+            let score = 0;
+            let stableCount = 0;
+            let powerUpLevel = 1; // Multiplier
+            let powerUpEndTime = 0;
+            let targetChord = null;
+            let chordTimerEndTime = 0;
+            let sunPulse = 0; // For visual feedback on chord match
+
+            // Harmonic ratios (partials 2-16)
+            const HARMONIC_RATIOS = [];
+            for (let i = 2; i <= 16; i++) {
+                HARMONIC_RATIOS.push(i);
+            }
+            
+            // Define chords by their constituent ratios (relative to root)
+            const CHORDS = [
+                { name: "Major", ratios: [1, 1.25, 1.5] }, // 4:5:6 (Root, M3, P5)
+                { name: "Minor", ratios: [1, 1.2, 1.5] },  // 10:12:15 (Root, m3, P5)
+                { name: "Diminished", ratios: [1, 1.2, 1.4142] }, // Root, m3, Dim5 (approx sqrt(2))
+                { name: "Augmented", ratios: [1, 1.25, 1.5874] }, // Root, M3, Aug5 (approx cbrt(4))
+                { name: "Seventh", ratios: [1, 1.25, 1.5, 1.75] } // Root, M3, P5, m7
+            ];
+            
+            // Planet class
+            class Planet {
+                constructor(ratio, index) {
+                    this.ratio = ratio;
+                    this.index = index;
+                    this.angle = Math.random() * Math.PI * 2;
+                    this.distance = MIN_DISTANCE + 20 + index * 35; // Increased spacing
+                    this.radius = 15 + Math.random() * 10;
+                    this.color = this.getPlanetColor();
+                    this.isDragging = false;
+                    this.oscillator = null;
+                    this.gainNode = null;
+                    this.isStable = false;
+                    this.stableTime = 0;
+                    this.lastStableCheck = 0;
+                    this.wobble = 0;
+                    this.wobbleDirection = 1;
+                }
+                getPlanetColor() {
+                    const colors = [
+                        '#FF6B6B', '#4ECDC4', '#FFE66D', '#FF9F1C', 
+                        '#6A0572', '#AB83A1', '#5BC0EB', '#9BC53D'
+                    ];
+                    return colors[this.index % colors.length];
+                }
+                getFrequency() {
+                    return BASE_FREQUENCY * this.ratio;
+                }
+                getCurrentRatio() {
+                    const currentDistance = this.distance;
+                    const minDistance = MIN_DISTANCE;
+                    const maxDistance = 400;
+                    const normalized = (currentDistance - minDistance) / (maxDistance - minDistance);
+                    const ratioIndex = Math.min(
+                        HARMONIC_RATIOS.length - 1,
+                        Math.floor(normalized * (HARMONIC_RATIOS.length - 1))
+                    );
+                    return HARMONIC_RATIOS[ratioIndex];
+                }
+                getCentsDeviation() {
+                    const currentRatio = this.getCurrentRatio();
+                    const idealFrequency = BASE_FREQUENCY * currentRatio;
+                    const actualFrequency = BASE_FREQUENCY * this.ratio;
+                    // Ensure we don't take log of zero or negative
+                    if (idealFrequency <= 0 || actualFrequency <= 0) return 0;
+                    return 1200 * Math.log2(actualFrequency / idealFrequency);
+                }
+                isPositionStable() {
+                    const centsDeviation = Math.abs(this.getCentsDeviation());
+                    return centsDeviation <= TOLERANCE_CENTS;
+                }
+                updatePosition(x, y) {
+                    const dx = x - CENTER_X;
+                    const dy = y - CENTER_Y;
+                    this.angle = Math.atan2(dy, dx);
+                    this.distance = Math.min(400, Math.max(MIN_DISTANCE, Math.sqrt(dx * dx + dy * dy)));
+                }
+                getX() {
+                    return CENTER_X + Math.cos(this.angle) * this.distance;
+                }
+                getY() {
+                    return CENTER_Y + Math.sin(this.angle) * this.distance;
+                }
+                draw(ctx) {
+                    const x = this.getX();
+                    const y = this.getY();
+                    
+                    let wobbleOffset = 0;
+                    if (!this.isStable && this.wobble > 0) {
+                        wobbleOffset = Math.sin(this.wobble * 5) * 3;
+                    }
+
+                    // Draw planet
+                    ctx.beginPath();
+                    ctx.arc(x + wobbleOffset, y, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.fill();
+                    
+                    // Draw glow effect - enhanced for stability and power-ups
+                    const glowIntensity = this.isStable ? 0.7 : 0.3;
+                    const glowColor = powerUpLevel > 1 ? `rgba(100, 200, 255, ${glowIntensity})` : `${this.color}${Math.floor(glowIntensity * 255).toString(16).padStart(2, '0')}`;
+                    const gradient = ctx.createRadialGradient(
+                        x + wobbleOffset, y, this.radius,
+                        x + wobbleOffset, y, this.radius * (2 + (powerUpLevel - 1) * 0.5)) // Larger glow with power-up
+                    ;
+                    gradient.addColorStop(0, glowColor);
+                    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.beginPath();
+                    ctx.arc(x + wobbleOffset, y, this.radius * (2 + (powerUpLevel - 1) * 0.5), 0, Math.PI * 2);
+                    ctx.fillStyle = gradient;
+                    ctx.fill();
+
+                    // Draw planet label
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(this.ratio.toString(), x + wobbleOffset, y);
+                }
+                startAudio() {
+                    if (this.oscillator) return;
+                    this.oscillator = audioContext.createOscillator();
+                    this.gainNode = audioContext.createGain();
+                    this.oscillator.type = 'sine';
+                    this.oscillator.frequency.value = this.getFrequency();
+                    this.gainNode.gain.value = 0;
+                    this.oscillator.connect(this.gainNode);
+                    this.gainNode.connect(audioContext.destination);
+                    this.oscillator.start();
+                }
+                stopAudio() {
+                    if (this.oscillator) {
+                        try {
+                            this.gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+                            this.oscillator.stop(audioContext.currentTime + 0.5);
+                        } catch (e) {
+                             this.oscillator.disconnect();
+                             this.gainNode.disconnect();
+                        }
+                        this.oscillator = null;
+                        this.gainNode = null;
+                    }
+                }
+                updateAudio() {
+                    if (!this.oscillator) return;
+                    const now = audioContext.currentTime;
+                    this.isStable = this.isPositionStable();
+                    if (this.isStable) {
+                        this.gainNode.gain.cancelScheduledValues(now);
+                        this.gainNode.gain.linearRampToValueAtTime(0.1 * powerUpLevel, now + 0.1); // Scale volume with power-up
+                        if (this.lastStableCheck === 0) {
+                            this.lastStableCheck = now;
+                        } else {
+                            this.stableTime += now - this.lastStableCheck;
+                            this.lastStableCheck = now;
+                        }
+                    } else {
+                        const deviation = this.getCentsDeviation();
+                        const detuneAmount = isFinite(deviation) ? deviation * 10 : 0;
+                        this.oscillator.detune.value = detuneAmount;
+                        
+                        const lfo = audioContext.createOscillator();
+                        const lfoGain = audioContext.createGain();
+                        lfo.type = 'sine';
+                        lfo.frequency.value = 0.5 + Math.random() * 2;
+                        lfoGain.gain.value = 2 + Math.random() * 3;
+                        lfo.connect(lfoGain);
+                        lfoGain.connect(this.oscillator.frequency);
+                        lfo.start();
+                        lfo.stop(now + 0.1);
+                        
+                        this.gainNode.gain.cancelScheduledValues(now);
+                        this.gainNode.gain.linearRampToValueAtTime(0.05 * powerUpLevel, now + 0.1); // Scale volume with power-up
+                        this.lastStableCheck = 0;
+                    }
+                }
+            }
+
+            // Power-Up class
+            class PowerUp {
+                constructor() {
+                    this.reset();
+                    this.radius = 12;
+                }
+                reset() {
+                     this.angle = Math.random() * Math.PI * 2;
+                     this.distance = MIN_DISTANCE + 50 + Math.random() * 300;
+                     this.collected = false;
+                     this.pulse = 0;
+                }
+                 getX() {
+                    return CENTER_X + Math.cos(this.angle) * this.distance;
+                }
+                getY() {
+                    return CENTER_Y + Math.sin(this.angle) * this.distance;
+                }
+                draw(ctx) {
+                    if (this.collected) return;
+                    const x = this.getX();
+                    const y = this.getY();
+                    
+                    this.pulse = (this.pulse + 0.05) % (Math.PI * 2);
+                    const pulseSize = Math.sin(this.pulse) * 3;
+
+                    // Draw core
+                    ctx.beginPath();
+                    ctx.arc(x, y, this.radius + pulseSize, 0, Math.PI * 2);
+                    ctx.fillStyle = '#6495ED'; // Cornflower Blue
+                    ctx.fill();
+
+                    // Draw glow
+                    const gradient = ctx.createRadialGradient(x, y, this.radius, x, y, (this.radius + 5) + pulseSize);
+                    gradient.addColorStop(0, 'rgba(100, 150, 255, 0.8)');
+                    gradient.addColorStop(1, 'rgba(100, 150, 255, 0)');
+                    ctx.beginPath();
+                    ctx.arc(x, y, (this.radius + 5) + pulseSize, 0, Math.PI * 2);
+                    ctx.fillStyle = gradient;
+                    ctx.fill();
+
+                    // Draw symbol
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('B', x, y); // 'Boost'
+                }
+                checkCollection(planet) {
+                    if (this.collected) return false;
+                    const dx = planet.getX() - this.getX();
+                    const dy = planet.getY() - this.getY();
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < planet.radius + this.radius) {
+                         this.collected = true;
+                         return true;
+                    }
+                    return false;
+                }
+            }
+
+            // Orbit manager
+            class OrbitManager {
+                constructor() {
+                    this.planets = [];
+                    this.powerUps = [];
+                    this.lastUpdate = 0;
+                    this.initializePlanets();
+                    this.initializePowerUps();
+                    this.setNewTargetChord();
+                }
+                initializePlanets() {
+                    this.planets = [];
+                    for (let i = 0; i < PLANET_COUNT; i++) {
+                        const ratio = HARMONIC_RATIOS[i % HARMONIC_RATIOS.length];
+                        this.planets.push(new Planet(ratio, i));
+                    }
+                }
+                 initializePowerUps() {
+                    this.powerUps = [];
+                    for (let i = 0; i < POWERUP_COUNT; i++) {
+                        this.powerUps.push(new PowerUp());
+                    }
+                }
+                draw(ctx) {
+                    // Draw sun with potential pulse
+                    const sunRadius = SUN_RADIUS * (1 + sunPulse * 0.2);
+                    ctx.beginPath();
+                    ctx.arc(CENTER_X, CENTER_Y, sunRadius, 0, Math.PI * 2);
+                    const sunGradient = ctx.createRadialGradient(
+                        CENTER_X, CENTER_Y, 0,
+                        CENTER_X, CENTER_Y, sunRadius * 2
+                    );
+                    sunGradient.addColorStop(0, '#FFD166');
+                    sunGradient.addColorStop(1, '#FF9F1C');
+                    ctx.fillStyle = sunGradient;
+                    ctx.fill();
+                    
+                    const glowRadius = sunRadius * (1.5 + sunPulse * 0.3);
+                    ctx.beginPath();
+                    ctx.arc(CENTER_X, CENTER_Y, glowRadius, 0, Math.PI * 2);
+                    const glowGradient = ctx.createRadialGradient(
+                        CENTER_X, CENTER_Y, sunRadius,
+                        CENTER_X, CENTER_Y, glowRadius
+                    );
+                    const glowAlpha = 0.3 + sunPulse * 0.2;
+                    glowGradient.addColorStop(0, `rgba(255, 209, 102, ${glowAlpha})`);
+                    glowGradient.addColorStop(1, 'rgba(255, 159, 28, 0)');
+                    ctx.fillStyle = glowGradient;
+                    ctx.fill();
+
+                    // Draw orbital rings
+                    ctx.strokeStyle = 'rgba(100, 150, 255, 0.2)';
+                    ctx.lineWidth = 1;
+                    for (let i = 0; i < HARMONIC_RATIOS.length; i++) {
+                        const distance = MIN_DISTANCE + i * 20;
+                        ctx.beginPath();
+                        ctx.arc(CENTER_X, CENTER_Y, distance, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                    
+                    // Draw power-ups
+                    this.powerUps.forEach(pu => pu.draw(ctx));
+
+                    // Draw planets
+                    this.planets.forEach(planet => planet.draw(ctx));
+                }
+                update(deltaTime) {
+                    const now = performance.now();
+                    this.lastUpdate = now;
+                    
+                    stableCount = 0;
+                    let scoreIncrement = 0;
+                    
+                    this.planets.forEach(planet => {
+                        planet.updateAudio();
+                        
+                        if (planet.isStable) {
+                            planet.wobble = Math.max(0, planet.wobble - deltaTime * 0.01);
+                            stableCount++;
+                            // More significant score contribution from stable planets
+                            scoreIncrement += (10 + stableCount * 2) * powerUpLevel;
+                        } else {
+                            planet.wobble = Math.min(1, planet.wobble + deltaTime * 0.005);
+                        }
+                        
+                        if (!planet.oscillator) {
+                            planet.startAudio();
+                        }
+                        
+                        // Check for power-up collection
+                        this.powerUps.forEach(pu => {
+                             if (pu.checkCollection(planet) && !pu.collected) {
+                                playPowerUpSound();
+                                powerUpLevel = Math.min(5, powerUpLevel + 1); // Cap at x5
+                                powerUpEndTime = now + 10000; // 10 seconds
+                                pu.reset(); // Reposition power-up
+                                // Brief visual feedback
+                                planet.radius += 5;
+                                setTimeout(() => { if(planet.radius > 15) planet.radius -= 5; }, 200);
+                             }
+                        });
+                    });
+                    
+                    score += scoreIncrement * (deltaTime / 16);
+                    
+                    // Update power-up timer
+                    if (powerUpEndTime > 0 && now > powerUpEndTime) {
+                        powerUpLevel = 1;
+                        powerUpEndTime = 0;
+                    }
+                    
+                    // Update chord timer
+                    if (chordTimerEndTime > 0) {
+                        if (now > chordTimerEndTime) {
+                             this.setNewTargetChord(); // Time's up, get a new chord
+                        }
+                    }
+                    
+                    // Check for chord match
+                    this.checkChordMatch();
+                    
+                    // Decay sun pulse
+                    sunPulse = Math.max(0, sunPulse - deltaTime * 0.01);
+                    
+                    // Update UI
+                    scoreElement.textContent = Math.floor(score);
+                    stableElement.textContent = stableCount;
+                    multiplierElement.textContent = `x${powerUpLevel}`;
+                    multiplierElement.style.color = powerUpLevel > 1 ? '#4cc9f0' : '#a9d6e5';
+                    if (chordTimerEndTime > 0) {
+                         const timeLeft = Math.ceil((chordTimerEndTime - now) / 1000);
+                         timerElement.textContent = timeLeft > 0 ? timeLeft : '0';
+                    } else {
+                         timerElement.textContent = '--';
+                    }
+                }
+                
+                setNewTargetChord() {
+                    targetChord = CHORDS[Math.floor(Math.random() * CHORDS.length)];
+                    chordElement.textContent = targetChord.name;
+                    chordTimerEndTime = performance.now() + 30000; // 30 seconds
+                }
+                
+                checkChordMatch() {
+                    const stableRatios = this.planets.filter(p => p.isStable).map(p => p.ratio);
+                    if (stableRatios.length < targetChord.ratios.length) return; // Not enough planets
+
+                    // Simple check: do the stable ratios contain the target chord ratios?
+                    // This is a basic check, a more robust one might sort and compare sequences.
+                    const isMatch = targetChord.ratios.every(ratio => 
+                        stableRatios.some(stableRatio => 
+                            Math.abs(1200 * Math.log2(stableRatio / ratio)) <= TOLERANCE_CENTS
+                        )
+                    );
+
+                    if (isMatch) {
+                         const now = performance.now();
+                         // Add bonus based on remaining time and power-up
+                         const timeBonus = Math.max(0, (chordTimerEndTime - now) / 1000) * 50;
+                         const chordBonus = 1000 * powerUpLevel;
+                         score += chordBonus + timeBonus;
+                         
+                         // Visual/Audio feedback
+                         sunPulse = 1;
+                         playChordSound(targetChord);
+                         
+                         // Get a new chord
+                         setTimeout(() => this.setNewTargetChord(), 1000);
+                    }
+                }
+
+                getRandomPosition() {
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = MIN_DISTANCE + 20 + Math.random() * 300;
+                    return {
+                        x: CENTER_X + Math.cos(angle) * distance,
+                        y: CENTER_Y + Math.sin(angle) * distance
+                    };
+                }
+                randomizeOrbits() {
+                    this.planets.forEach(planet => {
+                        const pos = this.getRandomPosition();
+                        planet.updatePosition(pos.x, pos.y);
+                    });
+                    this.powerUps.forEach(pu => pu.reset());
+                }
+                reset() {
+                    this.planets.forEach(planet => {
+                        planet.stopAudio();
+                    });
+                    this.initializePlanets();
+                    this.initializePowerUps();
+                    score = 0;
+                    stableCount = 0;
+                    powerUpLevel = 1;
+                    powerUpEndTime = 0;
+                    sunPulse = 0;
+                    this.setNewTargetChord();
+                }
+            }
+
+            // Initialize orbit manager
+            const orbitManager = new OrbitManager();
+
+            // Mouse/touch interaction
+            let draggedPlanet = null;
+            function getMousePos(canvas, evt) {
+                const rect = canvas.getBoundingClientRect();
+                return {
+                    x: evt.clientX - rect.left,
+                    y: evt.clientY - rect.top
+                };
+            }
+            canvas.addEventListener('mousedown', (e) => {
+                const mousePos = getMousePos(canvas, e);
+                orbitManager.planets.forEach(planet => {
+                    const dx = mousePos.x - planet.getX();
+                    const dy = mousePos.y - planet.getY();
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < planet.radius) {
+                        draggedPlanet = planet;
+                        planet.isDragging = true;
+                    }
+                });
+            });
+            canvas.addEventListener('mousemove', (e) => {
+                const mousePos = getMousePos(canvas, e);
+                let showTooltip = false;
+                orbitManager.planets.forEach(planet => {
+                    const dx = mousePos.x - planet.getX();
+                    const dy = mousePos.y - planet.getY();
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < planet.radius * 2) {
+                        showTooltip = true;
+                        const ratio = planet.getCurrentRatio();
+                        const cents = planet.getCentsDeviation().toFixed(1);
+                        tooltip.innerHTML = `
+                            <div>Ratio: ${ratio}:1</div>
+                            <div>Deviation: ${cents} cents</div>
+                            <div>Status: ${planet.isStable ? 'Stable' : 'Unstable'}</div>
+                        `;
+                        tooltip.style.left = (mousePos.x + 15) + 'px';
+                        tooltip.style.top = (mousePos.y - 30) + 'px';
+                        tooltip.classList.add('visible');
+                    }
+                });
+                if (!showTooltip) {
+                    tooltip.classList.remove('visible');
+                }
+                if (draggedPlanet) {
+                    draggedPlanet.updatePosition(mousePos.x, mousePos.y);
+                }
+            });
+            canvas.addEventListener('mouseup', () => {
+                if (draggedPlanet) {
+                    draggedPlanet.isDragging = false;
+                    draggedPlanet = null;
+                }
+            });
+            canvas.addEventListener('mouseleave', () => {
+                tooltip.classList.remove('visible');
+                if (draggedPlanet) {
+                    draggedPlanet.isDragging = false;
+                    draggedPlanet = null;
+                }
+            });
+
+            // Touch events for mobile
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const mouseEvent = new MouseEvent('mousedown', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                });
+                canvas.dispatchEvent(mouseEvent);
+            });
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const mouseEvent = new MouseEvent('mousemove', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                });
+                canvas.dispatchEvent(mouseEvent);
+            });
+            canvas.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                const mouseEvent = new MouseEvent('mouseup', {});
+                canvas.dispatchEvent(mouseEvent);
+            });
+
+            // Button event listeners
+            randomizeBtn.addEventListener('click', () => {
+                orbitManager.randomizeOrbits();
+            });
+            resetBtn.addEventListener('click', () => {
+                orbitManager.reset();
+            });
+
+            // Audio helpers
+            function playPowerUpSound() {
+                 if (audioContext.state === 'suspended') return;
+                 const oscillator = audioContext.createOscillator();
+                 const gainNode = audioContext.createGain();
+                 oscillator.type = 'sine';
+                 oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
+                 oscillator.frequency.exponentialRampToValueAtTime(783.99, audioContext.currentTime + 0.5); // G5
+                 gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                 gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                 oscillator.connect(gainNode);
+                 gainNode.connect(audioContext.destination);
+                 oscillator.start();
+                 oscillator.stop(audioContext.currentTime + 0.5);
+            }
+            
+            function playChordSound(chord) {
+                 if (audioContext.state === 'suspended') return;
+                 const now = audioContext.currentTime;
+                 const duration = 1.0;
+                 
+                 chord.ratios.forEach((ratio, i) => {
+                     const oscillator = audioContext.createOscillator();
+                     const gainNode = audioContext.createGain();
+                     oscillator.type = 'sine';
+                     oscillator.frequency.value = BASE_FREQUENCY * ratio;
+                     gainNode.gain.setValueAtTime(0.1, now);
+                     gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration);
+                     
+                     // Stagger start times slightly for a more natural sound
+                     oscillator.start(now + i * 0.05);
+                     oscillator.stop(now + duration);
+                     
+                     oscillator.connect(gainNode);
+                     gainNode.connect(audioContext.destination);
+                 });
+            }
+
+            // Animation loop
+            let lastTime = 0;
+            function animate(time) {
+                const deltaTime = time - lastTime;
+                lastTime = time;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawStars(ctx);
+                orbitManager.update(deltaTime);
+                orbitManager.draw(ctx);
+                requestAnimationFrame(animate);
+            }
+
+            // Draw background stars
+            function drawStars(ctx) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                for (let i = 0; i < 100; i++) {
+                    const x = Math.random() * canvas.width;
+                    const y = Math.random() * canvas.height;
+                    const radius = Math.random() * 1.5;
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // Start animation
+            animate(0);
+
+            // Handle audio context activation on user interaction
+            document.body.addEventListener('click', () => {
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+            }, { once: true });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waveform Weaver - Enhanced</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: #e6e6e6;
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .container {
+            max-width: 1100px;
+            width: 100%;
+            background: rgba(25, 25, 45, 0.85);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(100, 100, 200, 0.2);
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #4cc9f0, #4361ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            color: #a0a0c0;
+            margin-bottom: 20px;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .panel {
+            background: rgba(30, 30, 50, 0.7);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(100, 100, 200, 0.1);
+        }
+        
+        .panel-title {
+            font-size: 1.4rem;
+            margin-bottom: 20px;
+            color: #4cc9f0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .panel-title i {
+            font-size: 1.6rem;
+        }
+        
+        .waveform-container {
+            height: 220px;
+            position: relative;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(10, 10, 20, 0.5);
+            border: 1px solid rgba(100, 100, 200, 0.1);
+        }
+        
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        @media (max-width: 576px) {
+            .controls {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .slider-label {
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            color: #a0a0c0;
+        }
+        
+        .harmonic-slider {
+            -webkit-appearance: slider-vertical;
+            width: 20px;
+            height: 120px;
+            background: rgba(50, 50, 80, 0.5);
+            border-radius: 10px;
+            outline: none;
+        }
+        
+        .harmonic-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #4361ee;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(67, 97, 238, 0.7);
+        }
+        
+        .harmonic-slider::-moz-range-thumb {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #4361ee;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 8px rgba(67, 97, 238, 0.7);
+        }
+        
+        .buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(90deg, #4361ee, #3a0ca3);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        #playBtn {
+            background: linear-gradient(90deg, #4cc9f0, #4361ee);
+        }
+        
+        #resetBtn {
+            background: linear-gradient(90deg, #f72585, #b5179e);
+        }
+        
+        #randomBtn {
+            background: linear-gradient(90deg, #7209b7, #560bad);
+        }
+        
+        .analysis {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .chord-display {
+            background: rgba(40, 40, 70, 0.6);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid rgba(100, 100, 200, 0.1);
+        }
+        
+        .chord-name {
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+            background: linear-gradient(90deg, #f72585, #b5179e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .chord-description {
+            font-size: 1rem;
+            color: #a0a0c0;
+        }
+        
+        .partials-display {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+        
+        @media (max-width: 576px) {
+            .partials-display {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        .partial {
+            background: rgba(40, 40, 70, 0.6);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 1px solid rgba(100, 100, 200, 0.1);
+        }
+        
+        .partial-number {
+            font-size: 0.9rem;
+            color: #a0a0c0;
+            margin-bottom: 5px;
+        }
+        
+        .partial-amplitude {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        
+        .consonance-meter {
+            height: 20px;
+            background: rgba(40, 40, 70, 0.6);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+            position: relative;
+            border: 1px solid rgba(100, 100, 200, 0.1);
+        }
+        
+        .consonance-fill {
+            height: 100%;
+            width: 0%;
+            transition: width 0.5s ease;
+            background: linear-gradient(90deg, #f72585, #4cc9f0);
+        }
+        
+        .consonance-label {
+            text-align: center;
+            margin-top: 8px;
+            font-size: 0.9rem;
+            color: #a0a0c0;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .glow {
+            animation: glow 1.5s ease-in-out infinite alternate;
+        }
+        
+        @keyframes glow {
+            from {
+                box-shadow: 0 0 10px rgba(76, 201, 240, 0.5);
+            }
+            to {
+                box-shadow: 0 0 20px rgba(76, 201, 240, 0.8), 0 0 30px rgba(67, 97, 238, 0.6);
+            }
+        }
+        
+        .distortion {
+            animation: distort 0.2s infinite;
+        }
+        
+        @keyframes distort {
+            0% { transform: translate(0); }
+            25% { transform: translate(-2px, 2px); }
+            50% { transform: translate(2px, -2px); }
+            75% { transform: translate(-2px, -2px); }
+            100% { transform: translate(2px, 2px); }
+        }
+        
+        .frequency-display {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            font-size: 0.8rem;
+            color: #7a7a9e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Waveform Weaver</h1>
+            <p class="subtitle">Synthesize waveforms, analyze chords, and visualize harmonic relationships</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="panel">
+                <h2 class="panel-title">Waveform Synthesizer</h2>
+                
+                <div class="waveform-container">
+                    <canvas id="waveformCanvas"></canvas>
+                </div>
+                
+                <div class="controls">
+                    <div class="slider-container">
+                        <span class="slider-label">Fundamental</span>
+                        <input type="range" min="0" max="1" step="0.01" value="0.8" class="harmonic-slider" data-harmonic="1">
+                        <div class="frequency-display">220 Hz</div>
+                    </div>
+                    <div class="slider-container">
+                        <span class="slider-label">2nd Harmonic</span>
+                        <input type="range" min="0" max="1" step="0.01" value="0.5" class="harmonic-slider" data-harmonic="2">
+                        <div class="frequency-display">440 Hz</div>
+                    </div>
+                    <div class="slider-container">
+                        <span class="slider-label">3rd Harmonic</span>
+                        <input type="range" min="0" max="1" step="0.01" value="0.3" class="harmonic-slider" data-harmonic="3">
+                        <div class="frequency-display">660 Hz</div>
+                    </div>
+                    <div class="slider-container">
+                        <span class="slider-label">4th Harmonic</span>
+                        <input type="range" min="0" max="1" step="0.01" value="0.2" class="harmonic-slider" data-harmonic="4">
+                        <div class="frequency-display">880 Hz</div>
+                    </div>
+                    <div class="slider-container">
+                        <span class="slider-label">5th Harmonic</span>
+                        <input type="range" min="0" max="1" step="0.01" value="0.15" class="harmonic-slider" data-harmonic="5">
+                        <div class="frequency-display">1100 Hz</div>
+                    </div>
+                    <div class="slider-container">
+                        <span class="slider-label">6th Harmonic</span>
+                        <input type="range" min="0" max="1" step="0.01" value="0.1" class="harmonic-slider" data-harmonic="6">
+                        <div class="frequency-display">1320 Hz</div>
+                    </div>
+                    <div class="slider-container">
+                        <span class="slider-label">7th Harmonic</span>
+                        <input type="range" min="0" max="1" step="0.01" value="0.08" class="harmonic-slider" data-harmonic="7">
+                        <div class="frequency-display">1540 Hz</div>
+                    </div>
+                    <div class="slider-container">
+                        <span class="slider-label">8th Harmonic</span>
+                        <input type="range" min="0" max="1" step="0.01" value="0.05" class="harmonic-slider" data-harmonic="8">
+                        <div class="frequency-display">1760 Hz</div>
+                    </div>
+                </div>
+                
+                <div class="buttons">
+                    <button id="playBtn">Weave Sound</button>
+                    <button id="resetBtn">Reset</button>
+                    <button id="randomBtn">Randomize</button>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2 class="panel-title">Harmonic Analysis</h2>
+                
+                <div class="analysis">
+                    <div class="chord-display">
+                        <div class="chord-name" id="chordName">C Major</div>
+                        <div class="chord-description" id="chordDescription">Perfect fifth with major third</div>
+                    </div>
+                    
+                    <div class="partials-display">
+                        <div class="partial">
+                            <div class="partial-number">1st Partial</div>
+                            <div class="partial-amplitude" id="partial1">0.80</div>
+                        </div>
+                        <div class="partial">
+                            <div class="partial-number">2nd Partial</div>
+                            <div class="partial-amplitude" id="partial2">0.50</div>
+                        </div>
+                        <div class="partial">
+                            <div class="partial-number">3rd Partial</div>
+                            <div class="partial-amplitude" id="partial3">0.30</div>
+                        </div>
+                        <div class="partial">
+                            <div class="partial-number">4th Partial</div>
+                            <div class="partial-amplitude" id="partial4">0.20</div>
+                        </div>
+                        <div class="partial">
+                            <div class="partial-number">5th Partial</div>
+                            <div class="partial-amplitude" id="partial5">0.15</div>
+                        </div>
+                        <div class="partial">
+                            <div class="partial-number">6th Partial</div>
+                            <div class="partial-amplitude" id="partial6">0.10</div>
+                        </div>
+                        <div class="partial">
+                            <div class="partial-number">7th Partial</div>
+                            <div class="partial-amplitude" id="partial7">0.08</div>
+                        </div>
+                        <div class="partial">
+                            <div class="partial-number">8th Partial</div>
+                            <div class="partial-amplitude" id="partial8">0.05</div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="consonance-label">Harmonic Consonance</div>
+                        <div class="consonance-meter">
+                            <div class="consonance-fill" id="consonanceMeter"></div>
+                        </div>
+                        <div class="consonance-label" id="consonanceLabel">Moderately Consonant</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Waveform Weaver - Interactive Harmonic Synthesis with Web Audio API</p>
+        </div>
+    </div>
+
+    <script>
+        // Audio Engine
+        class AudioEngine {
+            constructor() {
+                this.audioContext = null;
+                this.oscillator = null;
+                this.gainNode = null;
+                this.isPlaying = false;
+                this.harmonics = Array(8).fill(0).map((_, i) => i === 0 ? 0.8 : 0.5 / (i+1));
+                this.baseFrequency = 220; // A3
+            }
+            
+            init() {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                this.gainNode = this.audioContext.createGain();
+                this.gainNode.connect(this.audioContext.destination);
+                this.gainNode.gain.value = 0;
+            }
+            
+            createWaveform() {
+                const real = new Float32Array(512);
+                const imag = new Float32Array(512);
+                
+                // Set the fundamental frequency
+                real[0] = 0;
+                imag[0] = 0;
+                
+                // Set harmonics based on slider values
+                for (let i = 0; i < 8; i++) {
+                    const harmonic = i + 1;
+                    const amplitude = this.harmonics[i];
+                    
+                    if (harmonic < 512) {
+                        imag[harmonic] = amplitude;
+                    }
+                }
+                
+                return this.audioContext.createPeriodicWave(real, imag);
+            }
+            
+            play() {
+                if (this.isPlaying) return;
+                
+                if (!this.audioContext) {
+                    this.init();
+                }
+                
+                if (this.audioContext.state === 'suspended') {
+                    this.audioContext.resume();
+                }
+                
+                this.oscillator = this.audioContext.createOscillator();
+                this.oscillator.setPeriodicWave(this.createWaveform());
+                this.oscillator.frequency.value = this.baseFrequency;
+                
+                // Apply ADSR envelope
+                const now = this.audioContext.currentTime;
+                this.gainNode.gain.cancelScheduledValues(now);
+                this.gainNode.gain.setValueAtTime(0, now);
+                this.gainNode.gain.linearRampToValueAtTime(0.7, now + 0.1); // Attack
+                this.gainNode.gain.linearRampToValueAtTime(0.5, now + 0.3); // Decay
+                this.gainNode.gain.setValueAtTime(0.5, now + 1.5); // Sustain
+                this.gainNode.gain.linearRampToValueAtTime(0, now + 2.0); // Release
+                
+                this.oscillator.connect(this.gainNode);
+                this.oscillator.start(now);
+                this.oscillator.stop(now + 2.0);
+                
+                this.isPlaying = true;
+                
+                // Reset playing state after sound finishes
+                setTimeout(() => {
+                    this.isPlaying = false;
+                }, 2000);
+            }
+            
+            updateHarmonics(harmonics) {
+                this.harmonics = harmonics;
+            }
+        }
+        
+        // Waveform Visualizer
+        class WaveformVisualizer {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.width = canvas.width;
+                this.height = canvas.height;
+            }
+            
+            drawWaveform(harmonics) {
+                // Clear the canvas completely
+                this.ctx.clearRect(0, 0, this.width, this.height);
+                
+                // Draw grid
+                this.ctx.strokeStyle = 'rgba(100, 100, 150, 0.2)';
+                this.ctx.lineWidth = 1;
+                
+                // Vertical grid lines
+                for (let x = 0; x < this.width; x += this.width / 10) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x, 0);
+                    this.ctx.lineTo(x, this.height);
+                    this.ctx.stroke();
+                }
+                
+                // Horizontal grid lines
+                for (let y = 0; y < this.height; y += this.height / 4) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, y);
+                    this.ctx.lineTo(this.width, y);
+                    this.ctx.stroke();
+                }
+                
+                // Draw center line
+                this.ctx.strokeStyle = 'rgba(100, 100, 150, 0.5)';
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, this.height / 2);
+                this.ctx.lineTo(this.width, this.height / 2);
+                this.ctx.stroke();
+                
+                // Draw waveform
+                this.ctx.strokeStyle = '#4cc9f0';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                
+                const sampleCount = 800;
+                const step = this.width / sampleCount;
+                
+                for (let i = 0; i <= sampleCount; i++) {
+                    const x = i * step;
+                    let y = 0;
+                    
+                    // Sum all harmonics
+                    for (let h = 0; h < harmonics.length; h++) {
+                        const harmonic = h + 1;
+                        const amplitude = harmonics[h];
+                        const frequency = harmonic;
+                        y += amplitude * Math.sin(2 * Math.PI * frequency * (i / sampleCount));
+                    }
+                    
+                    const canvasY = this.height / 2 - y * (this.height / 2.5);
+                    
+                    if (i === 0) {
+                        this.ctx.moveTo(x, canvasY);
+                    } else {
+                        this.ctx.lineTo(x, canvasY);
+                    }
+                }
+                
+                this.ctx.stroke();
+            }
+        }
+        
+        // Consonance Scorer
+        class ConsonanceScorer {
+            constructor() {
+                // Common consonant intervals (frequency ratios)
+                this.consonantRatios = [
+                    { ratio: [1, 1], name: "Unison", consonance: 1.0 },
+                    { ratio: [2, 1], name: "Octave", consonance: 1.0 },
+                    { ratio: [3, 2], name: "Perfect Fifth", consonance: 0.95 },
+                    { ratio: [4, 3], name: "Perfect Fourth", consonance: 0.9 },
+                    { ratio: [5, 4], name: "Major Third", consonance: 0.85 },
+                    { ratio: [6, 5], name: "Minor Third", consonance: 0.8 },
+                    { ratio: [5, 3], name: "Major Sixth", consonance: 0.75 },
+                    { ratio: [8, 5], name: "Minor Sixth", consonance: 0.7 }
+                ];
+                
+                // Note names for chord identification
+                this.noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+            }
+            
+            analyzePartials(harmonics) {
+                // Get top 3 non-fundamental partials with significant amplitude
+                const partials = harmonics.map((amp, index) => ({ 
+                    index: index + 1, 
+                    amplitude: amp,
+                    frequency: 220 * (index + 1) // Assuming fundamental is 220Hz
+                }))
+                .filter(p => p.amplitude > 0.05 && p.index > 1) // Exclude fundamental
+                .sort((a, b) => b.amplitude - a.amplitude)
+                .slice(0, 3);
+                
+                // Calculate consonance score
+                let totalScore = 0;
+                let maxScore = 0;
+                let chordDescription = "No significant harmonics";
+                let chordName = "No Chord";
+                
+                if (partials.length >= 2) {
+                    // Compare each pair of partials
+                    for (let i = 0; i < partials.length - 1; i++) {
+                        for (let j = i + 1; j < partials.length; j++) {
+                            const p1 = partials[i].index;
+                            const p2 = partials[j].index;
+                            
+                            // Simplify the ratio
+                            const gcd = this.gcd(p1, p2);
+                            const ratioA = p1 / gcd;
+                            const ratioB = p2 / gcd;
+                            
+                            // Find the closest consonant ratio
+                            let bestMatch = null;
+                            let bestDifference = Infinity;
+                            
+                            for (const ratio of this.consonantRatios) {
+                                const diff = Math.abs((ratio.ratio[0] / ratio.ratio[1]) - (ratioA / ratioB));
+                                if (diff < bestDifference) {
+                                    bestDifference = diff;
+                                    bestMatch = ratio;
+                                }
+                            }
+                            
+                            // Score based on how close we are to a consonant ratio
+                            const score = bestMatch ? bestMatch.consonance * (1 - bestDifference) : 0;
+                            totalScore += score;
+                            maxScore += 1;
+                        }
+                    }
+                    
+                    // Determine chord name and description
+                    if (partials.length >= 3) {
+                        // Triad chord
+                        const rootNote = this.getNoteName(partials[0].index);
+                        const thirdInterval = this.getIntervalName(partials[1].index, partials[0].index);
+                        const fifthInterval = this.getIntervalName(partials[2].index, partials[0].index);
+                        
+                        chordName = `${rootNote} ${this.getChordType(thirdInterval, fifthInterval)}`;
+                        chordDescription = `${thirdInterval} with ${fifthInterval}`;
+                    } else {
+                        // Dyad (interval)
+                        const rootNote = this.getNoteName(partials[0].index);
+                        const interval = this.getIntervalName(partials[1].index, partials[0].index);
+                        
+                        chordName = `${rootNote} ${interval}`;
+                        chordDescription = `${interval} interval`;
+                    }
+                }
+                
+                const consonance = maxScore > 0 ? totalScore / maxScore : 0;
+                
+                return {
+                    consonance,
+                    chordName,
+                    chordDescription,
+                    partials: partials.map(p => p.index)
+                };
+            }
+            
+            gcd(a, b) {
+                while (b !== 0) {
+                    const temp = b;
+                    b = a % b;
+                    a = temp;
+                }
+                return a;
+            }
+            
+            getNoteName(partial) {
+                // Calculate note based on partial number (assuming fundamental is A)
+                // A = 0, A# = 1, B = 2, etc.
+                const noteIndex = (7 * (partial - 1)) % 12;
+                return this.noteNames[noteIndex];
+            }
+            
+            getIntervalName(partial1, partial2) {
+                const ratio = partial1 / partial2;
+                
+                if (Math.abs(ratio - 1.5) < 0.02) return "Perfect Fifth";
+                if (Math.abs(ratio - 1.33) < 0.02) return "Perfect Fourth";
+                if (Math.abs(ratio - 1.25) < 0.02) return "Major Third";
+                if (Math.abs(ratio - 1.2) < 0.02) return "Minor Third";
+                if (Math.abs(ratio - 2) < 0.02) return "Octave";
+                if (Math.abs(ratio - 1.66) < 0.02) return "Major Sixth";
+                if (Math.abs(ratio - 1.6) < 0.02) return "Minor Sixth";
+                if (Math.abs(ratio - 1.125) < 0.02) return "Major Second";
+                if (Math.abs(ratio - 1.066) < 0.02) return "Minor Second";
+                
+                return "Complex Interval";
+            }
+            
+            getChordType(third, fifth) {
+                if (third.includes("Major Third") && fifth.includes("Perfect Fifth")) {
+                    return "Major";
+                } else if (third.includes("Minor Third") && fifth.includes("Perfect Fifth")) {
+                    return "Minor";
+                } else if (third.includes("Major Third") && fifth.includes("Minor Sixth")) {
+                    return "Augmented";
+                } else if (third.includes("Minor Third") && fifth.includes("Tritone")) {
+                    return "Diminished";
+                }
+                return "Chord";
+            }
+        }
+        
+        // Main Application
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize components
+            const audioEngine = new AudioEngine();
+            const canvas = document.getElementById('waveformCanvas');
+            const visualizer = new WaveformVisualizer(canvas);
+            const consonanceScorer = new ConsonanceScorer();
+            
+            // Initialize harmonics array
+            let harmonics = Array(8).fill(0).map((_, i) => {
+                const sliders = document.querySelectorAll('.harmonic-slider');
+                return parseFloat(sliders[i].value);
+            });
+            
+            // Set canvas dimensions
+            function resizeCanvas() {
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                visualizer.drawWaveform(harmonics);
+            }
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Get DOM elements
+            const sliders = document.querySelectorAll('.harmonic-slider');
+            const playBtn = document.getElementById('playBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const randomBtn = document.getElementById('randomBtn');
+            const chordNameEl = document.getElementById('chordName');
+            const chordDescriptionEl = document.getElementById('chordDescription');
+            const consonanceMeter = document.getElementById('consonanceMeter');
+            const consonanceLabel = document.getElementById('consonanceLabel');
+            const partialDisplays = Array.from({length: 8}, (_, i) => document.getElementById(`partial${i+1}`));
+            
+            // Draw initial waveform
+            visualizer.drawWaveform(harmonics);
+            
+            // Update displays
+            function updateDisplays() {
+                // Update partial displays
+                harmonics.forEach((amp, i) => {
+                    partialDisplays[i].textContent = amp.toFixed(2);
+                });
+                
+                // Analyze consonance
+                const analysis = consonanceScorer.analyzePartials(harmonics);
+                
+                // Update chord display
+                chordNameEl.textContent = analysis.chordName;
+                chordDescriptionEl.textContent = analysis.chordDescription;
+                
+                // Update consonance meter
+                const consonancePercent = Math.round(analysis.consonance * 100);
+                consonanceMeter.style.width = `${consonancePercent}%`;
+                
+                // Update consonance label
+                if (analysis.consonance > 0.8) {
+                    consonanceLabel.textContent = "Highly Consonant";
+                    canvas.parentElement.classList.add('glow');
+                    canvas.parentElement.classList.remove('distortion');
+                } else if (analysis.consonance > 0.5) {
+                    consonanceLabel.textContent = "Moderately Consonant";
+                    canvas.parentElement.classList.remove('glow', 'distortion');
+                } else {
+                    consonanceLabel.textContent = "Dissonant";
+                    canvas.parentElement.classList.add('distortion');
+                    canvas.parentElement.classList.remove('glow');
+                }
+            }
+            
+            // Event listeners for sliders
+            sliders.forEach(slider => {
+                slider.addEventListener('input', () => {
+                    const harmonicIndex = parseInt(slider.dataset.harmonic) - 1;
+                    harmonics[harmonicIndex] = parseFloat(slider.value);
+                    
+                    // Update audio engine
+                    audioEngine.updateHarmonics(harmonics);
+                    
+                    // Redraw waveform cleanly
+                    visualizer.drawWaveform(harmonics);
+                    
+                    // Update displays
+                    updateDisplays();
+                });
+            });
+            
+            // Play button
+            playBtn.addEventListener('click', () => {
+                audioEngine.play();
+            });
+            
+            // Reset button
+            resetBtn.addEventListener('click', () => {
+                harmonics = [0.8, 0.5, 0.3, 0.2, 0.15, 0.1, 0.08, 0.05];
+                harmonics.forEach((amp, i) => {
+                    sliders[i].value = amp;
+                });
+                
+                audioEngine.updateHarmonics(harmonics);
+                visualizer.drawWaveform(harmonics);
+                updateDisplays();
+            });
+            
+            // Randomize button
+            randomBtn.addEventListener('click', () => {
+                harmonics = harmonics.map((_, i) => {
+                    // Fundamental should be stronger
+                    const max = i === 0 ? 1 : 0.7;
+                    return Math.random() * max;
+                });
+                
+                harmonics.forEach((amp, i) => {
+                    sliders[i].value = amp;
+                });
+                
+                audioEngine.updateHarmonics(harmonics);
+                visualizer.drawWaveform(harmonics);
+                updateDisplays();
+            });
+            
+            // Initial update
+            updateDisplays();
+        });
+    </script>
+</body>
+</html>
