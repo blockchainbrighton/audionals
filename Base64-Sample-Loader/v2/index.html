@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Sample Loader Module</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #2c3e50;
+        }
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        #status, #results {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap; /* Preserve line breaks */
+        }
+        #status {
+            background-color: #ecf0f1;
+        }
+        #results {
+            background-color: #e8f5e9; /* Light green */
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .error {
+            background-color: #ffebee !important; /* Light red */
+            color: #c62828;
+        }
+        progress {
+            width: 100%;
+            margin-top: 10px;
+        }
+        select, input {
+            padding: 5px;
+            margin: 5px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sample Loader Module Test</h1>
+
+        <div class="section">
+            <h2>1. Initialize Audio Context</h2>
+            <button id="initBtn">Initialize AudioContext</button>
+            <div id="status">Status: Not initialized. Click the button above.</div>
+        </div>
+
+        <div class="section">
+            <h2>2. Load Samples</h2>
+            <button id="loadAllBtn" disabled>Load All Samples</button>
+            <progress id="progressBar" value="0" max="100" style="display:none;"></progress>
+            <span id="progressText" style="display:none;"></span><br>
+
+            <h3>Or Load a Single Sample:</h3>
+            <label for="sampleSelect">Select Sample:</label>
+            <select id="sampleSelect" disabled>
+                <option value="">-- Loading samples list --</option>
+            </select>
+            <button id="loadSingleBtn" disabled>Load Selected Sample</button>
+        </div>
+
+        <div class="section">
+            <h2>3. Check Status</h2>
+            <button id="checkStatusBtn" disabled>Check All Samples Loaded</button>
+            <button id="listLoadedBtn" disabled>List Loaded Samples</button>
+            <button id="listAllBtn" disabled>List All Samples</button>
+        </div>
+
+        <div class="section">
+            <h2>4. Test Playback (Index 0)</h2>
+            <button id="playBtn" disabled>Play First Loaded Sample (Index 0)</button>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <!-- Import the sample loader module -->
+    <script type="module">
+        // Import necessary functions from the module
+        import {
+            ogSampleUrls,
+            initAudioContext,
+            loadAllSamples,
+            loadSingleSample,
+            checkAllSamplesLoaded,
+            getSampleByIndex,
+            getSampleByUrl,
+            getLoadedSamplesMap,
+            getSampleList,
+            isAudioContextInitialized,
+            getAudioContext
+        } from './sampleLoader.js'; // Make sure the path is correct
+
+        // --- UI Elements ---
+        const initBtn = document.getElementById('initBtn');
+        const statusDiv = document.getElementById('status');
+        const loadAllBtn = document.getElementById('loadAllBtn');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const checkStatusBtn = document.getElementById('checkStatusBtn');
+        const listLoadedBtn = document.getElementById('listLoadedBtn');
+        const listAllBtn = document.getElementById('listAllBtn');
+        const playBtn = document.getElementById('playBtn');
+        const resultsDiv = document.getElementById('results');
+        const sampleSelect = document.getElementById('sampleSelect');
+        const loadSingleBtn = document.getElementById('loadSingleBtn');
+
+        let audioContext = null;
+
+        // --- Helper Functions ---
+        function updateStatus(message, isError = false) {
+            statusDiv.textContent = `Status: ${message}`;
+            statusDiv.classList.toggle('error', isError);
+        }
+
+        function updateResults(message, isError = false) {
+            const timestamp = new Date().toLocaleTimeString();
+            resultsDiv.textContent += `[${timestamp}] ${message}\n`;
+            resultsDiv.scrollTop = resultsDiv.scrollHeight; // Auto-scroll
+            if (isError) {
+                resultsDiv.classList.add('error');
+                // Remove error class after a short time for new messages
+                setTimeout(() => resultsDiv.classList.remove('error'), 1000);
+            }
+        }
+
+        // --- Event Listeners ---
+
+        // Initialize AudioContext
+        initBtn.addEventListener('click', async () => {
+            try {
+                audioContext = await initAudioContext();
+                updateStatus(`AudioContext initialized (State: ${audioContext.state}).`);
+                initBtn.disabled = true;
+                loadAllBtn.disabled = false;
+                checkStatusBtn.disabled = false;
+                listLoadedBtn.disabled = false;
+                listAllBtn.disabled = false;
+                playBtn.disabled = false;
+                sampleSelect.disabled = false;
+                loadSingleBtn.disabled = false;
+
+                // Populate the sample select dropdown
+                sampleSelect.innerHTML = ''; // Clear placeholder
+                ogSampleUrls.forEach((sample, index) => {
+                    const option = document.createElement('option');
+                    option.value = sample.value.trim().split('#')[0]; // Normalize URL like the loader
+                    option.textContent = `${index}: ${sample.text}`;
+                    sampleSelect.appendChild(option);
+                });
+                if (sampleSelect.options.length > 0) {
+                     sampleSelect.selectedIndex = 0;
+                }
+
+            } catch (e) {
+                console.error("Initialization failed:", e);
+                updateStatus(`Failed to initialize AudioContext: ${e.message}`, true);
+                updateResults(`ERROR: Failed to initialize AudioContext: ${e.message}`, true);
+            }
+        });
+
+        // Load All Samples
+        loadAllBtn.addEventListener('click', () => {
+            if (!isAudioContextInitialized()) {
+                updateResults("ERROR: AudioContext not initialized!", true);
+                return;
+            }
+
+            loadAllBtn.disabled = true;
+            progressBar.style.display = 'block';
+            progressText.style.display = 'inline';
+            progressBar.value = 0;
+            progressText.textContent = '0%';
+
+            updateResults("Starting to load all samples...");
+
+            loadAllSamples((index, total, url, error) => {
+                const percent = Math.round(((index + 1) / total) * 100);
+                progressBar.value = percent;
+                progressText.textContent = `${percent}%`;
+
+                if (error) {
+                    updateResults(`Progress: ${index + 1}/${total} - FAILED: ${url}\n  -> Error: ${error.message}`, true);
+                } else {
+                    updateResults(`Progress: ${index + 1}/${total} - SUCCESS: ${url}`);
+                }
+            }).then(() => {
+                progressBar.style.display = 'none';
+                progressText.style.display = 'none';
+                loadAllBtn.disabled = false;
+                updateResults("Finished loading all samples. Click 'Check All Samples Loaded' to verify.");
+            }).catch(err => {
+                 progressBar.style.display = 'none';
+                 progressText.style.display = 'none';
+                 loadAllBtn.disabled = false;
+                 updateResults(`UNEXPECTED ERROR during loading: ${err.message}`, true);
+                 console.error("Unexpected error in loadAllSamples:", err);
+            });
+        });
+
+        // Load Single Sample
+        loadSingleBtn.addEventListener('click', async () => {
+            if (!isAudioContextInitialized()) {
+                updateResults("ERROR: AudioContext not initialized!", true);
+                return;
+            }
+            const selectedUrl = sampleSelect.value;
+            if (!selectedUrl) {
+                updateResults("ERROR: No sample selected!", true);
+                return;
+            }
+            const selectedText = sampleSelect.options[sampleSelect.selectedIndex].text;
+
+            updateResults(`Starting to load single sample: ${selectedText}`);
+            try {
+                 await loadSingleSample(selectedUrl);
+                 updateResults(`SUCCESS: Loaded single sample: ${selectedText} (${selectedUrl})`);
+            } catch (err) {
+                 updateResults(`ERROR: Failed to load single sample: ${selectedText}\n  -> Error: ${err.message}`, true);
+            }
+        });
+
+
+        // Check All Samples Loaded
+        checkStatusBtn.addEventListener('click', () => {
+            const allLoaded = checkAllSamplesLoaded();
+            const loadedCount = getLoadedSamplesMap().size;
+            const totalCount = ogSampleUrls.length;
+            const message = `Check Status: ${allLoaded ? 'ALL samples loaded successfully!' : `Only ${loadedCount} out of ${totalCount} samples loaded.`}`;
+            updateResults(message, !allLoaded); // Highlight if not all loaded
+        });
+
+        // List Loaded Samples
+        listLoadedBtn.addEventListener('click', () => {
+            const loadedMap = getLoadedSamplesMap();
+            let output = `--- Loaded Samples (${loadedMap.size} total) ---\n`;
+            if (loadedMap.size === 0) {
+                output += "No samples have been loaded yet.\n";
+            } else {
+                // Iterate through the *original* list to show index and name
+                ogSampleUrls.forEach((sampleMeta, index) => {
+                     const normalizedUrl = sampleMeta.value.trim().split('#')[0];
+                     if (loadedMap.has(normalizedUrl)) {
+                         output += `Index ${index}: ${sampleMeta.text} (OK)\n`;
+                     }
+                });
+                // Also list any loaded samples that might not be in the original list (though unlikely here)
+                // This part is more for completeness if the loader allowed arbitrary URLs
+                // for (const [url, buffer] of loadedMap) {
+                //     if (!ogSampleUrls.some(s => s.value.trim().split('#')[0] === url)) {
+                //          output += `Extra: ${url} (OK)\n`;
+                //     }
+                // }
+            }
+            updateResults(output);
+        });
+
+         // List All Samples
+        listAllBtn.addEventListener('click', () => {
+            const sampleList = getSampleList();
+            const loadedMap = getLoadedSamplesMap();
+            let output = `--- All Samples (${sampleList.length} total) ---\n`;
+            sampleList.forEach((sampleMeta, index) => {
+                 const normalizedUrl = sampleMeta.value.trim().split('#')[0];
+                 const status = loadedMap.has(normalizedUrl) ? "(LOADED)" : "(NOT LOADED)";
+                 output += `Index ${index}: ${sampleMeta.text} ${status}\n  URL: ${normalizedUrl}\n`;
+            });
+            updateResults(output);
+        });
+
+        // Play First Sample (Index 0)
+        playBtn.addEventListener('click', () => {
+            if (!isAudioContextInitialized()) {
+                updateResults("ERROR: AudioContext not initialized!", true);
+                return;
+            }
+            const audioCtx = getAudioContext(); // Get the context from the module
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume(); // Resume if suspended
+            }
+
+            const buffer = getSampleByIndex(0);
+            if (!buffer) {
+                updateResults("ERROR: Sample at index 0 is not loaded!", true);
+                return;
+            }
+
+            try {
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtx.destination);
+                source.start();
+                updateResults("Playing sample at index 0.");
+            } catch (e) {
+                 updateResults(`ERROR: Failed to play sample: ${e.message}`, true);
+            }
+        });
+
+        // Initial status message
+        updateStatus("Ready. Click 'Initialize AudioContext' to start.");
+    </script>
+</body>
+</html>
