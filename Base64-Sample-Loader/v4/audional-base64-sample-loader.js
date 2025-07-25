@@ -1,4 +1,36 @@
-// sampleLoader.js (Optimized, with by-index API and caching)
+// audional-base64-sample-loader.js (Optimized, with by-index API and caching)
+
+
+/**
+ * audional-base64-sample-loader.js
+ * ------------------------------------------------------------------------
+ * OG Audional Ordinals Sample Loader & Caching Utility
+ *
+ * This module provides:
+ *   - A curated array (`ogSampleUrls`) of on-chain Ordinals sample inscriptions (music/audio, e.g., OB1 kit)
+ *   - Robust utilities for fetching and decoding those samples as Web Audio `AudioBuffer` objects in the browser
+ *   - By-index and batch APIs, with built-in caching for efficient interactive and real-time use
+ *   - Fully browser-native (no Node dependencies), works with live URLs or on-chain Ordinals endpoints
+ *
+ * Core features:
+ *   • Handles raw Ordinals URLs, with or without trailing hashes/queries (e.g. ...i0#)
+ *   • Normalizes input URLs for reliability (production: ordinals.com, on-chain: your own gateway or domainless)
+ *   • Supports JSON audioData, direct audio files, and embedded audio in HTML
+ *   • Suitable for dApps, sequencers, DAWs, samplers, and interactive music/NFT projects
+ *
+ * Futureproofing:
+ *   • To migrate to fully on-chain or gatewayless mode, adjust `normalizeOrdUrl()` to resolve content from your
+ *     chosen storage or Ordinals node, removing/prepending domains as needed (see comments in code).
+ *
+ * Usage Example:
+ *     import { SimpleSampleLoader } from './sampleLoader.js';
+ *     const buffer = await SimpleSampleLoader.getSampleByIndex(0); // Loads first OB1 sample as AudioBuffer
+ *
+ * Author: jim.btc
+ *
+ * ------------------------------------------------------------------------
+ */
+
 
 /*****************************************************************
  * OG Audional Sample List & Dropdown
@@ -61,45 +93,58 @@
 ];
 
 const getAudioContext = () => new (window.AudioContext || window.webkitAudioContext)();
-
-// Internal cache for already-decoded samples (by index)
 const bufferCache = new Map();
+
+/**
+ * Normalizes a given URL string:
+ * - strips any trailing hash/query
+ * - prepends ordinals.com if not already present
+ */
+function normalizeOrdUrl(url) {
+  // Strip after first "i0" (anything after)
+  const m = url.match(/(\/content\/[a-f0-9]{64}i0)/i);
+  if (m) return `https://ordinals.com${m[1]}`;
+  // Remove any trailing hash from a full URL
+  return url.replace(/([a-f0-9]{64}i0)[#?]?.*$/i, '$1');
+}
 
 /**
  * Loads a sample URL and decodes as AudioBuffer.
  */
 async function loadSample(src) {
-  try {
-    const isOrd = /^\/content\/[a-f0-9]{64}i0$/i.test(src) || src.startsWith('https://ordinals.com/content/');
-    const url = isOrd && !src.startsWith('http') ? `https://ordinals.com${src}` : src;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
-    const type = res.headers.get('Content-Type') || '';
+  // Normalize OB1-style URLs and ordinals.com URLs
+  const url = normalizeOrdUrl(src);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
+  const type = res.headers.get('Content-Type') || '';
 
-    if (type.includes('application/json')) {
-      const { audioData } = await res.json();
-      if (!audioData) throw new Error("No 'audioData' in JSON");
-      let b64 = audioData.includes(',') ? audioData.split(',')[1] : audioData;
-      const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer;
-      return await getAudioContext().decodeAudioData(bin);
-    }
-    if (type.startsWith('audio/')) {
-      return await getAudioContext().decodeAudioData(await res.arrayBuffer());
-    }
-    const html = await res.text();
-    let m = html.match(/<audio[^>]+src=["']([^"']+)["']/i) || html.match(/src=["'](data:audio\/[^"']+)["']/i);
-    if (m) return loadSample(m[1].startsWith('http') ? m[1] : new URL(m[1], url).href);
-
-    throw new Error(`Unsupported format: ${type}`);
-  } catch (error) {
-    throw error;
+  if (type.includes('application/json')) {
+    const { audioData } = await res.json();
+    if (!audioData) throw new Error("No 'audioData' in JSON");
+    let b64 = audioData.includes(',') ? audioData.split(',')[1] : audioData;
+    const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer;
+    return await getAudioContext().decodeAudioData(bin);
   }
+  if (type.startsWith('audio/')) {
+    return await getAudioContext().decodeAudioData(await res.arrayBuffer());
+  }
+  const html = await res.text();
+  let m = html.match(/<audio[^>]+src=["']([^"']+)["']/i) || html.match(/src=["'](data:audio\/[^"']+)["']/i);
+  if (m) return loadSample(m[1].startsWith('http') ? m[1] : new URL(m[1], url).href);
+
+  throw new Error(`Unsupported format: ${type}`);
 }
 
-const SimpleSampleLoader = {
+export const SimpleSampleLoader = {
+  ogSampleUrls,
+
   loadSample,
 
-  // Request a sample by its index; returns a Promise<AudioBuffer>.
+  /**
+   * Get AudioBuffer for a given sample index.
+   * @param {number} index
+   * @returns {Promise<AudioBuffer>}
+   */
   async getSampleByIndex(index) {
     if (!Number.isInteger(index) || index < 0 || index >= ogSampleUrls.length) {
       throw new Error(`Invalid sample index: ${index}`);
@@ -120,7 +165,9 @@ const SimpleSampleLoader = {
     return promise;
   },
 
-  // Load all samples, as before, for batch loading.
+  /**
+   * Load all samples, returns array of { name, url, success, audioBuffer?, error? }
+   */
   async loadAllSamples() {
     const results = await Promise.all(ogSampleUrls.map(async ({ text: name, value: url }, idx) => {
       try {
@@ -139,6 +186,3 @@ const SimpleSampleLoader = {
     return results;
   }
 };
-
-SimpleSampleLoader.ogSampleUrls = ogSampleUrls;
-export { SimpleSampleLoader };
