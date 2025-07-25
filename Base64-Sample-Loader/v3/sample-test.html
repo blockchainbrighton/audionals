@@ -6,7 +6,7 @@
     <title>Sample Loader Test</title>
     <style>
         body { font-family: sans-serif; padding: 20px; background-color: #f0f0f0; }
-        button { padding: 10px 15px; margin: 5px; font-size: 16px; cursor: pointer; }
+        button, select { padding: 10px 15px; margin: 5px; font-size: 16px; cursor: pointer; }
         #results { margin-top: 20px; }
         .result-item { padding: 10px; margin: 5px 0; border-radius: 4px; }
         .success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
@@ -16,111 +16,117 @@
 </head>
 <body>
 
-    <h1>Sample Loader Test</h1>
-    <p>This page tests the simplified sample loading logic against all URLs in <code>samples.js</code>.</p>
+<h1>Sample Loader Test</h1>
+<p>This page tests the simplified sample loading logic against all URLs in <code>samples.js</code>.</p>
 
-    <button id="loadAllBtn">Load All Samples</button>
-    <button id="clearBtn">Clear Results</button>
+<button id="loadAllBtn">Load All Samples</button>
+<button id="clearBtn">Clear Results</button>
 
-    <div id="results"></div>
+<!-- New: Single sample test UI -->
+<div>
+    <label for="sampleIndexSelect"><strong>Test individual sample:</strong></label>
+    <select id="sampleIndexSelect"></select>
+    <button id="loadSingleBtn">Decode &amp; Play Selected</button>
+    <span id="singleResult"></span>
+</div>
 
-    <!-- Include the sample definitions -->
-    <script type="module" src="./samples.js"></script>
+<div id="results"></div>
 
-    <!-- Include the simplified loader logic -->
-    <script type="module">
-        // Import the loader logic
-        import { SimpleSampleLoader } from './sampleLoader.js';
-        // Import the sample list to display count
-        import { ogSampleUrls } from './samples.js';
+<script type="module">
+import { SimpleSampleLoader } from './sampleLoader.js';
+import { ogSampleUrls } from './samples.js';
 
-        const loadAllBtn = document.getElementById('loadAllBtn');
-        const clearBtn = document.getElementById('clearBtn');
-        const resultsDiv = document.getElementById('results');
+const loadAllBtn = document.getElementById('loadAllBtn');
+const clearBtn = document.getElementById('clearBtn');
+const resultsDiv = document.getElementById('results');
 
-        clearBtn.addEventListener('click', () => {
-            resultsDiv.innerHTML = '';
-        });
+// Populate the sample index dropdown
+const sampleIndexSelect = document.getElementById('sampleIndexSelect');
+ogSampleUrls.forEach((sample, idx) => {
+    const opt = document.createElement('option');
+    opt.value = idx;
+    opt.textContent = `[${idx}] ${sample.text}`;
+    sampleIndexSelect.appendChild(opt);
+});
 
-        loadAllBtn.addEventListener('click', async () => {
-            resultsDiv.innerHTML = `<p>Loading ${ogSampleUrls.length} samples...</p>`;
-            loadAllBtn.disabled = true; // Prevent multiple clicks
+// Clear results
+clearBtn.addEventListener('click', () => {
+    resultsDiv.innerHTML = '';
+    document.getElementById('singleResult').textContent = '';
+});
 
-            try {
-                // Call the function to load all samples
-                // --- CORRECTED THE TYPO HERE ---
-                const loadResults = await SimpleSampleLoader.loadAllSamples();
+// Load all samples test
+loadAllBtn.addEventListener('click', async () => {
+    resultsDiv.innerHTML = `<p>Loading ${ogSampleUrls.length} samples...</p>`;
+    loadAllBtn.disabled = true;
 
-                // Clear previous results and display new ones
-                resultsDiv.innerHTML = '<h2>Results:</h2>';
-
-                let successCount = 0;
-                let failureCount = 0;
-
-                loadResults.forEach(result => {
-                    const itemDiv = document.createElement('div');
-                    itemDiv.classList.add('result-item');
-                    if (result.success) {
-                        successCount++;
-                        itemDiv.classList.add('success');
-                        itemDiv.innerHTML = `<strong>✅ ${result.name}</strong><br>URL: ${result.url}<br>Status: Success`;
-                        // Optional: Add a button to play the loaded AudioBuffer
-                         const playBtn = document.createElement('button');
-                         playBtn.textContent = 'Play Sample';
-                         // --- Pass the audioBuffer to the play function ---
-                         playBtn.onclick = () => playAudioBuffer(result.audioBuffer);
-                         itemDiv.appendChild(document.createElement('br'));
-                         itemDiv.appendChild(playBtn);
-                    } else {
-                        failureCount++;
-                        itemDiv.classList.add('failure');
-                        itemDiv.innerHTML = `<strong>❌ ${result.name}</strong><br>URL: ${result.url}<br>Status: Failed<br>Error: <pre>${result.error}</pre>`;
-                    }
-                    resultsDiv.appendChild(itemDiv);
-                });
-
-                // Add a summary
-                const summary = document.createElement('div');
-                summary.innerHTML = `<h3>Summary: ${successCount} Succeeded, ${failureCount} Failed</h3>`;
-                resultsDiv.prepend(summary); // Add summary at the top of results
-
-            } catch (error) {
-                console.error("An unexpected error occurred during loading:", error);
-                resultsDiv.innerHTML += `<p class="failure"><strong>Unexpected Error:</strong> ${error.message}</p>`;
-            } finally {
-                loadAllBtn.disabled = false; // Re-enable the button
-            }
-        });
-
-        // Helper function to play an AudioBuffer
-        // --- MOVED THIS FUNCTION INSIDE THE MODULE SCOPE ---
-        function playAudioBuffer(audioBuffer) {
-            if (!audioBuffer) {
-                 console.warn("No AudioBuffer provided to play.");
-                 return;
-            }
-            // Ensure AudioContext is available and resumed if needed (user interaction)
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            const audioContext = new AudioContext();
-            if (audioContext.state === 'suspended') {
-                 audioContext.resume().then(() => {
-                     console.log("AudioContext resumed for playback.");
-                     doPlay(audioContext);
-                 }).catch(err => console.error("Failed to resume AudioContext:", err));
+    try {
+        const loadResults = await SimpleSampleLoader.loadAllSamples();
+        resultsDiv.innerHTML = '<h2>Results:</h2>';
+        let successCount = 0;
+        let failureCount = 0;
+        loadResults.forEach(result => {
+            const itemDiv = document.createElement('div');
+            itemDiv.classList.add('result-item');
+            if (result.success) {
+                successCount++;
+                itemDiv.classList.add('success');
+                itemDiv.innerHTML = `<strong>✅ ${result.name}</strong><br>URL: ${result.url}<br>Status: Success`;
+                const playBtn = document.createElement('button');
+                playBtn.textContent = 'Play Sample';
+                playBtn.onclick = () => playAudioBuffer(result.audioBuffer);
+                itemDiv.appendChild(document.createElement('br'));
+                itemDiv.appendChild(playBtn);
             } else {
-                 doPlay(audioContext);
+                failureCount++;
+                itemDiv.classList.add('failure');
+                itemDiv.innerHTML = `<strong>❌ ${result.name}</strong><br>URL: ${result.url}<br>Status: Failed<br>Error: <pre>${result.error}</pre>`;
             }
+            resultsDiv.appendChild(itemDiv);
+        });
+        const summary = document.createElement('div');
+        summary.innerHTML = `<h3>Summary: ${successCount} Succeeded, ${failureCount} Failed</h3>`;
+        resultsDiv.prepend(summary);
+    } catch (error) {
+        console.error("An unexpected error occurred during loading:", error);
+        resultsDiv.innerHTML += `<p class="failure"><strong>Unexpected Error:</strong> ${error.message}</p>`;
+    } finally {
+        loadAllBtn.disabled = false;
+    }
+});
 
-            function doPlay(ctx) {
-                 const source = ctx.createBufferSource();
-                 source.buffer = audioBuffer;
-                 source.connect(ctx.destination);
-                 source.start();
-                 console.log("Playing audio buffer.");
-            }
-        }
+// Single sample decode & play
+document.getElementById('loadSingleBtn').addEventListener('click', async () => {
+    const idx = parseInt(sampleIndexSelect.value, 10);
+    const info = ogSampleUrls[idx];
+    const singleResult = document.getElementById('singleResult');
+    singleResult.textContent = 'Loading...';
+    try {
+        const audioBuffer = await SimpleSampleLoader.getSampleByIndex(idx);
+        singleResult.textContent = `✅ Decoded: ${info.text}`;
+        playAudioBuffer(audioBuffer);
+    } catch (e) {
+        singleResult.textContent = `❌ Failed: ${info.text} (${e.message})`;
+    }
+});
 
-    </script>
-
+// Helper to play AudioBuffer
+function playAudioBuffer(audioBuffer) {
+    if (!audioBuffer) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioContext = new AudioContext();
+    if (audioContext.state === 'suspended') {
+        audioContext.resume().then(() => doPlay(audioContext));
+    } else {
+        doPlay(audioContext);
+    }
+    function doPlay(ctx) {
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctx.destination);
+        source.start();
+    }
+}
+</script>
 </body>
 </html>
