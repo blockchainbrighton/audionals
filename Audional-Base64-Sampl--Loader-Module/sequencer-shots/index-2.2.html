@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>8-Channel 4-Bar Web Audio Sequencer (Live Load)</title>
+  <title>8-Channel 4-Bar Web Audio Sequencer (Tone.js Sync)</title>
+  <!-- Include Tone.js Library -->
+  <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
   <script type="module" src="audional-base64-sample-loader.js" defer></script>
   <style>
     body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #eee; text-align: center; margin: 0; padding: 20px; }
@@ -28,10 +30,8 @@
   </style>
 </head>
 <body>
-
-  <h1>8-Channel 4-Bar Sequencer</h1>
+  <h1>8-Channel 4-Bar Sequencer (Tone.js)</h1>
   <p class="loading" id="loaderStatus">Loading sample list...</p>
-
   <div class="controls">
     <div class="bpm-control">
       <label for="bpmInput">BPM:</label>
@@ -41,18 +41,22 @@
     <button id="playBtn" disabled>Play</button>
     <button id="stopBtn" disabled>Stop</button>
   </div>
-
   <div class="sequencer" id="sequencer"></div>
-
   <script type="module">
     import { SimpleSampleLoader } from './audional-base64-sample-loader.js';
 
     const NUM_CHANNELS = 8, STEPS_PER_BAR = 16;
-    let BPM = 120.00, audioContext, currentStep = -1, intervalId;
+    let BPM = 120.00;
+    // --- Tone.js Specific Variables ---
+    let isToneStarted = false; // Flag to check if Tone.js context is started
+    let audioContext; // We'll get this from Tone.js
+    let sequence; // Tone.js Sequence instance
+    let currentStepIndex = 0; // To track the current step for UI highlighting
+    // --- End Tone.js Specific Variables ---
+
     let sampleNames = [], sampleBPMs = [], isLoopSample = [], allBuffers = {};
     let channelSelection = [0,1,2,3,4,5,6,7];
     let channelSteps = Array(NUM_CHANNELS).fill().map(() => Array(STEPS_PER_BAR).fill(false));
-
     const sequencerEl = document.getElementById('sequencer');
     const playBtn = document.getElementById('playBtn');
     const stopBtn = document.getElementById('stopBtn');
@@ -71,16 +75,22 @@
     //--- BPM controls, robust 2-way sync, no "fight" ---
     let isSliderActive = false;
     const clampBPM = v => Math.max(60, Math.min(180, Math.round(parseFloat(v || BPM) * 100) / 100));
-
     function renderBPM(val) {
       bpmInput.value = val.toFixed(2).replace(/\.00$/, '');
       bpmSlider.value = Math.round(val);
     }
+
     function setBPM(val, source) {
       BPM = clampBPM(val);
       renderBPM(BPM);
       checkAllSelectedLoopsBPM();
-      if (intervalId) restartSequencer();
+
+      // --- Update Tone.js Transport BPM ---
+      if (Tone && Tone.Transport) {
+        Tone.Transport.bpm.value = BPM;
+        // If using Tone.js scheduling, changes take effect immediately or on next loop
+      }
+      // --- No need to restart manually with Tone.js ---
     }
 
     bpmInput.addEventListener('input', e => !isSliderActive && setBPM(e.target.value, 'input'));
@@ -103,8 +113,97 @@
     bpmSlider.addEventListener('change', e=>setBPM(e.target.value,'slider'));
 
     //--- Transport ---
-    playBtn.onclick = startAudioContext;
-    stopBtn.onclick = stopSequencer;
+    playBtn.onclick = startSequencerWithTone;
+    stopBtn.onclick = stopSequencerWithTone;
+
+    // --- Tone.js Sequencer Engine Functions ---
+    function scheduleStep(time, stepIndex) {
+        // Remove 'playing' class from all previously playing steps
+        document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
+
+        // Add 'playing' class to currently active steps
+        document.querySelectorAll(`.step[data-step="${stepIndex}"]`).forEach(el => {
+            const ch = parseInt(el.dataset.channel, 10);
+            if (channelSteps[ch][stepIndex]) {
+                el.classList.add('playing');
+
+                // Play the sound
+                const idx = channelSelection[ch];
+                const buffer = allBuffers[idx];
+                if (buffer) {
+                    // Use Tone.js Player for better scheduling and control
+                    const player = new Tone.Player(buffer).toDestination();
+                    player.start(time); // Schedule the sound to play at the precise 'time'
+                }
+            }
+        });
+
+        // Update the global step index for potential use elsewhere
+        currentStepIndex = stepIndex;
+    }
+
+
+    function createSequence() {
+         // Create an array representing the steps (0 to STEPS_PER_BAR - 1)
+        const sequenceSteps = Array.from({ length: STEPS_PER_BAR }, (_, i) => i);
+        // Dispose of the old sequence if it exists
+        if (sequence) {
+            sequence.dispose();
+        }
+        // Create the new Tone.Sequence
+        sequence = new Tone.Sequence((time, stepIndex) => {
+            scheduleStep(time, stepIndex);
+        }, sequenceSteps, "16n"); // 16th notes for 16 steps per bar
+
+        // Ensure the sequence is added to the transport
+        sequence.start(0); // Start at the beginning of the transport timeline
+    }
+
+    function startSequencerWithTone() {
+        // Ensure Tone.js AudioContext is started (required by user gesture)
+        if (!isToneStarted) {
+             // This implicitly starts Tone.js's internal AudioContext
+            Tone.start().then(() => {
+                 isToneStarted = true;
+                 console.log("Tone.js AudioContext started.");
+                 proceedWithStart();
+            }).catch(err => {
+                 console.error("Error starting Tone.js:", err);
+                 loaderStatus.textContent = "Error starting audio. Please try again.";
+                 loaderStatus.style.color = "#f00";
+            });
+        } else {
+            proceedWithStart();
+        }
+
+        function proceedWithStart() {
+            // Disable play button, enable stop
+            playBtn.disabled = true;
+            stopBtn.disabled = false;
+
+            // Set Tone.js Transport BPM
+            Tone.Transport.bpm.value = BPM;
+
+            // Create/update the sequence based on current steps
+            createSequence();
+
+            // Start the Tone.js Transport
+            Tone.Transport.start();
+            console.log("Tone.js Sequencer Started");
+        }
+    }
+
+    function stopSequencerWithTone() {
+        // Stop the Tone.js Transport
+        Tone.Transport.stop();
+        // Reset the UI
+        document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
+        currentStepIndex = 0; // Reset step index
+        // Enable play button, disable stop
+        playBtn.disabled = false;
+        stopBtn.disabled = true;
+        console.log("Tone.js Sequencer Stopped");
+    }
 
     //--- Sequencer Build ---
     async function initSequencer() {
@@ -123,12 +222,10 @@
       for (let i=0; i<NUM_CHANNELS; i++) {
         const channel = document.createElement('div');
         channel.className = 'channel';
-
         const label = document.createElement('div');
         label.className = 'channel-label';
         label.textContent = sampleNames[channelSelection[i]];
         channel.appendChild(label);
-
         const select = document.createElement('select');
         select.className = 'sample-select';
         select.dataset.channel = i;
@@ -154,9 +251,11 @@
               setTimeout(()=>loaderStatus.textContent='Ready!',2000);
             }
           }
+          // If steps change, the sequence needs to be recreated to reflect the new state
+          // This is handled by creating the sequence fresh on each play press.
+          // Alternatively, you could update the sequence's callback or array.
         };
         channel.appendChild(select);
-
         const stepsContainer = document.createElement('div');
         stepsContainer.className = 'steps';
         for (let step=0; step<STEPS_PER_BAR; step++) {
@@ -167,6 +266,8 @@
           stepEl.onclick = () => {
             stepEl.classList.toggle('active');
             channelSteps[i][step] = !channelSteps[i][step];
+            // If steps change, the sequence needs to be recreated to reflect the new state
+            // This is handled by creating the sequence fresh on each play press.
           };
           stepsContainer.appendChild(stepEl);
         }
@@ -215,45 +316,6 @@
       } else {
         bpmWarning.style.display = 'none';
       }
-    }
-
-    //--- AudioContext ---
-    function startAudioContext() {
-      if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioContext.state === 'suspended') audioContext.resume();
-      if (!intervalId) startSequencer();
-    }
-
-    //--- Sequencer Engine ---
-    function getStepTimeMs() { return (60 / BPM / 4) * 1000; }
-    function restartSequencer() { stopSequencer(); startSequencer(); }
-    function startSequencer() {
-      if(intervalId) clearInterval(intervalId);
-      currentStep = 0;
-      playBtn.disabled = true;
-      stopBtn.disabled = false;
-      intervalId = setInterval(()=>{
-        document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
-        document.querySelectorAll(`.step[data-step="${currentStep}"]`).forEach(el => {
-          const ch = el.dataset.channel;
-          if(channelSteps[ch][currentStep]) {
-            el.classList.add('playing');
-            const idx = channelSelection[ch], buffer = allBuffers[idx];
-            if(!buffer) return;
-            const source = audioContext.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioContext.destination);
-            source.start();
-          }
-        });
-        currentStep = (currentStep + 1) % STEPS_PER_BAR;
-      }, getStepTimeMs());
-    }
-    function stopSequencer() {
-      if(intervalId) clearInterval(intervalId), intervalId=null;
-      document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
-      playBtn.disabled = false;
-      stopBtn.disabled = true;
     }
 
     //--- Init ---
