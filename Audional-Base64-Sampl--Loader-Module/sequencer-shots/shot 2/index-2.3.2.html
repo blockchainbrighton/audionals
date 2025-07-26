@@ -7,11 +7,7 @@
   <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
   <script type="module" src="audional-base64-sample-loader.js" defer></script>
   <style>
-    :root {
-      --steps-per-row: 64;
-      --step-size: 22px; /* Default, will be adjusted by JS */
-      --channel-padding: 10px;
-    }
+    :root { --steps-per-row: 64; --step-size: 22px; --channel-padding: 10px; }
     body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #eee; text-align: center; margin: 0; padding: 20px; }
     h1 { color: #0f0; }
     .controls { margin: 20px; padding: 15px; background: #222; border-radius: 8px; display: inline-block; }
@@ -28,64 +24,40 @@
     .channel-controls { margin: 10px 0; }
     .sequencer { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 20px; }
     .channel {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      background: #222;
-      padding: var(--channel-padding);
-      border-radius: 8px;
-      width: 90vw;
-      max-width: 90vw;
-      box-sizing: border-box;
-      justify-content: flex-start;
-      margin: 0 auto;
-      transition: max-width 0.2s;
+      display: flex; align-items: flex-start; gap: 10px; background: #222;
+      padding: var(--channel-padding); border-radius: 8px; width: 90vw; max-width: 90vw;
+      box-sizing: border-box; justify-content: flex-start; margin: 0 auto; transition: max-width 0.2s;
     }
     .channel-label { width: 150px; text-align: left; font-weight: bold; color: #0f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 5px; }
     .sample-select { width: 220px; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; }
-    .steps {
-      flex-grow: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      justify-content: center;
-      align-items: flex-start;
-      width: 100%;
-      transition: grid-template-columns 0.2s;
-    }
-    .step-row {
-      display: grid;
-      grid-template-columns: repeat(var(--steps-per-row), 1fr);
-      gap: 3px;
-      width: 100%;
-      box-sizing: border-box;
-    }
-    .step {
-      width: var(--step-size);
-      height: var(--step-size);
-      background: #333;
-      border: 1px solid #555;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background .08s, border .08s, box-shadow .09s;
-      box-sizing: border-box;
-    }
+    .steps { flex-grow: 1; display: flex; flex-direction: column; gap: 4px; justify-content: center; align-items: flex-start; width: 100%; transition: grid-template-columns 0.2s; }
+    .step-row { display: grid; grid-template-columns: repeat(var(--steps-per-row), 1fr); gap: 3px; width: 100%; box-sizing: border-box; }
+    .step { width: var(--step-size); height: var(--step-size); background: #333; border: 1px solid #555; border-radius: 4px; cursor: pointer; transition: background .08s, border .08s, box-shadow .09s; box-sizing: border-box; }
     .step.active { background: #0f0; }
     .step.playing { background: #ff0 !important; border-color: #ff0 !important; box-shadow: 0 0 8px #ff0bb9cc; z-index: 2; }
     .loading { color: #ff0; font-style: italic; margin: 20px; }
     .playback-controls { margin-top: 10px; }
+    .save-load { margin: 18px 0 0 0; display: flex; justify-content: center; gap: 8px; }
+    .save-load input[type="text"] { width: 410px; max-width: 60vw; padding: 6px; font-size: 15px; border-radius: 5px; border: 1px solid #555; background: #292929; color: #fff; text-align: left; }
     @media (max-width: 1300px) {
       .channel { max-width: 98vw; }
       .channel-label, .sample-select { width: 110px; font-size: 13px; }
+      .save-load input[type="text"] { width: 270px; }
     }
     @media (max-width: 850px) {
       .channel-label, .sample-select { width: 70px; font-size: 11px; }
       .channel { max-width: 99vw; }
+      .save-load input[type="text"] { width: 120px; }
     }
   </style>
 </head>
 <body>
   <h1>Responsive Web Audio Sequencer (Tone.js)</h1>
+  <div class="save-load">
+    <button id="saveBtn" title="Copy settings">Save</button>
+    <input type="text" id="saveLoadField" placeholder="Paste settings string here" spellcheck="false" autocomplete="off">
+    <button id="loadBtn" title="Load settings">Load</button>
+  </div>
   <p class="loading" id="loaderStatus">Loading sample list...</p>
   <div class="controls">
     <div class="bpm-control">
@@ -120,25 +92,14 @@
     let STEP_ROWS = 1, STEPS_PER_ROW = 64;
     function updateStepRows() {
       const width = Math.min(window.innerWidth, document.body.offsetWidth);
-      for (const layout of ROWS_LAYOUTS) {
-        if (width <= layout.maxWidth) {
-          STEP_ROWS = layout.rows;
-          STEPS_PER_ROW = layout.stepsPerRow;
-        }
-      }
-      // Set CSS variable for grid and sizing
+      for (const layout of ROWS_LAYOUTS) if (width <= layout.maxWidth) { STEP_ROWS = layout.rows; STEPS_PER_ROW = layout.stepsPerRow; }
       document.documentElement.style.setProperty('--steps-per-row', STEPS_PER_ROW);
-      // Dynamically calculate step size
       const channelWidth = Math.min(width * 0.9, 1100);
       let stepSize = Math.floor((channelWidth - 160 - 220 - 40 - (STEPS_PER_ROW - 1) * 3) / STEPS_PER_ROW);
-      stepSize = Math.max(8, Math.min(stepSize, 34)); // Keep within reasonable range
+      stepSize = Math.max(8, Math.min(stepSize, 34));
       document.documentElement.style.setProperty('--step-size', stepSize + 'px');
     }
-    // Listen for resize to update layout and re-render sequencer
-    window.addEventListener('resize', () => {
-      updateStepRows();
-      renderSequencer();
-    });
+    window.addEventListener('resize', () => { updateStepRows(); renderSequencer(); });
 
     // --- Core constants ---
     const STEPS_PER_BAR = 16, BARS_PER_SEQUENCE = 4;
@@ -159,6 +120,10 @@
     const sequenceListEl = document.getElementById('sequenceList');
     const addSequenceBtn = document.getElementById('addSequenceBtn');
     const addChannelsBtn = document.getElementById('addChannelsBtn');
+    // Save/Load controls
+    const saveBtn = document.getElementById('saveBtn');
+    const loadBtn = document.getElementById('loadBtn');
+    const saveLoadField = document.getElementById('saveLoadField');
 
     const bpmWarning = document.createElement('div');
     bpmWarning.id = 'bpmWarning';
@@ -188,13 +153,8 @@
     }, { passive: false });
     bpmSlider.addEventListener('mousedown', ()=>isSliderActive=true);
     bpmSlider.addEventListener('touchstart', ()=>isSliderActive=true);
-    bpmSlider.addEventListener('input', e => {
-      if(isSliderActive) setBPM(e.target.value);
-    });
-    ['mouseup','touchend'].forEach(evt => bpmSlider.addEventListener(evt, e=>{
-      isSliderActive=false;
-      setBPM(bpmSlider.value);
-    }));
+    bpmSlider.addEventListener('input', e => { if(isSliderActive) setBPM(e.target.value); });
+    ['mouseup','touchend'].forEach(evt => bpmSlider.addEventListener(evt, e=>{ isSliderActive=false; setBPM(bpmSlider.value); }));
     bpmSlider.addEventListener('change', e=>setBPM(e.target.value));
 
     // --- Playback Controls ---
@@ -206,17 +166,12 @@
 
     function createEmptySequence(numChannels = INITIAL_CHANNELS_PER_SEQUENCE) {
       const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
-      return {
-        channels: Array(numChannels).fill(null).map(() => ({
-          selectedSampleIndex: 0,
-          steps: Array(totalSteps).fill(false)
-        }))
-      };
+      return { channels: Array(numChannels).fill(null).map(() => ({
+        selectedSampleIndex: 0, steps: Array(totalSteps).fill(false)
+      }))};
     }
     function addSequence() {
-      if (projectData.sequences.length >= MAX_SEQUENCES) {
-        loaderStatus.textContent = `Max sequences (${MAX_SEQUENCES}) reached.`; return;
-      }
+      if (projectData.sequences.length >= MAX_SEQUENCES) { loaderStatus.textContent = `Max sequences (${MAX_SEQUENCES}) reached.`; return; }
       const newSeq = createEmptySequence(getCurrentSequence().channels.length);
       projectData.sequences.push(newSeq);
       updateSequenceListUI();
@@ -231,12 +186,8 @@
     function addChannelsToCurrentSequence(count) {
       const currentSeq = getCurrentSequence();
       const newChannelCount = currentSeq.channels.length + count;
-      if (newChannelCount > MAX_CHANNELS_PER_SEQUENCE) {
-        loaderStatus.textContent = `Max channels per sequence (${MAX_CHANNELS_PER_SEQUENCE}) reached.`; return;
-      }
-      for (let i = 0; i < count; i++) {
-        currentSeq.channels.push({ selectedSampleIndex: 0, steps: Array(STEPS_PER_BAR * BARS_PER_SEQUENCE).fill(false) });
-      }
+      if (newChannelCount > MAX_CHANNELS_PER_SEQUENCE) { loaderStatus.textContent = `Max channels per sequence (${MAX_CHANNELS_PER_SEQUENCE}) reached.`; return; }
+      for (let i = 0; i < count; i++) currentSeq.channels.push({ selectedSampleIndex: 0, steps: Array(STEPS_PER_BAR * BARS_PER_SEQUENCE).fill(false) });
       renderSequencer();
     }
     function updateSequenceListUI() {
@@ -282,15 +233,12 @@
           isLoopSample[idx] ? checkBPMCompatibility(idx) : checkAllSelectedLoopsBPM();
           if(!allBuffers[idx]) {
             loaderStatus.textContent = `Loading: ${sampleNames[idx]}...`;
-            try { allBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx);
-              loaderStatus.textContent = 'Ready!'; } catch {
-              loaderStatus.textContent = `Failed to load: ${sampleNames[idx]}`;
-              setTimeout(()=>loaderStatus.textContent='Ready!',2000);
+            try { allBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx); loaderStatus.textContent = 'Ready!'; } catch {
+              loaderStatus.textContent = `Failed to load: ${sampleNames[idx]}`; setTimeout(()=>loaderStatus.textContent='Ready!',2000);
             }
           }
         };
         channel.appendChild(select);
-
         // --- Step grid (rows/columns) ---
         const stepsContainer = document.createElement('div');
         stepsContainer.className = 'steps';
@@ -351,7 +299,6 @@
       sequence = new Tone.Sequence((time, stepIndex) => {
         scheduleStep(time, stepIndex);
         if (projectData.playMode === 'all' && stepIndex === totalSteps - 1) {
-            // Immediately advance to next sequence
             Tone.Transport.scheduleOnce(() => {
                 const nextSeqIndex = (currentPlaybackSequenceIndex + 1) % projectData.sequences.length;
                 currentPlaybackSequenceIndex = nextSeqIndex;
@@ -360,7 +307,7 @@
                 createSequence();
                 sequence.start(Tone.Transport.seconds);
             }, Tone.Transport.seconds + 0.01);
-            }
+        }
       }, sequenceSteps, "16n");
       sequence.start(0);
     }
@@ -463,6 +410,113 @@
     renderBPM(projectData.bpm);
     updateStepRows();
     initSequencer();
+
+    // --- SAVE/LOAD SETTINGS LOGIC ---
+    // Format: bpm|curSeq|seq1-ch1:idx,steps|ch2:idx,steps|..._seq2-ch1:...
+    function bitfieldToBase36(bits) {
+        // 64 steps => always output 12 chars (6 bits per char)
+        let out = '';
+        for (let i = 0; i < 64; i += 6) {
+            let chunk = 0;
+            for (let j = 0; j < 6; ++j) {
+            if (bits[i + j]) chunk |= (1 << j);
+            }
+            out += chunk.toString(36);
+        }
+        return out;
+        }
+
+        function base36ToBitfield(str, total) {
+        // total should be 64
+        let bits = [];
+        for (let i = 0; i < str.length; ++i) {
+            let val = parseInt(str[i], 36);
+            for (let j = 0; j < 6; ++j) {
+            bits.push((val >> j) & 1 ? true : false);
+            if (bits.length === total) return bits;
+            }
+        }
+        while (bits.length < total) bits.push(false);
+        return bits;
+        }
+
+    function encodeSettings() {
+      // Compose a very condensed settings string
+      const { sequences, bpm, currentSequenceIndex } = projectData;
+      let main = [bpm, currentSequenceIndex].join('|');
+      let seqs = sequences.map(seq =>
+        seq.channels.map(ch => {
+          let idx = ch.selectedSampleIndex.toString(36).padStart(2,'0');
+          let steps = bitfieldToBase36(ch.steps);
+          return `${idx},${steps}`;
+        }).join('|')
+      ).join('_');
+      return `${main}:${seqs}`;
+    }
+    function decodeSettings(str) {
+      // In-place update to projectData
+      if (!str.includes(':')) throw new Error('Invalid settings');
+      let [main, ...seqsRaw] = str.split(':');
+      let [bpm, curIdx] = main.split('|').map(Number);
+      let seqs = seqsRaw.join(':').split('_');
+      let sequences = seqs.map(seqStr => {
+        let chs = seqStr.split('|').map(chStr => {
+          let [idx, steps] = chStr.split(',');
+          return {
+            selectedSampleIndex: parseInt(idx, 36),
+            steps: base36ToBitfield(steps, STEPS_PER_BAR * BARS_PER_SEQUENCE)
+          }
+        });
+        return { channels: chs };
+      });
+      if (!sequences.length || isNaN(bpm) || isNaN(curIdx)) throw new Error('Parse error');
+      projectData.sequences = sequences;
+      projectData.bpm = bpm;
+      projectData.currentSequenceIndex = Math.max(0, Math.min(sequences.length-1, curIdx));
+    }
+    saveBtn.onclick = () => {
+      try {
+        saveLoadField.value = encodeSettings();
+        saveLoadField.select(); saveLoadField.setSelectionRange(0, 999);
+        document.execCommand("copy");
+        saveBtn.textContent = "Copied!";
+        setTimeout(()=>{saveBtn.textContent="Save"}, 850);
+      } catch (e) {
+        saveBtn.textContent = "Err";
+        setTimeout(()=>{saveBtn.textContent="Save"}, 1000);
+      }
+    };
+    loadBtn.onclick = async () => {
+        try {
+            decodeSettings(saveLoadField.value.trim());
+            renderBPM(projectData.bpm);
+            updateSequenceListUI();
+            updateStepRows();
+            renderSequencer();
+
+            // ---- NEW: Ensure all samples for all channels are loaded
+            let neededSampleIndices = new Set();
+            for (let seq of projectData.sequences) {
+            for (let ch of seq.channels) {
+                neededSampleIndices.add(ch.selectedSampleIndex);
+            }
+            }
+            loaderStatus.textContent = 'Loading samples...';
+            await Promise.all([...neededSampleIndices].map(async idx => {
+            if (!allBuffers[idx]) {
+                allBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx);
+            }
+            }));
+            loaderStatus.textContent = 'Loaded!';
+            loaderStatus.style.color = '#0f0';
+            setTimeout(()=>{loaderStatus.textContent = 'Ready!';}, 900);
+        } catch (e) {
+            loaderStatus.textContent = 'Load failed';
+            loaderStatus.style.color = '#f00';
+        }
+        };
+
+    saveLoadField.onfocus = function(){this.select();};
   </script>
 </body>
 </html>
