@@ -1,6 +1,7 @@
 // modules/recorder.js
 import { Keyboard } from './keyboard.js';
 import { PianoRoll } from './piano-roll.js';
+import { LoopManager } from './loop.js';
 
 export const Recorder = {
     buttons: {},
@@ -16,6 +17,9 @@ export const Recorder = {
         };
         this.initAudio();
         this.bindUI();
+        
+        // Initialize loop manager
+        LoopManager.init();
     },
         onRecord() {
             if (synthApp.isArmed) {
@@ -101,21 +105,61 @@ export const Recorder = {
         this.dom.stopBtn.disabled=0;
     },
     stop(){
-        if(synthApp.isPlaying){Tone.Transport.stop(); Tone.Transport.cancel(); synthApp.events.forEach(clearTimeout); synthApp.events=[]; synthApp.isPlaying=0;}
-        synthApp.isRec=synthApp.isArmed=0; synthApp.activeNotes.forEach(n=>{synthApp.synth.triggerRelease(n);Keyboard.updateKeyVisual(n,0)}); synthApp.activeNotes.clear();
-        this.dom.recStat.textContent='Status: Stopped'; this.dom.recInd.classList.remove('active'); this.dom.recordBtn.classList.remove('armed');
-        this.dom.stopBtn.disabled=1; this.dom.playBtn.disabled=!synthApp.seq.length;
+        // Stop regular playback
+        if(synthApp.isPlaying){
+            Tone.Transport.stop(); 
+            Tone.Transport.cancel(); 
+            synthApp.events.forEach(clearTimeout); 
+            synthApp.events=[]; 
+            synthApp.isPlaying=0;
+        }
+        
+        // Stop loop playback
+        if(LoopManager.isCurrentlyLooping()) {
+            LoopManager.stopLoop();
+        }
+        
+        synthApp.isRec=synthApp.isArmed=0; 
+        synthApp.activeNotes.forEach(n=>{
+            synthApp.synth.triggerRelease(n);
+            Keyboard.updateKeyVisual(n,0)
+        }); 
+        synthApp.activeNotes.clear();
+        this.dom.recStat.textContent='Status: Stopped'; 
+        this.dom.recInd.classList.remove('active'); 
+        this.dom.recordBtn.classList.remove('armed');
+        this.dom.stopBtn.disabled=1; 
+        this.dom.playBtn.disabled=!synthApp.seq.length;
     },
     playSeq(){
-        if(!synthApp.seq.length||synthApp.isPlaying)return; synthApp.isPlaying=1; this.dom.recStat.textContent='Status: Playing...'; this.dom.recInd.classList.add('active'); this.dom.stopBtn.disabled=0;
-        Tone.Transport.cancel();
-        synthApp.seq.forEach(o=>{
-            let id=Tone.Transport.schedule(time=>synthApp.synth.triggerAttackRelease(o.note,o.dur,time,o.vel), o.start);
-            synthApp.events.push(id);
-        });
-        Tone.Transport.start();
-        let last=synthApp.seq.reduce((a,b)=>a.start+a.dur>b.start+b.dur?a:b);
-        Tone.Transport.schedule(()=>this.stop(), last.start+last.dur);
+        if(!synthApp.seq.length||synthApp.isPlaying)return; 
+        
+        synthApp.isPlaying=1; 
+        this.dom.recStat.textContent='Status: Playing...'; 
+        this.dom.recInd.classList.add('active'); 
+        this.dom.stopBtn.disabled=0;
+        
+        // Check if loop mode is enabled
+        if(LoopManager.isLoopEnabled) {
+            // Use loop playback
+            this.dom.recStat.textContent='Status: Looping...';
+            LoopManager.startLoop(synthApp.seq);
+        } else {
+            // Use regular playback
+            Tone.Transport.cancel();
+                synthApp.seq.forEach(o => {
+                    if (o.dur > 0) {
+                        let id = Tone.Transport.schedule(
+                            time => synthApp.synth.triggerAttackRelease(o.note, o.dur, time, o.vel), 
+                            o.start
+                        );
+                        synthApp.events.push(id);
+                    }
+                });
+            Tone.Transport.start();
+            let last=synthApp.seq.reduce((a,b)=>a.start+a.dur>b.start+b.dur?a:b);
+            Tone.Transport.schedule(()=>this.stop(), last.start+last.dur);
+        }
     },
     clearSeq(){ synthApp.seq=[]; this.stop(); this.dom.playBtn.disabled=1; this.dom.recStat.textContent='Status: Cleared'; PianoRoll.draw(); }
 };
