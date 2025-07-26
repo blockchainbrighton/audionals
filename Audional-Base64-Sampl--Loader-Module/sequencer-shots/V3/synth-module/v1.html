@@ -117,6 +117,17 @@
       h1 { font-size:1.5rem; }
       .panel { padding:10px; min-height:340px;}
     }
+
+    /* Add this to your <style> */
+    .key.white-key { z-index: 1; }
+    .key.black-key {
+    z-index: 2;
+    height: 65%;
+    top: 0;
+    border: 1px solid #222;
+    }
+    .keyboard { position:relative; width:100%; height:100%; user-select:none; }
+
   </style>
 </head>
 <body>
@@ -227,27 +238,76 @@
           blackKeys = ['C#','D#','F#','G#','A#'],
           minMidiNote = 21, maxMidiNote = 108, totalNotes = maxMidiNote - minMidiNote + 1;
     
-    function createKeyboard() {
-      const kb = document.getElementById('keyboard'); kb.innerHTML = '';
-      const keyWidth = 100/14, blackKeyWidth = keyWidth*0.6, blackKeyHeight = 60;
-      let w = 0, b = 0;
-      for (let o = currentOctave; o <= currentOctave+1; o++)
-        for (const n of whiteKeys) {
-          const nn = `${n}${o}`, k = document.createElement('div');
-          k.className = 'key white-key'; k.dataset.note = nn;
-          k.style.width = `${keyWidth}%`; k.style.left = `${w++*keyWidth}%`; k.style.height = '100%';
-          k.onmousedown = () => playNote(nn, 0.8); k.onmouseup = k.onmouseleave = () => releaseNote(nn);
-          kb.appendChild(k);
-        }
-      for (let o = currentOctave; o <= currentOctave+1; o++)
-        for (const n of blackKeys) {
-          const nn = `${n}${o}`, k = document.createElement('div');
-          k.className = 'key black-key'; k.dataset.note = nn;
-          k.style.width = `${blackKeyWidth}%`; k.style.left = `${(++b-0.3)*keyWidth}%`; k.style.height = `${blackKeyHeight}%`;
-          k.onmousedown = () => playNote(nn, 0.8); k.onmouseup = k.onmouseleave = () => releaseNote(nn);
-          kb.appendChild(k);
-        }
-    }
+          function createKeyboard() {
+            const kb = document.getElementById('keyboard');
+            kb.innerHTML = '';
+
+            // Two octaves: e.g. 4 and 5
+            const octaves = [currentOctave, currentOctave + 1];
+            const keysPerOctave = 7; // C D E F G A B
+            const whiteKeyWidth = 100 / (octaves.length * keysPerOctave);
+            const blackKeyWidth = whiteKeyWidth * 0.62;
+            const blackKeyHeight = 65; // in %
+
+            // Store position for each white key (for black overlay)
+            let whiteKeyPos = [];
+
+            // 1. Draw all white keys first
+            let whiteIndex = 0;
+            for (let o = 0; o < octaves.length; o++) {
+                for (let i = 0; i < keysPerOctave; i++) {
+                const noteName = whiteKeys[i] + octaves[o];
+                const k = document.createElement('div');
+                k.className = 'key white-key';
+                k.dataset.note = noteName;
+                k.style.width = `${whiteKeyWidth}%`;
+                k.style.left = `${whiteIndex * whiteKeyWidth}%`;
+                k.style.height = '100%';
+                k.onmousedown = () => playNote(noteName, 0.8);
+                k.onmouseup = k.onmouseleave = () => releaseNote(noteName);
+                kb.appendChild(k);
+                whiteKeyPos.push({ left: whiteIndex * whiteKeyWidth, octave: octaves[o], idx: i, note: noteName });
+                whiteIndex++;
+                }
+            }
+
+            // 2. Draw all black keys on top
+            // For each octave, the black keys are at these positions *between* white keys:
+            // C  C#  D  D#  E  F  F#  G  G#  A  A#  B
+            // 0  0.5 1 1.5 2 3 3.5 4 4.5 5 5.5 6
+            const blackMap = [
+                { pos: 0, name: 'C#' },
+                { pos: 1, name: 'D#' },
+                // no E#
+                { pos: 3, name: 'F#' },
+                { pos: 4, name: 'G#' },
+                { pos: 5, name: 'A#' }
+                // no B#
+            ];
+            let keyCount = 0;
+            for (let o = 0; o < octaves.length; o++) {
+                for (const b of blackMap) {
+                const whiteIdx = o * keysPerOctave + b.pos;
+                if (whiteIdx + 1 >= whiteKeyPos.length) continue;
+                // Center black key between this and next white key
+                const left =
+                    whiteKeyPos[whiteIdx].left +
+                    whiteKeyWidth -
+                    blackKeyWidth / 2;
+                const noteName = b.name + octaves[o];
+                const k = document.createElement('div');
+                k.className = 'key black-key';
+                k.dataset.note = noteName;
+                k.style.width = `${blackKeyWidth}%`;
+                k.style.left = `${left}%`;
+                k.style.height = `${blackKeyHeight}%`;
+                k.onmousedown = () => playNote(noteName, 0.8);
+                k.onmouseup = k.onmouseleave = () => releaseNote(noteName);
+                kb.appendChild(k);
+                }
+            }
+            }
+
     
     function playNote(note, velocity = 0.8) {
       if (activeNotes.has(note)) return;
