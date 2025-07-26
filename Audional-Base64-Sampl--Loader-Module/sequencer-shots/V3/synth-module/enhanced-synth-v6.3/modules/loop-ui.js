@@ -3,24 +3,22 @@ import { LoopManager } from './loop.js';
 
 export const LoopUI = {
     elements: {},
-    
+
     init() {
         console.log('[LoopUI] Initializing loop controls...');
         this.createUI();
         this.bindEvents();
         this.updateUI();
     },
-    
+
     createUI() {
-        const container = document.getElementById('loop-controls');
-        if (!container) {
-            console.error('[LoopUI] Loop controls container not found');
-            return;
-        }
+        const el = id => document.getElementById(id);
+        const container = el('loop-controls');
+        if (!container) return console.error('[LoopUI] Loop controls container not found');
 
         container.innerHTML = `
             <div class="loop-panel">
-                <div class="loop-section" style="display: flex; gap: 32px;">
+                <div class="loop-section" style="display:flex;gap:32px;">
                     <div class="loop-toggle-section">
                         <label class="loop-checkbox-label">
                             <input type="checkbox" id="loopEnabled" class="loop-checkbox">
@@ -35,7 +33,6 @@ export const LoopUI = {
                         </label>
                     </div>
                 </div>
-
                 <div id="loopSettingsSection" style="display:none">
                     <div class="loop-section">
                         <h4 class="loop-section-title">Loop Boundaries</h4>
@@ -68,7 +65,6 @@ export const LoopUI = {
                         </div>
                     </div>
                 </div>
-
                 <div id="quantizeSettingsSection" style="display:none">
                     <div class="loop-section">
                         <h4 class="loop-section-title">Quantization Settings</h4>
@@ -81,7 +77,7 @@ export const LoopUI = {
                                     <option value="quarter">Quarter Note</option>
                                     <option value="eighth">Eighth Note</option>
                                     <option value="sixteenth">Sixteenth Note</option>
-                                    <option value="thirtysecond"selected>Thirty-second Note</option>
+                                    <option value="thirtysecond" selected>Thirty-second Note</option>
                                 </select>
                             </div>
                             <div class="swing-control">
@@ -92,7 +88,6 @@ export const LoopUI = {
                         </div>
                     </div>
                 </div>
-
                 <div class="loop-section">
                     <h4 class="loop-section-title">Tempo Conversion</h4>
                     <div class="tempo-controls">
@@ -111,148 +106,92 @@ export const LoopUI = {
                 </div>
             </div>
         `;
-        
-        // Store element references
         this.elements = {
-            loopEnabled: document.getElementById('loopEnabled'),
-            loopStatus: document.getElementById('loopStatus'),
-            loopStart: document.getElementById('loopStart'),
-            loopEnd: document.getElementById('loopEnd'),
-            autoDetectBounds: document.getElementById('autoDetectBounds'),
-            maxLoops: document.getElementById('maxLoops'),
-            quantizeEnabled: document.getElementById('quantizeEnabled'),
-            quantizeGrid: document.getElementById('quantizeGrid'),
-            swingAmount: document.getElementById('swingAmount'),
-            swingValue: document.getElementById('swingValue'),
-            originalTempo: document.getElementById('originalTempo'),
-            targetTempo: document.getElementById('targetTempo'),
-            tempoRatio: document.getElementById('tempoRatio'),
-            loopSettingsSection: document.getElementById('loopSettingsSection'),
-            quantizeSettingsSection: document.getElementById('quantizeSettingsSection')
+            loopEnabled: el('loopEnabled'),
+            loopStatus: el('loopStatus'),
+            loopStart: el('loopStart'),
+            loopEnd: el('loopEnd'),
+            autoDetectBounds: el('autoDetectBounds'),
+            maxLoops: el('maxLoops'),
+            quantizeEnabled: el('quantizeEnabled'),
+            quantizeGrid: el('quantizeGrid'),
+            swingAmount: el('swingAmount'),
+            swingValue: el('swingValue'),
+            originalTempo: el('originalTempo'),
+            targetTempo: el('targetTempo'),
+            tempoRatio: el('tempoRatio'),
+            loopSettingsSection: el('loopSettingsSection'),
+            quantizeSettingsSection: el('quantizeSettingsSection')
         };
     },
-    
+
     bindEvents() {
-        // Loop enable/disable
-        this.elements.loopEnabled.addEventListener('change', (e) => {
+        const els = this.elements;
+        this._on(els.loopEnabled, 'change', e => {
             LoopManager.setLoopEnabled(e.target.checked);
-            this.toggleLoopSettingsSection(e.target.checked);
+            this._toggleSection(els.loopSettingsSection, e.target.checked);
             this.updateLoopStatus();
         });
-
-        // Quantize enable/disable
-        this.elements.quantizeEnabled.addEventListener('change', (e) => {
+        this._on(els.quantizeEnabled, 'change', e => {
             LoopManager.setQuantization(e.target.checked, LoopManager.quantizeGrid);
-            this.toggleQuantizeSettingsSection(e.target.checked);
+            this._toggleSection(els.quantizeSettingsSection, e.target.checked);
         });
-
-        // Loop boundaries
-        this.elements.loopStart.addEventListener('change', (e) => {
-            const start = parseFloat(e.target.value);
-            const end = parseFloat(this.elements.loopEnd.value);
-            LoopManager.setLoopBounds(start, end);
+        this._on(els.loopStart, 'change', e => LoopManager.setLoopBounds(+e.target.value, +els.loopEnd.value));
+        this._on(els.loopEnd, 'change', e => LoopManager.setLoopBounds(+els.loopStart.value, +e.target.value));
+        this._on(els.autoDetectBounds, 'click', () => {
+            const b = LoopManager.autoDetectLoopBounds();
+            els.loopStart.value = b.start.toFixed(1);
+            els.loopEnd.value = b.end.toFixed(1);
         });
-        
-        this.elements.loopEnd.addEventListener('change', (e) => {
-            const start = parseFloat(this.elements.loopStart.value);
-            const end = parseFloat(e.target.value);
-            LoopManager.setLoopBounds(start, end);
+        this._on(els.maxLoops, 'change', e => LoopManager.setMaxLoops(+e.target.value));
+        this._on(els.quantizeGrid, 'change', e => LoopManager.setQuantizationGrid(e.target.value));
+        this._on(els.swingAmount, 'input', e => {
+            const v = +e.target.value;
+            LoopManager.setSwing(v / 100);
+            els.swingValue.textContent = `${v}%`;
         });
-
-        // Auto-detect bounds
-        this.elements.autoDetectBounds.addEventListener('click', () => {
-            const bounds = LoopManager.autoDetectLoopBounds();
-            this.elements.loopStart.value = bounds.start.toFixed(1);
-            this.elements.loopEnd.value = bounds.end.toFixed(1);
-        });
-        
-        // Max loops
-        this.elements.maxLoops.addEventListener('change', (e) => {
-            const maxLoops = parseInt(e.target.value);
-            LoopManager.setMaxLoops(maxLoops);
-        });
-
-        // Quantization settings
-        this.elements.quantizeGrid.addEventListener('change', (e) => {
-            LoopManager.setQuantizationGrid(e.target.value);
-        });
-        this.elements.swingAmount.addEventListener('input', (e) => {
-            const swingAmount = parseInt(e.target.value) / 100;
-            LoopManager.setSwing(swingAmount);
-            this.elements.swingValue.textContent = e.target.value + '%';
-        });
-
-        // Tempo conversion
-        this.elements.originalTempo.addEventListener('change', (e) => {
-            this.updateTempoConversion();
-        });
-        this.elements.targetTempo.addEventListener('change', (e) => {
-            this.updateTempoConversion();
-        });
+        this._on(els.originalTempo, 'change', () => this.updateTempoConversion());
+        this._on(els.targetTempo, 'change', () => this.updateTempoConversion());
     },
 
-    toggleLoopSettingsSection(show) {
-        if (this.elements.loopSettingsSection) {
-            this.elements.loopSettingsSection.style.display = show ? '' : 'none';
-        }
-    },
-    toggleQuantizeSettingsSection(show) {
-        if (this.elements.quantizeSettingsSection) {
-            this.elements.quantizeSettingsSection.style.display = show ? '' : 'none';
-        }
-    },
+    _on(el, ev, fn) { el && el.addEventListener(ev, fn); },
+    _toggleSection(el, show) { el && (el.style.display = show ? '' : 'none'); },
 
     updateTempoConversion() {
-        const originalTempo = parseFloat(this.elements.originalTempo.value);
-        const targetTempo = parseFloat(this.elements.targetTempo.value);
-        LoopManager.setTempoConversion(originalTempo, targetTempo);
-        const ratio = targetTempo / originalTempo;
-        this.elements.tempoRatio.textContent = `Ratio: ${ratio.toFixed(2)}x`;
+        const { originalTempo, targetTempo, tempoRatio } = this.elements;
+        const orig = +originalTempo.value, tgt = +targetTempo.value;
+        LoopManager.setTempoConversion(orig, tgt);
+        tempoRatio.textContent = `Ratio: ${(tgt / orig).toFixed(2)}x`;
     },
-    
+
     updateLoopStatus() {
-        const status = LoopManager.getLoopStatus();
-        if (status.enabled) {
-            if (status.active) {
-                this.elements.loopStatus.textContent = `Loop: Active (${status.duration.toFixed(1)}s)`;
-                this.elements.loopStatus.className = 'loop-status active';
-            } else {
-                this.elements.loopStatus.textContent = `Loop: Ready (${status.duration.toFixed(1)}s)`;
-                this.elements.loopStatus.className = 'loop-status ready';
-            }
+        const { loopStatus } = this.elements, s = LoopManager.getLoopStatus();
+        if (s.enabled) {
+            loopStatus.textContent = s.active ? `Loop: Active (${s.duration.toFixed(1)}s)` : `Loop: Ready (${s.duration.toFixed(1)}s)`;
+            loopStatus.className = `loop-status ${s.active ? 'active' : 'ready'}`;
         } else {
-            this.elements.loopStatus.textContent = 'Loop: Disabled';
-            this.elements.loopStatus.className = 'loop-status disabled';
+            loopStatus.textContent = 'Loop: Disabled';
+            loopStatus.className = 'loop-status disabled';
         }
     },
-    
+
     updateUI() {
-        // Sync toggles
-        this.elements.loopEnabled.checked = LoopManager.isLoopEnabled;
-        this.toggleLoopSettingsSection(LoopManager.isLoopEnabled);
-
-        this.elements.quantizeEnabled.checked = LoopManager.quantizeEnabled;
-        this.toggleQuantizeSettingsSection(LoopManager.quantizeEnabled);
-
-        // Loop
-        this.elements.loopStart.value = LoopManager.loopStart.toFixed(1);
-        this.elements.loopEnd.value = LoopManager.loopEnd.toFixed(1);
-        this.elements.maxLoops.value = LoopManager.maxLoops.toString();
-
-        // Quantization
-        this.elements.quantizeGrid.value = LoopManager.getQuantizeGridKey();
-        this.elements.swingAmount.value = (LoopManager.swingAmount * 100).toString();
-        this.elements.swingValue.textContent = (LoopManager.swingAmount * 100).toFixed(0) + '%';
-
-        // Tempo
-        this.elements.originalTempo.value = LoopManager.originalTempo.toString();
-        this.elements.targetTempo.value = LoopManager.targetTempo.toString();
+        const e = this.elements, m = LoopManager;
+        e.loopEnabled.checked = m.isLoopEnabled;
+        this._toggleSection(e.loopSettingsSection, m.isLoopEnabled);
+        e.quantizeEnabled.checked = m.quantizeEnabled;
+        this._toggleSection(e.quantizeSettingsSection, m.quantizeEnabled);
+        e.loopStart.value = m.loopStart.toFixed(1);
+        e.loopEnd.value = m.loopEnd.toFixed(1);
+        e.maxLoops.value = m.maxLoops.toString();
+        e.quantizeGrid.value = m.getQuantizeGridKey();
+        e.swingAmount.value = (m.swingAmount * 100).toString();
+        e.swingValue.textContent = (m.swingAmount * 100).toFixed(0) + '%';
+        e.originalTempo.value = m.originalTempo.toString();
+        e.targetTempo.value = m.targetTempo.toString();
         this.updateLoopStatus();
         this.updateTempoConversion();
     },
-    
-    // Call when playback state changes
-    onPlaybackStateChange() {
-        this.updateLoopStatus();
-    }
+
+    onPlaybackStateChange() { this.updateLoopStatus(); }
 };
