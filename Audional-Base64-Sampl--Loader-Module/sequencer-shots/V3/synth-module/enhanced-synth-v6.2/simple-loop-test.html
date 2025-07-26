@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simple Loop Test</title>
+<style>
+body { 
+    margin: 0; 
+    padding: 24px; 
+    background: #181818; 
+    color: #fff; 
+    font-family: 'Segoe UI', sans-serif; 
+}
+.container { 
+    max-width: 800px; 
+    margin: auto; 
+}
+h1 { 
+    text-align: center; 
+    color: #bb86fc; 
+}
+.controls { 
+    display: flex; 
+    gap: 12px; 
+    justify-content: center; 
+    margin: 20px 0; 
+    flex-wrap: wrap; 
+}
+button { 
+    padding: 12px 24px; 
+    background: #232323; 
+    color: #bb86fc; 
+    border: 2px solid #03dac6; 
+    border-radius: 8px; 
+    cursor: pointer; 
+    font-size: 16px; 
+}
+button:hover { 
+    background: #03dac6; 
+    color: #000; 
+}
+.status { 
+    text-align: center; 
+    margin: 20px 0; 
+    padding: 12px; 
+    background: #232323; 
+    border-radius: 8px; 
+}
+.loop-settings { 
+    background: #232323; 
+    padding: 20px; 
+    border-radius: 8px; 
+    margin: 20px 0; 
+}
+.setting { 
+    margin: 10px 0; 
+    display: flex; 
+    align-items: center; 
+    gap: 10px; 
+}
+label { 
+    min-width: 120px; 
+}
+input, select { 
+    padding: 8px; 
+    background: #181818; 
+    color: #fff; 
+    border: 1px solid #444; 
+    border-radius: 4px; 
+}
+.log { 
+    background: #000; 
+    color: #0f0; 
+    padding: 12px; 
+    border-radius: 8px; 
+    font-family: monospace; 
+    font-size: 12px; 
+    max-height: 200px; 
+    overflow-y: auto; 
+    margin-top: 20px; 
+}
+</style>
+<script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Simple Loop System Test</h1>
+    
+    <div class="status" id="status">Status: Ready</div>
+    
+    <div class="controls">
+        <button onclick="initAudio()">Initialize Audio</button>
+        <button onclick="playOnce()">Play Once</button>
+        <button onclick="playLoop()">Play Loop</button>
+        <button onclick="stopPlayback()">Stop</button>
+        <button onclick="testQuantization()">Test Quantization</button>
+        <button onclick="testTempo()">Test Tempo</button>
+    </div>
+    
+    <div class="loop-settings">
+        <h3>Loop Settings</h3>
+        <div class="setting">
+            <label>Loop Enabled:</label>
+            <input type="checkbox" id="loopEnabled" checked>
+        </div>
+        <div class="setting">
+            <label>Max Loops:</label>
+            <select id="maxLoops">
+                <option value="-1">Infinite</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="4" selected>4</option>
+            </select>
+        </div>
+        <div class="setting">
+            <label>Quantize:</label>
+            <input type="checkbox" id="quantizeEnabled">
+        </div>
+        <div class="setting">
+            <label>Grid:</label>
+            <select id="quantizeGrid">
+                <option value="1.0">Quarter Note</option>
+                <option value="0.5">Eighth Note</option>
+                <option value="0.25" selected>Sixteenth Note</option>
+            </select>
+        </div>
+        <div class="setting">
+            <label>Original BPM:</label>
+            <input type="number" id="originalBPM" value="120" min="60" max="200">
+        </div>
+        <div class="setting">
+            <label>Target BPM:</label>
+            <input type="number" id="targetBPM" value="140" min="60" max="200">
+        </div>
+    </div>
+    
+    <div class="log" id="log"></div>
+</div>
+
+<script>
+// Test sequence
+const testSequence = [
+    {note: "C4", start: 0.0, dur: 0.4, vel: 0.8},
+    {note: "E4", start: 0.5, dur: 0.4, vel: 0.8},
+    {note: "G4", start: 1.0, dur: 0.4, vel: 0.8},
+    {note: "C5", start: 1.5, dur: 0.4, vel: 0.8}
+];
+
+let synth = null;
+let isPlaying = false;
+let scheduledEvents = [];
+let loopTimeoutId = null;
+
+function log(message) {
+    const logEl = document.getElementById('log');
+    const timestamp = new Date().toLocaleTimeString();
+    logEl.innerHTML += `[${timestamp}] ${message}\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+    console.log(message);
+}
+
+function updateStatus(status) {
+    document.getElementById('status').textContent = `Status: ${status}`;
+    log(`Status: ${status}`);
+}
+
+function initAudio() {
+    if (synth) {
+        log('Audio already initialized');
+        return;
+    }
+    
+    try {
+        synth = new Tone.PolySynth(Tone.Synth).toDestination();
+        Tone.Transport.bpm.value = 120;
+        log('Audio initialized successfully');
+        updateStatus('Audio Ready');
+    } catch (error) {
+        log(`Error initializing audio: ${error.message}`);
+        updateStatus('Audio Error');
+    }
+}
+
+function playOnce() {
+    if (!synth) {
+        log('Please initialize audio first');
+        return;
+    }
+    
+    if (isPlaying) {
+        log('Already playing');
+        return;
+    }
+    
+    isPlaying = true;
+    updateStatus('Playing Once');
+    
+    Tone.Transport.cancel();
+    scheduledEvents = [];
+    
+    testSequence.forEach(note => {
+        const eventId = Tone.Transport.schedule(time => {
+            synth.triggerAttackRelease(note.note, note.dur, time, note.vel);
+            log(`Playing note: ${note.note}`);
+        }, note.start);
+        scheduledEvents.push(eventId);
+    });
+    
+    Tone.Transport.start();
+    
+    // Stop after sequence ends
+    const lastNote = testSequence.reduce((a,b) => a.start + a.dur > b.start + b.dur ? a : b);
+    Tone.Transport.schedule(() => {
+        stopPlayback();
+    }, lastNote.start + lastNote.dur);
+}
+
+function playLoop() {
+    if (!synth) {
+        log('Please initialize audio first');
+        return;
+    }
+    
+    if (isPlaying) {
+        log('Already playing');
+        return;
+    }
+    
+    const maxLoops = parseInt(document.getElementById('maxLoops').value);
+    const quantizeEnabled = document.getElementById('quantizeEnabled').checked;
+    const quantizeGrid = parseFloat(document.getElementById('quantizeGrid').value);
+    const originalBPM = parseInt(document.getElementById('originalBPM').value);
+    const targetBPM = parseInt(document.getElementById('targetBPM').value);
+    
+    log(`Starting loop playback - Max loops: ${maxLoops === -1 ? 'Infinite' : maxLoops}`);
+    log(`Quantize: ${quantizeEnabled}, Grid: ${quantizeGrid}`);
+    log(`Tempo conversion: ${originalBPM} -> ${targetBPM} BPM`);
+    
+    isPlaying = true;
+    updateStatus('Looping');
+    
+    Tone.Transport.cancel();
+    scheduledEvents = [];
+    
+    // Process sequence
+    let processedSeq = [...testSequence];
+    
+    // Apply tempo conversion
+    if (originalBPM !== targetBPM) {
+        const tempoRatio = targetBPM / originalBPM;
+        processedSeq = processedSeq.map(note => ({
+            ...note,
+            start: note.start / tempoRatio,
+            dur: note.dur / tempoRatio
+        }));
+        log(`Applied tempo conversion (ratio: ${tempoRatio.toFixed(2)})`);
+    }
+    
+    // Apply quantization
+    if (quantizeEnabled) {
+        const beatDuration = 60 / targetBPM;
+        const gridDuration = beatDuration * quantizeGrid;
+        
+        processedSeq = processedSeq.map(note => ({
+            ...note,
+            start: Math.round(note.start / gridDuration) * gridDuration,
+            dur: Math.round(note.dur / gridDuration) * gridDuration
+        }));
+        log(`Applied quantization (grid: ${gridDuration.toFixed(3)}s)`);
+    }
+    
+    // Calculate loop duration
+    const loopDuration = Math.max(...processedSeq.map(note => note.start + note.dur));
+    log(`Loop duration: ${loopDuration.toFixed(2)}s`);
+    
+    // Schedule loops
+    const loopsToSchedule = maxLoops === -1 ? 8 : maxLoops; // Schedule 8 loops for infinite
+    
+    for (let loopNum = 0; loopNum < loopsToSchedule; loopNum++) {
+        const loopOffset = loopNum * loopDuration;
+        
+        processedSeq.forEach(note => {
+            const eventId = Tone.Transport.schedule(time => {
+                synth.triggerAttackRelease(note.note, note.dur, time, note.vel);
+                log(`Loop ${loopNum + 1}: Playing ${note.note}`);
+            }, loopOffset + note.start);
+            scheduledEvents.push(eventId);
+        });
+    }
+    
+    Tone.Transport.start();
+    
+    // Set up stop timeout for finite loops
+    if (maxLoops > 0) {
+        const totalDuration = maxLoops * loopDuration;
+        loopTimeoutId = setTimeout(() => {
+            stopPlayback();
+        }, totalDuration * 1000);
+    }
+}
+
+function stopPlayback() {
+    if (!isPlaying) {
+        log('Not currently playing');
+        return;
+    }
+    
+    isPlaying = false;
+    updateStatus('Stopped');
+    
+    Tone.Transport.stop();
+    Tone.Transport.cancel();
+    
+    scheduledEvents.forEach(eventId => {
+        Tone.Transport.clear(eventId);
+    });
+    scheduledEvents = [];
+    
+    if (loopTimeoutId) {
+        clearTimeout(loopTimeoutId);
+        loopTimeoutId = null;
+    }
+    
+    log('Playback stopped');
+}
+
+function testQuantization() {
+    const originalSeq = [
+        {note: "C4", start: 0.13, dur: 0.37, vel: 0.8},
+        {note: "E4", start: 0.61, dur: 0.29, vel: 0.8},
+        {note: "G4", start: 1.08, dur: 0.44, vel: 0.8}
+    ];
+    
+    const beatDuration = 60 / 120; // 120 BPM
+    const gridDuration = beatDuration * 0.25; // 16th note
+    
+    const quantizedSeq = originalSeq.map(note => ({
+        ...note,
+        start: Math.round(note.start / gridDuration) * gridDuration,
+        dur: Math.round(note.dur / gridDuration) * gridDuration
+    }));
+    
+    log('=== Quantization Test ===');
+    log('Original sequence:');
+    originalSeq.forEach(note => {
+        log(`  ${note.note}: start=${note.start.toFixed(3)}, dur=${note.dur.toFixed(3)}`);
+    });
+    
+    log('Quantized sequence:');
+    quantizedSeq.forEach(note => {
+        log(`  ${note.note}: start=${note.start.toFixed(3)}, dur=${note.dur.toFixed(3)}`);
+    });
+}
+
+function testTempo() {
+    const originalSeq = testSequence;
+    const originalBPM = 120;
+    const targetBPM = 160;
+    const tempoRatio = targetBPM / originalBPM;
+    
+    const convertedSeq = originalSeq.map(note => ({
+        ...note,
+        start: note.start / tempoRatio,
+        dur: note.dur / tempoRatio
+    }));
+    
+    log('=== Tempo Conversion Test ===');
+    log(`Converting from ${originalBPM} to ${targetBPM} BPM (ratio: ${tempoRatio.toFixed(2)})`);
+    log('Original sequence:');
+    originalSeq.forEach(note => {
+        log(`  ${note.note}: start=${note.start.toFixed(3)}, dur=${note.dur.toFixed(3)}`);
+    });
+    
+    log('Tempo converted sequence:');
+    convertedSeq.forEach(note => {
+        log(`  ${note.note}: start=${note.start.toFixed(3)}, dur=${note.dur.toFixed(3)}`);
+    });
+}
+
+// Initialize on click
+document.addEventListener('click', () => {
+    if (Tone.context.state !== 'running') {
+        Tone.context.resume();
+    }
+}, { once: true });
+
+log('Simple Loop Test loaded. Click "Initialize Audio" to begin.');
+</script>
+</body>
+</html>
+
