@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dynamic Channel & Sequence Web Audio Sequencer (Tone.js)</title>
+  <!-- Include Tone.js Library -->
+  <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
+  <script type="module" src="audional-base64-sample-loader.js" defer></script>
+  <style>
+    body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #eee; text-align: center; margin: 0; padding: 20px; }
+    h1 { color: #0f0; }
+    .controls { margin: 20px; padding: 15px; background: #222; border-radius: 8px; display: inline-block; }
+    .bpm-control { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .bpm-control label { width: 80px; text-align: right; color: #0f0; }
+    input[type="range"] { width: 200px; }
+    input[type="number"] { width: 60px; background: #333; color: #fff; border: 1px solid #555; padding: 5px; }
+    button { background: #0f0; color: #000; border: none; padding: 10px 20px; font-size: 16px; margin: 5px; cursor: pointer; border-radius: 6px; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    button.sequence-btn { background: #333; color: #eee; padding: 8px 15px; font-size: 14px; margin: 3px; }
+    button.sequence-btn.active { background: #0a0; color: #000; font-weight: bold; }
+    button.sequence-btn:hover:not(:disabled) { background: #555; }
+    .sequence-controls { margin: 15px 0; padding: 10px; background: #2a2a2a; border-radius: 6px; }
+    .channel-controls { margin: 10px 0; }
+    .sequencer { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 20px; }
+    .channel { display: flex; align-items: center; gap: 10px; background: #222; padding: 10px; border-radius: 8px; width: 95%; max-width: 960px; }
+    .channel-label { width: 160px; text-align: left; font-weight: bold; color: #0f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 5px; }
+    .sample-select { width: 240px; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; }
+    .steps { display: flex; gap: 5px; flex-grow: 1; flex-wrap: wrap; } /* Allow wrapping for longer sequences */
+    .step { width: 30px; height: 30px; background: #333; border: 1px solid #555; border-radius: 4px; cursor: pointer; flex-shrink: 0; } /* Prevent shrinking */
+    .step.active { background: #0f0; }
+    .step.playing { background: #ff0; border-color: #aa0; }
+    .loading { color: #ff0; font-style: italic; margin: 20px; }
+    .status { font-size: 0.9em; color: #aaa; }
+    .playback-controls { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Dynamic Channel & Sequence Sequencer (Tone.js)</h1>
+  <p class="loading" id="loaderStatus">Loading sample list...</p>
+  
+  <div class="controls">
+    <div class="bpm-control">
+      <label for="bpmInput">BPM:</label>
+      <input type="range" id="bpmSlider" min="60" max="180" value="120" step="1" />
+      <input type="number" id="bpmInput" min="60" max="180" value="120" step="0.01" style="text-align:center;" />
+    </div>
+    
+    <div class="playback-controls">
+        <button id="playSequenceBtn" disabled>Play Sequence</button>
+        <button id="playAllBtn" disabled>Play All</button>
+        <button id="stopBtn" disabled>Stop</button>
+    </div>
+  </div>
+
+  <div class="sequence-controls">
+    <h3>Sequences</h3>
+    <div id="sequenceList"></div>
+    <button id="addSequenceBtn">Add 4-Bar Sequence</button>
+  </div>
+
+  <div class="channel-controls">
+    <button id="addChannelsBtn">Add 8 Channels</button>
+    <!-- <button id="removeChannelsBtn">Remove 8 Channels</button> --> <!-- Optional: Add remove logic -->
+  </div>
+
+  <div class="sequencer" id="sequencer"></div>
+  
+  <script type="module">
+    import { SimpleSampleLoader } from './audional-base64-sample-loader.js';
+
+    // --- Constants ---
+    const STEPS_PER_BAR = 16;
+    const BARS_PER_SEQUENCE = 4;
+    const CHANNELS_PER_ADDITION = 8;
+    const INITIAL_SEQUENCES = 1;
+    const INITIAL_CHANNELS_PER_SEQUENCE = 8;
+    const MAX_SEQUENCES = 32;
+    const MAX_CHANNELS_PER_SEQUENCE = 32;
+
+    // --- Global State ---
+    let projectData = {
+      sequences: [],
+      currentSequenceIndex: 0,
+      bpm: 120.00,
+      isPlaying: false,
+      playMode: null // 'sequence' or 'all'
+    };
+
+    // --- Tone.js Specific Variables ---
+    let isToneStarted = false;
+    let sequence; // Tone.js Sequence instance for current playback
+    let currentStepIndex = 0;
+    let currentPlaybackSequenceIndex = 0; // For 'Play All' mode
+    // --- End Tone.js Specific Variables ---
+
+    let sampleNames = [], sampleBPMs = [], isLoopSample = [], allBuffers = {};
+
+    // --- DOM Elements ---
+    const sequencerEl = document.getElementById('sequencer');
+    const playSequenceBtn = document.getElementById('playSequenceBtn');
+    const playAllBtn = document.getElementById('playAllBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const bpmInput = document.getElementById('bpmInput');
+    const bpmSlider = document.getElementById('bpmSlider');
+    const loaderStatus = document.getElementById('loaderStatus');
+    const sequenceListEl = document.getElementById('sequenceList');
+    const addSequenceBtn = document.getElementById('addSequenceBtn');
+    const addChannelsBtn = document.getElementById('addChannelsBtn');
+    // const removeChannelsBtn = document.getElementById('removeChannelsBtn'); // Optional
+
+    // --- BPM Warning ---
+    const bpmWarning = document.createElement('div');
+    bpmWarning.id = 'bpmWarning';
+    Object.assign(bpmWarning.style, {
+      color: '#ff9800', fontWeight: 'bold', display: 'none', marginTop: '8px'
+    });
+    loaderStatus.parentNode.insertBefore(bpmWarning, loaderStatus.nextSibling);
+
+    // --- BPM Controls (Simplified sync) ---
+    let isSliderActive = false;
+    const clampBPM = v => Math.max(60, Math.min(180, Math.round(parseFloat(v || projectData.bpm) * 100) / 100));
+    function renderBPM(val) {
+      bpmInput.value = val.toFixed(2).replace(/\.00$/, '');
+      bpmSlider.value = Math.round(val);
+    }
+    function setBPM(val) {
+       const newBPM = clampBPM(val);
+       projectData.bpm = newBPM;
+       renderBPM(newBPM);
+       checkAllSelectedLoopsBPM();
+       if (Tone && Tone.Transport) {
+         Tone.Transport.bpm.value = newBPM;
+       }
+    }
+    bpmInput.addEventListener('input', e => !isSliderActive && setBPM(e.target.value));
+    bpmInput.addEventListener('blur', e => setBPM(e.target.value));
+    bpmInput.addEventListener('keydown', e => { if(e.key==='Enter') setBPM(e.target.value); });
+    bpmInput.addEventListener('wheel', e => {
+      e.preventDefault();
+      setBPM((parseFloat(bpmInput.value||projectData.bpm) + (e.deltaY < 0 ? 0.01 : -0.01)).toFixed(2));
+    }, { passive: false });
+    bpmSlider.addEventListener('mousedown', ()=>isSliderActive=true);
+    bpmSlider.addEventListener('touchstart', ()=>isSliderActive=true);
+    bpmSlider.addEventListener('input', e => {
+      if(isSliderActive) setBPM(e.target.value);
+    });
+    ['mouseup','touchend'].forEach(evt => bpmSlider.addEventListener(evt, e=>{
+      isSliderActive=false;
+      setBPM(bpmSlider.value);
+    }));
+    bpmSlider.addEventListener('change', e=>setBPM(e.target.value));
+
+    // --- Playback Controls ---
+    playSequenceBtn.onclick = () => startSequencerWithTone('sequence');
+    playAllBtn.onclick = () => startSequencerWithTone('all');
+    stopBtn.onclick = stopSequencerWithTone;
+
+    // --- Sequence & Channel Management ---
+    addSequenceBtn.onclick = addSequence;
+    addChannelsBtn.onclick = () => addChannelsToCurrentSequence(CHANNELS_PER_ADDITION);
+    // removeChannelsBtn.onclick = () => removeChannelsFromCurrentSequence(CHANNELS_PER_ADDITION); // Optional
+
+    // --- Core Data Structure Functions ---
+    function createEmptySequence(numChannels = INITIAL_CHANNELS_PER_SEQUENCE) {
+        const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
+        return {
+            channels: Array(numChannels).fill(null).map(() => ({
+                selectedSampleIndex: 0,
+                steps: Array(totalSteps).fill(false)
+            }))
+        };
+    }
+
+    function addSequence() {
+        if (projectData.sequences.length >= MAX_SEQUENCES) {
+            loaderStatus.textContent = `Max sequences (${MAX_SEQUENCES}) reached.`;
+            return;
+        }
+        const newSeq = createEmptySequence(getCurrentSequence().channels.length); // Match channel count
+        projectData.sequences.push(newSeq);
+        updateSequenceListUI();
+        // Optionally switch to the new sequence
+        // switchToSequence(projectData.sequences.length - 1);
+    }
+
+    // --- Modified switchToSequence to optionally skip UI render ---
+    function switchToSequence(index, { updateUI = true } = {}) {
+        if (index >= 0 && index < projectData.sequences.length) {
+            projectData.currentSequenceIndex = index;
+            if (updateUI) {
+                updateSequenceListUI();
+                renderSequencer();
+            }
+        }
+    }
+
+
+    function getCurrentSequence() {
+        return projectData.sequences[projectData.currentSequenceIndex];
+    }
+
+    function addChannelsToCurrentSequence(count) {
+        const currentSeq = getCurrentSequence();
+        const newChannelCount = currentSeq.channels.length + count;
+        if (newChannelCount > MAX_CHANNELS_PER_SEQUENCE) {
+            loaderStatus.textContent = `Max channels per sequence (${MAX_CHANNELS_PER_SEQUENCE}) reached.`;
+            return;
+        }
+
+        for (let i = 0; i < count; i++) {
+            currentSeq.channels.push({
+                selectedSampleIndex: 0,
+                steps: Array(STEPS_PER_BAR * BARS_PER_SEQUENCE).fill(false)
+            });
+        }
+        renderSequencer(); // Re-render UI for current sequence
+    }
+
+    // Optional: function removeChannelsFromCurrentSequence(count) { ... }
+
+    // --- UI Update Functions ---
+    function updateSequenceListUI() {
+        sequenceListEl.innerHTML = '';
+        projectData.sequences.forEach((seq, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'sequence-btn';
+            btn.textContent = `Seq ${index + 1}`;
+            if (index === projectData.currentSequenceIndex) {
+                btn.classList.add('active');
+            }
+            btn.onclick = () => switchToSequence(index); // Manual click
+            sequenceListEl.appendChild(btn);
+        });
+    }
+
+    function renderSequencer() {
+        sequencerEl.innerHTML = ''; // Clear existing UI
+        const currentSeq = getCurrentSequence();
+        const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
+
+        if (!currentSeq) return;
+
+        currentSeq.channels.forEach((channelData, ch) => {
+            const channel = document.createElement('div');
+            channel.className = 'channel';
+
+            const label = document.createElement('div');
+            label.className = 'channel-label';
+            label.textContent = sampleNames[channelData.selectedSampleIndex] || `Sample ${channelData.selectedSampleIndex}`;
+            channel.appendChild(label);
+
+            const select = document.createElement('select');
+            select.className = 'sample-select';
+            select.dataset.channel = ch;
+            sampleNames.forEach((name, j) => {
+                const opt = document.createElement('option');
+                opt.value = j;
+                opt.textContent = isLoopSample[j] ? `${name} (${sampleBPMs[j]} BPM)` : name;
+                select.appendChild(opt);
+            });
+            select.value = channelData.selectedSampleIndex;
+            select.onchange = async () => {
+                const chIndex = parseInt(select.dataset.channel, 10);
+                const idx = parseInt(select.value, 10);
+                getCurrentSequence().channels[chIndex].selectedSampleIndex = idx;
+                label.textContent = sampleNames[idx];
+                isLoopSample[idx] ? checkBPMCompatibility(idx) : checkAllSelectedLoopsBPM();
+                if(!allBuffers[idx]) {
+                    loaderStatus.textContent = `Loading: ${sampleNames[idx]}...`;
+                    try {
+                        allBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx);
+                        loaderStatus.textContent = 'Ready!';
+                    } catch {
+                        loaderStatus.textContent = `Failed to load: ${sampleNames[idx]}`;
+                        setTimeout(()=>loaderStatus.textContent='Ready!',2000);
+                    }
+                }
+            };
+            channel.appendChild(select);
+
+            const stepsContainer = document.createElement('div');
+            stepsContainer.className = 'steps';
+            for (let step = 0; step < totalSteps; step++) {
+                const stepEl = document.createElement('div');
+                stepEl.className = 'step';
+                if (channelData.steps[step]) stepEl.classList.add('active');
+                stepEl.dataset.channel = ch;
+                stepEl.dataset.step = step;
+                stepEl.onclick = () => {
+                    stepEl.classList.toggle('active');
+                    const currentSeqData = getCurrentSequence();
+                    currentSeqData.channels[ch].steps[step] = !currentSeqData.channels[ch].steps[step];
+                };
+                stepsContainer.appendChild(stepEl);
+            }
+            channel.appendChild(stepsContainer);
+            sequencerEl.appendChild(channel);
+        });
+    }
+
+    // --- Tone.js Sequencer Engine Functions ---
+    function scheduleStep(time, stepIndex) {
+        document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
+        
+        // Determine the sequence data to use for this step
+        const currentSeqData = projectData.playMode === 'all' ? 
+                              projectData.sequences[currentPlaybackSequenceIndex] : 
+                              getCurrentSequence();
+
+        // Highlight steps based on the sequence data being played
+        document.querySelectorAll(`.step[data-step="${stepIndex}"]`).forEach(el => {
+            const ch = parseInt(el.dataset.channel, 10);
+            // Check against the sequence data being played
+            if (ch < currentSeqData.channels.length && currentSeqData.channels[ch].steps[stepIndex]) {
+                el.classList.add('playing');
+                const idx = currentSeqData.channels[ch].selectedSampleIndex;
+                const buffer = allBuffers[idx];
+                if (buffer) {
+                    const player = new Tone.Player(buffer).toDestination();
+                    player.start(time);
+                }
+            }
+        });
+        currentStepIndex = stepIndex;
+    }
+
+    function createSequence() {
+        const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
+        const sequenceSteps = Array.from({ length: totalSteps }, (_, i) => i);
+        if (sequence) sequence.dispose();
+        sequence = new Tone.Sequence((time, stepIndex) => {
+            scheduleStep(time, stepIndex);
+            
+            // Handle 'Play All' mode transition and UI update
+            if (projectData.playMode === 'all' && stepIndex === totalSteps - 1) {
+                 // Calculate the time for the next sequence to start (4 bars from now)
+                 const timeForNextSequence = `+${(60 / projectData.bpm) * (totalSteps / 4)}`;
+                 
+                 // Schedule the UI update and sequence switch *before* the next sequence starts
+                 Tone.Transport.scheduleOnce(() => {
+                     // Update the index for the next sequence to play
+                     const nextSeqIndex = (currentPlaybackSequenceIndex + 1) % projectData.sequences.length;
+                     currentPlaybackSequenceIndex = nextSeqIndex;
+                     
+                     // --- Update the UI to reflect the new playing sequence ---
+                     // This updates projectData.currentSequenceIndex and refreshes the sequencer UI
+                     switchToSequence(nextSeqIndex, { updateUI: true }); 
+                     
+                     // Dispose of the old Tone.Sequence instance
+                     if (sequence) sequence.dispose();
+                     
+                     // Create the new Tone.Sequence for the *next* sequence
+                     createSequence(); 
+                     
+                     // Start the new sequence immediately on the Transport
+                     sequence.start(Tone.Transport.seconds); 
+                     
+                 }, timeForNextSequence); 
+            }
+        }, sequenceSteps, "16n");
+        sequence.start(0);
+    }
+
+    function startSequencerWithTone(mode) {
+        projectData.playMode = mode;
+        if (mode === 'all') {
+            // Initialize the playback sequence index to the currently viewed sequence
+            currentPlaybackSequenceIndex = projectData.currentSequenceIndex;
+            // Also ensure the UI reflects this starting sequence
+            switchToSequence(currentPlaybackSequenceIndex, { updateUI: true });
+        } else {
+             // For 'sequence' mode, playback uses the currentSequenceIndex
+             // Ensure UI is consistent
+             switchToSequence(projectData.currentSequenceIndex, { updateUI: true });
+        }
+
+        if (!isToneStarted) {
+            Tone.start().then(() => {
+                isToneStarted = true;
+                console.log("Tone.js AudioContext started.");
+                proceedWithStart();
+            }).catch(err => {
+                console.error("Error starting Tone.js:", err);
+                loaderStatus.textContent = "Error starting audio. Please try again.";
+                loaderStatus.style.color = "#f00";
+            });
+        } else {
+            proceedWithStart();
+        }
+
+        function proceedWithStart() {
+            projectData.isPlaying = true;
+            playSequenceBtn.disabled = true;
+            playAllBtn.disabled = true;
+            stopBtn.disabled = false;
+            Tone.Transport.bpm.value = projectData.bpm;
+            createSequence();
+            Tone.Transport.start();
+            console.log(`Tone.js Sequencer Started (${mode})`);
+        }
+    }
+
+    function stopSequencerWithTone() {
+        Tone.Transport.stop();
+        if (sequence) sequence.dispose();
+        sequence = null;
+        document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
+        currentStepIndex = 0;
+        projectData.isPlaying = false;
+        projectData.playMode = null;
+        // Reset playback index to match the currently viewed sequence when stopped
+        currentPlaybackSequenceIndex = projectData.currentSequenceIndex;
+        playSequenceBtn.disabled = false;
+        playAllBtn.disabled = false;
+        stopBtn.disabled = true;
+        console.log("Tone.js Sequencer Stopped");
+    }
+
+    //--- Sequencer Initialization ---
+    async function initSequencer() {
+      try {
+        loaderStatus.textContent = 'Fetching sample list...';
+        await loadSampleMetadata();
+        
+        // Initialize project data with one sequence
+        projectData.sequences = [createEmptySequence(INITIAL_CHANNELS_PER_SEQUENCE)];
+        projectData.currentSequenceIndex = 0;
+        projectData.bpm = 120.00;
+
+        updateSequenceListUI();
+        renderSequencer();
+
+        loaderStatus.textContent = 'Ready! Click Play to start.';
+        loaderStatus.style.color = '#0f0';
+        playSequenceBtn.disabled = false;
+        playAllBtn.disabled = false;
+        stopBtn.disabled = false;
+
+        // Preload initial samples
+        const initialSamples = getCurrentSequence().channels.map(ch => ch.selectedSampleIndex);
+        await Promise.all(initialSamples.map(async idx=>{
+            if(!allBuffers[idx]) allBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx);
+        }));
+
+      } catch (err) {
+        loaderStatus.textContent = 'Error: ' + err.message;
+        loaderStatus.style.color = '#f00';
+        return;
+      }
+      checkAllSelectedLoopsBPM();
+    }
+
+    //--- Sample Metadata (Unchanged) ---
+    async function loadSampleMetadata() {
+      const urls = SimpleSampleLoader.ogSampleUrls;
+      if (!urls.length) throw new Error("No samples found in ogSampleUrls");
+      urls.forEach((item,i)=>{
+        sampleNames[i] = item.text || `Sample ${i}`;
+        const nameLower = sampleNames[i].toLowerCase();
+        isLoopSample[i] = item.isLoop !== undefined
+          ? item.isLoop
+          : ['loop','groove','beat','pattern'].some(k=>nameLower.includes(k));
+        sampleBPMs[i] = isLoopSample[i] ? (item.bpm!==undefined ? item.bpm : 120) : null;
+      });
+    }
+
+    //--- BPM Mismatch Warning (Adapted) ---
+    function checkBPMCompatibility(idx) {
+      const loopBPM = sampleBPMs[idx];
+      if (Math.abs(loopBPM - projectData.bpm) > 1) {
+        bpmWarning.style.display = 'block';
+        bpmWarning.textContent = `⚠️ BPM mismatch: Selected loop is ${loopBPM} BPM, but sequencer is ${projectData.bpm} BPM. Consider adjusting BPM to avoid sync issues.`;
+      } else {
+        checkAllSelectedLoopsBPM();
+      }
+    }
+
+    function checkAllSelectedLoopsBPM() {
+        const currentSeq = getCurrentSequence();
+        if (!currentSeq) return;
+        const loopIndices = currentSeq.channels.map(ch => ch.selectedSampleIndex).filter(idx => isLoopSample[idx]);
+        const mismatches = loopIndices.filter(idx => Math.abs(sampleBPMs[idx] - projectData.bpm) > 1);
+        if (mismatches.length) {
+            const uniqueBPMs = [...new Set(mismatches.map(idx => sampleBPMs[idx]))].join(', ');
+            bpmWarning.style.display = 'block';
+            bpmWarning.textContent = `⚠️ BPM mismatch: Selected loops are ${uniqueBPMs} BPM, but sequencer is ${projectData.bpm} BPM. Sync may be affected.`;
+        } else {
+            bpmWarning.style.display = 'none';
+        }
+    }
+
+    //--- Init ---
+    renderBPM(projectData.bpm);
+    initSequencer();
+  </script>
+</body>
+</html>
