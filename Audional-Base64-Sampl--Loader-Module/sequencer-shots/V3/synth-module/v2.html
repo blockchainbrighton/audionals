@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web Synth Studio</title>
+  <script src="https://cdn.jsdelivr.net/npm/tone@14.8.48/build/Tone.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1a1a2e;
+      color: #e6e6e6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1rem;
+      flex: 1;
+    }
+
+    header {
+      text-align: center;
+      padding: 1rem 0;
+      background: #16213e;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 0.5rem;
+      color: #0f969c;
+    }
+
+    .tabs {
+      display: flex;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid #333;
+    }
+
+    .tab {
+      padding: 0.75rem 1.5rem;
+      cursor: pointer;
+      background: #16213e;
+      color: #aaa;
+      border: 1px solid #333;
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      margin-right: 0.5rem;
+      transition: all 0.2s ease;
+    }
+
+    .tab.active {
+      background: #0f4c75;
+      color: #fff;
+      border-bottom: 1px solid #0f4c75;
+    }
+
+    .content {
+      display: none;
+      padding: 1rem;
+      background: #16213e;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+
+    .content.active {
+      display: block;
+    }
+
+    /* Keyboard Styles */
+    .keyboard {
+      display: flex;
+      height: 120px;
+      margin: 2rem 0;
+      position: relative;
+      user-select: none;
+    }
+
+    .key {
+      flex: 1;
+      background: white;
+      border: 1px solid #333;
+      border-radius: 0 0 5px 5px;
+      position: relative;
+      z-index: 1;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    .key.black {
+      background: #111;
+      color: white;
+      width: 60%;
+      height: 70%;
+      position: absolute;
+      z-index: 2;
+      border-radius: 0 0 5px 5px;
+    }
+
+    .key.active {
+      background: #4CAF50;
+    }
+
+    .key.black.active {
+      background: #388E3C;
+    }
+
+    .key-label {
+      position: absolute;
+      bottom: 5px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 0.75rem;
+      pointer-events: none;
+    }
+
+    .black .key-label {
+      color: #ccc;
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      background: #16213e;
+      border-radius: 8px;
+    }
+
+    .control-group {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .control-group h3 {
+      margin-bottom: 0.5rem;
+      color: #0f969c;
+      font-size: 1rem;
+    }
+
+    button {
+      background: #0f4c75;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.2s;
+      margin: 0.25rem;
+    }
+
+    button:hover {
+      background: #0f629c;
+    }
+
+    button.recording {
+      background: #d63031;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+
+    /* Piano Roll */
+    .piano-roll {
+      overflow-x: auto;
+      margin-top: 1rem;
+      background: #16213e;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+
+    .roll-header {
+      display: flex;
+      min-width: 800px;
+    }
+
+    .note-labels {
+      width: 60px;
+      background: #0f4c75;
+    }
+
+    .note-label {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 8px 0 0;
+      font-size: 0.8rem;
+      border-bottom: 1px solid #16213e;
+    }
+
+    .roll-tracks {
+      flex: 1;
+      position: relative;
+    }
+
+    .time-ruler {
+      height: 30px;
+      display: flex;
+      border-bottom: 1px solid #333;
+    }
+
+    .time-mark {
+      flex: 1;
+      text-align: center;
+      font-size: 0.75rem;
+      padding: 5px 0;
+      border-right: 1px solid #333;
+      position: relative;
+    }
+
+    .time-mark:last-child {
+      border-right: none;
+    }
+
+    .time-mark::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 15px;
+      background: #666;
+    }
+
+    .track {
+      height: 30px;
+      display: flex;
+      border-bottom: 1px solid #333;
+      position: relative;
+    }
+
+    .note {
+      position: absolute;
+      background: #0f969c;
+      border: 1px solid #0a6a6c;
+      border-radius: 3px;
+      cursor: move;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      color: white;
+      user-select: none;
+      transition: background 0.1s;
+    }
+
+    .note:hover {
+      background: #12a8ad;
+      z-index: 10;
+    }
+
+    .note.selected {
+      background: #4CAF50;
+      border-color: #388E3C;
+      z-index: 5;
+    }
+
+    .note-handle {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      cursor: ew-resize;
+      z-index: 6;
+    }
+
+    .velocity-slider {
+      position: absolute;
+      left: 4px;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: rgba(0,0,0,0.3);
+      z-index: 4;
+    }
+
+    .velocity-slider span {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 0;
+      background: #ffeb3b;
+    }
+
+    /* Status bar */
+    .status-bar {
+      padding: 0.5rem 1rem;
+      background: #0f4c75;
+      border-radius: 8px;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+
+    .record-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      background: #d63031;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container {
+        padding: 0.5rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      .keyboard {
+        height: 100px;
+      }
+
+      .key {
+        border-width: 0.5px;
+      }
+
+      .key.black {
+        height: 65%;
+      }
+
+      .controls {
+        flex-direction: column;
+      }
+
+      .tab {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Web Synth Studio</h1>
+    <p>Virtual Synthesizer with MIDI Recording & Piano Roll Editor</p>
+  </header>
+
+  <div class="container">
+    <div class="tabs">
+      <div class="tab active" data-tab="synth">Synth</div>
+      <div class="tab" data-tab="editor">MIDI Editor</div>
+    </div>
+
+    <div id="synth-content" class="content active">
+      <div class="controls">
+        <div class="control-group">
+          <h3>Synth Type</h3>
+          <button id="synth-poly">Poly Synth</button>
+          <button id="synth-amsynth">AM Synth</button>
+          <button id="synth-fmsynth">FM Synth</button>
+        </div>
+        
+        <div class="control-group">
+          <h3>Controls</h3>
+          <button id="start-midi">Enable MIDI</button>
+          <button id="record-btn">Start Recording</button>
+          <button id="play-recording" disabled>Play Recording</button>
+          <button id="clear-recording" disabled>Clear Recording</button>
+        </div>
+
+        <div class="control-group">
+          <h3>Octave</h3>
+          <button id="octave-down">Octave Down</button>
+          <span id="octave-display">Octave: 4</span>
+          <button id="octave-up">Octave Up</button>
+        </div>
+      </div>
+
+      <div class="status-bar">
+        <div class="record-indicator">
+          <div class="dot" id="record-dot" style="display: none;"></div>
+          <span id="status-text">Ready</span>
+        </div>
+      </div>
+
+      <div class="keyboard" id="keyboard"></div>
+    </div>
+
+    <div id="editor-content" class="content">
+      <div class="status-bar">
+        <p>Click and drag notes to move. Drag right edge to resize. Click to select. Right-click or use Delete key to remove.</p>
+      </div>
+      <div class="piano-roll">
+        <div class="roll-header">
+          <div class="note-labels" id="note-labels"></div>
+          <div class="roll-tracks" id="roll-tracks">
+            <div class="time-ruler" id="time-ruler"></div>
+            <div id="note-tracks"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Main application
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize Tone.js
+      Tone.start();
+      
+      // Global state
+      const state = {
+        currentSynth: null,
+        octave: 4,
+        recording: false,
+        recordStartTime: null,
+        recordedNotes: [],
+        selectedNotes: [],
+        currentSynthType: 'poly',
+        transportRunning: false,
+        midiAccess: null,
+        keyboardKeys: {},
+        noteHeight: 30,
+        pixelsPerBeat: 100,
+        totalBeats: 16,
+        recordingArmed: false
+      };
+
+      // Synth definitions
+      const synths = {
+        poly: new Tone.PolySynth(Tone.Synth).toDestination(),
+        amsynth: new Tone.PolySynth(Tone.AMSynth).toDestination(),
+        fmsynth: new Tone.PolySynth(Tone.FMSynth).toDestination()
+      };
+
+      // Set initial synth
+      state.currentSynth = synths.poly;
+
+      // Key mappings for 2 octaves
+      const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      const whiteKeys = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+      const keyboardMapping = {
+        'a': 'C', 'w': 'C#', 's': 'D', 'e': 'D#', 'd': 'E', 'f': 'F',
+        't': 'F#', 'g': 'G', 'y': 'G#', 'h': 'A', 'u': 'A#', 'j': 'B',
+        'k': 'C5', 'o': 'C#5', 'l': 'D5', 'p': ']'
+      };
+
+      // Create keyboard
+      function createKeyboard() {
+        const keyboard = document.getElementById('keyboard');
+        keyboard.innerHTML = '';
+        state.keyboardKeys = {};
+
+        // Create white keys first
+        const whiteKeyElements = [];
+        for (let i = 0; i < 14; i++) {
+          const noteIndex = i % 12;
+          const octOffset = Math.floor(i / 12);
+          const noteName = noteNames[noteIndex];
+          const octave = state.octave + octOffset;
+          const fullName = `${noteName}${octave}`;
+          
+          if (whiteKeys.includes(noteName)) {
+            const key = document.createElement('div');
+            key.className = 'key';
+            key.dataset.note = fullName;
+            
+            const label = document.createElement('div');
+            label.className = 'key-label';
+            label.textContent = fullName;
+            key.appendChild(label);
+            
+            keyboard.appendChild(key);
+            whiteKeyElements.push({ element: key, note: fullName });
+            state.keyboardKeys[fullName] = key;
+          }
+        }
+
+        // Add black keys on top
+        for (let i = 0; i < 14; i++) {
+          const noteIndex = i % 12;
+          const octOffset = Math.floor(i / 12);
+          const noteName = noteNames[noteIndex];
+          const octave = state.octave + octOffset;
+          const fullName = `${noteName}${octave}`;
+          
+          if (!whiteKeys.includes(noteName)) {
+            const key = document.createElement('div');
+            key.className = 'key black';
+            key.dataset.note = fullName;
+            
+            // Position the black key
+            const whiteKeyIndex = whiteKeyElements.findIndex(k => {
+              const keyOctave = parseInt(k.note.slice(-1));
+              const keyRoot = k.note.slice(0, -1);
+              return noteNames.indexOf(noteName) > noteNames.indexOf(keyRoot) && 
+                     noteNames.indexOf(noteName) <= noteNames.indexOf('B') && 
+                     keyOctave === octave;
+            });
+            
+            if (whiteKeyIndex >= 0) {
+              key.style.left = `${(whiteKeyIndex / whiteKeyElements.length) * 100}%`;
+            }
+            
+            const label = document.createElement('div');
+            label.className = 'key-label';
+            label.textContent = noteName.replace('#', '♯');
+            key.appendChild(label);
+            
+            keyboard.appendChild(key);
+            state.keyboardKeys[fullName] = key;
+          }
+        }
+
+        // Update octave display
+        document.getElementById('octave-display').textContent = `Octave: ${state.octave}`;
+      }
+
+      // Initialize keyboard
+      createKeyboard();
+
+      // Play a note
+      function playNote(note, velocity = 0.8) {
+        if (state.currentSynth) {
+          state.currentSynth.triggerAttack(note, undefined, velocity);
+        }
+        
+        // Visual feedback
+        const key = state.keyboardKeys[note];
+        if (key) {
+          key.classList.add('active');
+        }
+      }
+
+      // Release a note
+      function releaseNote(note) {
+        if (state.currentSynth) {
+          state.currentSynth.triggerRelease(note);
+        }
+        
+        // Remove visual feedback
+        const key = state.keyboardKeys[note];
+        if (key) {
+          key.classList.remove('active');
+        }
+      }
+
+      // Start recording a note
+      function startRecordingNote(note, time) {
+        if (!state.recording && state.recordingArmed) {
+          state.recording = true;
+          state.recordStartTime = time;
+          document.getElementById('record-dot').style.display = 'inline-block';
+          document.getElementById('status-text').textContent = 'Recording...';
+          document.getElementById('record-btn').classList.add('recording');
+          state.recordedNotes = [];
+        }
+        
+        if (state.recording) {
+          const relativeTime = time - state.recordStartTime;
+          const noteObj = {
+            note: note,
+            startTime: relativeTime,
+            duration: 0,
+            velocity: 0.8,
+            element: null,
+            selected: false
+          };
+          
+          state.recordedNotes.push(noteObj);
+          return noteObj;
+        }
+        
+        return null;
+      }
+
+      // End recording a note
+      function endRecordingNote(note, time) {
+        if (state.recording) {
+          const noteObj = state.recordedNotes.find(n => n.note === note && n.duration === 0);
+          if (noteObj) {
+            noteObj.duration = time - state.recordStartTime - noteObj.startTime;
+            if (noteObj.duration <= 0) noteObj.duration = 0.25; // Minimum duration
+          }
+        }
+      }
+
+      // Keyboard event listeners
+      document.addEventListener('keydown', (e) => {
+        if (e.repeat) return;
+        
+        const key = e.key.toLowerCase();
+        if (keyboardMapping[key]) {
+          const note = keyboardMapping[key];
+          const fullNote = note.includes('5') ? note : note + state.octave;
+          
+          // Start recording if first note is played
+          if (!state.recording && state.recordingArmed) {
+            state.recording = true;
+            state.recordStartTime = Tone.now();
+            document.getElementById('record-dot').style.display = 'inline-block';
+            document.getElementById('status-text').textContent = 'Recording...';
+            document.getElementById('record-btn').classList.add('recording');
+            state.recordedNotes = [];
+          }
+          
+          playNote(fullNote);
+          
+          // Record the note
+          if (state.recording) {
+            startRecordingNote(fullNote, Tone.now());
+          }
+        }
+      });
+
+      document.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase();
+        if (keyboardMapping[key]) {
+          const note = keyboardMapping[key];
+          const fullNote = note.includes('5') ? note : note + state.octave;
+          releaseNote(fullNote);
+          
+          if (state.recording) {
+            endRecordingNote(fullNote, Tone.now());
+          }
+        }
+      });
+
+      // Mouse events for keyboard
+      const keyboard = document.getElementById('keyboard');
+      keyboard.addEventListener('mousedown', (e) => {
+        let target = e.target;
+        while (target && !target.dataset.note) {
+          target = target.parentElement;
+        }
+        
+        if (target && target.dataset.note) {
+          const note = target.dataset.note;
+          playNote(note);
+          
+          // Start recording if first note
+          if (!state.recording && state.recordingArmed) {
+            state.recording = true;
+            state.recordStartTime = Tone.now();
+            document.getElementById('record-dot').style.display = 'inline-block';
+            document.getElementById('status-text').textContent = 'Recording...';
+            document.getElementById('record-btn').classList.add('recording');
+            state.recordedNotes = [];
+          }
+          
+          if (state.recording) {
+            startRecordingNote(note, Tone.now());
+          }
+          
+          // Keep track of pressed note for mouseup
+          keyboard.activeNote = note;
+        }
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (keyboard.activeNote) {
+          releaseNote(keyboard.activeNote);
+          
+          if (state.recording) {
+            endRecordingNote(keyboard.activeNote, Tone.now());
+          }
+          
+          keyboard.activeNote = null;
+        }
+      });
+
+      // Synth type buttons
+      document.getElementById('synth-poly').addEventListener('click', () => {
+        state.currentSynth = synths.poly;
+        state.currentSynthType = 'poly';
+        updateActiveButton('synth-poly');
+      });
+
+      document.getElementById('synth-amsynth').addEventListener('click', () => {
+        state.currentSynth = synths.amsynth;
+        state.currentSynthType = 'amsynth';
+        updateActiveButton('synth-amsynth');
+      });
+
+      document.getElementById('synth-fmsynth').addEventListener('click', () => {
+        state.currentSynth = synths.fmsynth;
+        state.currentSynthType = 'fmsynth';
+        updateActiveButton('synth-fmsynth');
+      });
+
+      function updateActiveButton(activeId) {
+        const buttons = ['synth-poly', 'synth-amsynth', 'synth-fmsynth'];
+        buttons.forEach(id => {
+          const btn = document.getElementById(id);
+          if (id === activeId) {
+            btn.style.backgroundColor = '#0f969c';
+          } else {
+            btn.style.backgroundColor = '';
+          }
+        });
+      }
+
+      // Octave controls
+      document.getElementById('octave-up').addEventListener('click', () => {
+        if (state.octave < 7) {
+          state.octave++;
+          createKeyboard();
+        }
+      });
+
+      document.getElementById('octave-down').addEventListener('click', () => {
+        if (state.octave > 1) {
+          state.octave--;
+          createKeyboard();
+        }
+      });
+
+      // Recording controls
+      const recordBtn = document.getElementById('record-btn');
+      recordBtn.addEventListener('click', () => {
+        if (!state.recording) {
+          state.recordingArmed = true;
+          document.getElementById('status-text').textContent = 'Recording armed - play a note to start';
+        } else {
+          stopRecording();
+        }
+      });
+
+      function stopRecording() {
+        state.recording = false;
+        state.recordingArmed = false;
+        document.getElementById('record-dot').style.display = 'none';
+        document.getElementById('status-text').textContent = 'Recording stopped';
+        document.getElementById('record-btn').classList.remove('recording');
+        document.getElementById('play-recording').disabled = false;
+        document.getElementById('clear-recording').disabled = false;
+      }
+
+      document.getElementById('clear-recording').addEventListener('click', () => {
+        state.recordedNotes = [];
+        state.recording = false;
+        state.recordingArmed = false;
+        document.getElementById('record-dot').style.display = 'none';
+        document.getElementById('status-text').textContent = 'Recording cleared';
+        document.getElementById('record-btn').classList.remove('recording');
+        document.getElementById('play-recording').disabled = true;
+        document.getElementById('clear-recording').disabled = true;
+        renderPianoRoll();
+      });
+
+      // Play recording
+      document.getElementById('play-recording').addEventListener('click', () => {
+        if (state.transportRunning) {
+          Tone.Transport.stop();
+          state.transportRunning = false;
+          document.getElementById('play-recording').textContent = 'Play Recording';
+        } else {
+          // Schedule all notes
+          const now = Tone.now();
+          state.recordedNotes.forEach(noteObj => {
+            state.currentSynth.triggerAttackRelease(
+              noteObj.note,
+              noteObj.duration,
+              now + noteObj.startTime
+            );
+          });
+          
+          state.transportRunning = true;
+          document.getElementById('play-recording').textContent = 'Stop Playback';
+          
+          // Reset button after playback
+          setTimeout(() => {
+            if (state.transportRunning) {
+              state.transportRunning = false;
+              document.getElementById('play-recording').textContent = 'Play Recording';
+            }
+          }, Math.max(...state.recordedNotes.map(n => n.startTime + n.duration)) * 1000 + 500);
+        }
+      });
+
+      // MIDI Support
+      document.getElementById('start-midi').addEventListener('click', async () => {
+        try {
+          state.midiAccess = await navigator.requestMIDIAccess();
+          state.midiAccess.onstatechange = onMIDIPortChange;
+          
+          // Initialize all current ports
+          for (const entry of state.midiAccess.inputs) {
+            const input = entry[1];
+            input.onmidimessage = onMIDIMessage;
+          }
+          
+          document.getElementById('status-text').textContent = 'MIDI Connected';
+          document.getElementById('start-midi').disabled = true;
+        } catch (err) {
+          document.getElementById('status-text').textContent = `MIDI Error: ${err.message}`;
+        }
+      });
+
+      function onMIDIPortChange(event) {
+        const port = event.port;
+        if (port.type === 'input' && port.state === 'connected') {
+          port.onmidimessage = onMIDIMessage;
+        }
+      }
+
+      function onMIDIMessage(message) {
+        const command = message.data[0] >> 4;
+        const noteNumber = message.data[1];
+        const velocity = message.data[2] / 127;
+        
+        // Note on
+        if (command === 9 && velocity > 0) {
+          const note = noteFromNumber(noteNumber);
+          playNote(note, velocity);
+          
+          // Start recording if first note
+          if (!state.recording && state.recordingArmed) {
+            state.recording = true;
+            state.recordStartTime = Tone.now();
+            document.getElementById('record-dot').style.display = 'inline-block';
+            document.getElementById('status-text').textContent = 'Recording...';
+            document.getElementById('record-btn').classList.add('recording');
+            state.recordedNotes = [];
+          }
+          
+          if (state.recording) {
+            const noteObj = {
+              note: note,
+              startTime: Tone.now() - state.recordStartTime,
+              duration: 0,
+              velocity: velocity,
+              element: null,
+              selected: false
+            };
+            state.recordedNotes.push(noteObj);
+          }
+        }
+        
+        // Note off or note on with velocity 0
+        if ((command === 8) || (command === 9 && velocity === 0)) {
+          const note = noteFromNumber(noteNumber);
+          releaseNote(note);
+          
+          if (state.recording) {
+            const noteObj = state.recordedNotes.find(n => n.note === note && n.duration === 0);
+            if (noteObj) {
+              noteObj.duration = Tone.now() - state.recordStartTime - noteObj.startTime;
+              if (noteObj.duration <= 0) noteObj.duration = 0.25;
+            }
+          }
+        }
+      }
+
+      function noteFromNumber(number) {
+        const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const octave = Math.floor(number / 12) - 1;
+        const note = noteNames[number % 12];
+        return `${note}${octave}`;
+      }
+
+      // Piano Roll Editor
+      function renderPianoRoll() {
+        const noteLabels = document.getElementById('note-labels');
+        const timeRuler = document.getElementById('time-ruler');
+        const noteTracks = document.getElementById('note-tracks');
+        
+        noteLabels.innerHTML = '';
+        timeRuler.innerHTML = '';
+        noteTracks.innerHTML = '';
+        
+        // Create note labels (C1 to B5)
+        const notes = [];
+        for (let oct = 5; oct >= 1; oct--) {
+          for (let i = noteNames.length - 1; i >= 0; i--) {
+            if (whiteKeys.includes(noteNames[i])) {
+              notes.push(`${noteNames[i]}${oct}`);
+            }
+          }
+        }
+        
+        notes.forEach(note => {
+          const label = document.createElement('div');
+          label.className = 'note-label';
+          label.textContent = note;
+          noteLabels.appendChild(label);
+        });
+        
+        // Create time ruler (16 beats)
+        for (let i = 0; i <= state.totalBeats; i++) {
+          const mark = document.createElement('div');
+          mark.className = 'time-mark';
+          mark.textContent = i;
+          mark.style.flex = `0 0 ${state.pixelsPerBeat}px`;
+          timeRuler.appendChild(mark);
+        }
+        
+        // Create tracks
+        notes.forEach(note => {
+          const track = document.createElement('div');
+          track.className = 'track';
+          noteTracks.appendChild(track);
+          
+          // Add notes to track
+          state.recordedNotes
+            .filter(n => n.note === note)
+            .forEach(noteObj => {
+              const noteElement = document.createElement('div');
+              noteElement.className = 'note';
+              if (noteObj.selected) noteElement.classList.add('selected');
+              
+              // Position and size the note
+              const left = noteObj.startTime * state.pixelsPerBeat;
+              const width = noteObj.duration * state.pixelsPerBeat;
+              noteElement.style.left = `${left}px`;
+              noteElement.style.width = `${Math.max(width, 10)}px`;
+              noteElement.style.height = `${state.noteHeight - 2}px`;
+              
+              // Velocity indicator
+              const velocitySlider = document.createElement('div');
+              velocitySlider.className = 'velocity-slider';
+              const velocityBar = document.createElement('span');
+              velocityBar.style.height = `${noteObj.velocity * 100}%`;
+              velocitySlider.appendChild(velocityBar);
+              noteElement.appendChild(velocitySlider);
+              
+              // Resize handle
+              const handle = document.createElement('div');
+              handle.className = 'note-handle';
+              noteElement.appendChild(handle);
+              
+              // Store reference
+              noteObj.element = noteElement;
+              
+              track.appendChild(noteElement);
+              
+              // Make note draggable
+              makeNoteDraggable(noteElement, noteObj, track);
+            });
+        });
+      }
+
+      function makeNoteDraggable(element, noteObj, track) {
+        let isDragging = false;
+        let isResizing = false;
+        let startX, startLeft, startWidth, originalStartTime, originalDuration;
+        
+        element.addEventListener('mousedown', (e) => {
+          if (e.target.classList.contains('note-handle')) {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = element.offsetWidth;
+            originalDuration = noteObj.duration;
+          } else {
+            isDragging = true;
+            startX = e.clientX;
+            startLeft = element.offsetLeft;
+            originalStartTime = noteObj.startTime;
+            
+            // Select this note (and others if shift is held)
+            if (!e.shiftKey) {
+              // Clear other selections
+              state.recordedNotes.forEach(n => {
+                n.selected = false;
+                if (n.element) n.element.classList.remove('selected');
+              });
+            }
+            noteObj.selected = true;
+            element.classList.add('selected');
+          }
+          
+          state.selectedNotes = state.recordedNotes.filter(n => n.selected);
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+          if (isDragging || isResizing) {
+            e.preventDefault();
+            
+            const deltaX = e.clientX - startX;
+            const deltaT = deltaX / state.pixelsPerBeat;
+            
+            if (isDragging) {
+              const newTime = originalStartTime + deltaT;
+              if (newTime >= 0) {
+                noteObj.startTime = newTime;
+                element.style.left = `${noteObj.startTime * state.pixelsPerBeat}px`;
+              }
+            }
+            
+            if (isResizing) {
+              const newDuration = originalDuration + deltaT;
+              if (newDuration > 0.1) {
+                noteObj.duration = newDuration;
+                const width = noteObj.duration * state.pixelsPerBeat;
+                element.style.width = `${Math.max(width, 10)}px`;
+              }
+            }
+          }
+        });
+        
+        document.addEventListener('mouseup', () => {
+          if (isDragging || isResizing) {
+            isDragging = false;
+            isResizing = false;
+          }
+        });
+        
+        // Right-click to delete
+        element.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          deleteNote(noteObj);
+        });
+        
+        // Click to select
+        element.addEventListener('click', (e) => {
+          if (!e.shiftKey) {
+            state.recordedNotes.forEach(n => {
+              n.selected = false;
+              if (n.element) n.element.classList.remove('selected');
+            });
+          }
+          
+          noteObj.selected = !noteObj.selected;
+          if (noteObj.selected) {
+            element.classList.add('selected');
+          } else {
+            element.classList.remove('selected');
+          }
+          
+          state.selectedNotes = state.recordedNotes.filter(n => n.selected);
+        });
+      }
+
+      function deleteNote(noteObj) {
+        state.recordedNotes = state.recordedNotes.filter(n => n !== noteObj);
+        if (noteObj.element && noteObj.element.parentNode) {
+          noteObj.element.parentNode.removeChild(noteObj.element);
+        }
+        
+        // Update UI
+        if (state.recordedNotes.length === 0) {
+          document.getElementById('play-recording').disabled = true;
+          document.getElementById('clear-recording').disabled = true;
+        }
+      }
+
+      // Tab switching
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+          
+          tab.classList.add('active');
+          const tabId = tab.dataset.tab;
+          document.getElementById(`${tabId}-content`).classList.add('active');
+          
+          if (tabId === 'editor') {
+            renderPianoRoll();
+          }
+        });
+      });
+
+      // Keyboard shortcuts for editor
+      document.addEventListener('keydown', (e) => {
+        if (document.querySelector('#editor-content.active')) {
+          if (e.key === 'Delete' || e.key === 'Backspace') {
+            e.preventDefault();
+            // Delete selected notes
+            const notesToDelete = [...state.selectedNotes];
+            notesToDelete.forEach(noteObj => {
+              deleteNote(noteObj);
+            });
+            state.selectedNotes = [];
+            renderPianoRoll(); // Re-render to update positions
+          }
+        }
+      });
+
+      // Initialize
+      updateActiveButton('synth-poly');
+    });
+  </script>
+</body>
+</html>
