@@ -10,16 +10,6 @@ export const PianoRoll = {
     maxZoomX: 4,
     minZoomY: 0.5,
     maxZoomY: 2.5,
-
-    quantOptions: [
-        { value: 1, label: 'Whole Note' },
-        { value: 0.5, label: 'Half Note' },
-        { value: 0.25, label: 'Quarter Note' },
-        { value: 0.125, label: 'Eighth Note' },
-        { value: 0.0625, label: 'Sixteenth Note' },
-        { value: 0.03125, label: 'Thirty-second Note' }
-    ],
-
     transportInterval: null,
 
     init() {
@@ -50,39 +40,9 @@ export const PianoRoll = {
         this.zoomOutY = this._btn('–', () => this.setZoomY(this.zoomY / 1.15), 'Zoom Out (Vertical)');
         this.zoomInY = this._btn('∣∣', () => this.setZoomY(this.zoomY * 1.15), 'Zoom In (Vertical)');
 
-        // --- Quantization controls (checkbox + dropdown) ---
-        this.quantCheckbox = document.createElement('input');
-        this.quantCheckbox.type = 'checkbox';
-        this.quantCheckbox.style.marginLeft = '16px';
-        this.quantCheckbox.checked = !!LoopManager.quantizeEnabled;
-        this.quantCheckbox.onchange = () => {
-            if (this.quantCheckbox.checked) {
-                LoopManager.setQuantization(true, 0.03125);
-            } else {
-                LoopManager.setQuantization(false, null);
-            }
-            this.updateQuantUI();
-        };
-
-        this.quantSel = document.createElement('select');
-        this.quantOptions.forEach(opt => {
-            let op = document.createElement('option');
-            op.value = opt.value;
-            op.textContent = opt.label;
-            if (opt.value === 0.03125) op.selected = true;
-            this.quantSel.appendChild(op);
-        });
-        this.quantSel.disabled = !LoopManager.quantizeEnabled;
-        this.quantSel.value = String(LoopManager.quantizeGrid || 0.03125);
-        this.quantSel.onchange = () => {
-            LoopManager.setQuantization(true, Number(this.quantSel.value));
-            this.updateQuantUI();
-        };
-
         this.controlsBar.append(
             this._label('Zoom X:'), this.zoomOutX, this.zoomInX,
-            this._label('Zoom Y:'), this.zoomOutY, this.zoomInY,
-            this._label('Quantize:'), this.quantCheckbox, this.quantSel
+            this._label('Zoom Y:'), this.zoomOutY, this.zoomInY
         );
 
         // --- SCROLLABLE WRAPPER ---
@@ -152,14 +112,6 @@ export const PianoRoll = {
             document.addEventListener("keydown", this._keyListener);
         }
 
-        this.draw();
-    },
-
-    updateQuantUI() {
-        // Sync quant controls to LoopManager
-        this.quantCheckbox.checked = !!LoopManager.quantizeEnabled;
-        this.quantSel.disabled = !LoopManager.quantizeEnabled;
-        this.quantSel.value = String(LoopManager.quantizeGrid != null ? LoopManager.quantizeGrid : 0.03125);
         this.draw();
     },
 

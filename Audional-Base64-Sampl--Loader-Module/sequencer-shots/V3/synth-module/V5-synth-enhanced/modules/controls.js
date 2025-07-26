@@ -7,12 +7,10 @@ export const Controls = {
         EnvelopeManager.init();
         AudioSafety.init();
 
-        // Render UI
         const panel = document.getElementById('control-panel');
         panel.innerHTML = `
             <div class="control-panel">
-                <div class="control-group">
-                    <h3>Audio Safety</h3>
+                ${this.groupBlock('Audio Safety', 'audio', true, `
                     <div class="control-row">
                         <span class="control-label">Master Volume</span>
                         <input type="range" id="masterVolume" min="0" max="1" step="0.01" value="0.7">
@@ -29,9 +27,8 @@ export const Controls = {
                         <span class="control-label" id="voiceCount">Voices: 0/16</span>
                         <button id="emergencyStop" class="emergency-button">Emergency Stop</button>
                     </div>
-                </div>
-                <div class="control-group">
-                    <h3>Envelope (ADSR)</h3>
+                `)}
+                ${this.groupBlock('Envelope (ADSR)', 'env', false, `
                     <div class="control-row">
                         <span class="control-label">Preset</span>
                         <select id="envelopePreset">
@@ -69,9 +66,8 @@ export const Controls = {
                         <input type="number" id="envelopeReleaseInput" min="0.001" max="5" step="0.001" value="0.3" style="width:65px; margin-left:7px;">
                         <span class="control-value" id="envelopeReleaseVal">0.300</span>
                     </div>
-                </div>
-                <div class="control-group">
-                    <h3>Oscillator</h3>
+                `)}
+                ${this.groupBlock('Oscillator', 'osc', false, `
                     <div class="control-row">
                         <span class="control-label">Waveform</span>
                         <select id="waveform">
@@ -87,9 +83,8 @@ export const Controls = {
                         <input type="number" id="detuneInput" min="-50" max="50" value="0" style="width:58px; margin-left:7px;">
                         <span class="control-value" id="detuneVal">0</span>
                     </div>
-                </div>
-                <div class="control-group">
-                    <h3>Filter</h3>
+                `)}
+                ${this.groupBlock('Filter', 'filter', false, `
                     <div class="control-row">
                         <span class="control-label">Type</span>
                         <select id="filterType"><option>lowpass</option><option>highpass</option><option>bandpass</option></select>
@@ -106,9 +101,8 @@ export const Controls = {
                         <input type="number" id="filterQInput" min="0" max="20" value="1" style="width:55px; margin-left:7px;">
                         <span class="control-value" id="filterQVal">1</span>
                     </div>
-                </div>
-                <div class="control-group">
-                    <h3>Effects</h3>
+                `)}
+                ${this.groupBlock('Effects', 'fx', false, `
                     <div class="control-row">
                         <span class="control-label">Reverb</span>
                         <input type="range" id="reverb" min="0" max="100" value="30">
@@ -121,16 +115,35 @@ export const Controls = {
                         <input type="number" id="delayInput" min="0" max="100" value="20" style="width:60px; margin-left:7px;">
                         <span class="control-value" id="delayVal">20%</span>
                     </div>
-                </div>
-                <div class="control-group">
-                    <h3>BPM</h3>
+                `)}
+                ${this.groupBlock('BPM', 'bpm', false, `
                     <div class="control-row">
                         <span class="control-label">BPM</span>
                         <input type="number" id="bpm" min="40" max="240" value="120">
                     </div>
-                </div>
+                `)}
             </div>
         `;
+
+        // Toggle expand/collapse logic
+        ['audio','env','osc','filter','fx','bpm'].forEach(id => {
+            const toggle = panel.querySelector(`#${id}_toggle`);
+            const content = panel.querySelector(`#${id}_content`);
+            if (!toggle || !content) return;
+            content.classList.toggle('group-content-collapsed', !toggle.checked);
+            toggle.addEventListener('change', () => {
+                content.classList.toggle('group-content-collapsed', !toggle.checked);
+            });
+            // Also expand/collapse when title row is clicked
+            const titleRow = panel.querySelector(`#${id}_title_row`);
+            if (titleRow) {
+                titleRow.addEventListener('click', (e) => {
+                    if (e.target === toggle) return;
+                    toggle.checked = !toggle.checked;
+                    toggle.dispatchEvent(new Event('change'));
+                });
+            }
+        });
 
         // Utility: sync slider<->number for a pair, call cb(value) on change
         function linkSliderAndInput(sliderId, inputId, valueCb) {
@@ -141,7 +154,6 @@ export const Controls = {
                 valueCb(slider.value);
             });
             input.addEventListener('input', e => {
-                // Clamp for safety
                 let val = input.value;
                 if (slider.min !== undefined) val = Math.max(Number(slider.min), val);
                 if (slider.max !== undefined) val = Math.min(Number(slider.max), val);
@@ -165,7 +177,6 @@ export const Controls = {
         panel.querySelector('#envelopePreset').onchange = (e) => {
             if (e.target.value) EnvelopeManager.loadPreset(e.target.value);
         };
-        
         linkSliderAndInput('#envelopeAttack', '#envelopeAttackInput', (val) => {
             EnvelopeManager.setParameter('attack', val);
             panel.querySelector('#envelopeAttackVal').textContent = parseFloat(val).toFixed(3);
@@ -206,5 +217,19 @@ export const Controls = {
         Effects.setReverb();
         Effects.setDelay();
         EnvelopeManager.updateUI();
+    },
+
+    groupBlock(title, id, expanded, contentHtml) {
+        return `
+            <div class="control-group">
+                <div class="group-title-row" id="${id}_title_row">
+                    <input type="checkbox" id="${id}_toggle" class="group-toggle" ${expanded ? "checked" : ""} />
+                    <h3 style="margin:0;flex:1 1 auto;">${title}</h3>
+                </div>
+                <div id="${id}_content" class="group-content${expanded ? "" : " group-content-collapsed"}">
+                    ${contentHtml}
+                </div>
+            </div>
+        `;
     }
 };
