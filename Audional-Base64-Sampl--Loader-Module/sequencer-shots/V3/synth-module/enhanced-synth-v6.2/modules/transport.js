@@ -1,5 +1,5 @@
 // modules/transport.js
-import { Recorder } from './recorder.js';
+import { EnhancedRecorder } from './enhanced-recorder.js';
 
 export const Transport = {
     init() {
@@ -13,14 +13,14 @@ export const Transport = {
             <button id="clearBtn" class="transport-button"><span>🗑</span>Clear</button>
         `;
 
-        // Wire up events to Recorder module
-        document.getElementById('recordBtn').onclick = Recorder.onRecord;
-        document.getElementById('stopBtn').onclick   = Recorder.onStop;
-        document.getElementById('playBtn').onclick   = Recorder.onPlay;
-        document.getElementById('clearBtn').onclick  = Recorder.onClear;
+        // Wire up events to EnhancedRecorder module
+        document.getElementById('recordBtn').onclick = EnhancedRecorder.onRecord;
+        document.getElementById('stopBtn').onclick   = EnhancedRecorder.onStop;
+        document.getElementById('playBtn').onclick   = EnhancedRecorder.onPlay;
+        document.getElementById('clearBtn').onclick  = EnhancedRecorder.onClear;
 
         // Store references for state updates
-        Recorder.buttons = {
+        EnhancedRecorder.buttons = {
             record: document.getElementById('recordBtn'),
             stop:   document.getElementById('stopBtn'),
             play:   document.getElementById('playBtn'),

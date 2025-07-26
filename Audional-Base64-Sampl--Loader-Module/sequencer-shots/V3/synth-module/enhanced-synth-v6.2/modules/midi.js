@@ -1,5 +1,5 @@
 // modules/midi.js
-import { Recorder } from './recorder.js';
+import { EnhancedRecorder } from './enhanced-recorder.js';
 
 export const MidiControl = {
     init() {
@@ -23,6 +23,6 @@ export const MidiControl = {
     },
     onMIDI(ev){
         let [cmd,note,vel]=ev.data, n=Tone.Frequency(note,'midi').toNote();
-        if(cmd===144&&vel>0)Recorder.playNote(n); else if(cmd===128||(cmd===144&&vel===0))Recorder.releaseNote(n);
+        if(cmd===144&&vel>0)EnhancedRecorder.playNote(n); else if(cmd===128||(cmd===144&&vel===0))EnhancedRecorder.releaseNote(n);
     }
 };
