@@ -255,6 +255,7 @@ let isRecording = false,
 
 const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'],
       whiteKeys = ['C','D','E','F','G','A','B'],
+      blackKeys = ['C#','D#','F#','G#','A#'],
       minMidiNote = 21, maxMidiNote = 108, totalNotes = maxMidiNote - minMidiNote + 1;
 
 function createKeyboard() {
@@ -278,7 +279,7 @@ function createKeyboard() {
       k.onmousedown = () => playNote(noteName, 0.8);
       k.onmouseup = k.onmouseleave = () => releaseNote(noteName);
       kb.appendChild(k);
-      whiteKeyPos.push({ left: whiteIndex * whiteKeyWidth });
+      whiteKeyPos.push({ left: whiteIndex * whiteKeyWidth, octave: octaves[o], idx: i, note: noteName });
       whiteIndex++;
     }
   }
@@ -305,13 +306,14 @@ function createKeyboard() {
   }
 }
 
-// KEY CHANGE: Play note only starts recording if *record is armed*
+// ----------- RECORD/PLAYBACK/EDITOR LOGIC -----------
+
+// (1) Keyboard and MIDI only trigger recording if armed by user
 function playNote(note, velocity = 0.8) {
   if (activeNotes.has(note)) return;
   synth.triggerAttack(note, Tone.now(), velocity);
   activeNotes.add(note);
   document.querySelector(`.key[data-note="${note}"]`)?.classList.add('active');
-  // Only start recording on first note if user armed recording
   if (isRecordArmed && !isRecording) startRecording();
   if (isRecording) recordedNotes.push({note, startTime: Tone.now() - recordingStartTime, velocity, duration: 0});
 }
@@ -329,22 +331,29 @@ function releaseNote(note) {
   }
 }
 
+// Called ONLY when user presses record button
 function armRecording() {
-  if (isRecording) return;
+  if (isRecording || isRecordArmed) return;
   isRecordArmed = true;
-  btns('record-btn', 1, true); // highlight record, disable it
+  btns('record-btn', 1, true);
   btns('stop-btn', 0, false);
   btns('play-btn', 0, true);
   document.getElementById('recording-status').textContent = 'Record ready (play a note)';
 }
 function startRecording() {
-  isRecording = true; isRecordArmed = false;
-  recordingStartTime = Tone.now(); recordedNotes = [];
-  btns('record-btn', 1, true); btns('stop-btn', 0, false); btns('play-btn', 0, true);
+  isRecording = true;
+  isRecordArmed = false;
+  recordingStartTime = Tone.now();
+  recordedNotes = [];
+  btns('record-btn', 1, true);
+  btns('stop-btn', 0, false);
+  btns('play-btn', 0, true);
   document.getElementById('recording-status').textContent = 'Recording...';
+  renderPianoRoll();
 }
 function stopAll() {
-  isRecording = false; isRecordArmed = false;
+  isRecording = false;
+  isRecordArmed = false;
   btns('record-btn', 0, false);
   btns('stop-btn', 0, true);
   btns('play-btn', 0, recordedNotes.length === 0);
@@ -373,18 +382,99 @@ function clearRecording() {
   renderPianoRoll();
 }
 
-function renderPianoRoll() {/* unchanged, omitted for brevity */}
-const noteNameToIndex = note => {/* unchanged, omitted for brevity */};
-const noteIndexToName = idx => {/* unchanged, omitted for brevity */};
-function selectNote(i) {/* unchanged, omitted for brevity */}
-function handleMouseMove(e) {/* unchanged, omitted for brevity */}
-function getMaxTime() {/* unchanged, omitted for brevity */}
-function handleMouseUp() {/* unchanged, omitted for brevity */}
-function handleKeyDown(e) {/* unchanged, omitted for brevity */}
-function updateBPM() { bpm = +document.getElementById('bpm').value; beatDuration = 60/bpm; Tone.Transport.bpm.value = bpm; }
-async function initMIDI() {/* unchanged, omitted for brevity */}
-function updateMIDIDevices() {/* unchanged, omitted for brevity */}
-function handleMIDIMessage(msg) {/* unchanged, omitted for brevity */}
+function renderPianoRoll() {
+  const c = document.getElementById('piano-roll-content'); c.innerHTML = '';
+  let maxTime = Math.max(...recordedNotes.map(n => n.startTime + n.duration), 8);
+  c.style.height = `${pianoRollHeight = totalNotes*20}px`;
+  const lanes = Array.from({length:totalNotes},(_,i)=>{
+    const midi = maxMidiNote-i, nn=noteIndexToName(midi), l=document.createElement('div');
+    l.className='note-lane'; l.dataset.note=nn; l.dataset.midiNote=midi; l.style.top=`${i*20}px`;
+    l.appendChild(Object.assign(document.createElement('div'),{className:'note-label',textContent:nn}));
+    c.appendChild(l); return l;
+  });
+  recordedNotes.forEach((r,i)=>{
+    const midi=noteNameToIndex(r.note), idx=maxMidiNote-midi;
+    if(idx<0||idx>=lanes.length) return;
+    const n=document.createElement('div');
+    n.className='note'; n.dataset.index=i;
+    n.style=`left:${r.startTime/maxTime*100}%;width:${r.duration/maxTime*100}%;top:${idx*20+2}px;opacity:${r.velocity};`;
+    const h=document.createElement('div'); h.className='velocity-handle'; n.appendChild(h);
+    n.onmousedown=e=>{
+      e.stopPropagation(); selectNote(i);
+      if(e.target===h){velocityDragging=true;velocityStartY=e.clientY;velocityStartOpacity=parseFloat(n.style.opacity);}
+      else if(e.offsetX>n.offsetWidth-10){resizeDragging=true;resizeStartX=e.clientX;resizeStartWidth=n.offsetWidth;}
+      else{noteDragging=true;dragStartX=e.clientX;dragStartLeft=n.offsetLeft;}
+      document.onmousemove=handleMouseMove; document.onmouseup=handleMouseUp;
+    };
+    lanes[idx].appendChild(n);
+  });
+}
+const noteNameToIndex = note => {
+  const m = note.match(/([A-G]#?)(\d+)/); if (!m) return 60;
+  return noteNames.indexOf(m[1]) + (parseInt(m[2])+1)*12;
+};
+const noteIndexToName = idx => `${noteNames[idx%12]}${Math.floor(idx/12)-1}`;
+function selectNote(i) {
+  document.querySelector(`.note[data-index="${selectedNote}"]`)?.classList.remove('selected');
+  if(i!=null) document.querySelector(`.note[data-index="${i}"]`)?.classList.add('selected');
+  selectedNote=i;
+}
+function handleMouseMove(e) {
+  const c=document.getElementById('piano-roll-content'), w=c.clientWidth, maxT=getMaxTime();
+  if(noteDragging&&selectedNote!=null){
+    let left=(dragStartLeft+e.clientX-dragStartX)/w*maxT;
+    recordedNotes[selectedNote].startTime=Math.max(0,left);
+    document.querySelector(`.note[data-index="${selectedNote}"]`).style.left = `${Math.max(0,left)/maxT*100}%`;
+  }
+  if(resizeDragging&&selectedNote!=null){
+    let width=Math.max(5,resizeStartWidth+e.clientX-resizeStartX)/w*maxT;
+    recordedNotes[selectedNote].duration=Math.max(0.1,width);
+    document.querySelector(`.note[data-index="${selectedNote}"]`).style.width = `${Math.max(0.1,width)/maxT*100}%`;
+  }
+  if(velocityDragging&&selectedNote!=null){
+    let v=Math.min(1,Math.max(0,velocityStartOpacity+(velocityStartY-e.clientY)/100));
+    recordedNotes[selectedNote].velocity = v;
+    document.querySelector(`.note[data-index="${selectedNote}"]`).style.opacity = v;
+  }
+}
+function getMaxTime() {
+  return Math.max(...recordedNotes.map(n=>n.startTime+n.duration),8);
+}
+function handleMouseUp() {
+  noteDragging=velocityDragging=resizeDragging=false;
+  document.onmousemove = document.onmouseup = null;
+}
+function handleKeyDown(e) {
+  if([' ','Enter','Delete'].includes(e.key)) e.preventDefault();
+  if(e.key==='Delete' && selectedNote!=null) { recordedNotes.splice(selectedNote,1); renderPianoRoll(); selectedNote=null; }
+}
+function updateBPM() {
+  bpm = +document.getElementById('bpm').value; beatDuration = 60/bpm; Tone.Transport.bpm.value = bpm;
+}
+async function initMIDI() {
+  try {
+    midiAccess = await navigator.requestMIDIAccess();
+    updateMIDIDevices();
+    midiAccess.onstatechange = updateMIDIDevices;
+    document.getElementById('midi-status').textContent = 'Connected';
+  } catch (err) {
+    document.getElementById('midi-status').textContent = 'Connection failed';
+  }
+}
+function updateMIDIDevices() {
+  if (!midiAccess) return;
+  midiInputs = [];
+  for (const input of midiAccess.inputs.values()) {
+    midiInputs.push(input); input.onmidimessage = handleMIDIMessage;
+  }
+  document.getElementById('midi-status').textContent =
+    midiInputs.length ? `Connected (${midiInputs.length} device${midiInputs.length>1?'s':''})` : 'No devices';
+}
+function handleMIDIMessage(msg) {
+  const [cmd,n,v]=msg.data;
+  if(cmd===144&&v) playNote(noteIndexToName(n), v/127);
+  else if(cmd===128||(cmd===144&&!v)) releaseNote(noteIndexToName(n));
+}
 function btns(id,rec,dis){ const b=document.getElementById(id); if(rec) b.classList.add('recording'); else b.classList.remove('recording'); b.disabled=!!dis; }
 function changeOctave(direction) {
   const newOctave = currentOctave + direction;
@@ -397,8 +487,10 @@ function initUI() {
       document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
       document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));
       tab.classList.add('active'); document.getElementById(`${tab.dataset.tab}-panel`).classList.remove('hidden');
+      // Rerender piano roll when MIDI Editor is opened, keep up-to-date!
+      if(tab.dataset.tab === 'editor') renderPianoRoll();
     });
-  // KEY CHANGE: Wire up armRecording, not startRecording
+  // Use armRecording instead of startRecording on button
   [['record-btn',armRecording],['stop-btn',stopAll],['play-btn',playRecording],['clear-btn',clearRecording],['apply-bpm',updateBPM]]
     .forEach(([id,fn])=>document.getElementById(id).onclick=fn);
   document.getElementById('prev-octave').onclick = () => changeOctave(-1);
