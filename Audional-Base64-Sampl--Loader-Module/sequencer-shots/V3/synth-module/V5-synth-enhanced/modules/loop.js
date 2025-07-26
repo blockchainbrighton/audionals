@@ -11,7 +11,7 @@ export const LoopManager = {
 
     // Quantization settings
     quantizeEnabled: false,
-    quantizeGrid: 0.25, // 1/4 note by default
+    quantizeGrid: 0.125, // thirty-second note by default
     swingAmount: 0, // 0-1 swing amount
 
     // Tempo conversion
@@ -527,6 +527,19 @@ export const LoopManager = {
         } else {
             console.warn(`[LoopManager] Unknown quantization grid: ${subdivision}`);
         }
+    },
+
+    getQuantizeGridKey() {
+        const grids = {
+            4.0: 'whole',
+            2.0: 'half',
+            1.0: 'quarter',
+            0.5: 'eighth',
+            0.25: 'sixteenth',
+            0.125: 'thirtysecond'
+        };
+        // JS treats object keys as strings, so use toString()
+        return grids[this.quantizeGrid?.toString()] || 'thirtysecond';
     },
 
     getQuantizationOptions() {

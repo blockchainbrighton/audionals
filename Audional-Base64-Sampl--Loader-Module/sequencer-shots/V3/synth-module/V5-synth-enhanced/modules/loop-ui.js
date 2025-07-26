@@ -78,10 +78,10 @@ export const LoopUI = {
                                 <select id="quantizeGrid" class="loop-select">
                                     <option value="whole">Whole Note</option>
                                     <option value="half">Half Note</option>
-                                    <option value="quarter" selected>Quarter Note</option>
+                                    <option value="quarter">Quarter Note</option>
                                     <option value="eighth">Eighth Note</option>
                                     <option value="sixteenth">Sixteenth Note</option>
-                                    <option value="thirtysecond">Thirty-second Note</option>
+                                    <option value="thirtysecond"selected>Thirty-second Note</option>
                                 </select>
                             </div>
                             <div class="swing-control">
@@ -240,7 +240,7 @@ export const LoopUI = {
         this.elements.maxLoops.value = LoopManager.maxLoops.toString();
 
         // Quantization
-        this.elements.quantizeGrid.value = LoopManager.quantizeGrid || 'quarter';
+        this.elements.quantizeGrid.value = LoopManager.getQuantizeGridKey();
         this.elements.swingAmount.value = (LoopManager.swingAmount * 100).toString();
         this.elements.swingValue.textContent = (LoopManager.swingAmount * 100).toFixed(0) + '%';
 
