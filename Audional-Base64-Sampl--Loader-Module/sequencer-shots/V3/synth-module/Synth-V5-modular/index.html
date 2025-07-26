@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Streamlined Web Synthesizer</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Streamlined Web Synthesizer</h1>
+    <p class="subtitle">A modern polyphonic synthesizer built with Tone.js</p>
+    <div class="tabs">
+        <button class="tab-button active" data-tab="synth">Synthesizer</button>
+        <button class="tab-button" data-tab="midi">MIDI Editor</button>
+    </div>
+    <div id="synth" class="tab-content active">
+        <div id="control-panel"></div> <!-- Controls will be rendered here -->
+        <div class="transport-controls" id="transport-controls"></div>
+        <div class="keyboard-container">
+            <div class="octave-controls">
+                <button id="octaveDown" class="octave-button">Octave -</button>
+                <span id="octaveLabel">Octave: 4</span>
+                <button id="octaveUp" class="octave-button">Octave +</button>
+            </div>
+            <div class="keyboard-outer">
+                <div class="keyboard" id="keyboard"></div>
+            </div>
+        </div>
+        <div class="status-bar">
+            <div><span class="status-indicator" id="midiInd"></span> <span id="midiStat">MIDI: Not supported</span></div>
+            <div><span class="status-indicator" id="recInd"></span> <span id="recStat">Status: Inactive</span></div>
+        </div>
+    </div>
+    <div id="midi" class="tab-content">
+        <h3>Piano Roll Editor</h3>
+        <div class="piano-roll"><div class="roll-grid" id="rollGrid"></div></div>
+    </div>
+    <footer>Streamlined Web Synthesizer | Built with Tone.js</footer>
+</div>
+<script type="module">
+import { Controls }    from './modules/controls.js';
+import { Keyboard }    from './modules/keyboard.js';
+import { Recorder }    from './modules/recorder.js';
+import { Transport }   from './modules/transport.js';    // <-- new
+
+import { MidiControl } from './modules/midi.js';
+import { PianoRoll }   from './modules/piano-roll.js';
+
+window.synthApp = {
+    seq: [],
+    curOct: 4,
+    activeNotes: new Set(),
+    isRec: false,
+    isArmed: false,
+    isPlaying: false,
+    recStart: 0,
+    events: [],
+    selNote: null,
+    synth: null, reverb: null, delay: null, filter: null,
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    Controls.init();
+    Keyboard.init();
+    Transport.init();   
+    Recorder.init();
+    MidiControl.init();
+    PianoRoll.init();
+
+    document.querySelectorAll('.tab-button').forEach(btn => btn.onclick = () => {
+        document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        let tabId = btn.dataset.tab;
+        document.getElementById(tabId).classList.add('active');
+        if (tabId === 'midi') PianoRoll.draw();
+    });
+
+    window.onresize = Keyboard.draw;
+    window.onclick = () => { if (Tone.context.state !== 'running') Tone.context.resume(); };
+});
+</script>
+</body>
+</html>

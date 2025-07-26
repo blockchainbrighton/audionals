@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Streamlined Web Synthesizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+:root {
+    --bg: #181818; --panel: #232323; --key-w: #f8f8f8; --key-b: #181818;
+    --key-active: #bb86fc; --accent: #bb86fc; --accent2: #03dac6; --border: 8px;
+}
+body { margin:0; padding:24px; background:var(--bg); color:#fff; font:1rem 'Segoe UI',sans-serif; }
+.container { max-width:1100px; margin:auto; }
+h1 { font-size:2rem; text-align:center; margin-bottom:8px;
+    background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; color:transparent;}
+.subtitle {text-align:center; color:#aaa; margin-bottom:18px;}
+.tabs { display:flex; background:var(--panel); border-radius:var(--border); margin-bottom:18px; }
+.tab-button { flex:1; padding:14px; background:none; border:none; color:#aaa; font-size:1rem; cursor:pointer;}
+.tab-button.active { background: #101018; color: var(--accent); font-weight: bold;}
+.tab-content { display: none; background:var(--panel); border-radius:var(--border); padding:24px 18px; min-height:340px;}
+.tab-content.active { display: block; }
+.control-panel { display: flex; gap:16px; flex-wrap: wrap; margin-bottom:20px;}
+.control-group { background:#181818; border-radius:var(--border); flex:1; min-width:200px; padding:14px; }
+.control-group h3 { color:var(--accent2); margin-bottom:8px; }
+.control-row { display:flex; align-items:center; margin-bottom:8px;}
+.control-label { flex:1; font-size:.92rem; }
+.control-value { width:40px; text-align:right; color:var(--accent); font-size:.92rem; }
+select, input[type="range"], input[type="number"] {
+    width: 100%; background: var(--panel); color: #fff; border-radius:4px; border:1px solid #333; padding:5px;}
+input[type="range"] { height:4px; -webkit-appearance:none; background:#333; }
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent);}
+.transport-controls { display:flex; justify-content:center; gap:16px; margin:16px 0;}
+.transport-button { padding:10px 18px; border:none; border-radius:8px; background:#222; color:#fff;
+    font-size:1rem; cursor:pointer; display:flex; align-items:center; gap:6px;}
+.transport-button:hover { background: #333; }
+.transport-button:disabled { opacity:.5; cursor:default;}
+.record-button.armed { animation:pulse 1.2s infinite; background:#ff3333; }
+@keyframes pulse {0%{opacity:1;}50%{opacity:.5;}100%{opacity:1;}}
+.keyboard-container { background:var(--panel); border-radius:var(--border); padding:18px 10px 10px 10px; margin:20px 0;}
+.octave-controls { display:flex; justify-content:center; gap:14px; margin-bottom:8px; }
+.octave-button { padding:6px 14px; border:none; border-radius:4px; background:var(--panel); color:#fff; cursor:pointer;}
+/* --- Responsive full-width piano keyboard --- */
+.keyboard-outer { position: relative; width: 100%; height: 160px; margin: 0 auto; background: #222; border-radius: 8px; overflow: hidden;}
+.keyboard {
+  position: relative;
+  width: 100%;
+  height: 160px;
+  min-width: 300px;
+  margin: 0 auto;
+  user-select: none;
+}
+.key-white {
+  position: absolute;
+  top: 0;
+  background: #fff;
+  border: 1px solid #bbb;
+  border-radius: 0 0 6px 6px;
+  z-index: 1;
+  box-shadow: 0 2px 2px #bbb;
+  cursor: pointer;
+  transition: background 0.09s;
+  height: 160px;
+}
+.key-white.active { background: #bb86fc; }
+.key-black {
+  position: absolute;
+  top: 0;
+  background: #232f3e;
+  z-index: 2;
+  border-radius: 0 0 5px 5px;
+  border: 1.5px solid #222;
+  box-shadow: 0 4px 8px #111, 0 1px 0 #666;
+  cursor: pointer;
+  transition: background 0.09s;
+  height: 96px;
+}
+.key-black.active { background: #bb86fc; }
+.key-label {
+  position: absolute;
+  left: 50%; bottom: 6px; transform: translateX(-50%);
+  font-size: 0.82rem; color: #333;
+  pointer-events: none;
+  user-select: none;
+}
+.status-bar { display:flex; justify-content:space-between; background:#181818;
+    border-radius:var(--border); padding:8px 14px; font-size:.95rem; margin-top:16px;}
+.status-indicator { width:10px; height:10px; border-radius:50%; background:#555;}
+.status-indicator.active { background:var(--accent2);}
+.piano-roll { background:#161616; border-radius:var(--border); height:300px; overflow:auto; position:relative;}
+.roll-grid { position:relative; min-width:100%; min-height:100%;}
+.roll-note { position:absolute; background:var(--accent); border-radius:2px; height:18px; opacity:.8;}
+.roll-note.selected, .roll-note:hover { border:2px solid #fff; opacity:1;}
+.time-grid,.pitch-grid { position:absolute; top:0; left:0; width:100%; height:100%;}
+.time-line { position:absolute; top:0; bottom:0; width:1px; background:rgba(255,255,255,.07);}
+.pitch-line { position:absolute; left:0; right:0; height:1px; background:rgba(255,255,255,.08);}
+footer { text-align:center; margin-top:26px; color:#999; font-size:.92rem;}
+@media (max-width: 768px) {
+    .control-panel { flex-direction:column; }
+    .transport-controls { flex-wrap:wrap;}
+    h1 { font-size:1.5rem;}
+    .keyboard { min-width:160px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>Streamlined Web Synthesizer</h1>
+    <p class="subtitle">A modern polyphonic synthesizer built with Tone.js</p>
+    <div class="tabs">
+        <button class="tab-button active" data-tab="synth">Synthesizer</button>
+        <button class="tab-button" data-tab="midi">MIDI Editor</button>
+    </div>
+    <div id="synth" class="tab-content active">
+        <div class="control-panel">
+            <div class="control-group">
+                <h3>Oscillator</h3>
+                <div class="control-row">
+                    <span class="control-label">Waveform</span>
+                    <select id="waveform"><option>sine</option><option>square</option><option>sawtooth</option><option>triangle</option></select>
+                </div>
+                <div class="control-row">
+                    <span class="control-label">Detune</span>
+                    <input type="range" id="detune" min="-50" max="50" value="0">
+                    <span class="control-value" id="detuneVal">0</span>
+                </div>
+            </div>
+            <div class="control-group">
+                <h3>Filter</h3>
+                <div class="control-row">
+                    <span class="control-label">Type</span>
+                    <select id="filterType"><option>lowpass</option><option>highpass</option><option>bandpass</option></select>
+                </div>
+                <div class="control-row">
+                    <span class="control-label">Frequency</span>
+                    <input type="range" id="filterFreq" min="20" max="20000" value="5000">
+                    <span class="control-value" id="filterFreqVal">5000</span>
+                </div>
+                <div class="control-row">
+                    <span class="control-label">Resonance</span>
+                    <input type="range" id="filterQ" min="0" max="20" value="1">
+                    <span class="control-value" id="filterQVal">1</span>
+                </div>
+            </div>
+            <div class="control-group">
+                <h3>Effects</h3>
+                <div class="control-row">
+                    <span class="control-label">Reverb</span>
+                    <input type="range" id="reverb" min="0" max="100" value="30">
+                    <span class="control-value" id="reverbVal">30%</span>
+                </div>
+                <div class="control-row">
+                    <span class="control-label">Delay</span>
+                    <input type="range" id="delay" min="0" max="100" value="20">
+                    <span class="control-value" id="delayVal">20%</span>
+                </div>
+            </div>
+            <div class="control-group">
+                <h3>BPM</h3>
+                <div class="control-row">
+                    <span class="control-label">BPM</span>
+                    <input type="number" id="bpm" min="40" max="240" value="120">
+                </div>
+            </div>
+        </div>
+        <div class="transport-controls">
+            <button id="recordBtn" class="transport-button"><span>●</span>Record</button>
+            <button id="stopBtn" class="transport-button" disabled><span>■</span>Stop</button>
+            <button id="playBtn" class="transport-button" disabled><span>▶</span>Play</button>
+            <button id="clearBtn" class="transport-button"><span>🗑</span>Clear</button>
+        </div>
+        <div class="keyboard-container">
+            <div class="octave-controls">
+                <button id="octaveDown" class="octave-button">Octave -</button>
+                <span id="octaveLabel">Octave: 4</span>
+                <button id="octaveUp" class="octave-button">Octave +</button>
+            </div>
+            <div class="keyboard-outer">
+                <div class="keyboard" id="keyboard"></div>
+            </div>
+        </div>
+        <div class="status-bar">
+            <div><span class="status-indicator" id="midiInd"></span> <span id="midiStat">MIDI: Not supported</span></div>
+            <div><span class="status-indicator" id="recInd"></span> <span id="recStat">Status: Inactive</span></div>
+        </div>
+    </div>
+    <div id="midi" class="tab-content">
+        <h3>Piano Roll Editor</h3>
+        <div class="piano-roll"><div class="roll-grid" id="rollGrid"></div></div>
+    </div>
+    <footer>Streamlined Web Synthesizer | Built with Tone.js</footer>
+</div>
+<script>
+let synth, reverb, delay, filter, isRec=false, isArmed=false, isPlaying=false, seq=[], recStart=0, curOct=4, activeNotes=new Set, midi, events=[], selNote=null;
+
+const dom = {
+    waveform: q('#waveform'), detune: q('#detune'), detuneVal: q('#detuneVal'),
+    filterType: q('#filterType'), filterFreq: q('#filterFreq'), filterFreqVal: q('#filterFreqVal'),
+    filterQ: q('#filterQ'), filterQVal: q('#filterQVal'),
+    reverb: q('#reverb'), reverbVal: q('#reverbVal'), delay: q('#delay'), delayVal: q('#delayVal'),
+    bpm: q('#bpm'),
+    recordBtn: q('#recordBtn'), stopBtn: q('#stopBtn'), playBtn: q('#playBtn'), clearBtn: q('#clearBtn'),
+    octaveDown: q('#octaveDown'), octaveUp: q('#octaveUp'), octaveLabel: q('#octaveLabel'),
+    keyboard: q('#keyboard'), rollGrid: q('#rollGrid'),
+    midiInd: q('#midiInd'), midiStat: q('#midiStat'), recInd: q('#recInd'), recStat: q('#recStat'),
+    tabs: [...document.querySelectorAll('.tab-button')], contents: [...document.querySelectorAll('.tab-content')]
+};
+
+function q(sel){return document.querySelector(sel);}
+
+// --- Audio Setup ---
+function initAudio() {
+    reverb = new Tone.Reverb({ decay:2, wet:.3 }).toDestination();
+    delay = new Tone.FeedbackDelay({ delayTime:.25, feedback:.3, wet:.2 }).toDestination();
+    filter = new Tone.Filter(5000, "lowpass").connect(reverb).connect(delay);
+    synth = new Tone.PolySynth(Tone.Synth).connect(filter);
+    Tone.Transport.bpm.value = +dom.bpm.value;
+    setOsc(); setDetune(); setFilter(); setReverb(); setDelay();
+}
+function setOsc() { synth.set({ oscillator: { type: dom.waveform.value }}); }
+function setDetune() { dom.detuneVal.textContent = dom.detune.value; synth.set({detune:+dom.detune.value}); }
+function setFilter() {
+    filter.type = dom.filterType.value;
+    filter.frequency.value = +dom.filterFreq.value;
+    dom.filterFreqVal.textContent = dom.filterFreq.value;
+    filter.Q.value = +dom.filterQ.value;
+    dom.filterQVal.textContent = dom.filterQ.value;
+}
+function setReverb() { reverb.wet.value = +dom.reverb.value/100; dom.reverbVal.textContent = dom.reverb.value+"%"; }
+function setDelay() { delay.wet.value = +dom.delay.value/100; dom.delayVal.textContent = dom.delay.value+"%"; }
+dom.waveform.onchange = setOsc;
+dom.detune.oninput = setDetune;
+[dom.filterType, dom.filterFreq, dom.filterQ].forEach(el=>el.oninput=setFilter);
+dom.reverb.oninput = setReverb;
+dom.delay.oninput = setDelay;
+dom.bpm.onchange = ()=>Tone.Transport.bpm.value = +dom.bpm.value;
+
+// --- Responsive Keyboard Rendering ---
+const WHITE_NOTES = ['C','D','E','F','G','A','B'];
+const BLACKS = { 0:'C#', 1:'D#', 3:'F#', 4:'G#', 5:'A#' }; // White key idx : black note
+function drawKeyboard() {
+    dom.keyboard.innerHTML = '';
+    // Get width of .keyboard (may not be set until visible, so use setTimeout if needed)
+    const kbWidth = dom.keyboard.offsetWidth || 800;
+    const whiteKeyW = 100 / Math.floor(kbWidth/38); // try to fit 38px wide per key
+    const totalWhite = Math.floor(100 / whiteKeyW); // number of white keys (percent based)
+    const startMidi = curOct*12; // MIDI for first C of selected octave
+
+    // Start from C note of current octave
+    let midiNum = curOct*12;
+    let whiteIndex = 0, noteLabels = [];
+    for (let i = 0; i < totalWhite; i++) {
+        // Which note in the octave?
+        let wn = WHITE_NOTES[whiteIndex % 7];
+        let octaveOffset = Math.floor((whiteIndex) / 7);
+        let midi = Tone.Frequency(`${wn}${curOct+octaveOffset}`).toMidi();
+        let note = Tone.Frequency(midi, "midi").toNote();
+        // White key
+        let wkey = document.createElement('div');
+        wkey.className = 'key-white';
+        wkey.dataset.note = note;
+        wkey.style.left = (i * whiteKeyW) + '%';
+        wkey.style.width = whiteKeyW + '%';
+        wkey.tabIndex = 0;
+        addKeyHandlers(wkey, note);
+        // Optional: label C and F keys
+        if (wn === "C" || wn === "F") {
+            let lbl = document.createElement('span');
+            lbl.className = 'key-label';
+            lbl.innerText = note;
+            wkey.appendChild(lbl);
+        }
+        dom.keyboard.appendChild(wkey);
+        noteLabels.push({idx: i, note: note});
+        whiteIndex++;
+    }
+    // Black keys: positioned absolutely between white keys
+    whiteIndex = 0;
+    for (let i = 0; i < totalWhite; i++) {
+        let wn = WHITE_NOTES[whiteIndex % 7];
+        let octaveOffset = Math.floor((whiteIndex) / 7);
+        if (BLACKS.hasOwnProperty(whiteIndex%7)) {
+            let blackNote = BLACKS[whiteIndex%7] + (curOct+octaveOffset);
+            let midi = Tone.Frequency(blackNote).toMidi();
+            let bkey = document.createElement('div');
+            bkey.className = 'key-black';
+            bkey.dataset.note = Tone.Frequency(midi, "midi").toNote();
+            // Center between current and next white key
+            let leftPercent = (i + 0.7) * whiteKeyW - (whiteKeyW*0.28); // fudge to center
+            bkey.style.left = leftPercent + '%';
+            bkey.style.width = (whiteKeyW * 0.62) + '%'; // ~62% width of white
+            bkey.tabIndex = 0;
+            addKeyHandlers(bkey, bkey.dataset.note);
+            dom.keyboard.appendChild(bkey);
+        }
+        whiteIndex++;
+    }
+}
+
+function addKeyHandlers(el, note) {
+    el.onmousedown = ()=>playNote(note);
+    el.onmouseup = ()=>releaseNote(note);
+    el.onmouseleave = ()=>releaseNote(note);
+    el.ontouchstart = (e)=>{e.preventDefault(); playNote(note);}
+    el.ontouchend = (e)=>{e.preventDefault(); releaseNote(note);}
+}
+
+function playNote(note){
+    if(!synth)return; activeNotes.add(note); updateKeyVisual(note,1);
+    if(isArmed && !isRec) startRec();
+    if(isRec){
+        const now=Tone.now();
+        seq.push({note,start:now-recStart,dur:0,vel:.8});
+    }
+    synth.triggerAttack(note);
+}
+function releaseNote(note){
+    if(!synth)return; activeNotes.delete(note); updateKeyVisual(note,0);
+    if(isRec){
+        const now=Tone.now();
+        let n = seq.slice().reverse().find(o=>o.note===note&&o.dur===0);
+        if(n) n.dur = now-recStart-n.start;
+    }
+    synth.triggerRelease(note);
+}
+function updateKeyVisual(note,on){
+    dom.keyboard.querySelectorAll('.key-white,.key-black').forEach(k=>{
+        if(k.dataset.note===note) k.classList.toggle('active',!!on);
+    });
+}
+
+// --- Record/Play/Stop/Clear ---
+function startRec(){ isRec=1; isArmed=0; recStart=Tone.now(); dom.recInd.classList.add('active');
+    dom.recStat.textContent='Status: Recording...'; dom.recordBtn.classList.remove('armed'); dom.stopBtn.disabled=0; }
+function stop(){
+    if(isPlaying){Tone.Transport.stop(); Tone.Transport.cancel(); events.forEach(clearTimeout); events=[]; isPlaying=0;}
+    isRec=isArmed=0; activeNotes.forEach(n=>{synth.triggerRelease(n);updateKeyVisual(n,0)}); activeNotes.clear();
+    dom.recStat.textContent='Status: Stopped'; dom.recInd.classList.remove('active'); dom.recordBtn.classList.remove('armed');
+    dom.stopBtn.disabled=1; dom.playBtn.disabled=!seq.length;
+}
+function playSeq(){
+    if(!seq.length||isPlaying)return; isPlaying=1; dom.recStat.textContent='Status: Playing...'; dom.recInd.classList.add('active'); dom.stopBtn.disabled=0;
+    Tone.Transport.cancel();
+    seq.forEach(o=>{
+        let id=Tone.Transport.schedule(time=>synth.triggerAttackRelease(o.note,o.dur,time,o.vel), o.start);
+        events.push(id);
+    });
+    Tone.Transport.start();
+    let last=seq.reduce((a,b)=>a.start+a.dur>b.start+b.dur?a:b);
+    Tone.Transport.schedule(stop, last.start+last.dur);
+}
+function clearSeq(){ seq=[]; stop(); dom.playBtn.disabled=1; dom.recStat.textContent='Status: Cleared'; drawPianoRoll(); }
+
+// --- UI Event Bindings ---
+dom.recordBtn.onclick = ()=>{
+    if(isArmed) { isArmed=0; dom.recordBtn.classList.remove('armed'); dom.recStat.textContent='Status: Inactive'; }
+    else if(!isRec&&!isPlaying){ isArmed=1; dom.recordBtn.classList.add('armed'); dom.recStat.textContent='Status: Record ready'; dom.stopBtn.disabled=0; }
+};
+dom.stopBtn.onclick = stop;
+dom.playBtn.onclick = ()=>{if(!isPlaying&&seq.length) playSeq();};
+dom.clearBtn.onclick = clearSeq;
+dom.octaveUp.onclick = ()=>{if(curOct<7){curOct++; dom.octaveLabel.textContent='Octave: '+curOct; drawKeyboard();}};
+dom.octaveDown.onclick = ()=>{if(curOct>0){curOct--; dom.octaveLabel.textContent='Octave: '+curOct; drawKeyboard();}};
+
+// --- Tab Switching ---
+dom.tabs.forEach(btn=>btn.onclick=()=>{
+    dom.tabs.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    dom.contents.forEach(c=>c.classList.remove('active'));
+    let tabId=btn.dataset.tab;
+    q('#'+tabId).classList.add('active');
+    if(tabId==='midi') drawPianoRoll();
+});
+
+// --- Piano Roll ---
+function drawPianoRoll(){
+    dom.rollGrid.innerHTML='';
+    let timeGrid=ce('div','time-grid'), pitchGrid=ce('div','pitch-grid');
+    dom.rollGrid.append(timeGrid,pitchGrid);
+    for(let i=0;i<=10;i++){let l=ce('div','time-line');l.style.left=i*10+'%';timeGrid.append(l);}
+    for(let i=0;i<=24;i++){let l=ce('div','pitch-line');l.style.top=i*100/24+'%';pitchGrid.append(l);}
+    seq.forEach((o,i)=>{
+        let n=ce('div','roll-note',null); n.dataset.idx=i;
+        n.style.left=(o.start/10)*100+'%'; n.style.width=(o.dur/10)*100+'%';
+        n.style.top=(100-(Tone.Frequency(o.note).toMidi()-48)/24*100)+'%'; n.style.opacity=o.vel;
+        n.onclick = _=>{
+            dom.rollGrid.querySelectorAll('.roll-note').forEach(e=>e.classList.remove('selected'));
+            n.classList.add('selected'); selNote=i;
+        };
+        dom.rollGrid.append(n);
+    });
+}
+function ce(tag,cls,note){let e=document.createElement(tag);e.className=cls;if(note)e.dataset.note=note;return e;}
+
+// --- MIDI ---
+async function initMIDI(){
+    if(navigator.requestMIDIAccess){
+        try{
+            midi = await navigator.requestMIDIAccess();
+            setMidiStatus(`Connected (${midi.inputs.size})`);
+            midi.inputs.forEach(input=>input.onmidimessage=onMIDI);
+            midi.onstatechange = ()=>setMidiStatus(`Connected (${midi.inputs.size})`);
+        }catch(e){setMidiStatus('Error');}
+    }else setMidiStatus('Not supported');
+}
+function setMidiStatus(txt){
+    dom.midiStat.textContent='MIDI: '+txt; dom.midiInd.className='status-indicator'+(txt.includes('Connected')?' active':'');
+}
+function onMIDI(ev){
+    let [cmd,note,vel]=ev.data, n=Tone.Frequency(note,'midi').toNote();
+    if(cmd===144&&vel>0)playNote(n); else if(cmd===128||(cmd===144&&vel===0))releaseNote(n);
+}
+
+// --- Init ---
+window.onload=()=>{
+    initAudio(); drawKeyboard(); initMIDI();
+    dom.octaveLabel.textContent='Octave: '+curOct;
+};
+window.onresize=drawKeyboard; // make responsive
+window.onclick=()=>{if(Tone.context.state!=='running')Tone.context.resume();};
+</script>
+</body>
+</html>
