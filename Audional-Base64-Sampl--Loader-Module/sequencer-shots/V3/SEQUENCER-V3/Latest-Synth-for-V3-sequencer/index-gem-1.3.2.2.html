@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Audionauts Synth</title>
+<title>Blockchain‑Orchestrated Polyphonic Synth</title>
 <style>
 /* =================== ROOT VARIABLES =================== */
 :root {
@@ -270,8 +270,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed !important; }
 </head>
 <body>
     <div class="container">
-        <h1>Audionauts: Enhanced On-Chain Synth</h1>
-        <p class="subtitle">Polyphonic On-Chain Web3 Enabled Synthesizer.</p>
+        <h1>Blockchain‑Orchestrated Polyphonic Synthesiser</h1>
+        <p class="subtitle">Foundational Tooling for B.A.M. (The Bitcoin Audional Matrix)</p>
         <div class="tabs">
             <button class="tab-button active" data-tab="synth">Synthesizer</button>
             <button class="tab-button" data-tab="midi">MIDI Editor</button>
@@ -301,7 +301,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed !important; }
             <h3>Piano Roll Editor</h3>
             <div class="piano-roll"><div class="roll-grid" id="rollGrid"></div></div>
         </div>
-        <footer>Polyphonic On-Chain Web3 Enabled Synthesizer</footer>
+        <footer>Blockchain‑Orchestrated Polyphonic Synth</footer>
     </div>
 
     <!-- // ***START OF CHUNK 1*** -->
@@ -2493,72 +2493,112 @@ const EnhancedRecorder = {
             }, 3000);
         },
 
-        /** Initiates the save process. */
+       // --- Public API (Enhanced for smaller files and complete state) ---
+
+        /** Displays a temporary status message. */
+        showStatus(message, type = 'info') {
+            const statusEl = document.getElementById('saveLoadStatus');
+            if (!statusEl) return;
+
+            statusEl.textContent = message;
+            statusEl.style.display = 'block';
+            statusEl.style.backgroundColor = {
+                success: '#4caf50', error: '#f44336', info: '#2196f3', warning: '#ff9800'
+            }[type] ?? '#2196f3';
+            statusEl.style.color = 'white';
+
+            clearTimeout(this._statusTimeout);
+            this._statusTimeout = setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 3000);
+        },
+
+        /** Initiates the enhanced save process. */
         saveState() {
             try {
-                console.log('[SaveLoad] Starting save operation...');
-                const jsonString = JSON.stringify(this.captureState(), null, 2);
+                console.log('[SaveLoad] Starting condensed save operation...');
+                
+                // 1. Capture the full, descriptive state object from all modules.
+                const fullState = this.captureState();
+
+                // 2. Define a helper to round numbers to 4 decimal places for compactness.
+                const round = (num) => typeof num === 'number' ? parseFloat(num.toFixed(4)) : num;
+
+                // 3. Convert the full state to a condensed format using short keys.
+                const condensedState = {
+                    v: '2.0', // version
+                    e: fullState.envelope, // envelope
+                    fx: { // effects
+                        e: fullState.effects.enabled,
+                        p: fullState.effects.parameters
+                    }, 
+                    l: fullState.loop, // loop
+                    o: fullState.oscillator, // oscillator
+                    t: fullState.transport, // transport
+                    ui: fullState.ui, // ui
+                    // Convert sequence of objects to an array of arrays [note, start, dur, vel]
+                    s: fullState.sequence.map(n => [n.note, round(n.start), round(n.dur), round(n.vel)])
+                };
+
+                // 4. Stringify without any extra whitespace for maximum compression.
+                const jsonString = JSON.stringify(condensedState);
+
                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-                this.downloadFile(jsonString, `synth-state-${timestamp}.synthstate`);
+                this.downloadFile(jsonString, `synth-state-${timestamp}.synthstate-v2.json`);
                 this.showStatus('State saved successfully!', 'success');
-                console.log('[SaveLoad] Save completed successfully');
+                console.log(`[SaveLoad] Save completed. Size: ${jsonString.length} bytes`);
+
             } catch (error) {
                 console.error('[SaveLoad] Save error:', error);
                 this.showStatus(`Save failed: ${error.message}`, 'error');
             }
         },
 
-        /** Captures the complete synth state. */
+        /** Captures the complete synth state from all relevant modules. */
         captureState() {
-            const SETTINGS_CONFIG = {
-                // Oscillator
-                waveform: { section: 'oscillator', key: 'waveform', type: 'value' },
-                detune: { section: 'oscillator', key: 'detune', type: 'float' },
-                // Filter
-                filterType: { section: 'filter', key: 'type', type: 'value' },
-                filterFreq: { section: 'filter', key: 'frequency', type: 'float' },
-                filterQ: { section: 'filter', key: 'resonance', type: 'float' },
-                // Effects
-                reverb: { section: 'effects', key: 'reverb', type: 'float' },
-                delay: { section: 'effects', key: 'delay', type: 'float' },
-                // Transport
-                bpm: { section: 'transport', key: 'bpm', type: 'float' },
-            };
-            const settings = {};
-            try {
-                for (const [id, config] of Object.entries(SETTINGS_CONFIG)) {
-                    if (!settings[config.section]) settings[config.section] = {};
-                    let value = this._getElementValue(id);
-                    if (value != null && config.type === 'float') {
-                        value = parseFloat(value);
-                    }
-                    settings[config.section][config.key] = value;
-                }
-            } catch (error) {
-                console.warn('[SaveLoad] Error capturing settings:', error);
-            }
+            console.log('[SaveLoad] Capturing complete application state...');
 
-            const ui = { currentOctave: 4, selectedNote: null };
-            try {
-                if (window.synthApp) {
-                    ui.currentOctave = window.synthApp.curOct ?? ui.currentOctave;
-                    ui.selectedNote = window.synthApp.selNote;
-                }
-            } catch (error) {
-                console.warn('[SaveLoad] Error capturing UI state:', error);
-            }
-
-            const state = {
-                version: this.version,
-                timestamp: new Date().toISOString(),
-                synthState: {
-                    settings: settings,
-                    sequence: window.synthApp?.seq ? JSON.parse(JSON.stringify(window.synthApp.seq)) : [],
-                    ui: ui
+            // Get state directly from the modules' own methods for robustness.
+            const envelopeSettings = EnvelopeManager.getSettings();
+            const effectsState = EnhancedEffects.savePreset();
+            
+            const loopSettings = {
+                enabled: LoopManager.isLoopEnabled,
+                start: LoopManager.loopStart,
+                end: LoopManager.loopEnd,
+                quantize: LoopManager.quantizeEnabled,
+                grid: LoopManager.quantizeGrid,
+                swing: LoopManager.swingAmount,
+                tempo: {
+                    original: LoopManager.originalTempo,
+                    target: LoopManager.targetTempo
                 }
             };
-            console.log('[SaveLoad] Captured state:', state);
-            return state;
+            
+            // Get the remaining simple values from the DOM/global app state.
+            const oscillatorSettings = {
+                waveform: this._getElementValue('waveform'),
+                detune: parseFloat(this._getElementValue('detune'))
+            };
+            const transportSettings = {
+                bpm: parseFloat(this._getElementValue('bpm'))
+            };
+            const uiState = {
+                currentOctave: window.synthApp.curOct,
+                selectedNote: window.synthApp.selNote
+            };
+            const sequence = window.synthApp.seq || [];
+
+            // Assemble into a single, descriptively-keyed object.
+            return {
+                envelope: envelopeSettings,
+                effects: effectsState,
+                loop: loopSettings,
+                oscillator: oscillatorSettings,
+                transport: transportSettings,
+                ui: uiState,
+                sequence: sequence
+            };
         },
 
         /** Triggers a file download. */
@@ -2599,29 +2639,88 @@ const EnhancedRecorder = {
             event.target.value = ''; // Reset input for re-loading same file
         },
 
-        /** Loads the synth state from a JSON string. */
+        /** Loads the synth state from a JSON string, supporting old and new formats. */
         loadState(jsonString) {
             try {
                 console.log('[SaveLoad] Starting load operation...');
-                const state = JSON.parse(jsonString);
-                if (!this.validateState(state)) {
-                    throw new Error('Invalid state file format');
+                const loadedData = JSON.parse(jsonString);
+
+                // --- BACKWARDS COMPATIBILITY CHECK ---
+                if (loadedData.synthState) {
+                    console.warn('[SaveLoad] Old file format detected. Using legacy loader.');
+                    return this._legacyLoadState(loadedData);
                 }
-                this.restoreSettings(state.synthState.settings);
-                this.restoreSequence(state.synthState.sequence);
-                this.restoreUIState(state.synthState.ui);
+                
+                // --- NEW FORMAT (v2.0) LOADER ---
+                if (!loadedData.v || !loadedData.v.startsWith('2.')) {
+                    throw new Error('Invalid or unsupported state file format');
+                }
+
+                // 1. Restore Envelope
+                if (loadedData.e) EnvelopeManager.setSettings(loadedData.e);
+
+                // 2. Restore Effects
+                if (loadedData.fx) EnhancedEffects.loadPreset({
+                    enabled: loadedData.fx.e,
+                    parameters: loadedData.fx.p
+                });
+                
+                // 3. Restore Loop Settings
+                if (loadedData.l) {
+                    const l = loadedData.l;
+                    LoopManager.setLoopEnabled(l.enabled);
+                    LoopManager.setLoopBounds(l.start, l.end);
+                    LoopManager.setQuantization(l.quantize, l.grid);
+                    LoopManager.setSwing(l.swing);
+                    if (l.tempo) LoopManager.setTempoConversion(l.tempo.original, l.tempo.target);
+                    this._safeCall(window.LoopUI?.updateUI, 'loop UI update');
+                }
+
+                // 4. Restore Oscillator and Transport from DOM elements
+                if (loadedData.o) {
+                    this._setElementValue('waveform', loadedData.o.waveform, 'change');
+                    this._setElementValue('detune', loadedData.o.detune, 'input');
+                }
+                if (loadedData.t) {
+                    this._setElementValue('bpm', loadedData.t.bpm, 'change');
+                }
+
+                // 5. Restore Sequence by reconstructing objects from arrays
+                if (loadedData.s) {
+                    const sequence = loadedData.s.map(n => ({ note: n[0], start: n[1], dur: n[2], vel: n[3] || 0.8 }));
+                    this.restoreSequence(sequence);
+                }
+
+                // 6. Restore UI State
+                if (loadedData.ui) this.restoreUIState(loadedData.ui);
+
                 this.refreshDisplays();
+                this._safeCall(window.EnhancedControls?.updateAllDisplayValues, 'enhanced controls update');
+
                 this.showStatus('State loaded successfully!', 'success');
                 console.log('[SaveLoad] Load completed successfully');
+
             } catch (error) {
                 console.error('[SaveLoad] Load error:', error);
                 this.showStatus(`Load failed: ${error.message}`, 'error');
             }
         },
 
-        /** Validates the structure of a loaded state object. */
-        validateState(state) {
-            return state?.version && state?.synthState?.settings && Array.isArray(state?.synthState?.sequence);
+        /**
+         * Private method to handle loading of the original, verbose file format.
+         * @param {object} state - The parsed old-format state object.
+         */
+        _legacyLoadState(state) {
+            if (!(state?.version && state?.synthState?.settings && Array.isArray(state?.synthState?.sequence))) {
+                throw new Error('Invalid legacy state file format');
+            }
+            // Restore using the old method of setting DOM elements from a config map.
+            this.restoreSettings(state.synthState.settings); 
+            this.restoreSequence(state.synthState.sequence);
+            this.restoreUIState(state.synthState.ui);
+            this.refreshDisplays();
+            this.showStatus('Legacy state loaded successfully!', 'success');
+            console.log('[SaveLoad] Legacy load completed successfully');
         },
 
         /** Restores synth settings to the UI. */
