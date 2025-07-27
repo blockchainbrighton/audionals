@@ -1,0 +1,1998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audionauts: Enhanced Web Synthesizer with Advanced Effects</title>
+<style>
+/* =================== ROOT VARIABLES =================== */
+:root {
+    --bg: #181818; --panel: #232323; --key-w: #f8f8f8; --key-b: #181818;
+    --key-active: #bb86fc; --accent: #bb86fc; --accent2: #03dac6; --border: 8px;
+}
+
+/* =================== GLOBAL / LAYOUT =================== */
+body {
+    margin: 0; padding: 24px; background: var(--bg); color: #fff;
+    font: 1rem 'Segoe UI', sans-serif;
+}
+.container { max-width: 1100px; margin: auto; }
+h1 {
+    font-size: 2rem; text-align: center; margin-bottom: 8px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; color: transparent;
+}
+.subtitle { text-align: center; color: #aaa; margin-bottom: 18px; }
+footer { text-align: center; margin-top: 26px; color: #999; font-size: .92rem; }
+
+/* =================== TABS & PANELS =================== */
+.tabs {
+    display: flex; background: var(--panel); border-radius: var(--border);
+    margin-bottom: 18px;
+}
+.tab-button {
+    flex: 1; padding: 14px; background: none; border: none; color: #aaa;
+    font-size: 1rem; cursor: pointer;
+}
+.tab-button.active,
+.tab-button:focus {
+    background: #101018; color: var(--accent); font-weight: bold;
+}
+.tab-content {
+    display: none; background: var(--panel); border-radius: var(--border);
+    padding: 24px 18px; min-height: 340px;
+}
+.tab-content.active { display: block; }
+
+/* =================== CONTROL PANEL =================== */
+.control-panel {
+    display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+}
+.control-group {
+    overflow: hidden; background: #181818; border-radius: var(--border);
+    flex: 1; min-width: 200px; padding: 14px;
+    border: 1px solid #333;
+}
+.control-group h3 {
+    color: var(--accent2); margin: 0 0 12px 0; font-size: 1.1rem;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.control-row {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    flex-wrap: wrap; min-height: 32px;
+}
+.control-label {
+    flex: 1 1 auto; min-width: 80px; font-size: 0.9rem; color: #ccc;
+}
+.control-value {
+    flex: 0 0 auto; min-width: 45px; text-align: right; font-size: 0.8rem;
+    color: var(--accent2); font-family: monospace;
+}
+
+/* =================== COMMON INPUTS =================== */
+select, input[type="range"], input[type="number"] {
+    background: var(--panel); color: #fff; border: 1px solid #444;
+    border-radius: 4px; font-size: 0.9rem; outline: none;
+    transition: border-color 0.2s;
+}
+select:focus, input[type="range"]:focus, input[type="number"]:focus {
+    border-color: var(--accent);
+    outline: 2px solid var(--accent); outline-offset: 1px;
+}
+select { padding: 6px 8px; cursor: pointer; }
+select option { background: var(--panel); color: #fff; }
+input[type="number"] {
+    padding: 4px 6px; text-align: center; width: 60px;
+}
+input[type="range"] {
+    flex: 2 1 100px; min-width: 80px; height: 6px; -webkit-appearance: none;
+    background: #333; border-radius: 3px; outline: none; transition: background 0.2s;
+}
+input[type="range"]:hover { background: #444; }
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    transition: all 0.2s;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+    background: var(--accent2); transform: scale(1.1);
+    box-shadow: 0 0 8px var(--accent)80;
+}
+input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%; background: var(--accent);
+    cursor: pointer; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* =================== TRANSPORT & SAVE/LOAD BUTTONS =================== */
+.transport-controls, .save-load-controls {
+    display: flex; justify-content: center; gap: 18px;
+    margin: 16px 0 22px 0; flex-wrap: wrap;
+    align-items: center;
+}
+.transport-button, .save-button, .load-button {
+    padding: 10px 24px; border: 2px solid var(--accent2); border-radius: var(--border);
+    background: var(--panel); color: var(--accent); font: inherit;
+    font-weight: 600; letter-spacing: 0.03em; box-shadow: 0 2px 8px #0008;
+    cursor: pointer; outline: none; display: flex; align-items: center; gap: 9px;
+    transition: background 0.13s, color 0.13s, border 0.13s, box-shadow 0.13s, transform 0.1s;
+}
+.transport-button:focus, .transport-button:hover,
+.save-button:focus, .save-button:hover,
+.load-button:focus, .load-button:hover {
+    background: var(--accent2); color: #fff; border-color: var(--accent);
+    box-shadow: 0 4px 18px #0ff2, 0 2px 8px #000b; transform: translateY(-2px) scale(1.03);
+}
+.transport-button:active,
+.save-button:active, .load-button:active {
+    background: var(--accent); color: #fff; border-color: var(--accent2);
+    box-shadow: 0 1px 3px #0006; transform: translateY(0) scale(0.98);
+}
+.transport-button:disabled, .save-button:disabled, .load-button:disabled {
+    opacity: 0.54; cursor: default; box-shadow: none; filter: grayscale(0.1);
+}
+
+/* --- Transport Button Variants --- */
+.record-button {
+    border-color: #f44336; color: #f44336;
+}
+.record-button:focus, .record-button:hover {
+    background: #f44336; color: #fff; border-color: #fff;
+    box-shadow: 0 4px 18px #f4433640, 0 2px 8px #000a;
+}
+.record-button.armed {
+    animation: pulse 1.1s infinite; background: #ff3333; color: #fff;
+    border-color: #fff; box-shadow: 0 0 12px 2px #f4433680, 0 4px 16px #ff333330;
+}
+.clear-button {
+    border-color: #ff9800; color: #ff9800;
+}
+.clear-button:focus, .clear-button:hover {
+    background: #ff9800; color: #fff; border-color: #fff;
+    box-shadow: 0 4px 16px #ff9800a0, 0 2px 8px #000a;
+}
+.clear-button:active {
+    background: #fff; color: #ff9800; border-color: #ff9800;
+}
+.stop-button {
+    border-color: var(--accent); color: var(--accent2); background: #181818;
+}
+.stop-button:focus, .stop-button:hover {
+    background: var(--accent); color: #fff; border-color: #fff;
+    box-shadow: 0 4px 16px #bb86fc90, 0 2px 8px #000a;
+}
+.stop-button:active {
+    background: #fff; color: var(--accent); border-color: var(--accent);
+}
+
+/* --- Save/Load Specific --- */
+.save-load-controls {
+    margin-top: 0; padding: 0; background: none; border: none;
+    justify-content: center;
+}
+.save-button, .load-button {
+    padding: 9px 20px; font-size: 1rem; letter-spacing: 0.02em;
+    box-shadow: 0 2px 8px #0007; gap: 7px;
+}
+.save-button span, .load-button span { font-size: 1.15em; line-height: 1; }
+.save-load-status {
+    margin-left: 14px; background: #24262b; color: var(--accent2);
+    border-radius: 4px; padding: 5px 11px; font-size: 0.95em;
+    font-weight: 500; box-shadow: 0 1px 4px #0003; display: none;
+    min-width: 120px; text-align: center;
+}
+
+/* =================== KEYBOARD SECTION =================== */
+.keyboard-container {
+    background: var(--panel); border-radius: var(--border);
+    padding: 18px 10px 10px 10px; margin: 20px 0;
+}
+.octave-controls {
+    display: flex; justify-content: center; gap: 14px; margin-bottom: 8px;
+}
+.octave-button {
+    padding: 6px 14px; border: none; border-radius: 4px;
+    background: var(--panel); color: #fff; cursor: pointer;
+}
+.keyboard-outer {
+    position: relative; width: 100%; height: 160px; margin: 0 auto;
+    background: #222; border-radius: 8px; overflow: hidden;
+}
+.keyboard {
+    position: relative; width: 100%; height: 160px; min-width: 300px;
+    margin: 0 auto; user-select: none;
+}
+.key-white {
+    position: absolute; top: 0; background: var(--key-w); border: 1px solid #bbb;
+    border-radius: 0 0 6px 6px; z-index: 1; box-shadow: 0 2px 2px #bbb;
+    cursor: pointer; transition: background 0.09s; height: 160px;
+}
+.key-white.active { background: var(--key-active); }
+.key-black {
+    position: absolute; top: 0; background: var(--key-b); z-index: 2;
+    border-radius: 0 0 5px 5px; border: 1.5px solid #222;
+    box-shadow: 0 4px 8px #111, 0 1px 0 #666; cursor: pointer;
+    transition: background 0.09s; height: 96px;
+}
+.key-black.active { background: var(--key-active); }
+.key-label {
+    position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%);
+    font-size: 0.82rem; color: #333; pointer-events: none; user-select: none;
+}
+
+/* =================== STATUS BAR =================== */
+.status-bar {
+    display: flex; justify-content: space-between; background: #181818;
+    border-radius: var(--border); padding: 8px 14px; font-size: .95rem;
+    margin-top: 16px;
+}
+.status-indicator {
+    width: 10px; height: 10px; border-radius: 50%; background: #555;
+}
+.status-indicator.active { background: var(--accent2); }
+
+/* =================== ANIMATIONS =================== */
+@keyframes pulse {
+    0%   { box-shadow: 0 0 8px 2px #ff333380; opacity:1;}
+    50%  { box-shadow: 0 0 24px 6px #ff333399; opacity:0.7;}
+    100% { box-shadow: 0 0 8px 2px #ff333380; opacity:1;}
+}
+
+/* =================== EFFECTS CONTROLS =================== */
+/* --- Enable Switch --- */
+.enable-switch {
+    position: relative; display: inline-block; width: 44px; height: 24px;
+    margin-right: 8px; flex-shrink: 0;
+}
+.enable-switch input {
+    opacity: 0; width: 0; height: 0;
+}
+.enable-switch .slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #333; transition: .3s; border-radius: 24px;
+    border: 1px solid #555;
+}
+.enable-switch .slider:before {
+    position: absolute; content: ""; height: 18px; width: 18px; left: 2px;
+    bottom: 2px; background-color: #999; transition: .3s; border-radius: 50%;
+}
+.enable-switch input:checked + .slider {
+    background-color: var(--accent); border-color: var(--accent2);
+    box-shadow: 0 0 8px var(--accent)40;
+}
+.enable-switch input:focus + .slider {
+    box-shadow: 0 0 1px var(--accent);
+    outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.enable-switch input:checked + .slider:before {
+    transform: translateX(20px); background-color: #fff;
+}
+
+/* --- Group Toggle --- */
+.group-title-row {
+    display: flex; align-items: center; cursor: pointer; padding: 4px 0;
+    border-bottom: 1px solid #333; margin-bottom: 12px; user-select: none;
+}
+.group-toggle {
+    margin-right: 8px; accent-color: var(--accent);
+    width: 1.5em; height: 1.5em; border: 2px solid var(--accent2);
+    border-radius: 5px; background: #19191c; position: relative;
+    cursor: pointer; transition: border-color 0.16s;
+}
+.group-toggle:checked::after {
+    content: "✓"; color: var(--accent2); font-size: 1.3em;
+    position: absolute; left: 50%; top: 48%; transform: translate(-50%,-60%);
+}
+.group-toggle:not(:checked)::after {
+    content: "+"; color: var(--accent2); font-size: 1.1em;
+    position: absolute; left: 52%; top: 48%; transform: translate(-50%,-50%);
+}
+.group-content {
+    transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+    overflow: hidden; max-height: 1000px; opacity: 1;
+}
+.group-content-collapsed {
+    max-height: 0; opacity: 0; margin-bottom: 0 !important;
+}
+
+/* =================== LOOP CONTROLS =================== */
+.loop-panel {
+    background: var(--panel); border-radius: var(--border); padding: 18px;
+    border: 1px solid #333; margin: 16px 0;
+}
+.loop-title {
+    color: var(--accent2); margin: 0 0 16px 0; font-size: 1.2rem;
+    text-align: center;
+}
+.loop-section {
+    margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #333;
+}
+.loop-section:last-child { border-bottom: none; margin-bottom: 0; }
+.loop-section-title {
+    color: var(--accent); margin: 0 0 10px 0; font-size: 1rem;
+}
+.loop-toggle-section {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+}
+.loop-checkbox-label {
+    display: flex; align-items: center; cursor: pointer; gap: 8px;
+}
+.loop-checkbox {
+    width: 18px; height: 18px; accent-color: var(--accent);
+}
+.loop-checkbox-text { color: #fff; font-size: 1rem; }
+.loop-status {
+    padding: 6px 12px; border-radius: 4px; font-size: 0.9rem; font-weight: 600;
+}
+.loop-status.disabled { background: #333; color: #999; }
+.loop-status.ready { background: var(--accent2); color: #000; }
+.loop-status.active {
+    background: var(--accent); color: #000; animation: pulse-loop 2s infinite;
+}
+@keyframes pulse-loop {
+    0%, 100% { opacity: 1; } 50% { opacity: 0.7; }
+}
+.loop-bounds-controls, .loop-settings-controls, .quantize-controls, .tempo-controls {
+    display: flex; gap: 12px;
+    align-items: end;
+    flex-wrap: wrap;
+}
+.loop-bound-control, .loop-setting-control, .tempo-control {
+    display: flex; flex-direction: column; gap: 4px; min-width: 100px;
+}
+.loop-bound-control label, .loop-setting-control label, .tempo-control label {
+    color: #ccc; font-size: 0.9rem;
+}
+.loop-input, .loop-select {
+    padding: 8px; background: var(--bg); border: 1px solid #444;
+    border-radius: 4px; color: #fff; font-size: 0.95rem;
+}
+.loop-button {
+    padding: 8px 16px; background: var(--accent2); color: #000; border: none;
+    border-radius: 4px; cursor: pointer; font-size: 0.9rem; font-weight: 600;
+    height: fit-content;
+}
+.loop-button:hover { background: #05f5e0; }
+.quantize-grid-control, .swing-control {
+    display: flex; align-items: center; gap: 8px;
+}
+.quantize-grid-control label, .swing-control label {
+    color: #ccc; font-size: 0.9rem;
+}
+.quantize-grid-control label { min-width: 40px; }
+.swing-control label { min-width: 50px; }
+.loop-slider {
+    flex: 1; height: 6px; background: #333; border-radius: 3px;
+    outline: none; -webkit-appearance: none;
+}
+.loop-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); cursor: pointer;
+}
+.loop-slider::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: none;
+}
+.loop-value {
+    color: var(--accent); font-size: 0.9rem; font-weight: 600;
+    min-width: 40px; text-align: right;
+}
+.tempo-ratio {
+    display: flex; align-items: center; padding: 8px 12px;
+    background: var(--bg); border: 1px solid #444; border-radius: 4px;
+    color: var(--accent2); font-size: 0.95rem; font-weight: 600; height: fit-content;
+}
+
+/* =================== MISCELLANEOUS =================== */
+.emergency-button {
+    background: #ff4444; color: white; border: none; padding: 8px 16px;
+    border-radius: 4px; font-weight: bold; cursor: pointer;
+    transition: background-color 0.2s;
+}
+.emergency-button:hover { background: #cc3333; }
+.emergency-button:active { background: #aa2222; }
+.voice-count {
+    font-weight: bold; color: #333; transition: color 0.3s;
+}
+.voice-count.warning { color: #ff8800; }
+.voice-count.overload {
+    color: #ff0000; animation: pulse-voice 0.5s infinite alternate;
+}
+@keyframes pulse-voice {
+    from { opacity: 1; } to { opacity: 0.5; }
+}
+button { transition: all 0.2s ease; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:not(:disabled):hover {
+    transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.synth-section-title, .piano-roll-section-title, .filter-section-title {
+    color: var(--accent); font-size: 1.16rem; font-weight: 700;
+    letter-spacing: 0.04em; margin-bottom: 8px;
+}
+
+/* =================== PIANO ROLL =================== */
+.piano-roll {
+    background: var(--bg); border: 1px solid #333; border-radius: 8px;
+    height: 400px; overflow: auto; position: relative;
+}
+.roll-grid {
+    position: relative; min-width: 800px; height: 100%;
+    background-image: 
+        linear-gradient(to right, #333 1px, transparent 1px),
+        linear-gradient(to bottom, #333 1px, transparent 1px);
+    background-size: 40px 20px;
+}
+.piano-note {
+    position: absolute; background: var(--accent); border: 1px solid var(--accent2);
+    border-radius: 3px; cursor: pointer; min-width: 20px; height: 18px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; color: #000; font-weight: bold;
+}
+.piano-note.selected {
+    background: var(--accent2); border-color: #fff;
+    box-shadow: 0 0 8px var(--accent2);
+}
+
+/* =================== RESPONSIVE =================== */
+@media (max-width: 768px) {
+    .control-panel { flex-direction: column; }
+    .transport-controls, .save-load-controls {
+        flex-wrap: wrap;
+    }
+    h1 { font-size: 1.5rem; }
+    .keyboard { min-width: 160px; }
+    input[type="number"], input[type="text"] {
+         max-width: none;
+         font-size: 0.95rem; padding: 3px 6px; width: 50px;
+    }
+    .save-load-controls { flex-direction: column; gap: 8px; }
+    .save-load-status {
+        margin: 8px 0 0 0; text-align: center; min-width: auto;
+    }
+    .control-panel { gap: 12px; }
+    .control-group { min-width: auto; flex: 1 1 auto; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>Audionauts: Enhanced On-Chain Synth</h1>
+    <p class="subtitle">Advanced Polyphonic Synthesizer with Enhanced Effects, LFOs & Enable Switches</p>
+    <div class="tabs">
+        <button class="tab-button active" data-tab="synth">Synthesizer</button>
+        <button class="tab-button" data-tab="midi">MIDI Editor</button>
+    </div>
+    <div id="synth" class="tab-content active">
+        <div id="control-panel"></div>
+        <div class="transport-controls" id="transport-controls"></div>
+        <div class="loop-controls" id="loop-controls"></div>
+        <div class="keyboard-container">
+            <div class="octave-controls">
+                <button id="octaveDown" class="octave-button">Octave -</button>
+                <span id="octaveLabel">Octave: 4</span>
+                <button id="octaveUp" class="octave-button">Octave +</button>
+            </div>
+            <div class="keyboard-outer">
+                <div class="keyboard" id="keyboard"></div>
+            </div>
+        </div>
+        <div class="status-bar">
+            <div><span class="status-indicator" id="midiInd"></span> <span id="midiStat">MIDI: Not supported</span></div>
+            <div><span class="status-indicator" id="recInd"></span> <span id="recStat">Status: Inactive</span></div>
+        </div>
+    </div>
+    <div id="midi" class="tab-content">
+        <h3>Piano Roll Editor</h3>
+        <div class="piano-roll"><div class="roll-grid" id="rollGrid"></div></div>
+    </div>
+    <footer>Enhanced On-Chain Polyphonic Synthesizer with Advanced Effects System</footer>
+</div>
+
+<script type="module">
+const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+
+console.log('[Audionauts Enhanced] Starting enhanced app...');
+let Tone;
+
+// Load Tone.js from the ordinals URL
+import(TONE_ORDINALS_URL)
+    .then(() => {
+        Tone = window.Tone;
+        console.log('[Audionauts Enhanced] Tone.js loaded:', Tone ? Tone.version : Tone);
+        boot();
+    })
+    .catch(err => {
+        console.error('[Audionauts Enhanced] Failed to load Tone.js:', err);
+    });
+
+// ===== ENHANCED EFFECTS MODULE =====
+const EnhancedEffects = {
+    effects: {
+        reverb: null, delay: null, filter: null,
+        chorus: null, distortion: null, phaser: null,
+        tremolo: null, vibrato: null, compressor: null, bitCrusher: null,
+        filterLFO: null, tremoloLFO: null, vibratoLFO: null, phaserLFO: null,
+        inputGain: null, outputGain: null, dryWetMixer: null, mixer: null,
+        chain1: null, chain2: null, chain3: null
+    },
+    enabled: {
+        reverb: true, delay: true, filter: true,
+        chorus: false, distortion: false, phaser: false,
+        tremolo: false, vibrato: false, compressor: true, bitCrusher: false,
+        filterLFO: false, tremoloLFO: false, vibratoLFO: false, phaserLFO: false
+    },
+    defaults: {
+        reverb: { decay: 2, wet: 0.3, roomSize: 0.7 },
+        delay: { delayTime: 0.25, feedback: 0.3, wet: 0.2 },
+        filter: { frequency: 5000, Q: 1, type: 'lowpass' },
+        chorus: { frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0.5 },
+        distortion: { distortion: 0.4, wet: 0.3 },
+        phaser: { frequency: 0.5, octaves: 3, baseFrequency: 350, wet: 0.5 },
+        tremolo: { frequency: 10, depth: 0.5, wet: 0.7 },
+        vibrato: { frequency: 5, depth: 0.1, wet: 0.8 },
+        compressor: { threshold: -24, ratio: 12, attack: 0.003, release: 0.25 },
+        bitCrusher: { bits: 4, wet: 0.3 },
+        filterLFO: { frequency: 0.5, min: 200, max: 2000, depth: 0.5 },
+        tremoloLFO: { frequency: 4, depth: 0.3 },
+        vibratoLFO: { frequency: 6, depth: 0.02 },
+        phaserLFO: { frequency: 0.3, depth: 0.5 }
+    },
+
+    init() {
+        console.log('[EnhancedEffects] Initializing enhanced effects system...');
+        this.createEffects();
+        this.setupAudioChain();
+        this.applyDefaultSettings();
+        console.log('[EnhancedEffects] Enhanced effects system initialized');
+    },
+
+    createEffects() {
+        const d = this.defaults, e = this.effects;
+        e.inputGain = new Tone.Gain(1);
+        e.outputGain = new Tone.Gain(0.7);
+        e.reverb     = new Tone.Reverb(d.reverb);
+        e.delay      = new Tone.FeedbackDelay(d.delay);
+        e.filter     = new Tone.Filter(d.filter);
+        e.chorus     = new Tone.Chorus(d.chorus);
+        e.distortion = new Tone.Distortion(d.distortion);
+        e.phaser     = new Tone.Phaser(d.phaser);
+        e.tremolo    = new Tone.Tremolo({ frequency: d.tremolo.frequency, depth: 0 });
+        e.vibrato    = new Tone.Vibrato({ frequency: d.vibrato.frequency, depth: 0 });
+        e.compressor = new Tone.Compressor(d.compressor);
+        e.bitCrusher = new Tone.BitCrusher(d.bitCrusher);
+
+        e.filterLFO   = new Tone.LFO({ frequency: d.filterLFO.frequency, min: d.filterLFO.min, max: d.filterLFO.max, amplitude: 0 });
+        e.tremoloLFO  = new Tone.LFO({ frequency: d.tremoloLFO.frequency, min: 0, max: 1, amplitude: 0 });
+        e.vibratoLFO  = new Tone.LFO({ frequency: d.vibratoLFO.frequency, min: -d.vibratoLFO.depth, max: d.vibratoLFO.depth, amplitude: 0 });
+        e.phaserLFO   = new Tone.LFO({ frequency: d.phaserLFO.frequency, min: 0.1, max: 10, amplitude: 0 });
+    },
+
+    setupAudioChain() {
+        const e = this.effects;
+        e.chain1 = new Tone.Gain();
+        e.inputGain.connect(e.distortion);
+        e.distortion.connect(e.compressor);
+        e.compressor.connect(e.chain1);
+
+        e.chain2 = new Tone.Gain();
+        e.inputGain.connect(e.chorus);
+        e.chorus.connect(e.phaser);
+        e.phaser.connect(e.tremolo);
+        e.tremolo.connect(e.vibrato);
+        e.vibrato.connect(e.chain2);
+
+        e.chain3 = new Tone.Gain();
+        e.inputGain.connect(e.bitCrusher);
+        e.bitCrusher.connect(e.chain3);
+
+        const mixer = new Tone.Gain(0.33);
+        e.chain1.connect(mixer);
+        e.chain2.connect(mixer);
+        e.chain3.connect(mixer);
+        e.mixer = mixer;
+
+        mixer.connect(e.filter);
+        e.filter.connect(e.delay);
+        e.delay.connect(e.reverb);
+        e.reverb.connect(e.outputGain);
+    },
+
+    applyDefaultSettings() {
+        console.log('[EnhancedEffects] Applying default settings...');
+        this.setupLFOConnections();
+        Object.keys(this.defaults).forEach(name => {
+            if (this.effects[name]) {
+                this.setEffectParameters(name, this.defaults[name]);
+                this.toggleEffect(name, this.enabled[name]);
+            }
+        });
+        console.log('[EnhancedEffects] Default settings applied.');
+    },
+
+    setupLFOConnections() {
+        const e = this.effects;
+        console.log('[EnhancedEffects] Setting up LFO connections...');
+        e.filterLFO?.connect(e.filter?.frequency);
+        e.tremoloLFO?.connect(e.tremolo?.depth);
+        e.vibratoLFO?.connect(e.vibrato?.depth);
+        e.phaserLFO?.connect(e.phaser?.frequency);
+        console.log('[EnhancedEffects] LFO connections established.');
+    },
+
+    getInputNode() { return this.effects.inputGain; },
+    getOutputNode() { return this.effects.outputGain; },
+
+    toggleEffect(effectName, enabled) {
+        const effect = this.effects[effectName];
+        if (!effect) return;
+        this.enabled[effectName] = enabled;
+        console.log(`[EnhancedEffects] Toggling ${effectName} to ${enabled}`);
+
+        if (effect.wet !== undefined) {
+            effect.wet.value = enabled ? (this.defaults[effectName]?.wet ?? 0.5) : 0;
+        } else if (effectName.endsWith('LFO')) {
+            const targetAmplitude = enabled ? (this.defaults[effectName]?.depth ?? 0.5) : 0;
+            effect.amplitude.rampTo(targetAmplitude, 0.01);
+            if (enabled && effect.start) {
+                effect.start();
+            }
+        } else if ('bypass' in effect) {
+            effect.bypass = !enabled;
+        }
+    },
+
+    setEffectParameters(effectName, params) {
+        const effect = this.effects[effectName];
+        if (!effect) return;
+        
+        for (const [k, v] of Object.entries(params)) {
+            try {
+                if (effectName.endsWith('LFO')) {
+                    if (k === 'depth') {
+                        if (this.defaults[effectName]) {
+                            this.defaults[effectName][k] = v;
+                        }
+                    } else if (k === 'min' || k === 'max') {
+                        effect[k] = v;
+                        if (this.defaults[effectName]) {
+                            this.defaults[effectName][k] = v;
+                        }
+                    } else {
+                        if (effect[k]?.value !== undefined) {
+                            effect[k].value = v;
+                        } else {
+                            effect[k] = v;
+                        }
+                        if (this.defaults[effectName]) {
+                            this.defaults[effectName][k] = v;
+                        }
+                    }
+                } else if ((effectName === 'tremolo' || effectName === 'vibrato') && k === 'depth') {
+                    if (effect[k]?.value !== undefined) {
+                        effect[k].value = v;
+                    } else {
+                        effect[k] = v;
+                    }
+                    if (this.defaults[effectName]) {
+                        this.defaults[effectName][k] = v;
+                    }
+                } else {
+                    if (effect[k] !== undefined) {
+                        if (effect[k]?.value !== undefined) {
+                            effect[k].value = v;
+                        } else {
+                            effect[k] = v;
+                        }
+                        if (this.defaults[effectName]) {
+                            this.defaults[effectName][k] = v;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn(`[EnhancedEffects] Could not set ${k} on ${effectName}:`, err);
+            }
+        }
+    },
+
+    setReverb(p)     { this.setEffectParameters('reverb',     p); },
+    setDelay(p)      { this.setEffectParameters('delay',      p); },
+    setFilter(p)     { this.setEffectParameters('filter',     p); },
+    setChorus(p)     { this.setEffectParameters('chorus',     p); },
+    setDistortion(p) { this.setEffectParameters('distortion', p); },
+    setPhaser(p)     { this.setEffectParameters('phaser',     p); },
+    setTremolo(p)    { this.setEffectParameters('tremolo',    p); },
+    setVibrato(p)    { this.setEffectParameters('vibrato',    p); },
+    setCompressor(p) { this.setEffectParameters('compressor', p); },
+    setBitCrusher(p) { this.setEffectParameters('bitCrusher', p); },
+    setFilterLFO(p)   { this.setEffectParameters('filterLFO',   p); },
+    setTremoloLFO(p)  { this.setEffectParameters('tremoloLFO',  p); },
+    setVibratoLFO(p)  { this.setEffectParameters('vibratoLFO',  p); },
+    setPhaserLFO(p)   { this.setEffectParameters('phaserLFO',   p); },
+
+    setMasterVolume(vol) {
+        if (this.effects.outputGain) {
+            const clampedVol = Math.max(0, Math.min(1, vol));
+            this.effects.outputGain.gain.value = clampedVol;
+        }
+    }
+};
+
+// ===== ENVELOPE MODULE =====
+const EnvelopeManager = {
+    defaultEnvelope: {
+        attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3,
+        attackCurve: 'exponential', decayCurve: 'exponential', releaseCurve: 'exponential'
+    },
+    presets: {
+        piano:   { attack: 0.01, decay: 0.3, sustain: 0.4, release: 1.2 },
+        organ:   { attack: 0.01, decay: 0.1, sustain: 0.9, release: 0.1 },
+        strings: { attack: 0.3,  decay: 0.2, sustain: 0.8, release: 1.5 },
+        brass:   { attack: 0.1,  decay: 0.2, sustain: 0.7, release: 0.8 },
+        pad:     { attack: 1.0,  decay: 0.5, sustain: 0.6, release: 2.0 },
+        pluck:   { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.3 },
+        bass:    { attack: 0.01, decay: 0.1, sustain: 0.8, release: 0.4 }
+    },
+    currentEnvelope: null,
+
+    init() {
+        this.currentEnvelope = { ...this.defaultEnvelope };
+        console.log('[EnvelopeManager] Initialized with default envelope');
+    },
+
+    createEnvelope() { return { ...this.currentEnvelope }; },
+
+    setParameter(param, value) {
+        if (!(param in this.currentEnvelope)) return;
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, +v));
+        if (['attack', 'decay', 'release'].includes(param)) value = clamp(value, 0.001, 5.0);
+        if (param === 'sustain') value = clamp(value, 0, 1);
+        if (['attackCurve', 'decayCurve', 'releaseCurve'].includes(param) &&
+            !['linear', 'exponential'].includes(value)) value = 'exponential';
+        this.currentEnvelope[param] = value;
+        this.updateSynth();
+        console.log(`[EnvelopeManager] Set ${param} to ${value}`);
+    },
+
+    loadPreset(name) {
+        if (!this.presets[name]) return;
+        this.currentEnvelope = { ...this.defaultEnvelope, ...this.presets[name] };
+        this.updateSynth(); this.updateUI();
+        console.log(`[EnvelopeManager] Loaded preset: ${name}`);
+    },
+
+    updateSynth() {
+        if (window.synthApp?.synth)
+            window.synthApp.synth.set({ envelope: this.createEnvelope() }),
+            console.log('[EnvelopeManager] Updated synth envelope');
+    },
+
+    updateUI() {
+        const p = document.getElementById('control-panel');
+        if (!p) return;
+        const env = this.currentEnvelope;
+        [
+            ['#envelopeAttack',   env.attack,   3],
+            ['#envelopeDecay',    env.decay,    3],
+            ['#envelopeSustain',  env.sustain,  2],
+            ['#envelopeRelease',  env.release,  3]
+        ].forEach(([id, val, dp]) => {
+            const s = p.querySelector(id);
+            const v = p.querySelector(id + 'Val');
+            if (s) s.value = val;
+            if (v) v.textContent = (+val).toFixed(dp);
+        });
+    },
+
+    getSettings() { return { ...this.currentEnvelope }; },
+    setSettings(settings) {
+        this.currentEnvelope = { ...this.defaultEnvelope, ...settings };
+        this.updateSynth(); this.updateUI();
+    }
+};
+
+// ---- Audio Safety ----
+const AudioSafety = {
+    maxPolyphony: 16,
+    masterVolume: 0.7,
+    limiterThreshold: -3,
+    limiterRatio: 10,
+    masterLimiter: null,
+    masterGainNode: null,
+    dcBlocker: null,
+    compressor: null,
+    activeVoices: new Set(),
+    voiceCount: 0,
+    isOverloading: false,
+    overloadCount: 0,
+
+    init() {
+        this.createAudioChain();
+        this.startMonitoring();
+        console.log('[AudioSafety] Initialized audio safety system');
+    },
+
+    createAudioChain() {
+        this.masterGainNode = new Tone.Gain(this.masterVolume);
+        this.dcBlocker = new Tone.Filter(5, 'highpass');
+        this.compressor = new Tone.Compressor({ threshold: -24, ratio: 4, attack: 0.003, release: 0.1 });
+        this.masterLimiter = new Tone.Limiter(this.limiterThreshold);
+        this.dcBlocker.connect(this.compressor);
+        this.compressor.connect(this.masterGainNode);
+        this.masterGainNode.connect(this.masterLimiter);
+        this.masterLimiter.toDestination();
+        console.log('[AudioSafety] Created audio safety chain');
+    },
+
+    getInputNode() { return this.dcBlocker; },
+    canPlayNote() { return this.voiceCount < this.maxPolyphony && !this.isOverloading; },
+
+    addVoice(noteId) {
+        if (this.voiceCount >= this.maxPolyphony) {
+            const oldest = this.activeVoices.values().next().value;
+            oldest && this.removeVoice(oldest);
+            console.log(`[AudioSafety] Voice stealing: removed ${oldest}`);
+        }
+        this.activeVoices.add(noteId);
+        this.voiceCount = this.activeVoices.size;
+        this.updateVoiceDisplay();
+    },
+
+    removeVoice(noteId) {
+        this.activeVoices.delete(noteId);
+        this.voiceCount = this.activeVoices.size;
+        this.updateVoiceDisplay();
+    },
+
+    updateVoiceDisplay() {
+        const v = document.getElementById('voiceCount');
+        if (v) {
+            v.textContent = `Voices: ${this.voiceCount}/${this.maxPolyphony}`;
+            v.className = this.voiceCount >= this.maxPolyphony ? 'voice-count warning' : 'voice-count';
+        }
+    },
+
+    setMasterVolume(vol) {
+        vol = Math.max(0, Math.min(1, +vol));
+        this.masterVolume = vol;
+        this.masterGainNode?.gain.rampTo(vol, 0.1);
+        console.log(`[AudioSafety] Set master volume to ${vol}`);
+    },
+
+    setLimiterThreshold(thresh) {
+        thresh = Math.max(-20, Math.min(0, +thresh));
+        this.limiterThreshold = thresh;
+        this.masterLimiter && (this.masterLimiter.threshold.value = thresh);
+        console.log(`[AudioSafety] Set limiter threshold to ${thresh}dB`);
+    },
+
+    startMonitoring() {
+        if (typeof Tone !== 'undefined' && Tone.Meter) {
+            this.meter = new Tone.Meter();
+            this.masterLimiter.connect(this.meter);
+            setInterval(() => {
+                if (!this.meter) return;
+                const level = this.meter.getValue();
+                const db = typeof level === 'number' ? level : Math.max(level.left || -Infinity, level.right || -Infinity);
+                if (db > -1) {
+                    this.overloadCount++;
+                    if (this.overloadCount > 3) this.isOverloading = true, this.handleOverload();
+                } else {
+                    this.overloadCount = Math.max(0, this.overloadCount - 1);
+                    if (!this.overloadCount) this.isOverloading = false;
+                }
+            }, 100);
+        }
+    },
+
+    handleOverload() {
+        console.warn('[AudioSafety] Audio overload detected, reducing volume');
+        const curVol = this.masterVolume;
+        this.setMasterVolume(curVol * 0.7);
+        setTimeout(() => {
+            this.setMasterVolume(curVol);
+            this.isOverloading = false; this.overloadCount = 0;
+        }, 2000);
+
+        const v = document.getElementById('voiceCount');
+        v?.classList.add('overload');
+        setTimeout(() => v?.classList.remove('overload'), 2000);
+    },
+
+    emergencyStop() {
+        this.masterGainNode?.gain.rampTo(0, 0.1);
+        setTimeout(() => this.masterGainNode?.gain.rampTo(this.masterVolume, 0.1), 200);
+        this.activeVoices.clear(); this.voiceCount = 0; this.updateVoiceDisplay();
+        try { window.synthApp?.synth?.releaseAll(); }
+        catch (err) { console.warn('[AudioSafety] Error during emergency stop:', err); }
+        console.log('[AudioSafety] Emergency stop executed');
+    }
+};
+
+// Continue with the rest of the modules...
+
+
+// ===== ENHANCED CONTROLS MODULE =====
+const EnhancedControls = {
+    init() {
+        EnvelopeManager.init();
+        AudioSafety.init();
+
+        const panel = document.getElementById('control-panel');
+        panel.innerHTML = this.panelHTML();
+
+        EnhancedEffects.init();
+
+        this.setupToggles(panel);
+        this.setupEffects(panel);
+        this.setupAudioSafety(panel);
+        this.setupEnvelope(panel);
+        this.setupOscillator(panel);
+        this.updateAllDisplayValues();
+    },
+
+    panelHTML() {
+        const group = (title, id, content, expanded = false) =>
+            `<div class="control-group">
+                <div class="group-title-row" id="${id}_title_row">
+                    <input type="checkbox" id="${id}_toggle" class="group-toggle" ${expanded ? "checked" : ""} />
+                    <h3 style="margin:0;flex:1 1 auto;">${title}</h3>
+                </div>
+                <div id="${id}_content" class="group-content${expanded ? "" : " group-content-collapsed"}">
+                    ${content}
+                </div>
+            </div>`;
+
+        return `<div class="control-panel">
+            ${group('Audio Safety', 'audio', `
+                <div class="control-row">
+                    <span class="control-label">Master Volume</span>
+                    <input type="range" id="masterVolume" min="0" max="1" step="0.01" value="0.7">
+                    <input type="number" id="masterVolumeInput" min="0" max="1" step="0.01" value="0.7" style="width:58px; margin-left:7px;">
+                    <span class="control-value" id="masterVolumeVal">70%</span>
+                </div>
+                <div class="control-row">
+                    <span class="control-label">Limiter Threshold</span>
+                    <input type="range" id="limiterThreshold" min="-20" max="0" step="0.1" value="-3">
+                    <input type="number" id="limiterThresholdInput" min="-20" max="0" step="0.1" value="-3" style="width:62px; margin-left:7px;">
+                    <span class="control-value" id="limiterThresholdVal">-3dB</span>
+                </div>
+                <div class="control-row">
+                    <span class="control-label" id="voiceCount">Voices: 0/16</span>
+                    <button id="emergencyStop" class="emergency-button">Emergency Stop</button>
+                </div>
+            `)}
+            ${group('Envelope (ADSR)', 'env', `
+                <div class="control-row"><span class="control-label">Preset</span>
+                <select id="envelopePreset">
+                    <option value="">Custom</option>
+                    <option value="piano">Piano</option>
+                    <option value="organ">Organ</option>
+                    <option value="strings">Strings</option>
+                    <option value="brass">Brass</option>
+                    <option value="pad">Pad</option>
+                    <option value="pluck">Pluck</option>
+                    <option value="bass">Bass</option>
+                </select></div>
+                <div class="control-row"><span class="control-label">Attack</span>
+                <input type="range" id="envelopeAttack" min="0.001" max="5" step="0.001" value="0.01">
+                <input type="number" id="envelopeAttackInput" min="0.001" max="5" step="0.001" value="0.01" style="width:65px; margin-left:7px;">
+                <span class="control-value" id="envelopeAttackVal">0.010</span></div>
+                <div class="control-row"><span class="control-label">Decay</span>
+                <input type="range" id="envelopeDecay" min="0.001" max="5" step="0.001" value="0.1">
+                <input type="number" id="envelopeDecayInput" min="0.001" max="5" step="0.001" value="0.1" style="width:65px; margin-left:7px;">
+                <span class="control-value" id="envelopeDecayVal">0.100</span></div>
+                <div class="control-row"><span class="control-label">Sustain</span>
+                <input type="range" id="envelopeSustain" min="0" max="1" step="0.01" value="0.7">
+                <input type="number" id="envelopeSustainInput" min="0" max="1" step="0.01" value="0.7" style="width:58px; margin-left:7px;">
+                <span class="control-value" id="envelopeSustainVal">0.70</span></div>
+                <div class="control-row"><span class="control-label">Release</span>
+                <input type="range" id="envelopeRelease" min="0.001" max="5" step="0.001" value="0.3">
+                <input type="number" id="envelopeReleaseInput" min="0.001" max="5" step="0.001" value="0.3" style="width:65px; margin-left:7px;">
+                <span class="control-value" id="envelopeReleaseVal">0.300</span></div>
+            `)}
+            ${group('Oscillator', 'osc', `
+                <div class="control-row">
+                    <span class="control-label">Waveform</span>
+                    <select id="waveform"><option>sine</option><option>square</option><option>sawtooth</option><option>triangle</option></select>
+                </div>
+                <div class="control-row">
+                    <span class="control-label">Detune</span>
+                    <input type="range" id="detune" min="-50" max="50" value="0">
+                    <input type="number" id="detuneInput" min="-50" max="50" value="0" style="width:58px; margin-left:7px;">
+                    <span class="control-value" id="detuneVal">0</span>
+                </div>
+            `)}
+            ${group('Filter & LFO', 'filter', `
+                <div class="control-row"><label class="enable-switch"><input type="checkbox" id="filterEnable" checked><span class="slider"></span></label><span class="control-label">Filter Enable</span></div>
+                <div class="control-row"><span class="control-label">Type</span><select id="filterType"><option>lowpass</option><option>highpass</option><option>bandpass</option></select></div>
+                <div class="control-row"><span class="control-label">Frequency</span><input type="range" id="filterFreq" min="20" max="20000" value="5000"><input type="number" id="filterFreqInput" min="20" max="20000" value="5000" style="width:80px; margin-left:7px;"><span class="control-value" id="filterFreqVal">5000</span></div>
+                <div class="control-row"><span class="control-label">Resonance</span><input type="range" id="filterQ" min="0" max="20" value="1"><input type="number" id="filterQInput" min="0" max="20" value="1" style="width:55px; margin-left:7px;"><span class="control-value" id="filterQVal">1</span></div>
+                <div class="control-row"><label class="enable-switch"><input type="checkbox" id="filterLFOEnable"><span class="slider"></span></label><span class="control-label">Filter LFO</span></div>
+                <div class="control-row"><span class="control-label">LFO Rate</span><input type="range" id="filterLFORate" min="0.1" max="10" step="0.1" value="0.5"><span class="control-value" id="filterLFORateVal">0.5</span></div>
+                <div class="control-row"><span class="control-label">LFO Depth</span><input type="range" id="filterLFODepth" min="0" max="1" step="0.01" value="0.5"><span class="control-value" id="filterLFODepthVal">0.5</span></div>
+            `)}
+            ${group('Modulation Effects', 'modulation', `
+                <div class="control-row"><label class="enable-switch"><input type="checkbox" id="chorusEnable"><span class="slider"></span></label><span class="control-label">Chorus</span><input type="range" id="chorusWet" min="0" max="1" step="0.01" value="0.5"><span class="control-value" id="chorusWetVal">50%</span></div>
+                <div class="control-row"><span class="control-label">Chorus Rate</span><input type="range" id="chorusRate" min="0.1" max="5" step="0.1" value="1.5"><span class="control-value" id="chorusRateVal">1.5</span></div>
+                <div class="control-row"><label class="enable-switch"><input type="checkbox" id="phaserEnable"><span class="slider"></span></label><span class="control-label">Phaser</span><input type="range" id="phaserWet" min="0" max="1" step="0.01" value="0.5"><span class="control-value" id="phaserWetVal">50%</span></div>
+                <div class="control-row"><span class="control-label">Phaser Rate</span><input type="range" id="phaserRate" min="0.1" max="2" step="0.1" value="0.5"><span class="control-value" id="phaserRateVal">0.5</span></div>
+                <div class="control-row"><label class="enable-switch"><input type="checkbox" id="tremoloEnable"><span class="slider"></span></label><span class="control-label">Tremolo</span><input type="range" id="tremoloWet" min="0" max="1" step="0.01" value="0.7"><span class="control-value" id="tremoloWetVal">70%</span></div>
+                <div class="control-row"><span class="control-label">Tremolo Rate</span><input type="range" id="tremoloRate" min="1" max="20" step="0.5" value="10"><span class="control-value" id="tremoloRateVal">10</span></div>
+                <div class="control-row"><label class="enable-switch"><input type="checkbox" id="vibratoEnable"><span class="slider"></span></label><span class="control-label">Vibrato</span><input type="range" id="vibratoWet" min="0" max="1" step="0.01" value="0.8"><span class="control-value" id="vibratoWetVal">80%</span></div>
+                <div class="control-row"><span class="control-label">Vibrato Rate</span><input type="range" id="vibratoRate" min="1" max="15" step="0.5" value="5"><span class="control-value" id="vibratoRateVal">5</span></div>
+            `)}
+            ${group('Distortion & Dynamics', 'distortion', `
+                <div class="control-row"><label class="enable-switch"><input type="checkbox" id="compressorEnable" checked><span class="slider"></span></label><span class="control-label">Compressor</span></div>
+                <div class="control-row"><span class="control-label">Threshold</span><input type="range" id="compressorThreshold" min="-40" max="0" step="1" value="-24"><span class="control-value" id="compressorThresholdVal">-24dB</span></div>
+                <div class="control-row"><span class="control-label">Ratio</span><input type="range" id="compressorRatio" min="1" max="20" step="0.5" value="12"><span class="control-value" id="compressorRatioVal">12:1</span></div>
+                <div class="control-row"><label class="enable-switch"><input type="checkbox" id="distortionEnable"><span class="slider"></span></label><span class="control-label">Distortion</span><input type="range" id="distortionWet" min="0" max="1" step="0.01" value="0.3"><span class="control-value" id="distortionWetVal">30%</span></div>
+                <div class="control-row"><span class="control-label">Drive</span><input type="range" id="distortionDrive" min="0" max="1" step="0.01" value="0.4"><span class="control-value" id="distortionDriveVal">0.4</span></div>
+                <div class="control-row"><label class="enable-switch"><input type="checkbox" id="bitCrusherEnable"><span class="slider"></span></label><span class="control-label">BitCrusher</span><input type="range" id="bitCrusherWet" min="0" max="1" step="0.01" value="0.3"><span class="control-value" id="bitCrusherWetVal">30%</span></div>
+                <div class="control-row"><span class="control-label">Bits</span><input type="range" id="bitCrusherBits" min="1" max="16" step="1" value="4"><span class="control-value" id="bitCrusherBitsVal">4</span></div>
+            `)}
+            ${group('Time-Based Effects', 'time', `
+                <div class="control-row"><label class="enable-switch"><input type="checkbox" id="delayEnable" checked><span class="slider"></span></label><span class="control-label">Delay</span><input type="range" id="delay" min="0" max="100" value="20"><input type="number" id="delayInput" min="0" max="100" value="20" style="width:60px; margin-left:7px;"><span class="control-value" id="delayVal">20%</span></div>
+                <div class="control-row"><span class="control-label">Delay Time</span><input type="range" id="delayTime" min="0.01" max="1" step="0.01" value="0.25"><span class="control-value" id="delayTimeVal">0.25s</span></div>
+                <div class="control-row"><span class="control-label">Feedback</span><input type="range" id="delayFeedback" min="0" max="0.95" step="0.01" value="0.3"><span class="control-value" id="delayFeedbackVal">0.3</span></div>
+                <div class="control-row"><label class="enable-switch"><input type="checkbox" id="reverbEnable" checked><span class="slider"></span></label><span class="control-label">Reverb</span><input type="range" id="reverb" min="0" max="100" value="30"><input type="number" id="reverbInput" min="0" max="100" value="30" style="width:60px; margin-left:7px;"><span class="control-value" id="reverbVal">30%</span></div>
+                <div class="control-row"><span class="control-label">Room Size</span><input type="range" id="reverbRoom" min="0.1" max="1" step="0.01" value="0.7"><span class="control-value" id="reverbRoomVal">0.7</span></div>
+                <div class="control-row"><span class="control-label">Decay</span><input type="range" id="reverbDecay" min="0.1" max="10" step="0.1" value="2"><span class="control-value" id="reverbDecayVal">2s</span></div>
+            `)}
+            ${group('BPM', 'bpm', `<div class="control-row"><span class="control-label">BPM</span><input type="number" id="bpm" min="40" max="240" value="120"></div>`)}
+        </div>`;
+    },
+
+    setupToggles(panel) {
+        for (const id of ['audio','env','osc','filter','modulation','distortion','time','bpm']) {
+            const toggle = panel.querySelector(`#${id}_toggle`);
+            const content = panel.querySelector(`#${id}_content`);
+            if (!toggle || !content) continue;
+            content.classList.toggle('group-content-collapsed', !toggle.checked);
+            toggle.addEventListener('change', () =>
+                content.classList.toggle('group-content-collapsed', !toggle.checked)
+            );
+            panel.querySelector(`#${id}_title_row`)?.addEventListener('click', e => {
+                if (e.target !== toggle) {
+                    toggle.checked = !toggle.checked;
+                    toggle.dispatchEvent(new Event('change'));
+                }
+            });
+        }
+    },
+
+    setupEffects(panel) {
+        [
+            ['filterEnable','filter'],['filterLFOEnable','filterLFO'],
+            ['chorusEnable','chorus'],['phaserEnable','phaser'],['tremoloEnable','tremolo'],['vibratoEnable','vibrato'],
+            ['compressorEnable','compressor'],['distortionEnable','distortion'],['bitCrusherEnable','bitCrusher'],
+            ['delayEnable','delay'],['reverbEnable','reverb'],
+        ].forEach(([id, name]) => this.effectToggle(id, name));
+
+        this.effectParams(panel);
+    },
+
+    effectToggle(toggleId, effectName) {
+        const el = document.getElementById(toggleId);
+        if (!el) return;
+        el.onchange = () => EnhancedEffects.toggleEffect(effectName, el.checked);
+        el.checked = !!EnhancedEffects.enabled?.[effectName];
+    },
+
+    effectParams(panel) {
+        const params = [
+            ['#filterFreq',   '#filterFreqInput',   '#filterFreqVal',   v => EnhancedEffects.setFilter({ frequency: v })],
+            ['#filterQ',      '#filterQInput',      '#filterQVal',      v => EnhancedEffects.setFilter({ Q: v })],
+            ['#filterLFORate',null,'#filterLFORateVal',v => EnhancedEffects.setFilterLFO({ frequency: v })],
+            ['#filterLFODepth',null,'#filterLFODepthVal',v=>EnhancedEffects.setFilterLFO({depth:v})],
+            ['#chorusWet',    null, '#chorusWetVal', v => EnhancedEffects.setChorus({ wet: v }), v => Math.round(v*100)+'%'],
+            ['#chorusRate',   null, '#chorusRateVal', v => EnhancedEffects.setChorus({ frequency: v })],
+            ['#phaserWet',    null, '#phaserWetVal', v => EnhancedEffects.setPhaser({ wet: v }), v => Math.round(v*100)+'%'],
+            ['#phaserRate',   null, '#phaserRateVal', v => EnhancedEffects.setPhaser({ frequency: v })],
+            ['#tremoloWet',   null, '#tremoloWetVal', v => EnhancedEffects.setTremolo({ wet: v }), v => Math.round(v*100)+'%'],
+            ['#tremoloRate',  null, '#tremoloRateVal', v => EnhancedEffects.setTremolo({ frequency: v })],
+            ['#vibratoWet',   null, '#vibratoWetVal', v => EnhancedEffects.setVibrato({ wet: v }), v => Math.round(v*100)+'%'],
+            ['#vibratoRate',  null, '#vibratoRateVal', v => EnhancedEffects.setVibrato({ frequency: v })],
+            ['#compressorThreshold',null,'#compressorThresholdVal',v=>EnhancedEffects.setCompressor({threshold:v}),v=>v+'dB'],
+            ['#compressorRatio',null,'#compressorRatioVal',v=>EnhancedEffects.setCompressor({ratio:v}),v=>v+':1'],
+            ['#distortionWet',null,'#distortionWetVal',v=>EnhancedEffects.setDistortion({wet:v}),v=>Math.round(v*100)+'%'],
+            ['#distortionDrive',null,'#distortionDriveVal',v=>EnhancedEffects.setDistortion({distortion:v})],
+            ['#bitCrusherWet',null,'#bitCrusherWetVal',v=>EnhancedEffects.setBitCrusher({wet:v}),v=>Math.round(v*100)+'%'],
+            ['#bitCrusherBits',null,'#bitCrusherBitsVal',v=>EnhancedEffects.setBitCrusher({bits:v})],
+            ['#delay',        '#delayInput',        '#delayVal',        v => EnhancedEffects.setDelay({ wet: v/100 }), v => Math.round(v)+'%'],
+            ['#delayTime',    null,                 '#delayTimeVal',    v => EnhancedEffects.setDelay({ delayTime: v }), v => v+'s'],
+            ['#delayFeedback',null,                 '#delayFeedbackVal',v => EnhancedEffects.setDelay({ feedback: v })],
+            ['#reverb',       '#reverbInput',       '#reverbVal',       v => EnhancedEffects.setReverb({ wet: v/100 }), v => Math.round(v)+'%'],
+            ['#reverbRoom',   null,                 '#reverbRoomVal',   v => EnhancedEffects.setReverb({ roomSize: v })],
+            ['#reverbDecay',  null,                 '#reverbDecayVal',  v => EnhancedEffects.setReverb({ decay: v }), v => v+'s']
+        ];
+
+        params.forEach(([sliderSel, inputSel, valSel, setFn, formatter]) => {
+            const slider = panel.querySelector(sliderSel);
+            const input = inputSel ? panel.querySelector(inputSel) : null;
+            const valSpan = panel.querySelector(valSel);
+
+            if (slider && setFn) {
+                const update = () => {
+                    const val = +slider.value;
+                    setFn(val);
+                    if (input) input.value = val;
+                    if (valSpan) valSpan.textContent = formatter ? formatter(val) : val;
+                };
+                slider.oninput = update;
+                if (input) input.onchange = () => {
+                    slider.value = input.value;
+                    update();
+                };
+                update();
+            }
+        });
+
+        const filterType = panel.querySelector('#filterType');
+        if (filterType) {
+            filterType.onchange = e => EnhancedEffects.setFilter({ type: e.target.value });
+        }
+    },
+
+    setupAudioSafety(panel) {
+        const masterVol = panel.querySelector('#masterVolume');
+        const masterVolInput = panel.querySelector('#masterVolumeInput');
+        const masterVolVal = panel.querySelector('#masterVolumeVal');
+        const limiterThresh = panel.querySelector('#limiterThreshold');
+        const limiterThreshInput = panel.querySelector('#limiterThresholdInput');
+        const limiterThreshVal = panel.querySelector('#limiterThresholdVal');
+        const emergencyStop = panel.querySelector('#emergencyStop');
+
+        if (masterVol) {
+            const updateMasterVol = () => {
+                const val = +masterVol.value;
+                AudioSafety.setMasterVolume(val);
+                EnhancedEffects.setMasterVolume(val);
+                if (masterVolInput) masterVolInput.value = val;
+                if (masterVolVal) masterVolVal.textContent = Math.round(val*100)+'%';
+            };
+            masterVol.oninput = updateMasterVol;
+            if (masterVolInput) masterVolInput.onchange = () => {
+                masterVol.value = masterVolInput.value;
+                updateMasterVol();
+            };
+            updateMasterVol();
+        }
+
+        if (limiterThresh) {
+            const updateLimiter = () => {
+                const val = +limiterThresh.value;
+                AudioSafety.setLimiterThreshold(val);
+                if (limiterThreshInput) limiterThreshInput.value = val;
+                if (limiterThreshVal) limiterThreshVal.textContent = val+'dB';
+            };
+            limiterThresh.oninput = updateLimiter;
+            if (limiterThreshInput) limiterThreshInput.onchange = () => {
+                limiterThresh.value = limiterThreshInput.value;
+                updateLimiter();
+            };
+            updateLimiter();
+        }
+
+        if (emergencyStop) {
+            emergencyStop.onclick = () => AudioSafety.emergencyStop();
+        }
+    },
+
+    setupEnvelope(panel) {
+        const preset = panel.querySelector('#envelopePreset');
+        const params = ['Attack', 'Decay', 'Sustain', 'Release'];
+
+        if (preset) {
+            preset.onchange = () => {
+                if (preset.value) {
+                    EnvelopeManager.loadPreset(preset.value);
+                }
+            };
+        }
+
+        params.forEach(param => {
+            const slider = panel.querySelector(`#envelope${param}`);
+            const input = panel.querySelector(`#envelope${param}Input`);
+            const valSpan = panel.querySelector(`#envelope${param}Val`);
+
+            if (slider) {
+                const update = () => {
+                    const val = +slider.value;
+                    EnvelopeManager.setParameter(param.toLowerCase(), val);
+                    if (input) input.value = val;
+                    if (valSpan) {
+                        const dp = param === 'Sustain' ? 2 : 3;
+                        valSpan.textContent = val.toFixed(dp);
+                    }
+                    if (preset) preset.value = '';
+                };
+                slider.oninput = update;
+                if (input) input.onchange = () => {
+                    slider.value = input.value;
+                    update();
+                };
+            }
+        });
+    },
+
+    setupOscillator(panel) {
+        const waveform = panel.querySelector('#waveform');
+        const detune = panel.querySelector('#detune');
+        const detuneInput = panel.querySelector('#detuneInput');
+        const detuneVal = panel.querySelector('#detuneVal');
+
+        if (waveform) {
+            waveform.onchange = () => {
+                if (window.synthApp?.synth) {
+                    window.synthApp.synth.set({ oscillator: { type: waveform.value } });
+                }
+            };
+        }
+
+        if (detune) {
+            const updateDetune = () => {
+                const val = +detune.value;
+                if (window.synthApp?.synth) {
+                    window.synthApp.synth.set({ detune: val });
+                }
+                if (detuneInput) detuneInput.value = val;
+                if (detuneVal) detuneVal.textContent = val;
+            };
+            detune.oninput = updateDetune;
+            if (detuneInput) detuneInput.onchange = () => {
+                detune.value = detuneInput.value;
+                updateDetune();
+            };
+        }
+    },
+
+    updateAllDisplayValues() {
+        const panel = document.getElementById('control-panel');
+        if (!panel) return;
+
+        panel.querySelectorAll('input[type="range"]').forEach(slider => {
+            const event = new Event('input');
+            slider.dispatchEvent(event);
+        });
+    }
+};
+
+// ===== KEYBOARD MODULE =====
+const Keyboard = {
+    WHITE_NOTES: ['C','D','E','F','G','A','B'],
+    BLACKS: { 0:'C#', 1:'D#', 3:'F#', 4:'G#', 5:'A#' },
+
+    init() {
+        this.keyboard = document.getElementById('keyboard');
+        document.getElementById('octaveUp').onclick   = () => { 
+            if (synthApp.curOct<7) { 
+                synthApp.curOct++; 
+                document.getElementById('octaveLabel').textContent='Octave: '+synthApp.curOct; 
+                this.draw(); 
+            }
+        };
+        document.getElementById('octaveDown').onclick = () => { 
+            if (synthApp.curOct>0) { 
+                synthApp.curOct--; 
+                document.getElementById('octaveLabel').textContent='Octave: '+synthApp.curOct; 
+                this.draw(); 
+            }
+        };
+        this.draw();
+    },
+
+    draw() {
+        this.keyboard.innerHTML = '';
+        const kbWidth = this.keyboard.offsetWidth || 800;
+        const whiteKeyW = 100 / Math.floor(kbWidth/38);
+        const totalWhite = Math.floor(100 / whiteKeyW);
+
+        let whiteIndex = 0;
+        for (let i = 0; i < totalWhite; i++) {
+            let wn = this.WHITE_NOTES[whiteIndex % 7];
+            let octaveOffset = Math.floor((whiteIndex) / 7);
+            let midi = Tone.Frequency(`${wn}${synthApp.curOct+octaveOffset}`).toMidi();
+            let note = Tone.Frequency(midi, "midi").toNote();
+
+            let wkey = document.createElement('div');
+            wkey.className = 'key-white';
+            wkey.dataset.note = note;
+            wkey.style.left = (i * whiteKeyW) + '%';
+            wkey.style.width = whiteKeyW + '%';
+            wkey.tabIndex = 0;
+            this.addKeyHandlers(wkey, note);
+
+            if (wn === "C" || wn === "F") {
+                let lbl = document.createElement('span');
+                lbl.className = 'key-label';
+                lbl.innerText = note;
+                wkey.appendChild(lbl);
+            }
+            this.keyboard.appendChild(wkey);
+            whiteIndex++;
+        }
+
+        // Black keys
+        whiteIndex = 0;
+        for (let i = 0; i < totalWhite; i++) {
+            if (this.BLACKS.hasOwnProperty(whiteIndex%7)) {
+                let wn = this.WHITE_NOTES[whiteIndex % 7];
+                let octaveOffset = Math.floor((whiteIndex) / 7);
+                let blackNote = this.BLACKS[whiteIndex%7] + (synthApp.curOct+octaveOffset);
+                let midi = Tone.Frequency(blackNote).toMidi();
+                let bkey = document.createElement('div');
+                bkey.className = 'key-black';
+                bkey.dataset.note = Tone.Frequency(midi, "midi").toNote();
+                let leftPercent = (i + 0.7) * whiteKeyW - (whiteKeyW*0.28);
+                bkey.style.left = leftPercent + '%';
+                bkey.style.width = (whiteKeyW * 0.62) + '%';
+                bkey.tabIndex = 0;
+                this.addKeyHandlers(bkey, bkey.dataset.note);
+                this.keyboard.appendChild(bkey);
+            }
+            whiteIndex++;
+        }
+    },
+
+    addKeyHandlers(el, note) {
+        el.onmousedown   = ()=>EnhancedRecorder.playNote(note);
+        el.onmouseup     = ()=>EnhancedRecorder.releaseNote(note);
+        el.onmouseleave  = ()=>EnhancedRecorder.releaseNote(note);
+        el.ontouchstart  = (e)=>{e.preventDefault(); EnhancedRecorder.playNote(note);}
+        el.ontouchend    = (e)=>{e.preventDefault(); EnhancedRecorder.releaseNote(note);}
+    },
+
+    updateKeyVisual(note, on){
+        this.keyboard.querySelectorAll('.key-white,.key-black').forEach(k=>{
+            if(k.dataset.note===note) k.classList.toggle('active',!!on);
+        });
+    }
+};
+
+// ===== TRANSPORT MODULE =====
+const Transport = {
+    init() {
+        const transportContainer = document.getElementById('transport-controls');
+        if (transportContainer) {
+            transportContainer.innerHTML = `
+                <button id="recordBtn" class="transport-button record-button">● Record</button>
+                <button id="playBtn" class="transport-button">▶ Play</button>
+                <button id="stopBtn" class="transport-button stop-button">■ Stop</button>
+                <button id="clearBtn" class="transport-button clear-button">Clear</button>
+            `;
+        }
+    }
+};
+
+// Continue with remaining modules...
+
+
+// ===== ENHANCED RECORDER MODULE =====
+const EnhancedRecorder = {
+    buttons: {},
+    init() {
+        this.dom = [
+            'waveform', 'detune', 'detuneVal', 'bpm', 
+            'recordBtn', 'stopBtn', 'playBtn', 'clearBtn', 
+            'recInd', 'recStat'
+        ].reduce((o, id) => (o[id] = document.getElementById(id), o), {});
+        this.initAudio();
+        this.bindUI();
+        LoopManager.init();
+    },
+
+    onRecord() {
+        if (synthApp.isArmed) {
+            synthApp.isArmed = false;
+            this.buttons.record?.classList.remove('armed');
+            this.setStatus('Inactive');
+        } else if (!synthApp.isRec && !synthApp.isPlaying) {
+            synthApp.isArmed = true;
+            this.buttons.record?.classList.add('armed');
+            this.setStatus('Record ready');
+            this.buttons.stop && (this.buttons.stop.disabled = false);
+        }
+    },
+
+    onStop()  { this.stop(); },
+    onPlay()  { !synthApp.isPlaying && synthApp.seq.length && this.playSeq(); },
+    onClear() { this.clearSeq(); },
+
+    setStatus(txt) {
+        this.dom.recStat && (this.dom.recStat.textContent = 'Status: ' + txt);
+        this.dom.recInd?.classList.toggle('active', txt.match(/Recording|Playing/));
+        this.buttons.record?.classList.remove('armed');
+    },
+
+    async initAudio() {
+        let a = synthApp;
+        try {
+            EnhancedEffects.getOutputNode().connect(AudioSafety.getInputNode());
+            a.synth = new Tone.PolySynth(Tone.Synth, {
+                envelope: EnvelopeManager.createEnvelope(),
+                volume: -6
+            });
+            a.synth.connect(EnhancedEffects.getInputNode());
+            Object.assign(a, {
+                filter: EnhancedEffects.effects.filter,
+                reverb: EnhancedEffects.effects.reverb,
+                delay: EnhancedEffects.effects.delay,
+                enhancedEffects: EnhancedEffects
+            });
+            this.dom.bpm && (Tone.Transport.bpm.value = +this.dom.bpm.value);
+            this.setOsc(); this.setDetune();
+            console.log('[EnhancedRecorder] Enhanced audio system initialized successfully');
+        } catch (err) {
+            console.error('[EnhancedRecorder] Enhanced audio failed:', err);
+            a.reverb = new Tone.Reverb({ decay: 2, wet: 0.3 }).toDestination();
+            a.delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.3, wet: 0.2 }).toDestination();
+            a.filter = new Tone.Filter(5000, "lowpass").connect(a.reverb).connect(a.delay);
+            a.synth = new Tone.PolySynth(Tone.Synth).connect(a.filter);
+            this.dom.bpm && (Tone.Transport.bpm.value = +this.dom.bpm.value);
+            this.setOsc(); this.setDetune();
+        }
+    },
+
+    setOsc() {
+        if (synthApp.synth && this.dom.waveform)
+            synthApp.synth.set({ oscillator: { type: this.dom.waveform.value } });
+    },
+
+    setDetune() {
+        if (this.dom.detune && this.dom.detuneVal && synthApp.synth) {
+            this.dom.detuneVal.textContent = this.dom.detune.value;
+            synthApp.synth.set({ detune: +this.dom.detune.value });
+        }
+    },
+
+    bindUI() {
+        const d = this.dom;
+        d.waveform && (d.waveform.onchange = () => this.setOsc());
+        d.detune   && (d.detune.oninput   = () => this.setDetune());
+        d.bpm      && (d.bpm.onchange     = () => window.Tone && (Tone.Transport.bpm.value = +d.bpm.value));
+
+        // Transport
+        d.recordBtn && (d.recordBtn.onclick = () => {
+            synthApp.isArmed
+                ? (synthApp.isArmed = 0, d.recordBtn.classList.remove('armed'), d.recStat.textContent = 'Status: Inactive')
+                : (!synthApp.isRec && !synthApp.isPlaying && (synthApp.isArmed = 1, d.recordBtn.classList.add('armed'), d.recStat.textContent = 'Status: Record ready', d.stopBtn && (d.stopBtn.disabled = 0)));
+        });
+        d.stopBtn   && (d.stopBtn.onclick   = () => this.stop());
+        d.playBtn   && (d.playBtn.onclick   = () => !synthApp.isPlaying && synthApp.seq.length && this.playSeq());
+        d.clearBtn  && (d.clearBtn.onclick  = () => this.clearSeq());
+    },
+
+    playNote(note) {
+        if (!synthApp.synth) return;
+        if (!AudioSafety.canPlayNote()) return console.warn(`[EnhancedRecorder] Cannot play note ${note}: voice limit reached`);
+        const noteId = note + '_' + Date.now();
+        AudioSafety.addVoice(noteId);
+        synthApp.activeNoteIds ||= new Map();
+        synthApp.activeNoteIds.set(note, noteId);
+        synthApp.activeNotes.add(note);
+        Keyboard.updateKeyVisual(note, 1);
+        if (synthApp.isArmed && !synthApp.isRec) this.startRec();
+        if (synthApp.isRec) {
+            const now = Tone.now();
+            synthApp.seq.push({ note, start: now - synthApp.recStart, dur: 0, vel: 0.8 });
+        }
+        synthApp.synth.triggerAttack(note, undefined, 0.8);
+    },
+
+    releaseNote(note) {
+        if (!synthApp.synth) return;
+        if (synthApp.activeNoteIds?.has(note)) {
+            AudioSafety.removeVoice(synthApp.activeNoteIds.get(note));
+            synthApp.activeNoteIds.delete(note);
+        }
+        synthApp.activeNotes.delete(note);
+        Keyboard.updateKeyVisual(note, 0);
+        if (synthApp.isRec) {
+            const now = Tone.now();
+            let n = [...synthApp.seq].reverse().find(o => o.note === note && o.dur === 0);
+            n && (n.dur = now - synthApp.recStart - n.start);
+        }
+        try { synthApp.synth.triggerRelease(note); }
+        catch (err) { console.warn(`[EnhancedRecorder] Error releasing note ${note}:`, err); }
+    },
+
+    startRec() {
+        synthApp.isRec = 1; synthApp.isArmed = 0;
+        synthApp.recStart = Tone.now();
+        this.dom.recInd?.classList.add('active');
+        this.dom.recStat && (this.dom.recStat.textContent = 'Status: Recording...');
+        this.dom.recordBtn?.classList.remove('armed');
+        this.dom.stopBtn && (this.dom.stopBtn.disabled = 0);
+    },
+
+    stop() {
+        if (synthApp.isPlaying) {
+            Tone.Transport.stop(); Tone.Transport.cancel();
+            synthApp.events.forEach(clearTimeout);
+            synthApp.events = [];
+            synthApp.isPlaying = 0;
+        }
+        LoopManager.isCurrentlyLooping?.() && LoopManager.stopLoop?.();
+        synthApp.isRec = synthApp.isArmed = 0;
+        synthApp.activeNotes.forEach(n => {
+            synthApp.synth.triggerRelease(n);
+            Keyboard.updateKeyVisual(n, 0)
+        });
+        synthApp.activeNotes.clear();
+        this.dom.recStat && (this.dom.recStat.textContent = 'Status: Stopped');
+        this.dom.recInd?.classList.remove('active');
+        this.dom.recordBtn?.classList.remove('armed');
+        this.dom.stopBtn && (this.dom.stopBtn.disabled = 1);
+        this.dom.playBtn && (this.dom.playBtn.disabled = !synthApp.seq.length);
+    },
+
+    playSeq() {
+        if (!synthApp.seq.length || synthApp.isPlaying) return;
+        synthApp.isPlaying = 1;
+        this.dom.recStat && (this.dom.recStat.textContent = 'Status: Playing...');
+        this.dom.recInd?.classList.add('active');
+        this.dom.stopBtn && (this.dom.stopBtn.disabled = 0);
+
+        if (LoopManager.isLoopEnabled) {
+            this.dom.recStat && (this.dom.recStat.textContent = 'Status: Looping...');
+            LoopManager.startLoop(synthApp.seq);
+        } else {
+            Tone.Transport.cancel();
+            synthApp.seq.forEach(o => o.dur > 0 &&
+                synthApp.events.push(Tone.Transport.schedule(
+                    t => synthApp.synth.triggerAttackRelease(o.note, o.dur, t, o.vel), o.start)));
+            Tone.Transport.start();
+            let last = synthApp.seq.reduce((a, b) => a.start + a.dur > b.start + b.dur ? a : b);
+            Tone.Transport.schedule(() => this.stop(), last.start + last.dur);
+        }
+    },
+
+    clearSeq() {
+        synthApp.seq = []; this.stop();
+        this.dom.playBtn && (this.dom.playBtn.disabled = 1);
+        this.dom.recStat && (this.dom.recStat.textContent = 'Status: Cleared');
+        PianoRoll.draw();
+    }
+};
+
+// ===== MIDI CONTROL MODULE =====
+const MidiControl = {
+    init() {
+        const midiStat = document.getElementById('midiStat');
+        const midiInd = document.getElementById('midiInd');
+        
+        if (navigator.requestMIDIAccess) {
+            navigator.requestMIDIAccess().then(access => {
+                if (midiStat) midiStat.textContent = 'MIDI: Connected';
+                if (midiInd) midiInd.classList.add('active');
+                
+                for (let input of access.inputs.values()) {
+                    input.onmidimessage = this.handleMIDI.bind(this);
+                }
+            }).catch(() => {
+                if (midiStat) midiStat.textContent = 'MIDI: Failed';
+            });
+        } else {
+            if (midiStat) midiStat.textContent = 'MIDI: Not supported';
+        }
+    },
+
+    handleMIDI(event) {
+        const [command, note, velocity] = event.data;
+        const noteStr = Tone.Frequency(note, "midi").toNote();
+        
+        if (command === 144 && velocity > 0) { // Note on
+            EnhancedRecorder.playNote(noteStr);
+        } else if (command === 128 || (command === 144 && velocity === 0)) { // Note off
+            EnhancedRecorder.releaseNote(noteStr);
+        }
+    }
+};
+
+// ===== PIANO ROLL MODULE =====
+const PianoRoll = {
+    init() {
+        this.grid = document.getElementById('rollGrid');
+        this.draw();
+    },
+
+    draw() {
+        if (!this.grid) return;
+        this.grid.innerHTML = '';
+        
+        synthApp.seq.forEach((note, index) => {
+            const noteEl = document.createElement('div');
+            noteEl.className = 'piano-note';
+            noteEl.textContent = note.note;
+            noteEl.style.left = (note.start * 40) + 'px';
+            noteEl.style.width = Math.max(20, note.dur * 40) + 'px';
+            noteEl.style.top = (this.getNoteY(note.note)) + 'px';
+            noteEl.onclick = () => this.selectNote(index);
+            this.grid.appendChild(noteEl);
+        });
+    },
+
+    getNoteY(note) {
+        const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const octave = parseInt(note.slice(-1));
+        const noteName = note.slice(0, -1);
+        const noteIndex = noteNames.indexOf(noteName);
+        return (7 - octave) * 84 + (11 - noteIndex) * 7;
+    },
+
+    selectNote(index) {
+        synthApp.selNote = index;
+        this.grid.querySelectorAll('.piano-note').forEach((el, i) => {
+            el.classList.toggle('selected', i === index);
+        });
+    }
+};
+
+// ===== SAVE/LOAD MODULE =====
+const SaveLoad = {
+    init() {
+        const transportContainer = document.getElementById('transport-controls');
+        if (transportContainer) {
+            transportContainer.innerHTML += `
+                <div class="save-load-controls">
+                    <button id="saveBtn" class="save-button"><span>💾</span> Save</button>
+                    <button id="loadBtn" class="load-button"><span>📁</span> Load</button>
+                    <div id="saveLoadStatus" class="save-load-status"></div>
+                </div>
+            `;
+            
+            document.getElementById('saveBtn').onclick = () => this.save();
+            document.getElementById('loadBtn').onclick = () => this.load();
+        }
+    },
+
+    save() {
+        const data = {
+            sequence: synthApp.seq,
+            effects: EnhancedEffects.savePreset ? EnhancedEffects.savePreset() : {},
+            envelope: EnvelopeManager.getSettings(),
+            timestamp: Date.now()
+        };
+        
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `synth-preset-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        this.showStatus('Saved successfully!');
+    },
+
+    load() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    if (data.sequence) {
+                        synthApp.seq = data.sequence;
+                        PianoRoll.draw();
+                    }
+                    
+                    if (data.effects && EnhancedEffects.loadPreset) {
+                        EnhancedEffects.loadPreset(data.effects);
+                    }
+                    
+                    if (data.envelope) {
+                        EnvelopeManager.setSettings(data.envelope);
+                    }
+                    
+                    this.showStatus('Loaded successfully!');
+                } catch (err) {
+                    this.showStatus('Error loading file!');
+                    console.error('Load error:', err);
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    },
+
+    showStatus(message) {
+        const status = document.getElementById('saveLoadStatus');
+        if (status) {
+            status.textContent = message;
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 3000);
+        }
+    }
+};
+
+// ===== LOOP MANAGER MODULE =====
+const LoopManager = {
+    isLoopEnabled: false,
+    loopStart: 0,
+    loopEnd: 4,
+    isCurrentlyLooping: false,
+
+    init() {
+        console.log('[LoopManager] Initialized');
+    },
+
+    startLoop(sequence) {
+        if (!sequence.length) return;
+        this.isCurrentlyLooping = true;
+        
+        const loopDuration = this.loopEnd - this.loopStart;
+        Tone.Transport.cancel();
+        
+        sequence.forEach(note => {
+            if (note.start >= this.loopStart && note.start < this.loopEnd) {
+                const loopTime = note.start - this.loopStart;
+                Tone.Transport.scheduleRepeat(
+                    time => synthApp.synth.triggerAttackRelease(note.note, note.dur, time, note.vel),
+                    loopDuration,
+                    loopTime
+                );
+            }
+        });
+        
+        Tone.Transport.start();
+    },
+
+    stopLoop() {
+        this.isCurrentlyLooping = false;
+        Tone.Transport.stop();
+        Tone.Transport.cancel();
+    }
+};
+
+// ===== LOOP UI MODULE =====
+const LoopUI = {
+    init() {
+        const loopContainer = document.getElementById('loop-controls');
+        if (loopContainer) {
+            loopContainer.innerHTML = `
+                <div class="loop-panel">
+                    <h3 class="loop-title">Loop Controls</h3>
+                    <div class="loop-section">
+                        <div class="loop-toggle-section">
+                            <label class="loop-checkbox-label">
+                                <input type="checkbox" id="loopEnable" class="loop-checkbox">
+                                <span class="loop-checkbox-text">Enable Loop</span>
+                            </label>
+                            <div id="loopStatus" class="loop-status disabled">Disabled</div>
+                        </div>
+                    </div>
+                    <div class="loop-section">
+                        <div class="loop-bounds-controls">
+                            <div class="loop-bound-control">
+                                <label>Start (bars)</label>
+                                <input type="number" id="loopStart" class="loop-input" value="0" min="0" max="32">
+                            </div>
+                            <div class="loop-bound-control">
+                                <label>End (bars)</label>
+                                <input type="number" id="loopEnd" class="loop-input" value="4" min="1" max="32">
+                            </div>
+                            <button id="setLoopBounds" class="loop-button">Set Bounds</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            this.bindEvents();
+        }
+    },
+
+    bindEvents() {
+        const loopEnable = document.getElementById('loopEnable');
+        const loopStatus = document.getElementById('loopStatus');
+        const loopStart = document.getElementById('loopStart');
+        const loopEnd = document.getElementById('loopEnd');
+        const setLoopBounds = document.getElementById('setLoopBounds');
+
+        if (loopEnable) {
+            loopEnable.onchange = () => {
+                LoopManager.isLoopEnabled = loopEnable.checked;
+                if (loopStatus) {
+                    loopStatus.textContent = loopEnable.checked ? 'Ready' : 'Disabled';
+                    loopStatus.className = `loop-status ${loopEnable.checked ? 'ready' : 'disabled'}`;
+                }
+            };
+        }
+
+        if (setLoopBounds) {
+            setLoopBounds.onclick = () => {
+                if (loopStart && loopEnd) {
+                    LoopManager.loopStart = parseFloat(loopStart.value);
+                    LoopManager.loopEnd = parseFloat(loopEnd.value);
+                    console.log(`[LoopUI] Set loop bounds: ${LoopManager.loopStart} - ${LoopManager.loopEnd}`);
+                }
+            };
+        }
+    }
+};
+
+// Main initialization after Tone.js is loaded
+function boot() {
+    console.log('[Audionauts Enhanced] Booting enhanced app after Tone.js load...');
+
+    // Initialize global synthApp object
+    window.synthApp = {
+        seq: [],
+        curOct: 4,
+        activeNotes: new Set(),
+        activeNoteIds: new Map(),
+        isRec: false,
+        isArmed: false,
+        isPlaying: false,
+        recStart: 0,
+        events: [],
+        selNote: null,
+        synth: null, 
+        reverb: null, 
+        delay: null, 
+        filter: null,
+        enhancedEffects: null,
+    };
+
+    // Initialize all modules in the correct order
+    initializeModules();
+}
+
+function initializeModules() {
+    console.log('[Audionauts Enhanced] Initializing enhanced modules...');
+    
+    try {
+        // Initialize modules in the correct order
+        EnhancedEffects.init();
+        console.log('[Audionauts Enhanced] Enhanced Effects initialized');
+        
+        EnhancedControls.init(); 
+        console.log('[Audionauts Enhanced] Enhanced Controls initialized');
+        
+        Keyboard.init(); 
+        console.log('[Audionauts Enhanced] Keyboard initialized');
+        
+        Transport.init(); 
+        console.log('[Audionauts Enhanced] Transport initialized');
+        
+        EnhancedRecorder.init(); 
+        console.log('[Audionauts Enhanced] Enhanced Recorder initialized');
+        
+        MidiControl.init(); 
+        console.log('[Audionauts Enhanced] MIDI Control initialized');
+        
+        PianoRoll.init(); 
+        console.log('[Audionauts Enhanced] Piano Roll initialized');
+        
+        SaveLoad.init(); 
+        console.log('[Audionauts Enhanced] Save/Load initialized');
+        
+        LoopUI.init(); 
+        console.log('[Audionauts Enhanced] Loop UI initialized');
+        
+        console.log('[Audionauts Enhanced] All enhanced modules initialized successfully!');
+        
+    } catch(e) {
+        console.error('[Audionauts Enhanced] Error during enhanced module init:', e);
+    }
+
+    // Tab switching functionality
+    document.querySelectorAll('.tab-button').forEach(btn => btn.onclick = () => {
+        document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        let tabId = btn.dataset.tab;
+        document.getElementById(tabId).classList.add('active');
+        if (tabId === 'midi') {
+            try { 
+                PianoRoll.draw(); 
+                console.log('[Audionauts Enhanced] PianoRoll.draw() called'); 
+            } catch(e) { 
+                console.error('[Audionauts Enhanced] Error in PianoRoll.draw:', e); 
+            }
+        }
+    });
+
+    // Window event handlers
+    window.onresize = () => { 
+        try { 
+            Keyboard.draw(); 
+            console.log('[Audionauts Enhanced] Keyboard.draw() called on resize'); 
+        } catch(e) { 
+            console.error('[Audionauts Enhanced] Error in Keyboard.draw (resize):', e); 
+        }
+    };
+    
+    window.onclick = () => { 
+        if (Tone && Tone.context && Tone.context.state !== 'running') {
+            Tone.context.resume();
+            console.log('[Audionauts Enhanced] Tone.context.resume() called');
+        }
+    };
+
+    // Add keyboard shortcuts for effects
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+            switch(e.key) {
+                case '1':
+                    e.preventDefault();
+                    toggleEffectByKey('reverb');
+                    break;
+                case '2':
+                    e.preventDefault();
+                    toggleEffectByKey('delay');
+                    break;
+                case '3':
+                    e.preventDefault();
+                    toggleEffectByKey('chorus');
+                    break;
+                case '4':
+                    e.preventDefault();
+                    toggleEffectByKey('distortion');
+                    break;
+                case '5':
+                    e.preventDefault();
+                    toggleEffectByKey('filter');
+                    break;
+            }
+        }
+    });
+
+    function toggleEffectByKey(effectName) {
+        const toggle = document.getElementById(effectName + 'Enable');
+        if (toggle) {
+            toggle.checked = !toggle.checked;
+            toggle.dispatchEvent(new Event('change'));
+            console.log(`[Audionauts Enhanced] Toggled ${effectName} via keyboard shortcut`);
+        }
+    }
+
+    // Add visual feedback for enhanced effects
+    setInterval(() => {
+        updateEffectsVisualFeedback();
+    }, 100);
+
+    function updateEffectsVisualFeedback() {
+        // Update LFO indicators
+        const lfoEffects = ['filterLFO', 'tremoloLFO', 'vibratoLFO', 'phaserLFO'];
+        lfoEffects.forEach(lfoName => {
+            const toggle = document.getElementById(lfoName.replace('LFO', '') + 'LFOEnable');
+            const label = document.querySelector(`label[for="${lfoName.replace('LFO', '') + 'LFOEnable'}"]`);
+            if (toggle && label && toggle.checked) {
+                label.classList.add('lfo-active');
+            } else if (label) {
+                label.classList.remove('lfo-active');
+            }
+        });
+    }
+}
+
+// Global error handler for enhanced features
+window.addEventListener('error', (e) => {
+    console.error('[Audionauts Enhanced] Global error:', e.error);
+});
+
+// Performance monitoring
+if (window.performance && window.performance.mark) {
+    window.performance.mark('audionauts-enhanced-start');
+    window.addEventListener('load', () => {
+        window.performance.mark('audionauts-enhanced-loaded');
+        window.performance.measure('audionauts-enhanced-load-time', 'audionauts-enhanced-start', 'audionauts-enhanced-loaded');
+        const measure = window.performance.getEntriesByName('audionauts-enhanced-load-time')[0];
+        console.log(`[Audionauts Enhanced] Load time: ${measure.duration.toFixed(2)}ms`);
+    });
+}
+
+</script>
+</body>
+</html>
+

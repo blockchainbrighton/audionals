@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Audionauts – All-in-One Synth</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* ==== CORE THEME ==== */
+:root{
+  --bg:#181818; --panel:#232323; --accent:#bb86fc; --accent2:#03dac6;
+  --key-w:#f8f8f8; --key-b:#181818; --radius:8px;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:24px;background:var(--bg);color:#fff;font-family:'Segoe UI',sans-serif}
+h1{margin:.2em 0;text-align:center;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;color:transparent}
+.tabs{display:flex;background:var(--panel);border-radius:var(--radius);margin-bottom:18px}
+.tab-button{flex:1;padding:14px;background:none;border:none;color:#aaa;cursor:pointer;font-size:1rem}
+.tab-button.active{background:#101018;color:var(--accent);font-weight:bold}
+.tab-content{display:none;background:var(--panel);border-radius:var(--radius);padding:24px 18px;min-height:340px}
+.tab-content.active{display:block}
+.control-panel{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.control-group{flex:1 1 220px;background:#181818;border:1px solid #333;border-radius:var(--radius);padding:14px}
+.control-group h3{margin:0 0 12px;color:var(--accent2);font-size:1.1rem}
+.control-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:.9rem}
+.control-label{min-width:100px;color:#ccc}
+.control-value{min-width:45px;text-align:right;color:var(--accent2);font-family:monospace}
+input[type=range]{flex:1;height:6px;background:#333;border-radius:3px;appearance:none}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer}
+input[type=number],select{background:var(--panel);color:#fff;border:1px solid #444;border-radius:4px;padding:4px 6px;font-size:.9rem}
+button:disabled{opacity:.5;cursor:not-allowed}
+.transport-controls,.save-load-controls{display:flex;justify-content:center;gap:18px;margin:16px 0 22px}
+.transport-button,.save-button,.load-button{padding:10px 24px;border:2px solid var(--accent2);border-radius:var(--radius);background:var(--panel);color:var(--accent);cursor:pointer;font-weight:600;transition:all .15s}
+.transport-button:hover,.save-button:hover,.load-button:hover{background:var(--accent2);color:#000;transform:translateY(-2px)}
+.keyboard-container{background:var(--panel);border-radius:var(--radius);padding:18px 10px 10px;margin:20px 0}
+.octave-controls{display:flex;justify-content:center;gap:14px;margin-bottom:8px}
+.octave-button{padding:6px 14px;border:none;border-radius:4px;background:var(--panel);color:#fff;cursor:pointer}
+.keyboard-outer{position:relative;width:100%;height:160px;background:#222;border-radius:8px;overflow:hidden}
+.keyboard{position:relative;width:100%;height:160px;user-select:none}
+.key-white{position:absolute;top:0;background:var(--key-w);border:1px solid #bbb;border-radius:0 0 6px 6px;z-index:1;cursor:pointer;height:160px;transition:background .09s}
+.key-white.active{background:var(--accent)}
+.key-black{position:absolute;top:0;background:var(--key-b);z-index:2;border-radius:0 0 5px 5px;border:1.5px solid #222;cursor:pointer;height:96px;transition:background .09s}
+.key-black.active{background:var(--accent)}
+.key-label{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);font-size:.82rem;color:#333;pointer-events:none}
+.status-bar{display:flex;justify-content:space-between;background:#181818;border-radius:var(--radius);padding:8px 14px;margin-top:16px;font-size:.95rem}
+.status-indicator{width:10px;height:10px;border-radius:50%;background:#555}
+.status-indicator.active{background:var(--accent2)}
+.enable-switch{position:relative;display:inline-block;width:44px;height:24px;margin-right:8px}
+.enable-switch input{opacity:0;width:0;height:0}
+.enable-switch .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#333;transition:.3s;border-radius:24px}
+.enable-switch .slider:before{position:absolute;content:"";height:18px;width:18px;left:2px;bottom:2px;background:#999;transition:.3s;border-radius:50%}
+.enable-switch input:checked+.slider{background:var(--accent)}
+.enable-switch input:checked+.slider:before{transform:translateX(20px);background:#fff}
+.group-title-row{display:flex;align-items:center;cursor:pointer;padding:4px 0;border-bottom:1px solid #333;margin-bottom:12px}
+.group-toggle{margin-right:8px;accent-color:var(--accent)}
+.group-content{transition:max-height .3s ease-out,opacity .3s;overflow:hidden;max-height:1000px;opacity:1}
+.group-content-collapsed{max-height:0;opacity:0;margin-bottom:0}
+.loop-panel{background:var(--panel);border:1px solid #333;border-radius:var(--radius);padding:18px;margin:16px 0}
+.loop-section{margin-bottom:16px;border-bottom:1px solid #333}
+.loop-section:last-child{border:none;margin:0}
+.loop-checkbox-label{display:flex;align-items:center;gap:8px;cursor:pointer}
+.loop-checkbox{width:18px;height:18px;accent-color:var(--accent)}
+.loop-button{padding:8px 16px;background:var(--accent2);color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:600}
+.loop-button:hover{background:#05f5e0}
+.loop-input,.loop-select{padding:8px;background:var(--bg);border:1px solid #444;border-radius:4px;color:#fff}
+.piano-roll{position:relative;background:#181a1b;height:60vh;border-radius:var(--radius);overflow:hidden}
+.roll-grid{position:relative;width:100%;height:100%;overflow:auto;font-family:Segoe UI;font-size:14px}
+.controls-bar{display:flex;gap:10px;align-items:center;background:#212126;border-bottom:2px solid #29292d;padding:7px 10px;position:sticky;top:0;z-index:30}
+.roll-row{display:flex;height:18px;position:relative}
+.roll-label{width:48px;min-width:48px;height:100%;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;font-size:13px;border-right:2px solid #282828}
+.roll-note-area{position:relative;flex-grow:1;border-bottom:1px solid #292b2e}
+.roll-note{position:absolute;height:100%;background:var(--accent);border-radius:3px;cursor:grab;z-index:10}
+.roll-note.selected{outline:2px solid var(--accent2)}
+.playhead{position:absolute;top:0;width:3px;background:linear-gradient(to bottom,var(--accent) 70%,var(--accent2) 100%);opacity:.9;z-index:99;pointer-events:none}
+@media(max-width:768px){
+  .control-panel{flex-direction:column}
+  .keyboard{min-width:160px}
+}
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Audionauts</h1>
+    <div class="tabs">
+      <button class="tab-button active" data-tab="synth">Synthesizer</button>
+      <button class="tab-button" data-tab="midi">Piano-Roll</button>
+    </div>
+
+    <!-- SYNTH TAB -->
+    <div id="synth" class="tab-content active">
+      <div id="control-panel"></div>
+      <div id="transport-controls"></div>
+      <div id="loop-controls"></div>
+      <div class="keyboard-container">
+        <div class="octave-controls">
+          <button id="octaveDown">Octave -</button>
+          <span id="octaveLabel">Octave: 4</span>
+          <button id="octaveUp">Octave +</button>
+        </div>
+        <div class="keyboard-outer">
+          <div class="keyboard" id="keyboard"></div>
+        </div>
+      </div>
+      <div class="status-bar">
+        <div><span id="midiInd" class="status-indicator"></span> <span id="midiStat">MIDI: Not supported</span></div>
+        <div><span id="recInd" class="status-indicator"></span> <span id="recStat">Status: Inactive</span></div>
+      </div>
+    </div>
+
+    <!-- PIANO-ROLL TAB -->
+    <div id="midi" class="tab-content">
+      <h3>Piano Roll Editor</h3>
+      <div class="piano-roll"><div class="roll-grid" id="rollGrid"></div></div>
+    </div>
+    <footer>Audionauts – One-file Web Synth</footer>
+  </div>
+
+<script type="module">
+/* =============================================================
+   GLOBAL STATE & HELPERS
+============================================================= */
+const synthApp = window.synthApp = {
+  seq: [], curOct: 4, activeNotes: new Set(), activeNoteIds: new Map(),
+  isRec: false, isArmed: false, isPlaying: false, recStart: 0,
+  events: [], selNote: null, synth: null, reverb: null, delay: null, filter: null, effects: null
+};
+
+/* =============================================================
+   TONE.JS BOOTSTRAP  (loads from ordinals.com CDN fallback)
+============================================================= */
+let Tone;
+const TONE_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+await import(TONE_URL).then(()=>{ Tone = window.Tone; boot(); });
+
+function boot(){
+/* =============================================================
+   ENHANCED EFFECTS (reverb, delay, chorus, phaser, tremolo, vibrato, distortion, bit-crusher, LFOs, compressor, limiter, DC blocker)
+============================================================= */
+const EnhancedEffects = {
+  fx:{}, enabled:{reverb:1,delay:1,filter:1,compressor:1}, defaults:{},
+  init(){
+    const d = this.defaults = {
+      reverb:{decay:2,wet:.3,roomSize:.7}, delay:{delayTime:.25,feedback:.3,wet:.2},
+      filter:{frequency:5000,Q:1,type:'lowpass'}, chorus:{frequency:1.5,depth:.7,wet:.5},
+      phaser:{frequency:.5,octaves:3,baseFrequency:350,wet:.5}, tremolo:{frequency:10,depth:.5,wet:.7},
+      vibrato:{frequency:5,depth:.1,wet:.8}, distortion:{distortion:.4,wet:.3}, bitCrusher:{bits:4,wet:.3},
+      compressor:{threshold:-24,ratio:12,attack:.003,release:.25},
+      filterLFO:{frequency:.5,min:200,max:2000,depth:.5}, tremoloLFO:{frequency:4,depth:.3},
+      vibratoLFO:{frequency:6,depth:.02}, phaserLFO:{frequency:.3,depth:.5}
+    };
+    this.fx = {
+      input: new Tone.Gain(1), output: new Tone.Gain(.7), reverb: new Tone.Reverb(d.reverb),
+      delay: new Tone.FeedbackDelay(d.delay), filter: new Tone.Filter(d.filter),
+      chorus: new Tone.Chorus(d.chorus), phaser: new Tone.Phaser(d.phaser),
+      tremolo: new Tone.Tremolo(d.tremolo), vibrato: new Tone.Vibrato(d.vibrato),
+      distortion: new Tone.Distortion(d.distortion), compressor: new Tone.Compressor(d.compressor),
+      bitCrusher: new Tone.BitCrusher(d.bitCrusher),
+      filterLFO: new Tone.LFO(d.filterLFO), tremoloLFO: new Tone.LFO(d.tremoloLFO),
+      vibratoLFO: new Tone.LFO(d.vibratoLFO), phaserLFO: new Tone.LFO(d.phaserLFO),
+      dc: new Tone.Filter(5,'highpass'), limiter: new Tone.Limiter(-3)
+    };
+    // audio chain:
+    this.fx.input.chain(this.fx.dc, this.fx.compressor, this.fx.limiter, this.fx.output, Tone.Destination);
+    // connect effects
+    this.toggleEffect('reverb',true); this.toggleEffect('delay',true); this.toggleEffect('filter',true);
+    // LFO wiring
+    this.fx.filterLFO.connect(this.fx.filter.frequency);
+    this.fx.tremoloLFO.connect(this.fx.tremolo.depth);
+    this.fx.vibratoLFO.connect(this.fx.vibrato.depth);
+    this.fx.phaserLFO.connect(this.fx.phaser.frequency);
+  },
+  toggleEffect(name, on){
+    this.enabled[name]=on;
+    const fx=this.fx[name];
+    if(!fx) return;
+    if(fx.wet!==undefined) fx.wet.value = on ? this.defaults[name].wet : 0;
+    else if(name.endsWith('LFO')) fx.amplitude.value = on ? this.defaults[name].depth : 0;
+    else if('bypass' in fx) fx.bypass = !on;
+  },
+  setParam(name, param, val){
+    const fx=this.fx[name]; if(!fx) return;
+    if(fx[param] && fx[param].value!==undefined) fx[param].value = val;
+    else fx[param] = val;
+  },
+  savePreset(){ return {enabled:this.enabled, params:this.defaults} },
+  loadPreset(p){ if(p.enabled) Object.entries(p.enabled).forEach(([k,v])=>this.toggleEffect(k,v)); if(p.params) Object.entries(p.params).forEach(([k,v])=>this.setParam(k, null, v)) }
+};
+EnhancedEffects.init();
+
+/* =============================================================
+   ENVELOPE MANAGER
+============================================================= */
+const EnvelopeManager = {
+  env:{attack:.01,decay:.1,sustain:.7,release:.3},
+  presets:{piano:{attack:.01,decay:.3,sustain:.4,release:1.2},organ:{attack:.01,decay:.1,sustain:.9,release:.1},strings:{attack:.3,decay:.2,sustain:.8,release:1.5},brass:{attack:.1,decay:.2,sustain:.7,release:.8},pad:{attack:1,decay:.5,sustain:.6,release:2},pluck:{attack:.01,decay:.2,sustain:.1,release:.3},bass:{attack:.01,decay:.1,sustain:.8,release:.4}},
+  setParam(k,v){ this.env[k]=v; synthApp.synth?.set({envelope:this.env}) },
+  loadPreset(name){ Object.assign(this.env,this.presets[name]); synthApp.synth?.set({envelope:this.env}) }
+};
+
+/* =============================================================
+   KEYBOARD
+============================================================= */
+const Keyboard = {
+  WHITE:['C','D','E','F','G','A','B'], BLACK:{0:'C#',1:'D#',3:'F#',4:'G#',5:'A#'},
+  init(){
+    const kb=document.getElementById('keyboard');
+    const draw=()=>{
+      kb.innerHTML='';
+      const w=kb.offsetWidth||800, wkw=100/Math.floor(w/38), total=Math.floor(100/wkw);
+      let wi=0;
+      for(let i=0;i<total;i++){
+        const wn=this.WHITE[wi%7], oct=Math.floor(wi/7), note=wn+(synthApp.curOct+oct);
+        const key=document.createElement('div');
+        key.className='key-white'; key.dataset.note=note;
+        key.style.left=(i*wkw)+'%'; key.style.width=wkw+'%';
+        key.onmousedown=()=>Recorder.playNote(note);
+        key.onmouseup=key.onmouseleave=()=>Recorder.releaseNote(note);
+        kb.appendChild(key); wi++;
+      }
+      wi=0;
+      for(let i=0;i<total;i++){
+        if(this.BLACK[wi%7]){
+          const oct=Math.floor(wi/7), note=this.BLACK[wi%7]+(synthApp.curOct+oct);
+          const key=document.createElement('div');
+          key.className='key-black'; key.dataset.note=note;
+          key.style.left=((i+.7)*wkw-(wkw*.28))+'%'; key.style.width=(wkw*.62)+'%';
+          key.onmousedown=()=>Recorder.playNote(note);
+          key.onmouseup=key.onmouseleave=()=>Recorder.releaseNote(note);
+          kb.appendChild(key);
+        } wi++;
+      }
+    };
+    draw();
+    document.getElementById('octaveUp').onclick=()=>{ if(synthApp.curOct<7){ synthApp.curOct++; document.getElementById('octaveLabel').textContent='Octave: '+synthApp.curOct; draw(); }};
+    document.getElementById('octaveDown').onclick=()=>{ if(synthApp.curOct>0){ synthApp.curOct--; document.getElementById('octaveLabel').textContent='Octave: '+synthApp.curOct; draw(); }};
+    window.addEventListener('resize',draw);
+  },
+  updateVisual(note,on){ document.querySelectorAll('.key-white, .key-black').forEach(k=>{ if(k.dataset.note===note) k.classList.toggle('active',on) }) }
+};
+
+/* =============================================================
+   PIANO-ROLL
+============================================================= */
+const PianoRoll = {
+  LOW:21,HIGH:108, zoomX:1,zoomY:1, CELL:18,
+  init(){
+    this.grid=document.getElementById('rollGrid');
+    this.draw();
+  },
+  draw(){
+    const seq=synthApp.seq||[]; const cellW=40*this.zoomX, cellH=this.CELL*this.zoomY;
+    const timeMax=Math.max(16,...seq.map(n=>n.start+n.dur));
+    this.grid.innerHTML='';
+    const bar=document.createElement('div');
+    bar.className='controls-bar';
+    bar.innerHTML=`<button onclick="PianoRoll.zoomX/=1.3">–X</button>
+                   <button onclick="PianoRoll.zoomX*=1.3">+X</button>
+                   <button onclick="PianoRoll.zoomY/=1.15">–Y</button>
+                   <button onclick="PianoRoll.zoomY*=1.15">+Y</button>`;
+    this.grid.appendChild(bar);
+
+    const totalH=(this.HIGH-this.LOW+1)*cellH;
+    const scroll=document.createElement('div');
+    scroll.style.cssText='overflow:auto;height:calc(60vh - 40px)';
+    const inner=document.createElement('div');
+    inner.style.cssText=`position:relative;width:${cellW*timeMax+48}px;height:${totalH}px`;
+    for(let midi=this.HIGH; midi>=this.LOW; midi--){
+      const row=this.HIGH-midi;
+      const rowDiv=document.createElement('div');
+      rowDiv.className='roll-row'; rowDiv.style.height=cellH+'px';
+      const label=document.createElement('div');
+      label.className='roll-label'; label.textContent=Tone.Frequency(midi,'midi').toNote();
+      rowDiv.appendChild(label);
+      const area=document.createElement('div');
+      area.className='roll-note-area';
+      seq.forEach((n,i)=>{
+        if(Tone.Frequency(n.note).toMidi()!==midi) return;
+        const noteDiv=document.createElement('div');
+        noteDiv.className='roll-note'; noteDiv.style.left=(n.start*cellW)+'px'; noteDiv.style.width=(n.dur*cellW)+'px';
+        noteDiv.dataset.idx=i;
+        noteDiv.onclick=(e)=>{ e.stopPropagation(); synthApp.selNote=i; PianoRoll.draw(); };
+        // simple drag not implemented for brevity
+        area.appendChild(noteDiv);
+      });
+      rowDiv.appendChild(area);
+      inner.appendChild(rowDiv);
+    }
+    scroll.appendChild(inner);
+    this.grid.appendChild(scroll);
+  }
+};
+
+/* =============================================================
+   LOOP MANAGER
+============================================================= */
+const LoopManager = {
+  enabled:false, start:0,end:4,maxLoops:-1, quantize:false, grid:.25,
+  setEnabled(b){ this.enabled=b },
+  autoBounds(seq=synthApp.seq){
+    if(!seq.length){ this.start=0;this.end=4; return }
+    const beat=60/Tone.Transport.bpm.value;
+    this.start=Math.floor(Math.min(...seq.map(n=>n.start))/beat)*beat;
+    this.end=Math.ceil(Math.max(...seq.map(n=>n.start+n.dur))/beat)*beat;
+    if(this.end-this.start<beat*2) this.end=this.start+beat*2;
+  },
+  prepare(seq=synthApp.seq){
+    if(!seq.length) return [];
+    this.autoBounds();
+    return seq.filter(n=>n.start<this.end && n.start+n.dur>this.start)
+              .map(n=>({...n,start:Math.max(0,n.start-this.start),dur:Math.max(.01,Math.min(n.dur,this.end-this.start-n.start))}));
+  },
+  play(){
+    if(!this.enabled) return;
+    const seq=this.prepare(); if(!seq.length) return;
+    const dur=this.end-this.start;
+    seq.forEach(n=>Tone.Transport.schedule(t=>synthApp.synth.triggerAttackRelease(n.note,n.dur,t,n.vel),n.start));
+    Tone.Transport.schedule(()=>Recorder.stop(),dur);
+    Tone.Transport.start();
+  }
+};
+
+/* =============================================================
+   RECORDER / TRANSPORT
+============================================================= */
+const Recorder = {
+  init(){
+    document.getElementById('transport-controls').innerHTML=`
+      <button id="recordBtn" class="transport-button">● Record</button>
+      <button id="stopBtn" class="transport-button" disabled>■ Stop</button>
+      <button id="playBtn" class="transport-button" disabled>▶ Play</button>
+      <button id="clearBtn" class="transport-button">🗑 Clear</button>`;
+    ['recordBtn','stopBtn','playBtn','clearBtn'].forEach(id=>document.getElementById(id).onclick=this[id]);
+    this.buttons={record:document.getElementById('recordBtn'),stop:document.getElementById('stopBtn'),play:document.getElementById('playBtn'),clear:document.getElementById('clearBtn')};
+  },
+  recordBtn(){
+    if(synthApp.isArmed){ synthApp.isArmed=false; this.buttons.record.classList.remove('armed'); this.setStatus('Inactive');}
+    else if(!synthApp.isRec && !synthApp.isPlaying){ synthApp.isArmed=true; this.buttons.record.classList.add('armed'); this.setStatus('Record ready'); this.buttons.stop.disabled=false;}
+  },
+  stopBtn(){
+    Tone.Transport.stop(); Tone.Transport.cancel(); synthApp.events.forEach(clearTimeout); synthApp.events=[];
+    synthApp.isPlaying=synthApp.isRec=synthApp.isArmed=false;
+    synthApp.activeNotes.forEach(n=>{ synthApp.synth.triggerRelease(n); Keyboard.updateVisual(n,false) });
+    synthApp.activeNotes.clear();
+    this.setStatus('Stopped');
+    this.buttons.record.classList.remove('armed');
+    this.buttons.stop.disabled=true;
+    this.buttons.play.disabled=!synthApp.seq.length;
+  },
+  playBtn(){
+    if(synthApp.isPlaying || !synthApp.seq.length) return;
+    synthApp.isPlaying=true; this.setStatus('Playing...'); this.buttons.stop.disabled=false;
+    LoopManager.play();
+  },
+  clearBtn(){ synthApp.seq=[]; this.stopBtn(); this.buttons.play.disabled=true; this.setStatus('Cleared'); PianoRoll.draw(); },
+  playNote(note){
+    if(!synthApp.synth) return;
+    const id=note+'_'+Date.now();
+    synthApp.activeNotes.add(note); Keyboard.updateVisual(note,true);
+    if(synthApp.isArmed && !synthApp.isRec) this.startRec();
+    if(synthApp.isRec) synthApp.seq.push({note,start:Tone.now()-synthApp.recStart,dur:0,vel:.8});
+    synthApp.synth.triggerAttack(note,undefined,.8);
+  },
+  releaseNote(note){
+    synthApp.activeNotes.delete(note); Keyboard.updateVisual(note,false);
+    if(synthApp.isRec){ const n=synthApp.seq.slice().reverse().find(o=>o.note===note&&o.dur===0); if(n) n.dur=Tone.now()-synthApp.recStart-n.start; }
+    synthApp.synth.triggerRelease(note);
+  },
+  startRec(){ synthApp.isRec=true; synthApp.isArmed=false; synthApp.recStart=Tone.now(); this.setStatus('Recording...'); },
+  setStatus(txt){ document.getElementById('recStat').textContent='Status: '+txt; document.getElementById('recInd').classList.toggle('active',/Recording|Playing/.test(txt)) }
+};
+
+/* =============================================================
+   CONTROL PANEL BUILDER
+============================================================= */
+function buildControls(){
+  const panel=document.getElementById('control-panel');
+  const sections=[
+    {title:'Audio Safety',html:`
+      <div class="control-row"><label>Master Volume</label><input type="range" id="masterVolume" min="0" max="1" step=".01" value=".7"><span class="control-value">70%</span></div>
+      <div class="control-row"><label>Limiter Threshold</label><input type="range" id="limiterThreshold" min="-20" max="0" step=".1" value="-3"><span class="control-value">-3dB</span></div>
+      <div class="control-row"><span id="voiceCount">Voices: 0/16</span><button id="emergencyStop" class="transport-button">Emergency Stop</button></div>
+    `},
+    {title:'Envelope (ADSR)',html:`
+      <div class="control-row"><label>Preset</label><select id="envelopePreset"><option>Custom</option><option>piano</option><option>organ</option><option>strings</option><option>brass</option><option>pad</option><option>pluck</option><option>bass</option></select></div>
+      <div class="control-row"><label>Attack</label><input type="range" id="envelopeAttack" min="0.001" max="5" step="0.001" value="0.01"><span class="control-value">0.010</span></div>
+      <div class="control-row"><label>Decay</label><input type="range" id="envelopeDecay" min="0.001" max="5" step="0.001" value="0.1"><span class="control-value">0.100</span></div>
+      <div class="control-row"><label>Sustain</label><input type="range" id="envelopeSustain" min="0" max="1" step="0.01" value="0.7"><span class="control-value">0.70</span></div>
+      <div class="control-row"><label>Release</label><input type="range" id="envelopeRelease" min="0.001" max="5" step="0.001" value="0.3"><span class="control-value">0.300</span></div>
+    `},
+    {title:'Oscillator',html:`
+      <div class="control-row"><label>Waveform</label><select id="waveform"><option>sine</option><option>square</option><option>sawtooth</option><option>triangle</option></select></div>
+      <div class="control-row"><label>Detune</label><input type="range" id="detune" min="-50" max="50" value="0"><span class="control-value">0</span></div>
+    `},
+    {title:'Filter & LFO',html:`
+      <div class="control-row"><label class="enable-switch"><input type="checkbox" id="filterEnable" checked><span class="slider"></span></label><label>Filter Enable</label></div>
+      <div class="control-row"><label>Type</label><select id="filterType"><option>lowpass</option><option>highpass</option><option>bandpass</option></select></div>
+      <div class="control-row"><label>Frequency</label><input type="range" id="filterFreq" min="20" max="20000" value="5000"><span class="control-value">5000</span></div>
+      <div class="control-row"><label>Resonance</label><input type="range" id="filterQ" min="0" max="20" value="1"><span class="control-value">1</span></div>
+      <div class="control-row"><label class="enable-switch"><input type="checkbox" id="filterLFOEnable"><span class="slider"></span></label><label>Filter LFO</label></div>
+      <div class="control-row"><label>LFO Rate</label><input type="range" id="filterLFORate" min="0.1" max="10" step="0.1" value="0.5"><span class="control-value">0.5</span></div>
+      <div class="control-row"><label>LFO Depth</label><input type="range" id="filterLFODepth" min="0" max="1" step="0.01" value="0.5"><span class="control-value">0.5</span></div>
+    `},
+    {title:'Modulation Effects',html:`
+      <div class="control-row"><label class="enable-switch"><input type="checkbox" id="chorusEnable"><span class="slider"></span></label><label>Chorus</label><input type="range" id="chorusWet" min="0" max="1" step="0.01" value="0.5"><span class="control-value">50%</span></div>
+      <div class="control-row"><label>Chorus Rate</label><input type="range" id="chorusRate" min="0.1" max="5" step="0.1" value="1.5"><span class="control-value">1.5</span></div>
+      <div class="control-row"><label class="enable-switch"><input type="checkbox" id="phaserEnable"><span class="slider"></span></label><label>Phaser</label><input type="range" id="phaserWet" min="0" max="1" step="0.01" value="0.5"><span class="control-value">50%</span></div>
+      <div class="control-row"><label>Phaser Rate</label><input type="range" id="phaserRate" min="0.1" max="2" step="0.1" value="0.5"><span class="control-value">0.5</span></div>
+      <div class="control-row"><label class="enable-switch"><input type="checkbox" id="tremoloEnable"><span class="slider"></span></label><label>Tremolo</label><input type="range" id="tremoloWet" min="0" max="1" step="0.01" value="0.7"><span class="control-value">70%</span></div>
+      <div class="control-row"><label>Tremolo Rate</label><input type="range" id="tremoloRate" min="1" max="20" step="0.5" value="10"><span class="control-value">10</span></div>
+      <div class="control-row"><label class="enable-switch"><input type="checkbox" id="vibratoEnable"><span class="slider"></span></label><label>Vibrato</label><input type="range" id="vibratoWet" min="0" max="1" step="0.01" value="0.8"><span class="control-value">80%</span></div>
+      <div class="control-row"><label>Vibrato Rate</label><input type="range" id="vibratoRate" min="1" max="15" step="0.5" value="5"><span class="control-value">5</span></div>
+    `},
+    {title:'Distortion & Dynamics',html:`
+      <div class="control-row"><label class="enable-switch"><input type="checkbox" id="compressorEnable" checked><span class="slider"></span></label><label>Compressor</label></div>
+      <div class="control-row"><label>Threshold</label><input type="range" id="compressorThreshold" min="-40" max="0" step="1" value="-24"><span class="control-value">-24dB</span></div>
+      <div class="control-row"><label>Ratio</label><input type="range" id="compressorRatio" min="1" max="20" step="0.5" value="12"><span class="control-value">12:1</span></div>
+      <div class="control-row"><label class="enable-switch"><input type="checkbox" id="distortionEnable"><span class="slider"></span></label><label>Distortion</label><input type="range" id="distortionWet" min="0" max="1" step="0.01" value="0.3"><span class="control-value">30%</span></div>
+      <div class="control-row"><label>Drive</label><input type="range" id="distortionDrive" min="0" max="1" step="0.01" value="0.4"><span class="control-value">0.4</span></div>
+      <div class="control-row"><label class="enable-switch"><input type="checkbox" id="bitCrusherEnable"><span class="slider"></span></label><label>BitCrusher</label><input type="range" id="bitCrusherWet" min="0" max="1" step="0.01" value="0.3"><span class="control-value">30%</span></div>
+      <div class="control-row"><label>Bits</label><input type="range" id="bitCrusherBits" min="1" max="16" step="1" value="4"><span class="control-value">4</span></div>
+    `},
+    {title:'Time-Based Effects',html:`
+      <div class="control-row"><label class="enable-switch"><input type="checkbox" id="delayEnable" checked><span class="slider"></span></label><label>Delay</label><input type="range" id="delay" min="0" max="100" value="20"><span class="control-value">20%</span></div>
+      <div class="control-row"><label>Delay Time</label><input type="range" id="delayTime" min="0.01" max="1" step="0.01" value="0.25"><span class="control-value">0.25s</span></div>
+      <div class="control-row"><label>Feedback</label><input type="range" id="delayFeedback" min="0" max="0.95" step="0.01" value="0.3"><span class="control-value">0.3</span></div>
+      <div class="control-row"><label class="enable-switch"><input type="checkbox" id="reverbEnable" checked><span class="slider"></span></label><label>Reverb</label><input type="range" id="reverb" min="0" max="100" value="30"><span class="control-value">30%</span></div>
+      <div class="control-row"><label>Room Size</label><input type="range" id="reverbRoom" min="0.1" max="1" step="0.01" value="0.7"><span class="control-value">0.7</span></div>
+      <div class="control-row"><label>Decay</label><input type="range" id="reverbDecay" min="0.1" max="10" step="0.1" value="2"><span class="control-value">2s</span></div>
+    `},
+    {title:'BPM',html:`<div class="control-row"><label>BPM</label><input type="number" id="bpm" min="40" max="240" value="120"></div>`}
+  ];
+  sections.forEach(s=>{
+    const g=document.createElement('div'); g.className='control-group';
+    g.innerHTML=`<h3>${s.title}</h3>${s.html}`;
+    panel.appendChild(g);
+  });
+  // wiring
+  document.getElementById('masterVolume').oninput=e=>{ EnhancedEffects.fx.output.gain.value=e.target.value; e.target.nextElementSibling.textContent=Math.round(e.target.value*100)+'%'; };
+  document.getElementById('limiterThreshold').oninput=e=>{ EnhancedEffects.fx.limiter.threshold.value=e.target.value; e.target.nextElementSibling.textContent=e.target.value+'dB'; };
+  document.getElementById('voiceCount').textContent='Voices: 0/16';
+  document.getElementById('emergencyStop').onclick=()=>{ EnhancedEffects.fx.output.gain.rampTo(0,.1); setTimeout(()=>EnhancedEffects.fx.output.gain.rampTo(.7,.1),200); synthApp.synth.releaseAll(); };
+  document.getElementById('envelopePreset').onchange=e=>EnvelopeManager.loadPreset(e.target.value);
+  ['Attack','Decay','Sustain','Release'].forEach(p=>{
+    const el=document.getElementById('envelope'+p);
+    el.oninput=e=>{ EnvelopeManager.setParam(p.toLowerCase(),+e.target.value); e.target.nextElementSibling.textContent=(+e.target.value).toFixed(p==='Sustain'?2:3) };
+  });
+  document.getElementById('waveform').onchange=e=>synthApp.synth.set({oscillator:{type:e.target.value}});
+  document.getElementById('detune').oninput=e=>{ synthApp.synth.set({detune:+e.target.value}); e.target.nextElementSibling.textContent=e.target.value; };
+  document.getElementById('bpm').onchange=e=>Tone.Transport.bpm.value=+e.target.value;
+  document.getElementById('filterEnable').onchange=e=>EnhancedEffects.toggleEffect('filter',e.target.checked);
+  document.getElementById('filterType').onchange=e=>EnhancedEffects.fx.filter.type=e.target.value;
+  document.getElementById('filterFreq').oninput=e=>{ EnhancedEffects.setParam('filter','frequency',+e.target.value); e.target.nextElementSibling.textContent=e.target.value; };
+  document.getElementById('filterQ').oninput=e=>{ EnhancedEffects.setParam('filter','Q',+e.target.value); e.target.nextElementSibling.textContent=e.target.value; };
+  ['chorus','phaser','tremolo','vibrato','distortion','bitCrusher','reverb','delay'].forEach(fx=>{
+    ['Enable','Wet','Rate','Room','Decay','Drive','Bits','Feedback','Time'].forEach(par=>{
+      const id=fx+par;
+      const el=document.getElementById(id);
+      if(!el) return;
+      if(par==='Enable') el.onchange=e=>EnhancedEffects.toggleEffect(fx,e.target.checked);
+      else el.oninput=e=>{
+        let val=+e.target.value;
+        if(par==='Wet'||par==='Decay'||par==='Feedback'||par==='Time') val=par==='Time'?val:val/100;
+        EnhancedEffects.setParam(fx,par.toLowerCase(),val);
+        e.target.nextElementSibling.textContent=par==='Wet'?Math.round(val*100)+'%':val+(par==='Decay'||par==='Time'?'s':'');
+      };
+    });
+  });
+}
+
+/* =============================================================
+   SAVE / LOAD
+============================================================= */
+const SaveLoad = {
+  save(){
+    const state={
+      settings:{
+        oscillator:{waveform:document.getElementById('waveform').value,detune:document.getElementById('detune').value},
+        filter:{type:document.getElementById('filterType').value,frequency:document.getElementById('filterFreq').value,Q:document.getElementById('filterQ').value},
+        bpm:document.getElementById('bpm').value
+      },
+      sequence:synthApp.seq,
+      ui:{curOct:synthApp.curOct,selNote:synthApp.selNote}
+    };
+    const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='synth-state.json'; a.click();
+  },
+  load(file){
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const state=JSON.parse(e.target.result);
+      document.getElementById('waveform').value=state.settings.oscillator.waveform;
+      document.getElementById('detune').value=state.settings.oscillator.detune;
+      document.getElementById('filterType').value=state.settings.filter.type;
+      document.getElementById('filterFreq').value=state.settings.filter.frequency;
+      document.getElementById('filterQ').value=state.settings.filter.Q;
+      document.getElementById('bpm').value=state.settings.bpm;
+      synthApp.seq=state.sequence;
+      synthApp.curOct=state.ui.curOct; document.getElementById('octaveLabel').textContent='Octave: '+synthApp.curOct;
+      Keyboard.init(); PianoRoll.draw();
+    };
+    reader.readAsText(file);
+  }
+};
+
+/* =============================================================
+   MIDI
+============================================================= */
+const Midi = {
+  init(){
+    if(!navigator.requestMIDIAccess) return;
+    navigator.requestMIDIAccess().then(m=>{
+      this.midi=m;
+      document.getElementById('midiStat').textContent='MIDI: Connected ('+m.inputs.size+')';
+      document.getElementById('midiInd').classList.add('active');
+      m.inputs.forEach(i=>i.onmidimessage=e=>{
+        const [cmd,note,vel]=e.data;
+        const n=Tone.Frequency(note,'midi').toNote();
+        if(cmd===144 && vel>0) Recorder.playNote(n);
+        else if(cmd===128 || (cmd===144 && vel===0)) Recorder.releaseNote(n);
+      });
+    });
+  }
+};
+
+/* =============================================================
+   INITIALISE EVERYTHING
+============================================================= */
+function initApp(){
+  // Synth
+  synthApp.synth=new Tone.PolySynth(Tone.Synth,{volume:-6,envelope:EnvelopeManager.env}).chain(EnhancedEffects.fx.input);
+  // Controls
+  buildControls();
+  Keyboard.init();
+  Recorder.init();
+  PianoRoll.init();
+  Midi.init();
+  // Save / Load UI
+  const sl=document.createElement('div'); sl.className='save-load-controls';
+  sl.innerHTML='<button class="save-button">💾 Save</button><button class="load-button">📁 Load</button><input type="file" style="display:none" accept=".json">';
+  document.getElementById('transport-controls').appendChild(sl);
+  sl.children[0].onclick=SaveLoad.save;
+  sl.children[1].onclick=()=>sl.children[2].click();
+  sl.children[2].onchange=e=>SaveLoad.load(e.target.files[0]);
+  // Tab switching
+  document.querySelectorAll('.tab-button').forEach(btn=>btn.onclick=()=>{
+    document.querySelectorAll('.tab-button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab==='midi') PianoRoll.draw();
+  });
+  // Keyboard shortcuts
+  document.addEventListener('keydown',e=>{
+    if(e.ctrlKey || e.metaKey){
+      if(e.key==='s'){ e.preventDefault(); SaveLoad.save(); }
+      if(e.key==='o'){ e.preventDefault(); sl.children[2].click(); }
+    }
+  });
+}
+
+initApp();
+}
+</script>
+</body>
+</html>
